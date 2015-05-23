@@ -4,5 +4,6 @@
 *.elf
 *.sym
 *.bin
+*.hex
 documentation/html/
 include/hermit/config.inc
