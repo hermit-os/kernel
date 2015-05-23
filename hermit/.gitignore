@@ -1,0 +1,8 @@
+*.o
+*.dep
+*~
+*.elf
+*.sym
+*.bin
+documentation/html/
+include/hermit/config.inc
