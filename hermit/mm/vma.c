@@ -58,7 +58,7 @@ int vma_init(void)
 
 	// add Kernel
 	ret  = vma_add(PAGE_CEIL((size_t) &kernel_start),
-		(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL), /* we use 2MB pages to map the kernel */
+		PAGE_FLOOR((size_t) &kernel_end),
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
