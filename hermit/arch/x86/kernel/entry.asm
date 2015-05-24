@@ -41,7 +41,16 @@ extern kernel_end
 SECTION .mboot
 global start
 start:
-    jmp stublet
+    ; do we have a multiboot info? => no relocation required
+    cmp ebx, 0
+    je short Lnoreset
+    mov ebp, kernel_start
+Lnoreset:
+    ; relocate jmp
+    mov eax, stublet
+    sub eax, kernel_start
+    add eax, ebp ; ebp contains the physical address of the kernel
+    jmp eax
 
 ; This part MUST be 4 byte aligned, so we solve that issue using 'ALIGN 4'.
 ALIGN 4
@@ -61,8 +70,10 @@ mboot:
     dd 0, 0, 0, 0,
     global base
     global limit
-    base dq 0
-    limit dq 0
+    global cpu_freq
+    base dd kernel_start
+    limit dd 0
+    cpu_freq dd 0
 
 ALIGN 4
 ; we need already a valid GDT to switch in the 64bit modus
@@ -95,64 +106,121 @@ GDT64:                           ; Global Descriptor Table (64-bit).
 SECTION .text
 ALIGN 4
 stublet:
-    ; Initialize stack pointer
-    mov esp, boot_stack
+    ; Relocate stack pointer
+    mov eax, boot_stack
+    sub eax, kernel_start
+    add eax, ebp
+    mov esp, eax
     add esp, KERNEL_STACK_SIZE - 16
 
     ; Interpret multiboot information
-    mov DWORD [mb_info], ebx
-
-    ; Initialize CPU features
-    call cpu_init
-
-    lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
-    jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
+    mov eax, mb_info
+    sub eax, kernel_start
+    add eax, ebp
+    mov DWORD [eax], ebx
 
 ; This will set up the x86 control registers:
 ; Caching and the floating point unit are enabled
 ; Bootstrap page tables are loaded and page size
 ; extensions (huge pages) enabled.
-global cpu_init
 cpu_init:
+   push edi
+
+; relocate page tables
+   mov edi, boot_pml4
+   sub edi, kernel_start
+   add edi, ebp
+   mov eax, DWORD [edi]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi], eax
+
+   mov eax, DWORD [edi+511*8]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi+511*8], eax
+
+   mov edi, boot_pdpt
+   sub edi, kernel_start
+   add edi, ebp
+   mov eax, DWORD [edi]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi], eax
+
+   mov eax, DWORD [edi+511*8]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi+511*8], eax
+
+   mov edi, boot_pgd
+   sub edi, kernel_start
+   add edi, ebp
+   mov eax, DWORD [edi]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi], eax
+
+   mov eax, DWORD [edi+511*8]
+   sub eax, kernel_start
+   add eax, ebp
+   mov DWORD [edi+511*8], eax
 
 ; initialize page tables
 
 ; map vga 1:1
 %ifdef CONFIG_VGA
-    push edi
     mov eax, VIDEO_MEM_ADDR   ; map vga
     and eax, 0xFFFFF000       ; page align lower half
     mov edi, eax
     shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add edi, boot_pgt
+    sub edi, kernel_start
+    add edi, ebp
     or eax, 0x113             ; set present, global, writable and cache disable bits
     mov DWORD [edi], eax
-    pop edi
 %endif
 
     ; map multiboot info 1:1
-    push edi
-    mov eax, DWORD [mb_info]  ; map multiboot info
+    mov eax, mb_info  ; map multiboot info
+    sub eax, kernel_start
+    add eax, ebp
+    mov eax, DWORD [eax]
     cmp eax, 0
-    je Lno_mbinfo
+    je short Lno_mbinfo
     and eax, 0xFFFFF000       ; page align lower half
     mov edi, eax
     shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add edi, boot_pgt
+    sub edi, kernel_start
+    add edi, ebp
     or eax, 0x101             ; set present and global bits
     mov DWORD [edi], eax
 Lno_mbinfo:
-    pop edi
+
+    ; map kernel at link address, use a page size of 2MB
+    mov eax, ebp
+    and eax, 0xFFE00000
+    mov edi, kernel_start
+    and edi, 0xFFE00000
+    shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
+    add edi, boot_pgd
+    sub edi, kernel_start
+    add edi, ebp
+    or eax, 0x183
+    mov DWORD [edi], eax
 
     ; map kernel 1:1, use a page size of 2MB
-    push edi
-    mov eax, kernel_start
+    mov eax, ebp
     and eax, 0xFFE00000
     mov edi, eax
     shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
     add edi, boot_pgd
+    sub edi, kernel_start
+    add edi, ebp
     or eax, 0x183
     mov DWORD [edi], eax
+
     pop edi
 
     ; check for long mode
@@ -169,19 +237,19 @@ Lno_mbinfo:
     push ecx
     popfd
     xor eax, ecx
-    jz Linvalid
+    jz short Linvalid
 
     ; cpuid > 0x80000000?
     mov eax, 0x80000000
     cpuid
     cmp eax, 0x80000001
-    jb Linvalid ; It is less, there is no long mode.
+    jb short Linvalid ; It is less, there is no long mode.
 
     ; do we have a long mode?
     mov eax, 0x80000001
     cpuid
     test edx, 1 << 29 ; Test if the LM-bit, which is bit 29, is set in the D-register.
-    jz Linvalid ; They aren't, there is no long mode.
+    jz short Linvalid ; They aren't, there is no long mode.
 
 
     ; we need to enable PAE modus
@@ -197,6 +265,8 @@ Lno_mbinfo:
 
     ; Set CR3
     mov eax, boot_pml4
+    sub eax, kernel_start
+    add eax, ebp    
     mov cr3, eax
 
     ; Set CR4
@@ -213,7 +283,8 @@ Lno_mbinfo:
     or eax, (1 << 0)        ; long mode also needs PM-bit set
     mov cr0, eax
 
-    ret
+    lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
+    jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
 
 ; there is no long mode
 Linvalid:
@@ -233,6 +304,7 @@ start64:
     ; set default stack pointer
     mov rsp, boot_stack
     add rsp, KERNEL_STACK_SIZE-16
+    mov rbp, rsp
 
     ; jump to the boot processors's C code
     extern main
