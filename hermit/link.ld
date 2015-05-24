@@ -1,7 +1,7 @@
 OUTPUT_FORMAT("elf64-x86-64")
 OUTPUT_ARCH("i386:x86-64")
 ENTRY(start)
-phys = 0x1400000;
+phys = (2 << 20);
 
 SECTIONS
 {
@@ -13,6 +13,7 @@ SECTIONS
   }
   .text ALIGN(4096) : AT(ADDR(.text)) {
     *(.text)
+    *(.text.startup)
   }
   .rodata ALIGN(4096) : AT(ADDR(.rodata)) {
     *(.rodata)
