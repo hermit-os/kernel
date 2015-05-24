@@ -210,6 +210,9 @@ Lno_mbinfo:
     or eax, 0x183
     mov DWORD [edi], eax
 
+    cmp ebp, kernel_start
+    je Lno_remap
+
     ; map kernel 1:1, use a page size of 2MB
     mov eax, ebp
     and eax, 0xFFE00000
@@ -220,6 +223,7 @@ Lno_mbinfo:
     add edi, ebp
     or eax, 0x183
     mov DWORD [edi], eax
+Lno_remap:
 
     pop edi
 
@@ -301,6 +305,16 @@ start64:
     mov fs, ax
     mov gs, ax
 
+    cmp ebp, kernel_start
+    je Lno_unmap
+    ; unmap temporary 1:1 mapping of the kernel
+    mov edi, ebp
+    shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
+    add edi, boot_pgd
+    mov DWORD [edi], 0
+    xor rdi, rdi
+
+Lno_unmap:
     ; set default stack pointer
     mov rsp, boot_stack
     add rsp, KERNEL_STACK_SIZE-16
