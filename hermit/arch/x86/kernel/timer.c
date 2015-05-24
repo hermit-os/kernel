@@ -39,6 +39,7 @@
  * has been running for 
  */
 static volatile uint64_t timer_ticks = 0;
+extern uint32_t cpu_freq;
 
 uint64_t get_clock_tick(void)
 {
@@ -54,6 +55,14 @@ static void timer_handler(struct state *s)
 {
 	/* Increment our 'tick counter' */
 	timer_ticks++;
+
+	/*
+	 * Every TIMER_FREQ clocks (approximately 1 second), we will
+	 * display a message on the screen
+	 */
+	if (timer_ticks % TIMER_FREQ == 0) {
+		kputs("One second has passed\n");
+	}
 }
 
 #define LATCH(f)	((CLOCK_TICK_RATE + f/2) / f)
@@ -73,6 +82,9 @@ int timer_init(void)
 	 */
 	irq_install_handler(32, timer_handler);
 	irq_install_handler(123, timer_handler);
+
+	if (cpu_freq) // do we need to configure the timer?
+		return 0;
 
 	/*
 	 * Port 0x43 is for initializing the PIT:
