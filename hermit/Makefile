@@ -58,18 +58,20 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
-default: all
+default: $(NAME).elf
 
 all: $(NAME).elf
 
 $(NAME).elf:
 	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^
 	@echo [OBJCOPY] $(NAME).bin
-	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .text -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
-	#@echo [OBJCOPY] $(NAME).sym
-	#$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $(NAME).elf $(NAME).sym
-	#@echo [OBJCOPY] $(NAME).elf
-	#$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $(OUTPUT_FORMAT) $(NAME).elf
+	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
+
+$(NAME).elf32: $(NAME).elf
+	@echo [OBJCOPY] $(NAME).sym
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $(NAME).elf $(NAME).sym
+	@echo [OBJCOPY] $(NAME).elf32
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $(OUTPUT_FORMAT) $(NAME).elf $(NAME).elf32
 
 clean:
 	$Q$(RM) $(NAME).elf $(NAME).sym $(NAME).bin *~
@@ -79,12 +81,12 @@ veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
 	@echo Very cleaned
 
-qemu: all
-	$(QEMU) $(QEMUFLAGS) -kernel $(NAME).elf
+qemu: $(NAME).elf32
+	$(QEMU) $(QEMUFLAGS) -kernel $(NAME).elf32
 
-debug: all
+debug: $(NAME).elf32
 	$(TERM) -e $(GDB) $(GDBFLAGS) &
-	$(QEMU) $(QEMUDEBUGFLAGS) -s -S -kernel $(NAME).elf
+	$(QEMU) $(QEMUDEBUGFLAGS) -s -S -kernel $(NAME).elf32
 
 doc:
 	@echo Create documentation...
