@@ -35,8 +35,8 @@
 #include <asm/multiboot.h>
 #include <asm/page.h>
 
-extern size_t base;
-extern size_t limit;
+extern uint32_t base;
+extern uint32_t limit;
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -283,22 +283,28 @@ int memory_init(void)
 				}
 			}
 		}
+
+		// mark kernel as used, we use 2MB pages to map the kernel
+		for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
+			page_set_mark(addr >> PAGE_BITS);
+			atomic_int32_inc(&total_allocated_pages);
+			atomic_int32_dec(&total_available_pages);
+		}
+
 	} else {
+		//kprintf("base 0x%lx, limit 0x%lx\n", base, limit);
+
 		// mark available memory as free
-		for(addr=base; addr<limit; addr+=PAGE_SIZE) {
+		for(addr=base+0x200000ULL; (addr<limit) && (addr < (BITMAP_SIZE*8*PAGE_SIZE)); addr+=PAGE_SIZE) {
 			if (page_marked(addr >> PAGE_BITS)) {
 				page_clear_mark(addr >> PAGE_BITS);
 				atomic_int32_inc(&total_pages);
 				atomic_int32_inc(&total_available_pages);
 			}
 		}
-	}
 
-	// mark kernel as used, we use 2MB pages to map the kernel
-	for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
-		page_set_mark(addr >> PAGE_BITS);
-		atomic_int32_inc(&total_allocated_pages);
-		atomic_int32_dec(&total_available_pages);
+		atomic_int32_add(&total_allocated_pages, 0x200000 / PAGE_SIZE);
+		atomic_int32_add(&total_pages, 0x200000 / PAGE_SIZE);
 	}
 
 	ret = vma_init();
