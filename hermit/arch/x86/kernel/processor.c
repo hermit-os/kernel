@@ -35,7 +35,7 @@
 extern void isrsyscall(void);
 
 cpu_info_t cpu_info = { 0, 0, 0, 0};
-static uint32_t cpu_freq = 0;
+extern uint32_t cpu_freq;
 
 static void default_mb(void)
 {
