@@ -37,9 +37,10 @@ _pmstart:
 
 	xor ebx, ebx ; invalid multiboot address
 	mov esp, -16
-	push DWORD 0x00 ; dummy value
-	push DWORD 0x00 ; dummy value
-	jmp codesel : codeaddr
+	mov ebp, 0x00       ; dummy value
+	push DWORD 0x00     ; dummy value
+	push DWORD 0x00     ; dummy value
+	jmp codesel : 0x00  ; dummy value
 	jmp $
 
 ALIGN 4
@@ -63,5 +64,3 @@ datasel equ $-gdt
         db 0xCF                 ; additional informationen and degment size 16...19
         db 0x00                 ; segment address 24..31
 gdt_end:
-
-codeaddr equ 0x1400000		; address of the 32bit kernel
