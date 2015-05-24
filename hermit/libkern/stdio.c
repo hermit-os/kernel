@@ -46,7 +46,7 @@ static uint32_t early_print = VGA_EARLY_PRINT;
 static uint32_t early_print = NO_EARLY_PRINT;
 #endif
 static spinlock_irqsave_t olock = SPINLOCK_IRQSAVE_INIT;
-static atomic_int32_t kmsg_counter = ATOMIC_INIT(0);
+static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 static unsigned char kmessages[KMSG_SIZE] __attribute__ ((section(".kmsg"))) = {[0 ... KMSG_SIZE-1] = 0x00};
 
 int koutput_init(void)
