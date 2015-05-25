@@ -2,6 +2,7 @@
 *.dep
 *~
 *.elf
+*.elf32
 *.sym
 *.bin
 *.hex
