@@ -33,6 +33,7 @@ extern "C" {
 #endif
 
 #define HERMIT_VERSION		"0.1"
+#define MAX_CORES		8
 #define MAX_TASKS		16
 #define MAX_FNAME		128
 #define TIMER_FREQ		100 /* in HZ */
