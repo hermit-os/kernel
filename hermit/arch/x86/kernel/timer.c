@@ -60,9 +60,9 @@ static void timer_handler(struct state *s)
 	 * Every TIMER_FREQ clocks (approximately 1 second), we will
 	 * display a message on the screen
 	 */
-	if (timer_ticks % TIMER_FREQ == 0) {
+	/*if (timer_ticks % TIMER_FREQ == 0) {
 		kputs("One second has passed\n");
-	}
+	}*/
 }
 
 #define LATCH(f)	((CLOCK_TICK_RATE + f/2) / f)

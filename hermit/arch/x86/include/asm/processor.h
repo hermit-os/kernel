@@ -38,7 +38,7 @@
 
 #include <hermit/stddef.h>
 #include <asm/gdt.h>
-//#include <asm/apic.h>
+#include <asm/apic.h>
 #include <asm/irqflags.h>
 
 #ifdef __cplusplus
@@ -511,10 +511,10 @@ void udelay(uint32_t usecs);
  */
 inline static int system_calibration(void)
 {
-	//apic_init();
+	apic_init();
 	irq_enable();
 	detect_cpu_frequency();
-	//apic_calibration();
+	apic_calibration();
 
 	return 0;
 }

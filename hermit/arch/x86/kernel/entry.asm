@@ -71,9 +71,11 @@ mboot:
     global base
     global limit
     global cpu_freq
+    global boot_processor
     base dd kernel_start
     limit dd 0
     cpu_freq dd 0
+    boot_processor dd -1
 
 ALIGN 4
 ; we need already a valid GDT to switch in the 64bit modus
