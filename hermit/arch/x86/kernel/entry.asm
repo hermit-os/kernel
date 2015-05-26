@@ -571,10 +571,6 @@ common_switch:
     or eax, 8
     mov cr0, rax
 
-    ; set rsp0 in the task state segment
-    extern set_kernel_stack
-    call set_kernel_stack
-
     ; call cleanup code
     call finish_task_switch
 

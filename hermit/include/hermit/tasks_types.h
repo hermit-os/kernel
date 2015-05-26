@@ -73,6 +73,8 @@ typedef struct task {
 	tid_t			id __attribute__ ((aligned (CACHE_LINE)));
 	/// Task status (INVALID, READY, RUNNING, ...)
 	uint32_t		status;
+	/// last core id on which the task was running
+	uint32_t		last_core;
 	/// copy of the stack pointer before a context switch
 	size_t*			last_stack_pointer;
 	/// start address of the stack 

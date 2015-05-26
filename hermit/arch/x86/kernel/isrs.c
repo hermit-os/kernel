@@ -174,7 +174,7 @@ void isrs_install(void)
 
 static void fpu_handler(struct state *s)
 {
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 
 	asm volatile ("clts"); // clear the TS flag of cr0
 	if (!(task->flags & TASK_FPU_INIT))  {

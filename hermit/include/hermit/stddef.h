@@ -36,6 +36,7 @@
 
 #include <hermit/config.h>
 #include <asm/stddef.h>
+#include <asm/irqflags.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -46,9 +47,42 @@ extern "C" {
 /// represents a task identifier
 typedef unsigned int tid_t;
 
+#if MAX_CORES == 1
+#define per_core(name) name
+#define DECLARE_PER_CORE(type, name) extern type name;
+#define DEFINE_PER_CORE(type, name, def_value) type name = def_value;
+#define DEFINE_PER_CORE_STATIC(type, name, def_value)   static type name = def_value;
+#define CORE_ID 0
+#else
+#define per_core(name) (*__get_percore_##name())
+#define DECLARE_PER_CORE(type, name) \
+	typedef struct { type var  __attribute__ ((aligned (CACHE_LINE))); } aligned_##name;\
+	extern aligned_##name name[MAX_CORES];\
+	inline static type* __get_percore_##name(void) {\
+		type* ret; \
+		uint8_t flags = irq_nested_disable(); \
+		ret = &(name[smp_id()].var); \
+		irq_nested_enable(flags);\
+		return ret; \
+	}
+#define DEFINE_PER_CORE(type, name, def_value) \
+	aligned_##name name[MAX_CORES] = {[0 ... MAX_CORES-1] = {def_value}};
+#define DEFINE_PER_CORE_STATIC(type, name, def_value) \
+	typedef struct { type var  __attribute__ ((aligned (CACHE_LINE))); } aligned_##name;\
+	static aligned_##name name[MAX_CORES] = {[0 ... MAX_CORES-1] = {def_value}}; \
+	inline static type* __get_percore_##name(void) {\
+		type* ret; \
+		uint8_t flags = irq_nested_disable(); \
+		ret = &(name[smp_id()].var); \
+		irq_nested_enable(flags);\
+		return ret; \
+	}
+#define CORE_ID smp_id()
+#endif
+
+/* needed to find the task, which is currently running on this core */
 struct task;
-/// pointer to the current (running) task
-extern struct task* current_task;
+DECLARE_PER_CORE(struct task*, current_task);
 
 #ifdef __cplusplus
 }

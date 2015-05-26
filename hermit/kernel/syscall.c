@@ -46,7 +46,7 @@ static int sys_write(int fd, const char* buf, size_t len)
 
 static ssize_t sys_sbrk(int incr)
 {
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 	vma_t* heap = task->heap;
 	ssize_t ret;
 

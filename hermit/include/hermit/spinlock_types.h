@@ -41,7 +41,6 @@
 extern "C" {
 #endif
 
-
 /** @brief Spinlock structure */
 typedef struct spinlock {
 	/// Internal queue
@@ -59,6 +58,8 @@ typedef struct spinlock_irqsave {
 	atomic_int32_t queue;
 	/// Internal dequeue
 	atomic_int32_t dequeue;
+	/// Core Id of the lock owner
+	uint32_t coreid;
 	/// Internal counter var
 	uint32_t counter;
 	/// Interrupt flag
@@ -68,7 +69,7 @@ typedef struct spinlock_irqsave {
 /// Macro for spinlock initialization
 #define SPINLOCK_INIT { ATOMIC_INIT(0), ATOMIC_INIT(1), MAX_TASKS, 0}
 /// Macro for irqsave spinlock initialization
-#define SPINLOCK_IRQSAVE_INIT { ATOMIC_INIT(0), ATOMIC_INIT(1), 0, 0}
+#define SPINLOCK_IRQSAVE_INIT { ATOMIC_INIT(0), ATOMIC_INIT(1), (uint32_t)-1, 0, 0}
 
 #ifdef __cplusplus
 }
