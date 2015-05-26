@@ -89,21 +89,27 @@ inline static int spinlock_destroy(spinlock_t* s) {
  */
 inline static int spinlock_lock(spinlock_t* s) {
 	int32_t ticket;
+	task_t* curr_task;
 
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
 
-	if (s->owner == current_task->id) {
+	curr_task = per_core(current_task);
+	if (s->owner == curr_task->id) {
 		s->counter++;
 		return 0;
 	}
 
-	ticket = atomic_int32_add(&s->queue, 1);
+#if 1
+	ticket = atomic_int32_inc(&s->queue);
 	while(atomic_int32_read(&s->dequeue) != ticket) {
-		PAUSE;
+		NOP1;
 	}
-	s->owner = current_task->id;
+	s->owner = curr_task->id;
 	s->counter = 1;
+#else
+	while( atomic_int32_test_and_set(&s->dequeue,0) );
+#endif
 
 	return 0;
 }
@@ -120,7 +126,11 @@ inline static int spinlock_unlock(spinlock_t* s) {
 	s->counter--;
 	if (!s->counter) {
 		s->owner = MAX_TASKS;
+#if 1
 		atomic_int32_inc(&s->dequeue);
+#else
+		atomic_int32_set(&s->dequeue,1);
+#endif
 	}
 
 	return 0;
@@ -141,6 +151,7 @@ inline static int spinlock_irqsave_init(spinlock_irqsave_t* s) {
 	atomic_int32_set(&s->queue, 0);
 	atomic_int32_set(&s->dequeue, 1);
 	s->flags = 0;
+	s->coreid = (uint32_t)-1;
 	s->counter = 0;
 
 	return 0;
@@ -156,6 +167,7 @@ inline static int spinlock_irqsave_destroy(spinlock_irqsave_t* s) {
 		return -EINVAL;
 
 	s->flags = 0;
+	s->coreid = (uint32_t)-1;
 	s->counter = 0;
 
 	return 0;
@@ -167,23 +179,28 @@ inline static int spinlock_irqsave_destroy(spinlock_irqsave_t* s) {
  * - -EINVAL (-22) on failure
  */
 inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
+	uint32_t flags;
 	int32_t ticket;
-	uint8_t flags;
 
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
 
 	flags = irq_nested_disable();
-	if (s->counter == 1) {
+	if (s->coreid == CORE_ID) {
 		s->counter++;
 		return 0;
 	}
 
-	ticket = atomic_int32_add(&s->queue, 1);
+#if 1
+	ticket = atomic_int32_inc(&s->queue);
 	while (atomic_int32_read(&s->dequeue) != ticket) {
-		PAUSE;
+		NOP1;
 	}
+#else
+	while( atomic_int32_test_and_set(&s->dequeue,0) );
+#endif
 
+	s->coreid = CORE_ID;
 	s->flags = flags;
 	s->counter = 1;
 
@@ -196,7 +213,7 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
  * - -EINVAL (-22) on failure
  */
 inline static int spinlock_irqsave_unlock(spinlock_irqsave_t* s) {
-	uint8_t flags;
+	uint32_t flags;
 
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
@@ -204,8 +221,13 @@ inline static int spinlock_irqsave_unlock(spinlock_irqsave_t* s) {
 	s->counter--;
 	if (!s->counter) {
 		flags = s->flags;
+		s->coreid = (uint32_t) -1;
 		s->flags = 0;
-                atomic_int32_inc(&s->dequeue);
+#if 1
+		atomic_int32_inc(&s->dequeue);
+#else
+		atomic_int32_set(&s->dequeue,1);
+#endif
 		irq_nested_enable(flags);
 	}
 

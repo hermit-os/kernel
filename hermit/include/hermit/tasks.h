@@ -107,7 +107,7 @@ int create_user_task(tid_t* id, const char* fame, char** argv);
  * - 0 on success
  * - -ENOMEM (-12) or -EINVAL (-22) on failure
  */
-int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio);
+int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id);
 
 /** @brief Cleanup function for the task termination
  *

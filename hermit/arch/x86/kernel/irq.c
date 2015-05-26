@@ -254,7 +254,7 @@ size_t** irq_handler(struct state *s)
 	// timer interrupt?
 	if ((s->int_no == 32) || (s->int_no == 123))
 		ret = scheduler(); // switch to a new task
-	else if ((s->int_no >= 32) && (get_highest_priority() > current_task->prio))
+	else if ((s->int_no >= 32) && (get_highest_priority() > per_core(current_task)->prio))
 		ret = scheduler();
 	else kprintf("Receive IRQ %d\n", s->int_no);
 

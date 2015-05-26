@@ -109,6 +109,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 	int lvl, ret = -ENOMEM;
 	long vpn = viraddr >> PAGE_BITS;
 	long first[PAGE_LEVELS], last[PAGE_LEVELS];
+	task_t* curr_task;
 
 	/* Calculate index boundaries for page map traversal */
 	for (lvl=0; lvl<PAGE_LEVELS; lvl++) {
@@ -116,9 +117,11 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 		last[lvl]  = (vpn+npages-1) >> (lvl * PAGE_MAP_BITS);
 	}
 
+	curr_task = per_core(current_task);
+
 	/** @todo: might not be sufficient! */
 	if (bits & PG_USER)
-		spinlock_irqsave_lock(&current_task->page_lock);
+		spinlock_irqsave_lock(&curr_task->page_lock);
 	else
 		spinlock_lock(&kslock);
 
@@ -135,7 +138,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 						goto out;
 					
 					if (bits & PG_USER)
-						atomic_int32_inc(&current_task->user_usage);
+						atomic_int32_inc(&curr_task->user_usage);
 
 					/* Reference the new table within its parent */
 #if 0
@@ -163,7 +166,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 	ret = 0;
 out:
 	if (bits & PG_USER)
-		spinlock_irqsave_unlock(&current_task->page_lock);
+		spinlock_irqsave_unlock(&curr_task->page_lock);
 	else
 		spinlock_unlock(&kslock);
 
@@ -173,9 +176,11 @@ out:
 /** Tables are freed by page_map_drop() */
 int page_unmap(size_t viraddr, size_t npages)
 {
+	task_t* curr_task = per_core(current_task);
+
 	/* We aquire both locks for kernel and task tables
 	 * as we dont know to which the region belongs. */
-	spinlock_irqsave_lock(&current_task->page_lock);
+	spinlock_irqsave_lock(&curr_task->page_lock);
 	spinlock_lock(&kslock);
 
 	/* Start iterating through the entries.
@@ -184,7 +189,7 @@ int page_unmap(size_t viraddr, size_t npages)
 	for (vpn=start; vpn<start+npages; vpn++)
 		self[0][vpn] = 0;
 
-	spinlock_irqsave_unlock(&current_task->page_lock);
+	spinlock_irqsave_unlock(&curr_task->page_lock);
 	spinlock_unlock(&kslock);
 
 	/* This can't fail because we don't make checks here */
@@ -193,6 +198,8 @@ int page_unmap(size_t viraddr, size_t npages)
 
 int page_map_drop(void)
 {
+	task_t* curr_task = per_core(current_task);
+
 	void traverse(int lvl, long vpn) {
 		long stop;
 		for (stop=vpn+PAGE_MAP_ENTRIES; vpn<stop; vpn++) {
@@ -202,16 +209,16 @@ int page_map_drop(void)
 					traverse(lvl-1, vpn<<PAGE_MAP_BITS);
 
 				put_pages(self[lvl][vpn] & PAGE_MASK, 1);
-				atomic_int32_dec(&current_task->user_usage);
+				atomic_int32_dec(&curr_task->user_usage);
 			}
 		}
 	}
 
-	spinlock_irqsave_lock(&current_task->page_lock);
+	spinlock_irqsave_lock(&curr_task->page_lock);
 
 	traverse(PAGE_LEVELS-1, 0);
 
-	spinlock_irqsave_unlock(&current_task->page_lock);
+	spinlock_irqsave_unlock(&curr_task->page_lock);
 
 	/* This can't fail because we don't make checks here */
 	return 0;
@@ -219,6 +226,8 @@ int page_map_drop(void)
 
 int page_map_copy(task_t *dest)
 {
+	task_t* curr_task = per_core(current_task);
+
 	int traverse(int lvl, long vpn) {
 		long stop;
 		for (stop=vpn+PAGE_MAP_ENTRIES; vpn<stop; vpn++) {
@@ -249,14 +258,14 @@ int page_map_copy(task_t *dest)
 		return 0;
 	}
 
-	spinlock_irqsave_lock(&current_task->page_lock);
+	spinlock_irqsave_lock(&curr_task->page_lock);
 	self[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = dest->page_map | PG_PRESENT | PG_SELF | PG_RW;
 
 	int ret = traverse(PAGE_LEVELS-1, 0);
 
 	other[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-1] = dest->page_map | PG_PRESENT | PG_SELF | PG_RW;
 	self [PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = 0;
-	spinlock_irqsave_unlock(&current_task->page_lock);
+	spinlock_irqsave_unlock(&curr_task->page_lock);
 
 	/* Flush TLB entries of 'other' self-reference */
 	flush_tlb();
@@ -267,7 +276,7 @@ int page_map_copy(task_t *dest)
 void page_fault_handler(struct state *s)
 {
 	size_t viraddr = read_cr2();
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 
 	// on demand userspace heap mapping
 	if ((task->heap) && (viraddr >= task->heap->start) && (viraddr < task->heap->end)) {
@@ -293,23 +302,13 @@ void page_fault_handler(struct state *s)
 	}
 
 default_handler:
-#if 0
 	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
-		s->int_no, s->cs, s->eip, current_task->id, viraddr, s->error,
+		s->int_no, s->cs, s->rip, task->id, viraddr, s->error,
 		(s->error & 0x4) ? "user" : "supervisor",
 		(s->error & 0x10) ? "instruction" : "data",
 		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
 		(s->error & 0x1) ? "protection" : "not present",
 		(s->error & 0x8) ? "reserved bit" : "\b");
-#else
-	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
-		s->int_no, s->cs, s->rip, current_task->id, viraddr, s->error,
-		(s->error & 0x4) ? "user" : "supervisor",
-		(s->error & 0x10) ? "instruction" : "data",
-		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
-		(s->error & 0x1) ? "protection" : "not present",
-		(s->error & 0x8) ? "reserved bit" : "\b");
-#endif
 
 	while(1) HALT;
 }

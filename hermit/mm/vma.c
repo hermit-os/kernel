@@ -105,7 +105,7 @@ out:
 
 size_t vma_alloc(size_t size, uint32_t flags)
 {
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 	spinlock_t* lock;
 	vma_t** list;
 
@@ -178,7 +178,7 @@ found:
 
 int vma_free(size_t start, size_t end)
 {
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 	spinlock_t* lock;
 	vma_t* vma;
 	vma_t** list = NULL;
@@ -251,7 +251,7 @@ int vma_free(size_t start, size_t end)
 
 int vma_add(size_t start, size_t end, uint32_t flags)
 {
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 	spinlock_t* lock;
 	vma_t** list;
 
@@ -386,7 +386,7 @@ void vma_dump(void)
 		}
 	}
 
-	task_t* task = current_task;
+	task_t* task = per_core(current_task);
 
 	kputs("Kernelspace VMAs:\n");
 	spinlock_lock(&vma_lock);

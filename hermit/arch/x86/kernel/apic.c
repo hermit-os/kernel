@@ -177,6 +177,9 @@ uint32_t apic_cpu_id(void)
 	if (apic_is_enabled())
 		return ((lapic_read(APIC_ID)) >> 24);
 
+	if (boot_processor >= 0)
+		return boot_processor;
+
 	return 0;
 }
 
