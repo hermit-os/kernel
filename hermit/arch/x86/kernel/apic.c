@@ -34,6 +34,7 @@
 #include <hermit/time.h>
 #include <hermit/spinlock.h>
 #include <hermit/vma.h>
+#include <hermit/tasks.h>
 #include <asm/irq.h>
 #include <asm/idt.h>
 #include <asm/irqflags.h>
@@ -553,6 +554,44 @@ no_mp:
 	apic_config = NULL;
 	ncores = 1;
 	goto check_lapic;
+}
+
+extern int smp_main(void);
+extern void gdt_flush(void);
+extern int set_idle_task(void);
+
+int smp_start(void)
+{
+	if (lapic && has_x2apic()) // enable x2APIC support
+		wrmsr(0x1B, 0xFEE00C00);
+
+	// reset APIC and set id
+	lapic_reset();
+
+	kprintf("Processor %d is entering its idle task\n", apic_cpu_id());
+
+	// use the same gdt like the boot processors
+	gdt_flush();
+                                                           
+	// install IDT
+	idt_install();
+
+	/*
+	 * we turned on paging
+	 * => now, we are able to register our task
+	 */
+	register_task();
+
+	// enable additional cpu features
+	cpu_detection();
+
+	//kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+
+	set_idle_task();
+
+	irq_enable();
+
+	return smp_main();
 }
 
 static void apic_err_handler(struct state *s)

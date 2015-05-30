@@ -103,7 +103,7 @@ inline static int spinlock_lock(spinlock_t* s) {
 #if 1
 	ticket = atomic_int32_inc(&s->queue);
 	while(atomic_int32_read(&s->dequeue) != ticket) {
-		NOP1;
+		PAUSE;
 	}
 	s->owner = curr_task->id;
 	s->counter = 1;
@@ -194,7 +194,7 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
 #if 1
 	ticket = atomic_int32_inc(&s->queue);
 	while (atomic_int32_read(&s->dequeue) != ticket) {
-		NOP1;
+		PAUSE;
 	}
 #else
 	while( atomic_int32_test_and_set(&s->dequeue,0) );

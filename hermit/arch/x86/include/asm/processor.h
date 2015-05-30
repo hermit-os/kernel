@@ -454,13 +454,7 @@ static inline size_t lsb(size_t i)
 }
 
 /// A one-instruction-do-nothing
-#define NOP1	asm  volatile ("nop")
-/// A two-instruction-do-nothing
-#define NOP2	asm  volatile ("nop;nop")
-/// A four-instruction-do-nothing
-#define NOP4	asm  volatile ("nop;nop;nop;nop")
-/// A eight-instruction-do-nothing
-#define NOP8	asm  volatile ("nop;nop;nop;nop;nop;nop;nop;nop")
+#define NOP	asm  volatile ("nop")
 /// The PAUSE instruction provides a hint to the processor that the code sequence is a spin-wait loop.
 #define PAUSE	asm volatile ("pause")
 /// The HALT instruction stops the processor until the next interrupt arrives 
@@ -503,6 +497,14 @@ uint32_t get_cpu_frequency(void);
  */
 void udelay(uint32_t usecs);
 
+/// Register a task's TSS at GDT
+static inline void register_task(void)
+{
+	uint16_t sel = (CORE_ID*2+6) << 3;
+
+	asm volatile ("ltr %%ax" : : "a"(sel));
+}
+
 /** @brief System calibration
  *
  * This procedure will detect the CPU frequency and calibrate the APIC timer.
@@ -512,9 +514,12 @@ void udelay(uint32_t usecs);
 inline static int system_calibration(void)
 {
 	apic_init();
+	register_task();
 	irq_enable();
 	detect_cpu_frequency();
 	apic_calibration();
+
+	//kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
 
 	return 0;
 }
