@@ -36,7 +36,7 @@
 #include <asm/page.h>
 
 gdt_ptr_t			gp;
-static tss_t			task_state_segment __attribute__ ((aligned (PAGE_SIZE)));
+static tss_t			task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
 // currently, our kernel has full access to the ioports
 static gdt_entry_t		gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 0}};
 
@@ -52,7 +52,7 @@ size_t get_kernel_stack(void)
 {
 	task_t* curr_task = per_core(current_task);
 
-	return (size_t) curr_task->stack + KERNEL_STACK_SIZE - 16; // => stack is 16byte aligned
+	return (size_t) curr_task->stack + curr_task->id * KERNEL_STACK_SIZE - 16; // => stack is 16byte aligned
 }
 
 /* Setup a descriptor in the Global Descriptor Table */
@@ -89,9 +89,9 @@ void configure_gdt_entry(gdt_entry_t *dest_entry, unsigned long base, unsigned l
 void gdt_install(void)
 {
 	unsigned long gran_ds, gran_cs, limit;
-	int num = 0;
+	int i, num = 0;
 
-	memset(&task_state_segment, 0x00, sizeof(tss_t));
+	memset(task_state_segments, 0x00, MAX_CORES*sizeof(tss_t));
 
 	gran_cs = GDT_FLAG_64_BIT;
 	gran_ds = 0;
@@ -138,9 +138,14 @@ void gdt_install(void)
 	gdt_set_gate(num++, 0, limit,
 		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, gran_cs);
 
-	task_state_segment.rsp0 = (size_t) &boot_stack - 0x10;
-	gdt_set_gate(num++, (unsigned long) (&task_state_segment), sizeof(tss_t)-1,
+	/*
+	 * Create TSS for each task at ring0 (we use these segments for task switching)
+	 */
+	for(i=0; i<MAX_CORES; i++) {
+		task_state_segments[i].rsp0 = (size_t) &boot_stack + (i + 1) * KERNEL_STACK_SIZE - 16;
+		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t)-1,
 			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, gran_ds);
+	}
 
 	/* Flush out the old GDT and install the new changes! */
 	gdt_flush();

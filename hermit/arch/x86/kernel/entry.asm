@@ -72,10 +72,12 @@ mboot:
     global limit
     global cpu_freq
     global boot_processor
+    global cpu_online
     base dd kernel_start
     limit dd 0
     cpu_freq dd 0
     boot_processor dd -1
+    cpu_online dd 0
 
 ALIGN 4
 ; we need already a valid GDT to switch in the 64bit modus
@@ -114,6 +116,15 @@ stublet:
     add eax, ebp
     mov esp, eax
     add esp, KERNEL_STACK_SIZE - 16
+    mov eax, boot_processor
+    sub eax, kernel_start
+    add eax, ebp
+    mov eax, DWORD [eax]
+    cmp eax, -1
+    je L0
+    imul eax, KERNEL_STACK_SIZE
+    add esp, eax
+L0:
 
     ; Interpret multiboot information
     mov eax, mb_info
@@ -128,6 +139,20 @@ stublet:
 cpu_init:
    push edi
 
+; do we have to relocate / to intialize the page tables?
+; only the boot_processor have to do it
+   mov eax, cpu_online
+   sub eax, kernel_start
+   add eax, ebp
+   mov eax, DWORD [eax]
+   cmp eax, 0
+   je short Lrelocate
+   mov eax, Lmap_kernel
+   sub eax, kernel_start
+   add eax, ebp ; ebp contains the physical address of the kernel
+   jmp eax
+
+Lrelocate:
 ; relocate page tables
    mov edi, boot_pml4
    sub edi, kernel_start
@@ -212,6 +237,7 @@ Lno_mbinfo:
     or eax, 0x183
     mov DWORD [edi], eax
 
+Lmap_kernel:
     cmp ebp, kernel_start
     je Lno_remap
 
@@ -317,15 +343,48 @@ start64:
     xor rdi, rdi
 
 Lno_unmap:
+    mov eax, DWORD [cpu_online]
+    cmp eax, 0
+    jne Lsmp_main
+
     ; set default stack pointer
     mov rsp, boot_stack
     add rsp, KERNEL_STACK_SIZE-16
+    xor rax, rax
+    mov eax, [boot_processor]
+    cmp eax, -1
+    je L1
+    imul eax, KERNEL_STACK_SIZE
+    add rsp, rax
+L1:
     mov rbp, rsp
 
     ; jump to the boot processors's C code
     extern main
     call main
     jmp $
+
+Lsmp_main:
+    ; dirty to hack to determine the cpu id
+    ; with a temporary stack
+    mov rsp, tmp_stack-16
+    extern apic_cpu_id
+    call apic_cpu_id
+
+    ; set default stack pointer
+    imul rax, KERNEL_STACK_SIZE
+    add rax, boot_stack
+    add rax, KERNEL_STACK_SIZE-16
+    mov rsp, rax
+    mov rbp, rsp
+    
+    extern smp_start
+    call smp_start
+    jmp $
+
+    DQ 0, 0, 0, 0
+    DQ 0, 0, 0, 0
+tmp_stack:
 
 global gdt_flush
 extern gp
@@ -605,7 +664,7 @@ mb_info:
 ALIGN 4096
 global boot_stack
 boot_stack:
-    TIMES (KERNEL_STACK_SIZE) DB 0xcd
+    TIMES (MAX_CORES*KERNEL_STACK_SIZE) DB 0xcd
 
 ; Bootstrap page tables are used during the initialization.
 ALIGN 4096

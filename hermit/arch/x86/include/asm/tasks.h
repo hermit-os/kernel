@@ -61,20 +61,6 @@ void switch_context(size_t** stack);
  */
 int create_default_frame(task_t* task, entry_point_t ep, void* arg);
 
-/** @brief Register a task's TSS at GDT
- *
- * @return
- * - 0 on success
- */
-static inline int register_task(void)
-{
-	uint16_t sel = 6 << 3;
-
-	asm volatile ("ltr %%ax" : : "a"(sel));
-
-	return 0;
-}
-
 /** @brief Jump to user code
  *
  * This function runs the user code after stopping it just as if

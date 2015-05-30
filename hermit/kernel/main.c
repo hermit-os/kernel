@@ -55,6 +55,8 @@ extern atomic_int32_t total_pages;
 extern atomic_int32_t total_allocated_pages;
 extern atomic_int32_t total_available_pages;
 
+extern atomic_int32_t cpu_online;
+
 static int foo(void* arg)
 {
 	kprintf("hello from %s\n", (char*) arg);
@@ -77,10 +79,27 @@ static int hermit_init(void)
 	return 0;
 }
 
+int smp_main(void)
+{
+	int32_t cpu = atomic_int32_inc(&cpu_online);
+
+	kprintf("%d CPUs are now online\n", cpu);
+
+	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
+
+	while(1) {
+                HALT;
+        }
+
+	return 0;
+}
+
 int main(void)
 {
 	hermit_init();
 	system_calibration(); // enables also interrupts
+
+	atomic_int32_inc(&cpu_online);
 
 	kprintf("This is Hermit %s Build %u, %u\n", HERMIT_VERSION, &__BUILD_DATE, &__BUILD_TIME);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
@@ -89,7 +108,7 @@ int main(void)
 	kprintf("Current allocated memory: %lu KiB\n", atomic_int32_read(&total_allocated_pages) * PAGE_SIZE / 1024);
 	kprintf("Current available memory: %lu KiB\n", atomic_int32_read(&total_available_pages) * PAGE_SIZE / 1024);
 
-	create_kernel_task(NULL, foo, "foo", NORMAL_PRIO);
+	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 
 	while(1) { 
 		HALT;

@@ -71,21 +71,54 @@ uint32_t get_highest_priority(void)
 
 int multitasking_init(void)
 {
+	uint32_t core_id = CORE_ID;
+
 	if (BUILTIN_EXPECT(task_table[0].status != TASK_IDLE, 0)) {
 		kputs("Task 0 is not an idle task\n");
 		return -ENOMEM;
 	}
 
 	task_table[0].prio = IDLE_PRIO;
-	task_table[0].stack = (char*) &boot_stack;
+	task_table[0].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 	task_table[0].page_map = read_cr3();
 
-	readyqueues[CORE_ID].idle = task_table+0;
-
-	// register idle task
-	register_task();
+	readyqueues[core_id].idle = task_table+0;
 
 	return 0;
+}
+
+int set_idle_task(void)
+{
+	uint32_t i, core_id = CORE_ID;
+	int ret = -ENOMEM;
+
+	spinlock_irqsave_lock(&table_lock);
+
+	for(i=0; i<MAX_TASKS; i++) {
+		if (task_table[i].status == TASK_INVALID) {
+			task_table[i].id = i;
+			task_table[i].status = TASK_IDLE;
+                        task_table[i].last_core = core_id;
+                        task_table[i].last_stack_pointer = NULL;
+                        task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);;
+                        task_table[i].prio = IDLE_PRIO;
+                        spinlock_init(&task_table[i].vma_lock);
+                        task_table[i].vma_list = NULL;
+                        task_table[i].heap = NULL;
+			spinlock_irqsave_init(&task_table[i].page_lock);
+			atomic_int32_set(&task_table[i].user_usage, 0);
+			task_table[i].page_map = read_cr3();
+			per_core(current_task) = readyqueues[core_id].idle = task_table+i;
+			ret = 0;
+
+			
+			break;
+		}
+	}
+
+	spinlock_irqsave_unlock(&table_lock);
+
+	return ret;
 }
 
 void finish_task_switch(void)
