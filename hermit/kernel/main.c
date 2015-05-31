@@ -87,6 +87,7 @@ int smp_main(void)
 
 	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
+	flush_tlb();
 	while(1) {
                 HALT;
         }

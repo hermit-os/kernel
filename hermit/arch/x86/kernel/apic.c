@@ -70,10 +70,14 @@ static uint32_t icr = 0;
 static uint32_t ncores = 1;
 static uint8_t irq_redirect[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF};
 static uint8_t initialized = 0;
+static uint8_t online[MAX_CORES] = {[0 ... MAX_CORES-1] = 0};
+
 spinlock_t bootlock = SPINLOCK_INIT;
 
 // forward declaration
 static int lapic_reset(void);
+
+extern atomic_int32_t cpu_online;
 
 static uint32_t lapic_read_default(uint32_t addr)
 {
@@ -586,6 +590,7 @@ int smp_start(void)
 	cpu_detection();
 
 	//kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+	online[apic_cpu_id()] = 1;
 
 	set_idle_task();
 
@@ -593,6 +598,60 @@ int smp_start(void)
 
 	return smp_main();
 }
+
+#if MAX_CORES > 1
+static inline void set_ipi_dest(uint32_t cpu_id) {
+	uint32_t tmp;
+
+	tmp = lapic_read(APIC_ICR2);
+	tmp &= 0x00FFFFFF;
+	tmp |= (cpu_id << 24);
+	lapic_write(APIC_ICR2, tmp);
+}
+
+int ipi_tlb_flush(void)
+{
+	uint32_t core_id = CORE_ID;
+	uint32_t flags;
+	uint32_t i, j;
+
+	if (atomic_int32_read(&cpu_online) == 1)
+		return 0;
+
+	if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+		kputs("ERROR: previous send not complete");
+		return -EIO;
+	}
+
+	flags = irq_nested_disable();
+	for(i=0; i<MAX_CORES; i++)
+	{
+		if (i == core_id)
+			continue;
+		if (!online[i])
+			continue;
+
+		set_ipi_dest(i);
+		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|124);
+
+		j = 0;
+		while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
+			j++; // wait for it to finish, give up eventualy tho
+	}
+	irq_nested_enable(flags);
+
+	return 0;
+}
+
+static void apic_tlb_handler(struct state *s)
+{
+	uint32_t val = read_cr3();
+
+	if (val)
+		write_cr3(val);
+	//kputs("Flush TLB!\n");
+}
+#endif
 
 static void apic_err_handler(struct state *s)
 {
@@ -612,7 +671,11 @@ int apic_init(void)
 
 	// set APIC error handler
 	irq_install_handler(126, apic_err_handler);
+#if MAX_CORES > 1
+	irq_install_handler(124, apic_tlb_handler);
+#endif
 	kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
+	online[boot_processor] = 1;
 
 	return 0;
 }
