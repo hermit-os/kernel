@@ -68,7 +68,7 @@ size_t** scheduler(void);
  */
 int multitasking_init(void);
 
-/** @brief create a kernel-level task. 
+/** @brief create a kernel-level task on the current core. 
  *
  * @param id The value behind this pointer will be set to the new task's id
  * @param ep Pointer to the entry function for the new task
@@ -81,7 +81,21 @@ int multitasking_init(void);
  */
 int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio);
 
-/** @brief Create a user level task.
+/** @brief create a kernel-level task. 
+ *
+ * @param id The value behind this pointer will be set to the new task's id
+ * @param ep Pointer to the entry function for the new task
+ * @param args Arguments the task shall start with
+ * @param prio Desired priority of the new kernel task
+ * @param core_id Start the new task on the core with this id
+ *
+ * @return 
+ * - 0 on success
+ * - -EINVAL (-22) on failure
+ */
+int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id);
+
+/** @brief Create a user level task on the current core.
  *
  * @param id The value behind this pointer will be set to the new task's id
  * @param fname Filename of the executable to start the task with
@@ -92,6 +106,19 @@ int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio);
  * - -EINVAL (-22) or -ENOMEM (-12)on failure
  */
 int create_user_task(tid_t* id, const char* fame, char** argv);
+
+/** @brief Create a user level task.
+ *
+ * @param id The value behind this pointer will be set to the new task's id
+ * @param fname Filename of the executable to start the task with
+ * @param argv Pointer to arguments array
+ * @param core_id Start the new task on the core with this id 
+ *
+ * @return
+ * - 0 on success
+ * - -EINVAL (-22) or -ENOMEM (-12)on failure
+ */
+int create_user_task_on_core(tid_t* id, const char* fame, char** argv, uint32_t core_id);
 
 /** @brief Create a task with a specific entry point
  *
