@@ -211,6 +211,10 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 		return -EINVAL;
 	if (BUILTIN_EXPECT(prio > MAX_PRIO, 0))
 		return -EINVAL;
+	if (BUILTIN_EXPECT(core_id >= MAX_CORES, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
+		return -EINVAL;
 
 	spinlock_irqsave_lock(&table_lock);
 
@@ -265,6 +269,14 @@ out:
 	spinlock_irqsave_unlock(&table_lock);
 
 	return ret;
+}
+
+int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id)
+{
+	if (prio > MAX_PRIO)
+		prio = NORMAL_PRIO;
+
+	return create_task(id, ep, args, prio, core_id);
 }
 
 int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio)
