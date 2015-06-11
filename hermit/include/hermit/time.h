@@ -44,10 +44,26 @@ extern "C" {
  */
 int timer_init(void);
 
+/** @brief Initialized a timer
+ *
+ * @param ticks Amount of ticks to wait
+ * @return
+ * - 0 on success
+ */
+int timer_wait(unsigned int ticks);
+
 /** @brief Returns the current number of ticks.
  * @return Current number of ticks
  */
 uint64_t get_clock_tick(void);
+
+/** @brief sleep some seconds
+ *
+ * This function sleeps some seconds
+ *
+ * @param sec Amount of seconds to wait
+ */
+static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
 
 #ifdef __cplusplus
 }

@@ -176,11 +176,50 @@ int wakeup_task(tid_t);
  */
 int block_current_task(void);
 
+/** @brief Block current task until timer expires
+ *
+ * @param deadline Clock tick, when the timer expires
+ * @return
+ *  - 0 on success
+ *  - -EINVAL (-22) on failure
+ */
+int set_timer(uint64_t deadline);
+
+/** @brief check is a timer is expired
+ *
+ */
+void check_timers(void);
+
 /** @brief Abort current task */
 void NORETURN abort(void);
 
 /** @brief This function shall be called by leaving kernel-level tasks */
 void NORETURN leave_kernel_task(void);
+
+/** @brief if a task exists with higher priority, MetalSVM switch to it.
+ *  */
+void check_scheduling(void);
+
+#if 0
+/** @brief check, if the tick counter has to be updated
+ *  */
+void check_ticks(void);
+#endif
+
+static inline void check_workqueues_in_irqhandler(int irq)
+{
+	//check_ticks();
+	check_timers();
+
+	if (irq < 0)
+		check_scheduling();
+}
+
+static inline void check_workqueues(void)
+{
+	// call with invalid interrupt number
+	check_workqueues_in_irqhandler(-1);
+}
 
 #ifdef __cplusplus
 }

@@ -32,6 +32,7 @@
 #include <hermit/tasks.h>
 #include <hermit/tasks_types.h>
 #include <hermit/spinlock.h>
+#include <hermit/time.h>
 #include <hermit/errno.h>
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
@@ -41,16 +42,16 @@
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, NULL, ATOMIC_INIT(0), NULL, NULL}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, NULL,ATOMIC_INIT(0), NULL, NULL}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, NULL, ATOMIC_INIT(0), NULL, NULL, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, NULL,ATOMIC_INIT(0), NULL, NULL, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
 #if MAX_CORES > 1
 static readyqueues_t readyqueues[MAX_CORES] = { \
-		[0 ... MAX_CORES-1]   = {NULL, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, SPINLOCK_IRQSAVE_INIT}};
+		[0 ... MAX_CORES-1]   = {NULL, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
 #else
-static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, SPINLOCK_IRQSAVE_INIT}};
+static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
 #endif
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
@@ -62,6 +63,14 @@ extern const void boot_stack;
 task_t* get_current_task(void)
 {
 	return per_core(current_task);
+}
+
+void check_scheduling(void)
+{
+	if (!is_irq_enabled())
+		return;
+	if (msb(readyqueues[CORE_ID].prio_bitmap) > per_core(current_task)->prio)
+		reschedule();
 }
 
 uint32_t get_highest_priority(void)
@@ -229,6 +238,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			spinlock_init(&task_table[i].vma_lock);
 			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
+			task_table[i].lwip_err = 0;
 
 			spinlock_irqsave_init(&task_table[i].page_lock);
 			atomic_int32_set(&task_table[i].user_usage, 0);
@@ -314,6 +324,19 @@ int wakeup_task(tid_t id)
 		// increase the number of ready tasks
 		readyqueues[core_id].nr_tasks++;
 
+		// do we need to remove from timer queue?
+		if (task->flags & TASK_TIMER) {
+			task->flags &= ~TASK_TIMER;
+			if (task->prev)
+				task->prev->next = task->next;
+			if (task->next)
+				task->next->prev = task->prev;
+			if (readyqueues[core_id].timers.first == task)
+				readyqueues[core_id].timers.first = task->next;
+			if (readyqueues[core_id].timers.last == task)
+				readyqueues[core_id].timers.last = task->prev;
+		}
+
 		// add task to the runqueue
 		if (!readyqueues[core_id].queue[prio-1].last) {
 			readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first = task;
@@ -386,6 +409,132 @@ int block_current_task(void)
 	irq_nested_enable(flags);
 
 	return ret;
+}
+
+int set_timer(uint64_t deadline)
+{
+	task_t* curr_task;
+	task_t* tmp;
+	uint32_t core_id, prio;
+	uint32_t flags;
+	int ret = -EINVAL;
+
+	flags = irq_nested_disable();
+
+	curr_task = per_core(current_task);
+	prio = curr_task->prio;
+	core_id = CORE_ID;
+
+	if (curr_task->status == TASK_RUNNING) {
+		curr_task->status = TASK_BLOCKED;
+		curr_task->timeout = deadline;
+		curr_task->flags |= TASK_TIMER;
+		ret = 0;
+
+		spinlock_irqsave_lock(&readyqueues[core_id].lock);
+
+		// reduce the number of ready tasks
+		readyqueues[core_id].nr_tasks--;
+
+		// remove task from queue
+		if (curr_task->prev)
+			curr_task->prev->next = curr_task->next;
+		if (curr_task->next)
+			curr_task->next->prev = curr_task->prev;
+		if (readyqueues[core_id].queue[prio-1].first == curr_task)
+			readyqueues[core_id].queue[prio-1].first = curr_task->next;
+		if (readyqueues[core_id].queue[prio-1].last == curr_task) {
+			readyqueues[core_id].queue[prio-1].last = curr_task->prev;
+			if (!readyqueues[core_id].queue[prio-1].last)
+				readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first;
+		}
+
+		// No valid task in queue => update prio_bitmap
+		if (!readyqueues[core_id].queue[prio-1].first)
+			readyqueues[core_id].prio_bitmap &= ~(1 << prio);
+
+		// add task to the timer queue
+		tmp = readyqueues[core_id].timers.first;
+		if (!tmp) {
+			readyqueues[core_id].timers.first = readyqueues[core_id].timers.last = curr_task;
+			curr_task->prev = curr_task->next = NULL;
+		} else {
+			while(tmp && (deadline >= tmp->timeout))
+				tmp = tmp->next;
+
+			if (!tmp) {
+				curr_task->next = NULL;
+				curr_task->prev = readyqueues[core_id].timers.last;
+				if (readyqueues[core_id].timers.last)
+					readyqueues[core_id].timers.last->next = curr_task;
+				readyqueues[core_id].timers.last = curr_task;
+				// obsolete lines...
+				//if (!readyqueues[core_id].timers.first)
+				//      readyqueues[core_id].timers.first = curr_task;
+			} else {
+				curr_task->prev = tmp->prev;
+				curr_task->next = tmp;
+				tmp->prev = curr_task;
+				if (curr_task->prev)
+					curr_task->prev->next = curr_task;
+				if (readyqueues[core_id].timers.first == tmp)
+					readyqueues[core_id].timers.first = curr_task;
+			}
+		}
+
+		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+	} else kprintf("Task is already blocked. No timer will be set!\n");
+
+	irq_nested_enable(flags);
+
+	return ret;
+}
+
+void check_timers(void)
+{
+	uint32_t core_id = CORE_ID;
+	uint32_t prio;
+	uint64_t current_tick;
+
+	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+
+        // check timers
+	current_tick = get_clock_tick();
+	while (readyqueues[core_id].timers.first && readyqueues[core_id].timers.first->timeout <= current_tick)
+	{
+		task_t* task = readyqueues[core_id].timers.first;
+
+		// remove timer from queue
+		readyqueues[core_id].timers.first = readyqueues[core_id].timers.first->next;
+		if (readyqueues[core_id].timers.first)
+			readyqueues[core_id].timers.first->prev = NULL;
+		else
+			readyqueues[core_id].timers.last = NULL;
+		task->flags &= ~TASK_TIMER;
+
+		// wakeup task
+		if (task->status == TASK_BLOCKED) {
+			task->status = TASK_READY;
+			prio = task->prio;
+
+			// increase the number of ready tasks
+			readyqueues[core_id].nr_tasks++;
+
+			// add task to the runqueue
+			if (!readyqueues[core_id].queue[prio-1].first) {
+				readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first = task;
+				task->next = task->prev = NULL;
+				readyqueues[core_id].prio_bitmap |= (1 << prio);
+			} else {
+				task->prev = readyqueues[core_id].queue[prio-1].last;
+				task->next = NULL;
+				readyqueues[core_id].queue[prio-1].last->next = task;
+				readyqueues[core_id].queue[prio-1].last = task;
+			}
+		}
+	}
+
+	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 }
 
 size_t** scheduler(void)

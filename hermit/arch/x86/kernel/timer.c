@@ -29,6 +29,7 @@
 #include <hermit/string.h>
 #include <hermit/processor.h>
 #include <hermit/time.h>
+#include <hermit/tasks.h>
 #include <hermit/errno.h>
 #include <asm/irq.h>
 #include <asm/irqflags.h>
@@ -63,6 +64,39 @@ static void timer_handler(struct state *s)
 	/*if (timer_ticks % TIMER_FREQ == 0) {
 		kputs("One second has passed\n");
 	}*/
+}
+
+int timer_wait(unsigned int ticks)
+{
+	uint64_t eticks = timer_ticks + ticks;
+        
+	task_t* curr_task = per_core(current_task);
+
+	if (curr_task->status == TASK_IDLE)
+	{
+		/*
+		 * This will continuously loop until the given time has
+		 * been reached
+		 */
+		while (timer_ticks < eticks) {
+			check_workqueues();
+
+			// recheck break condition
+			if (timer_ticks >= eticks)
+				break;
+
+			HALT;
+		}
+	} else if (timer_ticks < eticks) {
+		check_workqueues();
+
+		if (timer_ticks < eticks) {
+			set_timer(eticks);
+			reschedule();
+		}
+	}
+
+	return 0;
 }
 
 #define LATCH(f)	((CLOCK_TICK_RATE + f/2) / f)

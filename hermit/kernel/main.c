@@ -34,10 +34,20 @@
 #include <hermit/tasks.h>
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
-
 #include <asm/irq.h>
 #include <asm/atomic.h>
 #include <asm/page.h>
+
+#include <lwip/init.h>
+#include <lwip/sys.h>
+#include <lwip/stats.h>
+#include <lwip/udp.h>
+#include <lwip/tcp.h>
+#include <lwip/tcpip.h>
+#include <lwip/dhcp.h>
+#include <lwip/netifapi.h>
+#include <lwip/timers.h>
+#include <netif/etharp.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -79,6 +89,30 @@ static int hermit_init(void)
 	return 0;
 }
 
+static void tcpip_init_done(void* arg)
+{
+	sys_sem_t* sem = (sys_sem_t*)arg;
+
+	kprintf("LwIP's tcpip thread has task id %d\n", per_core(current_task)->id);
+
+	sys_sem_signal(sem);
+}
+
+static int init_netifs(void)
+{
+	sys_sem_t	sem;
+
+	if(sys_sem_new(&sem, 0) != ERR_OK)
+		LWIP_ASSERT("Failed to create semaphore", 0);
+
+	tcpip_init(tcpip_init_done, &sem);
+	sys_sem_wait(&sem);
+	kprintf("TCP/IP initialized.\n");
+	sys_sem_free(&sem);
+
+	return 0;
+}
+
 int smp_main(void)
 {
 	int32_t cpu = atomic_int32_inc(&cpu_online);
@@ -87,8 +121,8 @@ int smp_main(void)
 
 	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
-	flush_tlb();
 	while(1) {
+		check_workqueues();
                 HALT;
         }
 
@@ -111,7 +145,10 @@ int main(void)
 
 	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 
-	while(1) { 
+	init_netifs();
+
+	while(1) {
+		check_workqueues();
 		HALT;
 	}
 

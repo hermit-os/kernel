@@ -241,6 +241,8 @@ size_t** irq_handler(struct state *s)
 	/* This is a blank function pointer */
 	void (*handler) (struct state * s);
 
+	check_workqueues_in_irqhandler(s->int_no);
+
 	/* 
 	 * Find out if we have a custom handler to run for this
 	 * IRQ and then finally, run it 
