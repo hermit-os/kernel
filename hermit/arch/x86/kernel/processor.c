@@ -228,3 +228,16 @@ uint32_t get_cpu_frequency(void)
 	return detect_cpu_frequency();
 }
 
+void udelay(uint32_t usecs)
+{
+	uint64_t diff, end, start = rdtsc();
+	uint64_t deadline = get_cpu_frequency() * usecs;
+
+	do {
+		mb();
+		end = rdtsc();
+		diff = end > start ? end - start : start - end;
+		if ((diff < deadline) && (deadline - diff > 50000))
+			check_workqueues();
+	} while(diff < deadline);
+}

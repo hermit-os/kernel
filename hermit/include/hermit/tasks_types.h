@@ -48,15 +48,16 @@ extern "C" {
 #endif
 
 #define TASK_INVALID	0
-#define TASK_READY		1
+#define TASK_READY	1
 #define TASK_RUNNING	2
 #define TASK_BLOCKED	3
 #define TASK_FINISHED	4
-#define TASK_IDLE		5
+#define TASK_IDLE	5
 
 #define TASK_DEFAULT_FLAGS	0
 #define TASK_FPU_INIT		(1 << 0)
 #define TASK_FPU_USED		(1 << 1)
+#define TASK_TIMER		(1 << 2)
 
 #define MAX_PRIO	31
 #define REALTIME_PRIO	31
@@ -83,6 +84,8 @@ typedef struct task {
 	uint8_t			flags;
 	/// Task priority
 	uint8_t			prio;
+	/// timeout for a blocked task
+	uint64_t		timeout;
 	/// Physical address of root page table
 	size_t			page_map;
 	/// Lock for page tables
@@ -99,6 +102,8 @@ typedef struct task {
 	struct task*	next;
 	/// previous task in the queue
 	struct task*	prev;
+	/// LwIP error code
+	int		lwip_err;
 	/// FPU state
 	union fpu_state	fpu;
 } task_t;
@@ -120,6 +125,8 @@ typedef struct {
 	uint32_t	prio_bitmap;
 	/// a queue for each priority
 	task_list_t	queue[MAX_PRIO];
+	/// a queue for timers
+	task_list_t     timers;
 	/// lock for this runqueue
 	spinlock_irqsave_t lock;
 } readyqueues_t;

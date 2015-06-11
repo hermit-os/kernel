@@ -2,7 +2,8 @@ TERM = xterm
 TOPDIR = $(shell pwd)
 ARCH = x86
 NAME = hermit
-KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm
+LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
+KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
 SUBDIRS = $(KERNDIRS)
 
 # Set your own cross compiler tool chain prefix here
@@ -38,7 +39,7 @@ QEMUDEBUGFLAGS = -monitor none -daemonize \
 QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
 		-chardev socket,host=localhost,port=4555,server,id=tS0
 
-INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include
+INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4
 # Compiler options for final code
 CFLAGS = -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 # Compiler options for debugging
