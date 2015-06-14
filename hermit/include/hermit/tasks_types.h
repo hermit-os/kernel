@@ -48,11 +48,11 @@ extern "C" {
 #endif
 
 #define TASK_INVALID	0
-#define TASK_READY		1
+#define TASK_READY	1
 #define TASK_RUNNING	2
 #define TASK_BLOCKED	3
 #define TASK_FINISHED	4
-#define TASK_IDLE		5
+#define TASK_IDLE	5
 
 #define TASK_DEFAULT_FLAGS	0
 #define TASK_FPU_INIT		(1 << 0)
