@@ -15,6 +15,9 @@ init.hex: init.bin
 clean:
 	$(RM) -rf *.o *~ *.bin *.obj *.hex
 
+veryclean: clean
+	
+
 depend:
 	$(CC) -MM $(CFLAGS) *.c > Makefile.dep
 
