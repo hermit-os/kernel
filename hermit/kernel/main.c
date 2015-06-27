@@ -69,7 +69,12 @@ extern atomic_int32_t cpu_online;
 
 static int foo(void* arg)
 {
-	kprintf("hello from %s\n", (char*) arg);
+	int i;
+
+	for(i=0; i<5; i++) {
+		kprintf("hello from %s\n", (char*) arg);
+		sleep(1);
+	}
 
 	return 0;
 }
@@ -144,6 +149,7 @@ int main(void)
 	kprintf("Current available memory: %lu KiB\n", atomic_int32_read(&total_available_pages) * PAGE_SIZE / 1024);
 
 	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
+	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	init_netifs();
 
