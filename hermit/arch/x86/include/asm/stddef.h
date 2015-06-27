@@ -87,6 +87,11 @@ typedef char int8_t;
 /// 16 bit wide char type
 typedef unsigned short wchar_t;
 
+#ifndef _WINT_T
+#define _WINT_T
+typedef wchar_t wint_t;
+#endif
+
 /// This defines what the stack looks like after the task context is saved.
 struct state {
 	/// R15 register
