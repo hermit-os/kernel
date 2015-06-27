@@ -649,7 +649,7 @@ static void apic_tlb_handler(struct state *s)
 
 	if (val)
 		write_cr3(val);
-	//kputs("Flush TLB!\n");
+	kputs("Flush TLB!\n");
 }
 #endif
 
