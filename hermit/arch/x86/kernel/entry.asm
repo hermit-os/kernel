@@ -566,7 +566,10 @@ switch_context:
     ; create on the stack a pseudo interrupt
     ; afterwards, we switch to the task with iret
     mov rax, rdi                ; rdi contains the address to store the old rsp
-    pushf                       ; RFLAGS
+    push QWORD 0x10             ; SS
+    push rsp                    ; RSP
+    add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
+    pushfq                      ; RFLAGS
     push QWORD 0x08             ; CS
     push QWORD rollback         ; RIP
     push QWORD 0x00             ; Interrupt number
