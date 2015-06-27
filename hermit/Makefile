@@ -41,9 +41,9 @@ QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4
 # Compiler options for final code
-CFLAGS = -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
+CFLAGS = -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 # Compiler options for debugging
-debug debug-eclipse : CFLAGS = -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
+debug debug-eclipse : CFLAGS = -D_HERMIT -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
@@ -52,6 +52,12 @@ STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
 
+CFLAGS_FOR_NEWLIB = $(STACKPROT) -mtune=native
+LDFLAGS_FOR_NEWLIB =
+NASMFLAGS_FOR_NEWLIB = -felf64
+CFLAGS_FOR_TOOLS = -O2 -Wall
+LDFLAGS_FOR_TOOLS =
+
 # Prettify output
 V = 0
 ifeq ($V,0)
@@ -59,9 +65,30 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
-default: $(NAME).elf
+default: all
 
-all: $(NAME).elf
+all: newlib $(NAME).elf
+
+newlib:
+	$Q$(MAKE) ARCH=$(ARCH) \
+		LDFLAGS="$(LDFLAGS_FOR_NEWLIB)" \
+		CFLAGS="$(CFLAGS_FOR_NEWLIB)" \
+		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
+		CC_FOR_TARGET=$(CC_FOR_TARGET) \
+		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
+		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
+		AR_FOR_TARGET=$(AR_FOR_TARGET) \
+		AS_FOR_TARGET=$(AS_FOR_TARGET) \
+		LD_FOR_TARGET=$(LD_FOR_TARGET) \
+		NM_FOR_TARGET=$(NM_FOR_TARGET) \
+		OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET) \
+		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
+		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
+		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C newlib
+
+tools:
+	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
 
 $(NAME).elf:
 	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^
@@ -76,10 +103,14 @@ $(NAME).elf32: $(NAME).elf
 
 clean:
 	$Q$(RM) $(NAME).elf $(NAME).sym $(NAME).bin *~
+	$Q$(MAKE) -C tools clean
+	$Q$(MAKE) -C newlib clean
 	@echo Cleaned.
 
 veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
+	$Q$(MAKE) -C tools veryclean
+	$Q$(MAKE) -C newlib veryclean
 	@echo Very cleaned
 
 qemu: $(NAME).elf32
@@ -115,6 +146,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean emu gdb
+.PHONY: default all clean emu gdb newlib
 
 include $(addsuffix /Makefile,$(SUBDIRS))
