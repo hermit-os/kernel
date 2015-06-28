@@ -58,7 +58,6 @@ extern const void kernel_end;
 extern const void bss_start;
 extern const void bss_end;
 extern char __BUILD_DATE;
-extern char __BUILD_TIME;
 
 /* Page frame counters */
 extern atomic_int32_t total_pages;
@@ -141,7 +140,7 @@ int main(void)
 
 	atomic_int32_inc(&cpu_online);
 
-	kprintf("This is Hermit %s Build %u, %u\n", HERMIT_VERSION, &__BUILD_DATE, &__BUILD_TIME);
+	kprintf("This is Hermit %s, build date %u\n", VERSION, &__BUILD_DATE);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
 	kprintf("Total memory: %lu KiB\n", atomic_int32_read(&total_pages) * PAGE_SIZE / 1024);
