@@ -1,10 +1,12 @@
 TERM = xterm
-TOPDIR = $(shell pwd)
+TOPDIR := $(shell pwd)
 ARCH = x86
 NAME = hermit
 LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
 KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
 SUBDIRS = $(KERNDIRS)
+GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
+TODAY := $(shell date +'%Y%m%d')
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX =
@@ -41,13 +43,13 @@ QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4
 # Compiler options for final code
-CFLAGS = -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
+CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 # Compiler options for debugging
-debug debug-eclipse : CFLAGS = -D_HERMIT -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
+debug debug-eclipse : CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
-LDFLAGS = -T link.ld -z max-page-size=4096 --defsym __BUILD_DATE=$(shell date +'%Y%m%d') --defsym __BUILD_TIME=$(shell date +'%H%M%S')
+LDFLAGS = -T link.ld -z max-page-size=4096 --defsym __BUILD_DATE=$(TODAY)
 STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
