@@ -69,9 +69,9 @@ typedef long long off_t;
 #endif
 
 /// Unsigned 64 bit integer
-typedef unsigned long long uint64_t;
+typedef unsigned long uint64_t;
 /// Signed 64 bit integer
-typedef long long int64_t;
+typedef long int64_t;
 /// Unsigned 32 bit integer
 typedef unsigned int uint32_t;
 /// Signed 32 bit integer
