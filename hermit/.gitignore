@@ -8,3 +8,6 @@
 *.hex
 documentation/html/
 include/hermit/config.inc
+newlib/examples/hello
+newlib/examples/jacobi
+newlib/x86/
