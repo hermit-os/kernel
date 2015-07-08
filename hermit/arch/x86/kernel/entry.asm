@@ -269,19 +269,19 @@ Lno_remap:
     push ecx
     popfd
     xor eax, ecx
-    jz short Linvalid
+    jz $ ; there is no long mode
 
     ; cpuid > 0x80000000?
     mov eax, 0x80000000
     cpuid
     cmp eax, 0x80000001
-    jb short Linvalid ; It is less, there is no long mode.
+    jb $ ; It is less, there is no long mode.
 
     ; do we have a long mode?
     mov eax, 0x80000001
     cpuid
     test edx, 1 << 29 ; Test if the LM-bit, which is bit 29, is set in the D-register.
-    jz short Linvalid ; They aren't, there is no long mode.
+    jz $ ; They aren't, there is no long mode.
 
 
     ; we need to enable PAE modus
@@ -298,13 +298,16 @@ Lno_remap:
     ; Set CR3
     mov eax, boot_pml4
     sub eax, kernel_start
-    add eax, ebp    
+    add eax, ebp
+    or eax, (1 << 0)        ; set present bit
     mov cr3, eax
 
     ; Set CR4
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
     or eax, (1 << 4)        ; enable PSE
+    or eax, (1 << 5)        ; enable PAE
+    or eax, (1 << 7)        ; enable PGE
     mov cr4, eax
 
     ; Set CR0
@@ -317,10 +320,6 @@ Lno_remap:
 
     lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
     jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
-
-; there is no long mode
-Linvalid:
-    jmp $
 
 [BITS 64]
 start64:
@@ -377,7 +376,7 @@ Lsmp_main:
     add rax, KERNEL_STACK_SIZE-16
     mov rsp, rax
     mov rbp, rsp
-    
+
     extern smp_start
     call smp_start
     jmp $
