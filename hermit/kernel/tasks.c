@@ -120,7 +120,7 @@ int set_idle_task(void)
 			per_core(current_task) = readyqueues[core_id].idle = task_table+i;
 			ret = 0;
 
-			
+
 			break;
 		}
 	}
@@ -209,7 +209,21 @@ void NORETURN abort(void) {
 	do_exit(-1);
 }
 
-int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
+/** @brief Create a task with a specific entry point
+ *
+ * @todo Don't acquire table_lock for the whole task creation.
+ *
+ * @param id Pointer to a tid_t struct were the id shall be set
+ * @param ep Pointer to the function the task shall start with
+ * @param arg Arguments list
+ * @param prio Desired priority of the new task
+ * @param core_id Start the new task on the core with this id
+ *
+ * @return
+ * - 0 on success
+ * - -ENOMEM (-12) or -EINVAL (-22) on failure
+ */
+static int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
 {
 	int ret = -ENOMEM;
 	uint32_t i;
