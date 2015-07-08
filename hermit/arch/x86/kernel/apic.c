@@ -518,7 +518,7 @@ check_lapic:
 		goto out;
 	kprintf("Found APIC at 0x%x\n", lapic);
 
-	if (has_x2apic()) {
+	if (0) { //has_x2apic()) {
 		kprintf("Enable X2APIC support!\n");
 		wrmsr(MSR_APIC_BASE, lapic | 0xD00);
 		lapic_read = lapic_read_msr;
@@ -576,7 +576,7 @@ int smp_start(void)
 
 	// use the same gdt like the boot processors
 	gdt_flush();
-                                                           
+
 	// install IDT
 	idt_install();
 
@@ -728,7 +728,7 @@ int ioapic_intoff(uint8_t irq, uint8_t apicid)
 		return -EINVAL;
 	}
 
-	if (irq < 16) 
+	if (irq < 16)
 		off = irq_redirect[irq]*2;
 	else
 		off = irq*2;
