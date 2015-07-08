@@ -34,7 +34,7 @@
 
 extern void isrsyscall(void);
 
-cpu_info_t cpu_info = { 0, 0, 0, 0};
+cpu_info_t cpu_info = { 0, 0, 0, 0, 0};
 extern uint32_t cpu_freq;
 
 static void default_mb(void)
@@ -140,6 +140,9 @@ int cpu_detection(void) {
 
 		cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
 		cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
+
+		a = c = d = 0;
+		cpuid(7, &a, &cpu_info.feature4, &c, &d);
 	}
 
 	if (first_time) {
@@ -189,6 +192,12 @@ int cpu_detection(void) {
 	if (first_time && has_avx())
 		kprintf("The CPU owns the Advanced Vector Extensions (AVX). However, HermitCore doesn't support AVX!\n");
 
+	if (first_time && has_avx2())
+			kprintf("The CPU owns the Advanced Vector Extensions (AVX2). However, HermitCore doesn't support AVX2!\n");
+
+	if (first_time && has_fma())
+		kprintf("The CPU supports Fused Multiply-Add!\n");
+
 	if (has_fpu()) {
 		if (first_time)
 			kputs("Found and initialized FPU!\n");
@@ -221,7 +230,7 @@ int cpu_detection(void) {
 }
 
 uint32_t get_cpu_frequency(void)
-{	
+{
 	if (cpu_freq > 0)
 		return cpu_freq;
 

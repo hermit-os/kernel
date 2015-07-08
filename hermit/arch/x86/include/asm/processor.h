@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
+/**
  * @author Stefan Lankes
  * @file arch/x86/include/asm/processor.h
  * @brief CPU-specific functions
@@ -52,6 +52,7 @@ extern "C" {
 #define CPU_FEATURE_PAE			(1 << 6)
 #define CPU_FEATURE_APIC		(1 << 9)
 #define CPU_FEATURE_SEP			(1 << 11)
+#define CPU_FEATURE_FMA			(1 << 12)
 #define CPU_FEATURE_PGE			(1 << 13)
 #define CPU_FEATURE_PAT			(1 << 16)
 #define CPU_FEATURE_PSE36		(1 << 17)
@@ -70,6 +71,9 @@ extern "C" {
 #define CPU_FEATURE_NX			(1 << 20)
 #define CPU_FEATURE_1GBHP		(1 << 26)
 #define CPU_FEATURE_LM			(1 << 29)
+
+// feature list 4
+#define CPU_FEATURE_AVX2		(1 << 5)
 
 // x86 control registers
 
@@ -165,7 +169,8 @@ extern "C" {
 #define EFER_TCE				(1 << 15)
 
 typedef struct {
-	uint32_t feature1, feature2, feature3;
+	uint32_t feature1, feature2;
+	uint32_t feature3, feature4;
 	uint32_t addr_width;
 } cpu_info_t;
 
@@ -207,6 +212,10 @@ inline static uint32_t has_sep(void) {
 	return (cpu_info.feature1 & CPU_FEATURE_SEP);
 }
 
+inline static uint32_t has_fma(void) {
+		return (cpu_info.feature1 & CPU_FEATURE_FMA);
+}
+
 inline static uint32_t has_x2apic(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_X2APIC);
 }
@@ -224,6 +233,9 @@ inline static uint32_t has_nx(void)
 	return (cpu_info.feature3 & CPU_FEATURE_NX);
 }
 
+inline static uint32_t has_avx2(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
+}
 /** @brief Read out time stamp counter
  *
  * The rdtsc asm command puts a 64 bit time stamp value
@@ -431,7 +443,7 @@ static inline uint32_t read_eflags(void)
 /** @brief search the first most significant bit
  *
  * @param i source operand
- * @return 
+ * @return
  * - first bit, which is set in the source operand
  * - invalid value, if not bit ist set
  */
@@ -449,7 +461,7 @@ static inline size_t msb(size_t i)
 /** @brief search the least significant bit
  *
  * @param i source operand
- * @return 
+ * @return
  * - first bit, which is set in the source operand
  * - invalid value, if not bit ist set
  */
@@ -468,7 +480,7 @@ static inline size_t lsb(size_t i)
 #define NOP	asm  volatile ("nop")
 /// The PAUSE instruction provides a hint to the processor that the code sequence is a spin-wait loop.
 #define PAUSE	asm volatile ("pause")
-/// The HALT instruction stops the processor until the next interrupt arrives 
+/// The HALT instruction stops the processor until the next interrupt arrives
 #define HALT	asm volatile ("hlt")
 
 /** @brief Init several subsystems
