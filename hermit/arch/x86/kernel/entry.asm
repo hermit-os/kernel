@@ -302,20 +302,18 @@ Lno_remap:
     or eax, (1 << 0)        ; set present bit
     mov cr3, eax
 
-    ; Set CR4
+    ; Set CR4 (PAE is already set)
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
-    or eax, (1 << 4)        ; enable PSE
-    or eax, (1 << 5)        ; enable PAE
     or eax, (1 << 7)        ; enable PGE
     mov cr4, eax
 
-    ; Set CR0
+    ; Set CR0 (PM-bit is already set)
     mov eax, cr0
     and eax, ~(1 << 30)     ; enable caching
+    and eax, ~(1 << 29)     ; disable write through caching
     and eax, ~(1 << 16)     ; allow kernel write access to read-only pages
     or eax, (1 << 31)       ; enable paging
-    or eax, (1 << 0)        ; long mode also needs PM-bit set
     mov cr0, eax
 
     lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
