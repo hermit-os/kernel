@@ -127,8 +127,8 @@ int smp_main(void)
 
 	while(1) {
 		check_workqueues();
-                HALT;
-        }
+		HALT;
+	}
 
 	return 0;
 }
