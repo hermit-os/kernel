@@ -313,7 +313,7 @@ Lno_remap:
     ; Set CR0
     mov eax, cr0
     and eax, ~(1 << 30)     ; enable caching
-    and eax, ~(1 << 16)	    ; allow kernel write access to read-only pages
+    and eax, ~(1 << 16)     ; allow kernel write access to read-only pages
     or eax, (1 << 31)       ; enable paging
     or eax, (1 << 0)        ; long mode also needs PM-bit set
     mov cr0, eax
@@ -671,17 +671,17 @@ boot_stack:
 ; Bootstrap page tables are used during the initialization.
 ALIGN 4096
 boot_pml4:
-    DQ boot_pdpt + 0x107 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    DQ boot_pdpt + 0x7   ; PG_PRESENT | PG_RW | PG_USER
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pdpt:
-    DQ boot_pgd + 0x107  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    DQ boot_pgd + 0x7    ; PG_PRESENT | PG_RW | PG_USER
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgd:
-    DQ boot_pgt + 0x107  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    DQ boot_pgt + 0x7    ; PG_PRESENT | PG_RW | PG_USER
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgt:
     times 512 DQ 0
 
