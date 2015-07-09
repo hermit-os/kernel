@@ -45,14 +45,13 @@
 extern "C" {
 #endif
 
-// feature list 1
+// feature list 0x00000001 (ebx)
 #define CPU_FEATURE_FPU			(1 << 0)
 #define CPU_FEATUE_PSE			(1 << 3)
 #define CPU_FEATURE_MSR			(1 << 5)
 #define CPU_FEATURE_PAE			(1 << 6)
 #define CPU_FEATURE_APIC		(1 << 9)
 #define CPU_FEATURE_SEP			(1 << 11)
-#define CPU_FEATURE_FMA			(1 << 12)
 #define CPU_FEATURE_PGE			(1 << 13)
 #define CPU_FEATURE_PAT			(1 << 16)
 #define CPU_FEATURE_PSE36		(1 << 17)
@@ -61,19 +60,26 @@ extern "C" {
 #define CPU_FEATURE_SSE			(1 << 25)
 #define CPU_FEATURE_SSE2		(1 << 26)
 
-// feature list 2
-#define CPU_FEATURE_X2APIC		(1 << 21)
-#define CPU_FEATURE_AVX			(1 << 28)
+// feature list 0x00000001 (ecx)
+#define CPU_FEATURE_SSE3				(1 << 9)
+#define CPU_FEATURE_FMA					(1 << 12)
+#define CPU_FEATURE_SSE4_1			(1 << 19)
+#define CPU_FEATURE_SSE4_2			(1 << 20)
+#define CPU_FEATURE_X2APIC			(1 << 21)
+#define CPU_FEATURE_MOVBE				(1 << 22)
+#define CPU_FEATURE_XSAVE				(1 << 26)
+#define CPU_FEATURE_OSXSAVE			(1 << 27)
+#define CPU_FEATURE_AVX					(1 << 28)
 #define CPU_FEATURE_HYPERVISOR	(1 << 31)
 
 // CPUID.80000001H:EDX feature list
 #define CPU_FEATURE_SYSCALL		(1 << 11)
-#define CPU_FEATURE_NX			(1 << 20)
-#define CPU_FEATURE_1GBHP		(1 << 26)
-#define CPU_FEATURE_LM			(1 << 29)
+#define CPU_FEATURE_NX				(1 << 20)
+#define CPU_FEATURE_1GBHP			(1 << 26)
+#define CPU_FEATURE_LM				(1 << 29)
 
-// feature list 4
-#define CPU_FEATURE_AVX2		(1 << 5)
+// feature list 0x00000007:0
+#define CPU_FEATURE_AVX2			(1 << 5)
 
 // x86 control registers
 
@@ -212,12 +218,32 @@ inline static uint32_t has_sep(void) {
 	return (cpu_info.feature1 & CPU_FEATURE_SEP);
 }
 
+inline static uint32_t has_movbe(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_MOVBE);
+}
+
 inline static uint32_t has_fma(void) {
-		return (cpu_info.feature1 & CPU_FEATURE_FMA);
+		return (cpu_info.feature2 & CPU_FEATURE_FMA);
+}
+
+inline static uint32_t has_sse3(void) {
+		return (cpu_info.feature2 & CPU_FEATURE_SSE3);
+}
+
+inline static uint32_t has_sse4_1(void) {
+		return (cpu_info.feature2 & CPU_FEATURE_SSE4_1);
+}
+
+inline static uint32_t has_sse4_2(void) {
+		return (cpu_info.feature2 & CPU_FEATURE_SSE4_2);
 }
 
 inline static uint32_t has_x2apic(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_X2APIC);
+}
+
+inline static uint32_t has_xsave(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_XSAVE);
 }
 
 inline static uint32_t has_avx(void) {
@@ -413,6 +439,35 @@ extern func_memory_barrier mb;
 extern func_memory_barrier rmb;
 /// Force strict CPU ordering, serializes store operations.
 extern func_memory_barrier wmb;
+
+/** @brief Get Extended Control Register
+ *
+ * Reads the contents of the extended control register (XCR) specified
+ * in the ECX register.
+ */
+static inline uint64_t xgetbv(uint32_t index)
+{
+	uint32_t edx, eax;
+
+	asm volatile ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(index));
+
+	return (uint64_t) eax | ((uint64_t) edx << 32ULL);
+}
+
+/** @brief Set Extended Control Register
+ *
+ * Writes a 64-bit value into the extended control register (XCR) specified
+ * in the ECX register.
+ */
+static inline void xsetbv(uint32_t index, uint64_t value)
+{
+	uint32_t edx, eax;
+
+	edx = (uint32_t) (value >> 32ULL);
+	eax = (uint32_t) value;
+
+	asm volatile ("xsetbv" :: "a"(eax), "c"(index), "d"(edx));
+}
 
 /** @brief Read out CPU ID
  *

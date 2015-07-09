@@ -30,7 +30,7 @@
  * @file arch/x86/include/asm/tasks_types.h
  * @brief Task related structure definitions
  *
- * This file contains the task_t structure definition 
+ * This file contains the task_t structure definition
  * and task state define constants
  */
 
@@ -76,9 +76,22 @@ typedef struct i387_fxsave_struct {
 	};
 } i387_fxsave_t __attribute__ ((aligned (16)));
 
+typedef struct {
+	uint64_t xstate_bv;
+	uint64_t xcomp_bv;
+  uint64_t reserved[6];
+} xsave_header_t;
+
+typedef struct {
+	i387_fxsave_t fxsave;
+	xsave_header_t hdr;
+	uint32_t ymmh[64];
+} xsave_t;
+
 union fpu_state {
 	i387_fsave_t	fsave;
 	i387_fxsave_t	fxsave;
+	xsave_t xsave;
 };
 
 typedef void (*handle_fpu_state)(union fpu_state* state);
