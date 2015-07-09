@@ -76,7 +76,7 @@ handle_fpu_state fpu_init = default_fpu_init;
 
 static void save_fpu_state_fxsr(union fpu_state* state)
 {
-	asm volatile ("fxsave %0; fnclex" : "=m"((*state).fxsave) :: "memory");
+	asm volatile ("fxsave %0; fnclex" : "=m"(state->fxsave) :: "memory");
 }
 
 static void restore_fpu_state_fxsr(union fpu_state* state)
@@ -92,6 +92,30 @@ static void fpu_init_fxsr(union fpu_state* fpu)
 	fx->cwd = 0x37f;
 	if (BUILTIN_EXPECT(has_sse(), 1))
 		fx->mxcsr = 0x1f80;
+}
+
+static void save_fpu_state_xsave(union fpu_state* state)
+{
+	uint32_t eax = 1, edx = 1;
+
+	asm volatile ("xsave %0" : "=m"(state->xsave) : "a"(eax), "d"(edx) : "memory");
+}
+
+static void restore_fpu_state_xsave(union fpu_state* state)
+{
+	uint32_t eax = 1, edx = 1;
+
+	asm volatile ("xrstor %0" :: "m"(state->xsave), "a"(eax), "d"(edx));
+}
+
+static void fpu_init_xsave(union fpu_state* fpu)
+{
+	xsave_t* xs = &fpu->xsave;
+
+	memset(xs, 0x00, sizeof(xsave_t));
+	xs->fxsave.cwd = 0x37f;
+	if (BUILTIN_EXPECT(has_sse(), 1))
+		xs->fxsave.mxcsr = 0x1f80;
 }
 
 uint32_t detect_cpu_frequency(void)
@@ -123,6 +147,7 @@ uint32_t detect_cpu_frequency(void)
 }
 
 int cpu_detection(void) {
+	uint64_t xcr0;
 	uint32_t a=0, b=0, c=0, d=0;
 	uint32_t family, model, stepping;
 	size_t cr4;
@@ -141,7 +166,7 @@ int cpu_detection(void) {
 		cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
 		cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
 
-		a = c = d = 0;
+		a = b = c = d = 0;
 		cpuid(7, &a, &cpu_info.feature4, &c, &d);
 	}
 
@@ -167,9 +192,24 @@ int cpu_detection(void) {
 		cr4 |= CR4_OSFXSR;		// set the OSFXSR bit
 	if (has_sse())
 		cr4 |= CR4_OSXMMEXCPT;	// set the OSXMMEXCPT bit
+	if (has_xsave())
+		cr4 |= CR4_OSXSAVE;
 	if (has_pge())
 		cr4 |= CR4_PGE;
 	write_cr4(cr4);
+
+	if (has_xsave())
+	{
+		xcr0 = xgetbv(0);
+		if (has_fpu())
+			xcr0 |= 0x1;
+		if (has_sse())
+			xcr0 |= 0x2;
+		if (has_avx())
+			xcr0 |= 0x3;
+		//kprintf("Set XCR to 0x%llx\n", xcr0);
+		xsetbv(0, xcr0);
+	}
 
 	if (cpu_info.feature3 & CPU_FEATURE_SYSCALL) {
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_LMA | EFER_SCE);
@@ -189,22 +229,34 @@ int cpu_detection(void) {
 		mb = mfence;
 	}
 
-	if (first_time && has_avx())
-		kprintf("The CPU owns the Advanced Vector Extensions (AVX). However, HermitCore doesn't support AVX!\n");
-
-	if (first_time && has_avx2())
-			kprintf("The CPU owns the Advanced Vector Extensions (AVX2). However, HermitCore doesn't support AVX2!\n");
-
-	if (first_time && has_fma())
-		kprintf("The CPU supports Fused Multiply-Add!\n");
-
 	if (has_fpu()) {
 		if (first_time)
 			kputs("Found and initialized FPU!\n");
 		asm volatile ("fninit");
 	}
 
-	if (first_time && has_fxsr()) {
+  if (first_time) {
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+			has_sse() ? "SSE " : "",
+			has_sse2() ? "SSE2 " : "",
+			has_sse3() ? "SSE3 " : "",
+			has_sse4_1() ? "SSE4.1 " : "",
+			has_sse4_2() ? "SSE4.2 " : "",
+			has_avx() ? "AVX " : "",
+			has_avx2() ? "AVX2 " : "",
+			has_fma() ? "FMA " : "",
+			has_movbe() ? "MOVBE " : "",
+			has_x2apic() ? "X2APIC " : "",
+			has_fpu() ? "FPU " : "",
+			has_fxsr() ? "FXSR " : "",
+			has_xsave() ? "XSAVE " : "");
+	}
+
+	if (first_time && has_xsave()) {
+		save_fpu_state = save_fpu_state_xsave;
+		restore_fpu_state = restore_fpu_state_xsave;
+		fpu_init = fpu_init_xsave;
+	} else if (first_time && has_fxsr()) {
 		save_fpu_state = save_fpu_state_fxsr;
 		restore_fpu_state = restore_fpu_state_fxsr;
 		fpu_init = fpu_init_fxsr;
