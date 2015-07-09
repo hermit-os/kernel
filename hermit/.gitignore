@@ -11,3 +11,4 @@ include/hermit/config.inc
 newlib/examples/hello
 newlib/examples/jacobi
 newlib/x86/
+newlib/tmp/
