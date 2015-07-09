@@ -148,13 +148,18 @@ uint32_t detect_cpu_frequency(void)
 
 int cpu_detection(void) {
 	uint64_t xcr0;
-	uint32_t a=0, b=0, c=0, d=0;
+	uint32_t a=0, b=0, c=0, d=0, level = 0;
 	uint32_t family, model, stepping;
 	size_t cr4;
 	uint8_t first_time = 0;
 
 	if (!cpu_info.feature1) {
 		first_time = 1;
+
+		cpuid(0, &level, &b, &c, &d);
+		kprintf("cpuid level %d\n", level);
+
+		a = b = c = d = 0;
 		cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
 		family   = (a & 0x00000F00) >> 8;
@@ -166,8 +171,11 @@ int cpu_detection(void) {
 		cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
 		cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
 
-		a = b = c = d = 0;
-		cpuid(7, &a, &cpu_info.feature4, &c, &d);
+		/* Additional Intel-defined flags: level 0x00000007 */
+        	if (level >= 0x00000007) {
+			a = b = c = d = 0;
+			cpuid(7, &a, &cpu_info.feature4, &c, &d);
+		}
 	}
 
 	if (first_time) {

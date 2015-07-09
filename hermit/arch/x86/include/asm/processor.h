@@ -61,19 +61,19 @@ extern "C" {
 #define CPU_FEATURE_SSE2		(1 << 26)
 
 // feature list 0x00000001 (ecx)
-#define CPU_FEATURE_SSE3				(1 << 9)
-#define CPU_FEATURE_FMA					(1 << 12)
+#define CPU_FEATURE_SSE3			(1 << 9)
+#define CPU_FEATURE_FMA				(1 << 12)
 #define CPU_FEATURE_SSE4_1			(1 << 19)
 #define CPU_FEATURE_SSE4_2			(1 << 20)
 #define CPU_FEATURE_X2APIC			(1 << 21)
-#define CPU_FEATURE_MOVBE				(1 << 22)
-#define CPU_FEATURE_XSAVE				(1 << 26)
+#define CPU_FEATURE_MOVBE			(1 << 22)
+#define CPU_FEATURE_XSAVE			(1 << 26)
 #define CPU_FEATURE_OSXSAVE			(1 << 27)
-#define CPU_FEATURE_AVX					(1 << 28)
-#define CPU_FEATURE_HYPERVISOR	(1 << 31)
+#define CPU_FEATURE_AVX				(1 << 28)
+#define CPU_FEATURE_HYPERVISOR			(1 << 31)
 
 // CPUID.80000001H:EDX feature list
-#define CPU_FEATURE_SYSCALL		(1 << 11)
+#define CPU_FEATURE_SYSCALL			(1 << 11)
 #define CPU_FEATURE_NX				(1 << 20)
 #define CPU_FEATURE_1GBHP			(1 << 26)
 #define CPU_FEATURE_LM				(1 << 29)
@@ -260,7 +260,7 @@ inline static uint32_t has_nx(void)
 }
 
 inline static uint32_t has_avx2(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
+	return cpu_info.feature4 & CPU_FEATURE_AVX2;
 }
 /** @brief Read out time stamp counter
  *
