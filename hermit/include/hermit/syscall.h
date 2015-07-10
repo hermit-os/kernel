@@ -37,7 +37,6 @@
 #define __SYSCALL_H__
 
 #include <hermit/stddef.h>
-#include <asm/syscall.h>
 
 #ifdef __cplusplus
 extern "C" {
