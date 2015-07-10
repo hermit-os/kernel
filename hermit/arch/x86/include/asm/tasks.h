@@ -75,8 +75,7 @@ static inline int jump_to_user_code(size_t ep, size_t stack)
 
 	// x86_64 doesn't longer use segment registers
 	//asm volatile ("mov %0, %%ds; mov %0, %%es" :: "r"(ds));
-	asm volatile ("push %0; push %1; pushfq; push %2; push %3" :: "r"(ds), "r"(stack), "r"(cs), "r"(ep));
-	asm volatile ("iretq");
+	asm volatile ("push %0; push %1; pushfq; push %2; push %3; iretq" :: "r"(ds), "r"(stack), "r"(cs), "r"(ep));
 
 	return 0;
 }
