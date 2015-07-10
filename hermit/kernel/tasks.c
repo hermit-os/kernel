@@ -109,7 +109,7 @@ int set_idle_task(void)
 			task_table[i].status = TASK_IDLE;
                         task_table[i].last_core = core_id;
                         task_table[i].last_stack_pointer = NULL;
-                        task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);;
+                        task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
                         task_table[i].prio = IDLE_PRIO;
                         spinlock_init(&task_table[i].vma_lock);
                         task_table[i].vma_list = NULL;
@@ -119,7 +119,6 @@ int set_idle_task(void)
 			task_table[i].page_map = read_cr3();
 			per_core(current_task) = readyqueues[core_id].idle = task_table+i;
 			ret = 0;
-
 
 			break;
 		}

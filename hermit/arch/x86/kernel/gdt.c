@@ -52,7 +52,7 @@ size_t get_kernel_stack(void)
 {
 	task_t* curr_task = per_core(current_task);
 
-	return (size_t) curr_task->stack + curr_task->id * KERNEL_STACK_SIZE - 16; // => stack is 16byte aligned
+	return (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10; // => stack is 16byte aligned
 }
 
 /* Setup a descriptor in the Global Descriptor Table */
