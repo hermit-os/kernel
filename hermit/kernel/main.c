@@ -34,6 +34,7 @@
 #include <hermit/tasks.h>
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
+#include <hermit/fs.h>
 #include <asm/irq.h>
 #include <asm/atomic.h>
 #include <asm/page.h>
@@ -89,6 +90,7 @@ static int hermit_init(void)
 	timer_init();
 	multitasking_init();
 	memory_init();
+	initrd_init();
 
 	return 0;
 }
@@ -147,10 +149,17 @@ int main(void)
 	kprintf("Current allocated memory: %lu KiB\n", atomic_int32_read(&total_allocated_pages) * PAGE_SIZE / 1024);
 	kprintf("Current available memory: %lu KiB\n", atomic_int32_read(&total_available_pages) * PAGE_SIZE / 1024);
 
+#if 1
+	kputs("Filesystem:\n");
+	list_fs(fs_root, 1);
+#endif
+
 	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
+#if 0
 	init_netifs();
+#endif
 
 	while(1) {
 		check_workqueues();
