@@ -196,7 +196,7 @@ void NORETURN abort(void);
 /** @brief This function shall be called by leaving kernel-level tasks */
 void NORETURN leave_kernel_task(void);
 
-/** @brief if a task exists with higher priority, MetalSVM switch to it.
+/** @brief if a task exists with higher priority, HermitCore switch to it.
  *  */
 void check_scheduling(void);
 
