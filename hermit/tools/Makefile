@@ -1,19 +1,50 @@
 MAKE = make
 NASM = nasm
 NASMFLAGS = -fbin
+CC = gcc
+CFLAGS = -O2 -Wall
+HEXDUMP = hexdump
+LDFLGAS =
+EXECFILES = $(shell find ../newlib/examples -perm -u+r+x -type f)
+
+# Prettify output
+V = 0
+ifeq ($V,0)
+	Q = @
+	P = > /dev/null
+endif
+
+# other implicit rules
+%.o : %.c
+	@echo [CC] $@
+	$Q$(CC) -c $(CFLAGS) -o $@ $<
 
 default: all
 	
-all: init.hex
+all: init.hex make_initrd initrd.o
 
 init.bin: init.asm
-	$(NASM) $(NASMFLAGS) -o $@ $<
+	@echo [NASM] $@
+	$Q$(NASM) $(NASMFLAGS) -o $@ $<
 
 init.hex: init.bin
-	hexdump -v -e '"0x" 1/1 "%02X" ", "' $< > $@
+	@echo [HEXDUMP] $@
+	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< > $@
+
+initrd.o: initrd.S initrd.img
+	@echo [CC] Build initrd as object file
+	$Q$(CC) -c -o $@ initrd.S
+ 
+initrd.img: $(EXECFILES) make_initrd
+	@echo [MAKE_INITRD] initrd.img
+	$Q./make_initrd /bin $(foreach FILE, $(EXECFILES), $(FILE) $(shell basename $(FILE)))
+
+make_initrd: make_initrd.o
+	$Q$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 clean:
-	$(RM) -rf *.o *~ *.bin *.obj *.hex
+	@echo Cleaning tools
+	$Q$(RM) -rf *.o *~ *.bin *.obj *.hex
 
 veryclean: clean
 	

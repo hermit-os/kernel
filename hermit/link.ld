@@ -18,6 +18,10 @@ SECTIONS
   .rodata ALIGN(4096) : AT(ADDR(.rodata)) {
     *(.rodata)
     *(.rodata.*)
+    . = ALIGN((1 << 12));
+    initrd_start = .;
+    *(.initrd)
+    initrd_end = .;
   }
   .data ALIGN(4096) : AT(ADDR(.data)) {
     *(.data)

@@ -3,7 +3,7 @@ TOPDIR := $(shell pwd)
 ARCH = x86
 NAME = hermit
 LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
-KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
+KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
@@ -70,7 +70,7 @@ endif
 
 default: all
 
-all: newlib $(NAME).elf
+all: newlib tools $(NAME).elf
 
 newlib:
 	$Q$(MAKE) ARCH=$(ARCH) \
@@ -94,9 +94,10 @@ tools:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
 
 $(NAME).elf:
-	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^
+	@echo [LD] $(NAME).elf
+	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^ tools/initrd.o
 	@echo [OBJCOPY] $(NAME).bin
-	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
+	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .initrd -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
 
 $(NAME).elf32: $(NAME).elf
 	@echo [OBJCOPY] $(NAME).sym
@@ -149,6 +150,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean emu gdb newlib
+.PHONY: default all clean emu gdb newlib tools
 
 include $(addsuffix /Makefile,$(SUBDIRS))
