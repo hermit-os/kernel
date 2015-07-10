@@ -53,7 +53,7 @@ Lnoreset:
     jmp eax
 
 ; This part MUST be 4 byte aligned, so we solve that issue using 'ALIGN 4'.
-ALIGN 4
+align 4
 mboot:
     ; Multiboot macros to make a few lines more readable later
     MULTIBOOT_PAGE_ALIGN	equ (1 << 0)
@@ -79,7 +79,7 @@ mboot:
     boot_processor dd -1
     cpu_online dd 0
 
-ALIGN 4
+align 4
 ; we need already a valid GDT to switch in the 64bit modus
 GDT64:                           ; Global Descriptor Table (64-bit).
     .Null: equ $ - GDT64         ; The null descriptor.
@@ -108,7 +108,7 @@ GDT64:                           ; Global Descriptor Table (64-bit).
     dq GDT64                     ; Base.
 
 SECTION .text
-ALIGN 4
+align 4
 stublet:
     ; Relocate stack pointer
     mov eax, boot_stack
@@ -404,6 +404,7 @@ gdt_flush:
 ; NASM macro which pushs also an pseudo error code
 %macro isrstub_pseudo_error 1
     global isr%1
+    align 8
     isr%1:
         push byte 0 ; pseudo error code
         push byte %1
@@ -415,6 +416,7 @@ gdt_flush:
 ; on the stack.
 %macro isrstub 1
     global isr%1
+    align 8
     isr%1:
         push byte %1
         jmp common_stub
@@ -467,6 +469,7 @@ isrstub_pseudo_error 9
 ; NASM macro for asynchronous interrupts (no exceptions)
 %macro irqstub 1
     global irq%1
+    align 8
     irq%1:
         push byte 0 ; pseudo error code
         push byte 32+%1
@@ -481,30 +484,35 @@ isrstub_pseudo_error 9
 %endrep
 
 global apic_timer
+align 8
 apic_timer:
     push byte 0 ; pseudo error code
     push byte 123
     jmp common_stub
 
 global apic_lint0
+align 8
 apic_lint0:
     push byte 0 ; pseudo error code
     push byte 124
     jmp common_stub
 
 global apic_lint1
+align 8
 apic_lint1:
     push byte 0 ; pseudo error code
     push byte 125
     jmp common_stub
 
 global apic_error
+align 8
 apic_error:
     push byte 0 ; pseudo error code
     push byte 126
     jmp common_stub
 
 global apic_svr
+align 8
 apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
@@ -513,17 +521,14 @@ apic_svr:
 extern irq_handler
 extern get_current_stack
 extern finish_task_switch
+extern syscall_handler
+extern get_kernel_stack
 
-global isrsyscall
-; used to realize system calls
-isrsyscall:
+global int80_syscall
+align 8
+int80_syscall:
     cli
-    ; set kernel stack
-    extern get_kernel_stack
-    call get_kernel_stack
-    xchg rsp, rax ; => rax contains original rsp
 
-    push rax ; contains original rsp
     push r15
     push r14
     push r13
@@ -537,7 +542,6 @@ isrsyscall:
     push rsi
     sti
 
-    extern syscall_handler
     call syscall_handler
 
     cli
@@ -552,13 +556,78 @@ isrsyscall:
     pop r13
     pop r14
     pop r15
-    pop r10
-    mov rsp, r10
+    sti
+    iretq
+
+global isrsyscall
+align 8
+; used to realize system calls
+isrsyscall:
+    cli
+    ; save register accross function call
+    ;push r11
+    ;push rbp
+    ;push rdx
+    ;push rcx
+    ;push rbx
+    ;push rdi
+    ;push rsi
+
+    ; get kernel stack
+    ;call get_kernel_stack
+
+    ; restore registers
+    ;pop rsi
+    ;pop rdi
+    ;pop rbx
+    ;pop rcx
+    ;pop rdx
+    ;pop rbp
+    ;pop r11
+
+    ;xchg rsp, rax ; => rax contains original rsp
+
+    ;push rax ; contains original rsp
+    push r15
+    push r14
+    push r13
+    push r12
+    push r11
+    push rbp
+    push rdx
+    push rcx
+    push rbx
+    push rdi
+    push rsi
+    sti
+
+    ; syscall stores in rcx the return address
+    ; => r10 for the temporary storage of the 4th
+    ;    argument
+    ; => exchange the value to get the correct order
+    xchg rcx, r10
+
+    call syscall_handler
+
+    cli
+    pop rsi
+    pop rdi
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rbp
+    pop r11
+    pop r12
+    pop r13
+    pop r14
+    pop r15
+    ;pop r10
+    ;mov rsp, r10
     sti
     o64 sysret
 
 global switch_context
-ALIGN 8
+align 8
 switch_context:
     ; create on the stack a pseudo interrupt
     ; afterwards, we switch to the task with iret
@@ -590,11 +659,11 @@ switch_context:
 
     jmp common_switch
 
-ALIGN 8
+align 8
 rollback:
     ret
 
-ALIGN 8
+align 8
 common_stub:
     push rax
     push rcx
@@ -657,17 +726,17 @@ no_context_switch:
 SECTION .data
 
 global mb_info:
-ALIGN 8
+align 8
 mb_info:
     DQ 0
 
-ALIGN 4096
+align 4096
 global boot_stack
 boot_stack:
     TIMES (MAX_CORES*KERNEL_STACK_SIZE) DB 0xcd
 
 ; Bootstrap page tables are used during the initialization.
-ALIGN 4096
+align 4096
 boot_pml4:
     DQ boot_pdpt + 0x7   ; PG_PRESENT | PG_RW | PG_USER
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
