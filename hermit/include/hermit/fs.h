@@ -27,7 +27,7 @@
 
 /**
  * @author Stefan Lankes
- * @file include/eduos/fs.h
+ * @file include/hermit/fs.h
  * @brief Filesystem related functions and structures
  */
 
