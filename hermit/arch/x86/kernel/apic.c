@@ -371,7 +371,7 @@ int apic_calibration(void)
 	lapic_reset();
 	irq_nested_enable(flags);
 
-	// Now, eduOS is able to use the APIC => Therefore, we disable the PIC
+	// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
 	outportb(0xA1, 0xFF);
 	outportb(0x21, 0xFF);
 
@@ -418,7 +418,7 @@ found_mp:
 	kprintf("MP features 1: %u\n", apic_mp->features[0]);
 
 	if (apic_mp->features[0]) {
-		kputs("Currently, eduOS supports only multiprocessing via the MP config tables!\n");
+		kputs("Currently, HermitCore supports only multiprocessing via the MP config tables!\n");
 		goto no_mp;
 	}
 
@@ -535,7 +535,7 @@ check_lapic:
 	kprintf("EOI-broadcast: %s\n", (apic_broadcast()) ? "available" : "unavailable");
 
 	if (!((apic_version() >> 4))) {
-		kprintf("Currently, eduOS didn't supports extern APICs!\n");
+		kprintf("Currently, HermitCore didn't supports extern APICs!\n");
 		goto out;
 	}
 
