@@ -102,7 +102,7 @@ ssize_t syscall_handler(uint32_t sys_nr, ...)
 		break;
 	}
 	default:
-		kprintf("invalid system call: %u\n", sys_nr);
+		kprintf("invalid system call: 0x%lx\n", sys_nr);
 		ret = -ENOSYS;
 		break;
 	};

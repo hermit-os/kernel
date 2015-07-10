@@ -32,9 +32,9 @@
 #include <hermit/errno.h>
 #include <hermit/processor.h>
 #include <hermit/memory.h>
-//#include <hermit/fs.h>
+#include <hermit/fs.h>
 #include <hermit/vma.h>
-//#include <asm/elf.h>
+#include <asm/elf.h>
 #include <asm/page.h>
 
 size_t* get_current_stack(void)
@@ -102,8 +102,6 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg)
 	return 0;
 }
 
-#if 0
-
 #define MAX_ARGS        (PAGE_SIZE - 2*sizeof(int) - sizeof(vfs_node_t*))
 
 /** @brief Structure which keeps all
@@ -139,7 +137,7 @@ static int load_task(load_args_t* largs)
 	file->flags = 0;
 
 	//TODO: init the hole fildes_t struct!
-	task_t* curr_task = current_task;
+	task_t* curr_task = per_core(current_task);
 	int err;
 
 	if (!largs)
@@ -161,25 +159,11 @@ static int load_task(load_args_t* largs)
 	if (BUILTIN_EXPECT(header.type != ELF_ET_EXEC, 0))
 		goto invalid;
 
-#ifdef CONFIG_X86_32
-	if (BUILTIN_EXPECT(header.machine != ELF_EM_386, 0))
-		goto invalid;
-#elif defined(CONFIG_X86_64)
 	if (BUILTIN_EXPECT(header.machine != ELF_EM_X86_64, 0))
 		goto invalid;
-#else
-	goto invalid;
-#endif
 
-#ifdef CONFIG_X86_32
-	if (BUILTIN_EXPECT(header.ident._class != ELF_CLASS_32, 0))
-		goto invalid;
-#elif defined(CONFIG_X86_64)
 	if (BUILTIN_EXPECT(header.ident._class != ELF_CLASS_64, 0))
 		goto invalid;
-#else
-	goto invalid;
-#endif
 
 	if (BUILTIN_EXPECT(header.ident.data != ELF_DATA_2LSB, 0))
 		goto invalid;
@@ -208,10 +192,9 @@ static int load_task(load_args_t* largs)
 			addr = get_pages(npages);
 
 			flags = PG_USER;
-#ifdef CONFIG_X86_64
 			if (has_nx() && !(prog_header.flags & PF_X))
 				flags |= PG_XD;
-#endif
+
 			// map page frames in the address space of the current task
 			if (page_map(prog_header.virt_addr, addr, npages, flags|PG_RW))
 				kprintf("Could not map 0x%x at 0x%x\n", addr, prog_header.virt_addr);
@@ -249,10 +232,8 @@ static int load_task(load_args_t* largs)
 			addr = get_pages(npages);
 			stack = header.entry*2; // virtual address of the stack
 			flags = PG_USER|PG_RW;
-#ifdef CONFIG_X86_64
 			if (has_nx() && !(prog_header.flags & PF_X))
 				flags |= PG_XD;
-#endif
 
 			if (page_map(stack, addr, npages, flags)) {
 				kprintf("Could not map stack at 0x%x\n", stack);
@@ -382,7 +363,7 @@ static int user_entry(void* arg)
  * - 0 on success
  * - -ENOMEM (-12) or -EINVAL (-22) on failure
  */
-int create_user_task(tid_t* id, const char* fname, char** argv)
+int create_user_task_on_core(tid_t* id, const char* fname, char** argv, uint8_t prio, uint32_t core_id)
 {
 	vfs_node_t* node;
 	int argc = 0;
@@ -421,6 +402,5 @@ int create_user_task(tid_t* id, const char* fname, char** argv)
 
 
 	/* create new task */
-	return create_task(id, user_entry, load_args, NORMAL_PRIO);
+	return create_task(id, user_entry, load_args, prio, core_id);
 }
-#endif

@@ -209,21 +209,7 @@ void NORETURN abort(void) {
 	do_exit(-1);
 }
 
-/** @brief Create a task with a specific entry point
- *
- * @todo Don't acquire table_lock for the whole task creation.
- *
- * @param id Pointer to a tid_t struct were the id shall be set
- * @param ep Pointer to the function the task shall start with
- * @param arg Arguments list
- * @param prio Desired priority of the new task
- * @param core_id Start the new task on the core with this id
- *
- * @return
- * - 0 on success
- * - -ENOMEM (-12) or -EINVAL (-22) on failure
- */
-static int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
+int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
 {
 	int ret = -ENOMEM;
 	uint32_t i;
@@ -293,6 +279,14 @@ out:
 	spinlock_irqsave_unlock(&table_lock);
 
 	return ret;
+}
+
+int create_user_task(tid_t* id, const char* fname, char** argv, uint8_t prio)
+{
+	if (prio > MAX_PRIO)
+		prio = NORMAL_PRIO;
+
+	return create_user_task_on_core(id, fname, argv, prio, CORE_ID);
 }
 
 int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id)
@@ -610,7 +604,7 @@ get_task_out:
 			orig_task->flags &= ~TASK_FPU_USED;
 		}
 
-		//kprintf("schedule on core %d from %u to %u with prio %u\n", core_id, orig_task->id, curr_task->id, (uint32_t)curr_task->prio);
+		kprintf("schedule on core %d from %u to %u with prio %u\n", core_id, orig_task->id, curr_task->id, (uint32_t)curr_task->prio);
 
 		return (size_t**) &(orig_task->last_stack_pointer);
 	}

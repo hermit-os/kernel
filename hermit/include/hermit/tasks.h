@@ -68,6 +68,22 @@ size_t** scheduler(void);
  */
 int multitasking_init(void);
 
+/** @brief Create a task with a specific entry point
+ *
+ * @todo Don't acquire table_lock for the whole task creation.
+ *
+ * @param id Pointer to a tid_t struct were the id shall be set
+ * @param ep Pointer to the function the task shall start with
+ * @param arg Arguments list
+ * @param prio Desired priority of the new task
+ * @param core_id Start the new task on the core with this id
+ *
+ * @return
+ * - 0 on success
+ * - -ENOMEM (-12) or -EINVAL (-22) on failure
+ */
+int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id);
+
 /** @brief create a kernel-level task on the current core.
  *
  * @param id The value behind this pointer will be set to the new task's id
@@ -105,7 +121,7 @@ int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t 
  * - 0 on success
  * - -EINVAL (-22) or -ENOMEM (-12)on failure
  */
-int create_user_task(tid_t* id, const char* fame, char** argv);
+int create_user_task(tid_t* id, const char* fame, char** argv, uint8_t prio);
 
 /** @brief Create a user level task.
  *
@@ -118,7 +134,7 @@ int create_user_task(tid_t* id, const char* fame, char** argv);
  * - 0 on success
  * - -EINVAL (-22) or -ENOMEM (-12)on failure
  */
-int create_user_task_on_core(tid_t* id, const char* fame, char** argv, uint32_t core_id);
+int create_user_task_on_core(tid_t* id, const char* fame, char** argv, uint8_t prio, uint32_t core_id);
 
 /** @brief Cleanup function for the task termination
  *
