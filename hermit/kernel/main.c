@@ -156,8 +156,8 @@ int main(void)
 	list_fs(fs_root, 1);
 #endif
 
-	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
-	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
+	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
+	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 	create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
 
 #if 0
