@@ -40,7 +40,7 @@
 #include <asm/isrs.h>
 #include <asm/irq.h>
 #include <asm/idt.h>
-#include <asm/io.h>
+#include <asm/apic.h>
 
 /*
  * These are function prototypes for all of the exception
@@ -218,8 +218,8 @@ static void fault_handler(struct state *s)
 		kputs(exception_messages[s->int_no]);
 		kprintf(" Exception (%d) at 0x%llx:0x%llx, error code 0x%llx, rflags 0x%llx\n",
 			s->int_no, s->cs, s->rip, s->error, s->rflags);
-		outportb(0x20, 0x20);
-
+	
+		apic_eoi(s->int_no);
 		irq_enable();
 		abort();
 	}
