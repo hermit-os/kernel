@@ -48,7 +48,7 @@ extern "C" {
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
-#define CONFIG_VGA
+//#define CONFIG_VGA
 
 #define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
 //#define BUILTIN_EXPECT(exp, b)	(exp)
