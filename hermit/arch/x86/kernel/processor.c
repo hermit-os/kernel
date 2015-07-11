@@ -197,7 +197,7 @@ int cpu_detection(void) {
 
 	cr4 = read_cr4();
 	if (has_fxsr())
-		cr4 |= CR4_OSFXSR;		// set the OSFXSR bit
+		cr4 |= CR4_OSFXSR;	// set the OSFXSR bit
 	if (has_sse())
 		cr4 |= CR4_OSXMMEXCPT;	// set the OSXMMEXCPT bit
 	if (has_xsave())
@@ -243,7 +243,7 @@ int cpu_detection(void) {
 		asm volatile ("fninit");
 	}
 
-  if (first_time) {
+	if (first_time) {
 		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
