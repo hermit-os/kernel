@@ -107,13 +107,13 @@ int set_idle_task(void)
 		if (task_table[i].status == TASK_INVALID) {
 			task_table[i].id = i;
 			task_table[i].status = TASK_IDLE;
-                        task_table[i].last_core = core_id;
-                        task_table[i].last_stack_pointer = NULL;
-                        task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
-                        task_table[i].prio = IDLE_PRIO;
-                        spinlock_init(&task_table[i].vma_lock);
-                        task_table[i].vma_list = NULL;
-                        task_table[i].heap = NULL;
+			task_table[i].last_core = core_id;
+			task_table[i].last_stack_pointer = NULL;
+			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
+			task_table[i].prio = IDLE_PRIO;
+			spinlock_init(&task_table[i].vma_lock);
+			task_table[i].vma_list = NULL;
+			task_table[i].heap = NULL;
 			spinlock_irqsave_init(&task_table[i].page_lock);
 			atomic_int32_set(&task_table[i].user_usage, 0);
 			task_table[i].page_map = read_cr3();
