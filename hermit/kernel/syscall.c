@@ -34,12 +34,15 @@
 
 static int sys_write(int fd, const char* buf, size_t len)
 {
+	size_t i;
+
 	//TODO: Currently, we ignore the file descriptor
 
 	if (BUILTIN_EXPECT(!buf, 0))
 		return -1;
 
-	kputs(buf);
+	for(i=0; i<len; i++)
+		kputchar(buf[i]);
 
 	return 0;
 }
