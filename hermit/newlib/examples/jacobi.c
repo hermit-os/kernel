@@ -45,13 +45,17 @@ static int generate_empty_matrix(double*** A , unsigned int N) {
 
 	*A = (double**) malloc((N+1)*sizeof(double*));
 
-	if (*A == NULL) 
-		return -2;	/* Error */
+	if (*A == NULL) {
+		printf("*A is NULL...\n");
+		return -1;	/* Error */
+	}
 
 	(*A)[0] = (double*) malloc((N+1)*N*sizeof(double));
 
-	if (**A == NULL)
+	if (**A == NULL) {
+		printf("**A is NULL...\n");
 		return -2;	/* Error */
+	}
 
 	for(iCnt=1; iCnt<N; iCnt++) { /* Assign pointers in the first "real index"; Value from 1 to N (0 yet set, value N means N+1) */
 		(*A)[iCnt] = &((*A)[0][iCnt*(N+1)]);
