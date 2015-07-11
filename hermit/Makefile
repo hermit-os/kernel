@@ -55,7 +55,7 @@ STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
 
-CFLAGS_FOR_NEWLIB = $(STACKPROT) -mtune=native
+CFLAGS_FOR_NEWLIB = $(STACKPROT) #-mtune=native
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
 CFLAGS_FOR_TOOLS = -O2 -Wall
