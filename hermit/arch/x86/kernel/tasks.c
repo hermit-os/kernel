@@ -210,7 +210,7 @@ static int load_task(load_args_t* largs)
 			file->offset = prog_header.offset;
 			read_fs(file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
 
-			flags = VMA_CACHEABLE;
+			flags = VMA_CACHEABLE|VMA_USER;
 			if (prog_header.flags & PF_R)
 				flags |= VMA_READ;
 			if (prog_header.flags & PF_W)
@@ -242,7 +242,7 @@ static int load_task(load_args_t* largs)
 			memset((void*) stack, 0x00, npages*PAGE_SIZE);
 
 			// create vma regions for the user-level stack
-			flags = VMA_CACHEABLE;
+			flags = VMA_CACHEABLE|VMA_USER;
 			if (prog_header.flags & PF_R)
 				flags |= VMA_READ;
 			if (prog_header.flags & PF_W)
@@ -319,6 +319,8 @@ static int load_task(load_args_t* largs)
 
 	// clear fpu state => currently not supported
 	curr_task->flags &= ~(TASK_FPU_USED|TASK_FPU_INIT);
+
+	//vma_dump();
 
 	jump_to_user_code(header.entry, stack+offset);
 
