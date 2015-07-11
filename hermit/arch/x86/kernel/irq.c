@@ -251,6 +251,8 @@ size_t** irq_handler(struct state *s)
 		handler = irq_routines[s->int_no];
 		if (handler)
 			handler(s);
+		else
+			kprintf("Unhandle IRQ %d\n", s->int_no);
 	} else kprintf("Invalid interrupt number %d\n", s->int_no);
 
 	// timer interrupt?
@@ -258,7 +260,6 @@ size_t** irq_handler(struct state *s)
 		ret = scheduler(); // switch to a new task
 	else if ((s->int_no >= 32) && (get_highest_priority() > per_core(current_task)->prio))
 		ret = scheduler();
-	else kprintf("Receive IRQ %d\n", s->int_no);
 
 	apic_eoi(s->int_no);
 
