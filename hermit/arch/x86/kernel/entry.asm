@@ -565,29 +565,29 @@ align 8
 isrsyscall:
     cli
     ; save register accross function call
-    ;push r11
-    ;push rbp
-    ;push rdx
-    ;push rcx
-    ;push rbx
-    ;push rdi
-    ;push rsi
+    push r11
+    push rbp
+    push rdx
+    push rcx
+    push rbx
+    push rdi
+    push rsi
 
     ; get kernel stack
-    ;call get_kernel_stack
+    call get_kernel_stack
 
     ; restore registers
-    ;pop rsi
-    ;pop rdi
-    ;pop rbx
-    ;pop rcx
-    ;pop rdx
-    ;pop rbp
-    ;pop r11
+    pop rsi
+    pop rdi
+    pop rbx
+    pop rcx
+    pop rdx
+    pop rbp
+    pop r11
 
-    ;xchg rsp, rax ; => rax contains original rsp
+    xchg rsp, rax ; => rax contains original rsp
 
-    ;push rax ; contains original rsp
+    push rax ; contains original rsp
     push r15
     push r14
     push r13
@@ -621,8 +621,8 @@ isrsyscall:
     pop r13
     pop r14
     pop r15
-    ;pop r10
-    ;mov rsp, r10
+    pop r10
+    mov rsp, r10
     sti
     o64 sysret
 
