@@ -138,6 +138,7 @@ int smp_main(void)
 int main(void)
 {
 	char* argv1[] = {"/bin/hello", NULL};
+	//char* argv2[] = {"/bin/jacobi", NULL};
 
 	hermit_init();
 	system_calibration(); // enables also interrupts
@@ -159,6 +160,8 @@ int main(void)
 	create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 	create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
+	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
+	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 
 #if 0
 	init_netifs();
