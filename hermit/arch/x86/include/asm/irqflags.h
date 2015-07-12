@@ -83,7 +83,7 @@ inline static void irq_nested_enable(uint8_t flags) {
 		irq_enable();
 }
 
-/** @brief Determines, if the interrupt flags (IF) is ser
+/** @brief Determines, if the interrupt flags (IF) is set
  *
  * @return
  * - 1 interrupt flag is set
