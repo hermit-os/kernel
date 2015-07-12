@@ -262,6 +262,13 @@ inline static uint32_t has_nx(void)
 inline static uint32_t has_avx2(void) {
 	return cpu_info.feature4 & CPU_FEATURE_AVX2;
 }
+
+/// clear TS bit in cr0
+static inline void clts(void)
+{
+	asm volatile("clts");
+}
+
 /** @brief Read out time stamp counter
  *
  * The rdtsc asm command puts a 64 bit time stamp value

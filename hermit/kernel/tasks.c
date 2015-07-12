@@ -49,9 +49,9 @@ static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
 #if MAX_CORES > 1
 static readyqueues_t readyqueues[MAX_CORES] = { \
-		[0 ... MAX_CORES-1]   = {NULL, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
+		[0 ... MAX_CORES-1]   = {NULL, NULL, 0, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
 #else
-static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
+static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, 0, {[0 ... MAX_PRIO-2] = {NULL, NULL}}, {NULL, NULL}, SPINLOCK_IRQSAVE_INIT}};
 #endif
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
@@ -94,6 +94,32 @@ int multitasking_init(void)
 	readyqueues[core_id].idle = task_table+0;
 
 	return 0;
+}
+
+/* interrupt handler to save / restore the FPU context */
+void fpu_handler(struct state *s)
+{
+	task_t* task = per_core(current_task);
+	uint32_t core_id = CORE_ID;
+
+	clts(); // clear the TS flag of cr0
+
+	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+	// did another already use the the FPU? => save FPU state
+	if (readyqueues[core_id].fpu_owner) {
+		save_fpu_state(&task_table[readyqueues[core_id].fpu_owner].fpu);
+		readyqueues[core_id].fpu_owner = 0;
+	}
+	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+	if (!(task->flags & TASK_FPU_INIT))  {
+		// use the FPU at the first time => Initialize FPU
+ 		fpu_init(&task->fpu);
+		task->flags |= TASK_FPU_INIT;
+	}
+
+	restore_fpu_state(&task->fpu);
+	task->flags |= TASK_FPU_USED;
 }
 
 int set_idle_task(void)
@@ -252,6 +278,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 
 			if (id)
 				*id = i;
+			//kprintf("Create task %d with pml4 at 0x%llx\n", i, task_table[i].page_map);
 
 			ret = create_default_frame(task_table+i, ep, arg);
 
@@ -594,19 +621,19 @@ size_t** scheduler(void)
 	}
 
 get_task_out:
-	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
-
 	if (curr_task != orig_task) {
 		/* if the original task is using the FPU, we need to save the FPU context */
 		if ((orig_task->flags & TASK_FPU_USED) && (orig_task->status == TASK_READY)) {
-			save_fpu_state(&(orig_task->fpu));
+			readyqueues[core_id].fpu_owner = orig_task->id;
 			orig_task->flags &= ~TASK_FPU_USED;
 		}
+
+		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
 		//kprintf("schedule on core %d from %u to %u with prio %u\n", core_id, orig_task->id, curr_task->id, (uint32_t)curr_task->prio);
 
 		return (size_t**) &(orig_task->last_stack_pointer);
-	}
+	} else spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
 	return NULL;
 }
