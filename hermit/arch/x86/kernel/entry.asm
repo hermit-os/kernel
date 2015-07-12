@@ -543,14 +543,14 @@ isrsyscall:
     call get_kernel_stack
 
     ; restore registers
-    mov rsi, [rsp+0]
-    mov rdi, [rsp+8]
-    mov rbx, [rsp+16]
-    mov rcx, [rsp+24]
-    mov rdx, [rsp+32]
-    mov rbp, [rsp+40]
-    mov r10, [rsp+48]
     mov r11, [rsp+56]
+    mov r10, [rsp+48]
+    mov rbp, [rsp+40]
+    mov rdx, [rsp+32]
+    mov rcx, [rsp+24]
+    mov rbx, [rsp+16]
+    mov rdi, [rsp+8]
+    mov rsi, [rsp+0]
 
     xchg rsp, rax ; => rax contains pointer to the kernel stack
 
@@ -558,8 +558,7 @@ isrsyscall:
     sti
 
     ; syscall stores in rcx the return address
-    ; => r10 for the temporary storage of the 4th
-    ;    argument
+    ; => r10 for the temporary storage of the 4th argument
     ; => exchange the value to get the correct order
     xchg rcx, r10
 
