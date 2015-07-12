@@ -223,7 +223,8 @@ int cpu_detection(void) {
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_LMA | EFER_SCE);
 		wrmsr(MSR_STAR, (0x1BULL << 48) | (0x08ULL << 32));
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
-		wrmsr(MSR_SYSCALL_MASK, 0); // we didn't clear RFLAGS during an interrupt
+		//  clear IF flag during an interrupt
+		wrmsr(MSR_SYSCALL_MASK, (1 << 9));
 	} else kputs("Processor doesn't support syscalls\n");
 
 	if (has_nx())
@@ -285,6 +286,9 @@ int cpu_detection(void) {
 		kprintf("Hypervisor Vendor Id: %s\n", vendor_id);
 		kprintf("Maximum input value for hypervisor: 0x%x\n", a);
 	}
+
+	if (first_time)
+		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
 
 	return 0;
 }
