@@ -135,10 +135,10 @@ static int load_task(load_args_t* largs)
 	fildes_t *file = kmalloc(sizeof(fildes_t));
 	file->offset = 0;
 	file->flags = 0;
+	int ret = -EINVAL;
 
 	//TODO: init the hole fildes_t struct!
 	task_t* curr_task = per_core(current_task);
-	int err;
 
 	if (!largs)
 		return -EINVAL;
@@ -147,29 +147,29 @@ static int load_task(load_args_t* largs)
 	if (!file->node)
 		return -EINVAL;
 
-	err = read_fs(file, (uint8_t*)&header, sizeof(elf_header_t));
-	if (err < 0) {
-		kprintf("read_fs failed: %d\n", err);
-		return err;
+	ret = read_fs(file, (uint8_t*)&header, sizeof(elf_header_t));
+	if (ret < 0) {
+		kprintf("read_fs failed: %d\n", ret);
+		goto Lerr;
 	}
 
 	if (BUILTIN_EXPECT(header.ident.magic != ELF_MAGIC, 0))
-		goto invalid;
+		goto Linvalid;
 
 	if (BUILTIN_EXPECT(header.type != ELF_ET_EXEC, 0))
-		goto invalid;
+		goto Linvalid;
 
 	if (BUILTIN_EXPECT(header.machine != ELF_EM_X86_64, 0))
-		goto invalid;
+		goto Linvalid;
 
 	if (BUILTIN_EXPECT(header.ident._class != ELF_CLASS_64, 0))
-		goto invalid;
+		goto Linvalid;
 
 	if (BUILTIN_EXPECT(header.ident.data != ELF_DATA_2LSB, 0))
-		goto invalid;
+		goto Linvalid;
 
 	if (header.entry <= KERNEL_SPACE)
-		goto invalid;
+		goto Linvalid;
 
 	// interpret program header table
 	for (i=0; i<header.ph_entry_count; i++) {
@@ -237,7 +237,8 @@ static int load_task(load_args_t* largs)
 
 			if (page_map(stack, addr, npages, flags)) {
 				kprintf("Could not map stack at 0x%x\n", stack);
-				return -ENOMEM;
+				ret = -ENOMEM;
+				goto Lerr;
 			}
 			memset((void*) stack, 0x00, npages*PAGE_SIZE);
 
@@ -260,7 +261,8 @@ static int load_task(load_args_t* largs)
 
 	if (BUILTIN_EXPECT(!curr_task->heap || !heap, 0)) {
 		kprintf("load_task: heap is missing!\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto Lerr;
 	}
 
 	curr_task->heap->flags = VMA_HEAP|VMA_USER;
@@ -269,7 +271,8 @@ static int load_task(load_args_t* largs)
 
 	if (BUILTIN_EXPECT(!stack, 0)) {
 		kprintf("Stack is missing!\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto Lerr;
 	}
 
 	// push strings on the stack
@@ -326,7 +329,7 @@ static int load_task(load_args_t* largs)
 
 	return 0;
 
-invalid:
+Linvalid:
 	kprintf("Invalid executable!\n");
 	kprintf("magic number 0x%x\n", (uint32_t) header.ident.magic);
 	kprintf("header type 0x%x\n", (uint32_t) header.type);
@@ -335,7 +338,8 @@ invalid:
 	kprintf("elf identdata 0x%x\n", header.ident.data);
 	kprintf("program entry point 0x%lx\n", (size_t) header.entry);
 
-	return -EINVAL;
+Lerr:
+	return ret;
 }
 
 /** @brief This call is used to adapt create_task calls
