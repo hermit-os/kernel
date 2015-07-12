@@ -310,6 +310,8 @@ Lno_remap:
 
     ; Set CR0 (PM-bit is already set)
     mov eax, cr0
+    and eax, ~(1 << 2)      ; disable FPU emulation
+    or eax, (1 << 1)        ; enable FPU montitoring 
     and eax, ~(1 << 30)     ; enable caching
     and eax, ~(1 << 29)     ; disable write through caching
     and eax, ~(1 << 16)     ; allow kernel write access to read-only pages
@@ -528,14 +530,15 @@ global isrsyscall
 align 8
 ; used to realize system calls
 isrsyscall:
-    cli
+    ; IF flag is already cleared => see processor.c
+    ; cli 
     ; save registers accross function call
-    push r11
+    push r8
+    push r9
     push r10
-    push rbp
+    push r11
     push rdx
     push rcx
-    push rbx
     push rdi
     push rsi
 
@@ -543,41 +546,43 @@ isrsyscall:
     call get_kernel_stack
 
     ; restore registers
-    mov r11, [rsp+56]
-    mov r10, [rsp+48]
-    mov rbp, [rsp+40]
-    mov rdx, [rsp+32]
-    mov rcx, [rsp+24]
-    mov rbx, [rsp+16]
+    mov r8,  [rsp+56]
+    mov r9,  [rsp+48]
+    mov r10, [rsp+40]
+    mov r11, [rsp+32]
+    mov rdx, [rsp+24]
+    ; see below
+    ; mov rcx, [rsp+16] 
     mov rdi, [rsp+8]
     mov rsi, [rsp+0]
 
     xchg rsp, rax ; => rax contains pointer to the kernel stack
 
     push rax ; contains original rsp
-    sti
 
     ; syscall stores in rcx the return address
-    ; => r10 for the temporary storage of the 4th argument
-    ; => exchange the value to get the correct order
-    xchg rcx, r10
+    ; => using of r12 for the temporary storage of the 4th argument
+    mov rcx, r12
 
+    ; during the system call, HermitCore allows interrupts
+    sti
     call syscall_handler
-
     cli
+
     ; restore user-level stack
     pop r10
     mov rsp, r10
 
     pop rsi
     pop rdi
-    pop rbx
     pop rcx
     pop rdx
-    pop rbp
-    pop r10
     pop r11
-    sti
+    pop r10
+    pop r9
+    pop r8
+    ; EFLAGS (and IF flag) will be restored by sysret
+    ; sti
     o64 sysret
 
 global switch_context
