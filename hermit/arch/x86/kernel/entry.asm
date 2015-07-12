@@ -524,48 +524,14 @@ extern finish_task_switch
 extern syscall_handler
 extern get_kernel_stack
 
-global int80_syscall
-align 8
-int80_syscall:
-    cli
-
-    push r15
-    push r14
-    push r13
-    push r12
-    push r11
-    push rbp
-    push rdx
-    push rcx
-    push rbx
-    push rdi
-    push rsi
-    sti
-
-    call syscall_handler
-
-    cli
-    pop rsi
-    pop rdi
-    pop rbx
-    pop rcx
-    pop rdx
-    pop rbp
-    pop r11
-    pop r12
-    pop r13
-    pop r14
-    pop r15
-    sti
-    iretq
-
 global isrsyscall
 align 8
 ; used to realize system calls
 isrsyscall:
     cli
-    ; save register accross function call
+    ; save registers accross function call
     push r11
+    push r10
     push rbp
     push rdx
     push rcx
@@ -577,28 +543,18 @@ isrsyscall:
     call get_kernel_stack
 
     ; restore registers
-    pop rsi
-    pop rdi
-    pop rbx
-    pop rcx
-    pop rdx
-    pop rbp
-    pop r11
+    mov rsi, [rsp+0]
+    mov rdi, [rsp+8]
+    mov rbx, [rsp+16]
+    mov rcx, [rsp+24]
+    mov rdx, [rsp+32]
+    mov rbp, [rsp+40]
+    mov r10, [rsp+48]
+    mov r11, [rsp+56]
 
-    xchg rsp, rax ; => rax contains original rsp
+    xchg rsp, rax ; => rax contains pointer to the kernel stack
 
     push rax ; contains original rsp
-    push r15
-    push r14
-    push r13
-    push r12
-    push r11
-    push rbp
-    push rdx
-    push rcx
-    push rbx
-    push rdi
-    push rsi
     sti
 
     ; syscall stores in rcx the return address
@@ -610,19 +566,18 @@ isrsyscall:
     call syscall_handler
 
     cli
+    ; restore user-level stack
+    pop r10
+    mov rsp, r10
+
     pop rsi
     pop rdi
     pop rbx
     pop rcx
     pop rdx
     pop rbp
-    pop r11
-    pop r12
-    pop r13
-    pop r14
-    pop r15
     pop r10
-    mov rsp, r10
+    pop r11
     sti
     o64 sysret
 
