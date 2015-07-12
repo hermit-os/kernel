@@ -139,7 +139,7 @@ void gdt_install(void)
 		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, gran_cs);
 
 	/*
-	 * Create TSS for each task at ring0 (we use these segments for task switching)
+	 * Create TSS for each core (we use these segments for task switching)
 	 */
 	for(i=0; i<MAX_CORES; i++) {
 		task_state_segments[i].rsp0 = (size_t) &boot_stack + i * KERNEL_STACK_SIZE - 0x10;
