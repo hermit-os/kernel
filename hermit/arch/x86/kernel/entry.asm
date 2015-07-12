@@ -532,6 +532,8 @@ align 8
 isrsyscall:
     ; IF flag is already cleared => see processor.c
     ; cli 
+    ; save space for caller's red zone
+    sub rsp, 128
     ; save registers accross function call
     push r8
     push r9
@@ -573,6 +575,7 @@ isrsyscall:
     pop r10
     mov rsp, r10
 
+    ; restore registers
     pop rsi
     pop rdi
     pop rcx
@@ -581,6 +584,8 @@ isrsyscall:
     pop r10
     pop r9
     pop r8
+    ; remove red zone
+    add rsp, 128
     ; EFLAGS (and IF flag) will be restored by sysret
     ; sti
     o64 sysret
