@@ -119,6 +119,8 @@ typedef struct {
 	task_t*		idle __attribute__ ((aligned (CACHE_LINE)));
         /// previous task
 	task_t*		old_task;
+	/// last task, which used the FPU
+	tid_t		fpu_owner;
 	/// total number of tasks in the queue
 	uint32_t	nr_tasks;
 	/// indicates the used priority queues

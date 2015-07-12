@@ -81,7 +81,7 @@ extern void isr30(void);
 extern void isr31(void);
 
 static void fault_handler(struct state *s);
-static void fpu_handler(struct state *s);
+extern void fpu_handler(struct state *s);
 
 /* 
  * This is a very repetitive function... it's not hard, it's
@@ -170,21 +170,6 @@ void isrs_install(void)
 	// set hanlder for fpu exceptions
 	irq_uninstall_handler(7);
 	irq_install_handler(7, fpu_handler);
-}
-
-static void fpu_handler(struct state *s)
-{
-	task_t* task = per_core(current_task);
-
-	asm volatile ("clts"); // clear the TS flag of cr0
-	if (!(task->flags & TASK_FPU_INIT))  {
-		// use the FPU at the first time => Initialize FPU
-		fpu_init(&task->fpu);
-		task->flags |= TASK_FPU_INIT;
-	}
-
-	restore_fpu_state(&task->fpu);
-	task->flags |= TASK_FPU_USED;
 }
 
 /** @brief Exception messages

@@ -79,7 +79,7 @@ typedef struct i387_fxsave_struct {
 typedef struct {
 	uint64_t xstate_bv;
 	uint64_t xcomp_bv;
-  uint64_t reserved[6];
+	uint64_t reserved[6];
 } xsave_header_t;
 
 typedef struct {
