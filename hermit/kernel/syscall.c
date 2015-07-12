@@ -78,6 +78,8 @@ ssize_t syscall_handler(uint32_t sys_nr, ...)
 	ssize_t ret = -EINVAL;
 	va_list vl;
 
+	check_workqueues();
+
 	va_start(vl, sys_nr);
 
 	switch(sys_nr)
