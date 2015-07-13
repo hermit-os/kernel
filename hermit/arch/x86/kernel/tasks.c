@@ -190,14 +190,22 @@ static int load_task(load_args_t* largs)
 				npages++;
 
 			addr = get_pages(npages);
-
+			if (BUILTIN_EXPECT(!addr, 0)) {
+				kprintf("load_task: not enough memory!\n");
+				ret = -ENOMEM;
+				goto Lerr;
+			}
+	
 			flags = PG_USER;
 			if (has_nx() && !(prog_header.flags & PF_X))
 				flags |= PG_XD;
 
 			// map page frames in the address space of the current task
-			if (page_map(prog_header.virt_addr, addr, npages, flags|PG_RW))
+			if (page_map(prog_header.virt_addr, addr, npages, flags|PG_RW)) {
 				kprintf("Could not map 0x%x at 0x%x\n", addr, prog_header.virt_addr);
+				ret = -ENOMEM;
+				goto Lerr;
+			}
 
 			// clear pages
 			memset((void*) prog_header.virt_addr, 0x00, npages*PAGE_SIZE);
@@ -210,6 +218,9 @@ static int load_task(load_args_t* largs)
 			file->offset = prog_header.offset;
 			read_fs(file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
 
+			if (!(prog_header.flags & PF_W))
+				page_set_flags(prog_header.virt_addr, npages, flags);
+
 			flags = VMA_CACHEABLE|VMA_USER;
 			if (prog_header.flags & PF_R)
 				flags |= VMA_READ;
@@ -219,8 +230,6 @@ static int load_task(load_args_t* largs)
 				flags |= VMA_EXECUTE;
 			vma_add(prog_header.virt_addr, prog_header.virt_addr+npages*PAGE_SIZE-1, flags);
 
-			if (!(prog_header.flags & PF_W))
-				page_set_flags(prog_header.virt_addr, npages, flags);
 			break;
 
 		case ELF_PT_GNU_STACK: // Indicates stack executability
@@ -230,6 +239,12 @@ static int load_task(load_args_t* largs)
 				npages++;
 
 			addr = get_pages(npages);
+			if (BUILTIN_EXPECT(!addr, 0)) {
+				kprintf("load_task: not enough memory!\n");
+				ret = -ENOMEM;
+				goto Lerr;
+			}
+
 			stack = header.entry*2; // virtual address of the stack
 			flags = PG_USER|PG_RW;
 			if (has_nx() && !(prog_header.flags & PF_X))
