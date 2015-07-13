@@ -160,7 +160,6 @@ void finish_task_switch(void)
 	task_t* old;
 	uint8_t prio;
 	const uint32_t core_id = CORE_ID;
-	task_t* curr_task = per_core(current_task);
 
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 
@@ -186,9 +185,6 @@ void finish_task_switch(void)
 	}
 
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
-
-	if (curr_task->heap)
-		kfree(curr_task->heap);
 }
 
 /** @brief A procedure to be called by
@@ -201,6 +197,10 @@ static void NORETURN do_exit(int arg)
 	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
 
 	page_map_drop();
+	if (curr_task->heap) {
+		kfree(curr_task->heap);
+		curr_task->heap = NULL;
+	}
 
 	// decrease the number of active tasks
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
