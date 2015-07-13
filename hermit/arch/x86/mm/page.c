@@ -39,6 +39,7 @@
 #include <hermit/errno.h>
 #include <hermit/string.h>
 #include <hermit/spinlock.h>
+#include <hermit/tasks.h>
 
 #include <asm/irq.h>
 #include <asm/page.h>
@@ -302,15 +303,19 @@ void page_fault_handler(struct state *s)
 	}
 
 default_handler:
-	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
-		s->int_no, s->cs, s->rip, task->id, viraddr, s->error,
+	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
+		s->int_no, s->cs, s->rip, s->rflags, task->id, viraddr, s->error,
 		(s->error & 0x4) ? "user" : "supervisor",
 		(s->error & 0x10) ? "instruction" : "data",
 		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
 		(s->error & 0x1) ? "protection" : "not present",
 		(s->error & 0x8) ? "reserved bit" : "\b");
+	if (task->heap)
+		kprintf("Heap 0x%llx - 0x%llx\n", task->heap->start, task->heap->end);
 
-	while(1) HALT;
+	apic_eoi(s->int_no);
+	irq_enable();
+	abort();
 }
 
 int page_init(void)
