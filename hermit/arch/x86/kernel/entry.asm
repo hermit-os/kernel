@@ -306,6 +306,7 @@ Lno_remap:
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
     or eax, (1 << 7)        ; enable PGE
+    or eax, (1 << 20)       ; enable SMEP
     mov cr4, eax
 
     ; Set CR0 (PM-bit is already set)
@@ -318,13 +319,13 @@ Lno_remap:
     or eax, (1 << 31)       ; enable paging
     mov cr0, eax
 
-    lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
-    jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
+    lgdt [GDT64.Pointer]    ; Load the 64-bit global descriptor table.
+    jmp GDT64.Code:start64  ; Set the code segment and enter 64-bit long mode.
 
 [BITS 64]
 start64:
     ; initialize segment registers
-    mov ax, GDT64.Data
+    mov ax, 0x00
     mov ds, ax
     mov es, ax
     mov ss, ax
@@ -563,8 +564,8 @@ isrsyscall:
     push rax ; contains original rsp
 
     ; syscall stores in rcx the return address
-    ; => using of r12 for the temporary storage of the 4th argument
-    mov rcx, r12
+    ; => using of r10 for the temporary storage of the 4th argument
+    mov rcx, r10
 
     ; during the system call, HermitCore allows interrupts
     sti
