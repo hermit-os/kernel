@@ -44,13 +44,13 @@ QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4
 # Compiler options for final code
-CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
+CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 # Compiler options for debugging
 debug debug-eclipse : CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
-LDFLAGS = -T link.ld -z max-page-size=4096 --defsym __BUILD_DATE=$(TODAY)
+LDFLAGS = -T link.ld -z max-page-size=4096 --defsym __BUILD_DATE=$(TODAY) -nostdlib
 STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
