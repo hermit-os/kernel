@@ -567,7 +567,7 @@ isrsyscall:
     ; => using of r10 for the temporary storage of the 4th argument
     mov rcx, r10
 
-    ; during the system call, HermitCore allows interrupts
+    ; during a system call, HermitCore allows interrupts
     sti
     call syscall_handler
     cli
