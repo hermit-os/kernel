@@ -73,46 +73,55 @@ static ssize_t sys_sbrk(int incr)
 	return ret;
 }
 
-ssize_t syscall_handler(uint32_t sys_nr, ...)
+static int sys_open(const char* name, int flags, int mode)
 {
-	ssize_t ret = -EINVAL;
-	va_list vl;
-
-	check_workqueues();
-
-	va_start(vl, sys_nr);
-
-	switch(sys_nr)
-	{
-	case __NR_exit:
-		sys_exit(va_arg(vl, uint32_t));
-		ret = 0;
-		break;
-	case __NR_write: {
-		int fd = va_arg(vl, int);
-		const char* buf = va_arg(vl, const char*);
-		size_t len = va_arg(vl, size_t);
-		ret = sys_write(fd, buf, len);
-		break;
-	}
-	//TODO: Currently, we ignore file descriptors
-	case __NR_open:
-	case __NR_close:
-		ret = 0;
-		break;
-	case __NR_sbrk: {
-		int incr = va_arg(vl, int);
-
-		ret = sys_sbrk(incr);
-		break;
-	}
-	default:
-		kprintf("invalid system call: 0x%lx\n", sys_nr);
-		ret = -ENOSYS;
-		break;
-	};
-
-	va_end(vl);
-
-	return ret;
+	return 0;
 }
+
+static int sys_close(int fd)
+{
+	return 0;
+}
+
+static int default_handler(void)
+{
+	kprintf("Invalid system call\n");
+
+	return -ENOSYS;
+}
+
+size_t syscall_table[] = {
+	(size_t) sys_exit,		/* __NR_exit 	*/
+	(size_t) sys_write,		/* __NR_write 	*/
+	(size_t) sys_open, 		/* __NR_open 	*/
+	(size_t) sys_close,		/* __NR_close 	*/
+	(size_t) default_handler,	/* __NR_read 	*/
+	(size_t) default_handler,	/* __NR_lseek	*/
+	(size_t) default_handler, 	/* __NR_unlink	*/
+	(size_t) default_handler, 	/* __NR_getpid	*/
+	(size_t) default_handler,	/* __NR_kill	*/
+	(size_t) default_handler,	/* __NR_fstat	*/
+	(size_t) sys_sbrk,		/* __NR_sbrk	*/
+	(size_t) default_handler,	/* __NR_fork	*/
+	(size_t) default_handler,	/* __NR_wait	*/
+	(size_t) default_handler,	/* __NR_execve	*/
+	(size_t) default_handler,	/* __NR_times	*/
+	(size_t) default_handler,	/* __NR_accept	*/
+	(size_t) default_handler,	/* __NR_bind	*/
+	(size_t) default_handler,	/* __NR_closesocket	*/
+	(size_t) default_handler,	/* __NR_connect	*/
+	(size_t) default_handler,	/* __NR_listen	*/
+	(size_t) default_handler,	/* __NR_recv	*/
+	(size_t) default_handler,	/* __NR_send	*/
+	(size_t) default_handler,	/* __NR_socket	*/
+	(size_t) default_handler,	/* __NR_getsockopt	*/
+	(size_t) default_handler,	/* __NR_setsockopt	*/
+	(size_t) default_handler, 	/* __NR_gethostbyname	*/
+	(size_t) default_handler,	/* __NR_sendto	*/
+	(size_t) default_handler,	/* __NR_recvfrom	*/
+	(size_t) default_handler,	/* __NR_select	*/
+	(size_t) default_handler,	/* __NR_stat	*/
+	(size_t) default_handler,	/* __NR_dup	*/
+	(size_t) default_handler,	/* __NR_dup2	*/
+
+};
