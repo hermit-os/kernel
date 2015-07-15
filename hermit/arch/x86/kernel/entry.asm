@@ -545,23 +545,28 @@ isrsyscall:
     push rdi
     push rsi
 
+    ; push system call number  
+    push rax 
+
     ; get kernel stack
     call get_kernel_stack
 
     ; restore registers
-    mov r8,  [rsp+56]
-    mov r9,  [rsp+48]
-    mov r10, [rsp+40]
-    mov r11, [rsp+32]
-    mov rdx, [rsp+24]
+    mov r8,  [rsp+64]
+    mov r9,  [rsp+56]
+    mov r10, [rsp+48]
+    mov r11, [rsp+40]
+    mov rdx, [rsp+32]
     ; see below
-    ; mov rcx, [rsp+16] 
-    mov rdi, [rsp+8]
-    mov rsi, [rsp+0]
+    ; mov rcx, [rsp+24] 
+    mov rdi, [rsp+16]
+    mov rsi, [rsp+8]
 
     xchg rsp, rax ; => rax contains pointer to the kernel stack
+    push rax	  ; store user-level stack pointer
 
-    push rax ; contains original rsp
+    ; restore system call number
+    mov rax, [rax+0]
 
     ; syscall stores in rcx the return address
     ; => using of r10 for the temporary storage of the 4th argument
@@ -569,14 +574,16 @@ isrsyscall:
 
     ; during a system call, HermitCore allows interrupts
     sti
-    call syscall_handler
+    extern syscall_table
+    call [rax*8+syscall_table]
     cli
 
-    ; restore user-level stack
+    ; restore user-level stack pointer
     pop r10
     mov rsp, r10
 
     ; restore registers
+    add rsp, 8 ; ignore old value of rax
     pop rsi
     pop rdi
     pop rcx
