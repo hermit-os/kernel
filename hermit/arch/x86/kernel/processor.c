@@ -96,26 +96,21 @@ static void fpu_init_fxsr(union fpu_state* fpu)
 
 static void save_fpu_state_xsave(union fpu_state* state)
 {
-	uint32_t eax = 1, edx = 1;
-
-	asm volatile ("xsave %0" : "=m"(state->xsave) : "a"(eax), "d"(edx) : "memory");
+	asm volatile ("xsaveq %0" : "=m"(state->xsave) : "a"(1), "d"(1) : "memory");
 }
 
 static void restore_fpu_state_xsave(union fpu_state* state)
 {
-	uint32_t eax = 1, edx = 1;
-
-	asm volatile ("xrstor %0" :: "m"(state->xsave), "a"(eax), "d"(edx));
+	asm volatile ("xrstorq %0" :: "m"(state->xsave), "a"(1), "d"(1));
 }
 
 static void fpu_init_xsave(union fpu_state* fpu)
 {
+	i387_fsave_t* fp = &fpu->fsave;
 	xsave_t* xs = &fpu->xsave;
 
 	memset(xs, 0x00, sizeof(xsave_t));
-	xs->fxsave.cwd = 0x37f;
-	if (BUILTIN_EXPECT(has_sse(), 1))
-		xs->fxsave.mxcsr = 0x1f80;
+	fp->twd = 0xffffu;
 }
 
 uint32_t detect_cpu_frequency(void)
@@ -215,7 +210,7 @@ int cpu_detection(void) {
 			xcr0 |= 0x2;
 		if (has_avx())
 			xcr0 |= 0x3;
-		//kprintf("Set XCR to 0x%llx\n", xcr0);
+		kprintf("Set XCR to 0x%llx\n", xcr0);
 		xsetbv(0, xcr0);
 	}
 
@@ -262,6 +257,22 @@ int cpu_detection(void) {
 	}
 
 	if (first_time && has_xsave()) {
+#if 0
+		a = b = d = 0;
+		c = 2;
+		cpuid(0, &a, &b, &c, &d);
+		kprintf("Ext_Save_Area_2: offset %d, size %d\n", b, a);
+
+		a = b = d = 0;
+		c = 3;
+		cpuid(0, &a, &b, &c, &d);
+		kprintf("Ext_Save_Area_3: offset %d, size %d\n", b, a);
+
+		a = b = d = 0;
+		c = 4;
+		cpuid(0, &a, &b, &c, &d);
+		kprintf("Ext_Save_Area_4: offset %d, size %d\n", b, a);
+#endif
 		save_fpu_state = save_fpu_state_xsave;
 		restore_fpu_state = restore_fpu_state_xsave;
 		fpu_init = fpu_init_xsave;
