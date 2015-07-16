@@ -10,5 +10,6 @@ documentation/html/
 include/hermit/config.inc
 newlib/examples/hello
 newlib/examples/jacobi
+newlib/examples/stream
 newlib/x86/
 newlib/tmp/
