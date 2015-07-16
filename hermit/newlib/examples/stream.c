@@ -415,16 +415,33 @@ checktick()
 /* A gettimeofday routine to give access to the wall
    clock timer on most UNIX-like systems.  */
 
+#include <time.h>
 #include <sys/time.h>
 
 double mysecond()
 {
+#if 0
         struct timeval tp;
         struct timezone tzp;
         int i;
 
         i = gettimeofday(&tp,&tzp);
         return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
+#else
+	static clock_t start, init = 0;
+	double ret;
+
+	if (init) {
+		ret = (double) (clock() - start) / (double) CLOCKS_PER_SEC;
+	} else {
+		start = clock();
+		init = 1;
+		ret = 0.0;
+		//printf("CLOCKS_PER_SEC = %d\n", CLOCKS_PER_SEC);
+	}
+
+	return ret;
+#endif
 }
 
 #ifndef abs

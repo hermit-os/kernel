@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 	double**	A=0;
 	double*		X;
 	double*		X_old, xi;
-	//clock_t		start, end;
+	clock_t		start, end;
 
 	if (generate_empty_matrix(&A,MATRIX_SIZE) < 0)
 	{
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
 	iter_start = 0;
 	iter_end = MATRIX_SIZE;
 
-	//start = clock();
+	start = clock();
 
 	while(1) 
 	{
@@ -169,7 +169,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//end = clock();
+	end = clock();
 	
 	if (MATRIX_SIZE < 16) {
 		printf("Print the solution...\n");
@@ -200,7 +200,7 @@ int main(int argc, char **argv)
 
 	printf("\nmatrix size: %d x %d\n", MATRIX_SIZE, MATRIX_SIZE);
 	printf("number of iterations: %d\n", iterations);
-	//printf("calculation time: %f s\n", (float) (end-start) / (float) CLOCKS_PER_SEC);
+	printf("calculation time: %f s\n", (float) (end-start) / (float) CLOCKS_PER_SEC);
 
 	free((void*) X_old);
 	free((void*) X);

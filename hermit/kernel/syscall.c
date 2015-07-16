@@ -31,6 +31,7 @@
 #include <hermit/errno.h>
 #include <hermit/syscall.h>
 #include <hermit/spinlock.h>
+#include <hermit/time.h>
 
 static int sys_write(int fd, const char* buf, size_t len)
 {
@@ -105,7 +106,7 @@ size_t syscall_table[] = {
 	(size_t) default_handler,	/* __NR_fork	*/
 	(size_t) default_handler,	/* __NR_wait	*/
 	(size_t) default_handler,	/* __NR_execve	*/
-	(size_t) default_handler,	/* __NR_times	*/
+	(size_t) sys_times,		/* __NR_times	*/
 	(size_t) default_handler,	/* __NR_accept	*/
 	(size_t) default_handler,	/* __NR_bind	*/
 	(size_t) default_handler,	/* __NR_closesocket	*/

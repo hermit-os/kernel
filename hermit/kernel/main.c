@@ -140,12 +140,14 @@ static int initd(void* arg)
 {
 	char* argv1[] = {"/bin/hello", NULL};
 	char* argv2[] = {"/bin/jacobi", NULL};
+	char* argv3[] = {"/bin/stream", NULL};
 
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 	create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
 	create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 	create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
+	//create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
 
 #if 0
 	init_netifs();
