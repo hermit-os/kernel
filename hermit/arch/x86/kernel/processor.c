@@ -209,8 +209,8 @@ int cpu_detection(void) {
 		if (has_sse())
 			xcr0 |= 0x2;
 		if (has_avx())
-			xcr0 |= 0x3;
-		kprintf("Set XCR to 0x%llx\n", xcr0);
+			xcr0 |= 0x4;
+		kprintf("Set XCR0 to 0x%llx\n", xcr0);
 		xsetbv(0, xcr0);
 	}
 
