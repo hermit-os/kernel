@@ -191,7 +191,7 @@ static int load_task(load_args_t* largs)
 
 			addr = get_pages(npages);
 			if (BUILTIN_EXPECT(!addr, 0)) {
-				kprintf("load_task: not enough memory!\n");
+				kprintf("load_task: not enough memoryi for %d pages!\n", npages);
 				ret = -ENOMEM;
 				goto Lerr;
 			}
