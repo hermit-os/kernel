@@ -42,6 +42,20 @@
 static volatile uint64_t timer_ticks = 0;
 extern uint32_t cpu_freq;
 
+int sys_times(struct tms* buffer, clock_t* clock)
+{
+	if (BUILTIN_EXPECT(!buffer, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(!clock, 0))
+		return -EINVAL;
+
+	memset(buffer, 0x00, sizeof(struct tms));
+	*clock = buffer->tms_utime = (clock_t) ((timer_ticks - per_core(current_task)->start_tick) * CLOCKS_PER_SEC / TIMER_FREQ);
+
+	return 0;
+}
+
+
 uint64_t get_clock_tick(void)
 {
 	return timer_ticks;
