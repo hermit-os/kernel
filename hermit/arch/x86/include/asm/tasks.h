@@ -71,11 +71,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg);
 static inline int jump_to_user_code(size_t ep, size_t stack)
 {
 	// Create a pseudo interrupt on the stack and return to user function
-	size_t ds = 0x23, cs = 0x2b;
-
-	// x86_64 doesn't longer use segment registers
-	//asm volatile ("mov %0, %%ds; mov %0, %%es" :: "r"(ds));
-	asm volatile ("push %0; push %1; push $0x1202; push %2; push %3; iretq" :: "r"(ds), "r"(stack), "r"(cs), "r"(ep));
+	asm volatile ("push %0; push %1; push $0x1202; push %2; push %3; iretq" :: "r"(0x23ULL), "r"(stack), "r"(0x2bULL), "r"(ep) : "memory");
 
 	return 0;
 }
