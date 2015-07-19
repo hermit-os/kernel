@@ -67,7 +67,7 @@ int kputchar(int c)
 	int pos;
 
 	/* add place holder for end of string */
-	if (!c)
+	if (BUILTIN_EXPECT(!c, 0))
 		c = '?';
 
 	if (early_print != NO_EARLY_PRINT)
