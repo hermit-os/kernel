@@ -40,6 +40,28 @@
 extern "C" {
 #endif
 
+#define per_core(var) ({ \
+	typeof(var) ptr; \
+	switch (sizeof(var)) { \
+	case 4: \
+		asm volatile ("movl %%gs:(" #var "), %0" : "=r"(ptr)); \
+		break; \
+	case 8: \
+		asm volatile ("movq %%gs:(" #var "), %0" : "=r"(ptr)); \
+		break; \
+	} \
+	ptr; })
+
+#define per_core_set(var, value) ({ \
+	switch (sizeof(var)) { \
+	case 4: asm volatile ("movl %0, %%gs:(" #var ")" :: "r"(value)); \
+		break; \
+	case 8: \
+		asm volatile ("movq %0, %%gs:(" #var ")" :: "r"(value)); \
+		break; \
+	} \
+	})
+
 #if __SIZEOF_POINTER__ == 4
 
 #define KERNEL_SPACE	(1UL << 30) /*  1 GiB */

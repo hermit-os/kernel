@@ -47,42 +47,21 @@ extern "C" {
 /// represents a task identifier
 typedef unsigned int tid_t;
 
-#if MAX_CORES == 1
-#define per_core(name) name
-#define DECLARE_PER_CORE(type, name) extern type name;
-#define DEFINE_PER_CORE(type, name, def_value) type name = def_value;
-#define DEFINE_PER_CORE_STATIC(type, name, def_value)   static type name = def_value;
-#define CORE_ID 0
-#else
-#define per_core(name) (*__get_percore_##name())
-#define DECLARE_PER_CORE(type, name) \
-	typedef struct { type var  __attribute__ ((aligned (CACHE_LINE))); } aligned_##name;\
-	extern aligned_##name name[MAX_CORES];\
-	inline static type* __get_percore_##name(void) {\
-		type* ret; \
-		uint8_t flags = irq_nested_disable(); \
-		ret = &(name[smp_id()].var); \
-		irq_nested_enable(flags);\
-		return ret; \
-	}
-#define DEFINE_PER_CORE(type, name, def_value) \
-	aligned_##name name[MAX_CORES] = {[0 ... MAX_CORES-1] = {def_value}};
-#define DEFINE_PER_CORE_STATIC(type, name, def_value) \
-	typedef struct { type var  __attribute__ ((aligned (CACHE_LINE))); } aligned_##name;\
-	static aligned_##name name[MAX_CORES] = {[0 ... MAX_CORES-1] = {def_value}}; \
-	inline static type* __get_percore_##name(void) {\
-		type* ret; \
-		uint8_t flags = irq_nested_disable(); \
-		ret = &(name[smp_id()].var); \
-		irq_nested_enable(flags);\
-		return ret; \
-	}
-#define CORE_ID smp_id()
-#endif
+#define DECLARE_PER_CORE(type, name) extern type name __attribute__ ((section (".percore")));
+#define DEFINE_PER_CORE(type, name, def_value) type name __attribute__ ((section (".percore"))) = def_value;
+#define DEFINE_PER_CORE_STATIC(type, name, def_value) static type name __attribute__ ((section (".percore"))) = def_value;
 
 /* needed to find the task, which is currently running on this core */
 struct task;
 DECLARE_PER_CORE(struct task*, current_task);
+
+/* allows fast access to the kernel stack */
+DECLARE_PER_CORE(char*, kernel_stack);
+
+/* allows fast access to the core id */
+DECLARE_PER_CORE(uint32_t, __core_id);
+
+#define CORE_ID per_core(__core_id)
 
 #ifdef __cplusplus
 }
