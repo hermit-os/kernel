@@ -55,6 +55,8 @@ static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, 0, {[0 .
 #endif
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
+DEFINE_PER_CORE(char*, kernel_stack, NULL);
+DEFINE_PER_CORE(uint32_t, __core_id, 0);
 extern const void boot_stack;
 
 /** @brief helper function for the assembly code to determine the current task
@@ -89,6 +91,8 @@ int multitasking_init(void)
 
 	task_table[0].prio = IDLE_PRIO;
 	task_table[0].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
+	per_core_set(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
+	per_core_set(current_task, task_table+0);
 	task_table[0].page_map = read_cr3();
 
 	readyqueues[core_id].idle = task_table+0;
@@ -136,6 +140,7 @@ int set_idle_task(void)
 			task_table[i].last_core = core_id;
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
+			per_core_set(kernel_stack, task_table[i].stack + KERNEL_STACK_SIZE - 0x10);
 			task_table[i].prio = IDLE_PRIO;
 			spinlock_init(&task_table[i].vma_lock);
 			task_table[i].vma_list = NULL;
@@ -143,7 +148,8 @@ int set_idle_task(void)
 			spinlock_irqsave_init(&task_table[i].page_lock);
 			atomic_int32_set(&task_table[i].user_usage, 0);
 			task_table[i].page_map = read_cr3();
-			per_core(current_task) = readyqueues[core_id].idle = task_table+i;
+			readyqueues[core_id].idle = task_table+i;
+			per_core_set(current_task, readyqueues[core_id].idle);
 			ret = 0;
 
 			break;
@@ -594,7 +600,8 @@ size_t** scheduler(void)
 	if (prio > MAX_PRIO) {
 		if ((curr_task->status == TASK_RUNNING) || (curr_task->status == TASK_IDLE))
 			goto get_task_out;
-		curr_task = per_core(current_task) = readyqueues[core_id].idle;
+		curr_task = readyqueues[core_id].idle;
+		per_core_set(current_task, curr_task);
 	} else {
 		// Does the current task have an higher priority? => no task switch
 		if ((curr_task->prio > prio) && (curr_task->status == TASK_RUNNING))
@@ -605,7 +612,8 @@ size_t** scheduler(void)
 			readyqueues[core_id].old_task = curr_task;
 		}
 
-		curr_task = per_core(current_task) = readyqueues[core_id].queue[prio-1].first;
+		curr_task = readyqueues[core_id].queue[prio-1].first;
+		per_core_set(current_task, curr_task);
 		if (BUILTIN_EXPECT(curr_task->status == TASK_INVALID, 0)) {
 			kprintf("Upps!!!!!!! Got invalid task %d, orig task %d\n", curr_task->id, orig_task->id);
 		}

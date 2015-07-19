@@ -32,6 +32,14 @@
 #include <hermit/processor.h>
 #include <hermit/tasks.h>
 
+/*
+ *  * Note that linker symbols are not variables, they have no memory allocated for
+ *   * maintaining a value, rather their address is their value.
+ *    */
+extern const void percore_start;
+extern const void percore_end0;
+extern const void percore_end;
+
 extern void isrsyscall(void);
 
 cpu_info_t cpu_info = { 0, 0, 0, 0, 0};
@@ -219,11 +227,20 @@ int cpu_detection(void) {
 		wrmsr(MSR_STAR, (0x1BULL << 48) | (0x08ULL << 32));
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
 		//  clear IF flag during an interrupt
-		wrmsr(MSR_SYSCALL_MASK, (1 << 9));
+		wrmsr(MSR_SYSCALL_MASK, EFLAGS_TF|EFLAGS_DF|EFLAGS_IF|EFLAGS_AC|EFLAGS_NT);
 	} else kputs("Processor doesn't support syscalls\n");
 
 	if (has_nx())
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
+
+	wrmsr(MSR_FS_BASE, 0);
+	wrmsr(MSR_GS_BASE, apic_cpu_id() * ((size_t) &percore_end0 - (size_t) &percore_start));
+	wrmsr(MSR_KERNEL_GS_BASE, 0);
+
+	kprintf("Core %d set per_core offset to 0x%x\n", apic_cpu_id(), rdmsr(MSR_GS_BASE));
+
+	/* set core id to apic_cpu_id */
+	per_core_set(__core_id, apic_cpu_id());
 
 	if (first_time && has_sse())
 		wmb = sfence;

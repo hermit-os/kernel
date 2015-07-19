@@ -35,10 +35,10 @@
 #include <asm/tss.h>
 #include <asm/page.h>
 
-gdt_ptr_t			gp;
-static tss_t			task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
+gdt_ptr_t		gp;
+tss_t			task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
 // currently, our kernel has full access to the ioports
-static gdt_entry_t		gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 0}};
+static gdt_entry_t	gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 0}};
 
 /* 
  * This is defined in entry.asm. We use this to properly reload
@@ -47,13 +47,6 @@ static gdt_entry_t		gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 
 extern void gdt_flush(void);
 
 extern const void boot_stack;
-
-size_t get_kernel_stack(void)
-{
-	task_t* curr_task = per_core(current_task);
-
-	return (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10; // => stack is 16byte aligned
-}
 
 /* Setup a descriptor in the Global Descriptor Table */
 void gdt_set_gate(int num, unsigned long base, unsigned long limit,

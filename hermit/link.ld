@@ -2,6 +2,7 @@ OUTPUT_FORMAT("elf64-x86-64")
 OUTPUT_ARCH("i386:x86-64")
 ENTRY(start)
 phys = (2 << 20);
+cores = 8;
 
 SECTIONS
 {
@@ -31,5 +32,12 @@ SECTIONS
     *(.bss)
   }
   bss_end = .;
-  kernel_end = .;
+  .percore ALIGN(4096) : AT(ADDR(.percore)) {
+    percore_start = .;
+    *(.percore)
+    . = ALIGN(64);
+    percore_end0 = .;
+  }
+  percore_end = percore_start + cores * SIZEOF(.percore);
+  kernel_end = percore_end;
 }

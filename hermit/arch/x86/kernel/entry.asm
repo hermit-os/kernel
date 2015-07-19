@@ -525,16 +525,23 @@ extern irq_handler
 extern get_current_stack
 extern finish_task_switch
 extern syscall_handler
-extern get_kernel_stack
+extern kernel_stack
 
 global isrsyscall
 align 8
 ; used to realize system calls
 isrsyscall:
-    ; IF flag is already cleared => see processor.c
+    ; IF flag is already cleared 
     ; cli 
-    ; save space for caller's red zone
-    sub rsp, 128
+    ; only called from user space => get kernel-level selector
+    swapgs
+    ; get kernel stack
+    xchg rsp, [gs:kernel_stack]
+
+    ; push old rsp and restore [gs:kernel_stack]
+    push QWORD [gs:kernel_stack]
+    mov QWORD [gs:kernel_stack], rsp
+
     ; save registers accross function call
     push r8
     push r9
@@ -546,27 +553,7 @@ isrsyscall:
     push rsi
 
     ; push system call number  
-    push rax 
-
-    ; get kernel stack
-    call get_kernel_stack
-
-    ; restore registers
-    mov r8,  [rsp+64]
-    mov r9,  [rsp+56]
-    mov r10, [rsp+48]
-    mov r11, [rsp+40]
-    mov rdx, [rsp+32]
-    ; see below
-    ; mov rcx, [rsp+24] 
-    mov rdi, [rsp+16]
-    mov rsi, [rsp+8]
-
-    xchg rsp, rax ; => rax contains pointer to the kernel stack
-    push rax	  ; store user-level stack pointer
-
-    ; restore system call number
-    mov rax, [rax+0]
+    ; push rax 
 
     ; syscall stores in rcx the return address
     ; => using of r10 for the temporary storage of the 4th argument
@@ -578,12 +565,8 @@ isrsyscall:
     call [rax*8+syscall_table]
     cli
 
-    ; restore user-level stack pointer
-    pop r10
-    mov rsp, r10
-
     ; restore registers
-    add rsp, 8 ; ignore old value of rax
+    ;add rsp, 8 ; ignore old value of rax
     pop rsi
     pop rdi
     pop rcx
@@ -592,8 +575,12 @@ isrsyscall:
     pop r10
     pop r9
     pop r8
-    ; remove red zone
-    add rsp, 128
+
+    ; restore user-level stack
+    mov rsp, [rsp]
+
+    ; set user-level selector
+    swapgs
     ; EFLAGS (and IF flag) will be restored by sysret
     ; sti
     o64 sysret
@@ -607,7 +594,7 @@ switch_context:
     push QWORD 0x10             ; SS
     push rsp                    ; RSP
     add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
-    pushfq                      ; RFLAGS
+    push QWORD 0x1202           ; RFLAGS
     push QWORD 0x08             ; CS
     push QWORD rollback         ; RIP
     push QWORD 0x00             ; Interrupt number
@@ -637,6 +624,11 @@ rollback:
 
 align 8
 common_stub:
+    ; do we interrupt user-level code?
+    cmp QWORD [rsp+24], 0x08
+    je kernel_space1
+    swapgs  ; set GS to the kernel selector
+kernel_space1:
     push rax
     push rcx
     push rdx
@@ -662,13 +654,13 @@ common_stub:
     je no_context_switch
 
 common_switch:
-    mov [rax], rsp             ; store old rsp
+    mov QWORD [rax], rsp       ; store old rsp
     call get_current_stack     ; get new rsp
-    xchg rax, rsp
+    mov rsp, rax
 
     ; set task switched flag
     mov rax, cr0
-    or eax, 8
+    or rax, 8
     mov cr0, rax
 
     ; call cleanup code
@@ -692,6 +684,11 @@ no_context_switch:
     pop rcx
     pop rax
 
+; do we interrupt user-level code?
+    cmp QWORD [rsp+24], 0x08
+    je kernel_space2
+    swapgs  ; set GS to the user-level selector
+kernel_space2:
     add rsp, 16
     iretq
 
