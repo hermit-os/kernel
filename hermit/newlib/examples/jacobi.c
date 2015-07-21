@@ -34,7 +34,7 @@
 #include <errno.h>
 
 #define MATRIX_SIZE 	128
-#define MAXVALUE	1337
+#define MAXVALUE	17
 #define PAGE_SIZE	4096
 #define CACHE_SIZE	(256*1024)
 #define ALIGN(x,a)	(((x)+(a)-1)&~((a)-1))

@@ -407,7 +407,7 @@ gdt_flush:
 ; NASM macro which pushs also an pseudo error code
 %macro isrstub_pseudo_error 1
     global isr%1
-    align 8
+    align 16
     isr%1:
         push byte 0 ; pseudo error code
         push byte %1
@@ -419,7 +419,7 @@ gdt_flush:
 ; on the stack.
 %macro isrstub 1
     global isr%1
-    align 8
+    align 16
     isr%1:
         push byte %1
         jmp common_stub
@@ -472,7 +472,7 @@ isrstub_pseudo_error 9
 ; NASM macro for asynchronous interrupts (no exceptions)
 %macro irqstub 1
     global irq%1
-    align 8
+    align 16
     irq%1:
         push byte 0 ; pseudo error code
         push byte 32+%1
@@ -487,35 +487,35 @@ isrstub_pseudo_error 9
 %endrep
 
 global apic_timer
-align 8
+align 16
 apic_timer:
     push byte 0 ; pseudo error code
     push byte 123
     jmp common_stub
 
 global apic_lint0
-align 8
+align 16
 apic_lint0:
     push byte 0 ; pseudo error code
     push byte 124
     jmp common_stub
 
 global apic_lint1
-align 8
+align 16
 apic_lint1:
     push byte 0 ; pseudo error code
     push byte 125
     jmp common_stub
 
 global apic_error
-align 8
+align 16
 apic_error:
     push byte 0 ; pseudo error code
     push byte 126
     jmp common_stub
 
 global apic_svr
-align 8
+align 16
 apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
@@ -528,7 +528,7 @@ extern syscall_handler
 extern kernel_stack
 
 global isrsyscall
-align 8
+align 16
 ; used to realize system calls
 isrsyscall:
     ; IF flag is already cleared 
@@ -586,7 +586,7 @@ isrsyscall:
     o64 sysret
 
 global switch_context
-align 8
+align 16
 switch_context:
     ; create on the stack a pseudo interrupt
     ; afterwards, we switch to the task with iret
@@ -618,11 +618,11 @@ switch_context:
 
     jmp common_switch
 
-align 8
+align 16
 rollback:
     ret
 
-align 8
+align 16
 common_stub:
     ; do we interrupt user-level code?
     cmp QWORD [rsp+24], 0x08
@@ -695,7 +695,7 @@ kernel_space2:
 SECTION .data
 
 global mb_info:
-align 8
+align 16
 mb_info:
     DQ 0
 

@@ -17,8 +17,8 @@ ifeq ($V,0)
 endif
 
 default: $(ARCH)
-	$Q$(MAKE) ARCH=$(ARCH) TARGET=$(TARGET) CFLAGS+="-ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C examples depend
-	$Q$(MAKE) ARCH=$(ARCH) TARGET=$(TARGET) CFLAGS+="-ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C examples
+	$Q$(MAKE) ARCH=$(ARCH) TARGET=$(TARGET) CFLAGS+="-DSTREAM_ARRAY_SIZE=100000 -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C examples depend
+	$Q$(MAKE) ARCH=$(ARCH) TARGET=$(TARGET) CFLAGS+="-DSTREAM_ARRAY_SIZE=100000 -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C examples
 
 $(ARCH):
 	@echo Build newlib

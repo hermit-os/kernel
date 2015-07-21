@@ -114,11 +114,11 @@ static void restore_fpu_state_xsave(union fpu_state* state)
 
 static void fpu_init_xsave(union fpu_state* fpu)
 {
-	i387_fsave_t* fp = &fpu->fsave;
 	xsave_t* xs = &fpu->xsave;
 
 	memset(xs, 0x00, sizeof(xsave_t));
-	fp->twd = 0xffffu;
+	//xs->fxsave.twd = 0xffffu;
+	xs->fxsave.mxcsr = 0x1f80;
 }
 
 uint32_t detect_cpu_frequency(void)
