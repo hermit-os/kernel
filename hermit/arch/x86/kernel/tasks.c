@@ -38,7 +38,7 @@
 #include <asm/page.h>
 #include <asm/tss.h>
 
-extern tss_t	task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
+extern tss_t	task_state_segments[MAX_CORES];
 
 size_t* get_current_stack(void)
 {

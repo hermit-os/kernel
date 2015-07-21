@@ -83,9 +83,13 @@ typedef struct {
 } xsave_header_t;
 
 typedef struct {
+	uint32_t ymmh_space[64];
+} ymmh_t;
+
+typedef struct {
 	i387_fxsave_t fxsave;
 	xsave_header_t hdr;
-	uint32_t ymmh[64];
+	ymmh_t ymmh;
 } xsave_t __attribute__ ((aligned (64)));
 
 union fpu_state {
