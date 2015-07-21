@@ -52,7 +52,7 @@ extern "C" {
 	} \
 	ptr; })
 
-#define per_core_set(var, value) ({ \
+#define set_per_core(var, value) ({ \
 	switch (sizeof(var)) { \
 	case 4: asm volatile ("movl %0, %%gs:(" #var ")" :: "r"(value)); \
 		break; \

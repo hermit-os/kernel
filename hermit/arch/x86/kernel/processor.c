@@ -240,7 +240,7 @@ int cpu_detection(void) {
 	kprintf("Core %d set per_core offset to 0x%x\n", apic_cpu_id(), rdmsr(MSR_GS_BASE));
 
 	/* set core id to apic_cpu_id */
-	per_core_set(__core_id, apic_cpu_id());
+	set_per_core(__core_id, apic_cpu_id());
 
 	if (first_time && has_sse())
 		wmb = sfence;

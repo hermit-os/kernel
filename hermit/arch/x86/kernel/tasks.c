@@ -45,7 +45,7 @@ size_t* get_current_stack(void)
 	uint32_t core_id = CORE_ID;
 	task_t* curr_task = per_core(current_task);
 
-	per_core_set(kernel_stack, curr_task->stack + KERNEL_STACK_SIZE - 0x10);
+	set_per_core(kernel_stack, curr_task->stack + KERNEL_STACK_SIZE - 0x10);
 	task_state_segments[core_id].rsp0 = (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10;
 
 	// use new page table
