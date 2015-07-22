@@ -519,10 +519,10 @@ inline static void cpuid(uint32_t code, uint32_t* a, uint32_t* b, uint32_t* c, u
  *
  * @return The EFLAGS value
  */
-static inline uint32_t read_eflags(void)
+static inline uint64_t read_rflags(void)
 {
-	uint32_t result;
-	asm volatile ("pushf; pop %0" : "=r"(result));
+	uint64_t result;
+	asm volatile ("pushfq; pop %0" : "=r"(result));
 	return result;
 }
 
