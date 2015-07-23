@@ -185,7 +185,7 @@ static const char *exception_messages[] = {
 	"No Coprocessor", "Double Fault", "Coprocessor Segment Overrun", "Bad TSS", 
 	"Segment Not Present", "Stack Fault", "General Protection Fault", "Page Fault", 
 	"Unknown Interrupt", "Coprocessor Fault", "Alignment Check", "Machine Check", 
-	"Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
+	"SIMD Floating-Point", "Virtualization", "Reserved", "Reserved", "Reserved",
 	"Reserved", "Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
 	"Reserved", "Reserved" };
 
