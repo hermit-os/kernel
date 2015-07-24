@@ -45,12 +45,15 @@ size_t* get_current_stack(void)
 	uint32_t core_id = CORE_ID;
 	task_t* curr_task = per_core(current_task);
 	size_t stptr = ((size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF;
+	size_t cr3;
 
 	set_per_core(kernel_stack, stptr);
 	task_state_segments[core_id].rsp0 = stptr;
 
-	// use new page table
-	write_cr3(curr_task->page_map);
+	cr3 = read_cr3();
+	// do we change the address space?
+	if (cr3 != curr_task->page_map)
+		write_cr3(curr_task->page_map); // use new page table
 
 	return curr_task->last_stack_pointer;
 }
