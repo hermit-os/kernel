@@ -44,9 +44,10 @@ size_t* get_current_stack(void)
 {
 	uint32_t core_id = CORE_ID;
 	task_t* curr_task = per_core(current_task);
+	size_t stptr = ((size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF;
 
-	set_per_core(kernel_stack, curr_task->stack + KERNEL_STACK_SIZE - 0x10);
-	task_state_segments[core_id].rsp0 = (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10;
+	set_per_core(kernel_stack, stptr);
+	task_state_segments[core_id].rsp0 = stptr;
 
 	// use new page table
 	write_cr3(curr_task->page_map);
@@ -72,7 +73,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg)
 	 * and not for HW-task-switching is setting up a stack and not a TSS.
 	 * This is the stack which will be activated and popped off for iret later.
 	 */
-	stack = (size_t*) (task->stack + KERNEL_STACK_SIZE - 16);	// => stack is 16byte aligned
+	stack = (size_t*) (((size_t) task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF);	// => stack is 16byte aligned
 
 	/* Only marker for debugging purposes, ... */
 	*stack-- = 0xDEADBEEF;
