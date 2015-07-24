@@ -208,6 +208,9 @@ static void NORETURN do_exit(int arg)
 		curr_task->heap = NULL;
 	}
 
+	if (curr_task->stack)
+		kfree(curr_task->stack);
+
 	// decrease the number of active tasks
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 	readyqueues[core_id].nr_tasks--;
@@ -264,7 +267,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].status = TASK_READY;
 			task_table[i].last_core = 0;
 			task_table[i].last_stack_pointer = NULL;
-			task_table[i].stack = create_stack(i);
+			task_table[i].stack = kmalloc(KERNEL_STACK_SIZE);
 			task_table[i].prio = prio;
 			spinlock_init(&task_table[i].vma_lock);
 			task_table[i].vma_list = NULL;
