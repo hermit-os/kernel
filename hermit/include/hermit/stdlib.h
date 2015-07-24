@@ -81,12 +81,6 @@ void* kmalloc(size_t sz);
  */
 void kfree(void* addr);
 
-/** @brief Create a new stack for a new task
- *
- * @return start address of the new stack
- */
-void* create_stack(tid_t id);
-
 /** @brief String to long
  *
  * @return Long value of the parsed numerical string

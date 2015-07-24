@@ -45,7 +45,6 @@ extern uint32_t limit;
 extern const void kernel_start;
 extern const void kernel_end;
 
-static char stack[MAX_TASKS-1][KERNEL_STACK_SIZE];
 static char bitmap[BITMAP_SIZE];
 
 static spinlock_t bitmap_lock = SPINLOCK_INIT;
@@ -53,18 +52,6 @@ static spinlock_t bitmap_lock = SPINLOCK_INIT;
 atomic_int32_t total_pages = ATOMIC_INIT(0);
 atomic_int32_t total_allocated_pages = ATOMIC_INIT(0);
 atomic_int32_t total_available_pages = ATOMIC_INIT(0);
-
-void* create_stack(tid_t id)
-{
-	// idle task uses stack, which is defined in entry.asm
-	if (BUILTIN_EXPECT(!id, 0))
-		return NULL;
-	// do we have a valid task id?
-	if (BUILTIN_EXPECT(id >= MAX_TASKS, 0))
-		return NULL;
-
-	return (void*) stack[id-1];
-}
 
 inline static int page_marked(size_t i)
 {
