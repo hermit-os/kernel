@@ -519,7 +519,7 @@ check_lapic:
 		goto out;
 	kprintf("Found APIC at 0x%x\n", lapic);
 
-	if (0) { //has_x2apic()) {
+	if (has_x2apic()) {
 		kprintf("Enable X2APIC support!\n");
 		wrmsr(MSR_APIC_BASE, lapic | 0xD00);
 		lapic_read = lapic_read_msr;
