@@ -2,7 +2,7 @@ OUTPUT_FORMAT("elf64-x86-64")
 OUTPUT_ARCH("i386:x86-64")
 ENTRY(start)
 phys = (2 << 20);
-cores = 8;
+cores = 40;
 
 SECTIONS
 {

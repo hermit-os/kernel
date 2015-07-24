@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#define MAX_CORES		8
+#define MAX_CORES		40
 #define MAX_TASKS		16
 #define MAX_FNAME		128
 #define TIMER_FREQ		100 /* in HZ */
@@ -48,6 +48,7 @@ extern "C" {
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
+//#define CONFIG_TICKLESS
 //#define CONFIG_VGA
 
 #define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
