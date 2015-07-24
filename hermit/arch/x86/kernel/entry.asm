@@ -565,12 +565,21 @@ isrsyscall:
 
     ; during a system call, HermitCore allows interrupts
     sti
+
     extern syscall_table
     call [rax*8+syscall_table]
+    push rax ; result, which we have to return
+
+    extern check_timers
+    call check_timers
+
+    extern check_scheduling
+    call check_scheduling
+
     cli
 
     ; restore registers
-    ;add rsp, 8 ; ignore old value of rax
+    pop rax
     pop rsi
     pop rdi
     pop rcx
