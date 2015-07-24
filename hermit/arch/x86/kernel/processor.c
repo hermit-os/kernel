@@ -104,12 +104,12 @@ static void fpu_init_fxsr(union fpu_state* fpu)
 
 static void save_fpu_state_xsave(union fpu_state* state)
 {
-	asm volatile ("xsaveq %0" : "=m"(state->xsave) : "a"(1), "d"(1) : "memory");
+	asm volatile ("xsaveq %0" : "=m"(state->xsave) : "a"(-1), "d"(-1) : "memory");
 }
 
 static void restore_fpu_state_xsave(union fpu_state* state)
 {
-	asm volatile ("xrstorq %0" :: "m"(state->xsave), "a"(1), "d"(1));
+	asm volatile ("xrstorq %0" :: "m"(state->xsave), "a"(-1), "d"(-1));
 }
 
 static void fpu_init_xsave(union fpu_state* fpu)
@@ -117,7 +117,7 @@ static void fpu_init_xsave(union fpu_state* fpu)
 	xsave_t* xs = &fpu->xsave;
 
 	memset(xs, 0x00, sizeof(xsave_t));
-	//xs->fxsave.twd = 0xffffu;
+	xs->fxsave.cwd = 0x37f;
 	xs->fxsave.mxcsr = 0x1f80;
 }
 
@@ -218,8 +218,9 @@ int cpu_detection(void) {
 			xcr0 |= 0x2;
 		if (has_avx())
 			xcr0 |= 0x4;
-		kprintf("Set XCR0 to 0x%llx\n", xcr0);
 		xsetbv(0, xcr0);
+
+		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	if (cpu_info.feature3 & CPU_FEATURE_SYSCALL) {
@@ -257,7 +258,11 @@ int cpu_detection(void) {
 	}
 
 	if (first_time) {
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		// reload feature list because we enabled OSXSAVE
+		a = b = c = d = 0;
+                cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
+
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -270,26 +275,26 @@ int cpu_detection(void) {
 			has_x2apic() ? "X2APIC " : "",
 			has_fpu() ? "FPU " : "",
 			has_fxsr() ? "FXSR " : "",
-			has_xsave() ? "XSAVE " : "");
+			has_xsave() ? "XSAVE " : "",
+			has_osxsave() ? "OSXSAVE " : "");
 	}
 
-	if (first_time && has_xsave()) {
-#if 0
+	if (first_time && has_osxsave()) {
 		a = b = d = 0;
 		c = 2;
-		cpuid(0, &a, &b, &c, &d);
+		cpuid(0xd, &a, &b, &c, &d);
 		kprintf("Ext_Save_Area_2: offset %d, size %d\n", b, a);
 
 		a = b = d = 0;
 		c = 3;
-		cpuid(0, &a, &b, &c, &d);
+		cpuid(0xd, &a, &b, &c, &d);
 		kprintf("Ext_Save_Area_3: offset %d, size %d\n", b, a);
 
 		a = b = d = 0;
 		c = 4;
-		cpuid(0, &a, &b, &c, &d);
+		cpuid(0xd, &a, &b, &c, &d);
 		kprintf("Ext_Save_Area_4: offset %d, size %d\n", b, a);
-#endif
+
 		save_fpu_state = save_fpu_state_xsave;
 		restore_fpu_state = restore_fpu_state_xsave;
 		fpu_init = fpu_init_xsave;
@@ -315,8 +320,10 @@ int cpu_detection(void) {
 		kprintf("Maximum input value for hypervisor: 0x%x\n", a);
 	}
 
-	if (first_time)
+	if (first_time) {
 		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
+		kprintf("size ofxsave_t: %d\n", sizeof(xsave_t));
+	}
 
 	return 0;
 }

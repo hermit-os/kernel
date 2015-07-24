@@ -111,12 +111,12 @@ void fpu_handler(struct state *s)
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 	// did another already use the the FPU? => save FPU state
 	if (readyqueues[core_id].fpu_owner) {
-		save_fpu_state(&task_table[readyqueues[core_id].fpu_owner].fpu);
+		save_fpu_state(&(task_table[readyqueues[core_id].fpu_owner].fpu));
 		readyqueues[core_id].fpu_owner = 0;
 	}
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
-	if (!(task->flags & TASK_FPU_INIT))  {
+	if (BUILTIN_EXPECT(!(task->flags & TASK_FPU_INIT), 0))  {
 		// use the FPU at the first time => Initialize FPU
  		fpu_init(&task->fpu);
 		task->flags |= TASK_FPU_INIT;
