@@ -571,7 +571,11 @@ static inline size_t lsb(size_t i)
 /// The PAUSE instruction provides a hint to the processor that the code sequence is a spin-wait loop.
 #define PAUSE	asm volatile ("pause")
 /// The HALT instruction stops the processor until the next interrupt arrives
+#ifndef CONFIG_TICKLESS
 #define HALT	asm volatile ("hlt")
+#else
+#define HALT	asm volatile("pause")
+#endif
 
 /** @brief Init several subsystems
  *

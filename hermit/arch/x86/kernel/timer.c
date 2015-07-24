@@ -41,6 +41,45 @@
  */
 static volatile uint64_t timer_ticks = 0;
 extern uint32_t cpu_freq;
+extern int32_t boot_processor;
+
+static int8_t use_tickless = 0;
+static uint64_t last_rdtsc = 0;
+
+void start_tickless(void)
+{
+	use_tickless = 1;
+	rmb();
+	last_rdtsc = rdtsc();
+}
+
+void end_tickless(void)
+{
+	use_tickless = 0;
+	last_rdtsc = 0;
+}
+
+void check_ticks(void)
+{
+	if (!use_tickless)
+		return;
+
+#if MAX_CORES > 1
+	if (CORE_ID == boot_processor)
+#endif
+	{
+		uint64_t curr_rdtsc = rdtsc();
+		uint64_t diff;
+
+		rmb();
+		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+		if (diff > 0) {
+			timer_ticks += diff;
+			last_rdtsc = curr_rdtsc;
+			rmb();
+		}
+	}
+}
 
 int sys_times(struct tms* buffer, clock_t* clock)
 {
@@ -48,6 +87,8 @@ int sys_times(struct tms* buffer, clock_t* clock)
 		return -EINVAL;
 	if (BUILTIN_EXPECT(!clock, 0))
 		return -EINVAL;
+
+	check_ticks();
 
 	memset(buffer, 0x00, sizeof(struct tms));
 	*clock = buffer->tms_utime = (clock_t) ((timer_ticks - per_core(current_task)->start_tick) * CLOCKS_PER_SEC / TIMER_FREQ);

@@ -73,6 +73,18 @@ int irq_uninstall_handler(unsigned int irq);
  */
 int irq_init(void);
 
+/** @brief Disable the timer interrupt
+ *
+ * @return 0 on success
+ */
+int disable_timer_irq(void);
+
+/** @brief Enable the timer interrupt
+ *
+ * @return 0 on success
+ */
+int enable_timer_irq(void);
+
 #ifdef __cplusplus
 }
 #endif

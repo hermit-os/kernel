@@ -135,6 +135,22 @@ static int irq_remap(void)
 	return 0;
 }
 
+int disable_timer_irq(void)
+{
+	if (BUILTIN_EXPECT(apic_is_enabled(), 1))
+		return apic_disable_timer();
+
+	return -EINVAL;
+}
+
+int enable_timer_irq(void)
+{
+	if (BUILTIN_EXPECT(apic_is_enabled(), 1))
+		return apic_enable_timer();
+
+	return -EINVAL;
+}
+
 /** @brief Remap IRQs and install ISRs in IDT
  *
  * We first remap the interrupt controllers, and then we install
