@@ -2,8 +2,7 @@ TERM = xterm
 TOPDIR := $(shell pwd)
 ARCH = x86
 NAME = hermit
-LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
-KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
+KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
