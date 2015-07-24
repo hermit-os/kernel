@@ -94,6 +94,7 @@ static int hermit_init(void)
 	return 0;
 }
 
+#if MAX_CORES > 1
 int smp_main(void)
 {
 	int32_t cpu = atomic_int32_inc(&cpu_online);
@@ -109,6 +110,7 @@ int smp_main(void)
 
 	return 0;
 }
+#endif
 
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)

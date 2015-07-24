@@ -58,10 +58,13 @@ DECLARE_PER_CORE(struct task*, current_task);
 /* allows fast access to the kernel stack */
 DECLARE_PER_CORE(char*, kernel_stack);
 
+#if MAX_CORES > 1
 /* allows fast access to the core id */
 DECLARE_PER_CORE(uint32_t, __core_id);
-
 #define CORE_ID per_core(__core_id)
+#else
+#define CORE_ID 0
+#endif
 
 #ifdef __cplusplus
 }

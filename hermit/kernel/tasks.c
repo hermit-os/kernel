@@ -56,7 +56,9 @@ static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, 0, {[0 .
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
 DEFINE_PER_CORE(char*, kernel_stack, NULL);
+#if MAX_CORES > 1
 DEFINE_PER_CORE(uint32_t, __core_id, 0);
+#endif
 extern const void boot_stack;
 
 /** @brief helper function for the assembly code to determine the current task
