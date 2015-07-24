@@ -270,6 +270,10 @@ inline static uint32_t has_xsave(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_XSAVE);
 }
 
+inline static uint32_t has_osxsave(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_OSXSAVE);
+}
+
 inline static uint32_t has_avx(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_AVX);
 }
