@@ -45,34 +45,42 @@ extern "C" {
 #endif
 
 typedef struct {
-	long	cwd;
-	long	swd;
-	long	twd;
-	long	fip;
-	long	fcs;
-	long	foo;
-	long	fos;
-	long	st_space[20];
-	long	status;
+	uint32_t	cwd;
+	uint32_t	swd;
+	uint32_t	twd;
+	uint32_t	fip;
+	uint32_t	fcs;
+	uint32_t	foo;
+	uint32_t	fos;
+	uint32_t	st_space[20];
+	uint32_t	status;
 } i387_fsave_t;
 
-typedef struct i387_fxsave_struct {
-	unsigned short	cwd;
-	unsigned short	swd;
-	unsigned short	twd;
-	unsigned short	fop;
-	long	fip;
-	long	fcs;
-	long	foo;
-	long	fos;
-	long	mxcsr;
-	long	mxcsr_mask;
-	long	st_space[32];
-	long	xmm_space[64];
-	long	padding[12];
+typedef struct {
+	uint16_t	cwd;
+	uint16_t	swd;
+	uint16_t	twd;
+	uint16_t	fop;
 	union {
-		long	padding1[12];
-		long	sw_reserved[12];
+		struct {
+			uint64_t	rip;
+			uint64_t	rdp;
+		};
+		struct {
+			uint32_t	fip;
+			uint32_t	fcs;
+			uint32_t	foo;
+			uint32_t	fos;
+		};
+	};
+	uint32_t	mxcsr;
+	uint32_t	mxcsr_mask;
+	uint32_t	st_space[32];
+	uint32_t	xmm_space[64];
+	uint32_t	padding[12];
+	union {
+		uint32_t	padding1[12];
+		uint32_t	sw_reserved[12];
 	};
 } i387_fxsave_t __attribute__ ((aligned (16)));
 
