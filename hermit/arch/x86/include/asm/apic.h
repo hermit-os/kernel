@@ -200,7 +200,7 @@ int apic_init(void);
 void apic_eoi(size_t int_no);
 uint32_t apic_cpu_id(void);
 int apic_calibration(void);
-//int apic_is_enabled(void);
+int apic_is_enabled(void);
 int apic_enable_timer(void);
 int apic_disable_timer(void);
 int ioapic_inton(uint8_t irq, uint8_t apicid);

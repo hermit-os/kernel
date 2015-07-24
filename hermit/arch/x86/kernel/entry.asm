@@ -570,6 +570,9 @@ isrsyscall:
     call [rax*8+syscall_table]
     push rax ; result, which we have to return
 
+    extern check_ticks
+    call check_ticks
+
     extern check_timers
     call check_timers
 

@@ -101,6 +101,10 @@ int smp_main(void)
 
 	kprintf("%d CPUs are now online\n", cpu);
 
+#ifdef CONFIG_TICKLESS
+	disable_timer_irq();
+#endif
+
 	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	while(1) {
@@ -148,6 +152,10 @@ int main(void)
 #if 1
 	kputs("Filesystem:\n");
 	list_fs(fs_root, 1);
+#endif
+
+#ifdef CONFIG_TICKLESS
+	disable_timer_irq();
 #endif
 
 	create_kernel_task(NULL, initd, NULL, NORMAL_PRIO);
