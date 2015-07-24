@@ -51,6 +51,7 @@ extern const void kernel_start;
 
 #define IOAPIC_ADDR	((size_t) &kernel_start - 2*PAGE_SIZE)
 #define LAPIC_ADDR	((size_t) &kernel_start - 1*PAGE_SIZE)
+#define MAX_APIC_CORES	256
 
 // IO APIC MMIO structure: write reg, then read or write data.
 typedef struct {
@@ -59,7 +60,7 @@ typedef struct {
 	uint32_t data;
 } ioapic_t;
 
-static const apic_processor_entry_t* apic_processors[MAX_CORES] = {[0 ... MAX_CORES-1] = NULL};
+static const apic_processor_entry_t* apic_processors[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = NULL};
 extern int32_t boot_processor;
 extern uint32_t cpu_freq;
 apic_mp_t* apic_mp  __attribute__ ((section (".data"))) = NULL;
@@ -70,7 +71,7 @@ static uint32_t icr = 0;
 static uint32_t ncores = 1;
 static uint8_t irq_redirect[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF};
 static uint8_t initialized = 0;
-static uint8_t online[MAX_CORES] = {[0 ... MAX_CORES-1] = 0};
+static uint8_t online[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = 0};
 
 spinlock_t bootlock = SPINLOCK_INIT;
 
@@ -469,7 +470,7 @@ found_mp:
 		if (*((uint8_t*) addr) == 0) { // cpu entry
 			apic_processor_entry_t* cpu = (apic_processor_entry_t*) addr;
 
-			if (j < MAX_CORES) {
+			if (j < MAX_APIC_CORES) {
 				 // is the processor usable?
 				if (cpu->cpu_flags & 0x01) {
 					apic_processors[j] = cpu;
@@ -564,6 +565,7 @@ extern int smp_main(void);
 extern void gdt_flush(void);
 extern int set_idle_task(void);
 
+#if MAX_CORES > 1
 int smp_start(void)
 {
 	if (lapic && has_x2apic()) // enable x2APIC support
@@ -599,7 +601,6 @@ int smp_start(void)
 	return smp_main();
 }
 
-#if MAX_CORES > 1
 static inline void set_ipi_dest(uint32_t cpu_id) {
 	uint32_t tmp;
 
@@ -624,7 +625,7 @@ int ipi_tlb_flush(void)
 	}
 
 	flags = irq_nested_disable();
-	for(i=0; i<MAX_CORES; i++)
+	for(i=0; i<MAX_APIC_CORES; i++)
 	{
 		if (i == core_id)
 			continue;

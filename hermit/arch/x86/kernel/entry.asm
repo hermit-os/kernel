@@ -343,9 +343,11 @@ start64:
     xor rdi, rdi
 
 Lno_unmap:
+%if MAX_CORES > 1
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lsmp_main
+%endif
 
     ; set default stack pointer
     mov rsp, boot_stack
@@ -364,6 +366,7 @@ L1:
     call main
     jmp $
 
+%if MAX_CORES > 1
 Lsmp_main:
     ; dirty to hack to determine the cpu id
     ; with a temporary stack
@@ -385,6 +388,7 @@ Lsmp_main:
     DQ 0, 0, 0, 0
     DQ 0, 0, 0, 0
 tmp_stack:
+%endif
 
 global gdt_flush
 extern gp

@@ -235,13 +235,19 @@ int cpu_detection(void) {
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 
 	wrmsr(MSR_FS_BASE, 0);
+#if MAX_CORES > 1
 	wrmsr(MSR_GS_BASE, apic_cpu_id() * ((size_t) &percore_end0 - (size_t) &percore_start));
+#else
+	wrmsr(MSR_GS_BASE, 0);
+#endif
 	wrmsr(MSR_KERNEL_GS_BASE, 0);
 
 	kprintf("Core %d set per_core offset to 0x%x\n", apic_cpu_id(), rdmsr(MSR_GS_BASE));
 
+#if MAX_CORES > 1
 	/* set core id to apic_cpu_id */
 	set_per_core(__core_id, apic_cpu_id());
+#endif
 
 	if (first_time && has_sse())
 		wmb = sfence;
