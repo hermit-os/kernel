@@ -617,7 +617,7 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 
 int ipi_tlb_flush(void)
 {
-	uint32_t core_id = CORE_ID;
+	uint32_t id = smp_id();
 	uint32_t flags;
 	uint32_t i, j;
 
@@ -632,11 +632,12 @@ int ipi_tlb_flush(void)
 	flags = irq_nested_disable();
 	for(i=0; i<MAX_APIC_CORES; i++)
 	{
-		if (i == core_id)
+		if (i == id)
 			continue;
 		if (!online[i])
 			continue;
 
+		//kprintf("send IPI to %i\n", i);
 		set_ipi_dest(i);
 		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|124);
 
