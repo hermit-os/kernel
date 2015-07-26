@@ -249,6 +249,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 {
 	int ret = -ENOMEM;
 	uint32_t i;
+	void* stack = NULL;
 
 	if (BUILTIN_EXPECT(!ep, 0))
 		return -EINVAL;
@@ -261,6 +262,10 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
 
+	stack = kmalloc(KERNEL_STACK_SIZE);
+	if (BUILTIN_EXPECT(!stack, 0))
+		return -ENOMEM;
+
 	spinlock_irqsave_lock(&table_lock);
 
 	for(i=0; i<MAX_TASKS; i++) {
@@ -269,7 +274,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].status = TASK_READY;
 			task_table[i].last_core = 0;
 			task_table[i].last_stack_pointer = NULL;
-			task_table[i].stack = kmalloc(KERNEL_STACK_SIZE);
+			task_table[i].stack = stack;
 			task_table[i].prio = prio;
 			spinlock_init(&task_table[i].vma_lock);
 			task_table[i].vma_list = NULL;
@@ -293,6 +298,8 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			//kprintf("Create task %d with pml4 at 0x%llx\n", i, task_table[i].page_map);
 
 			ret = create_default_frame(task_table+i, ep, arg);
+			if (ret)
+				goto out;
 
 			// add task in the readyqueues
 			spinlock_irqsave_lock(&readyqueues[core_id].lock);
@@ -315,6 +322,9 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 
 out:
 	spinlock_irqsave_unlock(&table_lock);
+
+	if (ret)
+		kfree(stack);
 
 	return ret;
 }
