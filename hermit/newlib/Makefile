@@ -8,7 +8,7 @@ CD = cd
 MKDIR = mkdir
 TMP = $(TOPDIR)/tmp
 OPT = --disable-shared --disable-multilib --disable-newlib-multithread --disable-newlib-reent-small
-ARCHOPT = -mavx2 -mfma
+ARCHOPT = #-mavx2 -mfma
 
 # Prettify output
 V = 0
