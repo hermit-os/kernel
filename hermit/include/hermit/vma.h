@@ -89,13 +89,8 @@ typedef struct vma {
 /** @brief Initalize the kernelspace VMA list
  *
  * Reserves several system-relevant virtual memory regions:
- *  - SMP boot page (SMP_SETUP_ADDR)
- *  - VGA video memory (VIDEO_MEM_ADDR)
  *  - The kernel (kernel_start - kernel_end)
- *  - Multiboot structure (mb_info)
- *  - Multiboot mmap (mb_info->mmap_*)
- *  - Multiboot modules (mb_info->mods_*)
- *    - Init Ramdisk
+ *  - Init Ramdisk
  *
  * @return
  *  - 0 on success

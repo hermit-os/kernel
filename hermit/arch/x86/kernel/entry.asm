@@ -488,11 +488,6 @@ kernel_space2:
 
 SECTION .data
 
-global mb_info:
-align 16
-mb_info:
-    DQ 0
-
 align 4096
 global boot_stack
 boot_stack:

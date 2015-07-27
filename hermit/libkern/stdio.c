@@ -32,19 +32,11 @@
 #include <hermit/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/processor.h>
-#include <asm/multiboot.h>
-#ifdef CONFIG_VGA
-#include <asm/vga.h>
-#endif
 
 #define NO_EARLY_PRINT		0x00
 #define VGA_EARLY_PRINT		0x01
 
-#ifdef CONFIG_VGA
-static uint32_t early_print = VGA_EARLY_PRINT;
-#else
 static uint32_t early_print = NO_EARLY_PRINT;
-#endif
 static spinlock_irqsave_t olock = SPINLOCK_IRQSAVE_INIT;
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 
@@ -55,10 +47,6 @@ static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 
 int koutput_init(void)
 {
-#ifdef CONFIG_VGA
-	vga_init();
-#endif
-
 	return 0;
 }
 
@@ -76,11 +64,6 @@ int kputchar(int c)
 	pos = atomic_int32_inc(&kmsg_counter);
 	kmessages[pos % KMSG_SIZE] = (unsigned char) c;
 
-#ifdef CONFIG_VGA
-	if (early_print & VGA_EARLY_PRINT)
-		vga_putchar(c);
-#endif
-
 	if (early_print != NO_EARLY_PRINT)
 		spinlock_irqsave_unlock(&olock);
 
@@ -97,10 +80,6 @@ int kputs(const char *str)
 	for(i=0; i<len; i++) {
 		pos = atomic_int32_inc(&kmsg_counter);
 		kmessages[pos % KMSG_SIZE] = str[i];
-#ifdef CONFIG_VGA
-		if (early_print & VGA_EARLY_PRINT)
-			vga_putchar(str[i]);
-#endif
 	}
 
 	if (early_print != NO_EARLY_PRINT)

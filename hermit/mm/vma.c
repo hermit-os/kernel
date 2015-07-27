@@ -31,7 +31,6 @@
 #include <hermit/tasks_types.h>
 #include <hermit/spinlock.h>
 #include <hermit/errno.h>
-#include <asm/multiboot.h>
 
 /* 
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -62,42 +61,6 @@ int vma_init(void)
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
-
-#ifdef CONFIG_VGA
-	// add VGA video memory
-	ret = vma_add(VIDEO_MEM_ADDR, VIDEO_MEM_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
-	if (BUILTIN_EXPECT(ret, 0))
-		goto out;
-#endif
-
-	// add Multiboot structures as modules
-	if (mb_info) {
-		ret = vma_add(PAGE_CEIL((size_t) mb_info),
-			PAGE_FLOOR((size_t) mb_info + sizeof(multiboot_info_t)),
-			VMA_READ|VMA_CACHEABLE);
-		if (BUILTIN_EXPECT(ret, 0))
-			goto out;
-
-		if (mb_info->flags & MULTIBOOT_INFO_MODS) {
-			multiboot_module_t* mmodule = (multiboot_module_t*) ((size_t) mb_info->mods_addr);
-
-			ret = vma_add(PAGE_CEIL((size_t) mb_info->mods_addr),
-					PAGE_FLOOR((size_t) mb_info->mods_addr + mb_info->mods_count*sizeof(multiboot_module_t)),
-					VMA_READ|VMA_CACHEABLE);
-
-			//TODO: Why do we get error code -22 (-EINVAL);
-			ret = 0; // TODO: Remove workaround
-
-			int i;
-			for(i=0; i<mb_info->mods_count; i++) {
-				ret = vma_add(PAGE_CEIL(mmodule[i].mod_start),
-					PAGE_FLOOR(mmodule[i].mod_end),
-					VMA_READ|VMA_WRITE|VMA_CACHEABLE);
-				if (BUILTIN_EXPECT(ret, 0))
-					goto out;
-			}
-		}
-	}
 
 out:
 	return ret;

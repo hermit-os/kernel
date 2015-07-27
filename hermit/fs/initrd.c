@@ -31,7 +31,6 @@
 #include <hermit/fs.h>
 #include <hermit/errno.h>
 #include <hermit/spinlock.h>
-#include <asm/multiboot.h>
 #include <asm/processor.h>
 
 static vfs_node_t initrd_root;
