@@ -328,7 +328,7 @@ int cpu_detection(void) {
 
 	if (first_time) {
 		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
-		kprintf("size ofxsave_t: %d\n", sizeof(xsave_t));
+		kprintf("size of xsave_t: %d\n", sizeof(xsave_t));
 	}
 
 	return 0;
