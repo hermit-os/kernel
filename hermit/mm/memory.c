@@ -32,7 +32,6 @@
 #include <hermit/spinlock.h>
 
 #include <asm/atomic.h>
-#include <asm/multiboot.h>
 #include <asm/page.h>
 
 extern uint32_t base;
@@ -186,7 +185,6 @@ int copy_page(size_t pdest, size_t psrc)
 
 int memory_init(void)
 {
-	unsigned int i;
 	size_t addr;
 	int ret = 0;
 
@@ -200,119 +198,24 @@ int memory_init(void)
 		return ret;
 	}
 
-	// parse multiboot information for available memory
-	if (mb_info) {
-		if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP) {
-			size_t end_addr;
-			multiboot_memory_map_t* mmap = (multiboot_memory_map_t*) ((size_t) mb_info->mmap_addr);
-			multiboot_memory_map_t* mmap_end = (void*) ((size_t) mb_info->mmap_addr + mb_info->mmap_length);
+	//kprintf("base 0x%lx, limit 0x%lx\n", base, limit);
 
-			// mark available memory as free
-			while (mmap < mmap_end) {
-				if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
-					/* set the available memory as "unused" */
-					addr = mmap->addr;
-					end_addr = addr + mmap->len;
-
-					while ((addr < end_addr) && (addr < (BITMAP_SIZE*8*PAGE_SIZE))) {
-						if (page_marked(addr >> PAGE_BITS)) {
-							page_clear_mark(addr >> PAGE_BITS);
-							atomic_int32_inc(&total_pages);
-							atomic_int32_inc(&total_available_pages);
-						}
-						addr += PAGE_SIZE;
-					}
-				}
-				mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size);
-			}
-		} else if (mb_info->flags & MULTIBOOT_INFO_MEM) {
-			size_t page;
-			size_t pages_lower = mb_info->mem_lower >> 2; /* KiB to page number */
-			size_t pages_upper = mb_info->mem_upper >> 2;
-
-			for (page=0; page<pages_lower; page++)
-				page_clear_mark(page);
-
-			if (pages_upper > BITMAP_SIZE*8-256)
-				pages_upper = BITMAP_SIZE*8-256;
-
-			for (page=0; page<pages_upper; page++)
-				page_clear_mark(page + 256); /* 1 MiB == 256 pages offset */
-
-			atomic_int32_add(&total_pages, pages_lower + pages_upper);
-			atomic_int32_add(&total_available_pages, pages_lower + pages_upper);
-		} else {
-			kputs("Unable to initialize the memory management subsystem\n");
-			while (1) HALT;
+	// mark available memory as free
+	for(addr=base+0x200000ULL; (addr<limit) && (addr < (BITMAP_SIZE*8*PAGE_SIZE)); addr+=PAGE_SIZE) {
+		if (page_marked(addr >> PAGE_BITS)) {
+			page_clear_mark(addr >> PAGE_BITS);
+			atomic_int32_inc(&total_pages);
+			atomic_int32_inc(&total_available_pages);
 		}
-
-		// mark mb_info as used
-		page_set_mark((size_t) mb_info >> PAGE_BITS);
-		atomic_int32_inc(&total_allocated_pages);
-		atomic_int32_dec(&total_available_pages);
-
-
-		if (mb_info->flags & MULTIBOOT_INFO_MODS) {
-			// mark modules list as used
-			for(addr=mb_info->mods_addr; addr<mb_info->mods_addr+mb_info->mods_count*sizeof(multiboot_module_t); addr+=PAGE_SIZE) {
-				page_set_mark(addr >> PAGE_BITS);
-				atomic_int32_inc(&total_allocated_pages);
-				atomic_int32_dec(&total_available_pages);
-			}
-
-			// mark modules as used
-			multiboot_module_t* mmodule = (multiboot_module_t*) ((size_t) mb_info->mods_addr);
-			for(i=0; i<mb_info->mods_count; i++) {
-				for(addr=mmodule[i].mod_start; addr<mmodule[i].mod_end; addr+=PAGE_SIZE) {
-					page_set_mark(addr >> PAGE_BITS);
-					atomic_int32_inc(&total_allocated_pages);
-					atomic_int32_dec(&total_available_pages);
-				}
-			}
-		}
-
-		// mark kernel as used, we use 2MB pages to map the kernel
-		for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
-			page_set_mark(addr >> PAGE_BITS);
-			atomic_int32_inc(&total_allocated_pages);
-			atomic_int32_dec(&total_available_pages);
-		}
-
-	} else {
-		//kprintf("base 0x%lx, limit 0x%lx\n", base, limit);
-
-		// mark available memory as free
-		for(addr=base+0x200000ULL; (addr<limit) && (addr < (BITMAP_SIZE*8*PAGE_SIZE)); addr+=PAGE_SIZE) {
-			if (page_marked(addr >> PAGE_BITS)) {
-				page_clear_mark(addr >> PAGE_BITS);
-				atomic_int32_inc(&total_pages);
-				atomic_int32_inc(&total_available_pages);
-			}
-		}
-
-		atomic_int32_add(&total_allocated_pages, 0x200000 / PAGE_SIZE);
-		atomic_int32_add(&total_pages, 0x200000 / PAGE_SIZE);
 	}
+
+	atomic_int32_add(&total_allocated_pages, 0x200000 / PAGE_SIZE);
+	atomic_int32_add(&total_pages, 0x200000 / PAGE_SIZE);
 
 	ret = vma_init();
 	if (BUILTIN_EXPECT(ret, 0)) {
 		kprintf("Failed to initialize VMA regions: %d\n", ret);
 		return ret;
-	}
-
-	/*
-	 * Modules like the init ram disk are already loaded.
-	 * Therefore, we set these pages as used.
-	 */
-	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_MODS)) {
-		multiboot_module_t* mmodule = (multiboot_module_t*) ((size_t) mb_info->mods_addr);
-		for(i=0; i<mb_info->mods_count; i++) {
-			for(addr=mmodule[i].mod_start; addr<mmodule[i].mod_end; addr+=PAGE_SIZE) {
-				page_set_mark(addr >> PAGE_BITS);
-				atomic_int32_inc(&total_allocated_pages);
-				atomic_int32_dec(&total_available_pages);
-			}
-		}
 	}
 
 	return ret;

@@ -41,7 +41,6 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/apic.h>
-#include <asm/multiboot.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for

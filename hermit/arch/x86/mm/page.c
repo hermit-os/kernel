@@ -43,7 +43,6 @@
 
 #include <asm/irq.h>
 #include <asm/page.h>
-#include <asm/multiboot.h>
 
 /* Note that linker symbols are not variables, they have no memory
  * allocated for maintaining a value, rather their address is their value. */
@@ -320,35 +319,9 @@ default_handler:
 
 int page_init(void)
 {
-	size_t addr, npages;
-	int i;
-
 	/* Replace default pagefault handler */
 	irq_uninstall_handler(14);
 	irq_install_handler(14, page_fault_handler);
-
-	/* Map multiboot information and modules */
-	if (mb_info) {
-		// already mapped => entry.asm
-		//addr = (size_t) mb_info & PAGE_MASK;
-		//npages = PAGE_FLOOR(sizeof(*mb_info)) >> PAGE_BITS;
-		//page_map(addr, addr, npages, PG_GLOBAL);
-
-		if (mb_info->flags & MULTIBOOT_INFO_MODS) {
-			addr = mb_info->mods_addr;
-			npages = PAGE_FLOOR(mb_info->mods_count*sizeof(multiboot_module_t)) >> PAGE_BITS;
-			page_map(addr, addr, npages, PG_GLOBAL);
-			kprintf("Map module info at 0x%lx\n", addr);
-
-			multiboot_module_t* mmodule = (multiboot_module_t*) ((size_t) mb_info->mods_addr);
-			for(i=0; i<mb_info->mods_count; i++) {
-				addr = mmodule[i].mod_start;
-				npages = PAGE_FLOOR(mmodule[i].mod_end - mmodule[i].mod_start) >> PAGE_BITS;
-				page_map(addr, addr, npages, PG_GLOBAL);
-				kprintf("Map modules at 0x%lx\n", addr);
-			}
-		}
-	}
 
 	return 0;
 }
