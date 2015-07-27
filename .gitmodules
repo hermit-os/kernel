@@ -1,0 +1,4 @@
+[submodule "linux"]
+	path = linux
+	url = git@github.com:RWTH-OS/linux.git
+	branch = hermit
