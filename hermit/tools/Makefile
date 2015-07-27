@@ -21,15 +21,17 @@ endif
 
 default: all
 	
-all: init.hex make_initrd initrd.o
+all: init.h make_initrd initrd.o
 
 init.bin: init.asm
 	@echo [NASM] $@
 	$Q$(NASM) $(NASMFLAGS) -o $@ $<
 
-init.hex: init.bin
+init.h: init.bin
 	@echo [HEXDUMP] $@
-	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< > $@
+	$Q@echo "static const uint8_t boot_code[] = {" > $@
+	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< >> $@
+	$Q@echo "};" >> $@
 
 initrd.o: initrd.S initrd.img
 	@echo [CC] Build initrd as object file
@@ -44,7 +46,7 @@ make_initrd: make_initrd.o
 
 clean:
 	@echo Cleaning tools
-	$Q$(RM) -rf *.o *~ *.bin *.obj *.hex
+	$Q$(RM) -rf *.o *~ *.bin *.obj *.h
 
 veryclean: clean
 	

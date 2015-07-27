@@ -1,5 +1,5 @@
 
-; Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+; Copyright (c) 2010-2015, Stefan Lankes, RWTH Aachen University
 ; All rights reserved.
 ;
 ; Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,7 @@
 
 %include "config.inc"
 
-[BITS 32]
+[BITS 64]
 
 extern kernel_start		; defined in linker script
 extern kernel_end
@@ -41,288 +41,22 @@ extern kernel_end
 SECTION .mboot
 global start
 start:
-    ; do we have a multiboot info? => no relocation required
-    cmp ebx, 0
-    je short Lnoreset
-    mov ebp, kernel_start
-Lnoreset:
-    ; relocate jmp
-    mov eax, stublet
-    sub eax, kernel_start
-    add eax, ebp ; ebp contains the physical address of the kernel
-    jmp eax
+    jmp start64
 
-; This part MUST be 4 byte aligned, so we solve that issue using 'ALIGN 4'.
 align 4
-mboot:
-    ; Multiboot macros to make a few lines more readable later
-    MULTIBOOT_PAGE_ALIGN	equ (1 << 0)
-    MULTIBOOT_MEMORY_INFO	equ (1 << 1)
-    MULTIBOOT_HEADER_MAGIC	equ 0x1BADB002
-    MULTIBOOT_HEADER_FLAGS	equ MULTIBOOT_PAGE_ALIGN | MULTIBOOT_MEMORY_INFO
-    MULTIBOOT_CHECKSUM		equ -(MULTIBOOT_HEADER_MAGIC + MULTIBOOT_HEADER_FLAGS)
-
-    ; This is the GRUB Multiboot header. A boot signature
-    dd MULTIBOOT_HEADER_MAGIC
-    dd MULTIBOOT_HEADER_FLAGS
-    dd MULTIBOOT_CHECKSUM
-    dd 0, 0, 0, 0, 0 ; address fields
-    dd 0, 0, 0, 0,
     global base
     global limit
     global cpu_freq
     global boot_processor
     global cpu_online
-    base dd kernel_start
-    limit dd 0
+    base dq 0
+    limit dq 0
     cpu_freq dd 0
     boot_processor dd -1
     cpu_online dd 0
 
-align 4
-; we need already a valid GDT to switch in the 64bit modus
-GDT64:                           ; Global Descriptor Table (64-bit).
-    .Null: equ $ - GDT64         ; The null descriptor.
-    dw 0                         ; Limit (low).
-    dw 0                         ; Base (low).
-    db 0                         ; Base (middle)
-    db 0                         ; Access.
-    db 0                         ; Granularity.
-    db 0                         ; Base (high).
-    .Code: equ $ - GDT64         ; The code descriptor.
-    dw 0                         ; Limit (low).
-    dw 0                         ; Base (low).
-    db 0                         ; Base (middle)
-    db 10011000b                 ; Access.
-    db 00100000b                 ; Granularity.
-    db 0                         ; Base (high).
-    .Data: equ $ - GDT64         ; The data descriptor.
-    dw 0                         ; Limit (low).
-    dw 0                         ; Base (low).
-    db 0                         ; Base (middle)
-    db 10010010b                 ; Access.
-    db 00000000b                 ; Granularity.
-    db 0                         ; Base (high).
-    .Pointer:                    ; The GDT-pointer.
-    dw $ - GDT64 - 1             ; Limit.
-    dq GDT64                     ; Base.
-
 SECTION .text
 align 4
-stublet:
-    ; Relocate stack pointer
-    mov eax, boot_stack
-    sub eax, kernel_start
-    add eax, ebp
-    mov esp, eax
-    add esp, KERNEL_STACK_SIZE - 16
-    mov eax, boot_processor
-    sub eax, kernel_start
-    add eax, ebp
-    mov eax, DWORD [eax]
-    cmp eax, -1
-    je L0
-    imul eax, KERNEL_STACK_SIZE
-    add esp, eax
-L0:
-
-    ; Interpret multiboot information
-    mov eax, mb_info
-    sub eax, kernel_start
-    add eax, ebp
-    mov DWORD [eax], ebx
-
-; This will set up the x86 control registers:
-; Caching and the floating point unit are enabled
-; Bootstrap page tables are loaded and page size
-; extensions (huge pages) enabled.
-cpu_init:
-   push edi
-
-; do we have to relocate / to intialize the page tables?
-; only the boot_processor have to do it
-   mov eax, cpu_online
-   sub eax, kernel_start
-   add eax, ebp
-   mov eax, DWORD [eax]
-   cmp eax, 0
-   je short Lrelocate
-   mov eax, Lmap_kernel
-   sub eax, kernel_start
-   add eax, ebp ; ebp contains the physical address of the kernel
-   jmp eax
-
-Lrelocate:
-; relocate page tables
-   mov edi, boot_pml4
-   sub edi, kernel_start
-   add edi, ebp
-   mov eax, DWORD [edi]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi], eax
-
-   mov eax, DWORD [edi+511*8]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi+511*8], eax
-
-   mov edi, boot_pdpt
-   sub edi, kernel_start
-   add edi, ebp
-   mov eax, DWORD [edi]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi], eax
-
-   mov eax, DWORD [edi+511*8]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi+511*8], eax
-
-   mov edi, boot_pgd
-   sub edi, kernel_start
-   add edi, ebp
-   mov eax, DWORD [edi]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi], eax
-
-   mov eax, DWORD [edi+511*8]
-   sub eax, kernel_start
-   add eax, ebp
-   mov DWORD [edi+511*8], eax
-
-; initialize page tables
-
-; map vga 1:1
-%ifdef CONFIG_VGA
-    mov eax, VIDEO_MEM_ADDR   ; map vga
-    and eax, 0xFFFFF000       ; page align lower half
-    mov edi, eax
-    shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add edi, boot_pgt
-    sub edi, kernel_start
-    add edi, ebp
-    or eax, 0x113             ; set present, global, writable and cache disable bits
-    mov DWORD [edi], eax
-%endif
-
-    ; map multiboot info 1:1
-    mov eax, mb_info  ; map multiboot info
-    sub eax, kernel_start
-    add eax, ebp
-    mov eax, DWORD [eax]
-    cmp eax, 0
-    je short Lno_mbinfo
-    and eax, 0xFFFFF000       ; page align lower half
-    mov edi, eax
-    shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add edi, boot_pgt
-    sub edi, kernel_start
-    add edi, ebp
-    or eax, 0x101             ; set present and global bits
-    mov DWORD [edi], eax
-Lno_mbinfo:
-
-    ; map kernel at link address, use a page size of 2MB
-    mov eax, ebp
-    and eax, 0xFFE00000
-    mov edi, kernel_start
-    and edi, 0xFFE00000
-    shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
-    add edi, boot_pgd
-    sub edi, kernel_start
-    add edi, ebp
-    or eax, 0x183
-    mov DWORD [edi], eax
-
-Lmap_kernel:
-    cmp ebp, kernel_start
-    je Lno_remap
-
-    ; map kernel 1:1, use a page size of 2MB
-    mov eax, ebp
-    and eax, 0xFFE00000
-    mov edi, eax
-    shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
-    add edi, boot_pgd
-    sub edi, kernel_start
-    add edi, ebp
-    or eax, 0x183
-    mov DWORD [edi], eax
-Lno_remap:
-
-    pop edi
-
-    ; check for long mode
-
-    ; do we have the instruction cpuid?
-    pushfd
-    pop eax
-    mov ecx, eax
-    xor eax, 1 << 21
-    push eax
-    popfd
-    pushfd
-    pop eax
-    push ecx
-    popfd
-    xor eax, ecx
-    jz $ ; there is no long mode
-
-    ; cpuid > 0x80000000?
-    mov eax, 0x80000000
-    cpuid
-    cmp eax, 0x80000001
-    jb $ ; It is less, there is no long mode.
-
-    ; do we have a long mode?
-    mov eax, 0x80000001
-    cpuid
-    test edx, 1 << 29 ; Test if the LM-bit, which is bit 29, is set in the D-register.
-    jz $ ; They aren't, there is no long mode.
-
-
-    ; we need to enable PAE modus
-    mov eax, cr4
-    or eax, 1 << 5
-    mov cr4, eax
-
-    ; switch to the compatibility mode (which is part of long mode)
-    mov ecx, 0xC0000080
-    rdmsr
-    or eax, 1 << 8
-    wrmsr
-
-    ; Set CR3
-    mov eax, boot_pml4
-    sub eax, kernel_start
-    add eax, ebp
-    or eax, (1 << 0)        ; set present bit
-    mov cr3, eax
-
-    ; Set CR4 (PAE is already set)
-    mov eax, cr4
-    and eax, 0xfffbf9ff     ; disable SSE
-    or eax, (1 << 7)        ; enable PGE
-    or eax, (1 << 20)       ; enable SMEP
-    mov cr4, eax
-
-    ; Set CR0 (PM-bit is already set)
-    mov eax, cr0
-    and eax, ~(1 << 2)      ; disable FPU emulation
-    or eax, (1 << 1)        ; enable FPU montitoring 
-    and eax, ~(1 << 30)     ; enable caching
-    and eax, ~(1 << 29)     ; disable write through caching
-    and eax, ~(1 << 16)     ; allow kernel write access to read-only pages
-    or eax, (1 << 31)       ; enable paging
-    mov cr0, eax
-
-    lgdt [GDT64.Pointer]    ; Load the 64-bit global descriptor table.
-    jmp GDT64.Code:start64  ; Set the code segment and enter 64-bit long mode.
-
-[BITS 64]
 start64:
     ; initialize segment registers
     mov ax, 0x00
@@ -333,16 +67,60 @@ start64:
     mov fs, ax
     mov gs, ax
 
-    cmp ebp, kernel_start
-    je Lno_unmap
-    ; unmap temporary 1:1 mapping of the kernel
-    mov edi, ebp
-    shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
-    add edi, boot_pgd
-    mov DWORD [edi], 0
-    xor rdi, rdi
+    mov eax, DWORD [cpu_online]
+    cmp eax, 0
+    jne Lno_pml4_init
 
-Lno_unmap:
+    ; relocate page tables
+    mov rdi, boot_pml4
+    mov rax, QWORD [rdi]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi], rax
+
+    mov rax, QWORD [rdi+511*8]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi+511*8], rax
+
+    mov rdi, boot_pdpt
+    mov rax, QWORD [rdi]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi], rax
+
+    mov rax, QWORD [rdi+511*8]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi+511*8], rax
+
+    mov rdi, boot_pgd
+    mov rax, QWORD [rdi]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi], rax
+
+    mov rax, QWORD [rdi+511*8]
+    sub rax, kernel_start
+    add rax, [base]
+    mov QWORD [rdi+511*8], rax
+ 
+    ; remap kernel
+    mov rdi, kernel_start
+    shr rdi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
+    add rdi, boot_pgd
+    mov rax, [base]
+    or rax, 0x183
+    mov QWORD [rdi], rax
+
+Lno_pml4_init:
+    ; Set CR3
+    mov rax, boot_pml4
+    sub rax, kernel_start
+    add rax, [base]
+    or rax, (1 << 0)          ; set present bit
+    mov cr3, rax
+
 %if MAX_CORES > 1
     mov eax, DWORD [cpu_online]
     cmp eax, 0
