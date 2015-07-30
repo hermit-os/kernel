@@ -37,6 +37,12 @@
 extern uint32_t base;
 extern uint32_t limit;
 
+typedef struct free_list {
+	size_t start, end;
+	struct free_list* next;
+	struct free_list* prev;
+} free_list_t;
+
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
@@ -44,106 +50,104 @@ extern uint32_t limit;
 extern const void kernel_start;
 extern const void kernel_end;
 
-static char bitmap[BITMAP_SIZE];
+static spinlock_t list_lock = SPINLOCK_INIT;
 
-static spinlock_t bitmap_lock = SPINLOCK_INIT;
+static free_list_t init_list;
+static free_list_t* free_start = &init_list;
 
 atomic_int32_t total_pages = ATOMIC_INIT(0);
 atomic_int32_t total_allocated_pages = ATOMIC_INIT(0);
 atomic_int32_t total_available_pages = ATOMIC_INIT(0);
 
-inline static int page_marked(size_t i)
-{
-	size_t index = i >> 3;
-	size_t mod = i & 0x7;
-
-	return  (bitmap[index] & (1 << mod));
-}
-
-inline static void page_set_mark(size_t i)
-{
-	size_t index = i >> 3;
-	size_t mod = i & 0x7;
-
-	bitmap[index] = bitmap[index] | (1 << mod);
-}
-
-inline static void page_clear_mark(size_t i)
-{
-	size_t index = i / 8;
-	size_t mod = i % 8;
-
-	bitmap[index] = bitmap[index] & ~(1 << mod);
-}
-
 size_t get_pages(size_t npages)
 {
-	size_t cnt, off;
-	static size_t alloc_start = (size_t) -1;
+	size_t i, ret = 0;
+	free_list_t* curr = free_start;
 
 	if (BUILTIN_EXPECT(!npages, 0))
 		return 0;
 	if (BUILTIN_EXPECT(npages > atomic_int32_read(&total_available_pages), 0))
 		return 0;
 
-	spinlock_lock(&bitmap_lock);
+	spinlock_lock(&list_lock);
 
-	if (alloc_start == (size_t)-1)
-		 alloc_start = ((size_t) &kernel_end >> PAGE_BITS);
-	off = 1;
-	while (off <= BITMAP_SIZE*8 - npages) {
-		for (cnt=0; cnt<npages; cnt++) {
-			if (page_marked(((off+alloc_start)%(BITMAP_SIZE*8 - npages))+cnt))
-				goto next;
+	while(curr) {
+		i = (curr->end - curr->start) / PAGE_SIZE;
+		if (i > npages) {
+			ret = curr->start;
+			curr->start += npages * PAGE_SIZE;
+			goto out;
+		} else if (i == npages) {
+			ret = curr->start;
+			if (curr->prev)
+				curr->prev = curr->next;
+			else
+				free_start = curr->next;
+			if (curr != &init_list)
+				kfree(curr);
+			goto out;
 		}
 
-		off = (off+alloc_start) % (BITMAP_SIZE*8 - npages);
-		alloc_start = off+npages;
+		curr = curr->next;
+	}
+out:
+	spinlock_unlock(&list_lock);
 
-		for (cnt=0; cnt<npages; cnt++) {
-			page_set_mark(off+cnt);
-		}
-
-		spinlock_unlock(&bitmap_lock);
-
+	if (ret) {
 		atomic_int32_add(&total_allocated_pages, npages);
 		atomic_int32_sub(&total_available_pages, npages);
-
-		return off << PAGE_BITS;
-
-next:		off += cnt+1;
 	}
 
-	spinlock_unlock(&bitmap_lock);
-
-	return 0;
+	return ret;
 }
 
+/* TODO: reunion of elements is still missing */
 int put_pages(size_t phyaddr, size_t npages)
 {
-	size_t i, ret = 0;
-	size_t base = phyaddr >> PAGE_BITS;
+	free_list_t* curr = free_start;
 
 	if (BUILTIN_EXPECT(!phyaddr, 0))
 		return -EINVAL;
 	if (BUILTIN_EXPECT(!npages, 0))
 		return -EINVAL;
 
-	spinlock_lock(&bitmap_lock);
+	spinlock_lock(&list_lock);
 
-	for (i=0; i<npages; i++) {
-		if (page_marked(base+i)) {
-			page_clear_mark(base+i);
-			ret++;
+	while(curr) {
+		if (phyaddr+npages*PAGE_SIZE == curr->start) {
+			curr->start = phyaddr;
+			goto out;
+		} else if (phyaddr == curr->end) {
+			curr->end += npages*PAGE_SIZE;
+			goto out;
+		} if (phyaddr > curr->end) {
+			free_list_t* n = kmalloc(sizeof(free_list_t));
+
+			if (BUILTIN_EXPECT(!n, 0))
+				goto out_err;
+
+			/* add new element */
+			n->start = phyaddr;
+			n->end = phyaddr + npages * PAGE_SIZE;
+			n->prev = curr;
+			n->next = curr->next;
+			curr->next = n;
 		}
+
+		curr = curr->next;
 	}
+out:
+	spinlock_unlock(&list_lock);
 
-	spinlock_unlock(&bitmap_lock);
+	atomic_int32_sub(&total_allocated_pages, npages);
+	atomic_int32_add(&total_available_pages, npages);
 
-	atomic_int32_sub(&total_allocated_pages, ret);
-	atomic_int32_add(&total_available_pages, ret);
+	return 0;
 
-	return ret;
+out_err:
+	spinlock_unlock(&list_lock);
+
+	return -ENOMEM;
 }
 
 int copy_page(size_t pdest, size_t psrc)
@@ -188,9 +192,6 @@ int memory_init(void)
 	size_t addr;
 	int ret = 0;
 
-	// mark all memory as used
-	memset(bitmap, 0xff, BITMAP_SIZE);
-
 	// enable paging and map Multiboot modules etc.
 	ret = page_init();
 	if (BUILTIN_EXPECT(ret, 0)) {
@@ -198,25 +199,28 @@ int memory_init(void)
 		return ret;
 	}
 
-	//kprintf("base 0x%lx, limit 0x%lx\n", base, limit);
+	kprintf("base 0x%llx, limit 0x%llx\n", base, limit);
 
 	// mark available memory as free
-	for(addr=base+0x200000ULL; (addr<limit) && (addr < (BITMAP_SIZE*8*PAGE_SIZE)); addr+=PAGE_SIZE) {
-		if (page_marked(addr >> PAGE_BITS)) {
-			page_clear_mark(addr >> PAGE_BITS);
-			atomic_int32_inc(&total_pages);
-			atomic_int32_inc(&total_available_pages);
-		}
+	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
+		atomic_int32_inc(&total_pages);
+		atomic_int32_inc(&total_available_pages);
 	}
 
-	atomic_int32_add(&total_allocated_pages, 0x200000 / PAGE_SIZE);
-	atomic_int32_add(&total_pages, 0x200000 / PAGE_SIZE);
+	// mark kernel as used, we use 2MB pages to map the kernel
+	for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
+		atomic_int32_inc(&total_allocated_pages);
+		atomic_int32_dec(&total_available_pages);
+	}
+
+	//initialize free list
+	init_list.start = ((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL;
+	init_list.end = limit;
+	init_list.prev = init_list.next = NULL;
 
 	ret = vma_init();
-	if (BUILTIN_EXPECT(ret, 0)) {
+	if (BUILTIN_EXPECT(ret, 0))
 		kprintf("Failed to initialize VMA regions: %d\n", ret);
-		return ret;
-	}
 
 	return ret;
 }
