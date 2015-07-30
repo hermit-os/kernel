@@ -53,9 +53,9 @@ extern const void percore_end;
 extern char __BUILD_DATE;
 
 /* Page frame counters */
-extern atomic_int32_t total_pages;
-extern atomic_int32_t total_allocated_pages;
-extern atomic_int32_t total_available_pages;
+extern atomic_int64_t total_pages;
+extern atomic_int64_t total_allocated_pages;
+extern atomic_int64_t total_available_pages;
 
 extern atomic_int32_t cpu_online;
 
@@ -143,11 +143,11 @@ int main(void)
 	kprintf("This is Hermit %s, build date %u\n", VERSION, &__BUILD_DATE);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
-	kprintf("Per core size 0x%llx\n", (size_t) &percore_end0 - (size_t) &percore_start);
+	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
-	kprintf("Total memory: %lu KiB\n", atomic_int32_read(&total_pages) * PAGE_SIZE / 1024);
-	kprintf("Current allocated memory: %lu KiB\n", atomic_int32_read(&total_allocated_pages) * PAGE_SIZE / 1024);
-	kprintf("Current available memory: %lu KiB\n", atomic_int32_read(&total_available_pages) * PAGE_SIZE / 1024);
+	kprintf("Total memory: %zd MiB\n", atomic_int64_read(&total_pages) * PAGE_SIZE / (1024ULL*1024ULL));
+	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
+	kprintf("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 
 #if 1
 	kputs("Filesystem:\n");

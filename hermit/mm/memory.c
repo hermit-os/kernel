@@ -34,8 +34,8 @@
 #include <asm/atomic.h>
 #include <asm/page.h>
 
-extern uint32_t base;
-extern uint32_t limit;
+extern uint64_t base;
+extern uint64_t limit;
 
 typedef struct free_list {
 	size_t start, end;
@@ -55,9 +55,9 @@ static spinlock_t list_lock = SPINLOCK_INIT;
 static free_list_t init_list;
 static free_list_t* free_start = &init_list;
 
-atomic_int32_t total_pages = ATOMIC_INIT(0);
-atomic_int32_t total_allocated_pages = ATOMIC_INIT(0);
-atomic_int32_t total_available_pages = ATOMIC_INIT(0);
+atomic_int64_t total_pages = ATOMIC_INIT(0);
+atomic_int64_t total_allocated_pages = ATOMIC_INIT(0);
+atomic_int64_t total_available_pages = ATOMIC_INIT(0);
 
 size_t get_pages(size_t npages)
 {
@@ -66,7 +66,7 @@ size_t get_pages(size_t npages)
 
 	if (BUILTIN_EXPECT(!npages, 0))
 		return 0;
-	if (BUILTIN_EXPECT(npages > atomic_int32_read(&total_available_pages), 0))
+	if (BUILTIN_EXPECT(npages > atomic_int64_read(&total_available_pages), 0))
 		return 0;
 
 	spinlock_lock(&list_lock);
@@ -94,8 +94,8 @@ out:
 	spinlock_unlock(&list_lock);
 
 	if (ret) {
-		atomic_int32_add(&total_allocated_pages, npages);
-		atomic_int32_sub(&total_available_pages, npages);
+		atomic_int64_add(&total_allocated_pages, npages);
+		atomic_int64_sub(&total_available_pages, npages);
 	}
 
 	return ret;
@@ -139,8 +139,8 @@ int put_pages(size_t phyaddr, size_t npages)
 out:
 	spinlock_unlock(&list_lock);
 
-	atomic_int32_sub(&total_allocated_pages, npages);
-	atomic_int32_add(&total_available_pages, npages);
+	atomic_int64_sub(&total_allocated_pages, npages);
+	atomic_int64_add(&total_available_pages, npages);
 
 	return 0;
 
@@ -199,18 +199,18 @@ int memory_init(void)
 		return ret;
 	}
 
-	kprintf("base 0x%llx, limit 0x%llx\n", base, limit);
+	kprintf("base 0x%zx, limit 0x%zx\n", base, limit);
 
 	// mark available memory as free
 	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
-		atomic_int32_inc(&total_pages);
-		atomic_int32_inc(&total_available_pages);
+		atomic_int64_inc(&total_pages);
+		atomic_int64_inc(&total_available_pages);
 	}
 
 	// mark kernel as used, we use 2MB pages to map the kernel
 	for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
-		atomic_int32_inc(&total_allocated_pages);
-		atomic_int32_dec(&total_available_pages);
+		atomic_int64_inc(&total_allocated_pages);
+		atomic_int64_dec(&total_available_pages);
 	}
 
 	//initialize free list
