@@ -104,7 +104,7 @@ start64:
     sub rax, kernel_start
     add rax, [base]
     mov QWORD [rdi+511*8], rax
- 
+
     ; remap kernel
     mov rdi, kernel_start
     shr rdi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
@@ -313,8 +313,8 @@ global isrsyscall
 align 16
 ; used to realize system calls
 isrsyscall:
-    ; IF flag is already cleared 
-    ; cli 
+    ; IF flag is already cleared
+    ; cli
     ; only called from user space => get kernel-level selector
     swapgs
     ; get kernel stack
@@ -334,8 +334,8 @@ isrsyscall:
     push rdi
     push rsi
 
-    ; push system call number  
-    ; push rax 
+    ; push system call number
+    ; push rax
 
     ; syscall stores in rcx the return address
     ; => using of r10 for the temporary storage of the 4th argument
