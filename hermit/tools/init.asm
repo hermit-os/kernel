@@ -72,6 +72,10 @@ datasel equ $-gdt
 gdt_end:
 
 ALIGN 4
+GDTR64:
+    dw GDT64_end - GDT64 - 1     ; Limit.
+    dq GDT64                     ; Base.
+
 ; we need a new GDT to switch in the 64bit modus
 GDT64:                           ; Global Descriptor Table (64-bit).
     .Null: equ $ - GDT64         ; The null descriptor.
@@ -95,9 +99,7 @@ GDT64:                           ; Global Descriptor Table (64-bit).
     db 10010010b                 ; Access.
     db 00000000b                 ; Granularity.
     db 0                         ; Base (high).
-    .Pointer:                    ; The GDT-pointer.
-    dw $ - GDT64 - 1             ; Limit.
-    dq GDT64                     ; Base.
+GDT64_end:
 
 ALIGN 4
 stublet:
@@ -141,15 +143,17 @@ cpu_init:
     ; initialize page tables
 
     ; map kernel at link address, use a page size of 2M
-    mov eax, 0x00             ; dummy value
+    mov eax, 0x00             ; lower part of the page addres, Linux will relocate this value
     and eax, 0xFFE00000
+    or eax, 0x183
+    mov ebx, 0x00             ; higher part of the page address, Linux will relocate this value
     mov edi, kernel_start
     and edi, 0xFFE00000
     shr edi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
     add edi, boot_pgd
     add edi, ebp
-    or eax, 0x183
     mov DWORD [edi], eax
+    mov DWORD [edi+4], ebx
 
     ; check for long mode
 
@@ -205,21 +209,21 @@ cpu_init:
     ; Set CR0 (PM-bit is already set)
     mov eax, cr0
     and eax, ~(1 << 2)      ; disable FPU emulation
-    or eax, (1 << 1)        ; enable FPU montitoring 
+    or eax, (1 << 1)        ; enable FPU montitoring
     and eax, ~(1 << 30)     ; enable caching
     and eax, ~(1 << 29)     ; disable write through caching
     and eax, ~(1 << 16)     ; allow kernel write access to read-only pages
     or eax, (1 << 31)       ; enable paging
     mov cr0, eax
 
-    lgdt [GDT64.Pointer]    ; Load the 64-bit global descriptor table.
+    lgdt [GDTR64]           ; Load the 64-bit global descriptor table.
     jmp GDT64.Code:start64  ; Set the code segment and enter 64-bit long mode.
 
 [BITS 64]
 ALIGN 8
 start64:
-    mov rax, kernel_start
-    jmp rax
+    push kernel_start
+    ret
 
 ALIGN 16
 global boot_stack
