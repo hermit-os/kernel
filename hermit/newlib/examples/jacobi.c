@@ -39,6 +39,43 @@
 #define CACHE_SIZE	(256*1024)
 #define ALIGN(x,a)	(((x)+(a)-1)&~((a)-1))
 
+extern unsigned int get_cpufreq();
+
+inline static unsigned long long rdtscp(void)
+{
+	unsigned long long lo, hi;
+	asm volatile ("rdtscp" : "=a"(lo), "=d"(hi) :: "%rcx");
+	return (hi << 32 | lo);
+}
+
+double mysecond()
+{
+#if 0
+	struct timeval tp;
+	struct timezone tzp;
+	int i;
+
+	i = gettimeofday(&tp,&tzp);
+	return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
+#else
+	static unsigned long long start;
+	static int init = 0;
+	double ret;
+
+	if (init) {
+		ret = (double) (rdtscp() - start) / ((double) get_cpufreq() * 1000000.0);
+	} else {
+		//printf("CPU frequency: %d MHz\n", get_cpufreq());
+		start = rdtscp();
+		init = 1;
+		ret = 0.0;
+	}
+
+	return ret;
+#endif
+}
+
+
 static int generate_empty_matrix(double*** A , unsigned int N) {
 	unsigned int iCnt;
 	int i,j;
@@ -107,7 +144,7 @@ int main(int argc, char **argv)
 	double**	A=0;
 	double*		X;
 	double*		X_old, xi;
-	clock_t		start, end;
+	double		start, end;
 
 	if (generate_empty_matrix(&A,MATRIX_SIZE) < 0)
 	{
@@ -137,7 +174,7 @@ int main(int argc, char **argv)
 	iter_start = 0;
 	iter_end = MATRIX_SIZE;
 
-	start = clock();
+	start = mysecond();
 
 	while(1) 
 	{
@@ -169,7 +206,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	end = clock();
+	end = mysecond();
 	
 	if (MATRIX_SIZE < 16) {
 		printf("Print the solution...\n");
@@ -200,7 +237,7 @@ int main(int argc, char **argv)
 
 	printf("\nmatrix size: %d x %d\n", MATRIX_SIZE, MATRIX_SIZE);
 	printf("number of iterations: %d\n", iterations);
-	printf("calculation time: %f s\n", (float) (end-start) / (float) CLOCKS_PER_SEC);
+	printf("calculation time: %lf s\n", end-start);
 
 	free((void*) X_old);
 	free((void*) X);
