@@ -442,7 +442,7 @@ double mysecond()
 	if (init) {
 		ret = (double) (rdtscp() - start) / ((double) get_cpufreq() * 1000000.0);
 	} else {
-		printf("CPU frequency: %d MHz\n", get_cpufreq());
+		//printf("CPU frequency: %d MHz\n", get_cpufreq());
 		start = rdtscp();
 		init = 1;
 		ret = 0.0;
