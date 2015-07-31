@@ -91,6 +91,8 @@ size_t get_pages(size_t npages)
 		curr = curr->next;
 	}
 out:
+	//kprintf("get_pages: ret 0%llx, curr->start 0x%llx, curr->end 0x%llx\n", ret, curr->start, curr->end);
+
 	spinlock_unlock(&list_lock);
 
 	if (ret) {
@@ -199,7 +201,7 @@ int memory_init(void)
 		return ret;
 	}
 
-	kprintf("base 0x%zx, limit 0x%zx\n", base, limit);
+	kprintf("memory_init: base 0x%zx, limit 0x%zx\n", base, limit);
 
 	// mark available memory as free
 	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
@@ -208,13 +210,13 @@ int memory_init(void)
 	}
 
 	// mark kernel as used, we use 2MB pages to map the kernel
-	for(addr=(size_t) &kernel_start; addr<(((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
+	for(addr=base; addr<((base + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
 		atomic_int64_inc(&total_allocated_pages);
 		atomic_int64_dec(&total_available_pages);
 	}
 
 	//initialize free list
-	init_list.start = ((size_t) &kernel_end + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL;
+	init_list.start = (base + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL;
 	init_list.end = limit;
 	init_list.prev = init_list.next = NULL;
 
