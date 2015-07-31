@@ -39,7 +39,7 @@
  * This will keep track of how many ticks the system
  * has been running for 
  */
-static volatile uint64_t timer_ticks = 0;
+extern volatile uint64_t timer_ticks;
 extern uint32_t cpu_freq;
 extern int32_t boot_processor;
 
@@ -80,22 +80,6 @@ void check_ticks(void)
 		}
 	}
 }
-
-int sys_times(struct tms* buffer, clock_t* clock)
-{
-	if (BUILTIN_EXPECT(!buffer, 0))
-		return -EINVAL;
-	if (BUILTIN_EXPECT(!clock, 0))
-		return -EINVAL;
-
-	check_ticks();
-
-	memset(buffer, 0x00, sizeof(struct tms));
-	*clock = buffer->tms_utime = (clock_t) ((timer_ticks - per_core(current_task)->start_tick) * CLOCKS_PER_SEC / TIMER_FREQ);
-
-	return 0;
-}
-
 
 uint64_t get_clock_tick(void)
 {

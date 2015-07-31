@@ -47,11 +47,6 @@ struct tms {
 	clock_t tms_cstime;
 };
 
-#ifndef CLOCKS_PER_SEC
-// newlib's default value
-#define CLOCKS_PER_SEC 1000
-#endif
-
 /** @brief Initialize Timer interrupts 
  *
  * This procedure installs IRQ handlers for timer interrupts
@@ -65,12 +60,6 @@ int timer_init(void);
  * - 0 on success
  */
 int timer_wait(unsigned int ticks);
-
-/** @brief Determines the time in CLK_TCK's
- *
- * System call, which returns the value of time in CLK_TCK's
- */
-int sys_times(struct tms*, clock_t* clock);
 
 /** @brief Returns the current number of ticks.
  * @return Current number of ticks
