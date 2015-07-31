@@ -49,11 +49,13 @@ align 4
     global cpu_freq
     global boot_processor
     global cpu_online
+    global timer_ticks
     base dq 0
     limit dq 0
     cpu_freq dd 0
     boot_processor dd -1
     cpu_online dd 0
+    timer_ticks dq 0
 
 SECTION .text
 align 4
