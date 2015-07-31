@@ -207,6 +207,7 @@ int cpu_detection(void) {
 		cr4 |= CR4_OSXSAVE;
 	if (has_pge())
 		cr4 |= CR4_PGE;
+	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc
 	write_cr4(cr4);
 
 	if (has_xsave())
@@ -268,7 +269,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -282,7 +283,8 @@ int cpu_detection(void) {
 			has_fpu() ? "FPU " : "",
 			has_fxsr() ? "FXSR " : "",
 			has_xsave() ? "XSAVE " : "",
-			has_osxsave() ? "OSXSAVE " : "");
+			has_osxsave() ? "OSXSAVE " : "",
+			has_rdtscp() ? "RDTSCP " : "");
 	}
 
 	if (first_time && has_osxsave()) {

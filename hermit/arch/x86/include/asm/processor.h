@@ -76,6 +76,7 @@ extern "C" {
 #define CPU_FEATURE_SYSCALL			(1 << 11)
 #define CPU_FEATURE_NX				(1 << 20)
 #define CPU_FEATURE_1GBHP			(1 << 26)
+#define CPU_FEATURE_RDTSCP			(1 << 27)
 #define CPU_FEATURE_LM				(1 << 29)
 
 // feature list 0x00000007:0
@@ -289,6 +290,10 @@ inline static uint32_t has_nx(void)
 
 inline static uint32_t has_avx2(void) {
 	return cpu_info.feature4 & CPU_FEATURE_AVX2;
+}
+
+inline static uint32_t has_rdtscp(void) {
+	return (cpu_info.feature3 & CPU_FEATURE_RDTSCP);
 }
 
 /// clear TS bit in cr0
