@@ -39,6 +39,7 @@
 #include <asm/tss.h>
 
 extern tss_t	task_state_segments[MAX_CORES];
+extern uint64_t base;
 
 size_t* get_current_stack(void)
 {
@@ -135,8 +136,9 @@ typedef struct {
  */
 static int load_task(load_args_t* largs)
 {
-	uint32_t i, offset, idx;
-	uint32_t addr, npages;
+	uint32_t i;
+	uint64_t offset, idx;
+	uint64_t addr, npages;
 	size_t stack = 0, heap = 0;
 	size_t flags;
 	elf_header_t header;
@@ -206,7 +208,7 @@ static int load_task(load_args_t* largs)
 				ret = -ENOMEM;
 				goto Lerr;
 			}
-	
+
 			flags = PG_USER;
 			if (has_nx() && !(prog_header.flags & PF_X))
 				flags |= PG_XD;
@@ -256,7 +258,7 @@ static int load_task(load_args_t* largs)
 				goto Lerr;
 			}
 
-			stack = header.entry*2; // virtual address of the stack
+			stack = (1ULL << 34ULL); // virtual address of the stack
 			flags = PG_USER|PG_RW;
 			if (has_nx() && !(prog_header.flags & PF_X))
 				flags |= PG_XD;
@@ -267,6 +269,7 @@ static int load_task(load_args_t* largs)
 				goto Lerr;
 			}
 			memset((void*) stack, 0x00, npages*PAGE_SIZE);
+			//kprintf("stack located at 0x%zx (0x%zx)\n", stack, addr);
 
 			// create vma regions for the user-level stack
 			flags = VMA_CACHEABLE|VMA_USER;
@@ -348,6 +351,13 @@ static int load_task(load_args_t* largs)
 
 	// clear fpu state => currently not supported
 	curr_task->flags &= ~(TASK_FPU_USED|TASK_FPU_INIT);
+
+	// map readonly kernel info into the user-space => vsyscall
+	if (has_nx())
+		page_map(header.entry - PAGE_SIZE, base, 1, PG_USER|PG_XD);
+	else
+		page_map(header.entry - PAGE_SIZE, base, 1, PG_USER);
+	vma_add(header.entry - PAGE_SIZE, header.entry, VMA_READ|VMA_CACHEABLE|VMA_USER);
 
 	//vma_dump();
 

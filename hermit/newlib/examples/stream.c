@@ -270,7 +270,6 @@ main()
 	    b[j] = 2.0;
 	    c[j] = 0.0;
 	}
-
     printf(HLINE);
 
     if  ( (quantum = checktick()) >= 1) 
@@ -300,7 +299,7 @@ main()
     printf("For best results, please be sure you know the\n");
     printf("precision of your system timer.\n");
     printf(HLINE);
-    
+
     /*	--- MAIN LOOP --- repeat test cases NTIMES times --- */
 
     scalar = 3.0;
@@ -387,7 +386,6 @@ checktick()
     double	t1, t2, timesfound[M];
 
 /*  Collect a sequence of M unique time values from the system. */
-
     for (i = 0; i < M; i++) {
 	t1 = mysecond();
 	while( ((t2=mysecond()) - t1) < 1.0E-6 )
@@ -418,6 +416,15 @@ checktick()
 #include <time.h>
 #include <sys/time.h>
 
+extern unsigned int get_cpufreq();
+
+inline static unsigned long long rdtscp(void)
+{
+        unsigned long long lo, hi;
+        asm volatile ("rdtscp" : "=a"(lo), "=d"(hi) :: "%rcx");
+        return (hi << 32 | lo);
+}
+
 double mysecond()
 {
 #if 0
@@ -428,16 +435,17 @@ double mysecond()
         i = gettimeofday(&tp,&tzp);
         return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
 #else
-	static clock_t start, init = 0;
+	static unsigned long long start;
+	static int init = 0;
 	double ret;
 
 	if (init) {
-		ret = (double) (clock() - start) / (double) CLOCKS_PER_SEC;
+		ret = (double) (rdtscp() - start) / ((double) get_cpufreq() * 1000000.0);
 	} else {
-		start = clock();
+		printf("CPU frequency: %d MHz\n", get_cpufreq());
+		start = rdtscp();
 		init = 1;
 		ret = 0.0;
-		//printf("CLOCKS_PER_SEC = %d\n", CLOCKS_PER_SEC);
 	}
 
 	return ret;
