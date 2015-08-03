@@ -198,8 +198,9 @@ static int load_task(load_args_t* largs)
 			if (!prog_header.virt_addr)
 				continue;
 
-			npages = (prog_header.mem_size >> PAGE_BITS);
-			if (prog_header.mem_size & (PAGE_SIZE-1))
+			npages = (prog_header.virt_addr + prog_header.mem_size) - (prog_header.virt_addr & ~(PAGE_SIZE-1));
+			npages = (npages >> PAGE_BITS);
+			if ((prog_header.virt_addr + prog_header.mem_size) & (PAGE_SIZE-1))
 				npages++;
 
 			addr = get_pages(npages);
@@ -214,14 +215,14 @@ static int load_task(load_args_t* largs)
 				flags |= PG_XD;
 
 			// map page frames in the address space of the current task
-			if (page_map(prog_header.virt_addr, addr, npages, flags|PG_RW)) {
+			if (page_map(prog_header.virt_addr & ~(PAGE_SIZE-1), addr, npages, flags|PG_RW)) {
 				kprintf("Could not map 0x%x at 0x%x\n", addr, prog_header.virt_addr);
 				ret = -ENOMEM;
 				goto Lerr;
 			}
 
 			// clear pages
-			memset((void*) prog_header.virt_addr, 0x00, npages*PAGE_SIZE);
+			memset((void*) (prog_header.virt_addr & ~(PAGE_SIZE-1)), 0x00, npages*PAGE_SIZE);
 
 			// update heap location
 			if (heap < prog_header.virt_addr + prog_header.mem_size)
@@ -281,6 +282,8 @@ static int load_task(load_args_t* largs)
 				flags |= VMA_EXECUTE;
 			vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
 			break;
+		default:
+			kprintf("Unknown type 0x%lx in program header\n", prog_header.type);
 		}
 	}
 

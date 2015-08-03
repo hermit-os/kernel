@@ -2,3 +2,11 @@
 	path = linux
 	url = git@github.com:RWTH-OS/linux.git
 	branch = hermit
+[submodule "hermit/newlib/pte"]
+	path = hermit/newlib/pte
+	url = git@github.com:RWTH-OS/pthread-embeded.git
+	branch = hermit
+[submodule "hermit/newlib/gcc"]
+	path = hermit/newlib/gcc
+	url = git@github.com:RWTH-OS/gcc.git
+	branch = gcc-5-branch
