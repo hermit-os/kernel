@@ -10,3 +10,7 @@
 	path = hermit/newlib/gcc
 	url = git@github.com:RWTH-OS/gcc.git
 	branch = gcc-5-branch
+[submodule "hermit/newlib/binutils"]
+	path = hermit/newlib/binutils
+	url = git@github.com:RWTH-OS/binutils.git
+	branch = hermit
