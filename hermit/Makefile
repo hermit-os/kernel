@@ -98,12 +98,6 @@ $(NAME).elf:
 	@echo [OBJCOPY] $(NAME).bin
 	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .initrd -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
 
-$(NAME).elf32: $(NAME).elf
-	@echo [OBJCOPY] $(NAME).sym
-	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $(NAME).elf $(NAME).sym
-	@echo [OBJCOPY] $(NAME).elf32
-	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $(OUTPUT_FORMAT) $(NAME).elf $(NAME).elf32
-
 clean:
 	$Q$(RM) $(NAME).elf $(NAME).sym $(NAME).bin *~
 	$Q$(MAKE) -C tools clean
@@ -115,13 +109,6 @@ veryclean: clean
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C newlib veryclean
 	@echo Very cleaned
-
-qemu: $(NAME).elf32
-	$(QEMU) $(QEMUFLAGS) -kernel $(NAME).elf32
-
-debug: $(NAME).elf32
-	$(TERM) -e $(GDB) $(GDBFLAGS) &
-	$(QEMU) $(QEMUDEBUGFLAGS) -s -S -kernel $(NAME).elf32
 
 doc:
 	@echo Create documentation...
