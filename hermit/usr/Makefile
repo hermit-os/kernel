@@ -29,19 +29,19 @@ $(ARCH):
 	$Q$(MKDIR) $(TMP)/binutils
 	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) && $(MAKE) install
 	$Q$(MKDIR) $(TMP)/newlib
-	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/src/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) && $(MAKE) install
+	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) && $(MAKE) install
 	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-O3 -I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte depend
 	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-O3 -I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte
 	$Q$(MKDIR) $(TMP)/gcc
 	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) && $(MAKE) install
 
 clean:
-	@echo Cleaning newlib
+	@echo Cleaning toolchain
 	$Q$(MAKE) -C examples clean
 	$Q$(RM) $(TMP)
 
 veryclean:
-	@echo Propper cleaning newlib
+	@echo Propper cleaning of the toolchain
 	$Q$(MAKE) -C pte veryclean
 	$Q$(MAKE) -C examples veryclean
 	$Q$(RM) $(TOPDIR)/$(ARCH)
