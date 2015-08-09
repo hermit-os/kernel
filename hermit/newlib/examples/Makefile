@@ -1,7 +1,7 @@
 ARCH = x86
 TARGET=x86_64-hermit
 MAKE = make
-STRIP_DEBUG = --strip-debug
+override STRIP_DEBUG = --strip-unneeded --strip-debug
 KEEP_DEBUG = --only-keep-debug
 
 # Set your own cross compiler tool chain prefix here
@@ -37,7 +37,7 @@ endif
 
 default: all
 
-all: hello jacobi stream
+all: hello jacobi stream thr_hello
 
 stream: stream.o
 	@echo [LD] $@
@@ -60,13 +60,20 @@ jacobi: jacobi.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+thr_hello: thr_hello.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS) $(CFLAGS) -o $@ $< -lpthread
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 clean:
 	@echo Cleaning examples
-	$Q$(RM) hello jacobi *.sym *.o *~ 
+	$Q$(RM) hello jacobi stream thr_hello *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning examples
-	$Q$(RM) hello jacobi stream *.sym *.o *~
+	$Q$(RM) hello jacobi stream thr_hello *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS) *.c > Makefile.dep
