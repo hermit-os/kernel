@@ -31,7 +31,27 @@
 #include <hermit/errno.h>
 #include <hermit/syscall.h>
 #include <hermit/spinlock.h>
+#include <hermit/semaphore.h>
 #include <hermit/time.h>
+
+static tid_t sys_getpid(void)
+{
+	task_t* task = per_core(current_task);
+
+	return task->id;
+}
+
+static int sys_getprio(void)
+{
+	task_t* task = per_core(current_task);
+
+	return task->prio;
+}
+
+static void sys_yield(void)
+{
+	reschedule();
+}
 
 static int sys_write(int fd, const char* buf, size_t len)
 {
@@ -84,6 +104,76 @@ static int sys_close(int fd)
 	return 0;
 }
 
+static int sys_msleep(unsigned int msec)
+{
+	timer_wait(msec*TIMER_FREQ/1000);
+
+	return 0;
+}
+
+static int sys_sem_init(sem_t** sem, unsigned int value)
+{
+	int ret;
+
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	*sem = (sem_t*) kmalloc(sizeof(sem_t));
+	if (BUILTIN_EXPECT(!(*sem), 0))
+		return -ENOMEM;
+
+	ret = sem_init(*sem, value);
+	if (ret) {
+		kfree(*sem);
+		*sem = NULL;
+	}
+
+	return ret;
+}
+
+static int sys_sem_destroy(sem_t* sem)
+{
+	int ret;
+
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	ret = sem_destroy(sem);
+	if (!ret)
+		kfree(sem);
+
+	return ret;
+}
+
+static int sys_sem_wait(sem_t* sem)
+{
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	return sem_wait(sem, 0);
+}
+
+static int sys_sem_post(sem_t* sem)
+{
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	return sem_post(sem);
+}
+
+static int sys_sem_timedwait(sem_t *sem, unsigned int ms)
+{
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	return sem_wait(sem, ms);
+}
+
+static int sys_clone(tid_t* id, void* ep, void* argv)
+{
+	return clone_task(id, ep, argv, per_core(current_task)->prio, CORE_ID);	
+}
+
 static int default_handler(void)
 {
 	kprintf("Invalid system call\n");
@@ -99,7 +189,7 @@ size_t syscall_table[] = {
 	(size_t) default_handler,	/* __NR_read 	*/
 	(size_t) default_handler,	/* __NR_lseek	*/
 	(size_t) default_handler, 	/* __NR_unlink	*/
-	(size_t) default_handler, 	/* __NR_getpid	*/
+	(size_t) sys_getpid, 		/* __NR_getpid	*/
 	(size_t) default_handler,	/* __NR_kill	*/
 	(size_t) default_handler,	/* __NR_fstat	*/
 	(size_t) sys_sbrk,		/* __NR_sbrk	*/
@@ -124,5 +214,14 @@ size_t syscall_table[] = {
 	(size_t) default_handler,	/* __NR_stat	*/
 	(size_t) default_handler,	/* __NR_dup	*/
 	(size_t) default_handler,	/* __NR_dup2	*/
-
+	(size_t) sys_msleep,		/* __NR_msleep	*/
+	(size_t) sys_yield,		/* __NR_yield	*/
+	(size_t) sys_sem_init,	 	/* __NR_sem_init	*/
+	(size_t) sys_sem_destroy, 	/* __NR_sem_destroy	*/
+	(size_t) sys_sem_wait,	 	/* __NR_sem_wait	*/
+	(size_t) sys_sem_post,	 	/* __NR_sem_post	*/
+	(size_t) sys_sem_timedwait, 	/* __NR_sem_timedwait	*/
+	(size_t) sys_getprio,		/* __NR_getprio	*/
+	(size_t) default_handler,	/* __NR_setprio	*/
+	(size_t) sys_clone		/* __NR_clone	*/
 };

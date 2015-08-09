@@ -138,7 +138,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 						goto out;
 					
 					if (bits & PG_USER)
-						atomic_int32_inc(&curr_task->user_usage);
+						atomic_int64_inc(curr_task->user_usage);
 
 					/* Reference the new table within its parent */
 #if 0
@@ -209,7 +209,7 @@ int page_map_drop(void)
 					traverse(lvl-1, vpn<<PAGE_MAP_BITS);
 
 				put_pages(self[lvl][vpn] & PAGE_MASK, 1);
-				atomic_int32_dec(&curr_task->user_usage);
+				atomic_int64_dec(curr_task->user_usage);
 			}
 		}
 	}
@@ -237,7 +237,7 @@ int page_map_copy(task_t *dest)
 					if (BUILTIN_EXPECT(!phyaddr, 0))
 						return -ENOMEM;
 
-					atomic_int32_inc(&dest->user_usage);
+					atomic_int64_inc(dest->user_usage);
 
 					other[lvl][vpn] = phyaddr | (self[lvl][vpn] & ~PAGE_MASK);
 					if (lvl) /* PML4, PDPT, PGD */
@@ -302,13 +302,14 @@ void page_fault_handler(struct state *s)
 	}
 
 default_handler:
-	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
-		s->int_no, s->cs, s->rip, s->rflags, task->id, viraddr, s->error,
+	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
+		s->int_no, s->cs, s->rip, s->fs, s->gs, s->rflags, task->id, viraddr, s->error,
 		(s->error & 0x4) ? "user" : "supervisor",
 		(s->error & 0x10) ? "instruction" : "data",
 		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
 		(s->error & 0x1) ? "protection" : "not present",
 		(s->error & 0x8) ? "reserved bit" : "\b");
+	kprintf("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp %#lx, rsp %#lx rdi %#lx, rsi %#lx\n", s->rax, s->rbx, s->rcx, s->rdx, s->rbp, s->rsp, s->rdi, s->rsi);
 	if (task->heap)
 		kprintf("Heap 0x%llx - 0x%llx\n", task->heap->start, task->heap->end);
 

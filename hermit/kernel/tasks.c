@@ -42,8 +42,8 @@
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, ATOMIC_INIT(0), NULL, NULL, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, ATOMIC_INIT(0), NULL, NULL, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -148,7 +148,7 @@ int set_idle_task(void)
 			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
 			spinlock_irqsave_init(&task_table[i].page_lock);
-			atomic_int32_set(&task_table[i].user_usage, 0);
+			task_table[i].user_usage = NULL;
 			task_table[i].page_map = read_cr3();
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
@@ -204,14 +204,19 @@ static void NORETURN do_exit(int arg)
 
 	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
 
-	page_map_drop();
-	if (curr_task->heap) {
-		kfree(curr_task->heap);
-		curr_task->heap = NULL;
+	// Threads should delete the page table and the heap */
+	if (!curr_task->parent) {
+		page_map_drop();
+		if (curr_task->heap) {
+			kfree(curr_task->heap);
+			curr_task->heap = NULL;
+		}
 	}
 
 	if (curr_task->stack)
 		kfree(curr_task->stack);
+	if (curr_task->user_usage);
+		kfree(curr_task->user_usage);
 
 	// decrease the number of active tasks
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
@@ -245,11 +250,12 @@ void NORETURN abort(void) {
 	do_exit(-1);
 }
 
-int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
+int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
 {
-	int ret = -ENOMEM;
+	int ret = -EINVAL;
 	uint32_t i;
 	void* stack = NULL;
+	task_t* curr_task;
 
 	if (BUILTIN_EXPECT(!ep, 0))
 		return -EINVAL;
@@ -261,6 +267,10 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 		return -EINVAL;
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
+	if (BUILTIN_EXPECT((size_t)ep < KERNEL_SPACE, 0))
+		return -EINVAL;
+
+	curr_task = per_core(current_task);
 
 	stack = kmalloc(KERNEL_STACK_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
@@ -276,14 +286,97 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
+			task_table[i].vma_list = curr_task->vma_list;
+			task_table[i].heap = curr_task->heap;
+                        task_table[i].start_tick = get_clock_tick();
+			task_table[i].parent = curr_task->id;
+			task_table[i].tls_addr = curr_task->tls_addr;
+			task_table[i].tls_size = curr_task->tls_size;
+			task_table[i].user_usage = curr_task->user_usage;
+			task_table[i].page_map = curr_task->page_map;
+
+			if (id)
+				*id = i;
+
+			ret = create_default_frame(task_table+i, ep, arg);
+			if (ret)
+				goto out;
+
+                        // add task in the readyqueues
+			spinlock_irqsave_lock(&readyqueues[core_id].lock);
+			readyqueues[core_id].prio_bitmap |= (1 << prio);
+			readyqueues[core_id].nr_tasks++;
+			if (!readyqueues[core_id].queue[prio-1].first) {
+				task_table[i].next = task_table[i].prev = NULL;
+				readyqueues[core_id].queue[prio-1].first = task_table+i;
+				readyqueues[core_id].queue[prio-1].last = task_table+i;
+			} else {
+				task_table[i].prev = readyqueues[core_id].queue[prio-1].last;
+				task_table[i].next = NULL;
+				readyqueues[core_id].queue[prio-1].last->next = task_table+i;
+				readyqueues[core_id].queue[prio-1].last = task_table+i;
+			}
+			spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+ 			break;
+		}
+	}
+
+	spinlock_irqsave_unlock(&table_lock);
+out: 
+	if (ret)
+		kfree(stack);
+
+	return ret;
+}
+
+int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
+{
+	int ret = -ENOMEM;
+	uint32_t i;
+	void* stack = NULL;
+	void* counter = NULL;
+
+	if (BUILTIN_EXPECT(!ep, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(prio == IDLE_PRIO, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(prio > MAX_PRIO, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(core_id >= MAX_CORES, 0))
+		return -EINVAL;
+	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
+		return -EINVAL;
+
+	stack = kmalloc(KERNEL_STACK_SIZE);
+	if (BUILTIN_EXPECT(!stack, 0))
+		return -ENOMEM;
+	counter = kmalloc(sizeof(atomic_int64_t));
+	if (BUILTIN_EXPECT(!counter, 0)) {
+		kfree(stack);
+		return -ENOMEM;
+	}
+	atomic_int64_set((atomic_int64_t*) counter, 0);
+
+	spinlock_irqsave_lock(&table_lock);
+
+	for(i=0; i<MAX_TASKS; i++) {
+		if (task_table[i].status == TASK_INVALID) {
+			task_table[i].id = i;
+			task_table[i].status = TASK_READY;
+			task_table[i].last_core = 0;
+			task_table[i].last_stack_pointer = NULL;
+			task_table[i].stack = stack;
+			task_table[i].prio = prio;
 			spinlock_init(&task_table[i].vma_lock);
 			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
-			task_table[i].lwip_err = 0;
 			task_table[i].start_tick = get_clock_tick();
+			task_table[i].parent = 0;
+			task_table[i].tls_addr = 0;
+			task_table[i].tls_size = 0;
 
 			spinlock_irqsave_init(&task_table[i].page_lock);
-			atomic_int32_set(&task_table[i].user_usage, 0);
+			task_table[i].user_usage = (atomic_int64_t*) counter;
 
 			/* Allocated new PGD or PML4 and copy page table */
 			task_table[i].page_map = get_pages(1);
@@ -323,8 +416,10 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 out:
 	spinlock_irqsave_unlock(&table_lock);
 
-	if (ret)
+	if (ret) {
 		kfree(stack);
+		kfree(counter);
+	}
 
 	return ret;
 }
