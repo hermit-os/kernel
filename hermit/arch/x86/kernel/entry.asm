@@ -412,6 +412,15 @@ switch_context:
     push r14
     push r15
     ; push fs and gs registers
+global Lpatch0
+Lpatch0:
+    jmp short Lrdfsgs1  ; we patch later this jump to enable rdfsbase/rdgsbase
+    rdfsbase rax
+    rdgsbase rdx
+    push rax
+    push rdx
+    jmp short Lgo1
+Lrdfsgs1:
     mov ecx, MSR_FS_BASE
     rdmsr
     sub rsp, 8
@@ -422,6 +431,7 @@ switch_context:
     sub rsp, 8
     mov DWORD [rsp+4], edx
     mov DWORD [rsp], eax
+Lgo1:
 
     mov rax, rdi		; rdi contains the address to store the old rsp
 
@@ -455,6 +465,15 @@ kernel_space1:
     push r14
     push r15
     ; push fs and gs registers
+global Lpatch1
+Lpatch1: 
+    jmp short Lrdfsgs2  ; we patch later this jump to enable rdfsbase/rdgsbase
+    rdfsbase rax
+    rdgsbase rdx
+    push rax
+    push rdx
+    jmp short Lgo2
+Lrdfsgs2:
     mov ecx, MSR_FS_BASE
     rdmsr
     sub rsp, 8
@@ -465,6 +484,7 @@ kernel_space1:
     sub rsp, 8
     mov DWORD [rsp+4], edx
     mov DWORD [rsp], eax
+Lgo2:
 
     ; use the same handler for interrupts and exceptions
     mov rdi, rsp
@@ -487,12 +507,22 @@ common_switch:
     call finish_task_switch
 
 no_context_switch:
+    ; restore fs / gs register
+global Lpatch2
+Lpatch2:
+    jmp short Lwrfsgs    ; we patch later this jump to enable wrfsbase/wrgsbase
+    add rsp, 8
+    pop r15
+    wrfsbase r15
+    jmp short Lgo3
+Lwrfsgs:
     add rsp, 8 ; ignore gs register
     mov ecx, MSR_FS_BASE
     mov edx, DWORD [rsp+4]
     mov eax, DWORD [rsp]
     add rsp, 8
     wrmsr
+Lgo3:
     pop r15
     pop r14
     pop r13
