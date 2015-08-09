@@ -116,6 +116,10 @@ typedef wchar_t wint_t;
 
 /// This defines what the stack looks like after the task context is saved.
 struct state {
+	/// GS register
+	uint64_t gs;
+	/// FS regsiter for TLS support
+	uint64_t fs;
 	/// R15 register
 	uint64_t r15;
 	/// R14 register
