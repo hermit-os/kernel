@@ -99,13 +99,17 @@ typedef struct task {
 	/// the userspace heap
 	vma_t*			heap;
 	/// usage in number of pages (including page map tables)
-	atomic_int32_t	user_usage;
+	atomic_int64_t*		user_usage;
+	/// parent thread
+	tid_t			parent;
 	/// next task in the queue
 	struct task*	next;
 	/// previous task in the queue
 	struct task*	prev;
-	/// LwIP error code
-	int		lwip_err;
+	/// TLS address
+	size_t	tls_addr;
+	/// TLS size
+	size_t tls_size;
 	/// FPU state
 	union fpu_state	fpu;
 } task_t;

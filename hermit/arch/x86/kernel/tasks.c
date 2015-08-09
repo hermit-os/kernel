@@ -41,6 +41,69 @@
 extern tss_t	task_state_segments[MAX_CORES];
 extern uint64_t base;
 
+static inline void enter_user_task(size_t ep, size_t stack)
+{
+	asm volatile ("swapgs");
+
+	jump_to_user_code(ep, stack);
+}
+
+static int thread_entry(void* arg, size_t ep)
+{
+	task_t* curr_task = per_core(current_task);
+	size_t addr, stack = 0;
+	size_t flags;
+	int64_t npages;
+	size_t offset = DEFAULT_STACK_SIZE-16;
+
+	//create user-level stack
+	npages = DEFAULT_STACK_SIZE >> PAGE_BITS;
+	if (DEFAULT_STACK_SIZE & (PAGE_SIZE-1))
+		npages++;
+
+	addr = get_pages(npages);
+	if (BUILTIN_EXPECT(!addr, 0)) {
+		kprintf("load_task: not enough memory!\n");
+		return -ENOMEM;
+	}
+
+	stack = (1ULL << 34ULL) - curr_task->id*DEFAULT_STACK_SIZE-PAGE_SIZE;	// virtual address of the stack
+	flags = PG_USER|PG_RW;
+	if (has_nx())
+		flags |= PG_XD;
+
+	if (page_map(stack, addr, npages, flags)) {
+		put_pages(addr, npages);
+		kprintf("Could not map stack at 0x%x\n", stack);
+		return -ENOMEM;
+	}
+	memset((void*) stack, 0x00, npages*PAGE_SIZE);
+	//kprintf("stack located at 0x%zx (0x%zx)\n", stack, addr);
+
+	// create vma regions for the user-level stack
+	flags = VMA_CACHEABLE|VMA_USER|VMA_READ|VMA_WRITE;
+	vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
+
+	//vma_dump();
+
+	// do we have to create a TLS segement?
+	if (curr_task->tls_addr && curr_task->tls_size) {
+		// set fs register to the TLS segment
+		writefs(stack+offset);
+		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, stack+offset);
+
+		// copy default TLS segment to stack
+		offset -= curr_task->tls_size;
+		memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_size);
+	}
+
+	// set first argument
+	asm volatile ("mov %0, %%rdi" :: "r"(arg));
+	enter_user_task(ep, stack+offset);
+
+	return 0;
+}
+
 size_t* get_current_stack(void)
 {
 	uint32_t core_id = CORE_ID;
@@ -102,7 +165,12 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg)
 
 	/* The instruction pointer shall be set on the first function to be called
 	   after IRETing */
-	stptr->rip = (size_t)ep;
+	if ((size_t) ep < KERNEL_SPACE) {
+		stptr->rip = (size_t)ep;
+	} else {
+		stptr->rip = (size_t)thread_entry;
+		stptr->rsi = (size_t)ep; // use second argument to transfer the entry point
+	}
 	stptr->cs = 0x08;
 	stptr->ss = 0x10;
 	stptr->rflags = 0x1202;
@@ -243,9 +311,7 @@ static int load_task(load_args_t* largs)
 			if (prog_header.flags & PF_X)
 				flags |= VMA_EXECUTE;
 			vma_add(prog_header.virt_addr, prog_header.virt_addr+npages*PAGE_SIZE-1, flags);
-
 			break;
-
 		case ELF_PT_GNU_STACK: // Indicates stack executability
 			// create user-level stack
 			npages = DEFAULT_STACK_SIZE >> PAGE_BITS;
@@ -282,6 +348,11 @@ static int load_task(load_args_t* largs)
 				flags |= VMA_EXECUTE;
 			vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
 			break;
+		case ELF_PT_TLS:
+			kprintf("Found TLS segment. addr 0x%llx, size 0x%llx\n", prog_header.virt_addr, prog_header.mem_size);
+			curr_task->tls_addr = prog_header.virt_addr;
+			curr_task->tls_size = prog_header.mem_size;
+			break;
 		default:
 			kprintf("Unknown type 0x%lx in program header\n", prog_header.type);
 		}
@@ -307,8 +378,26 @@ static int load_task(load_args_t* largs)
 		goto Lerr;
 	}
 
+	offset = DEFAULT_STACK_SIZE-16;
+
+	// do we have to create a TLS segement?
+	if (curr_task->tls_addr && curr_task->tls_size) {
+		if (curr_task->tls_size >= DEFAULT_STACK_SIZE-128) {
+			kprintf("TLS is too large: 0x%zx\n", curr_task->tls_size);
+			ret = -ENOMEM;
+			goto Lerr;
+		}
+
+		// set fs register to the TLS segment
+		writefs(stack+offset);
+		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, stack+offset);
+
+		// copy default TLS segment to stack
+		offset -= curr_task->tls_size;
+		memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_size);
+	}
+
 	// push strings on the stack
-	offset = DEFAULT_STACK_SIZE-8;
 	memset((void*) (stack+offset), 0, 4);
 	offset -= MAX_ARGS;
 	memcpy((void*) (stack+offset), largs->buffer, MAX_ARGS);
@@ -364,9 +453,7 @@ static int load_task(load_args_t* largs)
 
 	//vma_dump();
 
-	asm volatile ("swapgs");
-
-	jump_to_user_code(header.entry, stack+offset);
+	enter_user_task(header.entry, stack+offset);
 
 	return 0;
 

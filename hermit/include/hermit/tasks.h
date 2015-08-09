@@ -68,6 +68,22 @@ size_t** scheduler(void);
  */
 int multitasking_init(void);
 
+/** @brief Clone current task with a specific entry point
+ *
+ * @todo Don't acquire table_lock for the whole task creation.
+ *
+ * @param id Pointer to a tid_t struct were the id shall be set
+ * @param ep Pointer to the function the task shall start with
+ * @param arg Arguments list
+ * @param prio Desired priority of the new task
+ * @param core_id Start the new task on the core with this id
+ *
+ * @return
+ * - 0 on success
+ * - -ENOMEM (-12) or -EINVAL (-22) on failure
+ */
+int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id);
+
 /** @brief Create a task with a specific entry point
  *
  * @todo Don't acquire table_lock for the whole task creation.

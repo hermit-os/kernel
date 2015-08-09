@@ -74,6 +74,16 @@ extern "C" {
 #define __NR_stat		29
 #define __NR_dup		30
 #define __NR_dup2		31
+#define __NR_msleep		32
+#define __NR_yield		33
+#define __NR_sem_init		34
+#define __NR_sem_destroy	35
+#define __NR_sem_wait		36
+#define __NR_sem_post		37
+#define __NR_sem_timedwait	38
+#define __NR_getprio		39
+#define __NR_setprio		40
+#define __NR_clone		41
 
 #ifdef __cplusplus
 }
