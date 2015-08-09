@@ -39,6 +39,9 @@
 extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;
+extern void* Lpatch0;
+extern void* Lpatch1;
+extern void* Lpatch2;
 
 extern void isrsyscall(void);
 
@@ -271,6 +274,13 @@ int cpu_detection(void) {
 		readgs = rdgsbase;
 		writefs = wrfsbase;
 		writegs = wrgsbase;
+
+		// enable the usage of fsgsbase during a context switch
+		// => replace short jump with nops
+		// => see entry.asm
+		memset(&Lpatch0, 0x90, 2);
+		memset(&Lpatch1, 0x90, 2);
+		memset(&Lpatch2, 0x90, 2);
 	}
 
 	if (has_xsave())
