@@ -75,6 +75,59 @@ func_memory_barrier mb = default_mb;
 func_memory_barrier rmb = default_mb;
 func_memory_barrier wmb = default_mb;
 
+static void default_writefs(size_t fs)
+{
+	wrmsr(MSR_FS_BASE, fs);
+}
+
+static size_t default_readfs(void)
+{
+	return rdmsr(MSR_FS_BASE);
+}
+
+static void default_writegs(size_t gs)
+{
+	wrmsr(MSR_GS_BASE, gs);
+}
+
+static size_t default_readgs(void)
+{
+	return rdmsr(MSR_GS_BASE);
+}
+
+static void wrfsbase(size_t fs)
+{
+	asm volatile ("wrfsbase %0" :: "r"(fs));
+}
+
+static size_t rdfsbase(void)
+{
+	size_t ret = 0;
+
+	asm volatile ("rdfsbase %0" : "=r"(ret) :: "memory");
+
+	return ret;
+}
+
+static void wrgsbase(size_t gs)
+{
+	asm volatile ("wrgsbase %0" :: "r"(gs));
+}
+
+static size_t rdgsbase(void)
+{
+	size_t ret = 0;
+
+	asm volatile ("rdgsbase %0" : "=r"(ret) :: "memory");
+
+	return ret;
+}
+
+func_read_fsgs readfs = default_readfs;
+func_read_fsgs readgs = default_readgs;
+func_write_fsgs writefs = default_writefs;
+func_write_fsgs writegs = default_writegs;
+
 static void mfence(void) { asm volatile("mfence" ::: "memory"); }
 static void lfence(void) { asm volatile("lfence" ::: "memory"); }
 static void sfence(void) { asm volatile("sfence" ::: "memory"); }
@@ -207,8 +260,18 @@ int cpu_detection(void) {
 		cr4 |= CR4_OSXSAVE;
 	if (has_pge())
 		cr4 |= CR4_PGE;
+	if (has_fsgsbase())
+		cr4 |= CR4_FSGSBASE;
 	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc
 	write_cr4(cr4);
+
+	if (has_fsgsbase())
+	{
+		readfs = rdfsbase;
+		readgs = rdgsbase;
+		writefs = wrfsbase;
+		writegs = wrgsbase;
+	}
 
 	if (has_xsave())
 	{
@@ -235,11 +298,11 @@ int cpu_detection(void) {
 	if (has_nx())
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 
-	wrmsr(MSR_FS_BASE, 0);
+	writefs(0);
 #if MAX_CORES > 1
-	wrmsr(MSR_GS_BASE, apic_cpu_id() * ((size_t) &percore_end0 - (size_t) &percore_start));
+	writegs(apic_cpu_id() * ((size_t) &percore_end0 - (size_t) &percore_start));
 #else
-	wrmsr(MSR_GS_BASE, 0);
+	writegs(0);
 #endif
 	wrmsr(MSR_KERNEL_GS_BASE, 0);
 
@@ -269,7 +332,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -284,7 +347,8 @@ int cpu_detection(void) {
 			has_fxsr() ? "FXSR " : "",
 			has_xsave() ? "XSAVE " : "",
 			has_osxsave() ? "OSXSAVE " : "",
-			has_rdtscp() ? "RDTSCP " : "");
+			has_rdtscp() ? "RDTSCP " : "",
+			has_fsgsbase() ? "FSGSBASE " : "");
 	}
 
 	if (first_time && has_osxsave()) {

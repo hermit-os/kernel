@@ -80,6 +80,7 @@ extern "C" {
 #define CPU_FEATURE_LM				(1 << 29)
 
 // feature list 0x00000007:0
+#define CPU_FEATURE_FSGSBASE			(1 << 0)
 #define CPU_FEATURE_AVX2			(1 << 5)
 
 
@@ -158,7 +159,7 @@ extern "C" {
 /// Enable Safer Mode Extensions, see Trusted Execution Technology (TXT)
 #define CR4_SMXE				(1 << 14)
 /// Enables the instructions RDFSBASE, RDGSBASE, WRFSBASE, and WRGSBASE
-#define CR4_FSGSBASE			(1 << 16)
+#define CR4_FSGSBASE				(1 << 16)
 /// Enables process-context identifiers
 #define CR4_PCIDE				(1 << 17)
 /// Enable XSAVE and Processor Extended States
@@ -288,8 +289,12 @@ inline static uint32_t has_nx(void)
 	return (cpu_info.feature3 & CPU_FEATURE_NX);
 }
 
+inline static uint32_t has_fsgsbase(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_FSGSBASE);
+}
+
 inline static uint32_t has_avx2(void) {
-	return cpu_info.feature4 & CPU_FEATURE_AVX2;
+	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
 }
 
 inline static uint32_t has_rdtscp(void) {
@@ -411,6 +416,14 @@ static inline size_t read_cr4(void) {
 static inline void write_cr4(size_t val) {
 	asm volatile("mov %0, %%cr4" : : "r"(val));
 }
+
+typedef size_t (*func_read_fsgs)(void);
+typedef void (*func_write_fsgs)(size_t);
+
+extern func_read_fsgs readfs;
+extern func_read_fsgs readgs;
+extern func_write_fsgs writefs;
+extern func_write_fsgs writegs;
 
 /** @brief Flush cache
  *
