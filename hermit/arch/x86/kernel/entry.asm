@@ -36,6 +36,9 @@
 extern kernel_start		; defined in linker script
 extern kernel_end
 
+MSR_FS_BASE equ 0xc0000100
+MSR_GS_BASE equ 0xc0000101
+
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
 SECTION .mboot
@@ -66,8 +69,6 @@ start64:
     mov es, ax
     mov ss, ax
     mov ax, 0x00
-    mov fs, ax
-    mov gs, ax
 
     mov eax, DWORD [cpu_online]
     cmp eax, 0
@@ -386,7 +387,6 @@ align 16
 switch_context:
     ; create on the stack a pseudo interrupt
     ; afterwards, we switch to the task with iret
-    mov rax, rdi                ; rdi contains the address to store the old rsp
     push QWORD 0x10             ; SS
     push rsp                    ; RSP
     add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
@@ -411,6 +411,19 @@ switch_context:
     push r13
     push r14
     push r15
+    ; push fs and gs registers
+    mov ecx, MSR_FS_BASE
+    rdmsr
+    sub rsp, 8
+    mov DWORD [rsp+4], edx
+    mov DWORD [rsp], eax
+    mov ecx, MSR_GS_BASE
+    rdmsr
+    sub rsp, 8
+    mov DWORD [rsp+4], edx
+    mov DWORD [rsp], eax
+
+    mov rax, rdi		; rdi contains the address to store the old rsp
 
     jmp common_switch
 
@@ -441,6 +454,17 @@ kernel_space1:
     push r13
     push r14
     push r15
+    ; push fs and gs registers
+    mov ecx, MSR_FS_BASE
+    rdmsr
+    sub rsp, 8
+    mov DWORD [rsp+4], edx
+    mov DWORD [rsp], eax
+    mov ecx, MSR_GS_BASE
+    rdmsr
+    sub rsp, 8
+    mov DWORD [rsp+4], edx
+    mov DWORD [rsp], eax
 
     ; use the same handler for interrupts and exceptions
     mov rdi, rsp
@@ -463,6 +487,12 @@ common_switch:
     call finish_task_switch
 
 no_context_switch:
+    add rsp, 8 ; ignore gs register
+    mov ecx, MSR_FS_BASE
+    mov edx, DWORD [rsp+4]
+    mov eax, DWORD [rsp]
+    add rsp, 8
+    wrmsr
     pop r15
     pop r14
     pop r13
