@@ -69,9 +69,9 @@ endif
 
 default: all
 
-all: newlib tools $(NAME).elf
+all: usr tools $(NAME).elf
 
-newlib:
+usr:
 	$Q$(MAKE) ARCH=$(ARCH) \
 		LDFLAGS="$(LDFLAGS_FOR_NEWLIB)" \
 		CFLAGS="$(CFLAGS_FOR_NEWLIB)" \
@@ -87,7 +87,7 @@ newlib:
 		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
 		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
 		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
-		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C newlib
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr
 
 tools:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
@@ -101,13 +101,13 @@ $(NAME).elf:
 clean:
 	$Q$(RM) $(NAME).elf $(NAME).sym $(NAME).bin *~
 	$Q$(MAKE) -C tools clean
-	$Q$(MAKE) -C newlib clean
+	$Q$(MAKE) -C usr clean
 	@echo Cleaned.
 
 veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
 	$Q$(MAKE) -C tools veryclean
-	$Q$(MAKE) -C newlib veryclean
+	$Q$(MAKE) -C usr veryclean
 	@echo Very cleaned
 
 doc:
@@ -135,6 +135,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean emu gdb newlib tools
+.PHONY: default all clean emu gdb usr tools
 
 include $(addsuffix /Makefile,$(SUBDIRS))
