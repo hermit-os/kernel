@@ -5,10 +5,12 @@
 *.elf32
 *.sym
 *.bin
+autom4te.cache
 documentation/html/
 include/hermit/config.inc
 newlib/examples/hello
 newlib/examples/jacobi
 newlib/examples/stream
+newlib/examples/thr_hello
 newlib/x86/
 newlib/tmp/
