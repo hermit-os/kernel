@@ -30,8 +30,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#undef errno
-extern int errno;
 
 int main(int argc, char** argv)
 {
