@@ -60,9 +60,13 @@ jacobi: jacobi.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+thr_hello.o: thr_hello.c
+	 @echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS) -pthread -o $@ $<
+
 thr_hello: thr_hello.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS) $(CFLAGS) -o $@ $< -lpthread
+	$Q$(CC_FOR_TARGET) $(LDFLAGS) $(CFLAGS) -o $@ $< -pthread
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
