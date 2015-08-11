@@ -1,6 +1,7 @@
-TOPDIR = $(shell pwd)
+override TOPDIR = $(shell pwd)
 ARCH = x86
 TARGET=x86_64-hermit
+NJOBS=-j20
 
 NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
 RM = rm -rf
@@ -16,24 +17,35 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
-default: $(ARCH)
-	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte depend
-	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte
-	$Q$(MAKE) CFLAGS+="-mtune=native -O3" -C examples depend
-	$Q$(MAKE) CFLAGS+="-mtune=native -O3" -C examples
+demo:
+	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples depend
+	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples
 
 $(ARCH):
-	@echo Build newlib
-	$Q$(RM) $(TMP)
 	$Q$(MKDIR) $(TMP)
+
+bootstrap: $(ARCH) $(TMP)/binutils $(TMP)/bootstrap
+
+$(TMP)/binutils:
 	$Q$(MKDIR) $(TMP)/binutils
-	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) && $(MAKE) install
+	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+
+
+$(TMP)/bootstrap:
+	$Q$(MKDIR) $(TMP)/bootstrap
+	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
+
+toolchain: $(TMP)/newlib $(TMP)/gcc demo
+
+$(TMP)/newlib:
 	$Q$(MKDIR) $(TMP)/newlib
-	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) && $(MAKE) install
-	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-O3 -I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte depend
-	$Q$(MAKE) TARGET=$(TARGET) CFLAGS+="-O3 -I. -Iplatform/hermit -Iplatform/helper -ffreestanding -O3 -Wall -I$(NEWLIB)/include -I../../include -I../../arch/$(ARCH)/include" LDFLAGS+="-nostdlib -L$(NEWLIB)/lib" -C pte
+	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-O3 -I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte depend
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-O3 -I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
+
+$(TMP)/gcc:
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) && $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
 
 clean:
 	@echo Cleaning toolchain

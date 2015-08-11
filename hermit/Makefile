@@ -8,7 +8,7 @@ GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
 
 # Set your own cross compiler tool chain prefix here
-CROSSCOMPREFIX =
+CROSSCOMPREFIX = x86_64-hermit-
 STACKPROT = -fno-stack-protector
 
 CC_FOR_TARGET = $(CROSSCOMPREFIX)gcc
@@ -54,7 +54,7 @@ STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
 
-CFLAGS_FOR_NEWLIB = -O2 -mtune=native #$(STACKPROT)
+CFLAGS_FOR_NEWLIB = -O3 -mavx2 -mfma #$(STACKPROT)
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
 CFLAGS_FOR_TOOLS = -O2 -Wall
@@ -69,12 +69,12 @@ endif
 
 default: all
 
-all: usr tools $(NAME).elf
+all: bootstrap toolchain tools $(NAME).elf
 
-usr:
+toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \
-		LDFLAGS="$(LDFLAGS_FOR_NEWLIB)" \
-		CFLAGS="$(CFLAGS_FOR_NEWLIB)" \
+		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
+		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
 		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
 		CC_FOR_TARGET=$(CC_FOR_TARGET) \
 		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
@@ -87,7 +87,10 @@ usr:
 		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
 		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
 		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
-		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr toolchain
+
+bootstrap:
+	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="" LDFLAGS="" -C usr bootstrap
 
 tools:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
@@ -135,6 +138,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean emu gdb usr tools
+.PHONY: default all clean emu gdb usr toolchain tools
 
 include $(addsuffix /Makefile,$(SUBDIRS))
