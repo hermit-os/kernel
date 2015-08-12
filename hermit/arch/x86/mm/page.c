@@ -152,12 +152,19 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 				}
 			}
 			else { /* PGT */
+				int8_t flush = 0;
+
+				/* do we have to flush the TLB? */
 				if (self[lvl][vpn] & PG_PRESENT)
+					flush = 1;
+
+				self[lvl][vpn] = phyaddr | bits | PG_PRESENT;
+
+				if (flush)
 					/* There's already a page mapped at this address.
 					 * We have to flush a single TLB entry. */
 					tlb_flush_one_page(vpn << PAGE_BITS);
 
-				self[lvl][vpn] = phyaddr | bits | PG_PRESENT;
 				phyaddr += PAGE_SIZE;
 			}
 		}
