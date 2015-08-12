@@ -41,14 +41,18 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
-toolchain: $(TMP)/newlib $(TMP)/gcc demo
+toolchain: $(TMP)/newlib libs $(TMP)/gcc demo
 
 $(TMP)/newlib:
-	@echo Build newlib and the pthread library
+	@echo Build newlib, libpthread and libgomp
 	$Q$(MKDIR) $(TMP)/newlib
 	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-O3 -I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte depend
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-O3 -I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
+
+libs:
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall -ftls-model=initial-exec" -C pte depend
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall -ftls-model=initial-exec" -C pte
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread -ftls-model=initial-exec" -C libgomp depend
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread -ftls-model=initial-exec" -C libgomp
 
 $(TMP)/gcc:
 	@echo Build final gcc
@@ -63,5 +67,6 @@ clean:
 veryclean:
 	@echo Propper cleaning of the toolchain
 	$Q$(MAKE) -C pte veryclean
+	$Q$(MAKE) -C libgomp veryclean
 	$Q$(MAKE) -C examples veryclean
 	$Q$(RM) $(TOPDIR)/$(ARCH)
