@@ -38,6 +38,8 @@
 #include <asm/page.h>
 #include <asm/tss.h>
 
+#define START_ADDRESS	0x40200000
+
 extern tss_t	task_state_segments[MAX_CORES];
 extern uint64_t base;
 
@@ -266,6 +268,7 @@ static int load_task(load_args_t* largs)
 			if (!prog_header.virt_addr)
 				continue;
 
+			//kprintf("Load segment at 0x%zx (0x%zx bytes)\n", prog_header.virt_addr, prog_header.mem_size);
 			npages = (prog_header.virt_addr + prog_header.mem_size) - (prog_header.virt_addr & ~(PAGE_SIZE-1));
 			npages = (npages >> PAGE_BITS);
 			if ((prog_header.virt_addr + prog_header.mem_size) & (PAGE_SIZE-1))
@@ -289,6 +292,7 @@ static int load_task(load_args_t* largs)
 				goto Lerr;
 			}
 
+			//kprintf("Map 0x%zx - 0x%zx\n", prog_header.virt_addr & ~(PAGE_SIZE-1), (prog_header.virt_addr & ~(PAGE_SIZE-1)) + npages*PAGE_SIZE - 1);
 			// clear pages
 			memset((void*) (prog_header.virt_addr & ~(PAGE_SIZE-1)), 0x00, npages*PAGE_SIZE);
 
@@ -298,6 +302,7 @@ static int load_task(load_args_t* largs)
 
 			// load program
 			file->offset = prog_header.offset;
+			//kprintf("read programm 0x%zx - 0x%zx\n", prog_header.virt_addr, prog_header.virt_addr + prog_header.file_size);
 			read_fs(file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
 
 			if (!(prog_header.flags & PF_W))
@@ -335,8 +340,8 @@ static int load_task(load_args_t* largs)
 				ret = -ENOMEM;
 				goto Lerr;
 			}
+			//kprintf("Map stack at 0x%zx -- 0x%zx\n", stack, stack + npages*PAGE_SIZE - 1);
 			memset((void*) stack, 0x00, npages*PAGE_SIZE);
-			//kprintf("stack located at 0x%zx (0x%zx)\n", stack, addr);
 
 			// create vma regions for the user-level stack
 			flags = VMA_CACHEABLE|VMA_USER;
@@ -446,10 +451,11 @@ static int load_task(load_args_t* largs)
 
 	// map readonly kernel info into the user-space => vsyscall
 	if (has_nx())
-		page_map(header.entry - PAGE_SIZE, base, 1, PG_USER|PG_XD);
+		page_map(START_ADDRESS - PAGE_SIZE, base, 1, PG_USER|PG_XD);
 	else
-		page_map(header.entry - PAGE_SIZE, base, 1, PG_USER);
-	vma_add(header.entry - PAGE_SIZE, header.entry, VMA_READ|VMA_CACHEABLE|VMA_USER);
+		page_map(START_ADDRESS - PAGE_SIZE, base, 1, PG_USER);
+	//kprintf("Map kernel info: 0x%zx - 0x%xz\n", START_ADDRESS - PAGE_SIZE, START_ADDRESS - 1);
+	vma_add(START_ADDRESS - PAGE_SIZE, START_ADDRESS - 1, VMA_READ|VMA_CACHEABLE|VMA_USER);
 
 	//vma_dump();
 
