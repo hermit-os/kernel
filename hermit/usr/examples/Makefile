@@ -37,9 +37,13 @@ default: all
 
 all: hello jacobi stream thr_hello
 
+stream.o: stream.c
+	@echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
+
 stream: stream.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
