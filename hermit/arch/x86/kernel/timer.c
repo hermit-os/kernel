@@ -49,8 +49,11 @@ static uint64_t last_rdtsc = 0;
 void start_tickless(void)
 {
 	use_tickless = 1;
+	if (BUILTIN_EXPECT(has_rdtscp(), 1))
+		last_rdtsc = rdtscp(NULL);
+	else
+		last_rdtsc = rdtsc();
 	rmb();
-	last_rdtsc = rdtsc();
 }
 
 void end_tickless(void)
@@ -68,15 +71,28 @@ void check_ticks(void)
 	if (CORE_ID == boot_processor)
 #endif
 	{
-		uint64_t curr_rdtsc = rdtsc();
-		uint64_t diff;
+		if (BUILTIN_EXPECT(has_rdtscp(), 1)){
+			uint64_t curr_rdtsc = rdtscp(NULL);
+			uint64_t diff;
 
-		rmb();
-		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-		if (diff > 0) {
-			timer_ticks += diff;
-			last_rdtsc = curr_rdtsc;
 			rmb();
+			diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+			if (diff > 0) {
+				timer_ticks += diff;
+				last_rdtsc = curr_rdtsc;
+				rmb();
+			}
+		} else {
+			uint64_t curr_rdtsc = rdtsc();
+			uint64_t diff;
+
+			rmb();
+			diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+			if (diff > 0) {
+				timer_ticks += diff;
+				last_rdtsc = curr_rdtsc;
+				rmb();
+			}
 		}
 	}
 }
@@ -93,16 +109,19 @@ uint64_t get_clock_tick(void)
  */
 static void timer_handler(struct state *s)
 {
-	/* Increment our 'tick counter' */
-	timer_ticks++;
+	if (CORE_ID == boot_processor)
+		/* Increment our 'tick counter' */
+		timer_ticks++;
 
+#if 0
 	/*
 	 * Every TIMER_FREQ clocks (approximately 1 second), we will
 	 * display a message on the screen
 	 */
-	/*if (timer_ticks % TIMER_FREQ == 0) {
-		kputs("One second has passed\n");
-	}*/
+	if (timer_ticks % TIMER_FREQ == 0) {
+		kprintf("One second has passed %d\n", CORE_ID);
+	}
+#endif
 }
 
 int timer_wait(unsigned int ticks)

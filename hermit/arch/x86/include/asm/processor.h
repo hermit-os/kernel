@@ -309,7 +309,7 @@ static inline void clts(void)
 
 /** @brief Read out time stamp counter
  *
- * The rdtsc asm command puts a 64 bit time stamp value
+ * The rdtsc instruction puts a 64 bit time stamp value
  * into EDX:EAX.
  *
  * @return The 64 bit time stamp value
@@ -317,7 +317,28 @@ static inline void clts(void)
 inline static uint64_t rdtsc(void)
 {
 	uint64_t lo, hi;
+
 	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) );
+
+	return (hi << 32 | lo);
+}
+
+/** @brief Read time stamp counter and processor id
+ *
+ * The rdtscp instruction puts a 64 bit trime stamp value
+ * into EDX:EAX and the processor id into ECX.
+ *
+ * @return The 64 bit time stamp value
+ */
+inline static unsigned long long rdtscp(uint32_t* cpu_id)
+{
+	uint64_t lo, hi;
+	uint32_t id;
+
+	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi) :: "memory");
+	if (cpu_id)
+		*cpu_id = id;
+
 	return (hi << 32 | lo);
 }
 
@@ -347,8 +368,8 @@ inline static uint64_t rdmsr(uint32_t msr) {
  */
 inline static void wrmsr(uint32_t msr, uint64_t value)
 {
-	uint32_t low = value & 0xFFFFFFFF;
-	uint32_t high = value >> 32;
+	uint32_t low =  (uint32_t) (value & 0xFFFFFFFFULL);
+	uint32_t high = (uint32_t) (value >> 32);
 
 	asm volatile("wrmsr" :: "a"(low), "c"(msr), "d"(high));
 }
@@ -653,8 +674,6 @@ inline static int system_calibration(void)
 	irq_enable();
 	detect_cpu_frequency();
 	apic_calibration();
-
-	//kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
 
 	return 0;
 }

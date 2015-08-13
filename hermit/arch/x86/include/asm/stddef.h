@@ -165,10 +165,6 @@ struct state {
 	uint64_t ss;
 };
 
-uint32_t apic_cpu_id(void);
-
-#define smp_id  apic_cpu_id
-
 #ifdef __cplusplus
 }
 #endif

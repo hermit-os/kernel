@@ -42,6 +42,7 @@ extern const void percore_end;
 extern void* Lpatch0;
 extern void* Lpatch1;
 extern void* Lpatch2;
+extern atomic_int32_t current_boot_id;
 
 extern void isrsyscall(void);
 
@@ -268,7 +269,7 @@ int cpu_detection(void) {
 	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc
 	write_cr4(cr4);
 
-	if (has_fsgsbase())
+	if (first_time && has_fsgsbase())
 	{
 		readfs = rdfsbase;
 		readgs = rdgsbase;
@@ -310,18 +311,16 @@ int cpu_detection(void) {
 
 	writefs(0);
 #if MAX_CORES > 1
-	writegs(apic_cpu_id() * ((size_t) &percore_end0 - (size_t) &percore_start));
+	writegs(atomic_int32_read(&current_boot_id) * ((size_t) &percore_end0 - (size_t) &percore_start));
 #else
 	writegs(0);
 #endif
 	wrmsr(MSR_KERNEL_GS_BASE, 0);
 
-	kprintf("Core %d set per_core offset to 0x%x\n", apic_cpu_id(), rdmsr(MSR_GS_BASE));
+	kprintf("Core %d set per_core offset to 0x%x\n", atomic_int32_read(&current_boot_id), rdmsr(MSR_GS_BASE));
 
-#if MAX_CORES > 1
-	/* set core id to apic_cpu_id */
-	set_per_core(__core_id, apic_cpu_id());
-#endif
+	/* set core id to the current boor id */
+	set_per_core(__core_id, atomic_int32_read(&current_boot_id));
 
 	if (first_time && has_sse())
 		wmb = sfence;
@@ -420,14 +419,27 @@ uint32_t get_cpu_frequency(void)
 
 void udelay(uint32_t usecs)
 {
-	uint64_t diff, end, start = rdtsc();
-	uint64_t deadline = get_cpu_frequency() * usecs;
+	if (BUILTIN_EXPECT(has_rdtscp(), 1)) {
+		uint64_t diff, end, start = rdtscp(NULL);
+		uint64_t deadline = get_cpu_frequency() * usecs;
 
-	do {
-		mb();
-		end = rdtsc();
-		diff = end > start ? end - start : start - end;
-		if ((diff < deadline) && (deadline - diff > 50000))
-			check_workqueues();
-	} while(diff < deadline);
+		do {
+			end = rdtscp(NULL);
+			rmb();
+			diff = end > start ? end - start : start - end;
+			if ((diff < deadline) && (deadline - diff > 50000))
+				check_workqueues();
+		} while(diff < deadline);
+	} else {
+		uint64_t diff, end, start = rdtsc();
+		uint64_t deadline = get_cpu_frequency() * usecs;
+
+		do {
+			mb();
+			end = rdtsc();
+			diff = end > start ? end - start : start - end;
+			if ((diff < deadline) && (deadline - diff > 50000))
+				check_workqueues();
+		} while(diff < deadline);
+	}
 }

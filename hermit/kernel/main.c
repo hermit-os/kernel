@@ -34,9 +34,9 @@
 #include <hermit/tasks.h>
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
+#include <hermit/spinlock.h>
 #include <hermit/fs.h>
 #include <asm/irq.h>
-#include <asm/atomic.h>
 #include <asm/page.h>
 
 /*
@@ -58,6 +58,7 @@ extern atomic_int64_t total_allocated_pages;
 extern atomic_int64_t total_available_pages;
 
 extern atomic_int32_t cpu_online;
+extern atomic_int32_t possible_cpus;
 
 static int foo(void* arg)
 {
@@ -94,18 +95,31 @@ static int hermit_init(void)
 	return 0;
 }
 
+static void print_status(void)
+{
+	static spinlock_t status_lock = SPINLOCK_INIT;
+
+	spinlock_lock(&status_lock);
+	kprintf("%d CPU is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, read_cr0(), read_cr4());
+	spinlock_unlock(&status_lock);
+}
+
 #if MAX_CORES > 1
 int smp_main(void)
 {
 	int32_t cpu = atomic_int32_inc(&cpu_online);
 
-	kprintf("%d CPUs are now online\n", cpu);
-
 #ifdef CONFIG_TICKLESS
 	disable_timer_irq();
 #endif
 
-	create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
+	/* wait for the other cpus */
+	while(atomic_int32_read(&cpu_online) < atomic_int32_read(&possible_cpus))
+		PAUSE;
+
+	print_status();
+
+	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	while(1) {
 		check_workqueues();
@@ -159,6 +173,12 @@ int main(void)
 #ifdef CONFIG_TICKLESS
 	disable_timer_irq();
 #endif
+
+	/* wait for the other cpus */
+	while(atomic_int32_read(&cpu_online) < atomic_int32_read(&possible_cpus))
+		PAUSE;
+
+	print_status();
 
 	create_kernel_task(NULL, initd, NULL, NORMAL_PRIO);
 
