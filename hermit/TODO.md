@@ -5,3 +5,4 @@ TODO list
 * prioririty handling in the Pthread library is still missing
 * support of signals is still missing
 * use gs register to accelerate tha access to newlib's reentrant structure
+* revise TLB shoot down
