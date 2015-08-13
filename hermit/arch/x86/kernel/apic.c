@@ -182,19 +182,19 @@ void apic_eoi(size_t int_no)
 
 uint32_t apic_cpu_id(void)
 {
-	if (apic_is_enabled())
-		return ((lapic_read(APIC_ID)) >> 24);
+	int32_t id = -1;
 
-	if (boot_processor >= 0)
+	if (apic_is_enabled())
+		id = lapic_read(APIC_ID);
+
+	if ((id >= 0) && has_x2apic())
+		return id;
+	else if (id >= 0)
+		return (id >> 24);
+	else if (boot_processor >= 0)
 		return boot_processor;
-
-	return 0;
-}
-
-static inline void apic_set_cpu_id(uint32_t id)
-{
-	if (apic_is_enabled())
-		lapic_write(APIC_ID, id << 24);
+	else
+		return 0;
 }
 
 static inline uint32_t apic_version(void)
@@ -568,17 +568,18 @@ no_mp:
 extern int smp_main(void);
 extern void gdt_flush(void);
 extern int set_idle_task(void);
+extern atomic_int32_t current_boot_id;
 
 #if MAX_CORES > 1
 int smp_start(void)
 {
-	if (lapic && has_x2apic()) // enable x2APIC support
-		wrmsr(0x1B, 0xFEE00C00);
+	if (has_x2apic()) // enable x2APIC support
+		wrmsr(MSR_APIC_BASE, lapic | 0xD00);
 
 	// reset APIC and set id
 	lapic_reset();
 
-	kprintf("Processor %d is entering its idle task\n", apic_cpu_id());
+	kprintf("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
 	gdt_flush();
@@ -595,8 +596,8 @@ int smp_start(void)
 	// enable additional cpu features
 	cpu_detection();
 
-	//kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
-	online[apic_cpu_id()] = 1;
+	//kprintf("CR0 of core %u: 0x%x\n", atomic_int32_read(&current_boot_id), read_cr0());
+	online[atomic_int32_read(&current_boot_id)] = 1;
 
 	set_idle_task();
 
@@ -616,46 +617,62 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 
 int ipi_tlb_flush(void)
 {
-	uint32_t id = smp_id();
+	uint32_t id = CORE_ID;
 	uint32_t flags;
-	uint32_t i, j;
+	uint32_t j;
+	uint64_t i;
 
 	if (atomic_int32_read(&cpu_online) == 1)
 		return 0;
 
-	if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
-		kputs("ERROR: previous send not complete");
-		return -EIO;
+	if (BUILTIN_EXPECT(has_x2apic(), 1)) {
+		flags = irq_nested_disable();
+		for(i=0; i<MAX_APIC_CORES; i++)
+		{
+			 if (i == id)
+				continue;
+			if (!online[i])
+				continue;
+
+			//kprintf("send IPI to %zd\n", i);
+			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|124);
+		}
+		irq_nested_enable(flags);
+	} else {
+		if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+			kputs("ERROR: previous send not complete");
+			return -EIO;
+		}
+
+		flags = irq_nested_disable();
+		for(i=0; i<MAX_APIC_CORES; i++)
+		{
+			if (i == id)
+				continue;
+			if (!online[i])
+				continue;
+
+			//kprintf("send IPI to %zd\n", i);
+			set_ipi_dest(i);
+			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|124);
+
+			j = 0;
+			while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
+				j++; // wait for it to finish, give up eventualy tho
+		}
+		irq_nested_enable(flags);
 	}
-
-	flags = irq_nested_disable();
-	for(i=0; i<MAX_APIC_CORES; i++)
-	{
-		if (i == id)
-			continue;
-		if (!online[i])
-			continue;
-
-		//kprintf("send IPI to %i\n", i);
-		set_ipi_dest(i);
-		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|124);
-
-		j = 0;
-		while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
-			j++; // wait for it to finish, give up eventualy tho
-	}
-	irq_nested_enable(flags);
 
 	return 0;
 }
 
 static void apic_tlb_handler(struct state *s)
 {
-	uint32_t val = read_cr3();
+	size_t val;
 
+	val  = read_cr3();
 	if (val)
 		write_cr3(val);
-	kputs("Flush TLB!\n");
 }
 #endif
 

@@ -52,13 +52,17 @@ align 4
     global cpu_freq
     global boot_processor
     global cpu_online
+    global possible_cpus
     global timer_ticks
+    global current_boot_id
     base dq 0
     limit dq 0
     cpu_freq dd 0
     boot_processor dd -1
     cpu_online dd 0
+    possible_cpus dd 0
     timer_ticks dq 0
+    current_boot_id dd 0
 
 SECTION .text
 align 4
@@ -149,11 +153,8 @@ L1:
 
 %if MAX_CORES > 1
 Lsmp_main:
-    ; dirty to hack to determine the cpu id
-    ; with a temporary stack
-    mov rsp, tmp_stack-16
-    extern apic_cpu_id
-    call apic_cpu_id
+    xor rax, rax
+    mov eax, DWORD [current_boot_id]
 
     ; set default stack pointer
     imul rax, KERNEL_STACK_SIZE
@@ -165,12 +166,9 @@ Lsmp_main:
     extern smp_start
     call smp_start
     jmp $
-
-    DQ 0, 0, 0, 0
-    DQ 0, 0, 0, 0
-tmp_stack:
 %endif
 
+ALIGN 4
 global gdt_flush
 extern gp
 

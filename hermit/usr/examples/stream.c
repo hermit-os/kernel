@@ -421,7 +421,7 @@ extern unsigned int get_cpufreq();
 inline static unsigned long long rdtscp(void)
 {
         unsigned long long lo, hi;
-        asm volatile ("rdtscp" : "=a"(lo), "=d"(hi) :: "%rcx");
+        asm volatile ("rdtscp; lfence" : "=a"(lo), "=d"(hi) :: "%rcx", "memory");
         return (hi << 32 | lo);
 }
 
