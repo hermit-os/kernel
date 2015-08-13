@@ -201,8 +201,8 @@ static void fault_handler(struct state *s)
 {
 	if (s->int_no < 32) {
 		kputs(exception_messages[s->int_no]);
-		kprintf(" Exception (%d) at 0x%llx:0x%llx, error code 0x%llx, rflags 0x%llx\n",
-			s->int_no, s->cs, s->rip, s->error, s->rflags);
+		kprintf(" Exception (%d) on core %d at 0x%llx:0x%llx, error code 0x%llx, rflags 0x%llx\n",
+			s->int_no, CORE_ID, s->cs, s->rip, s->error, s->rflags);
 	
 		apic_eoi(s->int_no);
 		irq_enable();
