@@ -309,8 +309,8 @@ void page_fault_handler(struct state *s)
 	}
 
 default_handler:
-	kprintf("Page Fault Exception (%d) at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
-		s->int_no, s->cs, s->rip, s->fs, s->gs, s->rflags, task->id, viraddr, s->error,
+	kprintf("Page Fault Exception (%d) on core %d at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
+		s->int_no, CORE_ID, s->cs, s->rip, s->fs, s->gs, s->rflags, task->id, viraddr, s->error,
 		(s->error & 0x4) ? "user" : "supervisor",
 		(s->error & 0x10) ? "instruction" : "data",
 		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
@@ -322,6 +322,7 @@ default_handler:
 
 	apic_eoi(s->int_no);
 	irq_enable();
+while(1);
 	abort();
 }
 
