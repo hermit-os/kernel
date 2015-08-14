@@ -511,7 +511,7 @@ Lpatch2:
     jmp short Lwrfsgs    ; we patch later this jump to enable wrfsbase/wrgsbase
     add rsp, 8
     ;pop r15
-    ;wrgsbase r15
+    ;wrgsbase r15        ; currently, we don't use the gs register
     pop r15
     wrfsbase r15
     jmp short Lgo3
@@ -520,8 +520,7 @@ Lwrfsgs:
     ;mov edx, DWORD [rsp+4]
     ;mov eax, DWORD [rsp]
     add rsp, 8
-    ;wrmsr
-    add rsp, 8 ; ignore gs register
+    ;wrmsr               ; currently, we don't use the gs register
     mov ecx, MSR_FS_BASE
     mov edx, DWORD [rsp+4]
     mov eax, DWORD [rsp]
