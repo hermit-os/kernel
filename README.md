@@ -1,4 +1,4 @@
-# HermitCore - A lightweight extreme-scale statellite kernel
+# HermitCore - A lightweight extreme-scale satellite kernel
 
 The project has just initiated. Further information will be published shortly.
 
