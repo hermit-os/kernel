@@ -419,7 +419,7 @@ uint32_t get_cpu_frequency(void)
 
 void udelay(uint32_t usecs)
 {
-	if (BUILTIN_EXPECT(has_rdtscp(), 1)) {
+	if (has_rdtscp()) {
 		uint64_t diff, end, start = rdtscp(NULL);
 		uint64_t deadline = get_cpu_frequency() * usecs;
 

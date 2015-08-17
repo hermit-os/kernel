@@ -49,7 +49,7 @@ static uint64_t last_rdtsc = 0;
 void start_tickless(void)
 {
 	use_tickless = 1;
-	if (BUILTIN_EXPECT(has_rdtscp(), 1))
+	if (has_rdtscp())
 		last_rdtsc = rdtscp(NULL);
 	else
 		last_rdtsc = rdtsc();
@@ -71,7 +71,7 @@ void check_ticks(void)
 	if (CORE_ID == boot_processor)
 #endif
 	{
-		if (BUILTIN_EXPECT(has_rdtscp(), 1)){
+		if (has_rdtscp()){
 			uint64_t curr_rdtsc = rdtscp(NULL);
 			uint64_t diff;
 
@@ -158,7 +158,7 @@ int timer_wait(unsigned int ticks)
 }
 
 #define LATCH(f)	((CLOCK_TICK_RATE + f/2) / f)
-#define WAIT_SOME_TIME() do { uint64_t start = rdtsc(); \
+#define WAIT_SOME_TIME() do { uint64_t start = rdtsc(); mb(); \
 			      while(rdtsc() - start < 1000000) ; \
 			} while (0)
 
