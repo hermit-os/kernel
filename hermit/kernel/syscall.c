@@ -223,5 +223,6 @@ size_t syscall_table[] = {
 	(size_t) sys_sem_timedwait, 	/* __NR_sem_timedwait	*/
 	(size_t) sys_getprio,		/* __NR_getprio	*/
 	(size_t) default_handler,	/* __NR_setprio	*/
-	(size_t) sys_clone		/* __NR_clone	*/
+	(size_t) sys_clone,		/* __NR_clone	*/
+	(size_t) sys_sem_timedwait	/*  __NR_sem_cancelablewait	*/
 };
