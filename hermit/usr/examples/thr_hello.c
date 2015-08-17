@@ -15,11 +15,15 @@ void* thread_func(void* arg)
 int main(int argc, char** argv)
 {
 	pthread_t threads[MAX_THREADS];
-	int i, param[MAX_THREADS];
+	int i, ret, param[MAX_THREADS];
 
 	for(i=0; i<MAX_THREADS; i++) {
 		param[i] = i;
-		pthread_create(threads+i, NULL, thread_func, param+i);
+		ret = pthread_create(threads+i, NULL, thread_func, param+i);
+		if (ret)
+			printf("Thread creation failed! error =  %d\n", ret);
+		else
+			printf("Create thread %d\n", i);
 	}
 
 	/* wait until all threads have terminated */
