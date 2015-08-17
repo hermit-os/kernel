@@ -176,6 +176,14 @@ void finish_task_switch(void)
 			old->stack = NULL;
 			old->last_stack_pointer = NULL;
 			readyqueues[core_id].old_task = NULL;
+
+			/* cleanup task */
+			if (old->stack)
+				kfree(old->stack);
+			if (old->user_usage);
+				kfree(old->user_usage);
+			if (!old->parent && old->heap)
+				kfree(old->heap);
 		} else {
 			prio = old->prio;
 			if (!readyqueues[core_id].queue[prio-1].first) {
@@ -205,18 +213,8 @@ static void NORETURN do_exit(int arg)
 	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
 
 	// Threads should delete the page table and the heap */
-	if (!curr_task->parent) {
+	if (!curr_task->parent)
 		page_map_drop();
-		if (curr_task->heap) {
-			kfree(curr_task->heap);
-			curr_task->heap = NULL;
-		}
-	}
-
-	if (curr_task->stack)
-		kfree(curr_task->stack);
-	if (curr_task->user_usage);
-		kfree(curr_task->user_usage);
 
 	// decrease the number of active tasks
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
