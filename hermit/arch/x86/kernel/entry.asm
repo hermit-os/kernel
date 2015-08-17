@@ -67,13 +67,6 @@ align 4
 SECTION .text
 align 4
 start64:
-    ; initialize segment registers
-    mov ax, 0x00
-    mov ds, ax
-    mov es, ax
-    mov ss, ax
-    mov ax, 0x00
-
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
@@ -388,7 +381,7 @@ switch_context:
     push QWORD 0x10             ; SS
     push rsp                    ; RSP
     add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
-    push QWORD 0x1202           ; RFLAGS
+    pushfq                      ; RFLAGS
     push QWORD 0x08             ; CS
     push QWORD rollback         ; RIP
     push QWORD 0x00             ; Interrupt number
@@ -397,7 +390,7 @@ switch_context:
     push rcx
     push rdx
     push rbx
-    push rsp
+    push QWORD [rsp+9*8]
     push rbp
     push rsi
     push rdi
@@ -435,17 +428,17 @@ Lgo1:
 
     jmp common_switch
 
-align 16
+align 4
 rollback:
     ret
 
-align 16
+align 4
 common_stub:
     push rax
     push rcx
     push rdx
     push rbx
-    push rsp
+    push QWORD [rsp+9*8]        ; push user-space rsp, which is already on the stack
     push rbp
     push rsi
     push rdi
