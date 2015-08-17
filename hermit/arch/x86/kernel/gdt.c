@@ -81,14 +81,9 @@ void configure_gdt_entry(gdt_entry_t *dest_entry, unsigned long base, unsigned l
  */
 void gdt_install(void)
 {
-	unsigned long gran_ds, gran_cs, limit;
 	int i, num = 0;
 
 	memset(task_state_segments, 0x00, MAX_CORES*sizeof(tss_t));
-
-	gran_cs = GDT_FLAG_64_BIT;
-	gran_ds = 0;
-	limit = 0;
 
 	/* Setup the GDT pointer and limit */
 	gp.limit = (sizeof(gdt_entry_t) * GDT_ENTRIES) - 1;
@@ -102,16 +97,16 @@ void gdt_install(void)
 	 * is 0, the limit is 4 GByte, it uses 4KByte granularity,
 	 * and is a Code Segment descriptor.
 	 */
-	gdt_set_gate(num++, 0, limit,
-		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, gran_cs);
+	gdt_set_gate(num++, 0, 0,
+		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
 
 	/* 
 	 * The third entry is our Data Segment. It's EXACTLY the
 	 * same as our code segment, but the descriptor type in
 	 * this entry's access byte says it's a Data Segment 
 	 */
-	gdt_set_gate(num++, 0, limit,
-		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, gran_ds);
+	gdt_set_gate(num++, 0, 0,
+		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
 
 	/*
 	 * Create code segment for 32bit user-space applications (ring 3)
@@ -122,14 +117,20 @@ void gdt_install(void)
 	/*
 	 * Create data segment for user-space applications (ring 3)
 	 */
-	gdt_set_gate(num++, 0, limit,
-		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, gran_ds);
+	gdt_set_gate(num++, 0, 0xFFFFFFFF,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
 
 	/*
 	 * Create code segment for 64bit user-space applications (ring 3)
 	 */
-	gdt_set_gate(num++, 0, limit,
-		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, gran_cs);
+	gdt_set_gate(num++, 0, 0,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
+
+	/*
+	 * Create data segment for 64bit user-space applications (ring 3)
+	 */
+	gdt_set_gate(num++, 0, 0,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
 
 	/*
 	 * Create TSS for each core (we use these segments for task switching)
@@ -137,7 +138,7 @@ void gdt_install(void)
 	for(i=0; i<MAX_CORES; i++) {
 		task_state_segments[i].rsp0 = (size_t) &boot_stack + i * KERNEL_STACK_SIZE - 0x10;
 		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t)-1,
-			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, gran_ds);
+			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
 	}
 
 	/* Flush out the old GDT and install the new changes! */
