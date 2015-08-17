@@ -540,7 +540,6 @@ int create_user_task_on_core(tid_t* id, const char* fname, char** argv, uint8_t 
 		while ((*dest++ = *src++) != 0);
 	}
 
-
 	/* create new task */
 	return create_task(id, user_entry, load_args, prio, core_id);
 }
