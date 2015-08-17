@@ -368,10 +368,10 @@ inline static uint64_t rdmsr(uint32_t msr) {
  */
 inline static void wrmsr(uint32_t msr, uint64_t value)
 {
-	uint32_t low =  (uint32_t) (value & 0xFFFFFFFFULL);
+	uint32_t low =  (uint32_t) value;
 	uint32_t high = (uint32_t) (value >> 32);
 
-	asm volatile("wrmsr" :: "a"(low), "c"(msr), "d"(high));
+	asm volatile("wrmsr" :: "c"(msr), "a"(low), "d"(high) : "memory");
 }
 
 /** @brief Read cr0 register
