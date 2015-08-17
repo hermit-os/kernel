@@ -100,7 +100,7 @@ static void print_status(void)
 	static spinlock_t status_lock = SPINLOCK_INIT;
 
 	spinlock_lock(&status_lock);
-	kprintf("%d CPU is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, read_cr0(), read_cr4());
+	kprintf("CPU %d is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, read_cr0(), read_cr4());
 	spinlock_unlock(&status_lock);
 }
 
