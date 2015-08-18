@@ -115,7 +115,7 @@ void gdt_install(void)
 		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
 
 	/*
-	 * Create data segment for user-space applications (ring 3)
+	 * Create data segment for 32bit user-space applications (ring 3)
 	 */
 	gdt_set_gate(num++, 0, 0xFFFFFFFF,
 		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
