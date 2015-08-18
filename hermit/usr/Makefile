@@ -22,8 +22,8 @@ default:
 
 demo:
 	@echo Build demo applications
-	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples depend
-	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples
+	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples depend
+	$Q$(MAKE) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C examples
 
 $(ARCH):
 	$Q$(MKDIR) $(TMP)
@@ -57,12 +57,11 @@ libs:
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c,c++ --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
 
 clean:
 	@echo Cleaning toolchain
 	$Q$(MAKE) -C examples clean
-	$Q$(RM) $(TMP)
 
 veryclean:
 	@echo Propper cleaning of the toolchain
