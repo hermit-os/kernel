@@ -55,6 +55,7 @@ align 4
     global possible_cpus
     global timer_ticks
     global current_boot_id
+    global image_size
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -63,6 +64,25 @@ align 4
     possible_cpus dd 0
     timer_ticks dq 0
     current_boot_id dd 0
+    dummy dd 0
+    image_size dq 0
+
+; Bootstrap page tables are used during the initialization.
+align 4096
+boot_pml4:
+    DQ boot_pdpt + 0x7   ; PG_PRESENT | PG_RW | PG_USER
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
+boot_pdpt:
+    DQ boot_pgd + 0x7    ; PG_PRESENT | PG_RW | PG_USER
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
+boot_pgd:
+    DQ boot_pgt + 0x7    ; PG_PRESENT | PG_RW | PG_USER
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
+boot_pgt:
+    times 512 DQ 0
 
 SECTION .text
 align 4
@@ -111,7 +131,14 @@ start64:
     add rdi, boot_pgd
     mov rax, [base]
     or rax, 0x183
+    xor rcx, rcx
+Lremap:
     mov QWORD [rdi], rax
+    add rax, 0x200000
+    add rcx, 0x200000
+    add rdi, 8
+    cmp rcx, QWORD [image_size]
+    jb Lremap
 
 Lno_pml4_init:
     ; Set CR3
@@ -551,23 +578,6 @@ align 4096
 global boot_stack
 boot_stack:
     TIMES (MAX_CORES*KERNEL_STACK_SIZE) DB 0xcd
-
-; Bootstrap page tables are used during the initialization.
-align 4096
-boot_pml4:
-    DQ boot_pdpt + 0x7   ; PG_PRESENT | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-boot_pdpt:
-    DQ boot_pgd + 0x7    ; PG_PRESENT | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-boot_pgd:
-    DQ boot_pgt + 0x7    ; PG_PRESENT | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-boot_pgt:
-    times 512 DQ 0
 
 ; add some hints to the ELF file
 SECTION .note.GNU-stack noalloc noexec nowrite progbits
