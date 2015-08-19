@@ -36,6 +36,7 @@
 
 extern uint64_t base;
 extern uint64_t limit;
+extern uint64_t image_size;
 
 typedef struct free_list {
 	size_t start, end;
@@ -201,7 +202,7 @@ int memory_init(void)
 		return ret;
 	}
 
-	kprintf("memory_init: base 0x%zx, limit 0x%zx\n", base, limit);
+	kprintf("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
 
 	// mark available memory as free
 	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
@@ -210,13 +211,13 @@ int memory_init(void)
 	}
 
 	// mark kernel as used, we use 2MB pages to map the kernel
-	for(addr=base; addr<((base + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
+	for(addr=base; addr<((base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
 		atomic_int64_inc(&total_allocated_pages);
 		atomic_int64_dec(&total_available_pages);
 	}
 
 	//initialize free list
-	init_list.start = (base + 0x200000ULL) & 0xFFFFFFFFFFE00000ULL;
+	init_list.start = (base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL;
 	init_list.end = limit;
 	init_list.prev = init_list.next = NULL;
 
