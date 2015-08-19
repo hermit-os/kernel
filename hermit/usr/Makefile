@@ -57,7 +57,7 @@ libs:
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c,c++ --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
 
 clean:
 	@echo Cleaning toolchain
@@ -69,3 +69,4 @@ veryclean:
 	$Q$(MAKE) -C libgomp veryclean
 	$Q$(MAKE) -C examples veryclean
 	$Q$(RM) $(TOPDIR)/$(ARCH)
+	$Q$(RM) $(TMP)
