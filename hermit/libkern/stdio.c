@@ -43,7 +43,7 @@ static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 /* Workaround for a compiler bug. gcc 5.1 seems to ignore this array, if we
    defined it as as static array. At least it is as static array not part of
    the binary. => no valid kernel messages */
-/* static */ unsigned char kmessages[KMSG_SIZE] __attribute__ ((section(".kmsg"))) = {[0 ... KMSG_SIZE-1] = 0x00};
+/* static */ unsigned char kmessages[KMSG_SIZE+1] __attribute__ ((section(".kmsg"))) = {[0 ... KMSG_SIZE-1] = 0x00};
 
 int koutput_init(void)
 {
