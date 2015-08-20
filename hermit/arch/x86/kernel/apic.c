@@ -714,9 +714,9 @@ int apic_init(void)
 	// set APIC error handler
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
-	irq_install_handler(124, apic_tlb_handler);
+	irq_install_handler(80+32, apic_tlb_handler);
 #endif
-	irq_install_handler(122, apic_shutdown);
+	irq_install_handler(81+32, apic_shutdown);
 	kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	online[boot_processor] = 1;
 

@@ -289,12 +289,12 @@ isrstub_pseudo_error 9
 %assign i i+1
 %endrep
 
-global apic_shutdown
-align 16
-apic_shutdown:
-    push byte 0 ; pseudo error code
-    push byte 122
-    jmp common_stub
+; Create entries for the interrupts 80 to 81
+%assign i 80
+%rep 2
+  irqstub i
+%assign i i+1
+%endrep
 
 global apic_timer
 align 16

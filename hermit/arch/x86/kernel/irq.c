@@ -71,7 +71,8 @@ extern void irq20(void);
 extern void irq21(void);
 extern void irq22(void);
 extern void irq23(void);
-extern void apic_shutdown(void);
+extern void irq80(void);
+extern void irq81(void);
 extern void apic_timer(void);
 extern void apic_lint0(void);
 extern void apic_lint1(void);
@@ -211,9 +212,12 @@ static int irq_install(void)
 	idt_set_gate(55, (size_t)irq23, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP);
 
+	idt_set_gate(112, (size_t)irq80, KERNEL_CODE_SELECTOR,
+		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP);
+	idt_set_gate(113, (size_t)irq81, KERNEL_CODE_SELECTOR,
+		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP);
+
 	// add APIC interrupt handler
-	idt_set_gate(122, (size_t)apic_shutdown, KERNEL_CODE_SELECTOR,
-                IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP);
 	idt_set_gate(123, (size_t)apic_timer, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP);
 	idt_set_gate(124, (size_t)apic_lint0, KERNEL_CODE_SELECTOR,
