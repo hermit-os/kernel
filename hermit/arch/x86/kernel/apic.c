@@ -681,6 +681,25 @@ static void apic_err_handler(struct state *s)
 	kprintf("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
 }
 
+static void apic_shutdown(struct state *s)
+{
+	kprintf("Receive an IPI to shutdown HermitCore\n");
+
+	kprintf("Diable APIC timer\n");
+	apic_disable_timer();
+
+	kprintf("Disable APIC\n");
+	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
+	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
+	lapic_write(APIC_SVR, 0x00);   // disable the apic
+
+	kprintf("System goes down...\n");
+
+	HALT;
+	kprintf("Ups, we should never reach this point!\n");
+	while(1);
+}
+
 int apic_init(void)
 {
 	int ret;
@@ -697,6 +716,7 @@ int apic_init(void)
 #if MAX_CORES > 1
 	irq_install_handler(124, apic_tlb_handler);
 #endif
+	irq_install_handler(122, apic_shutdown);
 	kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	online[boot_processor] = 1;
 
