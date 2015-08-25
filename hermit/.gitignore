@@ -10,6 +10,7 @@ autom4te.cache
 documentation/html/
 include/hermit/config.inc
 usr/examples/hello
+usr/examples/hello++
 usr/examples/jacobi
 usr/examples/stream
 usr/examples/thr_hello
