@@ -635,7 +635,7 @@ int ipi_tlb_flush(void)
 				continue;
 
 			//kprintf("send IPI to %zd\n", i);
-			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|124);
+			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|112);
 		}
 		irq_nested_enable(flags);
 	} else {
@@ -654,7 +654,7 @@ int ipi_tlb_flush(void)
 
 			//kprintf("send IPI to %zd\n", i);
 			set_ipi_dest(i);
-			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|124);
+			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|112);
 
 			j = 0;
 			while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
@@ -670,6 +670,7 @@ static void apic_tlb_handler(struct state *s)
 {
 	size_t val;
 
+	//kputs("Receive IPI to flush the TLB\n");
 	val  = read_cr3();
 	if (val)
 		write_cr3(val);
@@ -700,6 +701,12 @@ static void apic_shutdown(struct state *s)
 	while(1);
 }
 
+static void apic_lint0(struct state * s)
+{
+	// Currently nothing to do
+	//kputs("Receive LINT0 interrupt\n");
+}
+
 int apic_init(void)
 {
 	int ret;
@@ -717,6 +724,7 @@ int apic_init(void)
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
+	irq_install_handler(124, apic_lint0);
 	kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	online[boot_processor] = 1;
 
