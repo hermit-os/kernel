@@ -43,8 +43,13 @@ extern uint64_t base;
 
 static inline void enter_user_task(size_t ep, size_t stack)
 {
-	asm volatile ("swapgs");
+	// don't interrupt the jump to user-level code
+	irq_disable();
 
+	asm volatile ("swapgs" ::: "memory");
+
+kprintf("AAAA fs 0x%llx\n", readfs());
+	// the jump also enable interrupts
 	jump_to_user_code(ep, stack);
 }
 
@@ -90,7 +95,7 @@ static int thread_entry(void* arg, size_t ep)
 	if (curr_task->tls_addr && curr_task->tls_size) {
 		// set fs register to the TLS segment
 		writefs(stack+offset);
-		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, stack+offset);
+		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, readfs());
 
 		// copy default TLS segment to stack
 		offset -= curr_task->tls_size;
@@ -389,7 +394,7 @@ static int load_task(load_args_t* largs)
 
 		// set fs register to the TLS segment
 		writefs(stack+offset);
-		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, stack+offset);
+		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, readfs());
 
 		// copy default TLS segment to stack
 		offset -= curr_task->tls_size;
