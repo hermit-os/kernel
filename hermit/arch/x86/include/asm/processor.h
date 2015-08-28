@@ -330,7 +330,7 @@ inline static uint64_t rdtsc(void)
  *
  * @return The 64 bit time stamp value
  */
-inline static unsigned long long rdtscp(uint32_t* cpu_id)
+inline static uint64_t rdtscp(uint32_t* cpu_id)
 {
 	uint32_t lo, hi;
 	uint32_t id;
