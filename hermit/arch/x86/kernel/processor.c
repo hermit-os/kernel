@@ -321,6 +321,7 @@ int cpu_detection(void) {
 
 	/* set core id to the current boor id */
 	set_per_core(__core_id, atomic_int32_read(&current_boot_id));
+	kprintf("Core id is set to %d\n", CORE_ID);
 
 	if (first_time && has_sse())
 		wmb = sfence;
