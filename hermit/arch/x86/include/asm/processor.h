@@ -172,7 +172,7 @@ extern "C" {
 // x86-64 specific MSRs
 
 /// APIC register
-#define MSR_APIC_BASE			0x0000001B
+#define MSR_APIC_BASE				0x0000001B
 /// extended feature register
 #define MSR_EFER				0xc0000080
 /// legacy mode SYSCALL target
@@ -182,13 +182,13 @@ extern "C" {
 /// compat mode SYSCALL target
 #define MSR_CSTAR				0xc0000083
 /// EFLAGS mask for syscall
-#define MSR_SYSCALL_MASK		0xc0000084
+#define MSR_SYSCALL_MASK			0xc0000084
 /// 64bit FS base
 #define MSR_FS_BASE				0xc0000100
 /// 64bit GS base
 #define MSR_GS_BASE				0xc0000101
 /// SwapGS GS shadow
-#define MSR_KERNEL_GS_BASE		0xc0000102
+#define MSR_KERNEL_GS_BASE			0xc0000102
 
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
