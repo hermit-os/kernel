@@ -40,12 +40,18 @@
 #define ALIGN(x,a)	(((x)+(a)-1)&~((a)-1))
 
 extern unsigned int get_cpufreq();
+static unsigned long long start_tsc;
 
-inline static unsigned long long rdtscp(void)
+inline static unsigned long long rdtsc(void)
 {
-	unsigned long long lo, hi;
-	asm volatile ("rdtscp; lfence" : "=a"(lo), "=d"(hi) :: "%rcx", "memory");
-	return (hi << 32 | lo);
+	unsigned long lo, hi;
+	asm volatile ("rdtsc; mfence" : "=a"(lo), "=d"(hi) :: "memory");
+	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
+}
+
+__attribute__((constructor)) static void timer_init()
+{
+	start_tsc = rdtsc();
 }
 
 double mysecond()
@@ -58,18 +64,10 @@ double mysecond()
 	i = gettimeofday(&tp,&tzp);
 	return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
 #else
-	static unsigned long long start;
-	static int init = 0;
 	double ret;
 
-	if (init) {
-		ret = (double) (rdtscp() - start) / ((double) get_cpufreq() * 1000000.0);
-	} else {
-		//printf("CPU frequency: %d MHz\n", get_cpufreq());
-		start = rdtscp();
-		init = 1;
-		ret = 0.0;
-	}
+	ret = (double) (rdtsc() - start_tsc) / ((double) get_cpufreq() * 1000000.0);
+	//printf("CPU frequency: %d MHz\n", get_cpufreq());
 
 	return ret;
 #endif
