@@ -36,7 +36,6 @@
 
 extern uint64_t base;
 extern uint64_t limit;
-extern uint64_t image_size;
 
 typedef struct free_list {
 	size_t start, end;
@@ -192,7 +191,7 @@ int copy_page(size_t pdest, size_t psrc)
 
 int memory_init(void)
 {
-	size_t addr;
+	size_t addr, image_size = (size_t) &kernel_end - (size_t) &kernel_start;
 	int ret = 0;
 
 	// enable paging and map Multiboot modules etc.
@@ -204,13 +203,13 @@ int memory_init(void)
 
 	kprintf("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
 
-	// mark available memory as free
+	// determine available memory
 	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
 		atomic_int64_inc(&total_pages);
 		atomic_int64_inc(&total_available_pages);
 	}
 
-	// mark kernel as used, we use 2MB pages to map the kernel
+	// determine allocated memory, we use 2MB pages to map the kernel
 	for(addr=base; addr<((base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
 		atomic_int64_inc(&total_allocated_pages);
 		atomic_int64_dec(&total_available_pages);
@@ -220,6 +219,7 @@ int memory_init(void)
 	init_list.start = (base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL;
 	init_list.end = limit;
 	init_list.prev = init_list.next = NULL;
+	kprintf("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
 	ret = vma_init();
 	if (BUILTIN_EXPECT(ret, 0))
