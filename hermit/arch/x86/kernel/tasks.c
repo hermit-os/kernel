@@ -48,7 +48,6 @@ static inline void enter_user_task(size_t ep, size_t stack)
 
 	asm volatile ("swapgs" ::: "memory");
 
-kprintf("AAAA fs 0x%llx\n", readfs());
 	// the jump also enable interrupts
 	jump_to_user_code(ep, stack);
 }
