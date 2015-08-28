@@ -265,6 +265,9 @@ int page_map_copy(task_t *dest)
 		return 0;
 	}
 
+	// set present bit
+	dest->page_map |= PG_PRESENT;
+
 	spinlock_irqsave_lock(&curr_task->page_lock);
 	self[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = dest->page_map | PG_PRESENT | PG_SELF | PG_RW;
 
