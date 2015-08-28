@@ -36,9 +36,10 @@
 #include <asm/page.h>
 
 gdt_ptr_t		gp;
-tss_t			task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
 // currently, our kernel has full access to the ioports
 static gdt_entry_t	gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 0}};
+static uint8_t		irq_stacks[MAX_CORES][KERNEL_STACK_SIZE] __attribute__ ((aligned (PAGE_SIZE)));
+static tss_t		task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
 
 /* 
  * This is defined in entry.asm. We use this to properly reload
@@ -136,7 +137,7 @@ void gdt_install(void)
 	 * Create TSS for each core (we use these segments for task switching)
 	 */
 	for(i=0; i<MAX_CORES; i++) {
-		task_state_segments[i].rsp0 = (size_t) &boot_stack + i * KERNEL_STACK_SIZE - 0x10;
+		task_state_segments[i].rsp0 = (size_t) irq_stacks[i] + KERNEL_STACK_SIZE - 0x10;
 		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t)-1,
 			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
 	}
