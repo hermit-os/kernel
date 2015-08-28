@@ -36,11 +36,9 @@
 #include <hermit/vma.h>
 #include <asm/elf.h>
 #include <asm/page.h>
-#include <asm/tss.h>
 
 #define START_ADDRESS	0x40200000
 
-extern tss_t	task_state_segments[MAX_CORES];
 extern uint64_t base;
 
 static inline void enter_user_task(size_t ep, size_t stack)
@@ -108,17 +106,13 @@ static int thread_entry(void* arg, size_t ep)
 
 size_t* get_current_stack(void)
 {
-	uint32_t core_id = CORE_ID;
 	task_t* curr_task = per_core(current_task);
 	size_t stptr = ((size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF;
-	size_t cr3;
 
 	set_per_core(kernel_stack, stptr);
-	task_state_segments[core_id].rsp0 = stptr;
 
-	cr3 = read_cr3();
 	// do we change the address space?
-	if (cr3 != curr_task->page_map)
+	if (read_cr3() != curr_task->page_map)
 		write_cr3(curr_task->page_map); // use new page table
 
 	return curr_task->last_stack_pointer;
@@ -488,10 +482,16 @@ static int user_entry(void* arg)
 		return -EINVAL;
 
 	ret = load_task((load_args_t*) arg);
+	if (ret)
+		kprintf("Load task failed: %d\n", ret);
 
 	kfree(arg);
 
-	return ret;
+	sys_exit(ret);
+
+	while(1) {
+		HALT;
+	}
 }
 
 /** @brief Luxus-edition of create_user_task functions. Just call with an exe name
