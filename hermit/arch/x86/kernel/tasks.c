@@ -95,7 +95,7 @@ static int thread_entry(void* arg, size_t ep)
 		// copy default TLS segment to stack
 		offset -= curr_task->tls_size;
 		memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_size);
-	}
+	} else writefs(0); // no TLS => clear fs register
 
 	// set first argument
 	asm volatile ("mov %0, %%rdi" :: "r"(arg));
