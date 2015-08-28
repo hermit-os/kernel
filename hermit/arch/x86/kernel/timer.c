@@ -31,6 +31,7 @@
 #include <hermit/time.h>
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
+#include <hermit/spinlock.h>
 #include <asm/irq.h>
 #include <asm/irqflags.h>
 #include <asm/io.h>
@@ -45,6 +46,10 @@ extern int32_t boot_processor;
 
 static int8_t use_tickless = 0;
 static uint64_t last_rdtsc = 0;
+
+#if MAX_CORES > 1
+static spinlock_irqsave_t ticks_lock = SPINLOCK_IRQSAVE_INIT;
+#endif
 
 void start_tickless(void)
 {
@@ -68,33 +73,37 @@ void check_ticks(void)
 		return;
 
 #if MAX_CORES > 1
-	if (CORE_ID == boot_processor)
+	spinlock_irqsave_lock(&ticks_lock);
 #endif
-	{
-		if (has_rdtscp()){
-			uint64_t curr_rdtsc = rdtscp(NULL);
-			uint64_t diff;
 
-			rmb();
-			diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-			if (diff > 0) {
-				timer_ticks += diff;
-				last_rdtsc = curr_rdtsc;
-				rmb();
-			}
-		} else {
-			uint64_t curr_rdtsc = rdtsc();
-			uint64_t diff;
+	if (has_rdtscp()){
+		uint64_t curr_rdtsc = rdtscp(NULL);
+		uint64_t diff;
 
+		rmb();
+		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+		if (diff > 0) {
+			timer_ticks += diff;
+			last_rdtsc = curr_rdtsc;
 			rmb();
-			diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-			if (diff > 0) {
-				timer_ticks += diff;
-				last_rdtsc = curr_rdtsc;
-				rmb();
-			}
+		}
+	} else {
+		uint64_t curr_rdtsc = rdtsc();
+		uint64_t diff;
+
+		rmb();
+		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+		if (diff > 0) {
+			timer_ticks += diff;
+			last_rdtsc = curr_rdtsc;
+			rmb();
 		}
 	}
+
+#if MAX_CORES > 1
+	spinlock_irqsave_unlock(&ticks_lock);
+#endif
+
 }
 
 uint64_t get_clock_tick(void)
@@ -109,7 +118,9 @@ uint64_t get_clock_tick(void)
  */
 static void timer_handler(struct state *s)
 {
+#if MAX_CORES > 1
 	if (CORE_ID == boot_processor)
+#endif
 		/* Increment our 'tick counter' */
 		timer_ticks++;
 
