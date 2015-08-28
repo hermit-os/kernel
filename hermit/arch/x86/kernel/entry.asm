@@ -55,7 +55,6 @@ align 4
     global possible_cpus
     global timer_ticks
     global current_boot_id
-    global image_size
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -74,11 +73,11 @@ boot_pml4:
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
     DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pdpt:
-    DQ boot_pgd + 0x7    ; PG_PRESENT | PG_RW | PG_USER
+    DQ boot_pgd + 0x3    ; PG_PRESENT | PG_RW
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
     DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgd:
-    DQ boot_pgt + 0x7    ; PG_PRESENT | PG_RW | PG_USER
+    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW 
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
     DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgt:
