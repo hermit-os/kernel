@@ -704,7 +704,7 @@ static void apic_shutdown(struct state *s)
 static void apic_lint0(struct state * s)
 {
 	// Currently nothing to do
-	//kputs("Receive LINT0 interrupt\n");
+	kputs("Receive LINT0 interrupt\n");
 }
 
 int apic_init(void)

@@ -316,11 +316,11 @@ static inline void clts(void)
  */
 inline static uint64_t rdtsc(void)
 {
-	uint64_t lo, hi;
+	uint32_t lo, hi;
 
 	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) );
 
-	return (hi << 32 | lo);
+	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
 }
 
 /** @brief Read time stamp counter and processor id
@@ -332,14 +332,14 @@ inline static uint64_t rdtsc(void)
  */
 inline static unsigned long long rdtscp(uint32_t* cpu_id)
 {
-	uint64_t lo, hi;
+	uint32_t lo, hi;
 	uint32_t id;
 
 	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi) :: "memory");
 	if (cpu_id)
 		*cpu_id = id;
 
-	return (hi << 32 | lo);
+	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
 }
 
 /** @brief Read MSR
