@@ -172,18 +172,28 @@ void finish_task_switch(void)
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 
 	if ((old = readyqueues[core_id].old_task) != NULL) {
-		if (old->status == TASK_INVALID) {
-			old->stack = NULL;
+		if (old->status == TASK_FINISHED) {
+			/* cleanup task */
+			if (old->stack) {
+				kfree(old->stack);
+				old->stack = NULL;
+			}
+
+			if (old->user_usage) {
+				kfree(old->user_usage);
+				old->user_usage = NULL;
+			}
+
+			if (!old->parent && old->heap) {
+				kfree(old->heap);
+				old->heap = NULL;
+			}
+
 			old->last_stack_pointer = NULL;
 			readyqueues[core_id].old_task = NULL;
 
-			/* cleanup task */
-			if (old->stack)
-				kfree(old->stack);
-			if (old->user_usage);
-				kfree(old->user_usage);
-			if (!old->parent && old->heap)
-				kfree(old->heap);
+			/* signalizes that this task could be reused */
+			old->status = TASK_INVALID;
 		} else {
 			prio = old->prio;
 			if (!readyqueues[core_id].queue[prio-1].first) {
@@ -212,6 +222,8 @@ static void NORETURN do_exit(int arg)
 
 	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
 
+	uint8_t flags = irq_nested_disable();
+
 	// Threads should delete the page table and the heap */
 	if (!curr_task->parent)
 		page_map_drop();
@@ -223,6 +235,8 @@ static void NORETURN do_exit(int arg)
 
 	curr_task->status = TASK_FINISHED;
 	reschedule();
+
+	irq_nested_enable(flags);
 
 	kprintf("Kernel panic: scheduler found no valid task\n");
 	while(1) {
@@ -698,11 +712,10 @@ size_t** scheduler(void)
 
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 
-	/* signalizes that this task could be reused */
-	if (curr_task->status == TASK_FINISHED) {
-		curr_task->status = TASK_INVALID;
+	/* signalizes that this task could be realized */
+	if (curr_task->status == TASK_FINISHED)
 		readyqueues[core_id].old_task = curr_task;
-	} else readyqueues[core_id].old_task = NULL; // reset old task
+	else readyqueues[core_id].old_task = NULL; // reset old task
 
 	prio = msb(readyqueues[core_id].prio_bitmap); // determines highest priority
 	if (prio > MAX_PRIO) {
