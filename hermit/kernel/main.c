@@ -140,7 +140,7 @@ static int initd(void* arg)
 
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
-	create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
+	//create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 	create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
