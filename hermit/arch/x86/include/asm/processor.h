@@ -379,7 +379,7 @@ inline static void wrmsr(uint32_t msr, uint64_t value)
  */
 static inline size_t read_cr0(void) {
 	size_t val;
-	asm volatile("mov %%cr0, %0" : "=r"(val));
+	asm volatile("mov %%cr0, %0" : "=r"(val) :: "memory");
 	return val;
 }
 
@@ -387,7 +387,7 @@ static inline size_t read_cr0(void) {
  * @param val The value you want to write into cr0
  */
 static inline void write_cr0(size_t val) {
-	asm volatile("mov %0, %%cr0" : : "r"(val));
+	asm volatile("mov %0, %%cr0" :: "r"(val) : "memory");
 }
 
 /** @brief Read cr2 register
@@ -395,7 +395,7 @@ static inline void write_cr0(size_t val) {
  */
 static inline size_t read_cr2(void) {
 	size_t val;
-	asm volatile("mov %%cr2, %0" : "=r"(val));
+	asm volatile("mov %%cr2, %0" : "=r"(val) :: "memory");
 	return val;
 }
 
@@ -403,7 +403,7 @@ static inline size_t read_cr2(void) {
  * @param val The value you want to write into cr2
  */
 static inline void write_cr2(size_t val) {
-	asm volatile("mov %0, %%cr2" : : "r"(val));
+	asm volatile("mov %0, %%cr2" :: "r"(val) : "memory");
 }
 
 /** @brief Read cr3 register
@@ -411,7 +411,7 @@ static inline void write_cr2(size_t val) {
  */
 static inline size_t read_cr3(void) {
         size_t val;
-        asm volatile("mov %%cr3, %0" : "=r"(val));
+        asm volatile("mov %%cr3, %0" : "=r"(val) :: "memory");
         return val;
 }
 
@@ -419,7 +419,7 @@ static inline size_t read_cr3(void) {
  * @param val The value you want to write into cr3
  */
 static inline void write_cr3(size_t val) {
-	asm volatile("mov %0, %%cr3" : : "r"(val));
+	asm volatile("mov %0, %%cr3" :: "r"(val) : "memory");
 }
 
 /** @brief Read cr4 register
@@ -427,7 +427,7 @@ static inline void write_cr3(size_t val) {
  */
 static inline size_t read_cr4(void) {
 	size_t val;
-	asm volatile("mov %%cr4, %0" : "=r"(val));
+	asm volatile("mov %%cr4, %0" : "=r"(val) :: "memory");
 	return val;
 }
 
@@ -435,7 +435,19 @@ static inline size_t read_cr4(void) {
  * @param val The value you want to write into cr4
  */
 static inline void write_cr4(size_t val) {
-	asm volatile("mov %0, %%cr4" : : "r"(val));
+	asm volatile("mov %0, %%cr4" :: "r"(val) : "memory");
+}
+
+static inline size_t read_cr8(void)
+{
+	size_t val;
+	asm volatile("mov %%cr8, %0" : "=r" (val) :: "memory");
+	return val;
+}
+
+static inline void write_cr8(size_t val)
+{
+	asm volatile("movq %0, %%cr8" :: "r" (val) : "memory");
 }
 
 typedef size_t (*func_read_fsgs)(void);
