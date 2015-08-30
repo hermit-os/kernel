@@ -94,7 +94,7 @@ static int thread_entry(void* arg, size_t ep)
 	if (curr_task->tls_addr && curr_task->tls_size) {
 		// set fs register to the TLS segment
 		writefs(stack+offset);
-		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, readfs());
+		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, stack+offset);
 
 		// copy default TLS segment to stack
 		offset -= curr_task->tls_size;
