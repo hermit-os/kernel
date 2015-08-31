@@ -6,6 +6,9 @@ KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
+INITRAMFS=../../busybox-1.23.2/initramfs/
+#QEMU = qemu-system-x86_64
+QEMU = qemu-kvm -cpu host
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -68,6 +71,7 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
+
 default: all
 
 all: bootstrap toolchain tools $(NAME).elf
@@ -114,6 +118,15 @@ veryclean: clean
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C usr veryclean
 	@echo Very cleaned
+
+ramfs: hermit.elf
+	touch myinitrd.cpio
+	cp hermit.bin $(INITRAMFS)
+	cd $(INITRAMFS); \
+	find . -print0 | cpio --null -ov --format=newc > $(TOPDIR)/myinitrd.cpio
+
+qemu:
+	$(QEMU) -smp 8 -kernel ../linux/arch/x86/boot/bzImage -initrd myinitrd.cpio -append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0 maxcpus=1" -net nic,model=rtl8139 -net user  -net dump -nographic -monitor telnet:127.0.0.1:1234,server,nowait -m 8G #-numa node,nodeid=0,cpus=0-3 -numa node,nodeid=1,cpus=4-7
 
 doc:
 	@echo Create documentation...
