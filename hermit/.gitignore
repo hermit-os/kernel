@@ -6,6 +6,8 @@
 *.elf32
 *.sym
 *.bin
+initrd.cpio
+qemu-vlan0.pcap
 autom4te.cache
 documentation/html/
 include/hermit/config.inc
