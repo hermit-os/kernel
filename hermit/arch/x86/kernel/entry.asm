@@ -77,7 +77,7 @@ boot_pdpt:
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
     DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgd:
-    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW 
+    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW
     times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
     DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
 boot_pgt:
@@ -86,6 +86,14 @@ boot_pgt:
 SECTION .text
 align 4
 start64:
+    ; reset registers to kill any stale realmode selectors
+    xor eax, eax
+    mov ds, eax
+    mov ss, eax
+    mov es, eax
+    mov fs, eax
+    mov gs, eax
+
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
@@ -485,7 +493,7 @@ common_stub:
     push r15
     ; push fs and gs registers
 global Lpatch1
-Lpatch1: 
+Lpatch1:
     jmp short Lrdfsgs2  ; we patch later this jump to enable rdfsbase/rdgsbase
     rdfsbase rax
     rdgsbase rdx
