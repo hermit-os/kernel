@@ -210,7 +210,7 @@ int cpu_detection(void) {
 	uint64_t xcr0;
 	uint32_t a=0, b=0, c=0, d=0, level = 0;
 	uint32_t family, model, stepping;
-	size_t cr4;
+	size_t cr0, cr4;
 	uint8_t first_time = 0;
 
 	if (!cpu_info.feature1) {
@@ -254,6 +254,13 @@ int cpu_detection(void) {
 		kprintf("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
 		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
+
+	// be sure that AM, NE and MP is enabled
+	cr0 = read_cr0();
+	cr0 |= CR0_AM;
+	cr0 |= CR0_NE;
+	cr0 |= CR0_MP;
+	write_cr0(cr0);
 
 	cr4 = read_cr4();
 	if (has_fxsr())
