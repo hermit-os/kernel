@@ -262,20 +262,19 @@ void NORETURN abort(void) {
 	do_exit(-1);
 }
 
-int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
+int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 {
 	int ret = -EINVAL;
 	uint32_t i;
 	void* stack = NULL;
 	task_t* curr_task;
+	static uint32_t core_id = MAX_CORES;
 
 	if (BUILTIN_EXPECT(!ep, 0))
 		return -EINVAL;
 	if (BUILTIN_EXPECT(prio == IDLE_PRIO, 0))
 		return -EINVAL;
 	if (BUILTIN_EXPECT(prio > MAX_PRIO, 0))
-		return -EINVAL;
-	if (BUILTIN_EXPECT(core_id >= MAX_CORES, 0))
 		return -EINVAL;
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
@@ -289,6 +288,21 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t co
 		return -ENOMEM;
 
 	spinlock_irqsave_lock(&table_lock);
+
+	if (core_id >= MAX_CORES)
+		core_id = CORE_ID;
+
+	// we assume OpenMP applications
+	// => number of threads is (normaly) equal to the number of cores
+	// => search next available core
+	for(i=0, core_id=(core_id+1)%MAX_CORES; i<MAX_CORES; i++, core_id=(core_id+1)%MAX_CORES)
+		if (readyqueues[core_id].idle)
+			break;
+
+	if ((core_id >= MAX_CORES) || !readyqueues[core_id].idle)
+		core_id = CORE_ID;
+
+	kprintf("start new thread on core %d\n", core_id);
 
 	for(i=0; i<MAX_TASKS; i++) {
 		if (task_table[i].status == TASK_INVALID) {
