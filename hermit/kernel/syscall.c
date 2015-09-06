@@ -171,7 +171,7 @@ static int sys_sem_timedwait(sem_t *sem, unsigned int ms)
 
 static int sys_clone(tid_t* id, void* ep, void* argv)
 {
-	return clone_task(id, ep, argv, per_core(current_task)->prio, CORE_ID);	
+	return clone_task(id, ep, argv, per_core(current_task)->prio);	
 }
 
 static int default_handler(void)
