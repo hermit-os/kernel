@@ -449,7 +449,7 @@ struct gomp_thread
 
   /* User pthread thread pool */
   struct gomp_thread_pool *thread_pool;
-};
+} __attribute__ ((aligned (64)));
 
 
 struct gomp_thread_pool
