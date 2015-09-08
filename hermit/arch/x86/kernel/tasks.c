@@ -91,14 +91,15 @@ static int thread_entry(void* arg, size_t ep)
 	//vma_dump();
 
 	// do we have to create a TLS segement?
-	if (curr_task->tls_addr && curr_task->tls_size) {
+	if (curr_task->tls_addr && curr_task->tls_mem_size) {
 		// set fs register to the TLS segment
 		writefs(stack+offset);
 		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, stack+offset);
 
 		// copy default TLS segment to stack
-		offset -= curr_task->tls_size;
-		memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_size);
+		offset -= curr_task->tls_mem_size;
+		if (curr_task->tls_file_size)
+			memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_file_size);
 	} else writefs(0); // no TLS => clear fs register
 
 	// set first argument
@@ -352,9 +353,10 @@ static int load_task(load_args_t* largs)
 			vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
 			break;
 		case ELF_PT_TLS:
-			kprintf("Found TLS segment. addr 0x%llx, size 0x%llx\n", prog_header.virt_addr, prog_header.mem_size);
+			kprintf("Found TLS segment. addr 0x%llx, mem size 0x%llx, file size 0x%llx\n", prog_header.virt_addr, prog_header.mem_size, prog_header.file_size);
 			curr_task->tls_addr = prog_header.virt_addr;
-			curr_task->tls_size = prog_header.mem_size;
+			curr_task->tls_mem_size = prog_header.mem_size;
+			curr_task->tls_file_size = prog_header.file_size;
 			break;
 		default:
 			kprintf("Unknown type 0x%lx in program header\n", prog_header.type);
@@ -384,20 +386,21 @@ static int load_task(load_args_t* largs)
 	offset = DEFAULT_STACK_SIZE-16;
 
 	// do we have to create a TLS segement?
-	if (curr_task->tls_addr && curr_task->tls_size) {
-		if (curr_task->tls_size >= DEFAULT_STACK_SIZE-128) {
-			kprintf("TLS is too large: 0x%zx\n", curr_task->tls_size);
+	if (curr_task->tls_addr && curr_task->tls_mem_size) {
+		if (curr_task->tls_mem_size >= DEFAULT_STACK_SIZE-128) {
+			kprintf("TLS is too large: 0x%zx\n", curr_task->tls_mem_size);
 			ret = -ENOMEM;
 			goto Lerr;
 		}
 
 		// set fs register to the TLS segment
 		writefs(stack+offset);
-		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, readfs());
+		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, stack+offset);
 
 		// copy default TLS segment to stack
-		offset -= curr_task->tls_size;
-		memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_size);
+		offset -= curr_task->tls_mem_size;
+		if (curr_task->tls_file_size)
+			memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_file_size);
 	}
 
 	// push strings on the stack

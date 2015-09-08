@@ -108,8 +108,10 @@ typedef struct task {
 	struct task*	prev;
 	/// TLS address
 	size_t	tls_addr;
-	/// TLS size
-	size_t tls_size;
+	/// TLS mem size
+	size_t tls_mem_size;
+	/// TLS file size
+	size_t tls_file_size;
 	/// FPU state
 	union fpu_state	fpu;
 } task_t;
