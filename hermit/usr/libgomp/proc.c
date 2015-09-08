@@ -64,7 +64,9 @@ unsigned
 gomp_dynamic_max_threads (void)
 {
   unsigned n_onln, loadavg;
+#ifndef __hermit__
   unsigned nthreads_var = gomp_icv (false)->nthreads_var;
+#endif
 
 #ifdef __hermit__
   n_onln = get_num_cpus();
