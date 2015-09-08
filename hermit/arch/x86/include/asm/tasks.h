@@ -71,7 +71,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg);
 static inline int jump_to_user_code(size_t ep, size_t stack)
 {
 	// Create a pseudo interrupt on the stack and return to user function
-	asm volatile ("push %0; push %1; push $0x1202; push %2; push %3; iretq" :: "r"(0x33ULL), "r"(stack), "r"(0x2bULL), "r"(ep) : "memory");
+	asm volatile ("push %0; push %1; push $0x41202; push %2; push %3; iretq" :: "r"(0x33ULL), "r"(stack), "r"(0x2bULL), "r"(ep) : "memory");
 
 	return 0;
 }
