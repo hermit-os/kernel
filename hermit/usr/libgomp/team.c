@@ -39,7 +39,7 @@ pthread_key_t gomp_thread_destructor;
 
 /* This is the libgomp per-thread data structure.  */
 #if defined HAVE_TLS || defined USE_EMUTLS
-__thread struct gomp_thread gomp_tls_data;
+__thread struct gomp_thread* gomp_tls_data = NULL;
 #else
 pthread_key_t gomp_tls_key;
 #endif
@@ -72,7 +72,7 @@ gomp_thread_start (void *xdata)
   void *local_data;
 
 #if defined HAVE_TLS || defined USE_EMUTLS
-  thr = &gomp_tls_data;
+  thr = gomp_tls_data = (struct gomp_thread*) gomp_malloc_cleared(sizeof(struct gomp_thread));
 #else
   struct gomp_thread local_thr;
   thr = &local_thr;
@@ -131,6 +131,10 @@ gomp_thread_start (void *xdata)
   gomp_sem_destroy (&thr->release);
   thr->thread_pool = NULL;
   thr->task = NULL;
+#if defined HAVE_TLS || defined USE_EMUTLS
+  free(thr);
+  thr = gomp_tls_data = NULL;
+#endif
   return NULL;
 }
 
@@ -922,6 +926,8 @@ initialize_team (void)
 
   pthread_key_create (&gomp_tls_key, NULL);
   pthread_setspecific (gomp_tls_key, &initial_thread_tls_data);
+#else
+  gomp_tls_data = (struct gomp_thread*) gomp_malloc_cleared(sizeof(struct gomp_thread));
 #endif
 
   if (pthread_key_create (&gomp_thread_destructor, gomp_free_thread) != 0)
@@ -931,6 +937,10 @@ initialize_team (void)
 static void __attribute__((destructor))
 team_destructor (void)
 {
+#if defined HAVE_TLS || defined USE_EMUTLS
+  free(gomp_tls_data);
+#endif
+
   /* Without this dlclose on libgomp could lead to subsequent
      crashes.  */
   pthread_key_delete (gomp_thread_destructor);
