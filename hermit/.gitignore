@@ -13,6 +13,7 @@ documentation/html/
 include/hermit/config.inc
 usr/examples/hello
 usr/examples/hello++
+usr/examples/hellof
 usr/examples/jacobi
 usr/examples/stream
 usr/examples/thr_hello
