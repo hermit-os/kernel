@@ -271,7 +271,7 @@ isrstub_pseudo_error 9
 ; 15: Reserved Exception
 ; 16: Floating Point Exception
 ; 17: Alignment Check Exception
-; 18: Machine Check Exceptio
+; 18: Machine Check Exception
 ; 19-31: Reserved
 %assign i 15
 %rep    17
@@ -368,9 +368,6 @@ isrsyscall:
     push rcx
     push rdi
     push rsi
-
-    ; push system call number
-    ; push rax
 
     ; syscall stores in rcx the return address
     ; => using of r10 for the temporary storage of the 4th argument
