@@ -37,9 +37,13 @@ endif
 	@echo [CXX] $@
 	$Q$(CXX_FOR_TARGET) -c $(CXXFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 
+%.o: %.f90
+	@echo [F90] $@
+	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
+
 default: all
 
-all: hello hello++ jacobi stream thr_hello
+all: hello hello++ hellof jacobi stream thr_hello
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -66,6 +70,13 @@ hello: hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+hellof: hellof.o
+	@echo [LD] $@
+	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 jacobi: jacobi.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lm
@@ -86,11 +97,11 @@ thr_hello: thr_hello.o
 
 clean:
 	@echo Cleaning examples
-	$Q$(RM) hello hello++ jacobi stream thr_hello *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi stream thr_hello *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning examples
-	$Q$(RM) hello hello++ jacobi stream thr_hello *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi stream thr_hello *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
