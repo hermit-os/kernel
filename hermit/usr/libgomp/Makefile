@@ -27,6 +27,7 @@ $(NAME): $(OBJS)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS_FOR_TARGET) $@ $(OBJS)
 	$Q$(CP) $@ $(NEWLIB)/lib
 	$Q$(CP) libgomp.spec $(NEWLIB)/lib
+	$Q$(CP) omp.h $(NEWLIB)/include
 	
 clean:
 	@echo Cleaning examples
