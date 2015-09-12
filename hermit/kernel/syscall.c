@@ -65,7 +65,7 @@ static int sys_write(int fd, const char* buf, size_t len)
 	for(i=0; i<len; i++)
 		kputchar(buf[i]);
 
-	return 0;
+	return len;
 }
 
 static ssize_t sys_sbrk(int incr)
