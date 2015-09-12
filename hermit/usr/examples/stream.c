@@ -422,7 +422,7 @@ static unsigned long long start_tsc;
 inline static unsigned long long rdtsc(void)
 {
 	unsigned long lo, hi;
-	asm volatile ("rdtsc; mfence" : "=a"(lo), "=d"(hi) :: "memory");
+	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
 	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
 }
 
