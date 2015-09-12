@@ -34,6 +34,7 @@
 #include <hermit/memory.h>
 #include <hermit/fs.h>
 #include <hermit/vma.h>
+#include <asm/tss.h>
 #include <asm/elf.h>
 #include <asm/page.h>
 
@@ -100,6 +101,9 @@ static int thread_entry(void* arg, size_t ep)
 		offset -= curr_task->tls_mem_size;
 		if (curr_task->tls_file_size)
 			memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_file_size);
+
+		// align stack to 16 byte boundary
+		offset = offset & ~0xFULL;
 	} else writefs(0); // no TLS => clear fs register
 
 	// set first argument
@@ -112,9 +116,10 @@ static int thread_entry(void* arg, size_t ep)
 size_t* get_current_stack(void)
 {
 	task_t* curr_task = per_core(current_task);
-	size_t stptr = ((size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF;
+	size_t stptr = (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10;
 
 	set_per_core(kernel_stack, stptr);
+	tss_set_rsp0(stptr);
 
 	// do we change the address space?
 	if (read_cr3() != curr_task->page_map)
@@ -430,16 +435,21 @@ static int load_task(load_args_t* largs)
 	}
 	((char**) (stack+offset))[largs->envc] = NULL;
 
+	// align stack to be conform to the UNIX ABI
+	size_t old_offset = offset;
+	offset = offset & ~0xFULL;
+	offset -= sizeof(size_t);
+
 	// push pointer to env
 	offset -= sizeof(char**);
 	if (!(largs->envc))
 		*((char***) (stack+offset)) = NULL;
 	else
-		*((char***) (stack+offset)) = (char**) (stack + offset + sizeof(char**));
+		*((char***) (stack+offset)) = (char**) (stack + old_offset);
 
 	// push pointer to argv
 	offset -= sizeof(char**);
-	*((char***) (stack+offset)) = (char**) (stack + offset + 2*sizeof(char**) + (largs->envc+1) * sizeof(char*));
+	*((char***) (stack+offset)) = (char**) (stack + old_offset + (largs->envc+1) * sizeof(char*));
 
 	// push argc on the stack
 	offset -= sizeof(ssize_t);
