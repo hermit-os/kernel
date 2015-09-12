@@ -38,8 +38,10 @@
 gdt_ptr_t		gp;
 // currently, our kernel has full access to the ioports
 static gdt_entry_t	gdt[GDT_ENTRIES] = {[0 ... GDT_ENTRIES-1] = {0, 0, 0, 0, 0, 0}};
-static uint8_t		irq_stacks[MAX_CORES][KERNEL_STACK_SIZE] __attribute__ ((aligned (PAGE_SIZE)));
 static tss_t		task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)));
+static uint8_t		stack_table[MAX_CORES*KERNEL_STACK_SIZE*3];
+
+extern const void boot_stack;
 
 /* 
  * This is defined in entry.asm. We use this to properly reload
@@ -48,6 +50,11 @@ static tss_t		task_state_segments[MAX_CORES] __attribute__ ((aligned (PAGE_SIZE)
 extern void gdt_flush(void);
 
 extern const void boot_stack;
+
+void tss_set_rsp0(size_t stptr)
+{
+	task_state_segments[CORE_ID].rsp0 = stptr;
+}
 
 /* Setup a descriptor in the Global Descriptor Table */
 void gdt_set_gate(int num, unsigned long base, unsigned long limit,
@@ -137,7 +144,11 @@ void gdt_install(void)
 	 * Create TSS for each core (we use these segments for task switching)
 	 */
 	for(i=0; i<MAX_CORES; i++) {
-		task_state_segments[i].rsp0 = (size_t) irq_stacks[i] + KERNEL_STACK_SIZE - 0x10;
+		task_state_segments[i].rsp0 = (size_t)&boot_stack + (i+1) * KERNEL_STACK_SIZE - 0x10;
+		task_state_segments[i].ist1 = (size_t)stack_table + 3*i * KERNEL_STACK_SIZE + KERNEL_STACK_SIZE - 0x10;
+		task_state_segments[i].ist2 = (size_t)stack_table + 3*i * KERNEL_STACK_SIZE + 2 * KERNEL_STACK_SIZE - 0x10;
+		task_state_segments[i].ist3 = (size_t)stack_table + 3*i * KERNEL_STACK_SIZE + 3 * KERNEL_STACK_SIZE - 0x10;
+
 		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t)-1,
 			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
 	}

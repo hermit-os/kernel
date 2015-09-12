@@ -82,8 +82,8 @@ typedef struct {
 	uint16_t base_lo;
 	/// Handler function's segment selector.
 	uint16_t sel;
-	/// These bits are reserved by Intel
-	uint8_t always0;
+	/// index of the interrupt stack table
+	uint8_t ist_index;
 	/// These 8 bits contain flags. Exact use depends on the type of interrupt gate.
 	uint8_t flags;
 	/// Higher 16 bits of handler function's base address
@@ -121,19 +121,9 @@ void idt_install(void);
  * @param base base-address of the handler function being installed
  * @param sel Segment the IDT will use
  * @param flags Flags this entry will have
+ * @param idx Index of interrupt stack table
  */
-void idt_set_gate(unsigned char num, size_t base, unsigned short sel,
-		  unsigned char flags);
-
-/** @brief Configures and returns a IDT entry with chosen attributes
- *
- * Just feed this function with base, selector and the flags
- * you have seen in idt.h
- *
- * @return a preconfigured idt descriptor
- */
-void configure_idt_entry(idt_entry_t *dest_entry, size_t base, 
-		unsigned short sel, unsigned char flags);
+void idt_set_gate(uint8_t num, size_t base, uint16_t sel, uint8_t flags, uint8_t idx);
 
 #ifdef __cplusplus
 }

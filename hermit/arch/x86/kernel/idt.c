@@ -50,8 +50,7 @@
 static idt_entry_t idt[256] = {[0 ... 255] = {0, 0, 0, 0, 0, 0, 0}};
 static idt_ptr_t idtp;
 
-void configure_idt_entry(idt_entry_t *dest_entry, size_t base, 
-		unsigned short sel, unsigned char flags)
+static void configure_idt_entry(idt_entry_t *dest_entry, size_t base, uint16_t sel, uint8_t flags, uint8_t idx)
 {
 	/* The interrupt routine's base address */
 	dest_entry->base_lo = (base & 0xFFFF);
@@ -60,7 +59,7 @@ void configure_idt_entry(idt_entry_t *dest_entry, size_t base,
 	/* The segment or 'selector' that this IDT entry will use
 	 *  is set here, along with any access flags */
 	dest_entry->sel = sel;
-	dest_entry->always0 = 0;
+	dest_entry->ist_index = idx;
 	dest_entry->flags = flags;
 }
 
@@ -68,10 +67,9 @@ void configure_idt_entry(idt_entry_t *dest_entry, size_t base,
  * Use this function to set an entry in the IDT. Alot simpler
  * than twiddling with the GDT ;)
  */
-void idt_set_gate(unsigned char num, size_t base, unsigned short sel,
-		  unsigned char flags)
+void idt_set_gate(uint8_t num, size_t base, uint16_t sel, uint8_t flags, uint8_t idx)
 {
-	configure_idt_entry(&idt[num], base, sel, flags);
+	configure_idt_entry(&idt[num], base, sel, flags, idx);
 }
 
 #if 0

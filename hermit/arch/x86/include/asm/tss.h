@@ -48,16 +48,20 @@ typedef struct {
 	uint64_t	rsp1;
 	uint64_t	rsp2;
 	uint32_t	res2, res3;		// reserved entries
-	uint64_t	ist_rsp1;
-	uint64_t	ist_rsp2;
-	uint64_t	ist_rsp3;
-	uint64_t	ist_rsp4;
-	uint64_t	ist_rsp5;
-	uint64_t	ist_rsp6;
-	uint64_t	ist_rsp7;
+	uint64_t	ist1;
+	uint64_t	ist2;
+	uint64_t	ist3;
+	uint64_t	ist4;
+	uint64_t	ist5;
+	uint64_t	ist6;
+	uint64_t	ist7;
 	uint32_t	res4, res5;		// reserved entries
 	uint16_t	res6, bitmap;
 } __attribute__ ((packed)) tss_t;
+
+/** @brief Set rsp0 in TSS of the current core
+ */
+void tss_set_rsp0(size_t ptr);
 
 #ifdef __cplusplus
 }

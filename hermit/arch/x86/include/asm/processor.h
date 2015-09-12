@@ -87,24 +87,24 @@ extern "C" {
 /*
  * EFLAGS bits
  */
-#define EFLAGS_CF	(1 <<  0) /* Carry Flag */
-#define EFLAGS_FIXED	(1 <<  1) /* Bit 1 - always on */
-#define EFLAGS_PF	(1 <<  2) /* Parity Flag */
-#define EFLAGS_AF	(1 <<  4) /* Auxiliary carry Flag */
-#define EFLAGS_ZF	(1 <<  6) /* Zero Flag */
-#define EFLAGS_SF	(1 <<  7) /* Sign Flag */
-#define EFLAGS_TF	(1 <<  8) /* Trap Flag */
-#define EFLAGS_IF	(1 <<  9) /* Interrupt Flag */
-#define EFLAGS_DF	(1 << 10) /* Direction Flag */
-#define EFLAGS_OF	(1 << 11) /* Overflow Flag */
-#define EFLAGS_IOPL	(1 << 12) /* I/O Privilege Level (2 bits) */
-#define EFLAGS_NT	(1 << 14) /* Nested Task */
-#define EFLAGS_RF	(1 << 16) /* Resume Flag */
-#define EFLAGS_VM	(1 << 17) /* Virtual Mode */
-#define EFLAGS_AC	(1 << 18) /* Alignment Check/Access Control */
-#define EFLAGS_VIF	(1 << 19) /* Virtual Interrupt Flag */
-#define EFLAGS_VIP	(1 << 20) /* Virtual Interrupt Pending */
-#define EFLAGS_ID	(1 << 21) /* CPUID detection */
+#define EFLAGS_CF	(1UL <<  0) /* Carry Flag */
+#define EFLAGS_FIXED	(1UL <<  1) /* Bit 1 - always on */
+#define EFLAGS_PF	(1UL <<  2) /* Parity Flag */
+#define EFLAGS_AF	(1UL <<  4) /* Auxiliary carry Flag */
+#define EFLAGS_ZF	(1UL <<  6) /* Zero Flag */
+#define EFLAGS_SF	(1UL <<  7) /* Sign Flag */
+#define EFLAGS_TF	(1UL <<  8) /* Trap Flag */
+#define EFLAGS_IF	(1UL <<  9) /* Interrupt Flag */
+#define EFLAGS_DF	(1UL << 10) /* Direction Flag */
+#define EFLAGS_OF	(1UL << 11) /* Overflow Flag */
+#define EFLAGS_IOPL	(1UL << 12) /* I/O Privilege Level (2 bits) */
+#define EFLAGS_NT	(1UL << 14) /* Nested Task */
+#define EFLAGS_RF	(1UL << 16) /* Resume Flag */
+#define EFLAGS_VM	(1UL << 17) /* Virtual Mode */
+#define EFLAGS_AC	(1UL << 18) /* Alignment Check/Access Control */
+#define EFLAGS_VIF	(1UL << 19) /* Virtual Interrupt Flag */
+#define EFLAGS_VIP	(1UL << 20) /* Virtual Interrupt Pending */
+#define EFLAGS_ID	(1UL << 21) /* CPUID detection */
 
 
 // x86 control registers
