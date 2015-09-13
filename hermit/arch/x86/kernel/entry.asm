@@ -95,6 +95,12 @@ start64:
     mov fs, eax
     mov gs, eax
 
+    ; determine full image size
+    mov rax, kernel_end
+    sub rax, kernel_start
+    mov QWORD [image_size], rax
+    xor rax, rax
+
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
