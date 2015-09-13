@@ -18,3 +18,7 @@
 	path = hermit/usr/newlib
 	url = git@github.com:RWTH-OS/newlib.git
 	branch = hermit
+[submodule "hermit/lwip"]
+	path = hermit/lwip
+	url = git@github.com:RWTH-OS/LwIP.git
+	branch = hermit
