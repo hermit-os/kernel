@@ -70,6 +70,7 @@ extern atomic_int64_t total_available_pages;
 
 extern atomic_int32_t cpu_online;
 extern atomic_int32_t possible_cpus;
+extern int32_t isle;
 
 static int foo(void* arg)
 {
@@ -111,7 +112,7 @@ static void print_status(void)
 	static spinlock_t status_lock = SPINLOCK_INIT;
 
 	spinlock_lock(&status_lock);
-	kprintf("CPU %d is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, read_cr0(), read_cr4());
+	kprintf("CPU %d of isle %d is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, isle, read_cr0(), read_cr4());
 	spinlock_unlock(&status_lock);
 }
 

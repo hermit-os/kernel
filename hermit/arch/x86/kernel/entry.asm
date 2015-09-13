@@ -56,6 +56,7 @@ align 4
     global possible_cpus
     global timer_ticks
     global current_boot_id
+    global isle
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -64,7 +65,7 @@ align 4
     possible_cpus dd 0
     timer_ticks dq 0
     current_boot_id dd 0
-    dummy dd 0
+    isle dd -1
     image_size dq 0
 
 ; Bootstrap page tables are used during the initialization.
