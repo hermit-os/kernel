@@ -107,11 +107,13 @@ typedef struct task {
 	/// previous task in the queue
 	struct task*	prev;
 	/// TLS address
-	size_t	tls_addr;
+	size_t		tls_addr;
 	/// TLS mem size
-	size_t tls_mem_size;
+	size_t		tls_mem_size;
 	/// TLS file size
-	size_t tls_file_size;
+	size_t		tls_file_size;
+	/// LwIP error code
+	int		lwip_err;
 	/// FPU state
 	union fpu_state	fpu;
 } task_t;

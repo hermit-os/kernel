@@ -44,6 +44,8 @@
 extern "C" {
 #endif
 
+void NORETURN abort(void);
+
 /** @brief General page allocator function
  *
  * This function allocates and maps whole pages.
