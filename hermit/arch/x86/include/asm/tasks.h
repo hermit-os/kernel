@@ -55,11 +55,12 @@ void switch_context(size_t** stack);
  * @param task Pointer to the task structure
  * @param ep The entry point for code execution
  * @param arg Arguments list pointer for the task's stack
+ * @param core_id Id of the core, which is firstly used by the task 
  * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
-int create_default_frame(task_t* task, entry_point_t ep, void* arg);
+int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t core_id);
 
 /** @brief Jump to user code
  *
