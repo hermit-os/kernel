@@ -40,6 +40,13 @@
 
 #define START_ADDRESS	0x40200000
 
+/*
+ * Note that linker symbols are not variables, they have no memory allocated for
+ * maintaining a value, rather their address is their value.
+ */
+extern const void percore_start;
+extern const void percore_end0;
+
 extern uint64_t base;
 
 static inline void enter_user_task(size_t ep, size_t stack)
@@ -128,7 +135,7 @@ size_t* get_current_stack(void)
 	return curr_task->last_stack_pointer;
 }
 
-int create_default_frame(task_t* task, entry_point_t ep, void* arg)
+int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t core_id)
 {
 	size_t *stack;
 	struct state *stptr;
@@ -179,6 +186,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg)
 	}
 	stptr->cs = 0x08;
 	stptr->ss = 0x10;
+	stptr->gs = core_id * ((size_t) &percore_end0 - (size_t) &percore_start); 
 	stptr->rflags = 0x1202;
 	stptr->userrsp = stptr->rsp;
 

@@ -33,9 +33,9 @@
 #include <hermit/tasks.h>
 
 /*
- *  * Note that linker symbols are not variables, they have no memory allocated for
- *   * maintaining a value, rather their address is their value.
- *    */
+ * Note that linker symbols are not variables, they have no memory allocated for
+ * maintaining a value, rather their address is their value.
+ */
 extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;

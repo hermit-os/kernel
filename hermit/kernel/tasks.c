@@ -325,7 +325,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			if (id)
 				*id = i;
 
-			ret = create_default_frame(task_table+i, ep, arg);
+			ret = create_default_frame(task_table+i, ep, arg, core_id);
 			if (ret)
 				goto out;
 
@@ -418,7 +418,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 				*id = i;
 			//kprintf("Create task %d with pml4 at 0x%llx\n", i, task_table[i].page_map);
 
-			ret = create_default_frame(task_table+i, ep, arg);
+			ret = create_default_frame(task_table+i, ep, arg, core_id);
 			if (ret)
 				goto out;
 

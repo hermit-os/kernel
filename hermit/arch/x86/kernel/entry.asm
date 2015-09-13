@@ -38,6 +38,7 @@ extern kernel_end
 
 MSR_FS_BASE equ 0xc0000100
 MSR_GS_BASE equ 0xc0000101
+MSR_KERNEL_GS_BASE equ 0xc0000102
 
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
@@ -350,8 +351,10 @@ align 16
 isrsyscall:
     ; IF flag is already cleared
     ; cli
+
     ; only called from user space => get kernel-level selector
     swapgs
+
     ; get kernel stack
     xchg rsp, [gs:kernel_stack]
 
@@ -391,8 +394,10 @@ isrsyscall:
 
     cli
 
-    ; restore registers
+    ; restore return value
     pop rax
+
+    ; restore registers
     pop rsi
     pop rdi
     pop rcx
@@ -407,6 +412,7 @@ isrsyscall:
 
     ; set user-level selector
     swapgs
+
     ; EFLAGS (and IF flag) will be restored by sysret
     ; sti
     o64 sysret
@@ -536,12 +542,16 @@ common_switch:
     call finish_task_switch
 
 no_context_switch:
+    ; do we interrupt user-level code?
+    cmp QWORD [rsp+24+18*8], 0x08
+    je short kernel_space2
+    swapgs  ; set GS to the user-level selector
+kernel_space2:
     ; restore fs / gs register
 global Lpatch2
 Lpatch2:
     jmp short Lwrfsgs    ; we patch later this jump to enable wrfsbase/wrgsbase
-    add rsp, 8
-    ;pop r15
+    pop r15
     ;wrgsbase r15        ; currently, we don't use the gs register
     pop r15
     wrfsbase r15
@@ -575,11 +585,6 @@ Lgo3:
     pop rcx
     pop rax
 
-    ; do we interrupt user-level code?
-    cmp QWORD [rsp+24], 0x08
-    je short kernel_space2
-    swapgs  ; set GS to the user-level selector
-kernel_space2:
     add rsp, 16
     iretq
 
