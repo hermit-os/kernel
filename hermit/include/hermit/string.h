@@ -49,6 +49,10 @@ void *memcpy(void *dest, const void *src, size_t count);
 void *memset(void *dest, int val, size_t count);
 #endif
 
+#ifndef HAVE_ARCH_MEMCMP
+int memcmp(const void *s1, const void *s2, size_t n);
+#endif
+
 #ifndef HAVE_ARCH_STRLEN
 size_t strlen(const char *str);
 #endif
