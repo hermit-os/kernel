@@ -57,6 +57,14 @@ align 4
     global timer_ticks
     global current_boot_id
     global isle
+    global possible_isles
+    global phy_isle_locks
+    global heap_phy_start_address
+    global header_phy_start_address
+    global heap_start_address
+    global header_start_address
+    global heap_size
+    global header_size
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -67,6 +75,14 @@ align 4
     current_boot_id dd 0
     isle dd -1
     image_size dq 0
+    phy_isle_locks dq 0
+    heap_phy_start_address dq 0
+    header_phy_start_address dq 0
+    heap_size dd 0
+    header_size dd 0
+    possible_isles dd 1
+    heap_start_address dq 0
+    header_start_address dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -345,6 +361,13 @@ apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
     jmp common_stub
+
+global mmnif_irq
+align 16
+mmnif_irq:
+	push byte 0 ; pseudo error code
+	push byte 122
+	jmp common_stub
 
 extern irq_handler
 extern get_current_stack

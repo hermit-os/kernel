@@ -618,9 +618,9 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 int ipi_tlb_flush(void)
 {
 	uint32_t id = CORE_ID;
-	uint32_t flags;
 	uint32_t j;
 	uint64_t i;
+	uint8_t flags;
 
 	if (atomic_int32_read(&cpu_online) == 1)
 		return 0;
@@ -676,6 +676,38 @@ static void apic_tlb_handler(struct state *s)
 		write_cr3(val);
 }
 #endif
+
+int apic_send_ipi(uint64_t dest, uint8_t irq)
+{
+	uint32_t j;
+	uint8_t flags;
+
+	if (BUILTIN_EXPECT(has_x2apic(), 1)) {
+		flags = irq_nested_disable();
+		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
+		wrmsr(0x830, (dest << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|irq);
+		irq_nested_enable(flags);
+	} else {
+		if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+			kputs("ERROR: previous send not complete");
+			return -EIO;
+		}
+
+		flags = irq_nested_disable();
+
+		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
+		set_ipi_dest((uint32_t)dest);
+		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|irq);
+
+		j = 0;
+		while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
+			j++; // wait for it to finish, give up eventualy tho
+
+		irq_nested_enable(flags);
+	}
+
+	return 0;
+}
 
 static void apic_err_handler(struct state *s)
 {

@@ -1,6 +1,11 @@
-/*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
- * All rights reserved.
+/* 
+ * Copyright 2011 Carl-Benedikt Krueger, Chair for Operating Systems,
+ *                                       RWTH Aachen University
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2 (https://www.gnu.org/licenses/gpl-2.0.txt)
+ * or the BSD license below:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,44 +30,10 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __CONFIG_H__
-#define __CONFIG_H__
+#ifndef __UTIL__
+#define __UTIL__
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#define MAX_CORES		40
-#define MAX_TASKS		16
-#define MAX_ISLE		8
-#define MAX_FNAME		128
-#define TIMER_FREQ		100 /* in HZ */
-#define CLOCK_TICK_RATE		1193182 /* 8254 chip's internal oscillator frequency */
-#define VIDEO_MEM_ADDR		0xB8000 /* the video memory address */
-#define CACHE_LINE		64
-#define KERNEL_STACK_SIZE	(8<<10)   /*  8 KiB */
-#define DEFAULT_STACK_SIZE	(64*1024) /* 16 KiB */
-#define KMSG_SIZE		(8*1024)
-#define INT_SYSCALL		0x80
-#define MAILBOX_SIZE	32
-
-#define BYTE_ORDER		LITTLE_ENDIAN
-
-//#define CONFIG_TICKLESS
-
-#define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
-//#define BUILTIN_EXPECT(exp, b)	(exp)
-#define NORETURN 		__attribute__((noreturn))
-#define STDCALL 		__attribute__((stdcall))
-
-#define HAVE_ARCH_MEMSET
-#define HAVE_ARCH_MEMCPY
-#define HAVE_ARCH_STRLEN
-#define HAVE_ARCH_STRCPY
-#define HAVE_ARCH_STRNCPY
-
-#ifdef __cplusplus
-}
-#endif
+// hex_dumb display network packets in a good way
+void hex_dump(unsigned n, const unsigned char *buf);
 
 #endif

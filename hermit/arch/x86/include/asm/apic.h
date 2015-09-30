@@ -203,6 +203,7 @@ int apic_calibration(void);
 int apic_is_enabled(void);
 int apic_enable_timer(void);
 int apic_disable_timer(void);
+int apic_send_ipi(uint64_t dest, uint8_t irq);
 int ioapic_inton(uint8_t irq, uint8_t apicid);
 int ioapic_intoff(uint8_t irq, uint8_t apicid);
 int map_apic(void);

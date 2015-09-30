@@ -78,6 +78,7 @@ extern void apic_lint0(void);
 extern void apic_lint1(void);
 extern void apic_error(void);
 extern void apic_svr(void);
+extern void mmnif_irq(void);
 
 #define MAX_HANDLERS	256
 
@@ -215,6 +216,9 @@ static int irq_install(void)
 	idt_set_gate(112, (size_t)irq80, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
 	idt_set_gate(113, (size_t)irq81, KERNEL_CODE_SELECTOR,
+		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
+
+	idt_set_gate(122, (size_t)mmnif_irq, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
 
 	// add APIC interrupt handler
