@@ -49,6 +49,9 @@
 #include <lwip/netifapi.h>
 #include <lwip/timers.h>
 #include <netif/etharp.h>
+#include <net/mmnif.h>
+
+static struct netif	mmnif_netif;
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -71,6 +74,7 @@ extern atomic_int64_t total_available_pages;
 extern atomic_int32_t cpu_online;
 extern atomic_int32_t possible_cpus;
 extern int32_t isle;
+extern int32_t possible_isles;
 
 static int foo(void* arg)
 {
@@ -127,6 +131,10 @@ static void tcpip_init_done(void* arg)
 
 static int init_netifs(void)
 {
+	struct ip_addr	ipaddr;
+	struct ip_addr	netmask;
+	struct ip_addr	gw;
+	err_t		err;
 	sys_sem_t	sem;
 
 	if(sys_sem_new(&sem, 0) != ERR_OK)
@@ -136,6 +144,31 @@ static int init_netifs(void)
 	sys_sem_wait(&sem);
 	kprintf("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
+
+	/* Set network address variables */
+        IP4_ADDR(&gw, 192,168,28,1);
+        IP4_ADDR(&ipaddr, 192,168,28,isle+2);
+        IP4_ADDR(&netmask, 255,255,255,0);
+
+	/* register our Memory Mapped Virtual IP interface in the lwip stack
+	 * and tell him how to use the interface:
+	 *  - mmnif_dev : the device data storage
+	 *  - ipaddr : the ip address wich should be used
+	 *  - gw : the gateway wicht should be used
+	 *  - mmnif_init : the initialization which has to be done in order to use our interface
+	 *  - ip_input : tells him that he should use ip_input
+	 *
+	 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
+	 * => Therefore, we are able to use ip_input instead of tcpip_input */
+        if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+        {
+                kprintf("Unable to add the intra network interface: err = %d\n", err);
+                return -ENODEV;
+        }
+
+	/* tell lwip all initialization is done and we want to set it up */
+	netifapi_netif_set_default(&mmnif_netif);
+	netifapi_netif_set_up(&mmnif_netif);
 
 	return 0;
 }
@@ -169,10 +202,10 @@ int smp_main(void)
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)
 {
-	char* argv1[] = {"/bin/hello", NULL};
-	char* argv2[] = {"/bin/jacobi", NULL};
-	char* argv3[] = {"/bin/stream", NULL};
-	char* argv4[] = {"/bin/thr_hello", NULL};
+	//char* argv1[] = {"/bin/hello", NULL};
+	//char* argv2[] = {"/bin/jacobi", NULL};
+	//char* argv3[] = {"/bin/stream", NULL};
+	//char* argv4[] = {"/bin/thr_hello", NULL};
 
 	init_netifs();
 
@@ -181,7 +214,7 @@ static int initd(void* arg)
 	//create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
-	create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
+	//create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/thr_hello", argv4, NORMAL_PRIO);
 
 	return 0;
@@ -195,6 +228,7 @@ int main(void)
 	atomic_int32_inc(&cpu_online);
 
 	kprintf("This is Hermit %s, build date %u\n", VERSION, &__BUILD_DATE);
+	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);

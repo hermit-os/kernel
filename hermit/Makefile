@@ -3,7 +3,8 @@ TOPDIR := $(shell pwd)
 ARCH = x86
 NAME = hermit
 LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
-KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS)
+DRIVERDIRS = drivers/net
+KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
@@ -46,7 +47,7 @@ QEMUDEBUGFLAGS = -monitor none -daemonize \
 QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
 		-chardev socket,host=localhost,port=4555,server,id=tS0
 
-INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4
+INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4 -I$(TOPDIR)/drivers
 # Compiler options for final code
 CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 # Compiler options for debugging
