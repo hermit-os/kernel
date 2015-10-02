@@ -132,6 +132,7 @@ int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t 
  * @param id The value behind this pointer will be set to the new task's id
  * @param fname Filename of the executable to start the task with
  * @param argv Pointer to arguments array
+ * @param prio Desired priority of the new kernel task
  *
  * @return
  * - 0 on success
@@ -139,11 +140,24 @@ int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t 
  */
 int create_user_task(tid_t* id, const char* fame, char** argv, uint8_t prio);
 
+/** @brief Create a user level task on the current core.
+ *
+ * @param id The value behind this pointer will be set to the new task's id
+ * @param sd Socket descriptor to load and to start the executable
+ * @param prio Desired priority of the new kernel task
+ *
+ * @return
+ * - 0 on success
+ * - -EINVAL (-22) or -ENOMEM (-12)on failure
+ */
+int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio);
+
 /** @brief Create a user level task.
  *
  * @param id The value behind this pointer will be set to the new task's id
- * @param fname Filename of the executable to start the task with
+ * @param sd Valid socket descriptor to a TCP/IP connection
  * @param argv Pointer to arguments array
+ * @param prio Desired priority of the new kernel task
  * @param core_id Start the new task on the core with this id
  *
  * @return

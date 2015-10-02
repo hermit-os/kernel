@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+ * Copyright (c) 2010-2015, Stefan Lankes, RWTH Aachen University
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,10 @@
 #include <asm/tss.h>
 #include <asm/elf.h>
 #include <asm/page.h>
+
+#include <lwip/sockets.h>
+#include <lwip/err.h>
+#include <lwip/stats.h>
 
 #define START_ADDRESS	0x40200000
 
@@ -142,7 +146,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	size_t state_size;
 
 	if (BUILTIN_EXPECT(!task, 0))
-		return -EINVAL; 
+		return -EINVAL;
 
 	if (BUILTIN_EXPECT(!task->stack, 0))
 		return -EINVAL;
@@ -162,7 +166,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	 * This procedure cleans the task after exit. */
 	*stack = (size_t) leave_kernel_task;
 
-	/* Next bunch on the stack is the initial register state. 
+	/* Next bunch on the stack is the initial register state.
 	 * The stack must look like the stack of a task which was
 	 * scheduled away previously. */
 	state_size = sizeof(struct state);
@@ -186,7 +190,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	}
 	stptr->cs = 0x08;
 	stptr->ss = 0x10;
-	stptr->gs = core_id * ((size_t) &percore_end0 - (size_t) &percore_start); 
+	stptr->gs = core_id * ((size_t) &percore_end0 - (size_t) &percore_start);
 	stptr->rflags = 0x1202;
 	stptr->userrsp = stptr->rsp;
 
@@ -203,6 +207,10 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 typedef struct {
 	/// Points to the node with the executable in the file system
 	vfs_node_t* node;
+	/// Points to a copy of the executable
+	char* executable;
+	/// Socket descriptor if have no file node
+	int sd;
 	/// Argument count
 	int argc;
 	/// Environment var count
@@ -226,27 +234,29 @@ static int load_task(load_args_t* largs)
 	elf_header_t header;
 	elf_program_header_t prog_header;
 	//elf_section_header_t sec_header;
-	///!!! kfree is missing!
-	fildes_t *file = kmalloc(sizeof(fildes_t));
-	file->offset = 0;
-	file->flags = 0;
-	int ret = -EINVAL;
-
-	//TODO: init the hole fildes_t struct!
+	fildes_t file;
 	task_t* curr_task = per_core(current_task);
+	int ret = -EINVAL;
 
 	if (!largs)
 		return -EINVAL;
 
-	file->node = largs->node;
-	if (!file->node)
+	if (largs->node) {
+		file.node = largs->node;
+		file.offset = 0;
+		file.flags = 0;
+	} else if (!largs->executable || (largs->sd < 0))
 		return -EINVAL;
 
-	ret = read_fs(file, (uint8_t*)&header, sizeof(elf_header_t));
-	if (ret < 0) {
-		kprintf("read_fs failed: %d\n", ret);
-		goto Lerr;
-	}
+	curr_task->sd = largs->sd;
+
+	if (largs->node) {
+		ret = read_fs(&file, (uint8_t*)&header, sizeof(elf_header_t));
+		if (ret < 0) {
+			kprintf("read_fs failed: %d\n", ret);
+			goto Lerr;
+		}
+	} else memcpy(&header, largs->executable, sizeof(elf_header_t));
 
 	if (BUILTIN_EXPECT(header.ident.magic != ELF_MAGIC, 0))
 		goto Linvalid;
@@ -268,11 +278,13 @@ static int load_task(load_args_t* largs)
 
 	// interpret program header table
 	for (i=0; i<header.ph_entry_count; i++) {
-		file->offset = header.ph_offset+i*header.ph_entry_size;
-		if (read_fs(file, (uint8_t*)&prog_header, sizeof(elf_program_header_t)) == 0) {
-			kprintf("Could not read programm header!\n");
-			continue;
-		}
+		if (largs->node) {
+			file.offset = header.ph_offset+i*header.ph_entry_size;
+			if (read_fs(&file, (uint8_t*)&prog_header, sizeof(elf_program_header_t)) == 0) {
+				kprintf("Could not read programm header!\n");
+				continue;
+			}
+		} else memcpy(&prog_header, largs->executable + header.ph_offset+i*header.ph_entry_size, sizeof(elf_program_header_t));
 
 		switch(prog_header.type)
 		{
@@ -313,9 +325,12 @@ static int load_task(load_args_t* largs)
 				heap = prog_header.virt_addr + prog_header.mem_size;
 
 			// load program
-			file->offset = prog_header.offset;
 			//kprintf("read programm 0x%zx - 0x%zx\n", prog_header.virt_addr, prog_header.virt_addr + prog_header.file_size);
-			read_fs(file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
+			if (largs->node) {
+				file.offset = prog_header.offset;
+				read_fs(&file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
+			} else
+				memcpy((uint8_t*)prog_header.virt_addr, largs->executable + prog_header.offset, prog_header.file_size);
 
 			if (!(prog_header.flags & PF_W))
 				page_set_flags(prog_header.virt_addr, npages, flags);
@@ -463,6 +478,8 @@ static int load_task(load_args_t* largs)
 	offset -= sizeof(ssize_t);
 	*((ssize_t*) (stack+offset)) = (ssize_t) largs->argc;
 
+	if (largs->executable)
+		kfree(largs->executable);
 	kfree(largs);
 
 	// clear fpu state => currently not supported
@@ -492,6 +509,10 @@ Linvalid:
 	kprintf("program entry point 0x%lx\n", (size_t) header.entry);
 
 Lerr:
+	if (largs->executable)
+		kfree(largs->executable);
+	kfree(largs);
+
 	return ret;
 }
 
@@ -499,6 +520,8 @@ Lerr:
  * which want to have a start function and argument list */
 static int user_entry(void* arg)
 {
+	load_args_t* largs = (load_args_t*) arg;
+
 	int ret;
 
 	finish_task_switch();
@@ -506,11 +529,9 @@ static int user_entry(void* arg)
 	if (BUILTIN_EXPECT(!arg, 0))
 		return -EINVAL;
 
-	ret = load_task((load_args_t*) arg);
+	ret = load_task(largs);
 	if (ret)
 		kprintf("Load task failed: %d\n", ret);
-
-	kfree(arg);
 
 	sys_exit(ret);
 
@@ -558,6 +579,8 @@ int create_user_task_on_core(tid_t* id, const char* fname, char** argv, uint8_t 
 		return -ENOMEM;
 	load_args->node = node;
 	load_args->argc = argc;
+	load_args->sd = -1;
+	load_args->executable = NULL;
 	load_args->envc = 0;
 	dest = load_args->buffer;
 	for (i=0; i<argc; i++) {
@@ -567,4 +590,92 @@ int create_user_task_on_core(tid_t* id, const char* fname, char** argv, uint8_t 
 
 	/* create new task */
 	return create_task(id, user_entry, load_args, prio, core_id);
+}
+
+int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio)
+{
+	int argc;
+	int ret, err = -EINVAL;
+	int len, total_len, i, j;
+	load_args_t* load_args = NULL;
+	char *dest;
+	uint32_t core_id = CORE_ID;
+	uint32_t counter = 0;
+
+	ret = read(sd, &argc, sizeof(int));
+	if ((ret != sizeof(int)) || (argc <= 0))
+		goto out;
+
+	load_args = kmalloc(sizeof(load_args_t));
+	if (BUILTIN_EXPECT(!load_args, 0)) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	load_args->node = NULL;
+	load_args->executable = NULL;
+	load_args->sd = sd;
+	load_args->argc = argc;
+	load_args->envc = 0;
+	dest = load_args->buffer;
+
+	for(i=0, total_len=0; i<argc; i++)
+	{
+		ret = read(sd, &len, sizeof(int));
+		if ((ret != sizeof(int)) || (len <= 0))
+			goto out;
+
+		total_len += len;
+		if (total_len >= MAX_ARGS)
+			goto out;
+
+		j=0;
+		while(j < len)
+		{
+			ret = read(sd, dest, len-j);
+			if (ret < 0)
+				goto out;
+			dest += ret;
+			j += ret;
+		}
+	}
+
+	// terminate array with a NULL pointer
+	*dest = 0;
+
+	ret = read(sd, &len, sizeof(int));
+	if ((ret != sizeof(int)) || (len <= 0))
+		goto out;
+	kprintf("length of the executable: %d\n", len);
+
+	load_args->executable = kmalloc(len);
+	if (!load_args->executable) {
+		err = -ENOMEM;
+		goto out;
+	}
+
+	j=0;
+	while(j < len)
+	{
+		ret = read(sd, load_args->executable+j, len-j);
+		if (ret < 0)
+			goto out;
+		j += ret;
+	}
+
+	/* create new task */
+	return create_task(id, user_entry, load_args, prio, core_id);
+
+out:
+	kprintf("Unable to load task: %d\n", err);
+
+	if (load_args && load_args->executable)
+		kfree(load_args->executable);
+	if (load_args)
+		kfree(load_args);
+
+	closesocket(sd);
+	counter++;
+
+	return err;
 }

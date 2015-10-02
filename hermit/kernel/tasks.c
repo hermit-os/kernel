@@ -42,8 +42,8 @@
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, -1, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, -1, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -215,7 +215,7 @@ void finish_task_switch(void)
 
 /** @brief A procedure to be called by
  * procedures which are called by exiting tasks. */
-static void NORETURN do_exit(int arg)
+void NORETURN do_exit(int arg)
 {
 	task_t* curr_task = per_core(current_task);
 	const uint32_t core_id = CORE_ID;
@@ -250,11 +250,6 @@ void NORETURN leave_kernel_task(void) {
 
 	result = 0; //get_return_value();
 	do_exit(result);
-}
-
-/** @brief To be called by the systemcall to exit tasks */
-void NORETURN sys_exit(int arg) {
-	do_exit(arg);
 }
 
 /** @brief Aborting a task is like exiting it with result -1 */
@@ -319,6 +314,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].tls_addr = curr_task->tls_addr;
 			task_table[i].tls_mem_size = curr_task->tls_mem_size;
 			task_table[i].tls_file_size = curr_task->tls_file_size;
+			task_table[i].sd = task_table[i].sd;
 			task_table[i].lwip_err = 0;
 			task_table[i].user_usage = curr_task->user_usage;
 			task_table[i].page_map = curr_task->page_map;
@@ -350,7 +346,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	}
 
 	spinlock_irqsave_unlock(&table_lock);
-out: 
+out:
 	if (ret)
 		kfree(stack);
 
@@ -403,6 +399,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_mem_size = 0;
 			task_table[i].tls_file_size = 0;
+			task_table[i].sd = -1;
 			task_table[i].lwip_err = 0;
 
 			spinlock_irqsave_init(&task_table[i].page_lock);

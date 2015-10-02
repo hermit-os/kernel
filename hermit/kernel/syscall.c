@@ -34,6 +34,12 @@
 #include <hermit/semaphore.h>
 #include <hermit/time.h>
 
+#include <lwip/sockets.h>
+#include <lwip/err.h>
+#include <lwip/stats.h>
+
+static spinlock_t lwip_lock = SPINLOCK_INIT;
+
 static tid_t sys_getpid(void)
 {
 	task_t* task = per_core(current_task);
@@ -53,19 +59,74 @@ static void sys_yield(void)
 	reschedule();
 }
 
+void NORETURN do_exit(int arg);
+
+/** @brief To be called by the systemcall to exit tasks */
+void NORETURN sys_exit(int arg)
+{
+	task_t* task = per_core(current_task);
+	int sysnr = __NR_exit;
+
+	if (task->sd >= 0)
+	{
+		spinlock_lock(&lwip_lock);
+		write(task->sd, &sysnr, sizeof(int));
+		write(task->sd, &arg, sizeof(int));
+		spinlock_unlock(&lwip_lock);
+
+		closesocket(task->sd);
+		task->sd = -1;
+	}
+
+	do_exit(arg);
+}
+
 static int sys_write(int fd, const char* buf, size_t len)
 {
+	task_t* task = per_core(current_task);
+	int ret, sysnr = __NR_write;
 	size_t i;
-
-	//TODO: Currently, we ignore the file descriptor
 
 	if (BUILTIN_EXPECT(!buf, 0))
 		return -1;
 
-	for(i=0; i<len; i++)
-		kputchar(buf[i]);
+	if (task->sd < 0)
+	{
+		for(i=0; i<len; i++)
+			kputchar(buf[i]);
 
-	return len;
+		return len;
+	}
+
+	spinlock_lock(&lwip_lock);
+
+	ret = write(task->sd, &sysnr, sizeof(int));
+	if (ret < 0)
+		goto out;
+
+	ret = write(task->sd, &fd, sizeof(int));
+	if (ret < 0)
+		goto out;
+
+	ret = write(task->sd, &len, sizeof(size_t));
+	if (ret < 0)
+		goto out;
+
+	i=0;
+	while(i<len)
+	{
+		ret = write(task->sd, (char*)buf+i, len-i);
+		if (ret < 0)
+			goto out;
+		i += ret;
+	}
+
+	ret = len;
+
+out:
+	spinlock_unlock(&lwip_lock);
+
+	return ret;
 }
 
 static ssize_t sys_sbrk(int incr)
@@ -96,12 +157,72 @@ static ssize_t sys_sbrk(int incr)
 
 static int sys_open(const char* name, int flags, int mode)
 {
-	return 0;
+	task_t* task = per_core(current_task);
+	int i, ret, sysnr = __NR_open;
+	size_t len = strlen(name+1);
+
+	if (task->sd < 0)
+		return 0;
+
+	len = strlen(name+1);
+
+	spinlock_lock(&lwip_lock);
+
+	ret = write(task->sd, &sysnr, sizeof(int));
+	if (ret < 0)
+		goto out;
+
+	ret = write(task->sd, &len, sizeof(size_t));
+	if (ret < 0)
+		goto out;
+
+	i=0;
+	while(i<len)
+	{
+		ret = write(task->sd, name+i, len-i);
+		if (ret < 0)
+			goto out;
+		i += ret;
+	}
+
+	ret = write(task->sd, &flags, sizeof(int));
+	if (ret < 0)
+		goto out;
+
+	ret = write(task->sd, &mode, sizeof(int));
+	if (ret < 0)
+		goto out;
+
+	read(task->sd, &ret, sizeof(int));
+
+out:
+	spinlock_unlock(&lwip_lock);
+
+	return ret;
 }
 
 static int sys_close(int fd)
 {
-	return 0;
+	task_t* task = per_core(current_task);
+	int ret, sysnr = __NR_close;
+
+	if (task->sd < 0)
+		return 0;
+
+	spinlock_lock(&lwip_lock);
+
+	ret = write(task->sd, &sysnr, sizeof(int));
+	if (ret < 0)
+		goto out;
+	ret = write(task->sd, &fd, sizeof(int));
+	if (ret < 0)
+		goto out;
+	read(task->sd, &ret, sizeof(int));
+
+out:
+	spinlock_unlock(&lwip_lock);
+
+	return ret;
 }
 
 static int sys_msleep(unsigned int msec)
@@ -171,7 +292,7 @@ static int sys_sem_timedwait(sem_t *sem, unsigned int ms)
 
 static int sys_clone(tid_t* id, void* ep, void* argv)
 {
-	return clone_task(id, ep, argv, per_core(current_task)->prio);	
+	return clone_task(id, ep, argv, per_core(current_task)->prio);
 }
 
 static int default_handler(void)

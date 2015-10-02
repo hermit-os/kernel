@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
-EXECFILES = $(shell find ../usr/examples -perm -u+r+x -type f)
+EXECFILES = ../usr/examples/hello #$(shell find ../usr/examples -perm -u+r+x -type f)
 
 # Prettify output
 V = 0
