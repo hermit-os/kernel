@@ -48,11 +48,18 @@
 #include <lwip/dhcp.h>
 #include <lwip/netifapi.h>
 #include <lwip/timers.h>
+#include <lwip/sockets.h>
+#include <lwip/err.h>
+#include <lwip/stats.h>
 #include <netif/etharp.h>
 #include <net/mmnif.h>
 
-static struct netif	mmnif_netif;
+#define HERMIT_PORT	0x494F
+#define HEMRIT_MAGIC	0x7E317
 
+static struct netif	mmnif_netif;
+static const int sobufsize = 131072;
+volatile int8_t shutdown = 0;
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
@@ -76,6 +83,7 @@ extern atomic_int32_t possible_cpus;
 extern int32_t isle;
 extern int32_t possible_isles;
 
+#if 0
 static int foo(void* arg)
 {
 	int i;
@@ -87,6 +95,7 @@ static int foo(void* arg)
 
 	return 0;
 }
+#endif
 
 static int hermit_init(void)
 {
@@ -173,6 +182,14 @@ static int init_netifs(void)
 	return 0;
 }
 
+static int network_shutdown(void)
+{
+        mmnif_shutdown();
+        netifapi_netif_set_down(&mmnif_netif);
+
+        return 0;
+}
+
 #if MAX_CORES > 1
 int smp_main(void)
 {
@@ -202,12 +219,14 @@ int smp_main(void)
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)
 {
+	int s, c, len, err;
+	int32_t magic;
+	struct sockaddr_in server, client;
+
 	//char* argv1[] = {"/bin/hello", NULL};
 	//char* argv2[] = {"/bin/jacobi", NULL};
 	//char* argv3[] = {"/bin/stream", NULL};
 	//char* argv4[] = {"/bin/thr_hello", NULL};
-
-	init_netifs();
 
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
@@ -216,6 +235,66 @@ static int initd(void* arg)
 	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
 	//create_user_task(NULL, "/bin/thr_hello", argv4, NORMAL_PRIO);
+
+	init_netifs();
+
+	s = socket(PF_INET , SOCK_STREAM , 0);
+	if (s < 0) {
+		kprintf("socket failed: %d\n", server);
+		return -1;
+	}
+
+	// prepare the sockaddr_in structure
+	memset((char *) &server, 0x00, sizeof(server));
+	server.sin_family = AF_INET;
+	server.sin_addr.s_addr = INADDR_ANY;
+	server.sin_port = htons(HERMIT_PORT);
+
+	if ((err = bind(s, (struct sockaddr *) &server, sizeof(server))) < 0)
+	{
+		kprintf("bind failed: %d\n", errno);
+		closesocket(s);
+		return -1;
+	}
+
+	if ((err = listen(s, 2)) < 0)
+	{
+		kprintf("listen failed: %d\n", errno);
+		closesocket(s);
+		return -1;
+	}
+
+	len = sizeof(struct sockaddr_in);
+	while(!shutdown)
+	{
+		kputs("TCP server listening.\n");
+
+		if ((c = accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
+		{
+			kprintf("accept faild: %d\n", errno);
+			closesocket(s);
+			return -1;
+		}
+
+		kputs("Establish IP connection\n");
+
+		setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
+		setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+
+		read(c, &magic, sizeof(int32_t));
+		if (magic != HEMRIT_MAGIC)
+		{
+			kprintf("Invalid magic number %d\n", magic);
+			closesocket(c);
+			continue;
+		}
+
+		create_user_task_form_socket(NULL, c, NORMAL_PRIO);
+	}
+
+	closesocket(s);
+
+	network_shutdown();
 
 	return 0;
 }

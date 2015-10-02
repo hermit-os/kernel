@@ -112,6 +112,8 @@ typedef struct task {
 	size_t		tls_mem_size;
 	/// TLS file size
 	size_t		tls_file_size;
+	/// Socket descriptor to the proxy
+	int		sd;
 	/// LwIP error code
 	int		lwip_err;
 	/// FPU state
