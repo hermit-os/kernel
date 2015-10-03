@@ -128,6 +128,7 @@ veryclean: clean
 ramfs: hermit.elf
 	touch initrd.cpio
 	cp hermit.bin $(INITRAMFS)
+	cp tools/*_proxy $(INITRAMFS)
 	cd $(INITRAMFS); \
 	find . -print0 | cpio --null -ov --format=newc > $(TOPDIR)/initrd.cpio
 
