@@ -646,7 +646,7 @@ int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio)
 	ret = read(sd, &len, sizeof(int));
 	if ((ret != sizeof(int)) || (len <= 0))
 		goto out;
-	kprintf("length of the executable: %d\n", len);
+	//kprintf("length of the executable: %d\n", len);
 
 	load_args->executable = kmalloc(len);
 	if (!load_args->executable) {
