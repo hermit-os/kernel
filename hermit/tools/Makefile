@@ -6,6 +6,7 @@ CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
 EXECFILES = ../usr/examples/hello #$(shell find ../usr/examples -perm -u+r+x -type f)
+PROXYFILES = $(shell find ../usr/examples -perm -u+r+x -type f)
 
 # Prettify output
 V = 0
@@ -21,7 +22,7 @@ endif
 
 default: all
 	
-all: init.h make_initrd initrd.o
+all: init.h make_initrd initrd.o proxy
 
 init.bin: init.asm
 	@echo [NASM] $@
@@ -43,6 +44,10 @@ initrd.img: $(EXECFILES) make_initrd
 
 make_initrd: make_initrd.o
 	$Q$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+
+proxy: $(PROXYFILES)
+	@echo [PROXY] Create proxy files
+	$Q./create_proxy.sh $(foreach FILE, $(EXECFILES), $(FILE))
 
 clean:
 	@echo Cleaning tools
