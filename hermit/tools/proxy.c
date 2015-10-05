@@ -35,6 +35,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <linux/tcp.h>
 
 #define HERMIT_PORT     0x494F
 #define HERMIT_MAGIC    0x7E317
@@ -44,6 +45,7 @@
 #define __HERMIT_open	2
 #define __HERMIT_close	3
 #define __HERMIT_read	4
+#define __HERMIT_lseek	5
 
 static char saddr[16] = "192.168.28.2";
 static int sobufsize = 131072;
@@ -69,7 +71,7 @@ int handle_syscalls(int s)
 		switch(sysnr)
 		{
 		case __HERMIT_exit: {
-			int arg;
+			int arg = 0;
 
 			ret = read(s, &arg, sizeof(arg));
 			if (ret < 0)
@@ -80,7 +82,8 @@ int handle_syscalls(int s)
 		}
 		case __HERMIT_write: {
 			int fd;
-			size_t j, len;
+			ssize_t j;
+			size_t len;
 			char* buff;
 
 			ret = read(s, &fd, sizeof(fd));
@@ -105,16 +108,50 @@ int handle_syscalls(int s)
 				j += len;
 			}
 
-			j=0;
-			while(j < len)
-			{
-				ret = write(fd, buff+j, len-j);
-				if (ret < 0)
-					goto out;
-				j += len;
-			}
+			j = write(fd, buff, len);
+			if (fd > 2)
+				write(s, &j, sizeof(j));
 
 			free(buff);
+			break;
+		}
+		case __HERMIT_open: {
+			size_t j, len;
+			char* fname;
+			int flags, mode;
+
+			ret = read(s, &len, sizeof(len));
+			if (ret < 0)
+				goto out;
+
+			fname = malloc(len);
+			if (!fname)
+				goto out;
+
+			j = 0;
+			while(j < len)
+			{
+				ret = read(s, fname+j, len-j);
+				if (ret < 0)
+					goto out;
+
+				j += ret;
+			}
+
+			ret = read(s, &flags, sizeof(flags));
+			if (ret < 0)
+				goto out;
+
+			ret = read(s, &mode, sizeof(mode));
+			if (ret < 0)
+				goto out;
+
+			//printf("flags 0x%x, mode 0x%x\n", flags, mode);
+
+			ret = open(fname, flags, mode);
+			write(s, &ret, sizeof(ret));
+
+			free(fname);
 			break;
 		}
 		case __HERMIT_close: {
@@ -134,6 +171,63 @@ int handle_syscalls(int s)
 				goto out;
 			break;
 		}
+		case __HERMIT_read: {
+			int fd, flag;
+			size_t len;
+			ssize_t j;
+			char* buff;
+
+			ret = read(s, &fd, sizeof(fd));
+			if (ret < 0)
+				goto out;
+
+			ret = read(s, &len, sizeof(len));
+			if (ret < 0)
+				goto out;
+
+			buff = malloc(len);
+			if (!buff)
+				goto out;
+
+			j = read(fd, buff, len);
+
+			flag = 0;
+			setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+
+			write(s, &j, sizeof(j));
+
+			if (j > 0)
+			{
+				ssize_t i = 0;
+
+				while(i < j)
+				{
+					ret = write(s, buff+i, j-i);
+					if (ret < 0)
+						break;
+
+					i += ret;
+				}
+			}
+
+			flag = 1;
+			setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
+
+			free(buff);
+			break;
+		}
+		case __HERMIT_lseek: {
+			int fd, whence;
+			off_t offset;
+
+			read(s, &fd, sizeof(fd));
+			read(s, &offset, sizeof(offset));
+			read(s, &whence, sizeof(whence));
+
+			offset = lseek(fd, offset, whence);
+			write(s, &offset, sizeof(offset));
+			break;
+		}
 		default:
 			fprintf(stderr, "Proxy: invalid syscall number %d\n", sysnr);
 			break;
@@ -141,7 +235,7 @@ int handle_syscalls(int s)
 	}
 
 out:
-	perror("Proxy: communication error");
+	perror("Proxy -- communication error");
 
 	return 1;
 }
@@ -162,6 +256,8 @@ int main(int argc, char **argv)
 
 	setsockopt(s, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
         setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	i = 1;
+	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
 	/* server address  */
 	memset((char *) &serv_name, 0x00, sizeof(serv_name));
@@ -172,7 +268,7 @@ int main(int argc, char **argv)
 	ret = connect(s, (struct sockaddr*)&serv_name, sizeof(serv_name));
 	if (ret < 0)
 	{
-		perror("Proxy: connection error");
+		perror("Proxy -- connection error");
 		close(s);
 		exit(1);
 	}
@@ -226,7 +322,7 @@ int main(int argc, char **argv)
 	return ret;
 
 out:
-	perror("Proxy: communication error");
+	perror("Proxy -- communication error");
 	close(s);
 	return 1;
 }

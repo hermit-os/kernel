@@ -61,17 +61,21 @@ static void sys_yield(void)
 
 void NORETURN do_exit(int arg);
 
+typedef struct {
+	int sysnr;
+	int arg;
+} __attribute__((packed)) sys_exit_t;
+
 /** @brief To be called by the systemcall to exit tasks */
 void NORETURN sys_exit(int arg)
 {
 	task_t* task = per_core(current_task);
-	int sysnr = __NR_exit;
+	sys_exit_t sysargs = {__NR_exit, arg};
 
 	if (task->sd >= 0)
 	{
 		spinlock_lock(&lwip_lock);
-		write(task->sd, &sysnr, sizeof(int));
-		write(task->sd, &arg, sizeof(int));
+		write(task->sd, &sysargs, sizeof(sysargs));
 		spinlock_unlock(&lwip_lock);
 
 		closesocket(task->sd);
@@ -81,11 +85,58 @@ void NORETURN sys_exit(int arg)
 	do_exit(arg);
 }
 
-static int sys_write(int fd, const char* buf, size_t len)
+typedef struct {
+	int sysnr;
+	int fd;
+	size_t len;
+} __attribute__((packed)) sys_read_t;
+
+static ssize_t sys_read(int fd, char* buf, size_t len)
 {
 	task_t* task = per_core(current_task);
-	int ret, sysnr = __NR_write;
-	size_t i;
+	sys_read_t sysargs = {__NR_read, fd, len};
+	ssize_t j, ret;
+
+	if (task->sd < 0)
+		return -ENOSYS;
+
+	spinlock_lock(&lwip_lock);
+	write(task->sd, &sysargs, sizeof(sysargs));
+
+	read(task->sd, &j, sizeof(j));
+	if (j > 0)
+	{
+		ssize_t i = 0;
+
+		while(i < j)
+		{
+			ret = read(task->sd, buf+i, j-i);
+			if (ret < 0) {
+				spinlock_unlock(&lwip_lock);
+				return ret;
+			}
+
+			i += ret;
+		}
+	}
+
+	spinlock_unlock(&lwip_lock);
+
+	return j;
+}
+
+typedef struct {
+	int sysnr;
+	int fd;
+	size_t len;
+} __attribute__((packed)) sys_write_t;
+
+static ssize_t sys_write(int fd, const char* buf, size_t len)
+{
+	task_t* task = per_core(current_task);
+	ssize_t i, ret;
+	int flag;
+	sys_write_t sysargs = {__NR_write, fd, len};
 
 	if (BUILTIN_EXPECT(!buf, 0))
 		return -1;
@@ -100,33 +151,35 @@ static int sys_write(int fd, const char* buf, size_t len)
 
 	spinlock_lock(&lwip_lock);
 
-	ret = write(task->sd, &sysnr, sizeof(int));
-	if (ret < 0)
-		goto out;
+	flag = 0;
+	setsockopt(task->sd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 
-	ret = write(task->sd, &fd, sizeof(int));
-	if (ret < 0)
-		goto out;
-
-	ret = write(task->sd, &len, sizeof(size_t));
-	if (ret < 0)
-		goto out;
+	write(task->sd, &sysargs, sizeof(sysargs));
 
 	i=0;
-	while(i<len)
+	while(i < len)
 	{
 		ret = write(task->sd, (char*)buf+i, len-i);
-		if (ret < 0)
-			goto out;
+		if (ret < 0) {
+			spinlock_unlock(&lwip_lock);
+			return ret;
+		}
+
 		i += ret;
 	}
 
-	ret = len;
+	flag = 1;
+	setsockopt(task->sd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 
-out:
+	if (fd > 2) {
+		ret = read(task->sd, &i, sizeof(i));
+		if (ret < 0)
+			i = ret;
+	} else i = len;
+
 	spinlock_unlock(&lwip_lock);
 
-	return ret;
+	return i;
 }
 
 static ssize_t sys_sbrk(int incr)
@@ -159,20 +212,23 @@ static int sys_open(const char* name, int flags, int mode)
 {
 	task_t* task = per_core(current_task);
 	int i, ret, sysnr = __NR_open;
-	size_t len = strlen(name+1);
+	size_t len;
 
 	if (task->sd < 0)
 		return 0;
 
-	len = strlen(name+1);
+	len = strlen(name)+1;
 
 	spinlock_lock(&lwip_lock);
 
-	ret = write(task->sd, &sysnr, sizeof(int));
+	i = 0;
+	setsockopt(task->sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+
+	ret = write(task->sd, &sysnr, sizeof(sysnr));
 	if (ret < 0)
 		goto out;
 
-	ret = write(task->sd, &len, sizeof(size_t));
+	ret = write(task->sd, &len, sizeof(len));
 	if (ret < 0)
 		goto out;
 
@@ -185,15 +241,18 @@ static int sys_open(const char* name, int flags, int mode)
 		i += ret;
 	}
 
-	ret = write(task->sd, &flags, sizeof(int));
+	ret = write(task->sd, &flags, sizeof(flags));
 	if (ret < 0)
 		goto out;
 
-	ret = write(task->sd, &mode, sizeof(int));
+	ret = write(task->sd, &mode, sizeof(mode));
 	if (ret < 0)
 		goto out;
 
-	read(task->sd, &ret, sizeof(int));
+	i = 1;
+	setsockopt(task->sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+
+	read(task->sd, &ret, sizeof(ret));
 
 out:
 	spinlock_unlock(&lwip_lock);
@@ -201,23 +260,26 @@ out:
 	return ret;
 }
 
+typedef struct {
+	int sysnr;
+	int fd;
+} __attribute__((packed)) sys_close_t;
+
 static int sys_close(int fd)
 {
+	int ret;
 	task_t* task = per_core(current_task);
-	int ret, sysnr = __NR_close;
+	sys_close_t sysargs = {__NR_close, fd};
 
 	if (task->sd < 0)
 		return 0;
 
 	spinlock_lock(&lwip_lock);
 
-	ret = write(task->sd, &sysnr, sizeof(int));
-	if (ret < 0)
+	ret = write(task->sd, &sysargs, sizeof(sysargs));
+	if (ret != sizeof(sysargs))
 		goto out;
-	ret = write(task->sd, &fd, sizeof(int));
-	if (ret < 0)
-		goto out;
-	read(task->sd, &ret, sizeof(int));
+	read(task->sd, &ret, sizeof(ret));
 
 out:
 	spinlock_unlock(&lwip_lock);
@@ -295,10 +357,42 @@ static int sys_clone(tid_t* id, void* ep, void* argv)
 	return clone_task(id, ep, argv, per_core(current_task)->prio);
 }
 
+typedef struct {
+	int sysnr;
+	int fd;
+	off_t offset;
+	int whence;
+} __attribute__((packed)) sys_lseek_t;
+
+static off_t sys_lseek(int fd, off_t offset, int whence)
+{
+	off_t off;
+	task_t* task = per_core(current_task);
+	sys_lseek_t sysargs = {__NR_lseek, fd, offset, whence};
+
+	if (task->sd < 0)
+		return -ENOSYS;
+
+	spinlock_lock(&lwip_lock);
+
+	write(task->sd, &sysargs, sizeof(sysargs));
+	read(task->sd, &off, sizeof(off));
+
+	spinlock_unlock(&lwip_lock);
+
+	return off;
+}
+
 static int default_handler(void)
 {
+#if 0
 	kprintf("Invalid system call\n");
+#else
+	uint64_t rax;
 
+	asm volatile ("mov %%rax, %0" : "=m"(rax) :: "memory");
+	kprintf("Invalid system call: %zd\n", rax);
+#endif
 	return -ENOSYS;
 }
 
@@ -307,8 +401,8 @@ size_t syscall_table[] = {
 	(size_t) sys_write,		/* __NR_write 	*/
 	(size_t) sys_open, 		/* __NR_open 	*/
 	(size_t) sys_close,		/* __NR_close 	*/
-	(size_t) default_handler,	/* __NR_read 	*/
-	(size_t) default_handler,	/* __NR_lseek	*/
+	(size_t) sys_read,		/* __NR_read 	*/
+	(size_t) sys_lseek,		/* __NR_lseek	*/
 	(size_t) default_handler, 	/* __NR_unlink	*/
 	(size_t) sys_getpid, 		/* __NR_getpid	*/
 	(size_t) default_handler,	/* __NR_kill	*/
