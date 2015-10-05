@@ -267,6 +267,8 @@ static int initd(void* arg)
 	len = sizeof(struct sockaddr_in);
 	while(!shutdown)
 	{
+		int flag = 1;
+
 		kputs("TCP server listening.\n");
 
 		if ((c = accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
@@ -280,6 +282,7 @@ static int initd(void* arg)
 
 		setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
 		setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+		setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 
 		read(c, &magic, sizeof(int32_t));
 		if (magic != HEMRIT_MAGIC)
