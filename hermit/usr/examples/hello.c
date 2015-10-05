@@ -31,15 +31,28 @@
 #include <unistd.h>
 #include <errno.h>
 
+#define N	255
+
 int main(int argc, char** argv)
 {
-	int i;
+	int i, random;
+	FILE* file;
 
 	printf("Hello World!!!\n");
 	for(i=0; environ[i]; i++)
 		printf("environ[%d] = %s\n", i, environ[i]);
 	for(i=0; i<argc; i++)
 		printf("argv[%d] = %s\n", i, argv[i]);
+
+	file = fopen("/etc/hostname", "r");
+	if (file)
+	{
+		char fname[N] = "";
+
+		fscanf(file, "%s", fname);
+		printf("Hostname: %s\n", fname);
+		fclose(file);
+	}
 
 	return errno;
 }
