@@ -1,8 +1,7 @@
 #!/bin/bash
 
-if test "$#" -ne 1; then
-  echo "Illegal number of parameters"
-else
+while [[ $# > 0 ]]
+do
   fname=$(basename "$1")
   fname_new=$(basename "$1")_proxy
 
@@ -20,4 +19,7 @@ else
   echo ".int    app_size - hermit_app" >> inc.S
 
   cc -O2 -Wall -o $fname_new proxy.c inc.S
-fi
+  rm -rf inc.S
+
+  shift
+done
