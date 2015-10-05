@@ -38,6 +38,7 @@
 #include <lwip/err.h>
 #include <lwip/stats.h>
 
+//TODO: don't use one big kernel lock to comminicate with all proxies
 static spinlock_t lwip_lock = SPINLOCK_INIT;
 
 static tid_t sys_getpid(void)
