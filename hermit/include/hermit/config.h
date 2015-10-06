@@ -48,12 +48,11 @@ extern "C" {
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
-//#define CONFIG_TICKLESS
+#define DYNAMIC_TICKS
 
 #define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
 //#define BUILTIN_EXPECT(exp, b)	(exp)
 #define NORETURN 		__attribute__((noreturn))
-#define STDCALL 		__attribute__((stdcall))
 
 #define HAVE_ARCH_MEMSET
 #define HAVE_ARCH_MEMCPY

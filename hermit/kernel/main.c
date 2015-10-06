@@ -195,8 +195,8 @@ int smp_main(void)
 {
 	int32_t cpu = atomic_int32_inc(&cpu_online);
 
-#ifdef CONFIG_TICKLESS
-	disable_timer_irq();
+#ifdef DYNAMIC_TICKS
+	enable_dynticks();
 #endif
 
 	/* wait for the other cpus */
@@ -324,8 +324,8 @@ int main(void)
 	list_fs(fs_root, 1);
 #endif
 
-#ifdef CONFIG_TICKLESS
-	disable_timer_irq();
+#ifdef DYNAMIC_TICKS
+	enable_dynticks();
 #endif
 
 	/* wait for the other cpus */

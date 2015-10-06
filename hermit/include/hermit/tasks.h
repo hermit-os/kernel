@@ -230,13 +230,17 @@ void NORETURN leave_kernel_task(void);
  *  */
 void check_scheduling(void);
 
+#ifdef DYNAMIC_TICKS
 /** @brief check, if the tick counter has to be updated
  *  */
 void check_ticks(void);
+#endif
 
 static inline void check_workqueues_in_irqhandler(int irq)
 {
+#ifdef DYNAMIC_TICKS
 	check_ticks();
+#endif
 	check_timers();
 
 	if (irq < 0)

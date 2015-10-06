@@ -55,9 +55,9 @@ extern "C" {
 /// LVT Timer Register
 #define APIC_LVT_T		0x0320
 /// LVT Thermal Sensor Register
-#define APIC_LVT_TSR	0x0330
+#define APIC_LVT_TSR		0x0330
 /// LVT Performance Monitoring Counters Register
-#define APIC_LVT_PMC	0x0340
+#define APIC_LVT_PMC		0x0340
 /// LVT LINT0 Register
 #define APIC_LINT0		0x0350
 /// LVT LINT1 Register
@@ -168,29 +168,29 @@ typedef struct {
 		struct {
 			uint32_t vector		:  8,
 				delivery_mode	:  3,	/* 000: FIXED
-				 	 	 	 	 	 	 * 001: lowest prio
-				 	 	 	 	 	 	 * 111: ExtINT
-				 	 	 	 	 	 	 */
+				  	 	 	 * 001: lowest prio
+		 	 	 	 	 	 * 111: ExtINT
+	 	 	 	 	 	 	 */
 				dest_mode		:  1,	/* 0: physical, 1: logical */
-				delivery_status	:  1,
+				delivery_status		:  1,
 				polarity		:  1,
-				irr				:  1,
+				irr			:  1,
 				trigger			:  1,	/* 0: edge, 1: level */
 				mask			:  1,	/* 0: enabled, 1: disabled */
-				__reserved_2	: 15;
+				__reserved_2		: 15;
 		} bitfield;
 		uint32_t whole;
 	} lower;
 	union {
 		struct {
 			uint32_t __reserved_1	: 24,
-				physical_dest		:  4,
-				__reserved_2		:  4;
+			physical_dest		:  4,
+			__reserved_2		:  4;
 		} physical;
 
 		struct {
 			uint32_t __reserved_1	: 24,
-				logical_dest		:  8;
+			logical_dest		:  8;
 		} logical;
 		uint32_t upper;
 	} dest;
@@ -203,6 +203,7 @@ int apic_calibration(void);
 int apic_is_enabled(void);
 int apic_enable_timer(void);
 int apic_disable_timer(void);
+int apic_timer_deadline(uint32_t);
 int apic_send_ipi(uint64_t dest, uint8_t irq);
 int ioapic_inton(uint8_t irq, uint8_t apicid);
 int ioapic_intoff(uint8_t irq, uint8_t apicid);

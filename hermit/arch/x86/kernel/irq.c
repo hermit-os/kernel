@@ -43,9 +43,9 @@
 #include <asm/io.h>
 #include <asm/apic.h>
 
-/* 
+/*
  * These are our own ISRs that point to our special IRQ handler
- * instead of the regular 'fault_handler' function 
+ * instead of the regular 'fault_handler' function
  */
 extern void irq0(void);
 extern void irq1(void);
@@ -78,6 +78,7 @@ extern void apic_lint0(void);
 extern void apic_lint1(void);
 extern void apic_error(void);
 extern void apic_svr(void);
+extern void wakeup(void);
 extern void mmnif_irq(void);
 
 #define MAX_HANDLERS	256
@@ -120,7 +121,7 @@ int irq_uninstall_handler(unsigned int irq)
  * actually happening. We send commands to the Programmable
  * Interrupt Controller (PICs - also called the 8259's) in
  * order to make IRQ0 to 15 be remapped to IDT entries 32 to
- * 47 
+ * 47
  */
 static int irq_remap(void)
 {
@@ -138,7 +139,7 @@ static int irq_remap(void)
 	return 0;
 }
 
-int disable_timer_irq(void)
+int enable_dynticks(void)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled(), 1))
 		return apic_disable_timer();
@@ -146,6 +147,7 @@ int disable_timer_irq(void)
 	return -EINVAL;
 }
 
+#if 0
 int enable_timer_irq(void)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled(), 1))
@@ -153,6 +155,7 @@ int enable_timer_irq(void)
 
 	return -EINVAL;
 }
+#endif
 
 /** @brief Remap IRQs and install ISRs in IDT
  *
@@ -218,6 +221,8 @@ static int irq_install(void)
 	idt_set_gate(113, (size_t)irq81, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
 
+	idt_set_gate(121, (size_t)wakeup, KERNEL_CODE_SELECTOR,
+                IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
 	idt_set_gate(122, (size_t)mmnif_irq, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 0);
 
@@ -250,10 +255,10 @@ int irq_init(void)
  * Each of the IRQ ISRs point to this function, rather than
  * the 'fault_handler' in 'isrs.c'. The IRQ Controllers need
  * to be told when you are done servicing them, so you need
- * to send them an "End of Interrupt" command. If we use the PIC 
- * instead of the APIC, we have two 8259 chips: The first one 
- * exists at 0x20, the second one exists at 0xA0. If the second 
- * controller (an IRQ from 8 to 15) gets an interrupt, you need to 
+ * to send them an "End of Interrupt" command. If we use the PIC
+ * instead of the APIC, we have two 8259 chips: The first one
+ * exists at 0x20, the second one exists at 0xA0. If the second
+ * controller (an IRQ from 8 to 15) gets an interrupt, you need to
  * acknowledge the interrupt at BOTH controllers, otherwise, you
  * only send an EOI command to the first controller. If you don't send
  * an EOI, it won't raise any more IRQs.
@@ -270,10 +275,10 @@ size_t** irq_handler(struct state *s)
 
 	check_workqueues_in_irqhandler(s->int_no);
 
-	/* 
+	/*
 	 * Find out if we have a custom handler to run for this
-	 * IRQ and then finally, run it 
-	 */	
+	 * IRQ and then finally, run it
+	 */
 	if (BUILTIN_EXPECT(s->int_no < MAX_HANDLERS, 1)) {
 		handler = irq_routines[s->int_no];
 		if (handler)

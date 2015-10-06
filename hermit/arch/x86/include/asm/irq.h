@@ -73,17 +73,11 @@ int irq_uninstall_handler(unsigned int irq);
  */
 int irq_init(void);
 
-/** @brief Disable the timer interrupt
+/** @brief Switch from a fix to a dynamic timer period
  *
  * @return 0 on success
  */
-int disable_timer_irq(void);
-
-/** @brief Enable the timer interrupt
- *
- * @return 0 on success
- */
-int enable_timer_irq(void);
+int enable_dynticks(void);
 
 #ifdef __cplusplus
 }

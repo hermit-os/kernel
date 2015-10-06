@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/** 
+/**
  * @author Stefan Lankes
  * @file include/hermit/time.h
  * @brief Time related functions
@@ -33,6 +33,8 @@
 
 #ifndef __TIME_H__
 #define __TIME_H__
+
+#include <asm/apic.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,7 +49,7 @@ struct tms {
 	clock_t tms_cstime;
 };
 
-/** @brief Initialize Timer interrupts 
+/** @brief Initialize Timer interrupts
  *
  * This procedure installs IRQ handlers for timer interrupts
  */
@@ -61,10 +63,15 @@ int timer_init(void);
  */
 int timer_wait(unsigned int ticks);
 
+DECLARE_PER_CORE(uint64_t, timer_ticks);
+
 /** @brief Returns the current number of ticks.
  * @return Current number of ticks
  */
-uint64_t get_clock_tick(void);
+static inline uint64_t get_clock_tick(void)
+{
+	return per_core(timer_ticks);
+}
 
 /** @brief sleep some seconds
  *
@@ -73,6 +80,8 @@ uint64_t get_clock_tick(void);
  * @param sec Amount of seconds to wait
  */
 static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
+
+static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
 
 #ifdef __cplusplus
 }
