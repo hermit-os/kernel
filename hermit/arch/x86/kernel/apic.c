@@ -48,9 +48,6 @@
  */
 extern const void kernel_start;
 
-extern void start_tickless(void);
-extern void end_tickless(void);
-
 #define IOAPIC_ADDR	((size_t) &kernel_start - 2*PAGE_SIZE)
 #define LAPIC_ADDR	((size_t) &kernel_start - 1*PAGE_SIZE)
 #define MAX_APIC_CORES	256
@@ -221,13 +218,28 @@ static inline uint32_t apic_lvt_entries(void)
 	return 0;
 }
 
+int apic_timer_deadline(uint32_t t)
+{
+	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
+		//kprintf("timer oneshot %ld\n", t);
+
+		// create one shot interrup
+		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
+		lapic_write(APIC_LVT_T, 0x7B);		// connects the timer to 123 and enables it
+		lapic_write(APIC_ICR, icr*t);
+
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
 int apic_disable_timer(void)
 {
 	if (BUILTIN_EXPECT(!apic_is_enabled(), 0))
 		return -EINVAL;
 
 	lapic_write(APIC_LVT_T, 0x10000);	// disable timer interrupt
-	start_tickless();
 
 	return 0;
 }
@@ -238,7 +250,6 @@ int apic_enable_timer(void)
 		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
 		lapic_write(APIC_LVT_T, 0x2007B);	// connects the timer to 123 and enables it
 		lapic_write(APIC_ICR, icr);
-		end_tickless();
 
 		return 0;
 	}

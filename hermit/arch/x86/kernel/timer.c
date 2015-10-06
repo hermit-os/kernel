@@ -36,55 +36,28 @@
 #include <asm/irqflags.h>
 #include <asm/io.h>
 
-/* 
+/*
  * This will keep track of how many ticks the system
- * has been running for 
+ * has been running for
  */
-extern volatile uint64_t timer_ticks;
+DEFINE_PER_CORE(uint64_t, timer_ticks, 0);
 extern uint32_t cpu_freq;
 extern int32_t boot_processor;
 
-static int8_t use_tickless = 0;
-static uint64_t last_rdtsc = 0;
-
-#if MAX_CORES > 1
-static spinlock_irqsave_t ticks_lock = SPINLOCK_IRQSAVE_INIT;
-#endif
-
-void start_tickless(void)
-{
-	use_tickless = 1;
-	if (has_rdtscp())
-		last_rdtsc = rdtscp(NULL);
-	else
-		last_rdtsc = rdtsc();
-	rmb();
-}
-
-void end_tickless(void)
-{
-	use_tickless = 0;
-	last_rdtsc = 0;
-}
+#ifdef DYNAMIC_TICKS
+DEFINE_PER_CORE(uint64_t, last_rdtsc, 0);
 
 void check_ticks(void)
 {
-	if (!use_tickless)
-		return;
-
-#if MAX_CORES > 1
-	spinlock_irqsave_lock(&ticks_lock);
-#endif
-
 	if (has_rdtscp()){
 		uint64_t curr_rdtsc = rdtscp(NULL);
 		uint64_t diff;
 
 		rmb();
-		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+		diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
 		if (diff > 0) {
-			timer_ticks += diff;
-			last_rdtsc = curr_rdtsc;
+			set_per_core(timer_ticks, per_core(timer_ticks) + diff);
+			set_per_core(last_rdtsc, curr_rdtsc);
 			rmb();
 		}
 	} else {
@@ -92,37 +65,31 @@ void check_ticks(void)
 		uint64_t diff;
 
 		rmb();
-		diff = ((curr_rdtsc - last_rdtsc) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+		diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
 		if (diff > 0) {
-			timer_ticks += diff;
-			last_rdtsc = curr_rdtsc;
+			set_per_core(timer_ticks, per_core(timer_ticks) + diff);
+			set_per_core(last_rdtsc, curr_rdtsc);
 			rmb();
 		}
 	}
-
-#if MAX_CORES > 1
-	spinlock_irqsave_unlock(&ticks_lock);
+}
 #endif
 
-}
-
-uint64_t get_clock_tick(void)
+static void wakeup_handler(struct state *s)
 {
-	return timer_ticks;
 }
 
-/* 
+/*
  * Handles the timer. In this case, it's very simple: We
  * increment the 'timer_ticks' variable every time the
- * timer fires. 
+ * timer fires.
  */
 static void timer_handler(struct state *s)
 {
-#if MAX_CORES > 1
-	if (CORE_ID == boot_processor)
+#ifndef DYNAMIC_TICKS
+	/* Increment our 'tick counter' */
+	set_per_core(timer_ticks, per_core(timer_ticks)+1);
 #endif
-		/* Increment our 'tick counter' */
-		timer_ticks++;
 
 #if 0
 	/*
@@ -138,7 +105,7 @@ static void timer_handler(struct state *s)
 int timer_wait(unsigned int ticks)
 {
 	uint64_t eticks = timer_ticks + ticks;
-        
+
 	task_t* curr_task = per_core(current_task);
 
 	if (curr_task->status == TASK_IDLE)
@@ -173,18 +140,26 @@ int timer_wait(unsigned int ticks)
 			      while(rdtsc() - start < 1000000) ; \
 			} while (0)
 
-/* 
+/*
  * Sets up the system clock by installing the timer handler
- * into IRQ0 
+ * into IRQ0
  */
 int timer_init(void)
 {
-	/* 
+	/*
 	 * Installs 'timer_handler' for the PIC and APIC timer,
 	 * only one handler will be later used.
 	 */
 	irq_install_handler(32, timer_handler);
 	irq_install_handler(123, timer_handler);
+	irq_install_handler(121, wakeup_handler);
+
+#ifdef DYNAMIC_TICKS
+	if (has_rdtscp())
+		last_rdtsc = rdtscp(NULL);
+	else
+		last_rdtsc = rdtsc();
+#endif
 
 	if (cpu_freq) // do we need to configure the timer?
 		return 0;

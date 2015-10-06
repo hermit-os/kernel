@@ -151,6 +151,7 @@ include/hermit/config.inc: include/hermit/config.h
 	@awk '/^#define MAX_CORES/{ print "%define MAX_CORES", $$3 }' include/hermit/config.h >> include/hermit/config.inc
 	@awk '/^#define KERNEL_STACK_SIZE/{ print "%define KERNEL_STACK_SIZE", $$3 }' include/hermit/config.h >> include/hermit/config.inc
 	@awk '/^#define VIDEO_MEM_ADDR/{ print "%define VIDEO_MEM_ADDR", $$3 }' include/hermit/config.h >> include/hermit/config.inc
+	@awk '/^#define DYNAMIC_TICKS/{ print "%define DYNAMIC_TICKS", $$3 }' include/hermit/config.h >> include/hermit/config.inc
 
 %.o : %.asm include/hermit/config.inc
 	@echo [ASM] $@

@@ -79,7 +79,11 @@ void check_scheduling(void)
 
 uint32_t get_highest_priority(void)
 {
-	return msb(readyqueues[CORE_ID].prio_bitmap);
+	uint32_t prio = msb(readyqueues[CORE_ID].prio_bitmap);
+
+	if (prio > MAX_PRIO)
+		return 0;
+	return prio;
 }
 
 int multitasking_init(void)
@@ -350,6 +354,9 @@ out:
 	if (ret)
 		kfree(stack);
 
+	if (core_id != CORE_ID)
+		apic_send_ipi(core_id, 121);
+
 	return ret;
 }
 
@@ -448,6 +455,9 @@ out:
 		kfree(counter);
 	}
 
+	if (core_id != CORE_ID)
+		apic_send_ipi(core_id, 121);
+
 	return ret;
 }
 
@@ -527,6 +537,12 @@ int wakeup_task(tid_t id)
 			readyqueues[core_id].queue[prio-1].last = task;
 		}
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+#ifdef DYNAMIC_TICKS
+		// send IPI to be sure that the scheuler recognize the new task
+		if (core_id != CORE_ID)
+			apic_send_ipi(core_id, 121);
+#endif
 	}
 
 	irq_nested_enable(flags);
@@ -636,6 +652,9 @@ int set_timer(uint64_t deadline)
 		if (!tmp) {
 			readyqueues[core_id].timers.first = readyqueues[core_id].timers.last = curr_task;
 			curr_task->prev = curr_task->next = NULL;
+#ifdef DYNAMIC_TICKS
+			timer_deadline(deadline-get_clock_tick());
+#endif
 		} else {
 			while(tmp && (deadline >= tmp->timeout))
 				tmp = tmp->next;
@@ -655,8 +674,12 @@ int set_timer(uint64_t deadline)
 				tmp->prev = curr_task;
 				if (curr_task->prev)
 					curr_task->prev->next = curr_task;
-				if (readyqueues[core_id].timers.first == tmp)
+				if (readyqueues[core_id].timers.first == tmp) {
 					readyqueues[core_id].timers.first = curr_task;
+#ifdef DYNAMIC_TICKS
+					timer_deadline(deadline-get_clock_tick());
+#endif
+				}
 			}
 		}
 
@@ -684,10 +707,13 @@ void check_timers(void)
 
 		// remove timer from queue
 		readyqueues[core_id].timers.first = readyqueues[core_id].timers.first->next;
-		if (readyqueues[core_id].timers.first)
+		if (readyqueues[core_id].timers.first) {
 			readyqueues[core_id].timers.first->prev = NULL;
-		else
-			readyqueues[core_id].timers.last = NULL;
+#ifdef DYNAMIC_TICKS
+			if (readyqueues[core_id].timers.first->timeout > get_clock_tick())
+				timer_deadline(readyqueues[core_id].timers.first->timeout-current_tick);
+#endif
+		} else  readyqueues[core_id].timers.last = NULL;
 		task->flags &= ~TASK_TIMER;
 
 		// wakeup task

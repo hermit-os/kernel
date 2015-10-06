@@ -54,7 +54,6 @@ align 4
     global boot_processor
     global cpu_online
     global possible_cpus
-    global timer_ticks
     global current_boot_id
     global isle
     global possible_isles
@@ -71,7 +70,7 @@ align 4
     boot_processor dd -1
     cpu_online dd 0
     possible_cpus dd 0
-    timer_ticks dq 0
+    dq 0 ; reserved for future extensions
     current_boot_id dd 0
     isle dd -1
     image_size dq 0
@@ -362,12 +361,19 @@ apic_svr:
     push byte 127
     jmp common_stub
 
+global wakeup
+align 16
+wakeup:
+    push byte 0 ; pseudo error code
+    push byte 121
+    jmp common_stub
+
 global mmnif_irq
 align 16
 mmnif_irq:
-	push byte 0 ; pseudo error code
-	push byte 122
-	jmp common_stub
+    push byte 0 ; pseudo error code
+    push byte 122
+    jmp common_stub
 
 extern irq_handler
 extern get_current_stack
@@ -413,8 +419,10 @@ isrsyscall:
     call [rax*8+syscall_table]
     push rax ; result, which we have to return
 
+%ifdef DYNAMIC_TICKS
     extern check_ticks
     call check_ticks
+%endif
 
     extern check_timers
     call check_timers
