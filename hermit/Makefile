@@ -60,7 +60,7 @@ STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
 
-CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -ftls-model=initial-exec -O3 #-mavx2 -mfma -mtune=intel #$(STACKPROT)
+CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -ftls-model=initial-exec -O3 -mavx2 -mfma -mtune=intel #$(STACKPROT)
 FFLAGS_FOR_NEWLIB = -O3
 CXXFLAGS_FOR_NEWLIB =
 LDFLAGS_FOR_NEWLIB =
