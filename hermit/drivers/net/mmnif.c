@@ -104,28 +104,14 @@
 #define MMNIF_STATUS_PENDING            0x01
 #define MMNIF_STATUS_RDY		0x02
 #define MMNIF_STATUS_INPROC		0x03
-#define MMNIF_STATUS_INPROC_BYPASS      0x04
-#define MMNIF_STATUS_PROC		0x05
-
-#define MMNIF_MAX_ACCEPTORS             0x20
-#define MMNIF_ACC_STAT_CLOSED           0x00
-#define MMNIF_ACC_STAT_ACCEPTING        0x01
-#define MMNIF_ACC_STAT_ACCEPT_ME        0x02
-#define MMNIF_ACC_STAT_ACCEPTED         0x03
-
-#define MMNIF_HASHTABLE_SIZE            0x20
-
-#define MMNIF_PSEUDO_SOCKET_START       0x31337
+#define MMNIF_STATUS_PROC		0x04
 
 // id of the HermitCore isle
 extern int32_t isle;
 extern int32_t possible_isles;
 extern char* phy_isle_locks;
 
-#if LWIP_SOCKET
-static int npseudosocket = MMNIF_PSEUDO_SOCKET_START;
-#endif
-static spinlock_t pseudolock;
+static spinlock_irqsave_t locallock;
 
 /* "message passing buffer" specific constants:
  * - start address
@@ -143,40 +129,8 @@ extern unsigned int heap_size;
  */
 static struct netif* mmnif_dev = NULL;
 
-/* accept struct
- */
-typedef struct acceptor {
-	/* stat: status of the acceptor
-	 * src_ip: where did the connect request came from
-	 * port: port on which the acceptor is listening
-	 * nsock : next pseudo socket which is used in further connection
-	 * rsock : remote socket which has to be assosicated with the nsock
-	 */
-	uint8_t stat;
-	uint8_t src_ip;
-	uint16_t port;
-	int nsock;
-	int rsock;
-} acceptor_t;
-
-/* bypass descriptor struct
- */
-typedef struct bypass_rxdesc {
-	/* socket : hashtarget
-	 * remote_socket: socket on the remote end
-	 * counter : packet counter
-	 * last_id : last packet id
-	 * dest_ip : associated destination ip/core
-	 */
-	int socket;
-	int remote_socket;
-	sem_t sem;
-	uint8_t dest_ip;
-} bypass_rxdesc_t;
-
 /*
  */
-static bypass_rxdesc_t mmnif_hashtable[MMNIF_HASHTABLE_SIZE];
 typedef struct mmnif_device_stats {
 	/* device stats (granularity in packets):
 	 * - recieve errors
@@ -206,13 +160,10 @@ typedef struct rx_desc {
 	/* stat : status of the descriptor
 	 * len  : length of the packet
 	 * addr : memory address of the packet
-	 * fast_sock: (-1) if no socket is associated
-	 *             else the socket n of the fast socket
 	 * id   : packet id
 	 */
 	uint8_t stat;
 	uint16_t len;
-	uint32_t fast_sock;
 	size_t addr;
 } rx_desc_t;
 
@@ -236,12 +187,6 @@ typedef struct mm_rx_buffer {
 	uint8_t dcount;
 	uint8_t dread;
 	uint8_t dwrite;
-
-	/* acceptors
-	 * shared memory "hashtable" to realize
-	 * fast socket accept/connect
-	 */
-	acceptor_t acceptors[MMNIF_MAX_ACCEPTORS];
 } mm_rx_buffer_t;
 
 typedef struct mmnif {
@@ -430,7 +375,7 @@ static size_t mmnif_rxbuff_alloc(uint8_t dest, uint16_t len)
 //            if ((rb->head - rb->tail < len)&&(rb->tail != rb->head))
 //                return NULL;
 
-	spinlock_lock(&pseudolock); // only one core should call our islelock
+	spinlock_irqsave_lock(&locallock); // only one core should call our islelock
 	islelock_lock(isle_locks + (dest-1));
 	if (rb->dcount)
 	{
@@ -482,7 +427,7 @@ static size_t mmnif_rxbuff_alloc(uint8_t dest, uint16_t len)
 		}
 	}
 	islelock_unlock(isle_locks + (dest-1));
-	spinlock_unlock(&pseudolock);
+	spinlock_irqsave_unlock(&locallock);
 
 	return ret;
 }
@@ -502,7 +447,6 @@ static int mmnif_commit_packet(uint8_t dest, uint32_t addr)
 		    && rb->desc_table[i].stat == MMNIF_STATUS_PENDING)
 		{
 			rb->desc_table[i].stat = MMNIF_STATUS_RDY;
-			rb->desc_table[i].fast_sock = -1;
 
 			return 0;
 		}
@@ -510,31 +454,6 @@ static int mmnif_commit_packet(uint8_t dest, uint32_t addr)
 
 	return -1;
 }
-
-#if LWIP_SOCKET
-/* mmnif_commit_packet: this function set the state of the (in advance)
- * allocated packet to RDY so the recieve queue knows that it can be
- * processed further
- */
-static int mmnif_commit_packet_bypass(uint8_t dest, size_t addr, int dest_socket)
-{
-	volatile mm_rx_buffer_t* rb = (mm_rx_buffer_t *) ((char *)header_start_address + (dest - 1) * header_size);
-	uint32_t i;
-
-	for (i = 0; i < MMNIF_MAX_DESCRIPTORS; i++)
-	{
-		if (rb->desc_table[i].addr == addr
-		    && rb->desc_table[i].stat == MMNIF_STATUS_PENDING)
-		{
-			rb->desc_table[i].stat = MMNIF_STATUS_RDY;
-			rb->desc_table[i].fast_sock = dest_socket;
-			return 0;
-		}
-	}
-
-	return -1;
-}
-#endif
 
 /* mmnif_rxbuff_free() : the opposite to mmnif_rxbuff_alloc() a from the receiver
  * already processed chunk of memory is freed so that it can be allocated again
@@ -545,7 +464,9 @@ static void mmnif_rxbuff_free(void)
 	volatile mm_rx_buffer_t *b = mmnif->rx_buff;
 	uint32_t i, j;
 	uint32_t rpos;
+	uint8_t flags;
 
+	flags = irq_nested_disable();
 	islelock_lock(isle_locks + (isle+1));
 	rpos = b->dread;
 
@@ -574,6 +495,7 @@ static void mmnif_rxbuff_free(void)
 	}
 
 	islelock_unlock(isle_locks + (isle+1));
+	irq_nested_enable(flags);
 }
 
 /*
@@ -646,163 +568,6 @@ drop_packet:
 	return ERR_IF;
 }
 
-/* mmnif_hashlookup(): looks up a bypass descriptor by
- * the associated socket
- */
-static bypass_rxdesc_t *mmnif_hashlookup(int s)
-{
-	int i;
-	bypass_rxdesc_t *p;
-
-	for (i=0, p = &mmnif_hashtable[s % MMNIF_HASHTABLE_SIZE]; i<MMNIF_HASHTABLE_SIZE; i++)
-	{
-		if (p->socket == s)
-			return p;
-		p = &mmnif_hashtable[(s + i + 1) % MMNIF_HASHTABLE_SIZE];
-	}
-
-	return 0;
-}
-
-#if LWIP_SOCKET
-/* mmnif_hashadd(): adds a entry to the hashtable
- * by the socket
- */
-static int mmnif_hashadd(int sock, int rsock, uint8_t dest_ip)
-{
-	bypass_rxdesc_t *p;
-	int i;
-
-	p = mmnif_hashlookup(sock);
-	if (p != 0)
-		return -1;
-
-	for (i = 0; i < MMNIF_HASHTABLE_SIZE; i++)
-	{
-		p = &mmnif_hashtable[(sock + i) % MMNIF_HASHTABLE_SIZE];
-		if (p->socket == -1)
-		{
-			p->socket = sock;
-			p->remote_socket = rsock;
-			p->dest_ip = dest_ip;
-
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
-/* mmnif_hashdelete(): deletes an entry from the
- * hashtable
- */
-static int mmnif_hashdelete(int sock)
-{
-	bypass_rxdesc_t *p;
-	int i;
-
-	p = mmnif_hashlookup(sock);
-	if (p != 0)
-		return -1;
-
-	for (i = 0; i < MMNIF_HASHTABLE_SIZE; i++)
-	{
-		p = &mmnif_hashtable[(sock + i) % MMNIF_HASHTABLE_SIZE];
-		if (p->socket == sock)
-		{
-			p->socket = -1;
-			p->remote_socket = 0;
-			p->dest_ip = 0;
-
-			return 0;
-		}
-	}
-
-	return -1;
-}
-
-/*
- * Transmid a packet (with insane speed)
- */
-static err_t mmnif_tx_bypass(struct netif * netif, void *pbuff, uint16_t size, int s)
-{
-	mmnif_t *mmnif = netif->state;
-	size_t write_address;
-	//uint32_t id;
-	bypass_rxdesc_t *dest = mmnif_hashlookup(s);
-	//mm_rx_buffer_t *rb = (mm_rx_buffer_t *) ((char *)header_start_address + (dest->dest_ip - 1) * header_size);
-
-	/* allocate memory for the packet in the remote buffer */
-realloc:
-	write_address = mmnif_rxbuff_alloc(dest->dest_ip, size);
-	if (!write_address)
-	{
-		PAUSE;
-		goto realloc;
-	}
-
-	/* write buffer to buffer & increment the queued packet count
-	 * this can be safely done without locking because this place is
-	 * reserved for us because it has the status "pending"
-	 */
-
-	memcpy((void*) write_address, pbuff, size);
-
-	if (mmnif_commit_packet_bypass(dest->dest_ip, write_address, dest->remote_socket))
-	{
-		DEBUGPRINTF("mmnif_tx_bypass(): packet somehow lost during commit\n");
-	}
-#ifdef DEBUG_MMNIF_PACKET
-	//       DEBUGPRINTF("\n SEND %p with length: %d\n",(char*)mpb_start_address + (dest_ip -1)*mpb_size + pos * 1792,p->tot_len +2);
-	//      hex_dump(p->tot_len, p->payload);
-#endif
-
-	/* just gather some stats */
-	LINK_STATS_INC(link.xmit);
-	mmnif->stats.tx++;
-	mmnif->stats.tx_bytes += size;
-
-	mmnif_trigger_irq(dest->dest_ip);
-
-	return ERR_OK;
-}
-
-/* mmnif_send(): is going to be used as replacement of
- * lwip_send with fast_sockets
- */
-int mmnif_send(int s, void *data, size_t size, int flags)
-{
-	bypass_rxdesc_t *p = mmnif_hashlookup(s);
-	uint32_t i, j, k;
-	int total_size = 0;
-
-	if (p != 0)
-	{
-		if (size < ((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE)) {
-			if (mmnif_tx_bypass(mmnif_dev, data, size, s) == ERR_OK)
-				return size;
-		} else {
-			j = size / (((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE));
-			k = size - (j * (((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE)));
-
-			for (i = 0; i < j; i++)
-			{
-				if (mmnif_tx_bypass(mmnif_dev, (char*) data + i * ((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE), ((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE), s) != ERR_OK)
-					return total_size;
-				total_size += (MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE;
-			}
-
-			if (mmnif_tx_bypass(mmnif_dev, data + (j - 1) * ((MMNIF_RX_BUFFERLEN / 2) - CLINE_SIZE), k, s) == ERR_OK)
-				total_size += k;
-		}
-
-		return total_size;
-	}
-
-	return lwip_send(s, data, size, flags);
-}
-#endif
-
 /* mmnif_link_layer(): wrapper function called by ip_output()
  * adding all needed headers for the link layer
  * because we have no link layer and everything is reliable we don't need
@@ -820,7 +585,6 @@ static err_t mmnif_link_layer(struct netif *netif, struct pbuf *q, ip_addr_t * i
 err_t mmnif_init(struct netif *netif)
 {
 	mmnif_t *mmnif = NULL;
-	uint32_t i;
 	int num = 0;
 	int err;
 	uint32_t nodes = possible_isles + 1;
@@ -928,30 +692,11 @@ err_t mmnif_init(struct netif *netif)
 
 	/* init the lock's for the hdr
 	 */
-	spinlock_init(&pseudolock);
+	spinlock_irqsave_init(&locallock);
 
 	/* init the sems for communication art
 	 */
 	sem_init(&mmnif->com_poll, 0);
-
-	for (i=0; i<MMNIF_HASHTABLE_SIZE; i++)
-	{
-		mmnif_hashtable[i].socket = -1;
-		mmnif_hashtable[i].remote_socket = -1;
-		mmnif_hashtable[i].dest_ip = 0;
-		//mmnif_hashtable[i].counter = 0;
-
-		sem_init(&mmnif_hashtable[i].sem, 0);
-	}
-
-	for (i=0; i<MMNIF_MAX_ACCEPTORS; i++)
-	{
-		mmnif->rx_buff->acceptors[i].stat = MMNIF_ACC_STAT_CLOSED;
-		mmnif->rx_buff->acceptors[i].nsock = -1;
-		mmnif->rx_buff->acceptors[i].rsock = -1;
-		mmnif->rx_buff->acceptors[i].src_ip = 0;
-		mmnif->rx_buff->acceptors[i].port = 0;
-	}
 
 	/* pass the device state to lwip */
 	netif->state = mmnif;
@@ -1009,7 +754,6 @@ static void mmnif_rx(struct netif *netif)
 	uint32_t i, j, flags;
 	uint8_t rdesc;
 	err_t err = ERR_OK;
-	bypass_rxdesc_t *bp;
 
 anotherpacket:
 	flags = irq_nested_disable();
@@ -1019,7 +763,9 @@ anotherpacket:
 	 */
 	if (b->desc_table[b->dread].stat == MMNIF_STATUS_FREE)
 	{
-		goto out;
+		mmnif->check_in_progress = 0;
+		irq_nested_enable(flags);
+		return;
 	}
 
 	/* search the packet whose transmission is finished
@@ -1029,32 +775,17 @@ anotherpacket:
 		if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].stat == MMNIF_STATUS_RDY)
 		{
 			rdesc = (j + i) % MMNIF_MAX_DESCRIPTORS;
-			if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].fast_sock == -1)
-			{
-				b->desc_table[rdesc].stat = MMNIF_STATUS_INPROC;
-				packet = (char *)b->desc_table[rdesc].addr;
-				length = b->desc_table[rdesc].len;
-				break;
-			} else {
-				bp = mmnif_hashlookup(b->desc_table[rdesc].fast_sock);
-				if (!bp)
-				{
-					DEBUGPRINTF("mmnif_rx(): no fast socket associated with %d", b->desc_table[rdesc].fast_sock);
-					mmnif->rx_buff->desc_table[rdesc].stat = MMNIF_STATUS_PROC;
-					mmnif_rxbuff_free();
-					goto out;
-				} else {
-					b->desc_table[rdesc].stat = MMNIF_STATUS_INPROC;
-					sem_post(&bp->sem);
-					irq_nested_enable(flags);
-					return;
-				}
-			}
+			b->desc_table[rdesc].stat = MMNIF_STATUS_INPROC;
+			packet = (char *)b->desc_table[rdesc].addr;
+			length = b->desc_table[rdesc].len;
+			break;
 		}
 
 		if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].stat == MMNIF_STATUS_FREE)
 		{
-			goto out;
+			mmnif->check_in_progress = 0;
+			irq_nested_enable(flags);
+			return;
 		}
 	}
 
@@ -1135,375 +866,17 @@ drop_packet:
 	/* TODO: error handling */
 	LINK_STATS_INC(link.drop);
 	mmnif->stats.rx_err++;
-	mmnif->check_in_progress = 0;
-	return;
-
 out:
 	mmnif->check_in_progress = 0;
-	irq_nested_enable(flags);
 	return;
 }
-
-#if LWIP_SOCKET
-/* mmnif_rx_bypass(): recieve packets
- * with insane speed ;)
- */
-static int mmnif_rx_bypass(struct netif *netif, int s, void *data, uint32_t len)
-{
-	mmnif_t *mmnif = netif->state;
-	volatile mm_rx_buffer_t *b = mmnif->rx_buff;
-	uint16_t length = 0;
-#ifdef DEBUG_MMNIF_PACKET
-	char *packet = NULL;
-#endif
-	uint32_t i, j;
-	uint8_t rdesc = 0xFF;
-
-	/* check if this call to mmnif_rx makes any sense
-	 */
-	if (b->desc_table[b->dread].stat == MMNIF_STATUS_FREE) {
-		return -1;
-	}
-
-	/* search the packet whose transmission is finished
-	 */
-	for (i = 0, j = b->dread; i < MMNIF_MAX_DESCRIPTORS; i++)
-	{
-		if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].stat == MMNIF_STATUS_INPROC
-		    && b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].fast_sock != -1)
-		{
-			rdesc = (j + i) % MMNIF_MAX_DESCRIPTORS;
-#ifdef DEBUG_MMNIF_PACKET
-			packet = (char *)b->desc_table[rdesc].addr;
-#endif
-			length = b->desc_table[rdesc].len;
-			b->desc_table[rdesc].stat = MMNIF_STATUS_INPROC_BYPASS;
-			break;
-		}
-	}
-
-	/* if there is no packet finished we encountered a random error
-	 */
-	if (rdesc == 0xFF)
-		return -1;
-
-	/* If length is zero return silently
-	 */
-	if (length == 0)
-	{
-		DEBUGPRINTF("mmnif_rx(): empty packet error\n");
-		return -1;
-	}
-
-	/* From now on there is a real packet and it
-	 * has to be worked on
-	 */
-
-#ifdef DEBUG_MMNIF_PACKET
-	DEBUGPRINTF("\n RECIEVED - %p with legth: %d\n", packet, length);
-	hex_dump(length, packet);
-#endif
-
-	if (BUILTIN_EXPECT(len < length, 0))
-		goto drop_packet;
-
-	memcpy(data, (void*) mmnif->rx_buff->desc_table[rdesc].addr, mmnif->rx_buff->desc_table[rdesc].len);
-
-	/* indicate that the copy process is done and the packet can be freed
-	 * note that we did not lock here because we are the only one editing this value
-	 */
-	b->desc_table[rdesc].stat = MMNIF_STATUS_PROC;
-
-	/* everything is copied to a new buffer so it's save to release
-	 * the old one for new incoming packets
-	 */
-	mmnif_rxbuff_free();
-
-	/* gather some stats and leave the rx handler */
-	LINK_STATS_INC(link.xmit);
-	mmnif->stats.rx++;
-	mmnif->stats.rx_bytes += length;
-
-	return length;
-
-drop_packet:
-	LINK_STATS_INC(link.drop);
-	mmnif->stats.rx_err++;
-
-	return -1;
-}
-
-/* mmnif_recv(): replacement of lwip_recv
- * for fast sockets
- */
-int mmnif_recv(int s, void *data, uint32_t len, int flags)
-{
-	mmnif_t* mmnif = (mmnif_t *) mmnif_dev->state;
-	bypass_rxdesc_t *p = mmnif_hashlookup(s);
-
-	if (p == 0)
-		return lwip_recv(s, data, len, flags);
-
-	if (sem_trywait(&p->sem) == 0)
-		return  mmnif_rx_bypass(mmnif_dev, s, data, len);
-
-	uint32_t state = irq_nested_disable();
-	if (mmnif->check_in_progress) {
-		uint32_t i,j;
-		volatile mm_rx_buffer_t *b = mmnif->rx_buff;
-		bypass_rxdesc_t *bp;
-		uint8_t rdesc;
-
-		/* search the packet whose transmission is finished
-		 */
-		for (i = 0, j = b->dread; i < MMNIF_MAX_DESCRIPTORS; i++)
-		{
-			if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].stat == MMNIF_STATUS_RDY)
-			{
-				rdesc = (j + i) % MMNIF_MAX_DESCRIPTORS;
-				if (b->desc_table[(j + i) % MMNIF_MAX_DESCRIPTORS].fast_sock != -1) {
-					bp = mmnif_hashlookup(b->desc_table[rdesc].fast_sock);
-					if (bp) {
-						b->desc_table[rdesc].stat = MMNIF_STATUS_INPROC;
-						irq_nested_enable(state);
-						return mmnif_rx_bypass(mmnif_dev, s, data, len);
-					}
-				}
-			}
-		}
-
-		mmnif->check_in_progress = 0;
-	}
-	irq_nested_enable(state);
-
-	sem_wait(&p->sem, 0);
-
-	return mmnif_rx_bypass(mmnif_dev, s, data, len);
-}
-
-/* mmnif_socket(): replacement of lwip_socket for
- * fast sockets
- */
-int mmnif_socket(int domain, int type, int protocol)
-{
-	int ret = 0;
-
-	if (domain == AF_MMNIF_NET)
-	{
-		spinlock_lock(&pseudolock);
-		ret = npseudosocket++;
-		spinlock_unlock(&pseudolock);
-		return ret;
-	}
-
-	return lwip_socket(domain, type, protocol);
-}
-
-/* mmnif_accept(): replacement of lwip_accept for
- * fast sockets
- */
-int mmnif_accept(int s, struct sockaddr *addr, socklen_t * addrlen)
-{
-	struct sockaddr_in *client = (struct sockaddr_in*)addr;
-	volatile mm_rx_buffer_t *b = ((mmnif_t *) mmnif_dev->state)->rx_buff;
-	bypass_rxdesc_t *p;
-	int tmp1 = get_clock_tick();
-	int i, tmp2 = 0;
-	uint16_t port;
-
-	// TODO: Bug, not compatible with BSD sockets
-	port = client->sin_port;
-
-	if ((unsigned int)s >= MMNIF_PSEUDO_SOCKET_START)
-	{
-		for (i = 0; i < MMNIF_MAX_ACCEPTORS; i++)
-		{
-			if (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat == MMNIF_ACC_STAT_CLOSED)
-			{
-				islelock_lock(isle_locks + (isle+1));
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].port = port;
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_ACCEPTING;
-				spinlock_lock(&pseudolock);
-				mmnif_hashadd(npseudosocket, -1, 0);
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock = npseudosocket++;
-				spinlock_unlock(&pseudolock);
-				islelock_unlock(isle_locks + (isle+1));
-
-				while (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat != MMNIF_ACC_STAT_ACCEPT_ME)
-					PAUSE;
-
-				p = mmnif_hashlookup(b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock);
-				p->dest_ip = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].src_ip;
-				p->remote_socket = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].rsock;
-				islelock_lock(isle_locks + (isle+1));
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_ACCEPTED;
-				i = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock;
-				islelock_unlock(isle_locks + (isle+1));
-
-				return i;
-			}
-		}
-
-		return -1;
-	} else {
-		for (i = 0; i < MMNIF_MAX_ACCEPTORS; i++)
-		{
-			if (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat == MMNIF_ACC_STAT_CLOSED)
-			{
-				islelock_lock(isle_locks + (isle+1));
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].port = port;
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_ACCEPTING;
-				spinlock_lock(&pseudolock);
-				mmnif_hashadd(npseudosocket, -1, 0);
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock = npseudosocket++;
-				spinlock_unlock(&pseudolock);
-				islelock_unlock(isle_locks + (isle+1));
-
-				while (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat != MMNIF_ACC_STAT_ACCEPT_ME)
-				{
-					tmp2 = get_clock_tick();
-					if (tmp2 - tmp1 > MMNIF_AUTO_SOCKET_TIMEOUT)
-					{
-						islelock_lock(isle_locks + (isle+1));
-						if (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat == MMNIF_ACC_STAT_ACCEPT_ME)
-						{
-							islelock_unlock(isle_locks + (isle+1));
-							break;
-						}
-						DEBUGPRINTF("mmnif_accept(): Timout occoured, switching to normal accept()");
-
-						mmnif_hashdelete(b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock);
-						b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_CLOSED;
-						islelock_unlock(isle_locks + (isle+1));
-						goto normalaccept;
-					}
-					PAUSE;
-				}
-
-				p = mmnif_hashlookup(b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock);
-				p->dest_ip = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].src_ip;
-				p->remote_socket = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].rsock;
-				islelock_lock(isle_locks + (isle+1));
-				b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_ACCEPTED;
-				i = b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock;
-				islelock_unlock(isle_locks + (isle+1));
-
-				return i;
-			}
-		}
-
-		return -1;
-	}
-
-normalaccept:
-	return lwip_accept(s, addr, addrlen);
-}
-
-/* mmnif_connect(): replacement of lwip_connect for
- * fast sockets
- */
-int mmnif_connect(int s, const struct sockaddr *name, socklen_t namelen)
-{
-	struct sockaddr_in *p = (struct sockaddr_in*) name;
-	uint16_t port = p->sin_port;
-	volatile mm_rx_buffer_t *b;
-	int i;
-	//int tmp1 = get_clock_tick();
-	//int tmp2 = 0;
-	uint8_t isle;
-
-	isle = ip4_addr4(&p->sin_addr.s_addr);
-	if ((isle) < 1 || (isle > MAX_ISLE))
-		return lwip_connect(s, name, namelen);
-
-	b = (volatile mm_rx_buffer_t *) ((char *)header_start_address + (isle - 1) * header_size);
-	for (i = 0; i < MMNIF_MAX_ACCEPTORS; i++)
-	{
-		if (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat == MMNIF_ACC_STAT_ACCEPTING
-		    && b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].port == port)
-		{
-			islelock_lock(isle_locks + (isle-1));
-			b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_ACCEPT_ME;
-			b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].rsock = s;
-			b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].src_ip = ip4_addr4(&mmnif_dev->ip_addr);
-			mmnif_hashadd(s, b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].nsock, isle);
-			islelock_unlock(isle_locks + (isle-1));
-
-			while (b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat != MMNIF_ACC_STAT_ACCEPTED)
-			{
-
-//                tmp2 = get_clock_tick();
-//                if (tmp2 - tmp1 > MMNIF_AUTO_SOCKET_TIMEOUT)
-//                {
-//#ifdef DEBUG_MMNIF
-//                        DEBUGPRINTF("mmnif_connect(): Timout occoured, switching to normal connect()");
-//#endif
-//                    mmnif_hashdelete(s);
-//                    goto normalsend;
-//                }
-				PAUSE;
-			}
-
-			islelock_lock(isle_locks + (isle-1));
-			b->acceptors[(i + port) % MMNIF_MAX_ACCEPTORS].stat = MMNIF_ACC_STAT_CLOSED;
-			islelock_unlock(isle_locks + (isle-1));
-
-			return 0;
-		}
-	}
-
-	DEBUGPRINTF("mmnif_connect(): no acceptor found");
-
-	return -1;
-}
-
-int mmnif_listen(int s, int backlog)
-{
-	if ((unsigned int)s < MMNIF_PSEUDO_SOCKET_START)
-		return lwip_listen(s, backlog);
-	return 0;
-}
-
-int mmnif_bind(int s, const struct sockaddr *name, socklen_t namelen)
-{
-	if ((unsigned int)s < MMNIF_PSEUDO_SOCKET_START)
-		return lwip_bind(s, name, namelen);
-	return 0;
-}
-
-int mmnif_setsockopt(int s, int level, int optname, const void *optval, socklen_t optlen)
-{
-	if ((unsigned int)s < MMNIF_PSEUDO_SOCKET_START)
-		return lwip_setsockopt(s, level, optname, optval, optlen);
-	return 0;
-}
-
-/* mmnif_closesocket(): replacement if lwip_close for
- * fast_sockets
- */
-int mmnif_closesocket(int s)
-{
-	bypass_rxdesc_t *p = mmnif_hashlookup(s);
-
-	if (p == 0)
-		return -1;
-
-	mmnif_hashdelete(s);
-	if ((unsigned int)s < MMNIF_PSEUDO_SOCKET_START)
-		return lwip_close(s);
-
-	return 0;
-}
-#endif
 
 /* mmnif_irqhandler():
  * handles the incomint interrupts
  */
 static void mmnif_irqhandler(struct state* s)
 {
-#if !NO_SYS
 	mmnif_t *mmnif;
-#endif
 
 	/* return if mmnif_dev is not yet initialized */
 	if (!mmnif_dev)
@@ -1512,9 +885,6 @@ static void mmnif_irqhandler(struct state* s)
 		return;
 	}
 
-#if NO_SYS
-	mmnif_rx((void*) mmnif_dev);
-#else
 	mmnif = (mmnif_t *) mmnif_dev->state;
 	if (!mmnif->check_in_progress) {
 		if (tcpip_callback_with_block((tcpip_callback_fn) mmnif_rx, (void*) mmnif_dev, 0) == ERR_OK) {
@@ -1523,7 +893,6 @@ static void mmnif_irqhandler(struct state* s)
 			DEBUGPRINTF("rckemacif_handler: unable to send a poll request to the tcpip thread\n");
 		}
 	}
-#endif
 }
 
 /*
@@ -1539,14 +908,8 @@ err_t mmnif_shutdown(void)
 		return ERR_MEM;
 	}
 
-#if NO_SYS
-	netif_set_down(mmnif_dev);
-	err = ERR_OK;
-#else
 	err = netifapi_netif_set_down(mmnif_dev);
-#endif
 
-	//RCCE_shfree(mpb_start_address);
 	mmnif_dev = NULL;
 
 	return err;
