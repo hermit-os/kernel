@@ -39,48 +39,6 @@
 #include <lwip/netif.h>		/* lwip netif */
 #include <lwip/sockets.h>
 
-#define AF_MMNIF_NET				0x42
-
-#if 0
-#define MMNIF_AUTOACTIVATE_FAST_SOCKETS		LWIP_SOCKET
-#else
-#define MMNIF_AUTOACTIVATE_FAST_SOCKETS		0
-#endif
-
-#if MMNIF_AUTOACTIVATE_FAST_SOCKETS
-
-int mmnif_socket(int domain, int type, int protocol);
-int mmnif_send(int s, void *data, size_t size, int flags);
-int mmnif_recv(int s, void *data, uint32_t len, int flags);
-int mmnif_accept(int s, struct sockaddr *addr, socklen_t * addrlen);
-int mmnif_connect(int s, const struct sockaddr *name, socklen_t namelen);
-int mmnif_listen(int s, int backlog);
-int mmnif_bind(int s, const struct sockaddr *name, socklen_t namelen);
-int mmnif_closesocket(int s);
-int mmnif_getsockopt (int s, int level, int optname, void *optval, socklen_t *optlen);
-int mmnif_setsockopt (int s, int level, int optname, const void *optval, socklen_t optlen);
-
-#undef accept
-#define accept(a,b,c)         mmnif_accept(a,b,c)
-#undef closesocket
-#define closesocket(s)        mmnif_closesocket(s)
-#undef connect
-#define connect(a,b,c)        mmnif_connect(a,b,c)
-#undef recv
-#define recv(a,b,c,d)         mmnif_recv(a,b,c,d)
-#undef send
-#define send(a,b,c,d)         mmnif_send(a,b,c,d)
-#undef socket
-#define socket(a,b,c)         mmnif_socket(a,b,c)
-#undef bind
-#define bind(a,b,c)           mmnif_bind(a,b,c)
-#undef listen
-#define listen(a,b)           mmnif_listen(a,b)
-#undef setsockopt
-#define setsockopt(a,b,c,d,e) mmnif_setsockopt(a,b,c,d,e)
-#undef select
-#endif
-
 err_t mmnif_init(struct netif*);
 err_t mmnif_shutdown(void);
 int mmnif_worker(void *e);
