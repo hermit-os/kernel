@@ -14,11 +14,11 @@ include/hermit/config.inc
 tools/*.img
 tools/*_proxy
 tools/make_initrd
-usr/examples/hello
-usr/examples/hello++
-usr/examples/hellof
-usr/examples/jacobi
-usr/examples/stream
-usr/examples/thr_hello
+usr/tests/hello
+usr/tests/hello++
+usr/tests/hellof
+usr/tests/jacobi
+usr/tests/stream
+usr/tests/thr_hello
 usr/x86/
 usr/tmp/
