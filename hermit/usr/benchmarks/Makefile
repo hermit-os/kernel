@@ -43,7 +43,7 @@ endif
 
 default: all
 
-all: stream
+all: stream hg
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -56,13 +56,20 @@ stream: stream.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< hist.o rdtsc.o run.o init.o opt.o report.o setup.o
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 clean:
 	@echo Cleaning benchmarks
-	$Q$(RM) stream *.sym *.o *~
+	$Q$(RM) stream hg *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning benchmarks
-	$Q$(RM)  stream *.sym *.o *~
+	$Q$(RM)  stream hg *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
