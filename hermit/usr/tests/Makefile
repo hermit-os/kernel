@@ -43,18 +43,7 @@ endif
 
 default: all
 
-all: hello hello++ hellof jacobi stream thr_hello
-
-stream.o: stream.c
-	@echo [CC] $@
-	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
-
-stream: stream.o
-	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
-	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
-	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qchmod a-x $@.sym
+all: hello hello++ hellof jacobi thr_hello
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -96,12 +85,12 @@ thr_hello: thr_hello.o
 	$Qchmod a-x $@.sym
 
 clean:
-	@echo Cleaning examples
-	$Q$(RM) hello hello++ hellof jacobi stream thr_hello *.sym *.o *~
+	@echo Cleaning tests
+	$Q$(RM) hello hello++ hellof jacobi thr_hello *.sym *.o *~
 
 veryclean:
-	@echo Propper cleaning examples
-	$Q$(RM) hello hello++ hellof jacobi stream thr_hello *.sym *.o *~
+	@echo Propper cleaning tests
+	$Q$(RM) hello hello++ hellof jacobi thr_hello *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
