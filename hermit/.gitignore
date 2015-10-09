@@ -20,5 +20,6 @@ usr/tests/hellof
 usr/tests/jacobi
 usr/tests/thr_hello
 usr/benchmarks/stream
+usr/benchmarks/hg
 usr/x86/
 usr/tmp/
