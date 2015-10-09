@@ -5,8 +5,8 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
-INITRDFILES = ../usr/examples/hello #$(shell find ../usr/examples -perm -u+r+x -type f)
-PROXYFILES = $(shell find ../usr/examples -perm -u+r+x -type f)
+INITRDFILES = ../usr/tests/hello #$(shell find ../usr/tests -perm -u+r+x -type f)
+PROXYFILES = $(shell find ../usr/tests -perm -u+r+x -type f)
 
 # Prettify output
 V = 0
