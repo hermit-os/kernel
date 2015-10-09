@@ -210,6 +210,8 @@ static void fault_handler(struct state *s)
 
 	kprintf(" Exception (%d) on core %d at 0x%llx:0x%llx, error code 0x%llx, rflags 0x%llx\n",
 		s->int_no, CORE_ID, s->cs, s->rip, s->error, s->rflags);
+	kprintf("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp, %#lx, rsp %#lx rdi %#lx, rsi %#lx, r8 %#lx, r9 %#lx, r10 %#lx, r11 %#lx, r12 %#lx, r13 %#lx, r14 %#lx, r15 %#lx\n",
+		s->rax, s->rbx, s->rcx, s->rdx, s->rbp, s->rsp, s->rdi, s->rsi, s->r8, s->r9, s->r10, s->r11, s->r12, s->r13, s->r14, s->r15);
 
 	apic_eoi(s->int_no);
 	irq_enable();
