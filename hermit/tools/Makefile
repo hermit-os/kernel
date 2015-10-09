@@ -6,7 +6,7 @@ CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
 INITRDFILES = ../usr/tests/hello #$(shell find ../usr/tests -perm -u+r+x -type f)
-PROXYFILES = $(shell find ../usr/tests -perm -u+r+x -type f)
+PROXYFILES = $(shell find ../usr/tests -perm -u+r+x -type f) $(shell find ../usr/benchmarks -perm -u+r+x -type f)
 
 # Prettify output
 V = 0
