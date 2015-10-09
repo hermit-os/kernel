@@ -18,7 +18,7 @@ usr/tests/hello
 usr/tests/hello++
 usr/tests/hellof
 usr/tests/jacobi
-usr/tests/stream
 usr/tests/thr_hello
+usr/benchmarks/stream
 usr/x86/
 usr/tmp/
