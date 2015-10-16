@@ -237,6 +237,7 @@ static int load_task(load_args_t* largs)
 	fildes_t file;
 	task_t* curr_task = per_core(current_task);
 	int ret = -EINVAL;
+	uint8_t hermit_exec = 0;
 
 	if (!largs)
 		return -EINVAL;
@@ -386,6 +387,10 @@ static int load_task(load_args_t* largs)
 			curr_task->tls_mem_size = prog_header.mem_size;
 			curr_task->tls_file_size = prog_header.file_size;
 			break;
+		case ELF_PT_NOTE:
+			//kprintf("Found note segment: %s\n", (char*)prog_header.virt_addr + 12);
+			hermit_exec |= (strcmp((char*)prog_header.virt_addr + 12, "HermitCore") == 0);
+			break;
 		default:
 			kprintf("Unknown type 0x%lx in program header\n", prog_header.type);
 		}
@@ -409,6 +414,13 @@ static int load_task(load_args_t* largs)
 		kprintf("Stack is missing!\n");
 		ret = -ENOMEM;
 		goto Lerr;
+	}
+
+	if (BUILTIN_EXPECT(!hermit_exec, 0)) {
+		kprintf("Not a valid executable!\n");
+		ret = -EINVAL;
+		goto Lerr;
+
 	}
 
 	offset = DEFAULT_STACK_SIZE-16;
