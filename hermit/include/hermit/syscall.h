@@ -85,6 +85,7 @@ extern "C" {
 #define __NR_setprio		40
 #define __NR_clone		41
 #define __NR_sem_cancelablewait	42
+#define __NR_get_ticks		43
 
 #ifdef __cplusplus
 }
