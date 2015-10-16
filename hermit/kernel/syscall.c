@@ -384,6 +384,11 @@ static off_t sys_lseek(int fd, off_t offset, int whence)
 	return off;
 }
 
+static size_t sys_get_ticks(void)
+{
+	return get_clock_tick();
+}
+
 static int default_handler(void)
 {
 #if 0
@@ -440,5 +445,6 @@ size_t syscall_table[] = {
 	(size_t) sys_getprio,		/* __NR_getprio	*/
 	(size_t) default_handler,	/* __NR_setprio	*/
 	(size_t) sys_clone,		/* __NR_clone	*/
-	(size_t) sys_sem_timedwait	/*  __NR_sem_cancelablewait	*/
+	(size_t) sys_sem_timedwait,	/* __NR_sem_cancelablewait	*/
+	(size_t) sys_get_ticks		/* __NR_get_ticks	*/
 };
