@@ -1,7 +1,7 @@
 ARCH = x86
 TARGET=x86_64-hermit
 MAKE = make
-override STRIP_DEBUG = --strip-unneeded --strip-debug
+override STRIP_DEBUG = --strip-debug #--strip-unneeded --strip-debug
 KEEP_DEBUG = --only-keep-debug
 
 # Set your own cross compiler tool chain prefix here
@@ -43,7 +43,7 @@ endif
 
 default: all
 
-all: stream hg
+all: stream hg RCCE_pingping RCCE_pingpong
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -52,6 +52,20 @@ stream.o: stream.c
 stream: stream.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
+RCCE_pingping: RCCE_pingping.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
+RCCE_pingpong: RCCE_pingpong.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
@@ -69,7 +83,7 @@ clean:
 
 veryclean:
 	@echo Propper cleaning benchmarks
-	$Q$(RM)  stream hg *.sym *.o *~
+	$Q$(RM)  stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep

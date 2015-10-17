@@ -43,7 +43,7 @@ endif
 
 default: all
 
-all: hello hello++ hellof jacobi thr_hello
+all: hello hello++ hellof jacobi thr_hello RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -84,13 +84,20 @@ thr_hello: thr_hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+RCCE_minimum: RCCE_minimum.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
