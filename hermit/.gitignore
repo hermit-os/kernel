@@ -19,6 +19,9 @@ usr/tests/hello++
 usr/tests/hellof
 usr/tests/jacobi
 usr/tests/thr_hello
+usr/tests/RCCE_minimum
+usr/benchmarks/RCCE_pingping
+usr/benchmarks/RCCE_pingpong
 usr/benchmarks/stream
 usr/benchmarks/hg
 usr/x86/
