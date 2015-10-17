@@ -55,6 +55,9 @@ libs:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libgomp depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libgomp
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
+
 
 $(TMP)/gcc:
 	@echo Build final gcc
@@ -73,6 +76,8 @@ veryclean:
 	@echo Propper cleaning of the toolchain
 	$Q$(MAKE) -C pte veryclean
 	$Q$(MAKE) -C libgomp veryclean
+	$Q$(MAKE) -C ircce veryclean
 	$Q$(MAKE) -C tests veryclean
+	$Q$(MAKE) -C benchmarks veryclean
 	$Q$(RM) $(TOPDIR)/$(ARCH)
 	$Q$(RM) $(TMP)
