@@ -47,11 +47,29 @@
 #define __HERMIT_read	4
 #define __HERMIT_lseek	5
 
-static char saddr[16] = "192.168.28.2";
+static char saddr[16];
 static int sobufsize = 131072;
+static unsigned int isle_nr = 0;
 
 extern char hermit_app[];
 extern unsigned app_size;
+
+int init_enviroment(void)
+{
+	char* str;
+
+	str = getenv("HERMIT_ISLE");
+	if (str)
+	{
+		isle_nr = atoi(str);
+		if ((isle_nr < 0) || (isle_nr > 254))
+			isle_nr = 0;
+	}
+
+	snprintf(saddr, 15, "192.168.28.%u", isle_nr+2);
+
+	return 0;
+}
 
 /*
  * in principle, HermitCore forwards basic system calls to
@@ -245,6 +263,8 @@ int main(int argc, char **argv)
 	int i, j, ret, s;
 	int32_t magic = HERMIT_MAGIC;
 	struct sockaddr_in serv_name;
+
+	init_enviroment();
 
 	/* create a socket */
 	s = socket(PF_INET, SOCK_STREAM, 0);
