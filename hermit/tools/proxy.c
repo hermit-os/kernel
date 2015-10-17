@@ -66,7 +66,7 @@ int init_enviroment(void)
 			isle_nr = 0;
 	}
 
-	snprintf(saddr, 15, "192.168.28.%u", isle_nr+2);
+	snprintf(saddr, 16, "192.168.28.%u", isle_nr+2);
 
 	return 0;
 }
