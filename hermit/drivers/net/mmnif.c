@@ -64,6 +64,7 @@
 #include <hermit/semaphore.h>
 #include <hermit/spinlock.h>
 #include <hermit/time.h>
+#include <hermit/islelock.h>
 #include <asm/page.h>
 #include <asm/irq.h>
 #include <asm/irqflags.h>
@@ -212,45 +213,6 @@ typedef struct mmnif {
 	 */
 	sem_t com_poll;
 } mmnif_t;
-
-typedef struct islelock {
-        /// Internal queue
-        atomic_int32_t queue;
-        /// Internal dequeue
-        atomic_int32_t dequeue;
-} islelock_t;
-
-inline static int islelock_init(islelock_t* s)
-{
-        atomic_int32_set(&s->queue, 0);
-        atomic_int32_set(&s->dequeue, 1);
-
-        return 0;
-}
-
-inline static int islelock_destroy(islelock_t* s)
-{
-        return 0;
-}
-
-static inline int islelock_lock(islelock_t* s)
-{
-	int ticket;
-
-	ticket = atomic_int32_inc(&s->queue);
-	while(atomic_int32_read(&s->dequeue) != ticket) {
-		PAUSE;
-	}
-
-	return 0;
-}
-
-static inline int islelock_unlock(islelock_t* s)
-{
-        atomic_int32_inc(&s->dequeue);
-
-        return 0;
-}
 
 // alread initialized by Linux
 static islelock_t* isle_locks = NULL;

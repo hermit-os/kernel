@@ -1,6 +1,11 @@
 /*
- * Copyright (c) 2011, Stefan Lankes, RWTH Aachen University
+ * Copyright 2015 Stefan Lankes, RWTH Aachen University
  * All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2 (https://www.gnu.org/licenses/gpl-2.0.txt)
+ * or the BSD license below:
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -25,73 +30,49 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @author Stefan Lankes
- * @file include/hermit/syscall.h
- * @brief System call number definitions
- *
- * This file contains define constants for every syscall's number.
- */
-
-#ifndef __SYSCALL_H__
-#define __SYSCALL_H__
+#ifndef __ISLELOCK_H__
+#define __ISLELOCK_H__
 
 #include <hermit/stddef.h>
+#include <asm/atomic.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+typedef struct islelock {
+        /// Internal queue
+        atomic_int32_t queue;
+        /// Internal dequeue
+        atomic_int32_t dequeue;
+} islelock_t;
 
-#define __NR_exit 		0
-#define __NR_write		1
-#define __NR_open		2
-#define __NR_close		3
-#define __NR_read		4
-#define __NR_lseek		5
-#define __NR_unlink		6
-#define __NR_getpid		7
-#define __NR_kill		8
-#define __NR_fstat		9
-#define __NR_sbrk		10
-#define __NR_fork		11
-#define __NR_wait		12
-#define __NR_execve		13
-#define __NR_times		14
-#define __NR_accept		15
-#define __NR_bind		16
-#define __NR_closesocket	17
-#define __NR_connect		18
-#define __NR_listen		19
-#define __NR_recv		20
-#define __NR_send		21
-#define __NR_socket		22
-#define __NR_getsockopt		23
-#define __NR_setsockopt		24
-#define __NR_gethostbyname	25
-#define __NR_sendto		26
-#define __NR_recvfrom		27
-#define __NR_select		28
-#define __NR_stat		29
-#define __NR_dup		30
-#define __NR_dup2		31
-#define __NR_msleep		32
-#define __NR_yield		33
-#define __NR_sem_init		34
-#define __NR_sem_destroy	35
-#define __NR_sem_wait		36
-#define __NR_sem_post		37
-#define __NR_sem_timedwait	38
-#define __NR_getprio		39
-#define __NR_setprio		40
-#define __NR_clone		41
-#define __NR_sem_cancelablewait	42
-#define __NR_get_ticks		43
-#define __NR_rcce_init		44
-#define __NR_rcce_fini		45
-#define __NR_rcce_malloc	46
+inline static int islelock_init(islelock_t* s)
+{
+        atomic_int32_set(&s->queue, 0);
+        atomic_int32_set(&s->dequeue, 1);
 
-#ifdef __cplusplus
+        return 0;
 }
-#endif
+
+inline static int islelock_destroy(islelock_t* s)
+{
+        return 0;
+}
+
+static inline int islelock_lock(islelock_t* s)
+{
+	int ticket;
+
+	ticket = atomic_int32_inc(&s->queue);
+	while(atomic_int32_read(&s->dequeue) != ticket) {
+		PAUSE;
+	}
+
+	return 0;
+}
+
+static inline int islelock_unlock(islelock_t* s)
+{
+        atomic_int32_inc(&s->dequeue);
+
+        return 0;
+}
 
 #endif

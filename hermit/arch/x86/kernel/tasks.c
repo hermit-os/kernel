@@ -34,6 +34,7 @@
 #include <hermit/memory.h>
 #include <hermit/fs.h>
 #include <hermit/vma.h>
+#include <hermit/rcce.h>
 #include <asm/tss.h>
 #include <asm/elf.h>
 #include <asm/page.h>
@@ -502,8 +503,15 @@ static int load_task(load_args_t* largs)
 		page_map(START_ADDRESS - PAGE_SIZE, base, 1, PG_USER|PG_XD);
 	else
 		page_map(START_ADDRESS - PAGE_SIZE, base, 1, PG_USER);
-	//kprintf("Map kernel info: 0x%zx - 0x%xz\n", START_ADDRESS - PAGE_SIZE, START_ADDRESS - 1);
+	//kprintf("Map kernel info: 0x%zx - 0x%zx\n", START_ADDRESS - PAGE_SIZE, START_ADDRESS - 1);
 	vma_add(START_ADDRESS - PAGE_SIZE, START_ADDRESS - 1, VMA_READ|VMA_CACHEABLE|VMA_USER);
+
+	if (has_nx())
+		page_map(START_ADDRESS - 2*PAGE_SIZE, phy_rcce_internals, 1, PG_USER|PG_RW|PG_XD);
+	else
+		page_map(START_ADDRESS - 2*PAGE_SIZE, phy_rcce_internals, 1, PG_USER|PG_RW);
+	//kprintf("Map rcce info: 0x%zx - 0x%zx\n", START_ADDRESS - 2*PAGE_SIZE, START_ADDRESS - PAGE_SIZE - 1);
+	vma_add(START_ADDRESS - 2*PAGE_SIZE, START_ADDRESS - PAGE_SIZE - 11, VMA_READ|VMA_WRITE|VMA_CACHEABLE|VMA_USER);
 
 	//vma_dump();
 
