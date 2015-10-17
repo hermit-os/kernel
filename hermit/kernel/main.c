@@ -36,6 +36,7 @@
 #include <hermit/memory.h>
 #include <hermit/spinlock.h>
 #include <hermit/fs.h>
+#include <hermit/rcce.h>
 #include <asm/irq.h>
 #include <asm/page.h>
 
@@ -82,6 +83,9 @@ extern atomic_int32_t cpu_online;
 extern atomic_int32_t possible_cpus;
 extern int32_t isle;
 extern int32_t possible_isles;
+
+islelock_t* rcce_lock = NULL;
+rcce_mpb_t* rcce_mpb = NULL;
 
 #if 0
 static int foo(void* arg)
@@ -216,6 +220,24 @@ int smp_main(void)
 }
 #endif
 
+static int init_rcce(void)
+{
+	size_t addr;
+
+	addr = vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	if (BUILTIN_EXPECT(!addr, 0))
+		return -ENOMEM;
+	if (page_map(addr, phy_rcce_internals, 1, PG_GLOBAL|PG_RW)) {
+		vma_free(addr, addr + PAGE_SIZE);
+		return -ENOMEM;
+	}
+
+	rcce_lock = (islelock_t*) addr;
+	rcce_mpb = (rcce_mpb_t*) (addr + CACHE_LINE*(RCCE_MAXNP+1));
+
+	return 0;
+}
+
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)
 {
@@ -237,6 +259,7 @@ static int initd(void* arg)
 	//create_user_task(NULL, "/bin/thr_hello", argv4, NORMAL_PRIO);
 
 	init_netifs();
+	init_rcce();
 
 	s = socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {

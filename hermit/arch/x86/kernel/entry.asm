@@ -57,6 +57,7 @@ align 4
     global current_boot_id
     global isle
     global possible_isles
+    global phy_rcce_internals
     global phy_isle_locks
     global heap_phy_start_address
     global header_phy_start_address
@@ -70,7 +71,7 @@ align 4
     boot_processor dd -1
     cpu_online dd 0
     possible_cpus dd 0
-    dq 0 ; reserved for future extensions
+    phy_rcce_internals dq 0
     current_boot_id dd 0
     isle dd -1
     image_size dq 0

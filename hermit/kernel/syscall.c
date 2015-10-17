@@ -33,6 +33,8 @@
 #include <hermit/spinlock.h>
 #include <hermit/semaphore.h>
 #include <hermit/time.h>
+#include <hermit/rcce.h>
+#include <hermit/memory.h>
 
 #include <lwip/sockets.h>
 #include <lwip/err.h>
@@ -40,6 +42,9 @@
 
 //TODO: don't use one big kernel lock to comminicate with all proxies
 static spinlock_t lwip_lock = SPINLOCK_INIT;
+
+extern int32_t isle;
+extern int32_t possible_isles;
 
 static tid_t sys_getpid(void)
 {
@@ -384,6 +389,134 @@ static off_t sys_lseek(int fd, off_t offset, int whence)
 	return off;
 }
 
+static int sys_rcce_init(int session_id)
+{
+	int i, err = 0;
+	size_t paddr = 0;
+
+	if (session_id <= 0)
+		return -EINVAL;
+
+	islelock_lock(rcce_lock);
+
+	for(i=0; i<MAX_RCCE_SESSIONS; i++)
+	{
+		if (rcce_mpb[i].id == session_id)
+			break;
+	}
+
+	// create new session
+	if (i >=MAX_RCCE_SESSIONS)
+	{
+		for(i=0; i<MAX_RCCE_SESSIONS; i++)
+		{
+			if (rcce_mpb[i].id == 0) {
+				rcce_mpb[i].id = session_id;
+				break;
+			}
+		}
+	}
+
+	if (i >= MAX_RCCE_SESSIONS)
+	{
+		err = -EINVAL;
+		goto out;
+	}
+
+	paddr = get_pages(2);
+	if (BUILTIN_EXPECT(!paddr, 0))
+	{
+		err = -ENOMEM;
+		goto out;
+	}
+
+	rcce_mpb[i].mpb[isle] = paddr;
+
+out:
+	islelock_unlock(rcce_lock);
+
+	kprintf("Create MPB for session %d at 0x%zx, using of slot %d\n", session_id, paddr, i);
+
+	return err;
+}
+
+static size_t sys_rcce_malloc(int session_id, int ue)
+{
+	size_t vaddr = 0;
+	int i;
+
+	if (session_id <= 0)
+		return -EINVAL;
+
+	for(i=0; i<MAX_RCCE_SESSIONS; i++)
+	{
+		if (rcce_mpb[i].id == session_id)
+			break;
+	}
+
+	// create new session
+	if (i >= MAX_RCCE_SESSIONS)
+		goto out;
+
+	if (!rcce_mpb[i].mpb[ue])
+		goto out;
+
+
+	vaddr = vma_alloc(2*PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_USER|VMA_CACHEABLE);
+        if (BUILTIN_EXPECT(!vaddr, 0))
+		goto out;
+
+	if (page_map(vaddr, rcce_mpb[i].mpb[ue], 2, PG_RW|PG_USER|PG_PRESENT)) {
+		vma_free(vaddr, vaddr + 2*PAGE_SIZE);
+		goto out;
+	}
+	
+	kprintf("Map MPB of session %d at 0x%zx, using of slot %d, isle %d\n", session_id, vaddr, i, ue);
+
+out:
+	return vaddr;
+}
+
+static int sys_rcce_fini(int session_id)
+{
+	int i, j;
+	int ret = 0;
+
+	// we have to free the MPB
+
+	if (session_id <= 0)
+		return -EINVAL;
+
+	islelock_lock(rcce_lock);
+
+	for(i=0; i<MAX_RCCE_SESSIONS; i++)
+	{
+		if (rcce_mpb[i].id == session_id)
+			break;
+	}
+
+	if (i >= MAX_RCCE_SESSIONS) {
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (rcce_mpb[i].mpb[isle])
+		put_pages(rcce_mpb[i].mpb[isle], 2);
+	rcce_mpb[i].mpb[isle] = 0;
+
+	for(j=0; (j<MAX_ISLE) && !rcce_mpb[i].mpb[j]; j++)
+		;
+
+	// rest full session
+	if (j >= MAX_ISLE)
+		rcce_mpb[i].id = 0;
+
+out:
+	islelock_unlock(rcce_lock);
+
+	return ret;
+}
+
 static size_t sys_get_ticks(void)
 {
 	return get_clock_tick();
@@ -446,5 +579,8 @@ size_t syscall_table[] = {
 	(size_t) default_handler,	/* __NR_setprio	*/
 	(size_t) sys_clone,		/* __NR_clone	*/
 	(size_t) sys_sem_timedwait,	/* __NR_sem_cancelablewait	*/
-	(size_t) sys_get_ticks		/* __NR_get_ticks	*/
+	(size_t) sys_get_ticks,		/* __NR_get_ticks	*/
+	(size_t) sys_rcce_init,		/* __NR_rcce_init	*/
+	(size_t) sys_rcce_fini,		/* __NR_rcce_fini       */
+	(size_t) sys_rcce_malloc	/* __NR_rcce_malloc	*/
 };
