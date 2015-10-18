@@ -39,14 +39,13 @@
 #define RCCE_MAXNP	8
 
 typedef struct tas {
-	unsigned char reg;
+	volatile unsigned char reg;
 	unsigned char reserved[CACHE_LINE-1];
 } tas_t  __attribute__ ((aligned (CACHE_LINE)));
 
 typedef struct rcce_mpb {
 	int id; // session id;
-	tas_t tas[RCCE_MAXNP];
-	size_t mpb[MAX_ISLE];
+	volatile size_t mpb[MAX_ISLE];
 } rcce_mpb_t;
 
 #define MAX_RCCE_SESSIONS 	((PAGE_SIZE - CACHE_LINE*(RCCE_MAXNP+1)) / sizeof(rcce_mpb_t))
