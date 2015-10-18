@@ -45,6 +45,7 @@
 #else
   #define RCCE_SESSION_ID	42
   #include "syscall.h"
+  extern unsigned int get_cpufreq();
 #endif
 #endif
   #include <sys/types.h>
@@ -190,7 +191,15 @@ t_vcharp RCCE_fool_write_combine_buffer;
 //......................................................................................
 
 #ifdef SCC
-#ifndef __INTEL_COMPILER
+#ifdef __hermit__
+inline volatile uint64_t _rdtsc() {
+	uint64_t lo, hi;
+
+	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) );
+
+	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
+}
+#elif defined(__INTEL_COMPILER)
     inline volatile long long _rdtsc() {
       register long long TSC __asm__("eax");
       __asm__ volatile (".byte 15, 49" : : : "eax", "edx");
@@ -248,7 +257,14 @@ int RC_COMM_BUFFER_SIZE() {
 //--------------------------------------------------------------------------------------
 t_vcharp RC_COMM_BUFFER_START(int ue){
 #ifdef __hermit__
-  return (t_vcharp) SYSCALL2(__NR_rcce_malloc, RCCE_SESSION_ID, ue);
+  t_vcharp retval;
+  retval =  (t_vcharp) SYSCALL2(__NR_rcce_malloc, RCCE_SESSION_ID, ue);
+  if (!retval) {
+    fprintf(stderr, "rcce_malloc failed\n");
+    RCCE_finalize();
+    exit(1);
+  }
+  return retval;
 #elif defined(SCC)
   // "Allocate" MPB, using memory mapping of physical addresses
   t_vcharp retval;
@@ -878,7 +894,14 @@ int RCCE_init(
 #endif
 
   RCCE_NP        = atoi(*(++(*argv)));  
+#ifdef __hermit__
+  // HermitCore ignores the third argument and uses
+  // its own clock value
+  RC_REFCLOCKGHZ = (double) get_cpufreq() / 1000.0;
+  ++(*argv);
+#else
   RC_REFCLOCKGHZ = atof(*(++(*argv)));
+#endif
 
   // put the participating core ids (unsorted) into an array             
   for (ue=0; ue<RCCE_NP; ue++) {
@@ -1200,8 +1223,6 @@ int RCCE_finalize(void){
 double RCCE_wtime(void) {
 #ifdef SCC
   return ( ((double)_rdtsc())/(RC_REFCLOCKGHZ*1.e9));
-#elif defined(__hermit__)
-#warning TODO
 #else
   return (omp_get_wtime());
 #endif
