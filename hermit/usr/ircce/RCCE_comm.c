@@ -24,7 +24,10 @@
 // 
 #include "RCCE_lib.h"
 
-#if defined(COPPERRIDGE) && !defined(__hermit__)
+#ifdef __hermit__
+#include "rte_memcpy.h"
+#define RCCE_memcpy_put(a,b,c) rte_memcpy(a,b,c)
+#elif defined(COPPERRIDGE)
 #define RCCE_memcpy_put(a,b,c) memcpy_to_mpb(a, b, c)
 #include "scc_memcpy.h"
 #else

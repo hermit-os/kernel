@@ -30,7 +30,10 @@
 //
 #include "iRCCE_lib.h"
 
-#if (defined COPPERRIDGE || defined SCC) && !defined(__hermit__)
+#ifdef __hermit__
+#include "rte_memcpy.h"
+#define memcpy_to_mpb rte_memcpy
+#elif defined COPPERRIDGE || defined SCC
 #include "scc_memcpy.h"
 #else
 #define memcpy_to_mpb memcpy

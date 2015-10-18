@@ -30,13 +30,17 @@
 //
 #include "iRCCE_lib.h"
 
-#if (defined COPPERRIDGE || defined SCC) && !defined(__hermit__) 
+#ifdef __hermit__
+#include "rte_memcpy.h"
+#elif defined COPPERRIDGE || defined SCC
 #include "scc_memcpy.h"
 #endif
 
 void* iRCCE_memcpy_get(void *dest, const void *src, size_t count)
 {
-#if (defined COPPERRIDGE || defined SCC) && !defined(__hermit__)
+#ifdef __hermit__
+  return rte_memcpy(dest, src, count);
+#elif defined COPPERRIDGE || defined SCC
   return memcpy_from_mpb(dest, src, count);
 #else
   return memcpy(dest, src, count);

@@ -30,13 +30,17 @@
 //
 #include "RCCE_lib.h"
 
-#if defined(COPPERRIDGE) && !defined(__hermit__)
+#ifdef __hermit__
+#include "rte_memcpy.h"
+#elif defined(COPPERRIDGE)
 #include "scc_memcpy.h"
 #endif
 
 void *RCCE_memcpy_put(void *dest, const void *src, size_t count)
 { // function wrapper for external usage of improved memcpy()...
-#if defined(COPPERRIDGE) && !defined(__hermit__)
+#ifdef __hermit__
+  return rte_memcpy(dest, src, count);
+#elif defined(COPPERRIDGE)
   return memcpy_to_mpb(dest, src, count);
 #else
   return memcpy(dest, src, count);
