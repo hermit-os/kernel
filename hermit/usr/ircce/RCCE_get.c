@@ -30,12 +30,13 @@
 //
 #include "RCCE_lib.h"
 
-#ifdef COPPERRIDGE
 #ifdef __hermit__
-#define memcpy_from_mpb memcpy
-#else
+#include "rte_memcpy.h"
+#define memcpy_from_mpb rte_memcpy
+#elif defined(COPPERRIDGE)
 #include "scc_memcpy.h"
-#endif
+#else
+#define memcpy_form_mpb memcpy
 #endif
 
 void *RCCE_memcpy_get(void *dest, const void *src, size_t count)

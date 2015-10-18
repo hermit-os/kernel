@@ -25,7 +25,10 @@
 //    limitations under the License.
 // 
 #include "RCCE_lib.h"
-#if defined(COPPERRIDGE) && !defined(__hermit__)
+#ifdef __hermit__
+#include "rte_memcpy.h"
+#define memcpy_scc rte_memcpy
+#elif defined(COPPERRIDGE) 
 #include "scc_memcpy.h"
 #else
 #define memcpy_scc memcpy
