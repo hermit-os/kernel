@@ -16,7 +16,7 @@
 #ifndef RCCE_LIB_H
 #define RCCE_LIB_H
 #include "RCCE.h"
-#ifdef _OPENMP
+#if defined(_OPENMP) && !defined(__hermit__)
   #include <omp.h>
 #endif
 #include <string.h>
@@ -349,7 +349,7 @@ t_vcharp RC_FLAG_BUFFER_START(int);
 #endif
 #endif
 
-#ifdef _OPENMP
+#if defined(_OPENMP) && !defined(__hermit__)
   #pragma omp threadprivate (RC_COREID, RC_MY_COREID, RC_REFCLOCKGHZ)
   #pragma omp threadprivate (RCCE_comm_buffer)
   #pragma omp threadprivate (RCCE_BUFF_SIZE)
