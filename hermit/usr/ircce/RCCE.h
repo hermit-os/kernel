@@ -24,6 +24,10 @@
 //                 by Carsten Clauss, Chair for Operating Systems,
 //                                    RWTH Aachen University
 //
+//    [2015-10-18] port (i)RCCE to "HermitCore"
+//                 by Stefan Lankes, Institute for Automation of Complex Power Systems
+//                                   RWTH Aachen University
+
 #ifndef RCCE_H
 #define RCCE_H
 
@@ -45,7 +49,7 @@
 
 #define ABS(x) ((x > 0)?x:-x)
 
-#ifndef _OPENMP
+#if !defined(_OPENMP) || defined(__hermit__)
   #define RCCE_APP main
 #endif
 
@@ -364,7 +368,7 @@ extern RCCE_COMM    RCCE_P_COMM;
 #define RCCE_POWER_DEFAULT -99999
 #endif
 
-#ifdef _OPENMP
+#if defined(_OPENMP) && !defined(__hermit__)
 #pragma omp threadprivate (RCCE_COMM_WORLD)
 #ifdef RC_POWER_MANAGEMENT
 #pragma omp threadprivate (RCCE_P_COMM)

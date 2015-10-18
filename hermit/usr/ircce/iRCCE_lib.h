@@ -51,7 +51,7 @@ extern iRCCE_RECV_REQUEST* iRCCE_irecv_any_source_queue;
 extern int iRCCE_recent_source;
 extern int iRCCE_recent_length;
 
-#ifdef _OPENMP
+#if defined(_OPENMP) && !defined(__hermit__)
 #pragma omp threadprivate (iRCCE_isend_queue, iRCCE_irecv_queue, iRCCE_irecv_any_source_queue, iRCCE_recent_source, iRCCE_recent_length)
 #endif
 

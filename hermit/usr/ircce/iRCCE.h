@@ -49,6 +49,9 @@
 //                 by Carsten Clauss, Chair for Operating Systems,
 //                                    RWTH Aachen University
 //
+//    [2015-10-18] port (i)RCCE to "HermitCore"
+//                 by Stefan Lankes, Institute for Automation of Complex Power Systems
+//                                   RWTH Aachen University
 
 #ifndef IRCCE_H
 #define IRCCE_H
@@ -70,7 +73,7 @@ extern const int iRCCE_ANY_LENGTH;
 #endif
 
 #if !defined(SINGLEBITFLAGS)
-#ifdef _OPENMP
+#if defined(_OPENMP) && !defined(__hermit__)
 #define iRCCE_MAX_TAGGED_LEN (RCCE_LINE_SIZE - 2 * sizeof(int))
 #else
 #define iRCCE_MAX_TAGGED_LEN (RCCE_LINE_SIZE - sizeof(int))
@@ -145,7 +148,7 @@ typedef struct _iRCCE_WAIT_LIST {
 
 #ifdef AIR
 typedef volatile struct _iRCCE_AIR {
-#ifndef _OPENMP
+#if !defined(_OPENMP) || defined(__hermit__)
         int * counter;
         int * init;
 #else
