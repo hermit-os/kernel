@@ -27,6 +27,10 @@
 #include <ctype.h>
 #include "rdtsc.h"
 
+#ifdef __hermit__
+extern unsigned int get_cpufreq();
+#endif
+
 static inline void cpuid(unsigned func, unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {
     __asm__ volatile ("cpuid" : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx) : "a"(func));
 }
