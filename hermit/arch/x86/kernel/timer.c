@@ -114,19 +114,19 @@ int timer_wait(unsigned int ticks)
 		 * This will continuously loop until the given time has
 		 * been reached
 		 */
-		while (timer_ticks < eticks) {
+		while (per_core(timer_ticks) < eticks) {
 			check_workqueues();
 
 			// recheck break condition
-			if (timer_ticks >= eticks)
+			if (per_core(timer_ticks) >= eticks)
 				break;
 
 			HALT;
 		}
-	} else if (timer_ticks < eticks) {
+	} else if (per_core(timer_ticks) < eticks) {
 		check_workqueues();
 
-		if (timer_ticks < eticks) {
+		if (per_core(timer_ticks) < eticks) {
 			set_timer(eticks);
 			reschedule();
 		}
