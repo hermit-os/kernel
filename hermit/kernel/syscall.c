@@ -295,7 +295,7 @@ out:
 
 static int sys_msleep(unsigned int msec)
 {
-	timer_wait(msec*TIMER_FREQ/1000);
+	timer_wait((msec*TIMER_FREQ)/1000);
 
 	return 0;
 }
@@ -443,24 +443,30 @@ out:
 static size_t sys_rcce_malloc(int session_id, int ue)
 {
 	size_t vaddr = 0;
-	int i;
+	int i, counter = 0;
 
 	if (session_id <= 0)
 		return -EINVAL;
 
-	for(i=0; i<MAX_RCCE_SESSIONS; i++)
-	{
-		if (rcce_mpb[i].id == session_id)
-			break;
-	}
+	// after 120 retries (= 120*300 ms) we give up
+	do {
+		for(i=0; i<MAX_RCCE_SESSIONS; i++)
+		{
+			if ((rcce_mpb[i].id == session_id) && rcce_mpb[i].mpb[ue])
+				break;
+		}
+
+		if (i >= MAX_RCCE_SESSIONS) {
+			counter++;
+			timer_wait((300*TIMER_FREQ)/1000);
+		}
+	} while((i >= MAX_RCCE_SESSIONS) && (counter < 120));
+
+	//kprintf("i = %d, counter = %d, max %d\n", i, counter, MAX_RCCE_SESSIONS);
 
 	// create new session
 	if (i >= MAX_RCCE_SESSIONS)
 		goto out;
-
-	if (!rcce_mpb[i].mpb[ue])
-		goto out;
-
 
 	vaddr = vma_alloc(2*PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_USER|VMA_CACHEABLE);
         if (BUILTIN_EXPECT(!vaddr, 0))
@@ -470,11 +476,15 @@ static size_t sys_rcce_malloc(int session_id, int ue)
 		vma_free(vaddr, vaddr + 2*PAGE_SIZE);
 		goto out;
 	}
-	
+
 	kprintf("Map MPB of session %d at 0x%zx, using of slot %d, isle %d\n", session_id, vaddr, i, ue);
 
-out:
 	return vaddr;
+
+out:
+	kprintf("Didn't find a valid MPB for session %d, isle %d\n", session_id, ue);
+
+	return 0;
 }
 
 static int sys_rcce_fini(int session_id)
