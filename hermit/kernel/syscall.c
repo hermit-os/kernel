@@ -423,7 +423,7 @@ static int sys_rcce_init(int session_id)
 		goto out;
 	}
 
-	paddr = get_pages(2);
+	paddr = get_pages(RCCE_MPB_SIZE / PAGE_SIZE);
 	if (BUILTIN_EXPECT(!paddr, 0))
 	{
 		err = -ENOMEM;
@@ -468,11 +468,11 @@ static size_t sys_rcce_malloc(int session_id, int ue)
 	if (i >= MAX_RCCE_SESSIONS)
 		goto out;
 
-	vaddr = vma_alloc(2*PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_USER|VMA_CACHEABLE);
+	vaddr = vma_alloc(RCCE_MPB_SIZE, VMA_READ|VMA_WRITE|VMA_USER|VMA_CACHEABLE);
         if (BUILTIN_EXPECT(!vaddr, 0))
 		goto out;
 
-	if (page_map(vaddr, rcce_mpb[i].mpb[ue], 2, PG_RW|PG_USER|PG_PRESENT)) {
+	if (page_map(vaddr, rcce_mpb[i].mpb[ue], RCCE_MPB_SIZE / PAGE_SIZE, PG_RW|PG_USER|PG_PRESENT)) {
 		vma_free(vaddr, vaddr + 2*PAGE_SIZE);
 		goto out;
 	}
@@ -511,7 +511,7 @@ static int sys_rcce_fini(int session_id)
 	}
 
 	if (rcce_mpb[i].mpb[isle])
-		put_pages(rcce_mpb[i].mpb[isle], 2);
+		put_pages(rcce_mpb[i].mpb[isle], RCCE_MPB_SIZE / PAGE_SIZE);
 	rcce_mpb[i].mpb[isle] = 0;
 
 	for(j=0; (j<MAX_ISLE) && !rcce_mpb[i].mpb[j]; j++)

@@ -63,7 +63,11 @@
 #endif
 #define RCCE_LINE_SIZE                     (1<<LOG2_LINE_SIZE)
 // RCCE_BUFF_SIZE_MAX is space per UE, which is half of the space per tile 
+#ifdef __hermit__
+#define RCCE_BUFF_SIZE_MAX                 (64*1024)
+#else
 #define RCCE_BUFF_SIZE_MAX                 (1<<13)
+#endif
 
 #ifdef SHMADD
 //64MB
