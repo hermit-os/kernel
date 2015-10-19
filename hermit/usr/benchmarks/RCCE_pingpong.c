@@ -22,7 +22,7 @@
 
 #include "RCCE.h"
 
-#undef  _CACHE_WARM_UP_
+#define  _CACHE_WARM_UP_
 #undef  _USE_SEPARATED_BUFFERS_
 #undef  _ERROR_CHECK_
 
@@ -32,14 +32,14 @@
 
 
 #ifdef _USE_SEPARATED_BUFFERS_
-char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
-char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
 #else
 #define send_buffer buffer
 #define recv_buffer buffer
-char buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
 #endif
-char dummy = 0;
+static char dummy = 0;
 
 int RCCE_APP(int argc, char **argv)
 {
@@ -82,6 +82,9 @@ int RCCE_APP(int argc, char **argv)
   }
 
   if(argc > 3) ircce_mode = 1;
+
+  if (ircce_mode && !my_rank)
+    printf("Use iRCCE mode\n");
 
   if(num_ranks != 2)
   {
