@@ -140,15 +140,13 @@ int iRCCE_flag_alloc_tagged(RCCE_FLAG *flag)
 
 int iRCCE_flag_write_tagged(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID, void *tag, int len) {
 
-  unsigned char val_array[RCCE_LINE_SIZE] = 
-  // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  unsigned int val_array[RCCE_LINE_SIZE / sizeof(int)] = {[0 ... RCCE_LINE_SIZE/sizeof(int)-1] = 0};
 
   int error, i, j;
 
-  *(int *) val_array = val;
+  *val_array = val;
 #ifdef _OPENMP
-  *(int *) &val_array[RCCE_LINE_SIZE-sizeof(int)] = val;
+  val_array[RCCE_LINE_SIZE/sizeof(int)-1] = val;
 #endif
 
   if(tag)
@@ -158,9 +156,9 @@ int iRCCE_flag_write_tagged(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID, void 
   }
 
 #ifdef RCCE_VERSION
-  error = iRCCE_put(flag->flag_addr, val_array, RCCE_LINE_SIZE, ID);
+  error = iRCCE_put(flag->flag_addr, (t_vcharp)val_array, RCCE_LINE_SIZE, ID);
 #else
-  error = iRCCE_put((t_vcharp)(*flag), val_array, RCCE_LINE_SIZE, ID);
+  error = iRCCE_put((t_vcharp)(*flag), (t_vcharp)val_array, RCCE_LINE_SIZE, ID);
 #endif
 
   return(RCCE_error_return(RCCE_debug_synch,error));
@@ -168,26 +166,26 @@ int iRCCE_flag_write_tagged(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID, void 
 
 int iRCCE_flag_read_tagged(RCCE_FLAG flag, RCCE_FLAG_STATUS *val, int ID, void *tag, int len) {
 
-  unsigned char val_array[RCCE_LINE_SIZE];
+  int val_array[RCCE_LINE_SIZE / sizeof(int)];
   int error, i, j;
 
 #ifdef RCCE_VERSION
-  if(error=iRCCE_get(val_array, flag.flag_addr, RCCE_LINE_SIZE, ID))
+  if((error=iRCCE_get((t_vcharp)val_array, flag.flag_addr, RCCE_LINE_SIZE, ID)))
     return(RCCE_error_return(RCCE_debug_synch,error));
 #else
-  if(error=iRCCE_get(val_array, (t_vcharp)flag, RCCE_LINE_SIZE, ID))
+  if((error=iRCCE_get((t_vcharp)val_array, (t_vcharp)flag, RCCE_LINE_SIZE, ID)))
     return(RCCE_error_return(RCCE_debug_synch,error));
 #endif
 
-  if(val) *val = *(int *)val_array;
+  if(val) *val = *val_array;
 
 #ifdef _OPENMP
-  if(val) *val = *(int *)&val_array[RCCE_LINE_SIZE-sizeof(int)];
+  if(val) *val = val_array[RCCE_LINE_SIZE / sizeof(int) - 1];
 #endif
 
   if( (val) && (*val) && (tag) ) {
     if(len > iRCCE_MAX_TAGGED_LEN) len = iRCCE_MAX_TAGGED_LEN;
-    iRCCE_memcpy_put(tag, &val_array[sizeof(int)], len);
+    iRCCE_memcpy_put(tag, &val_array[1], len);
   }
 
   return(RCCE_SUCCESS);

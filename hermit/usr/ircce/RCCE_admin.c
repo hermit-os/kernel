@@ -193,10 +193,8 @@ t_vcharp RCCE_fool_write_combine_buffer;
 #ifdef SCC
 #ifdef __hermit__
 inline volatile uint64_t _rdtsc() {
-	uint64_t lo, hi;
-
+	register uint64_t lo, hi;
 	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) );
-
 	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
 }
 #elif defined(__INTEL_COMPILER)

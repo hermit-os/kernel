@@ -92,7 +92,7 @@ int RCCE_comm_split(
   }
 #endif
 
-  if(error=RCCE_flag_alloc(&(comm->release)))
+  if((error=RCCE_flag_alloc(&(comm->release))))
      return(RCCE_error_return(RCCE_debug_comm,error));
 
   comm->label = 0;

@@ -403,7 +403,7 @@ int iRCCE_iprobe(int source, int* test_rank, int* test_flag)
 
 #ifdef _iRCCE_ANY_LENGTH_
 		{
-		  	int size = iRCCE_ANY_LENGTH;
+			ssize_t size = iRCCE_ANY_LENGTH;
 			RCCE_flag_read(RCCE_sent_flag[source], &size, RCCE_IAM);
 			if(iRCCE_recent_length != size) iRCCE_recent_length = size;
 		}

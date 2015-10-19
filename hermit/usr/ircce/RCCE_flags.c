@@ -60,10 +60,7 @@ int LEFTMOSTBIT = sizeof(int)*8-1;
 // END GLOBAL VARIABLES USED BY THE LIBRARY
 //......................................................................................
 
-RCCE_FLAG_LINE RCCE_flags = 
-// 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
- {{0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0},
-                             NULL, 0, NULL};
+RCCE_FLAG_LINE RCCE_flags = {{[0 ... RCCE_FLAGS_PER_LINE-1] = 0}, NULL, 0, NULL};
 
 // next three utility functions are only used by the library, not the user. We assume 
 // there will never be errrors, so we do not return any error code. "location" of a 
@@ -362,9 +359,7 @@ int RCCE_flag_free(RCCE_FLAG *flag) {
 int RCCE_flag_write(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID) {
   int error;
 #ifndef USE_FLAG_EXPERIMENTAL
-  volatile unsigned char val_array[RCCE_LINE_SIZE] = 
-  // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  volatile int val_array[RCCE_LINE_SIZE/sizeof(int)] = {[0 ... RCCE_LINE_SIZE/sizeof(int)-1] = 0};
 
 #ifdef GORY
   // check input parameters 
@@ -374,12 +369,12 @@ int RCCE_flag_write(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID) {
 #endif
 
 #ifndef USE_REVERTED_FLAGS
-  *(int *) val_array = val;
+  *val_array = val;
 #else
-  *(int *) &val_array[RCCE_LINE_SIZE-sizeof(int)] = val;
+  val_array[RCCE_LINE_SIZE/sizeof(int)-1] = val;
 #endif
 
-  error = RCCE_put((t_vcharp)(*flag), val_array, RCCE_LINE_SIZE, ID);
+  error = RCCE_put((t_vcharp)(*flag), (t_vcharp)val_array, RCCE_LINE_SIZE, ID);
 
 #else
   //*flag = val;
@@ -394,9 +389,7 @@ int RCCE_flag_write(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID) {
 #ifdef USE_TAGGED_FLAGS
 int RCCE_flag_write_tagged(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID, void* tag, int len) {
 
-  unsigned char val_array[RCCE_LINE_SIZE] = 
-  // 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+  unsigned char val_array[RCCE_LINE_SIZE] = {[0 ... RCCE_LINE_SIZE-1] = 0};
 
   int error, i, j;
 
@@ -432,19 +425,19 @@ int RCCE_flag_write_tagged(RCCE_FLAG *flag, RCCE_FLAG_STATUS val, int ID, void* 
 int RCCE_flag_read(RCCE_FLAG flag, RCCE_FLAG_STATUS *val, int ID) {
   int error;
 #ifndef USE_FLAG_EXPERIMENTAL
-  volatile unsigned char val_array[RCCE_LINE_SIZE];
+  volatile int val_array[RCCE_LINE_SIZE/sizeof(int)];
 #ifdef GORY
   if (!flag)  return(RCCE_error_return(RCCE_debug_synch,RCCE_ERROR_FLAG_UNDEFINED));
   if (!val)   return(RCCE_error_return(RCCE_debug_synch,RCCE_ERROR_VAL_UNDEFINED));
 #endif
 
-  if(error=RCCE_get(val_array, (t_vcharp)flag, RCCE_LINE_SIZE, ID)) 
+  if((error=RCCE_get((t_vcharp)val_array, (t_vcharp)flag, RCCE_LINE_SIZE, ID)))
     return(RCCE_error_return(RCCE_debug_synch,error));
 
 #ifndef USE_REVERTED_FLAGS
-  if(val) *val = *(int *)val_array;
+  if(val) *val = *val_array;
 #else
-  if(val) *val = *(int *)&val_array[RCCE_LINE_SIZE-sizeof(int)];
+  if(val) *val = val_array[RCCE_LINE_SIZE/sizeof(int)-1];
 #endif
 
 #else

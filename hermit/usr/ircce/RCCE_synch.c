@@ -128,10 +128,10 @@ int RCCE_test_flag(RCCE_FLAG flag, RCCE_FLAG_STATUS val, int *result) {
 //--------------------------------------------------------------------------------------
 int RCCE_barrier(RCCE_COMM *comm) {
  
+  t_vchar           cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  t_vchar           valchar  [RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
   int               counter, i, error;
   int               ROOT =  0;
-  t_vchar           cyclechar[RCCE_LINE_SIZE];
-  t_vchar           valchar  [RCCE_LINE_SIZE];
   t_vcharp gatherp, releasep;
   RCCE_FLAG_STATUS  cycle;
 
@@ -339,12 +339,12 @@ int RCCE_test_tagged(RCCE_FLAG flag, RCCE_FLAG_STATUS val, int *result, void *ta
 //--------------------------------------------------------------------------------------
 int RCCE_barrier(RCCE_COMM *comm) {
  
-  int   counter, i, error;
-  int   ROOT      =  0;
-  volatile unsigned char cyclechar[RCCE_LINE_SIZE];
-  volatile unsigned char   valchar[RCCE_LINE_SIZE];
+  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
   volatile char *cycle;
   volatile char *val;
+  int   counter, i, error;
+  int   ROOT      =  0;
 
   counter = 0;
   cycle  = (volatile char *)cyclechar;
@@ -403,16 +403,16 @@ int RCCE_barrier(RCCE_COMM *comm) {
 
   // flip local barrier variable                                      
 #ifndef USE_FLAG_EXPERIMENTAL
-  if (error = RCCE_get(cyclechar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_get(cyclechar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, RCCE_IAM)))
 #else
-  if (error = RCCE_get_flag(cyclechar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_get_flag(cyclechar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, RCCE_IAM)))
 #endif
     return(RCCE_error_return(RCCE_debug_synch,error));
   *cycle = !(*cycle);
 #ifndef USE_FLAG_EXPERIMENTAL
-  if (error = RCCE_put((t_vcharp)(comm->gather), cyclechar, RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_put((t_vcharp)(comm->gather), cyclechar, RCCE_LINE_SIZE, RCCE_IAM)))
 #else
-  if (error = RCCE_put_flag((t_vcharp)(comm->gather), cyclechar, RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_put_flag((t_vcharp)(comm->gather), cyclechar, RCCE_LINE_SIZE, RCCE_IAM)))
 #endif
     return(RCCE_error_return(RCCE_debug_synch,error));
 
@@ -424,11 +424,11 @@ int RCCE_barrier(RCCE_COMM *comm) {
       for (counter=i=1; i<comm->size; i++) {
         /* copy flag values out of comm buffer                        */
 #ifndef USE_FLAG_EXPERIMENTAL
-        if (error = RCCE_get(valchar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, 
-                             comm->member[i]))
+        if ((error = RCCE_get(valchar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, 
+                             comm->member[i])))
 #else
-         if (error = RCCE_get_flag(valchar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, 
-                             comm->member[i]))
+         if ((error = RCCE_get_flag(valchar, (t_vcharp)(comm->gather), RCCE_LINE_SIZE, 
+                             comm->member[i])))
 #endif
           return(RCCE_error_return(RCCE_debug_synch,error));
         if (*val == *cycle) counter++;
@@ -436,12 +436,12 @@ int RCCE_barrier(RCCE_COMM *comm) {
     }
     // set release flags                                             
     for (i=1; i<comm->size; i++) {
-      if (error = RCCE_flag_write(&(comm->release), *cycle, comm->member[i]))
+      if ((error = RCCE_flag_write(&(comm->release), *cycle, comm->member[i])))
         return(RCCE_error_return(RCCE_debug_synch,error));
     }
   }
   else {
-    if (error = RCCE_wait_until(comm->release, *cycle)) {
+    if ((error = RCCE_wait_until(comm->release, *cycle))) {
       return(RCCE_error_return(RCCE_debug_synch,error));
     }
   }
@@ -458,10 +458,10 @@ int RCCE_barrier(RCCE_COMM *comm) {
 //--------------------------------------------------------------------------------------
 int RCCE_nb_barrier(RCCE_COMM *comm) {
  
+  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
   int   i, error;
   int   ROOT      =  0;
-  volatile unsigned char cyclechar[RCCE_LINE_SIZE];
-  volatile unsigned char   valchar[RCCE_LINE_SIZE];
 #ifdef USE_FLAG_EXPERIMENTAL
   volatile char *cycle;
   volatile char *val;
@@ -546,16 +546,16 @@ label2:
 
   // flip local barrier variable
 #ifndef USE_FLAG_EXPERIMENTAL
-  if (error = RCCE_get(cyclechar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_get(cyclechar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, RCCE_IAM)))
 #else
-  if (error = RCCE_get_flag(cyclechar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_get_flag(cyclechar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, RCCE_IAM)))
 #endif
     return(RCCE_error_return(RCCE_debug_synch,error));
   *cycle = !(*cycle);
 #ifndef USE_FLAG_EXPERIMENTAL
-  if (error = RCCE_put((t_vcharp)(comm->gather[0]), cyclechar, RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_put((t_vcharp)(comm->gather[0]), cyclechar, RCCE_LINE_SIZE, RCCE_IAM)))
 #else
-  if (error = RCCE_put_flag((t_vcharp)(comm->gather[0]), cyclechar, RCCE_LINE_SIZE, RCCE_IAM))
+  if ((error = RCCE_put_flag((t_vcharp)(comm->gather[0]), cyclechar, RCCE_LINE_SIZE, RCCE_IAM)))
 #endif
     return(RCCE_error_return(RCCE_debug_synch,error));
 
@@ -569,11 +569,11 @@ label1:
       for (comm->count=i=1; i<comm->size; i++) {
         /* copy flag values out of comm buffer                        */
 #ifndef USE_FLAG_EXPERIMENTAL
-        if (error = RCCE_get(valchar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, 
-                             comm->member[i]))
+        if ((error = RCCE_get(valchar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, 
+                             comm->member[i])))
 #else
-         if (error = RCCE_get_flag(valchar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, 
-                             comm->member[i]))
+         if ((error = RCCE_get_flag(valchar, (t_vcharp)(comm->gather[0]), RCCE_LINE_SIZE, 
+                             comm->member[i])))
 #endif
           return(RCCE_error_return(RCCE_debug_synch,error));
         if (*val == comm->cycle) comm->count++;
@@ -585,7 +585,7 @@ label1:
     }
     // set release flags                                              
     for (i=1; i<comm->size; i++) {
-      if (error = RCCE_flag_write(&(comm->release), comm->cycle, comm->member[i]))
+      if ((error = RCCE_flag_write(&(comm->release), comm->cycle, comm->member[i])))
         return(RCCE_error_return(RCCE_debug_synch,error));
     }
   }

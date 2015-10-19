@@ -60,10 +60,10 @@ int RCCE_bcast(
 
   if (RCCE_IAM == comm.member[root]) {
     for (ue=0; ue<comm.size; ue++) if (ue != root)
-      if(ierr=RCCE_send(buf, num, comm.member[ue]))
+      if((ierr=RCCE_send(buf, num, comm.member[ue])))
          return(RCCE_error_return(RCCE_debug_comm,ierr));
   }
-  else if(ierr=RCCE_recv(buf, num, comm.member[root]))
+  else if((ierr=RCCE_recv(buf, num, comm.member[root])))
          return(RCCE_error_return(RCCE_debug_comm,ierr));
 
   return(RCCE_SUCCESS);
