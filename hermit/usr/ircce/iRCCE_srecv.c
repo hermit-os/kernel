@@ -301,7 +301,7 @@ int iRCCE_probe(int source, int* test_rank)
 
 #ifdef _iRCCE_ANY_LENGTH_
 	{
-	  int size;
+	  ssize_t size;
 	  RCCE_flag_read(RCCE_sent_flag[source], &size, RCCE_IAM);
 	  if(iRCCE_recent_length != size) iRCCE_recent_length = size;
 	}

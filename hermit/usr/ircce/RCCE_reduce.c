@@ -87,17 +87,17 @@ static int RCCE_reduce_general(
 
   if (RCCE_IAM != comm.member[root]) {
     // non-root UEs send their source buffers to the root
-    if (ierr=RCCE_send(inbuf, num*type_size, comm.member[root]))
+    if ((ierr=RCCE_send(inbuf, num*type_size, comm.member[root])))
       return(ierr);
     // in case of allreduce they also receive the reduced buffer
-    if (all) if (ierr=RCCE_recv(outbuf, num*type_size, comm.member[root]))
+    if (all) if ((ierr=RCCE_recv(outbuf, num*type_size, comm.member[root])))
       return(ierr);
   }
   else {
     // the root can copy directly from source to target buffer
     memcpy(outbuf, inbuf, num*type_size);
     for (ue=0; ue<comm.size; ue++) if (ue != root) {
-      if (ierr=RCCE_recv(inbuf, num*type_size, comm.member[ue]))
+      if ((ierr=RCCE_recv(inbuf, num*type_size, comm.member[ue])))
         return(ierr);
       
       // use combination of operation and data type to reduce number of switch statements
@@ -127,11 +127,11 @@ static int RCCE_reduce_general(
 
     // in case of allreduce the root sends the reduction results to all non-root UEs
     if (all) for (ue=0; ue<comm.size; ue++) if (ue != root)
-             if(ierr=RCCE_send(outbuf, num*type_size, comm.member[ue]))
+             if((ierr=RCCE_send(outbuf, num*type_size, comm.member[ue])))
                 return(ierr);
   }
   return(RCCE_SUCCESS);
-#endif GORY
+#endif // GORY
 }
 
 //---------------------------------------------------------------------------------------

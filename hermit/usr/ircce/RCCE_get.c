@@ -136,7 +136,7 @@ int RCCE_get(
   RCCE_memcpy_get((void *)target, (void *)source, num_bytes);
 
   if (RCCE_debug_synch)
-    fprintf(STDERR,"UE %d get data: %d from address %X \n", RCCE_IAM,*target,source);
+    fprintf(STDERR,"UE %d get data: %d from address %p \n", RCCE_IAM,*target,source);
 
 //  printf("UE %d finished the memcopy\n", RCCE_IAM);
 

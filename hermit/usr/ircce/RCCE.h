@@ -164,14 +164,14 @@ typedef struct {
 #ifdef USE_FLAG_EXPERIMENTAL
 typedef volatile unsigned char *RCCE_FLAG;
 #else
-typedef volatile int *RCCE_FLAG;
+typedef volatile ssize_t *RCCE_FLAG;
 #endif
 #endif
 
 #ifdef USE_FLAG_EXPERIMENTAL
 typedef unsigned char RCCE_FLAG_STATUS;
 #else
-typedef int RCCE_FLAG_STATUS;
+typedef ssize_t RCCE_FLAG_STATUS;
 #endif
 
 typedef struct {

@@ -41,8 +41,7 @@ int id_compare(
 // Copyright 1993, John Wiley.
 
     /*assume sizeof(long) is a power of 2 */
-#define SWAPINIT(a, es) swaptype =         \
-    (a-(char*)0 | es) % sizeof(long) ? 2 : es > sizeof(long);
+#define SWAPINIT(a, es) swaptype = ((a-(char*)0) | es) % sizeof(long) ? 2 : es > sizeof(long);
 #define swapcode(TYPE, parmi, parmj, n) {  \
     register TYPE *pi = (TYPE *) (parmi);  \
     register TYPE *pj = (TYPE *) (parmj);  \
