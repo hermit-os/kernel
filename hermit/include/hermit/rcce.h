@@ -37,6 +37,7 @@
 #include <hermit/islelock.h>
 
 #define RCCE_MAXNP	8
+#define RCCE_MPB_SIZE	(64*1024)
 
 typedef struct tas {
 	volatile unsigned char reg;
