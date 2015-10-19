@@ -22,7 +22,7 @@
 
 #include "RCCE.h"
 
-#undef  _CACHE_WARM_UP_
+#define  _CACHE_WARM_UP_
 #undef  _ERROR_CHECK_
 
 #define MAXBUFSIZE  1024*1024*64
@@ -30,9 +30,9 @@
 #define NUMROUNDS   10000
 
 
-char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
-char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
-char dummy = 0;
+static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char dummy = 0;
 
 int RCCE_APP(int argc, char **argv)
 {
