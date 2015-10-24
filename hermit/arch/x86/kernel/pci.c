@@ -32,7 +32,9 @@
 #include <asm/io.h>
 
 #include <asm/pci.h>
+#ifdef WITH_PCI_IDS
 #include "pcihdr.h"
+#endif
 
 /*
  * PCI configuration registers
@@ -182,6 +184,7 @@ int print_pci_adapters(void)
 					counter, adapters[bus][slot] & 0xffff, 
 					(adapters[bus][slot] & 0xffff0000) >> 16);
 
+#ifdef WITH_PCI_IDS
 				for (i=0; i<PCI_VENTABLE_LEN; i++) {
 					if ((adapters[bus][slot] & 0xffff) ==
 					    (uint32_t)PciVenTable[i].VenId)
@@ -201,6 +204,7 @@ int print_pci_adapters(void)
 						}
 					}
 				}
+#endif
 			}
 		}
 	}
