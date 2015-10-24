@@ -45,6 +45,7 @@ extern "C" {
 #define KMSG_SIZE		(8*1024)
 #define INT_SYSCALL		0x80
 #define MAILBOX_SIZE	32
+//#define WITH_PCI_IDS
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
