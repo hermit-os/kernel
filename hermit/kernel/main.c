@@ -347,7 +347,7 @@ int main(void)
 	list_fs(fs_root, 1);
 #endif
 
-#if 1
+#if 0
 	print_pci_adapters();
 #endif
 
