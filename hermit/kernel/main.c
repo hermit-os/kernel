@@ -342,9 +342,13 @@ int main(void)
 	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
 	kprintf("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 
-#if 1
+#if 0
 	kputs("Filesystem:\n");
 	list_fs(fs_root, 1);
+#endif
+
+#if 1
+	print_pci_adapters();
 #endif
 
 #ifdef DYNAMIC_TICKS

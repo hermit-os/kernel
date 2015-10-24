@@ -40,6 +40,7 @@
 #include <asm/gdt.h>
 #include <asm/apic.h>
 #include <asm/irqflags.h>
+#include <asm/pci.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -637,6 +638,7 @@ inline static int system_init(void)
 {
 	gdt_install();
 	cpu_detection();
+	pci_init();
 
 	return 0;
 }
