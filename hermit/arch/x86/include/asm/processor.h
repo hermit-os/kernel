@@ -62,8 +62,10 @@ extern "C" {
 #define CPU_FEATURE_SSE2		(1 << 26)
 
 // feature list 0x00000001 (ecx)
+#define CPU_FEATURE_MWAIT			(1 << 3)
 #define CPU_FEATURE_SSE3			(1 << 9)
 #define CPU_FEATURE_FMA				(1 << 12)
+#define CPU_FEATURE_DCA				(1 << 18)
 #define CPU_FEATURE_SSE4_1			(1 << 19)
 #define CPU_FEATURE_SSE4_2			(1 << 20)
 #define CPU_FEATURE_X2APIC			(1 << 21)
@@ -250,19 +252,27 @@ inline static uint32_t has_movbe(void) {
 }
 
 inline static uint32_t has_fma(void) {
-		return (cpu_info.feature2 & CPU_FEATURE_FMA);
+	return (cpu_info.feature2 & CPU_FEATURE_FMA);
+}
+
+inline static uint32_t has_mwait(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_MWAIT);
 }
 
 inline static uint32_t has_sse3(void) {
-		return (cpu_info.feature2 & CPU_FEATURE_SSE3);
+	return (cpu_info.feature2 & CPU_FEATURE_SSE3);
+}
+
+inline static uint32_t has_dca(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_DCA);
 }
 
 inline static uint32_t has_sse4_1(void) {
-		return (cpu_info.feature2 & CPU_FEATURE_SSE4_1);
+	return (cpu_info.feature2 & CPU_FEATURE_SSE4_1);
 }
 
 inline static uint32_t has_sse4_2(void) {
-		return (cpu_info.feature2 & CPU_FEATURE_SSE4_2);
+	return (cpu_info.feature2 & CPU_FEATURE_SSE4_2);
 }
 
 inline static uint32_t has_x2apic(void) {
