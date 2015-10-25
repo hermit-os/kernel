@@ -126,6 +126,7 @@ veryclean: clean
 	@echo Very cleaned
 
 ramfs: hermit.elf
+	make -C tools proxy
 	touch initrd.cpio
 	cp hermit.bin $(INITRAMFS)
 	cp tools/*_proxy $(INITRAMFS)
