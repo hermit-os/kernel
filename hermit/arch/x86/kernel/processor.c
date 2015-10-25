@@ -349,7 +349,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -365,7 +365,9 @@ int cpu_detection(void) {
 			has_xsave() ? "XSAVE " : "",
 			has_osxsave() ? "OSXSAVE " : "",
 			has_rdtscp() ? "RDTSCP " : "",
-			has_fsgsbase() ? "FSGSBASE " : "");
+			has_fsgsbase() ? "FSGSBASE " : "",
+			has_mwait() ? "MWAIT " : "",
+			has_dca() ? "DCA " : "");
 	}
 
 	if (first_time && has_osxsave()) {
