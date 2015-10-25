@@ -22,7 +22,7 @@ endif
 
 default: all
 	
-all: init.h make_initrd initrd.o proxy
+all: init.h make_initrd initrd.o
 
 init.bin: init.asm
 	@echo [NASM] $@
