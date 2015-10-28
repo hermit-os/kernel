@@ -20,5 +20,6 @@ clean:
 
 veryclean:
 	make -C hermit veryclean
+	make -C linux clean
 
 .PHONY: default all clean veryclean test
