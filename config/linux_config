@@ -136,7 +136,7 @@ CONFIG_ARCH_SUPPORTS_INT128=y
 # CONFIG_SYSFS_DEPRECATED is not set
 # CONFIG_RELAY is not set
 CONFIG_BLK_DEV_INITRD=y
-CONFIG_INITRAMFS_SOURCE="/work/lankes/HermitCore/hermit/initrd.cpio"
+CONFIG_INITRAMFS_SOURCE="../config/initrd.cpio"
 CONFIG_INITRAMFS_ROOT_UID=0
 CONFIG_INITRAMFS_ROOT_GID=0
 CONFIG_RD_GZIP=y
@@ -775,10 +775,11 @@ CONFIG_SCSI_PROC_FS=y
 #
 # SCSI support type (disk, tape, CD-ROM)
 #
-# CONFIG_BLK_DEV_SD is not set
+CONFIG_BLK_DEV_SD=y
 # CONFIG_CHR_DEV_ST is not set
 # CONFIG_CHR_DEV_OSST is not set
-# CONFIG_BLK_DEV_SR is not set
+CONFIG_BLK_DEV_SR=y
+CONFIG_BLK_DEV_SR_VENDOR=y
 # CONFIG_CHR_DEV_SG is not set
 # CONFIG_CHR_DEV_SCH is not set
 # CONFIG_SCSI_CONSTANTS is not set
@@ -853,8 +854,8 @@ CONFIG_SATA_PMP=y
 #
 # Controllers with non-SFF native interface
 #
-# CONFIG_SATA_AHCI is not set
-# CONFIG_SATA_AHCI_PLATFORM is not set
+CONFIG_SATA_AHCI=y
+CONFIG_SATA_AHCI_PLATFORM=y
 # CONFIG_SATA_INIC162X is not set
 # CONFIG_SATA_ACARD_AHCI is not set
 # CONFIG_SATA_SIL24 is not set
@@ -871,7 +872,7 @@ CONFIG_ATA_BMDMA=y
 #
 # SATA SFF controllers with BMDMA
 #
-# CONFIG_ATA_PIIX is not set
+CONFIG_ATA_PIIX=y
 # CONFIG_SATA_MV is not set
 # CONFIG_SATA_NV is not set
 # CONFIG_SATA_PROMISE is not set
@@ -933,7 +934,7 @@ CONFIG_ATA_BMDMA=y
 # Generic fallback / legacy drivers
 #
 # CONFIG_PATA_ACPI is not set
-# CONFIG_ATA_GENERIC is not set
+CONFIG_ATA_GENERIC=y
 # CONFIG_PATA_LEGACY is not set
 # CONFIG_MD is not set
 # CONFIG_TARGET_CORE is not set
@@ -1487,8 +1488,11 @@ CONFIG_EXT2_FS=y
 #
 # CD-ROM/DVD Filesystems
 #
-# CONFIG_ISO9660_FS is not set
-# CONFIG_UDF_FS is not set
+CONFIG_ISO9660_FS=y
+CONFIG_JOLIET=y
+# CONFIG_ZISOFS is not set
+CONFIG_UDF_FS=y
+CONFIG_UDF_NLS=y
 
 #
 # DOS/FAT/NT Filesystems
@@ -1911,7 +1915,7 @@ CONFIG_ARCH_HAS_FAST_MULTIPLIER=y
 # CONFIG_CRC_CCITT is not set
 # CONFIG_CRC16 is not set
 # CONFIG_CRC_T10DIF is not set
-# CONFIG_CRC_ITU_T is not set
+CONFIG_CRC_ITU_T=y
 CONFIG_CRC32=y
 # CONFIG_CRC32_SELFTEST is not set
 CONFIG_CRC32_SLICEBY8=y
