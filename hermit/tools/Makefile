@@ -53,14 +53,14 @@ proxy: iso $(PROXYFILES)
 	$Q./create_proxy.sh $(foreach FILE, $(PROXYFILES), $(FILE))
 	$Qmv *_proxy iso/
 	$Qcp ../hermit.bin iso
-	$Qgenisoimage -R -J -o proxy-image.iso iso
+	$Qgenisoimage -R -J -input-charset utf8 -o proxy-image.iso iso
 
 clean:
 	@echo Cleaning tools
 	$Q$(RM) -rf *.o *~ *.bin *.obj *.h
 
 veryclean: clean
-	@Q$(RM) -rf iso
+	$Q$(RM) -rf iso
 
 depend:
 	$(CC) -MM $(CFLAGS) *.c > Makefile.dep
