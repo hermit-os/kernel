@@ -9,8 +9,6 @@ SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
 INITRAMFS=../../busybox-1.23.2/initramfs/
-#QEMU = qemu-system-x86_64
-QEMU = qemu-kvm -cpu host
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -34,18 +32,6 @@ READELF_FOR_TARGET = $(CROSSCOMPREFIX)readelf
 MAKE = make
 NASM = nasm
 NASMFLAGS = -felf64 -g -i$(TOPDIR)/include/hermit/
-GDB = $(CROSSCOMPREFIX)gdb
-GDBFLAGS = -x debug.gdb
-#QEMU = qemu-system-x86_64
-QEMU = qemu-kvm -cpu host
-QEMUFLAGS = -smp 2 -monitor stdio \
-	    -net nic,model=rtl8139 \
-	    -net user,hostfwd=tcp::12345-:7
-QEMUDEBUGFLAGS = -monitor none -daemonize \
-	    -net nic,model=rtl8139 \
-	    -net user,hostfwd=tcp::12345-:7
-QEMUSERIALFLAGS = -device pci-serial,chardev=tS0 \
-		-chardev socket,host=localhost,port=4555,server,id=tS0
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4 -I$(TOPDIR)/drivers
 # Compiler options for final code
@@ -124,17 +110,6 @@ veryclean: clean
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C usr veryclean
 	@echo Very cleaned
-
-ramfs: hermit.elf
-	make -C tools proxy
-	touch initrd.cpio
-	cp hermit.bin $(INITRAMFS)
-	cp tools/*_proxy $(INITRAMFS)
-	cd $(INITRAMFS); \
-	find . -print0 | cpio --null -ov --format=newc > $(TOPDIR)/initrd.cpio
-
-qemu:
-	$(QEMU) -smp 20 -kernel ../linux/arch/x86/boot/bzImage -initrd initrd.cpio -append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0 maxcpus=1" -net nic,model=rtl8139 -net user  -net dump -nographic -monitor telnet:127.0.0.1:1234,server,nowait -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 -numa node,nodeid=2,cpus=10-14 -numa node,nodeid=3,cpus=15-19
 
 doc:
 	@echo Create documentation...

@@ -45,16 +45,22 @@ initrd.img: $(INITRDFILES) make_initrd
 make_initrd: make_initrd.o
 	$Q$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
-proxy: $(PROXYFILES)
+iso:
+	mkdir iso
+
+proxy: iso $(PROXYFILES)
 	@echo [PROXY] Create proxy files
 	$Q./create_proxy.sh $(foreach FILE, $(PROXYFILES), $(FILE))
+	$Qmv *_proxy iso/
+	$Qcp ../hermit.bin iso
+	$Qgenisoimage -R -J -o proxy-image.iso iso
 
 clean:
 	@echo Cleaning tools
 	$Q$(RM) -rf *.o *~ *.bin *.obj *.h
 
 veryclean: clean
-	
+	@Q$(RM) -rf iso
 
 depend:
 	$(CC) -MM $(CFLAGS) *.c > Makefile.dep
