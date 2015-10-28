@@ -14,6 +14,7 @@ include/hermit/config.inc
 tools/*.img
 tools/*_proxy
 tools/make_initrd
+tools/*iso
 usr/tests/hello
 usr/tests/hello++
 usr/tests/hellof
