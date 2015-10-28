@@ -2,11 +2,14 @@ QEMU = @QEMU@ -machine accel=kvm -cpu host
 CROSSDIR = @CROSSDIR@
 JOBS = 20
 
-default:
+default: linux/arch/x86/boot/bzImage
 	make PATH=$(PATH):$(CROSSDIR) -C hermit
 	make PATH=$(PATH):$(CROSSDIR) -C hermit/tools proxy
 
 all: default
+	make -j$(JOBS) -C linux
+
+linux/arch/x86/boot/bzImage:
 	make -j$(JOBS) -C linux
 
 test:
