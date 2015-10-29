@@ -28,8 +28,6 @@ The project has just initiated. Further information will be published shortly.
 1. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler and the demo applications.
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
 3. Create the directory `hermit` in the root directory of your Linux system (`mkdir /hermit`).
-4. Copy the HermitCore kernel and the demo applications to the new directory.
-        cp hermit/hermit.bin /hermit
-        cp hermit/tools/iso/* /hermit
+4. Copy the HermitCore kernel and the demo applications to the new directory (`cp hermit/hermit.bin /hermit ; cp hermit/tools/iso/* /hermit`).
 5. Boot your system.
 6. Follow the above tutorial from point 5.      
