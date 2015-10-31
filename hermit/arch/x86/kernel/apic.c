@@ -457,6 +457,13 @@ found_mp:
 	addr = (size_t) apic_config;
 	addr += sizeof(apic_config_table_t);
 
+	// does the apic table raise the page boundary? => map additional page
+	if (apic_config->entry_count * 20 + addr > ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE)
+	{
+		page_map(((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, 1, PG_GLOBAL | PG_RW | PG_PCD);
+		vma_add( ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, ((size_t) apic_config & PAGE_MASK) + 2*PAGE_SIZE, VMA_READ|VMA_WRITE);
+	}
+
 	// search the ISA bus => required to redirect the IRQs
 	for(i=0; i<apic_config->entry_count; i++) {
 		switch(*((uint8_t*) addr)) {
