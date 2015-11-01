@@ -40,5 +40,4 @@ NETMASK=255.255.255.0
 IPADDR=192.168.28.1
 NM_CONTROLLED=yes
 ```
-8. Boot your system.
-9. Follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5.
+Finally, boot your system with the new Linux kernel and follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5.
