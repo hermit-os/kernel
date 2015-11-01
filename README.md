@@ -24,10 +24,21 @@ The project has just initiated. Further information will be published shortly.
 
 ## Building and testing HermitCore on a real machine
 
-0. In principle you have to follow the tutorial above. After the configuration (step 2) go to the subdirectory `linux`, which contains the source code of the Linux kernel. Configure the kernel with `make menuconfig` for your system. Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
+0. In principle you have to follow the tutorial above. After the configuration (step 2 in the above tutorial) go to the subdirectory `linux`, which contains the source code of the Linux kernel. Configure the kernel with `make menuconfig` for your system. Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 1. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler and the demo applications.
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
 3. Create the directory `hermit` in the root directory of your Linux system (`mkdir /hermit`).
 4. Copy the HermitCore kernel and the demo applications to the new directory (`cp hermit/hermit.bin /hermit ; cp hermit/tools/iso/* /hermit`).
-5. Boot your system.
-6. Follow the above tutorial from point 5.      
+5. The IP device between HermitCore and Linux does currently not support IPv6. Consequently, disable IPv6 for the IP device `mmnif` with following command: `echo 1 > /proc/sys/net/ipv6/conf/eth0/disable_ipv6`.
+6. Per default, the IP device uses a static IP address range. Linux has to use `162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0). The network manager must be configured accordingly and consequently the file `/etc/sysconfig/network-scripts/ifcfg-mmnif` must be created with following contents:
+```
+DEVICE=mmnif
+BOOTPROTO=none
+ONBOOT=yes
+NETWORK=192.168.28.0
+NETMASK=255.255.255.0
+IPADDR=192.168.28.1
+NM_CONTROLLED=yes
+```
+7. Boot your system.
+8. Follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5.
