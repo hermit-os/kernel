@@ -42,7 +42,7 @@ extern "C" {
 #define CACHE_LINE		64
 #define KERNEL_STACK_SIZE	(8<<10)   /*  8 KiB */
 #define DEFAULT_STACK_SIZE	(64*1024) /* 16 KiB */
-#define KMSG_SIZE		(8*1024)
+#define KMSG_SIZE		(4*1024)
 #define INT_SYSCALL		0x80
 #define MAILBOX_SIZE	32
 //#define WITH_PCI_IDS
