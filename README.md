@@ -6,7 +6,7 @@ The project has just initiated. Further information will be published shortly.
 
 * Netwide Assembler (NASM)
 * GNU Make, GNU Binutils
-* Tools and libraries to build *linux*, *binutils* and *gcc* (e.g. flex, bison, MPFR library, GMP library, MPC library)
+* Tools and libraries to build *linux*, *binutils* and *gcc* (e.g. flex, bison, MPFR library, GMP library, MPC library, ISL library)
 * genisoimage
 * texinfo
 * Qemu
@@ -29,7 +29,7 @@ The project has just initiated. Further information will be published shortly.
 3. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
 4. Create the directory `hermit` in the root directory of your Linux system (`mkdir /hermit`).
 5. Copy the HermitCore kernel and the demo applications to the new directory (`cp hermit/hermit.bin /hermit ; cp hermit/tools/iso/* /hermit`).
-6. The IP device between HermitCore and Linux does currently not support IPv6. Consequently, disable IPv6 for the IP device `mmnif` with following command: `echo 1 > /proc/sys/net/ipv6/conf/eth0/disable_ipv6`.
+6. The IP device between HermitCore and Linux does currently not support IPv6. Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.eth0.disable_ipv6 = 1`.
 7. Per default, the IP device uses a static IP address range. Linux has to use `162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0). The network manager must be configured accordingly and consequently the file `/etc/sysconfig/network-scripts/ifcfg-mmnif` must be created with following contents:
 ```
 DEVICE=mmnif
