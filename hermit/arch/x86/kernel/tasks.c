@@ -619,8 +619,10 @@ int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio)
 	int len, total_len, i, j;
 	load_args_t* load_args = NULL;
 	char *dest;
-	uint32_t core_id = CORE_ID;
+	uint32_t core_id;
 	uint32_t counter = 0;
+
+	core_id = get_next_core_id();
 
 	ret = read(sd, &argc, sizeof(int));
 	if ((ret != sizeof(int)) || (argc <= 0))
