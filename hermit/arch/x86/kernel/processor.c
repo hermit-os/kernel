@@ -414,6 +414,8 @@ int cpu_detection(void) {
 	if (first_time) {
 		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
 		kprintf("size of xsave_t: %d\n", sizeof(xsave_t));
+		if (has_msr())
+			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
 	}
 
 	return 0;
