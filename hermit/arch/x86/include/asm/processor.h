@@ -193,6 +193,8 @@ extern "C" {
 /// SwapGS GS shadow
 #define MSR_KERNEL_GS_BASE			0xc0000102
 
+#define MSR_IA32_MISC_ENABLE			0x000001a0
+
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
 #define EFER_LME				(1 << 8)
