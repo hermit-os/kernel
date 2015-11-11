@@ -38,6 +38,7 @@
 #define SCC
 #define COPPERRIDGE
 #define USE_REMOTE_PUT_LOCAL_GET
+#define USE_PROBE_FLAGS
 #undef SHMADD
 #endif
 
