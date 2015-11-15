@@ -35,7 +35,6 @@
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
 #include <hermit/spinlock.h>
-#include <hermit/fs.h>
 #include <hermit/rcce.h>
 #include <asm/irq.h>
 #include <asm/page.h>
@@ -119,7 +118,6 @@ static int hermit_init(void)
 	timer_init();
 	multitasking_init();
 	memory_init();
-	initrd_init();
 
 	return 0;
 }
@@ -245,18 +243,8 @@ static int initd(void* arg)
 	int32_t magic;
 	struct sockaddr_in server, client;
 
-	//char* argv1[] = {"/bin/hello", NULL};
-	//char* argv2[] = {"/bin/jacobi", NULL};
-	//char* argv3[] = {"/bin/stream", NULL};
-	//char* argv4[] = {"/bin/thr_hello", NULL};
-
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
-	//create_user_task(NULL, "/bin/hello", argv1, NORMAL_PRIO);
-	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
-	//create_user_task(NULL, "/bin/jacobi", argv2, NORMAL_PRIO);
-	//create_user_task(NULL, "/bin/stream", argv3, NORMAL_PRIO);
-	//create_user_task(NULL, "/bin/thr_hello", argv4, NORMAL_PRIO);
 
 	init_netifs();
 	init_rcce();
@@ -341,11 +329,6 @@ int main(void)
 	kprintf("Total memory: %zd MiB\n", atomic_int64_read(&total_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
 	kprintf("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
-
-#if 0
-	kputs("Filesystem:\n");
-	list_fs(fs_root, 1);
-#endif
 
 #if 0
 	print_pci_adapters();

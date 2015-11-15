@@ -469,14 +469,6 @@ out:
 	return ret;
 }
 
-int create_user_task(tid_t* id, const char* fname, char** argv, uint8_t prio)
-{
-	if (prio > MAX_PRIO)
-		prio = NORMAL_PRIO;
-
-	return create_user_task_on_core(id, fname, argv, prio, CORE_ID);
-}
-
 int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id)
 {
 	if (prio > MAX_PRIO)

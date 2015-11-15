@@ -4,7 +4,7 @@ ARCH = x86
 NAME = hermit
 LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
 DRIVERDIRS = drivers/net
-KERNDIRS = kernel mm libkern fs arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
+KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
@@ -95,7 +95,7 @@ tools:
 
 $(NAME).elf:
 	@echo [LD] $(NAME).elf
-	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^ tools/initrd.o
+	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^
 	@echo [OBJCOPY] $(NAME).bin
 	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .initrd -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
 

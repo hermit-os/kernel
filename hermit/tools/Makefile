@@ -5,7 +5,6 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
-INITRDFILES = ../usr/tests/hello #$(shell find ../usr/tests -perm -u+r+x -type f)
 PROXYFILES = $(shell find ../usr/tests -perm -u+r+x -type f) $(shell find ../usr/benchmarks -perm -u+r+x -type f)
 
 # Prettify output
@@ -22,7 +21,7 @@ endif
 
 default: all
 	
-all: init.h make_initrd initrd.o
+all: init.h
 
 init.bin: init.asm
 	@echo [NASM] $@
@@ -33,17 +32,6 @@ init.h: init.bin
 	$Q@echo "static const uint8_t boot_code[] = {" > $@
 	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< >> $@
 	$Q@echo "};" >> $@
-
-initrd.o: initrd.S initrd.img
-	@echo [CC] Build initrd as object file
-	$Q$(CC) -c -o $@ initrd.S
- 
-initrd.img: $(INITRDFILES) make_initrd
-	@echo [MAKE_INITRD] initrd.img
-	$Q./make_initrd /bin $(foreach FILE, $(INITRDFILES), $(FILE) $(shell basename $(FILE)))
-
-make_initrd: make_initrd.o
-	$Q$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 iso:
 	mkdir iso
