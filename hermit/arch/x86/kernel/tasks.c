@@ -32,7 +32,6 @@
 #include <hermit/errno.h>
 #include <hermit/processor.h>
 #include <hermit/memory.h>
-#include <hermit/fs.h>
 #include <hermit/vma.h>
 #include <hermit/rcce.h>
 #include <asm/tss.h>
@@ -201,13 +200,11 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	return 0;
 }
 
-#define MAX_ARGS        (PAGE_SIZE - 2*sizeof(int) - sizeof(vfs_node_t*))
+#define MAX_ARGS        (PAGE_SIZE - 2*sizeof(int))
 
 /** @brief Structure which keeps all
  * relevant data for a new user task to start */
 typedef struct {
-	/// Points to the node with the executable in the file system
-	vfs_node_t* node;
 	/// Points to a copy of the executable
 	char* executable;
 	/// Socket descriptor if have no file node
@@ -235,7 +232,6 @@ static int load_task(load_args_t* largs)
 	elf_header_t header;
 	elf_program_header_t prog_header;
 	//elf_section_header_t sec_header;
-	fildes_t file;
 	task_t* curr_task = per_core(current_task);
 	int ret = -EINVAL;
 	uint8_t hermit_exec = 0;
@@ -243,22 +239,11 @@ static int load_task(load_args_t* largs)
 	if (!largs)
 		return -EINVAL;
 
-	if (largs->node) {
-		file.node = largs->node;
-		file.offset = 0;
-		file.flags = 0;
-	} else if (!largs->executable || (largs->sd < 0))
+	if (!largs->executable || (largs->sd < 0))
 		return -EINVAL;
 
 	curr_task->sd = largs->sd;
-
-	if (largs->node) {
-		ret = read_fs(&file, (uint8_t*)&header, sizeof(elf_header_t));
-		if (ret < 0) {
-			kprintf("read_fs failed: %d\n", ret);
-			goto Lerr;
-		}
-	} else memcpy(&header, largs->executable, sizeof(elf_header_t));
+	memcpy(&header, largs->executable, sizeof(elf_header_t));
 
 	if (BUILTIN_EXPECT(header.ident.magic != ELF_MAGIC, 0))
 		goto Linvalid;
@@ -280,13 +265,7 @@ static int load_task(load_args_t* largs)
 
 	// interpret program header table
 	for (i=0; i<header.ph_entry_count; i++) {
-		if (largs->node) {
-			file.offset = header.ph_offset+i*header.ph_entry_size;
-			if (read_fs(&file, (uint8_t*)&prog_header, sizeof(elf_program_header_t)) == 0) {
-				kprintf("Could not read programm header!\n");
-				continue;
-			}
-		} else memcpy(&prog_header, largs->executable + header.ph_offset+i*header.ph_entry_size, sizeof(elf_program_header_t));
+		memcpy(&prog_header, largs->executable + header.ph_offset+i*header.ph_entry_size, sizeof(elf_program_header_t));
 
 		switch(prog_header.type)
 		{
@@ -328,11 +307,7 @@ static int load_task(load_args_t* largs)
 
 			// load program
 			//kprintf("read programm 0x%zx - 0x%zx\n", prog_header.virt_addr, prog_header.virt_addr + prog_header.file_size);
-			if (largs->node) {
-				file.offset = prog_header.offset;
-				read_fs(&file, (uint8_t*)prog_header.virt_addr, prog_header.file_size);
-			} else
-				memcpy((uint8_t*)prog_header.virt_addr, largs->executable + prog_header.offset, prog_header.file_size);
+			memcpy((uint8_t*)prog_header.virt_addr, largs->executable + prog_header.offset, prog_header.file_size);
 
 			if (!(prog_header.flags & PF_W))
 				page_set_flags(prog_header.virt_addr, npages, flags);
@@ -560,58 +535,6 @@ static int user_entry(void* arg)
 	}
 }
 
-/** @brief Luxus-edition of create_user_task functions. Just call with an exe name
- *
- * @param id Pointer to the tid_t structure which shall be filles
- * @param fname Executable's path and filename
- * @param argv Arguments list
- * @return
- * - 0 on success
- * - -ENOMEM (-12) or -EINVAL (-22) on failure
- */
-int create_user_task_on_core(tid_t* id, const char* fname, char** argv, uint8_t prio, uint32_t core_id)
-{
-	vfs_node_t* node;
-	int argc = 0;
-	size_t i, buffer_size = 0;
-	load_args_t* load_args = NULL;
-	char *dest, *src;
-
-	node = findnode_fs((char*) fname);
-	if (!node || !(node->type == FS_FILE))
-		return -EINVAL;
-
-	// determine buffer size of argv
-	if (argv) {
-		while (argv[argc]) {
-			buffer_size += (strlen(argv[argc]) + 1);
-			argc++;
-		}
-	}
-
-	if (argc <= 0)
-		return -EINVAL;
-	if (buffer_size >= MAX_ARGS)
-		return -EINVAL;
-
-	load_args = kmalloc(sizeof(load_args_t));
-	if (BUILTIN_EXPECT(!load_args, 0))
-		return -ENOMEM;
-	load_args->node = node;
-	load_args->argc = argc;
-	load_args->sd = -1;
-	load_args->executable = NULL;
-	load_args->envc = 0;
-	dest = load_args->buffer;
-	for (i=0; i<argc; i++) {
-		src = argv[i];
-		while ((*dest++ = *src++) != 0);
-	}
-
-	/* create new task */
-	return create_task(id, user_entry, load_args, prio, core_id);
-}
-
 int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio)
 {
 	int argc;
@@ -634,7 +557,6 @@ int create_user_task_form_socket(tid_t* id, int sd, uint8_t prio)
 		goto out;
 	}
 
-	load_args->node = NULL;
 	load_args->executable = NULL;
 	load_args->sd = sd;
 	load_args->argc = argc;
