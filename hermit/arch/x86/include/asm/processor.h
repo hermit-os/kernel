@@ -195,6 +195,7 @@ extern "C" {
 #define MSR_KERNEL_GS_BASE			0xc0000102
 
 #define MSR_IA32_MISC_ENABLE			0x000001a0
+#define MSR_IA32_FEATURE_CONTROL		0x0000003a
 
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
