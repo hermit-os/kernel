@@ -318,6 +318,9 @@ int cpu_detection(void) {
 	if (has_nx())
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 
+	if (has_vmx())
+		wrmsr(MSR_IA32_FEATURE_CONTROL, rdmsr(MSR_IA32_FEATURE_CONTROL) | 0x5);
+
 	writefs(0);
 #if MAX_CORES > 1
 	writegs(atomic_int32_read(&current_boot_id) * ((size_t) &percore_end0 - (size_t) &percore_start));
@@ -417,8 +420,10 @@ int cpu_detection(void) {
 	if (first_time) {
 		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
 		kprintf("size of xsave_t: %d\n", sizeof(xsave_t));
-		if (has_msr())
+		if (has_msr()) {
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
+			kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
+		}
 	}
 
 	return 0;
