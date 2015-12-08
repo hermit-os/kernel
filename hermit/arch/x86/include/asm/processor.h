@@ -63,6 +63,7 @@ extern "C" {
 
 // feature list 0x00000001 (ecx)
 #define CPU_FEATURE_MWAIT			(1 << 3)
+#define CPU_FEATURE_VMX				(1 << 5)
 #define CPU_FEATURE_SSE3			(1 << 9)
 #define CPU_FEATURE_FMA				(1 << 12)
 #define CPU_FEATURE_DCA				(1 << 18)
@@ -259,6 +260,10 @@ inline static uint32_t has_fma(void) {
 
 inline static uint32_t has_mwait(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_MWAIT);
+}
+
+inline static uint32_t has_vmx(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_VMX);
 }
 
 inline static uint32_t has_sse3(void) {
