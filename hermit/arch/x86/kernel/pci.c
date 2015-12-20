@@ -170,7 +170,10 @@ int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info
 int print_pci_adapters(void)
 {
 	uint32_t slot, bus;
-	uint32_t i, counter = 0;
+	uint32_t counter = 0;
+#ifdef WITH_PCI_IDS
+	uint32_t i;
+#endif
 
 	if (!mechanism)
 		pci_init();
