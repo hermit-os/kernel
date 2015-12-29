@@ -212,7 +212,7 @@ int set_timer(uint64_t deadline);
 void check_timers(void);
 
 /** @brief Abort current task */
-void NORETURN abort(void);
+void NORETURN do_abort(void);
 
 /** @brief This function shall be called by leaving kernel-level tasks */
 void NORETURN leave_kernel_task(void);

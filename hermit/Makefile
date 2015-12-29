@@ -1,54 +1,46 @@
 TERM = xterm
 TOPDIR := $(shell pwd)
 ARCH = x86
-NAME = hermit
-LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
+NAME = libhermit.a
 DRIVERDIRS = drivers/net
-KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
+KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(DRIVERDIRS)
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
 INITRAMFS=../../busybox-1.23.2/initramfs/
 
 # Set your own cross compiler tool chain prefix here
-CROSSCOMPREFIX = x86_64-hermit-
+CROSSCOMPREFIX = x86_64-hermit
 STACKPROT = -fno-stack-protector
 
-FC_FOR_TARGET = $(CROSSCOMPREFIX)gfortran
-CC_FOR_TARGET = $(CROSSCOMPREFIX)gcc
-CXX_FOR_TARGET = $(CROSSCOMPREFIX)g++
-GCC_FOR_TARGET = $(CROSSCOMPREFIX)gcc
-CPP_FOR_TARGET = $(CROSSCOMPREFIX)cpp
-AR_FOR_TARGET = $(CROSSCOMPREFIX)ar
-AS_FOR_TARGET = $(CROSSCOMPREFIX)as
-LD_FOR_TARGET = $(CROSSCOMPREFIX)ld
-NM_FOR_TARGET = $(CROSSCOMPREFIX)nm
-OBJDUMP_FOR_TARGET = $(CROSSCOMPREFIX)objdump
-OBJCOPY_FOR_TARGET = $(CROSSCOMPREFIX)objcopy
-RANLIB_FOR_TARGET = $(CROSSCOMPREFIX)ranlib
-STRIP_FOR_TARGET = $(CROSSCOMPREFIX)strip
-READELF_FOR_TARGET = $(CROSSCOMPREFIX)readelf
+FC_FOR_TARGET = $(CROSSCOMPREFIX)-gfortran
+CC_FOR_TARGET = $(CROSSCOMPREFIX)-gcc
+CXX_FOR_TARGET = $(CROSSCOMPREFIX)-g++
+GCC_FOR_TARGET = $(CROSSCOMPREFIX)-gcc
+CPP_FOR_TARGET = $(CROSSCOMPREFIX)-cpp
+AR_FOR_TARGET = $(CROSSCOMPREFIX)-ar
+AS_FOR_TARGET = $(CROSSCOMPREFIX)-as
+LD_FOR_TARGET = $(CROSSCOMPREFIX)-ld
+NM_FOR_TARGET = $(CROSSCOMPREFIX)-nm
+OBJDUMP_FOR_TARGET = $(CROSSCOMPREFIX)-objdump
+OBJCOPY_FOR_TARGET = $(CROSSCOMPREFIX)-objcopy
+RANLIB_FOR_TARGET = $(CROSSCOMPREFIX)-ranlib
+STRIP_FOR_TARGET = $(CROSSCOMPREFIX)-strip
+READELF_FOR_TARGET = $(CROSSCOMPREFIX)-readelf
 
 MAKE = make
 NASM = nasm
 NASMFLAGS = -felf64 -g -i$(TOPDIR)/include/hermit/
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4 -I$(TOPDIR)/drivers
-# Compiler options for final code
-CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
-# Compiler options for debugging
-debug debug-eclipse : CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -D_HERMIT -g -O0 -m64 -Wall -fno-builtin -DWITH_FRAME_POINTER -nostdinc -mno-red-zone -fno-stack-protector $(INCLUDE)
+CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector $(INCLUDE)
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
-LDFLAGS = -T link.ld -z max-page-size=4096 --defsym __BUILD_DATE=$(TODAY) -nostdlib
-STRIP_DEBUG = --strip-debug
-KEEP_DEBUG = --only-keep-debug
-OUTPUT_FORMAT = -O elf32-i386
 
-CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -ftls-model=initial-exec -O3 -mavx2 -mfma -mtune=intel #$(STACKPROT)
-FFLAGS_FOR_NEWLIB = -O3
-CXXFLAGS_FOR_NEWLIB =
+CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -ftls-model=initial-exec -mno-red-zone -O3 -mavx2 -mfma -mtune=intel $(STACKPROT)
+FFLAGS_FOR_NEWLIB = -O3 -mavx2 -mfma -mtune=intel
+CXXFLAGS_FOR_NEWLIB = $(CFLAGS_FOR_NEWLIB)
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
 CFLAGS_FOR_TOOLS = -O2 -Wall
@@ -64,7 +56,7 @@ endif
 
 default: all
 
-all: bootstrap toolchain tools $(NAME).elf
+all: bootstrap $(NAME) toolchain tools
 
 toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \
@@ -85,7 +77,27 @@ toolchain:
 		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
 		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
 		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C lwip all
+	$Q$(MAKE) ARCH=$(ARCH) \
+		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
+		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
+		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
+		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
+		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
+		CC_FOR_TARGET=$(CC_FOR_TARGET) \
+		FC_FOR_TARGET=$(FC_FOR_TARGET) \
+		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
+		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
+		AR_FOR_TARGET=$(AR_FOR_TARGET) \
+		AS_FOR_TARGET=$(AS_FOR_TARGET) \
+		LD_FOR_TARGET=$(LD_FOR_TARGET) \
+		NM_FOR_TARGET=$(NM_FOR_TARGET) \
+		OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET) \
+		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
+		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
+		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
 		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr toolchain
+	#$Qcp -R lwip/src/include/lwip* usr/$(ARCH)/$(CROSSCOMPREFIX)/include
 
 bootstrap:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="" LDFLAGS="" -C usr bootstrap
@@ -93,20 +105,21 @@ bootstrap:
 tools:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
 
-$(NAME).elf:
-	@echo [LD] $(NAME).elf
-	$Q$(LD_FOR_TARGET) $(LDFLAGS) -o $(NAME).elf $^
-	@echo [OBJCOPY] $(NAME).bin
-	$Q$(OBJCOPY_FOR_TARGET) -j .mboot -j .kmsg -j .initrd -j .text -j .text.startup -j .data -j .rodata -j .bss -O binary $(NAME).elf $(NAME).bin
+$(NAME):
+	@echo [AR] $(NAME)
+	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
+	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME) $(TOPDIR)/usr/$(ARCH)/$(CROSSCOMPREFIX)/lib/$(NAME)
 
 clean:
-	$Q$(RM) $(NAME).elf $(NAME).sym $(NAME).bin *~
+	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
+	$Q$(MAKE) -C lwip clean
 	$Q$(MAKE) -C tools clean
 	$Q$(MAKE) -C usr clean
 	@echo Cleaned.
 
 veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
+	$Q$(MAKE) -C lwip veryclean
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C usr veryclean
 	@echo Very cleaned

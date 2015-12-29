@@ -215,5 +215,5 @@ static void fault_handler(struct state *s)
 
 	apic_eoi(s->int_no);
 	irq_enable();
-	abort();
+	do_abort();
 }

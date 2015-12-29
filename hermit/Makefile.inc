@@ -8,7 +8,7 @@ OBJS-$(MODULE) += $(ASM_source-$(MODULE):.asm=.o)
 
 $(MODULE): $(OBJS-$(MODULE))
 
-$(NAME).elf: $(OBJS-$(MODULE))
+$(NAME): $(OBJS-$(MODULE))
 
 clean: clean-$(MODULE)
 clean-$(MODULE): clean-% :

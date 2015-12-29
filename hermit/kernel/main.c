@@ -66,8 +66,8 @@ volatile int8_t shutdown = 0;
  */
 extern const void kernel_start;
 extern const void kernel_end;
-extern const void bss_start;
-extern const void bss_end;
+extern const void kbss_start;
+extern const void kbss_end;
 extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;
@@ -82,6 +82,7 @@ extern atomic_int32_t cpu_online;
 extern atomic_int32_t possible_cpus;
 extern int32_t isle;
 extern int32_t possible_isles;
+extern int libc_sd;
 
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
@@ -106,7 +107,7 @@ static int hermit_init(void)
 	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
 
 	// initialize .bss section
-	memset((void*)&bss_start, 0x00, ((size_t) &bss_end - (size_t) &bss_start));
+	memset((void*)&kbss_start, 0x00, ((size_t) &kbss_end - (size_t) &kbss_start));
 
 	// initialize .percore section => copy first section to all other sections
 	for(i=1; i<MAX_CORES; i++)
@@ -236,18 +237,40 @@ static int init_rcce(void)
 	return 0;
 }
 
+int libc_start(int argc, char** argv);
+
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)
 {
-	int s, c, len, err;
-	int32_t magic;
+	int s = -1, c = -1;
+	int i, j, flag = 1;
+	int len, err;
+	int magic;
 	struct sockaddr_in server, client;
+	task_t* curr_task = per_core(current_task);
+	size_t heap = 0x8000000;
+	int argc;
+	char** argv = NULL;
+
+	// setup heap
+	if (!curr_task->heap)
+		curr_task->heap = (vma_t*) kmalloc(sizeof(vma_t));
+
+	if (BUILTIN_EXPECT(!curr_task->heap, 0)) {
+		kprintf("load_task: heap is missing!\n");
+		return -ENOMEM;
+	}
+
+	curr_task->heap->flags = VMA_HEAP|VMA_USER;
+	curr_task->heap->start = PAGE_FLOOR(heap);
+	curr_task->heap->end = PAGE_FLOOR(heap);
 
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	init_netifs();
-	init_rcce();
+
+	//init_rcce();
 
 	s = socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {
@@ -276,51 +299,91 @@ static int initd(void* arg)
 	}
 
 	len = sizeof(struct sockaddr_in);
-	while(!shutdown)
+
+	kputs("TCP server listening.\n");
+
+	if ((c = accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
 	{
-		int flag = 1;
-
-		kputs("TCP server listening.\n");
-
-		if ((c = accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
-		{
-			kprintf("accept faild: %d\n", errno);
-			closesocket(s);
-			return -1;
-		}
-
-		kputs("Establish IP connection\n");
-
-		setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
-		setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
-		setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
-
-		read(c, &magic, sizeof(int32_t));
-		if (magic != HEMRIT_MAGIC)
-		{
-			kprintf("Invalid magic number %d\n", magic);
-			closesocket(c);
-			continue;
-		}
-
-		create_user_task_form_socket(NULL, c, NORMAL_PRIO);
+		kprintf("accept faild: %d\n", errno);
+		closesocket(s);
+		return -1;
 	}
 
-	closesocket(s);
+	kputs("Establish IP connection\n");
 
-	network_shutdown();
+	setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
+	setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
+
+	read(c, &magic, sizeof(magic));
+	if (magic != HEMRIT_MAGIC)
+	{
+		kprintf("Invalid magic number %d\n", magic);
+		closesocket(c);
+		return -1;
+	}
+
+	err = read(c, &argc, sizeof(argc));
+	if (err != sizeof(argc))
+		goto out;
+
+	argv = kmalloc((argc+1)*sizeof(char*));
+	if (!argv)
+		goto out;
+	memset(argv, 0x00, (argc+1)*sizeof(char*));
+
+	for(i=0; i<argc; i++)
+	{
+		err = read(c, &len, sizeof(c));
+		if (err != sizeof(c))
+			goto out;
+
+		argv[i] = kmalloc(len);
+		if (!argv)
+			goto out;
+
+		j = 0;
+		while(j < len) {
+			err = read(c, argv[i]+j, len-j);
+			if (err < 0)
+				goto out;
+			j += err;
+		}
+	}
+
+	libc_sd = c;
+	libc_start(argc, argv);
+
+out:
+	if (argv) {
+		for(i=0; i<argc; i++) {
+			if (argv[i])
+				kfree(argv[i]);
+		}
+
+		kfree(argv);
+	}
+
+	if (c > 0)
+		closesocket(c);
+	libc_sd = -1;
+
+	if (s > 0)
+		closesocket(s);
+
+	//network_shutdown();
 
 	return 0;
 }
 
-int main(void)
+int hermit_main(void)
 {
 	hermit_init();
 	system_calibration(); // enables also interrupts
 
 	atomic_int32_inc(&cpu_online);
 
-	kprintf("This is Hermit %s, build date %u\n", VERSION, &__BUILD_DATE);
+	kprintf("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
