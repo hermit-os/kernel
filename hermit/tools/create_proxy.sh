@@ -3,7 +3,7 @@
 while [[ $# > 0 ]]
 do
   fname=$(basename "$1")
-  fname_new=$(basename "$1")_proxy
+  fname_new="${fname//.bin}"_proxy
 
   echo "Create proxy for $fname"
   echo ".section .rodata" > inc.S

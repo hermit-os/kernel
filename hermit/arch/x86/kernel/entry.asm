@@ -43,8 +43,8 @@ MSR_KERNEL_GS_BASE equ 0xc0000102
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
 SECTION .mboot
-global start
-start:
+global _start
+_start:
     jmp start64
 
 align 4
@@ -101,7 +101,7 @@ boot_pgd:
 boot_pgt:
     times 512 DQ 0
 
-SECTION .text
+SECTION .ktext
 align 4
 start64:
     ; reset registers to kill any stale realmode selectors
@@ -198,8 +198,8 @@ L1:
     mov rbp, rsp
 
     ; jump to the boot processors's C code
-    extern main
-    call main
+    extern hermit_main
+    call hermit_main
     jmp $
 
 %if MAX_CORES > 1

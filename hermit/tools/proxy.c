@@ -50,13 +50,22 @@
 static char saddr[16];
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
+static char fname[] = "/tmp/hermitXXXXXX";
 
 extern char hermit_app[];
 extern unsigned app_size;
 
-int init_enviroment(void)
+static void fini_env(void)
 {
+	//unlink(fname);
+}
+
+static int init_env(void)
+{
+	int j, fd;
+	int ret;
 	char* str;
+	FILE* file;
 
 	str = getenv("HERMIT_ISLE");
 	if (str)
@@ -67,6 +76,57 @@ int init_enviroment(void)
 	}
 
 	snprintf(saddr, 16, "192.168.28.%u", isle_nr+2);
+
+	mkstemp(fname);
+	printf("fname %s\n", fname);
+
+	// register function to delete temporary files
+	atexit(fini_env);
+
+	fd = open(fname, O_CREAT|O_RDWR);
+	if (fd < 0) {
+		perror("open");
+		exit(1);
+	}
+
+	// write binary to tmpfs
+	j = 0;
+	while(j < app_size)
+	{
+		ret = write(fd, hermit_app+j, app_size-j);
+		if (ret < 0) {
+			perror("write");
+			close(fd);
+			exit(1);
+		}
+		j += ret;
+	}
+
+	close(fd);
+
+	// set path to temporary file
+	file = fopen("/sys/hermit/path", "w");
+	if (!file) {
+		perror("fopen");
+		exit(1);
+	}
+
+	fprintf(file, "%s", fname);
+
+	fclose(file);
+
+	// start application
+	file = fopen("/sys/hermit/isle0/cpus", "w");
+	if (!file) {
+		perror("fopen");
+		exit(1);
+	}
+
+	fprintf(file, "%s", "3");
+
+	fclose(file);
+
+	sleep(3);
 
 	return 0;
 }
@@ -264,7 +324,7 @@ int main(int argc, char **argv)
 	int32_t magic = HERMIT_MAGIC;
 	struct sockaddr_in serv_name;
 
-	init_enviroment();
+	init_env();
 
 	/* create a socket */
 	s = socket(PF_INET, SOCK_STREAM, 0);
@@ -318,21 +378,6 @@ int main(int argc, char **argv)
 				goto out;
 			j += ret;
 		}
-	}
-
-	// send length of the elf file to HermitCore
-	ret = write(s, &app_size, sizeof(app_size));
-	if (ret < 0)
-		goto out;
-
-	// send the executable to HermitCore
-	j = 0;
-	while(j < app_size)
-	{
-		ret = write(s, hermit_app+j, app_size-j);
-		if (ret < 0)
-			goto out;
-		j += ret;
 	}
 
 	ret = handle_syscalls(s);

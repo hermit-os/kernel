@@ -42,8 +42,8 @@
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, -1, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, -1, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -257,7 +257,7 @@ void NORETURN leave_kernel_task(void) {
 }
 
 /** @brief Aborting a task is like exiting it with result -1 */
-void NORETURN abort(void) {
+void NORETURN do_abort(void) {
 	do_exit(-1);
 }
 
@@ -326,7 +326,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].tls_addr = curr_task->tls_addr;
 			task_table[i].tls_mem_size = curr_task->tls_mem_size;
 			task_table[i].tls_file_size = curr_task->tls_file_size;
-			task_table[i].sd = task_table[i].sd;
 			task_table[i].lwip_err = 0;
 			task_table[i].user_usage = curr_task->user_usage;
 			task_table[i].page_map = curr_task->page_map;
@@ -414,7 +413,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_mem_size = 0;
 			task_table[i].tls_file_size = 0;
-			task_table[i].sd = -1;
 			task_table[i].lwip_err = 0;
 
 			spinlock_irqsave_init(&task_table[i].page_lock);

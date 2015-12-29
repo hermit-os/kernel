@@ -242,7 +242,7 @@ static int load_task(load_args_t* largs)
 	if (!largs->executable || (largs->sd < 0))
 		return -EINVAL;
 
-	curr_task->sd = largs->sd;
+	//curr_task->sd = largs->sd;
 	memcpy(&header, largs->executable, sizeof(elf_header_t));
 
 	if (BUILTIN_EXPECT(header.ident.magic != ELF_MAGIC, 0))

@@ -44,7 +44,7 @@
 extern "C" {
 #endif
 
-void NORETURN abort(void);
+void NORETURN do_abort(void);
 
 /** @brief General page allocator function
  *

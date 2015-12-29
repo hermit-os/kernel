@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
-PROXYFILES = $(shell find ../usr/tests -perm -u+r+x -type f) $(shell find ../usr/benchmarks -perm -u+r+x -type f)
+PROXYFILES = $(shell find ../usr/tests -name '*.bin') $(shell find ../usr/benchmarks -name '*.bin')
 
 # Prettify output
 V = 0
@@ -40,7 +40,6 @@ proxy: iso $(PROXYFILES)
 	@echo [PROXY] Create proxy files
 	$Q./create_proxy.sh $(foreach FILE, $(PROXYFILES), $(FILE))
 	$Qmv *_proxy iso/
-	$Qcp ../hermit.bin iso
 	$Qgenisoimage -R -J -input-charset utf8 -o proxy-image.iso iso
 
 clean:

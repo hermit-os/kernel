@@ -1,8 +1,9 @@
 ARCH = x86
 TARGET=x86_64-hermit
 MAKE = make
-override STRIP_DEBUG = --strip-unneeded --strip-debug
+override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
+OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -O binary
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -43,7 +44,7 @@ endif
 
 default: all
 
-all: hello hello++ hellof jacobi thr_hello RCCE_minimum
+all: hello.bin hello++.bin #hellof.bin thr_hello.bin #jacobi RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -52,6 +53,10 @@ hello++: hello++.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+hello++.bin: hello++
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
+
 hello: hello.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
@@ -59,12 +64,20 @@ hello: hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+hello.bin: hello
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
+
 hellof: hellof.o
 	@echo [LD] $@
 	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
+
+hellof.bin: hellof
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
 
 jacobi: jacobi.o
 	@echo [LD] $@
@@ -84,6 +97,10 @@ thr_hello: thr_hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+thr_hello.bin: thr_hello
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
+
 RCCE_minimum: RCCE_minimum.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
@@ -93,11 +110,11 @@ RCCE_minimum: RCCE_minimum.o
 
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~ *.bin
 
 veryclean:
 	@echo Propper cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~ *.bin
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
