@@ -111,7 +111,7 @@ static int init_env(void)
 		exit(1);
 	}
 
-	fprintf(file, "%s", fname);
+	//fprintf(file, "%s", fname);
 
 	fclose(file);
 
