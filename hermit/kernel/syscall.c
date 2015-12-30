@@ -547,7 +547,7 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 
 static int default_handler(void)
 {
-#if 0
+#if 1
 	kprintf("Invalid system call\n");
 #else
 	uint64_t rax;
@@ -558,52 +558,10 @@ static int default_handler(void)
 	return -ENOSYS;
 }
 
+/* 
+ * Currently our sytemcall table is a dummy table for
+ * future developments.
+ */
 size_t syscall_table[] = {
-	(size_t) sys_exit,		/* __NR_exit	*/
-	(size_t) sys_write,		/* __NR_write	*/
-	(size_t) sys_open,		/* __NR_open	*/
-	(size_t) sys_close,		/* __NR_close	*/
-	(size_t) sys_read,		/* __NR_read	*/
-	(size_t) sys_lseek,		/* __NR_lseek	*/
-	(size_t) default_handler,	/* __NR_unlink	*/
-	(size_t) sys_getpid,		/* __NR_getpid	*/
-	(size_t) default_handler,	/* __NR_kill	*/
-	(size_t) default_handler,	/* __NR_fstat	*/
-	(size_t) sys_sbrk,		/* __NR_sbrk	*/
-	(size_t) default_handler,	/* __NR_fork	*/
-	(size_t) default_handler,	/* __NR_wait	*/
-	(size_t) default_handler,	/* __NR_execve	*/
-	(size_t) default_handler,	/* __NR_times	*/
-	(size_t) default_handler,	/* __NR_accept	*/
-	(size_t) default_handler,	/* __NR_bind	*/
-	(size_t) default_handler,	/* __NR_closesocket	*/
-	(size_t) default_handler,	/* __NR_connect	*/
-	(size_t) default_handler,	/* __NR_listen	*/
-	(size_t) default_handler,	/* __NR_recv	*/
-	(size_t) default_handler,	/* __NR_send	*/
-	(size_t) default_handler,	/* __NR_socket	*/
-	(size_t) default_handler,	/* __NR_getsockopt	*/
-	(size_t) default_handler,	/* __NR_setsockopt	*/
-	(size_t) default_handler,	/* __NR_gethostbyname	*/
-	(size_t) default_handler,	/* __NR_sendto	*/
-	(size_t) default_handler,	/* __NR_recvfrom	*/
-	(size_t) default_handler,	/* __NR_select	*/
-	(size_t) default_handler,	/* __NR_stat	*/
-	(size_t) default_handler,	/* __NR_dup	*/
-	(size_t) default_handler,	/* __NR_dup2	*/
-	(size_t) sys_msleep,		/* __NR_msleep	*/
-	(size_t) sys_yield,		/* __NR_yield	*/
-	(size_t) sys_sem_init,		/* __NR_sem_init	*/
-	(size_t) sys_sem_destroy,	/* __NR_sem_destroy	*/
-	(size_t) sys_sem_wait,		/* __NR_sem_wait	*/
-	(size_t) sys_sem_post,		/* __NR_sem_post	*/
-	(size_t) sys_sem_timedwait,	/* __NR_sem_timedwait	*/
-	(size_t) sys_getprio,		/* __NR_getprio	*/
-	(size_t) default_handler,	/* __NR_setprio	*/
-	(size_t) sys_clone,		/* __NR_clone	*/
-	(size_t) sys_sem_timedwait,	/* __NR_sem_cancelablewait	*/
-	(size_t) sys_get_ticks,		/* __NR_get_ticks	*/
-	(size_t) sys_rcce_init,		/* __NR_rcce_init	*/
-	(size_t) sys_rcce_fini,		/* __NR_rcce_fini	*/
-	(size_t) sys_rcce_malloc	/* __NR_rcce_malloc	*/
+	(size_t) default_handler
 };
