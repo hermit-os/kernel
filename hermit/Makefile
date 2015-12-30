@@ -3,7 +3,8 @@ TOPDIR := $(shell pwd)
 ARCH = x86
 NAME = libhermit.a
 DRIVERDIRS = drivers/net
-KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(DRIVERDIRS)
+LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/netif
+KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
 SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
@@ -77,27 +78,7 @@ toolchain:
 		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
 		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
 		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
-		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C lwip all
-	$Q$(MAKE) ARCH=$(ARCH) \
-		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
-		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
-		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
-		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
-		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
-		CC_FOR_TARGET=$(CC_FOR_TARGET) \
-		FC_FOR_TARGET=$(FC_FOR_TARGET) \
-		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
-		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
-		AR_FOR_TARGET=$(AR_FOR_TARGET) \
-		AS_FOR_TARGET=$(AS_FOR_TARGET) \
-		LD_FOR_TARGET=$(LD_FOR_TARGET) \
-		NM_FOR_TARGET=$(NM_FOR_TARGET) \
-		OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET) \
-		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
-		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
-		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
 		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr toolchain
-	#$Qcp -R lwip/src/include/lwip* usr/$(ARCH)/$(CROSSCOMPREFIX)/include
 
 bootstrap:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="" LDFLAGS="" -C usr bootstrap
@@ -112,14 +93,12 @@ $(NAME):
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
-	$Q$(MAKE) -C lwip clean
 	$Q$(MAKE) -C tools clean
 	$Q$(MAKE) -C usr clean
 	@echo Cleaned.
 
 veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
-	$Q$(MAKE) -C lwip veryclean
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C usr veryclean
 	@echo Very cleaned
