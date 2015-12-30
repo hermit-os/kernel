@@ -108,10 +108,8 @@ typedef struct task {
 	struct task*	prev;
 	/// TLS address
 	size_t		tls_addr;
-	/// TLS mem size
-	size_t		tls_mem_size;
 	/// TLS file size
-	size_t		tls_file_size;
+	size_t		tls_size;
 	/// LwIP error code
 	int		lwip_err;
 	/// FPU state

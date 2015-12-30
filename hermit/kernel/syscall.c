@@ -61,6 +61,11 @@ int sys_getprio(void)
 	return task->prio;
 }
 
+int sys_setprio(tid_t* id, int prio)
+{
+	return -ENOSYS;
+}
+
 static void sys_yield(void)
 {
 	reschedule();
@@ -355,6 +360,11 @@ int sys_sem_timedwait(sem_t *sem, unsigned int ms)
 		return -EINVAL;
 
 	return sem_wait(sem, ms);
+}
+
+int sys_sem_cancelablewait(sem_t* sem, unsigned int ms)
+{
+	return -ENOSYS;
 }
 
 int sys_clone(tid_t* id, void* ep, void* argv)

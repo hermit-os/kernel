@@ -42,8 +42,8 @@
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -294,8 +294,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 		return -EINVAL;
 	if (BUILTIN_EXPECT(prio > MAX_PRIO, 0))
 		return -EINVAL;
-	if (BUILTIN_EXPECT((size_t)ep < KERNEL_SPACE, 0))
-		return -EINVAL;
 
 	curr_task = per_core(current_task);
 
@@ -324,8 +322,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
                         task_table[i].start_tick = get_clock_tick();
 			task_table[i].parent = curr_task->id;
 			task_table[i].tls_addr = curr_task->tls_addr;
-			task_table[i].tls_mem_size = curr_task->tls_mem_size;
-			task_table[i].tls_file_size = curr_task->tls_file_size;
+			task_table[i].tls_size = curr_task->tls_size;
 			task_table[i].lwip_err = 0;
 			task_table[i].user_usage = curr_task->user_usage;
 			task_table[i].page_map = curr_task->page_map;
@@ -411,8 +408,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].start_tick = get_clock_tick();
 			task_table[i].parent = 0;
 			task_table[i].tls_addr = 0;
-			task_table[i].tls_mem_size = 0;
-			task_table[i].tls_file_size = 0;
+			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;
 
 			spinlock_irqsave_init(&task_table[i].page_lock);
