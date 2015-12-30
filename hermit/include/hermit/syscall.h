@@ -36,11 +36,54 @@
 #ifndef __SYSCALL_H__
 #define __SYSCALL_H__
 
+#ifdef __KERNEL__
 #include <hermit/stddef.h>
+#else
+#include <stdlib.h>
+#include <stdint.h>
+#include <sys/types.h>
+
+#ifndef NORETURN
+#define NORETURN	__attribute__((noreturn))
+#endif
+
+typedef unsigned int tid_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct sem;
+typedef struct sem sem_t;
+
+/*
+ * HermitCore is a libOS.
+ * => classical system calls are realized as normal function
+ * => forward declaration of system calls as function
+ */
+tid_t sys_getpid(void);
+int sys_fork(void);
+int sys_wait(int* status);
+int sys_execve(const char* name, char * const * argv, char * const * env);
+int sys_getprio(void);
+int sys_setprio(tid_t* id, int prio);
+void NORETURN sys_exit(int arg);
+ssize_t sys_read(int fd, char* buf, size_t len);
+ssize_t sys_write(int fd, const char* buf, size_t len);
+ssize_t sys_sbrk(int incr);
+int sys_open(const char* name, int flags, int mode);
+int sys_close(int fd);
+void sys_msleep(unsigned int ms);
+int sys_sem_init(sem_t** sem, unsigned int value);
+int sys_sem_destroy(sem_t* sem);
+int sys_sem_wait(sem_t* sem);
+int sys_sem_post(sem_t* sem);
+int sys_sem_timedwait(sem_t *sem, unsigned int ms);
+int sys_sem_cancelablewait(sem_t* sem, unsigned int ms);
+int sys_clone(tid_t* id, void* ep, void* argv);
+off_t sys_lseek(int fd, off_t offset, int whence);
+size_t sys_get_ticks(void);
 
 #define __NR_exit 		0
 #define __NR_write		1
@@ -57,38 +100,46 @@ extern "C" {
 #define __NR_wait		12
 #define __NR_execve		13
 #define __NR_times		14
-#define __NR_accept		15
-#define __NR_bind		16
-#define __NR_closesocket	17
-#define __NR_connect		18
-#define __NR_listen		19
-#define __NR_recv		20
-#define __NR_send		21
-#define __NR_socket		22
-#define __NR_getsockopt		23
-#define __NR_setsockopt		24
-#define __NR_gethostbyname	25
-#define __NR_sendto		26
-#define __NR_recvfrom		27
-#define __NR_select		28
-#define __NR_stat		29
-#define __NR_dup		30
-#define __NR_dup2		31
-#define __NR_msleep		32
-#define __NR_yield		33
-#define __NR_sem_init		34
-#define __NR_sem_destroy	35
-#define __NR_sem_wait		36
-#define __NR_sem_post		37
-#define __NR_sem_timedwait	38
-#define __NR_getprio		39
-#define __NR_setprio		40
-#define __NR_clone		41
-#define __NR_sem_cancelablewait	42
-#define __NR_get_ticks		43
-#define __NR_rcce_init		44
-#define __NR_rcce_fini		45
-#define __NR_rcce_malloc	46
+#define __NR_stat		15
+#define __NR_dup		16
+#define __NR_dup2		17
+#define __NR_msleep		18
+#define __NR_yield		19
+#define __NR_sem_init		20
+#define __NR_sem_destroy	21
+#define __NR_sem_wait		22
+#define __NR_sem_post		23
+#define __NR_sem_timedwait	24
+#define __NR_getprio		25
+#define __NR_setprio		26
+#define __NR_clone		27
+#define __NR_sem_cancelablewait	28
+#define __NR_get_ticks		29
+
+#ifndef __KERNEL__
+inline static long
+syscall(int nr, unsigned long arg0, unsigned long arg1, unsigned long arg2)
+{
+	long res;
+
+	// note: syscall stores the return address in rcx and rflags in r11
+	asm volatile ("syscall"
+		: "=a" (res)
+		: "a" (nr), "D" (arg0), "S" (arg1), "d" (arg2)
+		: "memory", "%rcx", "%r11");
+
+	return res;
+}
+
+#define SYSCALL0(NR) \
+	syscall(NR, 0, 0, 0)
+#define SYSCALL1(NR, ARG0) \
+	syscall(NR, (unsigned long)ARG0, 0, 0)
+#define SYSCALL2(NR, ARG0, ARG1) \
+	syscall(NR, (unsigned long)ARG0, (unsigned long)ARG1, 0)
+#define SYSCALL3(NR, ARG0, ARG1, ARG2) \
+	syscall(NR, (unsigned long)ARG0, (unsigned long)ARG1, (unsigned long)ARG2)
+#endif // __KERNEL__
 
 #ifdef __cplusplus
 }
