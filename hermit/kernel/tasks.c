@@ -222,6 +222,7 @@ void finish_task_switch(void)
 void NORETURN do_exit(int arg)
 {
 	task_t* curr_task = per_core(current_task);
+	void* tls_addr = NULL;
 	const uint32_t core_id = CORE_ID;
 
 	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
@@ -236,6 +237,13 @@ void NORETURN do_exit(int arg)
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 	readyqueues[core_id].nr_tasks--;
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+	// do we need to release the TLS?
+	tls_addr = (void*)get_tls();
+	if (tls_addr) {
+		kprintf("Release TLS %p\n", tls_addr);
+		kfree(tls_addr);
+	}
 
 	curr_task->status = TASK_FINISHED;
 	reschedule();

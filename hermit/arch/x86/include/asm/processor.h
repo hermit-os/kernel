@@ -477,6 +477,24 @@ extern func_read_fsgs readgs;
 extern func_write_fsgs writefs;
 extern func_write_fsgs writegs;
 
+/** @brife Get thread local storage
+ *
+ * Helper function to get the TLS of the current task
+ */
+static inline size_t get_tls(void)
+{
+	return readfs();
+}
+
+/** @brief Set thread local storage
+ *
+ * Helper function to set the TLS of the current task
+ */
+static inline void set_tls(size_t addr)
+{
+	writefs(addr);
+}
+
 /** @brief Flush cache
  *
  * The wbinvd asm instruction which stands for "Write back and invalidate"
