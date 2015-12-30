@@ -41,7 +41,7 @@ extern "C" {
 #endif
 
 /** @brief Semaphore structure */
-typedef struct {
+typedef struct sem {
 	/// Resource available count
 	unsigned int value;
 	/// Queue of waiting tasks

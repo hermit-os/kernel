@@ -66,11 +66,6 @@ int sys_setprio(tid_t* id, int prio)
 	return -ENOSYS;
 }
 
-static void sys_yield(void)
-{
-	reschedule();
-}
-
 void NORETURN do_exit(int arg);
 
 typedef struct {
@@ -294,14 +289,12 @@ out:
 	return ret;
 }
 
-int sys_msleep(unsigned int ms)
+void sys_msleep(unsigned int ms)
 {
 	if (ms * TIMER_FREQ / 1000 > 0)
 		timer_wait(ms * TIMER_FREQ / 1000);
 	else if (ms > 0)
 		udelay(ms * 1000);
-
-	return 0;
 }
 
 int sys_sem_init(sem_t** sem, unsigned int value)
