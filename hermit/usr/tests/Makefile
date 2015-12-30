@@ -3,7 +3,7 @@ TARGET=x86_64-hermit
 MAKE = make
 override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
-OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -O binary
+OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -O binary
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -44,7 +44,7 @@ endif
 
 default: all
 
-all: hello.bin hello++.bin #hellof.bin thr_hello.bin #jacobi RCCE_minimum
+all: hello.bin hello++.bin thr_hello.bin #hellof.bin #jacobi RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@

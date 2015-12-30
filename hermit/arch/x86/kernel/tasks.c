@@ -67,6 +67,7 @@ static inline void enter_user_task(size_t ep, size_t stack)
 static int thread_entry(void* arg, size_t ep)
 {
 	task_t* curr_task = per_core(current_task);
+#if 0
 	size_t addr, stack = 0;
 	size_t flags;
 	int64_t npages;
@@ -99,27 +100,29 @@ static int thread_entry(void* arg, size_t ep)
 	// create vma regions for the user-level stack
 	flags = VMA_CACHEABLE|VMA_USER|VMA_READ|VMA_WRITE;
 	vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
+#endif
 
 	//vma_dump();
 
 	// do we have to create a TLS segement?
-	if (curr_task->tls_addr && curr_task->tls_mem_size) {
-		// set fs register to the TLS segment
-		writefs(stack+offset);
-		kprintf("Task %d set fs to 0x%llx\n", curr_task->id, stack+offset);
+	if (curr_task->tls_addr && curr_task->tls_size) {
+		char* tls_addr = NULL;
 
+		tls_addr = kmalloc(curr_task->tls_size);
 		// copy default TLS segment to stack
-		offset -= curr_task->tls_mem_size;
-		if (curr_task->tls_file_size)
-			memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_file_size);
+		memcpy((void*) (tls_addr), (void*) curr_task->tls_addr, curr_task->tls_size);
 
-		// align stack to 16 byte boundary
-		offset = offset & ~0xFULL;
+		// set fs register to the TLS segment
+		writefs((size_t) tls_addr);
+		kprintf("Task %d set fs to %p\n", curr_task->id, tls_addr);
 	} else writefs(0); // no TLS => clear fs register
 
 	// set first argument
-	asm volatile ("mov %0, %%rdi" :: "r"(arg));
-	enter_user_task(ep, stack+offset);
+	//asm volatile ("mov %0, %%rdi" :: "r"(arg));
+	//enter_user_task(ep, stack+offset);
+
+	entry_point_t call_ep = (entry_point_t) ep;
+	call_ep(arg);
 
 	return 0;
 }
@@ -182,12 +185,12 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 
 	/* The instruction pointer shall be set on the first function to be called
 	   after IRETing */
-	if ((size_t) ep < KERNEL_SPACE) {
-		stptr->rip = (size_t)ep;
-	} else {
+	//if ((size_t) ep < KERNEL_SPACE) {
+	//	stptr->rip = (size_t)ep;
+	//} else {
 		stptr->rip = (size_t)thread_entry;
 		stptr->rsi = (size_t)ep; // use second argument to transfer the entry point
-	}
+	//}
 	stptr->cs = 0x08;
 	stptr->ss = 0x10;
 	stptr->gs = core_id * ((size_t) &percore_end0 - (size_t) &percore_start);
@@ -359,9 +362,11 @@ static int load_task(load_args_t* largs)
 			break;
 		case ELF_PT_TLS:
 			kprintf("Found TLS segment. addr 0x%llx, mem size 0x%llx, file size 0x%llx\n", prog_header.virt_addr, prog_header.mem_size, prog_header.file_size);
+#if 0
 			curr_task->tls_addr = prog_header.virt_addr;
 			curr_task->tls_mem_size = prog_header.mem_size;
 			curr_task->tls_file_size = prog_header.file_size;
+#endif
 			break;
 		case ELF_PT_NOTE:
 			//kprintf("Found note segment: %s\n", (char*)prog_header.virt_addr + 12);
@@ -401,6 +406,7 @@ static int load_task(load_args_t* largs)
 
 	offset = DEFAULT_STACK_SIZE-16;
 
+#if 0
 	// do we have to create a TLS segement?
 	if (curr_task->tls_addr && curr_task->tls_mem_size) {
 		if (curr_task->tls_mem_size >= DEFAULT_STACK_SIZE-128) {
@@ -418,6 +424,7 @@ static int load_task(load_args_t* largs)
 		if (curr_task->tls_file_size)
 			memcpy((void*) (stack+offset), (void*) curr_task->tls_addr, curr_task->tls_file_size);
 	}
+#endif
 
 	// push strings on the stack
 	memset((void*) (stack+offset), 0, 4);

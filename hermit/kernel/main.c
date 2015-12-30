@@ -68,6 +68,8 @@ extern const void kernel_start;
 extern const void kernel_end;
 extern const void kbss_start;
 extern const void kbss_end;
+extern const void tls_start;
+extern const void tls_end;
 extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;
@@ -270,6 +272,28 @@ static int initd(void* arg)
 
 	init_netifs();
 
+	// do we have a thread local storage?
+	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
+		char* tls_addr = NULL;
+
+		curr_task->tls_addr = (size_t) &tls_start;
+		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
+
+		// TODO: free TLS after termination
+		tls_addr = kmalloc(curr_task->tls_size);
+		if (BUILTIN_EXPECT(!tls_addr, 0)) {
+			kprintf("load_task: heap is missing!\n");
+			kfree(curr_task->heap);
+			return -ENOMEM;
+		}
+
+		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
+
+		// set fs register to the TLS segment
+		writefs((size_t) tls_addr);
+		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, tls_addr);
+	} else writefs(0); // no TLS => clear fs register
+
 	//init_rcce();
 
 	s = socket(PF_INET , SOCK_STREAM , 0);
@@ -386,6 +410,7 @@ int hermit_main(void)
 	kprintf("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
+	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
