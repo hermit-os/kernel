@@ -78,7 +78,7 @@ static int init_env(void)
 	snprintf(saddr, 16, "192.168.28.%u", isle_nr+2);
 
 	mkstemp(fname);
-	printf("fname %s\n", fname);
+	//printf("fname %s\n", fname);
 
 	// register function to delete temporary files
 	atexit(fini_env);
@@ -111,7 +111,7 @@ static int init_env(void)
 		exit(1);
 	}
 
-	//fprintf(file, "%s", fname);
+	fprintf(file, "%s", fname);
 
 	fclose(file);
 
