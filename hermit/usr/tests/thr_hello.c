@@ -20,10 +20,10 @@ int main(int argc, char** argv)
 	for(i=0; i<MAX_THREADS; i++) {
 		param[i] = i;
 		ret = pthread_create(threads+i, NULL, thread_func, param+i);
-		if (ret)
+		if (ret) {
 			printf("Thread creation failed! error =  %d\n", ret);
-		else
-			printf("Create thread %d\n", i);
+			return ret;
+		} else printf("Create thread %d\n", i);
 	}
 
 	/* wait until all threads have terminated */
