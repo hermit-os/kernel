@@ -48,7 +48,7 @@ endif
 
 default: all
 
-all: hello.bin hello++.bin thr_hello.bin #hellof.bin #jacobi RCCE_minimum
+all: hello.bin hello++.bin thr_hello.bin jacobi.bin #hellof.bin RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
