@@ -1,8 +1,9 @@
 ARCH = x86
 TARGET=x86_64-hermit
 MAKE = make
-override STRIP_DEBUG = --strip-debug #--strip-unneeded --strip-debug
+override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
+OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -O binary
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -41,9 +42,13 @@ endif
 	@echo [F90] $@
 	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
 
+%.bin: %
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
+
 default: all
 
-all: stream hg RCCE_pingping RCCE_pingpong
+all: stream.bin hg.bin #RCCE_pingping RCCE_pingpong
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -79,11 +84,11 @@ hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 
 clean:
 	@echo Cleaning benchmarks
-	$Q$(RM) stream hg *.sym *.o *~
+	$Q$(RM) stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
 
 veryclean:
 	@echo Propper cleaning benchmarks
-	$Q$(RM)  stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~
+	$Q$(RM)  stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
