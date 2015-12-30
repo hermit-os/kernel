@@ -128,9 +128,11 @@ size_t* get_current_stack(void)
 	set_per_core(kernel_stack, stptr);
 	tss_set_rsp0(stptr);
 
+#if 0
 	// do we change the address space?
 	if (read_cr3() != curr_task->page_map)
 		write_cr3(curr_task->page_map); // use new page table
+#endif
 
 	return curr_task->last_stack_pointer;
 }
