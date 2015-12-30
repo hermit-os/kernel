@@ -42,6 +42,10 @@ endif
 	@echo [F90] $@
 	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
 
+%.bin: %
+	@echo [OBJECT_COPY] $@
+	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
+
 default: all
 
 all: hello.bin hello++.bin thr_hello.bin #hellof.bin #jacobi RCCE_minimum
@@ -53,10 +57,6 @@ hello++: hello++.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
-hello++.bin: hello++
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
-
 hello: hello.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
@@ -64,20 +64,12 @@ hello: hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
-hello.bin: hello
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
-
 hellof: hellof.o
 	@echo [LD] $@
 	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
-
-hellof.bin: hellof
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
 
 jacobi: jacobi.o
 	@echo [LD] $@
@@ -96,10 +88,6 @@ thr_hello: thr_hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
-
-thr_hello.bin: thr_hello
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
 
 RCCE_minimum: RCCE_minimum.o
 	@echo [LD] $@
