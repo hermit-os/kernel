@@ -290,9 +290,9 @@ static int initd(void* arg)
 		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
 
 		// set fs register to the TLS segment
-		writefs((size_t) tls_addr);
+		set_tls((size_t) tls_addr);
 		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, tls_addr);
-	} else writefs(0); // no TLS => clear fs register
+	} else set_tls(0); // no TLS => clear fs register
 
 	//init_rcce();
 
