@@ -538,6 +538,21 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 	return -ENOSYS;
 }
 
+int sys_fork(void)
+{
+	return -ENOSYS;
+}
+
+int sys_wait(int* status)
+{
+	return -ENOSYS;
+}
+
+int sys_execve(const char* name, char * const * argv, char * const * env)
+{
+	return -ENOSYS;
+}
+
 static int default_handler(void)
 {
 #if 1
