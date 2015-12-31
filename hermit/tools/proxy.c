@@ -39,6 +39,7 @@
 
 #define HERMIT_PORT     0x494F
 #define HERMIT_MAGIC    0x7E317
+#define MAX_PATH	255
 
 #define __HERMIT_exit	0
 #define __HERMIT_write	1
@@ -57,7 +58,7 @@ extern unsigned app_size;
 
 static void fini_env(void)
 {
-	//unlink(fname);
+	unlink(fname);
 }
 
 static int init_env(void)
@@ -66,6 +67,7 @@ static int init_env(void)
 	int ret;
 	char* str;
 	FILE* file;
+	char isle_path[MAX_PATH];
 
 	str = getenv("HERMIT_ISLE");
 	if (str)
@@ -78,7 +80,6 @@ static int init_env(void)
 	snprintf(saddr, 16, "192.168.28.%u", isle_nr+2);
 
 	mkstemp(fname);
-	//printf("fname %s\n", fname);
 
 	// register function to delete temporary files
 	atexit(fini_env);
@@ -116,17 +117,22 @@ static int init_env(void)
 	fclose(file);
 
 	// start application
-	file = fopen("/sys/hermit/isle0/cpus", "w");
+	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/cpus", isle_nr);
+	file = fopen(isle_path, "w");
 	if (!file) {
 		perror("fopen");
 		exit(1);
 	}
 
-	fprintf(file, "%s", "3");
+	str = getenv("HERMIT_CPUS");
+	if (str)
+		fprintf(file, "%s", str);
+	else
+		fprintf(file, "%s", "1");
 
 	fclose(file);
 
-	sleep(3);
+	//sleep(3);
 
 	return 0;
 }
