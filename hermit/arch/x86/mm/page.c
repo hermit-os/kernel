@@ -47,7 +47,7 @@
 /* Note that linker symbols are not variables, they have no memory
  * allocated for maintaining a value, rather their address is their value. */
 extern const void kernel_start;
-extern const void kernel_end;
+//extern const void kernel_end;
 
 /// This page is reserved for copying
 #define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
@@ -288,31 +288,7 @@ void page_fault_handler(struct state *s)
 	size_t viraddr = read_cr2();
 	task_t* task = per_core(current_task);
 
-	// do we got a pagefault within the kernel? => BSS is not initialized
-	if ((viraddr >= (size_t) &kernel_start) && (viraddr < (size_t) &kernel_end))
-	{
-		kprintf("Pagefault within the kernel: 0x%llx\n", viraddr);
-
-		viraddr &= PAGE_MASK;
-
-		size_t phyaddr = get_page();
-		if (BUILTIN_EXPECT(!phyaddr, 0)) {
-			kprintf("out of memory: task = %u\n", task->id);
-			goto default_handler;
-		}
-
-		int ret = page_map(viraddr, phyaddr, 1, PG_RW);
-		if (BUILTIN_EXPECT(ret, 0)) {
-			kprintf("map_region: could not map %#lx to %#lx, task = %u\n", phyaddr, viraddr, task->id);
-			put_page(phyaddr);
-
-			goto default_handler;
-		}
-
-		memset((void*) viraddr, 0x00, PAGE_SIZE); // fill with zeros
-
-		return;
-	} else if ((task->heap) && (viraddr >= task->heap->start) && (viraddr < task->heap->end)) {
+	if ((task->heap) && (viraddr >= task->heap->start) && (viraddr < task->heap->end)) {
 		 // on demand userspace heap mapping
 
 		viraddr &= PAGE_MASK;
