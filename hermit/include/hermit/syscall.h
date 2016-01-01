@@ -66,7 +66,7 @@ tid_t sys_getpid(void);
 int sys_fork(void);
 int sys_wait(int* status);
 int sys_execve(const char* name, char * const * argv, char * const * env);
-int sys_getprio(void);
+int sys_getprio(tid_t* id);
 int sys_setprio(tid_t* id, int prio);
 void NORETURN sys_exit(int arg);
 ssize_t sys_read(int fd, char* buf, size_t len);
