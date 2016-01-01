@@ -43,7 +43,7 @@ static spinlock_t buddy_lock = SPINLOCK_INIT;
 /** @brief Check if larger free buddies are available */
 static inline int buddy_large_avail(uint8_t exp)
 {
-	while (exp<BUDDY_MAX && !buddy_lists[exp-BUDDY_MIN])
+	while ((exp<BUDDY_MAX) && !buddy_lists[exp-BUDDY_MIN])
 		exp++;
 
 	return exp != BUDDY_MAX;
@@ -75,7 +75,7 @@ static buddy_t* buddy_get(int exp)
 		// there is already a free buddy =>
 		// we remove it from the list
 		*list = buddy->next;
-	else if (exp >= BUDDY_ALLOC && !buddy_large_avail(exp))
+	else if ((exp >= BUDDY_ALLOC) && !buddy_large_avail(exp))
 		// theres no free buddy larger than exp =>
 		// we can allocate new memory
 		buddy = (buddy_t*) palloc(1<<exp, 0);
@@ -114,6 +114,7 @@ void buddy_dump(void)
 {
 	size_t free = 0;
 	int i;
+
 	for (i=0; i<BUDDY_LISTS; i++) {
 		buddy_t* buddy;
 		int exp = i+BUDDY_MIN;
