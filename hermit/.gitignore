@@ -6,15 +6,14 @@
 *.elf32
 *.sym
 *.bin
-initrd.cpio
 qemu-vlan0.pcap
 autom4te.cache
 documentation/html/
 include/hermit/config.inc
 tools/*.img
 tools/*_proxy
-tools/make_initrd
 tools/*iso
+tools/init.h
 usr/tests/hello
 usr/tests/hello++
 usr/tests/hellof
