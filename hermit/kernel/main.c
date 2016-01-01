@@ -60,6 +60,7 @@
 static struct netif	mmnif_netif;
 static const int sobufsize = 131072;
 volatile int8_t shutdown = 0;
+
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
@@ -70,6 +71,7 @@ extern const void kbss_start;
 extern const void kbss_end;
 extern const void tls_start;
 extern const void tls_end;
+extern const void __bss_start;
 extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;
@@ -108,7 +110,7 @@ static int hermit_init(void)
 	uint32_t i;
 	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
 
-	// initialize .bss section
+	// initialize .kbss section
 	memset((void*)&kbss_start, 0x00, ((size_t) &kbss_end - (size_t) &kbss_start));
 
 	// initialize .percore section => copy first section to all other sections
@@ -254,6 +256,8 @@ static int initd(void* arg)
 	int argc;
 	char** argv = NULL;
 
+	kputs("Initd is running\n");
+
 	// setup heap
 	if (!curr_task->heap)
 		curr_task->heap = (vma_t*) kmalloc(sizeof(vma_t));
@@ -375,6 +379,7 @@ static int initd(void* arg)
 		}
 	}
 
+	// call user code
 	libc_sd = c;
 	libc_start(argc, argv);
 
@@ -411,6 +416,7 @@ int hermit_main(void)
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
+	kprintf("Kernel BBS starts at %p and ends at %p\n", &kbss_start, &kbss_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
