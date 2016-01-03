@@ -253,7 +253,7 @@ static int initd(void* arg)
 	int magic;
 	struct sockaddr_in server, client;
 	task_t* curr_task = per_core(current_task);
-	size_t heap = 0x8000000;
+	size_t heap = 0x80000000;
 	int argc;
 	char** argv = NULL;
 
