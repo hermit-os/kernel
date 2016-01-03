@@ -67,8 +67,7 @@ volatile int8_t shutdown = 0;
  */
 extern const void kernel_start;
 extern const void kernel_end;
-extern const void kbss_start;
-extern const void kbss_end;
+extern const void hbss_start;
 extern const void tls_start;
 extern const void tls_end;
 extern const void __bss_start;
@@ -110,8 +109,8 @@ static int hermit_init(void)
 	uint32_t i;
 	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
 
-	// initialize .kbss section
-	memset((void*)&kbss_start, 0x00, ((size_t) &kbss_end - (size_t) &kbss_start));
+	// initialize .kbss sections
+	memset((void*)&hbss_start, 0x00, ((size_t) &kernel_end - (size_t) &hbss_start));
 
 	// initialize .percore section => copy first section to all other sections
 	for(i=1; i<MAX_CORES; i++)
@@ -223,6 +222,7 @@ int smp_main(void)
 }
 #endif
 
+#if 0
 static int init_rcce(void)
 {
 	size_t addr;
@@ -240,6 +240,7 @@ static int init_rcce(void)
 
 	return 0;
 }
+#endif
 
 int libc_start(int argc, char** argv);
 
@@ -416,7 +417,7 @@ int hermit_main(void)
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
-	kprintf("Kernel BBS starts at %p and ends at %p\n", &kbss_start, &kbss_end);
+	kprintf("Kernel BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());

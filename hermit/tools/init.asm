@@ -14,7 +14,7 @@
 ; We switch to the protected mode and jump to HermitCore's kernel.
 
 KERNEL_STACK_SIZE equ 0x100
-kernel_start equ 0x200000
+kernel_start equ 0x800000
 
 [BITS 16]
 SECTION .text
