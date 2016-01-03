@@ -39,6 +39,9 @@
 extern const void kernel_start;
 extern const void kernel_end;
 
+#define PAGE_2M_FLOOR(addr)	(((addr) + (1L << 21) - 1) & (-1L << 21))
+#define PAGE_2M_CEIL(addr)	( (addr)                   & (-1L << 21))
+
 /*
  * Kernel space VMA list and lock
  * 
@@ -55,9 +58,13 @@ int vma_init(void)
 {
 	int ret;
 
+	kprintf("vma_init: reserve vma region 0x%llx - 0x%llx\n",
+		PAGE_2M_CEIL((size_t) &kernel_start),
+		PAGE_2M_FLOOR((size_t) &kernel_end));
+
 	// add Kernel
-	ret  = vma_add(PAGE_CEIL((size_t) &kernel_start),
-		PAGE_FLOOR((size_t) &kernel_end),
+	ret  = vma_add(PAGE_2M_CEIL((size_t) &kernel_start),
+		PAGE_2M_FLOOR((size_t) &kernel_end),
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
