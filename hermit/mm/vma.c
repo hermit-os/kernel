@@ -88,7 +88,7 @@ size_t vma_alloc(size_t size, uint32_t flags)
 		base = VMA_USER_MIN;
 		limit = VMA_USER_MAX;
 		list = &task->vma_list;
-		lock = &task->vma_lock;
+		lock = task->vma_lock;
 	}
 	else {
 		base = VMA_KERN_MIN;
@@ -163,7 +163,7 @@ int vma_free(size_t start, size_t end)
 		list = &vma_list;
 	}
 	else if (start >= VMA_KERN_MAX) {
-		lock = &task->vma_lock;
+		lock = task->vma_lock;
 		list = &task->vma_list;
 	}
 
@@ -230,7 +230,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 
 	if (flags & VMA_USER) {
 		list = &task->vma_list;
-		lock = &task->vma_lock;
+		lock = task->vma_lock;
 
 		// check if address is in userspace
 		if (BUILTIN_EXPECT(start < VMA_KERN_MAX, 0))
@@ -294,18 +294,18 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 
 int copy_vma_list(task_t* src, task_t* dest)
 {
-	spinlock_init(&dest->vma_lock);
+	spinlock_init(dest->vma_lock);
 
-	spinlock_lock(&src->vma_lock);
-	spinlock_lock(&dest->vma_lock);
+	spinlock_lock(src->vma_lock);
+	spinlock_lock(dest->vma_lock);
 
 	vma_t* last = NULL;
 	vma_t* old;
 	for (old=src->vma_list; old; old=old->next) {
 		vma_t *new = kmalloc(sizeof(vma_t));
 		if (BUILTIN_EXPECT(!new, 0)) {
-			spinlock_unlock(&dest->vma_lock);
-			spinlock_unlock(&src->vma_lock);
+			spinlock_unlock(dest->vma_lock);
+			spinlock_unlock(src->vma_lock);
 			return -ENOMEM;
 		}
 
@@ -322,8 +322,8 @@ int copy_vma_list(task_t* src, task_t* dest)
 		last = new;
 	}
 
-	spinlock_unlock(&dest->vma_lock);
-	spinlock_unlock(&src->vma_lock);
+	spinlock_unlock(dest->vma_lock);
+	spinlock_unlock(src->vma_lock);
 
 	return 0;
 }
@@ -332,14 +332,14 @@ int drop_vma_list(task_t *task)
 {
 	vma_t* vma;
 
-	spinlock_lock(&task->vma_lock);
+	spinlock_lock(task->vma_lock);
 
 	while ((vma = task->vma_list)) {
 		task->vma_list = vma->next;
 		kfree(vma);
 	}
 
-	spinlock_unlock(&task->vma_lock);
+	spinlock_unlock(task->vma_lock);
 
 	return 0;
 }
@@ -364,7 +364,7 @@ void vma_dump(void)
 	spinlock_unlock(&vma_lock);
 
 	kputs("Userspace VMAs:\n");
-	spinlock_lock(&task->vma_lock);
+	spinlock_lock(task->vma_lock);
 	print_vma(task->vma_list);
-	spinlock_unlock(&task->vma_lock);
+	spinlock_unlock(task->vma_lock);
 }

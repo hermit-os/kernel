@@ -633,6 +633,7 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 	lapic_write(APIC_ICR2, tmp);
 }
 
+#if 0
 int ipi_tlb_flush(void)
 {
 	uint32_t id = CORE_ID;
@@ -693,6 +694,7 @@ static void apic_tlb_handler(struct state *s)
 	if (val)
 		write_cr3(val);
 }
+#endif
 #endif
 
 int apic_send_ipi(uint64_t dest, uint8_t irq)
@@ -771,7 +773,7 @@ int apic_init(void)
 	// set APIC error handler
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
-	irq_install_handler(80+32, apic_tlb_handler);
+	//irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
 	irq_install_handler(124, apic_lint0);

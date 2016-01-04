@@ -194,7 +194,7 @@ ssize_t sys_sbrk(int incr)
 	vma_t* heap = task->heap;
 	ssize_t ret;
 
-	spinlock_lock(&task->vma_lock);
+	spinlock_lock(task->vma_lock);
 
 	if (BUILTIN_EXPECT(!heap, 0)) {
 		kprintf("sys_sbrk: missing heap!\n");
@@ -209,7 +209,7 @@ ssize_t sys_sbrk(int incr)
 	// allocation and mapping of new pages for the heap
 	// is catched by the pagefault handler
 
-	spinlock_unlock(&task->vma_lock);
+	spinlock_unlock(task->vma_lock);
 
 	return ret;
 }

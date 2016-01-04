@@ -89,9 +89,9 @@ typedef struct task {
 	/// Physical address of root page table
 	size_t			page_map;
 	/// Lock for page tables
-	spinlock_irqsave_t	page_lock;
+	spinlock_irqsave_t*	page_lock;
 	/// lock for the VMA_list
-	spinlock_t		vma_lock;
+	spinlock_t*		vma_lock;
 	/// list of VMAs
 	vma_t*			vma_list;
 	/// starting time/tick of the task
