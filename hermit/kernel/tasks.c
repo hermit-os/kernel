@@ -236,10 +236,6 @@ void NORETURN do_exit(int arg)
 
 	uint8_t flags = irq_nested_disable();
 
-	// Threads should delete the page table and the heap */
-	if (!curr_task->parent)
-		page_map_drop();
-
 	// decrease the number of active tasks
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 	readyqueues[core_id].nr_tasks--;
@@ -387,6 +383,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	uint32_t i;
 	void* stack = NULL;
 	void* counter = NULL;
+	task_t* curr_task;
 
 	if (BUILTIN_EXPECT(!ep, 0))
 		return -EINVAL;
@@ -399,6 +396,8 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
 
+	curr_task = per_core(current_task);
+
 	stack = kmalloc(KERNEL_STACK_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
@@ -409,8 +408,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 		return -ENOMEM;
 	}
 	atomic_int64_set((atomic_int64_t*) counter, 0);
-
-	kprintf("start new thread on core %d with stack address %p\n", core_id, stack);
 
 	spinlock_irqsave_lock(&table_lock);
 
@@ -432,15 +429,8 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].lwip_err = 0;
 
 			task_table[i].page_lock = &page_lock;
+			task_table[i].page_map = curr_task->page_map;
 			task_table[i].user_usage = (atomic_int64_t*) counter;
-
-			/* Allocated new PGD or PML4 and copy page table */
-			task_table[i].page_map = get_pages(1);
-			if (BUILTIN_EXPECT(!task_table[i].page_map, 0))
-				goto out;
-
-			/* Copy page tables & user frames of current task to new one */
-			page_map_copy(&task_table[i]);
 
 			if (id)
 				*id = i;
@@ -468,6 +458,9 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			break;
 		}
 	}
+
+	if (!ret)
+                kprintf("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
 
 out:
 	spinlock_irqsave_unlock(&table_lock);
