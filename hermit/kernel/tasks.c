@@ -37,13 +37,20 @@
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
 
+/*
+ * HermitCore is a single address space OS
+ * => we need only a lock to protect the page tables & VMA
+ */
+static spinlock_irqsave_t page_lock = SPINLOCK_IRQSAVE_INIT;
+static spinlock_t vma_lock = SPINLOCK_INIT;
+
 /** @brief Array of task structures (aka PCB)
  *
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, SPINLOCK_IRQSAVE_INIT, SPINLOCK_INIT, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, &page_lock, &vma_lock, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, &page_lock, &vma_lock, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -148,10 +155,10 @@ int set_idle_task(void)
 			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 			set_per_core(kernel_stack, task_table[i].stack + KERNEL_STACK_SIZE - 0x10);
 			task_table[i].prio = IDLE_PRIO;
-			spinlock_init(&task_table[i].vma_lock);
+			task_table[i].vma_lock = &vma_lock;
 			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
-			spinlock_irqsave_init(&task_table[i].page_lock);
+			task_table[i].page_lock = &page_lock;
 			task_table[i].user_usage = NULL;
 			task_table[i].page_map = read_cr3();
 			readyqueues[core_id].idle = task_table+i;
@@ -415,7 +422,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
-			spinlock_init(&task_table[i].vma_lock);
+			task_table[i].vma_lock = &vma_lock;
 			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
 			task_table[i].start_tick = get_clock_tick();
@@ -424,7 +431,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;
 
-			spinlock_irqsave_init(&task_table[i].page_lock);
+			task_table[i].page_lock = &page_lock;
 			task_table[i].user_usage = (atomic_int64_t*) counter;
 
 			/* Allocated new PGD or PML4 and copy page table */
