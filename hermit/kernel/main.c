@@ -242,7 +242,7 @@ static int init_rcce(void)
 }
 #endif
 
-int libc_start(int argc, char** argv);
+int libc_start(int argc, char** argv, char** env);
 
 // init task => creates all other tasks an initialize the LwIP
 static int initd(void* arg)
@@ -254,8 +254,9 @@ static int initd(void* arg)
 	struct sockaddr_in server, client;
 	task_t* curr_task = per_core(current_task);
 	size_t heap = 0x80000000;
-	int argc;
+	int argc, envc;
 	char** argv = NULL;
+	char **environ = NULL;
 
 	kputs("Initd is running\n");
 
@@ -363,12 +364,12 @@ static int initd(void* arg)
 
 	for(i=0; i<argc; i++)
 	{
-		err = read(c, &len, sizeof(c));
-		if (err != sizeof(c))
+		err = read(c, &len, sizeof(len));
+		if (err != sizeof(len))
 			goto out;
 
 		argv[i] = kmalloc(len);
-		if (!argv)
+		if (!argv[i])
 			goto out;
 
 		j = 0;
@@ -378,11 +379,40 @@ static int initd(void* arg)
 				goto out;
 			j += err;
 		}
+
+	}
+
+	err = read(c, &envc, sizeof(envc));
+	if (err != sizeof(envc))
+		goto out;
+
+	environ = kmalloc((envc+1)*sizeof(char**));
+	if (!environ)
+		goto out;
+	memset(environ, 0x00, (envc+1)*sizeof(char*));
+
+	for(i=0; i<envc; i++)
+	{
+		err = read(c, &len, sizeof(len));
+		if (err != sizeof(len))
+			goto out;
+
+		environ[i] = kmalloc(len);
+		if (!environ[i])
+			goto out;
+
+		j = 0;
+		while(j < len) {
+			err = read(c, environ[i]+j, len-j);
+			if (err < 0)
+				goto out;
+			j += err;
+		}
 	}
 
 	// call user code
 	libc_sd = c;
-	libc_start(argc, argv);
+	libc_start(argc, argv, environ);
 
 out:
 	if (argv) {
@@ -392,6 +422,16 @@ out:
 		}
 
 		kfree(argv);
+	}
+
+	if (environ) {
+		i = 0;
+		while(environ[i]) {
+			kfree(environ[i]);
+			i++;
+		}
+
+		kfree(environ);
 	}
 
 	if (c > 0)
