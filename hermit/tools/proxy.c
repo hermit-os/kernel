@@ -56,6 +56,8 @@ static char fname[] = "/tmp/hermitXXXXXX";
 extern char hermit_app[];
 extern unsigned app_size;
 
+extern char **environ;
+
 static void fini_env(void)
 {
 	unlink(fname);
@@ -380,6 +382,33 @@ int main(int argc, char **argv)
 		while(j < len)
 		{
 			ret = write(s, argv[i]+j, len-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
+	}
+
+	// send environment
+	i = 0;
+	while(environ[i])
+		i++;
+
+	ret = write(s, &i, sizeof(i));
+	if (ret < 0)
+		goto out;
+
+	for(i=0; environ[i] ;i++)
+	{
+		int len = strlen(environ[i])+1;
+
+		ret = write(s, &len, sizeof(len));
+		if (ret < 0)
+			goto out;
+
+		j = 0;
+		while(j < len)
+		{
+			ret = write(s, environ[i]+j, len-j);
 			if (ret < 0)
 				goto out;
 			j += ret;
