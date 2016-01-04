@@ -315,8 +315,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	if ((core_id >= MAX_CORES) || !readyqueues[core_id].idle)
 		core_id = CORE_ID;
 
-	kprintf("start new thread on core %d with stack address %p\n", core_id, stack);
-
 	for(i=0; i<MAX_TASKS; i++) {
 		if (task_table[i].status == TASK_INVALID) {
 			task_table[i].id = i;
@@ -362,6 +360,10 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	}
 
 	spinlock_irqsave_unlock(&table_lock);
+
+	if (!ret)
+		kprintf("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+
 out:
 	if (ret)
 		kfree(stack);

@@ -359,7 +359,10 @@ int sys_sem_timedwait(sem_t *sem, unsigned int ms)
 
 int sys_sem_cancelablewait(sem_t* sem, unsigned int ms)
 {
-	return -ENOSYS;
+	if (BUILTIN_EXPECT(!sem, 0))
+		return -EINVAL;
+
+	return sem_wait(sem, ms);
 }
 
 int sys_clone(tid_t* id, void* ep, void* argv)
