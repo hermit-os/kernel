@@ -62,6 +62,7 @@ typedef struct {
 static const apic_processor_entry_t* apic_processors[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = NULL};
 extern int32_t boot_processor;
 extern uint32_t cpu_freq;
+extern atomic_int32_t cpu_online;
 apic_mp_t* apic_mp  __attribute__ ((section (".data"))) = NULL;
 static apic_config_table_t* apic_config = NULL;
 static size_t lapic = 0;
@@ -736,17 +737,32 @@ static void apic_err_handler(struct state *s)
 
 static void apic_shutdown(struct state *s)
 {
-	kprintf("Receive an IPI to shutdown HermitCore\n");
+	int if_bootprocessor = (apic_processors[boot_processor]->id == apic_cpu_id());
 
-	kprintf("Diable APIC timer\n");
+	if (if_bootprocessor) {
+		kprintf("Receive an IPI to shutdown HermitCore\n");
+
+		while(atomic_int32_read(&cpu_online) != 1)
+			PAUSE;
+
+		network_shutdown();
+
+		kprintf("Diable APIC timer\n");
+	}
+
 	apic_disable_timer();
 
-	kprintf("Disable APIC\n");
+	if (if_bootprocessor)
+		kprintf("Disable APIC\n");
+
 	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
 	lapic_write(APIC_SVR, 0x00);   // disable the apic
 
-	kprintf("System goes down...\n");
+	if (if_bootprocessor)
+		kprintf("System goes down...\n");
+	flush_cache();
+	atomic_int32_dec(&cpu_online);
 
 	HALT;
 	kprintf("Ups, we should never reach this point!\n");

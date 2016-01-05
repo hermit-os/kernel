@@ -460,7 +460,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	}
 
 	if (!ret)
-                kprintf("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+                kprintf("start new task %d on core %d with stack address %p\n", i, core_id, stack);
 
 out:
 	spinlock_irqsave_unlock(&table_lock);
