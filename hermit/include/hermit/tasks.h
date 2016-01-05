@@ -206,8 +206,12 @@ void NORETURN do_abort(void);
 void NORETURN leave_kernel_task(void);
 
 /** @brief if a task exists with higher priority, HermitCore switch to it.
- *  */
+ */
 void check_scheduling(void);
+
+/** @brief This function shutdowns the (ip) network
+ */
+int network_shutdown(void);
 
 #ifdef DYNAMIC_TICKS
 /** @brief check, if the tick counter has to be updated

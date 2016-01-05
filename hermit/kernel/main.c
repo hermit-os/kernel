@@ -188,8 +188,13 @@ static int init_netifs(void)
 	return 0;
 }
 
-static int network_shutdown(void)
+int network_shutdown(void)
 {
+	kputs("Shutdown LwIP\n");
+
+	if (libc_sd > 0)
+		closesocket(libc_sd);
+
         mmnif_shutdown();
         netifapi_netif_set_down(&mmnif_netif);
 
