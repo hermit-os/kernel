@@ -139,6 +139,53 @@ static int init_env(void)
 	return 0;
 }
 
+static void dump_log(void)
+{
+	char isle_path[MAX_PATH];
+	char* str = getenv("HERMIT_VERBOSE");
+	FILE* file;
+	char line[2048];
+
+	if (!str)
+		return;
+
+	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/log", isle_nr);
+	file = fopen(isle_path, "r");
+	if (!file) {
+		perror("fopen");
+		return;
+	}
+
+	puts("\nDump kernel log:");
+	puts("================\n");
+
+	while(fgets(line, 2048, file)) {
+		printf("%s", line);
+	}
+
+	fclose(file);
+}
+
+static void stop_kermit(void)
+{
+#if 0
+	FILE* file;
+	char isle_path[MAX_PATH];
+
+	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/cpus", isle_nr);
+
+	file = fopen(isle_path, "w");
+	if (!file) {
+		perror("fopen");
+		return;
+	}
+
+	fprintf(file, "-1");
+
+	fclose(file);
+#endif
+}
+
 /*
  * in principle, HermitCore forwards basic system calls to
  * this proxy, which mapped these call to Linux system calls.
@@ -163,6 +210,10 @@ int handle_syscalls(int s)
 			if (ret < 0)
 				goto out;
 			close(s);
+
+			dump_log();
+			stop_kermit();
+
 			exit(arg);
 			break;
 		}
