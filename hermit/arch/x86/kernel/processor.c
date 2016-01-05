@@ -308,7 +308,7 @@ int cpu_detection(void) {
 	}
 
 	if (cpu_info.feature3 & CPU_FEATURE_SYSCALL) {
-		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_LMA | EFER_LME | EFER_NXE | EFER_SCE);
+		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_LMA | EFER_LME | EFER_SCE);
 		wrmsr(MSR_STAR, (0x1BULL << 48) | (0x08ULL << 32));
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
 		//  clear IF flag during an interrupt
