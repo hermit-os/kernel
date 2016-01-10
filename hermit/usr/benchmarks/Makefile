@@ -75,6 +75,10 @@ RCCE_pingpong: RCCE_pingpong.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+netio.o: netio.c
+	@echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -D_POSIX_SOURCE -o $@ $<
+
 netio: netio.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
