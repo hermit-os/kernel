@@ -47,15 +47,6 @@ extern int32_t isle;
 extern int32_t possible_isles;
 extern int libc_sd;
 
-
-int* __getreent(void);
-
-static inline int* libc_errno(void)
-{
-
-	return __getreent();
-}
-
 tid_t sys_getpid(void)
 {
 	task_t* task = per_core(current_task);
@@ -116,13 +107,10 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
 		ret = lwip_read(fd & ~LWIP_FD_BIT, buf, len);
-		if (ret)
-		{
-			*libc_errno() = errno;
-			return -1;
-		}
+		if (ret < 0)
+			return -errno;
 
-		return 0;
+		return ret;
 	}
 
 	if (libc_sd < 0)
@@ -171,13 +159,10 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
 		ret = lwip_write(fd & ~LWIP_FD_BIT, buf, len);
-		if (ret)
-		{
-			*libc_errno() = errno;
-			return -1;
-		}
+		if (ret < 0)
+			return -errno;
 
-		return 0;
+		return ret;
 	}
 
 	if (libc_sd < 0)
@@ -311,11 +296,8 @@ int sys_close(int fd)
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
 		ret = lwip_close(fd & ~LWIP_FD_BIT);
-		if (ret)
-		{
-			*libc_errno() = errno;
-			return -1;
-		}
+		if (ret < 0)
+			return -errno;
 
 		return 0;
 	}
