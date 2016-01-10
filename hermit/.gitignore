@@ -24,5 +24,6 @@ usr/benchmarks/RCCE_pingping
 usr/benchmarks/RCCE_pingpong
 usr/benchmarks/stream
 usr/benchmarks/hg
+usr/benchmarks/netio
 usr/x86/
 usr/tmp/
