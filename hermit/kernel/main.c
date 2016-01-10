@@ -54,12 +54,11 @@
 #include <netif/etharp.h>
 #include <net/mmnif.h>
 
-#define HERMIT_PORT	0x494F
+#define HERMIT_PORT	0x494E
 #define HEMRIT_MAGIC	0x7E317
 
 static struct netif	mmnif_netif;
 static const int sobufsize = 131072;
-volatile int8_t shutdown = 0;
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -193,7 +192,7 @@ int network_shutdown(void)
 	kputs("Shutdown LwIP\n");
 
 	if (libc_sd > 0)
-		closesocket(libc_sd);
+		lwip_close(libc_sd);
 
         mmnif_shutdown();
         netifapi_netif_set_down(&mmnif_netif);
@@ -281,33 +280,13 @@ static int initd(void* arg)
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
+	// initialize network
 	init_netifs();
 
-	// do we have a thread local storage?
-	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
-		char* tls_addr = NULL;
-
-		curr_task->tls_addr = (size_t) &tls_start;
-		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
-
-		// TODO: free TLS after termination
-		tls_addr = kmalloc(curr_task->tls_size);
-		if (BUILTIN_EXPECT(!tls_addr, 0)) {
-			kprintf("load_task: heap is missing!\n");
-			kfree(curr_task->heap);
-			return -ENOMEM;
-		}
-
-		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
-
-		// set fs register to the TLS segment
-		set_tls((size_t) tls_addr);
-		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, tls_addr);
-	} else set_tls(0); // no TLS => clear fs register
-
+	// initialize iRCCE
 	//init_rcce();
 
-	s = socket(PF_INET , SOCK_STREAM , 0);
+	s = lwip_socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {
 		kprintf("socket failed: %d\n", server);
 		return -1;
@@ -319,17 +298,17 @@ static int initd(void* arg)
 	server.sin_addr.s_addr = INADDR_ANY;
 	server.sin_port = htons(HERMIT_PORT);
 
-	if ((err = bind(s, (struct sockaddr *) &server, sizeof(server))) < 0)
+	if ((err = lwip_bind(s, (struct sockaddr *) &server, sizeof(server))) < 0)
 	{
 		kprintf("bind failed: %d\n", errno);
-		closesocket(s);
+		lwip_close(s);
 		return -1;
 	}
 
-	if ((err = listen(s, 2)) < 0)
+	if ((err = lwip_listen(s, 2)) < 0)
 	{
 		kprintf("listen failed: %d\n", errno);
-		closesocket(s);
+		lwip_close(s);
 		return -1;
 	}
 
@@ -337,28 +316,28 @@ static int initd(void* arg)
 
 	kputs("TCP server listening.\n");
 
-	if ((c = accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
+	if ((c = lwip_accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
 	{
 		kprintf("accept faild: %d\n", errno);
-		closesocket(s);
+		lwip_close(s);
 		return -1;
 	}
 
 	kputs("Establish IP connection\n");
 
-	setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
-	setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
-	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
+	lwip_setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
+	lwip_setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 
-	read(c, &magic, sizeof(magic));
+	lwip_read(c, &magic, sizeof(magic));
 	if (magic != HEMRIT_MAGIC)
 	{
 		kprintf("Invalid magic number %d\n", magic);
-		closesocket(c);
+		lwip_close(c);
 		return -1;
 	}
 
-	err = read(c, &argc, sizeof(argc));
+	err = lwip_read(c, &argc, sizeof(argc));
 	if (err != sizeof(argc))
 		goto out;
 
@@ -369,7 +348,7 @@ static int initd(void* arg)
 
 	for(i=0; i<argc; i++)
 	{
-		err = read(c, &len, sizeof(len));
+		err = lwip_read(c, &len, sizeof(len));
 		if (err != sizeof(len))
 			goto out;
 
@@ -379,7 +358,7 @@ static int initd(void* arg)
 
 		j = 0;
 		while(j < len) {
-			err = read(c, argv[i]+j, len-j);
+			err = lwip_read(c, argv[i]+j, len-j);
 			if (err < 0)
 				goto out;
 			j += err;
@@ -387,7 +366,7 @@ static int initd(void* arg)
 
 	}
 
-	err = read(c, &envc, sizeof(envc));
+	err = lwip_read(c, &envc, sizeof(envc));
 	if (err != sizeof(envc))
 		goto out;
 
@@ -398,7 +377,7 @@ static int initd(void* arg)
 
 	for(i=0; i<envc; i++)
 	{
-		err = read(c, &len, sizeof(len));
+		err = lwip_read(c, &len, sizeof(len));
 		if (err != sizeof(len))
 			goto out;
 
@@ -408,7 +387,7 @@ static int initd(void* arg)
 
 		j = 0;
 		while(j < len) {
-			err = read(c, environ[i]+j, len-j);
+			err = lwip_read(c, environ[i]+j, len-j);
 			if (err < 0)
 				goto out;
 			j += err;
@@ -440,11 +419,11 @@ out:
 	}
 
 	if (c > 0)
-		closesocket(c);
+		lwip_close(c);
 	libc_sd = -1;
 
 	if (s > 0)
-		closesocket(s);
+		lwip_close(s);
 
 	//network_shutdown();
 

@@ -137,9 +137,18 @@ int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t 
  *
  * @return
  * - 0 on success
- * - -EINVAL (-22) or -ENOMEM (-12)on failure
+ * - -EINVAL (-22) or -ENOMEM (-12) on failure
  */
 int create_user_task_on_core(tid_t* id, const char* fame, char** argv, uint8_t prio, uint32_t core_id);
+
+
+/** @brief Create a thread local storage for the current task
+ *
+ * @return
+ * - 0 on success
+ * - -EONMEM on failure
+ */
+int init_tls(void);
 
 /** @brief Cleanup function for the task termination
  *

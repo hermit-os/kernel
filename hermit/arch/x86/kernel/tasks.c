@@ -59,7 +59,6 @@ static inline void enter_user_task(size_t ep, size_t stack)
 
 static int thread_entry(void* arg, size_t ep)
 {
-	task_t* curr_task = per_core(current_task);
 #if 0
 	size_t addr, stack = 0;
 	size_t flags;
@@ -95,20 +94,10 @@ static int thread_entry(void* arg, size_t ep)
 	vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
 #endif
 
+	if (init_tls())
+		return -ENOMEM;
+
 	//vma_dump();
-
-	// do we have to create a TLS segement?
-	if (curr_task->tls_addr && curr_task->tls_size) {
-		char* tls_addr = NULL;
-
-		tls_addr = kmalloc(curr_task->tls_size);
-		// copy default TLS segment to stack
-		memcpy((void*) (tls_addr), (void*) curr_task->tls_addr, curr_task->tls_size);
-
-		// set fs register to the TLS segment
-		writefs((size_t) tls_addr);
-		kprintf("Task %d set fs to %p\n", curr_task->id, tls_addr);
-	} else writefs(0); // no TLS => clear fs register
 
 	// set first argument
 	//asm volatile ("mov %0, %%rdi" :: "r"(arg));

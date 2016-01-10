@@ -38,6 +38,13 @@
 #include <hermit/memory.h>
 
 /*
+ * Note that linker symbols are not variables, they have no memory allocated for
+ * maintaining a value, rather their address is their value.
+ */
+extern const void tls_start;
+extern const void tls_end;
+
+/*
  * HermitCore is a single address space OS
  * => we need only a lock to protect the page tables & VMA
  */
@@ -172,6 +179,33 @@ int set_idle_task(void)
 	spinlock_irqsave_unlock(&table_lock);
 
 	return ret;
+}
+
+int init_tls(void)
+{
+	task_t* curr_task = per_core(current_task);
+
+	// do we have a thread local storage?
+	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
+		char* tls_addr = NULL;
+
+		curr_task->tls_addr = (size_t) &tls_start;
+		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
+
+		tls_addr = kmalloc(curr_task->tls_size);
+		if (BUILTIN_EXPECT(!tls_addr, 0)) {
+			kprintf("load_task: heap is missing!\n");
+			return -ENOMEM;
+		}
+
+		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
+
+		// set fs register to the TLS segment
+		set_tls((size_t) tls_addr);
+		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, tls_addr);
+	} else set_tls(0); // no TLS => clear fs register
+
+	return 0;
 }
 
 void finish_task_switch(void)
