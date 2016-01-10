@@ -3,9 +3,11 @@ ARCH = x86
 TARGET=x86_64-hermit
 NJOBS=-j20
 
+CROSSCOMPREFIX = x86_64-hermit
 NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
 RM = rm -rf
 CD = cd
+CP = cp
 MKDIR = mkdir
 TMP = $(TOPDIR)/tmp
 OPT = --disable-shared --disable-multilib --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
@@ -43,7 +45,7 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
-toolchain: $(TMP)/newlib libs $(TMP)/gcc demo
+toolchain: $(TMP)/newlib libs $(TMP)/gcc headers demo
 
 $(TMP)/newlib:
 	@echo Build newlib, libpthread and libgomp
@@ -58,6 +60,13 @@ libs:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
 
+headers:
+	@echo [CP] Copy headers
+	$Q$(CP) -R ../lwip/src/include/posix/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
+	$Q$(CP) -R ../lwip/src/include/arch $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
+	$Q$(CP) -R ../lwip/src/include/lwip* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
+	$Q$(CP) -R ../lwip/src/include/ipv4/lwip/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/lwip/
+	$Q$(CP) -R ../tools/neti* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 
 $(TMP)/gcc:
 	@echo Build final gcc
@@ -81,3 +90,5 @@ veryclean:
 	$Q$(MAKE) -C benchmarks veryclean
 	$Q$(RM) $(TOPDIR)/$(ARCH)
 	$Q$(RM) $(TMP)
+
+.PHONY: default all clean veryclean headers libs

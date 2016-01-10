@@ -37,7 +37,7 @@
 #include <arpa/inet.h>
 #include <linux/tcp.h>
 
-#define HERMIT_PORT     0x494F
+#define HERMIT_PORT     0x494E
 #define HERMIT_MAGIC    0x7E317
 #define MAX_PATH	255
 

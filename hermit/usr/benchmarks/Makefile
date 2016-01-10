@@ -48,7 +48,7 @@ endif
 
 default: all
 
-all: stream.bin hg.bin #RCCE_pingping RCCE_pingpong
+all: stream.bin hg.bin netio.bin #RCCE_pingping RCCE_pingpong
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -75,6 +75,13 @@ RCCE_pingpong: RCCE_pingpong.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+netio: netio.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< hist.o rdtsc.o run.o init.o opt.o report.o setup.o
@@ -84,7 +91,7 @@ hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 
 clean:
 	@echo Cleaning benchmarks
-	$Q$(RM) stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
+	$Q$(RM) stream hg netio RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
 
 veryclean:
 	@echo Propper cleaning benchmarks
