@@ -187,28 +187,25 @@ timeout:
  * - -EINVAL on invalid argument
  */
 inline static int sem_post(sem_t* s) {
+	unsigned int k, i;
+
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
 
 	spinlock_irqsave_lock(&s->lock);
-	if (s->value > 0) {
-		s->value++;
-		spinlock_irqsave_unlock(&s->lock);
-	} else {
-		unsigned int k, i;
 
-		s->value++;
-		i = s->pos;
-		for(k=0; k<MAX_TASKS; k++) {
-			if (s->queue[i] < MAX_TASKS) {
-				wakeup_task(s->queue[i]);
-				s->queue[i] = MAX_TASKS;
-				break;
-			}
-			i = (i + 1) % MAX_TASKS;
+	s->value++;
+	i = s->pos;
+	for(k=0; k<MAX_TASKS; k++) {
+		if (s->queue[i] < MAX_TASKS) {
+			wakeup_task(s->queue[i]);
+			s->queue[i] = MAX_TASKS;
+			break;
 		}
-		spinlock_irqsave_unlock(&s->lock);
+		i = (i + 1) % MAX_TASKS;
 	}
+
+	spinlock_irqsave_unlock(&s->lock);
 
 	return 0;
 }
