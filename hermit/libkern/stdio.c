@@ -33,11 +33,6 @@
 #include <asm/atomic.h>
 #include <asm/processor.h>
 
-#define NO_EARLY_PRINT		0x00
-#define VGA_EARLY_PRINT		0x01
-
-static uint32_t early_print = NO_EARLY_PRINT;
-static spinlock_irqsave_t olock = SPINLOCK_IRQSAVE_INIT;
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 
 /* Workaround for a compiler bug. gcc 5.1 seems to ignore this array, if we
@@ -58,14 +53,8 @@ int kputchar(int c)
 	if (BUILTIN_EXPECT(!c, 0))
 		c = '?';
 
-	if (early_print != NO_EARLY_PRINT)
-		spinlock_irqsave_lock(&olock);
-
 	pos = atomic_int32_inc(&kmsg_counter);
 	kmessages[pos % KMSG_SIZE] = (unsigned char) c;
-
-	if (early_print != NO_EARLY_PRINT)
-		spinlock_irqsave_unlock(&olock);
 
 	return 1;
 }
@@ -74,16 +63,10 @@ int kputs(const char *str)
 {
 	int pos, i, len = strlen(str);
 
-	if (early_print != NO_EARLY_PRINT)
-		spinlock_irqsave_lock(&olock);
-
 	for(i=0; i<len; i++) {
 		pos = atomic_int32_inc(&kmsg_counter);
 		kmessages[pos % KMSG_SIZE] = str[i];
 	}
-
-	if (early_print != NO_EARLY_PRINT)
-		spinlock_irqsave_unlock(&olock);
 
 	return len;
 }
