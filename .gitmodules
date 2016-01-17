@@ -22,7 +22,3 @@
 	path = hermit/lwip
 	url = git@github.com:RWTH-OS/LwIP.git
 	branch = hermit
-[submodule "hermit/usr/mpich"]
-	path = hermit/usr/mpich
-	url = git@github.com:RWTH-OS/mpich.git
-	branch = hermit
