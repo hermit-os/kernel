@@ -45,7 +45,7 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
-toolchain: $(TMP)/newlib libs $(TMP)/gcc headers demo
+toolchain: $(TMP)/newlib libs $(TMP)/gcc headers $(TMP)/mpich demo
 
 $(TMP)/newlib:
 	@echo Build newlib, libpthread and libgomp
@@ -59,6 +59,10 @@ libs:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libgomp
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
+
+$(TMP)/mpich:
+	$Q$(MKDIR) $(TMP)/mpich
+	$Q$(CD) $(TMP)/mpich; $(TOPDIR)/mpich/configure --prefix=$(TOPDIR)/$(ARCH) --enable-fast=all,O3 --enable-romio --with-pm=gforker --enable-threads=funneled && $(MAKE) && $(MAKE) install
 
 headers:
 	@echo [CP] Copy headers
