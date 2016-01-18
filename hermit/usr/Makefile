@@ -45,7 +45,7 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
-toolchain: $(TMP)/newlib libs $(TMP)/gcc headers $(TMP)/mpich demo
+toolchain: $(TMP)/newlib libs $(TMP)/gcc headers $(TMP)/mpich_hermit $(TMP)/mpich demo
 
 $(TMP)/newlib:
 	@echo Build newlib, libpthread and libgomp
@@ -62,7 +62,11 @@ libs:
 
 $(TMP)/mpich:
 	$Q$(MKDIR) $(TMP)/mpich
-	$Q$(CD) $(TMP)/mpich; $(TOPDIR)/mpich/configure --prefix=$(TOPDIR)/$(ARCH) --enable-fast=all,O3 --enable-romio --with-pm=gforker --enable-threads=funneled && $(MAKE) && $(MAKE) install
+	$Q$(CD) $(TMP)/mpich; $(TOPDIR)/mpich-3.2/configure --prefix=$(TOPDIR)/$(ARCH) --enable-fast=all,O3 --disable-romio --with-pm=gforker MPICHLIB_CFLAGS="-mavx2 -mfma" MPICHLIB_CXXFLAGS="-mavx2 -mfma" MPICHLIB_FFLAGS="-mavx2 -mfma" && $(MAKE) $(NJOBS) && $(MAKE) install
+
+$(TMP)/mpich_hermit:
+	$Q$(MKDIR) $(TMP)/mpich_hermit
+	$Q$(CD) $(TMP)/mpich_hermit; $(TOPDIR)/mpich-3.2/configure --prefix=$(TOPDIR)/$(ARCH)/$(TARGET) --target=$(TARGET) --enable-fast=all,O3 --disable-romio --with-pm=none --disable-shared --disable-fortran MPICHLIB_CFLAGS="-mno-red-zone -mavx2 -mfma" MPICHLIB_CXXFLAGS="-mno-red-zone -mavx2 -mfma" MPICHLIB_FFLAGS="-mno-red-zone -mavx2 -mfma" && $(MAKE) $(NJOBS) && $(MAKE) install
 
 headers:
 	@echo [CP] Copy headers
