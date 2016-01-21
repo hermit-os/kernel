@@ -13,16 +13,15 @@
 
 #include <stddef.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 
 #ifdef __cplusplus
 {
 #endif
 
-#if 0
-struct in_addr {
-  uint32_t s_addr;
-};
-#endif
+typedef uint16_t in_port_t;
+
+int inet_pton(int af, const char *src, void *dst);
 
 /** 255.255.255.255 */
 #define IPADDR_NONE         ((uint32_t)0xffffffffUL)
