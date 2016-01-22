@@ -35,6 +35,8 @@
 #include <hermit/time.h>
 #include <hermit/rcce.h>
 #include <hermit/memory.h>
+#include <sys/uio.h>
+#include <sys/poll.h>
 
 #include <lwip/sockets.h>
 #include <lwip/err.h>
@@ -141,6 +143,11 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 	return j;
 }
 
+ssize_t readv(int d, const struct iovec *iov, int iovcnt)
+{
+	return -ENOSYS;
+}
+
 typedef struct {
 	int sysnr;
 	int fd;
@@ -204,6 +211,11 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	spinlock_unlock(&lwip_lock);
 
 	return i;
+}
+
+ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
+{
+	return -ENOSYS;
 }
 
 ssize_t sys_sbrk(int incr)
@@ -570,19 +582,51 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 	return -ENOSYS;
 }
 
-int sys_fork(void)
+int fork(void)
 {
 	return -ENOSYS;
 }
 
-int sys_wait(int* status)
+int wait(int* status)
 {
 	return -ENOSYS;
 }
 
-int sys_execve(const char* name, char * const * argv, char * const * env)
+int execve(const char* name, char * const * argv, char * const * env)
 {
 	return -ENOSYS;
+}
+
+int dup2(int fildes, int fildes2)
+{
+	return -ENOSYS;
+}
+
+int dup(int fildes)
+{
+	return -ENOSYS;
+}
+
+int execvp(const char *file, char *const argv[])
+{
+	return -ENOSYS;
+}
+
+int poll(struct pollfd *fds, nfds_t nfds, int timeout)
+{
+	return -ENOSYS;
+}
+
+int inet_pton(int af, const char *src, void *dst)
+{
+	return -1;
+}
+
+int gethostname(char *name, size_t len)
+{
+	strncpy(name, "hermit", len);
+
+	return 0;
 }
 
 static int default_handler(void)
