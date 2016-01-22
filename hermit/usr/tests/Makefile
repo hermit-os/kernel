@@ -48,7 +48,7 @@ endif
 
 default: all
 
-all: hello.bin hello++.bin thr_hello.bin jacobi.bin hellof.bin #RCCE_minimum
+all: hello.bin hello++.bin thr_hello.bin jacobi.bin hellof.bin cpi.bin #RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -79,12 +79,23 @@ jacobi: jacobi.o
 	$Qchmod a-x $@.sym
 
 thr_hello.o: thr_hello.c
-	 @echo [CC] $@
+	@echo [CC] $@
 	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
 
 thr_hello: thr_hello.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
+cpi.o: cpi.c
+	@echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
+
+cpi: cpi.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread -lmpi
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
