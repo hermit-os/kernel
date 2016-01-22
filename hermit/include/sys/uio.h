@@ -25,8 +25,14 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __SYS_POLL_H__
-#define __SYS_POLL_H__
+#ifndef __SYS_MMAN_H__
+#define __SYS_MMAN_H__
+
+/**
+ * @author Stefan Lankes
+ * @file include/hermit/uio.h
+ * @brief Definition of struct iovec
+ */
 
 #include <stdlib.h>
 
@@ -34,46 +40,12 @@
 extern "C" {
 #endif
 
-/* These are specified by iBCS2 */
-#define POLLIN          0x0001
-#define POLLPRI         0x0002
-#define POLLOUT         0x0004
-#define POLLERR         0x0008
-#define POLLHUP         0x0010
-#define POLLNVAL        0x0020
-
-/* The rest seem to be more-or-less nonstandard. Check them! */
-#define POLLRDNORM      0x0040
-#define POLLRDBAND      0x0080
-#ifndef POLLWRNORM
-#define POLLWRNORM      0x0100
-#endif
-#ifndef POLLWRBAND
-#define POLLWRBAND      0x0200
-#endif
-#ifndef POLLMSG
-#define POLLMSG         0x0400
-#endif
-#ifndef POLLREMOVE
-#define POLLREMOVE      0x1000
-#endif
-#ifndef POLLRDHUP
-#define POLLRDHUP       0x2000
-#endif
-
-#define POLLFREE        0x4000  /* currently only for epoll */
-
-#define POLL_BUSY_LOOP  0x8000
-
-struct pollfd {
-	int fd;
-	short events;
-	short revents;
+/* Structure for scatter/gather I/O. */
+struct iovec
+{
+	void *iov_base;	/* Pointer to data.  */
+	size_t iov_len;	/* Length of data.  */
 };
-
-typedef unsigned long int nfds_t;
-
-int poll(struct pollfd *fds, nfds_t nfds, int timeout);
 
 #ifdef __cplusplus
 }
