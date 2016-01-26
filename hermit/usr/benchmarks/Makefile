@@ -48,7 +48,7 @@ endif
 
 default: all
 
-all: stream.bin hg.bin netio.bin #RCCE_pingping RCCE_pingpong
+all: stream.bin hg.bin netio.bin RCCE_pingping.bin RCCE_pingpong.bin
 
 stream.o: stream.c
 	@echo [CC] $@

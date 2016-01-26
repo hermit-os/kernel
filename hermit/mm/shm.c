@@ -27,6 +27,7 @@
 
 #include <sys/shm.h>
 
+#if 0
 int shmget(key_t key, size_t size, int shmflg)
 {
 	return 0;
@@ -46,3 +47,4 @@ int shmctl(int shmid, int cmd, struct shmid_ds *buf)
 {
 	return 0;
 }
+#endif

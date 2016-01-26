@@ -226,7 +226,6 @@ int smp_main(void)
 }
 #endif
 
-#if 0
 static int init_rcce(void)
 {
 	size_t addr;
@@ -242,9 +241,10 @@ static int init_rcce(void)
 	rcce_lock = (islelock_t*) addr;
 	rcce_mpb = (rcce_mpb_t*) (addr + CACHE_LINE*(RCCE_MAXNP+1));
 
+	kprintf("Map rcce_lock at %p and rcce_mpb at %p\n", rcce_lock, rcce_mpb);
+
 	return 0;
 }
-#endif
 
 int libc_start(int argc, char** argv, char** env);
 
@@ -284,7 +284,7 @@ static int initd(void* arg)
 	init_netifs();
 
 	// initialize iRCCE
-	//init_rcce();
+	init_rcce();
 
 	s = lwip_socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {
