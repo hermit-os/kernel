@@ -256,7 +256,7 @@ int RC_COMM_BUFFER_SIZE() {
 t_vcharp RC_COMM_BUFFER_START(int ue){
 #ifdef __hermit__
   t_vcharp retval;
-  retval =  (t_vcharp) SYSCALL2(__NR_rcce_malloc, RCCE_SESSION_ID, ue);
+  retval =  (t_vcharp) sys_rcce_malloc(RCCE_SESSION_ID, ue);
   if (!retval) {
     fprintf(stderr, "rcce_malloc failed\n");
     RCCE_finalize();
@@ -869,7 +869,7 @@ int RCCE_init(
   int verbose_level = 0;
 
 #ifdef __hermit__
-  SYSCALL1(__NR_rcce_init, RCCE_SESSION_ID /* id of the session */); 
+  sys_rcce_init(RCCE_SESSION_ID /* id of the session */);
 #elif defined(SCC)
   // Copperridge specific initialization...
   InitAPI(0);fflush(0);
@@ -1206,7 +1206,7 @@ int RCCE_finalize(void){
     FreeConfigReg((int *)(virtual_lockaddress[ue]));
   }
 #else
-  SYSCALL1(__NR_rcce_fini, RCCE_SESSION_ID /* id of the session */);
+  sys_rcce_fini(RCCE_SESSION_ID /* id of the session */);
 #endif
   fflush(NULL);
 #endif

@@ -434,7 +434,7 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 	return off;
 }
 
-static int sys_rcce_init(int session_id)
+int sys_rcce_init(int session_id)
 {
 	int i, err = 0;
 	size_t paddr = 0;
@@ -485,7 +485,7 @@ out:
 	return err;
 }
 
-static size_t sys_rcce_malloc(int session_id, int ue)
+size_t sys_rcce_malloc(int session_id, int ue)
 {
 	size_t vaddr = 0;
 	int i, counter = 0;
@@ -532,7 +532,7 @@ out:
 	return 0;
 }
 
-static int sys_rcce_fini(int session_id)
+int sys_rcce_fini(int session_id)
 {
 	int i, j;
 	int ret = 0;
@@ -582,6 +582,7 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 	return -ENOSYS;
 }
 
+#if 0
 int fork(void)
 {
 	return -ENOSYS;
@@ -628,6 +629,7 @@ int gethostname(char *name, size_t len)
 
 	return 0;
 }
+#endif
 
 static int default_handler(void)
 {
