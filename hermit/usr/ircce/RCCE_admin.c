@@ -78,14 +78,14 @@ static inline int tas(t_vcharp lock)
 #define BACKOFF_MAX 256
 
 #ifdef __hermit__
-#define RCCE_BASE	0x401fe000ULL
-
 typedef struct islelock {
 	// Internal queue
 	int32_t queue;
 	// Internal dequeue
 	int32_t dequeue;
 } islelock_t;
+
+extern islelock_t* rcce_lock;
 
 /*
  *  * Use a own implementation of "atomic_add_return" to gurantee
@@ -100,11 +100,10 @@ inline static int _hermit_atomic_add(int32_t *d, int i)
 
 static inline int islelock_lock(void)
 {
-	islelock_t* s = (islelock_t*) 0x401fe000ULL;
 	int ticket;
 
-	ticket = _hermit_atomic_add(&s->queue, 1);
-	while(s->dequeue != ticket) {
+	ticket = _hermit_atomic_add(&rcce_lock->queue, 1);
+	while(rcce_lock->dequeue != ticket) {
 		asm volatile ("pause");
 	}
 
@@ -113,9 +112,7 @@ static inline int islelock_lock(void)
 
 static inline int islelock_unlock(void)
 {
-	islelock_t* s = (islelock_t*) 0x401fe000ULL;
-
-	_hermit_atomic_add(&s->dequeue, 1);
+	_hermit_atomic_add(&rcce_lock->dequeue, 1);
 
 	return 0;
 }
@@ -256,7 +253,7 @@ int RC_COMM_BUFFER_SIZE() {
 t_vcharp RC_COMM_BUFFER_START(int ue){
 #ifdef __hermit__
   t_vcharp retval;
-  retval =  (t_vcharp) sys_rcce_malloc(RCCE_SESSION_ID, ue);
+  retval =  (t_vcharp) sys_rcce_malloc(RCCE_SESSION_ID, RC_COREID[ue]);
   if (!retval) {
     fprintf(stderr, "rcce_malloc failed\n");
     RCCE_finalize();
@@ -972,7 +969,7 @@ int RCCE_init(
   // compute and memory map addresses of test&set registers for all participating cores 
   for (ue=0; ue<RCCE_NP; ue++) { 
 #ifdef __hermit__
-    virtual_lockaddress[ue] = (t_vcharp) (RCCE_BASE + (ue+1) * RCCE_LINE_SIZE);
+    virtual_lockaddress[ue] = (t_vcharp) ((size_t)rcce_lock + (ue+1) * RCCE_LINE_SIZE);
 #else
     z = Z_PID(RC_COREID[ue]);
     x = X_PID(RC_COREID[ue]);
