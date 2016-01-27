@@ -202,7 +202,7 @@ int init_tls(void)
 
 		// set fs register to the TLS segment
 		set_tls((size_t) tls_addr);
-		kprintf("Task %d set fs to 0x%zx\n", curr_task->id, tls_addr);
+		kprintf("Task %d set fs to 0x%zx (TLS)\n", curr_task->id, tls_addr);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
