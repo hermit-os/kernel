@@ -138,6 +138,8 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	if (BUILTIN_EXPECT(!task->stack, 0))
 		return -EINVAL;
 
+	kprintf("Task %d use use the memory region [%p - %p] as kernel stack\n", task->id, task->stack, (char*) task->stack + KERNEL_STACK_SIZE - 1);
+
 	memset(task->stack, 0xCD, KERNEL_STACK_SIZE);
 
 	/* The difference between setting up a task for SW-task-switching
