@@ -3,7 +3,7 @@ TARGET=x86_64-hermit
 MAKE = make
 override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
-OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -O binary
+OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -j .eh_frame -j .jcr -j .got.plt -O binary
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
