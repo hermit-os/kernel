@@ -60,14 +60,6 @@ libs:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
 
-$(TMP)/mpich:
-	$Q$(MKDIR) $(TMP)/mpich
-	$Q$(CD) $(TMP)/mpich; $(TOPDIR)/mpich-3.2/configure --prefix=$(TOPDIR)/$(ARCH) --enable-fast=all,O3 --disable-romio --with-pm=gforker MPICHLIB_CFLAGS="-mavx2 -mfma" MPICHLIB_CXXFLAGS="-mavx2 -mfma" MPICHLIB_FFLAGS="-mavx2 -mfma" && $(MAKE) $(NJOBS) && $(MAKE) install
-
-$(TMP)/mpich_hermit:
-	$Q$(MKDIR) $(TMP)/mpich_hermit
-	$Q$(CD) $(TMP)/mpich_hermit; $(TOPDIR)/mpich-3.2/configure --prefix=$(TOPDIR)/$(ARCH)/$(TARGET) --host=$(TARGET) --enable-fast=all,O3 --disable-fortran --disable-romio --with-pm=none --disable-shared CC=$(TARGET)-gcc CXX=$(TARGET)-g++ FC=$(TARGET)-gfortran F77=$(TARGET)-gfortran MPICHLIB_CFLAGS="-D_POSIX_SOURCE -mno-red-zone -mavx2 -mfma" MPICHLIB_CXXFLAGS="-D_POSIX_SOURCE -mno-red-zone -mavx2 -mfma" MPICHLIB_FFLAGS="-mno-red-zone -mavx2 -mfma" && $(MAKE) $(NJOBS) && $(MAKE) install
-
 headers:
 	@echo [CP] Copy headers
 	$Q$(CP) -R ../lwip/src/include/posix/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
