@@ -112,7 +112,12 @@ static int thread_entry(void* arg, size_t ep)
 size_t* get_current_stack(void)
 {
 	task_t* curr_task = per_core(current_task);
-	size_t stptr = (size_t) curr_task->stack + KERNEL_STACK_SIZE - 0x10;
+	size_t stptr = (size_t) curr_task->stack;
+
+	if (curr_task->status == TASK_IDLE)
+		stptr += KERNEL_STACK_SIZE - 0x10;
+	else
+		stptr += DEFAULT_STACK_SIZE - 0x10;
 
 	set_per_core(kernel_stack, stptr);
 	tss_set_rsp0(stptr);
@@ -138,15 +143,15 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	if (BUILTIN_EXPECT(!task->stack, 0))
 		return -EINVAL;
 
-	kprintf("Task %d use use the memory region [%p - %p] as kernel stack\n", task->id, task->stack, (char*) task->stack + KERNEL_STACK_SIZE - 1);
+	kprintf("Task %d use use the memory region [%p - %p] as kernel stack\n", task->id, task->stack, (char*) task->stack + DEFAULT_STACK_SIZE - 1);
 
-	memset(task->stack, 0xCD, KERNEL_STACK_SIZE);
+	memset(task->stack, 0xCD, DEFAULT_STACK_SIZE);
 
 	/* The difference between setting up a task for SW-task-switching
 	 * and not for HW-task-switching is setting up a stack and not a TSS.
 	 * This is the stack which will be activated and popped off for iret later.
 	 */
-	stack = (size_t*) (((size_t) task->stack + KERNEL_STACK_SIZE - 0x10) & ~0xF);	// => stack is 16byte aligned
+	stack = (size_t*) (((size_t) task->stack + DEFAULT_STACK_SIZE - 0x10) & ~0xF);	// => stack is 16byte aligned
 
 	/* Only marker for debugging purposes, ... */
 	*stack-- = 0xDEADBEEF;
