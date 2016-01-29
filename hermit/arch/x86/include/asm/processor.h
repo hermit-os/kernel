@@ -676,7 +676,7 @@ inline static int system_init(void)
 {
 	gdt_install();
 	cpu_detection();
-	pci_init();
+	//pci_init();
 
 	return 0;
 }

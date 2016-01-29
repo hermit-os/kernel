@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#if 0
 #include <hermit/stdio.h>
 #include <hermit/string.h>
 #include <hermit/errno.h>
@@ -214,3 +215,5 @@ int print_pci_adapters(void)
 
 	return 0;
 }
+
+#endif
