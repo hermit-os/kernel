@@ -273,10 +273,11 @@ int cpu_detection(void) {
 		cr4 |= CR4_PGE;
 	if (has_fsgsbase())
 		cr4 |= CR4_FSGSBASE;
-	if (has_vmx())
-		cr4 |= CR4_VMXE;
+	//if (has_vmx())
+	//	cr4 |= CR4_VMXE;
 	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc
 	write_cr4(cr4);
+
 
 	if (first_time && has_fsgsbase())
 	{
@@ -318,8 +319,8 @@ int cpu_detection(void) {
 	if (has_nx())
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);
 
-	if (has_vmx())
-		wrmsr(MSR_IA32_FEATURE_CONTROL, rdmsr(MSR_IA32_FEATURE_CONTROL) | 0x5);
+	//if (has_vmx())
+	//	wrmsr(MSR_IA32_FEATURE_CONTROL, rdmsr(MSR_IA32_FEATURE_CONTROL) | 0x5);
 
 	writefs(0);
 #if MAX_CORES > 1
