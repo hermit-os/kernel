@@ -342,7 +342,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 	curr_task = per_core(current_task);
 
-	stack = kmalloc(KERNEL_STACK_SIZE);
+	stack = kmalloc(DEFAULT_STACK_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
 
@@ -432,7 +432,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 
 	curr_task = per_core(current_task);
 
-	stack = kmalloc(KERNEL_STACK_SIZE);
+	stack = kmalloc(DEFAULT_STACK_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
 
