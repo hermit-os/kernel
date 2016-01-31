@@ -71,7 +71,7 @@ int sys_setprio(tid_t* id, int prio);
 void NORETURN sys_exit(int arg);
 ssize_t sys_read(int fd, char* buf, size_t len);
 ssize_t sys_write(int fd, const char* buf, size_t len);
-ssize_t sys_sbrk(int incr);
+ssize_t sys_sbrk(ssize_t incr);
 int sys_open(const char* name, int flags, int mode);
 int sys_close(int fd);
 void sys_msleep(unsigned int ms);
