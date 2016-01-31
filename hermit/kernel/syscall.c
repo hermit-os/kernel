@@ -218,7 +218,7 @@ ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 	return -ENOSYS;
 }
 
-ssize_t sys_sbrk(int incr)
+ssize_t sys_sbrk(ssize_t incr)
 {
 	task_t* task = per_core(current_task);
 	vma_t* heap = task->heap;
