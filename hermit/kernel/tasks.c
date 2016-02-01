@@ -579,7 +579,7 @@ int wakeup_task(tid_t id)
 		}
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
-#ifdef DYNAMIC_TICKS
+#if 0 //def DYNAMIC_TICKS
 		// send IPI to be sure that the scheuler recognize the new task
 		if (core_id != CORE_ID)
 			apic_send_ipi(core_id, 121);
