@@ -219,7 +219,10 @@ int smp_main(void)
 
 	while(1) {
 		check_workqueues();
-		HALT;
+		if (libc_sd >= 0)
+			PAUSE;
+		else
+			HALT;
 	}
 
 	return 0;
@@ -467,7 +470,10 @@ int hermit_main(void)
 
 	while(1) {
 		check_workqueues();
-		HALT;
+		if (libc_sd >= 0)
+			PAUSE;
+		else
+			HALT;
 	}
 
 	return 0;
