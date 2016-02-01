@@ -42,7 +42,7 @@ extern "C" {
 /// Binary exponent of maximal size for kmalloc()
 #define BUDDY_MAX	32 // 4 GB
 /// Binary exponent of minimal buddy size
-#define BUDDY_MIN	3  // 8 Byte >= sizeof(buddy_t)
+#define BUDDY_MIN	6  // 64 Byte >= cache line
 /// Binary exponent of the size which we allocate with buddy_fill()
 #define BUDDY_ALLOC	16 // 64 KByte = 16 * PAGE_SIZE
 
