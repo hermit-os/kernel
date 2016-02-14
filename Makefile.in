@@ -16,7 +16,7 @@ test:
 	@echo "Nothing to test"
 
 qemu:
-	$(QEMU) -smp 20 -kernel linux/arch/x86/boot/bzImage -initrd config/initrd.cpio -append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0 maxcpus=1" -net nic,model=rtl8139 -net user  -net dump -nographic -monitor telnet:127.0.0.1:1234,server,nowait -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 -numa node,nodeid=2,cpus=10-14 -numa node,nodeid=3,cpus=15-19 -cdrom hermit/tools/proxy-image.iso
+	$(QEMU) -smp 10 -kernel linux/arch/x86/boot/bzImage -initrd config/initrd.cpio -append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0" -net nic,model=rtl8139 -net user  -net dump -nographic -monitor telnet:127.0.0.1:1234,server,nowait -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9  -cdrom hermit/tools/proxy-image.iso
 
 clean:
 	make -C hermit clean
