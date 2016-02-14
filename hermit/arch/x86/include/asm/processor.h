@@ -194,6 +194,8 @@ extern "C" {
 /// SwapGS GS shadow
 #define MSR_KERNEL_GS_BASE			0xc0000102
 
+#define MSR_XAPIC_ENABLE			(1UL << 11)
+#define MSR_X2APIC_ENABLE			(1UL << 10)
 #define MSR_IA32_MISC_ENABLE			0x000001a0
 #define MSR_IA32_FEATURE_CONTROL		0x0000003a
 
