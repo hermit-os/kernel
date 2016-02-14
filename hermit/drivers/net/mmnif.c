@@ -234,7 +234,7 @@ inline static int mmnif_trigger_irq(int dest_ip)
 	if (dest_ip == 1)
 		dest = 0;
 	else
-		dest = 0;
+		dest = 0;	// TODO: determine physical apic id of the destination
 
 	return apic_send_ipi(dest, MMNIF_IRQ);
 }
