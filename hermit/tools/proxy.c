@@ -168,9 +168,11 @@ static void dump_log(void)
 
 static void stop_kermit(void)
 {
-#if 0
 	FILE* file;
 	char isle_path[MAX_PATH];
+
+	fflush(stdout);
+	fflush(stderr);
 
 	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/cpus", isle_nr);
 
@@ -183,7 +185,6 @@ static void stop_kermit(void)
 	fprintf(file, "-1");
 
 	fclose(file);
-#endif
 }
 
 /*
