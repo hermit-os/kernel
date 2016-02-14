@@ -65,6 +65,7 @@ align 4
     global header_start_address
     global heap_size
     global header_size
+    global disable_x2apic
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -83,6 +84,7 @@ align 4
     possible_isles dd 1
     heap_start_address dq 0
     header_start_address dq 0
+    disable_x2apic dd 1
 
 ; Bootstrap page tables are used during the initialization.
 align 4096

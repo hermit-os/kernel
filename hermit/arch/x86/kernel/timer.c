@@ -140,30 +140,8 @@ int timer_wait(unsigned int ticks)
 			      while(rdtsc() - start < 1000000) ; \
 			} while (0)
 
-/*
- * Sets up the system clock by installing the timer handler
- * into IRQ0
- */
-int timer_init(void)
+static int pit_init(void)
 {
-	/*
-	 * Installs 'timer_handler' for the PIC and APIC timer,
-	 * only one handler will be later used.
-	 */
-	irq_install_handler(32, timer_handler);
-	irq_install_handler(123, timer_handler);
-	irq_install_handler(121, wakeup_handler);
-
-#ifdef DYNAMIC_TICKS
-	if (has_rdtscp())
-		last_rdtsc = rdtscp(NULL);
-	else
-		last_rdtsc = rdtsc();
-#endif
-
-	if (cpu_freq) // do we need to configure the timer?
-		return 0;
-
 	/*
 	 * Port 0x43 is for initializing the PIT:
 	 *
@@ -188,4 +166,31 @@ int timer_init(void)
 	outportb(0x40, LATCH(TIMER_FREQ) >> 8);     /* high byte */
 
 	return 0;
+}
+
+/*
+ * Sets up the system clock by installing the timer handler
+ * into IRQ0
+ */
+int timer_init(void)
+{
+	/*
+	 * Installs 'timer_handler' for the PIC and APIC timer,
+	 * only one handler will be later used.
+	 */
+	irq_install_handler(32, timer_handler);
+	irq_install_handler(123, timer_handler);
+	irq_install_handler(121, wakeup_handler);
+
+#ifdef DYNAMIC_TICKS
+	if (has_rdtscp())
+		last_rdtsc = rdtscp(NULL);
+	else
+		last_rdtsc = rdtsc();
+#endif
+
+	if (cpu_freq) // do we need to configure the timer?
+		return 0;
+
+	return pit_init();
 }

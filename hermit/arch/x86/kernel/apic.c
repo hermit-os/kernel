@@ -150,6 +150,48 @@ int apic_is_enabled(void)
 	return (lapic && initialized);
 }
 
+static inline void x2apic_disable(void)
+{
+	uint64_t msr;
+
+	if (!has_x2apic())
+		return;
+
+	msr = rdmsr(MSR_APIC_BASE);
+	if (!(msr & MSR_X2APIC_ENABLE)) {
+		kprintf("X2APIC already disabled!\n");
+		return;
+	}
+
+	/* Disable xapic and x2apic first and then reenable xapic mode */
+	wrmsr(MSR_APIC_BASE, msr & ~(MSR_X2APIC_ENABLE | MSR_XAPIC_ENABLE));
+	wrmsr(MSR_APIC_BASE, msr & ~MSR_X2APIC_ENABLE);
+
+	kprintf("Disable X2APIC support\n");
+	lapic_read = lapic_read_default;
+	lapic_write = lapic_write_default;
+}
+
+static inline void x2apic_enable(void)
+{
+	uint64_t msr;
+
+	if (!has_x2apic())
+		return;
+
+	msr = rdmsr(MSR_APIC_BASE);
+	if (msr & MSR_X2APIC_ENABLE) {
+		kprintf("X2APIC already enabled!\n");
+                return;
+	}
+
+	wrmsr(MSR_APIC_BASE, msr | MSR_X2APIC_ENABLE);
+
+	kprintf("Enable X2APIC support!\n");
+	lapic_read = lapic_read_msr;
+	lapic_write = lapic_write_msr;
+}
+
 /*
  * Send a 'End of Interrupt' command to the APIC
  */
@@ -302,6 +344,8 @@ static int lapic_reset(void)
 
 	if (!lapic)
 		return -ENXIO;
+
+	x2apic_enable();
 
 	max_lvt = apic_lvt_entries();
 
@@ -543,15 +587,16 @@ check_lapic:
 	kprintf("Found APIC at 0x%x\n", lapic);
 
 	if (has_x2apic()) {
-		kprintf("Enable X2APIC support!\n");
-		wrmsr(MSR_APIC_BASE, lapic | 0xD00);
-		lapic_read = lapic_read_msr;
-		lapic_write = lapic_write_msr;
+		x2apic_enable();
 	} else {
-		page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD);
-		vma_add(LAPIC_ADDR, LAPIC_ADDR + PAGE_SIZE, VMA_READ | VMA_WRITE);
-		lapic = LAPIC_ADDR;
-		kprintf("Map APIC to 0x%x\n", lapic);
+		if (page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD)) {
+			kprintf("Failed to map APIC to 0x%x\n", LAPIC_ADDR);
+			goto out;
+		} else {
+			kprintf("Mapped APIC 0x%x to 0x%x\n", lapic, LAPIC_ADDR);
+			vma_add(LAPIC_ADDR, LAPIC_ADDR + PAGE_SIZE, VMA_READ | VMA_WRITE);
+			lapic = LAPIC_ADDR;
+		}
 	}
 
 	kprintf("Maximum LVT Entry: 0x%x\n", apic_lvt_entries());
@@ -592,8 +637,7 @@ extern atomic_int32_t current_boot_id;
 #if MAX_CORES > 1
 int smp_start(void)
 {
-	if (has_x2apic()) // enable x2APIC support
-		wrmsr(MSR_APIC_BASE, lapic | 0xD00);
+	x2apic_enable();
 
 	// reset APIC and set id
 	lapic_reset();
@@ -645,7 +689,7 @@ int ipi_tlb_flush(void)
 	if (atomic_int32_read(&cpu_online) == 1)
 		return 0;
 
-	if (BUILTIN_EXPECT(has_x2apic(), 1)) {
+	if (has_x2apic()) {
 		flags = irq_nested_disable();
 		for(i=0; i<MAX_APIC_CORES; i++)
 		{
@@ -703,26 +747,27 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 	uint32_t j;
 	uint8_t flags;
 
-	if (BUILTIN_EXPECT(has_x2apic(), 1)) {
+	if (has_x2apic()) {
 		flags = irq_nested_disable();
 		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
 		wrmsr(0x830, (dest << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|irq);
 		irq_nested_enable(flags);
 	} else {
-		if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
-			kputs("ERROR: previous send not complete");
-			return -EIO;
-		}
-
 		flags = irq_nested_disable();
+
+		while (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+			PAUSE;
+		}
 
 		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
 		set_ipi_dest((uint32_t)dest);
 		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|irq);
 
 		j = 0;
-		while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
+		while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000)) {
 			j++; // wait for it to finish, give up eventualy tho
+			PAUSE;
+		}
 
 		irq_nested_enable(flags);
 	}
@@ -735,19 +780,23 @@ static void apic_err_handler(struct state *s)
 	kprintf("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
 }
 
-static void apic_shutdown(struct state *s)
+extern uint32_t disable_x2apic;
+
+void shutdown_system(void)
 {
 	int if_bootprocessor = (apic_processors[boot_processor]->id == apic_cpu_id());
 
+	irq_disable();
+
 	if (if_bootprocessor) {
-		kprintf("Receive an IPI to shutdown HermitCore\n");
+		kprintf("Try to shutdown HermitCore\n");
 
 		while(atomic_int32_read(&cpu_online) != 1)
 			PAUSE;
 
 		network_shutdown();
 
-		kprintf("Diable APIC timer\n");
+		kprintf("Disable APIC timer\n");
 	}
 
 	apic_disable_timer();
@@ -757,16 +806,29 @@ static void apic_shutdown(struct state *s)
 
 	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
-	lapic_write(APIC_SVR, 0x00);   // disable the apic
+	lapic_write(APIC_SVR, 0x00);	// disable the apic
+
+	// disable x2APIC
+	if (if_bootprocessor && disable_x2apic)
+		x2apic_disable();
 
 	if (if_bootprocessor)
 		kprintf("System goes down...\n");
 	flush_cache();
 	atomic_int32_dec(&cpu_online);
 
-	HALT;
-	kprintf("Ups, we should never reach this point!\n");
-	while(1);
+	while(1) {
+		HALT;
+	}
+}
+
+volatile uint32_t go_down = 0;
+
+static void apic_shutdown(struct state * s)
+{
+	go_down = 1;
+
+	kputs("Receive shutdown interrupt\n");
 }
 
 static void apic_lint0(struct state * s)
