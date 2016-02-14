@@ -224,9 +224,15 @@ int network_shutdown(void);
 
 #ifdef DYNAMIC_TICKS
 /** @brief check, if the tick counter has to be updated
- *  */
+ */
 void check_ticks(void);
 #endif
+
+volatile extern uint32_t go_down;
+
+/** @brief shutdown the hole system
+ */
+void shutdown_system(void);
 
 static inline void check_workqueues_in_irqhandler(int irq)
 {
@@ -235,8 +241,11 @@ static inline void check_workqueues_in_irqhandler(int irq)
 #endif
 	check_timers();
 
-	if (irq < 0)
+	if (irq < 0) {
+		if (go_down)
+			shutdown_system();
 		check_scheduling();
+	}
 }
 
 static inline void check_workqueues(void)
