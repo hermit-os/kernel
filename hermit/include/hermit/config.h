@@ -41,11 +41,12 @@ extern "C" {
 #define VIDEO_MEM_ADDR		0xB8000 /* the video memory address */
 #define CACHE_LINE		64
 #define KERNEL_STACK_SIZE	(8*1024)
-#define DEFAULT_STACK_SIZE	(128*1024)
+#define DEFAULT_STACK_SIZE	(64*1024*1024)
 #define KMSG_SIZE		(4*1024)
 #define INT_SYSCALL		0x80
 #define MAILBOX_SIZE	32
 //#define WITH_PCI_IDS
+#define SAVE_FPU
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
