@@ -574,10 +574,12 @@ common_switch:
     call get_current_stack     ; get new rsp
     mov rsp, rax
 
+%ifdef SAVE_FPU
     ; set task switched flag
     mov rax, cr0
     or rax, 8
     mov cr0, rax
+%endif
 
     ; call cleanup code
     call finish_task_switch
