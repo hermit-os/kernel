@@ -10,7 +10,7 @@ CD = cd
 CP = cp
 MKDIR = mkdir
 TMP = $(TOPDIR)/tmp
-OPT = --disable-shared --disable-multilib --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
+OPT = --disable-shared --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
 
 # Prettify output
 V = 0
