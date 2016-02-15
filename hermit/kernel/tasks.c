@@ -127,6 +127,16 @@ void fpu_handler(struct state *s)
 	uint32_t core_id = CORE_ID;
 
 	clts(); // clear the TS flag of cr0
+	task->flags |= TASK_FPU_USED;
+
+	if (!(task->flags & TASK_FPU_INIT))  {
+		// use the FPU at the first time => Initialize FPU
+		fpu_init(&task->fpu);
+		task->flags |= TASK_FPU_INIT;
+	}
+
+	if (readyqueues[core_id].fpu_owner == task->id)
+		return;
 
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 	// did another already use the the FPU? => save FPU state
@@ -136,14 +146,7 @@ void fpu_handler(struct state *s)
 	}
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
-	if (BUILTIN_EXPECT(!(task->flags & TASK_FPU_INIT), 0))  {
-		// use the FPU at the first time => Initialize FPU
- 		fpu_init(&task->fpu);
-		task->flags |= TASK_FPU_INIT;
-	}
-
 	restore_fpu_state(&task->fpu);
-	task->flags |= TASK_FPU_USED;
 }
 
 int set_idle_task(void)
