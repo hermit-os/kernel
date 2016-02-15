@@ -324,6 +324,7 @@ void page_fault_handler(struct state *s)
 		 // on demand userspace heap mapping
 		viraddr &= PAGE_MASK;
 
+		// TODO: a function to get zeroed pages is missing
 		size_t phyaddr = get_page();
 		if (BUILTIN_EXPECT(!phyaddr, 0)) {
 			kprintf("out of memory: task = %u\n", task->id);
@@ -338,7 +339,7 @@ void page_fault_handler(struct state *s)
 			goto default_handler;
 		}
 
-		memset((void*) viraddr, 0x00, PAGE_SIZE); // fill with zeros
+		// TODO: reusing of old data is possible => security issue
 
 		spinlock_irqsave_unlock(task->page_lock);
 
