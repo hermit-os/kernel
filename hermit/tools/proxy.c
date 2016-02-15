@@ -398,6 +398,8 @@ int main(int argc, char **argv)
         setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
 	i = 1;
 	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	i = 0;
+	setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char *) &i, sizeof(i));
 
 	/* server address  */
 	memset((char *) &serv_name, 0x00, sizeof(serv_name));

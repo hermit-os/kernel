@@ -196,6 +196,7 @@ int network_shutdown(void)
 
         mmnif_shutdown();
         netifapi_netif_set_down(&mmnif_netif);
+	//stats_display();
 
         return 0;
 }
@@ -331,6 +332,8 @@ static int initd(void* arg)
 	lwip_setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
 	lwip_setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
 	lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
+	flag = 0;
+	lwip_setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char *) &flag, sizeof(flag));
 
 	lwip_read(c, &magic, sizeof(magic));
 	if (magic != HEMRIT_MAGIC)
