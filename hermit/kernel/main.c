@@ -84,6 +84,7 @@ extern atomic_int32_t cpu_online;
 extern atomic_int32_t possible_cpus;
 extern int32_t isle;
 extern int32_t possible_isles;
+extern uint32_t boot_processor;
 extern int libc_sd;
 
 islelock_t* rcce_lock = NULL;
@@ -431,8 +432,6 @@ out:
 	if (s > 0)
 		lwip_close(s);
 
-	//network_shutdown();
-
 	return 0;
 }
 
@@ -469,7 +468,7 @@ int hermit_main(void)
 
 	print_status();
 
-	create_kernel_task(NULL, initd, NULL, NORMAL_PRIO);
+	create_kernel_task_on_core(NULL, initd, NULL, NORMAL_PRIO, boot_processor);
 
 	while(1) {
 		check_workqueues();
