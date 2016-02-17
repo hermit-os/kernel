@@ -150,11 +150,15 @@ int apic_is_enabled(void)
 	return (lapic && initialized);
 }
 
+extern uint32_t disable_x2apic;
+
 static inline void x2apic_disable(void)
 {
 	uint64_t msr;
 
 	if (!has_x2apic())
+		return;
+	if (!disable_x2apic)
 		return;
 
 	msr = rdmsr(MSR_APIC_BASE);
@@ -179,6 +183,11 @@ static inline void x2apic_enable(void)
 	if (!has_x2apic())
 		return;
 
+	if (lapic_read != lapic_read_msr)
+		lapic_read = lapic_read_msr;
+	if (lapic_write != lapic_write_msr)
+		lapic_write = lapic_write_msr;
+
 	msr = rdmsr(MSR_APIC_BASE);
 	if (msr & MSR_X2APIC_ENABLE) {
 		kprintf("X2APIC already enabled!\n");
@@ -188,8 +197,6 @@ static inline void x2apic_enable(void)
 	wrmsr(MSR_APIC_BASE, msr | MSR_X2APIC_ENABLE);
 
 	kprintf("Enable X2APIC support!\n");
-	lapic_read = lapic_read_msr;
-	lapic_write = lapic_write_msr;
 }
 
 /*
@@ -780,8 +787,6 @@ static void apic_err_handler(struct state *s)
 	kprintf("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
 }
 
-extern uint32_t disable_x2apic;
-
 void shutdown_system(void)
 {
 	int if_bootprocessor = (apic_processors[boot_processor]->id == apic_cpu_id());
@@ -809,7 +814,7 @@ void shutdown_system(void)
 	lapic_write(APIC_SVR, 0x00);	// disable the apic
 
 	// disable x2APIC
-	if (if_bootprocessor && disable_x2apic)
+	if (if_bootprocessor)
 		x2apic_disable();
 
 	if (if_bootprocessor)
