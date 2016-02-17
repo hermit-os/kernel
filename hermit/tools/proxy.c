@@ -407,9 +407,16 @@ int main(int argc, char **argv)
 	serv_name.sin_addr.s_addr = inet_addr(saddr);
 	serv_name.sin_port = htons(HERMIT_PORT);
 
+	i = 0;
+retry:
 	ret = connect(s, (struct sockaddr*)&serv_name, sizeof(serv_name));
 	if (ret < 0)
 	{
+		i++;
+		if (i <= 10) {
+			usleep(10000);
+			goto retry;
+		}
 		perror("Proxy -- connection error");
 		close(s);
 		exit(1);
