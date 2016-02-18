@@ -789,7 +789,7 @@ static void apic_err_handler(struct state *s)
 
 void shutdown_system(void)
 {
-	int if_bootprocessor = (apic_processors[boot_processor]->id == apic_cpu_id());
+	int if_bootprocessor = (boot_processor == apic_cpu_id());
 
 	irq_disable();
 
