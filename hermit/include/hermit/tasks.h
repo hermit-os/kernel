@@ -228,7 +228,7 @@ int network_shutdown(void);
 void check_ticks(void);
 #endif
 
-volatile extern uint32_t go_down;
+extern volatile uint32_t go_down;
 
 /** @brief shutdown the hole system
  */
