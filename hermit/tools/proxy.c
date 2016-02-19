@@ -86,7 +86,7 @@ static int init_env(void)
 	// register function to delete temporary files
 	atexit(fini_env);
 
-	fd = open(fname, O_CREAT|O_RDWR);
+	fd = open(fname, O_CREAT|O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
 	if (fd < 0) {
 		perror("open");
 		exit(1);
