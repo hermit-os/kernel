@@ -260,6 +260,7 @@ int cpu_detection(void) {
 	cr0 |= CR0_AM;
 	cr0 |= CR0_NE;
 	cr0 |= CR0_MP;
+	cr0 &= ~(CR0_CD|CR0_NW);
 	write_cr0(cr0);
 
 	cr4 = read_cr4();
@@ -424,6 +425,8 @@ int cpu_detection(void) {
 		if (has_msr()) {
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
 			kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
+			//kprintf("IA32_ENERGY_PERF_BIAS 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
+			//kprintf("IA32_PERF_STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
 		}
 	}
 

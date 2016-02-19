@@ -196,8 +196,11 @@ extern "C" {
 
 #define MSR_XAPIC_ENABLE			(1UL << 11)
 #define MSR_X2APIC_ENABLE			(1UL << 10)
+
 #define MSR_IA32_MISC_ENABLE			0x000001a0
 #define MSR_IA32_FEATURE_CONTROL		0x0000003a
+#define MSR_IA32_ENERGY_PERF_BIAS		0x000001b0
+#define MSR_IA32_PERF_STATUS			0x00000198
 
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
