@@ -182,9 +182,6 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 
 	spinlock_lock(&lwip_lock);
 
-	flag = 0;
-	lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
-
 	lwip_write(libc_sd, &sysargs, sizeof(sysargs));
 
 	i=0;
@@ -198,9 +195,6 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 
 		i += ret;
 	}
-
-	flag = 1;
-	lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 
 	if (fd > 2) {
 		ret = lwip_read(libc_sd, &i, sizeof(i));
@@ -256,8 +250,8 @@ int sys_open(const char* name, int flags, int mode)
 
 	spinlock_lock(&lwip_lock);
 
-	i = 0;
-	lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	//i = 0;
+	//lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
 	ret = lwip_write(libc_sd, &sysnr, sizeof(sysnr));
 	if (ret < 0)
@@ -284,8 +278,8 @@ int sys_open(const char* name, int flags, int mode)
 	if (ret < 0)
 		goto out;
 
-	i = 1;
-	lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	//i = 1;
+	//lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
 	lwip_read(libc_sd, &ret, sizeof(ret));
 
