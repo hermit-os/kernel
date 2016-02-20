@@ -849,11 +849,16 @@ static void mmnif_irqhandler(struct state* s)
 
 	mmnif = (mmnif_t *) mmnif_dev->state;
 	if (!mmnif->check_in_progress) {
+#if LWIP_TCPIP_CORE_LOCKING_INPUT
+		mmnif->check_in_progress = 1;
+		mmnif_rx(mmnif_dev);
+#else
 		if (tcpip_callback_with_block((tcpip_callback_fn) mmnif_rx, (void*) mmnif_dev, 0) == ERR_OK) {
 			mmnif->check_in_progress = 1;
 		} else {
-			DEBUGPRINTF("rckemacif_handler: unable to send a poll request to the tcpip thread\n");
+			DEBUGPRINTF("mmnif_handler: unable to send a poll request to the tcpip thread\n");
 		}
+#endif
 	}
 }
 

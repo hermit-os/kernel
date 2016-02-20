@@ -172,10 +172,16 @@ static int init_netifs(void)
 	 *  - gw : the gateway wicht should be used
 	 *  - mmnif_init : the initialization which has to be done in order to use our interface
 	 *  - ip_input : tells him that he should use ip_input
-	 *
+	 */
+#if LWIP_TCPIP_CORE_LOCKING_INPUT
+	if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, tcpip_input)) != ERR_OK)
+#else
+	/*
 	 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
-	 * => Therefore, we are able to use ip_input instead of tcpip_input */
+	 * => Therefore, we are able to use ip_input instead of tcpip_input
+	 */
         if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+#endif
         {
                 kprintf("Unable to add the intra network interface: err = %d\n", err);
                 return -ENODEV;
