@@ -97,14 +97,6 @@ static int thread_entry(void* arg, size_t ep)
 	if (init_tls())
 		return -ENOMEM;
 
-#ifndef SAVE_FPU
-	// set task switched flag for the first FPU access
-	// => initialize the FPU
-	size_t cr0 = read_cr0();
-	cr0 |= CR0_TS;
-	write_cr0(cr0);
-#endif
-
 	//vma_dump();
 
 	// set first argument

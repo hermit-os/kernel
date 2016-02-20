@@ -722,8 +722,17 @@ static inline void register_task(void)
  */
 inline static int system_calibration(void)
 {
+	size_t cr0;
+
 	apic_init();
 	register_task();
+
+	// set task switched flag for the first FPU access
+	//  => initialize the FPU
+	cr0 = read_cr0();
+	cr0 |= CR0_TS;
+	write_cr0(cr0);
+
 	irq_enable();
 	detect_cpu_frequency();
 	apic_calibration();

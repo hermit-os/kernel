@@ -669,6 +669,12 @@ int smp_start(void)
 	//kprintf("CR0 of core %u: 0x%x\n", atomic_int32_read(&current_boot_id), read_cr0());
 	online[atomic_int32_read(&current_boot_id)] = 1;
 
+	// set task switched flag for the first FPU access
+	// => initialize the FPU
+	size_t cr0 = read_cr0();
+	cr0 |= CR0_TS;
+	write_cr0(cr0);
+
 	set_idle_task();
 
 	irq_enable();
