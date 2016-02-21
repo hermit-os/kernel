@@ -39,8 +39,8 @@ AR = ar
 ARFLAGS = rsv
 RM = rm -rf
 
-CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -mavx2 -mfma -mtune=intel $(STACKPROT)
-FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -mavx2 -mfma -mtune=intel
+CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize $(STACKPROT)
+FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 CXXFLAGS_FOR_NEWLIB =
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
