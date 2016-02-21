@@ -46,7 +46,7 @@ extern "C" {
 #define INT_SYSCALL		0x80
 #define MAILBOX_SIZE	32
 //#define WITH_PCI_IDS
-#define SAVE_FPU
+//#define SAVE_FPU
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
