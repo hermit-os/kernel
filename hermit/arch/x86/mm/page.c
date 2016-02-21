@@ -142,9 +142,9 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 
 					/* Reference the new table within its parent */
 #if 0
-					self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_USER | PG_RW;
+					self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED;
 #else
-					self[lvl][vpn] = (phyaddr | bits | PG_PRESENT | PG_USER | PG_RW) & ~PG_XD;
+					self[lvl][vpn] = (phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED) & ~PG_XD;
 #endif
 
 					/* Fill new table with zeros */
@@ -158,7 +158,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 				if (self[lvl][vpn] & PG_PRESENT)
 					flush = 1;
 
-				self[lvl][vpn] = phyaddr | bits | PG_PRESENT;
+				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED;
 
 				if (flush)
 					/* There's already a page mapped at this address.
@@ -269,11 +269,11 @@ int page_map_copy(task_t *dest)
 	dest->page_map |= PG_PRESENT;
 
 	spinlock_irqsave_lock(curr_task->page_lock);
-	self[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = dest->page_map | PG_PRESENT | PG_SELF | PG_RW;
+	self[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = dest->page_map | PG_PRESENT | PG_SELF | PG_ACCESSED | PG_RW;
 
 	int ret = traverse(PAGE_LEVELS-1, 0);
 
-	other[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-1] = dest->page_map | PG_PRESENT | PG_SELF | PG_RW;
+	other[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-1] = dest->page_map | PG_PRESENT | PG_SELF | PG_ACCESSED | PG_RW;
 	self [PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = 0;
 	spinlock_irqsave_unlock(curr_task->page_lock);
 
@@ -316,7 +316,7 @@ void page_fault_handler(struct state *s)
 		 * do we have a valid page table entry? => flush TLB and return
 		 */
 		if (check_pagetables(viraddr)) {
-			tlb_flush_one_page(viraddr);
+			//tlb_flush_one_page(viraddr);
 			spinlock_irqsave_unlock(task->page_lock);
 			return;
 		}
