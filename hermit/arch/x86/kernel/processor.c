@@ -423,10 +423,38 @@ int cpu_detection(void) {
 		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
 		kprintf("size of xsave_t: %d\n", sizeof(xsave_t));
 		if (has_msr()) {
+			uint64_t msr;
+
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
 			kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
 			//kprintf("IA32_ENERGY_PERF_BIAS 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
 			//kprintf("IA32_PERF_STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
+			if (has_pat()) {
+				msr = rdmsr(MSR_IA32_CR_PAT);
+
+				kprintf("MSR_IA32_CR_PAT 0x%llx\n", msr);
+				kprintf("PAT use per default %s\n", (msr & 0xF) == 0x6 ? "writeback." : "NO writeback!");
+			}
+
+			msr = rdmsr(MSR_MTRRdefType);
+			kprintf("MTRR is %s.\n", (msr & (1 << 11)) ? "enabled" : "disabled");
+			kprintf("Fixed-range MTRR is %s.\n", (msr & (1 << 10)) ? "enabled" : "disabled");
+			kprintf("MTRR used per default %s\n", (msr & 0xFF) == 0x6 ? "writeback." : "NO writeback!");
+#if 0
+			if (msr & (1 << 10)) {
+				kprintf("MSR_MTRRfix64K_00000 0x%llx\n", rdmsr(MSR_MTRRfix64K_00000));
+				kprintf("MSR_MTRRfix16K_80000 0x%llx\n", rdmsr(MSR_MTRRfix16K_80000));
+				kprintf("MSR_MTRRfix16K_A0000 0x%llx\n", rdmsr(MSR_MTRRfix16K_A0000));
+				kprintf("MSR_MTRRfix4K_C0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C0000));
+				kprintf("MSR_MTRRfix4K_C8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C8000));
+				kprintf("MSR_MTRRfix4K_D0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D0000));
+				kprintf("MSR_MTRRfix4K_D8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D8000));
+				kprintf("MSR_MTRRfix4K_E0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E0000));
+				kprintf("MSR_MTRRfix4K_E8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E8000));
+				kprintf("MSR_MTRRfix4K_F0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F0000));
+				kprintf("MSR_MTRRfix4K_F8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F8000));
+			}
+#endif
 		}
 	}
 

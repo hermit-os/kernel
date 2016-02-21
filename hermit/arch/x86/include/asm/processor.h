@@ -201,6 +201,20 @@ extern "C" {
 #define MSR_IA32_FEATURE_CONTROL		0x0000003a
 #define MSR_IA32_ENERGY_PERF_BIAS		0x000001b0
 #define MSR_IA32_PERF_STATUS			0x00000198
+#define MSR_IA32_CR_PAT				0x00000277
+#define MSR_MTRRdefType				0x000002ff
+
+#define MSR_MTRRfix64K_00000			0x00000250
+#define MSR_MTRRfix16K_80000			0x00000258
+#define MSR_MTRRfix16K_A0000			0x00000259
+#define MSR_MTRRfix4K_C0000			0x00000268
+#define MSR_MTRRfix4K_C8000			0x00000269
+#define MSR_MTRRfix4K_D0000			0x0000026a
+#define MSR_MTRRfix4K_D8000			0x0000026b
+#define MSR_MTRRfix4K_E0000			0x0000026c
+#define MSR_MTRRfix4K_E8000			0x0000026d
+#define MSR_MTRRfix4K_F0000			0x0000026e
+#define MSR_MTRRfix4K_F8000			0x0000026f
 
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
@@ -241,6 +255,10 @@ inline static uint32_t has_fxsr(void) {
 
 inline static uint32_t has_sse(void) {
 	return (cpu_info.feature1 & CPU_FEATURE_SSE);
+}
+
+inline static uint32_t has_pat(void) {
+	return (cpu_info.feature1 & CPU_FEATURE_PAT);
 }
 
 inline static uint32_t has_sse2(void) {
