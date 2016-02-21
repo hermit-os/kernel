@@ -73,6 +73,10 @@ int irq_uninstall_handler(unsigned int irq);
  */
 int irq_init(void);
 
+/** @brief Print the number of received interrupts
+ */
+void print_irq_stats(void);
+
 /** @brief Switch from a fix to a dynamic timer period
  *
  * @return 0 on success

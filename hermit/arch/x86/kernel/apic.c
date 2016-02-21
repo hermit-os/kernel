@@ -823,8 +823,11 @@ void shutdown_system(void)
 	if (if_bootprocessor)
 		x2apic_disable();
 
-	if (if_bootprocessor)
+	if (if_bootprocessor) {
+		print_irq_stats();
 		kprintf("System goes down...\n");
+	}
+
 	flush_cache();
 	atomic_int32_dec(&cpu_online);
 
