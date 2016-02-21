@@ -37,6 +37,7 @@
 #include <hermit/string.h>
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
+#include <hermit/spinlock.h>
 #include <asm/irq.h>
 #include <asm/idt.h>
 #include <asm/isrs.h>
@@ -89,6 +90,7 @@ extern void mmnif_irq(void);
  * this to handle custom IRQ handlers for a given IRQ
  */
 static void* irq_routines[MAX_HANDLERS] = {[0 ... MAX_HANDLERS-1] = NULL};
+static uint64_t irq_counter[MAX_CORES][MAX_HANDLERS] = {[0 ... MAX_CORES-1][0 ... MAX_HANDLERS-1] = 0};
 
 /* This installs a custom IRQ handler for the given IRQ */
 int irq_install_handler(unsigned int irq, irq_handler_t handler)
@@ -273,6 +275,8 @@ size_t** irq_handler(struct state *s)
 	/* This is a blank function pointer */
 	void (*handler) (struct state * s);
 
+	irq_counter[CORE_ID][s->int_no]++;
+
 	check_workqueues_in_irqhandler(s->int_no);
 
 	/*
@@ -296,4 +300,18 @@ size_t** irq_handler(struct state *s)
 	apic_eoi(s->int_no);
 
 	return ret;
+}
+
+void print_irq_stats(void)
+{
+	uint32_t i, j;
+
+	for(i=0; i<MAX_CORES; i++)
+	{
+		for(j=0; j<MAX_HANDLERS; j++)
+		{
+			if (irq_counter[i][j])
+				kprintf("Core %d, IRQ %d: %lld interrupts\n", i, j, irq_counter[i][j]);
+		}
+	}
 }
