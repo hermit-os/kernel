@@ -49,37 +49,55 @@ void NORETURN do_abort(void);
 /** @brief General page allocator function
  *
  * This function allocates and maps whole pages.
- * To avoid fragmentation you should use kmalloc() and kfree()!
+ * Mapped memory will be tracked by the VMA subsystem.
+ * The sz argument is rounded down to multiples of the page size.
+ *
+ * For allocations which are smaller than a page you should use
+ * the buddy system allocator (kmalloc and kfree) to avoid fragmentation.
  *
  * @param sz Desired size of the new memory
  * @param flags Flags to for map_region(), vma_add()
  *
- * @return Pointer to the new memory range
+ * @return Pointer to the new memory range (page-aligned).
  */
 void* palloc(size_t sz, uint32_t flags);
 
-/** @brief Free general kernel memory
+/** @brief Free general kernel pages
+ *
+ * This function removes the memory from the VMA subsystem,
+ * unmap the pages and releases the physical pages.
  *
  * The pmalloc() doesn't track how much memory was allocated for which pointer,
  * so you have to specify how much memory shall be freed.
  *
+ * @param addr The virtual address returned by palloc().
  * @param sz The size which should freed
  */
 void pfree(void* addr, size_t sz);
 
 /** @brief The memory allocator function
  *
- * This allocator uses a buddy system to manage free memory.
+ * This allocator uses a buddy system to allocate memory.
+ * Attention: memory is not aligned!
  *
  * @return Pointer to the new memory range
  */
 void* kmalloc(size_t sz);
 
-/** @brief The memory free function
+/** @brief Release memory back to the buddy system
  *
- * Releases memory allocated by malloc()
+ * Every block of memory allocated by kmalloc() is prefixed with a buddy_t
+ * which includes the the size of the allocated block.
+ * This prefix is also used to re-insert the block into the linked list
+ * of free buddies.
  *
- * @param addr The address to the memory block allocated by malloc()
+ * Released memory will still be managed by the buddy system.
+ * Pages are not unmapped.
+ *
+ * Note: adjacent buddies are currently not merged!
+ *
+ * @see buddy_t
+ * @param addr The address to the memory block allocated by kmalloc()
  */
 void kfree(void* addr);
 
