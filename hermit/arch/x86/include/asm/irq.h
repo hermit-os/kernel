@@ -73,6 +73,10 @@ int irq_uninstall_handler(unsigned int irq);
  */
 int irq_init(void);
 
+/** @brief reset the counters of the received interrupts
+ */
+void reset_irq_stats(void);
+
 /** @brief Print the number of received interrupts
  */
 void print_irq_stats(void);

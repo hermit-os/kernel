@@ -83,6 +83,7 @@ extern void wakeup(void);
 extern void mmnif_irq(void);
 
 #define MAX_HANDLERS	256
+//#define MEASURE_IRQ
 
 /** @brief IRQ handle pointers
  *
@@ -91,6 +92,9 @@ extern void mmnif_irq(void);
  */
 static void* irq_routines[MAX_HANDLERS] = {[0 ... MAX_HANDLERS-1] = NULL};
 static uint64_t irq_counter[MAX_CORES][MAX_HANDLERS] = {[0 ... MAX_CORES-1][0 ... MAX_HANDLERS-1] = 0};
+#ifdef MEASURE_IRQ
+static int go = 0;
+#endif
 
 /* This installs a custom IRQ handler for the given IRQ */
 int irq_install_handler(unsigned int irq, irq_handler_t handler)
@@ -271,9 +275,17 @@ int irq_init(void)
 size_t** irq_handler(struct state *s)
 {
 	size_t** ret = NULL;
+#ifdef MEASURE_IRQ
+	uint64_t diff = 0;
+#endif
 
 	/* This is a blank function pointer */
 	void (*handler) (struct state * s);
+
+#ifdef MEASURE_IRQ
+	if (go)
+		diff = rdtsc();
+#endif
 
 	irq_counter[CORE_ID][s->int_no]++;
 
@@ -299,7 +311,25 @@ size_t** irq_handler(struct state *s)
 
 	apic_eoi(s->int_no);
 
+#ifdef MEASURE_IRQ
+	if (go) {
+		diff = rdtsc() - diff;
+		if (diff > 15000)
+		{
+			kprintf("Core %d, irq_no %d: %lld : %lld\n", CORE_ID, s->int_no, irq_counter[CORE_ID][s->int_no], diff);
+		}
+	}
+#endif
+
 	return ret;
+}
+
+void reset_irq_stats(void)
+{
+#ifdef MEASURE_IRQ
+	go = 1;
+#endif
+	memset(irq_counter, 0x00, sizeof(uint64_t)*MAX_CORES*MAX_HANDLERS);
 }
 
 void print_irq_stats(void)
