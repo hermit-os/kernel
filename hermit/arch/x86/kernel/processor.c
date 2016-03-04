@@ -190,13 +190,13 @@ uint32_t detect_cpu_frequency(void)
 
 	/* wait for the next time slice */
 	while((ticks = get_clock_tick()) - old == 0)
-		HALT;
+		PAUSE;
 
 	rmb();
 	start = rdtsc();
 	/* wait a second to determine the frequency */
 	while(get_clock_tick() - ticks < TIMER_FREQ)
-		HALT;
+		PAUSE;
 	rmb();
 	end = rdtsc();
 
@@ -204,6 +204,93 @@ uint32_t detect_cpu_frequency(void)
 	cpu_freq = (uint32_t) (diff / (uint64_t) 1000000);
 
 	return cpu_freq;
+}
+
+static int get_min_pstate(void)
+{
+	uint64_t value;
+
+	value = rdmsr(MSR_PLATFORM_INFO);
+
+	return (value >> 40) & 0xFF;
+}
+
+static int get_max_pstate(void)
+{
+	uint64_t value;
+
+	value = rdmsr(MSR_PLATFORM_INFO);
+
+	return (value >> 8) & 0xFF;
+}
+
+static uint8_t is_turbo = 0;
+static int max_pstate, min_pstate;
+
+static void set_max_pstate(void)
+{
+	uint64_t v = max_pstate << 8;
+	if (is_turbo)
+		v |= (1ULL << 32);
+	wrmsr(MSR_IA32_PERF_CTL, v);
+}
+
+void dump_pstate(void)
+{
+	kprintf("P-State 0x%x - 0x%x\n", min_pstate, max_pstate);
+	kprintf("PERF CTL 0x%llx\n", rdmsr(MSR_IA32_PERF_CTL));
+	kprintf("PERF STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
+}
+
+static void check_est(uint8_t out)
+{
+	uint32_t a=0, b=0, c=0, d=0;
+	uint64_t v;
+
+	if (!has_est())
+		return;
+
+	if (out)
+		kputs("System supports Enhanced SpeedStep Technology\n");
+
+	// enable Enhanced SpeedStep Technology
+	v = rdmsr(MSR_IA32_MISC_ENABLE);
+	if (!(v & MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP)) {
+		if (out)
+			kputs("Linux doesn't enable Enhanced SpeedStep Technology\n");
+		return;
+	}
+
+	if (v & MSR_IA32_MISC_ENABLE_SPEEDSTEP_LOCK) {
+		if (out)
+			kputs("Enhanced SpeedStep Technology is locked\n");
+		return;
+	}
+
+	if (v & MSR_IA32_MISC_ENABLE_TURBO_DISABLE) {
+		if (out)
+			kputs("Turbo Mode is disabled\n");
+	} else is_turbo=1;
+
+	cpuid(6, &a, &b, &c, &d);
+	if (c & CPU_FEATURE_IDA) {
+		if (out)
+			kprintf("Found P-State hardware coordination feedback capability bit\n");
+	}
+
+	if (c & CPU_FEATURE_HWP) {
+		if (out)
+			kprintf("P-State HWP enabled\n");
+	}
+
+	max_pstate = get_max_pstate();
+	min_pstate = get_min_pstate();
+	set_max_pstate();
+
+	if (out)
+		dump_pstate();
+
+	return;
 }
 
 int cpu_detection(void) {
@@ -403,6 +490,9 @@ int cpu_detection(void) {
 		fpu_init = fpu_init_fxsr;
 	}
 
+	// initialize Enhanced SpeedStep Technology
+	check_est(first_time);
+
 	if (first_time && on_hypervisor()) {
 		uint32_t c, d;
 		char vendor_id[13];
@@ -426,7 +516,7 @@ int cpu_detection(void) {
 			uint64_t msr;
 
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
-			kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
+			//kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
 			//kprintf("IA32_ENERGY_PERF_BIAS 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
 			//kprintf("IA32_PERF_STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
 			if (has_pat()) {
