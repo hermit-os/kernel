@@ -48,6 +48,7 @@ static spinlock_t lwip_lock = SPINLOCK_INIT;
 extern int32_t isle;
 extern int32_t possible_isles;
 extern int libc_sd;
+extern uint32_t idle_poll;
 
 tid_t sys_getpid(void)
 {
@@ -90,6 +91,7 @@ void NORETURN sys_exit(int arg)
 
 		lwip_close(libc_sd);
 		libc_sd = -1;
+		idle_poll = 0;
 	}
 
 	do_exit(arg);

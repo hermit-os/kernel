@@ -64,6 +64,7 @@ extern "C" {
 // feature list 0x00000001 (ecx)
 #define CPU_FEATURE_MWAIT			(1 << 3)
 #define CPU_FEATURE_VMX				(1 << 5)
+#define CPU_FEATURE_EST				(1 << 7)
 #define CPU_FEATURE_SSE3			(1 << 9)
 #define CPU_FEATURE_FMA				(1 << 12)
 #define CPU_FEATURE_DCA				(1 << 18)
@@ -87,6 +88,9 @@ extern "C" {
 #define CPU_FEATURE_FSGSBASE			(1 << 0)
 #define CPU_FEATURE_AVX2			(1 << 5)
 
+// feature list 0x00000006
+#define CPU_FEATURE_IDA				(1 << 0)
+#define CPU_FEATURE_HWP				(1 << 10)
 
 /*
  * EFLAGS bits
@@ -197,12 +201,30 @@ extern "C" {
 #define MSR_XAPIC_ENABLE			(1UL << 11)
 #define MSR_X2APIC_ENABLE			(1UL << 10)
 
+#define MSR_PLATFORM_INFO			0x000000ce
+
+#define MSR_IA32_MPERF				0x000000e7
+#define MSR_IA32_APERF				0x000000e8
 #define MSR_IA32_MISC_ENABLE			0x000001a0
 #define MSR_IA32_FEATURE_CONTROL		0x0000003a
 #define MSR_IA32_ENERGY_PERF_BIAS		0x000001b0
 #define MSR_IA32_PERF_STATUS			0x00000198
+#define MSR_IA32_PERF_CTL			0x00000199
 #define MSR_IA32_CR_PAT				0x00000277
 #define MSR_MTRRdefType				0x000002ff
+
+#define MSR_PPERF				0x0000064e
+#define MSR_PERF_LIMIT_REASONS			0x0000064f
+#define MSR_PM_ENABLE				0x00000770
+#define MSR_HWP_CAPABILITIES			0x00000771
+#define MSR_HWP_REQUEST_PKG			0x00000772
+#define MSR_HWP_INTERRUPT			0x00000773
+#define MSR_HWP_REQUEST				0x00000774
+#define MSR_HWP_STATUS				0x00000777
+
+#define MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP	(1ULL << 16)
+#define MSR_IA32_MISC_ENABLE_SPEEDSTEP_LOCK	(1ULL << 20)
+#define MSR_IA32_MISC_ENABLE_TURBO_DISABLE	(1ULL << 38)
 
 #define MSR_MTRRfix64K_00000			0x00000250
 #define MSR_MTRRfix16K_80000			0x00000258
@@ -288,6 +310,11 @@ inline static uint32_t has_mwait(void) {
 
 inline static uint32_t has_vmx(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_VMX);
+}
+
+inline static uint32_t has_est(void)
+{
+	return (cpu_info.feature2 & CPU_FEATURE_EST);
 }
 
 inline static uint32_t has_sse3(void) {
@@ -678,6 +705,10 @@ static inline size_t lsb(size_t i)
 
 	return ret;
 }
+
+/** @brief: print current pstate
+ */
+void dump_pstate(void);
 
 /// A one-instruction-do-nothing
 #define NOP	asm  volatile ("nop")

@@ -421,7 +421,7 @@ int apic_calibration(void)
 
 	/* wait for the next time slice */
 	while ((ticks = get_clock_tick()) - old == 0)
-		HALT;
+		PAUSE;
 
 	flags = irq_nested_disable();
 	lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
@@ -431,7 +431,7 @@ int apic_calibration(void)
 
 	/* wait 3 time slices to determine a ICR */
 	while (get_clock_tick() - ticks < 3)
-		HALT;
+		PAUSE;
 
 	icr = (0xFFFFFFFFUL - lapic_read(APIC_CCR)) / 3;
 
@@ -801,6 +801,8 @@ void shutdown_system(void)
 
 	if (if_bootprocessor) {
 		kprintf("Try to shutdown HermitCore\n");
+
+		dump_pstate();
 
 		while(atomic_int32_read(&cpu_online) != 1)
 			PAUSE;

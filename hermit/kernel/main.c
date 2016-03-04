@@ -87,6 +87,8 @@ extern int32_t possible_isles;
 extern uint32_t boot_processor;
 extern int libc_sd;
 
+uint32_t idle_poll = 1;
+
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
 
@@ -227,7 +229,7 @@ int smp_main(void)
 
 	while(1) {
 		check_workqueues();
-		if (libc_sd >= 0)
+		if (idle_poll)
 			PAUSE;
 		else
 			HALT;
@@ -478,7 +480,7 @@ int hermit_main(void)
 
 	while(1) {
 		check_workqueues();
-		if (libc_sd >= 0)
+		if (idle_poll)
 			PAUSE;
 		else
 			HALT;

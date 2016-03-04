@@ -121,7 +121,7 @@ int timer_wait(unsigned int ticks)
 			if (per_core(timer_ticks) >= eticks)
 				break;
 
-			HALT;
+			PAUSE;
 		}
 	} else if (per_core(timer_ticks) < eticks) {
 		check_workqueues();
