@@ -412,8 +412,10 @@ out:
 	if (ret)
 		kfree(stack);
 
+#if 0
 	if (core_id != CORE_ID)
 		apic_send_ipi(core_id, 121);
+#endif
 
 	return ret;
 }
@@ -511,8 +513,10 @@ out:
 		kfree(counter);
 	}
 
+#if 0
 	if (core_id != CORE_ID)
 		apic_send_ipi(core_id, 121);
+#endif
 
 	return ret;
 }
