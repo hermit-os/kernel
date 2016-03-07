@@ -90,6 +90,7 @@ extern "C" {
 
 // feature list 0x00000006
 #define CPU_FEATURE_IDA				(1 << 0)
+#define CPU_FEATURE_EPB				(1 << 3)
 #define CPU_FEATURE_HWP				(1 << 10)
 
 /*
@@ -237,6 +238,14 @@ extern "C" {
 #define MSR_MTRRfix4K_E8000			0x0000026d
 #define MSR_MTRRfix4K_F0000			0x0000026e
 #define MSR_MTRRfix4K_F8000			0x0000026f
+
+#define MSR_OFFCORE_RSP_0			0x000001a6
+#define MSR_OFFCORE_RSP_1			0x000001a7
+#define MSR_NHM_TURBO_RATIO_LIMIT		0x000001ad
+#define MSR_IVT_TURBO_RATIO_LIMIT		0x000001ae
+#define MSR_TURBO_RATIO_LIMIT			0x000001ad
+#define MSR_TURBO_RATIO_LIMIT1			0x000001ae
+#define MSR_TURBO_RATIO_LIMIT2			0x000001af
 
 // MSR EFER bits
 #define EFER_SCE				(1 << 0)
