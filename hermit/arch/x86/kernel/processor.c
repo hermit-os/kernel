@@ -252,6 +252,9 @@ static void set_pstate(int pstate)
 
 void dump_pstate(void)
 {
+	if (!has_est())
+		return
+
 	kprintf("P-State 0x%x - 0x%x, turbo 0x%x\n", min_pstate, max_pstate, turbo_pstate);
 	kprintf("PERF CTL 0x%llx\n", rdmsr(MSR_IA32_PERF_CTL));
 	kprintf("PERF STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
