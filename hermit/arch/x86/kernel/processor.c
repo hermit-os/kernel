@@ -224,20 +224,35 @@ static int get_max_pstate(void)
 	return (value >> 8) & 0xFF;
 }
 
+static int get_turbo_pstate(void)
+{
+	uint64_t value;
+	int i, ret;
+
+	value = rdmsr(MSR_NHM_TURBO_RATIO_LIMIT);
+	i = get_max_pstate();
+	ret = (value) & 255;
+	if (ret < i)
+		ret = i;
+
+	return ret;
+}
+
 static uint8_t is_turbo = 0;
 static int max_pstate, min_pstate;
+static int turbo_pstate;
 
-static void set_max_pstate(void)
+static void set_pstate(int pstate)
 {
-	uint64_t v = max_pstate << 8;
-	if (is_turbo)
+	uint64_t v = pstate << 8;
+	if (!is_turbo)
 		v |= (1ULL << 32);
 	wrmsr(MSR_IA32_PERF_CTL, v);
 }
 
 void dump_pstate(void)
 {
-	kprintf("P-State 0x%x - 0x%x\n", min_pstate, max_pstate);
+	kprintf("P-State 0x%x - 0x%x, turbo 0x%x\n", min_pstate, max_pstate, turbo_pstate);
 	kprintf("PERF CTL 0x%llx\n", rdmsr(MSR_IA32_PERF_CTL));
 	kprintf("PERF STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
 }
@@ -270,7 +285,11 @@ static void check_est(uint8_t out)
 	if (v & MSR_IA32_MISC_ENABLE_TURBO_DISABLE) {
 		if (out)
 			kputs("Turbo Mode is disabled\n");
-	} else is_turbo=1;
+	} else {
+		if (out)
+			kputs("Turbo Mode is enabled\n");
+		is_turbo=1;
+	}
 
 	cpuid(6, &a, &b, &c, &d);
 	if (c & CPU_FEATURE_IDA) {
@@ -283,9 +302,30 @@ static void check_est(uint8_t out)
 			kprintf("P-State HWP enabled\n");
 	}
 
+	if (c & CPU_FEATURE_EPB) {
+		// for maximum performance we have to clear BIAS
+		wrmsr(MSR_IA32_ENERGY_PERF_BIAS, 0);
+		if (out)
+			kprintf("Found Performance and Energy Bias Hint support: 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
+	}
+
+#if 0
+	if (out) {
+		kprintf("CPU features 6: 0x%x, 0x%x, 0x%x, 0x%x\n", a, b, c, d);
+		kprintf("MSR_PLATFORM_INFO 0x%llx\n", rdmsr(MSR_PLATFORM_INFO));
+	}
+#endif
+
 	max_pstate = get_max_pstate();
 	min_pstate = get_min_pstate();
-	set_max_pstate();
+	turbo_pstate = get_turbo_pstate();
+
+	// set boot_processor to turbo pstate because
+	// the boot processor has to handle the LwIP thread
+	if (out)
+		set_pstate(turbo_pstate);
+	else
+		set_pstate(max_pstate);
 
 	if (out)
 		dump_pstate();
@@ -516,9 +556,6 @@ int cpu_detection(void) {
 			uint64_t msr;
 
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
-			//kprintf("IA32_FEATURE_CONTROL 0x%llx\n", rdmsr(MSR_IA32_FEATURE_CONTROL));
-			//kprintf("IA32_ENERGY_PERF_BIAS 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
-			//kprintf("IA32_PERF_STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
 			if (has_pat()) {
 				msr = rdmsr(MSR_IA32_CR_PAT);
 
