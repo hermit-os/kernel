@@ -44,7 +44,7 @@ extern "C" {
 #define DEFAULT_STACK_SIZE	(64*1024*1024)
 #define KMSG_SIZE		(4*1024)
 #define INT_SYSCALL		0x80
-#define MAILBOX_SIZE	32
+#define MAILBOX_SIZE		128
 //#define WITH_PCI_IDS
 //#define SAVE_FPU
 
