@@ -1,0 +1,10 @@
+# Uncomment the following line to use OpenMP 2.0 features
+#OMPFLAG = -DOMPVER2
+# Uncomment the following line to use OpenMP 3.0 features
+OMPFLAG = -DOMPVER2 -DOMPVER3
+
+CC = /home/h012/fiona/SolarisStudio12.2-linux-x86-tar-ML/solstudio12.2/bin/suncc
+CFLAGS = -xopenmp -xO3 -lm
+LDFLAGS = -xopenmp -xO3 -lm
+CPP = /usr/bin/cpp
+LIBS = 

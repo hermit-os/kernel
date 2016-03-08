@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLGAS =
-PROXYFILES = $(shell find ../usr/tests -name '*.bin') $(shell find ../usr/benchmarks -name '*.bin')
+PROXYFILES = $(shell find ../usr/tests -name '*.bin') $(shell find ../usr/benchmarks -name '*.bin') $(shell find ../usr/openmpbench -name '*.bin')
 
 # Prettify output
 V = 0
