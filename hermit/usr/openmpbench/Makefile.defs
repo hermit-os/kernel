@@ -1,0 +1,14 @@
+# Uncomment the following line to use OpenMP 2.0 features
+OMPFLAG = -DOMPVER2
+# Uncomment the following line to use OpenMP 3.0 features
+#OMPFLAG = -DOMPVER2 -DOMPVER3
+
+CC = $(CC_FOR_TARGET)
+CFLAGS = -fopenmp $(CFLAGS_FOR_TARGET) -lm
+LDFLAGS = -fopenmp $(LDFLAGS_FOR_TARGET) -lm
+CPP = $(CPP_FOR_TARGET)
+LIBS =
+
+override STRIP_DEBUG = --strip-debug #--strip-unneeded
+KEEP_DEBUG = --only-keep-debug
+OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -j .eh_frame -j .jcr -j .got.plt -O binary 

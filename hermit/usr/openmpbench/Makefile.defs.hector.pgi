@@ -1,0 +1,12 @@
+# Uncomment the following line to use OpenMP 2.0 features
+#OMPFLAG = -DOMPVER2
+# Uncomment the following line to use OpenMP 3.0 features
+# Nested tasks don't work on HECToR Phase 3 for the PGI compiler
+# and thus are disabled. 
+OMPFLAG = -DOMPVER2 -DOMPVER3 -DDISABLE_NESTED_TASKS_TESTS
+
+CC =cc 
+CFLAGS = -fast -mp=nonuma -lm
+LDFLAGS = -fast -mp=nonuma -lm
+CPP = /usr/bin/cpp
+LIBS = 
