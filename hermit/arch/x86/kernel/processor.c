@@ -224,10 +224,17 @@ static int get_max_pstate(void)
 	return (value >> 8) & 0xFF;
 }
 
+static uint8_t is_turbo = 0;
+static int max_pstate, min_pstate;
+static int turbo_pstate;
+
 static int get_turbo_pstate(void)
 {
 	uint64_t value;
 	int i, ret;
+
+	if (!is_turbo)
+		return get_max_pstate();
 
 	value = rdmsr(MSR_NHM_TURBO_RATIO_LIMIT);
 	i = get_max_pstate();
@@ -237,10 +244,6 @@ static int get_turbo_pstate(void)
 
 	return ret;
 }
-
-static uint8_t is_turbo = 0;
-static int max_pstate, min_pstate;
-static int turbo_pstate;
 
 static void set_pstate(int pstate)
 {
@@ -323,12 +326,14 @@ static void check_est(uint8_t out)
 	min_pstate = get_min_pstate();
 	turbo_pstate = get_turbo_pstate();
 
+#if 0
 	// set boot_processor to turbo pstate because
 	// the boot processor has to handle the LwIP thread
 	if (out)
 		set_pstate(turbo_pstate);
 	else
 		set_pstate(max_pstate);
+#endif
 
 	if (out)
 		dump_pstate();
@@ -559,10 +564,11 @@ int cpu_detection(void) {
 			uint64_t msr;
 
 			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
+			kprintf("IA32_PLATFORM_ID 0x%llx\n", rdmsr(MSR_IA32_PLATFORM_ID));
 			if (has_pat()) {
 				msr = rdmsr(MSR_IA32_CR_PAT);
 
-				kprintf("MSR_IA32_CR_PAT 0x%llx\n", msr);
+				kprintf("IA32_CR_PAT 0x%llx\n", msr);
 				kprintf("PAT use per default %s\n", (msr & 0xF) == 0x6 ? "writeback." : "NO writeback!");
 			}
 
