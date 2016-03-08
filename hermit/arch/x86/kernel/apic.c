@@ -50,7 +50,7 @@ extern const void kernel_start;
 
 #define IOAPIC_ADDR	((size_t) &kernel_start - 2*PAGE_SIZE)
 #define LAPIC_ADDR	((size_t) &kernel_start - 1*PAGE_SIZE)
-#define MAX_APIC_CORES	256
+#define MAX_APIC_CORES	128
 
 // IO APIC MMIO structure: write reg, then read or write data.
 typedef struct {
@@ -447,6 +447,8 @@ int apic_calibration(void)
 
 	flags = irq_nested_disable();
 
+	// currently, we ignore the IOAPIC => Linux maintain the IOAPICs
+#if 0
 	if (ioapic) {
 		uint32_t max_entry = ioapic_max_redirection_entry();
 
@@ -457,6 +459,7 @@ int apic_calibration(void)
 		// now, we don't longer need the IOAPIC timer and turn it off
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
+#endif
 
 	initialized = 1;
 	irq_nested_enable(flags);
@@ -548,8 +551,6 @@ found_mp:
 				 // is the processor usable?
 				if (cpu->cpu_flags & 0x01) {
 					apic_processors[j] = cpu;
-					if ((cpu->cpu_flags & 0x02) && (boot_processor < 0))
-						boot_processor = j;
 					j++;
 				}
 			}
@@ -871,7 +872,10 @@ int apic_init(void)
 #endif
 	irq_install_handler(81+32, apic_shutdown);
 	irq_install_handler(124, apic_lint0);
-	kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
+	if (apic_processors[boot_processor])
+		kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
+	else
+		kprintf("Boot processor %u\n", boot_processor);
 	online[boot_processor] = 1;
 
 	return 0;
