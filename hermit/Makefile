@@ -41,7 +41,7 @@ RM = rm -rf
 
 CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize $(STACKPROT)
 FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
-CXXFLAGS_FOR_NEWLIB =
+CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
 CFLAGS_FOR_TOOLS = -O2 -Wall
