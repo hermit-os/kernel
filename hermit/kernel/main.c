@@ -259,6 +259,43 @@ static int init_rcce(void)
 	return 0;
 }
 
+#if 0
+// some stress tests
+static void lock_test(void)
+{
+	uint64_t start, end;
+	int i;
+	static spinlock_t _lock = SPINLOCK_INIT;
+	static sem_t _sem = SEM_INIT(1);
+
+	start = rdtsc();
+
+	for(i=0; i<10000; i++)
+	{
+		spinlock_lock(&_lock);
+		NOP;
+		spinlock_unlock(&_lock);
+	}
+
+	end = rdtsc();
+
+	kprintf("locks %lld (iterations %d)\n", end-start, i);
+
+	start = rdtsc();
+
+	for(i=0; i<10000; i++)
+	{
+		sem_wait(&_sem, 0);
+		NOP;
+		sem_post(&_sem);
+	}
+
+	end = rdtsc();
+
+	kprintf("sem %lld (iterations %d)\n", end-start, i);
+}
+#endif
+
 int libc_start(int argc, char** argv, char** env);
 
 // init task => creates all other tasks an initialize the LwIP
