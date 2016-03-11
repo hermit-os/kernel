@@ -47,18 +47,20 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
-toolchain: $(TMP)/newlib libs $(TMP)/gcc headers demo
+toolchain: $(TMP)/newlib pte $(TMP)/gcc libs headers demo
 
 $(TMP)/newlib:
 	@echo Build newlib, libpthread and libgomp
 	$Q$(MKDIR) $(TMP)/newlib
 	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
 
-libs:
+pte:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libgomp depend
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libgomp
+
+libs:
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libomp depend
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libomp
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
 
@@ -96,4 +98,4 @@ veryclean:
 	$Q$(RM) $(TOPDIR)/$(ARCH)
 	$Q$(RM) $(TMP)
 
-.PHONY: default all clean veryclean headers libs
+.PHONY: default all clean veryclean headers pte libs
