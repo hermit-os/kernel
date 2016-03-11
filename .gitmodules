@@ -22,7 +22,3 @@
 	path = hermit/lwip
 	url = git@github.com:RWTH-OS/LwIP.git
 	branch = hermit
-[submodule "hermit/usr/libomp"]
-	path = hermit/usr/libomp
-	url = git@github.com:RWTH-OS/libomp_oss.git
-	branch = hermit
