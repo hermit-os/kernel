@@ -36,7 +36,7 @@ endif
 
 %.o: %.cpp
 	@echo [CXX] $@
-	$Q$(CXX_FOR_TARGET) -c $(CXXFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CXX_FOR_TARGET) -c $(CXXFLAGS_FOR_TARGET) -o $@ $<
 
 %.o: %.f90
 	@echo [F90] $@
@@ -52,7 +52,7 @@ all: hello.bin hello++.bin thr_hello.bin jacobi.bin hellof.bin RCCE_minimum.bin
 
 hello++: hello++.o
 	@echo [LD] $@
-	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
