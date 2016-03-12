@@ -87,6 +87,7 @@ size_t sys_get_ticks(void);
 int sys_rcce_init(int session_id);
 size_t sys_rcce_malloc(int session_id, int ue);
 int sys_rcce_fini(int session_id);
+void sys_yield(void);
 
 #define __NR_exit 		0
 #define __NR_write		1
