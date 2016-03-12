@@ -416,6 +416,7 @@ checktick()
 #include <time.h>
 #include <sys/time.h>
 
+#ifdef __hermit__
 extern unsigned int get_cpufreq();
 static unsigned long long start_tsc;
 
@@ -430,10 +431,11 @@ __attribute__((constructor)) static void timer_init()
 {
 	start_tsc = rdtsc();
 }
+#endif
 
 double mysecond()
 {
-#if 0
+#ifndef __hermit__
         struct timeval tp;
         struct timezone tzp;
         int i;
