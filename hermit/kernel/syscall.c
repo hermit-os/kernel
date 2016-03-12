@@ -578,6 +578,11 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 	return -ENOSYS;
 }
 
+void sys_yield(void)
+{
+	check_workqueues();
+}
+
 #if 0
 int fork(void)
 {
