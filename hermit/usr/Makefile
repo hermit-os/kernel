@@ -2,6 +2,8 @@ override TOPDIR = $(shell pwd)
 ARCH = x86
 TARGET=x86_64-hermit
 NJOBS=-j20
+OMPRT=libgomp
+#OMPRT=libomp
 
 CROSSCOMPREFIX = x86_64-hermit
 NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
@@ -59,8 +61,8 @@ pte:
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
 
 libs:
-	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libomp depend
-	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C libomp
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C $(OMPRT) depend
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C $(OMPRT)
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
 
@@ -83,6 +85,9 @@ $(TMP)/gcc:
 
 clean:
 	@echo Cleaning toolchain
+	$Q$(MAKE) -C pte clean
+	$Q$(MAKE) -C $(OMPRT) clean
+	$Q$(MAKE) -C ircce clean
 	$Q$(MAKE) -C tests clean
 	$Q$(MAKE) -C benchmarks clean
 	$Q$(MAKE) -C openmpbench clean
@@ -90,7 +95,7 @@ clean:
 veryclean:
 	@echo Propper cleaning of the toolchain
 	$Q$(MAKE) -C pte veryclean
-	$Q$(MAKE) -C libgomp veryclean
+	$Q$(MAKE) -C $(OMPRT) veryclean
 	$Q$(MAKE) -C ircce veryclean
 	$Q$(MAKE) -C tests veryclean
 	$Q$(MAKE) -C benchmarks veryclean
