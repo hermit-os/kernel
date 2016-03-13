@@ -142,33 +142,20 @@ static int init_env(void)
 		exit(1);
 	}
 
-	if (str)
-		result = (char*) malloc(strlen(str)+128);
-	else
-		result = (char*) malloc(128);
+	result = NULL;
+	ret = fscanf(file, "%ms", &result);
+	
+	fclose(file);
 
-	if (!result)
-	{
-		perror("malloc");
+	if (ret <= 0) {
+		fprintf(stderr, "Unable to check the boot process!\n");
 		exit(1);
 	}
 
-	fscanf(file, "%s", result);
-
-	fclose(file);
-
-	if (str) {
-		if (strcmp(result, str) != 0) {
-			free(result);
-			fprintf(stderr, "Unable to boot cores %s\n", result);
-			exit(1);
-		}
-	} else {
-		if (strcmp(result, "1") != 0) {
-			free(result);
-			fprintf(stderr, "Unable to boot core 1");
-			exit(1);
-		}
+	if (strcmp(result, "-1") == 0) {
+		free(result);
+		fprintf(stderr, "Unable to boot cores %s\n", str ? str : "1");
+		exit(1);
 	}
 
 	free(result);
