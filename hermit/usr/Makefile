@@ -2,8 +2,8 @@ override TOPDIR = $(shell pwd)
 ARCH = x86
 TARGET=x86_64-hermit
 NJOBS=-j20
-OMPRT=libgomp
-#OMPRT=libomp
+#OMPRT=libgomp
+OMPRT=libomp
 
 CROSSCOMPREFIX = x86_64-hermit
 NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
