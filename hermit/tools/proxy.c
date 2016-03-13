@@ -70,6 +70,7 @@ static int init_env(void)
 	char* str;
 	FILE* file;
 	char isle_path[MAX_PATH];
+	char* result;
 
 	str = getenv("HERMIT_ISLE");
 	if (str)
@@ -128,13 +129,49 @@ static int init_env(void)
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
-		fprintf(file, "%s", str);
+		ret = fprintf(file, "%s", str);
 	else
-		fprintf(file, "%s", "1");
+		ret = fprintf(file, "%s", "1");
 
 	fclose(file);
 
-	//sleep(3);
+	// check result
+	file = fopen(isle_path, "r");
+	if (!file) {
+		perror("fopen");
+		exit(1);
+	}
+
+	if (str)
+		result = (char*) malloc(strlen(str)+128);
+	else
+		result = (char*) malloc(128);
+
+	if (!result)
+	{
+		perror("malloc");
+		exit(1);
+	}
+
+	fscanf(file, "%s", result);
+
+	fclose(file);
+
+	if (str) {
+		if (strcmp(result, str) != 0) {
+			free(result);
+			fprintf(stderr, "Unable to boot cores %s\n", str);
+			exit(1);
+		}
+	} else {
+		if (strcmp(result, "1") != 0) {
+			free(result);
+			fprintf(stderr, "Unable to boot core 1");
+			exit(1);
+		}
+	}
+
+	free(result);
 
 	return 0;
 }
