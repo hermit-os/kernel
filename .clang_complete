@@ -1,0 +1,7 @@
+-Ihermit/include
+-Ihermit/arch/x86/include
+-Ihermit/lwip/src/include
+-Ihermit/lwip/src/include/ipv4
+-Ihermit/drivers
+-nostdinc
+-ffreestanding
