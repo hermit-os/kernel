@@ -160,7 +160,7 @@ static int init_env(void)
 	if (str) {
 		if (strcmp(result, str) != 0) {
 			free(result);
-			fprintf(stderr, "Unable to boot cores %s\n", str);
+			fprintf(stderr, "Unable to boot cores %s\n", result);
 			exit(1);
 		}
 	} else {
