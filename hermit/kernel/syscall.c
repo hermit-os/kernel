@@ -159,7 +159,6 @@ typedef struct {
 ssize_t sys_write(int fd, const char* buf, size_t len)
 {
 	ssize_t i, ret;
-	int flag;
 	sys_write_t sysargs = {__NR_write, fd, len};
 
 	if (BUILTIN_EXPECT(!buf, 0))
