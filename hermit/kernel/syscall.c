@@ -580,7 +580,10 @@ int sys_stat(const char* file, /*struct stat *st*/ void* st)
 
 void sys_yield(void)
 {
-	check_workqueues();
+	//check_workqueues();
+	if (go_down)
+		shutdown_system();
+	check_scheduling();
 }
 
 #if 0
