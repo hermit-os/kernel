@@ -205,8 +205,8 @@ int init_tls(void)
 		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
 
 		// set fs register to the TLS segment
-		set_tls((size_t) tls_addr);
-		kprintf("Task %d set fs to 0x%zx (TLS)\n", curr_task->id, tls_addr);
+		set_tls((size_t) tls_addr + curr_task->tls_size);
+		kprintf("TLS of task %d starts at 0x%zx (TLS)\n", curr_task->id, tls_addr);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
@@ -285,8 +285,8 @@ void NORETURN do_exit(int arg)
 	// do we need to release the TLS?
 	tls_addr = (void*)get_tls();
 	if (tls_addr) {
-		kprintf("Release TLS %p\n", tls_addr);
-		kfree(tls_addr);
+		kprintf("Release TLS %p\n", tls_addr - curr_task->tls_size);
+		kfree(tls_addr - curr_task->tls_size);
 	}
 
 	curr_task->status = TASK_FINISHED;
