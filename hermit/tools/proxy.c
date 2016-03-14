@@ -129,9 +129,9 @@ static int init_env(void)
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
-		ret = fprintf(file, "%s", str);
+		fprintf(file, "%s", str);
 	else
-		ret = fprintf(file, "%s", "1");
+		fprintf(file, "%s", "1");
 
 	fclose(file);
 
@@ -144,7 +144,7 @@ static int init_env(void)
 
 	result = NULL;
 	ret = fscanf(file, "%ms", &result);
-	
+
 	fclose(file);
 
 	if (ret <= 0) {
