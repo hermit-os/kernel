@@ -44,6 +44,8 @@
 extern const void tls_start;
 extern const void tls_end;
 
+#define TLS_OFFSET	8
+
 /*
  * HermitCore is a single address space OS
  * => we need only a lock to protect the page tables & VMA
@@ -196,17 +198,17 @@ int init_tls(void)
 		curr_task->tls_addr = (size_t) &tls_start;
 		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
 
-		tls_addr = kmalloc(curr_task->tls_size);
+		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET);
 		if (BUILTIN_EXPECT(!tls_addr, 0)) {
 			kprintf("load_task: heap is missing!\n");
 			return -ENOMEM;
 		}
 
-		memcpy((void*) tls_addr, (void*) curr_task->tls_addr, curr_task->tls_size);
+		memcpy((void*) (tls_addr+TLS_OFFSET), (void*) curr_task->tls_addr, curr_task->tls_size);
 
 		// set fs register to the TLS segment
-		set_tls((size_t) tls_addr + curr_task->tls_size);
-		kprintf("TLS of task %d starts at 0x%zx (TLS)\n", curr_task->id, tls_addr);
+		set_tls((size_t) tls_addr + curr_task->tls_size + TLS_OFFSET);
+		kprintf("TLS of task %d starts at 0x%zx (TLS)\n", curr_task->id, tls_addr + TLS_OFFSET);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
@@ -285,8 +287,8 @@ void NORETURN do_exit(int arg)
 	// do we need to release the TLS?
 	tls_addr = (void*)get_tls();
 	if (tls_addr) {
-		kprintf("Release TLS %p\n", tls_addr - curr_task->tls_size);
-		kfree(tls_addr - curr_task->tls_size);
+		kprintf("Release TLS at %p\n", tls_addr - curr_task->tls_size);
+		kfree(tls_addr - curr_task->tls_size - TLS_OFFSET);
 	}
 
 	curr_task->status = TASK_FINISHED;
