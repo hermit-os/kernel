@@ -287,8 +287,8 @@ void NORETURN do_exit(int arg)
 	// do we need to release the TLS?
 	tls_addr = (void*)get_tls();
 	if (tls_addr) {
-		kprintf("Release TLS at %p\n", tls_addr - curr_task->tls_size);
-		kfree(tls_addr - curr_task->tls_size - TLS_OFFSET);
+		kprintf("Release TLS at %p\n", (char*)tls_addr - curr_task->tls_size);
+		kfree((char*)tls_addr - curr_task->tls_size - TLS_OFFSET);
 	}
 
 	curr_task->status = TASK_FINISHED;
