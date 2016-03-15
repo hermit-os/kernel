@@ -55,11 +55,15 @@ static char fname[] = "/tmp/hermitXXXXXX";
 
 extern char hermit_app[];
 extern unsigned app_size;
-
 extern char **environ;
+
+static void stop_hermit(void);
+static void dump_log(void);
 
 static void fini_env(void)
 {
+	dump_log();
+	stop_hermit();
 	unlink(fname);
 }
 
@@ -190,7 +194,7 @@ static void dump_log(void)
 	fclose(file);
 }
 
-static void stop_kermit(void)
+static void stop_hermit(void)
 {
 	FILE* file;
 	char isle_path[MAX_PATH];
@@ -236,8 +240,9 @@ int handle_syscalls(int s)
 				goto out;
 			close(s);
 
-			dump_log();
-			stop_kermit();
+			// already called by fini_env
+			//dump_log();
+			//stop_hermit();
 
 			exit(arg);
 			break;
