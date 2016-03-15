@@ -89,7 +89,7 @@
 
 #define MMNIF_AUTO_SOCKET_TIMEOUT       500
 
-#define MMNIF_RX_BUFFERLEN		(24*1024)
+#define MMNIF_RX_BUFFERLEN		(28*1024)
 #define MMNIF_IRQ			122
 
 #ifdef DEBUG_MMNIF
