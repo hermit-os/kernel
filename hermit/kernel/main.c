@@ -493,7 +493,7 @@ int hermit_main(void)
 	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
 	kprintf("Kernel BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
-	kprintf("Per core size 0x%zd\n", (size_t) &percore_end0 - (size_t) &percore_start);
+	kprintf("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
 	kprintf("Total memory: %zd MiB\n", atomic_int64_read(&total_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
