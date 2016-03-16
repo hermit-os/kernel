@@ -208,7 +208,7 @@ int init_tls(void)
 
 		// set fs register to the TLS segment
 		set_tls((size_t) tls_addr + curr_task->tls_size + TLS_OFFSET);
-		kprintf("TLS of task %d starts at 0x%zx (TLS)\n", curr_task->id, tls_addr + TLS_OFFSET);
+		kprintf("TLS of task %d on core %d starts at 0x%zx (TLS)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
