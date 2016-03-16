@@ -233,9 +233,6 @@ static int get_turbo_pstate(void)
 	uint64_t value;
 	int i, ret;
 
-	if (!is_turbo)
-		return get_max_pstate();
-
 	value = rdmsr(MSR_NHM_TURBO_RATIO_LIMIT);
 	i = get_max_pstate();
 	ret = (value) & 255;
@@ -248,7 +245,7 @@ static int get_turbo_pstate(void)
 static void set_pstate(int pstate)
 {
 	uint64_t v = pstate << 8;
-	if (!is_turbo)
+	if (is_turbo)
 		v |= (1ULL << 32);
 	wrmsr(MSR_IA32_PERF_CTL, v);
 }
@@ -326,14 +323,11 @@ static void check_est(uint8_t out)
 	min_pstate = get_min_pstate();
 	turbo_pstate = get_turbo_pstate();
 
-#if 0
-	// set boot_processor to turbo pstate because
-	// the boot processor has to handle the LwIP thread
-	if (out)
+	// set maximum p-state to get peak performance
+	if (is_turbo)
 		set_pstate(turbo_pstate);
 	else
 		set_pstate(max_pstate);
-#endif
 
 	if (out)
 		dump_pstate();
