@@ -397,6 +397,7 @@ int handle_syscalls(int s)
 		}
 		default:
 			fprintf(stderr, "Proxy: invalid syscall number %d\n", sysnr);
+			exit(1);
 			break;
 		}
 	}
