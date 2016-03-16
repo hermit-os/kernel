@@ -163,7 +163,7 @@ static inline void x2apic_disable(void)
 
 	msr = rdmsr(MSR_APIC_BASE);
 	if (!(msr & MSR_X2APIC_ENABLE)) {
-		kprintf("X2APIC already disabled!\n");
+		//kprintf("X2APIC already disabled!\n");
 		return;
 	}
 
@@ -190,7 +190,7 @@ static inline void x2apic_enable(void)
 
 	msr = rdmsr(MSR_APIC_BASE);
 	if (msr & MSR_X2APIC_ENABLE) {
-		kprintf("X2APIC already enabled!\n");
+		//kprintf("X2APIC already enabled!\n");
                 return;
 	}
 
