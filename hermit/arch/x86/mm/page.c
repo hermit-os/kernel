@@ -30,7 +30,7 @@
  * This is a 32/64 bit portable paging implementation for the x86 architecture
  * using self-referenced page tables	i.
  * See http://www.noteblok.net/2014/06/14/bachelor/ for a detailed description.
- * 
+ *
  * @author Steffen Vogel <steffen.vogel@rwth-aachen.de>
  */
 
@@ -136,7 +136,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 					size_t phyaddr = get_pages(1);
 					if (BUILTIN_EXPECT(!phyaddr, 0))
 						goto out;
-					
+
 					if (bits & PG_USER)
 						atomic_int64_inc(curr_task->user_usage);
 
