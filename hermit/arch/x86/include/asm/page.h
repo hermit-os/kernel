@@ -46,9 +46,9 @@
 #define PAGE_SIZE		( 1L << PAGE_BITS)
 /// Mask the page address without page map flags and XD flag
 #if 0
-#define PAGE_MASK		(-1L << PAGE_BITS)
+#define PAGE_MASK		((~0L) << PAGE_BITS)
 #else
-#define PAGE_MASK		((-1L << PAGE_BITS) & ~PG_XD)
+#define PAGE_MASK		(((~0L) << PAGE_BITS) & ~PG_XD)
 #endif
 
 #if 0
