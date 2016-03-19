@@ -43,7 +43,7 @@ static uint8_t		stack_table[MAX_CORES*KERNEL_STACK_SIZE*3];
 
 extern const void boot_stack;
 
-/* 
+/*
  * This is defined in entry.asm. We use this to properly reload
  * the new segment registers
  */
@@ -80,12 +80,12 @@ void configure_gdt_entry(gdt_entry_t *dest_entry, unsigned long base, unsigned l
 	dest_entry->access = access;
 }
 
-/* 
+/*
  * This will setup the special GDT
  * pointer, set up the entries in our GDT, and then
  * finally call gdt_flush() in our assembler file in order
  * to tell the processor where the new GDT is and update the
- * new segment registers 
+ * new segment registers
  */
 void gdt_install(void)
 {
@@ -100,7 +100,7 @@ void gdt_install(void)
 	/* Our NULL descriptor */
 	gdt_set_gate(num++, 0, 0, 0, 0);
 
-	/* 
+	/*
 	 * The second entry is our Code Segment. The base address
 	 * is 0, the limit is 4 GByte, it uses 4KByte granularity,
 	 * and is a Code Segment descriptor.
@@ -108,10 +108,10 @@ void gdt_install(void)
 	gdt_set_gate(num++, 0, 0,
 		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
 
-	/* 
+	/*
 	 * The third entry is our Data Segment. It's EXACTLY the
 	 * same as our code segment, but the descriptor type in
-	 * this entry's access byte says it's a Data Segment 
+	 * this entry's access byte says it's a Data Segment
 	 */
 	gdt_set_gate(num++, 0, 0,
 		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);

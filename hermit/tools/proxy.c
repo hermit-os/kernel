@@ -80,7 +80,7 @@ static int init_env(void)
 	if (str)
 	{
 		isle_nr = atoi(str);
-		if ((isle_nr < 0) || (isle_nr > 254))
+		if (isle_nr > 254)
 			isle_nr = 0;
 	}
 
