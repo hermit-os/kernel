@@ -120,8 +120,16 @@ static inline size_t sign_extend(ssize_t addr, int bits)
 #define PG_PSE			(1 << 7)
 /// Page attribute table
 #define PG_PAT			PG_PSE
-/// Global TLB entry (Pentium Pro and later)
+#if 1
+/* @brief Global TLB entry (Pentium Pro and later)
+ *
+ * HermitCore is a single-address space operating system
+ * => CR3 never changed => The flag isn't required for HermitCore
+ */
+#define PG_GLOBAL		0
+#else
 #define PG_GLOBAL		(1 << 8)
+#endif
 /// This table is a self-reference and should skipped by page_map_copy()
 #define PG_SELF			(1 << 9)
 

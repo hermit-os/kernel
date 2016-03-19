@@ -160,10 +160,10 @@ start64:
 
     ; remap kernel
     mov rdi, kernel_start
-    shr rdi, 18               ; (edi >> 21) * 8 (index for boot_pgd)
+    shr rdi, 18       ; (edi >> 21) * 8 (index for boot_pgd)
     add rdi, boot_pgd
     mov rax, [base]
-    or rax, 0x183
+    or rax, 0x83      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
     xor rcx, rcx
 Lremap:
     mov QWORD [rdi], rax
