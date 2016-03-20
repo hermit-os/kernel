@@ -109,15 +109,12 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 	int lvl, ret = -ENOMEM;
 	long vpn = viraddr >> PAGE_BITS;
 	long first[PAGE_LEVELS], last[PAGE_LEVELS];
-	task_t* curr_task;
 
 	/* Calculate index boundaries for page map traversal */
 	for (lvl=0; lvl<PAGE_LEVELS; lvl++) {
 		first[lvl] = (vpn         ) >> (lvl * PAGE_MAP_BITS);
 		last[lvl]  = (vpn+npages-1) >> (lvl * PAGE_MAP_BITS);
 	}
-
-	curr_task = per_core(current_task);
 
 	spinlock_irqsave_lock(&page_lock);
 
@@ -132,9 +129,6 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 					size_t phyaddr = get_pages(1);
 					if (BUILTIN_EXPECT(!phyaddr, 0))
 						goto out;
-
-					if (bits & PG_USER)
-						atomic_int64_inc(curr_task->user_usage);
 
 					/* Reference the new table within its parent */
 #if 0

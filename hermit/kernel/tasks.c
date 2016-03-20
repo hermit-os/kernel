@@ -51,8 +51,8 @@ extern const void tls_end;
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -161,7 +161,6 @@ int set_idle_task(void)
 			set_per_core(kernel_stack, task_table[i].stack + KERNEL_STACK_SIZE - 0x10);
 			task_table[i].prio = IDLE_PRIO;
 			task_table[i].heap = NULL;
-			task_table[i].user_usage = NULL;
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
 			ret = 0;
@@ -216,11 +215,6 @@ void finish_task_switch(void)
 			if (old->stack) {
 				kfree(old->stack);
 				old->stack = NULL;
-			}
-
-			if (old->user_usage) {
-				kfree(old->user_usage);
-				old->user_usage = NULL;
 			}
 
 			if (!old->parent && old->heap) {
@@ -363,7 +357,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].tls_addr = curr_task->tls_addr;
 			task_table[i].tls_size = curr_task->tls_size;
 			task_table[i].lwip_err = 0;
-			task_table[i].user_usage = curr_task->user_usage;
 
 			if (id)
 				*id = i;
@@ -453,7 +446,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;
-			task_table[i].user_usage = (atomic_int64_t*) counter;
 
 			if (id)
 				*id = i;

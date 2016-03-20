@@ -90,8 +90,6 @@ typedef struct task {
 	uint64_t		start_tick;
 	/// the userspace heap
 	vma_t*			heap;
-	/// usage in number of pages (including page map tables)
-	atomic_int64_t*		user_usage;
 	/// parent thread
 	tid_t			parent;
 	/// next task in the queue
