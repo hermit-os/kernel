@@ -86,14 +86,6 @@ typedef struct task {
 	uint8_t			prio;
 	/// timeout for a blocked task
 	uint64_t		timeout;
-	/// Physical address of root page table
-	size_t			page_map;
-	/// Lock for page tables
-	spinlock_irqsave_t*	page_lock;
-	/// lock for the VMA_list
-	spinlock_t*		vma_lock;
-	/// list of VMAs
-	vma_t*			vma_list;
 	/// starting time/tick of the task
 	uint64_t		start_tick;
 	/// the userspace heap

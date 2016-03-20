@@ -62,19 +62,6 @@ void NORETURN do_abort(void);
  */
 void* palloc(size_t sz, uint32_t flags);
 
-/** @brief Free general kernel pages
- *
- * This function removes the memory from the VMA subsystem,
- * unmap the pages and releases the physical pages.
- *
- * The pmalloc() doesn't track how much memory was allocated for which pointer,
- * so you have to specify how much memory shall be freed.
- *
- * @param addr The virtual address returned by palloc().
- * @param sz The size which should freed
- */
-void pfree(void* addr, size_t sz);
-
 /** @brief The memory allocator function
  *
  * This allocator uses a buddy system to allocate memory.

@@ -46,62 +46,13 @@ extern const void percore_end0;
 
 extern uint64_t base;
 
-static inline void enter_user_task(size_t ep, size_t stack)
-{
-	// don't interrupt the jump to user-level code
-	irq_disable();
-
-	asm volatile ("swapgs" ::: "memory");
-
-	// the jump also enable interrupts
-	jump_to_user_code(ep, stack);
-}
-
 static int thread_entry(void* arg, size_t ep)
 {
-#if 0
-	size_t addr, stack = 0;
-	size_t flags;
-	int64_t npages;
-	size_t offset = DEFAULT_STACK_SIZE-16;
-
-	//create user-level stack
-	npages = DEFAULT_STACK_SIZE >> PAGE_BITS;
-	if (DEFAULT_STACK_SIZE & (PAGE_SIZE-1))
-		npages++;
-
-	addr = get_pages(npages);
-	if (BUILTIN_EXPECT(!addr, 0)) {
-		kprintf("load_task: not enough memory!\n");
-		return -ENOMEM;
-	}
-
-	stack = (1ULL << 34ULL) - curr_task->id*DEFAULT_STACK_SIZE-PAGE_SIZE;	// virtual address of the stack
-	flags = PG_USER|PG_RW;
-	if (has_nx())
-		flags |= PG_XD;
-
-	if (page_map(stack, addr, npages, flags)) {
-		put_pages(addr, npages);
-		kprintf("Could not map stack at 0x%x\n", stack);
-		return -ENOMEM;
-	}
-	memset((void*) stack, 0x00, npages*PAGE_SIZE);
-	//kprintf("stack located at 0x%zx (0x%zx)\n", stack, addr);
-
-	// create vma regions for the user-level stack
-	flags = VMA_CACHEABLE|VMA_USER|VMA_READ|VMA_WRITE;
-	vma_add(stack, stack+npages*PAGE_SIZE-1, flags);
-#endif
 
 	if (init_tls())
 		return -ENOMEM;
 
 	//vma_dump();
-
-	// set first argument
-	//asm volatile ("mov %0, %%rdi" :: "r"(arg));
-	//enter_user_task(ep, stack+offset);
 
 	entry_point_t call_ep = (entry_point_t) ep;
 	call_ep(arg);
@@ -121,12 +72,6 @@ size_t* get_current_stack(void)
 
 	set_per_core(kernel_stack, stptr);
 	tss_set_rsp0(stptr);
-
-#if 0
-	// do we change the address space?
-	if (read_cr3() != curr_task->page_map)
-		write_cr3(curr_task->page_map); // use new page table
-#endif
 
 	return curr_task->last_stack_pointer;
 }
@@ -176,12 +121,9 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 
 	/* The instruction pointer shall be set on the first function to be called
 	   after IRETing */
-	//if ((size_t) ep < KERNEL_SPACE) {
-	//	stptr->rip = (size_t)ep;
-	//} else {
-		stptr->rip = (size_t)thread_entry;
-		stptr->rsi = (size_t)ep; // use second argument to transfer the entry point
-	//}
+	stptr->rip = (size_t)thread_entry;
+	stptr->rsi = (size_t)ep; // use second argument to transfer the entry point
+
 	stptr->cs = 0x08;
 	stptr->ss = 0x10;
 	stptr->gs = core_id * ((size_t) &percore_end0 - (size_t) &percore_start);

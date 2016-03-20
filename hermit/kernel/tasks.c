@@ -46,20 +46,13 @@ extern const void tls_end;
 
 #define TLS_OFFSET	8
 
-/*
- * HermitCore is a single address space OS
- * => we need only a lock to protect the page tables & VMA
- */
-static spinlock_irqsave_t page_lock = SPINLOCK_IRQSAVE_INIT;
-static spinlock_t vma_lock = SPINLOCK_INIT;
-
 /** @brief Array of task structures (aka PCB)
  *
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, &page_lock, &vma_lock, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, &page_lock, &vma_lock, NULL, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
+		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}, \
+		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, NULL, 0, NULL, NULL, 0, 0, 0}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -115,7 +108,6 @@ int multitasking_init(void)
 	task_table[0].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 	set_per_core(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
 	set_per_core(current_task, task_table+0);
-	task_table[0].page_map = read_cr3();
 
 	readyqueues[core_id].idle = task_table+0;
 
@@ -168,12 +160,8 @@ int set_idle_task(void)
 			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 			set_per_core(kernel_stack, task_table[i].stack + KERNEL_STACK_SIZE - 0x10);
 			task_table[i].prio = IDLE_PRIO;
-			task_table[i].vma_lock = &vma_lock;
-			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
-			task_table[i].page_lock = &page_lock;
 			task_table[i].user_usage = NULL;
-			task_table[i].page_map = read_cr3();
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
 			ret = 0;
@@ -369,7 +357,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
-			task_table[i].vma_list = curr_task->vma_list;
 			task_table[i].heap = curr_task->heap;
                         task_table[i].start_tick = get_clock_tick();
 			task_table[i].parent = curr_task->id;
@@ -377,7 +364,6 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].tls_size = curr_task->tls_size;
 			task_table[i].lwip_err = 0;
 			task_table[i].user_usage = curr_task->user_usage;
-			task_table[i].page_map = curr_task->page_map;
 
 			if (id)
 				*id = i;
@@ -428,7 +414,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	uint32_t i;
 	void* stack = NULL;
 	void* counter = NULL;
-	task_t* curr_task;
 
 	if (BUILTIN_EXPECT(!ep, 0))
 		return -EINVAL;
@@ -440,8 +425,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 		return -EINVAL;
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
-
-	curr_task = per_core(current_task);
 
 	stack = kmalloc(DEFAULT_STACK_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
@@ -464,17 +447,12 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
-			task_table[i].vma_lock = &vma_lock;
-			task_table[i].vma_list = NULL;
 			task_table[i].heap = NULL;
 			task_table[i].start_tick = get_clock_tick();
 			task_table[i].parent = 0;
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;
-
-			task_table[i].page_lock = &page_lock;
-			task_table[i].page_map = curr_task->page_map;
 			task_table[i].user_usage = (atomic_int64_t*) counter;
 
 			if (id)

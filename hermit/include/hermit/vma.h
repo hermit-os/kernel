@@ -59,12 +59,10 @@ extern "C" {
 #define VMA_HEAP	(VMA_READ|VMA_WRITE|VMA_CACHEABLE)
 
 // boundaries for VAS allocation
-#define VMA_KERN_MIN	0xC0000
-#define VMA_KERN_MAX	KERNEL_SPACE
-#define VMA_USER_MIN	KERNEL_SPACE
+#define VMA_MIN	0xC0000
 
 // last three top level entries are reserved
-#define VMA_USER_MAX	0xFFFFFE8000000000
+#define VMA_MAX	0xFFFFFE8000000000
 
 struct vma;
 
@@ -129,21 +127,6 @@ size_t vma_alloc(size_t size, uint32_t flags);
  * - -EINVAL (-22) on failure
  */
 int vma_free(size_t start, size_t end);
-
-/** @brief Free all virtual memory areas
- *
- * @return
- * - 0 on success
- */
-int drop_vma_list(struct task* task);
-
-/** @brief Copy the VMA list of the current task to task
- *
- * @param task The task where the list should be copied to
- * @return
- * - 0 on success
- */
-int copy_vma_list(struct task* src, struct task* dest);
 
 /** @brief Dump information about this task's VMAs into the terminal. */
 void vma_dump(void);
