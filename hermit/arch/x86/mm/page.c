@@ -52,8 +52,8 @@ extern const void kernel_start;
 /// This page is reserved for copying
 #define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
 
-/** Lock for kernel space page tables */
-static spinlock_t kslock = SPINLOCK_INIT;
+/** Single-address space operating system => one lock for all tasks */
+static spinlock_irqsave_t page_lock = SPINLOCK_IRQSAVE_INIT;
 
 /** This PGD table is initialized in entry.asm */
 extern size_t* boot_map;
@@ -119,11 +119,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 
 	curr_task = per_core(current_task);
 
-	/** @todo: might not be sufficient! */
-	if (bits & PG_USER)
-		spinlock_irqsave_lock(curr_task->page_lock);
-	else
-		spinlock_lock(&kslock);
+	spinlock_irqsave_lock(&page_lock);
 
 	/* Start iterating through the entries
 	 * beginning at the root table (PGD or PML4) */
@@ -172,115 +168,27 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 
 	ret = 0;
 out:
-	if (bits & PG_USER)
-		spinlock_irqsave_unlock(curr_task->page_lock);
-	else
-		spinlock_unlock(&kslock);
+	spinlock_irqsave_unlock(&page_lock);
 
 	return ret;
 }
 
-/** Tables are freed by page_map_drop() */
 int page_unmap(size_t viraddr, size_t npages)
 {
-	task_t* curr_task = per_core(current_task);
-
-	/* We aquire both locks for kernel and task tables
-	 * as we dont know to which the region belongs. */
-	spinlock_irqsave_lock(curr_task->page_lock);
-	spinlock_lock(&kslock);
+	spinlock_irqsave_lock(&page_lock);
 
 	/* Start iterating through the entries.
 	 * Only the PGT entries are removed. Tables remain allocated. */
 	size_t vpn, start = viraddr>>PAGE_BITS;
-	for (vpn=start; vpn<start+npages; vpn++)
+	for (vpn=start; vpn<start+npages; vpn++) {
 		self[0][vpn] = 0;
+		tlb_flush_one_page(vpn << PAGE_BITS);
+	}
 
-	spinlock_irqsave_unlock(curr_task->page_lock);
-	spinlock_unlock(&kslock);
+	spinlock_irqsave_unlock(&page_lock);
 
 	/* This can't fail because we don't make checks here */
 	return 0;
-}
-
-int page_map_drop(void)
-{
-	task_t* curr_task = per_core(current_task);
-
-	void traverse(int lvl, long vpn) {
-		long stop;
-		for (stop=vpn+PAGE_MAP_ENTRIES; vpn<stop; vpn++) {
-			if ((self[lvl][vpn] & PG_PRESENT) && (self[lvl][vpn] & PG_USER)) {
-				/* Post-order traversal */
-				if (lvl)
-					traverse(lvl-1, vpn<<PAGE_MAP_BITS);
-
-				put_pages(self[lvl][vpn] & PAGE_MASK, 1);
-				atomic_int64_dec(curr_task->user_usage);
-			}
-		}
-	}
-
-	spinlock_irqsave_lock(curr_task->page_lock);
-
-	traverse(PAGE_LEVELS-1, 0);
-
-	spinlock_irqsave_unlock(curr_task->page_lock);
-
-	/* This can't fail because we don't make checks here */
-	return 0;
-}
-
-int page_map_copy(task_t *dest)
-{
-	task_t* curr_task = per_core(current_task);
-
-	int traverse(int lvl, long vpn) {
-		long stop;
-		for (stop=vpn+PAGE_MAP_ENTRIES; vpn<stop; vpn++) {
-			if (self[lvl][vpn] & PG_PRESENT) {
-				if (self[lvl][vpn] & PG_USER) {
-					size_t phyaddr = get_pages(1);
-					if (BUILTIN_EXPECT(!phyaddr, 0))
-						return -ENOMEM;
-
-					atomic_int64_inc(dest->user_usage);
-
-					other[lvl][vpn] = phyaddr | (self[lvl][vpn] & ~PAGE_MASK);
-					if (lvl) /* PML4, PDPT, PGD */
-						traverse(lvl-1, vpn<<PAGE_MAP_BITS); /* Pre-order traversal */
-					else { /* PGT */
-						page_map(PAGE_TMP, phyaddr, 1, PG_RW);
-						memcpy((void*) PAGE_TMP, (void*) (vpn<<PAGE_BITS), PAGE_SIZE);
-					}
-				}
-				else if (self[lvl][vpn] & PG_SELF)
-					other[lvl][vpn] = 0;
-				else
-					other[lvl][vpn] = self[lvl][vpn];
-			}
-			else
-				other[lvl][vpn] = 0;
-		}
-		return 0;
-	}
-
-	// set present bit
-	dest->page_map |= PG_PRESENT;
-
-	spinlock_irqsave_lock(curr_task->page_lock);
-	self[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = dest->page_map | PG_PRESENT | PG_SELF | PG_ACCESSED | PG_RW;
-
-	int ret = traverse(PAGE_LEVELS-1, 0);
-
-	other[PAGE_LEVELS-1][PAGE_MAP_ENTRIES-1] = dest->page_map | PG_PRESENT | PG_SELF | PG_ACCESSED | PG_RW;
-	self [PAGE_LEVELS-1][PAGE_MAP_ENTRIES-2] = 0;
-	spinlock_irqsave_unlock(curr_task->page_lock);
-
-	/* Flush TLB entries of 'other' self-reference */
-	flush_tlb();
-
-	return ret;
 }
 
 void page_fault_handler(struct state *s)
@@ -309,7 +217,7 @@ void page_fault_handler(struct state *s)
 		return 1;
 	}
 
-	spinlock_irqsave_lock(task->page_lock);
+	spinlock_irqsave_lock(&page_lock);
 
 	if ((task->heap) && (viraddr >= task->heap->start) && (viraddr < task->heap->end)) {
 		/*
@@ -317,7 +225,7 @@ void page_fault_handler(struct state *s)
 		 */
 		if (check_pagetables(viraddr)) {
 			//tlb_flush_one_page(viraddr);
-			spinlock_irqsave_unlock(task->page_lock);
+			spinlock_irqsave_unlock(&page_lock);
 			return;
 		}
 
@@ -341,13 +249,13 @@ void page_fault_handler(struct state *s)
 
 		// TODO: reusing of old data is possible => security issue
 
-		spinlock_irqsave_unlock(task->page_lock);
+		spinlock_irqsave_unlock(&page_lock);
 
 		return;
 	}
 
 default_handler:
-	spinlock_irqsave_unlock(task->page_lock);
+	spinlock_irqsave_unlock(&page_lock);
 
 	kprintf("Page Fault Exception (%d) on core %d at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
 		s->int_no, CORE_ID, s->cs, s->rip, s->fs, s->gs, s->rflags, task->id, viraddr, s->error,

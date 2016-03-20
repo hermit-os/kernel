@@ -57,14 +57,4 @@ int put_pages(size_t phyaddr, size_t npages);
  */
 static inline int put_page(size_t phyaddr) { return put_pages(phyaddr, 1); }
 
-/** @brief Copy a physical page frame
- *
- * @param psrc physical address of source page frame
- * @param pdest physical address of source page frame
- * @return
- * - 0 on success
- * - -1 on failure
- */
-int copy_page(size_t pdest, size_t psrc);
-
 #endif

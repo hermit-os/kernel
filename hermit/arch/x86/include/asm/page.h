@@ -187,15 +187,4 @@ int page_unmap(size_t viraddr, size_t npages);
  */
 int page_set_flags(size_t viraddr, uint32_t npages, int flags);
 
-/** @brief Copy a whole page map tree
- *
- * @param dest Physical address of new page map
- * @retval 0 Success. Everything went fine.
- * @retval <0 Error. Something went wrong.
- */
-int page_map_copy(struct task *dest);
-
-/** @brief Free a whole page map tree */
-int page_map_drop(void);
-
 #endif

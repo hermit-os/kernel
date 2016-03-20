@@ -215,13 +215,14 @@ ssize_t writev(int fildes, const struct iovec *iov, int iovcnt)
 
 ssize_t sys_sbrk(ssize_t incr)
 {
-	task_t* task = per_core(current_task);
-	vma_t* heap = task->heap;
 	ssize_t ret;
+	vma_t* heap = per_core(current_task)->heap;
+	static spinlock_t heap_lock = SPINLOCK_INIT;
 
-	spinlock_lock(task->vma_lock);
+	spinlock_lock(&heap_lock);
 
 	if (BUILTIN_EXPECT(!heap, 0)) {
+		spinlock_unlock(&heap_lock);
 		kprintf("sys_sbrk: missing heap!\n");
 		do_abort();
 	}
@@ -234,7 +235,7 @@ ssize_t sys_sbrk(ssize_t incr)
 	// allocation and mapping of new pages for the heap
 	// is catched by the pagefault handler
 
-	spinlock_unlock(task->vma_lock);
+	spinlock_unlock(&heap_lock);
 
 	return ret;
 }

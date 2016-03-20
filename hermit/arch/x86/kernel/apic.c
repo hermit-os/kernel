@@ -381,7 +381,7 @@ static int lapic_reset(void)
  */
 int apic_calibration(void)
 {
-	uint32_t i;
+	//uint32_t i;
 	uint32_t flags;
 	uint64_t ticks, old;
 
@@ -562,11 +562,13 @@ found_mp:
 			apic_io_entry_t* io_entry = (apic_io_entry_t*) addr;
 			ioapic = (ioapic_t*) ((size_t) io_entry->addr);
 			kprintf("Found IOAPIC at 0x%x\n", ioapic);
+#if 0
 			page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD);
 			vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
 			ioapic = (ioapic_t*) IOAPIC_ADDR;
-			addr += 8;
 			kprintf("Map IOAPIC to 0x%x\n", ioapic);
+#endif
+			addr += 8;
 		} else if (*((uint8_t*) addr) == 3) { // IO_INT
 			apic_ioirq_entry_t* extint = (apic_ioirq_entry_t*) addr;
 			if (extint->src_bus == isa_bus) {
@@ -881,6 +883,7 @@ int apic_init(void)
 	return 0;
 }
 
+#if 0
 int ioapic_inton(uint8_t irq, uint8_t apicid)
 {
 	ioapic_route_t route;
@@ -954,3 +957,4 @@ int ioapic_intoff(uint8_t irq, uint8_t apicid)
 
 	return 0;
 }
+#endif

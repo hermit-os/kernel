@@ -161,26 +161,6 @@ void* palloc(size_t sz, uint32_t flags)
 	return (void*) viraddr;
 }
 
-void pfree(void* addr, size_t sz)
-{
-	if (BUILTIN_EXPECT(!addr || !sz, 0))
-		return;
-
-	size_t i;
-	size_t phyaddr;
-	size_t viraddr = (size_t) addr & PAGE_MASK;
-	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
-
-	// memory is probably not continuously mapped! (userspace heap)
-	for (i=0; i<npages; i++) {
-		phyaddr = virt_to_phys(viraddr+i*PAGE_SIZE);
-		put_page(phyaddr);
-	}
-
-	page_unmap(viraddr, npages);
-	vma_free(viraddr, viraddr+npages*PAGE_SIZE);
-}
-
 void* kmalloc(size_t sz)
 {
 	if (BUILTIN_EXPECT(!sz, 0))

@@ -48,7 +48,7 @@ extern const void kernel_end;
  * For bootstrapping we initialize the VMA list with one empty VMA
  * (start == end) and expand this VMA by calls to vma_alloc()
  */
-static vma_t vma_boot = { VMA_KERN_MIN, VMA_KERN_MIN, VMA_HEAP };
+static vma_t vma_boot = { VMA_MIN, VMA_MIN, VMA_HEAP };
 static vma_t* vma_list = &vma_boot;
 static spinlock_t vma_lock = SPINLOCK_INIT;
 
@@ -75,27 +75,17 @@ out:
 
 size_t vma_alloc(size_t size, uint32_t flags)
 {
-	task_t* task = per_core(current_task);
-	spinlock_t* lock;
-	vma_t** list;
+	spinlock_t* lock = &vma_lock;
+	vma_t** list = &vma_list;
 
 	//kprintf("vma_alloc: size = %#lx, flags = %#x\n", size, flags);
 
-	size_t base, limit; // boundaries for search
-	size_t start, end; // boundaries of free gaps
+	// boundaries of free gaps
+	size_t start, end;
 
-	if (flags & VMA_USER) {
-		base = VMA_USER_MIN;
-		limit = VMA_USER_MAX;
-		list = &task->vma_list;
-		lock = task->vma_lock;
-	}
-	else {
-		base = VMA_KERN_MIN;
-		limit = VMA_KERN_MAX;
-		list = &vma_list;
-		lock = &vma_lock;
-	}
+	// boundaries for search
+	size_t base = VMA_MIN;
+	size_t limit = VMA_MAX;
 
 	spinlock_lock(lock);
 
@@ -148,26 +138,13 @@ found:
 
 int vma_free(size_t start, size_t end)
 {
-	task_t* task = per_core(current_task);
-	spinlock_t* lock;
+	spinlock_t* lock = &vma_lock;
 	vma_t* vma;
-	vma_t** list = NULL;
+	vma_t** list = &vma_list;
 
 	//kprintf("vma_free: start = %#lx, end = %#lx\n", start, end);
 
 	if (BUILTIN_EXPECT(start >= end, 0))
-		return -EINVAL;
-
-	if (end < VMA_KERN_MAX) {
-		lock = &vma_lock;
-		list = &vma_list;
-	}
-	else if (start >= VMA_KERN_MAX) {
-		lock = task->vma_lock;
-		list = &task->vma_list;
-	}
-
-	if (BUILTIN_EXPECT(!list || !*list, 0))
 		return -EINVAL;
 
 	spinlock_lock(lock);
@@ -221,29 +198,11 @@ int vma_free(size_t start, size_t end)
 
 int vma_add(size_t start, size_t end, uint32_t flags)
 {
-	task_t* task = per_core(current_task);
-	spinlock_t* lock;
-	vma_t** list;
+	spinlock_t* lock = &vma_lock;
+	vma_t** list = &vma_list;
 
 	if (BUILTIN_EXPECT(start >= end, 0))
 		return -EINVAL;
-
-	if (flags & VMA_USER) {
-		list = &task->vma_list;
-		lock = task->vma_lock;
-
-		// check if address is in userspace
-		if (BUILTIN_EXPECT(start < VMA_KERN_MAX, 0))
-			return -EINVAL;
-	}
-	else {
-		list = &vma_list;
-		lock = &vma_lock;
-
-		// check if address is in kernelspace
-		if (BUILTIN_EXPECT(end >= VMA_KERN_MAX, 0))
-			return -EINVAL;
-	}
 
 	//kprintf("vma_add: start = %#lx, end = %#lx, flags = %#x\n", start, end, flags);
 
@@ -292,58 +251,6 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 	return 0;
 }
 
-int copy_vma_list(task_t* src, task_t* dest)
-{
-	spinlock_init(dest->vma_lock);
-
-	spinlock_lock(src->vma_lock);
-	spinlock_lock(dest->vma_lock);
-
-	vma_t* last = NULL;
-	vma_t* old;
-	for (old=src->vma_list; old; old=old->next) {
-		vma_t *new = kmalloc(sizeof(vma_t));
-		if (BUILTIN_EXPECT(!new, 0)) {
-			spinlock_unlock(dest->vma_lock);
-			spinlock_unlock(src->vma_lock);
-			return -ENOMEM;
-		}
-
-		new->start = old->start;
-		new->end = old->end;
-		new->flags = old->flags;
-		new->prev = last;
-
-		if (last)
-			last->next = new;
-		else
-			dest->vma_list = new;
-
-		last = new;
-	}
-
-	spinlock_unlock(dest->vma_lock);
-	spinlock_unlock(src->vma_lock);
-
-	return 0;
-}
-
-int drop_vma_list(task_t *task)
-{
-	vma_t* vma;
-
-	spinlock_lock(task->vma_lock);
-
-	while ((vma = task->vma_list)) {
-		task->vma_list = vma->next;
-		kfree(vma);
-	}
-
-	spinlock_unlock(task->vma_lock);
-
-	return 0;
-}
-
 void vma_dump(void)
 {
 	void print_vma(vma_t *vma) {
@@ -356,15 +263,8 @@ void vma_dump(void)
 		}
 	}
 
-	task_t* task = per_core(current_task);
-
-	kputs("Kernelspace VMAs:\n");
+	kputs("VMAs:\n");
 	spinlock_lock(&vma_lock);
-	print_vma(vma_list);
+	print_vma(&vma_boot);
 	spinlock_unlock(&vma_lock);
-
-	kputs("Userspace VMAs:\n");
-	spinlock_lock(task->vma_lock);
-	print_vma(task->vma_list);
-	spinlock_unlock(task->vma_lock);
 }
