@@ -782,6 +782,14 @@ size_t** scheduler(void)
 		readyqueues[core_id].old_task = curr_task;
 	else readyqueues[core_id].old_task = NULL; // reset old task
 
+	// do we receive a shutdown IPI => only the idle task should get the core
+	if (BUILTIN_EXPECT(go_down, 0)) {
+		if (curr_task->status == TASK_IDLE)
+			goto get_task_out;
+		curr_task = readyqueues[core_id].idle;
+		set_per_core(current_task, curr_task);
+	}
+
 	prio = msb(readyqueues[core_id].prio_bitmap); // determines highest priority
 	if (prio > MAX_PRIO) {
 		if ((curr_task->status == TASK_RUNNING) || (curr_task->status == TASK_IDLE))
