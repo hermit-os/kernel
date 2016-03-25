@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <signal.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -67,6 +68,11 @@ static void fini_env(void)
 	unlink(fname);
 }
 
+static void exit_handler(int sig)
+{
+	exit(0);
+}
+
 static int init_env(void)
 {
 	int j, fd;
@@ -75,6 +81,25 @@ static int init_env(void)
 	FILE* file;
 	char isle_path[MAX_PATH];
 	char* result;
+	struct sigaction sINT, sTERM;
+
+	/* define action for SIGINT */
+	sINT.sa_handler = exit_handler;
+	sINT.sa_flags = 0;
+	if (sigaction(SIGINT, &sINT, NULL) < 0)
+	{
+		perror("sigaction");
+		exit(1);
+	}
+
+	/* define action for SIGTERM */
+	sTERM.sa_handler = exit_handler;
+	sTERM.sa_flags = 0;
+	if (sigaction(SIGTERM, &sTERM, NULL) < 0)
+	{
+		perror("sigaction");
+		exit(1);
+	}
 
 	str = getenv("HERMIT_ISLE");
 	if (str)
