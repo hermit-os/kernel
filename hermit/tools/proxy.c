@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -421,7 +422,7 @@ int handle_syscalls(int s)
 			break;
 		}
 		default:
-			fprintf(stderr, "Proxy: invalid syscall number %d\n", sysnr);
+			fprintf(stderr, "Proxy: invalid syscall number %d, errno %d\n", sysnr, errno);
 			exit(1);
 			break;
 		}
