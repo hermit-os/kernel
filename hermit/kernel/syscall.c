@@ -589,55 +589,6 @@ void sys_yield(void)
 #endif
 }
 
-#if 0
-int fork(void)
-{
-	return -ENOSYS;
-}
-
-int wait(int* status)
-{
-	return -ENOSYS;
-}
-
-int execve(const char* name, char * const * argv, char * const * env)
-{
-	return -ENOSYS;
-}
-
-int dup2(int fildes, int fildes2)
-{
-	return -ENOSYS;
-}
-
-int dup(int fildes)
-{
-	return -ENOSYS;
-}
-
-int execvp(const char *file, char *const argv[])
-{
-	return -ENOSYS;
-}
-
-int poll(struct pollfd *fds, nfds_t nfds, int timeout)
-{
-	return -ENOSYS;
-}
-
-int inet_pton(int af, const char *src, void *dst)
-{
-	return -1;
-}
-
-int gethostname(char *name, size_t len)
-{
-	strncpy(name, "hermit", len);
-
-	return 0;
-}
-#endif
-
 static int default_handler(void)
 {
 #if 1
