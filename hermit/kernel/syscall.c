@@ -219,13 +219,12 @@ ssize_t sys_sbrk(ssize_t incr)
 	vma_t* heap = per_core(current_task)->heap;
 	static spinlock_t heap_lock = SPINLOCK_INIT;
 
-	spinlock_lock(&heap_lock);
-
 	if (BUILTIN_EXPECT(!heap, 0)) {
-		spinlock_unlock(&heap_lock);
 		kprintf("sys_sbrk: missing heap!\n");
 		do_abort();
 	}
+
+	spinlock_lock(&heap_lock);
 
 	ret = heap->end;
 	heap->end += incr;
