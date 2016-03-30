@@ -112,7 +112,7 @@ static int load_elf(int dest_fd, int elf_fd)
 
 		if (gelf_getphdr(elf, i, &phdr) != & phdr )
 			continue;
-		
+
 		if (phdr.p_type != PT_LOAD)
 			continue;
 		offset = phdr.p_offset;
@@ -120,7 +120,7 @@ static int load_elf(int dest_fd, int elf_fd)
 		if (ret != phdr.p_filesz || offset != phdr.p_offset + phdr.p_filesz)
 			goto out;
 	}
-	
+
 	ret = 0;
 
 out:	elf_end(elf);
@@ -164,7 +164,7 @@ static int load_bin(const char *app)
 
 	fprintf(file, "%s", fname);
 	fclose(file);
-	
+
 out:	close(tmp_fd);
 	close(elf_fd);
 
@@ -205,7 +205,7 @@ static int init_env(const char *path)
 		if (isle_nr > 254)
 			isle_nr = 0;
 	}
-	
+
 	// load application
 	ret = load_bin(path);
 	if (ret) {
