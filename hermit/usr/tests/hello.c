@@ -39,8 +39,8 @@ int main(int argc, char** argv)
 	FILE* file;
 
 	printf("Hello World!!!\n");
-	for(i=0; environ[i]; i++)
-		printf("environ[%d] = %s\n", i, environ[i]);
+	//for(i=0; environ[i]; i++)
+	//	printf("environ[%d] = %s\n", i, environ[i]);
 	for(i=0; i<argc; i++)
 		printf("argv[%d] = %s\n", i, argv[i]);
 
