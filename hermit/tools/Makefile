@@ -4,8 +4,7 @@ NASMFLAGS = -fbin
 CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
-LDFLGAS =
-PROXYFILES = $(shell find ../usr/tests -name '*.bin') $(shell find ../usr/benchmarks -name '*.bin') $(shell find ../usr/openmpbench -name '*.bin')
+PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
 # Prettify output
 V = 0
@@ -19,9 +18,11 @@ endif
 	@echo [CC] $@
 	$Q$(CC) -c $(CFLAGS) -o $@ $<
 
-default: all
-	
-all: init.h
+all: init.h proxy
+
+proxy: proxy.o
+	@echo [LD] $@
+	$Q$(CC) $(CFLAGS) -o $@ $< -lelf
 
 init.bin: init.asm
 	@echo [NASM] $@
@@ -32,15 +33,6 @@ init.h: init.bin
 	$Q@echo "static const uint8_t boot_code[] = {" > $@
 	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< >> $@
 	$Q@echo "};" >> $@
-
-iso:
-	mkdir iso
-
-proxy: iso $(PROXYFILES)
-	@echo [PROXY] Create proxy files
-	$Q./create_proxy.sh $(foreach FILE, $(PROXYFILES), $(FILE))
-	$Qmv *_proxy iso/
-	$Qgenisoimage -R -J -input-charset utf8 -o proxy-image.iso iso
 
 clean:
 	@echo Cleaning tools
