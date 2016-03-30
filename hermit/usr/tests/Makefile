@@ -5,6 +5,10 @@ override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
 OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -j .eh_frame -j .jcr -j .got.plt -j .preinit_array -j .init_array -j .fini_array -j .gcc_except_table -O binary
 
+# We patch the ELF header with a custom OSABI to be recognized by binfmt_misc
+ELF_OSABI_OFFSET = 7
+ELF_OSABI = "\\x42"
+
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
 
@@ -55,6 +59,7 @@ hello++: hello++.o
 	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 hello: hello.o
@@ -62,6 +67,7 @@ hello: hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 hellof: hellof.o
@@ -69,6 +75,7 @@ hellof: hellof.o
 	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 jacobi: jacobi.o
@@ -76,6 +83,7 @@ jacobi: jacobi.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lm
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 thr_hello.o: thr_hello.c
@@ -87,6 +95,7 @@ thr_hello: thr_hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 RCCE_minimum: RCCE_minimum.o
@@ -94,6 +103,7 @@ RCCE_minimum: RCCE_minimum.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
 	$Qchmod a-x $@.sym
 
 clean:

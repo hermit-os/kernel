@@ -10,9 +10,7 @@ qemu-vlan0.pcap
 autom4te.cache
 documentation/html/
 include/hermit/config.inc
-tools/*.img
-tools/*_proxy
-tools/*iso
+tools/proxy
 tools/init.h
 usr/tests/hello
 usr/tests/hello++
