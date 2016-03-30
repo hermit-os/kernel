@@ -4,7 +4,6 @@ NASMFLAGS = -fbin
 CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
-LDFLAGS = -lelf
 PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
 # Prettify output
@@ -20,6 +19,10 @@ endif
 	$Q$(CC) -c $(CFLAGS) -o $@ $<
 
 all: init.h proxy
+
+proxy: proxy.o
+	@echo [LD] $@
+	$Q$(CC) $(CFLAGS) -o $@ $< -lelf
 
 init.bin: init.asm
 	@echo [NASM] $@
