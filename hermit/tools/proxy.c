@@ -33,8 +33,10 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <gelf.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/sendfile.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <linux/tcp.h>
@@ -45,6 +47,7 @@
 #define HERMIT_PORT	0x494E
 #define HERMIT_IP(isle)	INADDR(192, 168, 28, isle + 2)
 #define HERMIT_MAGIC	0x7E317
+#define HERMIT_ELFOSABI	0x42
 
 #define __HERMIT_exit	0
 #define __HERMIT_write	1
@@ -57,8 +60,6 @@ static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
 static char fname[] = "/tmp/hermitXXXXXX";
 
-extern char hermit_app[];
-extern unsigned app_size;
 extern char **environ;
 
 static void stop_hermit(void);
@@ -76,9 +77,102 @@ static void exit_handler(int sig)
 	exit(0);
 }
 
-static int init_env(void)
+static int load_elf(int dest_fd, int elf_fd)
 {
-	int j, fd;
+	Elf *elf;
+	GElf_Ehdr ehdr;
+	GElf_Phdr phdr ;
+
+	size_t n;
+	int ret;
+	int i;
+
+	if (elf_version(EV_CURRENT) == EV_NONE)
+		return -1;
+
+	elf = elf_begin(elf_fd, ELF_C_READ, NULL);
+	if (!elf)
+		return -1;
+
+	if (elf_kind(elf) != ELF_K_ELF)
+		goto out;
+
+	if (gelf_getehdr(elf, &ehdr) != &ehdr)
+		goto out;
+
+	if (ehdr.e_ident[EI_OSABI] != HERMIT_ELFOSABI)
+		goto out;
+
+	if (elf_getphdrnum(elf , &n) != 0)
+		goto out;
+
+	for (i = 0; i < n ; i ++) {
+		ssize_t ret;
+		off_t offset;
+
+		if (gelf_getphdr(elf, i, &phdr) != & phdr )
+			continue;
+		
+		if (phdr.p_type != PT_LOAD)
+			continue;
+		offset = phdr.p_offset;
+		ret = sendfile(dest_fd, elf_fd, &offset, phdr.p_filesz);
+		if (ret != phdr.p_filesz || offset != phdr.p_offset + phdr.p_filesz)
+			goto out;
+	}
+	
+	ret = 0;
+
+out:	elf_end(elf);
+
+	return ret;
+}
+
+static int load_bin(const char *app)
+{
+	int tmp_fd, elf_fd, ret;
+	FILE *file;
+
+	mkstemp(fname);
+
+	// register function to delete temporary files
+	atexit(fini_env);
+
+	tmp_fd = open(fname, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
+	if (tmp_fd < 0) {
+		perror("open");
+		exit(1);
+	}
+
+	// get text section from elf binary
+	elf_fd = open(app, O_RDONLY, 0);
+	if (elf_fd < 0) {
+		perror("open");
+		exit(1);
+	}
+
+	ret = load_elf(tmp_fd, elf_fd);
+	if (ret)
+		goto out;
+
+	// set path to temporary file
+	file = fopen("/sys/hermit/path", "w");
+	if (!file) {
+		perror("fopen");
+		exit(1);
+	}
+
+	fprintf(file, "%s", fname);
+	fclose(file);
+	
+out:	close(tmp_fd);
+	close(elf_fd);
+
+	return ret;
+}
+
+static int init_env(const char *path)
+{
 	int ret;
 	char* str;
 	FILE* file;
@@ -111,42 +205,13 @@ static int init_env(void)
 		if (isle_nr > 254)
 			isle_nr = 0;
 	}
-	mkstemp(fname);
-
-	// register function to delete temporary files
-	atexit(fini_env);
-
-	fd = open(fname, O_CREAT|O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
-	if (fd < 0) {
-		perror("open");
+	
+	// load application
+	ret = load_bin(path);
+	if (ret) {
+		perror("Failed to load binary");
 		exit(1);
 	}
-
-	// write binary to tmpfs
-	j = 0;
-	while(j < app_size)
-	{
-		ret = write(fd, hermit_app+j, app_size-j);
-		if (ret < 0) {
-			perror("write");
-			close(fd);
-			exit(1);
-		}
-		j += ret;
-	}
-
-	close(fd);
-
-	// set path to temporary file
-	file = fopen("/sys/hermit/path", "w");
-	if (!file) {
-		perror("fopen");
-		exit(1);
-	}
-
-	fprintf(file, "%s", fname);
-
-	fclose(file);
 
 	// start application
 	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/cpus", isle_nr);
@@ -439,7 +504,7 @@ int main(int argc, char **argv)
 	int32_t magic = HERMIT_MAGIC;
 	struct sockaddr_in serv_name;
 
-	init_env();
+	init_env(argv[1]);
 
 	/* create a socket */
 	s = socket(PF_INET, SOCK_STREAM, 0);
