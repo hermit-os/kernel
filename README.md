@@ -7,7 +7,6 @@ The project has just initiated. Further information will be published shortly.
 * Netwide Assembler (NASM)
 * GNU Make, GNU Binutils
 * Tools and libraries to build *linux*, *binutils* and *gcc* (e.g. flex, bison, MPFR library, GMP library, MPC library, ISL library)
-* genisoimage
 * texinfo
 * Qemu
 
@@ -20,6 +19,7 @@ The project has just initiated. Further information will be published shortly.
 5. Afterwards, a small Linux system should run, which already includes the patches for HermitCore. For each NUMA node (= HermitCore isle) is in `/sys/hermit` a directory `isleX` created, where `X` represents the number of the NUMA node. The demo applications are located in the directory `/hermit` and possess the file extension `_proxy`. These applications are Linux proxies, in which the HermitCore binaries are embedded. By starting the Linux proxies, the embedded HermitCore binaries will be automatically started on isle 0 with cpu 1. To change the default behavior, the environment variable `HERMIT_ISLE` is used to specify the (memory) location of the isle, while the environment variable `HERMIT_CPUS` is used to specify the cores. For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/hello_proxy` starts a HelloWorld demo on the HermitCore isle 1, which used the cores 3 to 5. The output messages are forwarded to the Linux proxy and printed on the Linux system.
 6. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`, where `X` represents the isle.
 7. It exists an virtual IP devices between HermitCore isles and the Linux system (see output of `ifconfig`). Per default, the Linux system has the IP address `192.168.28.1`. The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
+8. Hermit applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
 
 ## Building and testing HermitCore on a real machine
 
@@ -37,4 +37,6 @@ NETMASK=255.255.255.0
 IPADDR=192.168.28.1
 NM_CONTROLLED=yes
 ```
-Finally, boot your system with the new Linux kernel and follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5. The demo applications are stored in the subdirectory `hermit/tools/iso` of the directory, which contains this *README*.
+Finally, boot your system with the new Linux kernel and follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5.
+
+The demo applications are stored in their subdirectories `hermit/usr/{tests,benchmarks}` of the directory, which contains this *README*.
