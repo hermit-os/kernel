@@ -5,7 +5,7 @@ CC = gcc
 CFLAGS = -O2 -Wall
 HEXDUMP = hexdump
 LDFLAGS = -lelf
-PROXYFILES = proxy $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
+PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
 # Prettify output
 V = 0
@@ -19,7 +19,7 @@ endif
 	@echo [CC] $@
 	$Q$(CC) -c $(CFLAGS) -o $@ $<
 
-all: proxy-image.iso init.h
+all: init.h proxy
 
 init.bin: init.asm
 	@echo [NASM] $@
@@ -31,16 +31,9 @@ init.h: init.bin
 	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< >> $@
 	$Q@echo "};" >> $@
 
-iso:
-	mkdir -p iso
-
-proxy-image.iso: iso $(PROXYFILES)
-	$Qcp $(PROXYFILES) iso
-	$Qgenisoimage -R -J -input-charset utf8 -o proxy-image.iso iso
-
 clean:
 	@echo Cleaning tools
-	$Q$(RM) -rf *.o *~ *.bin *.obj *.h *.iso iso
+	$Q$(RM) -rf *.o *~ *.bin *.obj *.h
 
 veryclean: clean
 	$Q$(RM) -rf iso
