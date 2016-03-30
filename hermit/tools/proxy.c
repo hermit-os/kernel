@@ -39,9 +39,12 @@
 #include <arpa/inet.h>
 #include <linux/tcp.h>
 
-#define HERMIT_PORT     0x494E
-#define HERMIT_MAGIC    0x7E317
 #define MAX_PATH	255
+#define INADDR(a, b, c, d) (struct in_addr) { .s_addr = ((((((d) << 8) | (c)) << 8) | (b)) << (8)) | a }
+
+#define HERMIT_PORT	0x494E
+#define HERMIT_IP(isle)	INADDR(192, 168, 28, isle + 2)
+#define HERMIT_MAGIC	0x7E317
 
 #define __HERMIT_exit	0
 #define __HERMIT_write	1
@@ -50,7 +53,6 @@
 #define __HERMIT_read	4
 #define __HERMIT_lseek	5
 
-static char saddr[16];
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
 static char fname[] = "/tmp/hermitXXXXXX";
@@ -109,9 +111,6 @@ static int init_env(void)
 		if (isle_nr > 254)
 			isle_nr = 0;
 	}
-
-	snprintf(saddr, 16, "192.168.28.%u", isle_nr+2);
-
 	mkstemp(fname);
 
 	// register function to delete temporary files
@@ -460,7 +459,7 @@ int main(int argc, char **argv)
 	/* server address  */
 	memset((char *) &serv_name, 0x00, sizeof(serv_name));
 	serv_name.sin_family = AF_INET;
-	serv_name.sin_addr.s_addr = inet_addr(saddr);
+	serv_name.sin_addr = HERMIT_IP(isle_nr);
 	serv_name.sin_port = htons(HERMIT_PORT);
 
 	i = 0;
