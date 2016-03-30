@@ -180,7 +180,7 @@ static int init_env(const char *path)
 	char* result;
 	struct sigaction sINT, sTERM;
 
-	/* define action for SIGINT */
+	// define action for SIGINT
 	sINT.sa_handler = exit_handler;
 	sINT.sa_flags = 0;
 	if (sigaction(SIGINT, &sINT, NULL) < 0)
@@ -189,7 +189,7 @@ static int init_env(const char *path)
 		exit(1);
 	}
 
-	/* define action for SIGTERM */
+	// define action for SIGTERM
 	sTERM.sa_handler = exit_handler;
 	sTERM.sa_flags = 0;
 	if (sigaction(SIGTERM, &sTERM, NULL) < 0)
@@ -515,7 +515,7 @@ int main(int argc, char **argv)
 	}
 
 	setsockopt(s, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
-        setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
 	i = 1;
 	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 	i = 0;
