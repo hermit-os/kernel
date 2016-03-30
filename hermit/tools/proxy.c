@@ -42,7 +42,7 @@
 #include <linux/tcp.h>
 
 #define MAX_PATH	255
-#define INADDR(a, b, c, d) (struct in_addr) { .s_addr = ((((((d) << 8) | (c)) << 8) | (b)) << (8)) | a }
+#define INADDR(a, b, c, d) (struct in_addr) { .s_addr = ((((((d) << 8) | (c)) << 8) | (b)) << 8) | (a) }
 
 #define HERMIT_PORT	0x494E
 #define HERMIT_IP(isle)	INADDR(192, 168, 28, isle + 2)
@@ -546,7 +546,12 @@ retry:
 	if (ret < 0)
 		goto out;
 
-	// froward program arguments to HermitCore
+	// forward program arguments to HermitCore
+	// argv[0] is path of this proxy so we strip it
+
+	argv++;
+	argc--;
+
 	ret = write(s, &argc, sizeof(argc));
 	if (ret < 0)
 		goto out;
