@@ -10,7 +10,7 @@ NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
 RM = rm -rf
 CD = cd
 CP = cp
-MKDIR = mkdir
+MKDIR = mkdir -p
 TMP = $(TOPDIR)/tmp
 OPT = --disable-shared --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
 

@@ -34,7 +34,7 @@ init.h: init.bin
 	$Q@echo "};" >> $@
 
 iso:
-	mkdir iso
+	mkdir -p iso
 
 proxy: iso $(PROXYFILES)
 	@echo [PROXY] Create proxy files
