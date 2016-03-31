@@ -1,6 +1,6 @@
 # HermitCore - A lightweight extreme-scale satellite kernel
 
-The project *HermitCore*has just initiated.
+The project *HermitCore* has just initiated.
 It is a unikernel operating system for high-performance computing.
 HermitCore is the result of a research project at RWTH Aachen University and is currently an experimental approach and not production ready. Please use it carefully.
 
