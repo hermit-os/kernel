@@ -1,16 +1,9 @@
 include Makefile.defs
 
-# We patch the ELF header with a custom OSABI to be recognized by binfmt_misc
-ELF_OSABI_OFFSET = 7
-ELF_OSABI = "\\x42"
-
 # If CFLAGS_CRAY is empty set it to CFLAGS
 ifeq ($(CFLAGS_CRAY),)
 CFLAGS_CRAY = ${CFLAGS}
 endif
-
-%.bin: %
-	$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
 
 .c.o:
 	${CC} ${CFLAGS} $(OMPFLAG) -c $*.c 
@@ -21,7 +14,7 @@ ARRAYOBJS = arraybench_$(IDA).o common.o
 TASKOBJS =  taskbench.o common.o 
 SCHEDFLAGS = -DSCHEDBENCH
 
-all:	syncbench.bin schedbench.bin taskbench.bin
+all:	syncbench schedbench taskbench
 
 prog: arraybench_$(IDA) 
 
@@ -41,7 +34,7 @@ common_sched.o:
 
 schedbench: $(SCHEDOBJS)
 	$(CC) -o schedbench  $(LDFLAGS) $(SCHEDOBJS) $(CLOCKOBJS) $(LIBS) -lm
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$(ELFEDIT) --output-osabi HermitCore $@
 
 # Multiple header files due to multiple array sizes, makes header file arraybench_*.h
 arraybench_$(IDA).h: arraybench.h
@@ -57,8 +50,7 @@ arraybench_$(IDA): $(ARRAYOBJS) $(CLOCKOBJS) arraybench.c
 
 taskbench: $(TASKOBJS)
 	$(CC) -o taskbench $(LDFLAGS) $(OMPFLAG) $(TASKOBJS) $(CLOCKOBJS) $(LIBS) -lm 
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
-
+	$(ELFEDIT) --output-osabi HermitCore $@
 clean: 
 	-rm -rf *.o syncbench schedbench arraybench_* taskbench
 
