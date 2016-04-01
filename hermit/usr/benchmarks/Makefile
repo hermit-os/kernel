@@ -3,11 +3,6 @@ TARGET=x86_64-hermit
 MAKE = make
 override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
-OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -j .eh_frame -j .jcr -j .got.plt  -j .preinit_array -j .init_array -j .fini_array -j .gcc_except_table -O binary
-
-# We patch the ELF header with a custom OSABI to be recognized by binfmt_misc
-ELF_OSABI_OFFSET = 7
-ELF_OSABI = "\\x42"
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -25,6 +20,7 @@ OBJCOPY_FOR_TARGET = $(CROSSCOMPREFIX)objcopy
 RANLIB_FOR_TARGET = $(CROSSCOMPREFIX)ranlib
 STRIP_FOR_TARGET = $(CROSSCOMPREFIX)strip
 READELF_FOR_TARGET = $(CROSSCOMPREFIX)readelf
+ELFEDIT_FOR_TARGET = $(CROSSCOMPREFIX)elfedit
 
 # Prettify output
 V = 0
@@ -46,13 +42,9 @@ endif
 	@echo [F90] $@
 	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
 
-%.bin: %
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
-
 default: all
 
-all: stream.bin hg.bin netio.bin RCCE_pingping.bin RCCE_pingpong.bin
+all: stream hg netio RCCE_pingping RCCE_pingpong
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -63,7 +55,7 @@ stream: stream.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_pingping: RCCE_pingping.o
@@ -71,7 +63,7 @@ RCCE_pingping: RCCE_pingping.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_pingpong: RCCE_pingpong.o
@@ -79,7 +71,7 @@ RCCE_pingpong: RCCE_pingpong.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 netio.o: netio.c
@@ -91,7 +83,7 @@ netio: netio.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
@@ -99,16 +91,16 @@ hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 clean:
 	@echo Cleaning benchmarks
-	$Q$(RM) stream hg netio RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
+	$Q$(RM) stream hg netio RCCE_pingping RCCE_pingpong *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning benchmarks
-	$Q$(RM)  stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~ *.bin
+	$Q$(RM)  stream hg RCCE_pingping RCCE_pingpong *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
