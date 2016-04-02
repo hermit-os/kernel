@@ -9,7 +9,6 @@ HermitCore is the result of a research project at RWTH Aachen University and is 
 * Netwide Assembler (NASM)
 * GNU Make, GNU Binutils
 * Tools and libraries to build *linux*, *binutils* and *gcc* (e.g. flex, bison, MPFR library, GMP library, MPC library, ISL library)
-* libelf
 * texinfo
 * Qemu
 
