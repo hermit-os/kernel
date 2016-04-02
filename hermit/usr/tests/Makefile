@@ -3,11 +3,6 @@ TARGET=x86_64-hermit
 MAKE = make
 override STRIP_DEBUG = --strip-debug #--strip-unneeded
 KEEP_DEBUG = --only-keep-debug
-OBJCOPY_FLAGS = -j .mboot -j .ktext -j .kdata -j .kbss -j .tbss -j .tdata -j .fini -j .init -j .ctors -j .dtors -j .text -j .data -j .rodata -j .bss -j .percore -j .eh_frame -j .jcr -j .got.plt -j .preinit_array -j .init_array -j .fini_array -j .gcc_except_table -O binary
-
-# We patch the ELF header with a custom OSABI to be recognized by binfmt_misc
-ELF_OSABI_OFFSET = 7
-ELF_OSABI = "\\x42"
 
 # Set your own cross compiler tool chain prefix here
 CROSSCOMPREFIX = x86_64-hermit-
@@ -25,6 +20,7 @@ OBJCOPY_FOR_TARGET = $(CROSSCOMPREFIX)objcopy
 RANLIB_FOR_TARGET = $(CROSSCOMPREFIX)ranlib
 STRIP_FOR_TARGET = $(CROSSCOMPREFIX)strip
 READELF_FOR_TARGET = $(CROSSCOMPREFIX)readelf
+ELFEDIT_FOR_TARGET = $(CROSSCOMPREFIX)elfedit
 
 # Prettify output
 V = 0
@@ -46,20 +42,16 @@ endif
 	@echo [F90] $@
 	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
 
-%.bin: %
-	@echo [OBJECT_COPY] $@
-	$Q$(OBJCOPY_FOR_TARGET) $(OBJCOPY_FLAGS) $< $@
-
 default: all
 
-all: hello.bin hello++.bin thr_hello.bin jacobi.bin hellof.bin RCCE_minimum.bin
+all: hello hello++ thr_hello jacobi hellof RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
 	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hello: hello.o
@@ -67,7 +59,7 @@ hello: hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hellof: hellof.o
@@ -75,7 +67,7 @@ hellof: hellof.o
 	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 jacobi: jacobi.o
@@ -83,7 +75,7 @@ jacobi: jacobi.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lm
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 thr_hello.o: thr_hello.c
@@ -95,7 +87,7 @@ thr_hello: thr_hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_minimum: RCCE_minimum.o
@@ -103,16 +95,16 @@ RCCE_minimum: RCCE_minimum.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~ *.bin
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~ *.bin
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
