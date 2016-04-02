@@ -20,7 +20,7 @@ prog: arraybench_$(IDA)
 
 syncbench: $(SYNCOBJS)
 	$(CC) -o syncbench $(LDFLAGS) $(SYNCOBJS) $(CLOCKOBJS) $(LIBS) -lm
-	$Qprintf $(ELF_OSABI) | dd of=$@ bs=1 seek=$(ELF_OSABI_OFFSET) count=1 conv=notrunc 2>/dev/null
+	$(ELFEDIT) --output-osabi HermitCore $@
 
 # Rule to ensure the lower optimisation level is picked up for common.c 
 # with the Cray compiler
