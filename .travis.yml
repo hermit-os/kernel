@@ -6,4 +6,4 @@ before_install:
         - sudo apt-get update
         - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
         - git submodule update --init --recursive
-install: sudo apt-get install nasm texinfo
+install: sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev
