@@ -1,4 +1,9 @@
+git:
+        submodules: false
 language: c
 compiler: gcc
-before_install: sudo apt-get update
+before_install:
+        - sudo apt-get update
+        - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
+        - git submodule update --init --recursive
 install: sudo apt-get install nasm
