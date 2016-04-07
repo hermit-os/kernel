@@ -9,10 +9,10 @@ before_install:
 install:
         - sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev
         - wget ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-0.10.tar.bz2
-        - tar -xjf isl-0.10.tar.bz2
-        - cd isl-0.10
+        - tar -xjf isl-0.12.2.tar.bz2
+        - cd isl-0.12.2
         - ./configure -with-bits=gmp
         - make -j4
         - sudo make install
         - cd -
-        - rm -rf isl-0.10*
+        - rm -rf isl-0.12.2*
