@@ -16,3 +16,6 @@ install:
         - sudo make install
         - cd -
         - rm -rf isl-0.12.2*
+before_script:
+        - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+        - export PATH=$PATH:/usr/local/bin
