@@ -8,7 +8,7 @@ before_install:
         - sudo apt-get -qq update
         - sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
         - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
-        - git submodule update --init --recursive
+        - git submodule update --init --recursive --depth 1
 before_script:
         - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
         - export PATH=$PATH:/usr/local/bin
