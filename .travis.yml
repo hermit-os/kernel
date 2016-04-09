@@ -1,3 +1,5 @@
+sudo: required
+dist: trusty
 git:
         submodules: false
 language: c
@@ -7,15 +9,7 @@ before_install:
         - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
         - git submodule update --init --recursive
 install:
-        - sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev
-        - wget ftp://gcc.gnu.org/pub/gcc/infrastructure/isl-0.12.2.tar.bz2
-        - tar -xjf isl-0.12.2.tar.bz2
-        - cd isl-0.12.2
-        - ./configure -with-bits=gmp
-        - make -j4
-        - sudo make install
-        - cd -
-        - rm -rf isl-0.12.2*
+        - sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
 before_script:
         - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
         - export PATH=$PATH:/usr/local/bin
