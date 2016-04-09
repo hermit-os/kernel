@@ -1,6 +1,6 @@
 QEMU = @QEMU@ -machine accel=kvm -cpu host
 CROSSDIR = @CROSSDIR@
-JOBS = 20
+JOBS = $(shell nproc)
 
 default: linux/arch/x86/boot/bzImage
 	make PATH=$(PATH):$(CROSSDIR) -C hermit
