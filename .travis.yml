@@ -5,11 +5,10 @@ git:
 language: c
 compiler: gcc
 before_install:
-        - sudo apt-get update
+        - sudo apt-get -qq update
+        - sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
         - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
         - git submodule update --init --recursive
-install:
-        - sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
 before_script:
         - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
         - export PATH=$PATH:/usr/local/bin
