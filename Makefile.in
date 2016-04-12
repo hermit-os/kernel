@@ -7,10 +7,10 @@ default: linux/arch/x86/boot/bzImage
 	make PATH=$(PATH):$(CROSSDIR) -C hermit/tools proxy
 
 all: default
-	make -s -j$(JOBS) -C linux
+	make -j$(JOBS) -C linux
 
 linux/arch/x86/boot/bzImage:
-	make -s -j$(JOBS) -C linux
+	make -j$(JOBS) -C linux
 
 test:
 	@echo "Nothing to test"
