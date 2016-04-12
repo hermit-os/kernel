@@ -109,7 +109,8 @@ static int init_env(const char *path)
 	}
 
 	// set path to temporary file
-	file = fopen("/sys/hermit/path", "w");
+	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/path", isle_nr);
+	file = fopen(isle_path, "w");
 	if (!file) {
 		perror("fopen");
 		exit(1);
