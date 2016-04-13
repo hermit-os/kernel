@@ -34,7 +34,7 @@ HermitCore is the result of a research project at RWTH Aachen University and is 
 2. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler and the demo applications.
 3. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
 4. Register the HermitCore loader to your system with following command: `echo ":hermit:M:7:\\x42:/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader. You find the loader `proxy` after building the HermiCore sources in the subdirectory `hermit/tools` of the directory, which contains this *README*.
-5. The IP device between HermitCore and Linux does currently not support IPv6. Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.eth0.disable_ipv6 = 1`.
+5. The IP device between HermitCore and Linux does currently not support IPv6. Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.mmnif.disable_ipv6 = 1`.
 6. Per default, the IP device uses a static IP address range. Linux has to use `162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0). The network manager must be configured accordingly and consequently the file `/etc/sysconfig/network-scripts/ifcfg-mmnif` must be created with following contents:
 ```
 DEVICE=mmnif
