@@ -1196,8 +1196,8 @@ int RCCE_finalize(void){
 //  for (iword=0; iword<(RCCE_BUFF_SIZE_MAX)/sizeof(int); iword++)
 //      ((int *)(RCCE_comm_buffer[ue]))[iword] = 0;
 //    MPBunalloc(&(RCCE_comm_buffer[ue]));
-#ifndef __hermit__
   RCCE_release_lock(RCCE_IAM);
+#ifndef __hermit__
   // each core needs to unmap all special memory locations
   for (ue=0; ue<RCCE_NP; ue++) { 
     FreeConfigReg((int *)(virtual_lockaddress[ue]));
