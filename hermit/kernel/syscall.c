@@ -519,6 +519,9 @@ size_t sys_rcce_malloc(int session_id, int ue)
 
 	kprintf("Map MPB of session %d at 0x%zx, using of slot %d, isle %d\n", session_id, vaddr, i, ue);
 
+	if (isle == ue)
+		memset((void*)vaddr, 0x0, RCCE_MPB_SIZE);
+
 	return vaddr;
 
 out:
@@ -554,8 +557,9 @@ int sys_rcce_fini(int session_id)
 		put_pages(rcce_mpb[i].mpb[isle], RCCE_MPB_SIZE / PAGE_SIZE);
 	rcce_mpb[i].mpb[isle] = 0;
 
-	for(j=0; (j<MAX_ISLE) && !rcce_mpb[i].mpb[j]; j++)
-		;
+	for(j=0; (j<MAX_ISLE) && !rcce_mpb[i].mpb[j]; j++) {
+		PAUSE;
+	}
 
 	// rest full session
 	if (j >= MAX_ISLE)
