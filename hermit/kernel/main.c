@@ -204,7 +204,6 @@ int network_shutdown(void)
 		lwip_close(libc_sd);
 
         mmnif_shutdown();
-        netifapi_netif_set_down(&mmnif_netif);
 	//stats_display();
 
         return 0;
