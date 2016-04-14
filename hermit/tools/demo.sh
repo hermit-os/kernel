@@ -15,11 +15,11 @@ echo " # hierarchical systems." | randtype -m 0 -t 18,10000
 echo -n $MYPROMPT
 echo ""
 echo -n $MYPROMPT
-echo " # By starting a HermitCore application, cores will be sperated from Linux and" | randtype -m 2 -t 18,10000
+echo " # By starting a HermitCore application, cores are be sperated from Linux and" | randtype -m 2 -t 18,10000
 echo -n $MYPROMPT
-echo " # a unikernel will be booted on these cores with the application." | randtype -m 2 -t 18,10000
+echo " # a unikernel is be booted on these cores with the application." | randtype -m 2 -t 18,10000
 echo -n $MYPROMPT
-echo " # Consequently, HermitCore is a single-address space operating system, which" | randtype -m 2 -t 18,10000
+echo " # Consequently, HermitCore is a single-address space operating system which" | randtype -m 2 -t 18,10000
 echo -n $MYPROMPT
 echo " # promise a lower OS noise and better scalability." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
@@ -30,9 +30,9 @@ echo -n $MYPROMPT
 echo " hermit/usr/tests/hello" | randtype -m 0 -t 18,10000
 hermit/usr/tests/hello
 echo -n $MYPROMPT
-echo " # Linux' kernels messages shows that cpu 1 is unplugged from Linux." | randtype -m 2 -t 18,10000
+echo " # Linux' kernels messages show that CPU 1 is unplugged from Linux." | randtype -m 2 -t 18,10000
 echo -n $MYPROMPT
-echo " # After the termination of the HermitCore application, cpu 1 is" | randtype -m 1 -t 18,10000
+echo " # After the termination of the HermitCore application, CPU 1 is" | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " # re-registered to the Linux system." | randtype -m 0 -t 18,10000
 echo -n $MYPROMPT
@@ -46,19 +46,19 @@ cat /sys/hermit/isle0/log
 echo -n $MYPROMPT
 echo " # HermitCore supports OpenMP (including Intel's OpenMP Runtime)." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
-echo " # The benchmark stream is used to show the mode of operation." | randtype -m 1 -t 18,10000
+echo " # The benchmark STREAM is used to show the mode of operation." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " hermit/usr/benchmarks/stream" | randtype -m 0 -t 18,10000
 hermit/usr/benchmarks/stream
 echo -n $MYPROMPT
-echo " # Per default, only cpu 1 is used. The setting could be changed by the" | randtype -m 1 -t 18,10000
+echo " # Per default, only CPU 1 is used. This can be changed by setting" | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " # the environment variable HERMIT_CPUS." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " HERMIT_CPUS=\"1-2\" hermit/usr/benchmarks/stream" | randtype -m 0 -t 18,10000
 HERMIT_CPUS="1-2" hermit/usr/benchmarks/stream
 echo -n $MYPROMPT
-echo " # In this example CPUs 1-2 are booted with the stream benchmark." | randtype -m 1 -t 18,10000
+echo " # In this example CPUs 1-2 are booted to run STREAM." | randtype -m 1 -t 18,10000
 #echo -n $MYPROMPT
 #echo " # Now, the same benchmark on Linux." | randtype -m 1 -t 18,10000
 #echo -n $MYPROMPT
@@ -78,13 +78,13 @@ sleep 1
 echo " lscpu" | randtype -m 0 -t 18,10000
 lscpu
 echo -n $MYPROMPT
-echo " # HermitCore is able to boot an application on each NUMA node, which we called isles." | randtype -m 1 -t 18,10000
+echo " # HermitCore is able to boot an application on each NUMA node which we calle isles." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " # The message passing interface iRCCE is supported for the inter-node communication." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " # MPI support will be published soon. A prototyp exists already." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
-echo " # The environment variable HERMIT_ISLE specifies, on which isle the application will be started." | randtype -m 1 -t 18,10000
+echo " # The environment variable HERMIT_ISLE specifies on which isle the application will be started." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " # The functionalitiy will be demonstrated with a PingPong benchmark." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
