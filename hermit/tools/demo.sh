@@ -86,7 +86,7 @@ echo " # MPI support will be published soon. A prototyp exists already." | randt
 echo -n $MYPROMPT
 echo " # The environment variable HERMIT_ISLE specifies on which isle the application will be started." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
-echo " # The functionalitiy will be demonstrated with a PingPong benchmark." | randtype -m 1 -t 18,10000
+echo " # The functionality will be demonstrated with a PingPong benchmark." | randtype -m 1 -t 18,10000
 echo -n $MYPROMPT
 echo " HERMIT_CPUS=1 HERMIT_ISLE=0 hermit/usr/benchmarks/RCCE_pingpong 2 533 0 1 &" | randtype -m 0 -t 18,10000
 HERMIT_CPUS=1 HERMIT_ISLE=0 hermit/usr/benchmarks/RCCE_pingpong 2 533 0 1 &
@@ -98,4 +98,4 @@ sleep 4
 #echo $MYPROMPT
 echo -n $MYPROMPT
 sleep .3
-echo " HermitCore is an experimental platform. But try it out and send us a feedback!" | randtype -m 1 -t 18,10000
+echo " HermitCore (http://www.hermitcore.org) is an experimental platform. But try it out and send us a feedback!" | randtype -m 1 -t 18,10000
