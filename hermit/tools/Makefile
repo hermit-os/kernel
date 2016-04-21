@@ -1,9 +1,6 @@
 MAKE = make
-NASM = nasm
-NASMFLAGS = -fbin
 CC = gcc
 CFLAGS = -O2 -Wall
-HEXDUMP = hexdump
 PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
 # Prettify output
@@ -18,28 +15,17 @@ endif
 	@echo [CC] $@
 	$Q$(CC) -c $(CFLAGS) -o $@ $<
 
-all: init.h proxy
+all: proxy
 
 proxy: proxy.o
 	@echo [LD] $@
 	$Q$(CC) $(CFLAGS) -o $@ $< -lelf
 
-init.bin: init.asm
-	@echo [NASM] $@
-	$Q$(NASM) $(NASMFLAGS) -o $@ $<
-
-init.h: init.bin
-	@echo [HEXDUMP] $@
-	$Q@echo "static const uint8_t boot_code[] = {" > $@
-	$Q$(HEXDUMP) -v -e '"0x" 1/1 "%02X" ", "' $< >> $@
-	$Q@echo "};" >> $@
-
 clean:
 	@echo Cleaning tools
-	$Q$(RM) -rf *.o *~ *.bin *.obj *.h
+	$Q$(RM) -rf *.o *~ *.bin *.obj
 
 veryclean: clean
-	$Q$(RM) -rf iso
 
 depend:
 	$(CC) -MM $(CFLAGS) *.c > Makefile.dep
