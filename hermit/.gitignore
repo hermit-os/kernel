@@ -11,7 +11,6 @@ autom4te.cache
 documentation/html/
 include/hermit/config.inc
 tools/proxy
-tools/init.h
 usr/tests/hello
 usr/tests/hello++
 usr/tests/hellof
