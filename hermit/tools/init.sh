@@ -21,6 +21,6 @@ grep binfmt_misc /proc/mounts || mount binfmt_misc -t binfmt_misc /proc/sys/fs/b
 echo ":hermit:M:$ELF_OSABI_OFFSET:$ELF_OSABI::$PROXY:" > /proc/sys/fs/binfmt_misc/register
 
 # Startup completed
-sleep 1 && echo -e '\n\nWelcome to HermitCore (http://www.hermitcore.org/)!'
+sleep 1 && echo -e '\nWelcome to HermitCore (http://www.hermitcore.org/)!'
 
 /bin/sh
