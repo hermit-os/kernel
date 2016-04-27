@@ -4,9 +4,6 @@ git:
         submodules: false
 language: c
 compiler: gcc
-cache:
-  directories:
-    - linux
 before_install:
         - sudo apt-get -qq update
         - sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
