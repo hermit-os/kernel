@@ -44,7 +44,7 @@ endif
 
 default: all
 
-all: stream hg netio RCCE_pingping RCCE_pingpong
+all: stream hg netio RCCE_pingping RCCE_pingpong basic
 
 stream.o: stream.c
 	@echo [CC] $@
@@ -53,6 +53,14 @@ stream.o: stream.c
 stream: stream.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
+	$Qchmod a-x $@.sym
+
+basic: basic.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
