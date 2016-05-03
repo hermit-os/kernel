@@ -62,24 +62,15 @@ void reschedule(void);
 
 static char* buff[M];
 
-#if 0
-inline static unsigned long long rdtsc(void)
-{
-	unsigned long lo, hi;
-	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
-	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
-}
-#else
 inline static unsigned long long rdtsc(void)
 {
 	unsigned int lo, hi;
 	unsigned int id;
 
-	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi) :: "memory");
+	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi));
 
 	return ((unsigned long long)hi << 32ULL | (unsigned long long)lo);
 }
-#endif
 
 int main(int argc, char** argv)
 {
