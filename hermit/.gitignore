@@ -22,6 +22,7 @@ usr/benchmarks/RCCE_pingpong
 usr/benchmarks/stream
 usr/benchmarks/hg
 usr/benchmarks/netio
+usr/benchmarks/basic
 usr/openmpbench/schedbench
 usr/openmpbench/syncbench
 usr/openmpbench/taskbench
