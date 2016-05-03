@@ -401,7 +401,7 @@ inline static uint64_t rdtsc(void)
 {
 	uint32_t lo, hi;
 
-	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) );
+	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
 
 	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
 }
@@ -418,7 +418,7 @@ inline static uint64_t rdtscp(uint32_t* cpu_id)
 	uint32_t lo, hi;
 	uint32_t id;
 
-	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi) :: "memory");
+	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi));
 	if (cpu_id)
 		*cpu_id = id;
 
