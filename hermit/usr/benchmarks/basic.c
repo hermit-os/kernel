@@ -57,17 +57,29 @@ void reschedule(void);
 #endif
 
 #define N		10000
-#define M		(1024)
+#define M		(1024+1)
 #define BUFFSZ		(1ULL*1024ULL*1024ULL)
 
 static char* buff[M];
 
+#if 0
 inline static unsigned long long rdtsc(void)
 {
 	unsigned long lo, hi;
 	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
 	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
 }
+#else
+inline static unsigned long long rdtsc(void)
+{
+	unsigned int lo, hi;
+	unsigned int id;
+
+	asm volatile ("rdtscp" : "=a"(lo), "=c"(id), "=d"(hi) :: "memory");
+
+	return ((unsigned long long)hi << 32ULL | (unsigned long long)lo);
+}
+#endif
 
 int main(int argc, char** argv)
 {
@@ -78,8 +90,10 @@ int main(int argc, char** argv)
 
 	printf("Determine systems performance\n\n");
 
+	// cache warm-up
 	ret = mygetpid();
 	ret = mygetpid();
+
 	start = rdtsc();
 	for(i=0; i<N; i++)
 		ret = mygetpid();
@@ -87,8 +101,10 @@ int main(int argc, char** argv)
 
 	printf("Average time for getpid: %lld cycles, pid %ld\n", (end - start) / N, ret);
 
+	// cache warm-up
 	reschedule();
 	reschedule();
+
 	start = rdtsc();
 	for(i=0; i<N; i++)
 		reschedule();
@@ -96,22 +112,27 @@ int main(int argc, char** argv)
 
 	printf("Average time for sched_yield: %lld cycles\n", (end - start) / N);
 
-	malloc(1);
-	malloc(1);
+	// cache warm-up
+	buff[0] = (char*) malloc(BUFFSZ);
+
 	start = rdtsc();
-	for(i=0; i<M; i++)
+	for(i=1; i<M; i++)
 		buff[i] = (char*) malloc(BUFFSZ);
 	end = rdtsc();
 
-	printf("Average time for malloc: %lld cycles\n", (end - start) / M);
+	printf("Average time for malloc: %lld cycles\n", (end - start) / (M-1));
+
+	// cache warm-up
+	for(j=0; j<BUFFSZ; j+=4096)
+		buff[0][j] = '1';
 
 	start = rdtsc();
-	for(i=0; i<M; i++)
+	for(i=1; i<M; i++)
 		for(j=0; j<BUFFSZ; j+=4096)
 			buff[i][j] = '1';
 	end = rdtsc();
 
-	printf("Average time for the first page access: %lld cycles\n", (end - start) / (M*BUFFSZ/4096));
+	printf("Average time for the first page access: %lld cycles\n", (end - start) / ((M-1)*BUFFSZ/4096));
 
 #if 0
 	write(2, (const void *)str, len);
