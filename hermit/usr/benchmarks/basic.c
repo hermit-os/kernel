@@ -34,18 +34,13 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#ifndef __hermit__
 #include <sched.h>
+#ifndef __hermit__
 #include <sys/syscall.h>
 
 static inline long mygetpid(void)
 {
 	return syscall(__NR_getpid);
-}
-
-static inline void reschedule(void)
-{
-	sched_yield();
 }
 #else
 static inline long mygetpid(void)
@@ -53,7 +48,7 @@ static inline long mygetpid(void)
 	return getpid();
 }
 
-void reschedule(void);
+int sched_yield(void);
 #endif
 
 #define N		10000
@@ -93,12 +88,12 @@ int main(int argc, char** argv)
 	printf("Average time for getpid: %lld cycles, pid %ld\n", (end - start) / N, ret);
 
 	// cache warm-up
-	reschedule();
-	reschedule();
+	sched_yield();
+	sched_yield();
 
 	start = rdtsc();
 	for(i=0; i<N; i++)
-		reschedule();
+		sched_yield();
 	end = rdtsc();
 
 	printf("Average time for sched_yield: %lld cycles\n", (end - start) / N);
