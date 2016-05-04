@@ -58,9 +58,13 @@ stream: stream.o
 	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
+basic.o: basic.c
+	@echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
+
 basic: basic.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
