@@ -20,7 +20,6 @@ prog: arraybench_$(IDA)
 
 syncbench: $(SYNCOBJS)
 	$(CC) -o syncbench $(LDFLAGS) $(SYNCOBJS) $(CLOCKOBJS) $(LIBS) -lm
-	$(ELFEDIT) --output-osabi HermitCore $@
 
 # Rule to ensure the lower optimisation level is picked up for common.c 
 # with the Cray compiler
@@ -34,7 +33,6 @@ common_sched.o:
 
 schedbench: $(SCHEDOBJS)
 	$(CC) -o schedbench  $(LDFLAGS) $(SCHEDOBJS) $(CLOCKOBJS) $(LIBS) -lm
-	$(ELFEDIT) --output-osabi HermitCore $@
 
 # Multiple header files due to multiple array sizes, makes header file arraybench_*.h
 arraybench_$(IDA).h: arraybench.h
@@ -50,7 +48,7 @@ arraybench_$(IDA): $(ARRAYOBJS) $(CLOCKOBJS) arraybench.c
 
 taskbench: $(TASKOBJS)
 	$(CC) -o taskbench $(LDFLAGS) $(OMPFLAG) $(TASKOBJS) $(CLOCKOBJS) $(LIBS) -lm 
-	$(ELFEDIT) --output-osabi HermitCore $@
+
 clean: 
 	-rm -rf *.o syncbench schedbench arraybench_* taskbench
 

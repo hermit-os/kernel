@@ -51,7 +51,6 @@ hello++: hello++.o
 	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hello: hello.o
@@ -59,7 +58,6 @@ hello: hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hellof: hellof.o
@@ -67,7 +65,6 @@ hellof: hellof.o
 	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 jacobi: jacobi.o
@@ -75,7 +72,6 @@ jacobi: jacobi.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lm
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 thr_hello.o: thr_hello.c
@@ -87,7 +83,6 @@ thr_hello: thr_hello.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_minimum: RCCE_minimum.o
@@ -95,7 +90,6 @@ RCCE_minimum: RCCE_minimum.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 clean:
