@@ -39,6 +39,7 @@ CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -g -m64 -Wall -O2 -mno-red-zone -fno-var-t
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
+OUTPUT_FORMAT = -O elf64-x86-64-hermit
 
 CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize $(STACKPROT)
 FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
@@ -127,6 +128,8 @@ include/hermit/config.inc: include/hermit/config.h
 %.o : %.asm include/hermit/config.inc
 	@echo [ASM] $@
 	$Q$(NASM) $(NASMFLAGS) -o $@ $<
+	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
+	#$Q$(OBJCOPY_FOR_TARGET) $(OUTPUT_FORMAT) $@
 
 %.o : %.S
 	@echo [GCC-ASM] $@

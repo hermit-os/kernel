@@ -55,7 +55,6 @@ stream: stream.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -fopenmp -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 basic.o: basic.c
@@ -67,7 +66,6 @@ basic: basic.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_pingping: RCCE_pingping.o
@@ -75,7 +73,6 @@ RCCE_pingping: RCCE_pingping.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 RCCE_pingpong: RCCE_pingpong.o
@@ -83,7 +80,6 @@ RCCE_pingpong: RCCE_pingpong.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 netio.o: netio.c
@@ -95,7 +91,6 @@ netio: netio.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
@@ -103,7 +98,6 @@ hg: hg.o hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< hist.o rdtsc.o run.o init.o opt.o report.o setup.o
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
-	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 	$Qchmod a-x $@.sym
 
 clean:
