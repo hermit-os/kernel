@@ -52,15 +52,17 @@ $(TMP)/bootstrap:
 toolchain: $(TMP)/newlib pte $(TMP)/gcc libs headers demo
 
 $(TMP)/newlib:
-	@echo Build newlib, libpthread and libgomp
+	@echo Build newlib
 	$Q$(MKDIR) $(TMP)/newlib
 	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
 
 pte:
+	@echo Build libpthread
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall" -C pte
 
 libs:
+	@echo Build OpenMP Runtime and iRCCE
 	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C $(OMPRT) depend
 	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread" -C $(OMPRT)
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
