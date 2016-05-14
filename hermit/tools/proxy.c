@@ -240,6 +240,8 @@ int handle_syscalls(int s)
 			//dump_log();
 			//stop_hermit();
 
+			if (arg == -14)
+				fprintf(stderr, "Does HermitCore receive a pagefault?");
 			exit(arg);
 			break;
 		}
