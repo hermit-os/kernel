@@ -265,7 +265,8 @@ default_handler:
 
 	apic_eoi(s->int_no);
 	irq_enable();
-	do_abort();
+	//do_abort();
+	sys_exit(-EFAULT);
 }
 
 int page_init(void)
