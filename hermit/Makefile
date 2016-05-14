@@ -42,6 +42,7 @@ RM = rm -rf
 OUTPUT_FORMAT = -O elf64-x86-64-hermit
 
 CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize $(STACKPROT)
+FCFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 LDFLAGS_FOR_NEWLIB =
@@ -66,6 +67,8 @@ toolchain:
 		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
 		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
 		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
+		FCFLAGS_FOR_TARGET="$(FCFLAGS_FOR_NEWLIB)" \
+		FCFLAGS="$(FCFLAGS_FOR_NEWLIB)" \
 		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
 		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
 		CC_FOR_TARGET=$(CC_FOR_TARGET) \
