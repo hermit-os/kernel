@@ -588,13 +588,16 @@ int ipi_tlb_flush(void);
  */
 static inline void flush_tlb(void)
 {
+/* single-address space OS => no TLB flush required */
+#if 0
 	size_t val = read_cr3();
 
 	if (val)
 		write_cr3(val);
 
 #if MAX_CORES > 1
-	//ipi_tlb_flush();
+	ipi_tlb_flush();
+#endif
 #endif
 }
 
@@ -603,10 +606,13 @@ static inline void flush_tlb(void)
  */
 static inline void tlb_flush_one_page(size_t addr)
 {
+/* single-address space OS => no TLB flush required */
+#if 0
 	asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
 
 #if MAX_CORES > 1
-	//ipi_tlb_flush();
+	ipi_tlb_flush();
+#endif
 #endif
 }
 
