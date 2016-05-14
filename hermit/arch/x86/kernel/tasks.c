@@ -68,7 +68,7 @@ size_t* get_current_stack(void)
 	if (curr_task->status == TASK_IDLE)
 		stptr += KERNEL_STACK_SIZE - 0x10;
 	else
-		stptr = (stptr + DEFAULT_STACK_SIZE - 1) & ~0x1F;
+		stptr = (stptr + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F;
 
 	set_per_core(kernel_stack, stptr);
 	tss_set_rsp0(stptr);
@@ -96,7 +96,8 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	 * and not for HW-task-switching is setting up a stack and not a TSS.
 	 * This is the stack which will be activated and popped off for iret later.
 	 */
-	stack = (size_t*) (((size_t) task->stack + DEFAULT_STACK_SIZE - 1) & ~0x1F);	// => stack is 16byte aligned
+	stack = (size_t*) (((size_t) task->stack + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F);	// => stack is 32byte aligned
+	stack += sizeof(size_t);
 
 	/* Only marker for debugging purposes, ... */
 	*stack-- = 0xDEADBEEF;
