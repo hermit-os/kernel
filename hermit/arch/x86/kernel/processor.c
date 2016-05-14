@@ -438,6 +438,8 @@ int cpu_detection(void) {
 		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
+	// libos => currently no support of syscalls
+#if 0
 	if (cpu_info.feature3 & CPU_FEATURE_SYSCALL) {
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_LMA | EFER_LME | EFER_SCE);
 		wrmsr(MSR_STAR, (0x1BULL << 48) | (0x08ULL << 32));
@@ -445,6 +447,7 @@ int cpu_detection(void) {
 		//  clear IF flag during an interrupt
 		wrmsr(MSR_SYSCALL_MASK, EFLAGS_TF|EFLAGS_DF|EFLAGS_IF|EFLAGS_AC|EFLAGS_NT);
 	} else kputs("Processor doesn't support syscalls\n");
+#endif
 
 	if (has_nx())
 		wrmsr(MSR_EFER, rdmsr(MSR_EFER) | EFER_NXE);

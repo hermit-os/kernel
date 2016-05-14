@@ -384,6 +384,8 @@ extern finish_task_switch
 extern syscall_handler
 extern kernel_stack
 
+; libos => no syscall interface required
+%if 0
 global isrsyscall
 align 16
 ; used to realize system calls
@@ -457,6 +459,7 @@ isrsyscall:
     ; EFLAGS (and IF flag) will be restored by sysret
     ; sti
     o64 sysret
+%endif
 
 global switch_context
 align 16
