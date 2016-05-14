@@ -40,7 +40,7 @@ endif
 
 %.o: %.f90
 	@echo [F90] $@
-	$Q$(FC_FOR_TARGET) -c $(FFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(FC_FOR_TARGET) -c $(FCLAGS_FOR_TARGET) -o $@ $<
 
 default: all
 
