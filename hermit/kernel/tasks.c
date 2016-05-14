@@ -333,9 +333,13 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 	curr_task = per_core(current_task);
 
-	stack = kmalloc(DEFAULT_STACK_SIZE);
+	stack = kmalloc(DEFAULT_STACK_SIZE + PAGE_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
+
+	// unmap the first page to detect a stack overflow
+	page_unmap((size_t)stack, 1);
+	stack = (void*) ((size_t) stack + PAGE_SIZE);
 
 	spinlock_irqsave_lock(&table_lock);
 
@@ -419,9 +423,13 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
 
-	stack = kmalloc(DEFAULT_STACK_SIZE);
+	stack = kmalloc(DEFAULT_STACK_SIZE + PAGE_SIZE);
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
+
+	// unmap the first page to detect a stack overflow
+	page_unmap((size_t)stack, 1);
+	stack = (void*) ((size_t) stack + PAGE_SIZE);
 
 	counter = kmalloc(sizeof(atomic_int64_t));
 	if (BUILTIN_EXPECT(!counter, 0)) {
