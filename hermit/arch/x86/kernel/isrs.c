@@ -36,6 +36,7 @@
 
 #include <hermit/stdio.h>
 #include <hermit/tasks.h>
+#include <hermit/errno.h>
 #include <asm/irqflags.h>
 #include <asm/isrs.h>
 #include <asm/irq.h>
@@ -215,5 +216,6 @@ static void fault_handler(struct state *s)
 
 	apic_eoi(s->int_no);
 	irq_enable();
-	do_abort();
+	//do_abort();
+	sys_exit(-EFAULT);
 }
