@@ -241,7 +241,7 @@ int handle_syscalls(int s)
 			//stop_hermit();
 
 			if (arg == -14)
-				fprintf(stderr, "Does HermitCore receive an exception?");
+				fprintf(stderr, "Does HermitCore receive an exception?\n");
 			exit(arg);
 			break;
 		}
