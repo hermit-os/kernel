@@ -114,6 +114,10 @@ start64:
     mov fs, eax
     mov gs, eax
 
+    ; clear DF flag => default value by entering a function
+    ; => see ABI
+    cld
+
     ; determine full image size
     mov rax, kernel_end
     sub rax, kernel_start
@@ -464,6 +468,8 @@ isrsyscall:
 global switch_context
 align 16
 switch_context:
+    ; by entering a function the DF flag has to be cleared => see ABI
+    cld
     ; create on the stack a pseudo interrupt
     ; afterwards, we switch to the task with iret
     push QWORD 0x10             ; SS
