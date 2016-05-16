@@ -35,7 +35,7 @@ NASM = nasm
 NASMFLAGS = -felf64 -g -i$(TOPDIR)/include/hermit/
 
 INCLUDE = -I$(TOPDIR)/include -I$(TOPDIR)/arch/$(ARCH)/include  -I$(TOPDIR)/lwip/src/include -I$(TOPDIR)/lwip/src/include/ipv4 -I$(TOPDIR)/drivers
-CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -fno-delete-null-pointer-checks -falign-jumps=1 -falign-loops=1 -mno-80387 -mno-fp-ret-in-387 -mskip-rax-setup -fno-common $(INCLUDE)
+CFLAGS = -DVERSION=\"$(GIT_VERSION)\" -g -m64 -Wall -O2 -mno-red-zone -fno-var-tracking-assignments -fstrength-reduce -fomit-frame-pointer -finline-functions -ffreestanding -nostdinc -fno-stack-protector -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -mno-avx -fno-delete-null-pointer-checks -falign-jumps=1 -falign-loops=1 -mno-80387 -mno-fp-ret-in-387 -mskip-rax-setup -fno-common -Wframe-larger-than=8192 $(INCLUDE)
 AR = ar
 ARFLAGS = rsv
 RM = rm -rf
