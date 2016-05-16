@@ -217,13 +217,13 @@ static void stop_hermit(void)
  */
 int handle_syscalls(int s)
 {
-	int ret;
 	int sysnr;
+	ssize_t sret;
 
 	while(1)
 	{
-		ret = read(s, &sysnr, sizeof(sysnr));
-		if (ret < 0)
+		sret = read(s, &sysnr, sizeof(sysnr));
+		if (sret < 0)
 			goto out;
 
 		switch(sysnr)
@@ -231,8 +231,8 @@ int handle_syscalls(int s)
 		case __HERMIT_exit: {
 			int arg = 0;
 
-			ret = read(s, &arg, sizeof(arg));
-			if (ret < 0)
+			sret = read(s, &arg, sizeof(arg));
+			if (sret < 0)
 				goto out;
 			close(s);
 
@@ -251,11 +251,11 @@ int handle_syscalls(int s)
 			size_t len;
 			char* buff;
 
-			ret = read(s, &fd, sizeof(fd));
-			if (ret < 0)
+			sret = read(s, &fd, sizeof(fd));
+			if (sret < 0)
 				goto out;
-			ret = read(s, &len, sizeof(len));
-			if (ret < 0)
+			sret = read(s, &len, sizeof(len));
+			if (sret < 0)
 				goto out;
 
 			buff = malloc(len);
@@ -267,15 +267,25 @@ int handle_syscalls(int s)
 			j=0;
 			while(j < len)
 			{
-				ret = read(s, buff+j, len-j);
-				if (ret < 0)
+				sret = read(s, buff+j, len-j);
+				if (sret < 0)
 					goto out;
-				j += len;
+				j += sret;
 			}
 
-			j = write(fd, buff, len);
-			if (fd > 2)
-				write(s, &j, sizeof(j));
+			if (fd > 2) {
+				sret = write(fd, buff, len);
+				write(s, &sret, sizeof(sret));
+			} else {
+				j=0;
+				while(j < len)
+				{
+					sret = write(fd, buff+j, len-j);
+					if (sret < 0)
+						goto out;
+					j += sret;
+				}
+			}
 
 			free(buff);
 			break;
@@ -283,10 +293,10 @@ int handle_syscalls(int s)
 		case __HERMIT_open: {
 			size_t j, len;
 			char* fname;
-			int flags, mode;
+			int flags, mode, ret;
 
-			ret = read(s, &len, sizeof(len));
-			if (ret < 0)
+			sret = read(s, &len, sizeof(len));
+			if (sret < 0)
 				goto out;
 
 			fname = malloc(len);
@@ -296,19 +306,19 @@ int handle_syscalls(int s)
 			j = 0;
 			while(j < len)
 			{
-				ret = read(s, fname+j, len-j);
-				if (ret < 0)
+				sret = read(s, fname+j, len-j);
+				if (sret < 0)
 					goto out;
 
-				j += ret;
+				j += sret;
 			}
 
-			ret = read(s, &flags, sizeof(flags));
-			if (ret < 0)
+			sret = read(s, &flags, sizeof(flags));
+			if (sret < 0)
 				goto out;
 
-			ret = read(s, &mode, sizeof(mode));
-			if (ret < 0)
+			sret = read(s, &mode, sizeof(mode));
+			if (sret < 0)
 				goto out;
 
 			//printf("flags 0x%x, mode 0x%x\n", flags, mode);
@@ -320,10 +330,10 @@ int handle_syscalls(int s)
 			break;
 		}
 		case __HERMIT_close: {
-			int fd;
+			int fd, ret;
 
-			ret = read(s, &fd, sizeof(fd));
-			if (ret < 0)
+			sret = read(s, &fd, sizeof(fd));
+			if (sret < 0)
 				goto out;
 
 			if (fd > 2)
@@ -331,8 +341,8 @@ int handle_syscalls(int s)
 			else
 				ret = 0;
 
-			ret = write(s, &ret, sizeof(ret));
-			if (ret < 0)
+			sret = write(s, &ret, sizeof(ret));
+			if (sret < 0)
 				goto out;
 			break;
 		}
@@ -342,12 +352,12 @@ int handle_syscalls(int s)
 			ssize_t j;
 			char* buff;
 
-			ret = read(s, &fd, sizeof(fd));
-			if (ret < 0)
+			sret = read(s, &fd, sizeof(fd));
+			if (sret < 0)
 				goto out;
 
-			ret = read(s, &len, sizeof(len));
-			if (ret < 0)
+			sret = read(s, &len, sizeof(len));
+			if (sret < 0)
 				goto out;
 
 			buff = malloc(len);
@@ -367,11 +377,11 @@ int handle_syscalls(int s)
 
 				while(i < j)
 				{
-					ret = write(s, buff+i, j-i);
-					if (ret < 0)
+					sret = write(s, buff+i, j-i);
+					if (sret < 0)
 						break;
 
-					i += ret;
+					i += sret;
 				}
 			}
 
@@ -394,7 +404,7 @@ int handle_syscalls(int s)
 			break;
 		}
 		default:
-			fprintf(stderr, "Proxy: invalid syscall number %d, errno %d\n", sysnr, errno);
+			fprintf(stderr, "Proxy: invalid syscall number %d, errno %d, ret %zd\n", sysnr, errno, sret);
 			close(s);
 			exit(1);
 			break;
