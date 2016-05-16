@@ -47,7 +47,7 @@ static spinlock_t lwip_lock = SPINLOCK_INIT;
 
 extern int32_t isle;
 extern int32_t possible_isles;
-extern int libc_sd;
+extern volatile int libc_sd;
 extern uint32_t idle_poll;
 
 tid_t sys_getpid(void)
@@ -83,15 +83,24 @@ void NORETURN sys_exit(int arg)
 {
 	sys_exit_t sysargs = {__NR_exit, arg};
 
+	spinlock_lock(&lwip_lock);
 	if (libc_sd >= 0)
 	{
-		spinlock_lock(&lwip_lock);
-		lwip_write(libc_sd, &sysargs, sizeof(sysargs));
+		int s = libc_sd;
+
+		lwip_write(s, &sysargs, sizeof(sysargs));
+		libc_sd = -1;
+
 		spinlock_unlock(&lwip_lock);
 
-		lwip_close(libc_sd);
-		libc_sd = -1;
+		// switch to LwIP thread
+		reschedule();
+
+kprintf("exit %d\n", arg);
+		lwip_close(s);
 		idle_poll = 0;
+	} else {
+		spinlock_unlock(&lwip_lock);
 	}
 
 	do_exit(arg);
@@ -107,6 +116,7 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 {
 	sys_read_t sysargs = {__NR_read, fd, len};
 	ssize_t j, ret;
+	int s;
 
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
@@ -117,20 +127,23 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 		return ret;
 	}
 
-	if (libc_sd < 0)
-		return -ENOSYS;
-
 	spinlock_lock(&lwip_lock);
-	lwip_write(libc_sd, &sysargs, sizeof(sysargs));
+	if (libc_sd < 0) {
+		spinlock_unlock(&lwip_lock);
+		return -ENOSYS;
+	}
 
-	lwip_read(libc_sd, &j, sizeof(j));
+	s = libc_sd;
+	lwip_write(s, &sysargs, sizeof(sysargs));
+
+	lwip_read(s, &j, sizeof(j));
 	if (j > 0)
 	{
 		ssize_t i = 0;
 
 		while(i < j)
 		{
-			ret = lwip_read(libc_sd, buf+i, j-i);
+			ret = lwip_read(s, buf+i, j-i);
 			if (ret < 0) {
 				spinlock_unlock(&lwip_lock);
 				return ret;
@@ -160,6 +173,7 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 {
 	ssize_t i, ret;
 	sys_write_t sysargs = {__NR_write, fd, len};
+	int s;
 
 	if (BUILTIN_EXPECT(!buf, 0))
 		return -1;
@@ -173,22 +187,24 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 		return ret;
 	}
 
+	spinlock_lock(&lwip_lock);
 	if (libc_sd < 0)
 	{
+		spinlock_unlock(&lwip_lock);
+
 		for(i=0; i<len; i++)
 			kputchar(buf[i]);
 
 		return len;
 	}
 
-	spinlock_lock(&lwip_lock);
-
-	lwip_write(libc_sd, &sysargs, sizeof(sysargs));
+	s = libc_sd;
+	lwip_write(s, &sysargs, sizeof(sysargs));
 
 	i=0;
 	while(i < len)
 	{
-		ret = lwip_write(libc_sd, (char*)buf+i, len-i);
+		ret = lwip_write(s, (char*)buf+i, len-i);
 		if (ret < 0) {
 			spinlock_unlock(&lwip_lock);
 			return ret;
@@ -198,7 +214,7 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	}
 
 	if (fd > 2) {
-		ret = lwip_read(libc_sd, &i, sizeof(i));
+		ret = lwip_read(s, &i, sizeof(i));
 		if (ret < 0)
 			i = ret;
 	} else i = len;
@@ -241,48 +257,50 @@ ssize_t sys_sbrk(ssize_t incr)
 
 int sys_open(const char* name, int flags, int mode)
 {
-	int i, ret, sysnr = __NR_open;
+	int s, i, ret, sysnr = __NR_open;
 	size_t len;
 
-	if (libc_sd < 0)
-		return 0;
+	spinlock_lock(&lwip_lock);
+	if (libc_sd < 0) {
+		ret = 0;
+		goto out;
+	}
 
+	s = libc_sd;
 	len = strlen(name)+1;
 
-	spinlock_lock(&lwip_lock);
-
 	//i = 0;
-	//lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	ret = lwip_write(libc_sd, &sysnr, sizeof(sysnr));
+	ret = lwip_write(s, &sysnr, sizeof(sysnr));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(libc_sd, &len, sizeof(len));
+	ret = lwip_write(s, &len, sizeof(len));
 	if (ret < 0)
 		goto out;
 
 	i=0;
 	while(i<len)
 	{
-		ret = lwip_write(libc_sd, name+i, len-i);
+		ret = lwip_write(s, name+i, len-i);
 		if (ret < 0)
 			goto out;
 		i += ret;
 	}
 
-	ret = lwip_write(libc_sd, &flags, sizeof(flags));
+	ret = lwip_write(s, &flags, sizeof(flags));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(libc_sd, &mode, sizeof(mode));
+	ret = lwip_write(s, &mode, sizeof(mode));
 	if (ret < 0)
 		goto out;
 
 	//i = 1;
-	//lwip_setsockopt(libc_sd, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	lwip_read(libc_sd, &ret, sizeof(ret));
+	lwip_read(s, &ret, sizeof(ret));
 
 out:
 	spinlock_unlock(&lwip_lock);
@@ -297,9 +315,10 @@ typedef struct {
 
 int sys_close(int fd)
 {
-	int ret;
+	int ret, s;
 	sys_close_t sysargs = {__NR_close, fd};
 
+kprintf("close %d\n", fd);
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
 		ret = lwip_close(fd & ~LWIP_FD_BIT);
@@ -309,15 +328,17 @@ int sys_close(int fd)
 		return 0;
 	}
 
-	if (libc_sd < 0)
-		return 0;
-
 	spinlock_lock(&lwip_lock);
+	if (libc_sd < 0) {
+		ret = 0;
+		goto out;
+	}
 
-	ret = lwip_write(libc_sd, &sysargs, sizeof(sysargs));
+	s = libc_sd;
+	ret = lwip_write(s, &sysargs, sizeof(sysargs));
 	if (ret != sizeof(sysargs))
 		goto out;
-	lwip_read(libc_sd, &ret, sizeof(ret));
+	lwip_read(s, &ret, sizeof(ret));
 
 out:
 	spinlock_unlock(&lwip_lock);
@@ -415,14 +436,18 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 {
 	off_t off;
 	sys_lseek_t sysargs = {__NR_lseek, fd, offset, whence};
-
-	if (libc_sd < 0)
-		return -ENOSYS;
+	int s;
 
 	spinlock_lock(&lwip_lock);
 
-	lwip_write(libc_sd, &sysargs, sizeof(sysargs));
-	lwip_read(libc_sd, &off, sizeof(off));
+	if (libc_sd < 0) {
+		spinlock_unlock(&lwip_lock);
+		return -ENOSYS;
+	}
+
+	s = libc_sd;
+	lwip_write(s, &sysargs, sizeof(sysargs));
+	lwip_read(s, &off, sizeof(off));
 
 	spinlock_unlock(&lwip_lock);
 

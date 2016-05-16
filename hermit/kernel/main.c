@@ -85,7 +85,7 @@ extern atomic_int32_t possible_cpus;
 extern int32_t isle;
 extern int32_t possible_isles;
 extern uint32_t boot_processor;
-extern int libc_sd;
+extern volatile int libc_sd;
 
 uint32_t idle_poll = 1;
 
