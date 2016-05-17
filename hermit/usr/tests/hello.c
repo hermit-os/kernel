@@ -52,7 +52,14 @@ int main(int argc, char** argv)
 		fscanf(file, "%s", fname);
 		printf("Hostname: %s\n", fname);
 		fclose(file);
-	}
+	} else fprintf(stderr, "Unable to open file /etc/hostname\n");
+
+	file = fopen("/tmp/test.txt", "w");
+	if (file)
+	{
+		fprintf(file, "Hello World!!!\n");
+		fclose(file);
+	} else fprintf(stderr, "Unable to open file /tmp/test.txt\n");
 
 	return errno;
 }
