@@ -20,10 +20,10 @@ qemu:
 		-kernel linux/arch/x86/boot/bzImage \
 		-append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0" \
 		-net nic,model=rtl8139 -net user -net dump \
-		-nographic -monitor telnet:127.0.0.1:1234,server,nowait \
-		-fsdev local,security_model=passthrough,id=fsdev0,path=$(shell realpath hermit) \
-		-device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hermit
-
+		-nographic -monitor telnet:127.0.0.1:1235,server,nowait \
+		-fsdev local,security_model=none,id=fsdev0,path=$(shell realpath hermit) \
+		-device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hermit \
+		-s
 clean:
 	make -C hermit clean
 
