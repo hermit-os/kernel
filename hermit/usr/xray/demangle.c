@@ -2,7 +2,7 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-#include "xray/xray_priv.h"
+#include "xray_priv.h"
 
 /* Note name demangling requires linking against libstdc++                 */
 /* If your platform does not support __cxa_demangle, re-compile XRay with: */

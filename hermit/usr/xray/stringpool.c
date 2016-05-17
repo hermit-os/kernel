@@ -14,7 +14,7 @@
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
-#include "xray/xray_priv.h"
+#include "xray_priv.h"
 
 #if defined(XRAY)
 

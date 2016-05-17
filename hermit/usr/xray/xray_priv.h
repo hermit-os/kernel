@@ -13,7 +13,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "xray/xray.h"
+#include "xray.h"
 
 #ifdef __cplusplus
 extern "C" {
