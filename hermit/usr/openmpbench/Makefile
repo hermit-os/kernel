@@ -6,17 +6,17 @@ CFLAGS_CRAY = ${CFLAGS}
 endif
 
 .c.o:
-	${CC} ${CFLAGS} $(OMPFLAG) -c $*.c 
+	${CC} ${CFLAGS} $(OMPFLAG) -c $*.c
 
-SYNCOBJS =  syncbench.o common.o 
-SCHEDOBJS = schedbench.o common_sched.o 
-ARRAYOBJS = arraybench_$(IDA).o common.o 
-TASKOBJS =  taskbench.o common.o 
+SYNCOBJS =  syncbench.o common.o
+SCHEDOBJS = schedbench.o common_sched.o
+ARRAYOBJS = arraybench_$(IDA).o common.o
+TASKOBJS =  taskbench.o common.o
 SCHEDFLAGS = -DSCHEDBENCH
 
 all:	syncbench schedbench taskbench
 
-prog: arraybench_$(IDA) 
+prog: arraybench_$(IDA)
 
 # We need to generate a linker map file so that Xray can resolve function names
 LDFLAGS += -Wl,-Map=$@.map
@@ -24,14 +24,14 @@ LDFLAGS += -Wl,-Map=$@.map
 syncbench: $(SYNCOBJS)
 	$(CC) -o syncbench $(SYNCOBJS) $(LDFLAGS) $(CLOCKOBJS) $(LIBS) -lm
 
-# Rule to ensure the lower optimisation level is picked up for common.c 
+# Rule to ensure the lower optimisation level is picked up for common.c
 # with the Cray compiler
-common.o:	
-	${CC} ${CFLAGS_CRAY} $(OMPFLAG) -c $*.c 
+common.o:
+	${CC} ${CFLAGS_CRAY} $(OMPFLAG) -c $*.c
 
-# Separate rule to build common_sched.o as we need to ensure the correct 
-# DEFAULT_DELAY_TIME is used. 
-common_sched.o:	
+# Separate rule to build common_sched.o as we need to ensure the correct
+# DEFAULT_DELAY_TIME is used.
+common_sched.o:
 	${CC} ${CFLAGS_CRAY} $(SCHEDFLAGS) $(OMPFLAG) -o common_sched.o -c common.c
 
 schedbench: $(SCHEDOBJS)
