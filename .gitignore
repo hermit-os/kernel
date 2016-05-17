@@ -1,7 +1,7 @@
 config.log
 config.status
 autom4te.cache
-Makefile
+/Makefile
 *.pcap
 *.config
 *.creator
