@@ -10,6 +10,11 @@
 
 #include <stdint.h>
 
+// we don't want that
+#ifndef XRAY_DISABLE_BROWSER_INTEGRATION
+#define XRAY_DISABLE_BROWSER_INTEGRATION
+#endif
+
 #ifndef XRAY_DISABLE_BROWSER_INTEGRATION
 #include "ppapi/c/ppb.h"
 #endif

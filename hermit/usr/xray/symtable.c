@@ -14,7 +14,7 @@
 #include <dlfcn.h>
 #endif
 
-#include "xray/xray_priv.h"
+#include "xray_priv.h"
 #define PNACL_STRING_OFFSET (0x10000000)
 
 #if defined(XRAY)

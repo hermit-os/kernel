@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "xray/xray_priv.h"
+#include "xray_priv.h"
 
 #if defined(XRAY)
 
@@ -199,10 +199,12 @@ void XRaySaveReport(struct XRayTraceCapture* capture,
                     float percent_cutoff,
                     int ticks_cutoff) {
   FILE* f;
-  f = fopen(filename, "wt");
+  f = fopen(filename, "w");
   if (NULL != f) {
     XRayReport(capture, f, percent_cutoff, ticks_cutoff);
     fclose(f);
+  } else {
+	  printf("Cannot open file '%s'\n", filename);
   }
 }
 
