@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
+#include <xray.h>
 
 #include "common.h"
 #include "syncbench.h"
@@ -41,6 +42,12 @@
 omp_lock_t lock;
 
 int main(int argc, char **argv) {
+
+	struct XRayTraceCapture* trace = XRayInit(
+				20,					// max. call depth
+				32 * 1000 * 1000,	// memory for report
+				13,					// frame count
+				"/hermit/usr/openmpbench/syncbench.map");
 
     // Start Paraver tracing
 #ifdef PARAVERTRACE
@@ -52,47 +59,79 @@ int main(int argc, char **argv) {
     omp_init_lock(&lock);
 
     /* GENERATE REFERENCE TIME */
-    reference("reference time 1", &refer);
+	XRayStartFrame(trace);
+	reference("reference time 1", &refer);
+	XRayEndFrame(trace);
 
     /* TEST PARALLEL REGION */
+	XRayStartFrame(trace);
     benchmark("PARALLEL", &testpr);
+	XRayEndFrame(trace);
 
     /* TEST FOR */
-    benchmark("FOR", &testfor);
+	XRayStartFrame(trace);
+	benchmark("FOR", &testfor);
+	XRayEndFrame(trace);
 
     /* TEST PARALLEL FOR */
-    benchmark("PARALLEL FOR", &testpfor);
+	XRayStartFrame(trace);
+	benchmark("PARALLEL FOR", &testpfor);
+	XRayEndFrame(trace);
 
     /* TEST BARRIER */
+	XRayStartFrame(trace);
     benchmark("BARRIER", &testbar);
+	XRayEndFrame(trace);
 
     /* TEST SINGLE */
+	XRayStartFrame(trace);
     benchmark("SINGLE", &testsing);
+	XRayEndFrame(trace);
 
     /* TEST  CRITICAL*/
+	XRayStartFrame(trace);
     benchmark("CRITICAL", &testcrit);
+	XRayEndFrame(trace);
 
     /* TEST  LOCK/UNLOCK */
+	XRayStartFrame(trace);
     benchmark("LOCK/UNLOCK", &testlock);
+	XRayEndFrame(trace);
 
     /* TEST ORDERED SECTION */
+	XRayStartFrame(trace);
     benchmark("ORDERED", &testorder);
+	XRayEndFrame(trace);
 
     /* GENERATE NEW REFERENCE TIME */
+	XRayStartFrame(trace);
     reference("reference time 2", &referatom);
+	XRayEndFrame(trace);
 
     /* TEST ATOMIC */
+	XRayStartFrame(trace);
     benchmark("ATOMIC", &testatom);
+	XRayEndFrame(trace);
 
     /* GENERATE NEW REFERENCE TIME */
+	XRayStartFrame(trace);
     reference("reference time 3", &referred);
+	XRayEndFrame(trace);
 
     /* TEST REDUCTION (1 var)  */
+	XRayStartFrame(trace);
     benchmark("REDUCTION", &testred);
+	XRayEndFrame(trace);
 
 #ifdef PARAVERTRACE
     Extrae_fini();
 #endif
+
+	XRaySaveReport(trace,
+				   "/hermit/usr/openmpbench/syncbench.xray", // report file
+				   0.05f, // Only output funcs that have higher runtime [%]
+				   1000); // Only output funcs that have higher runtime [cycles]
+	XRayShutdown(trace);
 
     finalise();
 
@@ -132,6 +171,11 @@ void referred() {
 
 void testpr() {
     int j;
+#ifdef XRAY
+	static int n = 1;
+	XRayAnnotate("n = %i", n);
+	n++;
+#endif
     for (j = 0; j < innerreps; j++) {
 #pragma omp parallel
 	{
@@ -155,6 +199,11 @@ void testfor() {
 
 void testpfor() {
     int i, j;
+#ifdef XRAY
+	static int n = 1;
+	XRayAnnotate("n = %i", n);
+	n++;
+#endif
     for (j = 0; j < innerreps; j++) {
 #pragma omp parallel for
 	for (i = 0; i < nthreads; i++) {

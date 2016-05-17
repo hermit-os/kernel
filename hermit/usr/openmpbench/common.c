@@ -35,6 +35,7 @@
 #include <string.h>
 #include <math.h>
 #include <omp.h>
+#include <xray.h>
 
 #include "common.h"
 
@@ -276,6 +277,8 @@ void reference(char *name, void (*refer)(void)) {
     int k;
     double start;
 
+	XRayAnnotate("name='%s'", name);
+
     // Calculate the required number of innerreps
     innerreps = getinnerreps(refer);
 
@@ -318,6 +321,8 @@ void benchmark(char *name, void (*test)(void))
     innerreps = getinnerreps(test);
 
     intitest(name);
+
+	XRayAnnotate("name='%s'", name);
 
     for (k=0; k<=outerreps; k++) {
 	start = getclock();
