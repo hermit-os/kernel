@@ -3,3 +3,8 @@ config.status
 autom4te.cache
 Makefile
 *.pcap
+*.config
+*.creator
+*.creator.user
+*.files
+*.includes
