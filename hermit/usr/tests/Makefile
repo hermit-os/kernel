@@ -32,7 +32,7 @@ endif
 # other implicit rules
 %.o : %.c
 	@echo [CC] $@
-	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -o $@ $< 
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -o $@ $<
 
 %.o: %.cpp
 	@echo [CXX] $@
@@ -48,28 +48,28 @@ all: hello hello++ thr_hello jacobi hellof RCCE_minimum
 
 hello++: hello++.o
 	@echo [LD] $@
-	$Q$(CXX_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CXX_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CXXFLAGS_FOR_TARGET)
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
 hello: hello.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET)
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
 hellof: hellof.o
 	@echo [LD] $@
-	$Q$(FC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET) -o $@ $<
+	$Q$(FC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET)
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
 jacobi: jacobi.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lm
+	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET)
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
@@ -80,14 +80,14 @@ thr_hello.o: thr_hello.c
 
 thr_hello: thr_hello.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -pthread
+	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -pthread
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
 RCCE_minimum: RCCE_minimum.o
 	@echo [LD] $@
-	$Q$(CC_FOR_TARGET) $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -o $@ $< -lircce
+	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -lircce
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
