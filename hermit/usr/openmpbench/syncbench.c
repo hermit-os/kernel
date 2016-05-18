@@ -68,59 +68,59 @@ int main(int argc, char **argv) {
     benchmark("PARALLEL", &testpr);
 	XRayEndFrame(trace);
 
-    /* TEST FOR */
+	/* TEST FOR */
 	XRayStartFrame(trace);
 	benchmark("FOR", &testfor);
 	XRayEndFrame(trace);
 
-    /* TEST PARALLEL FOR */
+	/* TEST PARALLEL FOR */
 	XRayStartFrame(trace);
 	benchmark("PARALLEL FOR", &testpfor);
 	XRayEndFrame(trace);
 
-    /* TEST BARRIER */
+	/* TEST BARRIER */
 	XRayStartFrame(trace);
-    benchmark("BARRIER", &testbar);
+	benchmark("BARRIER", &testbar);
 	XRayEndFrame(trace);
 
-    /* TEST SINGLE */
+	/* TEST SINGLE */
 	XRayStartFrame(trace);
-    benchmark("SINGLE", &testsing);
+	benchmark("SINGLE", &testsing);
 	XRayEndFrame(trace);
 
-    /* TEST  CRITICAL*/
+	/* TEST  CRITICAL*/
 	XRayStartFrame(trace);
-    benchmark("CRITICAL", &testcrit);
+	benchmark("CRITICAL", &testcrit);
 	XRayEndFrame(trace);
 
-    /* TEST  LOCK/UNLOCK */
+	/* TEST  LOCK/UNLOCK */
 	XRayStartFrame(trace);
-    benchmark("LOCK/UNLOCK", &testlock);
+	benchmark("LOCK/UNLOCK", &testlock);
 	XRayEndFrame(trace);
 
-    /* TEST ORDERED SECTION */
+	/* TEST ORDERED SECTION */
 	XRayStartFrame(trace);
-    benchmark("ORDERED", &testorder);
+	benchmark("ORDERED", &testorder);
 	XRayEndFrame(trace);
 
-    /* GENERATE NEW REFERENCE TIME */
+	/* GENERATE NEW REFERENCE TIME */
 	XRayStartFrame(trace);
-    reference("reference time 2", &referatom);
+	reference("reference time 2", &referatom);
 	XRayEndFrame(trace);
 
-    /* TEST ATOMIC */
+	/* TEST ATOMIC */
 	XRayStartFrame(trace);
-    benchmark("ATOMIC", &testatom);
+	benchmark("ATOMIC", &testatom);
 	XRayEndFrame(trace);
 
-    /* GENERATE NEW REFERENCE TIME */
+	/* GENERATE NEW REFERENCE TIME */
 	XRayStartFrame(trace);
-    reference("reference time 3", &referred);
+	reference("reference time 3", &referred);
 	XRayEndFrame(trace);
 
-    /* TEST REDUCTION (1 var)  */
+	/* TEST REDUCTION (1 var)  */
 	XRayStartFrame(trace);
-    benchmark("REDUCTION", &testred);
+	benchmark("REDUCTION", &testred);
 	XRayEndFrame(trace);
 
 #ifdef PARAVERTRACE

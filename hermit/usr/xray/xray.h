@@ -51,6 +51,7 @@ XRAY_NO_INSTRUMENT struct XRayTraceCapture* XRayInit(int stack_size,
 XRAY_NO_INSTRUMENT void XRayShutdown(struct XRayTraceCapture* capture);
 XRAY_NO_INSTRUMENT void XRayStartFrame(struct XRayTraceCapture* capture);
 XRAY_NO_INSTRUMENT void XRayEndFrame(struct XRayTraceCapture* capture);
+XRAY_NO_INSTRUMENT void XRayLabelFrame(const char* fmt, ...);
 XRAY_NO_INSTRUMENT void XRaySetAnnotationFilter(
     struct XRayTraceCapture* capture, uint32_t filter);
 XRAY_NO_INSTRUMENT void XRaySaveReport(struct XRayTraceCapture* capture,
@@ -95,6 +96,8 @@ inline struct XRayTraceCapture* XRayInit(int stack_size,
 inline void XRayShutdown(struct XRayTraceCapture* capture) {}
 inline void XRayStartFrame(struct XRayTraceCapture* capture) {}
 inline void XRayEndFrame(struct XRayTraceCapture* capture) {}
+inline void XRayLabelFrame(const char* fmt, ...) {}
+
 inline void XRaySetAnnotationFilter(struct XRayTraceCapture* capture,
                                     uint32_t filter) {}
 inline void XRaySaveReport(struct XRayTraceCapture* capture,
