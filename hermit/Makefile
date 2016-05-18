@@ -41,6 +41,19 @@ ARFLAGS = rsv
 RM = rm -rf
 OUTPUT_FORMAT = -O elf64-x86-64-hermit
 
+# Additional flags for profiling using Xray
+PROFILING_LDFLAGS =
+PROFILING_CFLAGS =
+
+ifdef PROFILING
+    PROFILING_LDFLAGS = -lxray
+
+    PROFILING_CFLAGS  = -falign-functions=32 -finstrument-functions
+    PROFILING_CFLAGS += -finstrument-functions-exclude-function-list=_mm_pause,_mm_setcsr,_mm_getcsr # we need this for libiomp to work
+    PROFILING_CFLAGS += -DXRAY -DXRAY_DISABLE_BROWSER_INTEGRATION -DXRAY_NO_DEMANGLE
+    PROFILING_CFLAGS += -DXRAY_ANNOTATE
+endif
+
 CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize $(STACKPROT)
 FCFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
 FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -mno-red-zone -O3 -march=native -mtune=native -ftree-vectorize
@@ -84,7 +97,9 @@ toolchain:
 		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
 		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
 		ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) \
-		READELF_FOR_TARGET=$(READELF_FOR_TARGET) -C usr toolchain
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) \
+		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
+		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr toolchain
 
 bootstrap:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="" LDFLAGS="" -C usr bootstrap
