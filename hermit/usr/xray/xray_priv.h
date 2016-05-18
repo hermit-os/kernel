@@ -38,7 +38,7 @@ extern "C" {
 #define XRAY_SYMBOL_TABLE_MAX_RATIO (0.66f)
 #define XRAY_LINE_SIZE (1024)
 #define XRAY_MAX_FRAMES (60)
-#define XRAY_MAX_LABEL (64)
+#define XRAY_MAX_LABEL (32)
 #define XRAY_DEFAULT_SYMBOL_TABLE_SIZE (4096)
 #define XRAY_SYMBOL_POOL_NODE_SIZE (1024)
 #define XRAY_GUARD_VALUE_0x12345678 (0x12345678)
@@ -197,6 +197,9 @@ XRAY_NO_INSTRUMENT struct XRayTimestampPair XRayFrameGetEndTimestampPair(
 XRAY_NO_INSTRUMENT struct XRayTimestampPair XRayGenerateTimestampsNow(void);
 #endif
 
+#ifndef XRAY_FRAME_LBL_BUFSIZE
+#define XRAY_FRAME_LBL_BUFSIZE 16
+#endif
 
 #endif  /* defined(XRAY) */
 

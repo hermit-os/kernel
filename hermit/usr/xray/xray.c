@@ -97,6 +97,7 @@ struct XRayTraceCapture {
   uint32_t guard3;
   struct XRayTraceBufferEntry* buffer;
   struct XRayTraceFrame frame;
+  char frame_labels[XRAY_FRAME_LBL_BUFSIZE][XRAY_MAX_LABEL];
 
 #ifndef XRAY_DISABLE_BROWSER_INTEGRATION
   int32_t thread_id;
@@ -556,7 +557,30 @@ int XRayFrameGetAnnotationCount(struct XRayTraceCapture* capture, int i) {
 void XRayFrameMakeLabel(struct XRayTraceCapture* capture,
                         int counter,
                         char* label) {
-  snprintf(label, XRAY_MAX_LABEL, "@@@frame%d@@@", counter);
+	if(counter < sizeof(capture->frame_labels) && capture->frame_labels[counter][0]) {
+		snprintf(label, XRAY_MAX_LABEL, "%s", capture->frame_labels[counter]);
+	} else {
+		snprintf(label, XRAY_MAX_LABEL, "frame_%i", counter);
+	}
+}
+void XRayLabelFrame(const char* fmt, ...)
+{
+	char buffer[32];
+	int r;
+	va_list args;
+
+	va_start(args, fmt);
+	r = vsnprintf(buffer, sizeof(buffer), fmt, args);
+	if(r != 0) {
+		const int n = XRayFrameGetHead(g_xray_capture);
+		if(n < sizeof(g_xray_capture->frame_labels)) {
+			strcpy(g_xray_capture->frame_labels[n], buffer);
+		} else {
+			puts("XRay: Not enough entries in frame label buffer");
+			puts("      Add -DXRAY_FRAME_LBL_BUFSIZE=[n] to your CFLAGS");
+		}
+	}
+	va_end(args);
 }
 
 
@@ -619,6 +643,11 @@ void XRayStartFrame(struct XRayTraceCapture* capture) {
   capture->recording = true;
   GTSC(capture->frame.entry[i].start_tsc);
   g_xray_capture = capture;
+
+  // initialize frame label
+  if(i < sizeof(capture->frame_labels)) {
+	capture->frame_labels[i][0] = 0;
+  }
 
 #ifndef XRAY_DISABLE_BROWSER_INTEGRATION
   capture->frame.entry[i].start_time = XRayGenerateTimestampsNow();

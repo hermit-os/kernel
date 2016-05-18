@@ -277,7 +277,7 @@ void reference(char *name, void (*refer)(void)) {
     int k;
     double start;
 
-	XRayAnnotate("name='%s'", name);
+	XRayLabelFrame(name);
 
     // Calculate the required number of innerreps
     innerreps = getinnerreps(refer);
@@ -322,7 +322,7 @@ void benchmark(char *name, void (*test)(void))
 
     intitest(name);
 
-	XRayAnnotate("name='%s'", name);
+	XRayLabelFrame(name);
 
     for (k=0; k<=outerreps; k++) {
 	start = getclock();
