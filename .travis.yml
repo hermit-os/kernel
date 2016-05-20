@@ -14,7 +14,7 @@ script:
         - wget https://www.lankes.org/deploy/bzImage
         - mv bzImage linux/arch/x86/boot/
         - wget https://www.lankes.org/deploy/bootstrap.tar.gz
-        - tar xzvf bootstrap.tar.gz
+        - tar xzf bootstrap.tar.gz
         - mv tmp hermit/usr/
         - mv x86 hermit/usr/
         - make
