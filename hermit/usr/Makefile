@@ -47,7 +47,7 @@ $(TMP)/binutils:
 $(TMP)/bootstrap:
 	@echo Build bootstrap compiler
 	$Q$(MKDIR) $(TMP)/bootstrap
-	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
+	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc $(P) && $(MAKE) install-gcc $(P)
 
 toolchain: $(TMP)/newlib pte $(TMP)/gcc libs headers demo
 
@@ -82,10 +82,10 @@ headers:
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(P) && $(MAKE) install $(P)
 	$Q$(RM) $(TMP)/gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c,c++,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c,c++,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(P) && $(MAKE) install $(P)
 
 clean:
 	@echo Cleaning toolchain
