@@ -9,6 +9,15 @@ before_install:
         - sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev
         - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
         - git submodule update --init --recursive
-before_script:
-        - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
-        - export PATH=$PATH:/usr/local/bin
+script:
+        - ./configure
+        - wget https://www.lankes.org/deploy/bzImage
+        - mv bzImage linux/arch/x86/boot/
+        - wget https://www.lankes.org/deploy/bootstrap.tar.gz
+        - tar xzf bootstrap.tar.gz
+        - mv tmp hermit/usr/
+        - mv x86 hermit/usr/
+        - make
+env:
+        global:
+                - TOPDIR=`pwd`/../..
