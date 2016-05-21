@@ -29,12 +29,8 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
-INTEL = 0
-ifeq ($INTEL,0)
 ICC_EXE =
-else
-ICC_EXE = stream_icc
-endif
+#ICC_EXE = stream_icc
 
 # other implicit rules
 %.o : %.c
