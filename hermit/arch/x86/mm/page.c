@@ -214,6 +214,9 @@ void page_fault_handler(struct state *s)
 	spinlock_irqsave_lock(&page_lock);
 
 	if ((task->heap) && (viraddr >= task->heap->start) && (viraddr < task->heap->end)) {
+		size_t flags;
+		int ret;
+
 		/*
 		 * do we have a valid page table entry? => flush TLB and return
 		 */
@@ -233,7 +236,11 @@ void page_fault_handler(struct state *s)
 			goto default_handler;
 		}
 
-		int ret = page_map(viraddr, phyaddr, 1, PG_USER|PG_RW);
+		flags = PG_USER|PG_RW;
+		if (has_nx()) // set no execution flag to protect the heap
+			flags |= PG_XD;
+		ret = page_map(viraddr, phyaddr, 1, flags);
+
 		if (BUILTIN_EXPECT(ret, 0)) {
 			kprintf("map_region: could not map %#lx to %#lx, task = %u\n", phyaddr, viraddr, task->id);
 			put_page(phyaddr);
