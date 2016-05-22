@@ -96,7 +96,6 @@ void NORETURN sys_exit(int arg)
 		// switch to LwIP thread
 		reschedule();
 
-kprintf("exit %d\n", arg);
 		lwip_close(s);
 		idle_poll = 0;
 	} else {
@@ -318,7 +317,6 @@ int sys_close(int fd)
 	int ret, s;
 	sys_close_t sysargs = {__NR_close, fd};
 
-kprintf("close %d\n", fd);
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
 		ret = lwip_close(fd & ~LWIP_FD_BIT);
