@@ -550,6 +550,7 @@ err_t mmnif_init(struct netif *netif)
 	int num = 0;
 	int err;
 	uint32_t nodes = possible_isles + 1;
+	size_t flags;
 
 	DEBUGPRINTF("Initialize mmnif\n");
 
@@ -598,8 +599,13 @@ err_t mmnif_init(struct netif *netif)
 		goto out;
 	}
 
+	// protect mmnif shared segments by the NX flag
+	flags = PG_RW|PG_GLOBAL;
+	if (has_nx())
+		flags |= PG_XD;
+
 	// map physical address in the virtual address space
-	err = page_map((size_t) header_start_address, (size_t) header_phy_start_address, (nodes * header_size) >> PAGE_BITS, PG_RW|PG_GLOBAL);
+	err = page_map((size_t) header_start_address, (size_t) header_phy_start_address, (nodes * header_size) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
 		DEBUGPRINTF("mmnif init(): page_map failed\n");
 		goto out;
@@ -621,7 +627,7 @@ err_t mmnif_init(struct netif *netif)
 	}
 
 	// map physical address in the virtual address space
-	err = page_map((size_t) heap_start_address, (size_t) heap_phy_start_address, (nodes * heap_size) >> PAGE_BITS, PG_RW|PG_GLOBAL);
+	err = page_map((size_t) heap_start_address, (size_t) heap_phy_start_address, (nodes * heap_size) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
 		DEBUGPRINTF("mmnif init(): page_map failed\n");
 		goto out;
@@ -641,7 +647,7 @@ err_t mmnif_init(struct netif *netif)
 	}
 
 	// map physical address in the virtual address space
-	err = page_map((size_t) isle_locks, (size_t) phy_isle_locks, (((nodes+1) * sizeof(islelock_t) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)) >> PAGE_BITS, PG_RW|PG_GLOBAL);
+	err = page_map((size_t) isle_locks, (size_t) phy_isle_locks, (((nodes+1) * sizeof(islelock_t) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
 		DEBUGPRINTF("mmnif init(): page_map failed\n");
 		goto out;

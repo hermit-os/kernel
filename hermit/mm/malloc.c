@@ -78,7 +78,7 @@ static buddy_t* buddy_get(int exp)
 	else if ((exp >= BUDDY_ALLOC) && !buddy_large_avail(exp))
 		// theres no free buddy larger than exp =>
 		// we can allocate new memory
-		buddy = (buddy_t*) palloc(1<<exp, 0);
+		buddy = (buddy_t*) palloc(1<<exp, VMA_HEAP);
 	else {
 		// we recursivly request a larger buddy...
 		buddy = buddy_get(exp+1);
@@ -132,14 +132,14 @@ void buddy_dump(void)
 
 void* palloc(size_t sz, uint32_t flags)
 {
-	size_t phyaddr, viraddr;
+	size_t phyaddr, viraddr, bits;
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
 	//kprintf("palloc(%lu) (%lu pages)\n", sz, npages);
 
 	// get free virtual address space
-	viraddr = vma_alloc(npages*PAGE_SIZE, VMA_HEAP);
+	viraddr = vma_alloc(npages*PAGE_SIZE, flags);
 	if (BUILTIN_EXPECT(!viraddr, 0))
 		return NULL;
 
@@ -150,8 +150,14 @@ void* palloc(size_t sz, uint32_t flags)
 		return NULL;
 	}
 
+	//TODO: interpretation of from (vma) flags is missing
+	bits = PG_RW|PG_GLOBAL;
+	// protect heap by the NX flag
+	if (has_nx())
+		bits |= PG_XD;
+
 	// map physical pages to VMA
-	err = page_map(viraddr, phyaddr, npages, PG_RW|PG_GLOBAL);
+	err = page_map(viraddr, phyaddr, npages, bits);
 	if (BUILTIN_EXPECT(err, 0)) {
 		vma_free(viraddr, viraddr+npages*PAGE_SIZE);
 		put_pages(phyaddr, npages);

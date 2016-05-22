@@ -309,8 +309,13 @@ int apic_enable_timer(void)
 
 static apic_mp_t* search_mptable(size_t base, size_t limit) {
 	size_t ptr=PAGE_CEIL(base), vptr=0;
+	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
 	apic_mp_t* tmp;
 	uint32_t i;
+
+	// protec apic by the NX flags
+	if (has_nx())
+		flags |= PG_XD;
 
 	while(ptr<=limit-sizeof(apic_mp_t)) {
 		if (vptr) {
@@ -319,7 +324,7 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 			vptr = 0;
 		}
 
-		if (BUILTIN_EXPECT(!page_map(ptr & PAGE_MASK, ptr & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD), 1))
+		if (BUILTIN_EXPECT(!page_map(ptr & PAGE_MASK, ptr & PAGE_MASK, 1, flags), 1))
 			vptr = ptr & PAGE_MASK;
 		else
 			return NULL;
@@ -472,6 +477,11 @@ static int apic_probe(void)
 	size_t addr;
 	uint32_t i, j, count;
 	int isa_bus = -1;
+	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
+
+	// protect apic by NX flags
+	if (has_nx())
+		flags |= PG_XD;
 
 	apic_mp = search_mptable(0xF0000, 0x100000);
 	if (apic_mp)
@@ -500,7 +510,7 @@ found_mp:
 
 	apic_config = (apic_config_table_t*) ((size_t) apic_mp->mp_config);
 	if (((size_t) apic_config & PAGE_MASK) != ((size_t) apic_mp & PAGE_MASK)) {
-		page_map((size_t) apic_config & PAGE_MASK,  (size_t) apic_config & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD);
+		page_map((size_t) apic_config & PAGE_MASK,  (size_t) apic_config & PAGE_MASK, 1, flags);
 		vma_add( (size_t) apic_config & PAGE_MASK, ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
 	}
 
@@ -515,7 +525,7 @@ found_mp:
 	// does the apic table raise the page boundary? => map additional page
 	if (apic_config->entry_count * 20 + addr > ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE)
 	{
-		page_map(((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, 1, PG_GLOBAL | PG_RW | PG_PCD);
+		page_map(((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, 1, flags);
 		vma_add( ((size_t) apic_config & PAGE_MASK) + PAGE_SIZE, ((size_t) apic_config & PAGE_MASK) + 2*PAGE_SIZE, VMA_READ|VMA_WRITE);
 	}
 
@@ -563,7 +573,7 @@ found_mp:
 			ioapic = (ioapic_t*) ((size_t) io_entry->addr);
 			kprintf("Found IOAPIC at 0x%x\n", ioapic);
 #if 0
-			page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD);
+			page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, flags);
 			vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
 			ioapic = (ioapic_t*) IOAPIC_ADDR;
 			kprintf("Map IOAPIC to 0x%x\n", ioapic);
@@ -599,7 +609,7 @@ check_lapic:
 	if (has_x2apic()) {
 		x2apic_enable();
 	} else {
-		if (page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, PG_GLOBAL | PG_RW | PG_PCD)) {
+		if (page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, flags)) {
 			kprintf("Failed to map APIC to 0x%x\n", LAPIC_ADDR);
 			goto out;
 		} else {
