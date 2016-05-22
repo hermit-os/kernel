@@ -240,12 +240,14 @@ int smp_main(void)
 
 static int init_rcce(void)
 {
-	size_t addr;
+	size_t addr, flags = PG_GLOBAL|PG_RW;
 
 	addr = vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(!addr, 0))
 		return -ENOMEM;
-	if (page_map(addr, phy_rcce_internals, 1, PG_GLOBAL|PG_RW)) {
+	if (has_nx())
+		flags |= PG_XD;
+	if (page_map(addr, phy_rcce_internals, 1, flags)) {
 		vma_free(addr, addr + PAGE_SIZE);
 		return -ENOMEM;
 	}
