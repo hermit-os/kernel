@@ -243,8 +243,10 @@ ssize_t sys_sbrk(ssize_t incr)
 
 	ret = heap->end;
 	heap->end += incr;
-	if (heap->end < heap->start)
-		heap->end = heap->start;
+
+	// reserve VMA regions
+	if (PAGE_CEIL(heap->end) > PAGE_CEIL(ret))
+		vma_add(PAGE_CEIL(ret+PAGE_SIZE), PAGE_FLOOR(heap->end), VMA_HEAP|VMA_USER);
 
 	// allocation and mapping of new pages for the heap
 	// is catched by the pagefault handler
