@@ -328,6 +328,9 @@ static int initd(void* arg)
 	curr_task->heap->start = PAGE_FLOOR(heap);
 	curr_task->heap->end = PAGE_FLOOR(heap);
 
+	// reserve VMA region
+	vma_add(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE, VMA_HEAP|VMA_USER);
+
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
