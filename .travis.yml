@@ -18,7 +18,7 @@ script:
         - tar xzf newlib.tar.gz
         - mv tmp hermit/usr/
         - mv x86 hermit/usr/
-        - make
+        - make T=1
 env:
         global:
                 - TOPDIR=`pwd`/../..
