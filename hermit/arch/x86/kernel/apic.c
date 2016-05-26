@@ -815,6 +815,7 @@ void shutdown_system(void)
 	if (if_bootprocessor) {
 		kprintf("Try to shutdown HermitCore\n");
 
+		//vma_dump();
 		dump_pstate();
 
 		while(atomic_int32_read(&cpu_online) != 1)
