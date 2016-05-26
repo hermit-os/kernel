@@ -109,9 +109,10 @@ fail:
 	return 0;
 
 found:
-	if (pred && pred->flags == flags)
-		pred->end = start + size; // resize VMA
-	else {
+	if (pred && pred->flags == flags) {
+		pred->end += size; // resize VMA
+		//kprintf("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
+	} else {
 		// insert new VMA
 		vma_t* new = kmalloc(sizeof(vma_t));
 		if (BUILTIN_EXPECT(!new, 0))
@@ -181,6 +182,8 @@ int vma_free(size_t start, size_t end)
 			spinlock_unlock(lock);
 			return -ENOMEM;
 		}
+
+		new->flags = vma->flags;
 
 		new->end = vma->end;
 		vma->end = start;
@@ -255,10 +258,11 @@ void vma_dump(void)
 {
 	void print_vma(vma_t *vma) {
 		while (vma) {
-			kprintf("0x%lx - 0x%lx: size=%x, flags=%c%c%c\n", vma->start, vma->end, vma->end - vma->start,
+			kprintf("0x%lx - 0x%lx: size=%x, flags=%c%c%c%s\n", vma->start, vma->end, vma->end - vma->start,
 				(vma->flags & VMA_READ) ? 'r' : '-',
 				(vma->flags & VMA_WRITE) ? 'w' : '-',
-				(vma->flags & VMA_EXECUTE) ? 'x' : '-');
+				(vma->flags & VMA_EXECUTE) ? 'x' : '-',
+				(vma->flags & VMA_CACHEABLE) ? "" : " (uncached)");
 			vma = vma->next;
 		}
 	}
