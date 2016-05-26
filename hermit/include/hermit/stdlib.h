@@ -71,6 +71,14 @@ void* palloc(size_t sz, uint32_t flags);
  */
 void* kmalloc(size_t sz);
 
+/** @brief Create a stack with guard pages
+ */
+void* create_stack(void);
+
+/** @brief Destroy stack with its guard pages
+ */
+int destroy_stack(void* addr);
+
 /** @brief Release memory back to the buddy system
  *
  * Every block of memory allocated by kmalloc() is prefixed with a buddy_t

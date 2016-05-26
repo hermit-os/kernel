@@ -78,7 +78,7 @@ static buddy_t* buddy_get(int exp)
 	else if ((exp >= BUDDY_ALLOC) && !buddy_large_avail(exp))
 		// theres no free buddy larger than exp =>
 		// we can allocate new memory
-		buddy = (buddy_t*) palloc(1<<exp, VMA_HEAP);
+		buddy = (buddy_t*) palloc(1<<exp, VMA_HEAP|VMA_CACHEABLE);
 	else {
 		// we recursivly request a larger buddy...
 		buddy = buddy_get(exp+1);
@@ -139,7 +139,7 @@ void* palloc(size_t sz, uint32_t flags)
 	//kprintf("palloc(%lu) (%lu pages)\n", sz, npages);
 
 	// get free virtual address space
-	viraddr = vma_alloc(npages*PAGE_SIZE, flags);
+	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
 	if (BUILTIN_EXPECT(!viraddr, 0))
 		return NULL;
 
@@ -165,6 +165,64 @@ void* palloc(size_t sz, uint32_t flags)
 	}
 
 	return (void*) viraddr;
+}
+
+void* create_stack(void)
+{
+	size_t phyaddr, viraddr, bits;
+	uint32_t npages = PAGE_FLOOR(DEFAULT_STACK_SIZE) >> PAGE_BITS;
+	int err;
+
+	//kprintf("create_stack(0x%zx) (%lu pages)\n", DEFAULT_STACK_SIZE, npages);
+
+	// get free virtual address space
+	viraddr = vma_alloc((npages+2)*PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	if (BUILTIN_EXPECT(!viraddr, 0))
+		return NULL;
+
+	// get continous physical pages
+	phyaddr = get_pages(npages);
+	if (BUILTIN_EXPECT(!phyaddr, 0)) {
+		vma_free(viraddr, viraddr+(npages+2)*PAGE_SIZE);
+		return NULL;
+	}
+
+	bits = PG_RW|PG_GLOBAL;
+	// protect heap by the NX flag
+	if (has_nx())
+		bits |= PG_XD;
+
+	// map physical pages to VMA
+	err = page_map(viraddr+PAGE_SIZE, phyaddr, npages, bits);
+	if (BUILTIN_EXPECT(err, 0)) {
+		vma_free(viraddr, viraddr+(npages+2)*PAGE_SIZE);
+		put_pages(phyaddr, npages);
+		return NULL;
+	}
+
+	return (void*) (viraddr+PAGE_SIZE);
+}
+
+int destroy_stack(void* viraddr)
+{
+	size_t phyaddr;
+	uint32_t npages = PAGE_FLOOR(DEFAULT_STACK_SIZE) >> PAGE_BITS;
+
+	//kprintf("destroy_stack(0x%zx) (size 0x%zx)\n", viraddr, DEFAULT_STACK_SIZE);
+
+	if (BUILTIN_EXPECT(!viraddr, 0))
+		return -ENOMEM;
+
+	phyaddr = virt_to_phys((size_t)viraddr);
+	if (BUILTIN_EXPECT(!phyaddr, 0))
+		return -ENOMEM;
+
+	// unmap and destroy stack
+	vma_free((size_t)viraddr-PAGE_SIZE, (size_t)viraddr+(npages+1)*PAGE_SIZE);
+	page_unmap((size_t)viraddr, npages);
+	put_pages(phyaddr, npages);
+
+	return 0;
 }
 
 void* kmalloc(size_t sz)

@@ -213,7 +213,8 @@ void finish_task_switch(void)
 		if (old->status == TASK_FINISHED) {
 			/* cleanup task */
 			if (old->stack) {
-				kfree(old->stack);
+				kprintf("Release stack at 0x%zx\n", old->stack);
+				destroy_stack(old->stack);
 				old->stack = NULL;
 			}
 
@@ -333,13 +334,9 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 	curr_task = per_core(current_task);
 
-	stack = kmalloc(DEFAULT_STACK_SIZE + PAGE_SIZE);
+	stack = create_stack();
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
-
-	// unmap the first page to detect a stack overflow
-	page_unmap((size_t)stack, 1);
-	stack = (void*) ((size_t) stack + PAGE_SIZE);
 
 	spinlock_irqsave_lock(&table_lock);
 
@@ -395,7 +392,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 out:
 	if (ret)
-		kfree(stack);
+		destroy_stack(stack);
 
 #if 0
 	if (core_id != CORE_ID)
@@ -423,17 +420,13 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0))
 		return -EINVAL;
 
-	stack = kmalloc(DEFAULT_STACK_SIZE + PAGE_SIZE);
+	stack = create_stack();
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
 
-	// unmap the first page to detect a stack overflow
-	page_unmap((size_t)stack, 1);
-	stack = (void*) ((size_t) stack + PAGE_SIZE);
-
 	counter = kmalloc(sizeof(atomic_int64_t));
 	if (BUILTIN_EXPECT(!counter, 0)) {
-		kfree(stack);
+		destroy_stack(stack);
 		return -ENOMEM;
 	}
 	atomic_int64_set((atomic_int64_t*) counter, 0);
@@ -489,7 +482,7 @@ out:
 	spinlock_irqsave_unlock(&table_lock);
 
 	if (ret) {
-		kfree(stack);
+		destroy_stack(stack);
 		kfree(counter);
 	}
 

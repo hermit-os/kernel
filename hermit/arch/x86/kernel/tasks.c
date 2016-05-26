@@ -97,7 +97,6 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	 * This is the stack which will be activated and popped off for iret later.
 	 */
 	stack = (size_t*) (((size_t) task->stack + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F);	// => stack is 32byte aligned
-	stack += sizeof(size_t);
 
 	/* Only marker for debugging purposes, ... */
 	*stack-- = 0xDEADBEEF;
