@@ -12,6 +12,7 @@
 #define __NETINET_IN_H__
 
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 
