@@ -203,6 +203,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 {
 	spinlock_t* lock = &vma_lock;
 	vma_t** list = &vma_list;
+	int ret = 0;
 
 	if (BUILTIN_EXPECT(start >= end, 0))
 		return -EINVAL;
@@ -225,33 +226,39 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 	}
 
 	if (BUILTIN_EXPECT(*list && !pred && !succ, 0)) {
-		spinlock_unlock(lock);
-		return -EINVAL;
+		ret = -EINVAL;
+		goto fail;
 	}
 
-	// insert new VMA
-	vma_t* new = kmalloc(sizeof(vma_t));
-	if (BUILTIN_EXPECT(!new, 0)) {
-		spinlock_unlock(lock);
-		return -ENOMEM;
+	if (pred && (pred->end == start) && (pred->flags == flags)) {
+		pred->end = end; // resize VMA
+		//kprintf("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
+	} else {
+		// insert new VMA
+		vma_t* new = kmalloc(sizeof(vma_t));
+		if (BUILTIN_EXPECT(!new, 0)) {
+			ret = -ENOMEM;
+			goto fail;
+		}
+
+		new->start = start;
+		new->end = end;
+		new->flags = flags;
+		new->next = succ;
+		new->prev = pred;
+
+		if (succ)
+			succ->prev = new;
+		if (pred)
+			pred->next = new;
+		else
+			*list = new;
 	}
 
-	new->start = start;
-	new->end = end;
-	new->flags = flags;
-	new->next = succ;
-	new->prev = pred;
-
-	if (succ)
-		succ->prev = new;
-	if (pred)
-		pred->next = new;
-	else
-		*list = new;
-
+fail:
 	spinlock_unlock(lock);
 
-	return 0;
+	return ret;
 }
 
 void vma_dump(void)
