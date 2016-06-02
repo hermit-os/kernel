@@ -32,12 +32,12 @@
 
 
 #ifdef _USE_SEPARATED_BUFFERS_
-static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
-static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (64)));
+static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (64)));
 #else
 #define send_buffer buffer
 #define recv_buffer buffer
-static char buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char buffer[MAXBUFSIZE+1] __attribute__ ((aligned (64)));
 #endif
 static char dummy = 0;
 
