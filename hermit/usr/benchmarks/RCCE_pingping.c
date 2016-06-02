@@ -30,8 +30,8 @@
 #define NUMROUNDS   10000
 
 
-static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
-static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (32)));
+static char send_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (64)));
+static char recv_buffer[MAXBUFSIZE+1] __attribute__ ((aligned (64)));
 static char dummy = 0;
 
 int RCCE_APP(int argc, char **argv)

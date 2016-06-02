@@ -128,8 +128,8 @@ int RCCE_test_flag(RCCE_FLAG flag, RCCE_FLAG_STATUS val, int *result) {
 //--------------------------------------------------------------------------------------
 int RCCE_barrier(RCCE_COMM *comm) {
  
-  t_vchar           cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
-  t_vchar           valchar  [RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  t_vchar           cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
+  t_vchar           valchar  [RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
   int               counter, i, error;
   int               ROOT =  0;
   t_vcharp gatherp, releasep;
@@ -339,8 +339,8 @@ int RCCE_test_tagged(RCCE_FLAG flag, RCCE_FLAG_STATUS val, int *result, void *ta
 //--------------------------------------------------------------------------------------
 int RCCE_barrier(RCCE_COMM *comm) {
  
-  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
-  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
+  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
   volatile char *cycle;
   volatile char *val;
   int   counter, i, error;
@@ -458,8 +458,8 @@ int RCCE_barrier(RCCE_COMM *comm) {
 //--------------------------------------------------------------------------------------
 int RCCE_nb_barrier(RCCE_COMM *comm) {
  
-  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
-  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (32)));
+  volatile unsigned char cyclechar[RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
+  volatile unsigned char   valchar[RCCE_LINE_SIZE] __attribute__ ((aligned (RCCE_LINE_SIZE)));
   int   i, error;
   int   ROOT      =  0;
 #ifdef USE_FLAG_EXPERIMENTAL
