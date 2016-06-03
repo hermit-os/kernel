@@ -73,11 +73,11 @@ void* kmalloc(size_t sz);
 
 /** @brief Create a stack with guard pages
  */
-void* create_stack(void);
+void* create_stack(size_t sz);
 
 /** @brief Destroy stack with its guard pages
  */
-int destroy_stack(void* addr);
+int destroy_stack(void* addr, size_t sz);
 
 /** @brief Release memory back to the buddy system
  *

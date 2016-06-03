@@ -646,6 +646,9 @@ align 4096
 global boot_stack
 boot_stack:
     TIMES (MAX_CORES*KERNEL_STACK_SIZE) DB 0xcd
+global boot_ist
+boot_ist:
+    TIMES KERNEL_STACK_SIZE DB 0xcd
 
 ; add some hints to the ELF file
 SECTION .note.GNU-stack noalloc noexec nowrite progbits
