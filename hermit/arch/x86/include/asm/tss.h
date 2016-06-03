@@ -59,9 +59,9 @@ typedef struct {
 	uint16_t	res6, bitmap;
 } __attribute__ ((packed)) tss_t;
 
-/** @brief Set rsp0 in TSS of the current core
+/** @brief Set rsp0 & ist1 in TSS of the current core
  */
-void tss_set_rsp0(size_t ptr);
+void set_tss(size_t rsp0, size_t ist1);
 
 #ifdef __cplusplus
 }

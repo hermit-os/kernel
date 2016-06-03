@@ -62,7 +62,7 @@ stream: stream.o
 
 stream_icc.o: stream.c
 	@echo [ICC] $@
-	icc -m64 -c -o $@ -mno-red-zone -O3 -xHost -fno-stack-protector -I$(TOPDIR)/hermit/usr/x86/x86_64-hermit/include/ -openmp -ffreestanding $<
+	icc -m64 -c -o $@ -O3 -xHost -I$(TOPDIR)/hermit/usr/x86/x86_64-hermit/include/ -openmp -ffreestanding $<
 	$Q$(ELFEDIT_FOR_TARGET) --output-osabi HermitCore $@
 
 stream_icc: stream_icc.o

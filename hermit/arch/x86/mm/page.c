@@ -271,7 +271,6 @@ default_handler:
 		kprintf("Heap 0x%llx - 0x%llx\n", task->heap->start, task->heap->end);
 
 	apic_eoi(s->int_no);
-	irq_enable();
 	//do_abort();
 	sys_exit(-EFAULT);
 }

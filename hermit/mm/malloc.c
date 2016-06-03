@@ -167,13 +167,16 @@ void* palloc(size_t sz, uint32_t flags)
 	return (void*) viraddr;
 }
 
-void* create_stack(void)
+void* create_stack(size_t sz)
 {
 	size_t phyaddr, viraddr, bits;
-	uint32_t npages = PAGE_FLOOR(DEFAULT_STACK_SIZE) >> PAGE_BITS;
+	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
 	//kprintf("create_stack(0x%zx) (%lu pages)\n", DEFAULT_STACK_SIZE, npages);
+
+	if (BUILTIN_EXPECT(!sz, 0))
+		return NULL;
 
 	// get free virtual address space
 	viraddr = vma_alloc((npages+2)*PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
@@ -203,15 +206,17 @@ void* create_stack(void)
 	return (void*) (viraddr+PAGE_SIZE);
 }
 
-int destroy_stack(void* viraddr)
+int destroy_stack(void* viraddr, size_t sz)
 {
 	size_t phyaddr;
-	uint32_t npages = PAGE_FLOOR(DEFAULT_STACK_SIZE) >> PAGE_BITS;
+	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 
 	//kprintf("destroy_stack(0x%zx) (size 0x%zx)\n", viraddr, DEFAULT_STACK_SIZE);
 
 	if (BUILTIN_EXPECT(!viraddr, 0))
-		return -ENOMEM;
+		return -EINVAL;
+	if (BUILTIN_EXPECT(!sz, 0))
+		return -EINVAL;
 
 	phyaddr = virt_to_phys((size_t)viraddr);
 	if (BUILTIN_EXPECT(!phyaddr, 0))
