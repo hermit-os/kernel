@@ -30,19 +30,30 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 
 #define N	255
+
+static void test_handler(int s)
+{
+	printf("Receive signal with number %d\n", s);
+}
 
 int main(int argc, char** argv)
 {
 	int i, random;
 	FILE* file;
 
+	// register test handler
+	signal(SIGUSR1, test_handler);
+
 	printf("Hello World!!!\n");
 	//for(i=0; environ[i]; i++)
 	//	printf("environ[%d] = %s\n", i, environ[i]);
 	for(i=0; i<argc; i++)
 		printf("argv[%d] = %s\n", i, argv[i]);
+
+	raise(SIGUSR1);
 
 	file = fopen("/etc/hostname", "r");
 	if (file)
