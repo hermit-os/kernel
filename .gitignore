@@ -8,3 +8,6 @@ autom4te.cache
 *.creator.user
 *.files
 *.includes
+*.pyc
+*.callgrind
+*.xray
