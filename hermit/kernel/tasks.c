@@ -409,8 +409,10 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 		kprintf("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
 
 out:
-	if (ret)
+	if (ret) {
 		destroy_stack(stack, DEFAULT_STACK_SIZE);
+		destroy_stack(ist, KERNEL_STACK_SIZE);
+	}
 
 #if 0
 	if (core_id != CORE_ID)
