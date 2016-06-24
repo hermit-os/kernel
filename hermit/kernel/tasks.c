@@ -512,6 +512,7 @@ out:
 
 	if (ret) {
 		destroy_stack(stack, DEFAULT_STACK_SIZE);
+		destroy_stack(ist, KERNEL_STACK_SIZE);
 		kfree(counter);
 	}
 
