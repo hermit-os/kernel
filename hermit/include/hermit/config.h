@@ -50,7 +50,6 @@ extern "C" {
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
-#define LIBOS
 #define DYNAMIC_TICKS
 
 #define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
