@@ -50,7 +50,7 @@ extern const void kernel_start;
 
 #define IOAPIC_ADDR	((size_t) &kernel_start - 2*PAGE_SIZE)
 #define LAPIC_ADDR	((size_t) &kernel_start - 1*PAGE_SIZE)
-#define MAX_APIC_CORES	128
+#define MAX_APIC_CORES	MAX_CORES
 
 // IO APIC MMIO structure: write reg, then read or write data.
 typedef struct {
