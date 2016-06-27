@@ -50,6 +50,11 @@
 #define RTE_MACHINE_CPUFLAG_AVX2
 #endif
 
+// gcc defines this macro, if avx is enabled
+#ifdef __AVX__
+#define RTE_MACHINE_CPUFLAG_AVX
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -314,7 +319,7 @@ COPY_BLOCK_64_BACK31:
 	goto COPY_BLOCK_64_BACK31;
 }
 
-#else /* RTE_MACHINE_CPUFLAG_AVX2 */
+#elif defined(RTE_MACHINE_CPUFLAG_AVX)
 
 /**
  * SSE & AVX implementation below
@@ -631,7 +636,14 @@ COPY_BLOCK_64_BACK15:
 	goto COPY_BLOCK_64_BACK15;
 }
 
-#endif /* RTE_MACHINE_CPUFLAG_AVX2 */
+#else
+
+static inline void * rte_memcpy(void *dst, const void *src, size_t n)
+{
+	return __builtin_memcpy(dst, src, n);
+}
+
+#endif
 
 #ifdef __cplusplus
 }
