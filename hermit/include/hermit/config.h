@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#define MAX_CORES		64
+#define MAX_CORES		128
 #define MAX_TASKS		(MAX_CORES*2+2)
 #define MAX_ISLE		8
 #define MAX_FNAME		128
@@ -50,7 +50,6 @@ extern "C" {
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 
-#define LIBOS
 #define DYNAMIC_TICKS
 
 #define BUILTIN_EXPECT(exp, b) 	__builtin_expect((exp), (b))
