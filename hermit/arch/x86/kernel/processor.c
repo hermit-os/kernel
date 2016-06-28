@@ -384,6 +384,8 @@ int cpu_detection(void) {
 		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
 
+	//TODO: add check for SMEP and SMAP
+
 	// be sure that AM, NE and MP is enabled
 	cr0 = read_cr0();
 	cr0 |= CR0_AM;
