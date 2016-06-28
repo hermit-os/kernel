@@ -403,6 +403,9 @@ static int mmnif_commit_packet(uint8_t dest, uint32_t addr)
 	volatile mm_rx_buffer_t *rb = (mm_rx_buffer_t *) ((char *)header_start_address + (dest - 1) * header_size);
 	uint32_t i;
 
+	// be sure that the packet has been written
+	wmb();
+
 	for (i = 0; i < MMNIF_MAX_DESCRIPTORS; i++)
 	{
 		if (rb->desc_table[i].addr == addr
