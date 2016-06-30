@@ -502,9 +502,6 @@ realloc:
 		i += q->len;
 	}
 
-	if (i != p->tot_len)
-		kprintf("%d != %d\n", i, p->tot_len);
-
 	if (mmnif_commit_packet(dest_ip, write_address))
 	{
 		DEBUGPRINTF("mmnif_tx(): packet somehow lost during commit\n");
