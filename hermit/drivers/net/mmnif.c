@@ -80,13 +80,6 @@
 #define DEBUG_MMNIF
 //#define DEBUG_MMNIF_PACKET
 
-/* Cache line wrappers */
-#define CLINE_SHIFT			6
-#define CLINE_SIZE			(1UL << CLINE_SHIFT)
-#define CLINE_MASK			(~(CLINE_SIZE - 1))
-#define CLINE_ALIGN(_x)			(((_x) + CLINE_SIZE - 1) & CLINE_MASK)
-//#define CLINE_ALIGN(_x)                       (_x)
-
 #define MMNIF_AUTO_SOCKET_TIMEOUT       500
 
 #define MMNIF_RX_BUFFERLEN		(28*1024)
@@ -337,7 +330,6 @@ static size_t mmnif_rxbuff_alloc(uint8_t dest, uint16_t len)
 //            if ((rb->head - rb->tail < len)&&(rb->tail != rb->head))
 //                return NULL;
 
-	spinlock_irqsave_lock(&locallock); // only one core should call our islelock
 	islelock_lock(isle_locks + (dest-1));
 	if (rb->dcount)
 	{
@@ -388,8 +380,8 @@ static size_t mmnif_rxbuff_alloc(uint8_t dest, uint16_t len)
 			}
 		}
 	}
+	mb();
 	islelock_unlock(isle_locks + (dest-1));
-	spinlock_irqsave_unlock(&locallock);
 
 	return ret;
 }
@@ -404,7 +396,7 @@ static int mmnif_commit_packet(uint8_t dest, uint32_t addr)
 	uint32_t i;
 
 	// be sure that the packet has been written
-	wmb();
+	mb();
 
 	for (i = 0; i < MMNIF_MAX_DESCRIPTORS; i++)
 	{
@@ -430,6 +422,9 @@ static void mmnif_rxbuff_free(void)
 	uint32_t i, j;
 	uint32_t rpos;
 	uint8_t flags;
+
+	// be sure that we receive all data
+	mb();
 
 	flags = irq_nested_disable();
 	islelock_lock(isle_locks + (isle+1));
@@ -459,6 +454,8 @@ static void mmnif_rxbuff_free(void)
 			break;
 	}
 
+	mb();
+
 	islelock_unlock(isle_locks + (isle+1));
 	irq_nested_enable(flags);
 }
@@ -486,6 +483,8 @@ static err_t mmnif_tx(struct netif *netif, struct pbuf *p)
 		goto drop_packet;
 	}
 
+	spinlock_irqsave_lock(&locallock); // only one core should call our islelock
+
 	/* allocate memory for the packet in the remote buffer */
 realloc:
 	write_address = mmnif_rxbuff_alloc(dest_ip, p->tot_len);
@@ -499,9 +498,12 @@ realloc:
 
 	for (q = p, i = 0; q != 0; q = q->next)
 	{
-		memcpy((char*) write_address + i, q->payload, q->len);
+		__builtin_memcpy((char*) write_address + i, q->payload, q->len);
 		i += q->len;
 	}
+
+	if (i != p->tot_len)
+		kprintf("%d != %d\n", i, p->tot_len);
 
 	if (mmnif_commit_packet(dest_ip, write_address))
 	{
@@ -512,6 +514,8 @@ realloc:
 //      DEBUGPRINTF("\n SEND %p with length: %d\n",(char*)heap_start_address + (dest_ip -1)*mpb_size + pos * 1792,p->tot_len +2);
 //      hex_dump(p->tot_len, p->payload);
 #endif
+
+	spinlock_irqsave_unlock(&locallock);
 
 	/* just gather some stats */
 	LINK_STATS_INC(link.xmit);
@@ -803,7 +807,7 @@ anotherpacket:
 	/* copy packet to pbuf structure going through linked list */
 	for (q = p, i = 0; q != NULL; q = q->next)
 	{
-		memcpy((uint8_t *) q->payload, packet + i, q->len);
+		__builtin_memcpy((uint8_t *) q->payload, packet + i, q->len);
 		i += q->len;
 	}
 
