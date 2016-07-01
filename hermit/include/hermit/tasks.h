@@ -230,7 +230,7 @@ void check_ticks(void);
 
 extern volatile uint32_t go_down;
 
-/** @brief shutdown the hole system
+/** @brief shutdown the whole system
  */
 void shutdown_system(void);
 
