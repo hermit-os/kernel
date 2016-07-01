@@ -47,9 +47,9 @@ extern "C" {
 /// represents a task identifier
 typedef unsigned int tid_t;
 
-#define DECLARE_PER_CORE(type, name) extern type name __attribute__ ((section (".percore")));
-#define DEFINE_PER_CORE(type, name, def_value) type name __attribute__ ((section (".percore"))) = def_value;
-#define DEFINE_PER_CORE_STATIC(type, name, def_value) static type name __attribute__ ((section (".percore"))) = def_value;
+#define DECLARE_PER_CORE(type, name) extern type name __attribute__ ((section (".percore")))
+#define DEFINE_PER_CORE(type, name, def_value) type name __attribute__ ((section (".percore"))) = def_value
+#define DEFINE_PER_CORE_STATIC(type, name, def_value) static type name __attribute__ ((section (".percore"))) = def_value
 
 /* needed to find the task, which is currently running on this core */
 struct task;
