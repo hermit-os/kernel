@@ -625,15 +625,19 @@ inline static void invalid_cache(void) {
 	asm volatile ("invd");
 }
 
-/* Force strict CPU ordering */
-typedef void (*func_memory_barrier)(void);
-
+#if 0
+// the old way to serialize the store and load operations
+static inline void mb(void) { asm volatile ("lock; addl $0,0(%%esp)" ::: "memory", "cc"); }
+static inline void rmb(void) { asm volatile ("lock; addl $0,0(%%esp)" ::: "memory", "cc"); }
+static inline void wmb(void) { asm volatile ("lock; addl $0,0(%%esp)" ::: "memory", "cc"); }
+#else
 /// Force strict CPU ordering, serializes load and store operations.
-extern func_memory_barrier mb;
+static inline void mb(void) { asm volatile("mfence":::"memory"); }
 /// Force strict CPU ordering, serializes load operations.
-extern func_memory_barrier rmb;
+static inline void rmb(void) { asm volatile("lfence":::"memory"); }
 /// Force strict CPU ordering, serializes store operations.
-extern func_memory_barrier wmb;
+static inline void wmb(void) { asm volatile("sfence" ::: "memory"); }
+#endif
 
 /** @brief Get Extended Control Register
  *
