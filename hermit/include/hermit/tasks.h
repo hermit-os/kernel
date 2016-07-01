@@ -190,6 +190,18 @@ int wakeup_task(tid_t);
  */
 int block_current_task(void);
 
+/** @brief Get a process control block
+ *
+ * @param id	ID of the task to retrieve
+ * @param task	Location to store pointer to task
+ * @return
+ *  - 0 on success
+ *  - -ENOMEM (-12) if @p task is NULL
+ *  - -ENOENT ( -2) if @p id not in task table
+ *  - -EINVAL (-22) if there's no valid task with @p id
+ */
+int get_task(tid_t id, task_t** task);
+
 /** @brief Block current task until timer expires
  *
  * @param deadline Clock tick, when the timer expires

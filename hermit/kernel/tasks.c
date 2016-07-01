@@ -877,6 +877,26 @@ get_task_out:
 	return NULL;
 }
 
+
+int get_task(tid_t id, task_t** task)
+{
+	if (BUILTIN_EXPECT(task == NULL, 0)) {
+		return -ENOMEM;
+	}
+
+	if (BUILTIN_EXPECT(id >= MAX_TASKS, 0)) {
+		return -ENOENT;
+	}
+
+	if (BUILTIN_EXPECT(task_table[id].status == TASK_INVALID, 0)) {
+		return -EINVAL;
+	}
+
+	*task = &task_table[id];
+
+	return 0;
+}
+
 void reschedule(void)
 {
 	size_t** stack;
