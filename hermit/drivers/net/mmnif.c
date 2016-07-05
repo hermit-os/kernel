@@ -380,7 +380,6 @@ static size_t mmnif_rxbuff_alloc(uint8_t dest, uint16_t len)
 			}
 		}
 	}
-	mb();
 	islelock_unlock(isle_locks + (dest-1));
 
 	return ret;
@@ -394,9 +393,6 @@ static int mmnif_commit_packet(uint8_t dest, uint32_t addr)
 {
 	volatile mm_rx_buffer_t *rb = (mm_rx_buffer_t *) ((char *)header_start_address + (dest - 1) * header_size);
 	uint32_t i;
-
-	// be sure that the packet has been written
-	mb();
 
 	for (i = 0; i < MMNIF_MAX_DESCRIPTORS; i++)
 	{
@@ -422,9 +418,6 @@ static void mmnif_rxbuff_free(void)
 	uint32_t i, j;
 	uint32_t rpos;
 	uint8_t flags;
-
-	// be sure that we receive all data
-	mb();
 
 	flags = irq_nested_disable();
 	islelock_lock(isle_locks + (isle+1));
@@ -453,8 +446,6 @@ static void mmnif_rxbuff_free(void)
 		} else
 			break;
 	}
-
-	mb();
 
 	islelock_unlock(isle_locks + (isle+1));
 	irq_nested_enable(flags);
@@ -498,7 +489,7 @@ realloc:
 
 	for (q = p, i = 0; q != 0; q = q->next)
 	{
-		__builtin_memcpy((char*) write_address + i, q->payload, q->len);
+		memcpy((char*) write_address + i, q->payload, q->len);
 		i += q->len;
 	}
 
@@ -512,12 +503,12 @@ realloc:
 //      hex_dump(p->tot_len, p->payload);
 #endif
 
-	spinlock_irqsave_unlock(&locallock);
-
 	/* just gather some stats */
 	LINK_STATS_INC(link.xmit);
 	mmnif->stats.tx++;
 	mmnif->stats.tx_bytes += p->tot_len;
+
+	spinlock_irqsave_unlock(&locallock);
 
 	mmnif_trigger_irq(dest_ip);
 
@@ -804,7 +795,7 @@ anotherpacket:
 	/* copy packet to pbuf structure going through linked list */
 	for (q = p, i = 0; q != NULL; q = q->next)
 	{
-		__builtin_memcpy((uint8_t *) q->payload, packet + i, q->len);
+		memcpy((uint8_t *) q->payload, packet + i, q->len);
 		i += q->len;
 	}
 
@@ -812,6 +803,7 @@ anotherpacket:
 	 * note that we did not lock here because we are the only one editing this value
 	 */
 	mmnif->rx_buff->desc_table[rdesc].stat = MMNIF_STATUS_PROC;
+	mb();
 
 	/* everything is copied to a new buffer so it's save to release
 	 * the old one for new incoming packets
