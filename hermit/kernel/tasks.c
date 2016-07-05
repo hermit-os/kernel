@@ -37,6 +37,7 @@
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
 #include <asm/tss.h>
+#include <asm/processor.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
