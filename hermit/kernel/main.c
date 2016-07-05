@@ -212,7 +212,7 @@ int network_shutdown(void)
 #if MAX_CORES > 1
 int smp_main(void)
 {
-	int32_t cpu = atomic_int32_inc(&cpu_online);
+	atomic_int32_inc(&cpu_online);
 
 #ifdef DYNAMIC_TICKS
 	enable_dynticks();
