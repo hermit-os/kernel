@@ -376,7 +376,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 		if (task_table[i].status == TASK_INVALID) {
 			task_table[i].id = i;
 			task_table[i].status = TASK_READY;
-			task_table[i].last_core = 0;
+			task_table[i].last_core = core_id;
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
@@ -476,7 +476,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 		if (task_table[i].status == TASK_INVALID) {
 			task_table[i].id = i;
 			task_table[i].status = TASK_READY;
-			task_table[i].last_core = 0;
+			task_table[i].last_core = core_id;
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
