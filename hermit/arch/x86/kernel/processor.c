@@ -49,11 +49,6 @@ extern void isrsyscall(void);
 cpu_info_t cpu_info = { 0, 0, 0, 0, 0};
 extern uint32_t cpu_freq;
 
-static void default_mb(void)
-{
-	asm volatile ("lock; addl $0,0(%%esp)" ::: "memory", "cc");
-}
-
 static void default_save_fpu_state(union fpu_state* state)
 {
 	asm volatile ("fnsave %0; fwait" : "=m"((*state).fsave) :: "memory");
@@ -74,10 +69,6 @@ static void default_fpu_init(union fpu_state* fpu)
 	fp->twd = 0xffffffffu;
 	fp->fos = 0xffff0000u;
 }
-
-func_memory_barrier mb = default_mb;
-func_memory_barrier rmb = default_mb;
-func_memory_barrier wmb = default_mb;
 
 static void default_writefs(size_t fs)
 {
@@ -132,9 +123,6 @@ func_read_fsgs readgs = default_readgs;
 func_write_fsgs writefs = default_writefs;
 func_write_fsgs writegs = default_writegs;
 
-static void mfence(void) { asm volatile("mfence" ::: "memory"); }
-static void lfence(void) { asm volatile("lfence" ::: "memory"); }
-static void sfence(void) { asm volatile("sfence" ::: "memory"); }
 handle_fpu_state save_fpu_state = default_save_fpu_state;
 handle_fpu_state restore_fpu_state = default_restore_fpu_state;
 handle_fpu_state fpu_init = default_fpu_init;
@@ -384,6 +372,8 @@ int cpu_detection(void) {
 		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
 
+	//TODO: add check for SMEP and SMAP
+
 	// be sure that AM, NE and MP is enabled
 	cr0 = read_cr0();
 	cr0 |= CR0_AM;
@@ -468,14 +458,6 @@ int cpu_detection(void) {
 	/* set core id to the current boor id */
 	set_per_core(__core_id, atomic_int32_read(&current_boot_id));
 	kprintf("Core id is set to %d\n", CORE_ID);
-
-	if (first_time && has_sse())
-		wmb = sfence;
-
-	if (first_time && has_sse2()) {
-		rmb = lfence;
-		mb = mfence;
-	}
 
 	if (has_fpu()) {
 		if (first_time)
