@@ -201,16 +201,17 @@ L1:
 
     ; Set CR3
     mov eax, boot_pml4
+    or eax, (1 << 0)        ; set present bit
     mov cr3, eax
 
     ; Set CR4
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
-    or eax, (1 << 4)        ; enable PSE
-    or eax, (1 << 7)        ; enabel PGE
+    or eax, (1 << 7)        ; enable PGE
+    or eax, (1 << 20)       ; enable SMEP
     mov cr4, eax
 
-    ; Set CR0
+    ; Set CR0 (PM-bit is already set)
     mov eax, cr0
     and eax, ~(1 << 2)      ; disable FPU emulation
     or eax, (1 << 1)        ; enable FPU montitoring
@@ -218,7 +219,6 @@ L1:
     and eax, ~(1 << 29)     ; disable write through caching
     and eax, ~(1 << 16)	    ; allow kernel write access to read-only pages
     or eax, (1 << 31)       ; enable paging
-    or eax, (1 << 0)        ; long mode also needs PM-bit set
     mov cr0, eax
 
     ret
@@ -246,15 +246,6 @@ start64:
     extern main
     call main
     jmp $
-
-;global gdt_flush
-;extern gp
-
-; This will set up our new segment registers and is declared in
-; C as 'extern void gdt_flush();'
-;gdt_flush:
-;    lgdt [gp]
-;    ret
 
 SECTION .data
 

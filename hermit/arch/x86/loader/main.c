@@ -136,9 +136,9 @@ void main(void)
 				*((uint64_t*) (viraddr + 0x08)) = phyaddr; // physical start address
 				*((uint32_t*) (viraddr + 0x1C)) = 0; // apicid;
 				*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
+				*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
 				*((uint64_t*) (viraddr + 0x38)) = prog_header->file_size;
 				*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
-				*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
 			}
 			break;
 		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing todo
