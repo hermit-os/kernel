@@ -57,6 +57,14 @@ int sched_yield(void);
 
 static char* buff[M];
 
+#if 1
+inline static unsigned long long rdtsc(void)
+{
+	unsigned long lo, hi;
+	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
+	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
+}
+#else
 inline static unsigned long long rdtsc(void)
 {
 	unsigned int lo, hi;
@@ -66,6 +74,7 @@ inline static unsigned long long rdtsc(void)
 
 	return ((unsigned long long)hi << 32ULL | (unsigned long long)lo);
 }
+#endif
 
 int main(int argc, char** argv)
 {
@@ -74,7 +83,8 @@ int main(int argc, char** argv)
 	const char str[] = "H";
 	size_t len = strlen(str);
 
-	printf("Determine systems performance\n\n");
+	printf("Determine systems performance\n");
+	printf("=============================\n");
 
 	// cache warm-up
 	ret = mygetpid();

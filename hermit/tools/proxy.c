@@ -229,11 +229,16 @@ int handle_syscalls(int s)
 		switch(sysnr)
 		{
 		case __HERMIT_exit: {
+			size_t j;
 			int arg = 0;
 
-			sret = read(s, &arg, sizeof(arg));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while(j < sizeof(arg)) {
+				sret = read(s, ((char*)&arg)+j, sizeof(arg)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 			close(s);
 
 			// already called by fini_env
@@ -247,16 +252,25 @@ int handle_syscalls(int s)
 		}
 		case __HERMIT_write: {
 			int fd;
-			ssize_t j;
+			size_t j;
 			size_t len;
 			char* buff;
 
-			sret = read(s, &fd, sizeof(fd));
-			if (sret < 0)
-				goto out;
-			sret = read(s, &len, sizeof(len));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while (j < sizeof(fd)) {
+				sret = read(s, ((char*)&fd)+j, sizeof(fd)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
+
+			j = 0;
+			while (j < sizeof(len)) {
+				sret = read(s, ((char*)&len)+j, sizeof(len)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			buff = malloc(len);
 			if (!buff) {
@@ -277,7 +291,7 @@ int handle_syscalls(int s)
 				sret = write(fd, buff, len);
 				write(s, &sret, sizeof(sret));
 			} else {
-				j=0;
+				j = 0;
 				while(j < len)
 				{
 					sret = write(fd, buff+j, len-j);
@@ -295,91 +309,140 @@ int handle_syscalls(int s)
 			char* fname;
 			int flags, mode, ret;
 
-			sret = read(s, &len, sizeof(len));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while (j < sizeof(len))
+			{
+				sret = read(s, ((char*)&len)+j, sizeof(len)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			fname = malloc(len);
 			if (!fname)
 				goto out;
 
 			j = 0;
-			while(j < len)
+			while (j < len)
 			{
 				sret = read(s, fname+j, len-j);
 				if (sret < 0)
 					goto out;
-
 				j += sret;
 			}
 
-			sret = read(s, &flags, sizeof(flags));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while (j < sizeof(flags))
+			{
+				sret = read(s, ((char*)&flags)+j, sizeof(flags)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
-			sret = read(s, &mode, sizeof(mode));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while (j < sizeof(mode))
+			{
+				sret = read(s, ((char*)&mode)+j, sizeof(mode)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			//printf("flags 0x%x, mode 0x%x\n", flags, mode);
 
 			ret = open(fname, flags, mode);
-			write(s, &ret, sizeof(ret));
+			j = 0;
+			while(j < sizeof(ret))
+			{
+				sret = write(s, ((char*)&ret)+j, sizeof(ret)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			free(fname);
 			break;
 		}
 		case __HERMIT_close: {
 			int fd, ret;
+			ssize_t j;
 
-			sret = read(s, &fd, sizeof(fd));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while(j < sizeof(fd))
+			{
+				sret = read(s, ((char*)&fd), sizeof(fd)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			if (fd > 2)
 				ret = close(fd);
 			else
 				ret = 0;
 
-			sret = write(s, &ret, sizeof(ret));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while (j < sizeof(ret))
+			{
+				sret = write(s, ((char*)&ret)+j, sizeof(ret)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 			break;
 		}
 		case __HERMIT_read: {
 			int fd, flag;
-			size_t len;
-			ssize_t j;
+			size_t len, j;
+			ssize_t sj;
 			char* buff;
 
-			sret = read(s, &fd, sizeof(fd));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while(j < sizeof(fd))
+			{
+				sret = read(s, ((char*)&fd)+j, sizeof(fd)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
-			sret = read(s, &len, sizeof(len));
-			if (sret < 0)
-				goto out;
+			j = 0;
+			while(j < sizeof(len))
+			{
+				sret = read(s, ((char*)&len)+j, sizeof(len)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			buff = malloc(len);
 			if (!buff)
 				goto out;
 
-			j = read(fd, buff, len);
+			sj = read(fd, buff, len);
 
 			flag = 0;
 			setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 
-			write(s, &j, sizeof(j));
+			j = 0;
+			while (j < sizeof(sj))
+			{
+				sret = write(s, &sj, sizeof(sj)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
-			if (j > 0)
+			if (sj > 0)
 			{
 				ssize_t i = 0;
 
-				while(i < j)
+				while (i < sj)
 				{
-					sret = write(s, buff+i, j-i);
+					sret = write(s, buff+i, sj-i);
 					if (sret < 0)
-						break;
+						goto out;
 
 					i += sret;
 				}
@@ -394,13 +457,45 @@ int handle_syscalls(int s)
 		case __HERMIT_lseek: {
 			int fd, whence;
 			off_t offset;
+			size_t j;
 
-			read(s, &fd, sizeof(fd));
-			read(s, &offset, sizeof(offset));
-			read(s, &whence, sizeof(whence));
+			j = 0;
+			while (j < sizeof(fd))
+			{
+				sret = read(s, ((char*)&fd)+j, sizeof(fd)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
+
+			j = 0;
+			while (j < sizeof(offset))
+			{
+				sret = read(s, ((char*)&offset)+j, sizeof(offset)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
+
+			j = 0;
+			while (j < sizeof(whence))
+			{
+				sret = read(s, ((char*)&whence)+j, sizeof(whence)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 
 			offset = lseek(fd, offset, whence);
-			write(s, &offset, sizeof(offset));
+
+			j = 0;
+			while (j < sizeof(offset))
+			{
+				sret = write(s, ((char*)&offset)+j, sizeof(offset)-j);
+				if (sret < 0)
+					goto out;
+				j += sret;
+			}
 			break;
 		}
 		default:
@@ -480,12 +575,17 @@ retry:
 	{
 		int len = strlen(argv[i])+1;
 
-		ret = write(s, &len, sizeof(len));
-		if (ret < 0)
-			goto out;
+		j = 0;
+		while (j < sizeof(len))
+		{
+			ret = write(s, ((char*)&len)+j, sizeof(len)-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
 
 		j = 0;
-		while(j < len)
+		while (j < len)
 		{
 			ret = write(s, argv[i]+j, len-j);
 			if (ret < 0)
@@ -507,12 +607,17 @@ retry:
 	{
 		int len = strlen(environ[i])+1;
 
-		ret = write(s, &len, sizeof(len));
-		if (ret < 0)
-			goto out;
+		j = 0;
+		while (j < sizeof(len))
+		{
+			ret = write(s, ((char*)&len)+j, sizeof(len)-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
 
 		j = 0;
-		while(j < len)
+		while (j < len)
 		{
 			ret = write(s, environ[i]+j, len-j);
 			if (ret < 0)
