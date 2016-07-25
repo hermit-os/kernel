@@ -165,6 +165,8 @@ struct state {
 	uint64_t ss;
 };
 
+const int32_t is_single_kernel(void);
+
 #ifdef __cplusplus
 }
 #endif

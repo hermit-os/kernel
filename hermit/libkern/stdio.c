@@ -32,8 +32,10 @@
 #include <hermit/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/processor.h>
+#include <asm/vga.h>
 
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
+static spinlock_irqsave_t vga_lock = SPINLOCK_IRQSAVE_INIT;
 
 /* Workaround for a compiler bug. gcc 5.1 seems to ignore this array, if we
    defined it as as static array. At least it is as static array not part of
@@ -42,6 +44,9 @@ static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
 
 int koutput_init(void)
 {
+	if (is_single_kernel())
+		vga_init();
+
 	return 0;
 }
 
@@ -56,6 +61,12 @@ int kputchar(int c)
 	pos = atomic_int32_inc(&kmsg_counter);
 	kmessages[pos % KMSG_SIZE] = (unsigned char) c;
 
+	if (is_single_kernel()) {
+		spinlock_irqsave_lock(&vga_lock);
+		vga_putchar(c);
+		spinlock_irqsave_unlock(&vga_lock);
+	}
+
 	return 1;
 }
 
@@ -66,6 +77,12 @@ int kputs(const char *str)
 	for(i=0; i<len; i++) {
 		pos = atomic_int32_inc(&kmsg_counter);
 		kmessages[pos % KMSG_SIZE] = str[i];
+	}
+
+	if (is_single_kernel()) {
+		spinlock_irqsave_lock(&vga_lock);
+		vga_puts(str);
+		spinlock_irqsave_unlock(&vga_lock);
 	}
 
 	return len;
