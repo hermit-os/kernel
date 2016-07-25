@@ -29,8 +29,6 @@
 #include <asm/io.h>
 #include <asm/vga.h>
 
-#define VIDEO_MEM_ADDR	0xB8000 /* the video memory address */
-
 /*
  * These define our textpointer, our background and foreground
  * colors (attributes), and x and y cursor coordinates 
