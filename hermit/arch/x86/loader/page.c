@@ -209,13 +209,16 @@ int page_init(void)
 			// we need only the program header of the ELF file
 			for(int i=0; i<mb_info->mods_count; i++) {
 				addr = mmodule[i].mod_start;
-				//npages = PAGE_FLOOR(mmodule[i].mod_end - mmodule[i].mod_start) >> PAGE_BITS;
+				npages = PAGE_FLOOR(mmodule[i].mod_end - mmodule[i].mod_start) >> PAGE_BITS;
 				ret = page_map(addr, addr, 1 /*npages*/, PG_GLOBAL);
 				kprintf("Map first page of module %d at 0x%lx (ret %d)\n", i, addr, ret);
+				kprintf("Module %d consists %zd\n", i, npages);
 			}
 		}
 	}
 
+	// add space for the migration of the elf file
+	first_page += 0x200000;
 	kprintf("Page pool starts at 0x%zx\n", first_page);
 
 	return 0;

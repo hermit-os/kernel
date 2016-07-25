@@ -42,6 +42,7 @@ extern kernel_end
 SECTION .mboot
 global start
 start:
+    cli ; avoid any interrupt
     jmp stublet
 
 ; This part MUST be 4 byte aligned, so we solve that issue using 'ALIGN 4'.
@@ -74,7 +75,7 @@ GDT64:                           ; Global Descriptor Table (64-bit).
     dw 0                         ; Limit (low).
     dw 0                         ; Base (low).
     db 0                         ; Base (middle)
-    db 10011000b                 ; Access.
+    db 10011010b                 ; Access.
     db 00100000b                 ; Granularity.
     db 0                         ; Base (high).
     .Data: equ $ - GDT64         ; The data descriptor.

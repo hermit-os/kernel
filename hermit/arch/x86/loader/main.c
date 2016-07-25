@@ -32,6 +32,8 @@
 #include <elf.h>
 #include <page.h>
 
+#define HALT	asm volatile ("hlt")
+
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
@@ -123,22 +125,32 @@ void main(void)
 		case  ELF_PT_LOAD: {	// load program segment
 				size_t viraddr = prog_header->virt_addr;
 				size_t phyaddr = prog_header->offset + (size_t)header;
+				const size_t displacement = 0x200000ULL - (phyaddr & 0x1FFFFFULL);
 
 				uint32_t npages = (prog_header->file_size >> PAGE_BITS);
 				if (prog_header->file_size & (PAGE_SIZE-1))
 					npages++;
 
-				kprintf("Map %u pages from physical start address 0x%zx linear to 0x%zx\n", npages, phyaddr, viraddr);
-				int ret = page_map(viraddr, phyaddr, npages, PG_GLOBAL|PG_RW);
+				kprintf("Map %u pages from physical start address 0x%zx linear to 0x%zx\n", npages + (displacement >> PAGE_BITS), phyaddr, viraddr);
+				int ret = page_map(viraddr, phyaddr, npages + (displacement >> PAGE_BITS), PG_GLOBAL|PG_RW);
 				if (ret)
 					goto failed;
 
+				phyaddr += displacement;
 				*((uint64_t*) (viraddr + 0x08)) = phyaddr; // physical start address
-				*((uint32_t*) (viraddr + 0x1C)) = 0; // apicid;
 				*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
 				*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
 				*((uint64_t*) (viraddr + 0x38)) = prog_header->file_size;
 				*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
+
+				// move file to a 2 MB boundary
+				for(size_t va = viraddr+(npages << PAGE_BITS)+displacement-sizeof(uint8_t); va >= viraddr+displacement; va-=sizeof(uint8_t))
+					*((uint8_t*) va) = *((uint8_t*) (va-displacement));
+
+				kprintf("Remap %u pages from physical start address 0x%zx linear to 0x%zx\n", npages, phyaddr, viraddr);
+				ret = page_map(viraddr, phyaddr, npages, PG_GLOBAL|PG_RW);
+				if (ret)
+					goto failed;
 			}
 			break;
 		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing todo
@@ -153,11 +165,11 @@ void main(void)
 	asm volatile ("jmp *%0" :: "r"(header->entry) : "memory");
 
 	// we should never reach this point
-	while(1);
+	while(1) { HALT; }
 
 failed:
 	kputs("Upps, kernel panic!\n");
-	while(1);
+	while(1) { HALT; }
 
 invalid:
 	kprintf("Invalid executable!\n");
@@ -167,5 +179,5 @@ invalid:
 	kprintf("elf ident class 0x%x\n", (uint32_t) header->ident._class);
 	kprintf("elf identdata 0x%x\n", header->ident.data);
 	kprintf("program entry point 0x%lx\n", (size_t) header->entry);
-	while(1);
+	while(1) { HALT; }
 }
