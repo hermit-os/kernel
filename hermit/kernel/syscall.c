@@ -263,7 +263,7 @@ int sys_open(const char* name, int flags, int mode)
 
 	spinlock_lock(&lwip_lock);
 	if (libc_sd < 0) {
-		ret = 0;
+		ret = -EINVAL;
 		goto out;
 	}
 
