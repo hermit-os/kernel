@@ -85,6 +85,7 @@ align 4
     heap_start_address dq 0
     header_start_address dq 0
     disable_x2apic dd 1
+    single_kernel dd 1
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -122,8 +123,8 @@ start64:
     mov rax, kernel_end
     sub rax, kernel_start
     mov QWORD [image_size], rax
-    xor rax, rax
 
+    xor rax, rax
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
@@ -161,6 +162,15 @@ start64:
     sub rax, kernel_start
     add rax, [base]
     mov QWORD [rdi+511*8], rax
+
+    ; map vga 1:1
+    mov rax, VIDEO_MEM_ADDR   ; map vga
+    and rax, ~0xFFF           ; page align lower half
+    mov rdi, rax
+    shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
+    add rdi, boot_pgt
+    or rax, 0x113             ; set present, global, writable and cache disable bits
+    mov QWORD [rdi], rax
 
     ; remap kernel
     mov rdi, kernel_start
@@ -639,6 +649,11 @@ Lgo3:
 
     add rsp, 16
     iretq
+
+global is_single_kernel
+is_single_kernel
+    mov eax, DWORD [single_kernel]
+    ret
 
 SECTION .data
 
