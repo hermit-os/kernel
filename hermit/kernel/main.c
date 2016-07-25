@@ -148,10 +148,6 @@ static void tcpip_init_done(void* arg)
 
 static int init_netifs(void)
 {
-	struct ip_addr	ipaddr;
-	struct ip_addr	netmask;
-	struct ip_addr	gw;
-	err_t		err;
 	sys_sem_t	sem;
 
 	if(sys_sem_new(&sem, 0) != ERR_OK)
@@ -162,36 +158,44 @@ static int init_netifs(void)
 	kprintf("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
-	/* Set network address variables */
-        IP4_ADDR(&gw, 192,168,28,1);
-        IP4_ADDR(&ipaddr, 192,168,28,isle+2);
-        IP4_ADDR(&netmask, 255,255,255,0);
+	if (!is_single_kernel())
+	{
+		struct ip_addr  ipaddr;
+		struct ip_addr  netmask;
+		struct ip_addr  gw;
+		err_t           err;
 
-	/* register our Memory Mapped Virtual IP interface in the lwip stack
-	 * and tell him how to use the interface:
-	 *  - mmnif_dev : the device data storage
-	 *  - ipaddr : the ip address wich should be used
-	 *  - gw : the gateway wicht should be used
-	 *  - mmnif_init : the initialization which has to be done in order to use our interface
-	 *  - ip_input : tells him that he should use ip_input
-	 */
+		/* Set network address variables */
+		IP4_ADDR(&gw, 192,168,28,1);
+		IP4_ADDR(&ipaddr, 192,168,28,isle+2);
+		IP4_ADDR(&netmask, 255,255,255,0);
+
+		/* register our Memory Mapped Virtual IP interface in the lwip stack
+		 * and tell him how to use the interface:
+		 *  - mmnif_dev : the device data storage
+		 *  - ipaddr : the ip address wich should be used
+		 *  - gw : the gateway wicht should be used
+		 *  - mmnif_init : the initialization which has to be done in order to use our interface
+		 *  - ip_input : tells him that he should use ip_input
+		 */
 #if LWIP_TCPIP_CORE_LOCKING_INPUT
-	if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, tcpip_input)) != ERR_OK)
+		if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, tcpip_input)) != ERR_OK)
 #else
-	/*
-	 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
-	 * => Therefore, we are able to use ip_input instead of tcpip_input
-	 */
-        if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+		/*
+		 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
+		 * => Therefore, we are able to use ip_input instead of tcpip_input
+		 */
+		if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
 #endif
-        {
-                kprintf("Unable to add the intra network interface: err = %d\n", err);
-                return -ENODEV;
-        }
+		{
+			kprintf("Unable to add the intra network interface: err = %d\n", err);
+			return -ENODEV;
+		}
 
-	/* tell lwip all initialization is done and we want to set it up */
-	netifapi_netif_set_default(&mmnif_netif);
-	netifapi_netif_set_up(&mmnif_netif);
+		/* tell lwip all initialization is done and we want to set it up */
+		netifapi_netif_set_default(&mmnif_netif);
+		netifapi_netif_set_up(&mmnif_netif);
+	}
 
 	return 0;
 }
@@ -336,6 +340,14 @@ static int initd(void* arg)
 
 	// initialize network
 	init_netifs();
+
+	if (is_single_kernel()) {
+		char* dummy[] = {"app_name", NULL};
+
+		libc_start(1, dummy, NULL);
+
+		return 0;
+	}
 
 	// initialize iRCCE
 	init_rcce();

@@ -63,6 +63,8 @@ static const apic_processor_entry_t* apic_processors[MAX_APIC_CORES] = {[0 ... M
 extern int32_t boot_processor;
 extern uint32_t cpu_freq;
 extern atomic_int32_t cpu_online;
+extern int32_t isle;
+extern int32_t possible_isles;
 apic_mp_t* apic_mp  __attribute__ ((section (".data"))) = NULL;
 static apic_config_table_t* apic_config = NULL;
 static size_t lapic = 0;
@@ -493,6 +495,11 @@ static int apic_probe(void)
 found_mp:
 	if (!apic_mp)
 		goto no_mp;
+
+	if (isle < 0) {
+		//TODO: add detection of NUMA node
+		isle = 0;
+	}
 
 	kprintf("Found MP config table at 0x%x\n", apic_mp->mp_config);
 	kprintf("System uses Multiprocessing Specification 1.%u\n", apic_mp->version);

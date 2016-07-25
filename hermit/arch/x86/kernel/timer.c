@@ -49,6 +49,10 @@ DEFINE_PER_CORE(uint64_t, last_rdtsc, 0);
 
 void check_ticks(void)
 {
+	// do we already know the cpu frequency? => if not, ignore this check
+	if (!cpu_freq)
+		return;
+
 	if (has_rdtscp()){
 		uint64_t curr_rdtsc = rdtscp(NULL);
 		uint64_t diff;
@@ -89,6 +93,10 @@ static void timer_handler(struct state *s)
 #ifndef DYNAMIC_TICKS
 	/* Increment our 'tick counter' */
 	set_per_core(timer_ticks, per_core(timer_ticks)+1);
+#else
+	// do we already know the cpu frequency? => if not, use timer interrupt to count the ticks
+	if (!cpu_freq)
+		set_per_core(timer_ticks, per_core(timer_ticks)+1);
 #endif
 
 #if 0
@@ -165,6 +173,7 @@ static int pit_init(void)
 
 	outportb(0x40, LATCH(TIMER_FREQ) >> 8);     /* high byte */
 
+kputs("pit_init\n");
 	return 0;
 }
 
