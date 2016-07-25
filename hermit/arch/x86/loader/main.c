@@ -45,6 +45,7 @@ extern const void bss_end;
 
 void main(void)
 {
+	size_t limit = 0;
 	elf_header_t* header = NULL;
 
 	// initialize .bss section
@@ -68,6 +69,9 @@ void main(void)
 					/* set the available memory as "unused" */
 					start_addr = mmap->addr;
 					end_addr = start_addr + mmap->len;
+
+					if (limit < end_addr)
+						limit = end_addr;
 			
 					kprintf("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 				}
@@ -138,6 +142,7 @@ void main(void)
 
 				phyaddr += displacement;
 				*((uint64_t*) (viraddr + 0x08)) = phyaddr; // physical start address
+				*((uint64_t*) (viraddr + 0x10)) = limit;   // physical limit
 				*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
 				*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
 				*((uint64_t*) (viraddr + 0x38)) = prog_header->file_size;
