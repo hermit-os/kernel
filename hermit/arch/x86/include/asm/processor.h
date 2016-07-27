@@ -754,7 +754,6 @@ inline static int system_init(void)
 {
 	gdt_install();
 	cpu_detection();
-	//pci_init();
 
 	return 0;
 }
@@ -798,6 +797,8 @@ inline static int system_calibration(void)
 	size_t cr0;
 
 	apic_init();
+	if (is_single_kernel())
+		pci_init();
 	register_task();
 
 	// set task switched flag for the first FPU access
