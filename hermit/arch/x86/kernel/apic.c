@@ -388,14 +388,13 @@ static int lapic_reset(void)
  */
 int apic_calibration(void)
 {
-	//uint32_t i;
 	uint32_t flags;
 	uint64_t ticks, old;
 
 	if (!lapic)
 		return -ENXIO;
 
-	if (cpu_freq > 0) {
+	if (!is_single_kernel()) {
 		uint64_t diff, wait = (uint64_t)cpu_freq * 3000000ULL / (uint64_t)TIMER_FREQ;
 
 		flags = irq_nested_disable();
@@ -454,10 +453,10 @@ int apic_calibration(void)
 
 	flags = irq_nested_disable();
 
-	// currently, we ignore the IOAPIC => Linux maintain the IOAPICs
-#if 0
-	if (ioapic) {
-		uint32_t max_entry = ioapic_max_redirection_entry();
+	// currently, Linux maintain the IOAPICs
+	// only in the single-kernel environment, we support the IOAPIC
+	if (ioapic && is_single_kernel()) {
+		uint32_t i, max_entry = ioapic_max_redirection_entry();
 
 		// now lets turn everything else on
 		for(i=0; i<=max_entry; i++)
@@ -466,7 +465,6 @@ int apic_calibration(void)
 		// now, we don't longer need the IOAPIC timer and turn it off
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
-#endif
 
 	initialized = 1;
 	irq_nested_enable(flags);
@@ -565,8 +563,9 @@ found_mp:
 			apic_processor_entry_t* cpu = (apic_processor_entry_t*) addr;
 
 			if (j < MAX_APIC_CORES) {
-				 // is the processor usable?
-				if (cpu->cpu_flags & 0x01) {
+				if (is_single_kernel() && (cpu->cpu_flags & 0x02))
+					boot_processor = j;
+				if (cpu->cpu_flags & 0x01) { // is the processor usable?
 					apic_processors[j] = cpu;
 					j++;
 				}
@@ -579,12 +578,12 @@ found_mp:
 			apic_io_entry_t* io_entry = (apic_io_entry_t*) addr;
 			ioapic = (ioapic_t*) ((size_t) io_entry->addr);
 			kprintf("Found IOAPIC at 0x%x\n", ioapic);
-#if 0
-			page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, flags);
-			vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
-			ioapic = (ioapic_t*) IOAPIC_ADDR;
-			kprintf("Map IOAPIC to 0x%x\n", ioapic);
-#endif
+			if (is_single_kernel() && ioapic) { 
+				page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, flags);
+				vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
+				ioapic = (ioapic_t*) IOAPIC_ADDR;
+				kprintf("Map IOAPIC to 0x%x\n", ioapic);
+			}
 			addr += 8;
 		} else if (*((uint8_t*) addr) == 3) { // IO_INT
 			apic_ioirq_entry_t* extint = (apic_ioirq_entry_t*) addr;
@@ -882,9 +881,6 @@ int apic_init(void)
 	if (ret)
 		return ret;
 
-	if (boot_processor < 0)
-		boot_processor = 0;
-
 	// set APIC error handler
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
@@ -901,7 +897,6 @@ int apic_init(void)
 	return 0;
 }
 
-#if 0
 int ioapic_inton(uint8_t irq, uint8_t apicid)
 {
 	ioapic_route_t route;
@@ -975,4 +970,3 @@ int ioapic_intoff(uint8_t irq, uint8_t apicid)
 
 	return 0;
 }
-#endif
