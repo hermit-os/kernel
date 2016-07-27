@@ -53,11 +53,13 @@
 #include <lwip/stats.h>
 #include <netif/etharp.h>
 #include <net/mmnif.h>
+#include <net/rtl8139.h>
+#include <net/e1000.h>
 
 #define HERMIT_PORT	0x494E
 #define HEMRIT_MAGIC	0x7E317
 
-static struct netif	mmnif_netif;
+static struct netif	default_netif;
 static const int sobufsize = 131072;
 
 /*
@@ -148,10 +150,16 @@ static void tcpip_init_done(void* arg)
 
 static int init_netifs(void)
 {
+	struct ip_addr	ipaddr;
+	struct ip_addr	netmask;
+	struct ip_addr	gw;
 	sys_sem_t	sem;
+	err_t		err;
 
 	if(sys_sem_new(&sem, 0) != ERR_OK)
 		LWIP_ASSERT("Failed to create semaphore", 0);
+
+	memset(&default_netif, 0x00, sizeof(struct netif));
 
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
@@ -160,11 +168,6 @@ static int init_netifs(void)
 
 	if (!is_single_kernel())
 	{
-		struct ip_addr  ipaddr;
-		struct ip_addr  netmask;
-		struct ip_addr  gw;
-		err_t           err;
-
 		/* Set network address variables */
 		IP4_ADDR(&gw, 192,168,28,1);
 		IP4_ADDR(&ipaddr, 192,168,28,isle+2);
@@ -179,13 +182,13 @@ static int init_netifs(void)
 		 *  - ip_input : tells him that he should use ip_input
 		 */
 #if LWIP_TCPIP_CORE_LOCKING_INPUT
-		if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, tcpip_input)) != ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
 #else
 		/*
 		 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ip_input instead of tcpip_input
 		 */
-		if ((err = netifapi_netif_add(&mmnif_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
 #endif
 		{
 			kprintf("Unable to add the intra network interface: err = %d\n", err);
@@ -193,9 +196,46 @@ static int init_netifs(void)
 		}
 
 		/* tell lwip all initialization is done and we want to set it up */
-		netifapi_netif_set_default(&mmnif_netif);
-		netifapi_netif_set_up(&mmnif_netif);
+		netifapi_netif_set_default(&default_netif);
+		netifapi_netif_set_up(&default_netif);
+	} else {
+		/* Clear network address because we use DHCP to get an ip address */
+		IP4_ADDR(&gw, 0,0,0,0);
+		IP4_ADDR(&ipaddr, 0,0,0,0);
+		IP4_ADDR(&netmask, 0,0,0,0);
+
+#if 0
+		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
+		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
+		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
+			goto success;
+		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, e1000if_init, ethernet_input)) == ERR_OK)
+			goto success;
+#endif
+
+		kprintf("Unable to add the network interface: err = %d\n", err);
+
+		return -ENODEV;
+
+success:
+		netifapi_netif_set_default(&default_netif);
+
+		kprintf("Starting DHCPD...\n");
+		netifapi_dhcp_start(&default_netif);
+
+		int mscnt = 0;
+		/* wait for ip address */
+		while(!default_netif.ip_addr.addr) {
+			sys_msleep(DHCP_FINE_TIMER_MSECS);
+			dhcp_fine_tmr();
+			mscnt += DHCP_FINE_TIMER_MSECS;
+			if (mscnt >= DHCP_COARSE_TIMER_SECS*1000) {
+				dhcp_coarse_tmr();
+				mscnt = 0;
+			}
+		}
 	}
+
 
 	return 0;
 }
