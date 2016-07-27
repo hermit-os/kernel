@@ -96,6 +96,27 @@ int destroy_stack(void* addr, size_t sz);
  */
 void kfree(void* addr);
 
+/** @brief Kernel's more general memory allocator function.
+ *
+ * This function lets you choose flags for the newly allocated memory.
+ * The new region is always page aligned.
+ *
+ * @param sz Desired size of the new memory
+ * @param flags Flags to specify
+ *
+ * @return Pointer to the new memory range
+ */
+void* page_alloc(size_t sz, uint32_t flags);
+
+/** @brief Kernel's more general release function.
+ *
+ * This function is the complement of page_allocation.
+ *
+ * @param addr Pointer to the memory range
+ * @param sz Desired size of the new memory
+ */
+void page_free(void* addr, size_t sz);
+
 /** @brief String to long
  *
  * @return Long value of the parsed numerical string
