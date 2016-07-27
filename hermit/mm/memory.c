@@ -152,6 +152,60 @@ out_err:
 	return -ENOMEM;
 }
 
+void* page_alloc(size_t sz, uint32_t flags)
+{
+	size_t viraddr = 0;
+	size_t phyaddr;
+	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
+	size_t pflags = PG_PRESENT|PG_GLOBAL|PG_XD;
+
+	if (BUILTIN_EXPECT(!npages, 0))
+		goto oom;
+
+	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
+	if (BUILTIN_EXPECT(!viraddr, 0))
+		goto oom;
+
+	phyaddr = get_pages(npages);
+	if (BUILTIN_EXPECT(!phyaddr, 0))
+	{
+		vma_free(viraddr, viraddr+npages*PAGE_SIZE);
+		viraddr = 0;
+		goto oom;
+	}
+
+	if (flags & VMA_WRITE)
+		pflags |= PG_RW;
+	if (!(flags & VMA_CACHEABLE))
+		pflags |= PG_PCD;
+
+	int ret = page_map(viraddr, phyaddr, npages, pflags);
+	if (BUILTIN_EXPECT(ret, 0))
+	{
+		vma_free(viraddr, viraddr+npages*PAGE_SIZE);
+		put_pages(phyaddr, npages);
+		viraddr = 0;
+	}
+
+oom:
+	return (void*) viraddr;
+}
+
+void page_free(void* viraddr, size_t sz)
+{
+	size_t phyaddr;
+
+	if (BUILTIN_EXPECT(!viraddr || !sz, 0))
+		return;
+
+	phyaddr = virt_to_phys((size_t)viraddr);
+
+	vma_free((size_t) viraddr, (size_t) viraddr + PAGE_FLOOR(sz));
+
+	if (phyaddr)
+		put_pages(phyaddr, PAGE_FLOOR(sz) >> PAGE_BITS);
+}
+
 int memory_init(void)
 {
 	size_t addr, image_size = (size_t) &kernel_end - (size_t) &kernel_start;
