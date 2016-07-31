@@ -1,4 +1,4 @@
-C_source := irq.c idt.c isrs.c gdt.c processor.c timer.c tasks.c apic.c pci.c vga.c
+C_source := irq.c idt.c isrs.c gdt.c processor.c timer.c tasks.c apic.c pci.c vga.c uart.c
 ASM_source := entry.asm string.asm
 MODULE := arch_x86_kernel
 

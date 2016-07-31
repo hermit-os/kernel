@@ -38,6 +38,7 @@
 #include <hermit/rcce.h>
 #include <asm/irq.h>
 #include <asm/page.h>
+#include <asm/uart.h>
 
 #include <lwip/init.h>
 #include <lwip/sys.h>
@@ -126,6 +127,9 @@ static int hermit_init(void)
 	timer_init();
 	multitasking_init();
 	memory_init();
+#ifndef CONFIG_VGA
+	uart_init();
+#endif
 
 	return 0;
 }

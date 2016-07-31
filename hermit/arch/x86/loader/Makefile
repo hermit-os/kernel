@@ -12,8 +12,9 @@ STRIP_DEBUG = --strip-debug
 KEEP_DEBUG = --only-keep-debug
 OUTPUT_FORMAT = -O elf32-i386
 NAME = ldhermit
+TTY := $(shell tty)
 
-C_source := main.c printf.c string.c stdio.c vga.c page.c
+C_source := main.c printf.c string.c stdio.c vga.c uart.c page.c
 ASM_source := entry.asm
 
 OBJS := $(C_source:.c=.o)
@@ -48,10 +49,12 @@ $(NAME).elf: $(OBJS)
 	$Q$(OBJCOPY) $(STRIP_DEBUG) $(OUTPUT_FORMAT) $(NAME).elf
 
 qemu:
+	@echo "Do you already start netcat (nc -l 4555)?"
 	$(QEMU) -smp 10 -m 4G -kernel $(NAME).elf -initrd ../../../usr/tests/hello \
 		-net nic,model=rtl8139 -net user -net dump \
-		-curses -monitor telnet:127.0.0.1:1235,server,nowait \
-		-s
+		-chardev socket,host=127.0.0.1,port=4555,id=gnc0 \
+		-device pci-serial,chardev=gnc0 \
+		-monitor telnet:127.0.0.1:1235,server,nowait -nographic
 
 clean:
 	@echo Cleaning loader

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+ * Copyright (c) 2014-2016, Stefan Lankes, Daniel Krebs, RWTH Aachen University
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,47 +25,43 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <string.h>
-#include <multiboot.h>
-#include <vga.h>
-#include <uart.h>
+#ifndef __ARCH_UART_H__
+#define __ARCH_UART_H__
 
-int koutput_init(void)
-{
-#ifdef CONFIG_VGA
-	vga_init();
-#else
-	uart_early_init((char*) mb_info->cmdline);
+#include <hermit/stddef.h>
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-	return 0;
+/** @brief Initialize UART output
+ *
+ * @return Returns 0 on success
+ */
+int uart_init(void);
+
+/** @brief Initialize UART output without a device check
+ *
+ * @return Returns 0 on success
+ */
+int uart_early_init(char*);
+
+/** @brief Simple string output on a serial device.
+ *
+ * If you want a new line you will have to "\\n".
+ *
+ * @return Length of output in bytes
+ */
+int uart_puts(const char *text);
+
+/** @brief Simple character output on a serial device.
+ *
+ * @return The original input character casted to int 
+ */
+int uart_putchar(unsigned char c);
+
+#ifdef __cplusplus
 }
-
-int kputchar(int c)
-{
-#ifdef CONFIG_VGA
-	vga_putchar(c);
-#else
-	uart_putchar(c);
 #endif
 
-	return 1;
-}
-
-int kputs(const char *str)
-{
-#ifdef CONFIG_UART
-#if 0
-	int i, len = strlen(str);
-
-	for(i=0; i<len; i++)
-		vga_putchar(str[i]);
-
-	return len;
-#else
-	return vga_puts(str);
 #endif
-#else // CONFIG_UART
-	return uart_puts(str);
-#endif
-}
