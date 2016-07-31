@@ -47,6 +47,7 @@ extern "C" {
 #define MAILBOX_SIZE		128
 //#define WITH_PCI_IDS
 //#define SAVE_FPU
+//#define CONFIG_VGA
 
 #define BYTE_ORDER		LITTLE_ENDIAN
 

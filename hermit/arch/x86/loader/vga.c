@@ -29,6 +29,8 @@
 #include <io.h>
 #include <vga.h>
 
+#ifdef CONFIG_UART
+
 #define VIDEO_MEM_ADDR	0xB8000 /* the video memory address */
 
 /*
@@ -235,3 +237,5 @@ void vga_init(void)
 	textmemptr = (unsigned short *)VIDEO_MEM_ADDR;
 	vga_clear();
 }
+
+#endif

@@ -33,9 +33,12 @@
 #include <asm/atomic.h>
 #include <asm/processor.h>
 #include <asm/vga.h>
+#include <asm/uart.h>
 
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
+#ifdef CONFIG_VGA
 static spinlock_irqsave_t vga_lock = SPINLOCK_IRQSAVE_INIT;
+#endif
 
 /* Workaround for a compiler bug. gcc 5.1 seems to ignore this array, if we
    defined it as as static array. At least it is as static array not part of
@@ -45,7 +48,13 @@ static spinlock_irqsave_t vga_lock = SPINLOCK_IRQSAVE_INIT;
 int koutput_init(void)
 {
 	if (is_single_kernel())
+	{
+#ifdef CONFIG_VGA
 		vga_init();
+#else
+		uart_early_init(NULL);
+#endif
+	}
 
 	return 0;
 }
@@ -62,9 +71,13 @@ int kputchar(int c)
 	kmessages[pos % KMSG_SIZE] = (unsigned char) c;
 
 	if (is_single_kernel()) {
+#ifdef CONFIG_VGA
 		spinlock_irqsave_lock(&vga_lock);
 		vga_putchar(c);
 		spinlock_irqsave_unlock(&vga_lock);
+#else
+		uart_putchar(c);
+#endif
 	}
 
 	return 1;
@@ -80,9 +93,13 @@ int kputs(const char *str)
 	}
 
 	if (is_single_kernel()) {
+#ifdef CONFIG_VGA
 		spinlock_irqsave_lock(&vga_lock);
 		vga_puts(str);
 		spinlock_irqsave_unlock(&vga_lock);
+#else
+		uart_puts(str);
+#endif
 	}
 
 	return len;
