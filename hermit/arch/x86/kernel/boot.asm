@@ -161,7 +161,7 @@ cpu_init:
     wrmsr
 
     ; Set CR3
-    mov eax, 0xDEADBEAF ;boot_pml4
+    mov eax, 0xDEADBEAF
     add eax, ebp
     or eax, (1 << 0)        ; set present bit
     mov cr3, eax
@@ -200,24 +200,3 @@ ALIGN 16
 global boot_stack
 boot_stack:
     TIMES (KERNEL_STACK_SIZE) DB 0xcd
-
-; Bootstrap page tables are used during the initialization.
-;ALIGN 4096
-;boot_pml4:
-;    DQ boot_pdpt + 0x7   ; PG_PRESENT | PG_RW | PG_USER
-;    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-;    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-;boot_pdpt:
-;    DQ boot_pgd + 0x7    ; PG_PRESENT | PG_RW | PG_USER
-;    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-;    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-;boot_pgd:
-;    DQ boot_pgt + 0x7    ; PG_PRESENT | PG_RW | PG_USER
-;    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-;    DQ boot_pml4 + 0x203 ; PG_PRESENT | PG_RW | PG_SELF (self-reference)
-;boot_pgt:
-;%assign i 0
-;%rep    512
-;    DQ i*0x1000 + 0x103
-;%assign i i+1
-;%endrep
