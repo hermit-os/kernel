@@ -40,6 +40,13 @@
 extern "C" {
 #endif
 
+#ifndef CMOS_PORT_ADDRESS
+#define CMOS_PORT_ADDRESS	0x70
+#endif
+#ifndef CMOS_PORT_DATA
+#define CMOS_PORT_DATA		0x71
+#endif
+
 /** @brief Read a byte from an IO port
  *
  * @param _port The port you want to read from
@@ -100,6 +107,18 @@ inline static void outportl(unsigned short _port, unsigned int _data)
 {
 	 asm volatile("outl %1, %0"::"dN"(_port), "a"(_data));
 }
+
+/**
+ * write a byte in CMOS
+ *  @param offset CMOS offset
+ *  @param val the value you want wto write
+ */
+inline static void cmos_write(uint8_t offset, uint8_t val)
+{
+	outportb(CMOS_PORT_ADDRESS, offset);
+	outportb(CMOS_PORT_DATA, val);
+}
+
 
 #ifdef __cplusplus
 }
