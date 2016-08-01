@@ -119,15 +119,15 @@ start64:
     ; => see ABI
     cld
 
-    ; determine full image size
-    mov rax, kernel_end
-    sub rax, kernel_start
-    mov QWORD [image_size], rax
-
     xor rax, rax
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
+
+    ; determine full image size
+    mov rax, kernel_end
+    sub rax, kernel_start
+    mov QWORD [image_size], rax
 
     ; relocate page tables
     mov rdi, boot_pml4
@@ -653,7 +653,7 @@ Lgo3:
     iretq
 
 global is_single_kernel
-is_single_kernel
+is_single_kernel:
     mov eax, DWORD [single_kernel]
     ret
 
