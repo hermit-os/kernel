@@ -73,7 +73,7 @@ endif
 
 default: all
 
-all: bootstrap $(NAME) toolchain tools
+all: arch/x86/kernel/boot.h bootstrap $(NAME) toolchain tools
 
 toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \
@@ -133,6 +133,16 @@ doc:
 	$Q$(CC_FOR_TARGET) -c -D__KERNEL__ $(CFLAGS) -o $@ $<
 	@echo [DEP] $*.dep
 	$Q$(CC_FOR_TARGET) -MF $*.dep -MT $*.o -MM $(CFLAGS) $<
+
+arch/x86/kernel/boot.bin: arch/x86/kernel/boot.asm
+	@echo "  NASM    $@"
+	$Q$(NASM) -fbin -o $@ $<
+
+arch/x86/kernel/boot.h: arch/x86/kernel/boot.bin
+	@echo "  HEXDUMP $@"
+	$Qecho "static const uint8_t boot_code[] = { \
+		$(shell hexdump -v -e '"0x" 1/1 "%02X" ", "' $<) \
+	};" > $@
 
 include/hermit/config.inc: include/hermit/config.h
 	@echo "; This file is generated automatically from the config.h file." > include/hermit/config.inc

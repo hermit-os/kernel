@@ -130,6 +130,7 @@ static int hermit_init(void)
 #ifndef CONFIG_VGA
 	uart_init();
 #endif
+	atomic_int32_inc(&cpu_online);
 
 	return 0;
 }
@@ -260,17 +261,17 @@ int network_shutdown(void)
 #if MAX_CORES > 1
 int smp_main(void)
 {
-	atomic_int32_inc(&cpu_online);
-
 #ifdef DYNAMIC_TICKS
 	enable_dynticks();
 #endif
 
+	print_status();
+
+	atomic_int32_inc(&cpu_online);
+
 	/* wait for the other cpus */
 	while(atomic_int32_read(&cpu_online) < atomic_int32_read(&possible_cpus))
 		PAUSE;
-
-	print_status();
 
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
@@ -545,7 +546,6 @@ int hermit_main(void)
 	hermit_init();
 	system_calibration(); // enables also interrupts
 
-	atomic_int32_inc(&cpu_online);
 
 	kprintf("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);

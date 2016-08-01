@@ -41,6 +41,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/apic.h>
+#include "boot.h"
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -51,6 +52,7 @@ extern const void kernel_start;
 #define IOAPIC_ADDR	((size_t) &kernel_start - 2*PAGE_SIZE)
 #define LAPIC_ADDR	((size_t) &kernel_start - 1*PAGE_SIZE)
 #define MAX_APIC_CORES	MAX_CORES
+#define SMP_SETUP_ADDR	0x8000ULL
 
 // IO APIC MMIO structure: write reg, then read or write data.
 typedef struct {
@@ -65,6 +67,8 @@ extern uint32_t cpu_freq;
 extern atomic_int32_t cpu_online;
 extern int32_t isle;
 extern int32_t possible_isles;
+extern int32_t possible_cpus;
+extern atomic_int32_t current_boot_id;
 apic_mp_t* apic_mp  __attribute__ ((section (".data"))) = NULL;
 static apic_config_table_t* apic_config = NULL;
 static size_t lapic = 0;
@@ -79,8 +83,6 @@ spinlock_t bootlock = SPINLOCK_INIT;
 
 // forward declaration
 static int lapic_reset(void);
-
-extern atomic_int32_t cpu_online;
 
 static uint32_t lapic_read_default(uint32_t addr)
 {
@@ -270,6 +272,15 @@ static inline uint32_t apic_lvt_entries(void)
 	return 0;
 }
 
+static inline void set_ipi_dest(uint32_t cpu_id) {
+	uint32_t tmp;
+
+	tmp = lapic_read(APIC_ICR2);
+	tmp &= 0x00FFFFFF;
+	tmp |= (cpu_id << 24);
+	lapic_write(APIC_ICR2, tmp);
+}
+
 int apic_timer_deadline(uint32_t t)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
@@ -382,6 +393,135 @@ static int lapic_reset(void)
 	return 0;
 }
 
+#if MAX_CORES > 1
+/*
+ * use the universal startup algorithm of Intel's MultiProcessor Specification
+ */
+static int wakeup_ap(uint32_t start_eip, uint32_t id)
+{
+        static char* reset_vector = 0;
+        uint32_t i;
+
+        kprintf("Wakeup application processor %d via IPI\n", id);
+
+        // set shutdown code to 0x0A
+        cmos_write(0x0F, 0x0A);
+
+	if (!reset_vector) {
+		reset_vector = (char*) vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE);
+                page_map((size_t)reset_vector, 0x00, 1, PG_RW|PG_GLOBAL|PG_PCD);
+                reset_vector += 0x467; // add base address of the reset vector
+                kprintf("Map reset vector to %p\n", reset_vector);
+        }
+        *((volatile unsigned short *) (reset_vector+2)) = start_eip >> 4;
+        *((volatile unsigned short *) reset_vector) =  0x00;
+
+        if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+                kputs("ERROR: previous send not complete");
+                return -EIO;
+        }
+
+	//kputs("Send IPI\n");
+	// send out INIT to AP
+	if (has_x2apic()) {
+		uint64_t dest = ((uint64_t)id << 32);
+
+		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_INT_LEVELTRIG|APIC_INT_ASSERT|APIC_DM_INIT);
+		udelay(200);
+		// reset INIT
+		wrmsr(0x800 + (APIC_ICR1 >> 4), APIC_INT_LEVELTRIG|APIC_DM_INIT);
+		udelay(10000);
+		// send out the startup
+		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_DM_STARTUP|(start_eip >> 12));
+		udelay(200);
+		// do it again
+		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_DM_STARTUP|(start_eip >> 12));
+		udelay(200);
+
+		//kputs("IPI done...\n");
+
+		return 0;
+	} else {
+		set_ipi_dest(id);
+		lapic_write(APIC_ICR1, APIC_INT_LEVELTRIG|APIC_INT_ASSERT|APIC_DM_INIT);
+		udelay(200);
+		// reset INIT
+		lapic_write(APIC_ICR1, APIC_INT_LEVELTRIG|APIC_DM_INIT);
+		udelay(10000);
+		// send out the startup
+		set_ipi_dest(id);
+		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
+		udelay(200);
+		// do it again
+		set_ipi_dest(id);
+		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
+                udelay(200);
+
+		//kputs("IPI done...\n");
+
+		i = 0;
+	        while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (i < 1000))
+			i++; // wait for it to finish, give up eventualy tho
+
+		return ((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) ? -EIO : 0); // did it fail (still delivering) or succeed ?
+	}
+}
+
+int smp_init(void)
+{
+	uint32_t i, j;
+	int err;
+
+	if (ncores <= 1)
+		return -EINVAL;
+
+	kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+
+	/*
+	 * dirty hack: Reserve memory for the bootup code.
+	 * In a single core enviroment is everythink below 8 MB free.
+	 *
+	 * Copy 16bit startup code to a 16bit address.
+	 * Wakeup the other cores via IPI. They start at this address
+	 * in real mode, switch to protected and finally they jump to smp_main.
+	 */
+	page_map(SMP_SETUP_ADDR, SMP_SETUP_ADDR, PAGE_FLOOR(sizeof(boot_code)) >> PAGE_BITS, PG_RW|PG_GLOBAL);
+	vma_add(SMP_SETUP_ADDR, SMP_SETUP_ADDR + PAGE_FLOOR(sizeof(boot_code)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	memcpy((void*)SMP_SETUP_ADDR, boot_code, sizeof(boot_code));
+
+	for(i=0; i<sizeof(boot_code); i++)
+	{
+		if (*((uint32_t*) (SMP_SETUP_ADDR + i)) == 0xDEADBEAF) {
+			*((uint32_t*) (SMP_SETUP_ADDR + i)) = (uint32_t) read_cr3();
+			break;
+		}
+	}
+
+	//kprintf("size of the boot_code %d\n", sizeof(boot_code));
+
+	for(i=1; (i<ncores) && (i<MAX_CORES); i++)
+	{
+		atomic_int32_set(&current_boot_id, i);
+
+		err = wakeup_ap(SMP_SETUP_ADDR, i);
+		if (err)
+			kprintf("Unable to wakeup application processor %d: %d\n", i, err);
+
+		for(j=0; (i >= atomic_int32_read(&cpu_online)) && (j < 1000); j++)
+			udelay(1000);
+
+		if (i >= atomic_int32_read(&cpu_online)) {
+			kprintf("Unable to wakeup processor %d, cpu_online %d\n", i, atomic_int32_read(&cpu_online));
+			return -EIO;
+		}
+	}
+
+	kprintf("%d cores online\n", atomic_int32_read(&cpu_online));
+
+	return 0;
+}
+#endif
+
 /*
  * detects the timer frequency of the APIC and restart
  * the APIC timer with the correct period
@@ -467,6 +607,9 @@ int apic_calibration(void)
 	}
 
 	initialized = 1;
+#if MAX_CORES > 1
+	smp_init();
+#endif
 	irq_nested_enable(flags);
 
 	return 0;
@@ -601,6 +744,8 @@ found_mp:
 		goto no_mp;
 	}
 	ncores = count;
+	if (is_single_kernel())
+		possible_cpus = count;
 
 check_lapic:
 	if (apic_config)
@@ -658,7 +803,6 @@ no_mp:
 extern int smp_main(void);
 extern void gdt_flush(void);
 extern int set_idle_task(void);
-extern atomic_int32_t current_boot_id;
 
 #if MAX_CORES > 1
 int smp_start(void)
@@ -699,15 +843,6 @@ int smp_start(void)
 	irq_enable();
 
 	return smp_main();
-}
-
-static inline void set_ipi_dest(uint32_t cpu_id) {
-	uint32_t tmp;
-
-	tmp = lapic_read(APIC_ICR2);
-	tmp &= 0x00FFFFFF;
-	tmp |= (cpu_id << 24);
-	lapic_write(APIC_ICR2, tmp);
 }
 
 #if 0
