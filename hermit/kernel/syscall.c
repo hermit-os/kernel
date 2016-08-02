@@ -100,6 +100,7 @@ void NORETURN sys_exit(int arg)
 		lwip_close(s);
 		idle_poll = 0;
 	} else {
+		idle_poll = 0;
 		spinlock_unlock(&lwip_lock);
 	}
 
