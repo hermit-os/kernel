@@ -45,6 +45,7 @@
  */
 
 #include <hermit/string.h>
+#include <hermit/spinlock.h>
 
 /* HermitCore use only the 64bit version */
 #define __64BIT__
@@ -74,6 +75,8 @@ static char const hex2ascii_data[] = "0123456789abcdefghijklmnopqrstuvwxyz";
 
 /* Max number conversion buffer length: a u_quad_t in base 2, plus NUL byte. */
 #define MAXNBUF	(sizeof(intmax_t) * NBBY + 1)
+
+extern spinlock_irqsave_t stdio_lock;
 
 /*
  * Put a NUL-terminated ASCII number (base <= 36) in a buffer in reverse
@@ -150,12 +153,16 @@ int kvprintf(char const *fmt, void (*func) (int, void *), void *arg, int radix,
 	if (radix < 2 || radix > 36)
 		radix = 10;
 
+	spinlock_irqsave_lock(&stdio_lock);
+
 	for (;;) {
 		padc = ' ';
 		width = 0;
 		while ((ch = (u_char) * fmt++) != '%' || stop) {
-			if (ch == '\0')
+			if (ch == '\0') {
+				spinlock_irqsave_unlock(&stdio_lock);
 				return (retval);
+			}
 			PCHAR(ch);
 		}
 		percent = fmt - 1;
@@ -449,6 +456,9 @@ int kvprintf(char const *fmt, void (*func) (int, void *), void *arg, int radix,
 			break;
 		}
 	}
+
+	spinlock_irqsave_unlock(&stdio_lock);
+
 #undef PCHAR
 }
 

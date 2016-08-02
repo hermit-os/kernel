@@ -36,9 +36,7 @@
 #include <asm/uart.h>
 
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
-#ifdef CONFIG_VGA
-static spinlock_irqsave_t vga_lock = SPINLOCK_IRQSAVE_INIT;
-#endif
+spinlock_irqsave_t stdio_lock = SPINLOCK_IRQSAVE_INIT;
 
 /* Workaround for a compiler bug. gcc 5.1 seems to ignore this array, if we
    defined it as as static array. At least it is as static array not part of
@@ -72,9 +70,7 @@ int kputchar(int c)
 
 	if (is_single_kernel()) {
 #ifdef CONFIG_VGA
-		spinlock_irqsave_lock(&vga_lock);
 		vga_putchar(c);
-		spinlock_irqsave_unlock(&vga_lock);
 #else
 		uart_putchar(c);
 #endif
@@ -87,6 +83,8 @@ int kputs(const char *str)
 {
 	int pos, i, len = strlen(str);
 
+	spinlock_irqsave_lock(&stdio_lock);
+
 	for(i=0; i<len; i++) {
 		pos = atomic_int32_inc(&kmsg_counter);
 		kmessages[pos % KMSG_SIZE] = str[i];
@@ -94,13 +92,13 @@ int kputs(const char *str)
 
 	if (is_single_kernel()) {
 #ifdef CONFIG_VGA
-		spinlock_irqsave_lock(&vga_lock);
 		vga_puts(str);
-		spinlock_irqsave_unlock(&vga_lock);
 #else
 		uart_puts(str);
 #endif
 	}
+
+	spinlock_irqsave_unlock(&stdio_lock);
 
 	return len;
 }

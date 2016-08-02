@@ -45,6 +45,7 @@
 //TODO: don't use one big kernel lock to comminicate with all proxies
 static spinlock_t lwip_lock = SPINLOCK_INIT;
 
+extern spinlock_irqsave_t stdio_lock;
 extern int32_t isle;
 extern int32_t possible_isles;
 extern volatile int libc_sd;
@@ -191,8 +192,10 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	{
 		spinlock_unlock(&lwip_lock);
 
+		spinlock_irqsave_lock(&stdio_lock);
 		for(i=0; i<len; i++)
 			kputchar(buf[i]);
+		spinlock_irqsave_unlock(&stdio_lock);
 
 		return len;
 	}
