@@ -6,7 +6,8 @@ By starting HermitCore applications, cores will be split off from the Linux syst
 This approach achieves a lower OS jitter and a better scalability.
 HermitCore applications and the Linux system can communicate via an IP interface (e.g. inter-kernel communication).
 
-HermitCore is the result of a research project at RWTH Aachen University and is currently an experimental approach, i.e.  not production ready. Please use it carefully.
+HermitCore could be also used as classical standalone unikernel, which reduces the demand on resources and improves the boot time.
+It is the result of a research project at RWTH Aachen University and is currently an experimental approach, i.e. not production ready. Please use it carefully.
 
 ## Requirements
 
@@ -48,3 +49,21 @@ NM_CONTROLLED=yes
 Finally, boot your system with the new Linux kernel and follow the above tutorial (*Building and testing HermitCore within a virtual machine*) from point 5.
 
 The demo applications are stored in their subdirectories `hermit/usr/{tests,benchmarks}` of the directory, which contains this *README*.
+
+## HermitCore as classical standalone unikernel
+
+HermitCore applications could be directly started within a virtual machine.
+Currently, a file system is missing and a UART device is used as output device.
+In the upcoming example, the console is redirected to the local host at port 4555.
+To view the messages, *netcat* has to be started and to listen on port 4555.
+```
+nc -l 4555
+```
+Afterwards, a virtual machine has to be initialized, which used the HermitCore loader (`hermit/arch/x86/loader/ldhermit.elf`) to load HermitCore binaries as initrd.
+No modifications to the binary are needed!
+```
+  qemu-system-x86_64 -machine accel=kvm -cpu host -smp 10 -m 4G -kernel hermit/arch/x86/loader/ldhermit.elf -initrd hermit/usr/benchmarks/stream \
+	-net nic,model=rtl8139 -net user -net dump \
+	-chardev socket,host=127.0.0.1,port=4555,id=gnc0 \
+	-device pci-serial,chardev=gnc0  -nographic
+```
