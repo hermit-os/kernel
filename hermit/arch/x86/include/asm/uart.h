@@ -56,7 +56,7 @@ int uart_puts(const char *text);
 
 /** @brief Simple character output on a serial device.
  *
- * @return The original input character casted to int 
+ * @return The original input character casted to int
  */
 int uart_putchar(unsigned char c);
 
