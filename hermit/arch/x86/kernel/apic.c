@@ -560,8 +560,12 @@ int apic_calibration(void)
 		initialized = 1;
 		irq_nested_enable(flags);
 
+		atomic_int32_inc(&cpu_online);
+
 		return 0;
 	}
+
+	atomic_int32_inc(&cpu_online);
 
 	old = get_clock_tick();
 
@@ -721,7 +725,7 @@ found_mp:
 			apic_io_entry_t* io_entry = (apic_io_entry_t*) addr;
 			ioapic = (ioapic_t*) ((size_t) io_entry->addr);
 			kprintf("Found IOAPIC at 0x%x\n", ioapic);
-			if (is_single_kernel() && ioapic) { 
+			if (is_single_kernel() && ioapic) {
 				page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, flags);
 				vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
 				ioapic = (ioapic_t*) IOAPIC_ADDR;
@@ -841,6 +845,8 @@ int smp_start(void)
 	set_idle_task();
 
 	irq_enable();
+
+	atomic_int32_inc(&cpu_online);
 
 	return smp_main();
 }
