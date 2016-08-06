@@ -73,7 +73,7 @@ endif
 
 default: all
 
-all: arch/x86/kernel/boot.h bootstrap $(NAME) toolchain tools
+all: arch/x86/kernel/boot.h bootstrap $(NAME) toolchain tools loader
 
 toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \
@@ -107,6 +107,9 @@ bootstrap:
 tools:
 	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
 
+loader:
+	$Q$(MAKE) -C arch/$(ARCH)/loader
+
 $(NAME):
 	@echo [AR] $(NAME)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
@@ -116,12 +119,14 @@ clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
 	$Q$(MAKE) -C tools clean
 	$Q$(MAKE) -C usr clean
+	$Q$(MAKE) -C arch/$(ARCH)/loader clean
 	@echo Cleaned.
 
 veryclean: clean
 	$Q$(RM) qemu-vlan0.pcap include/hermit/config.inc
 	$Q$(MAKE) -C tools veryclean
 	$Q$(MAKE) -C usr veryclean
+	$Q$(MAKE) -C arch/$(ARCH)/loader veryclean
 	@echo Very cleaned
 
 doc:
