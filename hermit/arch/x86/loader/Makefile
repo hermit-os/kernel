@@ -3,7 +3,7 @@ QEMU = qemu-system-x86_64 -machine accel=kvm -cpu host
 OBJDUMP = objdump
 OBJCOPY = objcopy
 CC = gcc
-CFLAGS = -O2 -Wall -m64 -ffreestanding -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -Iinclude
+CFLAGS = -O2 -Wall -m64 -std=c99 -ffreestanding -mno-red-zone -fstrength-reduce -fomit-frame-pointer -finline-functions -Iinclude
 NASM = nasm
 NASMFLAGS = -felf64 -g
 LD = ld
