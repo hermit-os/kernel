@@ -23,7 +23,7 @@ Following software packets are required to build HermitCore on a Linux system:
 
 On Ubuntu the packets could be installed with following command:
 ```
-  sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+  sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
 
 ## Building and testing HermitCore within a virtual machine
