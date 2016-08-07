@@ -81,8 +81,8 @@ static size_t * const other[PAGE_LEVELS] = {
 #endif
 
 /** @brief Flush a specific page entry in TLB
- *  * @param addr The (virtual) address of the page to flush
- *   */
+ *  @param addr The (virtual) address of the page to flush
+ */
 static inline void tlb_flush_one_page(size_t addr)
 {
 	asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
