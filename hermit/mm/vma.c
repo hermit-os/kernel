@@ -269,7 +269,7 @@ void vma_dump(void)
 {
 	void print_vma(vma_t *vma) {
 		while (vma) {
-			kprintf("0x%lx - 0x%lx: size=%x, flags=%c%c%c%s\n", vma->start, vma->end, vma->end - vma->start,
+			kprintf("0x%lx - 0x%lx: size=0x%x, flags=%c%c%c%s\n", vma->start, vma->end, vma->end - vma->start,
 				(vma->flags & VMA_READ) ? 'r' : '-',
 				(vma->flags & VMA_WRITE) ? 'w' : '-',
 				(vma->flags & VMA_EXECUTE) ? 'x' : '-',
