@@ -39,9 +39,6 @@
 extern const void kernel_start;
 extern const void kernel_end;
 
-#define PAGE_2M_FLOOR(addr)	(((addr) + (1L << 21) - 1) & ((~0L) << 21))
-#define PAGE_2M_CEIL(addr)	( (addr)                   & ((~0L) << 21))
-
 /*
  * Kernel space VMA list and lock
  * 
