@@ -13,11 +13,18 @@ Please use it with caution.
 
 ## Requirements
 
+Following software packets are required to build HermitCore on a Linux system:
+
 * Netwide Assembler (NASM)
 * GNU Make, GNU Binutils
 * Tools and libraries to build *linux*, *binutils* and *gcc* (e.g. flex, bison, MPFR library, GMP library, MPC library, ISL library)
 * texinfo
 * Qemu
+
+On Ubuntu the packets could be installed with following command:
+```
+  sudo apt-get install -y nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+```
 
 ## Building and testing HermitCore within a virtual machine
 
