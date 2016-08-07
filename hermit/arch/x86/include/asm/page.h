@@ -102,6 +102,11 @@ static inline size_t sign_extend(ssize_t addr, int bits)
 /// Align to page
 #define PAGE_CEIL(addr)         ( (addr)                  & PAGE_MASK)
 
+/// Align to next 2M boundary
+#define PAGE_2M_FLOOR(addr)	(((addr) + (1L << 21) - 1) & ((~0L) << 21))
+/// Align to nex 2M boundary
+#define PAGE_2M_CEIL(addr)	( (addr)                   & ((~0L) << 21))
+
 /// Page is present
 #define PG_PRESENT		(1 << 0)
 /// Page is read- and writable
