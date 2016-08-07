@@ -577,19 +577,15 @@ inline static void invalidate_cache(void) {
 	asm volatile ("invd" ::: "memory");
 }
 
-#if 0
 /// Send IPIs to the other core, which flush the TLB on the other cores.
 int ipi_tlb_flush(void);
-#endif
 
 /** @brief Flush Translation Lookaside Buffer
  *
  * Just reads cr3 and writes the same value back into it.
  */
-static inline void flush_tlb(void)
+static inline void tlb_flush(void)
 {
-/* single-address space OS => no TLB flush required */
-#if 0
 	size_t val = read_cr3();
 
 	if (val)
@@ -598,7 +594,6 @@ static inline void flush_tlb(void)
 #if MAX_CORES > 1
 	ipi_tlb_flush();
 #endif
-#endif
 }
 
 /** @brief Flush a specific page entry in TLB
@@ -606,13 +601,10 @@ static inline void flush_tlb(void)
  */
 static inline void tlb_flush_one_page(size_t addr)
 {
-/* single-address space OS => no TLB flush required */
-#if 0
 	asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
 
 #if MAX_CORES > 1
 	ipi_tlb_flush();
-#endif
 #endif
 }
 

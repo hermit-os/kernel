@@ -851,27 +851,23 @@ int smp_start(void)
 	return smp_main();
 }
 
-#if 0
 int ipi_tlb_flush(void)
 {
 	uint32_t id = CORE_ID;
-	uint32_t j;
-	uint64_t i;
-	uint8_t flags;
 
 	if (atomic_int32_read(&cpu_online) == 1)
 		return 0;
 
 	if (has_x2apic()) {
-		flags = irq_nested_disable();
-		for(i=0; i<MAX_APIC_CORES; i++)
+		uint8_t flags = irq_nested_disable();
+		for(uint64_t i=0; i<MAX_APIC_CORES; i++)
 		{
-			 if (i == id)
+			if (i == id)
 				continue;
 			if (!online[i])
 				continue;
 
-			//kprintf("send IPI to %zd\n", i);
+			kprintf("Send IPI to %zd\n", i);
 			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|112);
 		}
 		irq_nested_enable(flags);
@@ -881,19 +877,19 @@ int ipi_tlb_flush(void)
 			return -EIO;
 		}
 
-		flags = irq_nested_disable();
-		for(i=0; i<MAX_APIC_CORES; i++)
+		uint8_t flags = irq_nested_disable();
+		for(uint64_t i=0; i<MAX_APIC_CORES; i++)
 		{
 			if (i == id)
 				continue;
 			if (!online[i])
 				continue;
 
-			//kprintf("send IPI to %zd\n", i);
+			kprintf("Send IPI to %zd\n", i);
 			set_ipi_dest(i);
 			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|112);
 
-			j = 0;
+			uint32_t j = 0;
 			while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (j < 1000))
 				j++; // wait for it to finish, give up eventualy tho
 		}
@@ -912,7 +908,6 @@ static void apic_tlb_handler(struct state *s)
 	if (val)
 		write_cr3(val);
 }
-#endif
 #endif
 
 int apic_send_ipi(uint64_t dest, uint8_t irq)
@@ -1025,7 +1020,7 @@ int apic_init(void)
 	// set APIC error handler
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
-	//irq_install_handler(80+32, apic_tlb_handler);
+	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
 	irq_install_handler(124, apic_lint0);
