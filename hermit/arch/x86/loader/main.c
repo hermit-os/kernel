@@ -72,7 +72,7 @@ void main(void)
 
 					if (limit < end_addr)
 						limit = end_addr;
-			
+
 					kprintf("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 				}
 				mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size);
@@ -158,7 +158,9 @@ void main(void)
 					goto failed;
 			}
 			break;
-		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing todo
+		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing to do
+			break;
+		case ELF_PT_TLS: // Definition of the thread local storage => nothing to do
 			break;
 		default:
 			kprintf("Unknown type %d\n", prog_header->type);
