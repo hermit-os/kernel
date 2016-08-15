@@ -531,7 +531,7 @@ int apic_calibration(void)
 	uint32_t flags;
 	uint64_t ticks, old;
 
-	if (!lapic)
+	if (BUILTIN_EXPECT(!lapic, 0))
 		return -ENXIO;
 
 	if (!is_single_kernel()) {
@@ -597,15 +597,16 @@ int apic_calibration(void)
 
 	flags = irq_nested_disable();
 
-	// currently, Linux maintain the IOAPICs
-	// only in the single-kernel environment, we support the IOAPIC
-	if (ioapic && is_single_kernel()) {
-		uint32_t i, max_entry = ioapic_max_redirection_entry();
+	// only the single-kernel maintain the IOAPIC
+	if (ioapic) {
+		uint32_t max_entry = ioapic_max_redirection_entry();
 
 		// now lets turn everything else on
-		for(i=0; i<=max_entry; i++)
+		for(uint32_t i=0; i<=max_entry; i++) {
 			if (i != 2)
 				ioapic_inton(i, apic_processors[boot_processor]->id);
+		}
+
 		// now, we don't longer need the IOAPIC timer and turn it off
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
@@ -730,6 +731,8 @@ found_mp:
 				vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
 				ioapic = (ioapic_t*) IOAPIC_ADDR;
 				kprintf("Map IOAPIC to 0x%x\n", ioapic);
+				kprintf("IOAPIC version: 0x%x\n", ioapic_version());
+				kprintf("Max Redirection Entry: %u\n", ioapic_max_redirection_entry());
 			}
 			addr += 8;
 		} else if (*((uint8_t*) addr) == 3) { // IO_INT
@@ -901,12 +904,8 @@ int ipi_tlb_flush(void)
 
 static void apic_tlb_handler(struct state *s)
 {
-	size_t val;
-
 	//kputs("Receive IPI to flush the TLB\n");
-	val  = read_cr3();
-	if (val)
-		write_cr3(val);
+	write_cr3(read_cr3());
 }
 #endif
 
