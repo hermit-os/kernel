@@ -173,7 +173,6 @@ static int pit_init(void)
 
 	outportb(0x40, LATCH(TIMER_FREQ) >> 8);     /* high byte */
 
-kputs("pit_init\n");
 	return 0;
 }
 
