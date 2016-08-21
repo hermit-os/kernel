@@ -870,7 +870,7 @@ int ipi_tlb_flush(void)
 			if (!online[i])
 				continue;
 
-			kprintf("Send IPI to %zd\n", i);
+			//kprintf("Send IPI to %zd\n", i);
 			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|112);
 		}
 		irq_nested_enable(flags);
@@ -888,7 +888,7 @@ int ipi_tlb_flush(void)
 			if (!online[i])
 				continue;
 
-			kprintf("Send IPI to %zd\n", i);
+			//kprintf("Send IPI to %zd\n", i);
 			set_ipi_dest(i);
 			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|112);
 
