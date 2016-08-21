@@ -208,14 +208,12 @@ static int init_netifs(void)
 		IP4_ADDR(&ipaddr, 0,0,0,0);
 		IP4_ADDR(&netmask, 0,0,0,0);
 
-#if 0
 		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
 		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
 			goto success;
 		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, e1000if_init, ethernet_input)) == ERR_OK)
 			goto success;
-#endif
 
 		kprintf("Unable to add the network interface: err = %d\n", err);
 
