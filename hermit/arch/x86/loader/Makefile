@@ -50,7 +50,7 @@ $(NAME).elf: $(OBJS)
 
 qemu:
 	@echo "Do you already start netcat (nc -l 4555)?"
-	$(QEMU) -smp 10 -m 4G -kernel $(NAME).elf -initrd ../../../usr/benchmarks/stream \
+	$(QEMU) -smp 4 -m 4G -kernel $(NAME).elf -initrd ../../../usr/benchmarks/stream \
 		-net nic,model=rtl8139 -net user -net dump \
 		-chardev socket,host=127.0.0.1,port=4555,id=gnc0 \
 		-device pci-serial,chardev=gnc0 \
