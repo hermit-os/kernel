@@ -482,6 +482,5 @@ err_t rtl8139if_init(struct netif* netif)
 	/* broadcast capability */
 	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
 
-vma_dump();
 	return ERR_OK;
 }
