@@ -208,7 +208,7 @@ void page_free(void* viraddr, size_t sz)
 
 int memory_init(void)
 {
-	size_t addr, image_size = (size_t) &kernel_end - (size_t) &kernel_start;
+	size_t image_size = (size_t) &kernel_end - (size_t) &kernel_start;
 	int ret = 0;
 
 	// enable paging and map Multiboot modules etc.
@@ -221,19 +221,15 @@ int memory_init(void)
 	kprintf("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
 
 	// determine available memory
-	for(addr=base; addr<limit; addr+=PAGE_SIZE) {
-		atomic_int64_inc(&total_pages);
-		atomic_int64_inc(&total_available_pages);
-	}
+	atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
+	atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
 
 	// determine allocated memory, we use 2MB pages to map the kernel
-	for(addr=base; addr<((base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL); addr+=PAGE_SIZE) {
-		atomic_int64_inc(&total_allocated_pages);
-		atomic_int64_dec(&total_available_pages);
-	}
+	atomic_int64_add(&total_allocated_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
+	atomic_int64_sub(&total_available_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
 
 	//initialize free list
-	init_list.start = (base + image_size + 0x200000) & 0xFFFFFFFFFFE00000ULL;
+	init_list.start = PAGE_2M_FLOOR(base + image_size);
 	init_list.end = limit;
 	init_list.prev = init_list.next = NULL;
 	kprintf("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
