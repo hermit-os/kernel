@@ -584,7 +584,7 @@ int ipi_tlb_flush(void);
  *
  * Just reads cr3 and writes the same value back into it.
  */
-static inline void tlb_flush(void)
+static inline void tlb_flush(uint8_t with_ipi)
 {
 	size_t val = read_cr3();
 
@@ -592,19 +592,21 @@ static inline void tlb_flush(void)
 		write_cr3(val);
 
 #if MAX_CORES > 1
-	ipi_tlb_flush();
+	if (with_ipi)
+		ipi_tlb_flush();
 #endif
 }
 
 /** @brief Flush a specific page entry in TLB
  * @param addr The (virtual) address of the page to flush
  */
-static inline void tlb_flush_one_page(size_t addr)
+static inline void tlb_flush_one_page(size_t addr, uint8_t with_ipi)
 {
 	asm volatile("invlpg (%0)" : : "r"(addr) : "memory");
 
 #if MAX_CORES > 1
-	ipi_tlb_flush();
+	if (with_ipi)
+		ipi_tlb_flush();
 #endif
 }
 

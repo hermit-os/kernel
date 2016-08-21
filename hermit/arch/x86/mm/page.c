@@ -109,6 +109,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 	int lvl, ret = -ENOMEM;
 	long vpn = viraddr >> PAGE_BITS;
 	long first[PAGE_LEVELS], last[PAGE_LEVELS];
+	int8_t send_ipi = 0;
 
 	/* Calculate index boundaries for page map traversal */
 	for (lvl=0; lvl<PAGE_LEVELS; lvl++) {
@@ -146,19 +147,22 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 
 				/* do we have to flush the TLB? */
 				if (self[lvl][vpn] & PG_PRESENT)
-					flush = 1;
+					send_ipi = flush = 1;
 
 				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED;
 
 				if (flush)
 					/* There's already a page mapped at this address.
 					 * We have to flush a single TLB entry. */
-					tlb_flush_one_page(vpn << PAGE_BITS);
+					tlb_flush_one_page(vpn << PAGE_BITS, 0);
 
 				phyaddr += PAGE_SIZE;
 			}
 		}
 	}
+
+	if (send_ipi)
+		ipi_tlb_flush();
 
 	ret = 0;
 out:
@@ -169,6 +173,8 @@ out:
 
 int page_unmap(size_t viraddr, size_t npages)
 {
+	uint8_t ipi = 0;
+
 	spinlock_irqsave_lock(&page_lock);
 
 	/* Start iterating through the entries.
@@ -176,8 +182,12 @@ int page_unmap(size_t viraddr, size_t npages)
 	size_t vpn, start = viraddr>>PAGE_BITS;
 	for (vpn=start; vpn<start+npages; vpn++) {
 		self[0][vpn] = 0;
-		tlb_flush_one_page(vpn << PAGE_BITS);
+		tlb_flush_one_page(vpn << PAGE_BITS, 0);
+		ipi = 1;
 	}
+
+	if (ipi)
+		ipi_tlb_flush();
 
 	spinlock_irqsave_unlock(&page_lock);
 
