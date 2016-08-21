@@ -110,6 +110,14 @@ static inline uint32_t pci_what_iobase(uint32_t bus, uint32_t slot, uint32_t nr)
 	return pci_conf_read(bus, slot, PCI_CBIO + nr*4) & 0xFFFFFFFC;
 }
 
+static inline void pci_bus_master(uint32_t bus, uint32_t slot)
+{
+	// set the device to a bus master
+
+	uint32_t cmd = pci_conf_read(bus, slot, PCI_CFCS) | 0x4;
+	pci_conf_write(bus, slot, PCI_CFCS, cmd);
+}
+
 static inline uint32_t pci_what_size(uint32_t bus, uint32_t slot, uint32_t nr)
 {
 	uint32_t tmp, ret;
@@ -138,7 +146,7 @@ int pci_init(void)
 	return 0;
 }
 
-int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info)
+int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info, int8_t bus_master)
 {
 	uint32_t slot, bus, i;
 
@@ -155,9 +163,11 @@ int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info
 				   (((adapters[bus][slot] & 0xffff0000) >> 16) == device_id)) {
 					for(i=0; i<6; i++) {
 						info->base[i] = pci_what_iobase(bus, slot, i);
-						info->size[i] = (info->base[i]) ? pci_what_size(bus, slot, i) : 0;	
+						info->size[i] = (info->base[i]) ? pci_what_size(bus, slot, i) : 0;
 					}
 					info->irq = pci_what_irq(bus, slot);
+					if (bus_master)
+						pci_bus_master(bus, slot);
 					return 0;
 				}
 			}

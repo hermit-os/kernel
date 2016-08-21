@@ -304,13 +304,15 @@ err_t rtl8139if_init(struct netif* netif)
 
 	tmp8 = 0;
 	while (board_tbl[tmp8].vendor_str) {
-		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, &pci_info) == 0)
+		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, &pci_info, 1) == 0)
 			break;
 		tmp8++;
 	}
 
 	if (!board_tbl[tmp8].vendor_str)
 		return ERR_ARG;
+
+	//kprintf("Found %s %s\n", board_tbl[tmp8].vendor_str, board_tbl[tmp8].device_str);
 
 	rtl8139if = kmalloc(sizeof(rtl1839if_t));
 	if (!rtl8139if) {
@@ -340,9 +342,9 @@ err_t rtl8139if_init(struct netif* netif)
 		return ERR_MEM;
 	}
 	memset(rtl8139if->tx_buffer[0], 0x00, 4*TX_BUF_LEN);
-	rtl8139if->tx_buffer[1] = rtl8139if->tx_buffer[0] + TX_BUF_LEN;
-	rtl8139if->tx_buffer[2] = rtl8139if->tx_buffer[1] + TX_BUF_LEN;
-	rtl8139if->tx_buffer[3] = rtl8139if->tx_buffer[2] + TX_BUF_LEN;
+	rtl8139if->tx_buffer[1] = rtl8139if->tx_buffer[0] + 1*TX_BUF_LEN;
+	rtl8139if->tx_buffer[2] = rtl8139if->tx_buffer[0] + 2*TX_BUF_LEN;
+	rtl8139if->tx_buffer[3] = rtl8139if->tx_buffer[0] + 3*TX_BUF_LEN;
 
 	netif->state = rtl8139if;
 	mynetif = netif;
@@ -480,5 +482,6 @@ err_t rtl8139if_init(struct netif* netif)
 	/* broadcast capability */
 	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
 
+vma_dump();
 	return ERR_OK;
 }
