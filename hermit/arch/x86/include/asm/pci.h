@@ -57,12 +57,13 @@ int pci_init(void);
  * @param vendor_id The device's vendor ID
  * @param device_id the device's ID
  * @param info Pointer to the record pci_info_t where among other the IObase address will be stored
+ * @param enable_bus_master If true, the bus mastering will be enabled.
  *
  * @return 
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
-int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info);
+int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info, int8_t enble_bus_master);
 
 /** @brief Print information of existing pci adapters
  *
