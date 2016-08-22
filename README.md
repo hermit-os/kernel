@@ -61,18 +61,24 @@ The demo applications are stored in their subdirectories `hermit/usr/{tests,benc
 
 ## HermitCore as classical standalone unikernel
 
-HermitCore applications can be directly started within a virtual machine.
-Currently, a file system is missing and a UART device is used as output device.
-In the following example, the console is redirected to the local host at port 4555.
-To view the messages, *netcat* has to be started listening on port 4555.
+HermitCore applications can be directly started as standalone kernel within a virtual machine.
+Please register the loader like the multi-kernel version of HermitCore (see bullet 4 in section *Building and testing HermitCore on a real machine*).
+If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
+Please note that the loader requires Qemu **with** KVM support and expects that the executable name is *qemu-system-x86_64*.
+With the environment variable `HERMIT_QEMU`, the executable name could be adapted for your system.
+
+In this context, the environment variable `HERMIT_CPUS` specifies the number of cpus (and no longer a range of core ids).
+Furthermore, the variable `HERMIT_MEM` defines the memory size of the virtual machine.
+The suffix of *M* or *G* can be used to signify a value in megabytes or gigabytes respectively.
+Per default, the loader initializes a system with one core and 2 GByte RAM.
+
+The virtual machine opens two TCP/IP ports.
+One is used for the communication between HermitCore application and its proxy.
+The other port is used to create a connection via telnet to Qemu's system monitor.
+With the environment variable `HERMIT_PORT`, the default port could be changed between HermitCore application and its proxy.
+The connection to the system monitor used automatically 'HERMIT_PORT+1'.
+
+The following example starts the stream benchmark in a virtual machine, which has 4 cores and 6GB memory.
 ```
-nc -l 4555
-```
-Afterwards, a virtual machine has to be initialized, which used the HermitCore loader (`hermit/arch/x86/loader/ldhermit.elf`) to load HermitCore binaries as initrd.
-The described procedure does not require any modifications to the binary!
-```
-  qemu-system-x86_64 -machine accel=kvm -cpu host -smp 10 -m 4G -kernel hermit/arch/x86/loader/ldhermit.elf -initrd hermit/usr/benchmarks/stream \
-	-net nic,model=rtl8139 -net user -net dump \
-	-chardev socket,host=127.0.0.1,port=4555,id=gnc0 \
-	-device pci-serial,chardev=gnc0  -nographic
+HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ```
