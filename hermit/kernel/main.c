@@ -228,7 +228,19 @@ success:
 		int mscnt = 0;
 		/* wait for ip address */
 		while(!default_netif.ip_addr.addr) {
+			uint64_t end_tsc, start_tsc = rdtsc();
+
+#if 1
+			do {
+				if (default_netif.ip_addr.addr)
+					return 0;
+				check_workqueues();
+				end_tsc = rdtsc();
+			} while(((end_tsc - start_tsc) / (get_cpu_frequency() * 1000)) < DHCP_FINE_TIMER_MSECS);
+#else
 			sys_msleep(DHCP_FINE_TIMER_MSECS);
+#endif
+
 			dhcp_fine_tmr();
 			mscnt += DHCP_FINE_TIMER_MSECS;
 			if (mscnt >= DHCP_COARSE_TIMER_SECS*1000) {
@@ -237,7 +249,6 @@ success:
 			}
 		}
 	}
-
 
 	return 0;
 }
