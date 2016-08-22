@@ -75,10 +75,14 @@ Per default, the loader initializes a system with one core and 2 GByte RAM.
 The virtual machine opens two TCP/IP ports.
 One is used for the communication between HermitCore application and its proxy.
 The other port is used to create a connection via telnet to Qemu's system monitor.
-With the environment variable `HERMIT_PORT`, the default port could be changed between HermitCore application and its proxy.
+With the environment variable `HERMIT_PORT`, the default port (18766) can be changed between HermitCore application and its proxy.
 The connection to the system monitor used automatically 'HERMIT_PORT+1'.
 
 The following example starts the stream benchmark in a virtual machine, which has 4 cores and 6GB memory.
 ```
 HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ```
+
+## Tips and Tricks
+
+1. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages on the screen.
