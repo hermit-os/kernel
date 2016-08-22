@@ -68,6 +68,7 @@ int main(int argc, char** argv)
 	file = fopen("/tmp/test.txt", "w");
 	if (file)
 	{
+		fprintf(file, "Hello World!!!\n");
 		fclose(file);
 	} else fprintf(stderr, "Unable to open file /tmp/test.txt\n");
 
