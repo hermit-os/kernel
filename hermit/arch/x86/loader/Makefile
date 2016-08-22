@@ -48,9 +48,9 @@ $(NAME).elf: $(OBJS)
 	@echo [OBJCOPY] $(NAME).elf
 	$Q$(OBJCOPY) $(STRIP_DEBUG) $(OUTPUT_FORMAT) $(NAME).elf
 
-qemu:
-	@echo "Do you already start netcat (nc -l 4555)?"
-	$(QEMU) -smp 4 -m 4G -kernel $(NAME).elf -initrd ../../../usr/benchmarks/stream \
+#qemu:
+#	@echo "Do you already start netcat (nc -l 4555)?"
+#	$(QEMU) -smp 4 -m 4G -kernel $(NAME).elf -initrd ../../../usr/benchmarks/stream \
 		-net nic,model=rtl8139 -net user -net dump \
 		-chardev socket,host=127.0.0.1,port=4555,id=gnc0 \
 		-device pci-serial,chardev=gnc0 \

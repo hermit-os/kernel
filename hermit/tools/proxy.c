@@ -35,11 +35,13 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <linux/tcp.h>
 
 #define MAX_PATH	255
+#define MAX_ARGS	1024
 #define INADDR(a, b, c, d) (struct in_addr) { .s_addr = ((((((d) << 8) | (c)) << 8) | (b)) << 8) | (a) }
 
 #define HERMIT_PORT	0x494E
@@ -56,30 +58,44 @@
 
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
+static unsigned int qemu = 0;
+static pid_t id = 0;
+static unsigned int port = HERMIT_PORT;
+static char tmpname[] = "/tmp/hermit-XXXXXX";
 
 extern char **environ;
 
 static void stop_hermit(void);
 static void dump_log(void);
+static int init_multi(char *path);
+static int init_qemu(char *path);
 
 static void fini_env(void)
 {
-	dump_log();
-	stop_hermit();
-}
+	if (qemu) {
+		int status = 0;
+
+		if (id) {
+			kill(id, SIGINT);
+			wait(&status);
+		}
+
+		dump_log();
+		puts("");
+		unlink(tmpname);
+	} else {
+		dump_log();
+		stop_hermit();
+}	}
 
 static void exit_handler(int sig)
 {
 	exit(0);
 }
 
-static int init_env(const char *path)
+static int init_env(char *path)
 {
-	int ret;
 	char* str;
-	FILE* file;
-	char isle_path[MAX_PATH];
-	char* result;
 	struct sigaction sINT, sTERM;
 
 	// define action for SIGINT
@@ -103,10 +119,84 @@ static int init_env(const char *path)
 	str = getenv("HERMIT_ISLE");
 	if (str)
 	{
-		isle_nr = atoi(str);
-		if (isle_nr > 254)
+		if (strncmp(str, "qemu", 4) == 0) {
+			qemu = 1;
 			isle_nr = 0;
+		} else {
+			isle_nr = atoi(str);
+			if (isle_nr > 254)
+				isle_nr = 0;
+		}
 	}
+
+	str = getenv("HERMIT_PORT");
+	if (str)
+	{
+		port = atoi(str);
+		if ((port == 0) || (port >= UINT16_MAX))
+			port = HERMIT_PORT;
+	}
+
+	if (qemu)
+		return init_qemu(path);
+	else
+		return init_multi(path);
+}
+
+static int init_qemu(char *path)
+{
+	char* str;
+	char loader_path[MAX_PATH];
+	char hostfwd[MAX_PATH];
+	char monitor_str[MAX_PATH];
+	char chardev_file[MAX_PATH];
+	char* qemu_str = "qemu-system-x86_64";
+	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-net", "dump", "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-machine", "accel=kvm", "-cpu", "host", "-kernel", loader_path, "-initrd", path, NULL};
+
+	str = getenv("HERMIT_CPUS");
+	if (str)
+		qemu_argv[3] = str;
+
+	str = getenv("HERMIT_MEM");
+	if (str)
+		qemu_argv[5] = str;
+
+	str = getenv("HERMIT_QEMU");
+	if (str)
+		qemu_argv[0] = qemu_str = str;
+
+	snprintf(hostfwd, MAX_PATH, "user,hostfwd=tcp::%u-:%u", port, port);
+	snprintf(monitor_str, MAX_PATH, "telnet:127.0.0.1:%d,server,nowait", port+1);
+
+	mkstemp(tmpname);
+	snprintf(chardev_file, MAX_PATH, "file,id=gnc0,path=%s", tmpname);
+
+	readlink("/proc/self/exe", loader_path, MAX_PATH);
+	str = strstr(loader_path, "proxy");
+	strncpy(str, "../arch/x86/loader/ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
+
+	//for(int i=0; qemu_argv[i] != NULL; i++)
+	//	printf("%s\n", qemu_argv[i]);
+
+	id = fork();
+	if (id == 0)
+	{
+		execvp(qemu_str, qemu_argv);
+
+		fprintf(stderr, "Didn't find qemu\n");
+		exit(1);
+	}
+
+	return 0;
+}
+
+static int init_multi(char *path)
+{
+	int ret;
+	char* str;
+	FILE* file;
+	char isle_path[MAX_PATH];
+	char* result;
 
 	// set path to temporary file
 	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/path", isle_nr);
@@ -165,7 +255,6 @@ static int init_env(const char *path)
 
 static void dump_log(void)
 {
-	char isle_path[MAX_PATH];
 	char* str = getenv("HERMIT_VERBOSE");
 	FILE* file;
 	char line[2048];
@@ -173,8 +262,14 @@ static void dump_log(void)
 	if (!str)
 		return;
 
-	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/log", isle_nr);
-	file = fopen(isle_path, "r");
+	if (!qemu)
+	{
+		char isle_path[MAX_PATH];
+
+		snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/log", isle_nr);
+		file = fopen(isle_path, "r");
+	} else file = fopen(tmpname, "r");
+
 	if (!file) {
 		perror("fopen");
 		return;
@@ -539,8 +634,11 @@ int main(int argc, char **argv)
 	/* server address  */
 	memset((char *) &serv_name, 0x00, sizeof(serv_name));
 	serv_name.sin_family = AF_INET;
-	serv_name.sin_addr = HERMIT_IP(isle_nr);
-	serv_name.sin_port = htons(HERMIT_PORT);
+	if (qemu)
+		serv_name.sin_addr = INADDR(127, 0, 0, 1);
+	else
+		serv_name.sin_addr = HERMIT_IP(isle_nr);
+	serv_name.sin_port = htons(port);
 
 	i = 0;
 retry:
@@ -548,7 +646,7 @@ retry:
 	if (ret < 0)
 	{
 		i++;
-		if (i <= 10) {
+		if (i <= 100) {
 			usleep(10000);
 			goto retry;
 		}

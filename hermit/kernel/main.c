@@ -381,6 +381,7 @@ static int initd(void* arg)
 	// initialize network
 	init_netifs();
 
+#if 0
 	if (is_single_kernel()) {
 		char* dummy[] = {"app_name", NULL};
 
@@ -388,9 +389,11 @@ static int initd(void* arg)
 
 		return 0;
 	}
+#endif
 
 	// initialize iRCCE
-	init_rcce();
+	if (!is_single_kernel())
+		init_rcce();
 
 	s = lwip_socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {
