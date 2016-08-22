@@ -187,6 +187,10 @@ static int init_qemu(char *path)
 		exit(1);
 	}
 
+	// move the parent process to the end of the queue
+	// => child would be scheduled next
+	sched_yield();
+
 	return 0;
 }
 
