@@ -76,7 +76,7 @@ The virtual machine opens two TCP/IP ports.
 One is used for the communication between HermitCore application and its proxy.
 The other port is used to create a connection via telnet to Qemu's system monitor.
 With the environment variable `HERMIT_PORT`, the default port (18766) can be changed between HermitCore application and its proxy.
-The connection to the system monitor used automatically 'HERMIT_PORT+1'.
+The connection to the system monitor used automatically `HERMIT_PORT+1` (or per default 18767).
 
 The following example starts the stream benchmark in a virtual machine, which has 4 cores and 6GB memory.
 ```
