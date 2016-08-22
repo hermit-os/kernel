@@ -33,6 +33,7 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sched.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
