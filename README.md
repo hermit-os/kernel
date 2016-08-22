@@ -83,6 +83,6 @@ The following example starts the stream benchmark in a virtual machine, which ha
 HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ```
 
-## Tips and Tricks
+## Tips and tricks
 
 1. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages on the screen.
