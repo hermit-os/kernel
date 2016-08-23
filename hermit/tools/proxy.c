@@ -176,8 +176,18 @@ static int init_qemu(char *path)
 	str = strstr(loader_path, "proxy");
 	strncpy(str, "../arch/x86/loader/ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
 
-	//for(int i=0; qemu_argv[i] != NULL; i++)
-	//	printf("%s\n", qemu_argv[i]);
+	str = getenv("HERMIT_VERBOSE");
+	if (str)
+	{
+		printf("qemu startup command: \n");
+		printf("%s ", qemu_str);
+
+		for(int i=0; qemu_argv[i] != NULL; i++)
+			printf("%s ", qemu_argv[i]);
+
+		printf("\n");
+		fflush(stdout);
+	}
 
 	id = fork();
 	if (id == 0)
