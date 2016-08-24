@@ -101,7 +101,7 @@ class HermitPs(gdb.Command):
 
             else:
                 # find instruction pointer in saved stack
-                rip_addr = task['last_stack_pointer'] + 20
+                rip_addr = task['last_stack_pointer'] + 25
                 rip_val = int(rip_addr.dereference())
                 # try to resolve a symbol
                 rip_sym = addressToSymbol(rip_val)
