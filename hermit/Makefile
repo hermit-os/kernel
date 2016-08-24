@@ -60,7 +60,7 @@ FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -
 CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -ftree-vectorize
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
-CFLAGS_FOR_TOOLS = -O2 -Wall
+CFLAGS_FOR_TOOLS = -O2 -Wall -std=gnu99
 LDFLAGS_FOR_TOOLS =
 
 # Prettify output
