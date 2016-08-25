@@ -152,7 +152,7 @@ static int init_qemu(char *path)
 	char monitor_str[MAX_PATH];
 	char chardev_file[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-net", "dump", "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-machine", "accel=kvm", "-cpu", "host", "-kernel", loader_path, "-initrd", path, NULL};
+	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-machine", "accel=kvm", "-cpu", "host", "-kernel", loader_path, "-initrd", path, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
@@ -166,7 +166,7 @@ static int init_qemu(char *path)
 	if (str)
 		qemu_argv[0] = qemu_str = str;
 
-	snprintf(hostfwd, MAX_PATH, "user,hostfwd=tcp::%u-:%u", port, port);
+	snprintf(hostfwd, MAX_PATH, "user,hostfwd=tcp:127.0.0.1:%u-:%u", port, port);
 	snprintf(monitor_str, MAX_PATH, "telnet:127.0.0.1:%d,server,nowait", port+1);
 
 	mkstemp(tmpname);
@@ -179,13 +179,19 @@ static int init_qemu(char *path)
 	str = getenv("HERMIT_VERBOSE");
 	if (str)
 	{
+		int i;
+
 		printf("qemu startup command: \n");
 		printf("%s ", qemu_str);
 
-		for(int i=0; qemu_argv[i] != NULL; i++)
+		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
 
-		printf("\n");
+		// add flags to create dump of the network traffic
+		qemu_argv[i] = "-net";
+		qemu_argv[i+1] = "dump";
+		printf("%s %s\n", qemu_argv[i], qemu_argv[i+1]);
+
 		fflush(stdout);
 	}
 
@@ -329,17 +335,21 @@ int handle_syscalls(int s)
 {
 	int sysnr;
 	ssize_t sret;
+	size_t j;
 
 	while(1)
 	{
-		sret = read(s, &sysnr, sizeof(sysnr));
-		if (sret < 0)
-			goto out;
+		j = 0;
+		while(j < sizeof(sysnr)) {
+			sret = read(s, ((char*)&sysnr)+j, sizeof(sysnr)-j);
+			if (sret < 0)
+				goto out;
+			j += sret;
+		}
 
 		switch(sysnr)
 		{
 		case __HERMIT_exit: {
-			size_t j;
 			int arg = 0;
 
 			j = 0;
@@ -362,7 +372,6 @@ int handle_syscalls(int s)
 		}
 		case __HERMIT_write: {
 			int fd;
-			size_t j;
 			size_t len;
 			char* buff;
 
@@ -415,7 +424,7 @@ int handle_syscalls(int s)
 			break;
 		}
 		case __HERMIT_open: {
-			size_t j, len;
+			size_t len;
 			char* fname;
 			int flags, mode, ret;
 
@@ -476,12 +485,11 @@ int handle_syscalls(int s)
 		}
 		case __HERMIT_close: {
 			int fd, ret;
-			ssize_t j;
 
 			j = 0;
 			while(j < sizeof(fd))
 			{
-				sret = read(s, ((char*)&fd), sizeof(fd)-j);
+				sret = read(s, ((char*)&fd)+j, sizeof(fd)-j);
 				if (sret < 0)
 					goto out;
 				j += sret;
@@ -504,7 +512,7 @@ int handle_syscalls(int s)
 		}
 		case __HERMIT_read: {
 			int fd, flag;
-			size_t len, j;
+			size_t len;
 			ssize_t sj;
 			char* buff;
 
@@ -538,7 +546,7 @@ int handle_syscalls(int s)
 			j = 0;
 			while (j < sizeof(sj))
 			{
-				sret = write(s, &sj, sizeof(sj)-j);
+				sret = write(s, ((char*)&sj)+j, sizeof(sj)-j);
 				if (sret < 0)
 					goto out;
 				j += sret;
@@ -546,7 +554,7 @@ int handle_syscalls(int s)
 
 			if (sj > 0)
 			{
-				ssize_t i = 0;
+				size_t i = 0;
 
 				while (i < sj)
 				{
@@ -567,7 +575,6 @@ int handle_syscalls(int s)
 		case __HERMIT_lseek: {
 			int fd, whence;
 			off_t offset;
-			size_t j;
 
 			j = 0;
 			while (j < sizeof(fd))
@@ -654,6 +661,19 @@ int main(int argc, char **argv)
 	else
 		serv_name.sin_addr = HERMIT_IP(isle_nr);
 	serv_name.sin_port = htons(port);
+
+	/*
+	 * TODO: remove dirty hack
+	 *
+	 * Qemu starts not fast enough. Consequently, we loose the first SYN packet.
+	 * The timeout to retry the connection is per default too high. But I am not
+	 * able to define the timeout value. I could only define the number of retries.
+	 * (http://www.sekuda.com/overriding_the_default_linux_kernel_20_second_tcp_socket_connect_timeout)
+	 *
+	 * Dirty hack => sleep some time
+	 */
+	if (qemu)
+		sleep(2);
 
 	i = 0;
 retry:
