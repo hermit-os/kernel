@@ -60,6 +60,9 @@
 #define HERMIT_PORT	0x494E
 #define HEMRIT_MAGIC	0x7E317
 
+// set to one if the single-kernel version should use a DHCP server
+#define USE_DHCP	1
+
 static struct netif	default_netif;
 static const int sobufsize = 131072;
 
@@ -203,10 +206,16 @@ static int init_netifs(void)
 		netifapi_netif_set_default(&default_netif);
 		netifapi_netif_set_up(&default_netif);
 	} else {
+#if USE_DHCP
 		/* Clear network address because we use DHCP to get an ip address */
 		IP4_ADDR(&gw, 0,0,0,0);
 		IP4_ADDR(&ipaddr, 0,0,0,0);
 		IP4_ADDR(&netmask, 0,0,0,0);
+#else
+		IP4_ADDR(&gw, 10,0,2,2);
+		IP4_ADDR(&ipaddr, 10,0,2,15);
+		IP4_ADDR(&netmask, 255,255,255,0);
+#endif
 
 		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
@@ -222,6 +231,7 @@ static int init_netifs(void)
 success:
 		netifapi_netif_set_default(&default_netif);
 
+#if USE_DHCP
 		kprintf("Starting DHCPD...\n");
 		netifapi_dhcp_start(&default_netif);
 
@@ -248,6 +258,9 @@ success:
 				mscnt = 0;
 			}
 		}
+#else
+		netifapi_netif_set_up(&default_netif);
+#endif
 	}
 
 	return 0;
@@ -434,6 +447,7 @@ static int initd(void* arg)
 
 	len = sizeof(struct sockaddr_in);
 
+	kprintf("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
 	kputs("TCP server listening.\n");
 
 	if ((c = lwip_accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
