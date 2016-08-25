@@ -387,6 +387,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].tls_size = curr_task->tls_size;
 			task_table[i].ist_addr = ist;
 			task_table[i].lwip_err = 0;
+			task_table[i].signal_handler = NULL;
 
 			if (id)
 				*id = i;
@@ -487,6 +488,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;
+			task_table[i].signal_handler = NULL;
 
 			if (id)
 				*id = i;

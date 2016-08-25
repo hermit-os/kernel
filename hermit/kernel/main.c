@@ -98,6 +98,8 @@ uint32_t idle_poll = 1;
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
 
+extern void signal_init();
+
 #if 0
 static int foo(void* arg)
 {
@@ -130,6 +132,8 @@ static int hermit_init(void)
 	timer_init();
 	multitasking_init();
 	memory_init();
+	signal_init();
+
 #ifndef CONFIG_VGA
 	uart_init();
 #endif

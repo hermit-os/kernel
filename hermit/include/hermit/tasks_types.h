@@ -40,6 +40,7 @@
 #include <hermit/stddef.h>
 #include <hermit/spinlock_types.h>
 #include <hermit/vma.h>
+#include <hermit/signal.h>
 #include <asm/tasks_types.h>
 #include <asm/atomic.h>
 
@@ -104,6 +105,8 @@ typedef struct task {
 	size_t		tls_size;
 	/// LwIP error code
 	int		lwip_err;
+	/// Handler for (POSIX) Signals
+	signal_handler_t signal_handler;
 	/// FPU state
 	union fpu_state	fpu;
 } task_t;
