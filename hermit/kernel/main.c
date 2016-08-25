@@ -358,9 +358,9 @@ int libc_start(int argc, char** argv, char** env);
 static int initd(void* arg)
 {
 	int s = -1, c = -1;
-	int i, j, flag = 1;
+	int i, j, flag;
 	int len, err;
-	int magic;
+	int magic = 0;
 	struct sockaddr_in server, client;
 	task_t* curr_task = per_core(current_task);
 	size_t heap = 0x80000000;
@@ -447,10 +447,12 @@ static int initd(void* arg)
 
 	lwip_setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
 	lwip_setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	flag = 1;
 	lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(flag));
 	flag = 0;
 	lwip_setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char *) &flag, sizeof(flag));
 
+	magic = 0;
 	lwip_read(c, &magic, sizeof(magic));
 	if (magic != HEMRIT_MAGIC)
 	{
