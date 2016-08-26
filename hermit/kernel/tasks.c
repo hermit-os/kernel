@@ -45,6 +45,7 @@
  */
 extern const void tls_start;
 extern const void tls_end;
+extern atomic_int32_t cpu_online;
 
 #define TLS_OFFSET	8
 
@@ -317,13 +318,17 @@ uint32_t get_next_core_id(void)
 	if (core_id >= MAX_CORES)
 		core_id = CORE_ID;
 
-
 	// we assume OpenMP applications
 	// => number of threads is (normaly) equal to the number of cores
 	// => search next available core
-	for(i=0, core_id=(core_id+1)%MAX_CORES; i<MAX_CORES; i++, core_id=(core_id+1)%MAX_CORES)
+	for(i=0, core_id=(core_id+1)%MAX_CORES; i<2*MAX_CORES; i++, core_id=(core_id+1)%MAX_CORES)
 		if (readyqueues[core_id].idle)
 			break;
+
+	if (BUILDTIN_EXPECT(!readyqueues[core_id].idle), 0) {
+		kprintf("BUG: no core available!\n");
+		return MAX_CORES;
+	}
 
 	return core_id;
 }
@@ -359,8 +364,12 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	spinlock_irqsave_lock(&table_lock);
 
 	core_id = get_next_core_id();
-	if ((core_id >= MAX_CORES) || !readyqueues[core_id].idle)
-		core_id = CORE_ID;
+	if (BUILTIN_EXPECT(core_id >= MAX_CORES, 0))
+	{
+		spinlock_irqsave_unlock(&table_lock);
+		ret = -EINVAL;
+		goto out;
+	}
 
 	for(i=0; i<MAX_TASKS; i++) {
 		if (task_table[i].status == TASK_INVALID) {
