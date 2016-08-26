@@ -665,7 +665,7 @@ int main(int argc, char **argv)
 	/*
 	 * TODO: remove dirty hack
 	 *
-	 * Qemu starts not fast enough. Consequently, we loose the first SYN packet.
+	 * Qemu starts not fast enough. Consequently, we lose the first SYN packet.
 	 * The timeout to retry the connection is per default too high. But I am not
 	 * able to define the timeout value. I could only define the number of retries.
 	 * (http://www.sekuda.com/overriding_the_default_linux_kernel_20_second_tcp_socket_connect_timeout)
