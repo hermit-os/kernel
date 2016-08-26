@@ -23,7 +23,7 @@ Following software packets are required to build HermitCore on a Linux system:
 
 On Ubuntu the packets could be installed with following command:
 ```
-  sudo apt-get install nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+  sudo apt-get install qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
 
 ## Building and testing HermitCore within a virtual machine
@@ -83,6 +83,6 @@ The following example starts the stream benchmark in a virtual machine, which ha
 HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ```
 
-## Tips and tricks
+## Tips
 
 1. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages on the screen.
