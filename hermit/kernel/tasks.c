@@ -310,7 +310,7 @@ void NORETURN do_abort(void) {
 	do_exit(-1);
 }
 
-uint32_t get_next_core_id(void)
+static uint32_t get_next_core_id(void)
 {
 	uint32_t i;
 	static uint32_t core_id = MAX_CORES;
