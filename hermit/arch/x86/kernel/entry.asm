@@ -654,6 +654,7 @@ Lgo3:
     iretq
 
 global is_single_kernel
+align 64
 is_single_kernel:
     mov eax, DWORD [single_kernel]
     ret
