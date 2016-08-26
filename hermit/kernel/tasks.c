@@ -325,7 +325,7 @@ uint32_t get_next_core_id(void)
 		if (readyqueues[core_id].idle)
 			break;
 
-	if (BUILDTIN_EXPECT(!readyqueues[core_id].idle), 0) {
+	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0)) {
 		kprintf("BUG: no core available!\n");
 		return MAX_CORES;
 	}
