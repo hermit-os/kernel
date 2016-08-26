@@ -66,6 +66,7 @@ align 4
     global heap_size
     global header_size
     global disable_x2apic
+    global mb_info
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -86,6 +87,7 @@ align 4
     header_start_address dq 0
     disable_x2apic dd 1
     single_kernel dd 1
+    mb_info dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -107,6 +109,9 @@ boot_pgt:
 SECTION .ktext
 align 4
 start64:
+    ; store pointer to the multiboot information
+    mov [mb_info], QWORD rdx
+
     ; reset registers to kill any stale realmode selectors
     xor eax, eax
     mov ds, eax
@@ -173,7 +178,17 @@ start64:
     or rax, 0x113             ; set present, global, writable and cache disable bits
     mov QWORD [rdi], rax
 %endif
-
+    ; map multiboot info
+    mov rax, QWORD [mb_info]
+    and rax, ~0xFFF           ; page align lower half
+    cmp rax, 0
+    je Lno_mbinfo
+    mov rdi, rax
+    shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
+    add rdi, boot_pgt
+    or rax, 0x103             ; set present, global and writable bits
+    mov QWORD [rdi], rax
+Lno_mbinfo:
     ; remap kernel
     mov rdi, kernel_start
     shr rdi, 18       ; (edi >> 21) * 8 (index for boot_pgd)

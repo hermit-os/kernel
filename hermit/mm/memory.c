@@ -33,6 +33,7 @@
 
 #include <asm/atomic.h>
 #include <asm/page.h>
+#include <asm/multiboot.h>
 
 extern uint64_t base;
 extern uint64_t limit;
@@ -52,7 +53,7 @@ extern const void kernel_end;
 
 static spinlock_t list_lock = SPINLOCK_INIT;
 
-static free_list_t init_list;
+static free_list_t init_list = {0, 0, NULL, NULL};
 static free_list_t* free_start = &init_list;
 
 atomic_int64_t total_pages = ATOMIC_INIT(0);
@@ -218,25 +219,105 @@ int memory_init(void)
 		return ret;
 	}
 
+	kprintf("mb_info: 0x%zx\n", mb_info);
 	kprintf("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
 
-	// determine available memory
-	atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
-	atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
+	if (mb_info) {
+		if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP) {
+			size_t end_addr, start_addr;
+			multiboot_memory_map_t* mmap = (multiboot_memory_map_t*) ((size_t) mb_info->mmap_addr);
+			multiboot_memory_map_t* mmap_end = (void*) ((size_t) mb_info->mmap_addr + mb_info->mmap_length);
+
+			// mark first available memory slot as free
+			for(; mmap < mmap_end; mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size)) {
+				if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
+					start_addr = PAGE_FLOOR(mmap->addr);
+					end_addr = PAGE_CEIL(mmap->addr + mmap->len);
+
+					kprintf("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
+
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size))) {
+						init_list.start = PAGE_2M_FLOOR(base+image_size);
+						init_list.end = end_addr;
+
+						kprintf("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
+					}
+
+					// determine available memory
+					atomic_int64_add(&total_pages, (end_addr-start_addr) >> PAGE_BITS);
+					atomic_int64_add(&total_available_pages, (end_addr-start_addr) >> PAGE_BITS);
+				}
+			}
+
+			if (!init_list.end)
+				goto oom;
+		} else {
+			goto oom;
+		}
+	} else {
+		// determine available memory
+		atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
+		atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
+
+		//initialize free list
+		init_list.start = PAGE_2M_FLOOR(base + image_size);
+		init_list.end = limit;
+	}
 
 	// determine allocated memory, we use 2MB pages to map the kernel
 	atomic_int64_add(&total_allocated_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
 	atomic_int64_sub(&total_available_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
 
-	//initialize free list
-	init_list.start = PAGE_2M_FLOOR(base + image_size);
-	init_list.end = limit;
-	init_list.prev = init_list.next = NULL;
 	kprintf("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
 	ret = vma_init();
 	if (BUILTIN_EXPECT(ret, 0))
 		kprintf("Failed to initialize VMA regions: %d\n", ret);
 
+	// add missing free regions
+	if (mb_info) {
+		if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP) {
+			free_list_t* last = &init_list;
+			size_t end_addr, start_addr;
+			multiboot_memory_map_t* mmap = (multiboot_memory_map_t*) ((size_t) mb_info->mmap_addr);
+			multiboot_memory_map_t* mmap_end = (void*) ((size_t) mb_info->mmap_addr + mb_info->mmap_length);
+
+			// mark available memory as free
+			for(; mmap < mmap_end; mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size))
+			{
+				if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
+					start_addr = PAGE_FLOOR(mmap->addr);
+					end_addr = PAGE_CEIL(mmap->addr + mmap->len);
+
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size)))
+						end_addr = base;
+
+					// ignore everything below 1M => reserve for I/O devices
+					if ((start_addr < (size_t) 0x100000))
+						start_addr = 0x100000;
+
+					if (start_addr >= end_addr)
+						continue;
+
+					last->next = kmalloc(sizeof(free_list_t));
+					if (BUILTIN_EXPECT(!last->next, 0))
+						goto oom;
+
+					kprintf("Add region 0x%zx - 0x%zx\n", start_addr, end_addr);
+
+					last->next->prev = last;
+					last = last->next;
+					last->next = NULL;
+					last->start = start_addr;
+					last->end = end_addr;
+				}
+			}
+		}
+	}
+
 	return ret;
+
+oom:
+	kprintf("BUG: Failed to init mm!\n");
+	while(1) {HALT; }
 }
