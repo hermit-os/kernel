@@ -190,10 +190,6 @@ int wakeup_task(tid_t);
  */
 int block_current_task(void);
 
-/** @brief Get next core_id for a new task
- */
-uint32_t get_next_core_id(void);
-
 /** @brief Block current task until timer expires
  *
  * @param deadline Clock tick, when the timer expires
