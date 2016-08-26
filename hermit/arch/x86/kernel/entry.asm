@@ -221,6 +221,7 @@ L1:
     jmp $
 
 %if MAX_CORES > 1
+ALIGN 64
 Lsmp_main:
     xor rax, rax
     mov eax, DWORD [current_boot_id]
@@ -237,7 +238,7 @@ Lsmp_main:
     jmp $
 %endif
 
-ALIGN 4
+ALIGN 64
 global gdt_flush
 extern gp
 
@@ -259,7 +260,7 @@ gdt_flush:
 ; NASM macro which pushs also an pseudo error code
 %macro isrstub_pseudo_error 1
     global isr%1
-    align 16
+    align 64
     isr%1:
         push byte 0 ; pseudo error code
         push byte %1
@@ -271,7 +272,7 @@ gdt_flush:
 ; on the stack.
 %macro isrstub 1
     global isr%1
-    align 16
+    align 64
     isr%1:
         push byte %1
         jmp common_stub
@@ -324,7 +325,7 @@ isrstub_pseudo_error 9
 ; NASM macro for asynchronous interrupts (no exceptions)
 %macro irqstub 1
     global irq%1
-    align 16
+    align 64
     irq%1:
         push byte 0 ; pseudo error code
         push byte 32+%1
@@ -346,49 +347,49 @@ isrstub_pseudo_error 9
 %endrep
 
 global apic_timer
-align 16
+align 64
 apic_timer:
     push byte 0 ; pseudo error code
     push byte 123
     jmp common_stub
 
 global apic_lint0
-align 16
+align 64
 apic_lint0:
     push byte 0 ; pseudo error code
     push byte 124
     jmp common_stub
 
 global apic_lint1
-align 16
+align 64
 apic_lint1:
     push byte 0 ; pseudo error code
     push byte 125
     jmp common_stub
 
 global apic_error
-align 16
+align 64
 apic_error:
     push byte 0 ; pseudo error code
     push byte 126
     jmp common_stub
 
 global apic_svr
-align 16
+align 64
 apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
     jmp common_stub
 
 global wakeup
-align 16
+align 64
 wakeup:
     push byte 0 ; pseudo error code
     push byte 121
     jmp common_stub
 
 global mmnif_irq
-align 16
+align 64
 mmnif_irq:
     push byte 0 ; pseudo error code
     push byte 122
@@ -403,7 +404,7 @@ extern kernel_stack
 ; libos => no syscall interface required
 %if 0
 global isrsyscall
-align 16
+align 64
 ; used to realize system calls
 isrsyscall:
     ; IF flag is already cleared
@@ -478,7 +479,7 @@ isrsyscall:
 %endif
 
 global switch_context
-align 16
+align 64
 switch_context:
     ; by entering a function the DF flag has to be cleared => see ABI
     cld
@@ -534,11 +535,11 @@ Lgo1:
 
     jmp common_switch
 
-align 4
+align 64
 rollback:
     ret
 
-align 4
+align 64
 common_stub:
     push rax
     push rcx
