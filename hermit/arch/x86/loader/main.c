@@ -54,6 +54,7 @@ void main(void)
 	koutput_init();
 	kputs("HermitCore loader...\n");
 	kprintf("Loader starts at %p and ends at %p\n", &kernel_start, &kernel_end);
+	kprintf("Found mb_info at %p\n", mb_info);
 
 	page_init();
 
@@ -169,7 +170,7 @@ void main(void)
 
 	kprintf("Entry point: 0x%zx\n", header->entry);
 	// jump to the HermitCore app
-	asm volatile ("jmp *%0" :: "r"(header->entry) : "memory");
+	asm volatile ("jmp *%0" :: "r"(header->entry), "d"(mb_info) : "memory");
 
 	// we should never reach this point
 	while(1) { HALT; }

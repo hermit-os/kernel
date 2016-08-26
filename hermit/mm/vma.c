@@ -31,6 +31,7 @@
 #include <hermit/tasks_types.h>
 #include <hermit/spinlock.h>
 #include <hermit/errno.h>
+#include <asm/multiboot.h>
 
 /* 
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -72,6 +73,12 @@ int vma_init(void)
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
 #endif
+
+	if (mb_info) {
+		ret = vma_add((size_t)mb_info, (size_t)mb_info + PAGE_SIZE, VMA_READ|VMA_WRITE);
+		if (BUILTIN_EXPECT(ret, 0))
+			goto out;
+	}
 
 out:
 	return ret;
