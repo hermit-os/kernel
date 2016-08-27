@@ -663,7 +663,12 @@ int main(int argc, char **argv)
 	int32_t magic = HERMIT_MAGIC;
 	struct sockaddr_in serv_name;
 
-	init_env(argv[1]);
+	ret = init_env(argv[1]);
+	if (ret) {
+		perror("init_env failed");
+		exit(1);
+	}
+
 	atexit(fini_env);
 
 	/* create a socket */
