@@ -858,7 +858,7 @@ int ipi_tlb_flush(void)
 {
 	uint32_t id = CORE_ID;
 
-	if (atomic_int32_read(&cpu_online) == 1)
+	if (atomic_int32_read(&cpu_online) <= 1)
 		return 0;
 
 	if (has_x2apic()) {
