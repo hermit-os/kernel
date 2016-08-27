@@ -24,3 +24,4 @@ env:
                 - HERMIT_ISLE=qemu
                 - HERMIT_CPUS=2
                 - HERMIT_MEM="128M"
+                - HERMIT_KVM="0"
