@@ -16,6 +16,7 @@ script:
         - mv tmp hermit/usr/
         - mv x86 hermit/usr/
         - make T=1 travis
+        - make test
 env:
         global:
                 - TOPDIR=`pwd`/../..
