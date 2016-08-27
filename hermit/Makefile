@@ -54,10 +54,10 @@ ifdef PROFILING
     PROFILING_CFLAGS += -DXRAY_ANNOTATE
 endif
 
-CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -ftree-vectorize #$(STACKPROT)
-FCFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -ftree-vectorize
-FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -ftree-vectorize
-CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -march=native -mtune=native -ftree-vectorize
+CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT) #$(STACKPROT)
+FCFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
+FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
+CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
 LDFLAGS_FOR_NEWLIB =
 NASMFLAGS_FOR_NEWLIB = -felf64
 CFLAGS_FOR_TOOLS = -O2 -Wall -std=gnu99
