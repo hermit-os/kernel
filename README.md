@@ -40,6 +40,8 @@ On Ubuntu the packets could be installed with following command:
 
 ## Building and testing HermitCore on a real machine
 
+Note, to launch HermitCore applications, root privileges are required.
+
 1. In principle you have to follow the tutorial above. After the configuration (step 2 in the above tutorial) go to the subdirectory `linux`, which contains the source code of the Linux kernel. Configure the kernel with `make menuconfig` for your system. Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 2. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler and the demo applications.
 3. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution). We recommend to disable Linux NO_HZ feature by setting the kernel parameter `no_hz=off`. This feature reduces partly the OS noise, but noise sensitive applications should now run on HermitCore.
