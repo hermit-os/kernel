@@ -19,5 +19,14 @@ cp config/linux_config linux/.config
 CROSSDIR=`pwd`/hermit/usr/x86/bin
 AC_SUBST(CROSSDIR)
 
+AC_ARG_WITH([mtune],
+  [AS_HELP_STRING([--with-mtune=ARCH],
+                  [enable tuning for a specific architecture])],
+  [if test x"$withval" != x ; then
+     ARCH_OPT="-mtune=$withval -march=$withval"
+   fi],
+  [ARCH_OPT=])
+AC_SUBST(ARCH_OPT)
+
 AC_CONFIG_FILES(Makefile)
 AC_OUTPUT

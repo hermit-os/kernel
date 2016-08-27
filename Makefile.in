@@ -1,14 +1,15 @@
 QEMU = @QEMU@ -machine accel=kvm -cpu host
 CROSSDIR = @CROSSDIR@
 JOBS = $(shell nproc)
+ARCH_OPT = @ARCH_OPT@
 
 default: linux/arch/x86/boot/bzImage
-	make PATH=$(PATH):$(CROSSDIR) -C hermit
-	make PATH=$(PATH):$(CROSSDIR) -C hermit/tools proxy
+	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit
+	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit/tools proxy
 
 travis:
-	make PATH=$(PATH):$(CROSSDIR) -C hermit
-	make PATH=$(PATH):$(CROSSDIR) -C hermit/tools proxy
+	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit
+	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit/tools proxy
 
 all: default
 
