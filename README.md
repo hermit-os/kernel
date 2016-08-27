@@ -64,6 +64,7 @@ The demo applications are stored in their subdirectories `hermit/usr/{tests,benc
 ## HermitCore as classical standalone unikernel
 
 HermitCore applications can be directly started as standalone kernel within a virtual machine.
+In this case, iRCCE isn’t supported.
 Please register the loader like the multi-kernel version of HermitCore (see bullet 4 in section *Building and testing HermitCore on a real machine*).
 If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
 Please note that the loader requires Qemu **with** KVM support and expects that the executable name is *qemu-system-x86_64*.

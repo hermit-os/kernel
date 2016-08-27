@@ -463,6 +463,9 @@ int sys_rcce_init(int session_id)
 	int i, err = 0;
 	size_t paddr = 0;
 
+	if (is_single_kernel())
+		return -ENOSYS;
+
 	if (session_id <= 0)
 		return -EINVAL;
 
@@ -513,6 +516,9 @@ size_t sys_rcce_malloc(int session_id, int ue)
 {
 	size_t vaddr = 0;
 	int i, counter = 0;
+
+	if (is_single_kernel())
+		return -ENOSYS;
 
 	if (session_id <= 0)
 		return -EINVAL;
@@ -565,6 +571,9 @@ int sys_rcce_fini(int session_id)
 	int ret = 0;
 
 	// we have to free the MPB
+
+	if (is_single_kernel())
+		return -ENOSYS;
 
 	if (session_id <= 0)
 		return -EINVAL;
