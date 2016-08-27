@@ -16,7 +16,6 @@ script:
         - mv tmp hermit/usr/
         - mv x86 hermit/usr/
         - make T=1 travis
-        - sudo echo $PROXY_STR > /proc/sys/fs/binfmt_misc/register
 env:
         global:
                 - TOPDIR=`pwd`/../..
