@@ -6,4 +6,4 @@
 FILES="hermit/usr/tests/hello hermit/usr/tests/hellof hermit/usr/tests/hello++ hermit/usr/tests/thr_hello hermit/usr/tests/jacobi"
 PROXY=hermit/tools/proxy
 
-for f in $FILES; do echo "check $f..."; $PROXY $f; done
+for f in $FILES; do echo "check $f..."; $PROXY $f || exit 1; done
