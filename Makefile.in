@@ -16,7 +16,7 @@ linux/arch/x86/boot/bzImage:
 	make -j$(JOBS) -C linux
 
 test:
-	@echo "Nothing to test"
+	. ./test.sh
 
 qemu:
 	$(QEMU) -smp 10 -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 \
