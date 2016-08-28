@@ -155,6 +155,7 @@ static int is_qemu_available(void)
 {
 	char* line = (char*) malloc(2048);
 	size_t n = 2048;
+	int ret = 0;
 
 	if (!line) {
 		fprintf(stderr, "Not enough memory\n");
@@ -167,16 +168,15 @@ static int is_qemu_available(void)
 
 	while(getline(&line, &n, file) > 0) {
 		if (strncmp(line, "TCP server listening.\n", 2048) == 0) {
-			fclose(file);
-			free(line);
-			return 1;
+			ret = 1;
+			break;
 		}
 	}
 
 	fclose(file);
 	free(line);
 
-	return 0;
+	return ret;
 }
 
 static int init_qemu(char *path)
