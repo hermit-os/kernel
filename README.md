@@ -89,5 +89,5 @@ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ## Tips
 
 1. The configuration flag `--with-mtune=name` specifies the name of the target processor for which GCC should tune the performance of the code. You could use any architecture name, which is supported by the GCC. For instance, `--with-mtune=native` optimzes the code for the host system. Please note, if the applications will be started within a VM, the hypervisor has to support the specified architecture name. If KVM is started by our proxy, per default the host architecture will be used as target processor.
-2. If KVM is started by our proxy and the environment variable `HERMIT_KVM` is set to `0`, the virtual machine will be not accelerated by KVM. In this case, the configuration flag `--with-mtune=name` should avoided.
+2. If KVM is started by our proxy and the environment variable `HERMIT_KVM` is set to `0`, the virtual machine will be not accelerated by KVM. In this case, the configuration flag `--with-mtune=name` should be avoided.
 3. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages on the screen.
