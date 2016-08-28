@@ -7,11 +7,11 @@ MYPROMPT="~ > "
 
 clear
 echo -n $MYPROMPT
-echo -e " \e[92m# HermitCore is also usable as a classical unikernel. By setting the environment\e[39m" | randtype -m 2 -t 18,6000
+echo -e " \e[92m# HermitCore is also usable as a classical unikernel. By setting the\e[39m" | randtype -m 2 -t 18,6000
 echo -n $MYPROMPT
-echo -e " \e[92m# variable HERMIT_ISLE to qemu, the application will be started within a virtual\e[39m" | randtype -m 2 -t 18,6000
+echo -e " \e[92m# environment variable HERMIT_ISLE to qemu, the application will be started\e[39m" | randtype -m 2 -t 18,6000
 echo -n $MYPROMPT
-echo -e " \e[92m# machine. The boot time is about 2s.\e[39m" | randtype -m 0 -t 18,6000
+echo -e " \e[92m# within a virtual machine. The boot time is about 2s.\e[39m" | randtype -m 0 -t 18,6000
 echo -n $MYPROMPT
 echo  " HERMIT_ISLE=qemu time hermit/usr/tests/hello" | randtype -m 0 -t 18,6000
 HERMIT_ISLE=qemu time hermit/usr/tests/hello
@@ -27,8 +27,8 @@ echo -e " \e[92m# HermitCore's kernel messages are published by setting the envi
 echo -n $MYPROMPT
 echo -e " \e[92m# HERMIT_VERBOSE to 1.\e[39m" | randtype -m 1 -t 18,6000
 echo -n $MYPROMPT
-echo " HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=1G HERMIT_VERBOSE=1 hermit/usr/benchmarks/stream" | randtype -m 1 -t 18,6000
-HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=1G HERMIT_VERBOSE=1 hermit/usr/benchmarks/stream
+echo " HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_VERBOSE=1 hermit/usr/benchmarks/stream" | randtype -m 1 -t 18,6000
+HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_VERBOSE=1 hermit/usr/benchmarks/stream
 #echo $MYPROMPT
 echo -n $MYPROMPT
 echo -e " \e[92mHermitCore (\e[31mhttp://www.hermitcore.org\e[92m) is an experimental platform.\e[39m" | randtype -m 1 -t 18,6000
