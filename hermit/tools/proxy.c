@@ -25,6 +25,8 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _GNU_SOURCE
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -37,6 +39,8 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/inotify.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <linux/tcp.h>
@@ -56,6 +60,9 @@
 #define __HERMIT_close	3
 #define __HERMIT_read	4
 #define __HERMIT_lseek	5
+
+#define EVENT_SIZE	(sizeof (struct inotify_event))
+#define BUF_LEN		(1024 * (EVENT_SIZE + 16))
 
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
@@ -144,9 +151,30 @@ static int init_env(char *path)
 		return init_multi(path);
 }
 
+static int is_qemu_available(void)
+{
+	char line[2048] = "";
+	size_t n = 2048;
+
+	FILE* file = fopen(tmpname, "r");
+	if (!file)
+		return 0;
+
+	while(getline((char**)&line, &n, file) > 0) {
+		if (strcmp(line, "Establish IP connection") >= 0) {
+			fclose(file);
+			return 1;
+		}
+	}
+
+	fclose(file);
+
+	return 0;
+}
+
 static int init_qemu(char *path)
 {
-	int kvm;
+	int kvm, i = 0;
 	char* str;
 	char loader_path[MAX_PATH];
 	char hostfwd[MAX_PATH];
@@ -154,6 +182,7 @@ static int init_qemu(char *path)
 	char chardev_file[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
 	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char buffer[BUF_LEN];
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
@@ -185,8 +214,6 @@ static int init_qemu(char *path)
 
 	if (kvm)
 	{
-		int i;
-
 		for(i=0; qemu_argv[i] != NULL; i++)
 			;
 
@@ -195,8 +222,6 @@ static int init_qemu(char *path)
 		qemu_argv[i+2] = "-cpu";
 		qemu_argv[i+3] = "host";
 	} /*else {
-		int i;
-
 		for(i=0; qemu_argv[i] != NULL; i++)
 			;
 
@@ -207,10 +232,7 @@ static int init_qemu(char *path)
 	str = getenv("HERMIT_VERBOSE");
 	if (str)
 	{
-		int i;
-
 		printf("qemu startup command: \n");
-		printf("%s ", qemu_str);
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
@@ -235,6 +257,44 @@ static int init_qemu(char *path)
 	// move the parent process to the end of the queue
 	// => child would be scheduled next
 	sched_yield();
+
+	// wait until HermitCore is sucessfully booted
+
+	int fd = inotify_init();
+	if ( fd < 0 ) {
+		perror( "inotify_init" );
+		exit(1);
+	}
+
+	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
+
+	char* base = basename(tmpname);
+
+	if (is_qemu_available())
+		goto qemu_started;
+
+	while(1) {
+		int length = read(fd, buffer, BUF_LEN);
+
+		if (length < 0) {
+			perror("read");
+			goto qemu_started;
+		}
+
+		for(i=0; i<length; ) {
+			struct inotify_event *event = (struct inotify_event *) &buffer[i];
+
+			if ((strcmp(base, event->name) == 0) && is_qemu_available())
+				goto qemu_started;
+
+			i += EVENT_SIZE + event->len;
+		}
+	}
+
+qemu_started:
+	//printf("HermitCore is available\n");
+	inotify_rm_watch(fd, wd);
+	close(fd);
 
 	return 0;
 }
@@ -663,12 +723,7 @@ int main(int argc, char **argv)
 	int32_t magic = HERMIT_MAGIC;
 	struct sockaddr_in serv_name;
 
-	ret = init_env(argv[1]);
-	if (ret) {
-		perror("init_env failed");
-		exit(1);
-	}
-
+	init_env(argv[1]);
 	atexit(fini_env);
 
 	/* create a socket */
@@ -695,26 +750,13 @@ int main(int argc, char **argv)
 		serv_name.sin_addr = HERMIT_IP(isle_nr);
 	serv_name.sin_port = htons(port);
 
-	/*
-	 * TODO: remove dirty hack
-	 *
-	 * Qemu starts not fast enough. Consequently, we lose the first SYN packet.
-	 * The timeout to retry the connection is per default too high. But I am not
-	 * able to define the timeout value. I could only define the number of retries.
-	 * (http://www.sekuda.com/overriding_the_default_linux_kernel_20_second_tcp_socket_connect_timeout)
-	 *
-	 * Dirty hack => sleep some time
-	 */
-	if (qemu)
-		sleep(2);
-
 	i = 0;
 retry:
 	ret = connect(s, (struct sockaddr*)&serv_name, sizeof(serv_name));
 	if (ret < 0)
 	{
 		i++;
-		if (i <= 100) {
+		if (i <= 10) {
 			usleep(10000);
 			goto retry;
 		}
