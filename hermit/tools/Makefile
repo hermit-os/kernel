@@ -1,6 +1,6 @@
 MAKE = make
 CC = gcc
-CFLAGS = -O2 -Wall -std=gnu99
+CFLAGS = -O2 -Wall -std=gnu99 $(ARCH_OPT)
 PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
 # Prettify output
