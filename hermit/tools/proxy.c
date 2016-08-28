@@ -153,21 +153,28 @@ static int init_env(char *path)
 
 static int is_qemu_available(void)
 {
-	char line[2048] = "";
+	char* line = (char*) malloc(2048);
 	size_t n = 2048;
+
+	if (!line) {
+		fprintf(stderr, "Not enough memory\n");
+		exit(1);
+	}
 
 	FILE* file = fopen(tmpname, "r");
 	if (!file)
 		return 0;
 
-	while(getline((char**)&line, &n, file) > 0) {
-		if (strcmp(line, "Establish IP connection") >= 0) {
+	while(getline(&line, &n, file) > 0) {
+		if (strncmp(line, "TCP server listening.\n", 2048) == 0) {
 			fclose(file);
+			free(line);
 			return 1;
 		}
 	}
 
 	fclose(file);
+	free(line);
 
 	return 0;
 }
