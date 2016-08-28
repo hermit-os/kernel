@@ -271,7 +271,7 @@ static int init_qemu(char *path)
 	str = getenv("HERMIT_VERBOSE");
 	if (str)
 	{
-		printf("qemu startup command: \n");
+		printf("qemu startup command: ");
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
