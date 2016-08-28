@@ -167,7 +167,7 @@ static int is_qemu_available(void)
 		return 0;
 
 	while(getline(&line, &n, file) > 0) {
-		if (strncmp(line, "TCP server listening.\n", 2048) == 0) {
+		if (strncmp(line, "TCP server is listening.\n", 2048) == 0) {
 			ret = 1;
 			break;
 		}

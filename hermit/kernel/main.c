@@ -448,7 +448,7 @@ static int initd(void* arg)
 	len = sizeof(struct sockaddr_in);
 
 	kprintf("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
-	kputs("TCP server listening.\n");
+	kputs("TCP server is listening.\n");
 
 	if ((c = lwip_accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
 	{
