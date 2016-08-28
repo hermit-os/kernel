@@ -180,8 +180,10 @@ static int is_qemu_available(void)
 }
 
 // wait until HermitCore is sucessfully booted
-static int wait_qemu_available(void)
+static void wait_qemu_available(void)
 {
+	char buffer[BUF_LEN];
+
 	if (is_qemu_available())
 		return;
 
@@ -192,9 +194,6 @@ static int wait_qemu_available(void)
 	}
 
 	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
-
-	char* base = basename(tmpname);
-
 
 	while(1) {
 		int length = read(fd, buffer, BUF_LEN);
@@ -223,7 +222,6 @@ static int init_qemu(char *path)
 	char chardev_file[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
 	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-	char buffer[BUF_LEN];
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
