@@ -27,23 +27,23 @@
 
 #define _GNU_SOURCE
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdint.h>
-#include <signal.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sched.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/wait.h>
-#include <sys/types.h>
-#include <sys/inotify.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <linux/tcp.h>
+#include <netinet/in.h>
+#include <sched.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/inotify.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define MAX_PATH	255
 #define MAX_ARGS	1024
@@ -179,6 +179,40 @@ static int is_qemu_available(void)
 	return ret;
 }
 
+// wait until HermitCore is sucessfully booted
+static int wait_qemu_available(void)
+{
+	if (is_qemu_available())
+		return;
+
+	int fd = inotify_init();
+	if ( fd < 0 ) {
+		perror( "inotify_init" );
+		exit(1);
+	}
+
+	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
+
+	char* base = basename(tmpname);
+
+
+	while(1) {
+		int length = read(fd, buffer, BUF_LEN);
+
+		if (length < 0) {
+			perror("read");
+			break;
+		}
+
+		if (length != 0 && is_qemu_available())
+			break;
+	}
+
+	//printf("HermitCore is available\n");
+	inotify_rm_watch(fd, wd);
+	close(fd);
+}
+
 static int init_qemu(char *path)
 {
 	int kvm, i = 0;
@@ -266,42 +300,7 @@ static int init_qemu(char *path)
 	sched_yield();
 
 	// wait until HermitCore is sucessfully booted
-
-	int fd = inotify_init();
-	if ( fd < 0 ) {
-		perror( "inotify_init" );
-		exit(1);
-	}
-
-	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
-
-	char* base = basename(tmpname);
-
-	if (is_qemu_available())
-		goto qemu_started;
-
-	while(1) {
-		int length = read(fd, buffer, BUF_LEN);
-
-		if (length < 0) {
-			perror("read");
-			goto qemu_started;
-		}
-
-		for(i=0; i<length; ) {
-			struct inotify_event *event = (struct inotify_event *) &buffer[i];
-
-			if ((strcmp(base, event->name) == 0) && is_qemu_available())
-				goto qemu_started;
-
-			i += EVENT_SIZE + event->len;
-		}
-	}
-
-qemu_started:
-	//printf("HermitCore is available\n");
-	inotify_rm_watch(fd, wd);
-	close(fd);
+	wait_qemu_available();
 
 	return 0;
 }
