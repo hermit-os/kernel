@@ -223,9 +223,11 @@ int destroy_stack(void* viraddr, size_t sz)
 		return -ENOMEM;
 
 	// unmap and destroy stack
+	int8_t flag = irq_nested_disable();
 	vma_free((size_t)viraddr-PAGE_SIZE, (size_t)viraddr+(npages+1)*PAGE_SIZE);
 	page_unmap((size_t)viraddr, npages);
 	put_pages(phyaddr, npages);
+	irq_nested_enable(flag);
 
 	return 0;
 }
