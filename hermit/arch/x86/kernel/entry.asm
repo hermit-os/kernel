@@ -506,8 +506,8 @@ switch_context:
     pushfq                      ; RFLAGS
     push QWORD 0x08             ; CS
     push QWORD rollback         ; RIP
-    push QWORD 0x00             ; Interrupt number
     push QWORD 0x00edbabe       ; Error code
+    push QWORD 0x00             ; Interrupt number
     push rax
     push rcx
     push rdx
