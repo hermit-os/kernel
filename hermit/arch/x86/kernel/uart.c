@@ -48,7 +48,7 @@
  */
 
 #define UART_RX			0	/* In:  Receive buffer */
-#define UART_IIR		2   /* In:  Interrupt ID Register */
+#define UART_IIR		2	/* In:  Interrupt ID Register */
 #define UART_TX			0	/* Out: Transmit buffer */
 #define UART_IER		1	/* Out: Interrupt Enable Register */
 #define UART_FCR		2	/* Out: FIFO Control Register */
@@ -58,26 +58,26 @@
 #define UART_LCR		3	/* Out: Line Control Register */
 #define UART_LSR		5	/* Line Status Register */
 
-#define UART_IER_MSI	0x08	/* Enable Modem status interrupt */
-#define UART_IER_RLSI	0x04	/* Enable receiver line status interrupt */
-#define UART_IER_THRI	0x02	/* Enable Transmitter holding register int. */
-#define UART_IER_RDI	0x01	/* Enable receiver data interrupt */
+#define UART_IER_MSI		0x08	/* Enable Modem status interrupt */
+#define UART_IER_RLSI		0x04	/* Enable receiver line status interrupt */
+#define UART_IER_THRI		0x02	/* Enable Transmitter holding register int. */
+#define UART_IER_RDI		0x01	/* Enable receiver data interrupt */
 
 #define UART_IIR_NO_INT		0x01 /* No interrupts pending */
-#define UART_IIR_ID			0x06 /* Mask for the interrupt ID */
+#define UART_IIR_ID		0x06 /* Mask for the interrupt ID */
 #define UART_IIR_MSI		0x00 /* Modem status interrupt */
 #define UART_IIR_THRI		0x02 /* Transmitter holding register empty */
 #define UART_IIR_RDI		0x04 /* Receiver data interrupt */
 #define UART_IIR_RLSI		0x06 /* Receiver line status interrupt */
 
 #define UART_FCR_ENABLE_FIFO	0x01 /* Enable the FIFO */
-#define UART_FCR_CLEAR_RCVR		0x02 /* Clear the RCVR FIFO */
-#define UART_FCR_CLEAR_XMIT		0x04 /* Clear the XMIT FIFO */
+#define UART_FCR_CLEAR_RCVR	0x02 /* Clear the RCVR FIFO */
+#define UART_FCR_CLEAR_XMIT	0x04 /* Clear the XMIT FIFO */
 #define UART_FCR_TRIGGER_MASK	0xC0 /* Mask for the FIFO trigger range */
-#define UART_FCR_TRIGGER_1		0x00 /* Trigger RDI at FIFO level  1 byte */
-#define UART_FCR_TRIGGER_4		0x40 /* Trigger RDI at FIFO level  4 byte */
-#define UART_FCR_TRIGGER_8		0x80 /* Trigger RDI at FIFO level  8 byte */
-#define UART_FCR_TRIGGER_14		0xc0 /* Trigger RDI at FIFO level 14 byte*/
+#define UART_FCR_TRIGGER_1	0x00 /* Trigger RDI at FIFO level  1 byte */
+#define UART_FCR_TRIGGER_4	0x40 /* Trigger RDI at FIFO level  4 byte */
+#define UART_FCR_TRIGGER_8	0x80 /* Trigger RDI at FIFO level  8 byte */
+#define UART_FCR_TRIGGER_14	0xc0 /* Trigger RDI at FIFO level 14 byte*/
 
 
 #define UART_LCR_DLAB		0x80 /* Divisor latch access bit */
