@@ -173,7 +173,7 @@ out:
 
 int page_unmap(size_t viraddr, size_t npages)
 {
-	uint8_t ipi = 0;
+	//uint8_t ipi = 0;
 
 	spinlock_irqsave_lock(&page_lock);
 
@@ -183,11 +183,14 @@ int page_unmap(size_t viraddr, size_t npages)
 	for (vpn=start; vpn<start+npages; vpn++) {
 		self[0][vpn] = 0;
 		tlb_flush_one_page(vpn << PAGE_BITS, 0);
-		ipi = 1;
+		//ipi = 1;
 	}
 
-	if (ipi)
-		ipi_tlb_flush();
+	/*
+	 * IPI isn't required because unmaping is only used by shutdown the system
+	 */
+	/*if (ipi)
+		ipi_tlb_flush();*/
 
 	spinlock_irqsave_unlock(&page_lock);
 

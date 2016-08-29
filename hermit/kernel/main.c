@@ -270,8 +270,11 @@ int network_shutdown(void)
 {
 	kputs("Shutdown LwIP\n");
 
-	if (libc_sd > 0)
-		lwip_close(libc_sd);
+	if (libc_sd >= 0) {
+		int s = libc_sd;
+		libc_sd = -1;
+		lwip_close(s);
+	}
 
         mmnif_shutdown();
 	//stats_display();
