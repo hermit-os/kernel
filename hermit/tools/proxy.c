@@ -193,7 +193,7 @@ static void wait_qemu_available(void)
 		exit(1);
 	}
 
-	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
+	int wd = inotify_add_watch(fd, tmpname, IN_MODIFY|IN_CREATE);
 
 	while(1) {
 		int length = read(fd, buffer, BUF_LEN);
