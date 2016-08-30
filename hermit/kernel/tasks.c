@@ -766,7 +766,7 @@ void check_timers(void)
 
         // check timers
 	current_tick = get_clock_tick();
-	while (readyqueues[core_id].timers.first && readyqueues[core_id].timers.first->timeout >= current_tick)
+	while (readyqueues[core_id].timers.first && readyqueues[core_id].timers.first->timeout <= current_tick)
 	{
 		task_t* task = readyqueues[core_id].timers.first;
 
