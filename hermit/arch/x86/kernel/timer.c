@@ -46,6 +46,7 @@ extern int32_t boot_processor;
 
 #ifdef DYNAMIC_TICKS
 DEFINE_PER_CORE(uint64_t, last_rdtsc, 0);
+uint64_t boot_tsc = 0;
 
 void check_ticks(void)
 {
@@ -53,28 +54,15 @@ void check_ticks(void)
 	if (!cpu_freq)
 		return;
 
-	if (has_rdtscp()){
-		uint64_t curr_rdtsc = rdtscp(NULL);
-		uint64_t diff;
+	uint64_t curr_rdtsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
+	uint64_t diff;
 
+	rmb();
+	diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
+	if (diff > 0) {
+		set_per_core(timer_ticks, per_core(timer_ticks) + diff);
+		set_per_core(last_rdtsc, curr_rdtsc);
 		rmb();
-		diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-		if (diff > 0) {
-			set_per_core(timer_ticks, per_core(timer_ticks) + diff);
-			set_per_core(last_rdtsc, curr_rdtsc);
-			rmb();
-		}
-	} else {
-		uint64_t curr_rdtsc = rdtsc();
-		uint64_t diff;
-
-		rmb();
-		diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-		if (diff > 0) {
-			set_per_core(timer_ticks, per_core(timer_ticks) + diff);
-			set_per_core(last_rdtsc, curr_rdtsc);
-			rmb();
-		}
 	}
 }
 #endif
@@ -182,6 +170,14 @@ static int pit_init(void)
  */
 int timer_init(void)
 {
+#ifdef DYNAMIC_TICKS
+	if (boot_tsc)
+	{
+		set_per_core(last_rdtsc, boot_tsc);
+		return 0;
+	}
+#endif
+
 	/*
 	 * Installs 'timer_handler' for the PIC and APIC timer,
 	 * only one handler will be later used.
@@ -191,10 +187,8 @@ int timer_init(void)
 	irq_install_handler(121, wakeup_handler);
 
 #ifdef DYNAMIC_TICKS
-	if (has_rdtscp())
-		last_rdtsc = rdtscp(NULL);
-	else
-		last_rdtsc = rdtsc();
+	boot_tsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
+	set_per_core(last_rdtsc, boot_tsc);
 #endif
 
 	if (cpu_freq) // do we need to configure the timer?

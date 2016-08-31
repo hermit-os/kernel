@@ -285,6 +285,7 @@ int network_shutdown(void)
 #if MAX_CORES > 1
 int smp_main(void)
 {
+	timer_init();
 #ifdef DYNAMIC_TICKS
 	enable_dynticks();
 #endif
