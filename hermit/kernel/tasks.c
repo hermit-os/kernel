@@ -68,19 +68,132 @@ static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, 0, {[0 .
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
 DEFINE_PER_CORE(char*, kernel_stack, NULL);
+
 #if MAX_CORES > 1
 DEFINE_PER_CORE(uint32_t, __core_id, 0);
 #endif
+
 extern const void boot_stack;
 extern const void boot_ist;
 
-/** @brief helper function for the assembly code to determine the current task
- * @return Pointer to the task_t structure of current task
- */
-task_t* get_current_task(void)
+
+static void update_timer(task_t* first)
 {
-	return per_core(current_task);
+	if(first) {
+		if(first->timeout > get_clock_tick()) {
+			timer_deadline((uint32_t) (first->timeout - get_clock_tick()));
+		} else {
+			// workaround: start timer so new head will be serviced
+			timer_deadline(1);
+		}
+	} else {
+		// prevent spurious interrupts
+		timer_disable();
+	}
 }
+
+
+static void timer_queue_remove(uint32_t core_id, task_t* task)
+{
+	if(BUILTIN_EXPECT(!task, 0)) {
+		return;
+	}
+
+	task_list_t* timer_queue = &readyqueues[core_id].timers;
+
+#ifdef DYNAMIC_TICKS
+	// if task is first in timer queue, we need to update the oneshot
+	// timer for the next task
+	if(timer_queue->first == task) {
+		update_timer(task->next);
+	}
+#endif
+
+	task_list_remove_task(timer_queue, task);
+}
+
+
+static void timer_queue_push(uint32_t core_id, task_t* task)
+{
+	task_list_t* timer_queue = &readyqueues[core_id].timers;
+
+	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+
+	task_t* first = timer_queue->first;
+
+	if(!first) {
+		timer_queue->first = timer_queue->last = task;
+		task->next = task->prev = NULL;
+
+        #ifdef DYNAMIC_TICKS
+		    update_timer(task);
+        #endif
+	} else {
+		// lookup position where to insert task
+		task_t* tmp = first;
+		while(tmp && (task->timeout >= tmp->timeout))
+			tmp = tmp->next;
+
+		if(!tmp) {
+			// insert at the end of queue
+			task->next = NULL;
+			task->prev = timer_queue->last;
+
+			// there has to be a last element because there is also a first one
+			timer_queue->last->next = task;
+			timer_queue->last = task;
+		} else {
+			task->next = tmp;
+			task->prev = tmp->prev;
+			tmp->prev = task;
+
+			if(task->prev)
+				task->prev->next = task;
+
+			if(timer_queue->first == tmp) {
+				timer_queue->first = task;
+
+                #ifdef DYNAMIC_TICKS
+				    update_timer(task);
+                #endif
+			}
+		}
+	}
+
+	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+}
+
+
+static void readyqueues_push_back(uint32_t core_id, task_t* task)
+{
+	// idle task (prio=0) doesn't have a queue
+	task_list_t* readyqueue = &readyqueues[core_id].queue[task->prio - 1];
+
+	task_list_push_back(readyqueue, task);
+
+	// update priority bitmap
+	readyqueues[core_id].prio_bitmap |= (1 << task->prio);
+
+	// increase the number of ready tasks
+	readyqueues[core_id].nr_tasks++;
+}
+
+
+static void readyqueues_remove(uint32_t core_id, task_t* task)
+{
+	// idle task (prio=0) doesn't have a queue
+	task_list_t* readyqueue = &readyqueues[core_id].queue[task->prio - 1];
+
+	task_list_remove_task(readyqueue, task);
+
+	// no valid task in queue => update priority bitmap
+	if (readyqueue->first == NULL)
+		readyqueues[core_id].prio_bitmap &= ~(1 << task->prio);
+
+	// reduce the number of ready tasks
+	readyqueues[core_id].nr_tasks--;
+}
+
 
 void check_scheduling(void)
 {
@@ -90,6 +203,7 @@ void check_scheduling(void)
 		reschedule();
 }
 
+
 uint32_t get_highest_priority(void)
 {
 	uint32_t prio = msb(readyqueues[CORE_ID].prio_bitmap);
@@ -98,6 +212,7 @@ uint32_t get_highest_priority(void)
 		return 0;
 	return prio;
 }
+
 
 int multitasking_init(void)
 {
@@ -119,6 +234,7 @@ int multitasking_init(void)
 
 	return 0;
 }
+
 
 /* interrupt handler to save / restore the FPU context */
 void fpu_handler(struct state *s)
@@ -149,6 +265,7 @@ void fpu_handler(struct state *s)
 
 	restore_fpu_state(&task->fpu);
 }
+
 
 int set_idle_task(void)
 {
@@ -182,6 +299,7 @@ int set_idle_task(void)
 	return ret;
 }
 
+
 int init_tls(void)
 {
 	task_t* curr_task = per_core(current_task);
@@ -209,15 +327,17 @@ int init_tls(void)
 	return 0;
 }
 
+
 void finish_task_switch(void)
 {
 	task_t* old;
-	uint8_t prio;
 	const uint32_t core_id = CORE_ID;
 
 	spinlock_irqsave_lock(&readyqueues[core_id].lock);
 
 	if ((old = readyqueues[core_id].old_task) != NULL) {
+		readyqueues[core_id].old_task = NULL;
+
 		if (old->status == TASK_FINISHED) {
 			/* cleanup task */
 			if (old->stack) {
@@ -237,7 +357,6 @@ void finish_task_switch(void)
 			}
 
 			old->last_stack_pointer = NULL;
-			readyqueues[core_id].old_task = NULL;
 
 			if (readyqueues[core_id].fpu_owner == old->id)
 				readyqueues[core_id].fpu_owner = 0;
@@ -245,26 +364,15 @@ void finish_task_switch(void)
 			/* signalizes that this task could be reused */
 			old->status = TASK_INVALID;
 		} else {
-			prio = old->prio;
-			if (!readyqueues[core_id].queue[prio-1].first) {
-				old->next = old->prev = NULL;
-				readyqueues[core_id].queue[prio-1].first = readyqueues[core_id].queue[prio-1].last = old;
-			} else {
-				old->next = NULL;
-				old->prev = readyqueues[core_id].queue[prio-1].last;
-				readyqueues[core_id].queue[prio-1].last->next = old;
-				readyqueues[core_id].queue[prio-1].last = old;
-			}
-			readyqueues[core_id].old_task = NULL;
-			readyqueues[core_id].prio_bitmap |= (1 << prio);
+			// re-enqueue old task
+			readyqueues_push_back(core_id, old);
 		}
 	}
 
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 }
 
-/** @brief A procedure to be called by
- * procedures which are called by exiting tasks. */
+
 void NORETURN do_exit(int arg)
 {
 	task_t* curr_task = per_core(current_task);
@@ -298,7 +406,7 @@ void NORETURN do_exit(int arg)
 	}
 }
 
-/** @brief A procedure to be called by kernel tasks */
+
 void NORETURN leave_kernel_task(void) {
 	int result;
 
@@ -306,10 +414,11 @@ void NORETURN leave_kernel_task(void) {
 	do_exit(result);
 }
 
-/** @brief Aborting a task is like exiting it with result -1 */
+
 void NORETURN do_abort(void) {
 	do_exit(-1);
 }
+
 
 static uint32_t get_next_core_id(void)
 {
@@ -333,6 +442,7 @@ static uint32_t get_next_core_id(void)
 
 	return core_id;
 }
+
 
 int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 {
@@ -433,6 +543,7 @@ out:
 
 	return ret;
 }
+
 
 int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t core_id)
 {
@@ -537,6 +648,7 @@ out:
 	return ret;
 }
 
+
 int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id)
 {
 	if (prio > MAX_PRIO)
@@ -544,6 +656,7 @@ int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t 
 
 	return create_task(id, ep, args, prio, core_id);
 }
+
 
 int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio)
 {
@@ -553,23 +666,17 @@ int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio)
 	return create_task(id, ep, args, prio, CORE_ID);
 }
 
-/** @brief Wakeup a blocked task
- * @param id The task's tid_t structure
- * @return
- * - 0 on success
- * - -EINVAL (-22) on failure
- */
+
 int wakeup_task(tid_t id)
 {
 	task_t* task;
-	uint32_t core_id, prio;
+	uint32_t core_id;
 	int ret = -EINVAL;
 	uint8_t flags;
 
 	flags = irq_nested_disable();
 
-	task = task_table + id;
-	prio = task->prio;
+	task = &task_table[id];
 	core_id = task->last_core;
 
 	if (task->status == TASK_BLOCKED) {
@@ -577,56 +684,18 @@ int wakeup_task(tid_t id)
 		ret = 0;
 
 		spinlock_irqsave_lock(&readyqueues[core_id].lock);
-		// increase the number of ready tasks
-		readyqueues[core_id].nr_tasks++;
 
-		// do we need to remove from timer queue?
+		// if task is in timer queue, remove it
 		if (task->flags & TASK_TIMER) {
 			task->flags &= ~TASK_TIMER;
-			if (task->prev)
-				task->prev->next = task->next;
-			if (task->next)
-				task->next->prev = task->prev;
-			if (readyqueues[core_id].timers.first == task) {
-				readyqueues[core_id].timers.first = task->next;
 
-#ifdef DYNAMIC_TICKS
-				const task_t* first = readyqueues[core_id].timers.first;
-				if(first) {
-					if(first->timeout > get_clock_tick()) {
-						timer_deadline(first->timeout - get_clock_tick());
-					} else {
-						// workaround: start timer so new head will be serviced
-						timer_deadline(1);
-					}
-				} else {
-					// prevent spurious interrupts
-					timer_disable();
-				}
-#endif
-			}
-			if (readyqueues[core_id].timers.last == task)
-				readyqueues[core_id].timers.last = task->prev;
+			timer_queue_remove(core_id, task);
 		}
 
-		// add task to the runqueue
-		if (!readyqueues[core_id].queue[prio-1].last) {
-			readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first = task;
-			task->next = task->prev = NULL;
-			readyqueues[core_id].prio_bitmap |= (1 << prio);
-		} else {
-			task->prev = readyqueues[core_id].queue[prio-1].last;
-			task->next = NULL;
-			readyqueues[core_id].queue[prio-1].last->next = task;
-			readyqueues[core_id].queue[prio-1].last = task;
-		}
+		// add task to the ready queue
+		readyqueues_push_back(core_id, task);
+
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
-
-#if 0 //def DYNAMIC_TICKS
-		// send IPI to be sure that the scheuler recognize the new task
-		if (core_id != CORE_ID)
-			apic_send_ipi(core_id, 121);
-#endif
 	}
 
 	irq_nested_enable(flags);
@@ -634,203 +703,102 @@ int wakeup_task(tid_t id)
 	return ret;
 }
 
-/** @brief Block current task
- *
- * The current task's status will be changed to TASK_BLOCKED
- *
- * @return
- * - 0 on success
- * - -EINVAL (-22) on failure
- */
-int block_current_task(void)
+
+int block_task(tid_t id)
 {
-	task_t* curr_task;
-	tid_t id;
-	uint32_t prio, core_id;
+	task_t* task;
+	uint32_t core_id;
 	int ret = -EINVAL;
 	uint8_t flags;
 
 	flags = irq_nested_disable();
 
-	curr_task = per_core(current_task);
-	id = curr_task->id;
-	prio = curr_task->prio;
-	core_id = CORE_ID;
+	task = &task_table[id];
+	core_id = task->last_core;
 
-	if (task_table[id].status == TASK_RUNNING) {
-		task_table[id].status = TASK_BLOCKED;
-		ret = 0;
+	if (task->status == TASK_RUNNING) {
+		task->status = TASK_BLOCKED;
 
 		spinlock_irqsave_lock(&readyqueues[core_id].lock);
-		// reduce the number of ready tasks
-		readyqueues[core_id].nr_tasks--;
 
-		// remove task from queue
-		if (task_table[id].prev)
-			task_table[id].prev->next = task_table[id].next;
-		if (task_table[id].next)
-			task_table[id].next->prev = task_table[id].prev;
-		if (readyqueues[core_id].queue[prio-1].first == task_table+id)
-			readyqueues[core_id].queue[prio-1].first = task_table[id].next;
-		if (readyqueues[core_id].queue[prio-1].last == task_table+id) {
-			readyqueues[core_id].queue[prio-1].last = task_table[id].prev;
-			if (!readyqueues[core_id].queue[prio-1].last)
-				readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first;
-		}
+		// remove task from ready queue
+		readyqueues_remove(core_id, task);
 
-		// No valid task in queue => update prio_bitmap
-		if (!readyqueues[core_id].queue[prio-1].first)
-			readyqueues[core_id].prio_bitmap &= ~(1 << prio);
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+		ret = 0;
 	}
 
 	irq_nested_enable(flags);
 
 	return ret;
 }
+
+
+int block_current_task(void)
+{
+	return block_task(per_core(current_task)->id);
+}
+
 
 int set_timer(uint64_t deadline)
 {
 	task_t* curr_task;
-	task_t* tmp;
-	uint32_t core_id, prio;
+	uint32_t core_id;
 	uint8_t flags;
 	int ret = -EINVAL;
 
 	flags = irq_nested_disable();
 
 	curr_task = per_core(current_task);
-	prio = curr_task->prio;
 	core_id = CORE_ID;
 
 	if (curr_task->status == TASK_RUNNING) {
-		curr_task->status = TASK_BLOCKED;
-		curr_task->timeout = deadline;
+		// blocks task and removes from ready queue
+		block_task(curr_task->id);
+
 		curr_task->flags |= TASK_TIMER;
+		curr_task->timeout = deadline;
+
+		timer_queue_push(core_id, curr_task);
+
 		ret = 0;
-
-		spinlock_irqsave_lock(&readyqueues[core_id].lock);
-
-		// reduce the number of ready tasks
-		readyqueues[core_id].nr_tasks--;
-
-		// remove task from queue
-		if (curr_task->prev)
-			curr_task->prev->next = curr_task->next;
-		if (curr_task->next)
-			curr_task->next->prev = curr_task->prev;
-		if (readyqueues[core_id].queue[prio-1].first == curr_task)
-			readyqueues[core_id].queue[prio-1].first = curr_task->next;
-		if (readyqueues[core_id].queue[prio-1].last == curr_task) {
-			readyqueues[core_id].queue[prio-1].last = curr_task->prev;
-			if (!readyqueues[core_id].queue[prio-1].last)
-				readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first;
-		}
-
-		// No valid task in queue => update prio_bitmap
-		if (!readyqueues[core_id].queue[prio-1].first)
-			readyqueues[core_id].prio_bitmap &= ~(1 << prio);
-
-		// add task to the timer queue
-		tmp = readyqueues[core_id].timers.first;
-		if (!tmp) {
-			readyqueues[core_id].timers.first = readyqueues[core_id].timers.last = curr_task;
-			curr_task->prev = curr_task->next = NULL;
-#ifdef DYNAMIC_TICKS
-			timer_deadline(deadline-get_clock_tick());
-#endif
-		} else {
-			while(tmp && (deadline >= tmp->timeout))
-				tmp = tmp->next;
-
-			if (!tmp) {
-				curr_task->next = NULL;
-				curr_task->prev = readyqueues[core_id].timers.last;
-				if (readyqueues[core_id].timers.last)
-					readyqueues[core_id].timers.last->next = curr_task;
-				readyqueues[core_id].timers.last = curr_task;
-				// obsolete lines...
-				//if (!readyqueues[core_id].timers.first)
-				//      readyqueues[core_id].timers.first = curr_task;
-			} else {
-				curr_task->prev = tmp->prev;
-				curr_task->next = tmp;
-				tmp->prev = curr_task;
-				if (curr_task->prev)
-					curr_task->prev->next = curr_task;
-				if (readyqueues[core_id].timers.first == tmp) {
-					readyqueues[core_id].timers.first = curr_task;
-#ifdef DYNAMIC_TICKS
-					timer_deadline(deadline-get_clock_tick());
-#endif
-				}
-			}
-		}
-
-		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
-	} else kprintf("Task is already blocked. No timer will be set!\n");
+	} else {
+		kprintf("Task is already blocked. No timer will be set!\n");
+	}
 
 	irq_nested_enable(flags);
 
 	return ret;
 }
 
+
 void check_timers(void)
 {
-	uint32_t core_id = CORE_ID;
-	uint32_t prio;
-	uint64_t current_tick;
+	readyqueues_t* readyqueue = &readyqueues[CORE_ID];
+	spinlock_irqsave_lock(&readyqueue->lock);
 
-	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+	// since IRQs are disabled, get_clock_tick() won't increase here
+	const uint64_t current_tick = get_clock_tick();
 
-        // check timers
-	current_tick = get_clock_tick();
-	while (readyqueues[core_id].timers.first && readyqueues[core_id].timers.first->timeout <= current_tick)
+	// wakeup tasks whose deadline has expired
+	task_t* task;
+	while ((task = readyqueue->timers.first) && (task->timeout <= current_tick))
 	{
-		task_t* task = readyqueues[core_id].timers.first;
-
-		// remove timer from queue
-		readyqueues[core_id].timers.first = readyqueues[core_id].timers.first->next;
-		if (readyqueues[core_id].timers.first) {
-			readyqueues[core_id].timers.first->prev = NULL;
-#ifdef DYNAMIC_TICKS
-			if (readyqueues[core_id].timers.first->timeout > get_clock_tick())
-				timer_deadline(readyqueues[core_id].timers.first->timeout-current_tick);
-#endif
-		} else  readyqueues[core_id].timers.last = NULL;
-		task->flags &= ~TASK_TIMER;
-
-		// wakeup task
-		if (task->status == TASK_BLOCKED) {
-			task->status = TASK_READY;
-			prio = task->prio;
-
-			// increase the number of ready tasks
-			readyqueues[core_id].nr_tasks++;
-
-			// add task to the runqueue
-			if (!readyqueues[core_id].queue[prio-1].first) {
-				readyqueues[core_id].queue[prio-1].last = readyqueues[core_id].queue[prio-1].first = task;
-				task->next = task->prev = NULL;
-				readyqueues[core_id].prio_bitmap |= (1 << prio);
-			} else {
-				task->prev = readyqueues[core_id].queue[prio-1].last;
-				task->next = NULL;
-				readyqueues[core_id].queue[prio-1].last->next = task;
-				readyqueues[core_id].queue[prio-1].last = task;
-			}
-		}
+		// pops task from timer queue, so next iteration has new first element
+		wakeup_task(task->id);
 	}
 
-	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+	spinlock_irqsave_unlock(&readyqueue->lock);
 }
+
 
 size_t** scheduler(void)
 {
 	task_t* orig_task;
 	task_t* curr_task;
-	const int32_t core_id = CORE_ID;
-	uint32_t prio;
+	const uint32_t core_id = CORE_ID;
+	uint64_t prio;
 
 	orig_task = curr_task = per_core(current_task);
 	curr_task->last_core = core_id;
@@ -850,8 +818,12 @@ size_t** scheduler(void)
 		set_per_core(current_task, curr_task);
 	}
 
-	prio = msb(readyqueues[core_id].prio_bitmap); // determines highest priority
-	if (prio > MAX_PRIO) {
+	// determine highest priority
+	prio = msb(readyqueues[core_id].prio_bitmap);
+
+	const int readyqueue_empty = prio > MAX_PRIO;
+	if (readyqueue_empty) {
+
 		if ((curr_task->status == TASK_RUNNING) || (curr_task->status == TASK_IDLE))
 			goto get_task_out;
 		curr_task = readyqueues[core_id].idle;
@@ -861,26 +833,33 @@ size_t** scheduler(void)
 		if ((curr_task->prio > prio) && (curr_task->status == TASK_RUNNING))
 			goto get_task_out;
 
+		// mark current task for later cleanup by finish_task_switch()
 		if (curr_task->status == TASK_RUNNING) {
 			curr_task->status = TASK_READY;
 			readyqueues[core_id].old_task = curr_task;
 		}
 
-		curr_task = readyqueues[core_id].queue[prio-1].first;
-		set_per_core(current_task, curr_task);
-		if (BUILTIN_EXPECT(curr_task->status == TASK_INVALID, 0)) {
-			kprintf("Upps!!!!!!! Got invalid task %d, orig task %d\n", curr_task->id, orig_task->id);
-		}
-		curr_task->status = TASK_RUNNING;
+		// get new task from its ready queue
+		curr_task = task_list_pop_front(&readyqueues[core_id].queue[prio-1]);
 
-		// remove new task from queue
-		// by the way, priority 0 is only used by the idle task and doesn't need own queue
-		readyqueues[core_id].queue[prio-1].first = curr_task->next;
-		if (!curr_task->next) {
-			readyqueues[core_id].queue[prio-1].last = NULL;
+		if(BUILTIN_EXPECT(curr_task == NULL, 0)) {
+			kprintf("Kernel panic: No task in readyqueue\n");
+			while(1);
+		}
+		if (BUILTIN_EXPECT(curr_task->status == TASK_INVALID, 0)) {
+			kprintf("Kernel panic: Got invalid task %d, orig task %d\n",
+			        curr_task->id, orig_task->id);
+			while(1);
+		}
+
+		// if we removed the last task from queue, update priority bitmap
+		if(readyqueues[core_id].queue[prio-1].first == NULL) {
 			readyqueues[core_id].prio_bitmap &= ~(1 << prio);
 		}
-		curr_task->next = curr_task->prev = NULL;
+
+		// finally make it the new current task
+		curr_task->status = TASK_RUNNING;
+		set_per_core(current_task, curr_task);
 	}
 
 get_task_out:
@@ -914,6 +893,7 @@ int get_task(tid_t id, task_t** task)
 
 	return 0;
 }
+
 
 void reschedule(void)
 {
