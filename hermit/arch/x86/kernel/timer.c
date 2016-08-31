@@ -54,7 +54,7 @@ void check_ticks(void)
 	if (!cpu_freq)
 		return;
 
-	uint64_t curr_rdtsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
+	uint64_t curr_rdtsc = get_rdtsc();
 	uint64_t diff;
 
 	rmb();
@@ -187,7 +187,7 @@ int timer_init(void)
 	irq_install_handler(121, wakeup_handler);
 
 #ifdef DYNAMIC_TICKS
-	boot_tsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
+	boot_tsc = get_rdtsc();
 	set_per_core(last_rdtsc, boot_tsc);
 #endif
 
