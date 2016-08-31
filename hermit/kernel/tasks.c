@@ -694,7 +694,7 @@ int set_timer(uint64_t deadline)
 	task_t* curr_task;
 	task_t* tmp;
 	uint32_t core_id, prio;
-	uint32_t flags;
+	uint8_t flags;
 	int ret = -EINVAL;
 
 	flags = irq_nested_disable();
