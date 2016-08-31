@@ -23,6 +23,6 @@ env:
                 - PROXY_STR=":hermit:M:7:\\x42::`pwd`/RWTH-OS/HermitCore/hermit/tools/proxy"
                 - HERMIT_ISLE=qemu
                 - HERMIT_CPUS=1
-                - HERMIT_MEM="128M"
+                - HERMIT_MEM="512M"
                 - HERMIT_KVM="0"
                 #- HERMIT_VERBOSE="1"
