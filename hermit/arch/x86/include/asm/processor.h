@@ -425,6 +425,11 @@ inline static uint64_t rdtscp(uint32_t* cpu_id)
 	return ((uint64_t)hi << 32ULL | (uint64_t)lo);
 }
 
+inline static uint64_t get_rdtsc()
+{
+	return has_rdtscp() ? rdtscp(NULL) : rdtsc();
+}
+
 /** @brief Read MSR
  *
  * The asm instruction rdmsr which stands for "Read from model specific register"
