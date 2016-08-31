@@ -154,6 +154,28 @@ int apic_is_enabled(void)
 	return (lapic && apic_initialized);
 }
 
+static inline void lapic_timer_set_counter(uint32_t counter)
+{
+	// set counter decrements to 1
+	lapic_write(APIC_DCR, 0xB);
+	lapic_write(APIC_ICR, counter);
+}
+
+static inline void lapic_timer_disable(void)
+{
+	lapic_write(APIC_LVT_TSR, 0x10000);
+}
+
+static inline void lapic_timer_oneshot(void)
+{
+	lapic_write(APIC_LVT_T, 0x7B);
+}
+
+static inline void lapic_timer_periodic(void)
+{
+	lapic_write(APIC_LVT_T, 0x2007B);
+}
+
 extern uint32_t disable_x2apic;
 
 static inline void x2apic_disable(void)
@@ -281,15 +303,13 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 	lapic_write(APIC_ICR2, tmp);
 }
 
-int apic_timer_deadline(uint32_t t)
+int apic_timer_deadline(uint32_t ticks)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
 		//kprintf("timer oneshot %ld\n", t);
 
-		// create one shot interrup
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x7B);		// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr*t);
+		lapic_timer_oneshot();
+		lapic_timer_set_counter(ticks * icr);
 
 		return 0;
 	}
@@ -302,7 +322,7 @@ int apic_disable_timer(void)
 	if (BUILTIN_EXPECT(!apic_is_enabled(), 0))
 		return -EINVAL;
 
-	lapic_write(APIC_LVT_T, 0x10000);	// disable timer interrupt
+	lapic_timer_disable();
 
 	return 0;
 }
@@ -310,9 +330,9 @@ int apic_disable_timer(void)
 int apic_enable_timer(void)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x2007B);	// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr);
+
+		lapic_timer_periodic();
+		lapic_timer_set_counter(icr);
 
 		return 0;
 	}
@@ -376,12 +396,15 @@ static int lapic_reset(void)
 
 	lapic_write(APIC_SVR, 0x17F);	// enable the apic and connect to the idt entry 127
 	lapic_write(APIC_TPR, 0x00);	// allow all interrupts
+#ifdef DYNAMIC_TICKS
+	lapic_timer_disable();
+#else
 	if (icr) {
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x2007B);	// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr);
+		lapic_timer_periodic();
+		lapic_timer_set_counter(icr);
 	} else
-		lapic_write(APIC_LVT_T, 0x10000);	// disable timer interrupt
+		lapic_timer_disable();
+#endif
 	if (max_lvt >= 4)
 		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	if (max_lvt >= 5)
@@ -545,13 +568,11 @@ int apic_calibration(void)
 	// disable interrupts to increase calibration accuracy
 	flags = irq_nested_disable();
 
-	// set timer decrements to 1
-	lapic_write(APIC_DCR, 0xB);
-	// connect the timer to IRQ 123 and set one shot mode
-	lapic_write(APIC_LVT_T, 0x7B);
 	// start timer with max. counter value
 	const uint32_t initial_counter = 0xFFFFFFFF;
-	lapic_write(APIC_ICR, initial_counter);
+
+	lapic_timer_oneshot();
+	lapic_timer_set_counter(initial_counter);
 
 	rmb();
 	old = get_rdtsc();
