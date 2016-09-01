@@ -587,8 +587,24 @@ int wakeup_task(tid_t id)
 				task->prev->next = task->next;
 			if (task->next)
 				task->next->prev = task->prev;
-			if (readyqueues[core_id].timers.first == task)
+			if (readyqueues[core_id].timers.first == task) {
 				readyqueues[core_id].timers.first = task->next;
+
+#ifdef DYNAMIC_TICKS
+				const task_t* first = readyqueues[core_id].timers.first;
+				if(first) {
+					if(first->timeout > get_clock_tick()) {
+						timer_deadline(first->timeout - get_clock_tick());
+					} else {
+						// workaround: start timer so new head will be serviced
+						timer_deadline(1);
+					}
+				} else {
+					// prevent spurious interrupts
+					timer_disable();
+				}
+#endif
+			}
 			if (readyqueues[core_id].timers.last == task)
 				readyqueues[core_id].timers.last = task->prev;
 		}
