@@ -74,6 +74,7 @@ extern void irq22(void);
 extern void irq23(void);
 extern void irq80(void);
 extern void irq81(void);
+extern void irq82(void);
 extern void apic_timer(void);
 extern void apic_lint0(void);
 extern void apic_lint1(void);
@@ -230,6 +231,8 @@ static int irq_install(void)
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);
 	idt_set_gate(113, (size_t)irq81, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);
+	idt_set_gate(114, (size_t)irq82, KERNEL_CODE_SELECTOR,
+	    IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);
 
 	idt_set_gate(121, (size_t)wakeup, KERNEL_CODE_SELECTOR,
                 IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);

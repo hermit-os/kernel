@@ -35,6 +35,7 @@
 #include <hermit/time.h>
 #include <hermit/rcce.h>
 #include <hermit/memory.h>
+#include <hermit/signal.h>
 #include <sys/uio.h>
 #include <sys/poll.h>
 
@@ -628,6 +629,19 @@ void sys_yield(void)
 		shutdown_system();
 	check_scheduling();
 #endif
+}
+
+int sys_kill(tid_t dest, int signum)
+{
+	if(signum < 0) {
+		return -EINVAL;
+	}
+	return hermit_kill(dest, signum);
+}
+
+int sys_signal(signal_handler_t handler)
+{
+	return hermit_signal(handler);
 }
 
 static int default_handler(void)

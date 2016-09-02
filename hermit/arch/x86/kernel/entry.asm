@@ -354,9 +354,9 @@ isrstub_pseudo_error 9
 %assign i i+1
 %endrep
 
-; Create entries for the interrupts 80 to 81
+; Create entries for the interrupts 80 to 82
 %assign i 80
-%rep 2
+%rep 3
   irqstub i
 %assign i i+1
 %endrep
@@ -673,6 +673,34 @@ align 64
 is_single_kernel:
     mov eax, DWORD [single_kernel]
     ret
+
+
+global sighandler_epilog
+sighandler_epilog:
+    ; restore only those registers that might have changed between returning
+	; from IRQ and execution of signal handler
+	add rsp, 2 * 8		; ignore fs, gs
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rdi
+	pop rsi
+	pop rbp
+	add rsp, 8			; ignore rsp
+	pop rbx
+	pop rdx
+	pop rcx
+	pop rax
+	add rsp, 4 * 8		; ignore int_no, error, rip, cs
+	popfq
+	add rsp, 2 * 8		; ignore userrsp, ss
+
+    jmp [rsp - 5 * 8]	; jump to rip from saved state
 
 SECTION .data
 

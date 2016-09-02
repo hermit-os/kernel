@@ -57,6 +57,8 @@ extern "C" {
 struct sem;
 typedef struct sem sem_t;
 
+typedef void (*signal_handler_t)(int);
+
 /*
  * HermitCore is a libOS.
  * => classical system calls are realized as normal function
@@ -88,6 +90,8 @@ int sys_rcce_init(int session_id);
 size_t sys_rcce_malloc(int session_id, int ue);
 int sys_rcce_fini(int session_id);
 void sys_yield(void);
+int sys_kill(tid_t dest, int signum);
+int sys_signal(signal_handler_t handler);
 
 #define __NR_exit 		0
 #define __NR_write		1
