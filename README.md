@@ -1,7 +1,7 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
 The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting high-performance computing.
-HermitCore extends on the multi-kernel approach with unikernel features to provide better programmability and scalability for hierarchical systems.
+HermitCore extends on the multi-kernel approach (like *McKernel*) with unikernel features to provide better programmability and scalability for hierarchical systems.
 By starting HermitCore applications, cores will be split off from the Linux system and the applications run bare-metal on these cores.
 This approach achieves a lower OS jitter and a better scalability.
 HermitCore applications and the Linux system can communicate via an IP interface (e.g. inter-kernel communication).
@@ -67,7 +67,7 @@ HermitCore applications can be directly started as standalone kernel within a vi
 In this case, iRCCE isn’t supported.
 Please register the loader like the multi-kernel version of HermitCore (see bullet 4 in section *Building and testing HermitCore on a real machine*).
 If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
-Please note that the loader requires Qemu **with** KVM support and expects that the executable name is *qemu-system-x86_64*.
+Please note that the loader requires Qemu, uses per default *KVM* and expects that the executable name is *qemu-system-x86_64*.
 With the environment variable `HERMIT_QEMU`, the executable name could be adapted for your system.
 
 In this context, the environment variable `HERMIT_CPUS` specifies the number of cpus (and no longer a range of core ids).
