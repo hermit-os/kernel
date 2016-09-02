@@ -56,6 +56,8 @@ typedef struct {
 	uint32_t	status;
 } i387_fsave_t;
 
+#define FPU_STATE_INIT { {0, 0, 0, 0, 0, 0, 0, { [0 ... 19] = 0 }, 0} }
+
 typedef struct {
 	uint16_t	cwd;
 	uint16_t	swd;

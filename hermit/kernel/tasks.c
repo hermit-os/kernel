@@ -54,8 +54,8 @@ extern atomic_int32_t cpu_online;
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-		[0]                 = {0, TASK_IDLE, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0}, \
-		[1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0}};
+        [0]                 = {0, TASK_IDLE, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}, \
+        [1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -239,6 +239,8 @@ int multitasking_init(void)
 /* interrupt handler to save / restore the FPU context */
 void fpu_handler(struct state *s)
 {
+	(void) s;
+
 	task_t* task = per_core(current_task);
 	uint32_t core_id = CORE_ID;
 
