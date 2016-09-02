@@ -199,7 +199,8 @@ void check_scheduling(void)
 {
 	if (!is_irq_enabled())
 		return;
-	if (msb(readyqueues[CORE_ID].prio_bitmap) > per_core(current_task)->prio)
+
+	if (get_highest_priority() > per_core(current_task)->prio)
 		reschedule();
 }
 
