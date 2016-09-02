@@ -44,7 +44,7 @@ endif
 
 default: all
 
-all: hello hello++ thr_hello jacobi hellof RCCE_minimum
+all: hello hello++ thr_hello jacobi hellof RCCE_minimum signals
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -85,6 +85,17 @@ thr_hello: thr_hello.o
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
 
+signals.o: signals.c
+	@echo [CC] $@
+	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -pthread -o $@ $<
+
+signals: signals.o
+	@echo [LD] $@
+	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -pthread
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
 RCCE_minimum: RCCE_minimum.o
 	@echo [LD] $@
 	$Q$(CC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(CFLAGS_FOR_TARGET) -lircce
@@ -94,7 +105,7 @@ RCCE_minimum: RCCE_minimum.o
 
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum signals *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning tests
