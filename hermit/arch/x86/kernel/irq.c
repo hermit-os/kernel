@@ -91,7 +91,7 @@ extern void mmnif_irq(void);
  * This array is actually an array of function pointers. We use
  * this to handle custom IRQ handlers for a given IRQ
  */
-static void* irq_routines[MAX_HANDLERS] = {[0 ... MAX_HANDLERS-1] = NULL};
+static irq_handler_t irq_routines[MAX_HANDLERS] = {[0 ... MAX_HANDLERS-1] = NULL};
 static uint64_t irq_counter[MAX_CORES][MAX_HANDLERS] = {[0 ... MAX_CORES-1][0 ... MAX_HANDLERS-1] = 0};
 #ifdef MEASURE_IRQ
 static int go = 0;
@@ -281,40 +281,41 @@ int irq_init(void)
  */
 size_t** irq_handler(struct state *s)
 {
-	size_t** ret = NULL;
 #ifdef MEASURE_IRQ
 	uint64_t diff = 0;
-#endif
-
-	/* This is a blank function pointer */
-	void (*handler) (struct state * s);
-
-#ifdef MEASURE_IRQ
 	if (go)
 		diff = rdtsc();
 #endif
 
+	size_t** ret = NULL;
+
+	if(BUILTIN_EXPECT(s->int_no >= MAX_HANDLERS, 0)) {
+		kprintf("[%d] Invalid IRQ number %d\n", CORE_ID, s->int_no);
+		return NULL;
+	}
+
 	irq_counter[CORE_ID][s->int_no]++;
 
-	check_workqueues_in_irqhandler(s->int_no);
 
-	/*
-	 * Find out if we have a custom handler to run for this
-	 * IRQ and then finally, run it
-	 */
-	if (BUILTIN_EXPECT(s->int_no < MAX_HANDLERS, 1)) {
-		handler = irq_routines[s->int_no];
-		if (handler)
-			handler(s);
-		else
-			kprintf("Unhandle IRQ %d\n", s->int_no);
-	} else kprintf("Invalid interrupt number %d\n", s->int_no);
+	// Find out if we have a custom handler to run for this IRQ and run it
+	irq_handler_t handler = irq_routines[s->int_no];
 
-	// timer interrupt?
-	if ((s->int_no == 32) || (s->int_no == 123))
-		ret = scheduler(); // switch to a new task
-	else if ((s->int_no >= 32) && (get_highest_priority() > per_core(current_task)->prio))
+	if (handler) {
+		handler(s);
+	} else {
+		kprintf("[%d] Unhandled IRQ %d\n", CORE_ID, s->int_no);
+	}
+
+	// Check if timers have expired that would unblock tasks
+	check_workqueues_in_irqhandler((int) s->int_no);
+
+	if ((s->int_no == 32) || (s->int_no == 123)) {
+		// a timer interrupt may have caused unblocking of tasks
 		ret = scheduler();
+	} else if ((s->int_no >= 32) && (get_highest_priority() > per_core(current_task)->prio)) {
+		// there's a ready task with higher priority
+		ret = scheduler();
+	}
 
 	apic_eoi(s->int_no);
 

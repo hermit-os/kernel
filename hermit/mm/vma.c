@@ -48,7 +48,7 @@ extern const void kernel_end;
  */
 static vma_t vma_boot = { VMA_MIN, VMA_MIN, VMA_HEAP };
 static vma_t* vma_list = &vma_boot;
-static spinlock_t vma_lock = SPINLOCK_INIT;
+static spinlock_irqsave_t vma_lock = SPINLOCK_IRQSAVE_INIT;
 
 // TODO: we might move the architecture specific VMA regions to a
 //       seperate function arch_vma_init()
@@ -86,7 +86,7 @@ out:
 
 size_t vma_alloc(size_t size, uint32_t flags)
 {
-	spinlock_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &vma_lock;
 	vma_t** list = &vma_list;
 
 	//kprintf("vma_alloc: size = %#lx, flags = %#x\n", size, flags);
@@ -98,7 +98,7 @@ size_t vma_alloc(size_t size, uint32_t flags)
 	size_t base = VMA_MIN;
 	size_t limit = VMA_MAX;
 
-	spinlock_lock(lock);
+	spinlock_irqsave_lock(lock);
 
 	// first fit search for free memory area
 	vma_t* pred = NULL;  // vma before current gap
@@ -115,7 +115,7 @@ size_t vma_alloc(size_t size, uint32_t flags)
 	} while (pred || succ);
 
 fail:
-	spinlock_unlock(lock);	// we were unlucky to find a free gap
+	spinlock_irqsave_unlock(lock);	// we were unlucky to find a free gap
 
 	return 0;
 
@@ -143,14 +143,14 @@ found:
 			*list = new;
 	}
 
-	spinlock_unlock(lock);
+	spinlock_irqsave_unlock(lock);
 
 	return start;
 }
 
 int vma_free(size_t start, size_t end)
 {
-	spinlock_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &vma_lock;
 	vma_t* vma;
 	vma_t** list = &vma_list;
 
@@ -159,7 +159,7 @@ int vma_free(size_t start, size_t end)
 	if (BUILTIN_EXPECT(start >= end, 0))
 		return -EINVAL;
 
-	spinlock_lock(lock);
+	spinlock_irqsave_lock(lock);
 
 	// search vma
 	vma = *list;
@@ -169,7 +169,7 @@ int vma_free(size_t start, size_t end)
 	}
 
 	if (BUILTIN_EXPECT(!vma, 0)) {
-		spinlock_unlock(lock);
+		spinlock_irqsave_unlock(lock);
 		return -EINVAL;
 	}
 
@@ -190,7 +190,7 @@ int vma_free(size_t start, size_t end)
 	else {
 		vma_t* new = kmalloc(sizeof(vma_t));
 		if (BUILTIN_EXPECT(!new, 0)) {
-			spinlock_unlock(lock);
+			spinlock_irqsave_unlock(lock);
 			return -ENOMEM;
 		}
 
@@ -205,14 +205,14 @@ int vma_free(size_t start, size_t end)
 		new->prev = vma;
 	}
 
-	spinlock_unlock(lock);
+	spinlock_irqsave_unlock(lock);
 
 	return 0;
 }
 
 int vma_add(size_t start, size_t end, uint32_t flags)
 {
-	spinlock_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &vma_lock;
 	vma_t** list = &vma_list;
 	int ret = 0;
 
@@ -221,7 +221,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 
 	//kprintf("vma_add: start = %#lx, end = %#lx, flags = %#x\n", start, end, flags);
 
-	spinlock_lock(lock);
+	spinlock_irqsave_lock(lock);
 
 	// search gap
 	vma_t* pred = NULL;
@@ -267,7 +267,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 	}
 
 fail:
-	spinlock_unlock(lock);
+	spinlock_irqsave_unlock(lock);
 
 	return ret;
 }
@@ -286,7 +286,7 @@ void vma_dump(void)
 	}
 
 	kputs("VMAs:\n");
-	spinlock_lock(&vma_lock);
+	spinlock_irqsave_lock(&vma_lock);
 	print_vma(&vma_boot);
-	spinlock_unlock(&vma_lock);
+	spinlock_irqsave_unlock(&vma_lock);
 }
