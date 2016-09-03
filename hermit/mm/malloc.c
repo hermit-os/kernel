@@ -38,7 +38,7 @@
 /// A linked list for each binary size exponent
 static buddy_t* buddy_lists[BUDDY_LISTS] = { [0 ... BUDDY_LISTS-1] = NULL };
 /// Lock for the buddy lists
-static spinlock_t buddy_lock = SPINLOCK_INIT;
+static spinlock_irqsave_t buddy_lock = SPINLOCK_IRQSAVE_INIT;
 
 /** @brief Check if larger free buddies are available */
 static inline int buddy_large_avail(uint8_t exp)
@@ -66,7 +66,7 @@ static inline int buddy_exp(size_t sz)
 /** @brief Get a free buddy by potentially splitting a larger one */
 static buddy_t* buddy_get(int exp)
 {
-	spinlock_lock(&buddy_lock);
+	spinlock_irqsave_lock(&buddy_lock);
 	buddy_t** list = &buddy_lists[exp-BUDDY_MIN];
 	buddy_t* buddy = *list;
 	buddy_t* split;
@@ -92,7 +92,7 @@ static buddy_t* buddy_get(int exp)
 	}
 
 out:
-	spinlock_unlock(&buddy_lock);
+	spinlock_irqsave_unlock(&buddy_lock);
 
 	return buddy;
 }
@@ -103,11 +103,11 @@ out:
  */
 static void buddy_put(buddy_t* buddy)
 {
-	spinlock_lock(&buddy_lock);
+	spinlock_irqsave_lock(&buddy_lock);
 	buddy_t** list = &buddy_lists[buddy->prefix.exponent-BUDDY_MIN];
 	buddy->next = *list;
 	*list = buddy;
-	spinlock_unlock(&buddy_lock);
+	spinlock_irqsave_unlock(&buddy_lock);
 }
 
 void buddy_dump(void)
