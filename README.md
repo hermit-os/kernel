@@ -1,7 +1,7 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
 The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting high-performance computing.
-HermitCore extends on the multi-kernel approach (like *McKernel*) with unikernel features to provide better programmability and scalability for hierarchical systems.
+HermitCore extends on the multi-kernel approach (like [McKernel](http://www-sys-aics.riken.jp/ResearchTopics/os/mckernel.html])) with unikernel features to provide better programmability and scalability for hierarchical systems.
 By starting HermitCore applications, cores will be split off from the Linux system and the applications run bare-metal on these cores.
 This approach achieves a lower OS jitter and a better scalability.
 HermitCore applications and the Linux system can communicate via an IP interface (e.g. inter-kernel communication).
