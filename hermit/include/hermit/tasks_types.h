@@ -136,6 +136,66 @@ typedef struct {
 	spinlock_irqsave_t lock;
 } readyqueues_t;
 
+
+static inline void task_list_remove_task(task_list_t* list, task_t* task)
+{
+	if (task->prev)
+		task->prev->next = task->next;
+
+	if (task->next)
+		task->next->prev = task->prev;
+
+	if (list->last == task)
+		list->last = task->prev;
+
+	if (list->first == task)
+		list->first = task->next;
+}
+
+
+static inline void task_list_push_back(task_list_t* list, task_t* task)
+{
+	if(BUILTIN_EXPECT((task == NULL) || (list == NULL), 0)) {
+		return;
+	}
+
+	if (list->last) {
+		task->prev = list->last;
+		task->next = NULL;
+		list->last->next = task;
+		list->last = task;
+	} else {
+		list->last = list->first = task;
+		task->next = task->prev = NULL;
+	}
+}
+
+
+static inline task_t* task_list_pop_front(task_list_t* list)
+{
+	if(BUILTIN_EXPECT((list == NULL), 0)) {
+		return NULL;
+	}
+
+	task_t* task = list->first;
+
+	if(list->first) {
+		// advance list
+		list->first = list->first->next;
+
+		if(list->first) {
+			// first element has no previous element
+			list->first->prev = NULL;
+		} else {
+			// no first element => no last element either
+			list->last = NULL;
+		}
+	}
+
+	task->next = task->prev = NULL;
+	return task;
+}
+
 #ifdef __cplusplus
 }
 #endif

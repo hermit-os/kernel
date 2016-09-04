@@ -83,7 +83,9 @@ static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
 
 static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
 
-static inline void timer_disable() { apic_disable_timer(); }
+static inline void timer_disable(void) { apic_disable_timer(); }
+
+static inline int timer_is_running(void) { return apic_timer_is_running(); }
 
 #ifdef __cplusplus
 }

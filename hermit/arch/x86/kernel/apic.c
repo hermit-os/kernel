@@ -303,6 +303,15 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 	lapic_write(APIC_ICR2, tmp);
 }
 
+int apic_timer_is_running(void)
+{
+	if (BUILTIN_EXPECT(apic_is_enabled(), 1)) {
+		return lapic_read(APIC_CCR) != 0;
+	}
+
+	return 0;
+}
+
 int apic_timer_deadline(uint32_t ticks)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {

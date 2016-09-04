@@ -361,6 +361,20 @@ isrstub_pseudo_error 9
 %assign i i+1
 %endrep
 
+global wakeup
+align 64
+wakeup:
+    push byte 0 ; pseudo error code
+	push byte 121
+	jmp common_stub
+
+global mmnif_irq
+align 64
+mmnif_irq:
+    push byte 0 ; pseudo error code
+	push byte 122
+	jmp common_stub
+
 global apic_timer
 align 64
 apic_timer:
@@ -394,20 +408,6 @@ align 64
 apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
-    jmp common_stub
-
-global wakeup
-align 64
-wakeup:
-    push byte 0 ; pseudo error code
-    push byte 121
-    jmp common_stub
-
-global mmnif_irq
-align 64
-mmnif_irq:
-    push byte 0 ; pseudo error code
-    push byte 122
     jmp common_stub
 
 extern irq_handler
