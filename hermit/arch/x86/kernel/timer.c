@@ -54,13 +54,15 @@ void check_ticks(void)
 	if (!cpu_freq)
 		return;
 
-	uint64_t curr_rdtsc = get_rdtsc();
-	uint64_t diff;
-
+	const uint64_t curr_rdtsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
 	rmb();
-	diff = ((curr_rdtsc - per_core(last_rdtsc)) * (uint64_t)TIMER_FREQ) / (1000000ULL*(uint64_t)get_cpu_frequency());
-	if (diff > 0) {
-		set_per_core(timer_ticks, per_core(timer_ticks) + diff);
+
+	const uint64_t diff_cycles = curr_rdtsc - per_core(last_rdtsc);
+	const uint64_t cpu_freq_hz = 1000000ULL * (uint64_t) get_cpu_frequency();
+	const uint64_t diff_ticks = (diff_cycles * (uint64_t) TIMER_FREQ) / cpu_freq_hz;
+
+	if (diff_ticks > 0) {
+		set_per_core(timer_ticks, per_core(timer_ticks) + diff_ticks);
 		set_per_core(last_rdtsc, curr_rdtsc);
 		rmb();
 	}
@@ -187,7 +189,7 @@ int timer_init(void)
 	irq_install_handler(121, wakeup_handler);
 
 #ifdef DYNAMIC_TICKS
-	boot_tsc = get_rdtsc();
+	boot_tsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
 	set_per_core(last_rdtsc, boot_tsc);
 #endif
 
