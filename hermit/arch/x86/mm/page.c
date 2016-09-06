@@ -98,6 +98,14 @@ size_t virt_to_phys(size_t addr)
 	return phy | off;
 }
 
+/*
+ * get memory page size
+ */
+int getpagesize(void)
+{
+	return PAGE_SIZE;
+}
+
 //TODO: code is missing
 int page_set_flags(size_t viraddr, uint32_t npages, int flags)
 {
