@@ -1,19 +1,19 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting high-performance computing.
-HermitCore extends on the multi-kernel approach (like [McKernel](http://www-sys-aics.riken.jp/ResearchTopics/os/mckernel.html])) with unikernel features to provide better programmability and scalability for hierarchical systems.
-By starting HermitCore applications, cores will be split off from the Linux system and the applications run bare-metal on these cores.
-This approach achieves a lower OS jitter and a better scalability.
-HermitCore applications and the Linux system can communicate via an IP interface (e.g. inter-kernel communication).
+The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting at high-performance computing.
+HermitCore extends the multi-kernel approach (like [McKernel](http://www-sys-aics.riken.jp/ResearchTopics/os/mckernel.html])) with unikernel features for a better programmability and scalability for hierarchical systems.
+On the startup of HermitCore applications, cores are isolated from the Linux system enabling the bare-metal of the applications on these cores.
+This approach achieves lower OS jitter and a better scalability compared to full-weight kernels.
+Inter-kernel communication between HermitCore applications and the Linux system is realized by means of an IP interface.
 
-HermitCore can be used as classical standalone unikernel as well.
+In addition to the multi-kernel approach described above, HermitCore can be used as classical standalone unikernel as well.
 This reduces the demand on resources and improves the boot time.
 It is the result of a research project at RWTH Aachen University and is currently an experimental approach, i.e., not production ready.
 Please use it with caution.
 
 ## Requirements
 
-Following software packets are required to build HermitCore on a Linux system:
+The following software packets are required to build HermitCore on a Linux system:
 
 * Netwide Assembler (NASM)
 * GNU Make, GNU Binutils
@@ -21,7 +21,7 @@ Following software packets are required to build HermitCore on a Linux system:
 * texinfo
 * Qemu
 
-On Ubuntu the packets could be installed with following command:
+On Debian-based systems the packets can be installed by executing:
 ```
   sudo apt-get install qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
@@ -30,12 +30,12 @@ On Ubuntu the packets could be installed with following command:
 
 0. Please make sure that you cloned this repository and all its submodules.
 1. The build process works currently only on x86-based Linux systems.
-2. To configure the system, run the *configure* script in the directory, which contains this *README*. Fine tuning of the installation directories e.g. with the flag `--prefix` is currently not supported. HermitCore, the cross-compiler and the demo applications will be installed in subdirectories of this repository. Please find in section *Tips* (at the end of this *README*) hints to enable optimization for the target processor.
-3. The command `make` build the Linux kernel, the HermitCore kernel, the corss-compiler and the demo applications.
-4. To start a virtual machine and to boot a small Linux version use the command `make qemu`. Per default, the virtual machine has 10 cores, 2 NUMA nodes and 8 GByte RAM. To increase or to decrease the machine size, the label `qemu` in the Makefile has to be modified.
-5. Inside the VM runs a small Linux system, which already includes the patches for HermitCore. For each NUMA node (= HermitCore isle) is a directory called `isleX` in `/sys/hermit` , where `X` represents the number of the NUMA node. The demo applications are located in the directories `/hermit/usr/{tests,benchmarks}`. A HermitCore loader is already registered. By starting a HermitCore application, a proxy will be started on the Linux system, while the HermitCore binary will be started on isle 0 with cpu 1. To change the default behavior, the environment variable `HERMIT_ISLE` is used to specify the (memory) location of the isle, while the environment variable `HERMIT_CPUS` is used to specify the cores. For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/usr/tests/hello` starts a HelloWorld demo on the HermitCore isle 1, which used the cores 3 to 5. The output messages are forwarded to the Linux proxy and printed on the Linux system.
-6. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`, where `X` represents the isle.
-7. It exists an virtual IP devices between HermitCore isles and the Linux system (see output of `ifconfig`). Per default, the Linux system has the IP address `192.168.28.1`. The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
+2. To configure the system, run the *configure* script in the directory, which contains this *README*. Fine tuning of the installation directories, e.g., with the flag `--prefix` is currently not supported. HermitCore, the cross-compiler and the demo applications will be installed in subdirectories of this repository. At the end of this *README* in section *Tips* you find hints to enable optimization for the target processor.
+3. The command `make` build the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
+4. To start a virtual machine and to boot a small Linux version use the command `make qemu`. Per default, the virtual machine has 10 cores, 2 NUMA nodes, and 8 GiB RAM. To increase or to decrease the machine size, the label `qemu` in the Makefile has to be modified accordingly.
+5. Inside the VM runs a small Linux system, which already includes the patches for HermitCore. Per NUMA node (= HermitCore isle) there is a directory called `isleX` under `/sys/hermit` , where `X` represents the NUMA node ID. The demo applications are located in the directories `/hermit/usr/{tests,benchmarks}`. A HermitCore loader is already registered. By starting a HermitCore application, a proxy will be executed on the Linux system, while the HermitCore binary will be started on isle 0 with cpu 1. To change the default behavior, the environment variable `HERMIT_ISLE` is used to specify the (memory) location of the isle, while the environment variable `HERMIT_CPUS` is used to specify the cores. For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/usr/tests/hello` starts a HelloWorld demo on the HermitCore isle 1, which uses the cores 3 to 5. The output messages are forwarded to the Linux proxy and printed on the Linux system.
+6. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`.
+7. There is a virtual IP device for the communication between the HermitCore isles and the Linux system (see output of `ifconfig`). Per default, the Linux system has the IP address `192.168.28.1`. The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
 8. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
 
 ## Building and testing HermitCore on a real machine
