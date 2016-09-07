@@ -63,10 +63,6 @@ On Debian-based systems the packets can be installed by executing:
 2. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
 3. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
    We recommend to disable Linux NO_HZ feature by setting the kernel parameter `no_hz=off`.
-   This feature reduces partly the OS noise, but noise sensitive applications should now run on HermitCore.
-<!---
-Not sure what this means
---->
 4. Register the HermitCore loader at your system with following command: `echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader.
    You find the loader `proxy` after building the HermiCore sources in the subdirectory `hermit/tools` of the directory, which contains this *README*.
 5. The IP device between HermitCore and Linux currently does not support IPv6.
