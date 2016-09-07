@@ -60,7 +60,7 @@ NETMASK=255.255.255.0
 IPADDR=192.168.28.1
 NM_CONTROLLED=yes
 ```
-Finally, boot your system with the new Linux kernel and follow the [above tutorial](## Building and testing HermitCore within a virtual machine) from Step 5.
+Finally, boot your system with the new Linux kernel and follow the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine) from Step 5.
 
 The demo applications are located in their subdirectories `hermit/usr/{tests,benchmarks}`.
 
@@ -68,7 +68,7 @@ The demo applications are located in their subdirectories `hermit/usr/{tests,ben
 
 HermitCore applications can be directly started as standalone kernel within a virtual machine.
 In this case, [iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf) is not supported.
-Please register the loader the same way as done for the multi-kernel version of HermitCore (see Step 4 in [*Building and testing HermitCore on a real machine*](## Building and testing HermitCore on a real machine)).
+Please register the loader the same way as done for the multi-kernel version of HermitCore (see Step 4 in [*Building and testing HermitCore on a real machine*](#building-and-testing-hermitcore-on-a-real-machine)).
 If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
 Please note that the loader requires QEMU and uses per default *KVM*. Furthermore, it expects that the executable is called `qemu-system-x86_64`.
 You can adapt the name by setting the environment variable `HERMIT_QEMU`.
