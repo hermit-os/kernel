@@ -144,6 +144,8 @@ typedef struct mregs {
 	uint64_t rsp;
 	/// RIP
 	uint64_t rip;
+	/// MSXCSR
+	uint32_t mxcsr;
 } mregs_t;
 
 /// This defines what the stack looks like after the task context is saved
