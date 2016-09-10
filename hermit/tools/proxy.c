@@ -268,12 +268,6 @@ static int init_qemu(char *path)
 		qemu_argv[i+1] = "SandyBridge";
 	}*/
 
-	for(i=0; qemu_argv[i] != NULL; i++)
-		;
-	// add flags to create dump of the network traffic
-	qemu_argv[i] = "-net";
-	qemu_argv[i+1] = "dump";
-
 	str = getenv("HERMIT_VERBOSE");
 	if (str)
 	{
@@ -281,7 +275,11 @@ static int init_qemu(char *path)
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
-		printf("\n");
+
+		// add flags to create dump of the network traffic
+		qemu_argv[i] = "-net";
+		qemu_argv[i+1] = "dump";
+		printf("%s %s\n", qemu_argv[i], qemu_argv[i+1]);
 
 		fflush(stdout);
 	}
