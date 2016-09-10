@@ -103,11 +103,11 @@ static size_t	iobase = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
-	uint8_t c;
+	uint8_t c = 0;
 
 	if (mmio)
 		c = *((const volatile unsigned char*) (iobase + off));
-	else
+	else if (iobase)
 		c = inportb(iobase + off);
 
 	return c;
@@ -117,7 +117,7 @@ static void write_to_uart(uint32_t off, unsigned char c)
 {
 	if (mmio)
 		*((volatile unsigned char*) (iobase + off)) = c;
-	else
+	else if (iobase)
 		outportb(iobase + off, c);
 }
 
@@ -131,7 +131,7 @@ static unsigned char uart_getchar(void)
 /* Puts a single character on a serial device */
 int uart_putchar(unsigned char c)
 {
-	if (!iobase)
+	if (!iobase && !mmio)
 		return 0;
 
 	write_to_uart(UART_TX, c);
@@ -144,7 +144,7 @@ int uart_puts(const char *text)
 {
 	size_t i, len = strlen(text);
 
-	if (!iobase)
+	if (!iobase && !mmio)
 		return 0;
 
 	for (i = 0; i < len; i++)
