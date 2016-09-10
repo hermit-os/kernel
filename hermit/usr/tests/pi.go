@@ -32,17 +32,26 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"runtime"
 )
 
-func term(i int, step float64) (x float64) {
-	x = (float64(i) + 0.5) * step
-	x = 4.0 / (1.0 + x * x)
+var step float64
 
-	return
+func term(ch chan float64, start, end int) {
+	var res float64
+
+	for i := start; i < end; i++ {
+		x := (float64(i) + 0.5) * step
+		res += 4.0 / (1.0 + x * x)
+	}
+
+	ch <- res
 }
 
 func main() {
 	var num_steps int
+	ch := make(chan float64)
+	max_coroutines := runtime.NumCPU()
 
 	if len(os.Args) > 1 {
 		num_steps, _ = strconv.Atoi(os.Args[1])
@@ -53,12 +62,19 @@ func main() {
 	fmt.Println("num_steps = ", num_steps)
 
 	sum := float64(0)
-	step := 1.0 / float64(num_steps)
+	step = 1.0 / float64(num_steps)
 
 	start := time.Now()
 
-	for i := 0; i < num_steps; i++ {
-		sum += term(i, step)
+	for i := 0; i < max_coroutines; i++ {
+		start := (num_steps / max_coroutines) * i
+		end := (num_steps / max_coroutines) * (i+1)
+
+		go term(ch, start, end)
+	}
+
+	for i := 0; i < max_coroutines; i++ {
+		sum += <-ch
 	}
 
 	elapsed := time.Since(start)
