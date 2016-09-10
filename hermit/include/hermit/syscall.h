@@ -93,6 +93,16 @@ void sys_yield(void);
 int sys_kill(tid_t dest, int signum);
 int sys_signal(signal_handler_t handler);
 
+typedef struct ucontext {
+	mregs_t		uc_mregs;
+	union fpu_state	uc_fpu;
+	struct ucontext	*uc_link;
+	stack_t		uc_stack;
+} ucontext_t;
+
+void makecontext(ucontext_t *ucp, void (*func)(), int argc, ...);
+int swapcontext(ucontext_t *oucp, const ucontext_t *ucp);
+
 #define __NR_exit 		0
 #define __NR_write		1
 #define __NR_open		2

@@ -114,7 +114,39 @@ typedef unsigned short wchar_t;
 typedef wchar_t wint_t;
 #endif
 
-/// This defines what the stack looks like after the task context is saved.
+/// This defines registers, which are saved for a "user-level" context swicth
+typedef struct mregs {
+	/// R15 register
+	uint64_t r15;
+	/// R14 register
+	uint64_t r14;
+	/// R13 register
+	uint64_t r13;
+	/// R12 register
+	uint64_t r12;
+	/// R9 register
+	uint64_t r9;
+	/// R8 register
+	uint64_t r8;
+	/// RDI register
+	uint64_t rdi;
+	/// RSI register
+	uint64_t rsi;
+	/// RBP register
+	uint64_t rbp;
+	/// RBX register
+	uint64_t rbx;
+	/// RDX register
+	uint64_t rdx;
+	/// RCX register
+	uint64_t rcx;
+	/// RSP register
+	uint64_t rsp;
+	/// RIP
+	uint64_t rip;
+} mregs_t;
+
+/// This defines what the stack looks like after the task context is saved
 struct state {
 	/// GS register
 	uint64_t gs;
@@ -164,6 +196,12 @@ struct state {
 	uint64_t userrsp;
 	uint64_t ss;
 };
+
+typedef struct {
+	void	*ss_sp;		/* Stack base or pointer.  */
+	int	ss_flags;	/* Flags.  */
+	size_t	ss_size;	/* Stack size.  */
+} stack_t;
 
 const int32_t is_single_kernel(void);
 
