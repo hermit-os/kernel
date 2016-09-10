@@ -108,6 +108,22 @@ union fpu_state {
 	xsave_t xsave;
 };
 
+typedef struct {
+	uint16_t control_word;
+	uint16_t unused1;
+	uint16_t status_word;
+	uint16_t unused2;
+	uint16_t tags;
+	uint16_t unused3;
+	uint32_t eip;
+	uint16_t cs_selector;
+	uint32_t opcode:11;
+	uint32_t unused4:5;
+	uint32_t data_offset;
+	uint16_t data_selector;
+	uint16_t unused5;
+} fenv_t;
+
 typedef void (*handle_fpu_state)(union fpu_state* state);
 
 extern handle_fpu_state save_fpu_state;

@@ -493,7 +493,6 @@ isrsyscall:
     o64 sysret
 %endif
 
-extern save_fpu_state
 global getcontext
 align 64
 getcontext:
@@ -515,23 +514,23 @@ getcontext:
     mov QWORD [rdi + 0x60], rax
     mov rax, QWORD [rsp]
     mov QWORD [rdi + 0x68], rax
-    ; restore FPU state
-    add rdi, 0x80
-    call [save_fpu_state]
-    sub rdi, 0x80
+    ; save FPU state
+    fnstenv [rdi + 0x74]
+    fldenv [rdi + 0x74]
+    lea rax, [rdi + 0x70]
+    stmxcsr [rax]
     xor rax, rax
     sti
     ret
 
-extern restore_fpu_state
 global setcontext
 align 64
 setcontext:
     cli
     ; restore FPU state
-    add rdi, 0x80
-    call [restore_fpu_state]
-    sub rdi, 0x80
+    fldenv [rdi + 0x74]
+    lea rax, [rdi + 0x70]
+    ldmxcsr [rax]
     ; restore general purpose registers
     mov r15, QWORD [rdi + 0x00]
     mov r14, QWORD [rdi + 0x08]
