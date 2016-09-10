@@ -16,6 +16,7 @@ STACKPROT = -fno-stack-protector
 
 FC_FOR_TARGET = $(CROSSCOMPREFIX)-gfortran
 CC_FOR_TARGET = $(CROSSCOMPREFIX)-gcc
+GO_FOR_TARGET = $(CROSSCOMPREFIX)-gccgo
 CXX_FOR_TARGET = $(CROSSCOMPREFIX)-g++
 GCC_FOR_TARGET = $(CROSSCOMPREFIX)-gcc
 CPP_FOR_TARGET = $(CROSSCOMPREFIX)-cpp
@@ -55,6 +56,7 @@ ifdef PROFILING
 endif
 
 CFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT) #$(STACKPROT)
+GOFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
 FCFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
 FFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
 CXXFLAGS_FOR_NEWLIB = -m64 -mtls-direct-seg-refs -O3 -ftree-vectorize $(ARCH_OPT)
@@ -78,6 +80,7 @@ all: arch/x86/kernel/boot.h bootstrap $(NAME) toolchain tools loader
 toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \
 		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
+		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
 		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
 		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
 		FCFLAGS_FOR_TARGET="$(FCFLAGS_FOR_NEWLIB)" \
@@ -85,6 +88,7 @@ toolchain:
 		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
 		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
 		CC_FOR_TARGET=$(CC_FOR_TARGET) \
+		GO_FOR_TARGET=$(GO_FOR_TARGET) \
 		FC_FOR_TARGET=$(FC_FOR_TARGET) \
 		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
 		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
