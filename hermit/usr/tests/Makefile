@@ -8,6 +8,7 @@ KEEP_DEBUG = --only-keep-debug
 CROSSCOMPREFIX = x86_64-hermit-
 
 CC_FOR_TARGET = $(CROSSCOMPREFIX)gcc
+GO_FOR_TARGET = $(CROSSCOMPREFIX)gccgo
 CXX_FOR_TARGET = $(CROSSCOMPREFIX)g++
 GCC_FOR_TARGET = $(CROSSCOMPREFIX)gcc
 CPP_FOR_TARGET = $(CROSSCOMPREFIX)cpp
@@ -34,6 +35,10 @@ endif
 	@echo [CC] $@
 	$Q$(CC_FOR_TARGET) -c $(CFLAGS_FOR_TARGET) -o $@ $<
 
+%.o : %.go
+	@echo [GO] $@
+	$Q$(GO_FOR_TARGET) -c $(GOFLAGS_FOR_TARGET) -o $@ $<
+
 %.o: %.cpp
 	@echo [CXX] $@
 	$Q$(CXX_FOR_TARGET) -c $(CXXFLAGS_FOR_TARGET) -o $@ $<
@@ -44,7 +49,7 @@ endif
 
 default: all
 
-all: hello hello++ thr_hello jacobi hellof RCCE_minimum signals
+all: hello hello++ thr_hello jacobi hellof RCCE_minimum signals pi
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -63,6 +68,13 @@ hello: hello.o
 hellof: hellof.o
 	@echo [LD] $@
 	$Q$(FC_FOR_TARGET) -o $@ $< $(LDFLAGS_FOR_TARGET) $(FFLAGS_FOR_TARGET)
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
+pi: pi.o
+	@echo [LD] $@
+	$Q$(GO_FOR_TARGET) -pthread -o $@ $< $(LDFLAGS_FOR_TARGET) $(GOFLAGS_FOR_TARGET)
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
@@ -105,11 +117,11 @@ RCCE_minimum: RCCE_minimum.o
 
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum signals *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum signals pi *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum pi *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
