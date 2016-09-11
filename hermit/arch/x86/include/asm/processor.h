@@ -86,7 +86,28 @@ extern "C" {
 
 // feature list 0x00000007:0
 #define CPU_FEATURE_FSGSBASE			(1 << 0)
+#define CPU_FEATURE_TSC_ADJUST			(1 << 1)
+#define CPU_FEATURE_BMI1			(1 << 3)
+#define CPU_FEATURE_HLE				(1 << 4)
 #define CPU_FEATURE_AVX2			(1 << 5)
+#define CPU_FEATURE_SMEP			(1 << 7)
+#define CPU_FEATURE_BMI2			(1 << 8)
+#define CPU_FEATURE_ERMS			(1 << 9)
+#define CPU_FEATURE_INVPCID			(1 << 10)
+#define CPU_FEATURE_RTM				(1 << 11)
+#define CPU_FEATURE_CQM				(1 << 12)
+#define CPU_FEATURE_MPX				(1 << 14)
+#define CPU_FEATURE_AVX512F			(1 << 16)
+#define CPU_FEATURE_RDSEED			(1 << 18)
+#define CPU_FEATURE_ADX				(1 << 19)
+#define CPU_FEATURE_SMAP			(1 << 20)
+#define CPU_FEATURE_PCOMMIT			(1 << 22)
+#define CPU_FEATURE_CLFLUSHOPT			(1 << 23)
+#define CPU_FEATURE_CLWB			(1 << 24)
+#define CPU_FEATURE_AVX512PF			(1 << 26)
+#define CPU_FEATURE_AVX512ER			(1 << 27)
+#define CPU_FEATURE_AVX512CD			(1 << 28)
+#define CPU_FEATURE_SHA_NI			(1 << 29)
 
 // feature list 0x00000006
 #define CPU_FEATURE_IDA				(1 << 0)
@@ -378,6 +399,42 @@ inline static uint32_t has_fsgsbase(void) {
 
 inline static uint32_t has_avx2(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
+}
+
+inline static uint32_t has_bmi1(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_BMI1);
+}
+
+inline static uint32_t has_bmi2(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_BMI2);
+}
+
+inline static uint32_t has_hle(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_HLE);
+}
+
+inline static uint32_t has_cqm(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_CQM);
+}
+
+inline static uint32_t has_rtm(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_RTM);
+}
+
+inline static uint32_t has_avx512f(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512F);
+}
+
+inline static uint32_t has_avx512pf(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512PF);
+}
+
+inline static uint32_t has_avx512er(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512ER);
+}
+
+inline static uint32_t has_avx512cd(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512CD);
 }
 
 inline static uint32_t has_rdtscp(void) {

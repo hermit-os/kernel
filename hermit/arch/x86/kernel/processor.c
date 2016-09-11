@@ -470,7 +470,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -489,7 +489,16 @@ int cpu_detection(void) {
 			has_rdtscp() ? "RDTSCP " : "",
 			has_fsgsbase() ? "FSGSBASE " : "",
 			has_mwait() ? "MWAIT " : "",
-			has_dca() ? "DCA " : "");
+			has_bmi1() ? "BMI1 " : "",
+			has_bmi2() ? "BMI2 " : "",
+			has_dca() ? "DCA " : "",
+			has_rtm() ? "RTM " : "",
+			has_hle() ? "HLE " : "",
+			has_cqm() ? "CQM " : "",
+			has_avx512f() ? "AVX512F " : "",
+			has_avx512cd() ? "AVX512CD " : "",
+			has_avx512pf() ? "AVX512PF " : "",
+			has_avx512er() ? "AVX512ER " : "");
 	}
 
 	if (first_time && has_osxsave()) {
