@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+ * Copyright (c) 2016, Daniel Krebs, RWTH Aachen University
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,69 +26,51 @@
  */
 
 /**
- * @author Stefan Lankes
- * @file include/hermit/time.h
- * @brief Time related functions
+ * @author Daniel Krebs
+ * @file include/hermit/signal.h
+ * @brief Signal related functions
  */
 
-#ifndef __TIME_H__
-#define __TIME_H__
-
-#include <asm/apic.h>
+#ifndef __SIGNAL_H__
+#define __SIGNAL_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef uint32_t clock_t;
+#include <hermit/stddef.h>
+#include <hermit/semaphore_types.h>
 
-struct tms {
-	clock_t tms_utime;
-	clock_t tms_stime;
-	clock_t tms_cutime;
-	clock_t tms_cstime;
-};
+#define MAX_SIGNALS 32
 
-/** @brief Initialize Timer interrupts
+typedef void (*signal_handler_t)(int);
+
+// This is used in deqeue.h (HACK)
+typedef struct _sig {
+	tid_t dest;
+	int signum;
+} sig_t;
+
+/** @brief Send signal to kernel task
  *
- * This procedure installs IRQ handlers for timer interrupts
- */
-int timer_init(void);
-
-/** @brief Initialized a timer
- *
- * @param ticks Amount of ticks to wait
+ * @param dest		Send signal to this task
+ * @param signum	Signal number
  * @return
- * - 0 on success
+ *  - 0 on success
+ *  - -ENOENT (-2) if task not found
  */
-int timer_wait(unsigned int ticks);
+int hermit_kill(tid_t dest, int signum);
 
-DECLARE_PER_CORE(uint64_t, timer_ticks);
-
-/** @brief Returns the current number of ticks.
- * @return Current number of ticks
- */
-static inline uint64_t get_clock_tick(void)
-{
-	return per_core(timer_ticks);
-}
-
-/** @brief sleep some seconds
+/** @brief Register signal handler
  *
- * This function sleeps some seconds
- *
- * @param sec Amount of seconds to wait
+ * @param handler	Signal handler
+ * @return
+ *  - 0 on success
  */
-static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
-
-static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
-
-static inline void timer_disable(void) { apic_disable_timer(); }
-
-static inline int timer_is_running(void) { return apic_timer_is_running(); }
+int hermit_signal(signal_handler_t handler);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif // __SIGNAL_H__

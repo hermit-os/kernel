@@ -1,28 +1,28 @@
 [submodule "linux"]
 	path = linux
-	url = git@github.com:RWTH-OS/linux.git
+	url = https://github.com/RWTH-OS/linux.git
 	branch = hermit
 [submodule "hermit/usr/gcc"]
 	path = hermit/usr/gcc
-	url = git@github.com:RWTH-OS/gcc.git
+	url = https://github.com/RWTH-OS/gcc.git
 	branch = hermit
 [submodule "hermit/usr/binutils"]
 	path = hermit/usr/binutils
-	url = git@github.com:RWTH-OS/binutils.git
+	url = https://github.com/RWTH-OS/binutils.git
 	branch = hermit
 [submodule "hermit/usr/pte"]
 	path = hermit/usr/pte
-	url = git@github.com:RWTH-OS/pthread-embeded.git
+	url = https://github.com/RWTH-OS/pthread-embeded.git
 	branch = hermit
 [submodule "hermit/usr/newlib"]
 	path = hermit/usr/newlib
-	url = git@github.com:RWTH-OS/newlib.git
+	url = https://github.com/RWTH-OS/newlib.git
 	branch = hermit
 [submodule "hermit/lwip"]
 	path = hermit/lwip
-	url = git@github.com:RWTH-OS/LwIP.git
+	url = https://github.com/RWTH-OS/LwIP.git
 	branch = hermit
 [submodule "hermit/usr/libomp"]
 	path = hermit/usr/libomp
-	url = git@github.com:RWTH-OS/libomp_oss.git
+	url = https://github.com/RWTH-OS/libomp_oss.git
 	branch = hermit

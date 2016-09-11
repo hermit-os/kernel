@@ -57,3 +57,53 @@ Note that these are not signal handlers registered by newlib
   4 | 0x989660 <signal_dispatcher>
   5 | 0x989660 <signal_dispatcher>
 ```
+
+Show backtrace of suspended (or any) task:
+
+```
+(gdb) hermit-ps
+ ID | STATE | CPU | PRIO |      STACK | INSTRUCTION POINTER         
+--------------------------------------------------------------------
+  0 |  IDL  |   0 |    0 |   0x88d000 | 0x80a756 <reschedule+41>    
+  1 |  IDL  |   1 |    0 |   0x88f000 | 0x80a756 <reschedule+41>    
+  2 |  IDL  |   2 |    0 |   0x891000 | 0x80a756 <reschedule+41>    
+  3 |  IDL  |   3 |    0 |   0x893000 | 0x80a756 <reschedule+41>    
+  4 |  BLK  |   0 |    8 |    0xde000 | 0x80a756 <reschedule+41>    
+  5 |  BLK  |   0 |   16 |    0xf8000 | 0x80a756 <reschedule+41>    
+  6 |  RUN  |   1 |    8 |   0x115000 | 0x990070 <thread_func+64>   
+  7 |  RUN  |   2 |    8 |   0x12b000 | 0x990070 <thread_func+64>   
+  8 |  RUN  |   3 |    8 |   0x141000 | 0x990070 <thread_func+64>   
+  9 |  RUN  |   0 |    8 |   0x157000 | 0x990070 <thread_func+64>   
+(gdb) hermit-bt 4
+#0  0x000000000081701c in rollback ()
+#1  0x000000000080a756 in reschedule () at kernel/tasks.c:909
+#2  0x0000000000813f7b in timer_wait (ticks=50) at arch/x86/kernel/timer.c:139
+#3  0x000000000080b9f7 in sys_msleep (ms=500) at kernel/syscall.c:357
+#4  0x000000000098fd5e in main ()
+```
+
+Switch current context to any task to investigate call stack. Remember to
+restore the context if you want to continue execution.
+
+```
+(gdb) info threads 
+  Id   Target Id         Frame 
+* 1    Thread 1 (CPU#0 [running]) 0x0000000000990070 in thread_func ()
+  2    Thread 2 (CPU#1 [running]) 0x0000000000990070 in thread_func ()
+  3    Thread 3 (CPU#2 [running]) 0x0000000000990070 in thread_func ()
+  4    Thread 4 (CPU#3 [running]) 0x0000000000990070 in thread_func ()
+(gdb) hermit-switch-context 4
+(gdb) info threads 
+  Id   Target Id         Frame 
+* 1    Thread 1 (CPU#0 [running]) 0x000000000081701c in rollback ()
+  2    Thread 2 (CPU#1 [running]) 0x0000000000990070 in thread_func ()
+  3    Thread 3 (CPU#2 [running]) 0x0000000000990070 in thread_func ()
+  4    Thread 4 (CPU#3 [running]) 0x0000000000990070 in thread_func ()
+(gdb) bt
+#0  0x000000000081701c in rollback ()
+#1  0x000000000080a756 in reschedule () at kernel/tasks.c:909
+#2  0x0000000000813f7b in timer_wait (ticks=50) at arch/x86/kernel/timer.c:139
+#3  0x000000000080b9f7 in sys_msleep (ms=500) at kernel/syscall.c:357
+#4  0x000000000098fd5e in main ()
+(gdb) hermit-restore-context
+```

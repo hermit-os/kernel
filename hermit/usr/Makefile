@@ -32,8 +32,8 @@ default:
 
 demo:
 	@echo Build demo applications
-	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C tests depend
-	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C tests
+	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) GO_FOR_TARGET="$(GO_FOR_TARGET)" GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_TARGET)" -C tests depend
+	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) GO_FOR_TARGET="$(GO_FOR_TARGET)" GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_TARGET)" -C tests
 	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C benchmarks depend
 	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C benchmarks
 	#$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C openmpbench depend
@@ -55,7 +55,7 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-isl --with-tune=generic --enable-languages=c --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
 
-toolchain: $(TMP)/newlib pte $(TMP)/gcc libs headers demo
+toolchain: $(TMP)/newlib pte headers $(TMP)/gcc libs demo
 
 $(TMP)/newlib:
 	@echo Build newlib
@@ -91,7 +91,7 @@ $(TMP)/gcc:
 	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
 	$Q$(RM) $(TMP)/gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c,c++,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
 
 clean:
 	@echo Cleaning toolchain

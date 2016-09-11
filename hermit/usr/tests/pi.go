@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+ * Copyright (c) 2016, Stefan Lankes, RWTH Aachen University
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -25,70 +25,60 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @author Stefan Lankes
- * @file include/hermit/time.h
- * @brief Time related functions
- */
+package main
 
-#ifndef __TIME_H__
-#define __TIME_H__
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+	"runtime"
+)
 
-#include <asm/apic.h>
+var step float64
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+func term(ch chan float64, start, end int) {
+	var res float64
 
-typedef uint32_t clock_t;
+	for i := start; i < end; i++ {
+		x := (float64(i) + 0.5) * step
+		res += 4.0 / (1.0 + x * x)
+	}
 
-struct tms {
-	clock_t tms_utime;
-	clock_t tms_stime;
-	clock_t tms_cutime;
-	clock_t tms_cstime;
-};
-
-/** @brief Initialize Timer interrupts
- *
- * This procedure installs IRQ handlers for timer interrupts
- */
-int timer_init(void);
-
-/** @brief Initialized a timer
- *
- * @param ticks Amount of ticks to wait
- * @return
- * - 0 on success
- */
-int timer_wait(unsigned int ticks);
-
-DECLARE_PER_CORE(uint64_t, timer_ticks);
-
-/** @brief Returns the current number of ticks.
- * @return Current number of ticks
- */
-static inline uint64_t get_clock_tick(void)
-{
-	return per_core(timer_ticks);
+	ch <- res
 }
 
-/** @brief sleep some seconds
- *
- * This function sleeps some seconds
- *
- * @param sec Amount of seconds to wait
- */
-static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
+func main() {
+	var num_steps int
+	ch := make(chan float64)
+	max_coroutines := runtime.NumCPU()
 
-static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
+	if len(os.Args) > 1 {
+		num_steps, _ = strconv.Atoi(os.Args[1])
+	}
+	if num_steps < 100 {
+		num_steps = 1000000
+	}
+	fmt.Println("num_steps = ", num_steps)
 
-static inline void timer_disable(void) { apic_disable_timer(); }
+	sum := float64(0)
+	step = 1.0 / float64(num_steps)
 
-static inline int timer_is_running(void) { return apic_timer_is_running(); }
+	start := time.Now()
 
-#ifdef __cplusplus
+	for i := 0; i < max_coroutines; i++ {
+		start := (num_steps / max_coroutines) * i
+		end := (num_steps / max_coroutines) * (i+1)
+
+		go term(ch, start, end)
+	}
+
+	for i := 0; i < max_coroutines; i++ {
+		sum += <-ch
+	}
+
+	elapsed := time.Since(start)
+
+	fmt.Println("Pi   : ", sum*step)
+	fmt.Println("Time : ", elapsed)
 }
-#endif
-
-#endif
