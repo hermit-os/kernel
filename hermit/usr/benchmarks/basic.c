@@ -52,7 +52,7 @@ int sched_yield(void);
 #endif
 
 #define N		10000
-#define M		(1024+1)
+#define M		(256+1)
 #define BUFFSZ		(1ULL*1024ULL*1024ULL)
 
 static char* buff[M];

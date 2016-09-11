@@ -98,6 +98,8 @@ uint32_t idle_poll = 1;
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
 
+extern void signal_init();
+
 #if 0
 static int foo(void* arg)
 {
@@ -130,6 +132,8 @@ static int hermit_init(void)
 	timer_init();
 	multitasking_init();
 	memory_init();
+	signal_init();
+
 #ifndef CONFIG_VGA
 	uart_init();
 #endif
@@ -270,8 +274,11 @@ int network_shutdown(void)
 {
 	kputs("Shutdown LwIP\n");
 
-	if (libc_sd > 0)
-		lwip_close(libc_sd);
+	if (libc_sd >= 0) {
+		int s = libc_sd;
+		libc_sd = -1;
+		lwip_close(s);
+	}
 
         mmnif_shutdown();
 	//stats_display();
@@ -282,6 +289,7 @@ int network_shutdown(void)
 #if MAX_CORES > 1
 int smp_main(void)
 {
+	timer_init();
 #ifdef DYNAMIC_TICKS
 	enable_dynticks();
 #endif

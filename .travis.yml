@@ -7,7 +7,6 @@ compiler: gcc
 before_install:
         - sudo apt-get -qq update
         - sudo apt-get install -y qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
-        - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
         - git submodule update --init hermit/lwip hermit/usr/gcc hermit/usr/pte hermit/usr/libomp
 script:
         - ./configure
@@ -23,6 +22,6 @@ env:
                 - PROXY_STR=":hermit:M:7:\\x42::`pwd`/RWTH-OS/HermitCore/hermit/tools/proxy"
                 - HERMIT_ISLE=qemu
                 - HERMIT_CPUS=1
-                - HERMIT_MEM="128M"
+                - HERMIT_MEM="512M"
                 - HERMIT_KVM="0"
-                #- HERMIT_VERBOSE="1"
+                - HERMIT_VERBOSE="1"

@@ -35,6 +35,7 @@
 #include <hermit/time.h>
 #include <hermit/rcce.h>
 #include <hermit/memory.h>
+#include <hermit/signal.h>
 #include <sys/uio.h>
 #include <sys/poll.h>
 
@@ -43,7 +44,7 @@
 #include <lwip/stats.h>
 
 //TODO: don't use one big kernel lock to comminicate with all proxies
-static spinlock_t lwip_lock = SPINLOCK_INIT;
+static spinlock_irqsave_t lwip_lock = SPINLOCK_IRQSAVE_INIT;
 
 extern spinlock_irqsave_t stdio_lock;
 extern int32_t isle;
@@ -84,7 +85,7 @@ void NORETURN sys_exit(int arg)
 {
 	sys_exit_t sysargs = {__NR_exit, arg};
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd >= 0)
 	{
 		int s = libc_sd;
@@ -92,7 +93,7 @@ void NORETURN sys_exit(int arg)
 		lwip_write(s, &sysargs, sizeof(sysargs));
 		libc_sd = -1;
 
-		spinlock_unlock(&lwip_lock);
+		spinlock_irqsave_unlock(&lwip_lock);
 
 		// switch to LwIP thread
 		reschedule();
@@ -101,7 +102,7 @@ void NORETURN sys_exit(int arg)
 		idle_poll = 0;
 	} else {
 		idle_poll = 0;
-		spinlock_unlock(&lwip_lock);
+		spinlock_irqsave_unlock(&lwip_lock);
 	}
 
 	do_exit(arg);
@@ -128,9 +129,9 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 		return ret;
 	}
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0) {
-		spinlock_unlock(&lwip_lock);
+		spinlock_irqsave_unlock(&lwip_lock);
 		return -ENOSYS;
 	}
 
@@ -146,7 +147,7 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 		{
 			ret = lwip_read(s, buf+i, j-i);
 			if (ret < 0) {
-				spinlock_unlock(&lwip_lock);
+				spinlock_irqsave_unlock(&lwip_lock);
 				return ret;
 			}
 
@@ -154,7 +155,7 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 		}
 	}
 
-	spinlock_unlock(&lwip_lock);
+	spinlock_irqsave_unlock(&lwip_lock);
 
 	return j;
 }
@@ -188,10 +189,10 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 		return ret;
 	}
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0)
 	{
-		spinlock_unlock(&lwip_lock);
+		spinlock_irqsave_unlock(&lwip_lock);
 
 		spinlock_irqsave_lock(&stdio_lock);
 		for(i=0; i<len; i++)
@@ -209,7 +210,7 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	{
 		ret = lwip_write(s, (char*)buf+i, len-i);
 		if (ret < 0) {
-			spinlock_unlock(&lwip_lock);
+			spinlock_irqsave_unlock(&lwip_lock);
 			return ret;
 		}
 
@@ -222,7 +223,7 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 			i = ret;
 	} else i = len;
 
-	spinlock_unlock(&lwip_lock);
+	spinlock_irqsave_unlock(&lwip_lock);
 
 	return i;
 }
@@ -265,7 +266,7 @@ int sys_open(const char* name, int flags, int mode)
 	int s, i, ret, sysnr = __NR_open;
 	size_t len;
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0) {
 		ret = -EINVAL;
 		goto out;
@@ -308,7 +309,7 @@ int sys_open(const char* name, int flags, int mode)
 	lwip_read(s, &ret, sizeof(ret));
 
 out:
-	spinlock_unlock(&lwip_lock);
+	spinlock_irqsave_unlock(&lwip_lock);
 
 	return ret;
 }
@@ -332,7 +333,7 @@ int sys_close(int fd)
 		return 0;
 	}
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0) {
 		ret = 0;
 		goto out;
@@ -345,7 +346,7 @@ int sys_close(int fd)
 	lwip_read(s, &ret, sizeof(ret));
 
 out:
-	spinlock_unlock(&lwip_lock);
+	spinlock_irqsave_unlock(&lwip_lock);
 
 	return ret;
 }
@@ -442,10 +443,10 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 	sys_lseek_t sysargs = {__NR_lseek, fd, offset, whence};
 	int s;
 
-	spinlock_lock(&lwip_lock);
+	spinlock_irqsave_lock(&lwip_lock);
 
 	if (libc_sd < 0) {
-		spinlock_unlock(&lwip_lock);
+		spinlock_irqsave_unlock(&lwip_lock);
 		return -ENOSYS;
 	}
 
@@ -453,7 +454,7 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 	lwip_write(s, &sysargs, sizeof(sysargs));
 	lwip_read(s, &off, sizeof(off));
 
-	spinlock_unlock(&lwip_lock);
+	spinlock_irqsave_unlock(&lwip_lock);
 
 	return off;
 }
@@ -628,6 +629,19 @@ void sys_yield(void)
 		shutdown_system();
 	check_scheduling();
 #endif
+}
+
+int sys_kill(tid_t dest, int signum)
+{
+	if(signum < 0) {
+		return -EINVAL;
+	}
+	return hermit_kill(dest, signum);
+}
+
+int sys_signal(signal_handler_t handler)
+{
+	return hermit_signal(handler);
 }
 
 static int default_handler(void)

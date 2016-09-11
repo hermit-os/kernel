@@ -354,12 +354,26 @@ isrstub_pseudo_error 9
 %assign i i+1
 %endrep
 
-; Create entries for the interrupts 80 to 81
+; Create entries for the interrupts 80 to 82
 %assign i 80
-%rep 2
+%rep 3
   irqstub i
 %assign i i+1
 %endrep
+
+global wakeup
+align 64
+wakeup:
+    push byte 0 ; pseudo error code
+	push byte 121
+	jmp common_stub
+
+global mmnif_irq
+align 64
+mmnif_irq:
+    push byte 0 ; pseudo error code
+	push byte 122
+	jmp common_stub
 
 global apic_timer
 align 64
@@ -394,20 +408,6 @@ align 64
 apic_svr:
     push byte 0 ; pseudo error code
     push byte 127
-    jmp common_stub
-
-global wakeup
-align 64
-wakeup:
-    push byte 0 ; pseudo error code
-    push byte 121
-    jmp common_stub
-
-global mmnif_irq
-align 64
-mmnif_irq:
-    push byte 0 ; pseudo error code
-    push byte 122
     jmp common_stub
 
 extern irq_handler
@@ -493,6 +493,78 @@ isrsyscall:
     o64 sysret
 %endif
 
+global getcontext
+align 64
+getcontext:
+    cli
+    ; save general purpose regsiters
+    mov QWORD [rdi + 0x00], r15
+    mov QWORD [rdi + 0x08], r14
+    mov QWORD [rdi + 0x10], r13
+    mov QWORD [rdi + 0x18], r12
+    mov QWORD [rdi + 0x20], r9
+    mov QWORD [rdi + 0x28], r8
+    mov QWORD [rdi + 0x30], rdi
+    mov QWORD [rdi + 0x38], rsi
+    mov QWORD [rdi + 0x40], rbp
+    mov QWORD [rdi + 0x48], rbx
+    mov QWORD [rdi + 0x50], rdx
+    mov QWORD [rdi + 0x58], rcx
+    lea rax, [rsp + 0x08]
+    mov QWORD [rdi + 0x60], rax
+    mov rax, QWORD [rsp]
+    mov QWORD [rdi + 0x68], rax
+    ; save FPU state
+    fnstenv [rdi + 0x74]
+    fldenv [rdi + 0x74]
+    lea rax, [rdi + 0x70]
+    stmxcsr [rax]
+    xor rax, rax
+    sti
+    ret
+
+global setcontext
+align 64
+setcontext:
+    cli
+    ; restore FPU state
+    fldenv [rdi + 0x74]
+    lea rax, [rdi + 0x70]
+    ldmxcsr [rax]
+    ; restore general purpose registers
+    mov r15, QWORD [rdi + 0x00]
+    mov r14, QWORD [rdi + 0x08]
+    mov r13, QWORD [rdi + 0x10]
+    mov r12, QWORD [rdi + 0x18]
+    mov  r9, QWORD [rdi + 0x20]
+    mov  r8, QWORD [rdi + 0x28]
+    mov rdi, QWORD [rdi + 0x30]
+    mov rsi, QWORD [rdi + 0x38]
+    mov rbp, QWORD [rdi + 0x40]
+    mov rbx, QWORD [rdi + 0x48]
+    mov rdx, QWORD [rdi + 0x50]
+    mov rcx, QWORD [rdi + 0x58]
+    mov rsp, QWORD [rdi + 0x60]
+    push QWORD [rdi + 0x68]
+    xor rax, rax
+    sti
+    ret
+
+global __startcontext
+align 64
+__startcontext:
+    mov rsp, rbx
+    pop rdi
+    cmp rdi, 0
+    je Lno_context
+
+    call setcontext
+
+Lno_context:
+    extern exit
+    call exit
+    jmp $
+
 global switch_context
 align 64
 switch_context:
@@ -506,8 +578,8 @@ switch_context:
     pushfq                      ; RFLAGS
     push QWORD 0x08             ; CS
     push QWORD rollback         ; RIP
-    push QWORD 0x00             ; Interrupt number
     push QWORD 0x00edbabe       ; Error code
+    push QWORD 0x00             ; Interrupt number
     push rax
     push rcx
     push rdx
@@ -673,6 +745,34 @@ align 64
 is_single_kernel:
     mov eax, DWORD [single_kernel]
     ret
+
+
+global sighandler_epilog
+sighandler_epilog:
+    ; restore only those registers that might have changed between returning
+	; from IRQ and execution of signal handler
+	add rsp, 2 * 8		; ignore fs, gs
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rdi
+	pop rsi
+	pop rbp
+	add rsp, 8			; ignore rsp
+	pop rbx
+	pop rdx
+	pop rcx
+	pop rax
+	add rsp, 4 * 8		; ignore int_no, error, rip, cs
+	popfq
+	add rsp, 2 * 8		; ignore userrsp, ss
+
+    jmp [rsp - 5 * 8]	; jump to rip from saved state
 
 SECTION .data
 

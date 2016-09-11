@@ -76,7 +76,7 @@ static volatile ioapic_t* ioapic = NULL;
 static uint32_t icr = 0;
 static uint32_t ncores = 1;
 static uint8_t irq_redirect[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF};
-static uint8_t initialized = 0;
+static uint8_t apic_initialized = 0;
 static uint8_t online[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = 0};
 
 spinlock_t bootlock = SPINLOCK_INIT;
@@ -141,7 +141,7 @@ static inline uint32_t ioapic_version(void)
 	return 0;
 }
 
-static inline uint32_t ioapic_max_redirection_entry(void)
+static inline uint8_t ioapic_max_redirection_entry(void)
 {
 	if (ioapic)
 		 return (ioapic_read(IOAPIC_REG_VER) >> 16) & 0xFF;
@@ -151,7 +151,29 @@ static inline uint32_t ioapic_max_redirection_entry(void)
 
 int apic_is_enabled(void)
 {
-	return (lapic && initialized);
+	return (lapic && apic_initialized);
+}
+
+static inline void lapic_timer_set_counter(uint32_t counter)
+{
+	// set counter decrements to 1
+	lapic_write(APIC_DCR, 0xB);
+	lapic_write(APIC_ICR, counter);
+}
+
+static inline void lapic_timer_disable(void)
+{
+	lapic_write(APIC_LVT_TSR, 0x10000);
+}
+
+static inline void lapic_timer_oneshot(void)
+{
+	lapic_write(APIC_LVT_T, 0x7B);
+}
+
+static inline void lapic_timer_periodic(void)
+{
+	lapic_write(APIC_LVT_T, 0x2007B);
 }
 
 extern uint32_t disable_x2apic;
@@ -281,15 +303,22 @@ static inline void set_ipi_dest(uint32_t cpu_id) {
 	lapic_write(APIC_ICR2, tmp);
 }
 
-int apic_timer_deadline(uint32_t t)
+int apic_timer_is_running(void)
+{
+	if (BUILTIN_EXPECT(apic_is_enabled(), 1)) {
+		return lapic_read(APIC_CCR) != 0;
+	}
+
+	return 0;
+}
+
+int apic_timer_deadline(uint32_t ticks)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
 		//kprintf("timer oneshot %ld\n", t);
 
-		// create one shot interrup
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x7B);		// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr*t);
+		lapic_timer_oneshot();
+		lapic_timer_set_counter(ticks * icr);
 
 		return 0;
 	}
@@ -302,7 +331,7 @@ int apic_disable_timer(void)
 	if (BUILTIN_EXPECT(!apic_is_enabled(), 0))
 		return -EINVAL;
 
-	lapic_write(APIC_LVT_T, 0x10000);	// disable timer interrupt
+	lapic_timer_disable();
 
 	return 0;
 }
@@ -310,9 +339,9 @@ int apic_disable_timer(void)
 int apic_enable_timer(void)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x2007B);	// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr);
+
+		lapic_timer_periodic();
+		lapic_timer_set_counter(icr);
 
 		return 0;
 	}
@@ -376,12 +405,15 @@ static int lapic_reset(void)
 
 	lapic_write(APIC_SVR, 0x17F);	// enable the apic and connect to the idt entry 127
 	lapic_write(APIC_TPR, 0x00);	// allow all interrupts
+#ifdef DYNAMIC_TICKS
+	lapic_timer_disable();
+#else
 	if (icr) {
-		lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x2007B);	// connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, icr);
+		lapic_timer_periodic();
+		lapic_timer_set_counter(icr);
 	} else
-		lapic_write(APIC_LVT_T, 0x10000);	// disable timer interrupt
+		lapic_timer_disable();
+#endif
 	if (max_lvt >= 4)
 		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	if (max_lvt >= 5)
@@ -522,87 +554,67 @@ int smp_init(void)
 }
 #endif
 
+
+// How many ticks are used to calibrate the APIC timer
+#define APIC_TIMER_CALIBRATION_TICKS	(3)
+
 /*
- * detects the timer frequency of the APIC and restart
+ * detects the timer frequency of the APIC and restarts
  * the APIC timer with the correct period
  */
 int apic_calibration(void)
 {
-	uint32_t flags;
-	uint64_t ticks, old;
+	uint8_t flags;
+	uint64_t cycles, old, diff;
 
 	if (BUILTIN_EXPECT(!lapic, 0))
 		return -ENXIO;
 
-	if (!is_single_kernel()) {
-		uint64_t diff, wait = (uint64_t)cpu_freq * 3000000ULL / (uint64_t)TIMER_FREQ;
+	const uint64_t cpu_freq_hz = (uint64_t) get_cpu_frequency() * 1000000ULL;
+	const uint64_t cycles_per_tick = cpu_freq_hz / (uint64_t) TIMER_FREQ;
+	const uint64_t wait_cycles = cycles_per_tick * APIC_TIMER_CALIBRATION_TICKS;
 
-		flags = irq_nested_disable();
-		lapic_write(APIC_DCR, 0xB);             // set it to 1 clock increments
-		lapic_write(APIC_LVT_T, 0x2007B);       // connects the timer to 123 and enables it
-		lapic_write(APIC_ICR, 0xFFFFFFFFUL);
-		irq_nested_enable(flags);
+	// disable interrupts to increase calibration accuracy
+	flags = irq_nested_disable();
 
+	// start timer with max. counter value
+	const uint32_t initial_counter = 0xFFFFFFFF;
+
+	lapic_timer_oneshot();
+	lapic_timer_set_counter(initial_counter);
+
+	rmb();
+	old = get_rdtsc();
+
+	do {
 		rmb();
-        	old = rdtsc();
+		cycles = get_rdtsc();
+		diff = cycles > old ? cycles - old : old - cycles;
+	} while(diff < wait_cycles);
 
-		do {
-			rmb();
-			ticks = rdtsc();
-			diff = ticks > old ? ticks - old : old - ticks;
-		} while(diff < wait);
+	// Calculate timer increments for desired tick frequency
+	icr = (initial_counter - lapic_read(APIC_CCR)) / APIC_TIMER_CALIBRATION_TICKS;
+	irq_nested_enable(flags);
 
-		icr = (0xFFFFFFFFUL - lapic_read(APIC_CCR)) / 3;
-		kprintf("APIC calibration determined already an ICR of 0x%x\n", icr);
+	lapic_reset();
 
-		flags = irq_nested_disable();
-		lapic_reset();
-		initialized = 1;
-		irq_nested_enable(flags);
+	kprintf("APIC calibration determined an ICR of 0x%x\n", icr);
 
-		atomic_int32_inc(&cpu_online);
-
-		return 0;
-	}
-
+	apic_initialized = 1;
 	atomic_int32_inc(&cpu_online);
 
-	old = get_clock_tick();
+	if(is_single_kernel()) {
+		// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
+		outportb(0xA1, 0xFF);
+		outportb(0x21, 0xFF);
+	}
 
-	/* wait for the next time slice */
-	while ((ticks = get_clock_tick()) - old == 0)
-		PAUSE;
-
-	flags = irq_nested_disable();
-	lapic_write(APIC_DCR, 0xB);		// set it to 1 clock increments
-	lapic_write(APIC_LVT_T, 0x2007B); 	// connects the timer to 123 and enables it
-	lapic_write(APIC_ICR, 0xFFFFFFFFUL);
-	irq_nested_enable(flags);
-
-	/* wait 3 time slices to determine a ICR */
-	while (get_clock_tick() - ticks < 3)
-		PAUSE;
-
-	icr = (0xFFFFFFFFUL - lapic_read(APIC_CCR)) / 3;
-
-	flags = irq_nested_disable();
-	lapic_reset();
-	irq_nested_enable(flags);
-
-	// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
-	outportb(0xA1, 0xFF);
-	outportb(0x21, 0xFF);
-
-	kprintf("APIC calibration determines an ICR of 0x%x\n", icr);
-
-	flags = irq_nested_disable();
-
-	// only the single-kernel maintain the IOAPIC
-	if (ioapic) {
-		uint32_t max_entry = ioapic_max_redirection_entry();
+	// only the single-kernel maintains the IOAPIC
+	if (ioapic && is_single_kernel()) {
+		uint8_t max_entry = ioapic_max_redirection_entry();
 
 		// now lets turn everything else on
-		for(uint32_t i=0; i<=max_entry; i++) {
+		for(uint8_t i = 0; i <= max_entry; i++) {
 			if (i != 2)
 				ioapic_inton(i, apic_processors[boot_processor]->id);
 		}
@@ -611,11 +623,9 @@ int apic_calibration(void)
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
 
-	initialized = 1;
 #if MAX_CORES > 1
 	smp_init();
 #endif
-	irq_nested_enable(flags);
 
 	return 0;
 }
