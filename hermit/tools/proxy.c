@@ -220,8 +220,9 @@ static int init_qemu(char *path)
 	char hostfwd[MAX_PATH];
 	char monitor_str[MAX_PATH];
 	char chardev_file[MAX_PATH];
+	char port_str[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-s", NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-s", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
@@ -244,6 +245,22 @@ static int init_qemu(char *path)
 	readlink("/proc/self/exe", loader_path, MAX_PATH);
 	str = strstr(loader_path, "proxy");
 	strncpy(str, "../arch/x86/loader/ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
+
+	str = getenv("HERMIT_APP_PORT");
+	if (str)
+	{
+		int app_port = atoi(str);
+
+		if (app_port > 0) {
+			for(i=0; qemu_argv[i] != NULL; i++)
+				;
+
+			snprintf(port_str, MAX_PATH, "tcp:%u::%u", app_port, app_port);
+
+			qemu_argv[i] = "-redir";
+			qemu_argv[i+1] = port_str;
+		}
+	}
 
 	str = getenv("HERMIT_KVM");
 	if (str && (strcmp(str, "0") == 0))
