@@ -144,7 +144,7 @@ typedef struct mregs {
 	uint64_t rsp;
 	/// RIP
 	uint64_t rip;
-	/// MSXCSR
+	/// MXCSR
 	uint32_t mxcsr;
 } mregs_t;
 
