@@ -42,7 +42,7 @@ void makecontext(ucontext_t *ucp, void (*func)(), int argc, ...)
 
 	//kprintf("sys_makecontext %p, func %p, stack 0x%zx, task %d\n", ucp, func, ucp->uc_stack.ss_sp, per_core(current_task)->id);
 
-	size_t* stack = (size_t*) (ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
+	size_t* stack = (size_t*) ((size_t)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
 	stack -= (argc > 6 ? argc - 6 : 0) + 1;
 	uint32_t idx = (argc > 6 ? argc - 6 : 0) + 1;
 
