@@ -108,6 +108,23 @@ The following example starts the stream benchmark in a virtual machine, which ha
 HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
 ```
 
+## Building HermitCore applications
+
+After successful building of HermitCore and its demo applications (see above), HermitCore’s cross toolchain (*gcc*, *g++*, *gfortran*, *gccgo*, *objdump*, etc.) is located at the subdiretory `hermit/usr/x86` of the directory, which contains this *README*.
+To use these tools, add `hermit/usr/x86/bin` to your environment variable `PATH`.
+As with any other cross toolchain, the tool names begin with the target architecture (*x86_64*) and the name of the operating system (*hermit*).
+For instance, `x86_64-hermit-gcc` stands for the GNU C compiler, which is able to build HermitCore applications.
+
+All tools can be used as the well-known GNU tools. Only the Go compiler works different to the typical workflow.
+Instead of building Go application like
+```
+go build main.go
+```
+you have to use the compiler as follows
+```
+x86_64-hermit-gccgo -pthread -Wall -o main main.go
+```
+
 ## Tips
 
 1. The configuration flag `--with-mtune=name` specifies the name of the target processor for which GCC should tune the performance of the code.
