@@ -124,6 +124,7 @@ you have to use the compiler as follows
 ```
 x86_64-hermit-gccgo -pthread -Wall -o main main.go
 ```
+For network support, you have to link the Go application with the flag `-lnetgo`.
 
 ## Tips
 
@@ -134,4 +135,5 @@ x86_64-hermit-gccgo -pthread -Wall -o main main.go
    If KVM is started by our proxy, per default the host architecture will be used as target processor.
 2. If KVM is started by our proxy and the environment variable `HERMIT_KVM` is set to `0`, the virtual machine will be not accelerated by KVM.
    In this case, the configuration flag `--with-mtune=name` should be avoided.
+   With the environment variable `HERMIT_APP_PORT`, an additional port can be open to establish an TCP/IP connection with your application.
 3. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages onto the screen.
