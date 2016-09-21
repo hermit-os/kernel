@@ -19,6 +19,7 @@ usr/tests/thr_hello
 usr/tests/pi
 usr/tests/RCCE_minimum
 usr/tests/signals
+usr/tests/server
 usr/benchmarks/RCCE_pingping
 usr/benchmarks/RCCE_pingpong
 usr/benchmarks/stream

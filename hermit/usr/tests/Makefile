@@ -49,7 +49,7 @@ endif
 
 default: all
 
-all: hello hello++ thr_hello jacobi hellof RCCE_minimum signals pi
+all: hello hello++ thr_hello jacobi hellof RCCE_minimum signals pi server
 
 hello++: hello++.o
 	@echo [LD] $@
@@ -75,6 +75,13 @@ hellof: hellof.o
 pi: pi.o
 	@echo [LD] $@
 	$Q$(GO_FOR_TARGET) -pthread -o $@ $< $(LDFLAGS_FOR_TARGET) $(GOFLAGS_FOR_TARGET)
+	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
+	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
+	$Qchmod a-x $@.sym
+
+server: server.o
+	@echo [LD] $@
+	$Q$(GO_FOR_TARGET) -pthread -o $@ $< $(LDFLAGS_FOR_TARGET) $(GOFLAGS_FOR_TARGET) -lnetgo
 	$Q$(OBJCOPY_FOR_TARGET) $(KEEP_DEBUG) $@ $@.sym
 	$Q$(OBJCOPY_FOR_TARGET) $(STRIP_DEBUG) $@
 	$Qchmod a-x $@.sym
@@ -117,11 +124,11 @@ RCCE_minimum: RCCE_minimum.o
 
 clean:
 	@echo Cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum signals pi *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum signals pi server *.sym *.o *~
 
 veryclean:
 	@echo Propper cleaning tests
-	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum pi *.sym *.o *~
+	$Q$(RM) hello hello++ hellof jacobi thr_hello RCCE_minimum pi server *.sym *.o *~
 
 depend:
 	$Q$(CC_FOR_TARGET) -MM $(CFLAGS_FOR_TARGET) *.c > Makefile.dep
