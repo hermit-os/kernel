@@ -205,6 +205,7 @@ void check_scheduling(void)
 
 	if (prio > curr_task->prio) {
 		reschedule();
+#ifdef DYNAMIC_TICKS
 	} else if (prio == curr_task->prio) {
 		// if a task is ready, check if the current task runs already one tick (one time slice)
 		// => reschedule to realize round robin
@@ -216,6 +217,7 @@ void check_scheduling(void)
 			//kprintf("Time slice expired for task %d on core %d. New task has priority %u.\n", curr_task->id, CORE_ID, prio);
 			reschedule();
 		}
+#endif
 	}
 }
 
@@ -879,7 +881,9 @@ size_t** scheduler(void)
 
 		// finally make it the new current task
 		curr_task->status = TASK_RUNNING;
+#ifdef DYNAMIC_TICKS
 		curr_task->last_tsc = get_rdtsc();
+#endif
 		set_per_core(current_task, curr_task);
 	}
 
