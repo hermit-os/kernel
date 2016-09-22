@@ -124,6 +124,13 @@ typedef struct {
 	uint16_t unused5;
 } fenv_t;
 
+typedef struct ucontext {
+	mregs_t		uc_mregs;
+	fenv_t		uc_fenv;
+	struct ucontext	*uc_link;
+	stack_t		uc_stack;
+} ucontext_t;
+
 typedef void (*handle_fpu_state)(union fpu_state* state);
 
 extern handle_fpu_state save_fpu_state;
