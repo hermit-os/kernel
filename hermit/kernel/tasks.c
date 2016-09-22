@@ -54,8 +54,8 @@ extern atomic_int32_t cpu_online;
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-        [0]                 = {0, TASK_IDLE, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}, \
-        [1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}};
+        [0]                 = {0, TASK_IDLE, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}, \
+        [1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -200,8 +200,23 @@ void check_scheduling(void)
 	if (!is_irq_enabled())
 		return;
 
-	if (get_highest_priority() > per_core(current_task)->prio)
+	uint32_t prio = get_highest_priority();
+	task_t* curr_task = per_core(current_task);
+
+	if (prio > curr_task->prio) {
 		reschedule();
+	} else if (prio == curr_task->prio) {
+		// if a task is ready, check if the current task runs already one tick (one time slice)
+		// => reschedule to realize round robin
+
+		const uint64_t diff_cycles = get_rdtsc() - curr_task->last_tsc;
+		const uint64_t cpu_freq_hz = 1000000ULL * (uint64_t) get_cpu_frequency();
+
+		if (((diff_cycles * (uint64_t) TIMER_FREQ) / cpu_freq_hz) > 0) {
+			//kprintf("Time slice expired for task %d on core %d. New task has priority %u.\n", curr_task->id, CORE_ID, prio);
+			reschedule();
+		}
+	}
 }
 
 
@@ -495,6 +510,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].prio = prio;
 			task_table[i].heap = curr_task->heap;
                         task_table[i].start_tick = get_clock_tick();
+			task_table[i].last_tsc = 0;
 			task_table[i].parent = curr_task->id;
 			task_table[i].tls_addr = curr_task->tls_addr;
 			task_table[i].tls_size = curr_task->tls_size;
@@ -597,6 +613,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].prio = prio;
 			task_table[i].heap = NULL;
 			task_table[i].start_tick = get_clock_tick();
+			task_table[i].last_tsc = 0;
 			task_table[i].parent = 0;
 			task_table[i].ist_addr = ist;
 			task_table[i].tls_addr = 0;
@@ -862,6 +879,7 @@ size_t** scheduler(void)
 
 		// finally make it the new current task
 		curr_task->status = TASK_RUNNING;
+		curr_task->last_tsc = get_rdtsc();
 		set_per_core(current_task, curr_task);
 	}
 
