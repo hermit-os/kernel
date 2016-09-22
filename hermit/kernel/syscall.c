@@ -643,24 +643,3 @@ int sys_signal(signal_handler_t handler)
 {
 	return hermit_signal(handler);
 }
-
-static int default_handler(void)
-{
-#if 1
-	kprintf("Invalid system call\n");
-#else
-	uint64_t rax;
-
-	asm volatile ("mov %%rax, %0" : "=m"(rax) :: "memory");
-	kprintf("Invalid system call: %zd\n", rax);
-#endif
-	return -ENOSYS;
-}
-
-/* 
- * Currently our sytemcall table is a dummy table for
- * future developments.
- */
-size_t syscall_table[] = {
-	(size_t) default_handler
-};
