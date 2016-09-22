@@ -624,7 +624,8 @@ int apic_calibration(void)
 	}
 
 #if MAX_CORES > 1
-	smp_init();
+	if (is_single_kernel())
+		smp_init();
 #endif
 
 	return 0;
