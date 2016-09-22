@@ -439,7 +439,6 @@ getcontext:
     mov QWORD [rdi + 0x68], rax
     ; save FPU state
     fnstenv [rdi + 0x74]
-    fldenv [rdi + 0x74]
     lea rax, [rdi + 0x70]
     stmxcsr [rax]
     xor rax, rax
