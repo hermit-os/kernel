@@ -286,7 +286,7 @@ static int init_qemu(char *path)
 	}*/
 
 	str = getenv("HERMIT_VERBOSE");
-	if (str)
+	if (str && (strcmp(str, "0") != 0))
 	{
 		printf("qemu startup command: ");
 
@@ -389,7 +389,7 @@ static void dump_log(void)
 	FILE* file;
 	char line[2048];
 
-	if (!str)
+	if (!(str && (strcmp(str, "0") != 0)))
 		return;
 
 	if (!qemu)
