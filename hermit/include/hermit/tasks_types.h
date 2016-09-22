@@ -91,6 +91,8 @@ typedef struct task {
 	uint64_t		timeout;
 	/// starting time/tick of the task
 	uint64_t		start_tick;
+	/// last TSC, when the task got the CPU
+	uint64_t		last_tsc;
 	/// the userspace heap
 	vma_t*			heap;
 	/// parent thread
