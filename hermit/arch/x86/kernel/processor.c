@@ -182,14 +182,14 @@ uint32_t detect_cpu_frequency(void)
 
 	rmb();
 	start = rdtsc();
-	/* wait a second to determine the frequency */
-	while(get_clock_tick() - ticks < TIMER_FREQ)
+	/* wait 3 ticks to determine the frequency */
+	while(get_clock_tick() - ticks < 3)
 		PAUSE;
 	rmb();
 	end = rdtsc();
 
 	diff = end > start ? end - start : start - end;
-	cpu_freq = (uint32_t) (diff / (uint64_t) 1000000);
+	cpu_freq = (uint32_t) ((TIMER_FREQ*diff) / (1000000ULL*3ULL));
 
 	return cpu_freq;
 }
