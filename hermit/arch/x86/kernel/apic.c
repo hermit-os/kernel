@@ -79,6 +79,18 @@ static uint8_t irq_redirect[16] = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0xA, 0xB, 0xC,
 static uint8_t apic_initialized = 0;
 static uint8_t online[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = 0};
 
+/*
+ * The Multiprocessor Specification 1.4 (1997) suggests a 10ms delay
+ * between the BSP asserting INIT and de-asserting INIT, when starting
+ * a processor. But that slows the boot time off modern processors,
+ * which include many cores and don't require that delay.
+ *
+ * => we use per default a lower delay to improve the boot time
+ * => by setting traditional_delay to 1, we switch back to the old
+ *    way
+ */
+static uint8_t traditional_delay = 0;
+
 spinlock_t bootlock = SPINLOCK_INIT;
 
 // forward declaration
@@ -459,16 +471,28 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		uint64_t dest = ((uint64_t)id << 32);
 
 		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_INT_LEVELTRIG|APIC_INT_ASSERT|APIC_DM_INIT);
-		udelay(200);
+		if (traditional_delay)
+			udelay(200);
+		else
+			udelay(10);
 		// reset INIT
 		wrmsr(0x800 + (APIC_ICR1 >> 4), APIC_INT_LEVELTRIG|APIC_DM_INIT);
-		udelay(10000);
+		if (traditional_delay)
+			udelay(10000);
+		else
+			udelay(10);
 		// send out the startup
 		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_DM_STARTUP|(start_eip >> 12));
-		udelay(200);
+		if (traditional_delay)
+			udelay(200);
+		else
+			udelay(10);
 		// do it again
 		wrmsr(0x800 + (APIC_ICR1 >> 4), dest|APIC_DM_STARTUP|(start_eip >> 12));
-		udelay(200);
+		if (traditional_delay)
+			udelay(200);
+		else
+			udelay(10);
 
 		//kputs("IPI done...\n");
 
@@ -476,18 +500,30 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 	} else {
 		set_ipi_dest(id);
 		lapic_write(APIC_ICR1, APIC_INT_LEVELTRIG|APIC_INT_ASSERT|APIC_DM_INIT);
-		udelay(200);
+		if (traditional_delay)
+			udelay(200);
+		else
+			udelay(10);
 		// reset INIT
 		lapic_write(APIC_ICR1, APIC_INT_LEVELTRIG|APIC_DM_INIT);
-		udelay(10000);
+		if (traditional_delay)
+			udelay(10000);
+		else
+			udelay(10);
 		// send out the startup
 		set_ipi_dest(id);
 		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
-		udelay(200);
+		if (traditional_delay)
+			udelay(200);
+		else
+			udelay(10);
 		// do it again
 		set_ipi_dest(id);
 		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
-                udelay(200);
+		if (traditional_delay)
+	                udelay(200);
+		else
+			udelay(10);
 
 		//kputs("IPI done...\n");
 
