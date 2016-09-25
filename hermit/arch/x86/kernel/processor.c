@@ -166,12 +166,73 @@ static void fpu_init_xsave(union fpu_state* fpu)
 	xs->fxsave.mxcsr = 0x1f80;
 }
 
+// Try to determine the frequency from the CPU brand.
+// Code is derived from the manual "Intel Processor
+// Identification and the CPUID Instruction".
+static uint32_t get_frequency_from_brand(void)
+{
+	char brand[4*3*sizeof(uint32_t)+1];
+	uint32_t eax = 0, ebx = 0;
+	uint32_t ecx = 0, edx = 0;
+	uint32_t index, multiplier = 0;
+	uint32_t* bint = (uint32_t*) brand;
+
+	memset(brand, 0x00, sizeof(brand));
+
+	cpuid(0x80000000, &eax, &ebx, &ecx, &edx);
+	if (eax >= 0x80000004)
+	{
+		cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
+		cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
+		cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
+		kprintf("Processor: %s\n", brand);
+
+		for(index=0; index<sizeof(brand)-2; index++)
+		{
+			if ((brand[index+1] == 'H') && (brand[index+2] == 'z'))
+			{
+				if (brand[index] == 'M')
+					multiplier = 1;
+				else if (brand[index] == 'G')
+					multiplier = 1000;
+				else if (brand[index] == 'T')
+					multiplier = 1000000;
+			}
+
+			if (multiplier > 0) {
+				uint32_t freq;
+
+				// Compute frequency (in MHz) from brand string
+				if (brand[index-3] == '.') { // If format is “x.xx”
+					freq  = (uint32_t)(brand[index-4] - '0') * multiplier;
+					freq += (uint32_t)(brand[index-2] - '0') * (multiplier / 10);
+					freq += (uint32_t)(brand[index-1] - '0') * (multiplier / 100);
+				} else { // If format is xxxx
+					freq  = (uint32_t)(brand[index-4] - '0') * 1000;
+					freq += (uint32_t)(brand[index-3] - '0') * 100;
+					freq += (uint32_t)(brand[index-2] - '0') * 10;
+					freq += (uint32_t)(brand[index-1] - '0');
+					freq *= multiplier;
+				}
+
+				return freq;
+			}
+		}
+	}
+
+	return 0;
+}
+
 uint32_t detect_cpu_frequency(void)
 {
 	uint64_t start, end, diff;
 	uint64_t ticks, old;
 
 	if (BUILTIN_EXPECT(cpu_freq > 0, 0))
+		return cpu_freq;
+
+	cpu_freq = get_frequency_from_brand();
+	if (cpu_freq > 0)
 		return cpu_freq;
 
 	old = get_clock_tick();
