@@ -11,7 +11,7 @@ echo -e " \e[92m# HermitCore is also usable as a classical unikernel. By setting
 echo -n $MYPROMPT
 echo -e " \e[92m# environment variable HERMIT_ISLE to qemu, the application will be started\e[39m" | randtype -m 2 -t 18,6000
 echo -n $MYPROMPT
-echo -e " \e[92m# within a virtual machine. The boot time is about 2s.\e[39m" | randtype -m 0 -t 18,6000
+echo -e " \e[92m# within a virtual machine. The boot time is about 1s.\e[39m" | randtype -m 0 -t 18,6000
 echo -n $MYPROMPT
 echo  " HERMIT_ISLE=qemu time hermit/usr/tests/hello" | randtype -m 0 -t 18,6000
 HERMIT_ISLE=qemu time hermit/usr/tests/hello
