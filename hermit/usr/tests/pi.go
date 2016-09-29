@@ -59,7 +59,7 @@ func main() {
 	if num_steps < 100 {
 		num_steps = 1000000
 	}
-	fmt.Println("num_steps = ", num_steps)
+	fmt.Println("num_steps   : ", num_steps)
 
 	sum := float64(0)
 	step = 1.0 / float64(num_steps)
@@ -79,6 +79,14 @@ func main() {
 
 	elapsed := time.Since(start)
 
-	fmt.Println("Pi   : ", sum*step)
-	fmt.Println("Time : ", elapsed)
+	fmt.Println("Pi          : ", sum*step)
+	fmt.Println("Time        : ", elapsed)
+
+	s := new(runtime.MemStats)
+	runtime.ReadMemStats(s)
+
+	fmt.Println("Alloc       : ", s.Alloc)
+	fmt.Println("Total Alloc : ", s.TotalAlloc)
+	fmt.Println("Sys         : ", s.Sys)
+	fmt.Println("Lookups     : ", s.Lookups)
 }
