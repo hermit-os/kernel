@@ -89,7 +89,7 @@ static uint8_t online[MAX_APIC_CORES] = {[0 ... MAX_APIC_CORES-1] = 0};
  * => by setting traditional_delay to 1, we switch back to the old
  *    way
  */
-static uint8_t traditional_delay = 0;
+static uint8_t traditional_delay = 1;
 
 spinlock_t bootlock = SPINLOCK_INIT;
 
