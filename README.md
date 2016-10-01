@@ -26,7 +26,7 @@ On Debian-based systems the packets can be installed by executing:
   sudo apt-get install qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
 
-## Building and testing HermitCore within a virtual machine
+## Building and testing HermitCore as multi-kernel within a virtual machine
 
 0. Please make sure that you cloned this repository and all its submodules.
 1. To configure the system, run the *configure* script in the directory, which contains this *README*.
@@ -51,7 +51,7 @@ On Debian-based systems the packets can be installed by executing:
    The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
 7. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
 
-## Building and testing HermitCore on a real machine
+## Building and testing HermitCore as multi-kernel on a real machine
 
 *Note*: to launch HermitCore applications, root privileges are required.
 
@@ -82,11 +82,11 @@ Finally, boot your system with the new Linux kernel and follow the [above tutori
 
 The demo applications are located in their subdirectories `hermit/usr/{tests,benchmarks}`.
 
-## HermitCore as classical standalone unikernel
+## Builting and testing HermitCore as classical standalone unikernel
 
 HermitCore applications can be directly started as standalone kernel within a virtual machine.
 In this case, [iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf) is not supported.
-Please register the loader the same way as done for the multi-kernel version of HermitCore (see Step 4 in [*Building and testing HermitCore on a real machine*](#building-and-testing-hermitcore-on-a-real-machine)).
+Please build HermitCore and register the loader in the same way as done for the multi-kernel version (see [*Building and testing HermitCore on a real machine*](#building-and-testing-hermitcore-on-a-real-machine)).
 If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
 Please note that the loader requires QEMU and uses per default *KVM*.
 Furthermore, it expects that the executable is called `qemu-system-x86_64`.
