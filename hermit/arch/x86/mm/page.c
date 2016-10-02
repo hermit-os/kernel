@@ -265,7 +265,8 @@ void page_fault_handler(struct state *s)
 			goto default_handler;
 		}
 
-		// TODO: reusing of old data is possible => security issue
+		// reset page
+		memset(viraddr, 0x00, PAGE_SIZE);
 
 		spinlock_irqsave_unlock(&page_lock);
 
