@@ -170,7 +170,8 @@ static int init_netifs(void)
 	if(sys_sem_new(&sem, 0) != ERR_OK)
 		LWIP_ASSERT("Failed to create semaphore", 0);
 
-	memset(&default_netif, 0x00, sizeof(struct netif));
+	// part of bss => memset not required
+	//memset(&default_netif, 0x00, sizeof(struct netif));
 
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
@@ -583,7 +584,7 @@ int hermit_main(void)
 	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
 	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
 	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
-	kprintf("Kernel BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
+	kprintf("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
 	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	kprintf("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
