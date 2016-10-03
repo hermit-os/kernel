@@ -112,7 +112,7 @@ int page_set_flags(size_t viraddr, uint32_t npages, int flags)
 	return -EINVAL;
 }
 
-int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
+int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8_t do_ipi)
 {
 	int lvl, ret = -ENOMEM;
 	long vpn = viraddr >> PAGE_BITS;
@@ -169,7 +169,7 @@ int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
 		}
 	}
 
-	if (send_ipi)
+	if (do_ipi && send_ipi)
 		ipi_tlb_flush();
 
 	ret = 0;
@@ -246,8 +246,7 @@ void page_fault_handler(struct state *s)
 		 // on demand userspace heap mapping
 		viraddr &= PAGE_MASK;
 
-		// TODO: a function to get zeroed pages is missing
-		size_t phyaddr = get_page();
+		size_t phyaddr = get_zeroed_page();
 		if (BUILTIN_EXPECT(!phyaddr, 0)) {
 			kprintf("out of memory: task = %u\n", task->id);
 			goto default_handler;
@@ -264,9 +263,6 @@ void page_fault_handler(struct state *s)
 
 			goto default_handler;
 		}
-
-		// reset page
-		memset(viraddr, 0x00, PAGE_SIZE);
 
 		spinlock_irqsave_unlock(&page_lock);
 

@@ -30,6 +30,7 @@
 #include <hermit/stdio.h>
 #include <hermit/string.h>
 #include <hermit/spinlock.h>
+#include <hermit/memory.h>
 
 #include <asm/atomic.h>
 #include <asm/page.h>
@@ -102,6 +103,40 @@ out:
 	}
 
 	return ret;
+}
+
+DEFINE_PER_CORE(size_t, ztmp_addr, 0);
+
+size_t get_zeroed_page(void)
+{
+	size_t phyaddr = get_page();
+	size_t viraddr;
+	uint8_t flags;
+
+	if (BUILTIN_EXPECT(!phyaddr, 0))
+		return 0;
+
+	flags = irq_nested_disable();
+
+	viraddr = per_core(ztmp_addr);
+	if (BUILTIN_EXPECT(!viraddr, 0))
+	{
+		viraddr = vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+		if (BUILTIN_EXPECT(!viraddr, 0))
+			goto novaddr;
+
+		//kprintf("Core %d uses 0x%zx as temporary address\n", CORE_ID, viraddr);
+		set_per_core(ztmp_addr, viraddr);
+	}
+
+	__page_map(viraddr, phyaddr, 1, PG_GLOBAL|PG_RW|PG_PRESENT, 0);
+
+	memset((void*) viraddr, 0x00, PAGE_SIZE);
+
+novaddr:
+	irq_nested_enable(flags);
+
+	return phyaddr;
 }
 
 /* TODO: reunion of elements is still missing */
