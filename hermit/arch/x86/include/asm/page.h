@@ -165,9 +165,23 @@ int page_init(void);
  * @param phyaddr Physical address to map from
  * @param npages The region's size in number of pages
  * @param bits Further page flags
+ * @param do_ipi if set, inform via IPI all other cores
  * @return
  */
-int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits);
+int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8_t do_ipi);
+
+/** @brief Map a continuous region of pages
+ *
+ * @param viraddr Desired virtual address
+ * @param phyaddr Physical address to map from
+ * @param npages The region's size in number of pages
+ * @param bits Further page flags
+ * @return
+ */
+static inline int page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits)
+{
+	return __page_map(viraddr, phyaddr, npages, bits, 1);
+}
 
 /** @brief Unmap a continuous region of pages
  *

@@ -48,6 +48,9 @@ size_t get_pages(size_t npages);
  */
 static inline size_t get_page(void) { return get_pages(1); }
 
+/** @brief Get a single zeroed page */
+size_t get_zeroed_page(void);
+
 /** @brief release physical page frames */
 int put_pages(size_t phyaddr, size_t npages);
 
