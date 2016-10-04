@@ -383,7 +383,7 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 		else
 			return NULL;
 
-		for(i=0; (vptr) && (i<PAGE_SIZE-sizeof(apic_mp_t)); i+=4, vptr+=4) {
+		for(i=0; (vptr) && (i<PAGE_SIZE); i+=4, vptr+=4) {
 			tmp = (apic_mp_t*) vptr;
 			if (tmp->signature == MP_FLT_SIGNATURE) {
 				if (!((tmp->version > 4) || (tmp->features[0]))) {
@@ -402,6 +402,26 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 	}
 
 	return NULL;
+}
+
+static size_t search_ebda(void) {
+	size_t ptr=PAGE_CEIL(0x400), vptr=0xF0000;
+	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
+
+	// protec apic by the NX flags
+	if (has_nx())
+		flags |= PG_XD;
+
+	if (BUILTIN_EXPECT(page_map(vptr, ptr & PAGE_MASK, 1, flags), 0))
+		return 0;
+
+	uint16_t addr = *((uint16_t*) (vptr+0x40E));
+	kprintf("Found EBDA at 0x%x!\n", (uint32_t)addr);
+ 
+	// unmap page via mapping a zero page
+	page_unmap(vptr, 1);
+
+	return (size_t) addr;
 }
 
 static int lapic_reset(void)
@@ -669,7 +689,7 @@ int apic_calibration(void)
 
 static int apic_probe(void)
 {
-	size_t addr;
+	size_t addr, ebda;
 	uint32_t i, j, count;
 	int isa_bus = -1;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
@@ -677,6 +697,11 @@ static int apic_probe(void)
 	// protect apic by NX flags
 	if (has_nx())
 		flags |= PG_XD;
+
+	ebda = search_ebda();
+	apic_mp = search_mptable(ebda, ebda+0x400);
+	if (apic_mp)
+		goto found_mp;
 
 	apic_mp = search_mptable(0xF0000, 0x100000);
 	if (apic_mp)
@@ -686,8 +711,10 @@ static int apic_probe(void)
 		goto found_mp;
 
 found_mp:
-	if (!apic_mp)
+	if (!apic_mp) {
+		kprintf("Didn't found MP config table\n");
 		goto no_mp;
+	}
 
 	if (isle < 0) {
 		//TODO: add detection of NUMA node
@@ -848,6 +875,10 @@ out:
 	return -ENXIO;
 
 no_mp:
+	if (isle < 0)
+		isle = 0;
+	if (boot_processor < 0)
+		boot_processor = 0;
 	apic_mp = NULL;
 	apic_config = NULL;
 	ncores = 1;
