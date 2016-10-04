@@ -66,9 +66,19 @@ inline static void *memset(void* dest, int val, size_t count)
 	if (BUILTIN_EXPECT(!dest, 0))
 		return dest;
 
-	asm volatile ("cld; rep stosb" 
-		: "=&c"(i), "=&D"(j)
-		: "a"(val), "1"(dest), "0"(count) : "memory","cc");
+	if (val) {
+		asm volatile ("cld; rep stosb"
+			: "=&c"(i), "=&D"(j)
+			: "a"(val), "1"(dest), "0"(count) : "memory","cc");
+	} else {
+		asm volatile (
+			"cld; rep stosq\n\t"
+			"movq %5, %%rcx\n\t"
+			"andq $7, %%rcx\n\t"
+			"rep stosb\n\t"
+			: "=&c"(i), "=&D"(j)
+			: "a"((size_t)val), "1"(dest), "0"(count/8), "g"(count): "memory","cc");
+	}
 
 	return dest;
 }
