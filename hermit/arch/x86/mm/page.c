@@ -88,6 +88,8 @@ static size_t * const other[PAGE_LEVELS] = {
 };
 #endif
 
+static uint8_t expect_zeroed_pages = 0;
+
 size_t virt_to_phys(size_t addr)
 {
 	size_t vpn   = addr >> PAGE_BITS;	// virtual page number
@@ -246,7 +248,7 @@ void page_fault_handler(struct state *s)
 		 // on demand userspace heap mapping
 		viraddr &= PAGE_MASK;
 
-		size_t phyaddr = get_zeroed_page();
+		size_t phyaddr = expect_zeroed_pages ? get_zeroed_page() : get_page();
 		if (BUILTIN_EXPECT(!phyaddr, 0)) {
 			kprintf("out of memory: task = %u\n", task->id);
 			goto default_handler;
@@ -289,8 +291,18 @@ default_handler:
 	sys_exit(-EFAULT);
 }
 
+// weak symbol is used to detect a Go application
+void __attribute__((weak)) runtime_osinit();
+
 int page_init(void)
 {
+	// do we have Go application? => weak symbol isn't zeroe
+	// => Go expect zeroed pages => set zeroed_pages to true
+	if (runtime_osinit) {
+		expect_zeroed_pages = 1;
+		kputs("Detect Go runtime! Consequently, HermitCore zeroed heap.\n");
+	}
+
 	/* Replace default pagefault handler */
 	irq_uninstall_handler(14);
 	irq_install_handler(14, page_fault_handler);
