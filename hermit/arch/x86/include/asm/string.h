@@ -77,7 +77,7 @@ inline static void *memset(void* dest, int val, size_t count)
 			"andq $7, %%rcx\n\t"
 			"rep stosb\n\t"
 			: "=&c"(i), "=&D"(j)
-			: "a"((size_t)val), "1"(dest), "0"(count/8), "g"(count): "memory","cc");
+			: "a"(0x00ULL), "1"(dest), "0"(count/8), "g"(count): "memory","cc");
 	}
 
 	return dest;
