@@ -33,7 +33,7 @@
 /// Does the bootloader provide mem_* fields?
 #define MULTIBOOT_INFO_MEM		(1 << 0)
 /// Does the bootloader provide the command-line?
-#define MULTIBOOT_INFO_CMDLINE	(1 << 2)
+#define MULTIBOOT_INFO_CMDLINE		(1 << 2)
 /// Does the bootloader provide a list of modules?
 #define MULTIBOOT_INFO_MODS		(1 << 3)
 /// Does the bootloader provide a full memory map?
