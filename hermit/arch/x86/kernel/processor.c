@@ -31,6 +31,7 @@
 #include <hermit/time.h>
 #include <hermit/processor.h>
 #include <hermit/tasks.h>
+#include <asm/multiboot.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -166,6 +167,30 @@ static void fpu_init_xsave(union fpu_state* fpu)
 	xs->fxsave.mxcsr = 0x1f80;
 }
 
+static char* cmdline = 0;
+
+static uint32_t get_frequency_from_mbinfo(void)
+{
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
+	{
+		int i;
+
+		cmdline = (char*) vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+		if (BUILTIN_EXPECT(!cmdline, 0))
+			return 0;
+
+		page_map((size_t) cmdline, mb_info->cmdline & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
+		cmdline = (char*) ((size_t) cmdline | (mb_info->cmdline & ~PAGE_MASK));
+
+		for(i=0; (cmdline[i] != '\0') && (cmdline[i] != ' '); i++)
+			;
+
+		return atoi(cmdline+i+1);
+	}
+
+	return 0;
+}
+
 // Try to determine the frequency from the CPU brand.
 // Code is derived from the manual "Intel Processor
 // Identification and the CPUID Instruction".
@@ -231,6 +256,9 @@ uint32_t detect_cpu_frequency(void)
 	if (BUILTIN_EXPECT(cpu_freq > 0, 0))
 		return cpu_freq;
 
+	cpu_freq = get_frequency_from_mbinfo();
+	if (cpu_freq > 0)
+		return cpu_freq;
 	cpu_freq = get_frequency_from_brand();
 	if (cpu_freq > 0)
 		return cpu_freq;

@@ -19,7 +19,7 @@ all: proxy
 
 proxy: proxy.o
 	@echo [LD] $@
-	$Q$(CC) $(CFLAGS) -o $@ $<
+	$Q$(CC) $(CFLAGS) -o $@ $< -lpcre
 
 clean:
 	@echo Cleaning tools
