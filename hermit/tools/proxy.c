@@ -44,6 +44,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <stdint.h>
+#include <pcre.h>
 
 #define MAX_PATH	255
 #define MAX_ARGS	1024
@@ -99,6 +101,39 @@ static void fini_env(void)
 static void exit_handler(int sig)
 {
 	exit(0);
+}
+
+static char* cpufreq(void)
+{
+	const char* pattern = "^cpu MHz\\s*:\\s*(\\d+)";
+	const char* pcreErrorStr = NULL;
+	int creErrorOffset = 0;
+	char line[2048];
+	int rc, results[10];
+	
+	pcre* reCompiled = pcre_compile(pattern, PCRE_ANCHORED, &pcreErrorStr, &creErrorOffset, NULL);
+
+	if(reCompiled == NULL)
+		return "0";
+
+	FILE* fp = fopen("/proc/cpuinfo", "r");
+	if (!fp)
+		return "0";
+
+	while(fgets(line, 2048, fp)) {
+		if ((rc = pcre_exec(reCompiled, 0, line, 2048, 0, 0, results, 10)) < 0)
+			continue;
+
+		const char* match = NULL;
+		pcre_get_substring(line, results, rc, 1, &(match));
+		
+		fclose(fp);
+		pcre_free(reCompiled);
+
+		return (char*)match;
+	}
+
+	return "0";
 }
 
 static int init_env(char *path)
@@ -222,7 +257,7 @@ static int init_qemu(char *path)
 	char chardev_file[MAX_PATH];
 	char port_str[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-s", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), "-s", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
