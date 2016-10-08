@@ -209,7 +209,7 @@ static inline void x2apic_disable(void)
 	wrmsr(MSR_APIC_BASE, msr & ~(MSR_X2APIC_ENABLE | MSR_XAPIC_ENABLE));
 	wrmsr(MSR_APIC_BASE, msr & ~MSR_X2APIC_ENABLE);
 
-	kprintf("Disable X2APIC support\n");
+	//kprintf("Disable X2APIC support\n");
 	lapic_read = lapic_read_default;
 	lapic_write = lapic_write_default;
 }
@@ -234,7 +234,7 @@ static inline void x2apic_enable(void)
 
 	wrmsr(MSR_APIC_BASE, msr | MSR_X2APIC_ENABLE);
 
-	kprintf("Enable X2APIC support!\n");
+	//kprintf("Enable X2APIC support!\n");
 }
 
 /*
@@ -839,6 +839,7 @@ check_lapic:
 	kprintf("Found APIC at 0x%x\n", lapic);
 
 	if (has_x2apic()) {
+		kputs("Found and enable X2APIC\n");
 		x2apic_enable();
 	} else {
 		if (page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, flags)) {
@@ -892,7 +893,7 @@ extern int set_idle_task(void);
 #if MAX_CORES > 1
 int smp_start(void)
 {
-	x2apic_enable();
+	//x2apic_enable();
 
 	// reset APIC and set id
 	lapic_reset();
