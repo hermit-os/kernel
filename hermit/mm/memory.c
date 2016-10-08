@@ -347,6 +347,8 @@ int memory_init(void)
 					last->end = end_addr;
 				}
 			}
+
+			//TODO: mb_info and mb_info->cmdline should be marked as reserevd
 		}
 	}
 

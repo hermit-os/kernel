@@ -72,6 +72,7 @@ static unsigned int qemu = 0;
 static pid_t id = 0;
 static unsigned int port = HERMIT_PORT;
 static char tmpname[] = "/tmp/hermit-XXXXXX";
+static char cmdline[MAX_PATH] = "";
 
 extern char **environ;
 
@@ -109,6 +110,7 @@ static char* cpufreq(void)
 	const char* pcreErrorStr = NULL;
 	int creErrorOffset = 0;
 	char line[2048];
+	const char* match = NULL;
 	int rc, results[10];
 	
 	pcre* reCompiled = pcre_compile(pattern, PCRE_ANCHORED, &pcreErrorStr, &creErrorOffset, NULL);
@@ -124,13 +126,13 @@ static char* cpufreq(void)
 		if ((rc = pcre_exec(reCompiled, 0, line, 2048, 0, 0, results, 10)) < 0)
 			continue;
 
-		const char* match = NULL;
 		pcre_get_substring(line, results, rc, 1, &(match));
-		
+		snprintf(cmdline, MAX_PATH, "-freq%s", match);	
 		fclose(fp);
+		pcre_free_substring(match);
 		pcre_free(reCompiled);
 
-		return (char*)match;
+		return cmdline;
 	}
 
 	return "0";
