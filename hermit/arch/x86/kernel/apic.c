@@ -431,7 +431,7 @@ static int lapic_reset(void)
 	if (!lapic)
 		return -ENXIO;
 
-	x2apic_enable();
+	//x2apic_enable();
 
 	max_lvt = apic_lvt_entries();
 
@@ -893,7 +893,7 @@ extern int set_idle_task(void);
 #if MAX_CORES > 1
 int smp_start(void)
 {
-	//x2apic_enable();
+	x2apic_enable();
 
 	// reset APIC and set id
 	lapic_reset();
