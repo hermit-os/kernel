@@ -11,8 +11,7 @@ travis:
 	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit
 	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit/tools proxy
 
-all: linux/arch/x86/boot/bzImage
-	default
+all: linux/arch/x86/boot/bzImage default
 
 linux/arch/x86/boot/bzImage:
 	make -j$(JOBS) -C linux
