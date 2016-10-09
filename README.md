@@ -23,7 +23,7 @@ The build process works currently only on **x86-based Linux** systems. The follo
 
 On Debian-based systems the packets can be installed by executing:
 ```
-  sudo apt-get install qemu-system-x86 nasm texinfo libpcre3-dev libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+  sudo apt-get install qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
 
 ## Building and testing HermitCore as multi-kernel within a virtual machine

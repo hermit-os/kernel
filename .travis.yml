@@ -6,7 +6,7 @@ language: c
 compiler: gcc
 before_install:
         - sudo apt-get -qq update
-        - sudo apt-get install -y curl qemu-system-x86 nasm texinfo libpcre3-dev libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+        - sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
         - git submodule update --init hermit/lwip hermit/usr/gcc hermit/usr/pte hermit/usr/libomp
 script:
         - ./configure
