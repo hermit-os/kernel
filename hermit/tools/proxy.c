@@ -106,7 +106,8 @@ static void exit_handler(int sig)
 static char* cpufreq(void)
 {
 	char line[2048];
-	const char* match = NULL;
+	char* match;
+	char* point;
 
 	FILE* fp = fopen("/proc/cpuinfo", "r");
 	if (!fp)
@@ -119,6 +120,10 @@ static char* cpufreq(void)
 		// scan strinf for the next number
 		for(; (*match < 0x30) || (*match > 0x39); match++)
 			;
+
+		for(point = match; ((*point != '.') && (*point != '\0')); point++)
+			;
+		*point = '\0';
 
 		snprintf(cmdline, MAX_PATH, "-freq%s", match);	
 		fclose(fp);
