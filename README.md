@@ -33,7 +33,7 @@ On Debian-based systems the packets can be installed by executing:
    Fine tuning of the installation directories, e.g., with the flag `--prefix` is currently not supported.
    HermitCore, the cross-compiler and the demo applications will be installed in subdirectories of this repository.
    At the end of this *README* in section *Tips* you find hints to enable optimization for the target.
-2. The command `make` build the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
+2. The command `make all` build the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
 3. To start a virtual machine and to boot a small Linux version use the command `make qemu`.
    Per default, the virtual machine has 10 cores, 2 NUMA nodes, and 8 GiB RAM.
    To increase or to decrease the machine size, the label `qemu` in the Makefile has to be modified accordingly.
