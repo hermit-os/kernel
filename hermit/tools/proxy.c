@@ -45,7 +45,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdint.h>
-#include <pcre.h>
 
 #define MAX_PATH	255
 #define MAX_ARGS	1024
@@ -106,36 +105,28 @@ static void exit_handler(int sig)
 
 static char* cpufreq(void)
 {
-	const char* pattern = "^cpu MHz\\s*:\\s*(\\d+)";
-	const char* pcreErrorStr = NULL;
-	int creErrorOffset = 0;
 	char line[2048];
 	const char* match = NULL;
-	int rc, results[10];
-	
-	pcre* reCompiled = pcre_compile(pattern, PCRE_ANCHORED, &pcreErrorStr, &creErrorOffset, NULL);
-
-	if(reCompiled == NULL)
-		return "0";
 
 	FILE* fp = fopen("/proc/cpuinfo", "r");
 	if (!fp)
-		return "0";
+		return "-freq0";
 
 	while(fgets(line, 2048, fp)) {
-		if ((rc = pcre_exec(reCompiled, 0, line, 2048, 0, 0, results, 10)) < 0)
+		if ((match = strstr(line, "cpu MHz")) == NULL)
 			continue;
 
-		pcre_get_substring(line, results, rc, 1, &(match));
+		// scan strinf for the next number
+		for(; (*match < 0x30) || (*match > 0x39); match++)
+			;
+
 		snprintf(cmdline, MAX_PATH, "-freq%s", match);	
 		fclose(fp);
-		pcre_free_substring(match);
-		pcre_free(reCompiled);
 
 		return cmdline;
 	}
 
-	return "0";
+	return "-freq0";
 }
 
 static int init_env(char *path)
