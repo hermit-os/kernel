@@ -27,6 +27,11 @@
 
 #define _GNU_SOURCE
 
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -34,17 +39,13 @@
 #include <netinet/in.h>
 #include <sched.h>
 #include <signal.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/inotify.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <unistd.h>
-#include <stdint.h>
+#include <sys/ioctl.h>
+#include <net/if.h>
 
 #define MAX_PATH	255
 #define MAX_ARGS	1024
@@ -184,18 +185,27 @@ static int init_env(char *path)
 		return init_multi(path);
 }
 
-static int is_qemu_available(void)
+static int is_hermit_available(void)
 {
 	char* line = (char*) malloc(2048);
 	size_t n = 2048;
 	int ret = 0;
+	FILE* file;
 
 	if (!line) {
 		fprintf(stderr, "Not enough memory\n");
 		exit(1);
 	}
 
-	FILE* file = fopen(tmpname, "r");
+	if (qemu)
+		file = fopen(tmpname, "r");
+	else {
+		char logname[MAX_PATH];
+
+		snprintf(logname, MAX_PATH, "/sys/hermit/isle%d/log", isle_nr);
+		file = fopen(logname, "r");
+	}
+
 	if (!file)
 		return 0;
 
@@ -213,11 +223,12 @@ static int is_qemu_available(void)
 }
 
 // wait until HermitCore is sucessfully booted
-static void wait_qemu_available(void)
+static void wait_hermit_available(void)
 {
 	char buffer[BUF_LEN];
+	int wd;
 
-	if (is_qemu_available())
+	if (is_hermit_available())
 		return;
 
 	int fd = inotify_init();
@@ -226,7 +237,10 @@ static void wait_qemu_available(void)
 		exit(1);
 	}
 
-	int wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
+	if (qemu)
+		wd = inotify_add_watch(fd, "/tmp", IN_MODIFY|IN_CREATE);
+	else
+		wd = inotify_add_watch(fd, "/sys/hermit", IN_MODIFY|IN_CREATE);
 
 	while(1) {
 		int length = read(fd, buffer, BUF_LEN);
@@ -236,7 +250,7 @@ static void wait_qemu_available(void)
 			break;
 		}
 
-		if (length != 0 && is_qemu_available())
+		if (length != 0 && is_hermit_available())
 			break;
 	}
 
@@ -348,7 +362,7 @@ static int init_qemu(char *path)
 	sched_yield();
 
 	// wait until HermitCore is sucessfully booted
-	wait_qemu_available();
+	wait_hermit_available();
 
 	return 0;
 }
@@ -412,6 +426,9 @@ static int init_multi(char *path)
 	}
 
 	free(result);
+
+	// wait until HermitCore is sucessfully booted
+	wait_hermit_available();
 
 	return 0;
 }
@@ -779,6 +796,28 @@ int main(int argc, char **argv)
 
 	init_env(argv[1]);
 	atexit(fini_env);
+
+#if 0
+	// check if mmnif interface is available
+	if (!qemu) {
+		struct ifreq ethreq;
+
+		memset(&ethreq, 0, sizeof(ethreq));
+		strncpy(ethreq.ifr_name, "mmnif", IFNAMSIZ);
+
+		while(1) {
+			/* this socket doesn't really matter, we just need a descriptor 
+			 * to perform the ioctl on */
+			s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+			ioctl(s, SIOCGIFFLAGS, &ethreq);
+			close(s);
+
+			if (ethreq.ifr_flags & (IFF_UP|IFF_RUNNING))
+				break;
+		}
+		sched_yield();
+	}
+#endif
 
 	/* create a socket */
 	s = socket(PF_INET, SOCK_STREAM, 0);
