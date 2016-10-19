@@ -437,7 +437,7 @@ int cpu_detection(void) {
 
 	if (first_time) {
 		kprintf("Paging features: %s%s%s%s%s%s%s%s\n",
-				(cpu_info.feature1 & CPU_FEATUE_PSE) ? "PSE (2/4Mb) " : "",
+				(cpu_info.feature1 & CPU_FEATURE_PSE) ? "PSE (2/4Mb) " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PAE) ? "PAE " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PGE) ? "PGE " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PAT) ? "PAT " : "",

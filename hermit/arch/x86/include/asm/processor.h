@@ -48,7 +48,7 @@ extern "C" {
 
 // feature list 0x00000001 (ebx)
 #define CPU_FEATURE_FPU			(1 << 0)
-#define CPU_FEATUE_PSE			(1 << 3)
+#define CPU_FEATURE_PSE			(1 << 3)
 #define CPU_FEATURE_MSR			(1 << 5)
 #define CPU_FEATURE_PAE			(1 << 6)
 #define CPU_FEATURE_APIC		(1 << 9)
