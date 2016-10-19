@@ -309,6 +309,10 @@ static uint8_t mmnif_get_destination(struct netif *netif, struct pbuf *p)
 	iphdr = (struct ip_hdr *)(p->payload);
 	ip = iphdr->dest;
 
+	// forward packet to Linux (= isle 1), if the destination IP is a real address
+	if ((ip4_addr1(&ip) != 192) || (ip4_addr2(&ip) != 168) || (ip4_addr3(&ip) != 28))
+		return 1;
+
 	return ip4_addr4(&ip);
 }
 
