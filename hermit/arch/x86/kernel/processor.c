@@ -503,6 +503,8 @@ int cpu_detection(void) {
 			xcr0 |= 0x2;
 		if (has_avx())
 			xcr0 |= 0x4;
+		if (has_avx512f())
+			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
 		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
