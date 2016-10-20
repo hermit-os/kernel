@@ -80,6 +80,8 @@ extern const void percore_start;
 extern const void percore_end0;
 extern const void percore_end;
 extern char __BUILD_DATE;
+extern size_t hbmem_base;
+extern size_t hbmem_size;
 
 /* Page frame counters */
 extern atomic_int64_t total_pages;
@@ -592,6 +594,8 @@ int hermit_main(void)
 	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
 	kprintf("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	kprintf("Core %d is the boot processor\n", boot_processor);
+	if (hbmem_base)
+		kprintf("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
 
 #if 0
 	print_pci_adapters();

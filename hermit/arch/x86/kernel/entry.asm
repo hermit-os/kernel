@@ -67,6 +67,8 @@ align 4
     global header_size
     global disable_x2apic
     global mb_info
+    global hbmem_base
+    global hbmem_size
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -88,6 +90,8 @@ align 4
     disable_x2apic dd 1
     single_kernel dd 1
     mb_info dq 0
+    hbmem_base dq 0
+    hbmem_size dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
