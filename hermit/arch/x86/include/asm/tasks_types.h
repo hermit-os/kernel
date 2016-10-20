@@ -97,9 +97,32 @@ typedef struct {
 } ymmh_t;
 
 typedef struct {
+	uint64_t lwpcb_addr;
+	uint32_t flags;
+	uint32_t buf_head_offset;
+	uint64_t buf_base;
+	uint32_t buf_size;
+	uint32_t filters;
+	uint64_t saved_event_record[4];
+	uint32_t event_counter[16];
+} lwp_t;
+
+typedef struct {
+	uint64_t bndregs[8];
+} bndregs_t;
+
+typedef struct {
+	uint64_t cfg_reg_u;
+	uint64_t status_reg;
+} bndcsr_t;
+
+typedef struct {
 	i387_fxsave_t fxsave;
 	xsave_header_t hdr;
 	ymmh_t ymmh;
+	lwp_t lwp;
+	bndregs_t bndregs;
+	bndcsr_t bndcsr;
 } xsave_t __attribute__ ((aligned (64)));
 
 union fpu_state {
