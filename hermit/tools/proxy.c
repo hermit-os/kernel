@@ -428,7 +428,7 @@ static int init_multi(char *path)
 	free(result);
 
 	// wait until HermitCore is sucessfully booted
-	wait_hermit_available();
+	//wait_hermit_available();
 
 	return 0;
 }
