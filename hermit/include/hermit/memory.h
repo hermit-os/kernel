@@ -60,4 +60,28 @@ int put_pages(size_t phyaddr, size_t npages);
  */
 static inline int put_page(size_t phyaddr) { return put_pages(phyaddr, 1); }
 
+/** @brief Request physical hbmem page frames */
+size_t hbmem_get_pages(size_t npages);
+
+/** @brief Get a single hbmem page
+ *
+ * Convenience function: uses hbmem_get_pages(1);
+ */
+static inline size_t hbmem_get_page(void) { return hbmem_get_pages(1); }
+
+/** @brief release physical page frames */
+int hbmem_put_pages(size_t phyaddr, size_t npages);
+
+/** @brief Put a single hbmem page
+ *
+ * Convenience function: uses hbmem_put_pages(1);
+ */
+static inline int hbmem_put_page(size_t phyaddr) { return hbmem_put_pages(phyaddr, 1); }
+
+/** @brief check if high memory bandwidth is available */ 
+int is_hbmem_available(void);
+
+/** @brief Initialize the high bandwidth memory subsystem */
+int hbmemory_init(void);
+
 #endif

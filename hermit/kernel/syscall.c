@@ -496,7 +496,10 @@ int sys_rcce_init(int session_id)
 		goto out;
 	}
 
-	paddr = get_pages(RCCE_MPB_SIZE / PAGE_SIZE);
+	if (is_hbmem_available())
+		paddr = hbmem_get_pages(RCCE_MPB_SIZE / PAGE_SIZE);
+	else
+		paddr = get_pages(RCCE_MPB_SIZE / PAGE_SIZE);
 	if (BUILTIN_EXPECT(!paddr, 0))
 	{
 		err = -ENOMEM;
@@ -592,8 +595,12 @@ int sys_rcce_fini(int session_id)
 		goto out;
 	}
 
-	if (rcce_mpb[i].mpb[isle])
-		put_pages(rcce_mpb[i].mpb[isle], RCCE_MPB_SIZE / PAGE_SIZE);
+	if (rcce_mpb[i].mpb[isle]) {
+		if (is_hbmem_available())
+			hbmem_put_pages(rcce_mpb[i].mpb[isle], RCCE_MPB_SIZE / PAGE_SIZE);
+		else
+			put_pages(rcce_mpb[i].mpb[isle], RCCE_MPB_SIZE / PAGE_SIZE);
+	}
 	rcce_mpb[i].mpb[isle] = 0;
 
 	for(j=0; (j<MAX_ISLE) && !rcce_mpb[i].mpb[j]; j++) {

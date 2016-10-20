@@ -305,6 +305,9 @@ int memory_init(void)
 
 	kprintf("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
+	// init high bandwidth memory subsystem
+	hbmemory_init();
+
 	ret = vma_init();
 	if (BUILTIN_EXPECT(ret, 0))
 		kprintf("Failed to initialize VMA regions: %d\n", ret);
