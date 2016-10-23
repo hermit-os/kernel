@@ -32,7 +32,7 @@
 extern "C" {
 #endif
 
-#define MAX_CORES		128
+#define MAX_CORES		256
 #define MAX_TASKS		(MAX_CORES*2+2)
 #define MAX_ISLE		8
 #define MAX_FNAME		128
