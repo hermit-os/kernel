@@ -31,6 +31,7 @@
 #include <hermit/time.h>
 #include <hermit/processor.h>
 #include <hermit/tasks.h>
+#include <hermit/logging.h>
 #include <asm/multiboot.h>
 
 /*
@@ -201,7 +202,7 @@ static uint32_t get_frequency_from_brand(void)
 		cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
 		cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
 		cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
-		kprintf("Processor: %s\n", brand);
+		LOG_INFO("Processor: %s\n", brand);
 
 		for(index=0; index<sizeof(brand)-2; index++)
 		{
@@ -323,9 +324,9 @@ void dump_pstate(void)
 	if (!has_est())
 		return;
 
-	kprintf("P-State 0x%x - 0x%x, turbo 0x%x\n", min_pstate, max_pstate, turbo_pstate);
-	kprintf("PERF CTL 0x%llx\n", rdmsr(MSR_IA32_PERF_CTL));
-	kprintf("PERF STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
+	LOG_INFO("P-State 0x%x - 0x%x, turbo 0x%x\n", min_pstate, max_pstate, turbo_pstate);
+	LOG_INFO("PERF CTL 0x%llx\n", rdmsr(MSR_IA32_PERF_CTL));
+	LOG_INFO("PERF STATUS 0x%llx\n", rdmsr(MSR_IA32_PERF_STATUS));
 }
 
 static void check_est(uint8_t out)
@@ -337,53 +338,53 @@ static void check_est(uint8_t out)
 		return;
 
 	if (out)
-		kputs("System supports Enhanced SpeedStep Technology\n");
+		LOG_INFO("System supports Enhanced SpeedStep Technology\n");
 
 	// enable Enhanced SpeedStep Technology
 	v = rdmsr(MSR_IA32_MISC_ENABLE);
 	if (!(v & MSR_IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP)) {
 		if (out)
-			kputs("Linux doesn't enable Enhanced SpeedStep Technology\n");
+			LOG_INFO("Linux doesn't enable Enhanced SpeedStep Technology\n");
 		return;
 	}
 
 	if (v & MSR_IA32_MISC_ENABLE_SPEEDSTEP_LOCK) {
 		if (out)
-			kputs("Enhanced SpeedStep Technology is locked\n");
+			LOG_INFO("Enhanced SpeedStep Technology is locked\n");
 		return;
 	}
 
 	if (v & MSR_IA32_MISC_ENABLE_TURBO_DISABLE) {
 		if (out)
-			kputs("Turbo Mode is disabled\n");
+			LOG_INFO("Turbo Mode is disabled\n");
 	} else {
 		if (out)
-			kputs("Turbo Mode is enabled\n");
+			LOG_INFO("Turbo Mode is enabled\n");
 		is_turbo=1;
 	}
 
 	cpuid(6, &a, &b, &c, &d);
 	if (c & CPU_FEATURE_IDA) {
 		if (out)
-			kprintf("Found P-State hardware coordination feedback capability bit\n");
+			LOG_INFO("Found P-State hardware coordination feedback capability bit\n");
 	}
 
 	if (c & CPU_FEATURE_HWP) {
 		if (out)
-			kprintf("P-State HWP enabled\n");
+			LOG_INFO("P-State HWP enabled\n");
 	}
 
 	if (c & CPU_FEATURE_EPB) {
 		// for maximum performance we have to clear BIAS
 		wrmsr(MSR_IA32_ENERGY_PERF_BIAS, 0);
 		if (out)
-			kprintf("Found Performance and Energy Bias Hint support: 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
+			LOG_INFO("Found Performance and Energy Bias Hint support: 0x%llx\n", rdmsr(MSR_IA32_ENERGY_PERF_BIAS));
 	}
 
 #if 0
 	if (out) {
-		kprintf("CPU features 6: 0x%x, 0x%x, 0x%x, 0x%x\n", a, b, c, d);
-		kprintf("MSR_PLATFORM_INFO 0x%llx\n", rdmsr(MSR_PLATFORM_INFO));
+		LOG_INFO("CPU features 6: 0x%x, 0x%x, 0x%x, 0x%x\n", a, b, c, d);
+		LOG_INFO("MSR_PLATFORM_INFO 0x%llx\n", rdmsr(MSR_PLATFORM_INFO));
 	}
 #endif
 
@@ -414,7 +415,7 @@ int cpu_detection(void) {
 		first_time = 1;
 
 		cpuid(0, &level, &b, &c, &d);
-		kprintf("cpuid level %d\n", level);
+		LOG_INFO("cpuid level %d\n", level);
 
 		a = b = c = d = 0;
 		cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
@@ -436,7 +437,7 @@ int cpu_detection(void) {
 	}
 
 	if (first_time) {
-		kprintf("Paging features: %s%s%s%s%s%s%s%s\n",
+		LOG_INFO("Paging features: %s%s%s%s%s%s%s%s\n",
 				(cpu_info.feature1 & CPU_FEATURE_PSE) ? "PSE (2/4Mb) " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PAE) ? "PAE " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PGE) ? "PGE " : "",
@@ -446,10 +447,10 @@ int cpu_detection(void) {
 				(cpu_info.feature3 & CPU_FEATURE_1GBHP) ? "PSE (1Gb) " : "",
 				(cpu_info.feature3 & CPU_FEATURE_LM) ? "LM" : "");
 
-		kprintf("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
-		kprintf("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
-		kprintf("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
-		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
+		LOG_INFO("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
+		LOG_INFO("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
+		LOG_INFO("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
+		LOG_INFO("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
 
 	//TODO: add check for SMEP and SMAP
@@ -507,7 +508,7 @@ int cpu_detection(void) {
 			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
-		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
+		LOG_INFO("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	// libos => currently no support of syscalls
@@ -518,7 +519,7 @@ int cpu_detection(void) {
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
 		//  clear IF flag during an interrupt
 		wrmsr(MSR_SYSCALL_MASK, EFLAGS_TF|EFLAGS_DF|EFLAGS_IF|EFLAGS_AC|EFLAGS_NT);
-	} else kputs("Processor doesn't support syscalls\n");
+	} else LOG_INFO("Processor doesn't support syscalls\n");
 #endif
 
 	if (has_nx())
@@ -535,15 +536,15 @@ int cpu_detection(void) {
 #endif
 	wrmsr(MSR_KERNEL_GS_BASE, 0);
 
-	kprintf("Core %d set per_core offset to 0x%x\n", atomic_int32_read(&current_boot_id), rdmsr(MSR_GS_BASE));
+	LOG_INFO("Core %d set per_core offset to 0x%x\n", atomic_int32_read(&current_boot_id), rdmsr(MSR_GS_BASE));
 
-	/* set core id to the current boor id */
+	/* set core id to the current boot id */
 	set_per_core(__core_id, atomic_int32_read(&current_boot_id));
-	kprintf("Core id is set to %d\n", CORE_ID);
+	LOG_INFO("Core id is set to %d\n", CORE_ID);
 
 	if (has_fpu()) {
 		if (first_time)
-			kputs("Found and initialized FPU!\n");
+			LOG_INFO("Found and initialized FPU!\n");
 		asm volatile ("fninit");
 	}
 
@@ -552,7 +553,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		kprintf("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -588,17 +589,17 @@ int cpu_detection(void) {
 		a = b = d = 0;
 		c = 2;
 		cpuid(0xd, &a, &b, &c, &d);
-		kprintf("Ext_Save_Area_2: offset %d, size %d\n", b, a);
+		LOG_INFO("Ext_Save_Area_2: offset %d, size %d\n", b, a);
 
 		a = b = d = 0;
 		c = 3;
 		cpuid(0xd, &a, &b, &c, &d);
-		kprintf("Ext_Save_Area_3: offset %d, size %d\n", b, a);
+		LOG_INFO("Ext_Save_Area_3: offset %d, size %d\n", b, a);
 
 		a = b = d = 0;
 		c = 4;
 		cpuid(0xd, &a, &b, &c, &d);
-		kprintf("Ext_Save_Area_4: offset %d, size %d\n", b, a);
+		LOG_INFO("Ext_Save_Area_4: offset %d, size %d\n", b, a);
 
 		save_fpu_state = save_fpu_state_xsave;
 		restore_fpu_state = restore_fpu_state_xsave;
@@ -616,7 +617,7 @@ int cpu_detection(void) {
 		uint32_t c, d;
 		char vendor_id[13];
 
-		kprintf("HermitCore is running on a hypervisor!\n");
+		LOG_INFO("HermitCore is running on a hypervisor!\n");
 
 		cpuid(0x40000000, &a, &b, &c, &d);
 		memcpy(vendor_id, &b, 4);
@@ -624,42 +625,42 @@ int cpu_detection(void) {
 		memcpy(vendor_id + 8, &d, 4);
 		vendor_id[12] = '\0';
 
-		kprintf("Hypervisor Vendor Id: %s\n", vendor_id);
-		kprintf("Maximum input value for hypervisor: 0x%x\n", a);
+		LOG_INFO("Hypervisor Vendor Id: %s\n", vendor_id);
+		LOG_INFO("Maximum input value for hypervisor: 0x%x\n", a);
 	}
 
 	if (first_time) {
-		kprintf("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
-		kprintf("size of xsave_t: %d\n", sizeof(xsave_t));
+		LOG_INFO("CR0 0x%llx, CR4 0x%llx\n", read_cr0(), read_cr4());
+		LOG_INFO("size of xsave_t: %d\n", sizeof(xsave_t));
 		if (has_msr()) {
 			uint64_t msr;
 
-			kprintf("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
-			kprintf("IA32_PLATFORM_ID 0x%llx\n", rdmsr(MSR_IA32_PLATFORM_ID));
+			LOG_INFO("IA32_MISC_ENABLE 0x%llx\n", rdmsr(MSR_IA32_MISC_ENABLE));
+			LOG_INFO("IA32_PLATFORM_ID 0x%llx\n", rdmsr(MSR_IA32_PLATFORM_ID));
 			if (has_pat()) {
 				msr = rdmsr(MSR_IA32_CR_PAT);
 
-				kprintf("IA32_CR_PAT 0x%llx\n", msr);
-				kprintf("PAT use per default %s\n", (msr & 0xF) == 0x6 ? "writeback." : "NO writeback!");
+				LOG_INFO("IA32_CR_PAT 0x%llx\n", msr);
+				LOG_INFO("PAT use per default %s\n", (msr & 0xF) == 0x6 ? "writeback." : "NO writeback!");
 			}
 
 			msr = rdmsr(MSR_MTRRdefType);
-			kprintf("MTRR is %s.\n", (msr & (1 << 11)) ? "enabled" : "disabled");
-			kprintf("Fixed-range MTRR is %s.\n", (msr & (1 << 10)) ? "enabled" : "disabled");
-			kprintf("MTRR used per default %s\n", (msr & 0xFF) == 0x6 ? "writeback." : "NO writeback!");
+			LOG_INFO("MTRR is %s.\n", (msr & (1 << 11)) ? "enabled" : "disabled");
+			LOG_INFO("Fixed-range MTRR is %s.\n", (msr & (1 << 10)) ? "enabled" : "disabled");
+			LOG_INFO("MTRR used per default %s\n", (msr & 0xFF) == 0x6 ? "writeback." : "NO writeback!");
 #if 0
 			if (msr & (1 << 10)) {
-				kprintf("MSR_MTRRfix64K_00000 0x%llx\n", rdmsr(MSR_MTRRfix64K_00000));
-				kprintf("MSR_MTRRfix16K_80000 0x%llx\n", rdmsr(MSR_MTRRfix16K_80000));
-				kprintf("MSR_MTRRfix16K_A0000 0x%llx\n", rdmsr(MSR_MTRRfix16K_A0000));
-				kprintf("MSR_MTRRfix4K_C0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C0000));
-				kprintf("MSR_MTRRfix4K_C8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C8000));
-				kprintf("MSR_MTRRfix4K_D0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D0000));
-				kprintf("MSR_MTRRfix4K_D8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D8000));
-				kprintf("MSR_MTRRfix4K_E0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E0000));
-				kprintf("MSR_MTRRfix4K_E8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E8000));
-				kprintf("MSR_MTRRfix4K_F0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F0000));
-				kprintf("MSR_MTRRfix4K_F8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F8000));
+				LOG_INFO("MSR_MTRRfix64K_00000 0x%llx\n", rdmsr(MSR_MTRRfix64K_00000));
+				LOG_INFO("MSR_MTRRfix16K_80000 0x%llx\n", rdmsr(MSR_MTRRfix16K_80000));
+				LOG_INFO("MSR_MTRRfix16K_A0000 0x%llx\n", rdmsr(MSR_MTRRfix16K_A0000));
+				LOG_INFO("MSR_MTRRfix4K_C0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C0000));
+				LOG_INFO("MSR_MTRRfix4K_C8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_C8000));
+				LOG_INFO("MSR_MTRRfix4K_D0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D0000));
+				LOG_INFO("MSR_MTRRfix4K_D8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_D8000));
+				LOG_INFO("MSR_MTRRfix4K_E0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E0000));
+				LOG_INFO("MSR_MTRRfix4K_E8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_E8000));
+				LOG_INFO("MSR_MTRRfix4K_F0000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F0000));
+				LOG_INFO("MSR_MTRRfix4K_F8000 0x%llx\n", rdmsr(MSR_MTRRfix4K_F8000));
 			}
 #endif
 		}

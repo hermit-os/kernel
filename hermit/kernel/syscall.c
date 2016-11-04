@@ -36,6 +36,7 @@
 #include <hermit/rcce.h>
 #include <hermit/memory.h>
 #include <hermit/signal.h>
+#include <hermit/logging.h>
 #include <sys/uio.h>
 #include <sys/poll.h>
 
@@ -237,7 +238,7 @@ ssize_t sys_sbrk(ssize_t incr)
 	static spinlock_t heap_lock = SPINLOCK_INIT;
 
 	if (BUILTIN_EXPECT(!heap, 0)) {
-		kprintf("sys_sbrk: missing heap!\n");
+		LOG_ERROR("sys_sbrk: missing heap!\n");
 		do_abort();
 	}
 
@@ -508,7 +509,7 @@ int sys_rcce_init(int session_id)
 out:
 	islelock_unlock(rcce_lock);
 
-	kprintf("Create MPB for session %d at 0x%zx, using of slot %d\n", session_id, paddr, i);
+	LOG_INFO("Create MPB for session %d at 0x%zx, using of slot %d\n", session_id, paddr, i);
 
 	return err;
 }
@@ -538,7 +539,7 @@ size_t sys_rcce_malloc(int session_id, int ue)
 		}
 	} while((i >= MAX_RCCE_SESSIONS) && (counter < 120));
 
-	//kprintf("i = %d, counter = %d, max %d\n", i, counter, MAX_RCCE_SESSIONS);
+	LOG_DEBUG("i = %d, counter = %d, max %d\n", i, counter, MAX_RCCE_SESSIONS);
 
 	// create new session
 	if (i >= MAX_RCCE_SESSIONS)
@@ -553,7 +554,7 @@ size_t sys_rcce_malloc(int session_id, int ue)
 		goto out;
 	}
 
-	kprintf("Map MPB of session %d at 0x%zx, using of slot %d, isle %d\n", session_id, vaddr, i, ue);
+	LOG_INFO("Map MPB of session %d at 0x%zx, using of slot %d, isle %d\n", session_id, vaddr, i, ue);
 
 	if (isle == ue)
 		memset((void*)vaddr, 0x0, RCCE_MPB_SIZE);
@@ -561,7 +562,7 @@ size_t sys_rcce_malloc(int session_id, int ue)
 	return vaddr;
 
 out:
-	kprintf("Didn't find a valid MPB for session %d, isle %d\n", session_id, ue);
+	LOG_ERROR("Didn't find a valid MPB for session %d, isle %d\n", session_id, ue);
 
 	return 0;
 }

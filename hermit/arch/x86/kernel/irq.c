@@ -38,6 +38,7 @@
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
 #include <hermit/spinlock.h>
+#include <hermit/logging.h>
 #include <asm/irq.h>
 #include <asm/idt.h>
 #include <asm/isrs.h>
@@ -290,7 +291,7 @@ size_t** irq_handler(struct state *s)
 	size_t** ret = NULL;
 
 	if(BUILTIN_EXPECT(s->int_no >= MAX_HANDLERS, 0)) {
-		kprintf("[%d] Invalid IRQ number %d\n", CORE_ID, s->int_no);
+		LOG_ERROR("Invalid IRQ number %d\n", s->int_no);
 		return NULL;
 	}
 
@@ -303,7 +304,7 @@ size_t** irq_handler(struct state *s)
 	if (handler) {
 		handler(s);
 	} else {
-		kprintf("[%d] Unhandled IRQ %d\n", CORE_ID, s->int_no);
+		LOG_ERROR("Unhandled IRQ %d\n", s->int_no);
 	}
 
 	// Check if timers have expired that would unblock tasks
@@ -324,7 +325,7 @@ size_t** irq_handler(struct state *s)
 		diff = rdtsc() - diff;
 		if (diff > 15000)
 		{
-			kprintf("Core %d, irq_no %d: %lld : %lld\n", CORE_ID, s->int_no, irq_counter[CORE_ID][s->int_no], diff);
+			LOG_INFO("Core %d, irq_no %d: %lld : %lld\n", CORE_ID, s->int_no, irq_counter[CORE_ID][s->int_no], diff);
 		}
 	}
 #endif
@@ -349,7 +350,7 @@ void print_irq_stats(void)
 		for(j=0; j<MAX_HANDLERS; j++)
 		{
 			if (irq_counter[i][j])
-				kprintf("Core %d, IRQ %d: %lld interrupts\n", i, j, irq_counter[i][j]);
+				LOG_INFO("Core %d, IRQ %d: %lld interrupts\n", i, j, irq_counter[i][j]);
 		}
 	}
 }
