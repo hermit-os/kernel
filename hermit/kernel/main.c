@@ -58,7 +58,7 @@
 #include <net/e1000.h>
 
 #define HERMIT_PORT	0x494E
-#define HEMRIT_MAGIC	0x7E317
+#define HERMIT_MAGIC	0x7E317
 
 // set to one if the single-kernel version should use a DHCP server
 #define USE_DHCP	1
@@ -474,7 +474,7 @@ static int initd(void* arg)
 
 	magic = 0;
 	lwip_read(c, &magic, sizeof(magic));
-	if (magic != HEMRIT_MAGIC)
+	if (magic != HERMIT_MAGIC)
 	{
 		kprintf("Invalid magic number %d\n", magic);
 		lwip_close(c);
