@@ -28,6 +28,7 @@
 #include <hermit/stdio.h>
 #include <hermit/string.h>
 #include <hermit/errno.h>
+#include <hermit/logging.h>
 #include <asm/irqflags.h>
 #include <asm/io.h>
 
@@ -193,7 +194,7 @@ int print_pci_adapters(void)
 
 		if (adapters[bus][slot] != -1) {
 				counter++;
-				kprintf("%d) Vendor ID: 0x%x  Device Id: 0x%x\n",
+				LOG_INFO("%d) Vendor ID: 0x%x  Device Id: 0x%x\n",
 					counter, adapters[bus][slot] & 0xffff, 
 					(adapters[bus][slot] & 0xffff0000) >> 16);
 
@@ -201,7 +202,7 @@ int print_pci_adapters(void)
 				for (i=0; i<PCI_VENTABLE_LEN; i++) {
 					if ((adapters[bus][slot] & 0xffff) ==
 					    (uint32_t)PciVenTable[i].VenId)
-						kprintf("\tVendor is %s\n",
+						LOG_INFO("\tVendor is %s\n",
 							PciVenTable[i].VenShort);
 				}
 
@@ -210,7 +211,7 @@ int print_pci_adapters(void)
 					    (uint32_t)PciDevTable[i].VenId) {
 						if (((adapters[bus][slot] & 0xffff0000) >> 16) ==
 						    PciDevTable[i].DevId) {
-							kprintf
+							LOG_INFO
 							    ("\tChip: %s ChipDesc: %s\n",
 							     PciDevTable[i].Chip,
 							     PciDevTable[i].ChipDesc);

@@ -30,6 +30,7 @@
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
 #include <hermit/syscall.h>
+#include <hermit/logging.h>
 
 void __startcontext(void);
 
@@ -40,7 +41,7 @@ void makecontext(ucontext_t *ucp, void (*func)(), int argc, ...)
 	if (BUILTIN_EXPECT(!ucp, 0))
 		return;
 
-	//kprintf("sys_makecontext %p, func %p, stack 0x%zx, task %d\n", ucp, func, ucp->uc_stack.ss_sp, per_core(current_task)->id);
+	LOG_DEBUG("sys_makecontext %p, func %p, stack 0x%zx, task %d\n", ucp, func, ucp->uc_stack.ss_sp, per_core(current_task)->id);
 
 	size_t* stack = (size_t*) ((size_t)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
 	stack -= (argc > 6 ? argc - 6 : 0) + 1;
@@ -93,6 +94,6 @@ int swapcontext(ucontext_t *oucp, const ucontext_t *ucp)
 {
 	//TODO: implementation is missing
 
-	kprintf("WARNING: sys_swapcontext is currently not implemented: %p <=> %p\n", oucp, ucp);
+	LOG_WARNING("sys_swapcontext is currently not implemented: %p <=> %p\n", oucp, ucp);
 	return -ENOSYS;
 }
