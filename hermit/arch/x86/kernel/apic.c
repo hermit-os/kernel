@@ -327,7 +327,7 @@ int apic_timer_is_running(void)
 int apic_timer_deadline(uint32_t ticks)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
-		//kprintf("timer oneshot %ld\n", t);
+		//kprintf("timer oneshot %ld at core %d\n", ticks, CORE_ID);
 
 		lapic_timer_oneshot();
 		lapic_timer_set_counter(ticks * icr);
@@ -343,6 +343,7 @@ int apic_disable_timer(void)
 	if (BUILTIN_EXPECT(!apic_is_enabled(), 0))
 		return -EINVAL;
 
+	//kprintf("Disable local APIC timer at core %d\n", CORE_ID);
 	lapic_timer_disable();
 
 	return 0;
@@ -351,6 +352,7 @@ int apic_disable_timer(void)
 int apic_enable_timer(void)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
+		//kprintf("Enable local APIC timer at core %d\n", CORE_ID);
 
 		lapic_timer_periodic();
 		lapic_timer_set_counter(icr);
@@ -378,13 +380,15 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 			vptr = 0;
 		}
 
-		if (BUILTIN_EXPECT(!page_map(ptr & PAGE_MASK, ptr & PAGE_MASK, 1, flags), 1))
+		if (BUILTIN_EXPECT(!page_map(ptr & PAGE_MASK, ptr & PAGE_MASK, 1, flags), 1)) {
 			vptr = ptr & PAGE_MASK;
-		else
+		} else {
+			kprintf("Failed to map 0x%zx, which is required to search for the MP tables\n", ptr);
 			return NULL;
+		}
 
-		for(i=0; (vptr) && (i<PAGE_SIZE); i+=4, vptr+=4) {
-			tmp = (apic_mp_t*) vptr;
+		for(i=0; (vptr) && (i<PAGE_SIZE); i+=4) {
+			tmp = (apic_mp_t*) (vptr+i);
 			if (tmp->signature == MP_FLT_SIGNATURE) {
 				if (!((tmp->version > 4) || (tmp->features[0]))) {
 					vma_add(ptr & PAGE_MASK, (ptr & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
@@ -983,7 +987,7 @@ int ipi_tlb_flush(void)
 
 static void apic_tlb_handler(struct state *s)
 {
-	//kputs("Receive IPI to flush the TLB\n");
+	//kprintf("Receive IPI at core %d to flush the TLB\n", CORE_ID);
 	write_cr3(read_cr3());
 }
 #endif

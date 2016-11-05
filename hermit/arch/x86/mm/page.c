@@ -122,6 +122,8 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 	long first[PAGE_LEVELS], last[PAGE_LEVELS];
 	int8_t send_ipi = 0;
 
+	//kprintf("Map %d pages at 0x%zx\n", npages, viraddr);
+
 	/* Calculate index boundaries for page map traversal */
 	for (lvl=0; lvl<PAGE_LEVELS; lvl++) {
 		first[lvl] = (vpn         ) >> (lvl * PAGE_MAP_BITS);
@@ -157,8 +159,10 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 				int8_t flush = 0;
 
 				/* do we have to flush the TLB? */
-				if (self[lvl][vpn] & PG_PRESENT)
+				if (self[lvl][vpn] & PG_PRESENT) {
+					//kprintf("Remap address 0x%zx at core %d\n", viraddr, CORE_ID);
 					send_ipi = flush = 1;
+				}
 
 				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED;
 
@@ -168,6 +172,7 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 					tlb_flush_one_page(vpn << PAGE_BITS, 0);
 
 				phyaddr += PAGE_SIZE;
+				//viraddr += PAGE_SIZE;
 			}
 		}
 	}
@@ -186,6 +191,8 @@ int page_unmap(size_t viraddr, size_t npages)
 {
 	if (BUILTIN_EXPECT(!npages, 0))
 		return 0;
+
+	//kprintf("Unmap %d pages at 0x%zx\n", npages, viraddr);
 
 	spinlock_irqsave_lock(&page_lock);
 
@@ -258,7 +265,7 @@ void page_fault_handler(struct state *s)
 		flags = PG_USER|PG_RW;
 		if (has_nx()) // set no execution flag to protect the heap
 			flags |= PG_XD;
-		ret = page_map(viraddr, phyaddr, 1, flags);
+		ret = __page_map(viraddr, phyaddr, 1, flags, 0);
 
 		if (BUILTIN_EXPECT(ret, 0)) {
 			kprintf("map_region: could not map %#lx to %#lx, task = %u\n", phyaddr, viraddr, task->id);
