@@ -88,8 +88,8 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	if (BUILTIN_EXPECT(!task->stack, 0))
 		return -EINVAL;
 
-	kprintf("Task %d use use the memory region [%p - %p] as stack\n", task->id, task->stack, (char*) task->stack + KERNEL_STACK_SIZE - 1);
-	kprintf("Task %d use use the memory region [%p - %p] as IST1\n", task->id, task->ist_addr, (char*) task->ist_addr + KERNEL_STACK_SIZE - 1);
+	kprintf("Task %d uses memory region [%p - %p] as stack\n", task->id, task->stack, (char*) task->stack + KERNEL_STACK_SIZE - 1);
+	kprintf("Task %d uses memory region [%p - %p] as IST1\n", task->id, task->ist_addr, (char*) task->ist_addr + KERNEL_STACK_SIZE - 1);
 
 	memset(task->stack, 0xCD, DEFAULT_STACK_SIZE);
 
