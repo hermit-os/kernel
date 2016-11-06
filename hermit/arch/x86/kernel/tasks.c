@@ -136,3 +136,18 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 
 	return 0;
 }
+
+void wait_for_task(void)
+{
+	if (!has_mwait()) {
+		PAUSE;
+	} else {
+		void* queue = get_readyqueue();
+
+		if (has_clflush())
+			clflush(queue);
+
+		monitor(queue, 0, 0);
+		mwait(0xF /* = c0 */, 1 /* break on interrupt flag */);
+	}
+}
