@@ -232,6 +232,12 @@ uint32_t get_highest_priority(void)
 }
 
 
+void* get_readyqueue(void)
+{
+	return &readyqueues[CORE_ID];
+}
+
+
 int multitasking_init(void)
 {
 	uint32_t core_id = CORE_ID;

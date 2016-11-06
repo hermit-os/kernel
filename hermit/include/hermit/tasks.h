@@ -187,6 +187,17 @@ int wakeup_task(tid_t);
  */
 int block_current_task(void);
 
+/** @brief Block task until a new arrived
+ *
+ */
+void wait_for_task(void);
+
+/** @brief Get readyqueue of the current core
+ *
+ * @return
+ *  - address of the readyqueue
+ */ 
+void* get_readyqueue(void);
 
 /** @brief Get a process control block
  *

@@ -50,7 +50,6 @@ extern spinlock_irqsave_t stdio_lock;
 extern int32_t isle;
 extern int32_t possible_isles;
 extern volatile int libc_sd;
-extern uint32_t idle_poll;
 
 tid_t sys_getpid(void)
 {
@@ -99,9 +98,7 @@ void NORETURN sys_exit(int arg)
 		reschedule();
 
 		lwip_close(s);
-		idle_poll = 0;
 	} else {
-		idle_poll = 0;
 		spinlock_irqsave_unlock(&lwip_lock);
 	}
 
