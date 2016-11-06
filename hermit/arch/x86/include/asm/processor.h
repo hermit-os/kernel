@@ -56,6 +56,7 @@ extern "C" {
 #define CPU_FEATURE_PGE			(1 << 13)
 #define CPU_FEATURE_PAT			(1 << 16)
 #define CPU_FEATURE_PSE36		(1 << 17)
+#define CPU_FEATURE_CLFLUSH		(1 << 19)
 #define CPU_FEATURE_MMX			(1 << 23)
 #define CPU_FEATURE_FXSR		(1 << 24)
 #define CPU_FEATURE_SSE			(1 << 25)
@@ -308,6 +309,10 @@ inline static uint32_t has_apic(void) {
 
 inline static uint32_t has_fxsr(void) {
 	return (cpu_info.feature1 & CPU_FEATURE_FXSR);
+}
+
+inline static uint32_t has_clflush(void) {
+	return (cpu_info.feature1 & CPU_FEATURE_CLFLUSH);
 }
 
 inline static uint32_t has_sse(void) {
@@ -679,6 +684,21 @@ static inline void tlb_flush_one_page(size_t addr, uint8_t with_ipi)
  */
 inline static void invalid_cache(void) {
 	asm volatile ("invd");
+}
+
+static inline void monitor(const void *eax, unsigned long ecx, unsigned long edx)
+{
+	asm volatile("monitor" :: "a" (eax), "c" (ecx), "d"(edx));
+}
+
+static inline void mwait(unsigned long eax, unsigned long ecx)
+{
+	asm volatile("mwait" :: "a" (eax), "c" (ecx));
+}
+
+static inline void clflush(volatile void *addr)
+{
+	asm volatile("clflush %0" : "+m" (*(volatile char *)addr));
 }
 
 #if 0
