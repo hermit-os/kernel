@@ -1082,7 +1082,7 @@ static void apic_shutdown(struct state * s)
 {
 	go_down = 1;
 
-	kputs("Receive shutdown interrupt\n");
+	//kputs("Receive shutdown interrupt\n");
 }
 
 static void apic_lint0(struct state * s)
