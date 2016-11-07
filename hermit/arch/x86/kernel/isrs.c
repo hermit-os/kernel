@@ -37,6 +37,7 @@
 #include <hermit/stdio.h>
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
+#include <hermit/logging.h>
 #include <asm/irqflags.h>
 #include <asm/isrs.h>
 #include <asm/irq.h>
@@ -209,13 +210,13 @@ static void fault_handler(struct state *s)
 {
 	
 	if (s->int_no < 32)
-		kputs(exception_messages[s->int_no]);
+		LOG_INFO("%s", exception_messages[s->int_no]);
 	else
-		kprintf("Unknown exception %d", s->int_no);
+		LOG_WARNING("Unknown exception %d", s->int_no);
 
-	kprintf(" Exception (%d) on core %d at %#x:%#lx, fs = %#lx, gs = %#lx, error code = 0x%#lx, task id = %u, rflags = %#x\n",
+	LOG_ERROR(" Exception (%d) on core %d at %#x:%#lx, fs = %#lx, gs = %#lx, error code = 0x%#lx, task id = %u, rflags = %#x\n",
 		s->int_no, CORE_ID, s->cs, s->rip, s->fs, s->gs, s->error, per_core(current_task)->id, s->rflags);
-	kprintf("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp, %#lx, rsp %#lx rdi %#lx, rsi %#lx, r8 %#lx, r9 %#lx, r10 %#lx, r11 %#lx, r12 %#lx, r13 %#lx, r14 %#lx, r15 %#lx\n",
+	LOG_ERROR("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp, %#lx, rsp %#lx rdi %#lx, rsi %#lx, r8 %#lx, r9 %#lx, r10 %#lx, r11 %#lx, r12 %#lx, r13 %#lx, r14 %#lx, r15 %#lx\n",
 		s->rax, s->rbx, s->rcx, s->rdx, s->rbp, s->rsp, s->rdi, s->rsi, s->r8, s->r9, s->r10, s->r11, s->r12, s->r13, s->r14, s->r15);
 
 	apic_eoi(s->int_no);

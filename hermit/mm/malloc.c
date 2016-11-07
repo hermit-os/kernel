@@ -33,6 +33,7 @@
 #include <hermit/malloc.h>
 #include <hermit/spinlock.h>
 #include <hermit/memory.h>
+#include <hermit/logging.h>
 #include <asm/page.h>
 
 /// A linked list for each binary size exponent
@@ -120,14 +121,14 @@ void buddy_dump(void)
 		int exp = i+BUDDY_MIN;
 
 		if (buddy_lists[i])
-			kprintf("buddy_list[%u] (exp=%u, size=%lu bytes):\n", i, exp, 1<<exp);
+			LOG_INFO("buddy_list[%u] (exp=%u, size=%lu bytes):\n", i, exp, 1<<exp);
 
 		for (buddy=buddy_lists[i]; buddy; buddy=buddy->next) {
-			kprintf("  %p -> %p \n", buddy, buddy->next);
+			LOG_INFO("  %p -> %p \n", buddy, buddy->next);
 			free += 1<<exp;
 		}
 	}
-	kprintf("free buddies: %lu bytes\n", free);
+	LOG_INFO("free buddies: %lu bytes\n", free);
 }
 
 void* palloc(size_t sz, uint32_t flags)
@@ -136,7 +137,7 @@ void* palloc(size_t sz, uint32_t flags)
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
-	//kprintf("palloc(%lu) (%lu pages)\n", sz, npages);
+	LOG_DEBUG("palloc(%lu) (%lu pages)\n", sz, npages);
 
 	// get free virtual address space
 	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
@@ -173,7 +174,7 @@ void* create_stack(size_t sz)
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
-	//kprintf("create_stack(0x%zx) (%lu pages)\n", DEFAULT_STACK_SIZE, npages);
+	LOG_DEBUG("create_stack(0x%zx) (%lu pages)\n", DEFAULT_STACK_SIZE, npages);
 
 	if (BUILTIN_EXPECT(!sz, 0))
 		return NULL;
@@ -211,7 +212,7 @@ int destroy_stack(void* viraddr, size_t sz)
 	size_t phyaddr;
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 
-	//kprintf("destroy_stack(0x%zx) (size 0x%zx)\n", viraddr, DEFAULT_STACK_SIZE);
+	LOG_DEBUG("destroy_stack(0x%zx) (size 0x%zx)\n", viraddr, DEFAULT_STACK_SIZE);
 
 	if (BUILTIN_EXPECT(!viraddr, 0))
 		return -EINVAL;
@@ -250,7 +251,7 @@ void* kmalloc(size_t sz)
 	buddy->prefix.magic = BUDDY_MAGIC;
 	buddy->prefix.exponent = exp;
 
-	//kprintf("kmalloc(%lu) = %p\n", sz, buddy+1);
+	LOG_DEBUG("kmalloc(%lu) = %p\n", sz, buddy+1);
 
 	// pointer arithmetic: we hide the prefix
 	return buddy+1;
@@ -261,7 +262,7 @@ void kfree(void *addr)
 	if (BUILTIN_EXPECT(!addr, 0))
 		return;
 
-	//kprintf("kfree(%lu)\n", addr);
+	LOG_DEBUG("kfree(%lu)\n", addr);
 
 	buddy_t* buddy = (buddy_t*) addr - 1; // get prefix
 

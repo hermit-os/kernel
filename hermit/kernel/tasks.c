@@ -36,6 +36,7 @@
 #include <hermit/errno.h>
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
+#include <hermit/logging.h>
 #include <asm/tss.h>
 #include <asm/processor.h>
 
@@ -214,7 +215,7 @@ void check_scheduling(void)
 		const uint64_t cpu_freq_hz = 1000000ULL * (uint64_t) get_cpu_frequency();
 
 		if (((diff_cycles * (uint64_t) TIMER_FREQ) / cpu_freq_hz) > 0) {
-			//kprintf("Time slice expired for task %d on core %d. New task has priority %u.\n", curr_task->id, CORE_ID, prio);
+			LOG_DEBUG("Time slice expired for task %d on core %d. New task has priority %u.\n", curr_task->id, CORE_ID, prio);
 			reschedule();
 		}
 #endif
@@ -243,7 +244,7 @@ int multitasking_init(void)
 	uint32_t core_id = CORE_ID;
 
 	if (BUILTIN_EXPECT(task_table[0].status != TASK_IDLE, 0)) {
-		kputs("Task 0 is not an idle task\n");
+		LOG_ERROR("Task 0 is not an idle task\n");
 		return -ENOMEM;
 	}
 
@@ -339,7 +340,7 @@ int init_tls(void)
 
 		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET);
 		if (BUILTIN_EXPECT(!tls_addr, 0)) {
-			kprintf("load_task: heap is missing!\n");
+			LOG_ERROR("load_task: heap is missing!\n");
 			return -ENOMEM;
 		}
 
@@ -347,7 +348,7 @@ int init_tls(void)
 
 		// set fs register to the TLS segment
 		set_tls((size_t) tls_addr + curr_task->tls_size + TLS_OFFSET);
-		kprintf("TLS of task %d on core %d starts at 0x%zx (TLS)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET);
+		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (TLS)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
@@ -367,7 +368,7 @@ void finish_task_switch(void)
 		if (old->status == TASK_FINISHED) {
 			/* cleanup task */
 			if (old->stack) {
-				kprintf("Release stack at 0x%zx\n", old->stack);
+				LOG_INFO("Release stack at 0x%zx\n", old->stack);
 				destroy_stack(old->stack, DEFAULT_STACK_SIZE);
 				old->stack = NULL;
 			}
@@ -405,7 +406,7 @@ void NORETURN do_exit(int arg)
 	void* tls_addr = NULL;
 	const uint32_t core_id = CORE_ID;
 
-	kprintf("Terminate task: %u, return value %d\n", curr_task->id, arg);
+	LOG_INFO("Terminate task: %u, return value %d\n", curr_task->id, arg);
 
 	uint8_t flags = irq_nested_disable();
 
@@ -417,7 +418,7 @@ void NORETURN do_exit(int arg)
 	// do we need to release the TLS?
 	tls_addr = (void*)get_tls();
 	if (tls_addr) {
-		kprintf("Release TLS at %p\n", (char*)tls_addr - curr_task->tls_size);
+		LOG_INFO("Release TLS at %p\n", (char*)tls_addr - curr_task->tls_size);
 		kfree((char*)tls_addr - curr_task->tls_size - TLS_OFFSET);
 	}
 
@@ -426,7 +427,7 @@ void NORETURN do_exit(int arg)
 
 	irq_nested_enable(flags);
 
-	kprintf("Kernel panic: scheduler found no valid task\n");
+	LOG_ERROR("Kernel panic: scheduler found no valid task\n");
 	while(1) {
 		HALT;
 	}
@@ -462,7 +463,7 @@ static uint32_t get_next_core_id(void)
 			break;
 
 	if (BUILTIN_EXPECT(!readyqueues[core_id].idle, 0)) {
-		kprintf("BUG: no core available!\n");
+		LOG_ERROR("BUG: no core available!\n");
 		return MAX_CORES;
 	}
 
@@ -555,7 +556,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	spinlock_irqsave_unlock(&table_lock);
 
 	if (!ret)
-		kprintf("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+		LOG_INFO("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
 
 out:
 	if (ret) {
@@ -631,7 +632,6 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 
 			if (id)
 				*id = i;
-			//kprintf("Create task %d with pml4 at 0x%llx\n", i, task_table[i].page_map);
 
 			ret = create_default_frame(task_table+i, ep, arg, core_id);
 			if (ret)
@@ -657,7 +657,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	}
 
 	if (!ret)
-                kprintf("start new task %d on core %d with stack address %p\n", i, core_id, stack);
+		LOG_INFO("start new task %d on core %d with stack address %p\n", i, core_id, stack);
 
 out:
 	spinlock_irqsave_unlock(&table_lock);
@@ -792,7 +792,7 @@ int set_timer(uint64_t deadline)
 
 		ret = 0;
 	} else {
-		kprintf("Task is already blocked. No timer will be set!\n");
+		LOG_INFO("Task is already blocked. No timer will be set!\n");
 	}
 
 	irq_nested_enable(flags);
@@ -871,11 +871,11 @@ size_t** scheduler(void)
 		curr_task = task_list_pop_front(&readyqueues[core_id].queue[prio-1]);
 
 		if(BUILTIN_EXPECT(curr_task == NULL, 0)) {
-			kprintf("Kernel panic: No task in readyqueue\n");
+			LOG_ERROR("Kernel panic: No task in readyqueue\n");
 			while(1);
 		}
 		if (BUILTIN_EXPECT(curr_task->status == TASK_INVALID, 0)) {
-			kprintf("Kernel panic: Got invalid task %d, orig task %d\n",
+			LOG_ERROR("Kernel panic: Got invalid task %d, orig task %d\n",
 			        curr_task->id, orig_task->id);
 			while(1);
 		}
@@ -897,7 +897,7 @@ get_task_out:
 	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
 	if (curr_task != orig_task) {
-		//kprintf("schedule on core %d from %u to %u with prio %u\n", core_id, orig_task->id, curr_task->id, (uint32_t)curr_task->prio);
+		LOG_DEBUG("schedule on core %d from %u to %u with prio %u\n", core_id, orig_task->id, curr_task->id, (uint32_t)curr_task->prio);
 
 		return (size_t**) &(orig_task->last_stack_pointer);
 	}

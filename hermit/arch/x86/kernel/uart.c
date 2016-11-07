@@ -31,6 +31,7 @@
 #include <hermit/string.h>
 #include <hermit/ctype.h>
 #include <hermit/vma.h>
+#include <hermit/logging.h>
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/page.h>
@@ -298,11 +299,11 @@ Lsuccess:
 	irq_install_handler(32+pci_info.irq, uart_handler);
 	if (pci_info.type[0]) {
 		mmio = 0;
-		kprintf("UART uses io address 0x%x\n", iobase);
+		LOG_INFO("UART uses io address 0x%x\n", iobase);
 	} else {
 		mmio = 1;
 		page_map(iobase & PAGE_MASK, iobase & PAGE_MASK, 1, PG_GLOBAL | PG_ACCESSED | PG_DIRTY | PG_RW | PG_PCD);
-		kprintf("UART uses mmio address 0x%x\n", iobase);
+		LOG_INFO("UART uses mmio address 0x%x\n", iobase);
 		vma_add(iobase, iobase + PAGE_SIZE, VMA_READ|VMA_WRITE);
 	}
 

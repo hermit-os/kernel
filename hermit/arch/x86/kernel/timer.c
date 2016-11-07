@@ -32,6 +32,7 @@
 #include <hermit/tasks.h>
 #include <hermit/errno.h>
 #include <hermit/spinlock.h>
+#include <hermit/logging.h>
 #include <asm/irq.h>
 #include <asm/irqflags.h>
 #include <asm/io.h>
@@ -95,7 +96,7 @@ static void timer_handler(struct state *s)
 	 * display a message on the screen
 	 */
 	if (timer_ticks % TIMER_FREQ == 0) {
-		kprintf("One second has passed %d\n", CORE_ID);
+		LOG_INFO("One second has passed %d\n", CORE_ID);
 	}
 #endif
 }

@@ -4,14 +4,10 @@
 #include <hermit/stdio.h>
 #include <hermit/tasks.h>
 #include <hermit/dequeue.h>
+#include <hermit/logging.h>
 #include <asm/apic.h>
 #include <asm/irq.h>
 #include <asm/atomic.h>
-
-#define ENABLE_DEBUG 0
-#if !ENABLE_DEBUG
-#define kprintf(...)
-#endif
 
 #define SIGNAL_IRQ (32 + 82)
 #define SIGNAL_BUFFER_SIZE (16)
@@ -22,26 +18,26 @@ static sig_t signal_buffer[MAX_CORES][SIGNAL_BUFFER_SIZE];
 
 static void _signal_irq_handler(struct state* s)
 {
-	kprintf("Enter _signal_irq_handler() on core %d\n", CORE_ID);
+	LOG_DEBUG("Enter _signal_irq_handler() on core %d\n", CORE_ID);
 
 	sig_t signal;
 	task_t* dest_task;
 	task_t* curr_task = per_core(current_task);
 
 	while(dequeue_pop(&signal_queue[CORE_ID], &signal) == 0) {
-		kprintf("  Deliver signal %d\n", signal.signum);
+		LOG_DEBUG("  Deliver signal %d\n", signal.signum);
 
 		if(get_task(signal.dest, &dest_task) == 0) {
-			kprintf("  Found valid task with ID %d\n", dest_task->id);
+			LOG_DEBUG("  Found valid task with ID %d\n", dest_task->id);
 
 			// only service signals for tasks on this core
 			if(dest_task->last_core != CORE_ID) {
-				kprintf("  Signal dispatched to wrong CPU! Dropping it ...\n");
+				LOG_DEBUG("  Signal dispatched to wrong CPU! Dropping it ...\n");
 				continue;
 			}
 
 			if(dest_task->signal_handler) {
-				kprintf("  Has signal handler (%p)\n", dest_task->signal_handler);
+				LOG_DEBUG("  Has signal handler (%p)\n", dest_task->signal_handler);
 
 				/* We will inject the signal handler into the control flow when
 				 * the task will continue it's exection the next time. There are
@@ -82,7 +78,7 @@ static void _signal_irq_handler(struct state* s)
 				struct state *task_state, *sighandler_state;
 
 				const int task_is_running = dest_task == curr_task;
-				kprintf("  Task is%s running\n", task_is_running ? "" : " not");
+				LOG_DEBUG("  Task is%s running\n", task_is_running ? "" : " not");
 
 				// location of task state depends of type of interruption
 				task_state = (!task_is_running) ?
@@ -93,7 +89,7 @@ static void _signal_irq_handler(struct state* s)
 				const int state_on_task_stack = task_state->int_no == 0;
 
 				if(state_on_task_stack) {
-					kprintf("  State is already on task stack\n");
+					LOG_DEBUG("  State is already on task stack\n");
 					// stack pointer was saved by switch_context() after saving
 					// task state to task stack
 					task_stackptr = dest_task->last_stack_pointer;
@@ -102,7 +98,7 @@ static void _signal_irq_handler(struct state* s)
 					// interrupt stack
 					task_stackptr = (size_t*) task_state->rsp;
 
-					kprintf("  Copy state to task stack\n");
+					LOG_DEBUG("  Copy state to task stack\n");
 					task_stackptr -= sizeof(struct state) / sizeof(size_t);
 					memcpy(task_stackptr, task_state, sizeof(struct state));
 				}
@@ -114,7 +110,7 @@ static void _signal_irq_handler(struct state* s)
 				size_t* sighandler_rsp = task_stackptr;
 
 				if(state_on_task_stack) {
-					kprintf("  Craft state for signal handler on task stack\n");
+					LOG_DEBUG("  Craft state for signal handler on task stack\n");
 
 					// we actually only care for ss, rflags, cs, fs and gs
 					task_stackptr -= sizeof(struct state) / sizeof(size_t);
@@ -125,7 +121,7 @@ static void _signal_irq_handler(struct state* s)
 					// restored first
 					dest_task->last_stack_pointer = (size_t*) sighandler_state;
 				} else {
-					kprintf("  Reuse state on IST for signal handler\n");
+					LOG_DEBUG("  Reuse state on IST for signal handler\n");
 					sighandler_state = task_state;
 				}
 
@@ -138,13 +134,13 @@ static void _signal_irq_handler(struct state* s)
 				sighandler_state->rdi = (uint64_t) signal.signum;
 				sighandler_state->rip = (uint64_t) dest_task->signal_handler;
 			} else {
-				kprintf("  No signal handler installed\n");
+				LOG_DEBUG("  No signal handler installed\n");
 			}
 		} else {
-			kprintf("  Task %d has already died\n", signal.dest);
+			LOG_DEBUG("  Task %d has already died\n", signal.dest);
 		}
 	}
-	kprintf("Leave _signal_irq_handler() on core %d\n", CORE_ID);
+	LOG_DEBUG("Leave _signal_irq_handler() on core %d\n", CORE_ID);
 }
 
 int hermit_signal(signal_handler_t handler)
@@ -159,17 +155,17 @@ int hermit_kill(tid_t dest, int signum)
 {
 	task_t* task;
 	if(BUILTIN_EXPECT(get_task(dest, &task), 0)) {
-		kprintf("Trying to send signal %d to invalid task %d\n", signum, dest);
+		LOG_ERROR("Trying to send signal %d to invalid task %d\n", signum, dest);
 		return -ENOENT;
 	}
 
 	const tid_t dest_core = task->last_core;
 
-	kprintf("Send signal %d from task %d (core %d) to task %d (core %d)\n",
+	LOG_DEBUG("Send signal %d from task %d (core %d) to task %d (core %d)\n",
 	        signum, per_core(current_task)->id, CORE_ID, dest, dest_core);
 
 	if(task == per_core(current_task)) {
-		kprintf("  Deliver signal to itself, call handler immediately\n");
+		LOG_DEBUG("  Deliver signal to itself, call handler immediately\n");
 
 		if(task->signal_handler) {
 			task->signal_handler(signum);
@@ -179,12 +175,12 @@ int hermit_kill(tid_t dest, int signum)
 
 	sig_t signal = {dest, signum};
 	if(dequeue_push(&signal_queue[dest_core], &signal)) {
-		kprintf("  Cannot push signal to task's signal queue, dropping it\n");
+		LOG_ERROR("  Cannot push signal to task's signal queue, dropping it\n");
 		return -ENOMEM;
 	}
 
 	// send IPI to destination core
-	kprintf("  Send signal IPI (%d) to core %d\n", SIGNAL_IRQ, dest_core);
+	LOG_DEBUG("  Send signal IPI (%d) to core %d\n", SIGNAL_IRQ, dest_core);
 	apic_send_ipi(dest_core, SIGNAL_IRQ);
 
 	return 0;

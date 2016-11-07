@@ -31,6 +31,7 @@
  */
 
 #include <hermit/stdio.h>
+#include <hermit/logging.h>
 #include "util.h"
 
 inline int isprint(unsigned char e)
@@ -47,19 +48,19 @@ void hex_dump(unsigned n, const unsigned char *buf)
 
 	while (n-- > 0)
 	{
-		kprintf("%02X ", *buf++);
+		LOG_SAME_LINE(LOG_LEVEL_INFO, "%02X ", *buf++);
 		on_this_line += 1;
 
 		if (on_this_line == 16 || n == 0)
 		{
 			int i;
 
-			kputs(" ");
+			LOG_SAME_LINE(LOG_LEVEL_INFO, " ");
 			for (i = on_this_line; i < 16; i++)
-				kputs(" ");
+				LOG_SAME_LINE(LOG_LEVEL_INFO, " ");
 			for (i = on_this_line; i > 0; i--)
-				kputchar(isprint(buf[-i]) ? buf[-i] : '.');
-			kputs("\n");
+				LOG_SAME_LINE(LOG_LEVEL_INFO, "%c", isprint(buf[-i]) ? buf[-i] : '.');
+			LOG_SAME_LINE(LOG_LEVEL_INFO, "\n");
 			on_this_line = 0;
 		}
 	}

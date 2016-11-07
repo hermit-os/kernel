@@ -31,6 +31,7 @@
 #include <hermit/string.h>
 #include <hermit/processor.h>
 #include <hermit/mailbox.h>
+#include <hermit/logging.h>
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -422,7 +423,7 @@ err_t e1000if_init(struct netif* netif)
 	tmp32 &= ~(E1000_CTRL_VME|E1000_CTRL_FD|E1000_CTRL_ILOS|E1000_CTRL_PHY_RST|E1000_CTRL_LRST|E1000_CTRL_FRCSPD);
 	e1000_write(e1000if->bar0, E1000_CTRL, tmp32 | E1000_CTRL_SLU | E1000_CTRL_ASDE);
 	e1000_flush(e1000if->bar0);
-	kprintf("e1000if_init: Device Control Register 0x%x\n", e1000_read(e1000if->bar0, E1000_CTRL));
+	LOG_INFO("e1000if_init: Device Control Register 0x%x\n", e1000_read(e1000if->bar0, E1000_CTRL));
 
 	/* make sure transmits are disabled while setting up the descriptors */
 	tmp32 = e1000_read(e1000if->bar0, E1000_TCTL);

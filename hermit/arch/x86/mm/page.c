@@ -40,6 +40,7 @@
 #include <hermit/string.h>
 #include <hermit/spinlock.h>
 #include <hermit/tasks.h>
+#include <hermit/logging.h>
 
 #include <asm/multiboot.h>
 #include <asm/irq.h>
@@ -258,7 +259,7 @@ void page_fault_handler(struct state *s)
 
 		size_t phyaddr = expect_zeroed_pages ? get_zeroed_page() : get_page();
 		if (BUILTIN_EXPECT(!phyaddr, 0)) {
-			kprintf("out of memory: task = %u\n", task->id);
+			LOG_ERROR("out of memory: task = %u\n", task->id);
 			goto default_handler;
 		}
 
@@ -268,7 +269,7 @@ void page_fault_handler(struct state *s)
 		ret = __page_map(viraddr, phyaddr, 1, flags, 0);
 
 		if (BUILTIN_EXPECT(ret, 0)) {
-			kprintf("map_region: could not map %#lx to %#lx, task = %u\n", phyaddr, viraddr, task->id);
+			LOG_ERROR("map_region: could not map %#lx to %#lx, task = %u\n", phyaddr, viraddr, task->id);
 			put_page(phyaddr);
 
 			goto default_handler;
@@ -282,17 +283,17 @@ void page_fault_handler(struct state *s)
 default_handler:
 	spinlock_irqsave_unlock(&page_lock);
 
-	kprintf("Page Fault Exception (%d) on core %d at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
+	LOG_ERROR("Page Fault Exception (%d) on core %d at cs:ip = %#x:%#lx, fs = %#lx, gs = %#lx, rflags 0x%lx, task = %u, addr = %#lx, error = %#x [ %s %s %s %s %s ]\n",
 		s->int_no, CORE_ID, s->cs, s->rip, s->fs, s->gs, s->rflags, task->id, viraddr, s->error,
 		(s->error & 0x4) ? "user" : "supervisor",
 		(s->error & 0x10) ? "instruction" : "data",
 		(s->error & 0x2) ? "write" : ((s->error & 0x10) ? "fetch" : "read"),
 		(s->error & 0x1) ? "protection" : "not present",
 		(s->error & 0x8) ? "reserved bit" : "\b");
-	kprintf("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp, %#lx, rsp %#lx rdi %#lx, rsi %#lx, r8 %#lx, r9 %#lx, r10 %#lx, r11 %#lx, r12 %#lx, r13 %#lx, r14 %#lx, r15 %#lx\n",
+	LOG_ERROR("rax %#lx, rbx %#lx, rcx %#lx, rdx %#lx, rbp, %#lx, rsp %#lx rdi %#lx, rsi %#lx, r8 %#lx, r9 %#lx, r10 %#lx, r11 %#lx, r12 %#lx, r13 %#lx, r14 %#lx, r15 %#lx\n",
 		s->rax, s->rbx, s->rcx, s->rdx, s->rbp, s->rsp, s->rdi, s->rsi, s->r8, s->r9, s->r10, s->r11, s->r12, s->r13, s->r14, s->r15);
 	if (task->heap)
-		kprintf("Heap 0x%llx - 0x%llx\n", task->heap->start, task->heap->end);
+		LOG_ERROR("Heap 0x%llx - 0x%llx\n", task->heap->start, task->heap->end);
 
 	apic_eoi(s->int_no);
 	//do_abort();
@@ -308,11 +309,11 @@ int page_init(void)
 	// => Go expect zeroed pages => set zeroed_pages to true
 	if (runtime_osinit) {
 		expect_zeroed_pages = 1;
-		kputs("Detect Go runtime! Consequently, HermitCore zeroed heap.\n");
+		LOG_INFO("Detect Go runtime! Consequently, HermitCore zeroed heap.\n");
 	}
 
 	if (mb_info && ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK))) {
-		kprintf("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
+		LOG_INFO("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
 		page_map((size_t) mb_info->cmdline & PAGE_MASK, mb_info->cmdline & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
 	}
 

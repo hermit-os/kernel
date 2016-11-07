@@ -35,6 +35,7 @@
 #include <hermit/spinlock.h>
 #include <hermit/vma.h>
 #include <hermit/tasks.h>
+#include <hermit/logging.h>
 #include <asm/irq.h>
 #include <asm/idt.h>
 #include <asm/irqflags.h>
@@ -201,7 +202,7 @@ static inline void x2apic_disable(void)
 
 	msr = rdmsr(MSR_APIC_BASE);
 	if (!(msr & MSR_X2APIC_ENABLE)) {
-		//kprintf("X2APIC already disabled!\n");
+		LOG_WARNING("X2APIC already disabled!\n");
 		return;
 	}
 
@@ -209,7 +210,7 @@ static inline void x2apic_disable(void)
 	wrmsr(MSR_APIC_BASE, msr & ~(MSR_X2APIC_ENABLE | MSR_XAPIC_ENABLE));
 	wrmsr(MSR_APIC_BASE, msr & ~MSR_X2APIC_ENABLE);
 
-	//kprintf("Disable X2APIC support\n");
+	LOG_DEBUG("Disable X2APIC support\n");
 	lapic_read = lapic_read_default;
 	lapic_write = lapic_write_default;
 }
@@ -228,13 +229,13 @@ static inline void x2apic_enable(void)
 
 	msr = rdmsr(MSR_APIC_BASE);
 	if (msr & MSR_X2APIC_ENABLE) {
-		//kprintf("X2APIC already enabled!\n");
+		LOG_WARNING("X2APIC already enabled!\n");
                 return;
 	}
 
 	wrmsr(MSR_APIC_BASE, msr | MSR_X2APIC_ENABLE);
 
-	//kprintf("Enable X2APIC support!\n");
+	LOG_DEBUG("Enable X2APIC support!\n");
 }
 
 /*
@@ -327,8 +328,7 @@ int apic_timer_is_running(void)
 int apic_timer_deadline(uint32_t ticks)
 {
 	if (BUILTIN_EXPECT(apic_is_enabled() && icr, 1)) {
-		//kprintf("timer oneshot %ld at core %d\n", ticks, CORE_ID);
-
+		LOG_DEBUG("timer oneshot %ld at core %d\n", ticks, CORE_ID);
 		lapic_timer_oneshot();
 		lapic_timer_set_counter(ticks * icr);
 
@@ -420,7 +420,7 @@ static size_t search_ebda(void) {
 		return 0;
 
 	uint16_t addr = *((uint16_t*) (vptr+0x40E));
-	kprintf("Found EBDA at 0x%x!\n", (uint32_t)addr);
+	LOG_INFO("Found EBDA at 0x%x!\n", (uint32_t)addr);
  
 	// unmap page via mapping a zero page
 	page_unmap(vptr, 1);
@@ -467,30 +467,31 @@ static int lapic_reset(void)
  */
 static int wakeup_ap(uint32_t start_eip, uint32_t id)
 {
-        static char* reset_vector = 0;
-        uint32_t i;
+	static char* reset_vector = 0;
+	uint32_t i;
 
-        kprintf("Wakeup application processor %d via IPI\n", id);
+	LOG_INFO("Wakeup application processor %d via IPI\n", id);
 
-        // set shutdown code to 0x0A
-        cmos_write(0x0F, 0x0A);
+	// set shutdown code to 0x0A
+	cmos_write(0x0F, 0x0A);
 
 	if (!reset_vector) {
 		reset_vector = (char*) vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE);
-                page_map((size_t)reset_vector, 0x00, 1, PG_RW|PG_GLOBAL|PG_PCD);
-                reset_vector += 0x467; // add base address of the reset vector
-                kprintf("Map reset vector to %p\n", reset_vector);
-        }
-        *((volatile unsigned short *) (reset_vector+2)) = start_eip >> 4;
-        *((volatile unsigned short *) reset_vector) =  0x00;
+		page_map((size_t)reset_vector, 0x00, 1, PG_RW|PG_GLOBAL|PG_PCD);
+		reset_vector += 0x467; // add base address of the reset vector
+		LOG_INFO("Map reset vector to %p\n", reset_vector);
+	}
 
-        if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
-                kputs("ERROR: previous send not complete");
-                return -EIO;
-        }
+	*((volatile unsigned short *) (reset_vector+2)) = start_eip >> 4;
+	*((volatile unsigned short *) reset_vector) = 0x00;
 
-	//kputs("Send IPI\n");
+	if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
+		LOG_ERROR("Previous send not complete\n");
+		return -EIO;
+	}
+
 	// send out INIT to AP
+	LOG_DEBUG("Send IPI\n");
 	if (has_x2apic()) {
 		uint64_t dest = ((uint64_t)id << 32);
 
@@ -518,7 +519,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		else
 			udelay(10);
 
-		//kputs("IPI done...\n");
+		LOG_DEBUG("IPI done...\n");
 
 		return 0;
 	} else {
@@ -549,7 +550,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		else
 			udelay(10);
 
-		//kputs("IPI done...\n");
+		LOG_DEBUG("IPI done...\n");
 
 		i = 0;
 	        while((lapic_read(APIC_ICR1) & APIC_ICR_BUSY) && (i < 1000))
@@ -567,7 +568,7 @@ int smp_init(void)
 	if (ncores <= 1)
 		return -EINVAL;
 
-	kprintf("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+	LOG_INFO("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
 
 	/*
 	 * dirty hack: Reserve memory for the bootup code.
@@ -589,7 +590,7 @@ int smp_init(void)
 		}
 	}
 
-	//kprintf("size of the boot_code %d\n", sizeof(boot_code));
+	LOG_DEBUG("size of the boot_code %d\n", sizeof(boot_code));
 
 	for(i=1; (i<ncores) && (i<MAX_CORES); i++)
 	{
@@ -597,18 +598,18 @@ int smp_init(void)
 
 		err = wakeup_ap(SMP_SETUP_ADDR, i);
 		if (err)
-			kprintf("Unable to wakeup application processor %d: %d\n", i, err);
+			LOG_WARNING("Unable to wakeup application processor %d: %d\n", i, err);
 
 		for(j=0; (i >= atomic_int32_read(&cpu_online)) && (j < 1000); j++)
 			udelay(1000);
 
 		if (i >= atomic_int32_read(&cpu_online)) {
-			kprintf("Unable to wakeup processor %d, cpu_online %d\n", i, atomic_int32_read(&cpu_online));
+			LOG_ERROR("Unable to wakeup processor %d, cpu_online %d\n", i, atomic_int32_read(&cpu_online));
 			return -EIO;
 		}
 	}
 
-	kprintf("%d cores online\n", atomic_int32_read(&cpu_online));
+	LOG_INFO("%d cores online\n", atomic_int32_read(&cpu_online));
 
 	return 0;
 }
@@ -658,7 +659,7 @@ int apic_calibration(void)
 
 	lapic_reset();
 
-	kprintf("APIC calibration determined an ICR of 0x%x\n", icr);
+	LOG_INFO("APIC calibration determined an ICR of 0x%x\n", icr);
 
 	apic_initialized = 1;
 	atomic_int32_inc(&cpu_online);
@@ -716,7 +717,7 @@ static int apic_probe(void)
 
 found_mp:
 	if (!apic_mp) {
-		kprintf("Didn't found MP config table\n");
+		LOG_ERROR("Didn't find MP config table\n");
 		goto no_mp;
 	}
 
@@ -725,19 +726,19 @@ found_mp:
 		isle = 0;
 	}
 
-	kprintf("Found MP config table at 0x%x\n", apic_mp->mp_config);
-	kprintf("System uses Multiprocessing Specification 1.%u\n", apic_mp->version);
-	kprintf("MP features 1: %u\n", apic_mp->features[0]);
+	LOG_INFO("Found MP config table at 0x%x\n", apic_mp->mp_config);
+	LOG_INFO("System uses Multiprocessing Specification 1.%u\n", apic_mp->version);
+	LOG_INFO("MP features 1: %u\n", apic_mp->features[0]);
 
 	if (apic_mp->features[0]) {
-		kputs("Currently, HermitCore supports only multiprocessing via the MP config tables!\n");
+		LOG_ERROR("Currently, HermitCore supports only multiprocessing via the MP config tables!\n");
 		goto no_mp;
 	}
 
 	if (apic_mp->features[1] & 0x80)
-		kputs("PIC mode implemented\n");
+		LOG_INFO("PIC mode implemented\n");
 	else
-		kputs("Virtual-Wire mode implemented\n");
+		LOG_INFO("Virtual-Wire mode implemented\n");
 
 	apic_config = (apic_config_table_t*) ((size_t) apic_mp->mp_config);
 	if (((size_t) apic_config & PAGE_MASK) != ((size_t) apic_mp & PAGE_MASK)) {
@@ -746,7 +747,7 @@ found_mp:
 	}
 
 	if (!apic_config || strncmp((void*) &apic_config->signature, "PCMP", 4) !=0) {
-		kputs("Invalid MP config table\n");
+		LOG_ERROR("Invalid MP config table\n");
 		goto no_mp;
 	}
 
@@ -803,29 +804,29 @@ found_mp:
 		} else if (*((uint8_t*) addr) == 2) { // IO_APIC
 			apic_io_entry_t* io_entry = (apic_io_entry_t*) addr;
 			ioapic = (ioapic_t*) ((size_t) io_entry->addr);
-			kprintf("Found IOAPIC at 0x%x\n", ioapic);
+			LOG_INFO("Found IOAPIC at 0x%x\n", ioapic);
 			if (is_single_kernel() && ioapic) {
 				page_map(IOAPIC_ADDR, (size_t)ioapic & PAGE_MASK, 1, flags);
 				vma_add(IOAPIC_ADDR, IOAPIC_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
 				ioapic = (ioapic_t*) IOAPIC_ADDR;
-				kprintf("Map IOAPIC to 0x%x\n", ioapic);
-				kprintf("IOAPIC version: 0x%x\n", ioapic_version());
-				kprintf("Max Redirection Entry: %u\n", ioapic_max_redirection_entry());
+				LOG_INFO("Map IOAPIC to 0x%x\n", ioapic);
+				LOG_INFO("IOAPIC version: 0x%x\n", ioapic_version());
+				LOG_INFO("Max Redirection Entry: %u\n", ioapic_max_redirection_entry());
 			}
 			addr += 8;
 		} else if (*((uint8_t*) addr) == 3) { // IO_INT
 			apic_ioirq_entry_t* extint = (apic_ioirq_entry_t*) addr;
 			if (extint->src_bus == isa_bus) {
 				irq_redirect[extint->src_irq] = extint->dest_intin;
-				kprintf("Redirect irq %u -> %u\n", extint->src_irq,  extint->dest_intin);
+				LOG_INFO("Redirect irq %u -> %u\n", extint->src_irq,  extint->dest_intin);
 			}
 			addr += 8;
 		} else addr += 8;
 	}
-	kprintf("Found %u cores\n", count);
+	LOG_INFO("Found %u cores\n", count);
 
 	if (count > MAX_CORES) {
-		kputs("Found too many cores! Increase the macro MAX_CORES!\n");
+		LOG_ERROR("Found too many cores! Increase the macro MAX_CORES!\n");
 		goto no_mp;
 	}
 	ncores = count;
@@ -840,33 +841,33 @@ check_lapic:
 
 	if (!lapic)
 		goto out;
-	kprintf("Found APIC at 0x%x\n", lapic);
+	LOG_INFO("Found APIC at 0x%x\n", lapic);
 
 	if (has_x2apic()) {
-		kputs("Found and enable X2APIC\n");
+		LOG_INFO("Found and enable X2APIC\n");
 		x2apic_enable();
 	} else {
 		if (page_map(LAPIC_ADDR, (size_t)lapic & PAGE_MASK, 1, flags)) {
-			kprintf("Failed to map APIC to 0x%x\n", LAPIC_ADDR);
+			LOG_ERROR("Failed to map APIC to 0x%x\n", LAPIC_ADDR);
 			goto out;
 		} else {
-			kprintf("Mapped APIC 0x%x to 0x%x\n", lapic, LAPIC_ADDR);
+			LOG_INFO("Mapped APIC 0x%x to 0x%x\n", lapic, LAPIC_ADDR);
 			vma_add(LAPIC_ADDR, LAPIC_ADDR + PAGE_SIZE, VMA_READ | VMA_WRITE);
 			lapic = LAPIC_ADDR;
 		}
 	}
 
-	kprintf("Maximum LVT Entry: 0x%x\n", apic_lvt_entries());
-	kprintf("APIC Version: 0x%x\n", apic_version());
-	kprintf("EOI-broadcast: %s\n", (apic_broadcast()) ? "available" : "unavailable");
+	LOG_INFO("Maximum LVT Entry: 0x%x\n", apic_lvt_entries());
+	LOG_INFO("APIC Version: 0x%x\n", apic_version());
+	LOG_INFO("EOI-broadcast: %s\n", (apic_broadcast()) ? "available" : "unavailable");
 
 	if (!((apic_version() >> 4))) {
-		kprintf("Currently, HermitCore didn't supports extern APICs!\n");
+		LOG_ERROR("Currently, HermitCore doesn't support external APICs!\n");
 		goto out;
 	}
 
 	if (apic_lvt_entries() < 3) {
-		kprintf("LVT is too small\n");
+		LOG_ERROR("LVT is too small\n");
 		goto out;
 	}
 
@@ -902,7 +903,7 @@ int smp_start(void)
 	// reset APIC and set id
 	lapic_reset();
 
-	kprintf("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
+	LOG_INFO("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
 	gdt_flush();
@@ -919,7 +920,7 @@ int smp_start(void)
 	// enable additional cpu features
 	cpu_detection();
 
-	//kprintf("CR0 of core %u: 0x%x\n", atomic_int32_read(&current_boot_id), read_cr0());
+	LOG_DEBUG("CR0 of core %u: 0x%x\n", atomic_int32_read(&current_boot_id), read_cr0());
 	online[atomic_int32_read(&current_boot_id)] = 1;
 
 	// set task switched flag for the first FPU access
@@ -953,13 +954,13 @@ int ipi_tlb_flush(void)
 			if (!online[i])
 				continue;
 
-			//kprintf("Send IPI to %zd\n", i);
+			LOG_DEBUG("Send IPI to %zd\n", i);
 			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|112);
 		}
 		irq_nested_enable(flags);
 	} else {
 		if (lapic_read(APIC_ICR1) & APIC_ICR_BUSY) {
-			kputs("ERROR: previous send not complete");
+			LOG_ERROR("Previous send not complete");
 			return -EIO;
 		}
 
@@ -971,7 +972,7 @@ int ipi_tlb_flush(void)
 			if (!online[i])
 				continue;
 
-			//kprintf("Send IPI to %zd\n", i);
+			LOG_DEBUG("Send IPI to %zd\n", i);
 			set_ipi_dest(i);
 			lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|112);
 
@@ -987,7 +988,7 @@ int ipi_tlb_flush(void)
 
 static void apic_tlb_handler(struct state *s)
 {
-	//kprintf("Receive IPI at core %d to flush the TLB\n", CORE_ID);
+	LOG_DEBUG("Receive IPI at core %d to flush the TLB\n", CORE_ID);
 	write_cr3(read_cr3());
 }
 #endif
@@ -999,7 +1000,7 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 
 	if (has_x2apic()) {
 		flags = irq_nested_disable();
-		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
+		LOG_DEBUG("send IPI %d to %lld\n", (int)irq, dest);
 		wrmsr(0x830, (dest << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|irq);
 		irq_nested_enable(flags);
 	} else {
@@ -1009,7 +1010,7 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 			PAUSE;
 		}
 
-		//kprintf("send IPI %d to %lld\n", (int)irq, dest);
+		LOG_DEBUG("send IPI %d to %lld\n", (int)irq, dest);
 		set_ipi_dest((uint32_t)dest);
 		lapic_write(APIC_ICR1, APIC_INT_ASSERT|APIC_DM_FIXED|irq);
 
@@ -1027,7 +1028,7 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 
 static void apic_err_handler(struct state *s)
 {
-	kprintf("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
+	LOG_ERROR("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
 }
 
 void shutdown_system(void)
@@ -1037,7 +1038,7 @@ void shutdown_system(void)
 	irq_disable();
 
 	if (if_bootprocessor) {
-		kprintf("Try to shutdown HermitCore\n");
+		LOG_INFO("Try to shutdown HermitCore\n");
 
 		//vma_dump();
 		dump_pstate();
@@ -1047,13 +1048,13 @@ void shutdown_system(void)
 
 		network_shutdown();
 
-		kprintf("Disable APIC timer\n");
+		LOG_INFO("Disable APIC timer\n");
 	}
 
 	apic_disable_timer();
 
 	if (if_bootprocessor)
-		kprintf("Disable APIC\n");
+		LOG_INFO("Disable APIC\n");
 
 	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
@@ -1065,7 +1066,7 @@ void shutdown_system(void)
 
 	if (if_bootprocessor) {
 		print_irq_stats();
-		kprintf("System goes down...\n");
+		LOG_INFO("System goes down...\n");
 	}
 
 	flush_cache();
@@ -1082,13 +1083,13 @@ static void apic_shutdown(struct state * s)
 {
 	go_down = 1;
 
-	//kputs("Receive shutdown interrupt\n");
+	LOG_DEBUG("Receive shutdown interrupt\n");
 }
 
 static void apic_lint0(struct state * s)
 {
 	// Currently nothing to do
-	kputs("Receive LINT0 interrupt\n");
+	LOG_INFO("Receive LINT0 interrupt\n");
 }
 
 int apic_init(void)
@@ -1107,9 +1108,9 @@ int apic_init(void)
 	irq_install_handler(81+32, apic_shutdown);
 	irq_install_handler(124, apic_lint0);
 	if (apic_processors[boot_processor])
-		kprintf("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
+		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else
-		kprintf("Boot processor %u\n", boot_processor);
+		LOG_INFO("Boot processor %u\n", boot_processor);
 	online[boot_processor] = 1;
 
 	return 0;
@@ -1121,7 +1122,7 @@ int ioapic_inton(uint8_t irq, uint8_t apicid)
 	uint32_t off;
 
 	if (BUILTIN_EXPECT(irq > 24, 0)){
-		kprintf("IOAPIC: trying to turn on irq %i which is too high\n", irq);
+		LOG_ERROR("IOAPIC: trying to turn on irq %i which is too high\n", irq);
 		return -EINVAL;
 	}
 
@@ -1159,7 +1160,7 @@ int ioapic_intoff(uint8_t irq, uint8_t apicid)
 	uint32_t off;
 
 	if (BUILTIN_EXPECT(irq > 24, 0)){
-		kprintf("IOAPIC: trying to turn on irq %i which is too high\n", irq);
+		LOG_ERROR("IOAPIC: trying to turn off irq %i which is too high\n", irq);
 		return -EINVAL;
 	}
 
