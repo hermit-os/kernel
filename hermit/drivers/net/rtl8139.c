@@ -32,6 +32,7 @@
 #include <hermit/string.h>
 #include <hermit/processor.h>
 #include <hermit/mailbox.h>
+#include <hermit/logging.h>
 #include <asm/page.h>
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -93,22 +94,22 @@ static err_t rtl8139if_output(struct netif* netif, struct pbuf* p)
 	struct pbuf *q;
 
 	if (BUILTIN_EXPECT((rtl8139if->tx_queue - rtl8139if->tx_complete) > 3, 0)) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_output: too many packets at once\n"));
+		LOG_ERROR("rtl8139if_output: too many packets at once\n");
 		return ERR_IF;
 	}
 
 	if (BUILTIN_EXPECT(p->tot_len > 1792, 0)) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_output: packet is longer than 1792 bytes\n"));
+		LOG_ERROR("rtl8139if_output: packet is longer than 1792 bytes\n");
 		return ERR_IF;
 	}
 
 	if (rtl8139if->tx_inuse[transmitid] == 1) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_output: %i already inuse\n", transmitid));
+		LOG_ERROR("rtl8139if_output: %i already inuse\n", transmitid);
 		return ERR_IF;
 	}
 
 	if (inportb(rtl8139if->iobase + MSR) & MSR_LINKB) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_output: link failure\n"));
+		LOG_ERROR("rtl8139if_output: link failure\n");
 		return ERR_CONN;
 	}
 
@@ -181,7 +182,7 @@ static void rtl_rx_inthandler(struct netif* netif)
 				// forward packet to LwIP
 				netif->input(p, netif);
 			} else {
-				LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_rx_inthandler: not enough memory!\n"));
+				LOG_ERROR("rtl8139if_rx_inthandler: not enough memory!\n");
 				rtl8139if->rx_pos += (rtl8139if->rx_pos + length) % RX_BUF_LEN;
 				LINK_STATS_INC(link.memerr);
 				LINK_STATS_INC(link.drop);
@@ -191,7 +192,7 @@ static void rtl_rx_inthandler(struct netif* netif)
 			rtl8139if->rx_pos = ((rtl8139if->rx_pos + 4 + 3) & ~0x3) % RX_BUF_LEN;
 			outportw(rtl8139if->iobase + CAPR, rtl8139if->rx_pos - 0x10);
 		} else {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_rx_inthandler: invalid header 0x%x, rx_pos %d\n", (uint32_t) header, rtl8139if->rx_pos));
+			LOG_ERROR("rtl8139if_rx_inthandler: invalid header 0x%x, rx_pos %d\n", (uint32_t) header, rtl8139if->rx_pos);
 			LINK_STATS_INC(link.drop);
 			break;
 		}
@@ -220,12 +221,12 @@ static void rtl_tx_inthandler(struct netif* netif)
 			return;
 
 		if (txstatus & (TSD_TABT | TSD_OWC)) {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139_tx_inthandler: major error\n"));
+			LOG_ERROR("rtl8139_tx_inthandler: major error\n");
 			continue;
 		}
 
 		if (txstatus & TSD_TUN) {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139_tx_inthandler: transmit underrun\n"));
+			LOG_ERROR("rtl8139_tx_inthandler: transmit underrun\n");
 		}
 
 		if (txstatus & TSD_TOK) {
@@ -262,7 +263,7 @@ static void rtl8139if_handler(struct state* s)
 			if (tcpip_callback_with_block(rtl8139if_poll, NULL, 0) == ERR_OK) {
 				rtl8139if->polling = 1;
 			} else {
-				LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_handler: unable to send a poll request to the tcpip thread\n"));
+				LOG_ERROR("rtl8139if_handler: unable to send a poll request to the tcpip thread\n");
 			}
 #endif
  		}
@@ -271,15 +272,15 @@ static void rtl8139if_handler(struct state* s)
 			rtl_tx_inthandler(mynetif);
 
 		if (isr_contents & ISR_RER) {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_handler: RX error detected!\n"));
+			LOG_ERROR("rtl8139if_handler: RX error detected!\n");
 		}
 
 		if (isr_contents & ISR_TER) {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_handler: TX error detected!\n"));
+			LOG_ERROR("rtl8139if_handler: TX error detected!\n");
 		}
 
 		if (isr_contents & ISR_RXOVW) {
-			LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_handler: RX overflow detected!\n"));
+			LOG_ERROR("rtl8139if_handler: RX overflow detected!\n");
 		}
 
 		outportw(rtl8139if->iobase + ISR, isr_contents & (ISR_RXOVW|ISR_TER|ISR_RER|ISR_TOK|ISR_ROK));
@@ -312,11 +313,11 @@ err_t rtl8139if_init(struct netif* netif)
 	if (!board_tbl[tmp8].vendor_str)
 		return ERR_ARG;
 
-	//kprintf("Found %s %s\n", board_tbl[tmp8].vendor_str, board_tbl[tmp8].device_str);
+	LOG_DEBUG("Found %s %s\n", board_tbl[tmp8].vendor_str, board_tbl[tmp8].device_str);
 
 	rtl8139if = kmalloc(sizeof(rtl1839if_t));
 	if (!rtl8139if) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: out of memory\n"));
+		LOG_ERROR("rtl8139if_init: out of memory\n");
 		return ERR_MEM;
 	}
 	memset(rtl8139if, 0x00, sizeof(rtl1839if_t));
@@ -327,7 +328,7 @@ err_t rtl8139if_init(struct netif* netif)
 	/* allocate the receive buffer */
 	rtl8139if->rx_buffer = page_alloc(RX_BUF_LEN + 16 /* header size */, VMA_READ|VMA_WRITE);
 	if (!(rtl8139if->rx_buffer)) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: out of memory\n"));
+		LOG_ERROR("rtl8139if_init: out of memory\n");
 		kfree(rtl8139if);
 		return ERR_MEM;
 	}
@@ -336,7 +337,7 @@ err_t rtl8139if_init(struct netif* netif)
 	/* allocate the send buffers */
 	rtl8139if->tx_buffer[0] = page_alloc(4*TX_BUF_LEN, VMA_READ|VMA_WRITE);
 	if (!(rtl8139if->tx_buffer[0])) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: out of memory\n"));
+		LOG_ERROR("rtl8139if_init: out of memory\n");
 		page_free(rtl8139if->rx_buffer, RX_BUF_LEN + 16);
 		kfree(rtl8139if);
 		return ERR_MEM;
@@ -351,7 +352,7 @@ err_t rtl8139if_init(struct netif* netif)
 
 	tmp32 = inportl(rtl8139if->iobase + TCR);
 	if (tmp32 == 0xFFFFFF) {
-		LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: ERROR\n"));
+		LOG_ERROR("rtl8139if_init: ERROR\n");
 		page_free(rtl8139if->rx_buffer, RX_BUF_LEN + 16);
 		page_free(rtl8139if->tx_buffer[0], 4*TX_BUF_LEN);
 		kfree(rtl8139if);
@@ -369,8 +370,8 @@ err_t rtl8139if_init(struct netif* netif)
 	/* hardware address length */
 	netif->hwaddr_len = ETHARP_HWADDR_LEN;
 
-	LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: Found %s at iobase 0x%x (irq %u)\n", board_tbl[tmp8].device_str, 
-		rtl8139if->iobase, rtl8139if->irq));
+	LOG_INFO("rtl8139if_init: Found %s at iobase 0x%x (irq %u)\n", board_tbl[tmp8].device_str,
+	    rtl8139if->iobase, rtl8139if->irq);
 	// determine the mac address of this card
 	LWIP_DEBUGF(NETIF_DEBUG, ("rtl8139if_init: MAC address "));
 	for (tmp8=0; tmp8<ETHARP_HWADDR_LEN; tmp8++) {
@@ -396,7 +397,7 @@ err_t rtl8139if_init(struct netif* netif)
 
 	if (!tmp16) {
 		// it seems not to work
-		kprintf("RTL8139 reset failed\n");
+		LOG_ERROR("RTL8139 reset failed\n");
 		page_free(rtl8139if->rx_buffer, RX_BUF_LEN + 16);
 		page_free(rtl8139if->tx_buffer[0], 4*TX_BUF_LEN);
 		kfree(rtl8139if);
@@ -459,7 +460,7 @@ err_t rtl8139if_init(struct netif* netif)
 	// Enable Receive and Transmitter
 	outportb(rtl8139if->iobase + CR, CR_TE|CR_RE); // Sets the RE and TE bits high
 
-	kprintf("RTL8139: CR = 0x%x, ISR = 0x%x, speed = %u mbps\n", 
+	LOG_INFO("RTL8139: CR = 0x%x, ISR = 0x%x, speed = %u mbps\n",
 		inportb(rtl8139if->iobase + CR), inportw(rtl8139if->iobase + ISR), speed);
 
 	/*

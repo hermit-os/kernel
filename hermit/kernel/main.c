@@ -36,6 +36,7 @@
 #include <hermit/memory.h>
 #include <hermit/spinlock.h>
 #include <hermit/rcce.h>
+#include <hermit/logging.h>
 #include <asm/irq.h>
 #include <asm/page.h>
 #include <asm/uart.h>
@@ -58,7 +59,7 @@
 #include <net/e1000.h>
 
 #define HERMIT_PORT	0x494E
-#define HEMRIT_MAGIC	0x7E317
+#define HERMIT_MAGIC	0x7E317
 
 // set to one if the single-kernel version should use a DHCP server
 #define USE_DHCP	1
@@ -106,7 +107,7 @@ static int foo(void* arg)
 	int i;
 
 	for(i=0; i<5; i++) {
-		kprintf("hello from %s\n", (char*) arg);
+		LOG_INFO("hello from %s\n", (char*) arg);
 		sleep(1);
 	}
 
@@ -146,7 +147,7 @@ static void print_status(void)
 	static spinlock_t status_lock = SPINLOCK_INIT;
 
 	spinlock_lock(&status_lock);
-	kprintf("CPU %d of isle %d is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, isle, read_cr0(), read_cr4());
+	LOG_INFO("CPU %d of isle %d is now online (CR0 0x%zx, CR4 0x%zx)\n", CORE_ID, isle, read_cr0(), read_cr4());
 	spinlock_unlock(&status_lock);
 }
 
@@ -154,7 +155,7 @@ static void tcpip_init_done(void* arg)
 {
 	sys_sem_t* sem = (sys_sem_t*)arg;
 
-	kprintf("LwIP's tcpip thread has task id %d\n", per_core(current_task)->id);
+	LOG_INFO("LwIP's tcpip thread has task id %d\n", per_core(current_task)->id);
 
 	sys_sem_signal(sem);
 }
@@ -175,7 +176,7 @@ static int init_netifs(void)
 
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
-	kprintf("TCP/IP initialized.\n");
+	LOG_INFO("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
 	if (!is_single_kernel())
@@ -203,7 +204,7 @@ static int init_netifs(void)
 		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
 #endif
 		{
-			kprintf("Unable to add the intra network interface: err = %d\n", err);
+			LOG_ERROR("Unable to add the intra network interface: err = %d\n", err);
 			return -ENODEV;
 		}
 
@@ -229,7 +230,7 @@ static int init_netifs(void)
 		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, e1000if_init, ethernet_input)) == ERR_OK)
 			goto success;
 
-		kprintf("Unable to add the network interface: err = %d\n", err);
+		LOG_ERROR("Unable to add the network interface: err = %d\n", err);
 
 		return -ENODEV;
 
@@ -237,7 +238,7 @@ success:
 		netifapi_netif_set_default(&default_netif);
 
 #if USE_DHCP
-		kprintf("Starting DHCPD...\n");
+		LOG_INFO("Starting DHCPD...\n");
 		netifapi_dhcp_start(&default_netif);
 
 		int mscnt = 0;
@@ -273,7 +274,7 @@ success:
 
 int network_shutdown(void)
 {
-	kputs("Shutdown LwIP\n");
+	LOG_INFO("Shutdown LwIP\n");
 
 	if (libc_sd >= 0) {
 		int s = libc_sd;
@@ -329,7 +330,7 @@ static int init_rcce(void)
 	rcce_lock = (islelock_t*) addr;
 	rcce_mpb = (rcce_mpb_t*) (addr + CACHE_LINE*(RCCE_MAXNP+1));
 
-	kprintf("Map rcce_lock at %p and rcce_mpb at %p\n", rcce_lock, rcce_mpb);
+	LOG_INFO("Map rcce_lock at %p and rcce_mpb at %p\n", rcce_lock, rcce_mpb);
 
 	return 0;
 }
@@ -354,7 +355,7 @@ static void lock_test(void)
 
 	end = rdtsc();
 
-	kprintf("locks %lld (iterations %d)\n", end-start, i);
+	LOG_INFO("locks %lld (iterations %d)\n", end-start, i);
 
 	start = rdtsc();
 
@@ -367,7 +368,7 @@ static void lock_test(void)
 
 	end = rdtsc();
 
-	kprintf("sem %lld (iterations %d)\n", end-start, i);
+	LOG_INFO("sem %lld (iterations %d)\n", end-start, i);
 }
 #endif
 
@@ -387,14 +388,14 @@ static int initd(void* arg)
 	char** argv = NULL;
 	char **environ = NULL;
 
-	kputs("Initd is running\n");
+	LOG_INFO("Initd is running\n");
 
 	// setup heap
 	if (!curr_task->heap)
 		curr_task->heap = (vma_t*) kmalloc(sizeof(vma_t));
 
 	if (BUILTIN_EXPECT(!curr_task->heap, 0)) {
-		kprintf("load_task: heap is missing!\n");
+		LOG_ERROR("load_task: heap is missing!\n");
 		return -ENOMEM;
 	}
 
@@ -427,7 +428,7 @@ static int initd(void* arg)
 
 	s = lwip_socket(PF_INET , SOCK_STREAM , 0);
 	if (s < 0) {
-		kprintf("socket failed: %d\n", server);
+		LOG_ERROR("socket failed: %d\n", server);
 		return -1;
 	}
 
@@ -439,31 +440,31 @@ static int initd(void* arg)
 
 	if ((err = lwip_bind(s, (struct sockaddr *) &server, sizeof(server))) < 0)
 	{
-		kprintf("bind failed: %d\n", errno);
+		LOG_ERROR("bind failed: %d\n", errno);
 		lwip_close(s);
 		return -1;
 	}
 
 	if ((err = lwip_listen(s, 2)) < 0)
 	{
-		kprintf("listen failed: %d\n", errno);
+		LOG_ERROR("listen failed: %d\n", errno);
 		lwip_close(s);
 		return -1;
 	}
 
 	len = sizeof(struct sockaddr_in);
 
-	kprintf("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
-	kputs("TCP server is listening.\n");
+	LOG_INFO("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
+	LOG_INFO("TCP server is listening.\n");
 
 	if ((c = lwip_accept(s, (struct sockaddr *)&client, (socklen_t*)&len)) < 0)
 	{
-		kprintf("accept faild: %d\n", errno);
+		LOG_ERROR("accept faild: %d\n", errno);
 		lwip_close(s);
 		return -1;
 	}
 
-	kputs("Establish IP connection\n");
+	LOG_INFO("Establish IP connection\n");
 
 	lwip_setsockopt(c, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
 	lwip_setsockopt(c, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
@@ -474,9 +475,9 @@ static int initd(void* arg)
 
 	magic = 0;
 	lwip_read(c, &magic, sizeof(magic));
-	if (magic != HEMRIT_MAGIC)
+	if (magic != HERMIT_MAGIC)
 	{
-		kprintf("Invalid magic number %d\n", magic);
+		LOG_ERROR("Invalid magic number %d\n", magic);
 		lwip_close(c);
 		return -1;
 	}
@@ -577,20 +578,20 @@ int hermit_main(void)
 	hermit_init();
 	system_calibration(); // enables also interrupts
 
-	kprintf("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
-	kprintf("Isle %d of %d possible isles\n", isle, possible_isles);
-	kprintf("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
-	kprintf("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
-	kprintf("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
-	kprintf("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
-	kprintf("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
-	kprintf("Processor frequency: %u MHz\n", get_cpu_frequency());
-	kprintf("Total memory: %zd MiB\n", atomic_int64_read(&total_pages) * PAGE_SIZE / (1024ULL*1024ULL));
-	kprintf("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
-	kprintf("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
-	kprintf("Core %d is the boot processor\n", boot_processor);
+	LOG_INFO("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
+	LOG_INFO("Isle %d of %d possible isles\n", isle, possible_isles);
+	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
+	LOG_INFO("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
+	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
+	LOG_INFO("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
+	LOG_INFO("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
+	LOG_INFO("Processor frequency: %u MHz\n", get_cpu_frequency());
+	LOG_INFO("Total memory: %zd MiB\n", atomic_int64_read(&total_pages) * PAGE_SIZE / (1024ULL*1024ULL));
+	LOG_INFO("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
+	LOG_INFO("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
+	LOG_INFO("Core %d is the boot processor\n", boot_processor);
 	if (hbmem_base)
-		kprintf("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
+		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
 
 #if 0
 	print_pci_adapters();
