@@ -31,6 +31,7 @@
 #include <hermit/string.h>
 #include <hermit/spinlock.h>
 #include <hermit/memory.h>
+#include <hermit/logging.h>
 
 #include <asm/atomic.h>
 #include <asm/page.h>
@@ -93,7 +94,7 @@ size_t get_pages(size_t npages)
 		curr = curr->next;
 	}
 out:
-	//kprintf("get_pages: ret 0%llx, curr->start 0x%llx, curr->end 0x%llx\n", ret, curr->start, curr->end);
+	LOG_DEBUG("get_pages: ret 0%llx, curr->start 0x%llx, curr->end 0x%llx\n", ret, curr->start, curr->end);
 
 	spinlock_unlock(&list_lock);
 
@@ -125,7 +126,7 @@ size_t get_zeroed_page(void)
 		if (BUILTIN_EXPECT(!viraddr, 0))
 			goto novaddr;
 
-		//kprintf("Core %d uses 0x%zx as temporary address\n", CORE_ID, viraddr);
+		LOG_DEBUG("Core %d uses 0x%zx as temporary address\n", CORE_ID, viraddr);
 		set_per_core(ztmp_addr, viraddr);
 	}
 
@@ -250,12 +251,12 @@ int memory_init(void)
 	// enable paging and map Multiboot modules etc.
 	ret = page_init();
 	if (BUILTIN_EXPECT(ret, 0)) {
-		kputs("Failed to initialize paging!\n");
+		LOG_ERROR("Failed to initialize paging!\n");
 		return ret;
 	}
 
-	kprintf("mb_info: 0x%zx\n", mb_info);
-	kprintf("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
+	LOG_INFO("mb_info: 0x%zx\n", mb_info);
+	LOG_INFO("memory_init: base 0x%zx, image_size 0x%zx, limit 0x%zx\n", base, image_size, limit);
 
 	if (mb_info) {
 		if (mb_info->flags & MULTIBOOT_INFO_MEM_MAP) {
@@ -269,13 +270,13 @@ int memory_init(void)
 					start_addr = PAGE_FLOOR(mmap->addr);
 					end_addr = PAGE_CEIL(mmap->addr + mmap->len);
 
-					kprintf("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
+					LOG_INFO("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
 					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size))) {
 						init_list.start = PAGE_2M_FLOOR(base+image_size);
 						init_list.end = end_addr;
 
-						kprintf("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
+						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
 					}
 
 					// determine available memory
@@ -303,14 +304,14 @@ int memory_init(void)
 	atomic_int64_add(&total_allocated_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
 	atomic_int64_sub(&total_available_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
 
-	kprintf("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
+	LOG_INFO("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
 	// init high bandwidth memory subsystem
 	hbmemory_init();
 
 	ret = vma_init();
 	if (BUILTIN_EXPECT(ret, 0))
-		kprintf("Failed to initialize VMA regions: %d\n", ret);
+		LOG_WARNING("Failed to initialize VMA regions: %d\n", ret);
 
 	// add missing free regions
 	if (mb_info) {
@@ -341,7 +342,7 @@ int memory_init(void)
 					if (BUILTIN_EXPECT(!last->next, 0))
 						goto oom;
 
-					kprintf("Add region 0x%zx - 0x%zx\n", start_addr, end_addr);
+					LOG_INFO("Add region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
 					last->next->prev = last;
 					last = last->next;
@@ -358,6 +359,6 @@ int memory_init(void)
 	return ret;
 
 oom:
-	kprintf("BUG: Failed to init mm!\n");
+	LOG_ERROR("BUG: Failed to init mm!\n");
 	while(1) {HALT; }
 }

@@ -51,6 +51,7 @@
  */
 
 #include <hermit/stddef.h>
+#include <hermit/logging.h>
 
 #include <lwip/netif.h>		/* lwip netif */
 #include <lwip/stats.h>		/* inteface stats */
@@ -241,18 +242,18 @@ static void mmnif_print_stats(void)
 
 	if (!mmnif_dev)
 	{
-		DEBUGPRINTF("mmnif_print_stats(): the device is not initialized yet.\n");
+		LOG_INFO("mmnif_print_stats(): the device is not initialized yet.\n");
 		return;
 	}
 
 	mmnif = (mmnif_t *) mmnif_dev->state;
-	DEBUGPRINTF("/dev/mmnif - stats:\n");
-	DEBUGPRINTF("Received: %d packets successfull\n", mmnif->stats.rx);
-	DEBUGPRINTF("Received: %d bytes\n", mmnif->stats.rx_bytes);
-	DEBUGPRINTF("Received: %d packets containuing errors\n", mmnif->stats.rx_err);
-	DEBUGPRINTF("Transmitted: %d packests successfull\n", mmnif->stats.tx);
-	DEBUGPRINTF("Transmitted: %d bytes\n", mmnif->stats.tx_bytes);
-	DEBUGPRINTF("Transmitted: %d packests were dropped due to errors\n", mmnif->stats.tx_err);
+	LOG_INFO("/dev/mmnif - stats:\n");
+	LOG_INFO("Received: %d packets successfull\n", mmnif->stats.rx);
+	LOG_INFO("Received: %d bytes\n", mmnif->stats.rx_bytes);
+	LOG_INFO("Received: %d packets containuing errors\n", mmnif->stats.rx_err);
+	LOG_INFO("Transmitted: %d packests successfull\n", mmnif->stats.tx);
+	LOG_INFO("Transmitted: %d bytes\n", mmnif->stats.tx_bytes);
+	LOG_INFO("Transmitted: %d packests were dropped due to errors\n", mmnif->stats.tx_err);
 }
 
 /* mmnif_print_driver_status
@@ -265,28 +266,28 @@ void mmnif_print_driver_status(void)
 
 	if (!mmnif_dev)
 	{
-		DEBUGPRINTF("mmnif_print_driver_status(): the device is not initialized yet.\n");
+		LOG_ERROR("mmnif_print_driver_status(): the device is not initialized yet.\n");
 		return;
 	}
 
 	mmnif = (mmnif_t *) mmnif_dev->state;
-	DEBUGPRINTF("/dev/mmnif driver status: \n\n");
-	DEBUGPRINTF("rx_buf: 0xp\n", mmnif->rx_buff);
-	DEBUGPRINTF("free descriptors : %d\n\n", mmnif->rx_buff->dcount);
-	DEBUGPRINTF("descriptor table: (only print descriptors in use)\n");
-	DEBUGPRINTF("status\taddr\tsize\n");
+	LOG_INFO("/dev/mmnif driver status: \n\n");
+	LOG_INFO("rx_buf: 0xp\n", mmnif->rx_buff);
+	LOG_INFO("free descriptors : %d\n\n", mmnif->rx_buff->dcount);
+	LOG_INFO("descriptor table: (only print descriptors in use)\n");
+	LOG_INFO("status\taddr\tsize\n");
 
 	for (i = 0; i < MMNIF_MAX_DESCRIPTORS; i++)
 	{
 		if (mmnif->rx_buff->desc_table[i].stat != 0)
-			DEBUGPRINTF("0x%.2X\t%p\t%X\t\n",
+			LOG_INFO("0x%.2X\t%p\t%X\t\n",
 				    mmnif->rx_buff->desc_table[i].stat,
 				    mmnif->rx_buff->desc_table[i].addr,
 				    mmnif->rx_buff->desc_table[i].len);
 	}
 
-	DEBUGPRINTF("ring heap start addr: %p\n", mmnif->rx_buff + sizeof(mm_rx_buffer_t));
-	DEBUGPRINTF("head: 0x%X\ttail: 0x%X\n", mmnif->rx_buff->head, mmnif->rx_buff->tail);
+	LOG_INFO("ring heap start addr: %p\n", mmnif->rx_buff + sizeof(mm_rx_buffer_t));
+	LOG_INFO("head: 0x%X\ttail: 0x%X\n", mmnif->rx_buff->head, mmnif->rx_buff->tail);
 	mmnif_print_stats();
 }
 
@@ -468,13 +469,13 @@ static err_t mmnif_tx(struct netif *netif, struct pbuf *p)
 
 	/* check for over/underflow */
  	if (BUILTIN_EXPECT((p->tot_len < 20 /* IP header size */) || (p->tot_len > 1536), 0)) {
-                DEBUGPRINTF("mmnif_tx: illegal packet length %d => drop\n", p->tot_len);
+		LOG_ERROR("mmnif_tx: illegal packet length %d => drop\n", p->tot_len);
 		goto drop_packet;
 	}
 
 	/* check destination ip */
 	if (BUILTIN_EXPECT((dest_ip < 1) || (dest_ip > MAX_ISLE), 0)) {
-		DEBUGPRINTF("mmnif_tx: invalid destination IP %d => drop\n", dest_ip);
+		LOG_ERROR("mmnif_tx: invalid destination IP %d => drop\n", dest_ip);
 		goto drop_packet;
 	}
 
@@ -485,7 +486,7 @@ realloc:
 	write_address = mmnif_rxbuff_alloc(dest_ip, p->tot_len);
 	if (!write_address)
 	{
-		//DEBUGPRINTF("mmnif_tx(): concurrency");
+		LOG_DEBUG("mmnif_tx(): concurrency");
 
 		PAUSE;
 		goto realloc;
@@ -499,11 +500,11 @@ realloc:
 
 	if (mmnif_commit_packet(dest_ip, write_address))
 	{
-		DEBUGPRINTF("mmnif_tx(): packet somehow lost during commit\n");
+		LOG_WARNING("mmnif_tx(): packet somehow lost during commit\n");
 	}
 
 #ifdef DEBUG_MMNIF_PACKET
-//      DEBUGPRINTF("\n SEND %p with length: %d\n",(char*)heap_start_address + (dest_ip -1)*mpb_size + pos * 1792,p->tot_len +2);
+//      LOG_INFO("\n SEND %p with length: %d\n",(char*)heap_start_address + (dest_ip -1)*mpb_size + pos * 1792,p->tot_len +2);
 //      hex_dump(p->tot_len, p->payload);
 #endif
 
@@ -521,7 +522,7 @@ realloc:
 drop_packet:
 	/* drop packet for one or another reason
 	 */
-	DEBUGPRINTF("mmnif_tx(): packet dropped");
+	LOG_ERROR("mmnif_tx(): packet dropped");
 
 	LINK_STATS_INC(link.drop);
 	mmnif->stats.tx_err++;
@@ -551,7 +552,7 @@ err_t mmnif_init(struct netif *netif)
 	uint32_t nodes = possible_isles + 1;
 	size_t flags;
 
-	DEBUGPRINTF("Initialize mmnif\n");
+	LOG_INFO("Initialize mmnif\n");
 
 	mmnif_dev = netif;
 
@@ -560,7 +561,7 @@ err_t mmnif_init(struct netif *netif)
 	mmnif = kmalloc(sizeof(mmnif_t));
 	if (BUILTIN_EXPECT(!mmnif, 0))
 	{
-		DEBUGPRINTF("mmnif init():out of memory\n");
+		LOG_ERROR("mmnif init():out of memory\n");
 		goto out;
 	}
 	memset(mmnif, 0x00, sizeof(mmnif_t));
@@ -569,32 +570,32 @@ err_t mmnif_init(struct netif *netif)
 	 */
 	if (BUILTIN_EXPECT(header_size < sizeof(mm_rx_buffer_t), 0))
 	{
-		DEBUGPRINTF("mmnif init(): header_size is too small\n");
+		LOG_ERROR("mmnif init(): header_size is too small\n");
 		goto out;
 	}
 
 	if (BUILTIN_EXPECT(heap_size < MMNIF_RX_BUFFERLEN, 0))
 	{
-		DEBUGPRINTF("mmnif init(): heap_size is too small\n");
+		LOG_ERROR("mmnif init(): heap_size is too small\n");
 		goto out;
 	}
-	DEBUGPRINTF("mmnif_init() : size of mm_rx_buffer_t : %d\n", sizeof(mm_rx_buffer_t));
+	LOG_INFO("mmnif_init() : size of mm_rx_buffer_t : %d\n", sizeof(mm_rx_buffer_t));
 
 	if (BUILTIN_EXPECT(!header_phy_start_address || !header_phy_start_address || !phy_isle_locks, 0))
 	{
-		DEBUGPRINTF("mmnif init(): invalid heap or header address\n");
+		LOG_ERROR("mmnif init(): invalid heap or header address\n");
 		goto out;
 	}
 
 	if (BUILTIN_EXPECT(!header_start_address, 0))
 	{
-		DEBUGPRINTF("mmnif init(): vma_alloc failed\n");
+		LOG_ERROR("mmnif init(): vma_alloc failed\n");
 		goto out;
 	}
 
 	err = vma_add((size_t)header_start_address, PAGE_FLOOR((size_t)header_start_address + ((nodes * header_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(err, 0)) {
-		DEBUGPRINTF("mmnif init(): vma_add failed for header_start_address %p\n", header_start_address);
+		LOG_ERROR("mmnif init(): vma_add failed for header_start_address %p\n", header_start_address);
 		goto out;
 	}
 
@@ -606,34 +607,34 @@ err_t mmnif_init(struct netif *netif)
 	// map physical address in the virtual address space
 	err = page_map((size_t) header_start_address, (size_t) header_phy_start_address, (nodes * header_size) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
-		DEBUGPRINTF("mmnif init(): page_map failed\n");
+		LOG_ERROR("mmnif init(): page_map failed\n");
 		goto out;
 	}
 
-	DEBUGPRINTF("map header %p at %p\n", header_phy_start_address, header_start_address);
+	LOG_INFO("map header %p at %p\n", header_phy_start_address, header_start_address);
 	mmnif->rx_buff = (mm_rx_buffer_t *) (header_start_address + header_size * (isle+1));
 
 	if (BUILTIN_EXPECT(!heap_start_address, 0)) {
-		DEBUGPRINTF("mmnif init(): vma_alloc failed\n");
+		LOG_ERROR("mmnif init(): vma_alloc failed\n");
 		goto out;
 	}
 
 	err = vma_add((size_t)heap_start_address, PAGE_FLOOR((size_t)heap_start_address + ((nodes * heap_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(!heap_start_address, 0))
 	{
-		DEBUGPRINTF("mmnif init(): vma_add failed for heap_start_address %p\n", heap_start_address);
+		LOG_ERROR("mmnif init(): vma_add failed for heap_start_address %p\n", heap_start_address);
 		goto out;
 	}
 
 	// map physical address in the virtual address space
 	err = page_map((size_t) heap_start_address, (size_t) heap_phy_start_address, (nodes * heap_size) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
-		DEBUGPRINTF("mmnif init(): page_map failed\n");
+		LOG_ERROR("mmnif init(): page_map failed\n");
 		goto out;
 	}
 
 	// map physical address in the virtual address space
-	DEBUGPRINTF("map heap %p at %p\n", heap_phy_start_address, heap_start_address);
+	LOG_INFO("map heap %p at %p\n", heap_phy_start_address, heap_start_address);
 	mmnif->rx_heap = (uint8_t*) heap_start_address + heap_size * (isle+1);
 
 	memset((void*)mmnif->rx_buff, 0x00, header_size);
@@ -641,17 +642,17 @@ err_t mmnif_init(struct netif *netif)
 
 	isle_locks = (islelock_t*) vma_alloc(((nodes + 1) * sizeof(islelock_t) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(!isle_locks, 0)) {
-		DEBUGPRINTF("mmnif init(): vma_alloc failed\n");
+		LOG_ERROR("mmnif init(): vma_alloc failed\n");
 		goto out;
 	}
 
 	// map physical address in the virtual address space
 	err = page_map((size_t) isle_locks, (size_t) phy_isle_locks, (((nodes+1) * sizeof(islelock_t) + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1)) >> PAGE_BITS, flags);
 	if (BUILTIN_EXPECT(err, 0)) {
-		DEBUGPRINTF("mmnif init(): page_map failed\n");
+		LOG_ERROR("mmnif init(): page_map failed\n");
 		goto out;
 	}
-	DEBUGPRINTF("map isle_locks %p at %p\n", phy_isle_locks, isle_locks);
+	LOG_INFO("map isle_locks %p at %p\n", phy_isle_locks, isle_locks);
 
 	/* set initial values
 	 */
@@ -693,7 +694,7 @@ err_t mmnif_init(struct netif *netif)
 	// set interrupt handler
 	irq_install_handler(MMNIF_IRQ, mmnif_irqhandler);
 
-	DEBUGPRINTF("mmnif init complete\n");
+	LOG_INFO("mmnif init complete\n");
 
 	return ERR_OK;
 
@@ -767,14 +768,14 @@ anotherpacket:
 	 */
 	if (BUILTIN_EXPECT(length == 0, 0))
 	{
-		DEBUGPRINTF("mmnif_rx(): empty packet error\n");
+		LOG_ERROR("mmnif_rx(): empty packet error\n");
 		goto out;
 	}
 
 	/* check for over/underflow */
         if (BUILTIN_EXPECT((length < 20 /* IP header size */) || (length > 1536), 0))
 	{
-		DEBUGPRINTF("mmnif_rx(): illegal packet length %d => drop the packet\n", length);
+		LOG_ERROR("mmnif_rx(): illegal packet length %d => drop the packet\n", length);
 		goto drop_packet;
 	}
 
@@ -782,7 +783,7 @@ anotherpacket:
 	 * has to be worked on
 	 */
 #ifdef DEBUG_MMNIF_PACKET
-	DEBUGPRINTF("\n RECIEVED - %p with legth: %d\n", packet, length);
+	LOG_INFO("\n RECIEVED - %p with legth: %d\n", packet, length);
 	hex_dump(length, packet);
 #endif
 
@@ -792,7 +793,7 @@ anotherpacket:
 	p = pbuf_alloc(PBUF_RAW, length, PBUF_POOL);
 	if (BUILTIN_EXPECT(!p, 0))
 	{
-		DEBUGPRINTF("mmnif_rx(): low on mem - packet dropped\n");
+		LOG_ERROR("mmnif_rx(): low on mem - packet dropped\n");
 		goto drop_packet;
 	}
 
@@ -820,7 +821,7 @@ anotherpacket:
 	 */
 	if ((err = mmnif_dev->input(p, mmnif_dev)) != ERR_OK)
 	{
-		DEBUGPRINTF("mmnif_rx: IP input error\n");
+		LOG_ERROR("mmnif_rx: IP input error\n");
 		pbuf_free(p);
 	}
 
@@ -849,7 +850,7 @@ static void mmnif_irqhandler(struct state* s)
 	/* return if mmnif_dev is not yet initialized */
 	if (!mmnif_dev)
 	{
-		DEBUGPRINTF("mmnif_irqhandler(): the driver is not initialized yet\n");
+		LOG_ERROR("mmnif_irqhandler(): the driver is not initialized yet\n");
 		return;
 	}
 
@@ -862,7 +863,7 @@ static void mmnif_irqhandler(struct state* s)
 		if (tcpip_callback_with_block((tcpip_callback_fn) mmnif_rx, (void*) mmnif_dev, 0) == ERR_OK) {
 			mmnif->check_in_progress = 1;
 		} else {
-			DEBUGPRINTF("mmnif_handler: unable to send a poll request to the tcpip thread\n");
+			LOG_ERROR("mmnif_handler: unable to send a poll request to the tcpip thread\n");
 		}
 #endif
 	}
@@ -877,7 +878,7 @@ err_t mmnif_shutdown(void)
 	err_t err;
 
 	if (!mmnif_dev) {
-		DEBUGPRINTF("mmnif_shutdown(): you closed the device before it was properly initialized -.-* \n");
+		LOG_ERROR("mmnif_shutdown(): you closed the device before it was properly initialized -.-* \n");
 		return ERR_MEM;
 	}
 

@@ -31,6 +31,7 @@
 #include <hermit/tasks_types.h>
 #include <hermit/spinlock.h>
 #include <hermit/errno.h>
+#include <hermit/logging.h>
 #include <asm/multiboot.h>
 
 /* 
@@ -56,7 +57,7 @@ int vma_init(void)
 {
 	int ret;
 
-	kprintf("vma_init: reserve vma region 0x%llx - 0x%llx\n",
+	LOG_INFO("vma_init: reserve vma region 0x%llx - 0x%llx\n",
 		PAGE_2M_CEIL((size_t) &kernel_start),
 		PAGE_2M_FLOOR((size_t) &kernel_end));
 
@@ -95,7 +96,7 @@ size_t vma_alloc(size_t size, uint32_t flags)
 	spinlock_irqsave_t* lock = &vma_lock;
 	vma_t** list = &vma_list;
 
-	//kprintf("vma_alloc: size = %#lx, flags = %#x\n", size, flags);
+	LOG_DEBUG("vma_alloc: size = %#lx, flags = %#x\n", size, flags);
 
 	// boundaries of free gaps
 	size_t start, end;
@@ -128,7 +129,7 @@ fail:
 found:
 	if (pred && pred->flags == flags) {
 		pred->end += size; // resize VMA
-		//kprintf("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
+		LOG_DEBUG("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
 	} else {
 		// insert new VMA
 		vma_t* new = kmalloc(sizeof(vma_t));
@@ -160,7 +161,7 @@ int vma_free(size_t start, size_t end)
 	vma_t* vma;
 	vma_t** list = &vma_list;
 
-	//kprintf("vma_free: start = %#lx, end = %#lx\n", start, end);
+	LOG_DEBUG("vma_free: start = %#lx, end = %#lx\n", start, end);
 
 	if (BUILTIN_EXPECT(start >= end, 0))
 		return -EINVAL;
@@ -225,7 +226,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 	if (BUILTIN_EXPECT(start >= end, 0))
 		return -EINVAL;
 
-	//kprintf("vma_add: start = %#lx, end = %#lx, flags = %#x\n", start, end, flags);
+	LOG_DEBUG("vma_add: start = %#lx, end = %#lx, flags = %#x\n", start, end, flags);
 
 	spinlock_irqsave_lock(lock);
 
@@ -249,7 +250,7 @@ int vma_add(size_t start, size_t end, uint32_t flags)
 
 	if (pred && (pred->end == start) && (pred->flags == flags)) {
 		pred->end = end; // resize VMA
-		//kprintf("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
+		LOG_DEBUG("vma_alloc: resize vma, start 0x%zx, pred->start 0x%zx, pred->end 0x%zx\n", start, pred->start, pred->end);
 	} else {
 		// insert new VMA
 		vma_t* new = kmalloc(sizeof(vma_t));
@@ -282,7 +283,7 @@ void vma_dump(void)
 {
 	void print_vma(vma_t *vma) {
 		while (vma) {
-			kprintf("0x%lx - 0x%lx: size=0x%x, flags=%c%c%c%s\n", vma->start, vma->end, vma->end - vma->start,
+			LOG_INFO("0x%lx - 0x%lx: size=0x%x, flags=%c%c%c%s\n", vma->start, vma->end, vma->end - vma->start,
 				(vma->flags & VMA_READ) ? 'r' : '-',
 				(vma->flags & VMA_WRITE) ? 'w' : '-',
 				(vma->flags & VMA_EXECUTE) ? 'x' : '-',
@@ -291,7 +292,7 @@ void vma_dump(void)
 		}
 	}
 
-	kputs("VMAs:\n");
+	LOG_INFO("VMAs:\n");
 	spinlock_irqsave_lock(&vma_lock);
 	print_vma(&vma_boot);
 	spinlock_irqsave_unlock(&vma_lock);
