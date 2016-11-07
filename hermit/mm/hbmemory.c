@@ -31,6 +31,7 @@
 #include <hermit/string.h>
 #include <hermit/spinlock.h>
 #include <hermit/memory.h>
+#include <hermit/logging.h>
 
 #include <asm/atomic.h>
 #include <asm/page.h>
@@ -85,7 +86,7 @@ size_t hbmem_get_pages(size_t npages)
 		curr = curr->next;
 	}
 out:
-	//kprintf("get_pages: ret 0%llx, curr->start 0x%llx, curr->end 0x%llx\n", ret, curr->start, curr->end);
+	LOG_DEBUG("get_pages: ret 0%llx, curr->start 0x%llx, curr->end 0x%llx\n", ret, curr->start, curr->end);
 
 	spinlock_unlock(&list_lock);
 
@@ -164,7 +165,7 @@ int hbmemory_init(void)
 	init_list.start = hbmem_base;
 	init_list.end = hbmem_base + hbmem_size;
 
-	kprintf("free list for hbmem starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
+	LOG_INFO("free list for hbmem starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
 	return 0;
 }
