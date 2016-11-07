@@ -148,6 +148,6 @@ void wait_for_task(void)
 			clflush(queue);
 
 		monitor(queue, 0, 0);
-		mwait(0xF /* = c0 */, 1 /* break on interrupt flag */);
+		mwait(0x2 /* 0x2 = c3, 0xF = c0 */, 1 /* break on interrupt flag */);
 	}
 }
