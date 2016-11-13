@@ -210,7 +210,7 @@ static int is_hermit_available(void)
 		return 0;
 
 	while(getline(&line, &n, file) > 0) {
-		if (strncmp(line, "TCP server is listening.\n", 2048) == 0) {
+		if (strstr(line, "TCP server is listening.") != NULL) {
 			ret = 1;
 			break;
 		}
