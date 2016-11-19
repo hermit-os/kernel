@@ -76,6 +76,7 @@ extern "C" {
 #define CPU_FEATURE_XSAVE			(1 << 26)
 #define CPU_FEATURE_OSXSAVE			(1 << 27)
 #define CPU_FEATURE_AVX				(1 << 28)
+#define CPU_FEATURE_RDRAND			(1 << 30)
 #define CPU_FEATURE_HYPERVISOR			(1 << 31)
 
 // CPUID.80000001H:EDX feature list
@@ -389,6 +390,10 @@ inline static uint32_t has_avx(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_AVX);
 }
 
+inline static uint32_t has_rdrand(void) {
+	return (cpu_info.feature2 & CPU_FEATURE_RDRAND);
+}
+
 inline static uint32_t on_hypervisor(void) {
 	return (cpu_info.feature2 & CPU_FEATURE_HYPERVISOR);
 }
@@ -450,6 +455,22 @@ inline static uint32_t has_rdtscp(void) {
 static inline void clts(void)
 {
 	asm volatile("clts");
+}
+
+/** @brief Read a random number
+ *
+ *  Returns a hardware generated random value.
+ */
+inline static uint32_t rdrand(void)
+{
+	uint32_t val;
+	uint8_t rc;
+
+	do {
+		asm volatile("rdrand %0 ; setc %1" : "=r" (val), "=qm" (rc));
+	} while(rc == 0); // rc == 0: underflow
+
+	return val;
 }
 
 /** @brief Read out time stamp counter
