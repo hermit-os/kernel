@@ -44,12 +44,13 @@
 #include <lwip/init.h>
 #include <lwip/sys.h>
 #include <lwip/stats.h>
+#include <lwip/ip_addr.h>
 #include <lwip/udp.h>
 #include <lwip/tcp.h>
 #include <lwip/tcpip.h>
 #include <lwip/dhcp.h>
 #include <lwip/netifapi.h>
-#include <lwip/timers.h>
+#include <lwip/ip_addr.h>
 #include <lwip/sockets.h>
 #include <lwip/err.h>
 #include <lwip/stats.h>
@@ -60,9 +61,6 @@
 
 #define HERMIT_PORT	0x494E
 #define HERMIT_MAGIC	0x7E317
-
-// set to one if the single-kernel version should use a DHCP server
-#define USE_DHCP	1
 
 static struct netif	default_netif;
 static const int sobufsize = 131072;
@@ -162,9 +160,9 @@ static void tcpip_init_done(void* arg)
 
 static int init_netifs(void)
 {
-	struct ip_addr	ipaddr;
-	struct ip_addr	netmask;
-	struct ip_addr	gw;
+	ip_addr_t	ipaddr;
+	ip_addr_t	netmask;
+	ip_addr_t	gw;
 	sys_sem_t	sem;
 	err_t		err;
 
@@ -182,9 +180,9 @@ static int init_netifs(void)
 	if (!is_single_kernel())
 	{
 		/* Set network address variables */
-		IP4_ADDR(&gw, 192,168,28,1);
-		IP4_ADDR(&ipaddr, 192,168,28,isle+2);
-		IP4_ADDR(&netmask, 255,255,255,0);
+		IP_ADDR4(&gw, 192,168,28,1);
+		IP_ADDR4(&ipaddr, 192,168,28,isle+2);
+		IP_ADDR4(&netmask, 255,255,255,0);
 
 		/* register our Memory Mapped Virtual IP interface in the lwip stack
 		 * and tell him how to use the interface:
@@ -195,13 +193,13 @@ static int init_netifs(void)
 		 *  - ip_input : tells him that he should use ip_input
 		 */
 #if LWIP_TCPIP_CORE_LOCKING_INPUT
-		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
 #else
 		/*
 		 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ip_input instead of tcpip_input
 		 */
-		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, mmnif_init, ip_input)) != ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
 #endif
 		{
 			LOG_ERROR("Unable to add the intra network interface: err = %d\n", err);
@@ -212,22 +210,16 @@ static int init_netifs(void)
 		netifapi_netif_set_default(&default_netif);
 		netifapi_netif_set_up(&default_netif);
 	} else {
-#if USE_DHCP
 		/* Clear network address because we use DHCP to get an ip address */
-		IP4_ADDR(&gw, 0,0,0,0);
-		IP4_ADDR(&ipaddr, 0,0,0,0);
-		IP4_ADDR(&netmask, 0,0,0,0);
-#else
-		IP4_ADDR(&gw, 10,0,2,2);
-		IP4_ADDR(&ipaddr, 10,0,2,15);
-		IP4_ADDR(&netmask, 255,255,255,0);
-#endif
+		IP_ADDR4(&gw, 0,0,0,0);
+		IP_ADDR4(&ipaddr, 0,0,0,0);
+		IP_ADDR4(&netmask, 0,0,0,0);
 
 		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
-		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
 			goto success;
-		if ((err = netifapi_netif_add(&default_netif, &ipaddr, &netmask, &gw, NULL, e1000if_init, ethernet_input)) == ERR_OK)
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, e1000if_init, ethernet_input)) == ERR_OK)
 			goto success;
 
 		LOG_ERROR("Unable to add the network interface: err = %d\n", err);
@@ -236,19 +228,19 @@ static int init_netifs(void)
 
 success:
 		netifapi_netif_set_default(&default_netif);
+		netifapi_netif_set_up(&default_netif);
 
-#if USE_DHCP
 		LOG_INFO("Starting DHCPD...\n");
 		netifapi_dhcp_start(&default_netif);
 
 		int mscnt = 0;
 		/* wait for ip address */
-		while(!default_netif.ip_addr.addr) {
+		while(!ip_2_ip4(&default_netif.ip_addr)->addr) {
 			uint64_t end_tsc, start_tsc = rdtsc();
 
 #if 1
 			do {
-				if (default_netif.ip_addr.addr)
+				if (ip_2_ip4(&default_netif.ip_addr)->addr)
 					return 0;
 				check_workqueues();
 				end_tsc = rdtsc();
@@ -264,9 +256,6 @@ success:
 				mscnt = 0;
 			}
 		}
-#else
-		netifapi_netif_set_up(&default_netif);
-#endif
 	}
 
 	return 0;

@@ -54,6 +54,7 @@
 #include <hermit/logging.h>
 
 #include <lwip/netif.h>		/* lwip netif */
+#include <lwip/netifapi.h>
 #include <lwip/stats.h>		/* inteface stats */
 #include <netif/etharp.h>	/* ethernet arp packets */
 #include <lwip/ip.h>		/* struct iphdr */
@@ -302,7 +303,7 @@ void mmnif_print_driver_status(void)
 static uint8_t mmnif_get_destination(struct netif *netif, struct pbuf *p)
 {
 	struct ip_hdr *iphdr;
-	ip_addr_p_t ip;
+	ip4_addr_p_t ip;
 
 	/* grab the destination ip address out of the ip header
 	 * for internal routing the last ocet is interpreted as core ID.
@@ -687,6 +688,8 @@ err_t mmnif_init(struct netif *netif)
 
 	/* broadcast capability, keep all default flags */
 	//netif->flags |= NETIF_FLAG_BROADCAST;
+	/* set link up */
+	netif->flags |= NETIF_FLAG_LINK_UP;
 
 	/* hardware address length */
 	netif->hwaddr_len = 0;
