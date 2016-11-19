@@ -37,7 +37,6 @@
 #include <hermit/memory.h>
 #include <hermit/signal.h>
 #include <hermit/logging.h>
-#include <sys/uio.h>
 #include <sys/poll.h>
 
 #include <lwip/sockets.h>

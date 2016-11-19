@@ -40,6 +40,8 @@
 #include <lwip/stats.h>
 #include <lwip/netif.h>
 #include <lwip/tcpip.h>
+#include <lwip/snmp.h>
+#include <lwip/ethip6.h>
 #include <netif/etharp.h>
 #include <net/e1000.h>
 
@@ -562,9 +564,15 @@ err_t e1000if_init(struct netif* netif)
 	/* maximum transfer unit */
 	netif->mtu = 1500;
 	/* broadcast capability */
-	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP;
+	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP | NETIF_FLAG_MLD6;
 
 	e1000if->ethaddr = (struct eth_addr *)netif->hwaddr;
+
+#if LWIP_IPV6
+	netif->output_ip6 = ethip6_output;
+	netif_create_ip6_linklocal_address(netif, 1);
+	netif->ip6_autoconfig_enabled = 1;
+#endif
 
 	return ERR_OK;
 

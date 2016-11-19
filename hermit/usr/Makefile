@@ -81,7 +81,6 @@ headers:
 	$Q$(CP) -R ../lwip/src/include/posix/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 	$Q$(CP) -R ../lwip/src/include/arch $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 	$Q$(CP) -R ../lwip/src/include/lwip* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
-	$Q$(CP) -R ../lwip/src/include/ipv4/lwip/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/lwip/
 	$Q$(CP) -R ../include/neti* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 	$Q$(CP) -R ../include/sys $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 
