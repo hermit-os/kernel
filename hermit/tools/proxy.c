@@ -269,7 +269,7 @@ static int init_qemu(char *path)
 	char chardev_file[MAX_PATH];
 	char port_str[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), "-s", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
@@ -331,6 +331,16 @@ static int init_qemu(char *path)
 		qemu_argv[i] = "-cpu";
 		qemu_argv[i+1] = "SandyBridge";
 	}*/
+
+	str = getenv("HERMIT_DEBUG");
+	if (str && (strcmp(str, "0") != 0))
+	{
+		for(i=0; qemu_argv[i] != NULL; i++)
+			;
+
+		// add flag to start gdbserver on TCP port 1234
+		qemu_argv[i] = "-s";
+	}
 
 	str = getenv("HERMIT_VERBOSE");
 	if (str && (strcmp(str, "0") != 0))
