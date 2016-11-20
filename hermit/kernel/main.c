@@ -370,7 +370,7 @@ static int initd(void* arg)
 	int i, j, flag;
 	int len, err;
 	int magic = 0;
-	struct sockaddr_in server, client;
+	struct sockaddr_in6 server, client;
 	task_t* curr_task = per_core(current_task);
 	size_t heap = 0x80000000;
 	int argc, envc;
@@ -415,7 +415,7 @@ static int initd(void* arg)
 	if (!is_single_kernel())
 		init_rcce();
 
-	s = lwip_socket(PF_INET , SOCK_STREAM , 0);
+	s = lwip_socket(AF_INET6, SOCK_STREAM , 0);
 	if (s < 0) {
 		LOG_ERROR("socket failed: %d\n", server);
 		return -1;
@@ -423,9 +423,9 @@ static int initd(void* arg)
 
 	// prepare the sockaddr_in structure
 	memset((char *) &server, 0x00, sizeof(server));
-	server.sin_family = AF_INET;
-	server.sin_addr.s_addr = INADDR_ANY;
-	server.sin_port = htons(HERMIT_PORT);
+	server.sin6_family = AF_INET6;
+	server.sin6_addr = in6addr_any;
+	server.sin6_port = htons(HERMIT_PORT);
 
 	if ((err = lwip_bind(s, (struct sockaddr *) &server, sizeof(server))) < 0)
 	{
