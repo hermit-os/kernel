@@ -132,8 +132,9 @@ For network support, you have to link the Go application with the flag `-lnetgo`
    You can use any architecture name, which is supported by GCC.
    For instance, `--with-mtune=native` optimzes the code for the host system.
    Please note, if the applications is started within a VM, the hypervisor has to support the specified architecture name.
-   If KVM is started by our proxy, per default the host architecture will be used as target processor.
-2. If KVM is started by our proxy and the environment variable `HERMIT_KVM` is set to `0`, the virtual machine will be not accelerated by KVM.
+   Per default the system will be accelerated by KVM and the host architecture will be used as target processor.
+2. If Qemu is started by our proxy and the environment variable `HERMIT_KVM` is set to `0`, the virtual machine will be not accelerated by KVM.
    In this case, the configuration flag `--with-mtune=name` should be avoided.
    With the environment variable `HERMIT_APP_PORT`, an additional port can be open to establish an TCP/IP connection with your application.
 3. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages onto the screen.
+4. If `HERMIT_DEBUG` is set to `1`, Qemu will establish an gdbserver, which will be listen port 1234.
