@@ -570,7 +570,7 @@ int hermit_main(void)
 	LOG_INFO("This is Hermit %s, build date %u\n", VERSION, &__DATE__);
 	LOG_INFO("Isle %d of %d possible isles\n", isle, possible_isles);
 	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
-	LOG_INFO("TLS image starts at %p and ends at %p\n", &tls_start, &tls_end);
+	LOG_INFO("TLS image starts at %p and ends at %p (size 0x%zx)\n", &tls_start, &tls_end, ((size_t) &tls_end) - ((size_t) &tls_start));
 	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
 	LOG_INFO("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	LOG_INFO("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
