@@ -138,3 +138,4 @@ For network support, you have to link the Go application with the flag `-lnetgo`
    With the environment variable `HERMIT_APP_PORT`, an additional port can be open to establish an TCP/IP connection with your application.
 3. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages onto the screen.
 4. If `HERMIT_DEBUG` is set to `1`, Qemu will establish an gdbserver, which will be listen port 1234.
+   Afterwards you are able debug HermitCore applications remotely.
