@@ -1,7 +1,3 @@
-[submodule "linux"]
-	path = linux
-	url = https://github.com/RWTH-OS/linux.git
-	branch = hermit
 [submodule "hermit/usr/gcc"]
 	path = hermit/usr/gcc
 	url = https://github.com/RWTH-OS/gcc.git
