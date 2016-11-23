@@ -28,16 +28,16 @@ On Debian-based systems the packets can be installed by executing:
 
 ## Building and testing HermitCore as multi-kernel within a virtual machine
 
-0. Please make sure that you cloned this repository and all its submodules.
-1. To configure the system, run the *configure* script in the directory, which contains this *README*.
+1. Please make sure that you cloned this repository and all its submodules.
+2. To configure the system, run the *configure* script in the directory, which contains this *README*.
    Fine tuning of the installation directories, e.g., with the flag `--prefix` is currently not supported.
    HermitCore, the cross-compiler and the demo applications will be installed in subdirectories of this repository.
    At the end of this *README* in section *Tips* you find hints to enable optimization for the target.
-2. The command `make all` build the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
-3. To start a virtual machine and to boot a small Linux version use the command `make qemu`.
+3. The command `make all` build the the HermitCore kernel, the cross-compiler, and the demo applications.
+4. To start a virtual machine and to boot a small Linux version use the command `make qemu`.
    Per default, the virtual machine has 10 cores, 2 NUMA nodes, and 8 GiB RAM.
    To increase or to decrease the machine size, the label `qemu` in the Makefile has to be modified accordingly.
-4. Inside the VM runs a small Linux system, which already includes the patches for HermitCore.
+5. Inside the VM runs a small Linux system, which already includes the patches for HermitCore.
    Per NUMA node (= HermitCore isle) there is a directory called `isleX` under `/sys/hermit` , where `X` represents the NUMA node ID.
    The demo applications are located in the directories `/hermit/usr/{tests,benchmarks}`.
    A HermitCore loader is already registered.
@@ -45,28 +45,28 @@ On Debian-based systems the packets can be installed by executing:
    To change the default behavior, the environment variable `HERMIT_ISLE` is used to specify the (memory) location of the isle, while the environment variable `HERMIT_CPUS` is used to specify the cores.
    For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/usr/tests/hello` starts a HelloWorld demo on the HermitCore isle 1, which uses the cores 3 to 5.
    The output messages are forwarded to the Linux proxy and printed on the Linux system.
-5. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`.
-6. There is a virtual IP device for the communication between the HermitCore isles and the Linux system (see output of `ifconfig`).
+6. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`.
+7. There is a virtual IP device for the communication between the HermitCore isles and the Linux system (see output of `ifconfig`).
    Per default, the Linux system has the IP address `192.168.28.1`.
    The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
-7. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
+8. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
 
 ## Building and testing HermitCore as multi-kernel on a real machine
 
 *Note*: to launch HermitCore applications, root privileges are required.
 
 1. In principle you have to follow the tutorial above.
-   After the configuration (Step 2 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)) go to the subdirectory `linux`, which contains the source code of the Linux kernel.
+   After the configuration and building of the cross-compilers (Step 3 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
+   Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux) and switch to the branch `hermit`.
    Configure the kernel with `make menuconfig` for your system.
    Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
-2. Go back to the root directory of this repository and build with `make` the Linux kernel, the HermitCore kernel, the cross-compiler, and the demo applications.
-3. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
+2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
    We recommend to disable Linux NO_HZ feature by setting the kernel parameter `nohz=off`.
-4. Register the HermitCore loader at your system with following command: `echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader.
+3. Register the HermitCore loader at your system with following command: `echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader.
    You find the loader `proxy` after building the HermiCore sources in the subdirectory `hermit/tools` of the directory, which contains this *README*.
-5. The IP device between HermitCore and Linux currently does not support IPv6.
+4. The IP device between HermitCore and Linux currently does not support IPv6.
    Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.mmnif.disable_ipv6 = 1`.
-6. Per default, the IP device uses a static IP address range.
+5. Per default, the IP device uses a static IP address range.
    Linux has to use `162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0).
    The network manager must be configured accordingly and therefore the file `/etc/sysconfig/network-scripts/ifcfg-mmnif` must be created with the following content:
 ```

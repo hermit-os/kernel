@@ -11,17 +11,14 @@ travis:
 	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit
 	make PATH=$(PATH):$(CROSSDIR) ARCH_OPT="$(ARCH_OPT)" -C hermit/tools proxy
 
-all: linux/arch/x86/boot/bzImage default
-
-linux/arch/x86/boot/bzImage:
-	make -j$(JOBS) -C linux
+all: default
 
 test:
 	. ./test.sh
 
-qemu: linux/arch/x86/boot/bzImage
+qemu:
 	$(QEMU) -smp 10 -m 8G -numa node,nodeid=0,cpus=0-4 -numa node,nodeid=1,cpus=5-9 \
-		-kernel linux/arch/x86/boot/bzImage \
+		-kernel config/bzImage \
 		-append "root=/dev/ram0 rootfstype=ramfs init=init console=ttyS0" \
 		-net nic,model=rtl8139 -net user -net dump \
 		-nographic -monitor telnet:127.0.0.1:1235,server,nowait \
@@ -33,6 +30,5 @@ clean:
 
 veryclean:
 	make -C hermit veryclean
-	make -C linux clean
 
 .PHONY: default all clean veryclean test
