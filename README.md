@@ -57,7 +57,8 @@ On Debian-based systems the packets can be installed by executing:
 
 1. In principle you have to follow the tutorial above.
    After the configuration and building of the cross-compilers (Step 3 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
-   Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux) and switch to the branch `hermit`.
+   Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux). 
+   Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to `centos`, which is compatible to CentOS 7.
    Configure the kernel with `make menuconfig` for your system.
    Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
