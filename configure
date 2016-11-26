@@ -1727,8 +1727,7 @@ done
 
 # Checks for library functions.
 
-cp config/linux_config linux/.config
-CROSSDIR=`pwd`/hermit/usr/x86/bin
+CROSSDIR=`pwd`/usr/x86/bin
 
 
 
