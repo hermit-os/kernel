@@ -14,7 +14,7 @@ script:
         - tar xzf newlib.tar.gz
         - mv tmp usr/
         - mv x86 usr/
-        - make T=1 travis
+        - make T=1 all
         - make test
 env:
         global:
