@@ -15,8 +15,7 @@ AC_CHECK_PROGS(QEMU, qemu-system-x86_64)
 
 # Checks for library functions.
 
-cp config/linux_config linux/.config
-CROSSDIR=`pwd`/hermit/usr/x86/bin
+CROSSDIR=`pwd`/usr/x86/bin
 AC_SUBST(CROSSDIR)
 
 AC_ARG_WITH([mtune],

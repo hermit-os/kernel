@@ -64,7 +64,7 @@ On Debian-based systems the packets can be installed by executing:
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
    We recommend to disable Linux NO_HZ feature by setting the kernel parameter `nohz=off`.
 3. After a reboot of the system, register the HermitCore loader at your system with following command: `echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader.
-   You find the loader `proxy` after building the HermiCore sources in the subdirectory `hermit/tools` of the directory, which contains this *README*.
+   You find the loader `proxy` after building the HermiCore sources in the subdirectory `tools` of the directory, which contains this *README*.
 4. The IP device between HermitCore and Linux currently does not support IPv6.
    Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.mmnif.disable_ipv6 = 1`.
 5. Per default, the IP device uses a static IP address range.
@@ -81,7 +81,7 @@ NM_CONTROLLED=yes
 ```
 Finally, follow the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine) from Step 5.
 
-The demo applications are located in their subdirectories `hermit/usr/{tests,benchmarks}`.
+The demo applications are located in their subdirectories `usr/{tests,benchmarks}`.
 
 ## Builting and testing HermitCore as classical standalone unikernel
 
@@ -106,13 +106,13 @@ The connection to the system monitor used automatically `HERMIT_PORT+1`, i.e., t
 
 The following example starts the stream benchmark in a virtual machine, which has 4 cores and 6GB memory.
 ```
-HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G hermit/usr/benchmarks/stream
+HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G usr/benchmarks/stream
 ```
 
 ## Building HermitCore applications
 
-After successful building of HermitCore and its demo applications (see above), HermitCore’s cross toolchain (*gcc*, *g++*, *gfortran*, *gccgo*, *objdump*, etc.) is located at the subdiretory `hermit/usr/x86` of the directory, which contains this *README*.
-To use these tools, add `hermit/usr/x86/bin` to your environment variable `PATH`.
+After successful building of HermitCore and its demo applications (see above), HermitCore’s cross toolchain (*gcc*, *g++*, *gfortran*, *gccgo*, *objdump*, etc.) is located at the subdiretory `usr/x86` of the directory, which contains this *README*.
+To use these tools, add `usr/x86/bin` to your environment variable `PATH`.
 As with any other cross toolchain, the tool names begin with the target architecture (*x86_64*) and the name of the operating system (*hermit*).
 For instance, `x86_64-hermit-gcc` stands for the GNU C compiler, which is able to build HermitCore applications.
 
