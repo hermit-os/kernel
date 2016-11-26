@@ -72,5 +72,5 @@ int main(int argc, char** argv)
 		fclose(file);
 	} else fprintf(stderr, "Unable to open file /tmp/test.txt\n");
 
-	return errno;
+	return 0;
 }
