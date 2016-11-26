@@ -3,13 +3,13 @@
 # do not use this script
 # it is written only for internal tests via Travis CI
 
-FILES="hermit/usr/tests/hello hermit/usr/tests/hellof hermit/usr/tests/hello++ hermit/usr/tests/thr_hello hermit/usr/tests/pi hermit/usr/benchmarks/stream hermit/usr/benchmarks/basic"
-PROXY=hermit/tools/proxy
+FILES="usr/tests/hello usr/tests/hellof usr/tests/hello++ usr/tests/thr_hello usr/tests/pi usr/benchmarks/stream usr/benchmarks/basic"
+PROXY=tools/proxy
 
 for f in $FILES; do echo "check $f..."; timeout --preserve-status 3m $PROXY $f || exit 1; done
 
 # test echo server at port 8000
-$PROXY hermit/usr/tests/server &
+$PROXY usr/tests/server &
 sleep 10
 curl http://127.0.0.1:8000/help
 sleep 1
