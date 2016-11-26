@@ -6,7 +6,7 @@
 FILES="usr/tests/hello usr/tests/hellof usr/tests/hello++ usr/tests/thr_hello usr/tests/pi usr/benchmarks/stream usr/benchmarks/basic"
 PROXY=tools/proxy
 
-for f in $FILES; do echo "check $f..."; timeout --preserve-status 3m $PROXY $f || exit 1; done
+for f in $FILES; do echo "check $f..."; $PROXY $f || exit 1; done
 
 # test echo server at port 8000
 $PROXY usr/tests/server &
