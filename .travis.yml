@@ -25,4 +25,3 @@ env:
                 - HERMIT_MEM="512M"
                 - HERMIT_KVM="0"
                 - HERMIT_VERBOSE="1"
-                - HERMIT_APP_PORT=8000
