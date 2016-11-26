@@ -286,10 +286,18 @@ static int init_qemu(char *path)
 	snprintf(hostfwd, MAX_PATH, "user,hostfwd=tcp:127.0.0.1:%u-:%u", port, port);
 	snprintf(monitor_str, MAX_PATH, "telnet:127.0.0.1:%d,server,nowait", port+1);
 
-	mkstemp(tmpname);
+	if (mkstemp(tmpname) < 0)
+	{
+		perror("mkstemp");
+		exit(1);
+	}
 	snprintf(chardev_file, MAX_PATH, "file,id=gnc0,path=%s", tmpname);
 
-	readlink("/proc/self/exe", loader_path, MAX_PATH);
+	if (readlink("/proc/self/exe", loader_path, MAX_PATH) < 0)
+	{
+		perror("readlink");
+		exit(1);
+	}
 	str = strstr(loader_path, "proxy");
 	strncpy(str, "../arch/x86/loader/ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
 
@@ -577,7 +585,14 @@ int handle_syscalls(int s)
 
 			if (fd > 2) {
 				sret = write(fd, buff, len);
-				write(s, &sret, sizeof(sret));
+				j = 0;
+				while(j < sizeof(sret))
+				{
+					int l = write(s, ((char*)&sret)+j, sizeof(sret)-j);
+					if (l < 0)
+						goto out;
+					j += l;
+				}
 			} else {
 				j = 0;
 				while(j < len)
