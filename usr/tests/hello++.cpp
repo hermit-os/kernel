@@ -34,5 +34,5 @@ int main(int argc, char** argv)
 {
 	cout << "Hello World from g++!!!" << endl;
 
-	return errno;
+	return 0;
 }
