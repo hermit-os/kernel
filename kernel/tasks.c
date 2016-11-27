@@ -344,6 +344,7 @@ int init_tls(void)
 			return -ENOMEM;
 		}
 
+		memset(tls_addr, 0x00, TLS_OFFSET);
 		memcpy((void*) (tls_addr+TLS_OFFSET), (void*) curr_task->tls_addr, curr_task->tls_size);
 
 		// set fs register to the TLS segment
