@@ -43,6 +43,13 @@
 #include <lwip/err.h>
 #include <lwip/stats.h>
 
+/*
+ * Note that linker symbols are not variables, they have no memory allocated for
+ * maintaining a value, rather their address is their value.
+ */
+extern const void kernel_start;
+extern const void kernel_end;
+
 //TODO: don't use one big kernel lock to comminicate with all proxies
 static spinlock_irqsave_t lwip_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -244,11 +251,19 @@ ssize_t sys_sbrk(ssize_t incr)
 	spinlock_lock(&heap_lock);
 
 	ret = heap->end;
-	heap->end += incr;
 
-	// reserve VMA regions
-	if (PAGE_CEIL(heap->end) > PAGE_CEIL(ret))
-		vma_add(PAGE_CEIL(ret), PAGE_FLOOR(heap->end), VMA_HEAP|VMA_USER);
+	// check heapp boundaries
+	if ((heap->end >= HEAP_START) && (heap->end+incr < HEAP_START + HEAP_SIZE)) {
+		heap->end += incr;
+
+		// reserve VMA regions
+		if (PAGE_CEIL(heap->end) > PAGE_CEIL(ret)) {
+			// region is already reserved for the heap, we have to change the
+			// property
+			vma_free(PAGE_CEIL(ret), PAGE_FLOOR(heap->end));
+			vma_add(PAGE_CEIL(ret), PAGE_FLOOR(heap->end), VMA_HEAP|VMA_USER);
+		}
+	} else ret = -ENOMEM;
 
 	// allocation and mapping of new pages for the heap
 	// is catched by the pagefault handler

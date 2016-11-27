@@ -68,6 +68,11 @@ int vma_init(void)
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
 
+	// reserve space for the heap
+	ret = vma_add(HEAP_START, HEAP_START+HEAP_SIZE, VMA_NO_ACCESS);
+	if (BUILTIN_EXPECT(ret, 0))
+		goto out;
+
 #ifdef CONFIG_VGA
 	// add VGA video memory
 	ret = vma_add(VIDEO_MEM_ADDR, VIDEO_MEM_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
@@ -141,6 +146,7 @@ found:
 		new->flags = flags;
 		new->next = succ;
 		new->prev = pred;
+		LOG_DEBUG("vma_alloc: create new vma, new->start 0x%zx, new->end 0x%zx\n", new->start, new->end);
 
 		if (succ)
 			succ->prev = new;

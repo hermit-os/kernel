@@ -42,7 +42,8 @@ extern "C" {
 #define CACHE_LINE		64
 #define KERNEL_STACK_SIZE	(8*1024)
 #define DEFAULT_STACK_SIZE	(256*1024)
-#define HEAP_START		(1ULL << 34)
+#define HEAP_START		(PAGE_2M_FLOOR((size_t)&kernel_end) + 4*PAGE_SIZE)
+#define HEAP_SIZE		(1ULL << 32)
 #define KMSG_SIZE		(4*1024)
 #define INT_SYSCALL		0x80
 #define MAILBOX_SIZE		128

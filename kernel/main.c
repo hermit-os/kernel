@@ -392,7 +392,9 @@ static int initd(void* arg)
 	curr_task->heap->start = PAGE_FLOOR(heap);
 	curr_task->heap->end = PAGE_FLOOR(heap);
 
-	// reserve VMA region
+	// region is already reserved for the heap, we have to change the
+	// property of the first page
+	vma_free(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE);
 	vma_add(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE, VMA_HEAP|VMA_USER);
 
 	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
@@ -595,6 +597,7 @@ int hermit_main(void)
 		PAUSE;
 
 	print_status();
+	//vma_dump();
 
 	create_kernel_task_on_core(NULL, initd, NULL, NORMAL_PRIO, boot_processor);
 
