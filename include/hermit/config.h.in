@@ -4,6 +4,9 @@
 #undef MAX_TASKS
 #undef MAX_ISLE
 #undef MAX_FNAME
+#undef SAVE_FPU
+#undef CONFIG_VGA
+#undef VIDEO_MEM_ADDR
 
 /* Define to use machine specific version of memcpy */
 #undef HAVE_ARCH_MEMCPY
