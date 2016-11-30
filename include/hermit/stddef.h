@@ -44,7 +44,6 @@ extern "C" {
 
 #define TIMER_FREQ	100 /* in HZ */
 #define CLOCK_TICK_RATE	1193182 /* 8254 chip's internal oscillator frequency */
-#define VIDEO_MEM_ADDR	0xB8000 /* the video memory address */
 #define CACHE_LINE	64
 #define HEAP_START	(PAGE_2M_FLOOR((size_t)&kernel_end) + 4*PAGE_SIZE)
 #define HEAP_SIZE	(1ULL << 32)
@@ -52,8 +51,6 @@ extern "C" {
 #define INT_SYSCALL	0x80
 #define MAILBOX_SIZE	128
 //#define WITH_PCI_IDS
-//#define SAVE_FPU
-//#define CONFIG_VGA
 
 #define BYTE_ORDER             LITTLE_ENDIAN
 

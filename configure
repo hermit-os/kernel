@@ -1764,6 +1764,14 @@ $as_echo "#define MAX_ISLE 8" >>confdefs.h
 $as_echo "#define MAX_FNAME 128" >>confdefs.h
 
 
+$as_echo "#define VIDEO_MEM_ADDR 0xB8000" >>confdefs.h
+
+#AC_DEFINE(CONFIG_VGA, 1, Use the VGA interface as output device)
+
+$as_echo "#define DYNAMIC_TICKS 1" >>confdefs.h
+
+#AC_DEFINE(SAVE_FPU, 1, Set task switched flag during a context switch);
+
 CROSSDIR=`pwd`/usr/x86/bin
 
 
