@@ -58,7 +58,7 @@ On Debian-based systems the packets can be installed by executing:
 1. In principle you have to follow the tutorial above.
    After the configuration and building of the cross-compilers (Step 3 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
    Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux). 
-   Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to `centos`, which is compatible to CentOS 7.
+   Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to `centos`, which is compatible to the current CentOS 7 kernel.
    Configure the kernel with `make menuconfig` for your system.
    Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
@@ -70,6 +70,7 @@ On Debian-based systems the packets can be installed by executing:
 5. Per default, the IP device uses a static IP address range.
    Linux has to use `162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0).
    The network manager must be configured accordingly and therefore the file `/etc/sysconfig/network-scripts/ifcfg-mmnif` must be created with the following content:
+
 ```
 DEVICE=mmnif
 BOOTPROTO=none
@@ -80,14 +81,13 @@ IPADDR=192.168.28.1
 NM_CONTROLLED=yes
 ```
 Finally, follow the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine) from Step 5.
-
 The demo applications are located in their subdirectories `usr/{tests,benchmarks}`.
 
-## Builting and testing HermitCore as classical standalone unikernel
+## Building and testing HermitCore as classical standalone unikernel
 
 HermitCore applications can be directly started as standalone kernel within a virtual machine.
 In this case, [iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf) is not supported.
-Please build HermitCore and register the loader in the same way as done for the multi-kernel version (see [*Building and testing HermitCore on a real machine*](#building-and-testing-hermitcore-on-a-real-machine)).
+Please build HermitCore and register the loader in the same way as done for the multi-kernel version (see [Building and testing HermitCore on a real machine](#building-and-testing-hermitcore-on-a-real-machine)).
 If the environment variable `HERMIT_ISLE` is set to `qemu`, the application will be started within a VM.
 Please note that the loader requires QEMU and uses per default *KVM*.
 Furthermore, it expects that the executable is called `qemu-system-x86_64`.
