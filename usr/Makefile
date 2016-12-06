@@ -12,7 +12,7 @@ CD = cd
 CP = cp
 MKDIR = mkdir -p
 TMP = $(TOPDIR)/tmp
-OPT = --disable-shared --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
+OPT = --disable-shared --disable-multilib --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread --disable-multilib #--enable-newlib-reent-small
 
 # Prettify output
 V = 0
@@ -47,13 +47,13 @@ bootstrap: $(ARCH) $(TMP)/binutils $(TMP)/bootstrap
 $(TMP)/binutils:
 	@echo Build binutils
 	$Q$(MKDIR) $(TMP)/binutils
-	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-multilib --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
 
 
 $(TMP)/bootstrap:
 	@echo Build bootstrap compiler
 	$Q$(MKDIR) $(TMP)/bootstrap
-	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
+	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
 
 toolchain: $(TMP)/newlib pte headers $(TMP)/gcc libs demo
 
@@ -87,10 +87,10 @@ headers:
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --disable-multilib --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
 	$Q$(RM) $(TMP)/gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
 
 clean:
 	@echo Cleaning toolchain
