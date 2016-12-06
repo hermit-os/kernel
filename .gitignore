@@ -23,6 +23,7 @@ qemu-vlan0.pcap
 autom4te.cache
 documentation/html/
 include/hermit/config.inc
+include/hermit/config.h
 tools/proxy
 usr/tests/hello
 usr/tests/hello++
