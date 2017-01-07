@@ -12,7 +12,9 @@ CD = cd
 CP = cp
 MKDIR = mkdir -p
 TMP = $(TOPDIR)/tmp
-OPT = --disable-shared --disable-multilib --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread --disable-multilib #--enable-newlib-reent-small
+OPT = --disable-shared --disable-multilib --enable-lto --enable-newlib-hw-fp --enable-newlib-io-c99-formats --enable-newlib-multithread #--enable-newlib-reent-small
+CLONE_DEPTH = --depth=50
+#CLONE_DEPTH =
 
 # Prettify output
 V = 0
@@ -42,7 +44,20 @@ demo:
 $(ARCH):
 	$Q$(MKDIR) $(TMP)
 
-bootstrap: $(ARCH) $(TMP)/binutils $(TMP)/bootstrap
+bootstrap: binutils gcc newlib pte $(ARCH) $(TMP)/binutils $(TMP)/bootstrap
+
+binutils:
+	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/binutils.git
+
+gcc:
+	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/gcc.git
+
+pte:
+	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/pthread-embedded.git pte
+	$Q$(CD) pte; ./configure
+
+newlib:
+	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/newlib.git
 
 $(TMP)/binutils:
 	@echo Build binutils
@@ -55,17 +70,18 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
 
-toolchain: $(TMP)/newlib pte headers $(TMP)/gcc libs demo
+toolchain: $(TMP)/newlib libpthread $(TMP)/gcc libs demo
 
 $(TMP)/newlib:
 	@echo Build newlib
 	$Q$(MKDIR) $(TMP)/newlib
 	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
 
-pte:
+libpthread:
 	@echo Build libpthread
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte
+	$Q$(CP) pte/libpthread.a $(TOPDIR)/$(ARCH)/x86_64-hermit/lib/
 
 libs:
 	@echo Build Xray profiler
@@ -75,14 +91,6 @@ libs:
 	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread $(PROFILING_CFLAGS)" -C $(OMPRT)
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
-
-headers:
-	@echo [CP] Copy headers
-	$Q$(CP) -R ../lwip/src/include/posix/* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
-	$Q$(CP) -R ../lwip/src/include/arch $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
-	$Q$(CP) -R ../lwip/src/include/lwip* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
-	$Q$(CP) -R ../include/neti* $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
-	$Q$(CP) -R ../include/sys $(TOPDIR)/$(ARCH)/$(CROSSCOMPREFIX)/include/
 
 $(TMP)/gcc:
 	@echo Build final gcc
@@ -94,7 +102,6 @@ $(TMP)/gcc:
 
 clean:
 	@echo Cleaning toolchain
-	$Q$(MAKE) -C pte clean
 	$Q$(MAKE) -C $(OMPRT) clean
 	$Q$(MAKE) -C ircce clean
 	$Q$(MAKE) -C tests clean
@@ -104,13 +111,13 @@ clean:
 
 veryclean:
 	@echo Propper cleaning of the toolchain
-	$Q$(MAKE) -C pte veryclean
 	$Q$(MAKE) -C $(OMPRT) veryclean
 	$Q$(MAKE) -C ircce veryclean
 	$Q$(MAKE) -C tests veryclean
 	$Q$(MAKE) -C benchmarks veryclean
 	$Q$(MAKE) -C openmpbench veryclean
+	$Q$(RM) binutils gcc newlib pte
 	$Q$(RM) $(TOPDIR)/$(ARCH)
 	$Q$(RM) $(TMP)
 
-.PHONY: default all clean veryclean headers pte libs
+.PHONY: default all clean veryclean headers libpthread libs

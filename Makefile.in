@@ -12,6 +12,14 @@ QEMU = @QEMU@ -machine accel=kvm -cpu host
 CROSSDIR = @CROSSDIR@
 JOBS = $(shell nproc)
 ARCH_OPT = @ARCH_OPT@
+TOOLCHAIN = @TOOLCHAIN@
+ifeq ($(TOOLCHAIN),0)
+BUILD_BOOTSTRAP =
+BUILD_TOOLCHAIN =
+else
+BUILD_BOOTSTRAP = bootstrap
+BUILD_TOOLCHAIN = toolchain
+endif
 
 # add path to the cross toolchain
 PATH:=$(PATH):$(CROSSDIR)
@@ -81,7 +89,7 @@ endif
 
 default: all
 
-all: arch/x86/kernel/boot.h bootstrap $(NAME) toolchain tools loader
+all: arch/x86/kernel/boot.h $(BUILD_BOOTSTRAP) $(NAME) $(BUILD_TOOLCHAIN) tools loader
 
 toolchain:
 	$Q$(MAKE) ARCH=$(ARCH) \

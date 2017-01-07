@@ -587,6 +587,7 @@ PACKAGE_URL='http://www.hermitcore.org'
 ac_unique_file="kernel/main.c"
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+TOOLCHAIN
 ARCH_OPT
 CROSSDIR
 QEMU
@@ -632,6 +633,7 @@ ac_subst_files=''
 ac_user_opts='
 enable_option_checking
 with_mtune
+with_toolchain
 with_max_cores
 with_max_tasks
 with_kernel_stack_size
@@ -1249,6 +1251,7 @@ Optional Packages:
   --with-PACKAGE[=ARG]    use PACKAGE [ARG=yes]
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-mtune=ARCH       enable tuning for a specific architecture
+  --with-toolchain        build also the whole HermitCore toolchain
   --with-max-cores=N      specify the maximum number of cores
   --with-max-tasks=N      specify the maximum number of running tasks
   --with-kernel-stack-size=SIZE
@@ -1783,6 +1786,16 @@ if test "${with_mtune+set}" = set; then :
    fi
 else
   ARCH_OPT=
+fi
+
+
+
+
+# Check whether --with-toolchain was given.
+if test "${with_toolchain+set}" = set; then :
+  withval=$with_toolchain; TOOLCHAIN=1
+else
+  TOOLCHAIN=0
 fi
 
 
