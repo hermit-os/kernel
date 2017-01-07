@@ -42,6 +42,9 @@ AC_ARG_WITH([mtune],
   [ARCH_OPT=])
 AC_SUBST(ARCH_OPT)
 
+AC_ARG_WITH([toolchain], [AS_HELP_STRING([--with-toolchain], [build also the whole HermitCore toolchain])], [TOOLCHAIN=1], [TOOLCHAIN=0])
+AC_SUBST(TOOLCHAIN)
+
 AC_ARG_WITH(max-cores, [AS_HELP_STRING([--with-max-cores=N], [specify the maximum number of cores])])
 if test "x$with_max_cores" != x; then
 AC_DEFINE_UNQUOTED(MAX_CORES, $with_max_tasks, Define the maximum number of cores)
