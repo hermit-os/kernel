@@ -131,7 +131,7 @@ loader:
 $(NAME):
 	@echo [AR] $(NAME)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
-	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME) $(TOPDIR)/usr/$(ARCH)/$(CROSSCOMPREFIX)/lib/$(NAME)
+	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME)
 
 examples:
 	$Q$(MAKE) -C usr examples
