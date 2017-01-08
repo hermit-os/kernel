@@ -21,7 +21,7 @@ script:
         - mkdir -p $TOPDIR/tmp/bootstrap
         - cd -
         - ./configure
-        - make -j2 V=1 T=1 all
+        - make V=1 all
 env:
         global:
                 - TOPDIR=/home/travis/build
