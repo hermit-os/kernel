@@ -32,7 +32,7 @@ endif
 default:
 	@echo Do not use default rule!
 
-demo:
+examples:
 	@echo Build demo applications
 	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) GO_FOR_TARGET="$(GO_FOR_TARGET)" GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_TARGET)" -C tests depend
 	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) GO_FOR_TARGET="$(GO_FOR_TARGET)" GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_TARGET)" -C tests
@@ -70,7 +70,7 @@ $(TMP)/bootstrap:
 	$Q$(MKDIR) $(TMP)/bootstrap
 	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
 
-toolchain: $(TMP)/newlib libpthread $(TMP)/gcc libs demo
+toolchain: $(TMP)/newlib libpthread $(TMP)/gcc libs
 
 $(TMP)/newlib:
 	@echo Build newlib
