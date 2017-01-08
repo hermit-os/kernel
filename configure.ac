@@ -8,6 +8,8 @@ AC_CONFIG_SRCDIR(kernel/main.c)
 AC_CONFIG_HEADERS(include/hermit/config.h)
 
 # Checks for programs.
+AC_PROG_CC
+AC_PROG_INSTALL
 
 # Checks for libraries.
 
