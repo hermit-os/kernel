@@ -21,6 +21,12 @@ BUILD_BOOTSTRAP = bootstrap
 BUILD_TOOLCHAIN = toolchain
 endif
 
+prefix = @prefix@
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_DATA = @INSTALL_DATA@
+
 # add path to the cross toolchain
 PATH:=$(PATH):$(CROSSDIR)
 
@@ -148,6 +154,11 @@ qemu:
                 -fsdev local,security_model=none,id=fsdev0,path=$(shell realpath .) \
                 -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hermit \
                 -s
+
+install:
+	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
+	$Q$(INSTALL_DATA) usr/libomp/libiomp.a $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
+	$Q$(INSTALL_DATA) usr/libomp/libgomp.spec $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
