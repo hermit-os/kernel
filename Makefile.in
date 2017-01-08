@@ -133,7 +133,10 @@ $(NAME):
 	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
 	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME) $(TOPDIR)/usr/$(ARCH)/$(CROSSCOMPREFIX)/lib/$(NAME)
 
-test:
+examples:
+	$Q$(MAKE) -C usr examples
+
+test: demo
 	. ./test.sh
 
 qemu:
@@ -200,6 +203,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean qemu gdb usr test toolchain tools
+.PHONY: default all clean qemu gdb usr test toolchain tools examples
 
 include $(addsuffix /Makefile,$(SUBDIRS))
