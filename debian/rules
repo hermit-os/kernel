@@ -26,3 +26,7 @@ override_dh_auto_configure:
 
 override_dh_auto_test:
 	@echo "tests are disabled"
+
+override_dh_auto_install:
+	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/lib
+	/usr/bin/install -c -m 644 libhermit.a debian/libhermit/opt/hermit/x86_64-hermit/lib
