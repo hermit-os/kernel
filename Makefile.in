@@ -157,8 +157,6 @@ qemu:
 
 install:
 	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
-	$Q$(INSTALL_DATA) usr/libomp/libiomp.a $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
-	$Q$(INSTALL_DATA) usr/libomp/libgomp.spec $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
