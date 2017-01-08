@@ -23,3 +23,6 @@ export DEB_BUILD_OPTS = nocheck
 # This is example for Cmake (See https://bugs.debian.org/641051 )
 override_dh_auto_configure:
 	dh_auto_configure -- --prefix=/opt/hermit
+
+override_dh_auto_test:
+	@echo "tests are disabled"
