@@ -30,6 +30,7 @@ override_dh_auto_test:
 override_dh_auto_install:
 	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/lib
 	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/include
+	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/bin
 	/usr/bin/install -c -m 644 libhermit.a debian/libhermit/opt/hermit/x86_64-hermit/lib
 	#/usr/bin/install -c -m 644 usr/ircce/libircce.a debian/libhermit/opt/hermit/x86_64-hermit/lib
 	#/usr/bin/install -c -m 644 usr/ircce/*.h debian/libhermit/opt/hermit/x86_64-hermit/include
