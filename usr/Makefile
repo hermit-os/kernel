@@ -6,7 +6,7 @@ NJOBS=-j$(shell nproc)
 OMPRT=libomp
 
 CROSSCOMPREFIX = x86_64-hermit
-NEWLIB = $(TOPDIR)/$(ARCH)/$(TARGET)
+PREFIX = /opt/hermit
 RM = rm -rf
 CD = cd
 CP = cp
@@ -23,12 +23,6 @@ ifeq ($V,0)
 	P = > /dev/null
 endif
 
-# Avoid output on TravisCI
-T = 0
-ifeq ($T,1)
-	TP = > /dev/null
-endif
-
 default:
 	@echo Do not use default rule!
 
@@ -41,10 +35,7 @@ examples:
 	#$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C openmpbench depend
 	$Q$(MAKE) ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET) $(PROFILING_CFLAGS)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET) $(PROFILING_LDFLAGS)" OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) -C openmpbench
 
-$(ARCH):
-	$Q$(MKDIR) $(TMP)
-
-bootstrap: binutils gcc newlib pte $(ARCH) $(TMP)/binutils $(TMP)/bootstrap
+bootstrap: binutils gcc newlib pte $(TMP)/binutils $(TMP)/bootstrap
 
 binutils:
 	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/binutils.git
@@ -54,7 +45,7 @@ gcc:
 
 pte:
 	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/pthread-embedded.git pte
-	$Q$(CD) pte; ./configure
+	$Q$(CD) pte; ./configure --prefix=$(PREFIX)
 
 newlib:
 	git clone $(CLONE_DEPTH) https://github.com/RWTH-OS/newlib.git
@@ -62,43 +53,49 @@ newlib:
 $(TMP)/binutils:
 	@echo Build binutils
 	$Q$(MKDIR) $(TMP)/binutils
-	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --disable-multilib --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(PREFIX) --disable-multilib --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
 
 
 $(TMP)/bootstrap:
 	@echo Build bootstrap compiler
 	$Q$(MKDIR) $(TMP)/bootstrap
-	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc $(TP) && $(MAKE) install-gcc $(TP)
+	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
 toolchain: $(TMP)/newlib libpthread $(TMP)/gcc libs
 
 $(TMP)/newlib:
 	@echo Build newlib
 	$Q$(MKDIR) $(TMP)/newlib
-	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/newlib; $(TOPDIR)/newlib/configure --target=$(TARGET) --prefix=$(PREFIX) $(OPT) && $(MAKE) $(NJOBS) && $(MAKE) install
 
 libpthread:
 	@echo Build libpthread
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte depend
 	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte
-	$Q$(CP) pte/libpthread.a $(TOPDIR)/$(ARCH)/x86_64-hermit/lib/
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte install
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Iplatform/hermit -Iplatform/helper -Wall $(PROFILING_CFLAGS)" -C pte headers
 
 libs:
 	@echo Build Xray profiler
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" -C xray
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) CFLAGS_FOR_TARGET="$(CFLAGS_FOR_TARGET)" LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_TARGET)" PREFIX=$(PREFIX) -C xray
 	@echo Build OpenMP Runtime and iRCCE
-	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread $(PROFILING_CFLAGS)" -C $(OMPRT) depend
-	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread $(PROFILING_CFLAGS)" -C $(OMPRT)
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce depend
-	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" -C ircce
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread $(PROFILING_CFLAGS)" PREFIX=$(PREFIX) -C $(OMPRT) depend
+	$Q$(MAKE) TARGET=$(TARGET) CXX_FOR_TARGET=$(CXX_FOR_TARGET) CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_TARGET)" CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall -pthread $(PROFILING_CFLAGS)" PREFIX=$(PREFIX) -C $(OMPRT)
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" PREFIX=$(PREFIX) -C ircce depend
+	$Q$(MAKE) TARGET=$(TARGET) CC_FOR_TARGET=$(CC_FOR_TARGET) AR_FOR_TARGET=$(AR_FOR_TARGET) CFLAGS_FOR_TARGET+="-I. -Wall" PREFIX=$(PREFIX) -C ircce
+
+install:
+	$Q$(MAKE) PREFIX=$(PREFIX) -C xray install
+	$Q$(MAKE) PREFIX=$(PREFIX) -C ircce install
+	$Q$(MAKE) PREFIX=$(PREFIX) -C $(OMPRT) install
 
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --with-newlib --with-isl --disable-multilib --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) && $(MAKE) install
 	$Q$(RM) $(TMP)/gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(TOPDIR)/$(ARCH) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) $(TP) && $(MAKE) install $(TP)
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) &&  $(MAKE) install
 
 clean:
 	@echo Cleaning toolchain
@@ -117,7 +114,6 @@ veryclean:
 	$Q$(MAKE) -C benchmarks veryclean
 	$Q$(MAKE) -C openmpbench veryclean
 	$Q$(RM) binutils gcc newlib pte
-	$Q$(RM) $(TOPDIR)/$(ARCH)
 	$Q$(RM) $(TMP)
 
 .PHONY: default all clean veryclean headers libpthread libs

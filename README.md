@@ -30,14 +30,16 @@ On Debian-based systems the packets can be installed by executing:
 
 1. Please make sure that you cloned this repository and all its submodules.
 2. To configure the system, run the *configure* script in the directory, which contains this *README*.
-   Fine tuning of the installation directories, e.g., with the flag `--prefix` is currently not supported.
-   HermitCore, the cross-compiler and the demo applications will be installed in subdirectories of this repository.
+   With the flag `--with-toolchain`, the HermitCore's complete cross toolchain (cross compiler, binutils, etc.) will be downloaded and built.
+   **NOTE**: This requires write access to the installation directory, which is specified by the flag `--prefix`.
    At the end of this *README* in section *Tips* you find hints to enable optimization for the target.
-3. The command `make all` build the the HermitCore kernel, the cross-compiler, and the demo applications.
-4. To start a virtual machine and to boot a small Linux version use the command `make qemu`.
+3. The command `make all` build the the HermitCore kernel and depending on the configuration flags the cross toolchain.
+4. Install the kernel with `make install`.
+5. Build all example applications with `make examples`.
+6. To start a virtual machine and to boot a small Linux version use the command `make qemu`.
    Per default, the virtual machine has 10 cores, 2 NUMA nodes, and 8 GiB RAM.
    To increase or to decrease the machine size, the label `qemu` in the Makefile has to be modified accordingly.
-5. Inside the VM runs a small Linux system, which already includes the patches for HermitCore.
+7. Inside the VM runs a small Linux system, which already includes the patches for HermitCore.
    Per NUMA node (= HermitCore isle) there is a directory called `isleX` under `/sys/hermit` , where `X` represents the NUMA node ID.
    The demo applications are located in the directories `/hermit/usr/{tests,benchmarks}`.
    A HermitCore loader is already registered.
@@ -45,18 +47,18 @@ On Debian-based systems the packets can be installed by executing:
    To change the default behavior, the environment variable `HERMIT_ISLE` is used to specify the (memory) location of the isle, while the environment variable `HERMIT_CPUS` is used to specify the cores.
    For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/usr/tests/hello` starts a HelloWorld demo on the HermitCore isle 1, which uses the cores 3 to 5.
    The output messages are forwarded to the Linux proxy and printed on the Linux system.
-6. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`.
-7. There is a virtual IP device for the communication between the HermitCore isles and the Linux system (see output of `ifconfig`).
+8. HermitCore's kernel messages of `isleX` are available via `cat /sys/hermit/isleX/log`.
+9. There is a virtual IP device for the communication between the HermitCore isles and the Linux system (see output of `ifconfig`).
    Per default, the Linux system has the IP address `192.168.28.1`.
    The HermitCore isles starts with the IP address `192.168.28.2` for isle 0 and is increased by one for every isle.
-8. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
+10. More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}` which is a shared directory between the host and QEmu.
 
 ## Building and testing HermitCore as multi-kernel on a real machine
 
 *Note*: to launch HermitCore applications, root privileges are required.
 
 1. In principle you have to follow the tutorial above.
-   After the configuration and building of the cross-compilers (Step 3 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
+   After the configuration, building of the cross-compilers and all example application (Step 5 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
    Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux). 
    Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to `centos`, which is compatible to the current CentOS 7 kernel.
    Configure the kernel with `make menuconfig` for your system.

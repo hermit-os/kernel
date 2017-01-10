@@ -9,16 +9,18 @@ SUBDIRS = $(KERNDIRS)
 GIT_VERSION := $(shell git describe --abbrev=6 --dirty --always --tags)
 TODAY := $(shell date +'%Y%m%d')
 QEMU = @QEMU@ -machine accel=kvm -cpu host
-CROSSDIR = @CROSSDIR@
+CROSSDIR = @prefix@/bin
 JOBS = $(shell nproc)
 ARCH_OPT = @ARCH_OPT@
 TOOLCHAIN = @TOOLCHAIN@
 ifeq ($(TOOLCHAIN),0)
 BUILD_BOOTSTRAP =
 BUILD_TOOLCHAIN =
+INSTALL_LIBHERMIT = @echo "Library libhermit successfully built."
 else
 BUILD_BOOTSTRAP = bootstrap
 BUILD_TOOLCHAIN = toolchain
+INSTALL_LIBHERMIT = make install_libhermit
 endif
 
 prefix = @prefix@
@@ -98,7 +100,7 @@ default: all
 all: arch/x86/kernel/boot.h $(BUILD_BOOTSTRAP) $(NAME) $(BUILD_TOOLCHAIN) tools loader
 
 toolchain:
-	$Q$(MAKE) ARCH=$(ARCH) \
+	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
 		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
 		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
 		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
@@ -126,10 +128,10 @@ toolchain:
 		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr toolchain
 
 bootstrap:
-	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="" LDFLAGS="" -C usr bootstrap
+	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) CFLAGS="" LDFLAGS="" -C usr bootstrap
 
 tools:
-	$Q$(MAKE) ARCH=$(ARCH) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
+	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) CFLAGS="$(CFLAGS_FOR_TOOLS)" LDFLAGS="$(LDFLAGS_FOR_TOOLS)" -C tools
 
 loader:
 	$Q$(MAKE) -C arch/$(ARCH)/loader
@@ -138,9 +140,35 @@ $(NAME):
 	@echo [AR] $(NAME)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
 	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME)
+	$(INSTALL_LIBHERMIT)
 
 examples:
-	$Q$(MAKE) -C usr examples
+	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
+		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
+		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
+		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
+		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
+		FCFLAGS_FOR_TARGET="$(FCFLAGS_FOR_NEWLIB)" \
+		FCFLAGS="$(FCFLAGS_FOR_NEWLIB)" \
+		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
+		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
+		CC_FOR_TARGET=$(CC_FOR_TARGET) \
+		GO_FOR_TARGET=$(GO_FOR_TARGET) \
+		FC_FOR_TARGET=$(FC_FOR_TARGET) \
+		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
+		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
+		AR_FOR_TARGET=$(AR_FOR_TARGET) \
+		AS_FOR_TARGET=$(AS_FOR_TARGET) \
+		LD_FOR_TARGET=$(LD_FOR_TARGET) \
+		NM_FOR_TARGET=$(NM_FOR_TARGET) \
+		OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET) \
+		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
+		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
+		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
+		ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) \
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) \
+		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
+		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr examples
 
 test: demo
 	. ./test.sh
@@ -155,8 +183,12 @@ qemu:
                 -device virtio-9p-pci,id=fs0,fsdev=fsdev0,mount_tag=hermit \
                 -s
 
-install:
-	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(TOPDIR)/$(CROSSCOMPREFIX)/lib/
+install_libhermit:
+	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSCOMPREFIX)/lib/
+
+install: install_libhermit
+	$Q$(MAKE) PREFIX=$(prefix) -C usr install
+	$Q$(INSTALL_PROGRAM) tools/proxy $(prefix)/bin
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~

@@ -32,9 +32,6 @@ AC_DEFINE(VIDEO_MEM_ADDR, 0xB8000, Definition of the VGA address)
 AC_DEFINE(DYNAMIC_TICKS, 1, Use a dynamic tick instead of a static)
 #AC_DEFINE(SAVE_FPU, 1, Set task switched flag during a context switch);
 
-CROSSDIR=`pwd`/usr/x86/bin
-AC_SUBST(CROSSDIR)
-
 AC_ARG_WITH([mtune],
   [AS_HELP_STRING([--with-mtune=ARCH],
                   [enable tuning for a specific architecture])],

@@ -1,4 +1,4 @@
-NEWLIB = ../x86/x86_64-hermit
+CROSSPREFIX = x86_64-hermit
 CP = cp
 NAME = libxray.a
 
@@ -14,9 +14,11 @@ OBJS = xray.o stringpool.o hashtable.o symtable.o demangle.o parsesymbols.o repo
 
 $(NAME): $(OBJS)
 	$(AR_FOR_TARGET) rsv $@ $(OBJS)
-	$(CP) $@ $(NEWLIB)/lib
-	$(CP) libxray.spec $(NEWLIB)/lib
-	$(CP) xray.h $(NEWLIB)/include
+
+install: $(NAME)
+	$(CP) $(NAME) $(PREFIX)/$(CROSSPREFIX)/lib
+	$(CP) libxray.spec $(PREFIX)/$(CROSSPREFIX)/lib
+	$(CP) xray.h $(PREFIX)/$(CROSSPREFIX)/include
 
 %.o: %.c
 	@echo [CC] $@

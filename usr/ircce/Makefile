@@ -1,4 +1,4 @@
-NEWLIB = ../x86/x86_64-hermit
+CROSSPREFIX = x86_64-hermit
 MAKE = make
 ARFLAGS_FOR_TARGET = rsv
 CP = cp
@@ -25,8 +25,10 @@ all: $(NAME)
 
 $(NAME): $(OBJS)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS_FOR_TARGET) $@ $(OBJS)
-	$Q$(CP) $@ $(NEWLIB)/lib
-	$Q$(CP) *.h $(NEWLIB)/include
+
+install:
+	$Q$(CP) $(NAME) $(PREFIX)/$(CROSSPREFIX)/lib
+	$Q$(CP) *.h $(PREFIX)/$(CROSSPREFIX)/include
 	
 clean:
 	@echo Cleaning examples
