@@ -29,13 +29,14 @@ override_dh_auto_test:
 
 override_dh_auto_install:
 	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/lib
+	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/include
 	/usr/bin/install -c -m 644 libhermit.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/ircce/libircce.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/ircce/*.h debian/libhermit/opt/hermit/x86_64-hermit/include
-	/usr/bin/install -c -m 644 usr/ircce/libxray.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/ircce/libxray.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/ircce/libxray.h debian/libhermit/opt/hermit/x86_64-hermit/include
-	/usr/bin/install -c -m 644 usr/libomp/libiomp.h debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/libomp/libgomp.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
-	/usr/bin/install -c -m 644 usr/libomp/src/omp.h debian/libhermit/opt/hermit/x86_64-hermit/include
+	#/usr/bin/install -c -m 644 usr/ircce/libircce.a debian/libhermit/opt/hermit/x86_64-hermit/lib
+	#/usr/bin/install -c -m 644 usr/ircce/*.h debian/libhermit/opt/hermit/x86_64-hermit/include
+	#/usr/bin/install -c -m 644 usr/ircce/libxray.a debian/libhermit/opt/hermit/x86_64-hermit/lib
+	#/usr/bin/install -c -m 644 usr/ircce/libxray.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
+	#/usr/bin/install -c -m 644 usr/ircce/libxray.h debian/libhermit/opt/hermit/x86_64-hermit/include
+	#/usr/bin/install -c -m 644 usr/libomp/libiomp.h debian/libhermit/opt/hermit/x86_64-hermit/lib
+	#/usr/bin/install -c -m 644 usr/libomp/libgomp.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
+	#/usr/bin/install -c -m 644 usr/libomp/src/omp.h debian/libhermit/opt/hermit/x86_64-hermit/include
 	/usr/bin/install -c tools/proxy debian/libhermit/opt/hermit/bin
