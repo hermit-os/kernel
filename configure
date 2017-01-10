@@ -589,7 +589,6 @@ ac_subst_vars='LTLIBOBJS
 LIBOBJS
 TOOLCHAIN
 ARCH_OPT
-CROSSDIR
 INSTALL_DATA
 INSTALL_SCRIPT
 INSTALL_PROGRAM
@@ -2750,9 +2749,6 @@ $as_echo "#define VIDEO_MEM_ADDR 0xB8000" >>confdefs.h
 $as_echo "#define DYNAMIC_TICKS 1" >>confdefs.h
 
 #AC_DEFINE(SAVE_FPU, 1, Set task switched flag during a context switch);
-
-CROSSDIR=`pwd`/usr/x86/bin
-
 
 
 # Check whether --with-mtune was given.
