@@ -21,6 +21,7 @@ script:
   - mkdir -p $TOPDIR/tmp/bootstrap
   - cd /home/travis/build/RWTH-OS/libhermit-0.1
   - debuild -e PATH -us -uc
+  - x86_64-hermit-readelf -a kernel/main.o
 deploy:
   on: production
   provider: bintray
