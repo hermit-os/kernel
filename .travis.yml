@@ -18,7 +18,6 @@ script:
   - sudo dpkg -i ./binutils-hermit_2.26.1-1_amd64.deb
   - wget https://www.lankes.org/deploy/bootstrap.tar.gz
   - tar xzf bootstrap.tar.gz
-  - mkdir -p $TOPDIR/tmp/bootstrap
   - cd /home/travis/build/RWTH-OS/libhermit-0.1
   - debuild -e PATH -us -uc
   - x86_64-hermit-readelf -a kernel/main.o
