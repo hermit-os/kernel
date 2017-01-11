@@ -16,11 +16,11 @@ TOOLCHAIN = @TOOLCHAIN@
 ifeq ($(TOOLCHAIN),0)
 BUILD_BOOTSTRAP =
 BUILD_TOOLCHAIN =
-INSTALL_LIBHERMIT = @echo "Library libhermit successfully built."
+INSTALL_LIBHERMIT =
 else
 BUILD_BOOTSTRAP = bootstrap
 BUILD_TOOLCHAIN = toolchain
-INSTALL_LIBHERMIT = make install_libhermit
+INSTALL_LIBHERMIT = install_libhermit
 endif
 
 prefix = @prefix@
@@ -99,7 +99,7 @@ default: all
 
 all: arch/x86/kernel/boot.h $(BUILD_BOOTSTRAP) $(NAME) $(BUILD_TOOLCHAIN) tools loader
 
-toolchain:
+toolchain: $(INSTALL_LIBHERMIT)
 	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
 		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
 		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
@@ -140,7 +140,6 @@ $(NAME):
 	@echo [AR] $(NAME)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS) -o $(NAME) $^
 	$Q$(OBJCOPY_FOR_TARGET) --rename-section .bss=.kbss --rename-section .text=.ktext --rename-section .data=.kdata $(NAME)
-	$(INSTALL_LIBHERMIT)
 
 examples:
 	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
@@ -184,7 +183,10 @@ qemu:
                 -s
 
 install_libhermit:
+	$Q$(INSTALL_PROGRAM) -d $(prefix)/$(CROSSCOMPREFIX)/lib/
 	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSCOMPREFIX)/lib/
+	$Q$(INSTALL_PROGRAM) -d $(prefix)/$(CROSSCOMPREFIX)/include/hermit/
+	$Q$(INSTALL_DATA) include/hermit/* $(prefix)/$(CROSSCOMPREFIX)/include/hermit/
 
 install: install_libhermit
 	$Q$(MAKE) PREFIX=$(prefix) -C usr install
