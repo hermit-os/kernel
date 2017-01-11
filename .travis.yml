@@ -9,10 +9,11 @@ before_install:
   - sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev
   - git submodule update --init lwip usr/libomp
 script:
-  - rm -rf .git
+  - mv .git ..
   - cd ..
   - mv HermitCore libhermit-0.1
   - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1
+  - mv .git libhermit-0.1
   - cd $TOPDIR
   - wget https://bintray.com/rwth-os/hermitcore/download_file?file_path=binutils-hermit_2.26.1-1_amd64.deb -O binutils-hermit_2.26.1-1_amd64.deb
   - sudo dpkg -i ./binutils-hermit_2.26.1-1_amd64.deb
