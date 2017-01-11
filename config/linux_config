@@ -992,7 +992,7 @@ CONFIG_NET_CORE=y
 # CONFIG_TUN is not set
 # CONFIG_TUN_VNET_CROSS_LE is not set
 # CONFIG_VETH is not set
-# CONFIG_VIRTIO_NET is not set
+CONFIG_VIRTIO_NET=y
 # CONFIG_NLMON is not set
 # CONFIG_ARCNET is not set
 
