@@ -3,41 +3,18 @@
 # output every command that modifies files on the build system.
 #export DH_VERBOSE = 1
 
-
 # see FEATURE AREAS in dpkg-buildflags(1)
 #export DEB_BUILD_MAINT_OPTIONS = hardening=+all
 export DEB_BUILD_OPTS = nocheck
 
-# see ENVIRONMENT in dpkg-buildflags(1)
-# package maintainers to append CFLAGS
-#export DEB_CFLAGS_MAINT_APPEND  = -Wall -pedantic
-# package maintainers to append LDFLAGS
-#export DEB_LDFLAGS_MAINT_APPEND = -Wl,--as-needed
-
-
 %:
-	dh $@  #--with autotools_dev
+	dh $@ --parallel
 
-
-# dh_make generated override targets
-# This is example for Cmake (See https://bugs.debian.org/641051 )
 override_dh_auto_configure:
-	dh_auto_configure -- --prefix=/opt/hermit
+	./configure --prefix=`pwd`/debian/libhermit/opt/hermit
 
 override_dh_auto_test:
 	@echo "tests are disabled"
 
 override_dh_auto_install:
-	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/lib
-	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/include
-	mkdir -p debian/libhermit/opt/hermit/x86_64-hermit/bin
-	/usr/bin/install -c -m 644 libhermit.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/ircce/libircce.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/ircce/*.h debian/libhermit/opt/hermit/x86_64-hermit/include
-	#/usr/bin/install -c -m 644 usr/ircce/libxray.a debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/ircce/libxray.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/ircce/libxray.h debian/libhermit/opt/hermit/x86_64-hermit/include
-	#/usr/bin/install -c -m 644 usr/libomp/libiomp.h debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/libomp/libgomp.spec debian/libhermit/opt/hermit/x86_64-hermit/lib
-	#/usr/bin/install -c -m 644 usr/libomp/src/omp.h debian/libhermit/opt/hermit/x86_64-hermit/include
-	/usr/bin/install -c tools/proxy debian/libhermit/opt/hermit/bin
+	make install_libhermit
