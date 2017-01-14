@@ -13,6 +13,12 @@ export DEB_BUILD_OPTS = nocheck
 override_dh_auto_configure:
 	./configure --prefix=`pwd`/debian/libhermit/opt/hermit
 
+override_dh_auto_build:
+	# this target is somehow not executed by dh_auto_build and thus the build fails
+	make arch/x86/kernel/boot.h
+
+	dh_auto_build
+
 override_dh_auto_test:
 	@echo "tests are disabled"
 
