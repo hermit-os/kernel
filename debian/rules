@@ -18,3 +18,6 @@ override_dh_auto_test:
 
 override_dh_auto_install:
 	make install_libhermit
+	
+	# delete unneded files that would cause conflicts
+	rm -rf `-pwd`/debian/libhermit/opt/hermit/share/info/dir
