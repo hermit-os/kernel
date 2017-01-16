@@ -87,7 +87,7 @@ CFLAGS_FOR_TOOLS = -O2 -Wall -std=gnu99
 LDFLAGS_FOR_TOOLS =
 
 # Prettify output
-V = 1
+V = 0
 ifeq ($V,0)
 	Q = @
 	P = > /dev/null
