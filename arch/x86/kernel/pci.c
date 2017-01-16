@@ -154,7 +154,7 @@ int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info
 	if (!info)
 		return -EINVAL;
 
-	if (!mechanism)
+	if (!mechanism && !is_uhyve())
 		pci_init();
 
 	for (bus = 0; bus < MAX_BUS; bus++) {

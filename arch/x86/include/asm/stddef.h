@@ -205,6 +205,7 @@ typedef struct {
 	size_t	ss_size;	/* Stack size.  */
 } stack_t;
 
+const int32_t is_uhyve(void);
 const int32_t is_single_kernel(void);
 
 #ifdef __cplusplus
