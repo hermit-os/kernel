@@ -43,6 +43,9 @@ usr/benchmarks/basic
 usr/openmpbench/schedbench
 usr/openmpbench/syncbench
 usr/openmpbench/taskbench
-usr/x86/
 usr/tmp/
 arch/x86/kernel/boot.h
+usr/binutils/
+usr/gcc/
+usr/newlib/
+usr/pte/
