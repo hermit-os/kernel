@@ -1,5 +1,6 @@
 MAKE = make
 CC = gcc
+CP = cp
 CFLAGS = -O2 -Wall -std=gnu99 $(ARCH_OPT)
 PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
@@ -13,13 +14,13 @@ endif
 # other implicit rules
 %.o : %.c
 	@echo [CC] $@
-	$Q$(CC) -c $(CFLAGS) -o $@ $<
+	$Q$(CC) -c $(CFLAGS) -pthread -o $@ $<
 
 all: proxy
 
-proxy: proxy.o
+proxy: proxy.o uhyve.o
 	@echo [LD] $@
-	$Q$(CC) $(CFLAGS) -o $@ $<
+	$Q$(CC) $(CFLAGS) -pthread -o $@ $< uhyve.o
 
 clean:
 	@echo Cleaning tools

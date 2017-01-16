@@ -230,6 +230,8 @@ extern const void kernel_start;
 
 int uart_early_init(char* cmdline)
 {
+	if (is_uhyve())
+		return 0;
 #if 1
 	// default value of our QEMU configuration
 	iobase = 0xc110;
@@ -275,6 +277,9 @@ int uart_early_init(char* cmdline)
 
 int uart_init(void)
 {
+	if (is_uhyve())
+		return 0;
+
 #ifdef CONFIG_PCI
 	pci_info_t pci_info;
 	uint32_t bar = 0;

@@ -56,6 +56,13 @@ extern "C" {
 
 #define DYNAMIC_TICKS
 
+#define UHYVE_PORT_WRITE	0x499
+#define UHYVE_PORT_OPEN		0x500
+#define UHYVE_PORT_CLOSE	0x501
+#define UHYVE_PORT_READ		0x502
+#define UHYVE_PORT_EXIT		0x503
+#define UHYVE_PORT_LSEEK	0x504
+
 #define BUILTIN_EXPECT(exp, b)		__builtin_expect((exp), (b))
 //#define BUILTIN_EXPECT(exp, b)	(exp)
 #define NORETURN			__attribute__((noreturn))

@@ -47,6 +47,8 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 
+#include "proxy.h"
+
 #define MAX_PATH	255
 #define MAX_ARGS	1024
 #define INADDR(a, b, c, d) (struct in_addr) { .s_addr = ((((((d) << 8) | (c)) << 8) | (b)) << 8) | (a) }
@@ -54,14 +56,6 @@
 #define HERMIT_PORT	0x494E
 #define HERMIT_IP(isle)	INADDR(192, 168, 28, isle + 2)
 #define HERMIT_MAGIC	0x7E317
-#define HERMIT_ELFOSABI	0x42
-
-#define __HERMIT_exit	0
-#define __HERMIT_write	1
-#define __HERMIT_open	2
-#define __HERMIT_close	3
-#define __HERMIT_read	4
-#define __HERMIT_lseek	5
 
 #define EVENT_SIZE	(sizeof (struct inotify_event))
 #define BUF_LEN		(1024 * (EVENT_SIZE + 16))
@@ -80,24 +74,27 @@ static void stop_hermit(void);
 static void dump_log(void);
 static int init_multi(char *path);
 static int init_qemu(char *path);
+int init_uhyve(char *path);
 
-static void fini_env(void)
+static void fini_qemu(void)
 {
-	if (qemu) {
-		int status = 0;
+	int status = 0;
 
-		if (id) {
-			kill(id, SIGINT);
-			wait(&status);
-		}
+	if (id) {
+		kill(id, SIGINT);
+		wait(&status);
+	}
 
-		dump_log();
-		puts("");
-		unlink(tmpname);
-	} else {
-		dump_log();
-		stop_hermit();
-}	}
+	dump_log();
+	puts("");
+	unlink(tmpname);
+}
+
+static void fini_multi(void)
+{
+	dump_log();
+	stop_hermit();
+}
 
 static void exit_handler(int sig)
 {
@@ -126,7 +123,7 @@ static char* cpufreq(void)
 			;
 		*point = '\0';
 
-		snprintf(cmdline, MAX_PATH, "-freq%s", match);	
+		snprintf(cmdline, MAX_PATH, "-freq%s", match);
 		fclose(fp);
 
 		return cmdline;
@@ -139,6 +136,7 @@ static int init_env(char *path)
 {
 	char* str;
 	struct sigaction sINT, sTERM;
+	unsigned int uhyve = 0;
 
 	// define action for SIGINT
 	sINT.sa_handler = exit_handler;
@@ -163,6 +161,11 @@ static int init_env(char *path)
 	{
 		if (strncmp(str, "qemu", 4) == 0) {
 			qemu = 1;
+			uhyve = 0;
+			isle_nr = 0;
+		} else if (strncmp(str, "uhyve", 5) == 0) {
+			uhyve = 1;
+			qemu = 0;
 			isle_nr = 0;
 		} else {
 			isle_nr = atoi(str);
@@ -179,10 +182,15 @@ static int init_env(char *path)
 			port = HERMIT_PORT;
 	}
 
-	if (qemu)
+	if (qemu) {
+		atexit(fini_qemu);
 		return init_qemu(path);
-	else
+	} else if (uhyve) {
+		return init_uhyve(path);
+	} else {
+		atexit(fini_multi);
 		return init_multi(path);
+	}
 }
 
 static int is_hermit_available(void)
@@ -820,7 +828,9 @@ int main(int argc, char **argv)
 	struct sockaddr_in serv_name;
 
 	init_env(argv[1]);
-	atexit(fini_env);
+
+	// in case of uhyve, we will never reach this point
+	// => we could now establish an IP connection to HermitCore
 
 #if 0
 	// check if mmnif interface is available
@@ -831,7 +841,7 @@ int main(int argc, char **argv)
 		strncpy(ethreq.ifr_name, "mmnif", IFNAMSIZ);
 
 		while(1) {
-			/* this socket doesn't really matter, we just need a descriptor 
+			/* this socket doesn't really matter, we just need a descriptor
 			 * to perform the ioctl on */
 			s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 			ioctl(s, SIOCGIFFLAGS, &ethreq);

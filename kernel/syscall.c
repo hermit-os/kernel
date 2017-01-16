@@ -37,6 +37,7 @@
 #include <hermit/memory.h>
 #include <hermit/signal.h>
 #include <hermit/logging.h>
+#include <asm/io.h>
 #include <sys/poll.h>
 
 #include <lwip/sockets.h>
@@ -89,24 +90,28 @@ typedef struct {
 /** @brief To be called by the systemcall to exit tasks */
 void NORETURN sys_exit(int arg)
 {
-	sys_exit_t sysargs = {__NR_exit, arg};
-
-	spinlock_irqsave_lock(&lwip_lock);
-	if (libc_sd >= 0)
-	{
-		int s = libc_sd;
-
-		lwip_write(s, &sysargs, sizeof(sysargs));
-		libc_sd = -1;
-
-		spinlock_irqsave_unlock(&lwip_lock);
-
-		// switch to LwIP thread
-		reschedule();
-
-		lwip_close(s);
+	if (is_uhyve()) {
+		outportl(UHYVE_PORT_EXIT, (unsigned) (size_t) &arg);
 	} else {
-		spinlock_irqsave_unlock(&lwip_lock);
+		sys_exit_t sysargs = {__NR_exit, arg};
+
+		spinlock_irqsave_lock(&lwip_lock);
+		if (libc_sd >= 0)
+		{
+			int s = libc_sd;
+
+			lwip_write(s, &sysargs, sizeof(sysargs));
+			libc_sd = -1;
+
+			spinlock_irqsave_unlock(&lwip_lock);
+
+			// switch to LwIP thread
+			reschedule();
+
+			lwip_close(s);
+		} else {
+			spinlock_irqsave_unlock(&lwip_lock);
+		}
 	}
 
 	do_exit(arg);
@@ -118,8 +123,23 @@ typedef struct {
 	size_t len;
 } __attribute__((packed)) sys_read_t;
 
+typedef struct {
+	int fd;
+	char* buf;
+        size_t len;
+	ssize_t ret;
+} __attribute__((packed)) uhyve_read_t;
+
 ssize_t sys_read(int fd, char* buf, size_t len)
 {
+	if (is_uhyve()) {
+                uhyve_read_t uhyve_args = {fd, (char*) virt_to_phys((size_t) buf), len, -1};
+
+                outportl(UHYVE_PORT_READ, (unsigned)virt_to_phys((size_t)&uhyve_args));
+
+                return uhyve_args.ret;
+        }
+
 	sys_read_t sysargs = {__NR_read, fd, len};
 	ssize_t j, ret;
 	int s;
@@ -175,14 +195,28 @@ typedef struct {
 	size_t len;
 } __attribute__((packed)) sys_write_t;
 
+typedef struct {
+	int fd;
+	const char* buf;
+	size_t len;
+} __attribute__((packed)) uhyve_write_t;
+
 ssize_t sys_write(int fd, const char* buf, size_t len)
 {
-	ssize_t i, ret;
-	sys_write_t sysargs = {__NR_write, fd, len};
-	int s;
-
 	if (BUILTIN_EXPECT(!buf, 0))
 		return -1;
+
+	if (is_uhyve()) {
+		uhyve_write_t uhyve_args = {fd, (const char*) virt_to_phys((size_t) buf), len};
+
+		outportl(UHYVE_PORT_WRITE, (unsigned)virt_to_phys((size_t)&uhyve_args));
+
+		return uhyve_args.len;
+	}
+
+	ssize_t i, ret;
+	int s;
+	sys_write_t sysargs = {__NR_write, fd, len};
 
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
@@ -273,8 +307,24 @@ ssize_t sys_sbrk(ssize_t incr)
 	return ret;
 }
 
+typedef struct {
+	const char* name;
+	int flags;
+	int mode;
+	int ret;
+} __attribute__((packed)) uhyve_open_t;
+
 int sys_open(const char* name, int flags, int mode)
 {
+	if (is_uhyve()) {
+		uhyve_open_t uhyve_open = {(const char*)virt_to_phys((size_t)name), flags, mode, -1};
+
+		kprintf("name %s, %p, 0x%zx\n", name, name, uhyve_open.name);
+		outportl(UHYVE_PORT_OPEN, (unsigned)virt_to_phys((size_t) &uhyve_open));
+
+		return uhyve_open.ret;
+	}
+
 	int s, i, ret, sysnr = __NR_open;
 	size_t len;
 
@@ -331,8 +381,21 @@ typedef struct {
 	int fd;
 } __attribute__((packed)) sys_close_t;
 
+typedef struct {
+        int fd;
+        int ret;
+} __attribute__((packed)) uhyve_close_t;
+
 int sys_close(int fd)
 {
+	if (is_uhyve()) {
+		uhyve_close_t uhyve_close = {fd, -1};
+
+		outportl(UHYVE_PORT_CLOSE, (unsigned)virt_to_phys((size_t) &uhyve_close));
+
+		return uhyve_close.ret;
+	}
+
 	int ret, s;
 	sys_close_t sysargs = {__NR_close, fd};
 
@@ -449,8 +512,22 @@ typedef struct {
 	int whence;
 } __attribute__((packed)) sys_lseek_t;
 
+typedef struct {
+	int fd;
+	off_t offset;
+	int whence;
+} __attribute__((packed)) uhyve_lseek_t;
+
 off_t sys_lseek(int fd, off_t offset, int whence)
 {
+	if (is_uhyve()) {
+		uhyve_lseek_t uhyve_lseek = { fd, offset, whence };
+
+		outportl(UHYVE_PORT_LSEEK, (unsigned)virt_to_phys((size_t) &uhyve_lseek));
+
+		return uhyve_lseek.offset;
+	}
+
 	off_t off;
 	sys_lseek_t sysargs = {__NR_lseek, fd, offset, whence};
 	int s;

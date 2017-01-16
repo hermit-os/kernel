@@ -177,6 +177,9 @@ static int init_netifs(void)
 	LOG_INFO("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
+	if (is_uhyve())
+		return -ENODEV;
+
 	if (!is_single_kernel())
 	{
 		/* Set network address variables */
@@ -402,6 +405,17 @@ static int initd(void* arg)
 
 	// initialize network
 	init_netifs();
+
+	if (is_uhyve())
+	{
+		char* dummy[] = {"app_name", NULL};
+
+		LOG_INFO("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
+		// call user code
+		libc_start(1, dummy, NULL); //argc, argv, environ);
+
+		return 0;
+	}
 
 #if 0
 	if (is_single_kernel()) {

@@ -69,6 +69,7 @@ align 4
     global mb_info
     global hbmem_base
     global hbmem_size
+    global uhyve
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -92,6 +93,7 @@ align 4
     mb_info dq 0
     hbmem_base dq 0
     hbmem_size dq 0
+    uhyve dd 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -665,6 +667,12 @@ Lgo3:
 
     add rsp, 16
     iretq
+
+global is_uhyve
+align 64
+is_uhyve
+   mov eax, DWORD [uhyve]
+   ret
 
 global is_single_kernel
 align 64
