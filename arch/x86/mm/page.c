@@ -49,7 +49,7 @@
 /* Note that linker symbols are not variables, they have no memory
  * allocated for maintaining a value, rather their address is their value. */
 extern const void kernel_start;
-//extern const void kernel_end;
+extern const void kernel_end;
 
 /// This page is reserved for copying
 #define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
@@ -94,12 +94,24 @@ static uint8_t expect_zeroed_pages = 0;
 
 size_t virt_to_phys(size_t addr)
 {
-	size_t vpn   = addr >> PAGE_BITS;	// virtual page number
-	size_t entry = self[0][vpn];		// page table entry
-	size_t off   = addr  & ~PAGE_MASK;	// offset within page
-	size_t phy   = entry &  PAGE_MASK;	// physical page frame number
+	if ((addr > (size_t) &kernel_start) &&
+	    (addr <= PAGE_2M_FLOOR((size_t) &kernel_end)))
+	{
+		size_t vpn   = addr >> (PAGE_2M_BITS);	// virtual page number
+		size_t entry = self[1][vpn];		// page table entry
+		size_t off   = addr  & ~PAGE_2M_MASK;	// offset within page
+		size_t phy   = entry &  PAGE_2M_MASK;	// physical page frame number
 
-	return phy | off;
+		return phy | off;
+
+	} else {
+		size_t vpn   = addr >> PAGE_BITS;	// virtual page number
+		size_t entry = self[0][vpn];		// page table entry
+		size_t off   = addr  & ~PAGE_MASK;	// offset within page
+		size_t phy   = entry &  PAGE_MASK;	// physical page frame number
+
+		return phy | off;
+	}
 }
 
 /*
