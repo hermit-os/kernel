@@ -791,6 +791,66 @@ static inline uint64_t read_rflags(void)
 	return result;
 }
 
+/* For KVM hypercalls, a three-byte sequence of either the vmcall or the vmmcall
+ * instruction.  The hypervisor may replace it with something else but only the
+ * instructions are guaranteed to be supported.
+ *
+ * Up to four arguments may be passed in rbx, rcx, rdx, and rsi respectively.
+ * The hypercall number should be placed in rax and the return value will be
+ * placed in rax.  No other registers will be clobbered unless explicitly
+ * noted by the particular hypercall.
+ */
+
+inline static size_t vmcall0(int nr)
+{
+        size_t res;
+
+	asm volatile ("vmcall" : "=a" (res): "a" (nr)
+	                       : "memory");
+
+	return res;
+}
+
+inline static size_t vmcall1(int nr, size_t arg0)
+{
+        size_t res;
+
+	asm volatile ("vmcall" : "=a" (res): "a" (nr), "b"(arg0)
+	                       : "memory");
+
+	return res;
+}
+
+inline static size_t vmcall2(int nr, size_t arg0, size_t arg1)
+{
+        size_t res;
+
+	asm volatile ("vmcall" : "=a" (res): "a" (nr), "b"(arg0), "c"(arg1)
+	                       : "memory");
+
+	return res;
+}
+
+inline static size_t vmcall3(int nr, size_t arg0, size_t arg1, size_t arg2)
+{
+        size_t res;
+
+	asm volatile ("vmcall" : "=a" (res): "a" (nr), "b"(arg0), "c"(arg1), "d"(arg2)
+	                       : "memory");
+
+	return res;
+}
+
+inline static size_t vmcall4(int nr, size_t arg0, size_t arg1, size_t arg2, size_t arg3)
+{
+        size_t res;
+
+	asm volatile ("vmcall" : "=a" (res): "a" (nr), "b"(arg0), "c"(arg1), "d"(arg2), "S"(arg3)
+	                       : "memory");
+
+	return res;
+}
+
 /** @brief search the first most significant bit
  *
  * @param i source operand
@@ -894,7 +954,7 @@ inline static int system_calibration(void)
 	size_t cr0;
 
 	apic_init();
-	if (is_single_kernel())
+	if (is_single_kernel() && !is_uhyve())
 		pci_init();
 	register_task();
 
