@@ -42,13 +42,16 @@
 
 /// Page offset bits
 #define PAGE_BITS		12
+#define PAGE_2M_BITS		21
 /// The size of a single page in bytes
 #define PAGE_SIZE		( 1L << PAGE_BITS)
 /// Mask the page address without page map flags and XD flag
 #if 0
 #define PAGE_MASK		((~0L) << PAGE_BITS)
+#define PAGE_2M_MASK		(~0L) << PAGE_2M_BITS)
 #else
 #define PAGE_MASK		(((~0L) << PAGE_BITS) & ~PG_XD)
+#define PAGE_2M_MASK		(((~0L) << PAGE_2M_BITS) & ~PG_XD)
 #endif
 
 #if 0
