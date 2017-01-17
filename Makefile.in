@@ -126,6 +126,34 @@ toolchain: $(INSTALL_LIBHERMIT)
 		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
 		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr toolchain
 
+libs:
+	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
+		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
+		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
+		CFLAGS_FOR_TARGET="$(CFLAGS_FOR_NEWLIB)" \
+		FFLAGS_FOR_TARGET="$(FFLAGS_FOR_NEWLIB)" \
+		FCFLAGS_FOR_TARGET="$(FCFLAGS_FOR_NEWLIB)" \
+		FCFLAGS="$(FCFLAGS_FOR_NEWLIB)" \
+		CXXFLAGS_FOR_TARGET="$(CXXFLAGS_FOR_NEWLIB)" \
+		NASMFLAGS="$(NASMFLAGS_FOR_NEWLIB)" \
+		CC_FOR_TARGET=$(CC_FOR_TARGET) \
+		GO_FOR_TARGET=$(GO_FOR_TARGET) \
+		FC_FOR_TARGET=$(FC_FOR_TARGET) \
+		CXX_FOR_TARGET=$(CXX_FOR_TARGET) \
+		GCC_FOR_TARGET=$(GCC_FOR_TARGET) \
+		AR_FOR_TARGET=$(AR_FOR_TARGET) \
+		AS_FOR_TARGET=$(AS_FOR_TARGET) \
+		LD_FOR_TARGET=$(LD_FOR_TARGET) \
+		NM_FOR_TARGET=$(NM_FOR_TARGET) \
+		OBJDUMP_FOR_TARGET=$(OBJDUMP_FOR_TARGET) \
+		OBJCOPY_FOR_TARGET=$(OBJCOPY_FOR_TARGET) \
+		RANLIB_FOR_TARGET=$(RANLIB_FOR_TARGET) \
+		STRIP_FOR_TARGET=$(STRIP_FOR_TARGET) \
+		ELFEDIT_FOR_TARGET=$(ELFEDIT_FOR_TARGET) \
+		READELF_FOR_TARGET=$(READELF_FOR_TARGET) \
+		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
+		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr libs
+
 bootstrap:
 	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) CFLAGS="" LDFLAGS="" -C usr bootstrap
 
@@ -189,7 +217,7 @@ install_libhermit:
 
 install: install_libhermit
 	$Q$(MAKE) PREFIX=$(prefix) -C usr install
-	$Q$(INSTALL_PROGRAM) tools/proxy $(prefix)/bin
+	$Q$(MAKE) PREFIX=$(prefix) -C tools install
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~
@@ -245,6 +273,6 @@ include/hermit/config.inc: include/hermit/config.h
 	@echo [GCC-ASM] $@
 	$Q$(CC_FOR_TARGET) $(CFLAGS) -c -o $@ $<
 
-.PHONY: default all clean qemu gdb usr test toolchain tools examples
+.PHONY: default all clean qemu gdb usr test toolchain tools examples libs
 
 include $(addsuffix /Makefile,$(SUBDIRS))
