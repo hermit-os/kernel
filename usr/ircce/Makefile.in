@@ -34,7 +34,7 @@ $(NAME): $(OBJS)
 
 install:
 	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSPREFIX)/lib
-	$Q$(INSTALL_DATA) RCCE*.h $(prefix/$(CROSSPREFIX)/include
+	#$Q$(INSTALL_DATA) RCCE*.h $(prefix/$(CROSSPREFIX)/include
 	
 clean:
 	@echo Cleaning examples
