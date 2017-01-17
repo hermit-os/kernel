@@ -3,6 +3,12 @@ CC = gcc
 CFLAGS = -O2 -Wall -std=gnu99 $(ARCH_OPT)
 PROXYFILES = proxy init.sh $(shell find ../usr/tests ../usr/benchmarks ../usr/openmpbench -type f -executable)
 
+prefix = @prefix@
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_DATA = @INSTALL_DATA@
+
 # Prettify output
 V = 0
 ifeq ($V,0)
@@ -24,6 +30,10 @@ proxy: proxy.o
 clean:
 	@echo Cleaning tools
 	$Q$(RM) -rf *.o *~ *.bin *.obj
+
+install:
+	@echo Install tools
+	$Q$(INSTALL_PROGRAM) proxy $(prefix)/bin
 
 veryclean: clean
 
