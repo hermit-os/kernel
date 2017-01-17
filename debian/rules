@@ -27,3 +27,8 @@ override_dh_auto_install:
 	
 	# delete unneded files that would cause conflicts
 	rm -rf `-pwd`/debian/libhermit/opt/hermit/share/info/dir
+
+override_dh_strip:
+	# stripping will incorrectly use system tools for stripping, generating
+	# wrong binary format, i.e. not for HermitCore
+	@echo "No stripping"
