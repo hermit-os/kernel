@@ -31,7 +31,7 @@ clean:
 	@echo Cleaning tools
 	$Q$(RM) -rf *.o *~ *.bin *.obj
 
-install:
+install: proxy
 	@echo Install tools
 	$Q$(INSTALL_PROGRAM) proxy $(prefix)/bin
 
