@@ -24,7 +24,7 @@ override_dh_auto_test:
 	@echo "tests are disabled"
 
 override_dh_auto_install:
-	make install
+	make install_libhermit
 	
 	# delete unneded files that would cause conflicts
 	rm -rf `-pwd`/debian/libhermit/opt/hermit/share/info/dir
