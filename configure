@@ -2857,7 +2857,7 @@ $as_echo "#define DEFAULT_STACK_SIZE 262144" >>confdefs.h
 
 fi
 
-ac_config_files="$ac_config_files Makefile usr/ircce/Makefile"
+ac_config_files="$ac_config_files Makefile tools/Makefile usr/ircce/Makefile usr/xray/Makefile usr/libomp/Makefile"
 
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
@@ -3552,7 +3552,10 @@ do
   case $ac_config_target in
     "include/hermit/config.h") CONFIG_HEADERS="$CONFIG_HEADERS include/hermit/config.h" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
+    "tools/Makefile") CONFIG_FILES="$CONFIG_FILES tools/Makefile" ;;
     "usr/ircce/Makefile") CONFIG_FILES="$CONFIG_FILES usr/ircce/Makefile" ;;
+    "usr/xray/Makefile") CONFIG_FILES="$CONFIG_FILES usr/xray/Makefile" ;;
+    "usr/libomp/Makefile") CONFIG_FILES="$CONFIG_FILES usr/libomp/Makefile" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac
