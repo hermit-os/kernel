@@ -73,5 +73,5 @@ else
 AC_DEFINE(DEFAULT_STACK_SIZE, 262144, Define the default stack size)
 fi
 
-AC_CONFIG_FILES(Makefile usr/ircce/Makefile usr/xray/Makefile usr/libomp/Makefile)
+AC_CONFIG_FILES(Makefile tools/Makefile usr/ircce/Makefile usr/xray/Makefile usr/libomp/Makefile)
 AC_OUTPUT
