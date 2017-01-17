@@ -299,7 +299,7 @@ static int init_qemu(char *path)
 		exit(1);
 	}
 	str = strstr(loader_path, "proxy");
-	strncpy(str, "../arch/x86/loader/ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
+	strncpy(str, "ldhermit.elf", MAX_PATH-strlen(loader_path)+5);
 
 	str = getenv("HERMIT_APP_PORT");
 	if (str)

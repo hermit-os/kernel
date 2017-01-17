@@ -35,6 +35,7 @@ install: proxy
 	@echo Install tools
 	$Q$(INSTALL_PROGRAM) -d $(prefix)/bin
 	$Q$(INSTALL_PROGRAM) proxy $(prefix)/bin
+	$Q$(INSTALL_DATA) ../arch/x86/loader/ldhermit.elf $(prefix)/bin
 
 veryclean: clean
 
