@@ -18,12 +18,13 @@ override_dh_auto_build:
 	make arch/x86/kernel/boot.h
 
 	dh_auto_build
+	make libs
 
 override_dh_auto_test:
 	@echo "tests are disabled"
 
 override_dh_auto_install:
-	make install_libhermit
+	make install
 	
 	# delete unneded files that would cause conflicts
 	rm -rf `-pwd`/debian/libhermit/opt/hermit/share/info/dir
