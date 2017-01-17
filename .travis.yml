@@ -5,23 +5,21 @@ git:
 language: c
 compiler: gcc
 before_install:
+  - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - sudo apt-get -qq update
   - sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev
+  #- sudo apt-get install -y --force-yes binutils-hermit gcc-hermit-bootstrap
+  - sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
   - git submodule update --init lwip usr/libomp
+
 script:
-  - mv .git ..
   - cd ..
   - mv HermitCore libhermit-0.1
-  - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1
-  - mv .git libhermit-0.1
-  - cd $TOPDIR
-  - wget https://bintray.com/rwth-os/hermitcore/download_file?file_path=binutils-hermit_2.26.1-1_amd64.deb -O binutils-hermit_2.26.1-1_amd64.deb
-  - sudo dpkg -i ./binutils-hermit_2.26.1-1_amd64.deb
-  - wget https://www.lankes.org/deploy/bootstrap.tar.gz
-  - tar xzf bootstrap.tar.gz
-  - cd /home/travis/build/RWTH-OS/libhermit-0.1
-  - debuild -e PATH -us -uc
-  - x86_64-hermit-readelf -a kernel/main.o
+  - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1 --exclude=.git
+  - cd libhermit-0.1
+  - debuild -e PATH -us -uc -j2
+  - x86_64-hermit-readelf -a kernel/main.o | grep ABI
+
 deploy:
   on: production
   provider: bintray
@@ -32,8 +30,7 @@ deploy:
     secure: JfsqEUO3Z60yGfuK5RSzwMoWZtaYflZtW7QE6R1DVMPEQ+CytzEdV2JaTpY14xz4yz1YpBBuQ0P3Q3e2rf/ORp8N8j7/5m3gfiDi8bRH3gX10r6vCQaUBilj0pz3amWUacxwBUEYR/f1029OnJ1qug30f4ARk7DWyuAePt0OboDXZ3j4JOi8xfXKTzofyKGugU4EuzhmKAbpHaBoX97g8z+gETC+wsBEYio8iD2h0ZOe/qZ0S+JGYkphIKcxpQazKdi3YrmWm0BUZsQRtkgoH7KUZm8vqfOUyVOrK+UGOTz4vXqCWHZ+wG1QRrGPUv8ehLrB26y2o02mmaDWQhM+I3RtllL06JDvDw40xjRImYtzg6xr7Mvl0OTQHprXrkN8gw2IbIivV8v31O46Ov+KIaN3CCx1IncnllBWjEXAIs4zPtvNj2Ad338JTkI/opHmPG0DI0DKE36r8wPZYTs/pHVpc3xEzwKYDklJkICjMLUakUGKppS7eKzKGRMjWvbT0vM/U7hHUcz0lA+BUoXedNmJQ1wBT85Ud8uobuKS4C8QmlgIuF1PI2+6LJr5LsCGZRvg7Pl1SPc3ZQLPHX4ggoLAnZZJiV/0ZPCn7XCLiUS1qws37l0uZT1zJQMFLsw9MGuP58tpT7WDuYYAwma/pL+OKC/JKoDhuJwM1I7wB4s=
 env:
   global:
-    - TOPDIR=/home/travis/build
-    - PATH=$PATH:/opt/hermit/bin:$TOPDIR/x86/bin
+    - PATH=$PATH:/opt/hermit/bin/
     - PROXY_STR=":hermit:M:7:\\x42::`pwd`/RWTH-OS/libhermit-0.1/tools/proxy"
     - HERMIT_ISLE=qemu
     - HERMIT_CPUS=1

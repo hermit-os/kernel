@@ -6,6 +6,12 @@ C_source =  $(wildcard *.c)
 NAME = libircce.a
 OBJS = $(C_source:.c=.o)
 
+prefix = @prefix@
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_DATA = @INSTALL_DATA@
+
 #
 # Prettify output
 V = 0
@@ -27,8 +33,13 @@ $(NAME): $(OBJS)
 	$Q$(AR_FOR_TARGET) $(ARFLAGS_FOR_TARGET) $@ $(OBJS)
 
 install:
-	$Q$(CP) $(NAME) $(PREFIX)/$(CROSSPREFIX)/lib
-	$Q$(CP) *.h $(PREFIX)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSPREFIX)/lib
+	$Q$(INSTALL_DATA) iRCCE.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) iRCCE_lib.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE_debug.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE_lib.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) rte_memcpy.h $(prefix)/$(CROSSPREFIX)/include
 	
 clean:
 	@echo Cleaning examples
