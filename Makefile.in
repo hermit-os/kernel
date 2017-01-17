@@ -126,7 +126,7 @@ toolchain: $(INSTALL_LIBHERMIT)
 		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
 		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr toolchain
 
-libs: $(INSTALL_LIBHERMIT)
+libs:
 	$Q$(MAKE) ARCH=$(ARCH) PREFIX=$(prefix) \
 		LDFLAGS_FOR_TARGET="$(LDFLAGS_FOR_NEWLIB)" \
 		GOFLAGS_FOR_TARGET="$(GOFLAGS_FOR_NEWLIB)" \
@@ -217,7 +217,7 @@ install_libhermit:
 
 install: install_libhermit
 	$Q$(MAKE) PREFIX=$(prefix) -C usr install
-	$Q$(INSTALL_PROGRAM) tools/proxy $(prefix)/bin
+	$Q$(MAKE) PREFIX=$(prefix) -C tools install
 
 clean:
 	$Q$(RM) $(NAME) $(NAME).sym $(NAME).bin *~

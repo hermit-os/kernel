@@ -11,14 +11,19 @@ CFLAGS += ${CFLAGS_FOR_TARGET}
 
 OBJS = xray.o stringpool.o hashtable.o symtable.o demangle.o parsesymbols.o report.o
 
+prefix = @prefix@
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_SCRIPT = @INSTALL_SCRIPT@
+INSTALL_DATA = @INSTALL_DATA@
 
 $(NAME): $(OBJS)
 	$(AR_FOR_TARGET) rsv $@ $(OBJS)
 
 install: $(NAME)
-	$(CP) $(NAME) $(PREFIX)/$(CROSSPREFIX)/lib
-	$(CP) libxray.spec $(PREFIX)/$(CROSSPREFIX)/lib
-	$(CP) xray.h $(PREFIX)/$(CROSSPREFIX)/include
+	$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSPREFIX)/lib
+	$(INSTALL_DATA) libxray.spec $(prefix)/$(CROSSPREFIX)/lib
+	$(INSTALL_DATA) xray.h $(prefix)/$(CROSSPREFIX)/include
 
 %.o: %.c
 	@echo [CC] $@
