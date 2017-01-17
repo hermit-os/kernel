@@ -33,6 +33,7 @@ clean:
 
 install: proxy
 	@echo Install tools
+	$Q$(INSTALL_PROGRAM) -d $(prefix)/bin
 	$Q$(INSTALL_PROGRAM) proxy $(prefix)/bin
 
 veryclean: clean
