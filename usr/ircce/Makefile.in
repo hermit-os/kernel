@@ -34,12 +34,12 @@ $(NAME): $(OBJS)
 
 install:
 	$Q$(INSTALL_DATA) $(NAME) $(prefix)/$(CROSSPREFIX)/lib
-	$Q$(INSTALL_DATA) iRCCE.h $(prefix/$(CROSSPREFIX)/include
-	$Q$(INSTALL_DATA) iRCCE_lib.h $(prefix/$(CROSSPREFIX)/include
-	$Q$(INSTALL_DATA) RCCE_debug.h $(prefix/$(CROSSPREFIX)/include
-	$Q$(INSTALL_DATA) RCCE.h $(prefix/$(CROSSPREFIX)/include
-	$Q$(INSTALL_DATA) RCCE_lib.h $(prefix/$(CROSSPREFIX)/include
-	$Q$(INSTALL_DATA) rte_memcpy.h $(prefix/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) iRCCE.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) iRCCE_lib.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE_debug.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) RCCE_lib.h $(prefix)/$(CROSSPREFIX)/include
+	$Q$(INSTALL_DATA) rte_memcpy.h $(prefix)/$(CROSSPREFIX)/include
 	
 clean:
 	@echo Cleaning examples
