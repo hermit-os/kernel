@@ -6,10 +6,10 @@ language: c
 compiler: gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
-  - sudo apt-get -qq update
-  - sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev
+  - travis_retry sudo apt-get -qq update
+  - travis_retry sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev
   #- sudo apt-get install -y --force-yes binutils-hermit gcc-hermit-bootstrap
-  - sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
+  - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
   - git submodule update --init lwip usr/libomp
 
 script:
@@ -20,7 +20,7 @@ script:
   - debuild -e PATH -us -uc -j2
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
-  - make test
+  - if [ "$TRAVIS_BRANCH" != "production" ]; then make test; fi
 
 deploy:
   on: production
