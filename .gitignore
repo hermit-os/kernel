@@ -45,4 +45,7 @@ usr/openmpbench/syncbench
 usr/openmpbench/taskbench
 usr/x86/
 usr/tmp/
+tools/Makefile
+usr/ircce/Makefile
+usr/xray/Makefile
 arch/x86/kernel/boot.h
