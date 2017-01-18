@@ -10,8 +10,7 @@ BRANCH="production"
 echo $TRAVIS_BRANCH
 echo $BRANCH
 
-if [ "$TRAVIS_BRANCH" == "$BRANCH" ]
-then
+if [ "$TRAVIS_BRANCH" == "$BRANCH" ]; then
   echo "No tests on production branch"
 else
   for f in $FILES; do echo "check $f..."; $PROXY $f || exit 1; done
