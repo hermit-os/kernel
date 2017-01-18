@@ -18,7 +18,7 @@ script:
   - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1 --exclude=.git
   - cd libhermit-0.1
   - debuild -e PATH -us -uc -j2
-  - x86_64-hermit-readelf -a kernel/main.o | grep ABI
+  - sudo dpkg -i ../libhermit*_amd64.deb
 
 deploy:
   on: production
