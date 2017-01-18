@@ -5,22 +5,14 @@
 
 FILES="usr/tests/hello usr/tests/hellof usr/tests/hello++ usr/tests/thr_hello usr/tests/pi usr/benchmarks/stream usr/benchmarks/basic"
 PROXY=/opt/hermit/bin/proxy
-BRANCH="production"
 
-echo $TRAVIS_BRANCH
-echo $BRANCH
+for f in $FILES; do echo "check $f..."; $PROXY $f || exit 1; done
 
-if [ "$TRAVIS_BRANCH" == "$BRANCH" ]; then
-  echo "No tests on production branch"
-else
-  for f in $FILES; do echo "check $f..."; $PROXY $f || exit 1; done
+# test echo server at port 8000
+#HERMIT_APP_PORT=8000 $PROXY usr/tests/server &
+#sleep 10
+#curl http://127.0.0.1:8000/help
+#sleep 1
 
-  # test echo server at port 8000
-  #HERMIT_APP_PORT=8000 $PROXY usr/tests/server &
-  #sleep 10
-  #curl http://127.0.0.1:8000/help
-  #sleep 1
-
-  # kill server
-  #kill $!
-fi
+# kill server
+#kill $!
