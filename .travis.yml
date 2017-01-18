@@ -20,6 +20,7 @@ script:
   - debuild -e PATH -us -uc -j2
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
+  - make test
 
 deploy:
   on: production
