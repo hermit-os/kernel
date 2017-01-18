@@ -5,8 +5,12 @@
 
 FILES="usr/tests/hello usr/tests/hellof usr/tests/hello++ usr/tests/thr_hello usr/tests/pi usr/benchmarks/stream usr/benchmarks/basic"
 PROXY=/opt/hermit/bin/proxy
+BRANCH="production"
 
-if [ "$TRAVIS_BRANCH" == "production" ]
+echo $TRAVIS_BRANCH
+echo $BRANCH
+
+if [ "$TRAVIS_BRANCH" == "$BRANCH" ]
 then
   echo "No tests on production branch"
 else
