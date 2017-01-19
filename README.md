@@ -36,9 +36,9 @@ echo "deb [trusted=yes] https://dl.bintray.com/rwth-os/hermitcore vivid main" | 
 sudo apt-get -qq update
 sudo apt-get install binutils-hermit newlib-hermit  pthread-embedded-hermit gcc-hermit libhermit
 ```
-This toolchain is able to build applications to run within VM as [classical unikernel](building-and-testing-hermitcore-as-classical-standalone-unikernel) or bare-metal in a multi-kernel environment.
+This toolchain is able to build applications to run within VM as [classical unikernel](#building-and-testing-hermitcore-as-classical-standalone-unikernel) or bare-metal in a multi-kernel environment.
 For the multi-kernel environment, install the a modified Linux kernel.
-An introduction is published in section [Building and testing HermitCore as multi-kernel on a real machine](building-and-testing-hermitcore-as-multi-kernel-on a-real-machine).
+An introduction is published in section [Building and testing HermitCore as multi-kernel on a real machine](#building-and-testing-hermitcore-as-multi-kernel-on a-real-machine).
 
 ## Building and testing HermitCore as multi-kernel within a virtual machine
 
