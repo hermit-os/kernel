@@ -44,6 +44,9 @@ usr/openmpbench/schedbench
 usr/openmpbench/syncbench
 usr/openmpbench/taskbench
 usr/tmp/
+tools/Makefile
+usr/ircce/Makefile
+usr/xray/Makefile
 arch/x86/kernel/boot.h
 usr/binutils/
 usr/gcc/

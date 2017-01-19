@@ -196,7 +196,7 @@ examples:
 		PROFILING_CFLAGS="$(PROFILING_CFLAGS)" \
 		PROFILING_LDFLAGS="$(PROFILING_LDFLAGS)" -C usr examples
 
-test: demo
+test:
 	. ./test.sh
 
 qemu:
