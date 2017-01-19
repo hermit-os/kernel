@@ -29,7 +29,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <pthread.h>
-#include <syscall.h>
+#include <hermit/syscall.h>
 
 #define THREAD_COUNT_DEFAULT 2
 
