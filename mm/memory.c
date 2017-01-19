@@ -272,17 +272,7 @@ int memory_init(void)
 
 					LOG_INFO("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
-					if ((start_addr <= base) && (end_addr <= base)) {
-						init_list.start = start_addr;
-						init_list.end = end_addr;
-
-						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
-					} else if ((start_addr <= base) && (end_addr < PAGE_2M_FLOOR(base+image_size))) {
-						init_list.start = start_addr;
-						init_list.end = base;
-
-						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
-					} else if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size))) {
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size))) {
 						init_list.start = PAGE_2M_FLOOR(base+image_size);
 						init_list.end = end_addr;
 
