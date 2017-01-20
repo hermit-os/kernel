@@ -85,6 +85,13 @@
 #define UHYVE_PORT_EXIT		0x503
 #define UHYVE_PORT_LSEEK	0x504
 
+#define kvm_ioctl(fd, cmd, arg) ({ \
+	int ret = ioctl(fd, cmd, arg); \
+	if(ret == -1) \
+	    err(1, "KVM: ioctl " #cmd " failed"); \
+	ret; \
+	})
+
 static int kvm = -1, vmfd = -1, vcpufd = 1;
 static uint8_t* guest_mem = NULL;
 static uint8_t* klog = NULL;
@@ -402,20 +409,15 @@ static void setup_system_gdt(struct kvm_sregs *sregs,
 static void setup_system(int vcpufd, uint8_t *mem)
 {
 	struct kvm_sregs sregs;
-	int ret;
+
+	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 
 	/* Set all cpu/mem system structures */
-	ret = ioctl(vcpufd, KVM_GET_SREGS, &sregs);
-	if (ret == -1)
-		err(1, "KVM: ioctl (GET_SREGS) failed");
-
 	setup_system_gdt(&sregs, mem, BOOT_GDT);
 	setup_system_page_tables(&sregs, mem);
 	setup_system_64bit(&sregs);
 
-	ret = ioctl(vcpufd, KVM_SET_SREGS, &sregs);
-	if (ret == -1)
-		err(1, "KVM: ioctl (SET_SREGS) failed");
+	kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 }
 
 
@@ -426,14 +428,11 @@ static void setup_cpuid(int kvm, int vcpufd)
 
 	kvm_cpuid = calloc(1, sizeof(*kvm_cpuid) + max_entries * sizeof(*kvm_cpuid->entries));
 	kvm_cpuid->nent = max_entries;
-
-	if (ioctl(kvm, KVM_GET_SUPPORTED_CPUID, kvm_cpuid) < 0)
-		err(1, "KVM: ioctl (GET_SUPPORTED_CPUID) failed");
+	kvm_ioctl(kvm, KVM_GET_SUPPORTED_CPUID, kvm_cpuid);
 
 	filter_cpuid(kvm_cpuid);
 
-	if (ioctl(vcpufd, KVM_SET_CPUID2, kvm_cpuid) < 0)
-		err(1, "KVM: ioctl (SET_CPUID2) failed");
+	kvm_ioctl(vcpufd, KVM_SET_CPUID2, kvm_cpuid);
 }
 
 static void* vcpu_loop(struct kvm_run *run)
@@ -442,25 +441,27 @@ static void* vcpu_loop(struct kvm_run *run)
 
 	while (!done) {
 		ret = ioctl(vcpufd, KVM_RUN, NULL);
-		if (ret == -1 && errno == EINTR)
-			continue;
-		if (ret == -1) {
-			if (errno == EFAULT) {
-				struct kvm_regs regs;
+		if(ret == -1) {
+			switch(errno) {
+			case EINTR:
+				continue;
 
-				ret = ioctl(vcpufd, KVM_GET_REGS, &regs);
-				if (ret == -1)
-					err(1, "KVM: ioctl (GET_REGS) failed after guest fault");
+			case EFAULT: {
+				struct kvm_regs regs;
+				kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 				err(1, "KVM: host/guest translation fault: rip=0x%llx", regs.rip);
-			} else err(1, "KVM: ioctl in vcpu_loop failed");
+			}
+
+			default:
+				err(1, "KVM: ioctl KVM_RUN in vcpu_loop failed");
+				break;
+			}
 		}
 
-		/* TODO: handle requests */
-
+		/* handle requests */
 		switch (run->exit_reason) {
 		case KVM_EXIT_HLT:
-			fprintf(stderr, "KVM: unhandled KVM_EXIT_HLT\n");
-			/* Guest has halted the CPU, this is considered as a normal exit. */
+			fprintf(stderr, "Guest has halted the CPU, this is considered as a normal exit.\n");
 			return NULL;
 
 		case KVM_EXIT_MMIO:
@@ -549,7 +550,6 @@ static void* vcpu_loop(struct kvm_run *run)
 static void* uhyve_thread(void* arg)
 {
 	char* path = (char*) arg;
-	int ret;
 	size_t mmap_size;
 	struct kvm_run *run;
 
@@ -565,15 +565,12 @@ static void* uhyve_thread(void* arg)
 		err(1, "Could not open: /dev/kvm");
 
 	/* Make sure we have the stable version of the API */
-	ret = ioctl(kvm, KVM_GET_API_VERSION, NULL);
-	if (ret < 0)
-		err(1, "KVM: ioctl (GET_API_VERSION) failed");
-	if (ret != 12)
-		err(1, "KVM: API version is %d, uhyve requires version 12", ret);
+	int kvm_api_version = kvm_ioctl(kvm, KVM_GET_API_VERSION, NULL);
+	if (kvm_api_version != 12)
+		err(1, "KVM: API version is %d, uhyve requires version 12", kvm_api_version);
 
-	vmfd = ioctl(kvm, KVM_CREATE_VM, 0);
-	if (vmfd == -1)
-		err(1, "KVM: unable to create VM");
+	/* Create the virtual machine */
+	vmfd = kvm_ioctl(kvm, KVM_CREATE_VM, 0);
 
 	// TODO: we have to create a gap  for PCI
 	assert(guest_size < KVM_32BIT_GAP_SIZE);
@@ -583,8 +580,7 @@ static void* uhyve_thread(void* arg)
 	if (guest_mem == MAP_FAILED)
 		err(1, "mmap failed");
 
-	ret = load_kernel(guest_mem, path);
-	if (ret)
+	if (load_kernel(guest_mem, path) != 0)
 		exit(EXIT_FAILURE);
 
 	/* Map it to the second page frame (to avoid the real-mode IDT at 0). */
@@ -595,17 +591,9 @@ static void* uhyve_thread(void* arg)
 		.userspace_addr = (uint64_t) guest_mem,
 	};
 
-	ret = ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
-	if (ret == -1)
-		err(1, "KVM: set user memory failed");
-
-	ret = ioctl(vmfd, KVM_CREATE_IRQCHIP);
-	if (ret < 0)
-		err(1, "KVM_CREATE_IRQCHIP ioctl");
-
-	vcpufd = ioctl(vmfd, KVM_CREATE_VCPU, 0);
-	if (vcpufd == -1)
-		err(1, "KVM: create vcpu failed");
+	kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
+	vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, 0);
 
 	/* Setup registers and memory. */
 	setup_system(vcpufd, guest_mem);
@@ -623,15 +611,11 @@ static void* uhyve_thread(void* arg)
 		.rdx = 0,
 		.rflags = 0x2,
 	};
-	ret = ioctl(vcpufd, KVM_SET_REGS, &regs);
-	if (ret == -1)
-		err(1, "KVM: ioctl (SET_REGS) failed");
+	kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
 
 	/* Map the shared kvm_run structure and following data. */
-	ret = ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, NULL);
-	if (ret == -1)
-		err(1, "KVM: ioctl get VCPU_MMAP_SIZE failed");
-	mmap_size = ret;
+	mmap_size = (size_t) kvm_ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, NULL);
+
 	if (mmap_size < sizeof(*run))
 		err(1, "KVM: invalid VCPU_MMAP_SIZE: %zd", mmap_size);
 
