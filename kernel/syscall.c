@@ -319,7 +319,6 @@ int sys_open(const char* name, int flags, int mode)
 	if (is_uhyve()) {
 		uhyve_open_t uhyve_open = {(const char*)virt_to_phys((size_t)name), flags, mode, -1};
 
-		kprintf("name %s, %p, 0x%zx\n", name, name, uhyve_open.name);
 		outportl(UHYVE_PORT_OPEN, (unsigned)virt_to_phys((size_t) &uhyve_open));
 
 		return uhyve_open.ret;
