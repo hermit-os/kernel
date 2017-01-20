@@ -506,7 +506,8 @@ static void* vcpu_loop(struct kvm_run *run)
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 					uhyve_close_t* uhyve_close = (uhyve_close_t*) (guest_mem+data);
 
-					uhyve_close->ret = close(uhyve_close->fd);
+					if (uhyve_close->ret > 2)
+						uhyve_close->ret = close(uhyve_close->fd);
 					break;
 				}
 
