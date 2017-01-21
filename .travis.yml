@@ -20,7 +20,8 @@ script:
   - debuild -e PATH -us -uc -j2
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
-  - if [ "$TRAVIS_BRANCH" != "production" ]; then make test; fi
+  - make test
+  #- if [ "$TRAVIS_BRANCH" != "production" ]; then make test; fi
 
 deploy:
   on: production
