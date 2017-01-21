@@ -17,7 +17,7 @@ script:
   - mv HermitCore libhermit-0.1
   - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1 --exclude=.git
   - cd libhermit-0.1
-  - debuild -e PATH -us -uc -j2
+  - debuild -e PATH -e CFLAGS_FOR_TARGET -e GOFLAGS_FOR_TARGET -e FCFLAGS_FOR_TARGET -e FFLAGS_FOR_TARGET -e CXXFLAGS_FOR_TARGET -us -uc -j2
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
   - make test
@@ -40,3 +40,8 @@ env:
     - HERMIT_MEM="512M"
     - HERMIT_KVM="0"
     - HERMIT_VERBOSE="1"
+    - CFLAGS_FOR_TARGET="-m64 -mtls-direct-seg-refs -O2 -ftree-vectorize"
+    - GOFLAGS_FOR_TARGET"=-m64 -mtls-direct-seg-refs -O2 -ftree-vectorize"
+    - FCFLAGS_FOR_TARGET"=-m64 -mtls-direct-seg-refs -O2 -ftree-vectorize"
+    - FFLAGS_FOR_TARGET="-m64 -mtls-direct-seg-refs -O2 -ftree-vectorize"
+    - CXXFLAGS_FOR_TARGET="-m64 -mtls-direct-seg-refs -O2 -ftree-vectorize"
