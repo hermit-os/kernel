@@ -1,13 +1,14 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting at high-performance computing.
+The project [HermitCore](http://www.hermitcore.org) is new [unikernel](http://unikernel.org) targeting at a scalable and predictable runtime for high-performance and cloud computing.
 HermitCore extends the multi-kernel approach (like [McKernel](http://www-sys-aics.riken.jp/ResearchTopics/os/mckernel.html)) with unikernel features for a better programmability and scalability for hierarchical systems.
 On the startup of HermitCore applications, cores are isolated from the Linux system enabling the bare-metal of the applications on these cores.
 This approach achieves lower OS jitter and a better scalability compared to full-weight kernels.
 Inter-kernel communication between HermitCore applications and the Linux system is realized by means of an IP interface.
 
 In addition to the multi-kernel approach described above, HermitCore can be used as classical standalone unikernel as well.
-This reduces the demand on resources and improves the boot time.
+In this case HermitCore runs a single-kernel exclusively on the hardware or within a virtual machine.
+This reduces the resource demand and improves the boot time which is critical for cloud computing applications.
 It is the result of a research project at RWTH Aachen University and is currently an experimental approach, i.e., not production ready.
 Please use it with caution.
 
@@ -23,8 +24,21 @@ The build process works currently only on **x86-based Linux** systems. The follo
 
 On Debian-based systems the packets can be installed by executing:
 ```
-  sudo apt-get install qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
+  sudo apt-get install qemu-system-x86  nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison
 ```
+
+## Installing HermitCore with by using debian packets
+
+We provide binary packets for debian-based systems containing the complete HermitCore toolchain including a cross-compiler.
+To install the packets you have to execute the following commands:
+```
+echo "deb [trusted=yes] https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
+sudo apt-get -qq update
+sudo apt-get install binutils-hermit newlib-hermit pthread-embedded-hermit gcc-hermit libhermit
+```
+This toolchain is able to build applications for [classical unikernel](#building-and-testing-hermitcore-as-classical-standalone-unikernel) environments within virtual machines or bare-metal in a multi-kernel environment.
+For the latter, you have to install the modified Linux kernel.
+An introduction to this execution mode is provided in section [Building and testing HermitCore as multi-kernel on a real machine](#building-and-testing-hermitcore-as-multi-kernel-on a-real-machine).
 
 ## Building and testing HermitCore as multi-kernel within a virtual machine
 
@@ -59,7 +73,7 @@ On Debian-based systems the packets can be installed by executing:
 
 1. In principle you have to follow the tutorial above.
    After the configuration, building of the cross-compilers and all example application (Step 5 in the [above tutorial](#building-and-testing-hermitcore-within-a-virtual-machine)), a modified Linux kernel has to be installed.
-   Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux). 
+   Please clone the repository with the [modified Linux kernel](https://github.com/RWTH-OS/linux).
    Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to `centos`, which is compatible to the current CentOS 7 kernel.
    Configure the kernel with `make menuconfig` for your system.
    Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
