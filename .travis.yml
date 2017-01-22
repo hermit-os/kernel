@@ -20,8 +20,7 @@ script:
   - debuild -e PATH -e CFLAGS_FOR_TARGET -e GOFLAGS_FOR_TARGET -e FCFLAGS_FOR_TARGET -e FFLAGS_FOR_TARGET -e CXXFLAGS_FOR_TARGET -us -uc -j2
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
-  - make test
-  #- if [ "$TRAVIS_BRANCH" != "production" ]; then make test; fi
+  - if [ "$TRAVIS_BRANCH" != "master" ]; then make test; fi
 
 deploy:
   on: production
