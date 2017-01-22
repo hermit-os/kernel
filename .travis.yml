@@ -23,7 +23,7 @@ script:
   - if [ "$TRAVIS_BRANCH" != "master" ]; then make test; fi
 
 deploy:
-  on: production
+  on: master
   provider: bintray
   file: .bintray_descriptor.json
   user:
