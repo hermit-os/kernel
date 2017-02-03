@@ -670,7 +670,7 @@ Lgo3:
 
 global is_uhyve
 align 64
-is_uhyve
+is_uhyve:
    mov eax, DWORD [uhyve]
    ret
 
