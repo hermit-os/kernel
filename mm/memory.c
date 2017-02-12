@@ -272,8 +272,8 @@ int memory_init(void)
 
 					LOG_INFO("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
-					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size))) {
-						init_list.start = PAGE_2M_FLOOR(base+image_size);
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR((size_t) &kernel_end))) {
+						init_list.start = PAGE_2M_FLOOR((size_t) &kernel_end);
 						init_list.end = end_addr;
 
 						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
@@ -296,7 +296,7 @@ int memory_init(void)
 		atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
 
 		//initialize free list
-		init_list.start = PAGE_2M_FLOOR(base + image_size);
+		init_list.start = PAGE_2M_FLOOR((size_t) &kernel_end);
 		init_list.end = limit;
 	}
 
