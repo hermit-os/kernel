@@ -44,6 +44,10 @@ usr/openmpbench/schedbench
 usr/openmpbench/syncbench
 usr/openmpbench/taskbench
 usr/tmp/
+usr/binutils/
+usr/gcc/
+usr/newlib/
+usr/pte/
 tools/Makefile
 usr/ircce/Makefile
 usr/xray/Makefile
