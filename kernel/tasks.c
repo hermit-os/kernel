@@ -334,11 +334,12 @@ int init_tls(void)
 	// do we have a thread local storage?
 	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
 		char* tls_addr = NULL;
+		size_t fs;
 
 		curr_task->tls_addr = (size_t) &tls_start;
 		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
 
-		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET);
+		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET + sizeof(size_t));
 		if (BUILTIN_EXPECT(!tls_addr, 0)) {
 			LOG_ERROR("load_task: heap is missing!\n");
 			return -ENOMEM;
@@ -346,9 +347,11 @@ int init_tls(void)
 
 		memset(tls_addr, 0x00, TLS_OFFSET);
 		memcpy((void*) (tls_addr+TLS_OFFSET), (void*) curr_task->tls_addr, curr_task->tls_size);
+		fs = (size_t) tls_addr + curr_task->tls_size + TLS_OFFSET;
+		*((size_t*)fs) = fs;
 
 		// set fs register to the TLS segment
-		set_tls((size_t) tls_addr + curr_task->tls_size + TLS_OFFSET);
+		set_tls(fs);
 		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (size 0x%zx)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET, curr_task->tls_size);
 	} else set_tls(0); // no TLS => clear fs register
 
