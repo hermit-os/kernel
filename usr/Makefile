@@ -91,10 +91,6 @@ install:
 
 $(TMP)/gcc:
 	@echo Build final gcc
-	$Q$(RM) $(TMP)/gcc
-	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) &&  $(MAKE) install
-	$Q$(RM) $(TMP)/gcc
 	$Q$(MKDIR) $(TMP)/gcc
 	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) &&  $(MAKE) install
 
