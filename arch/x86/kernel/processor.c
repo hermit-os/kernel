@@ -416,7 +416,7 @@ int cpu_detection(void) {
 		first_time = 1;
 
 		cpuid(0, &level, &b, &c, &d);
-		LOG_INFO("cpuid level %d\n", level);
+		kprintf("cpuid level %d\n", level);
 
 		a = b = c = d = 0;
 		cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
@@ -438,7 +438,7 @@ int cpu_detection(void) {
 	}
 
 	if (first_time) {
-		LOG_INFO("Paging features: %s%s%s%s%s%s%s%s\n",
+		kprintf("Paging features: %s%s%s%s%s%s%s%s\n",
 				(cpu_info.feature1 & CPU_FEATURE_PSE) ? "PSE (2/4Mb) " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PAE) ? "PAE " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PGE) ? "PGE " : "",
@@ -448,10 +448,10 @@ int cpu_detection(void) {
 				(cpu_info.feature3 & CPU_FEATURE_1GBHP) ? "PSE (1Gb) " : "",
 				(cpu_info.feature3 & CPU_FEATURE_LM) ? "LM" : "");
 
-		LOG_INFO("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
-		LOG_INFO("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
-		LOG_INFO("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
-		LOG_INFO("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
+		kprintf("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
+		kprintf("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
+		kprintf("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
+		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
 
 	//TODO: add check for SMEP and SMAP
@@ -509,7 +509,7 @@ int cpu_detection(void) {
 			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
-		LOG_INFO("Set XCR0 to 0x%llx\n", xgetbv(0));
+		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	// libos => currently no support of syscalls
@@ -520,7 +520,7 @@ int cpu_detection(void) {
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
 		//  clear IF flag during an interrupt
 		wrmsr(MSR_SYSCALL_MASK, EFLAGS_TF|EFLAGS_DF|EFLAGS_IF|EFLAGS_AC|EFLAGS_NT);
-	} else LOG_INFO("Processor doesn't support syscalls\n");
+	} else kprintf("Processor doesn't support syscalls\n");
 #endif
 
 	if (has_nx())

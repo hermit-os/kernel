@@ -43,10 +43,48 @@ extern const void kernel_end;
 extern const void bss_start;
 extern const void bss_end;
 
+static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file_size)
+{
+	const size_t displacement = 0x200000ULL - (phyaddr & 0x1FFFFFULL);
+
+	kprintf("Found program segment at 0x%zx-0x%zx (viraddr 0x%zx-0x%zx)\n", phyaddr, phyaddr+file_size-1, viraddr, viraddr+file_size-1);
+
+	uint32_t npages = (file_size >> PAGE_BITS);
+	if (file_size & (PAGE_SIZE-1))
+		npages++;
+
+	kprintf("Map %u pages from physical start address 0x%zx linear to 0x%zx\n", npages + (displacement >> PAGE_BITS), phyaddr, viraddr);
+	int ret = page_map(viraddr, phyaddr, npages + (displacement >> PAGE_BITS), PG_GLOBAL|PG_RW);
+	if (ret)
+		return -1;
+
+	phyaddr += displacement;
+	*((uint64_t*) (viraddr + 0x08)) = phyaddr; // physical start address
+	*((uint64_t*) (viraddr + 0x10)) = limit;   // physical limit
+	*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
+	*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
+	*((uint64_t*) (viraddr + 0x38)) = file_size;
+	*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
+
+	// move file to a 2 MB boundary
+	for(size_t va = viraddr+(npages << PAGE_BITS)+displacement-sizeof(uint8_t); va >= viraddr+displacement; va-=sizeof(uint8_t))
+		*((uint8_t*) va) = *((uint8_t*) (va-displacement));
+
+	kprintf("Remap %u pages from physical start address 0x%zx linear to 0x%zx\n", npages, phyaddr, viraddr);
+	ret = page_map(viraddr, phyaddr, npages, PG_GLOBAL|PG_RW);
+	if (ret)
+		return -1;
+
+	return 0;
+}
+
 void main(void)
 {
 	size_t limit = 0;
+	size_t viraddr = 0;
+	size_t phyaddr = 0;
 	elf_header_t* header = NULL;
+	uint32_t file_size = 0;
 
 	// initialize .bss section
 	memset((void*)&bss_start, 0x00, ((size_t) &bss_end - (size_t) &bss_start));
@@ -128,35 +166,11 @@ void main(void)
 		switch(prog_header->type)
 		{
 		case  ELF_PT_LOAD: {	// load program segment
-				size_t viraddr = prog_header->virt_addr;
-				size_t phyaddr = prog_header->offset + (size_t)header;
-				const size_t displacement = 0x200000ULL - (phyaddr & 0x1FFFFFULL);
-
-				uint32_t npages = (prog_header->file_size >> PAGE_BITS);
-				if (prog_header->file_size & (PAGE_SIZE-1))
-					npages++;
-
-				kprintf("Map %u pages from physical start address 0x%zx linear to 0x%zx\n", npages + (displacement >> PAGE_BITS), phyaddr, viraddr);
-				int ret = page_map(viraddr, phyaddr, npages + (displacement >> PAGE_BITS), PG_GLOBAL|PG_RW);
-				if (ret)
-					goto failed;
-
-				phyaddr += displacement;
-				*((uint64_t*) (viraddr + 0x08)) = phyaddr; // physical start address
-				*((uint64_t*) (viraddr + 0x10)) = limit;   // physical limit
-				*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
-				*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
-				*((uint64_t*) (viraddr + 0x38)) = prog_header->file_size;
-				*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
-
-				// move file to a 2 MB boundary
-				for(size_t va = viraddr+(npages << PAGE_BITS)+displacement-sizeof(uint8_t); va >= viraddr+displacement; va-=sizeof(uint8_t))
-					*((uint8_t*) va) = *((uint8_t*) (va-displacement));
-
-				kprintf("Remap %u pages from physical start address 0x%zx linear to 0x%zx\n", npages, phyaddr, viraddr);
-				ret = page_map(viraddr, phyaddr, npages, PG_GLOBAL|PG_RW);
-				if (ret)
-					goto failed;
+				if (!viraddr)
+					viraddr = prog_header->virt_addr;
+				if (!phyaddr)
+					phyaddr = prog_header->offset + (size_t)header;
+				file_size = prog_header->virt_addr + PAGE_FLOOR(prog_header->file_size) - viraddr;
 			}
 			break;
 		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing to do
@@ -167,6 +181,9 @@ void main(void)
 			kprintf("Unknown type %d\n", prog_header->type);
 		}
 	}
+
+	if (BUILTIN_EXPECT(load_code(viraddr, phyaddr, limit, file_size), 0))
+		goto failed;
 
 	kprintf("Entry point: 0x%zx\n", header->entry);
 	// jump to the HermitCore app
