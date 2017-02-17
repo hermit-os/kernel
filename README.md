@@ -79,7 +79,7 @@ An introduction to this execution mode is provided in section [Building and test
    Be sure, that the option `CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 2. Install the Linux kernel and its initial ramdisk on your system (see descriptions of your Linux distribution).
    We recommend to disable Linux NO_HZ feature by setting the kernel parameter `nohz=off`.
-3. After a reboot of the system, register the HermitCore loader at your system with following command: `echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register`, in which `path2proxy` defines the path to the loader.
+3. After a reboot of the system, register the HermitCore loader at your system with following command: `sudo -c sh 'echo ":hermit:M:7:\\x42::/path2proyxy/proxy:" > /proc/sys/fs/binfmt_misc/register'`, in which `path2proxy` defines the path to the loader.
    You find the loader `proxy` after building the HermiCore sources in the subdirectory `tools` of the directory, which contains this *README*.
 4. The IP device between HermitCore and Linux currently does not support IPv6.
    Consequently, disable IPv6 by adding following line to `/etc/sysctl.conf`: `net.ipv6.conf.mmnif.disable_ipv6 = 1`.
