@@ -207,7 +207,7 @@ void check_scheduling(void)
 	if (prio > curr_task->prio) {
 		reschedule();
 #ifdef DYNAMIC_TICKS
-	} else if (prio == curr_task->prio) {
+	} else if ((prio > 0) && (prio == curr_task->prio)) {
 		// if a task is ready, check if the current task runs already one tick (one time slice)
 		// => reschedule to realize round robin
 
