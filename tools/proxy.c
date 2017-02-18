@@ -230,7 +230,7 @@ static int is_hermit_available(void)
 			ret = 1;
 			break;
 		}
-		PROXY_DEBUG("%s\n", line);
+		//PROXY_DEBUG("%s\n", line);
 	}
 
 	fclose(file);
@@ -284,6 +284,18 @@ static void wait_hermit_available(void)
 	close(fd);
 }
 
+static void qemu_sigchld_handler(int sig)
+{
+	pid_t p;
+	int status;
+
+	while ((p=waitpid(-1, &status, WNOHANG)) != -1)
+	{
+		fprintf(stderr, "Child %d died\n", p);
+		exit(1);
+	}
+}
+
 static int init_qemu(char *path)
 {
 	int kvm, i = 0;
@@ -295,6 +307,12 @@ static int init_qemu(char *path)
 	char port_str[MAX_PATH];
 	char* qemu_str = "qemu-system-x86_64";
 	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-monitor", monitor_str, "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = qemu_sigchld_handler;
+
+	sigaction(SIGCHLD, &sa, NULL);
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
