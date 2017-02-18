@@ -223,6 +223,8 @@ static int is_hermit_available(void)
 	if (!file)
 		return 0;
 
+	PROXY_DEBUG("Open log file\n");
+
 	while(getline(&line, &n, file) > 0) {
 		if (strstr(line, "TCP server is listening.") != NULL) {
 			ret = 1;
