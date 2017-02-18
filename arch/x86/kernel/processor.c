@@ -509,7 +509,8 @@ int cpu_detection(void) {
 			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
-		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
+		if (first_time)
+			kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	// libos => currently no support of syscalls
