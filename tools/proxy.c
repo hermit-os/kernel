@@ -250,6 +250,11 @@ static void wait_hermit_available(void)
 	else
 		wd = inotify_add_watch(fd, "/sys/hermit", IN_MODIFY|IN_CREATE);
 
+	if (wd < 0) {
+		perror("inotify_add_watch");
+		exit(1);
+	}
+
 	while(1) {
 		int length = read(fd, buffer, BUF_LEN);
 
