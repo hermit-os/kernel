@@ -615,7 +615,6 @@ int cpu_detection(void) {
 	check_est(first_time);
 
 	if (first_time && on_hypervisor()) {
-		uint32_t c, d;
 		char vendor_id[13];
 
 		LOG_INFO("HermitCore is running on a hypervisor!\n");
