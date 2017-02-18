@@ -60,6 +60,12 @@
 #define EVENT_SIZE	(sizeof (struct inotify_event))
 #define BUF_LEN		(1024 * (EVENT_SIZE + 16))
 
+#if 1
+#define PROXY_DEBUG(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);
+#else
+#define PROXY_DEBUG(fmt, ...) {}
+#endif
+
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
 static unsigned int qemu = 0;
@@ -394,12 +400,16 @@ static int init_qemu(char *path)
 		exit(1);
 	}
 
+	PROXY_DEBUG("Create VM with pid %d\n", id);
+
 	// move the parent process to the end of the queue
 	// => child would be scheduled next
 	sched_yield();
 
 	// wait until HermitCore is sucessfully booted
 	wait_hermit_available();
+
+	PROXY_DEBUG("VM is available\n");
 
 	return 0;
 }
