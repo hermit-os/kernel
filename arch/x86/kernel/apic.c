@@ -421,7 +421,7 @@ static size_t search_ebda(void) {
 
 	uint16_t addr = *((uint16_t*) (vptr+0x40E));
 	LOG_INFO("Found EBDA at 0x%x!\n", (uint32_t)addr);
- 
+
 	// unmap page via mapping a zero page
 	page_unmap(vptr, 1);
 
@@ -546,7 +546,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		set_ipi_dest(id);
 		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
 		if (traditional_delay)
-	                udelay(200);
+			udelay(200);
 		else
 			udelay(10);
 
