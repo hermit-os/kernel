@@ -137,7 +137,7 @@ void* palloc(size_t sz, uint32_t flags)
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
-	LOG_DEBUG("palloc(%lu) (%lu pages)\n", sz, npages);
+	LOG_DEBUG("palloc(%zd) (%u pages)\n", sz, npages);
 
 	// get free virtual address space
 	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
@@ -174,7 +174,7 @@ void* create_stack(size_t sz)
 	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
 	int err;
 
-	LOG_DEBUG("create_stack(0x%zx) (%lu pages)\n", DEFAULT_STACK_SIZE, npages);
+	LOG_DEBUG("create_stack(0x%zx) (%u pages)\n", DEFAULT_STACK_SIZE, npages);
 
 	if (BUILTIN_EXPECT(!sz, 0))
 		return NULL;
@@ -251,7 +251,7 @@ void* kmalloc(size_t sz)
 	buddy->prefix.magic = BUDDY_MAGIC;
 	buddy->prefix.exponent = exp;
 
-	LOG_DEBUG("kmalloc(%lu) = %p\n", sz, buddy+1);
+	LOG_DEBUG("kmalloc(%zd) = %p\n", sz, buddy+1);
 
 	// pointer arithmetic: we hide the prefix
 	return buddy+1;
@@ -262,7 +262,7 @@ void kfree(void *addr)
 	if (BUILTIN_EXPECT(!addr, 0))
 		return;
 
-	LOG_DEBUG("kfree(%lu)\n", addr);
+	LOG_DEBUG("kfree(%p)\n", addr);
 
 	buddy_t* buddy = (buddy_t*) addr - 1; // get prefix
 
