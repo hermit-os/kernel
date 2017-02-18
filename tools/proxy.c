@@ -268,7 +268,10 @@ static void wait_hermit_available(void)
 	}
 
 	//printf("HermitCore is available\n");
-	inotify_rm_watch(fd, wd);
+	if (inotify_rm_watch(fd, wd) < 0) {
+		perror("inotify_rm_watch");
+		exit(1);
+	}
 	close(fd);
 }
 
