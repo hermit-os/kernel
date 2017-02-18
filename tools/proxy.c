@@ -60,7 +60,7 @@
 #define EVENT_SIZE	(sizeof (struct inotify_event))
 #define BUF_LEN		(1024 * (EVENT_SIZE + 16))
 
-#if 1
+#if 0
 #define PROXY_DEBUG(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);
 #else
 #define PROXY_DEBUG(fmt, ...) {}
