@@ -49,6 +49,8 @@ extern atomic_int32_t current_boot_id;
 extern void isrsyscall(void);
 
 cpu_info_t cpu_info = { 0, 0, 0, 0, 0};
+static char cpu_vendor[13] = {[0 ... 12] = 0};
+static char cpu_brand[4*3*sizeof(uint32_t)+1] = {[0 ... 4*3*sizeof(uint32_t)] = 0};
 extern uint32_t cpu_freq;
 
 static void default_save_fpu_state(union fpu_state* state)
@@ -189,52 +191,37 @@ static uint32_t get_frequency_from_mbinfo(void)
 // Identification and the CPUID Instruction".
 static uint32_t get_frequency_from_brand(void)
 {
-	char brand[4*3*sizeof(uint32_t)+1];
-	uint32_t eax = 0, ebx = 0;
-	uint32_t ecx = 0, edx = 0;
 	uint32_t index, multiplier = 0;
-	uint32_t* bint = (uint32_t*) brand;
 
-	memset(brand, 0x00, sizeof(brand));
-
-	cpuid(0x80000000, &eax, &ebx, &ecx, &edx);
-	if (eax >= 0x80000004)
+	for(index=0; index<sizeof(cpu_brand)-2; index++)
 	{
-		cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
-		cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
-		cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
-		LOG_INFO("Processor: %s\n", brand);
-
-		for(index=0; index<sizeof(brand)-2; index++)
+		if ((cpu_brand[index+1] == 'H') && (cpu_brand[index+2] == 'z'))
 		{
-			if ((brand[index+1] == 'H') && (brand[index+2] == 'z'))
-			{
-				if (brand[index] == 'M')
-					multiplier = 1;
-				else if (brand[index] == 'G')
-					multiplier = 1000;
-				else if (brand[index] == 'T')
-					multiplier = 1000000;
+			if (cpu_brand[index] == 'M')
+				multiplier = 1;
+			else if (cpu_brand[index] == 'G')
+				multiplier = 1000;
+			else if (cpu_brand[index] == 'T')
+				multiplier = 1000000;
+		}
+
+		if (multiplier > 0) {
+			uint32_t freq;
+
+			// Compute frequency (in MHz) from brand string
+			if (cpu_brand[index-3] == '.') { // If format is “x.xx”
+				freq  = (uint32_t)(cpu_brand[index-4] - '0') * multiplier;
+				freq += (uint32_t)(cpu_brand[index-2] - '0') * (multiplier / 10);
+				freq += (uint32_t)(cpu_brand[index-1] - '0') * (multiplier / 100);
+			} else { // If format is xxxx
+				freq  = (uint32_t)(cpu_brand[index-4] - '0') * 1000;
+				freq += (uint32_t)(cpu_brand[index-3] - '0') * 100;
+				freq += (uint32_t)(cpu_brand[index-2] - '0') * 10;
+				freq += (uint32_t)(cpu_brand[index-1] - '0');
+				freq *= multiplier;
 			}
 
-			if (multiplier > 0) {
-				uint32_t freq;
-
-				// Compute frequency (in MHz) from brand string
-				if (brand[index-3] == '.') { // If format is “x.xx”
-					freq  = (uint32_t)(brand[index-4] - '0') * multiplier;
-					freq += (uint32_t)(brand[index-2] - '0') * (multiplier / 10);
-					freq += (uint32_t)(brand[index-1] - '0') * (multiplier / 100);
-				} else { // If format is xxxx
-					freq  = (uint32_t)(brand[index-4] - '0') * 1000;
-					freq += (uint32_t)(brand[index-3] - '0') * 100;
-					freq += (uint32_t)(brand[index-2] - '0') * 10;
-					freq += (uint32_t)(brand[index-1] - '0');
-					freq *= multiplier;
-				}
-
-				return freq;
-			}
+			return freq;
 		}
 	}
 
@@ -407,7 +394,7 @@ static void check_est(uint8_t out)
 
 int cpu_detection(void) {
 	uint64_t xcr0;
-	uint32_t a=0, b=0, c=0, d=0, level = 0;
+	uint32_t a=0, b=0, c=0, d=0, level = 0, extended = 0;
 	uint32_t family, model, stepping;
 	size_t cr0, cr4;
 	uint8_t first_time = 0;
@@ -415,10 +402,10 @@ int cpu_detection(void) {
 	if (!cpu_info.feature1) {
 		first_time = 1;
 
-		cpuid(0, &level, &b, &c, &d);
+		cpuid(0, &level, (uint32_t*) cpu_vendor, (uint32_t*)(cpu_vendor+8), (uint32_t*)(cpu_vendor+4));
 		kprintf("cpuid level %d\n", level);
+		kprintf("CPU vendor: %s\n", cpu_vendor);
 
-		a = b = c = d = 0;
 		cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
 		family   = (a & 0x00000F00) >> 8;
@@ -427,11 +414,22 @@ int cpu_detection(void) {
 		if ((family == 6) && (model < 3) && (stepping < 3))
 			cpu_info.feature1 &= ~CPU_FEATURE_SEP;
 
-		cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
-		cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
+		cpuid(0x80000000, &extended, &b, &c, &d);
+		if (extended >= 0x80000001)
+			cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
+		if (extended >= 0x80000008) {
+			uint32_t* bint = (uint32_t*) cpu_brand;
+
+			cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
+			cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
+			cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
+			kprintf("Processor: %s\n", cpu_brand);
+		}
+		if (extended >= 0x80000008)
+			cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
 
 		/* Additional Intel-defined flags: level 0x00000007 */
-        	if (level >= 0x00000007) {
+		if (level >= 0x00000007) {
 			a = b = c = d = 0;
 			cpuid(7, &a, &cpu_info.feature4, &c, &d);
 		}
@@ -509,7 +507,8 @@ int cpu_detection(void) {
 			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
-		kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
+		if (first_time)
+			kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	// libos => currently no support of syscalls
