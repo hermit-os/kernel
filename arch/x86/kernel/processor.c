@@ -620,10 +620,7 @@ int cpu_detection(void) {
 
 		LOG_INFO("HermitCore is running on a hypervisor!\n");
 
-		cpuid(0x40000000, &a, &b, &c, &d);
-		memcpy(vendor_id, &b, 4);
-		memcpy(vendor_id + 4, &c, 4);
-		memcpy(vendor_id + 8, &d, 4);
+		cpuid(0x40000000, &a, (uint32_t*)vendor_id, (uint32_t*)(vendor_id+4), (uint32_t*)(vendor_id+8));
 		vendor_id[12] = '\0';
 
 		LOG_INFO("Hypervisor Vendor Id: %s\n", vendor_id);
