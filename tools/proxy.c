@@ -381,6 +381,9 @@ static int init_qemu(char *path)
 
 		fprintf(stderr, "Didn't find qemu\n");
 		exit(1);
+	} else if (id < 0) {
+		perror("fork");
+		exit(1);
 	}
 
 	// move the parent process to the end of the queue
