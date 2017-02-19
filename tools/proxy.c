@@ -383,7 +383,7 @@ static int init_qemu(char *path)
 		qemu_argv[i+1] = "SandyBridge";
 	}*/
 
-	str = getenv("HERMIT_MONITOR")
+	str = getenv("HERMIT_MONITOR");
 	if (str && (strcmp(str, "0") != 0))
 	{
 		for(; qemu_argv[i] != NULL; i++)
@@ -421,6 +421,7 @@ static int init_qemu(char *path)
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
+		printf("\n");
 		fflush(stdout);
 	}
 
