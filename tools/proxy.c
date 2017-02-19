@@ -350,7 +350,7 @@ static int init_qemu(char *path)
 		int app_port = atoi(str);
 
 		if (app_port > 0) {
-			for(i=0; qemu_argv[i] != NULL; i++)
+			for(; qemu_argv[i] != NULL; i++)
 				;
 
 			snprintf(port_str, MAX_PATH, "tcp:%u::%u", app_port, app_port);
@@ -368,7 +368,7 @@ static int init_qemu(char *path)
 
 	if (kvm)
 	{
-		for(i=0; qemu_argv[i] != NULL; i++)
+		for(; qemu_argv[i] != NULL; i++)
 			;
 
 		qemu_argv[i] = "-machine";
@@ -376,7 +376,7 @@ static int init_qemu(char *path)
 		qemu_argv[i+2] = "-cpu";
 		qemu_argv[i+3] = "host";
 	} /*else {
-		for(i=0; qemu_argv[i] != NULL; i++)
+		for(; qemu_argv[i] != NULL; i++)
 			;
 
 		qemu_argv[i] = "-cpu";
@@ -386,7 +386,7 @@ static int init_qemu(char *path)
 	str = getenv("HERMIT_DEBUG");
 	if (str && (strcmp(str, "0") != 0))
 	{
-		for(i=0; qemu_argv[i] != NULL; i++)
+		for(; qemu_argv[i] != NULL; i++)
 			;
 
 		// add flag to start gdbserver on TCP port 1234
@@ -396,7 +396,7 @@ static int init_qemu(char *path)
 	str = getenv("HERMIT_CAPTURE_NET");
 	if (str && (strcmp(str, "0") != 0))
 	{
-		for(i=0; qemu_argv[i] != NULL; i++)
+		for(; qemu_argv[i] != NULL; i++)
 			;
 
 		// add flags to capture the network traffic
@@ -411,7 +411,6 @@ static int init_qemu(char *path)
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
-
 		fflush(stdout);
 	}
 
