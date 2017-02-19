@@ -393,6 +393,17 @@ static int init_qemu(char *path)
 		qemu_argv[i] = "-s";
 	}
 
+	str = getenv("HERMIT_CAPTURE_NET");
+	if (str && (strcmp(str, "0") != 0))
+	{
+		for(i=0; qemu_argv[i] != NULL; i++)
+			;
+
+		// add flags to capture the network traffic
+		qemu_argv[i] = "-net";
+		qemu_argv[i+1] = "dump";
+	}
+
 	str = getenv("HERMIT_VERBOSE");
 	if (str && (strcmp(str, "0") != 0))
 	{
@@ -400,11 +411,6 @@ static int init_qemu(char *path)
 
 		for(i=0; qemu_argv[i] != NULL; i++)
 			printf("%s ", qemu_argv[i]);
-
-		// add flags to create dump of the network traffic
-		//qemu_argv[i] = "-net";
-		//qemu_argv[i+1] = "dump";
-		//printf("%s %s\n", qemu_argv[i], qemu_argv[i+1]);
 
 		fflush(stdout);
 	}
