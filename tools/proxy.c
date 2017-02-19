@@ -402,9 +402,9 @@ static int init_qemu(char *path)
 			printf("%s ", qemu_argv[i]);
 
 		// add flags to create dump of the network traffic
-		qemu_argv[i] = "-net";
-		qemu_argv[i+1] = "dump";
-		printf("%s %s\n", qemu_argv[i], qemu_argv[i+1]);
+		//qemu_argv[i] = "-net";
+		//qemu_argv[i+1] = "dump";
+		//printf("%s %s\n", qemu_argv[i], qemu_argv[i+1]);
 
 		fflush(stdout);
 	}
