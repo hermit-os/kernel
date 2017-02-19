@@ -14,6 +14,7 @@ before_install:
   - git submodule update --init lwip usr/libomp
 
 script:
+  - df -H
   - cd ..
   - mv HermitCore libhermit-0.1
   - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1 --exclude=.git
