@@ -211,9 +211,11 @@ static int is_hermit_available(void)
 		exit(1);
 	}
 
-	if (qemu)
+	if (qemu) {
 		file = fopen(tmpname, "r");
-	else {
+		if (!file)
+			printf("%s is available\n", tmpname);
+	} else {
 		char logname[MAX_PATH];
 
 		snprintf(logname, MAX_PATH, "/sys/hermit/isle%d/log", isle_nr);
