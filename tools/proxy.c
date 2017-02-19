@@ -213,8 +213,9 @@ static int is_hermit_available(void)
 
 	if (qemu) {
 		file = fopen(tmpname, "r");
-		if (!file)
-			printf("%s is available\n", tmpname);
+		if (!file) {
+			PROXY_DEBUG("%s isn't available\n", tmpname);
+		}
 	} else {
 		char logname[MAX_PATH];
 
