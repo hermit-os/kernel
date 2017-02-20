@@ -25,7 +25,7 @@ script:
   - if [ "$TRAVIS_BRANCH" != "master" ]; then make test; fi
   - ls -la /tmp
   - cat /tmp/hermit*
-  - ps -aux|grep travis
+  - ps -aux|grep qemu
 
 deploy:
   on: master
