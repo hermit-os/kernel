@@ -60,7 +60,7 @@
 #define EVENT_SIZE	(sizeof (struct inotify_event))
 #define BUF_LEN		(1024 * (EVENT_SIZE + 16))
 
-#if 1
+#if 0
 #define PROXY_DEBUG(fmt, ...) fprintf(stderr, fmt, ##__VA_ARGS__);
 #else
 #define PROXY_DEBUG(fmt, ...) {}
@@ -93,7 +93,7 @@ static void fini_qemu(void)
 		if (ret <= 0)
 			fprintf(stderr, "Unable to read Qemu's pid\n");
 		fclose(fp);
-		//unlink(pidname);
+		unlink(pidname);
 
 		if (id >= 0) {
 			int status = 0;
@@ -104,7 +104,7 @@ static void fini_qemu(void)
 	}
 
 	dump_log();
-	//unlink(tmpname);
+	unlink(tmpname);
 }
 
 static void fini_multi(void)
