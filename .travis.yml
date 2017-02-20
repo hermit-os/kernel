@@ -23,6 +23,8 @@ script:
   - sudo dpkg -i ../libhermit*_amd64.deb
   - make -j2 examples
   - if [ "$TRAVIS_BRANCH" != "master" ]; then make test; fi
+  - ls -la /tmp
+  - cat /tmp/hermit*
 
 deploy:
   on: master
