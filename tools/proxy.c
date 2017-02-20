@@ -69,8 +69,8 @@
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
 static unsigned int qemu = 0;
-static pid_t id = 0;
 static unsigned int port = HERMIT_PORT;
+static char pidname[] = "/tmp/hpid-XXXXXX";
 static char tmpname[] = "/tmp/hermit-XXXXXX";
 static char cmdline[MAX_PATH] = "";
 
@@ -84,15 +84,26 @@ int init_uhyve(char *path);
 
 static void fini_qemu(void)
 {
-	int status = 0;
+	// try to kill qemu
+	FILE* fp = fopen(pidname, "r");
+	if (fp) {
+		pid_t id = -1;
 
-	if (id) {
-		kill(id, SIGINT);
-		wait(&status);
+		int ret = fscanf(fp, "%d", &id);
+		if (ret <= 0)
+			fprintf(stderr, "Unable to read Qemu's pid\n");
+		fclose(fp);
+		//unlink(pidname);
+
+		if (id >= 0) {
+			int status = 0;
+
+			kill(id, SIGINT);
+			wait(&status);
+		}
 	}
 
 	dump_log();
-	puts("");
 	//unlink(tmpname);
 }
 
@@ -287,18 +298,6 @@ static void wait_hermit_available(void)
 	close(fd);
 }
 
-static void qemu_sigchld_handler(int sig)
-{
-	pid_t p;
-	int status;
-
-	while ((p=waitpid(-1, &status, WNOHANG)) != -1)
-	{
-		fprintf(stderr, "Child %d died\n", p);
-		exit(1);
-	}
-}
-
 static int init_qemu(char *path)
 {
 	int kvm, i = 0;
@@ -308,22 +307,17 @@ static int init_qemu(char *path)
 	char monitor_str[MAX_PATH];
 	char chardev_file[MAX_PATH];
 	char port_str[MAX_PATH];
+	pid_t qemu_pid;
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-nographic", "-smp", "1", "-m", "2G", "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
-	struct sigaction sa;
-
-	memset(&sa, 0, sizeof(sa));
-	sa.sa_handler = qemu_sigchld_handler;
-
-	sigaction(SIGCHLD, &sa, NULL);
+	char* qemu_argv[] = {qemu_str, "-daemonize", "-display", "none", "-smp", "1", "-m", "2G", "-pidfile", pidname, "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
-		qemu_argv[3] = str;
+		qemu_argv[5] = str;
 
 	str = getenv("HERMIT_MEM");
 	if (str)
-		qemu_argv[5] = str;
+		qemu_argv[7] = str;
 
 	str = getenv("HERMIT_QEMU");
 	if (str)
@@ -331,6 +325,12 @@ static int init_qemu(char *path)
 
 	snprintf(hostfwd, MAX_PATH, "user,hostfwd=tcp:127.0.0.1:%u-:%u", port, port);
 	snprintf(monitor_str, MAX_PATH, "telnet:127.0.0.1:%d,server,nowait", port+1);
+
+	if (mkstemp(pidname) < 0)
+	{
+		perror("mkstemp");
+		exit(1);
+	}
 
 	if (mkstemp(tmpname) < 0)
 	{
@@ -428,19 +428,19 @@ static int init_qemu(char *path)
 		fflush(stdout);
 	}
 
-	id = fork();
-	if (id == 0)
+	qemu_pid = fork();
+	if (qemu_pid == 0)
 	{
 		execvp(qemu_str, qemu_argv);
 
 		fprintf(stderr, "Didn't find qemu\n");
 		exit(1);
-	} else if (id < 0) {
+	} else if (qemu_pid < 0) {
 		perror("fork");
 		exit(1);
 	}
 
-	PROXY_DEBUG("Create VM with pid %d\n", id);
+	PROXY_DEBUG("Create VM with pid %d\n", qemu_pid);
 
 	// move the parent process to the end of the queue
 	// => child would be scheduled next
