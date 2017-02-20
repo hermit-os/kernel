@@ -1,6 +1,5 @@
 sudo: required
 dist: trusty
-cache: ccache
 git:
   submodules: false
 language: c
