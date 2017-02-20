@@ -93,7 +93,7 @@ static void fini_qemu(void)
 
 	dump_log();
 	puts("");
-	unlink(tmpname);
+	//unlink(tmpname);
 }
 
 static void fini_multi(void)
