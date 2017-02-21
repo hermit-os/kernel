@@ -84,8 +84,11 @@ int init_uhyve(char *path);
 
 static void fini_qemu(void)
 {
+	FILE* fp = NULL;
+
 	// try to kill qemu
-	FILE* fp = fopen(pidname, "r");
+	if (qemu)
+		fp = fopen(pidname, "r");
 	if (fp) {
 		pid_t id = -1;
 
