@@ -24,7 +24,7 @@
  * lkvm: http://github.com/clearlinux/kvmtool
  */
 
-/* 
+/*
  * 15.1.2017: extend original version (https://github.com/Solo5/solo5)
  *            for HermitCore
  */
@@ -99,6 +99,7 @@ static size_t guest_size = 0x20000000ULL;
 static uint64_t elf_entry;
 //static pthread_t vcpu_thread;
 static volatile uint8_t done = 0;
+static __thread struct kvm_run *run = NULL;
 
 typedef struct {
 	int fd;
@@ -157,29 +158,23 @@ static void uhyve_exit(void)
 
 static uint32_t get_cpufreq(void)
 {
-#if 1
 	char line[2048];
 	uint32_t freq = 0;
-
-	FILE* fp = fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
-	if (!fp) {
-		perror("Unable to open /sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq\n");
-		return freq;
-	}
-
-	if (fgets(line, 2048, fp))
-		freq = atoi(line) / 1000;
-
-	return freq;
-#else
-	uint32_t freq = 0;
-	char line[2048];
 	char* match;
 	char* point;
 
-	FILE* fp = fopen("/proc/cpuinfo", "r");
+	FILE* fp = fopen("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq", "r");
+	if (fp) {
+		if (fgets(line, 2048, fp))
+			freq = atoi(line) / 1000;
+		fclose(fp);
+
+		return freq;
+	}
+
+	fp = fopen("/proc/cpuinfo", "r");
 	if (!fp)
-                return freq;
+		return freq;
 
 	while(fgets(line, 2048, fp)) {
 		if ((match = strstr(line, "cpu MHz")) == NULL)
@@ -196,11 +191,10 @@ static uint32_t get_cpufreq(void)
 		freq = atoi(match);
 		fclose(fp);
 
-                return freq;
+		return freq;
 	}
 
 	return freq;
-#endif
 }
 
 static ssize_t pread_in_full(int fd, void *buf, size_t count, off_t offset)
@@ -435,7 +429,7 @@ static void setup_cpuid(int kvm, int vcpufd)
 	kvm_ioctl(vcpufd, KVM_SET_CPUID2, kvm_cpuid);
 }
 
-static void* vcpu_loop(struct kvm_run *run)
+static int vcpu_loop(struct kvm_run *run)
 {
 	int ret;
 
@@ -462,7 +456,7 @@ static void* vcpu_loop(struct kvm_run *run)
 		switch (run->exit_reason) {
 		case KVM_EXIT_HLT:
 			fprintf(stderr, "Guest has halted the CPU, this is considered as a normal exit.\n");
-			return NULL;
+			return 0;
 
 		case KVM_EXIT_MMIO:
 			err(1, "KVM: unhandled KVM_EXIT_MMIO at 0x%llx", run->mmio.phys_addr);
@@ -501,7 +495,7 @@ static void* vcpu_loop(struct kvm_run *run)
 
 					uhyve_open->ret = open((const char*)guest_mem+(size_t)uhyve_open->name, uhyve_open->flags, uhyve_open->mode);
 					break;
-				} 
+				}
 
 			case UHYVE_PORT_CLOSE: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
@@ -516,7 +510,7 @@ static void* vcpu_loop(struct kvm_run *run)
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 					uhyve_lseek_t* uhyve_lseek = (uhyve_lseek_t*) (guest_mem+data);
 
-					uhyve_lseek->offset = lseek(uhyve_lseek->fd, uhyve_lseek->offset, uhyve_lseek->whence); 
+					uhyve_lseek->offset = lseek(uhyve_lseek->fd, uhyve_lseek->offset, uhyve_lseek->whence);
 					break;
 				}
 			default:
@@ -544,14 +538,12 @@ static void* vcpu_loop(struct kvm_run *run)
 		}
 	}
 
-	return NULL;
+	return 0;
 }
 
-static void* uhyve_thread(void* arg)
+int uhyve_init(char *path)
 {
-	char* path = (char*) arg;
 	size_t mmap_size;
-	struct kvm_run *run;
 
 	// register routine to close the VM
 	atexit(uhyve_exit);
@@ -625,14 +617,10 @@ static void* uhyve_thread(void* arg)
 
 	setup_cpuid(kvm, vcpufd);
 
-	return vcpu_loop(run);
+	return 0;
 }
 
-int init_uhyve(char *path)
+int uhyve_loop(void)
 {
-	//pthread_create(&vcpu_thread, NULL, uhyve_thread, (void*)path);
-
-	uhyve_thread(path);
-	exit(EXIT_SUCCESS);
-	return 0;
+	return vcpu_loop(run);
 }
