@@ -156,6 +156,6 @@ For network support, you have to link the Go application with the flag `-lnetgo`
 3. By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at termination the kernel log messages onto the screen.
 4. If `HERMIT_DEBUG` is set to `1`, Qemu will establish an gdbserver, which will be listen port 1234.
    Afterwards you are able debug HermitCore applications remotely.
-5. By setting the environment variable `HERMIT_CAPTURE_NET' to `1` and `HERMIT_ISLE` to `qemu`, Qemu captures the network traffic and
+5. By setting the environment variable `HERMIT_CAPTURE_NET` to `1` and `HERMIT_ISLE` to `qemu`, Qemu captures the network traffic and
    creates the trace file *qemu-vlan0.pcap*. For instance with [Wireshark](https://www.wireshark.org) you are able to analyze the file.
 6. If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, Qemu establishes a monitor which is available via telnet at port 18767.
