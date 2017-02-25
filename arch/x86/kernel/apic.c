@@ -887,7 +887,8 @@ no_mp:
 		boot_processor = 0;
 	apic_mp = NULL;
 	apic_config = NULL;
-	ncores = 1;
+	if (!is_uhyve())
+		ncores = 1;
 	goto check_lapic;
 }
 
