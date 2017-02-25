@@ -66,6 +66,12 @@
 #define PROXY_DEBUG(fmt, ...) {}
 #endif
 
+typedef enum {
+  BAREMETAL = 0,
+  QEMU,
+  UHYVE
+} monitor_t;
+
 static monitor_t monitor = BAREMETAL;
 static int sobufsize = 131072;
 static unsigned int isle_nr = 0;
