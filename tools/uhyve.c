@@ -27,6 +27,7 @@
 /*
  * 15.1.2017: extend original version (https://github.com/Solo5/solo5)
  *            for HermitCore
+ * 25.2.2017: add SMP support to enable more than one core
  */
 
 #define _GNU_SOURCE
@@ -290,6 +291,7 @@ static int load_kernel(uint8_t* mem, char* path)
 	Elf64_Phdr *phdr = NULL;
 	size_t buflen;
 	int fd, ret;
+	int first_load = 1;
 
 	fd = open(path, O_RDONLY);
 	if (fd == -1)
@@ -352,15 +354,19 @@ static int load_kernel(uint8_t* mem, char* path)
 		if (!mboot)
 			mboot = mem+paddr-GUEST_OFFSET;
 
-		// initialize kernel
-		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x08)) = paddr; // physical start address
-		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x10)) = guest_size;   // physical limit
-		*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x18)) = get_cpufreq();
-		*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x24)) = 1; // number of used cpus
-		*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
-		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) = filesz;
-		*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
-		*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
+		if (first_load) {
+			first_load = 0;
+
+			// initialize kernel
+			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x08)) = paddr; // physical start address
+			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x10)) = guest_size;   // physical limit
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x18)) = get_cpufreq();
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x24)) = 1; // number of used cpus
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
+			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) = filesz;
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
+		}
 	}
 
 out:
