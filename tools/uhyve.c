@@ -135,11 +135,6 @@ typedef struct {
 	int whence;
 } __attribute__((packed)) uhyve_lseek_t;
 
-static inline void clflush(volatile void *addr)
-{
-	asm volatile("clflush %0" : "+m" (*(volatile char *)addr));
-}
-
 static size_t memparse(const char *ptr)
 {
 	char *endptr;	/* local pointer to end of parsed string */
@@ -504,14 +499,10 @@ static void setup_cpuid(int kvm, int vcpufd)
 static int vcpu_loop(void)
 {
 	int ret;
-	struct kvm_mp_state state;
+	struct kvm_mp_state state = { KVM_MP_STATE_RUNNABLE };
 
 	// be sure that the multiprocessor is runable
-	kvm_ioctl(vcpufd, KVM_GET_MP_STATE, &state);
-	if (state.mp_state != KVM_MP_STATE_RUNNABLE) {
-		state.mp_state = KVM_MP_STATE_RUNNABLE;
-		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
-	}
+	kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
 
 	while (1) {
 		ret = kvm_ioctl(vcpufd, KVM_RUN, NULL);
@@ -628,11 +619,6 @@ static int vcpu_init(uint32_t id)
 {
 	size_t mmap_size;
 
-	while (*((volatile uint32_t*) (mboot + 0x20)) < id)
-		pthread_yield();
-	*((volatile uint32_t*) (mboot + 0x30)) = id;
-	clflush(mboot + 0x30);
-
 	vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, id);
 
 	/* Setup registers and memory. */
@@ -664,6 +650,12 @@ static int vcpu_init(uint32_t id)
 		err(1, "KVM: VCPU mmap failed");
 
 	setup_cpuid(kvm, vcpufd);
+
+	// only one core is able to enter startup code
+	// => the wait for the predecessor core
+	while (*((volatile uint32_t*) (mboot + 0x20)) < id)
+		pthread_yield();
+	*((volatile uint32_t*) (mboot + 0x30)) = id;
 
 	return 0;
 }
@@ -736,7 +728,6 @@ int uhyve_loop(void)
 	if (str)
 		ncores = atoi(str);
 	*((uint32_t*) (mboot+0x24)) = ncores;
-	clflush(mboot+0x24);
 
 	vcpu_threads = (pthread_t*) calloc(ncores, sizeof(pthread_t));
 	if (!vcpu_threads)
