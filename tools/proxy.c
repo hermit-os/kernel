@@ -1043,7 +1043,18 @@ int main(int argc, char **argv)
 	if (ret)
 		return ret;
 
-	if (monitor != UHYVE)
+
+	switch(monitor) {
+	case UHYVE:
+		return uhyve_loop();
+
+	case BAREMETAL:
+	case QEMU:
 		return socket_loop(argc, argv);
-	return uhyve_loop();
+
+	default:
+		perror("Unknown monitor");
+	}
+
+	return 1;
 }
