@@ -70,16 +70,6 @@
      (((base)  & _AC(0x00ffffff, ULL)) << 16) |      \
      (((limit) & _AC(0x0000ffff, ULL))))
 
-struct _kvm_segment {
-    __u64 base;
-    __u32 limit;
-    __u16 selector;
-    __u8 type;
-    __u8 present, dpl, db, s, l, g, avl;
-    __u8 unusable;
-    __u8 padding;
-};
-
 #define GDT_GET_G(x)   (__u8)(((x) & 0x0080000000000000) >> 55)
 #define GDT_GET_DB(x)  (__u8)(((x) & 0x0040000000000000) >> 54)
 #define GDT_GET_L(x)   (__u8)(((x) & 0x0020000000000000) >> 53)
