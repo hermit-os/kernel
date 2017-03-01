@@ -462,6 +462,8 @@ static void setup_cpuid(int kvm, int vcpufd)
 	// set features
 	filter_cpuid(kvm_cpuid);
 	kvm_ioctl(vcpufd, KVM_SET_CPUID2, kvm_cpuid);
+
+	free(kvm_cpuid);
 }
 
 static int vcpu_loop(void)
