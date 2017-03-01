@@ -58,6 +58,7 @@
 #include <asm/msr-index.h>
 
 #include "uhyve-cpu.h"
+#include "uhyve-syscalls.h"
 #include "proxy.h"
 
 #define GUEST_OFFSET		0x0
@@ -79,13 +80,6 @@
 #define KVM_32BIT_GAP_SIZE	(768 << 20)
 #define KVM_32BIT_GAP_START	(KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE)
 
-#define UHYVE_PORT_WRITE	0x499
-#define UHYVE_PORT_OPEN		0x500
-#define UHYVE_PORT_CLOSE	0x501
-#define UHYVE_PORT_READ		0x502
-#define UHYVE_PORT_EXIT		0x503
-#define UHYVE_PORT_LSEEK	0x504
-
 #define kvm_ioctl(fd, cmd, arg) ({ \
 	int ret = ioctl(fd, cmd, arg); \
 	if(ret == -1) \
@@ -103,37 +97,6 @@ static pthread_t* vcpu_threads = NULL;
 static int kvm = -1, vmfd = -1;
 static __thread struct kvm_run *run = NULL;
 static __thread int vcpufd = 1;
-
-typedef struct {
-	int fd;
-	const char* buf;
-	size_t len;
-} __attribute__((packed)) uhyve_write_t;
-
-typedef struct {
-	const char* name;
-	int flags;
-	int mode;
-	int ret;
-} __attribute__((packed)) uhyve_open_t;
-
-typedef struct {
-	int fd;
-	int ret;
-} __attribute__((packed)) uhyve_close_t;
-
-typedef struct {
-	int fd;
-	char* buf;
-	size_t len;
-	ssize_t ret;
-} __attribute__((packed)) uhyve_read_t;
-
-typedef struct {
-	int fd;
-	off_t offset;
-	int whence;
-} __attribute__((packed)) uhyve_lseek_t;
 
 static size_t memparse(const char *ptr)
 {
