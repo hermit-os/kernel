@@ -553,7 +553,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -580,6 +580,8 @@ int cpu_detection(void) {
 			has_rtm() ? "RTM " : "",
 			has_hle() ? "HLE " : "",
 			has_cqm() ? "CQM " : "",
+			has_clflushopt() ? "CLFLUSHOPT " : "",
+			has_clwb() ? "CLWB " : "",
 			has_avx512f() ? "AVX512F " : "",
 			has_avx512cd() ? "AVX512CD " : "",
 			has_avx512pf() ? "AVX512PF " : "",
