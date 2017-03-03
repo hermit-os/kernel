@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2010, Stefan Lankes, RWTH Aachen University
+ * Copyright (c) 2017, Stefan Lankes, RWTH Aachen University
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,63 +27,24 @@
 
 /**
  * @author Stefan Lankes
- * @file include/hermit/time.h
+ * @file arch/x86/include/asm/string.h
  * @brief Time related functions
  */
 
-#ifndef __TIME_H__
-#define __TIME_H__
+#ifndef __ARCH_TIME_H__
+#define __ARCH_TIME_H__
 
-#include <asm/time.h>
+#include <asm/stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef uint32_t clock_t;
+static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
 
-struct tms {
-	clock_t tms_utime;
-	clock_t tms_stime;
-	clock_t tms_cutime;
-	clock_t tms_cstime;
-};
+static inline void timer_disable(void) { apic_disable_timer(); }
 
-/** @brief Initialize Timer interrupts
- *
- * This procedure installs IRQ handlers for timer interrupts
- */
-int timer_init(void);
-
-/** @brief Initialized a timer
- *
- * @param ticks Amount of ticks to wait
- * @return
- * - 0 on success
- */
-int timer_wait(unsigned int ticks);
-
-DECLARE_PER_CORE(uint64_t, timer_ticks);
-
-/** @brief Returns the current number of ticks.
- * @return Current number of ticks
- */
-static inline uint64_t get_clock_tick(void)
-{
-	return per_core(timer_ticks);
-}
-
-/** @brief sleep some seconds
- *
- * This function sleeps some seconds
- *
- * @param sec Amount of seconds to wait
- */
-static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
-
-/** @brief Get milliseconds since system boot
- */
-static inline uint64_t get_uptime() { return (get_clock_tick() * 1000) / TIMER_FREQ; }
+static inline int timer_is_running(void) { return apic_timer_is_running(); }
 
 #ifdef __cplusplus
 }
