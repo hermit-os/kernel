@@ -26,7 +26,7 @@
 extern "C" {
 #endif
 
-#ifdef HAVE_ARCH_MEMCPY
+#if HAVE_ARCH_MEMCPY
 /** @brief Copy a byte range from source to dest
  *
  * @param dest Destination address
@@ -52,7 +52,7 @@ inline static void *memcpy(void* dest, const void *src, size_t count)
 }
 #endif
 
-#ifdef HAVE_ARCH_MEMSET
+#if HAVE_ARCH_MEMSET
 /** @brief Repeated write of a value to a whole range of bytes
  *
  * @param dest Destination address
@@ -84,7 +84,7 @@ inline static void *memset(void* dest, int val, size_t count)
 }
 #endif
 
-#ifdef HAVE_ARCH_STRLEN
+#if HAVE_ARCH_STRLEN
 /** @brief Standard string length
  *
  * This function computed the length of the given null terminated string
@@ -111,7 +111,7 @@ inline static size_t strlen(const char* str)
 }
 #endif
 
-#ifdef HAVE_ARCH_STRNCPY
+#if HAVE_ARCH_STRNCPY
 /** @brief Copy string with maximum of n byte length
  *
  * @param dest Destination string pointer
@@ -121,7 +121,7 @@ inline static size_t strlen(const char* str)
 char* strncpy(char* dest, const char* src, size_t n);
 #endif
 
-#ifdef HAVE_ARCH_STRCPY
+#if HAVE_ARCH_STRCPY
 /** @brief Copy string
  *
  * Note that there is another safer variant of this function: strncpy.\n
