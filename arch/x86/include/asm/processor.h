@@ -431,6 +431,14 @@ inline static uint32_t has_rtm(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_RTM);
 }
 
+inline static uint32_t has_clflushopt(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_CLFLUSHOPT);
+}
+
+inline static uint32_t has_clwb(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_CLWB);
+}
+
 inline static uint32_t has_avx512f(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_AVX512F);
 }
@@ -720,6 +728,16 @@ static inline void mwait(unsigned long eax, unsigned long ecx)
 static inline void clflush(volatile void *addr)
 {
 	asm volatile("clflush %0" : "+m" (*(volatile char *)addr));
+}
+
+static inline void clwb(volatile void *addr)
+{
+	asm volatile("clwb %0" : "+m" (*(volatile char *)addr));
+}
+
+static inline void  clflushopt(volatile void *addr)
+{
+	asm volatile("clflushopt %0" : "+m" (*(volatile char *)addr));
 }
 
 #if 0
