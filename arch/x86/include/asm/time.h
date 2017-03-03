@@ -34,7 +34,7 @@
 #ifndef __ARCH_TIME_H__
 #define __ARCH_TIME_H__
 
-#include <asm/stddef.h>
+#include <asm/apic.h>
 
 #ifdef __cplusplus
 extern "C" {
