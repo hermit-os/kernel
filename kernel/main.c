@@ -132,10 +132,7 @@ static int hermit_init(void)
 	multitasking_init();
 	memory_init();
 	signal_init();
-
-#ifndef CONFIG_VGA
 	uart_init();
-#endif
 
 	return 0;
 }

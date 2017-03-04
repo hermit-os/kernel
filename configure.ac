@@ -28,7 +28,6 @@ AC_DEFINE(HAVE_ARCH_STRNCPY, 1, Define to use machine specific version of strncp
 AC_DEFINE(MAX_ISLE, 8, Define the maximum number of isles / numa nodes)
 AC_DEFINE(MAX_FNAME, 128, Define the maximum length of a file name)
 AC_DEFINE(VIDEO_MEM_ADDR, 0xB8000, Definition of the VGA address)
-#AC_DEFINE(CONFIG_VGA, 1, Use the VGA interface as output device)
 AC_DEFINE(DYNAMIC_TICKS, 1, Use a dynamic tick instead of a static)
 #AC_DEFINE(SAVE_FPU, 1, Set task switched flag during a context switch);
 

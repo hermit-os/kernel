@@ -174,16 +174,6 @@ start64:
     add rax, [base]
     mov QWORD [rdi+511*8], rax
 
-%ifdef CONFIG_VGA
-    ; map vga 1:1
-    mov rax, VIDEO_MEM_ADDR   ; map vga
-    and rax, ~0xFFF           ; page align lower half
-    mov rdi, rax
-    shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add rdi, boot_pgt
-    or rax, 0x113             ; set present, global, writable and cache disable bits
-    mov QWORD [rdi], rax
-%endif
     ; map multiboot info
     mov rax, QWORD [mb_info]
     and rax, ~0xFFF           ; page align lower half
