@@ -14,7 +14,7 @@ OUTPUT_FORMAT = -O elf32-i386
 NAME = ldhermit
 TTY := $(shell tty)
 
-C_source := main.c printf.c string.c stdio.c vga.c uart.c page.c
+C_source := main.c printf.c string.c stdio.c uart.c page.c
 ASM_source := entry.asm
 
 OBJS := $(C_source:.c=.o)

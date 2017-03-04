@@ -41,8 +41,6 @@
 #include <asm/pci.h>
 #endif
 
-#ifndef CONFIG_VGA
-
 /*
  * This implementation based on following tutorial:
  * http://en.wikibooks.org/wiki/Serial_Programming/8250_UART_Programming
@@ -330,5 +328,3 @@ Lsuccess:
 	return uart_config();
 #endif
 }
-
-#endif
