@@ -32,7 +32,9 @@
 #include <hermit/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/processor.h>
+#ifdef CONFIG_VGA
 #include <asm/vga.h>
+#endif
 #include <asm/uart.h>
 
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
