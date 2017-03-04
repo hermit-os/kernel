@@ -37,7 +37,6 @@
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
 #include <hermit/logging.h>
-#include <asm/tss.h>
 #include <asm/processor.h>
 
 /*
