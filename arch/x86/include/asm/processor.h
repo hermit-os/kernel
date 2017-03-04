@@ -41,6 +41,7 @@
 #include <asm/apic.h>
 #include <asm/irqflags.h>
 #include <asm/pci.h>
+#include <asm/tss.h>
 
 #ifdef __cplusplus
 extern "C" {
