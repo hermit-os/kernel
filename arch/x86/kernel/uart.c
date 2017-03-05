@@ -97,40 +97,28 @@
 #define UART_MCR_RTS		0x02 /* RTS complement */
 #define UART_MCR_DTR		0x01 /* DTR complement */
 
-static uint8_t	mmio = 0;
 static size_t	iobase = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
 	uint8_t c = 0;
 
-	if (mmio)
-		c = *((const volatile unsigned char*) (iobase + off));
-	else if (iobase)
+	if (iobase)
 		c = inportb(iobase + off);
 
 	return c;
 }
 
-static void write_to_uart(uint32_t off, unsigned char c)
+static inline void write_to_uart(uint32_t off, unsigned char c)
 {
-	if (mmio)
-		*((volatile unsigned char*) (iobase + off)) = c;
-	else if (iobase)
+	if (iobase)
 		outportb(iobase + off, c);
-}
-
-
-/* Get a single character on a serial device */
-static unsigned char uart_getchar(void)
-{
-	return read_from_uart(UART_RX);
 }
 
 /* Puts a single character on a serial device */
 int uart_putchar(unsigned char c)
 {
-	if (!iobase && !mmio)
+	if (!iobase)
 		return 0;
 
 	write_to_uart(UART_TX, c);
@@ -143,46 +131,13 @@ int uart_puts(const char *text)
 {
 	size_t i, len = strlen(text);
 
-	if (!iobase && !mmio)
+	if (!iobase)
 		return 0;
 
 	for (i = 0; i < len; i++)
 		uart_putchar(text[i]);
 
 	return len;
-}
-
-/* Handles all UART's interrupt */
-static void uart_handler(struct state *s)
-{
-	unsigned char c = read_from_uart(UART_IIR);
-
-	while (!(c & UART_IIR_NO_INT)) {
-		if (c & UART_IIR_RDI) {
-			c = uart_getchar();
-
-			//TODO: handle input messages
-
-			goto out;
-		}
-
-		if(c & UART_IIR_THRI) {
-			// acknowledge interrupt
-			c = read_from_uart(UART_IIR);
-
-			goto out;
-		}
-
-		if(c & UART_IIR_RLSI) {
-			// acknowledge interrupt
-			c = read_from_uart(UART_LSR);
-
-			goto out;
-		}
-
-out:
-		c = read_from_uart(UART_IIR);
-	}
 }
 
 static int uart_config(void)
@@ -226,105 +181,14 @@ static int uart_config(void)
 
 extern const void kernel_start;
 
-int uart_early_init(char* cmdline)
-{
-	if (is_uhyve())
-		return 0;
-#if 1
-	// default value of our QEMU configuration
-	iobase = 0xc110;
-#else
-	if (BUILTIN_EXPECT(!cmdline, 0))
-		return -EINVAL;
-
-	char* str = strstr(cmdline, "uart=");
-	if (!str)
-		return -EINVAL;
-
-	if (strncmp(str, "uart=io:", 8) == 0) {
-		iobase = strtol(str+8, (char **)NULL, 16);
-		if (!iobase)
-			return -EINVAL;
-		mmio = 0;
-	} else if (strncmp(str, "uart=mmio:", 10) == 0) {
-		iobase = strtol(str+10, (char **)NULL, 16);
-		if (!iobase)
-			return -EINVAL;
-		if (iobase >= PAGE_MAP_ENTRIES*PAGE_SIZE) {
-			/* at this point we use the boot page table
-			 * => IO address is not mapped
-			 * => dirty hack, map device before the kernel
-			 */
-			int err;
-			size_t newaddr = ((size_t) &kernel_start - PAGE_SIZE);
-
-			err = page_map_bootmap(newaddr & PAGE_MASK, iobase & PAGE_MASK, PG_GLOBAL | PG_ACCESSED | PG_DIRTY | PG_RW | PG_PCD);
-			if (BUILTIN_EXPECT(err, 0)) {
-				iobase = 0;
-				return err;
-			}
-			iobase = newaddr;
-		}
-		mmio = 1;
-	}
-#endif
-
-	// configure uart
-	return uart_config();
-}
-
 int uart_init(void)
 {
 	if (is_uhyve())
 		return 0;
 
-#ifdef CONFIG_PCI
-	pci_info_t pci_info;
-	uint32_t bar = 0;
-
-	// Searching for Intel's UART device
-	if (pci_get_device_info(0x8086, 0x0936, iobase, &pci_info) == 0)
-		goto Lsuccess;
- 	// Searching for Qemu's UART device
-	if (pci_get_device_info(0x1b36, 0x0002, iobase, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 2x UART device (pci-serial-2x)
-	if (pci_get_device_info(0x1b36, 0x0003, iobase, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 4x UART device (pci-serial-4x)
-	if (pci_get_device_info(0x1b36, 0x0004, iobase, &pci_info) == 0)
-		goto Lsuccess;
-
-	return -1;
-
-Lsuccess:
-	iobase = pci_info.base[bar];
-	irq_install_handler(32+pci_info.irq, uart_handler);
-	if (pci_info.type[0]) {
-		mmio = 0;
-		LOG_INFO("UART uses io address 0x%x\n", iobase);
-	} else {
-		mmio = 1;
-		page_map(iobase & PAGE_MASK, iobase & PAGE_MASK, 1, PG_GLOBAL | PG_ACCESSED | PG_DIRTY | PG_RW | PG_PCD);
-		LOG_INFO("UART uses mmio address 0x%x\n", iobase);
-		vma_add(iobase, iobase + PAGE_SIZE, VMA_READ|VMA_WRITE);
-	}
+	// default value of our QEMU configuration
+	iobase = 0xc110;
 
 	// configure uart
 	return uart_config();
-#else
-	// per default we use COM1...
-	if (!iobase)
-		iobase = 0x3F8;
-	mmio = 0;
-	if ((iobase == 0x3F8) || (iobase == 0x3E8))
-		irq_install_handler(32+4, uart_handler);
-	else if ((iobase == 0x2F8) || (iobase == 0x2E8))
-		irq_install_handler(32+3, uart_handler);
-	else
-		return -EINVAL;
-
-	// configure uart
-	return uart_config();
-#endif
 }

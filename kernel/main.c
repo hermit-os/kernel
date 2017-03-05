@@ -132,7 +132,6 @@ static int hermit_init(void)
 	multitasking_init();
 	memory_init();
 	signal_init();
-	uart_init();
 
 	return 0;
 }
