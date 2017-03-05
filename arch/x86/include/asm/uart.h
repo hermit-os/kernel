@@ -40,12 +40,6 @@ extern "C" {
  */
 int uart_init(void);
 
-/** @brief Initialize UART output without a device check
- *
- * @return Returns 0 on success
- */
-int uart_early_init(char*);
-
 /** @brief Simple string output on a serial device.
  *
  * If you want a new line you will have to "\\n".

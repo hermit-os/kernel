@@ -45,7 +45,7 @@ spinlock_irqsave_t stdio_lock = SPINLOCK_IRQSAVE_INIT;
 int koutput_init(void)
 {
 	if (is_single_kernel())
-		uart_early_init(NULL);
+		uart_init();
 
 	return 0;
 }
