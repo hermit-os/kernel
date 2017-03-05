@@ -59,7 +59,7 @@ $(TMP)/binutils:
 $(TMP)/bootstrap:
 	@echo Build bootstrap compiler
 	$Q$(MKDIR) $(TMP)/bootstrap
-	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --without-headers --disable-multilib --with-isl --with-tune=generic --enable-languages=c,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
+	$Q$(CD) $(TMP)/bootstrap; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --without-headers --disable-multilib --with-isl --enable-languages=c,lto --disable-nls --disable-shared --disable-libssp --disable-libgomp --enable-threads=posix --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc && $(MAKE) install-gcc
 
 toolchain: $(TMP)/newlib libpthread $(TMP)/gcc libs
 
@@ -92,7 +92,7 @@ install:
 $(TMP)/gcc:
 	@echo Build final gcc
 	$Q$(MKDIR) $(TMP)/gcc
-	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --with-tune=generic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc; $(MAKE) install-all-gcc; $(MAKE) $(NJOBS) all-target-libgcc && $(MAKE) install-target-libgcc && $(MAKE) $(NJOBS) &&  $(MAKE) install
+	$Q$(CD) $(TMP)/gcc; $(TOPDIR)/gcc/configure --target=$(TARGET) --prefix=$(PREFIX) --with-newlib --with-isl --disable-multilib --without-libatomic --enable-languages=c,c++,go,fortran,lto --disable-nls --disable-shared --disable-libssp --enable-threads=posix --disable-libgomp --enable-tls --enable-lto --disable-symvers && $(MAKE) $(NJOBS) all-gcc; $(MAKE) install-all-gcc; $(MAKE) $(NJOBS) all-target-libgcc && $(MAKE) install-target-libgcc && $(MAKE) $(NJOBS) &&  $(MAKE) install
 
 clean:
 	@echo Cleaning toolchain
