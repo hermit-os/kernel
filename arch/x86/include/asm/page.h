@@ -36,6 +36,7 @@
 
 #include <hermit/stddef.h>
 #include <hermit/stdlib.h>
+#include <asm/processor.h>
 
 #ifndef __PAGE_H__
 #define __PAGE_H__
@@ -143,6 +144,8 @@ static inline size_t sign_extend(ssize_t addr, int bits)
 
 /// Disable execution for this page
 #define PG_XD			(1L << 63)
+
+#define PG_NX			(has_nx() ? PG_XD : 0)
 
 /** @brief Converts a virtual address to a physical
  *

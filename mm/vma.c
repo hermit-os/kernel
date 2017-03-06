@@ -32,9 +32,8 @@
 #include <hermit/spinlock.h>
 #include <hermit/errno.h>
 #include <hermit/logging.h>
-#include <asm/multiboot.h>
 
-/* 
+/*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
  */
@@ -43,7 +42,7 @@ extern const void kernel_end;
 
 /*
  * Kernel space VMA list and lock
- * 
+ *
  * For bootstrapping we initialize the VMA list with one empty VMA
  * (start == end) and expand this VMA by calls to vma_alloc()
  */
@@ -51,8 +50,6 @@ static vma_t vma_boot = { VMA_MIN, VMA_MIN, VMA_HEAP };
 static vma_t* vma_list = &vma_boot;
 static spinlock_irqsave_t vma_lock = SPINLOCK_IRQSAVE_INIT;
 
-// TODO: we might move the architecture specific VMA regions to a
-//       seperate function arch_vma_init()
 int vma_init(void)
 {
 	int ret;
@@ -73,17 +70,9 @@ int vma_init(void)
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
 
-	if (mb_info) {
-		ret = vma_add((size_t)mb_info & PAGE_MASK, ((size_t)mb_info & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
-		if (BUILTIN_EXPECT(ret, 0))
-			goto out;
-
-		if ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
-			ret = vma_add((size_t)mb_info->cmdline & PAGE_MASK, ((size_t)mb_info->cmdline & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
-			if (BUILTIN_EXPECT(ret, 0))
-				goto out;
-		}
-	}
+	// we might move the architecture specific VMA regions to a
+	// seperate function vma_arch_init()
+	ret = vma_arch_init();
 
 out:
 	return ret;
