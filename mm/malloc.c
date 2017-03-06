@@ -152,10 +152,7 @@ void* palloc(size_t sz, uint32_t flags)
 	}
 
 	//TODO: interpretation of from (vma) flags is missing
-	bits = PG_RW|PG_GLOBAL;
-	// protect heap by the NX flag
-	if (has_nx())
-		bits |= PG_XD;
+	bits = PG_RW|PG_GLOBAL|PG_NX;
 
 	// map physical pages to VMA
 	err = page_map(viraddr, phyaddr, npages, bits);
@@ -191,10 +188,7 @@ void* create_stack(size_t sz)
 		return NULL;
 	}
 
-	bits = PG_RW|PG_GLOBAL;
-	// protect heap by the NX flag
-	if (has_nx())
-		bits |= PG_XD;
+	bits = PG_RW|PG_GLOBAL|PG_NX;
 
 	// map physical pages to VMA
 	err = page_map(viraddr+PAGE_SIZE, phyaddr, npages, bits);
