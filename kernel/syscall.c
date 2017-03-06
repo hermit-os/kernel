@@ -37,7 +37,7 @@
 #include <hermit/memory.h>
 #include <hermit/signal.h>
 #include <hermit/logging.h>
-#include <asm/io.h>
+#include <asm/uhyve.h>
 #include <sys/poll.h>
 
 #include <lwip/sockets.h>
@@ -91,7 +91,7 @@ typedef struct {
 void NORETURN sys_exit(int arg)
 {
 	if (is_uhyve()) {
-		outportl(UHYVE_PORT_EXIT, (unsigned) (size_t) &arg);
+		uhyve_send(UHYVE_PORT_EXIT, (unsigned) (size_t) &arg);
 	} else {
 		sys_exit_t sysargs = {__NR_exit, arg};
 
@@ -135,7 +135,7 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 	if (is_uhyve()) {
                 uhyve_read_t uhyve_args = {fd, (char*) virt_to_phys((size_t) buf), len, -1};
 
-                outportl(UHYVE_PORT_READ, (unsigned)virt_to_phys((size_t)&uhyve_args));
+                uhyve_send(UHYVE_PORT_READ, (unsigned)virt_to_phys((size_t)&uhyve_args));
 
                 return uhyve_args.ret;
         }
@@ -209,7 +209,7 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	if (is_uhyve()) {
 		uhyve_write_t uhyve_args = {fd, (const char*) virt_to_phys((size_t) buf), len};
 
-		outportl(UHYVE_PORT_WRITE, (unsigned)virt_to_phys((size_t)&uhyve_args));
+		uhyve_send(UHYVE_PORT_WRITE, (unsigned)virt_to_phys((size_t)&uhyve_args));
 
 		return uhyve_args.len;
 	}
@@ -319,7 +319,7 @@ int sys_open(const char* name, int flags, int mode)
 	if (is_uhyve()) {
 		uhyve_open_t uhyve_open = {(const char*)virt_to_phys((size_t)name), flags, mode, -1};
 
-		outportl(UHYVE_PORT_OPEN, (unsigned)virt_to_phys((size_t) &uhyve_open));
+		uhyve_send(UHYVE_PORT_OPEN, (unsigned)virt_to_phys((size_t) &uhyve_open));
 
 		return uhyve_open.ret;
 	}
@@ -390,7 +390,7 @@ int sys_close(int fd)
 	if (is_uhyve()) {
 		uhyve_close_t uhyve_close = {fd, -1};
 
-		outportl(UHYVE_PORT_CLOSE, (unsigned)virt_to_phys((size_t) &uhyve_close));
+		uhyve_sendl(UHYVE_PORT_CLOSE, (unsigned)virt_to_phys((size_t) &uhyve_close));
 
 		return uhyve_close.ret;
 	}
