@@ -11,7 +11,7 @@
 #include <hermit/string.h>
 
 #if !HAVE_ARCH_MEMCPY
-void *memcpy(void *dest, const void *src, size_t count)
+void *__memcpy(void *dest, const void *src, size_t count)
 {
 	size_t i;
 
@@ -20,13 +20,13 @@ void *memcpy(void *dest, const void *src, size_t count)
 
 	for (i = 0; i < count; i++)
 		((char*)dest)[i] = ((char*)src)[i];
-	
+
 	return dest;
 }
 #endif
 
 #if !HAVE_ARCH_MEMSET
-void *memset(void *dest, int val, size_t count)
+void *__memset(void *dest, int val, size_t count)
 {
 	size_t i;
 
@@ -41,7 +41,7 @@ void *memset(void *dest, int val, size_t count)
 #endif
 
 #if !HAVE_ARCH_MEMCMP
-int memcmp(const void *s1, const void *s2, size_t n)
+int __memcmp(const void *s1, const void *s2, size_t n)
 {
 	if (n != 0) {
 		const unsigned char *p1 = s1, *p2 = s2;
@@ -57,7 +57,7 @@ int memcmp(const void *s1, const void *s2, size_t n)
 #endif
 
 #if !HAVE_ARCH_STRLEN
-size_t strlen(const char *str)
+size_t __strlen(const char *str)
 {
 	size_t len = 0;
 
@@ -72,7 +72,7 @@ size_t strlen(const char *str)
 #endif
 
 #if !HAVE_ARCH_STRNCPY
-char* strncpy(char *dest, const char *src, size_t n)
+char* __strncpy(char *dest, const char *src, size_t n)
 {
 	size_t i;
 
@@ -91,7 +91,7 @@ char* strncpy(char *dest, const char *src, size_t n)
 #endif
 
 #if !HAVE_ARCH_STRCPY
-char* strcpy(char *dest, const char *src)
+char* __strcpy(char *dest, const char *src)
 {
         size_t i;
 
@@ -107,7 +107,7 @@ char* strcpy(char *dest, const char *src)
 #endif
 
 #if !HAVE_ARCH_STRCMP
-int strcmp(const char *s1, const char *s2)
+int __strcmp(const char *s1, const char *s2)
 {
 	while (*s1 != '\0' && *s1 == *s2) {
 		s1++;
@@ -119,7 +119,7 @@ int strcmp(const char *s1, const char *s2)
 #endif
 
 #if !HAVE_ARCH_STRNCMP
-int strncmp(const char *s1, const char *s2, size_t n)
+int __strncmp(const char *s1, const char *s2, size_t n)
 {
 	if (BUILTIN_EXPECT(n == 0, 0))
 		return 0;
