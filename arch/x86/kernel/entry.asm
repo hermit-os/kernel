@@ -1,4 +1,3 @@
-
 ; Copyright (c) 2010-2015, Stefan Lankes, RWTH Aachen University
 ; All rights reserved.
 ;
