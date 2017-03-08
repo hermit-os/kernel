@@ -121,13 +121,17 @@ void page_free(void* addr, size_t sz);
  *
  * @return Long value of the parsed numerical string
  */
-long strtol(const char* str, char** endptr, int base);
+long __strtol(const char* str, char** endptr, int base);
+
+#define strtol(str, endptr, base)	__strtol((str), (endptr), (base))
 
 /** @brief String to unsigned long
  *
  * @return Unsigned long value of the parsed numerical string
  */
-unsigned long strtoul(const char* nptr, char** endptr, int base);
+unsigned long __strtoul(const char* nptr, char** endptr, int base);
+
+#define strtoul(nptr, endptr, base)	__strtoul((nptr), (endptr), (base))
 
 /** @brief ASCII to integer
  *
