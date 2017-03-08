@@ -42,56 +42,56 @@ extern "C" {
 #endif
 
 #if !HAVE_ARCH_MEMCPY
-void *__memcpy(void *dest, const void *src, size_t count);
+void *_memcpy(void *dest, const void *src, size_t count);
 
-#define memcpy(dest, src, count) __memcpy((dest), (src), (count))
+#define memcpy(dest, src, count) _memcpy((dest), (src), (count))
 #endif
 
 #if !HAVE_ARCH_MEMSET
-void *__memset(void *dest, int val, size_t count);
+void *_memset(void *dest, int val, size_t count);
 
-#define memset(dest, val, count) __memset((dest), (val), (count))
+#define memset(dest, val, count) _memset((dest), (val), (count))
 #endif
 
 #if !HAVE_ARCH_MEMCMP
-int __memcmp(const void *s1, const void *s2, size_t n);
+int _memcmp(const void *s1, const void *s2, size_t n);
 
-#define memcmp(s1, s2, n) __memcmp((s1), (s2), (n))
+#define memcmp(s1, s2, n) _memcmp((s1), (s2), (n))
 #endif
 
 #if !HAVE_ARCH_STRLEN
-size_t __strlen(const char *str);
+size_t _strlen(const char *str);
 
-#define strlen(str) __strlen((str))
+#define strlen(str) _strlen((str))
 #endif
 
 #if !HAVE_ARCH_STRNCPY
-char *__strncpy(char *dest, const char *src, size_t n);
+char *_strncpy(char *dest, const char *src, size_t n);
 
-#define strncpy(dest, src, n) __strncpy((dest), (src), (n))
+#define strncpy(dest, src, n) _strncpy((dest), (src), (n))
 #endif
 
 #if !HAVE_ARCH_STRCPY
-char *__strcpy(char *dest, const char *src);
+char *_strcpy(char *dest, const char *src);
 
-#define strcpy(dest, src) __strcpy((dest), (src))
+#define strcpy(dest, src) _strcpy((dest), (src))
 #endif
 
 #if !HAVE_ARCH_STRCMP
-int __strcmp(const char *s1, const char *s2);
+int _strcmp(const char *s1, const char *s2);
 
-#define strcmp(s1, s2) __strcmp((s1), (s2))
+#define strcmp(s1, s2) _strcmp((s1), (s2))
 #endif
 
 #if !HAVE_ARCH_STRNCMP
-int __strncmp(const char *s1, const char *s2, size_t n);
+int _strncmp(const char *s1, const char *s2, size_t n);
 
-#define strncmp(s1, s2, n) __strncmp((s1), (s2), (n))
+#define strncmp(s1, s2, n) _strncmp((s1), (s2), (n))
 #endif
 
-char *__strstr(const char *s, const char *find);
+char *_strstr(const char *s, const char *find);
 
-#define strstr(s, find) __strstr((s), (find))
+#define strstr(s, find) _strstr((s), (find))
 
 #ifdef __cplusplus
 }

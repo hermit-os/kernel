@@ -50,7 +50,7 @@
  * alphabets and digits are each contiguous.
  */
 unsigned long
-__strtoul(nptr, endptr, base)
+_strtoul(nptr, endptr, base)
 	const char *nptr;
 	char **endptr;
 	int base;

@@ -50,7 +50,7 @@
  * alphabets and digits are each contiguous.
  */
 long
-__strtol(nptr, endptr, base)
+_strtol(nptr, endptr, base)
 	const char *nptr;
 	char **endptr;
 	int base;
