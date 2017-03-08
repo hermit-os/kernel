@@ -4,7 +4,7 @@ ARCH = x86
 NAME = libhermit.a
 DRIVERDIRS = drivers/net
 LWIPDIRS = lwip/src/arch lwip/src/api lwip/src/core lwip/src/core/ipv4 lwip/src/core/ipv6 lwip/src/netif
-KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
+KERNDIRS = kernel mm libkern arch/$(ARCH)/kernel arch/$(ARCH)/libkern arch/$(ARCH)/mm $(LWIPDIRS) $(DRIVERDIRS)
 SUBDIRS = $(KERNDIRS)
 TODAY := $(shell date +'%Y%m%d')
 QEMU = @QEMU@ -machine accel=kvm -cpu host
