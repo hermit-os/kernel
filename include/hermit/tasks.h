@@ -133,16 +133,6 @@ int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio);
  */
 int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id);
 
-
-/** @brief Create a thread local storage for the current task
- *
- * @return
- * - 0 on success
- * - -EONMEM on failure
- */
-int init_tls(void);
-
-
 /** @brief Cleanup function for the task termination
  *
  * On termination, the task call this function to cleanup its address space.
@@ -196,7 +186,7 @@ void wait_for_task(void);
  *
  * @return
  *  - address of the readyqueue
- */ 
+ */
 void* get_readyqueue(void);
 
 /** @brief Get a process control block

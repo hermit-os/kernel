@@ -1078,8 +1078,6 @@ void shutdown_system(void)
 	}
 }
 
-volatile uint32_t go_down = 0;
-
 static void apic_shutdown(struct state * s)
 {
 	go_down = 1;
