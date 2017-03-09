@@ -195,6 +195,38 @@ static void readyqueues_remove(uint32_t core_id, task_t* task)
 }
 
 
+/* interrupt handler to save / restore the FPU context */
+void fpu_handler(struct state *s)
+{
+	(void) s;
+
+	task_t* task = per_core(current_task);
+	uint32_t core_id = CORE_ID;
+
+	clts(); // clear the TS flag of cr0
+	task->flags |= TASK_FPU_USED;
+
+	if (!(task->flags & TASK_FPU_INIT))  {
+		// use the FPU at the first time => Initialize FPU
+		fpu_init(&task->fpu);
+		task->flags |= TASK_FPU_INIT;
+	}
+
+	if (readyqueues[core_id].fpu_owner == task->id)
+		return;
+
+	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+	// did another already use the the FPU? => save FPU state
+	if (readyqueues[core_id].fpu_owner) {
+		save_fpu_state(&(task_table[readyqueues[core_id].fpu_owner].fpu));
+		task_table[readyqueues[core_id].fpu_owner].flags &= ~TASK_FPU_USED;
+	}
+	readyqueues[core_id].fpu_owner = task->id;
+	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+	restore_fpu_state(&task->fpu);
+}
+
 void check_scheduling(void)
 {
 	if (!is_irq_enabled())
