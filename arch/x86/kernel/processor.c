@@ -553,7 +553,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -572,6 +572,7 @@ int cpu_detection(void) {
 			has_vmx() ? "VMX " : "",
 			has_rdtscp() ? "RDTSCP " : "",
 			has_fsgsbase() ? "FSGSBASE " : "",
+			has_sgx() ? "SGX " : "",
 			has_mwait() ? "MWAIT " : "",
 			has_clflush() ? "CLFLUSH " : "",
 			has_bmi1() ? "BMI1 " : "",
@@ -585,7 +586,9 @@ int cpu_detection(void) {
 			has_avx512f() ? "AVX512F " : "",
 			has_avx512cd() ? "AVX512CD " : "",
 			has_avx512pf() ? "AVX512PF " : "",
-			has_avx512er() ? "AVX512ER " : "");
+			has_avx512er() ? "AVX512ER " : "",
+			has_avx512vl() ? "AVX512VL " : "",
+			has_avx512bw() ? "AVX512BW " : "");
 	}
 
 	if (first_time && has_osxsave()) {
