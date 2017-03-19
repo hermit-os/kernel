@@ -195,15 +195,11 @@ static void readyqueues_remove(uint32_t core_id, task_t* task)
 }
 
 
-/* interrupt handler to save / restore the FPU context */
-void fpu_handler(struct state *s)
+void fpu_handler(void)
 {
-	(void) s;
-
 	task_t* task = per_core(current_task);
 	uint32_t core_id = CORE_ID;
 
-	clts(); // clear the TS flag of cr0
 	task->flags |= TASK_FPU_USED;
 
 	if (!(task->flags & TASK_FPU_INIT))  {
@@ -284,7 +280,7 @@ int multitasking_init(void)
 	task_table[0].ist_addr = (char*)&boot_ist;
 	set_per_core(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
 	set_per_core(current_task, task_table+0);
-	set_tss((size_t) task_table[0].stack + KERNEL_STACK_SIZE - 0x10, (size_t) task_table[0].ist_addr + KERNEL_STACK_SIZE - 0x10);
+  arch_init_task(task_table+0);
 
 	readyqueues[core_id].idle = task_table+0;
 
@@ -312,7 +308,7 @@ int set_idle_task(void)
 			task_table[i].heap = NULL;
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
-			set_tss((size_t) task_table[i].stack + KERNEL_STACK_SIZE - 0x10, (size_t) task_table[i].ist_addr + KERNEL_STACK_SIZE - 0x10);
+      arch_init_task(task_table+i);
 			ret = 0;
 
 			break;
