@@ -53,7 +53,7 @@ newlib:
 $(TMP)/binutils:
 	@echo Build binutils
 	$Q$(MKDIR) $(TMP)/binutils
-	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(PREFIX) --with-sysroot --disable-multilib --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls && $(MAKE) $(NJOBS) && $(MAKE) install
+	$Q$(CD) $(TMP)/binutils; $(TOPDIR)/binutils/configure --target=$(TARGET) --prefix=$(PREFIX) --with-sysroot --disable-multilib --disable-shared --disable-nls --disable-gdb --disable-libdecnumber --disable-readline --disable-sim --disable-libssp --enable-tls --enable-lto --enable-plugin && $(MAKE) $(NJOBS) && $(MAKE) install
 
 
 $(TMP)/bootstrap:
