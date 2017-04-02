@@ -233,20 +233,17 @@ success:
 		netifapi_dhcp_start(&default_netif);
 
 		int mscnt = 0;
+		int ip_counter = 0;
 		/* wait for ip address */
-		while(!ip_2_ip4(&default_netif.ip_addr)->addr) {
+		while(!ip_2_ip4(&default_netif.ip_addr)->addr && (ip_counter < 20)) {
 			uint64_t end_tsc, start_tsc = rdtsc();
 
-#if 1
 			do {
 				if (ip_2_ip4(&default_netif.ip_addr)->addr)
 					return 0;
 				check_workqueues();
 				end_tsc = rdtsc();
 			} while(((end_tsc - start_tsc) / (get_cpu_frequency() * 1000)) < DHCP_FINE_TIMER_MSECS);
-#else
-			sys_msleep(DHCP_FINE_TIMER_MSECS);
-#endif
 
 			dhcp_fine_tmr();
 			mscnt += DHCP_FINE_TIMER_MSECS;
@@ -254,8 +251,13 @@ success:
 				dhcp_coarse_tmr();
 				mscnt = 0;
 			}
+
+			ip_counter++;
 		}
 	}
+
+	if (!ip_2_ip4(&default_netif.ip_addr)->addr)
+		return -ENODEV;
 
 	return 0;
 }
@@ -270,10 +272,10 @@ int network_shutdown(void)
 		lwip_close(s);
 	}
 
-        mmnif_shutdown();
+	mmnif_shutdown();
 	//stats_display();
 
-        return 0;
+	return 0;
 }
 
 #if MAX_CORES > 1
@@ -400,9 +402,9 @@ static int initd(void* arg)
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	// initialize network
-	init_netifs();
+	err = init_netifs();
 
-	if (is_uhyve())
+	if (is_uhyve() || (err != 0))
 	{
 		char* dummy[] = {"app_name", NULL};
 
