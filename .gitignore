@@ -1,7 +1,7 @@
 *.pcap
 *.config
 *.creator
-*.creator.user
+*.user
 *.files
 *.includes
 *.pyc

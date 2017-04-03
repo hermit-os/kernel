@@ -1,6 +1,6 @@
 #!/bin/sh
 
-PROXY=/hermit/tools/proxy
+PROXY=/hermit/bin/proxy
 
 ELF_OSABI_OFFSET=7
 ELF_OSABI="\\x42"

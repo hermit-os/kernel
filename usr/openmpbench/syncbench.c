@@ -45,9 +45,9 @@ int main(int argc, char **argv) {
 
 	struct XRayTraceCapture* trace = XRayInit(
 				20,					// max. call depth
-				32 * 1000 * 1000,	// memory for report
+				16 * 1000 * 1000,	// memory for report
 				13,					// frame count
-				"/hermit/usr/openmpbench/syncbench.map");
+				"syncbench.map");
 
     // Start Paraver tracing
 #ifdef PARAVERTRACE
@@ -128,7 +128,7 @@ int main(int argc, char **argv) {
 #endif
 
 	XRaySaveReport(trace,
-				   "/hermit/usr/openmpbench/syncbench.xray", // report file
+				   "syncbench.xray", // report file
 				   0.05f, // Only output funcs that have higher runtime [%]
 				   1000); // Only output funcs that have higher runtime [cycles]
 	XRayShutdown(trace);

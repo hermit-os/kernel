@@ -28,7 +28,7 @@
 ; perhaps setting up the GDT and segments. Please note that interrupts
 ; are disabled at this point: More on interrupts later!
 
-%include "config.inc"
+%include "hermit/config.asm"
 
 [BITS 64]
 
@@ -600,7 +600,7 @@ common_switch:
     call get_current_stack     ; get new rsp
     mov rsp, rax
 
-%ifdef SAVE_FPU
+%ifidn SAVE_FPU,ON
     ; set task switched flag
     mov rax, cr0
     or rax, 8
