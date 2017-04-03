@@ -309,7 +309,8 @@ static int load_kernel(uint8_t* mem, char* path)
 		ret = pread_in_full(fd, mem+paddr-GUEST_OFFSET, filesz, offset);
 		if (ret < 0)
 			goto out;
-		memset(mem+paddr+filesz-GUEST_OFFSET, 0x00, memsz - filesz);
+		//if (memsz - filesz > 0)
+		//	memset(mem+paddr+filesz-GUEST_OFFSET, 0x00, memsz - filesz);
 		if (!klog)
 			klog = mem+paddr+0x5000-GUEST_OFFSET;
 		if (!mboot)
