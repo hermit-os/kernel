@@ -172,7 +172,6 @@ static void fpu_init_xsave(union fpu_state* fpu)
 
 static uint32_t get_frequency_from_mbinfo(void)
 {
-#if 0
 	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
 	{
 		// search in the command line for cpu frequency
@@ -182,7 +181,7 @@ static uint32_t get_frequency_from_mbinfo(void)
 
 		return atoi(found+strlen("-freq"));
 	}
-#endif
+
 	return 0;
 }
 
