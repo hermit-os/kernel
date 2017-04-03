@@ -155,15 +155,15 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 				if (!(self[lvl][vpn] & PG_PRESENT)) {
 					/* There's no table available which covers the region.
 					 * Therefore we need to create a new empty table. */
-					size_t phyaddr = get_pages(1);
-					if (BUILTIN_EXPECT(!phyaddr, 0))
+					size_t paddr = get_pages(1);
+					if (BUILTIN_EXPECT(!paddr, 0))
 						goto out;
 
 					/* Reference the new table within its parent */
 #if 0
-					self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED;
+					self[lvl][vpn] = paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED;
 #else
-					self[lvl][vpn] = (phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED) & ~PG_XD;
+					self[lvl][vpn] = (paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED) & ~PG_XD;
 #endif
 
 					/* Fill new table with zeros */
@@ -328,7 +328,8 @@ int page_init(void)
 
 	if (mb_info && ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK))) {
 		LOG_INFO("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
-		page_map((size_t) mb_info->cmdline & PAGE_MASK, mb_info->cmdline & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
+		// reserve 2 pages for long cmdline strings
+		page_map((size_t) mb_info->cmdline & PAGE_MASK, mb_info->cmdline & PAGE_MASK, 2, PG_GLOBAL|PG_RW|PG_PRESENT);
 	}
 
 	/* Replace default pagefault handler */

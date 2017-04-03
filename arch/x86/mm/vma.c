@@ -38,7 +38,8 @@ int vma_arch_init(void)
 			goto out;
 
 		if ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
-			ret = vma_add((size_t)mb_info->cmdline & PAGE_MASK, ((size_t)mb_info->cmdline & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
+			// reserve 2 pages for long cmdline strings
+			ret = vma_add((size_t)mb_info->cmdline & PAGE_MASK, ((size_t)mb_info->cmdline & PAGE_MASK) + 2*PAGE_SIZE, VMA_READ|VMA_WRITE);
 			if (BUILTIN_EXPECT(ret, 0))
 				goto out;
 		}
