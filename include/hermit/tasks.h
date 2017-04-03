@@ -270,6 +270,10 @@ static inline void check_workqueues(void)
 	check_workqueues_in_irqhandler(-1);
 }
 
+/** @brief check if a proxy is available
+ */
+int is_proxy(void);
+
 #ifdef __cplusplus
 }
 #endif
