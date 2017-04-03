@@ -97,6 +97,8 @@
 #define UART_MCR_RTS		0x02 /* RTS complement */
 #define UART_MCR_DTR		0x01 /* DTR complement */
 
+#define DEFAULT_UART_PORT 	0xc110
+
 static size_t	iobase = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
@@ -167,9 +169,9 @@ static int uart_config(void)
 	write_to_uart(UART_LCR, lcr);
 
 	/*
-	 * set baudrate to 115200
+	 * set baudrate to 9600
 	 */
-	uint32_t divisor = 1843200 / 115200;
+	uint32_t divisor = 1843200 / 9600; //115200;
 	write_to_uart(UART_DLL, divisor & 0xff);
 	write_to_uart(UART_DLM, (divisor >> 8) & 0xff);
 
@@ -186,8 +188,32 @@ int uart_init(void)
 	if (is_uhyve())
 		return 0;
 
+	pci_info_t pci_info;
+	uint32_t bar = 0;
+
+	// Searching for Intel's UART device
+	if (pci_get_device_info(0x8086, 0x0936, &pci_info, 1) == 0)
+		goto Lsuccess;
+	// Searching for Qemu's UART device
+	if (pci_get_device_info(0x1b36, 0x0002, &pci_info, 1) == 0)
+		goto Lsuccess;
+	// Searching for Qemu's 2x UART device (pci-serial-2x)
+	if (pci_get_device_info(0x1b36, 0x0003, &pci_info, 1) == 0)
+		goto Lsuccess;
+	// Searching for Qemu's 4x UART device (pci-serial-4x)
+	if (pci_get_device_info(0x1b36, 0x0004, &pci_info, 1) == 0)
+		goto Lsuccess;
+
 	// default value of our QEMU configuration
-	iobase = 0xc110;
+	iobase = DEFAULT_UART_PORT;
+
+	// configure uart
+	return uart_config();;
+
+Lsuccess:
+	iobase = pci_info.base[bar];
+	//irq_install_handler(32+pci_info.irq, uart_handler);
+	kprintf("UART uses io address 0x%x\n", iobase);
 
 	// configure uart
 	return uart_config();
