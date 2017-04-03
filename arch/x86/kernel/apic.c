@@ -408,6 +408,7 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 	return NULL;
 }
 
+#if 0
 static size_t search_ebda(void) {
 	size_t ptr=PAGE_CEIL(0x400), vptr=0xF0000;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
@@ -427,6 +428,7 @@ static size_t search_ebda(void) {
 
 	return (size_t) addr;
 }
+#endif
 
 static int lapic_reset(void)
 {
@@ -694,7 +696,7 @@ int apic_calibration(void)
 
 static int apic_probe(void)
 {
-	size_t addr, ebda;
+	size_t addr;
 	uint32_t i, j, count;
 	int isa_bus = -1;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
@@ -703,10 +705,12 @@ static int apic_probe(void)
 	if (has_nx())
 		flags |= PG_XD;
 
-	ebda = search_ebda();
+#if 0
+	size_t ebda = search_ebda();
 	apic_mp = search_mptable(ebda, ebda+0x400);
 	if (apic_mp)
 		goto found_mp;
+#endif
 
 	apic_mp = search_mptable(0xF0000, 0x100000);
 	if (apic_mp)
