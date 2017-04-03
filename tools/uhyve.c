@@ -299,7 +299,7 @@ static int load_kernel(uint8_t* mem, char* path)
 		uint64_t paddr = phdr[ph_i].p_paddr;
 		size_t offset = phdr[ph_i].p_offset;
 		size_t filesz = phdr[ph_i].p_filesz;
-		size_t memsz = phdr[ph_i].p_memsz;
+		//size_t memsz = phdr[ph_i].p_memsz;
 
 		if (phdr[ph_i].p_type != PT_LOAD)
 			continue;
