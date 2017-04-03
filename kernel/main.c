@@ -404,7 +404,7 @@ static int initd(void* arg)
 	// initialize network
 	err = init_netifs();
 
-	if (is_uhyve() || (err != 0))
+	if ((err != 0) || is_proxy())
 	{
 		char* dummy[] = {"app_name", NULL};
 
@@ -414,16 +414,6 @@ static int initd(void* arg)
 
 		return 0;
 	}
-
-#if 0
-	if (is_single_kernel()) {
-		char* dummy[] = {"app_name", NULL};
-
-		libc_start(1, dummy, NULL);
-
-		return 0;
-	}
-#endif
 
 	// initialize iRCCE
 	if (!is_single_kernel())

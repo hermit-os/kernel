@@ -37,6 +37,7 @@
 #include <hermit/logging.h>
 #include <asm/tss.h>
 #include <asm/page.h>
+#include <asm/multiboot.h>
 
 #define TLS_OFFSET	8
 
@@ -93,6 +94,22 @@ static int thread_entry(void* arg, size_t ep)
 	entry_point_t call_ep = (entry_point_t) ep;
 	call_ep(arg);
 
+	return 0;
+}
+
+int is_proxy(void)
+{
+	if (is_uhyve())
+		return 0;
+	if (!is_single_kernel())
+		return 1;
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
+	{
+		// search in the command line for cpu frequency
+		char* found = strstr((char*) (size_t)mb_info->cmdline, "-proxy");
+		if (!found)
+			return 1;
+	}
 	return 0;
 }
 

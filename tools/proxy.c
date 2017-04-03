@@ -126,7 +126,7 @@ static void exit_handler(int sig)
 	exit(0);
 }
 
-static char* cpufreq(void)
+static char* get_append_string(void)
 {
 	char line[2048];
 	char* match;
@@ -148,7 +148,7 @@ static char* cpufreq(void)
 			;
 		*point = '\0';
 
-		snprintf(cmdline, MAX_PATH, "-freq%s", match);
+		snprintf(cmdline, MAX_PATH, "\"-freq%s -proxy\"", match);
 		fclose(fp);
 
 		return cmdline;
@@ -314,7 +314,7 @@ static int qemu_init(char *path)
 	char port_str[MAX_PATH];
 	pid_t qemu_pid;
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-daemonize", "-display", "none", "-smp", "1", "-m", "2G", "-pidfile", pidname, "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-kernel", loader_path, "-initrd", path, "-append", cpufreq(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char* qemu_argv[] = {qemu_str, "-daemonize", "-display", "none", "-smp", "1", "-m", "2G", "-pidfile", pidname, "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-kernel", loader_path, "-initrd", path, "-append", get_append_string(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
