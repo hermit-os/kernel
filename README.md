@@ -104,7 +104,7 @@ If your toolchain is not located in `/opt/hermit/bin` then you have to supply
 its location to the `cmake` command above like so:
 
 ```bash
-$ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin
+$ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 ```
 
 assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
