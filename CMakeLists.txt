@@ -58,21 +58,23 @@ list(APPEND KERNEL_OBJECTS
 	$<TARGET_OBJECTS:${X86_KERNEL_C_TARGET}>)
 
 # finally build libhermit.a
-add_library(hermit STATIC ${KERNEL_OBJECTS})
+add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
+set_target_properties(hermit-bootstrap PROPERTIES
+	ARCHIVE_OUTPUT_NAME hermit)
 
 # after compiling ASM sources, we need to post-process them. Adding this
 # dependency makes sure that this is done before hermit is linked
-add_dependencies(hermit ${X86_KERNEL_TARGET})
+add_dependencies(hermit-bootstrap ${X86_KERNEL_TARGET})
 
 add_custom_command(
 	TARGET
-		hermit POST_BUILD
+		hermit-bootstrap POST_BUILD
 	# rename sections in final library
 	COMMAND
 		${CMAKE_OBJCOPY} --rename-section .bss=.kbss
 						 --rename-section .text=.ktext
 						 --rename-section .data=.kdata
-						 $<TARGET_FILE:hermit>
+						 $<TARGET_FILE:hermit-bootstrap>
 
 	# copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
@@ -81,7 +83,7 @@ add_custom_command(
 		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_LIB_DIR}
 	COMMAND
 		${CMAKE_COMMAND} -E copy_if_different
-							$<TARGET_FILE:hermit>
+							$<TARGET_FILE:hermit-bootstrap>
 							${LOCAL_PREFIX_ARCH_LIB_DIR}/
 
 	# and also copy headers into local prefix
@@ -96,11 +98,33 @@ add_custom_command(
 							${CMAKE_BINARY_DIR}/include/hermit/*.asm
 							${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/)
 
+
 # deploy libhermit.a and headers for package creation
-install(TARGETS hermit
-	DESTINATION ${TARGET_ARCH}/lib)
+install(TARGETS hermit-bootstrap
+	DESTINATION ${TARGET_ARCH}/lib
+	COMPONENT bootstrap)
+
 install(DIRECTORY include/hermit
-	DESTINATION ${TARGET_ARCH}/include/)
+	DESTINATION ${TARGET_ARCH}/include/
+	COMPONENT bootstrap
+	FILES_MATCHING
+		PATTERN *.h)
+
+# provide custom target to only install libhermit without its runtimes which is
+# needed during the compilation of the cross toolchain
+add_custom_target(hermit-bootstrap-install
+	DEPENDS
+		hermit-bootstrap
+	COMMAND
+		${CMAKE_COMMAND}
+			-DCMAKE_INSTALL_COMPONENT=bootstrap
+			-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
+			-P cmake_install.cmake)
+
+# The target 'hermit' includes the HermitCore kernel and several runtimes.
+# Applications should depend on this target if they link against HermitCore.
+add_custom_target(hermit
+	DEPENDS hermit-bootstrap)
 
 
 ### External projects

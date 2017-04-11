@@ -10,3 +10,4 @@
 **/build/*
 .idea/*
 qemu-vlan0.pcap
+cmake/cmake-3.7.2-Linux-x86_64/*
