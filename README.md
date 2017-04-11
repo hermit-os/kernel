@@ -31,10 +31,10 @@ production ready. Please use it with caution.
 The build process works currently only on **x86-based Linux** systems. To build
 the HermitCore kernel and applications you need:
 
- * CMake, GNU Make, GNU Binutils
+ * CMake
  * Netwide Assember (NASM)
  * recent host compiler such as GCC
- * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads-embedded
+ * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads
 
 ### HermitCore cross-toolchain
 
