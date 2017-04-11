@@ -1,5 +1,6 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
+[![Join the chat at https://gitter.im/RWTH-OS/HermitCore](https://badges.gitter.im/RWTH-OS/HermitCore.svg)](https://gitter.im/RWTH-OS/HermitCore?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=devel)](https://travis-ci.org/RWTH-OS/HermitCore)
 
 The project [HermitCore]( http://www.hermitcore.org ) is a new
