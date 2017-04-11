@@ -1,6 +1,6 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
+[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=devel)](https://travis-ci.org/RWTH-OS/HermitCore)
 
 The project [HermitCore]( http://www.hermitcore.org ) is a new
 [unikernel](http://unikernel.org) targeting a scalable and predictable runtime
@@ -31,11 +31,10 @@ production ready. Please use it with caution.
 The build process works currently only on **x86-based Linux** systems. To build
 the HermitCore kernel and applications you need:
 
- * CMake
+ * CMake, GNU Make, GNU Binutils
  * Netwide Assember (NASM)
  * recent host compiler such as GCC
  * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads-embedded
-
 
 ### HermitCore cross-toolchain
 
@@ -48,13 +47,7 @@ $ sudo apt-get -qq update
 $ sudo apt-get install binutils-hermit newlib-hermit pthread-embedded-hermit gcc-hermit libhermit
 ```
 
-If you want to build the toolchain yourself, have a look at the following
-repositories, especially at `debian/rules` in each repository:
-
- * [GCC](https://github.com/RWTH-OS/gcc)
- * [Binutils](https://github.com/RWTH-OS/binutils)
- * [Newlib](https://github.com/RWTH-OS/newlib)
- * [Pthread-embedded](https://github.com/RWTH-OS/pthread-embedded)
+If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 
 Depending on how you want to use HermitCore, you might need additional packages
 such as:
