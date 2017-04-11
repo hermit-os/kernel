@@ -77,8 +77,10 @@ set(HERMIT_KERNEL_INCLUDES
 #
 # Furthermore this will produce a sensible error message if the toolchain cannot
 # be found.
-enable_language(C CXX Fortran Go)
-include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Paths.cmake)
+if(NOT BOOTSTRAP)
+	enable_language(C CXX Fortran Go)
+	include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Paths.cmake)
+endif()
 
 # find elfedit, CMake doesn't use this program, so we have to find it ourself
 find_toolchain_program(elfedit)
