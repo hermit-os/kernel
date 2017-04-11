@@ -27,7 +27,11 @@ endif()
 
 # use default toolchain if not specified by user
 if(NOT CMAKE_TOOLCHAIN_FILE)
-	set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-${HERMIT_ARCH}.cmake)
+	if(BOOTSTRAP)
+		# use bootstrap toolchain if requested
+		set(_BOOTSTRAP_ARCH_SUFFIX -bootstrap)
+	endif()
+	set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-${HERMIT_ARCH}${_BOOTSTRAP_ARCH_SUFFIX}.cmake)
 endif()
 
 # NASM detection will change binary format depending on host system, but
