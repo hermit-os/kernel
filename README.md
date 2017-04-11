@@ -1,5 +1,7 @@
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
+[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
+
 The project [HermitCore]( http://www.hermitcore.org ) is a new
 [unikernel](http://unikernel.org) targeting a scalable and predictable runtime
 for high-performance and cloud computing. HermitCore extends the multi-kernel
