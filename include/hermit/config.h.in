@@ -4,6 +4,7 @@
 #cmakedefine KERNEL_STACK_SIZE	(@KERNEL_STACK_SIZE@)
 #cmakedefine DEFAULT_STACK_SIZE	(@DEFAULT_STACK_SIZE@)
 #cmakedefine PACKAGE_VERSION 	"@PACKAGE_VERSION@"
+#cmakedefine MAX_FNAME			(@MAX_FNAME@)
 
 #cmakedefine SAVE_FPU
 
