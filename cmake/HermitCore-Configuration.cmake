@@ -10,6 +10,9 @@ set(MAX_TASKS "((MAX_CORES * 2) + 2)" CACHE STRING
 set(MAX_ISLE "8" CACHE STRING
 	"Maximum number of NUMA isles")
 
+set(MAX_FNAME "128" CACHE STRING
+	"Define the maximum length of a file name")
+
 set(KERNEL_STACK_SIZE 8192 CACHE STRING
 	"Kernel stack size in bytes")
 
