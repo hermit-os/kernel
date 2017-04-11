@@ -8,8 +8,9 @@ set(TARGET_ARCH x86_64-hermit)
 
 set(CMAKE_SYSTEM_NAME Generic)
 
-# point CMake to our toolchain, it will auto detect C++ compiler
+# point CMake to our toolchain
 set(CMAKE_C_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gcc)
+set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-g++)
 set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gfortran)
 set(CMAKE_Go_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gccgo)
 
