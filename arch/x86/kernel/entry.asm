@@ -33,7 +33,6 @@
 [BITS 64]
 
 extern kernel_start		; defined in linker script
-extern kernel_end
 
 MSR_FS_BASE equ 0xc0000100
 MSR_GS_BASE equ 0xc0000101
@@ -69,6 +68,7 @@ align 4
     global hbmem_base
     global hbmem_size
     global uhyve
+    global image_size
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -134,11 +134,6 @@ start64:
     cmp eax, 0
     jne Lno_pml4_init
 
-    ; determine full image size
-    mov rax, kernel_end
-    sub rax, kernel_start
-    mov QWORD [image_size], rax
-
     ; relocate page tables
     mov rdi, boot_pml4
     mov rax, QWORD [rdi]
@@ -191,11 +186,16 @@ Lno_mbinfo:
     mov rax, [base]
     or rax, 0x83      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
     xor rcx, rcx
+    mov rsi, 510*0x200000
+    sub rsi, kernel_start
 Lremap:
     mov QWORD [rdi], rax
     add rax, 0x200000
     add rcx, 0x200000
     add rdi, 8
+    ; note: the whole code segement muust fit in the first pgd
+    cmp rcx, rsi
+    jnb Lno_pml4_init
     cmp rcx, QWORD [image_size]
     jb Lremap
 

@@ -105,8 +105,8 @@ int is_proxy(void)
 		return 1;
 	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
 	{
-		// search in the command line for cpu frequency
-		char* found = strstr((char*) (size_t)mb_info->cmdline, "-proxy");
+		// search in the command line for the "proxy" hint
+		char* found = strstr((char*) (size_t) mb_info->cmdline, "-proxy");
 		if (!found)
 			return 1;
 	}

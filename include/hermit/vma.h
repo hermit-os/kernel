@@ -87,7 +87,7 @@ typedef struct vma {
 /** @brief Initalize the kernelspace VMA list
  *
  * Reserves several system-relevant virtual memory regions:
- *  - The kernel (kernel_start - kernel_end)
+ *  - The kernel (image_size)
  *  - Init Ramdisk
  *
  * @return

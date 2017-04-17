@@ -38,7 +38,6 @@
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 
 /*
  * Kernel space VMA list and lock
@@ -56,11 +55,11 @@ int vma_init(void)
 
 	LOG_INFO("vma_init: reserve vma region 0x%llx - 0x%llx\n",
 		PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_end));
+		PAGE_2M_FLOOR((size_t) &kernel_start + image_size));
 
 	// add Kernel
 	ret  = vma_add(PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_end),
+		PAGE_2M_FLOOR((size_t) &kernel_start + image_size),
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;

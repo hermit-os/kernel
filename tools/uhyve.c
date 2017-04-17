@@ -299,18 +299,16 @@ static int load_kernel(uint8_t* mem, char* path)
 		uint64_t paddr = phdr[ph_i].p_paddr;
 		size_t offset = phdr[ph_i].p_offset;
 		size_t filesz = phdr[ph_i].p_filesz;
-		//size_t memsz = phdr[ph_i].p_memsz;
+		size_t memsz = phdr[ph_i].p_memsz;
 
 		if (phdr[ph_i].p_type != PT_LOAD)
 			continue;
 
-		//printf("Kernel location 0x%zx, file size 0x%zx\n", paddr, filesz);
+		//printf("Kernel location 0x%zx, file size 0x%zx, memory size 0x%zx\n", paddr, filesz, memsz);
 
 		ret = pread_in_full(fd, mem+paddr-GUEST_OFFSET, filesz, offset);
 		if (ret < 0)
 			goto out;
-		//if (memsz - filesz > 0)
-		//	memset(mem+paddr+filesz-GUEST_OFFSET, 0x00, memsz - filesz);
 		if (!klog)
 			klog = mem+paddr+0x5000-GUEST_OFFSET;
 		if (!mboot)
@@ -325,10 +323,10 @@ static int load_kernel(uint8_t* mem, char* path)
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x18)) = get_cpufreq();
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x24)) = 1; // number of used cpus
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
-			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) = filesz;
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
 		}
+		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) += memsz; // total kernel size
 	}
 
 out:
