@@ -49,7 +49,6 @@
 /* Note that linker symbols are not variables, they have no memory
  * allocated for maintaining a value, rather their address is their value. */
 extern const void kernel_start;
-extern const void kernel_end;
 
 /// This page is reserved for copying
 #define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
@@ -97,7 +96,7 @@ static uint8_t expect_zeroed_pages = 0;
 size_t virt_to_phys(size_t addr)
 {
 	if ((addr > (size_t) &kernel_start) &&
-	    (addr <= PAGE_2M_FLOOR((size_t) &kernel_end)))
+	    (addr <= PAGE_2M_FLOOR((size_t) &kernel_start + image_size)))
 	{
 		size_t vpn   = addr >> (PAGE_2M_BITS);	// virtual page number
 		size_t entry = self[1][vpn];		// page table entry
@@ -329,7 +328,7 @@ int page_init(void)
 	if (mb_info && ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK))) {
 		LOG_INFO("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
 		// reserve 2 pages for long cmdline strings
-		page_map((size_t) mb_info->cmdline & PAGE_MASK, mb_info->cmdline & PAGE_MASK, 2, PG_GLOBAL|PG_RW|PG_PRESENT);
+		page_map(((size_t) mb_info->cmdline) & PAGE_MASK, ((size_t) mb_info->cmdline) & PAGE_MASK, 2, PG_GLOBAL|PG_RW|PG_PRESENT);
 	}
 
 	/* Replace default pagefault handler */

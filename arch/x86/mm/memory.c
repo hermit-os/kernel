@@ -37,6 +37,8 @@
 #include <asm/page.h>
 #include <asm/multiboot.h>
 
+#define GAP_BELOW	0x100000ULL
+
 extern uint64_t base;
 extern uint64_t limit;
 
@@ -51,7 +53,6 @@ typedef struct free_list {
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 
 static spinlock_t list_lock = SPINLOCK_INIT;
 
@@ -245,7 +246,6 @@ void page_free(void* viraddr, size_t sz)
 
 int memory_init(void)
 {
-	size_t image_size = (size_t) &kernel_end - (size_t) &kernel_start;
 	int ret = 0;
 
 	// enable paging and map Multiboot modules etc.
@@ -272,8 +272,8 @@ int memory_init(void)
 
 					LOG_INFO("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
-					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR((size_t) &kernel_end))) {
-						init_list.start = PAGE_2M_FLOOR((size_t) &kernel_end);
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR((size_t) &kernel_start + image_size))) {
+						init_list.start = PAGE_2M_FLOOR((size_t) &kernel_start + image_size);
 						init_list.end = end_addr;
 
 						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
@@ -295,9 +295,9 @@ int memory_init(void)
 		atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
 		atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
 
-		//initialize free list
-		init_list.start = PAGE_2M_FLOOR((size_t) &kernel_end);
-		init_list.end = limit;
+		//initialize free list, at first we use onyl memory below kernel_start
+		init_list.start = 0x100000;
+		init_list.end = (size_t) &kernel_start;
 	}
 
 	// determine allocated memory, we use 2MB pages to map the kernel
@@ -332,8 +332,16 @@ int memory_init(void)
 						end_addr = base;
 
 					// ignore everything below 1M => reserve for I/O devices
-					if ((start_addr < (size_t) 0x100000))
-						start_addr = 0x100000;
+					if ((start_addr < GAP_BELOW))
+						start_addr = GAP_BELOW;
+
+					if (start_addr < (size_t)mb_info)
+						start_addr = PAGE_FLOOR((size_t)mb_info);
+
+					if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
+						if (start_addr < (size_t) mb_info->cmdline+2*PAGE_SIZE)
+							start_addr = PAGE_FLOOR((size_t) mb_info->cmdline+2*PAGE_SIZE);
+					}
 
 					if (start_addr >= end_addr)
 						continue;
@@ -351,10 +359,26 @@ int memory_init(void)
 					last->end = end_addr;
 				}
 			}
-
-			//TODO: mb_info and mb_info->cmdline should be marked as reserevd
 		}
+	} else {
+		free_list_t* last = &init_list;
+		size_t start_addr = PAGE_2M_FLOOR((size_t) &kernel_start + image_size);
+                size_t end_addr = limit;
+
+		last->next = kmalloc(sizeof(free_list_t));
+		if (BUILTIN_EXPECT(!last->next, 0))
+			goto oom;
+
+		// add memory above image size
+		LOG_INFO("Add region 0x%zx - 0x%zx\n", start_addr, end_addr);
+
+		last->next->prev = last;
+		last = last->next;
+		last->next = NULL;
+		last->start = start_addr;
+		last->end = end_addr;
 	}
+
 
 	return ret;
 

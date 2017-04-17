@@ -49,7 +49,6 @@
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 
 //TODO: don't use one big kernel lock to comminicate with all proxies
 static spinlock_irqsave_t lwip_lock = SPINLOCK_IRQSAVE_INIT;
