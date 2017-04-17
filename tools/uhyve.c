@@ -53,13 +53,17 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <linux/const.h>
 #include <linux/kvm.h>
 #include <asm/msr-index.h>
+#include <asm/mman.h>
 
 #include "uhyve-cpu.h"
 #include "uhyve-syscalls.h"
 #include "proxy.h"
+
+#define MAX_FNAME	256
 
 #define GUEST_OFFSET		0x0
 #define CPUID_FUNC_PERFMON	0x0A
@@ -80,13 +84,67 @@
 #define KVM_32BIT_GAP_SIZE	(768 << 20)
 #define KVM_32BIT_GAP_START	(KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE)
 
+/// Page offset bits
+#define PAGE_BITS			12
+#define PAGE_2M_BITS	21
+#define PAGE_SIZE			(1L << PAGE_BITS)
+/// Mask the page address without page map flags and XD flag
+#if 0
+#define PAGE_MASK		((~0L) << PAGE_BITS)
+#define PAGE_2M_MASK		(~0L) << PAGE_2M_BITS)
+#else
+#define PAGE_MASK			(((~0L) << PAGE_BITS) & ~PG_XD)
+#define PAGE_2M_MASK	(((~0L) << PAGE_2M_BITS) & ~PG_XD)
+#endif
+
+// Page is present
+#define PG_PRESENT		(1 << 0)
+// Page is read- and writable
+#define PG_RW			(1 << 1)
+// Page is addressable from userspace
+#define PG_USER			(1 << 2)
+// Page write through is activated
+#define PG_PWT			(1 << 3)
+// Page cache is disabled
+#define PG_PCD			(1 << 4)
+// Page was recently accessed (set by CPU)
+#define PG_ACCESSED		(1 << 5)
+// Page is dirty due to recent write-access (set by CPU)
+#define PG_DIRTY		(1 << 6)
+// Huge page: 4MB (or 2MB, 1GB)
+#define PG_PSE			(1 << 7)
+// Page attribute table
+#define PG_PAT			PG_PSE
+#if 1
+/* @brief Global TLB entry (Pentium Pro and later)
+ *
+ * HermitCore is a single-address space operating system
+ * => CR3 never changed => The flag isn't required for HermitCore
+ */
+#define PG_GLOBAL		0
+#else
+#define PG_GLOBAL		(1 << 8)
+#endif
+// This table is a self-reference and should skipped by page_map_copy()
+#define PG_SELF			(1 << 9)
+
+/// Disable execution for this page
+#define PG_XD			(1L << 63)
+
+#define BITS					64
+#define PHYS_BITS			52
+#define VIRT_BITS			48
+#define PAGE_MAP_BITS	9
+#define PAGE_LEVELS		4
+
 #define kvm_ioctl(fd, cmd, arg) ({ \
 	const int ret = ioctl(fd, cmd, arg); \
 	if(ret == -1) \
-	    err(1, "KVM: ioctl " #cmd " failed"); \
+		err(1, "KVM: ioctl " #cmd " failed"); \
 	ret; \
 	})
 
+static uint32_t restart = 0;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
 static uint8_t* klog = NULL;
@@ -95,8 +153,11 @@ static size_t guest_size = 0x20000000ULL;
 static uint64_t elf_entry;
 static pthread_t* vcpu_threads = NULL;
 static int kvm = -1, vmfd = -1;
+static uint32_t no_checkpoint = 0;
+static pthread_barrier_t barrier;
 static __thread struct kvm_run *run = NULL;
 static __thread int vcpufd = 1;
+static __thread uint32_t cpuid = 0;
 
 static uint64_t memparse(const char *ptr)
 {
@@ -246,6 +307,38 @@ static ssize_t pread_in_full(int fd, void *buf, size_t count, off_t offset)
 	return total;
 }
 
+static int load_checkpoint(uint8_t* mem)
+{
+	char fname[MAX_FNAME];
+	size_t addr;
+	size_t paddr = elf_entry;
+
+	if (!klog)
+		klog = mem+paddr+0x5000-GUEST_OFFSET;
+	if (!mboot)
+		mboot = mem+paddr-GUEST_OFFSET;
+
+	for(uint32_t i=0; i<=no_checkpoint; i++)
+	{
+		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_mem.dat", i);
+
+		FILE* f = fopen(fname, "r");
+		if (f == NULL)
+			return -1;
+
+		while (fscanf(f, "%zd", &addr) != EOF) {
+			if (addr & PG_PSE)
+				fread((size_t*) (mem + (addr & PAGE_2M_MASK)), (1ULL << PAGE_2M_BITS), 1, f);
+			else
+				fread((size_t*) (mem + (addr & PAGE_MASK)), (1ULL << PAGE_BITS), 1, f);
+		}
+
+		fclose(f);
+	}
+
+	return 0;
+}
+
 static int load_kernel(uint8_t* mem, char* path)
 {
 	Elf64_Ehdr hdr;
@@ -370,7 +463,6 @@ static void setup_system_64bit(struct kvm_sregs *sregs)
 	sregs->efer |= EFER_LME;
 }
 
-
 static void setup_system_page_tables(struct kvm_sregs *sregs, uint8_t *mem)
 {
 	uint64_t *pml4 = (uint64_t *) (mem + BOOT_PML4);
@@ -445,15 +537,13 @@ static void setup_system(int vcpufd, uint8_t *mem, uint32_t id)
 	kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 }
 
-
 static void setup_cpuid(int kvm, int vcpufd)
 {
 	struct kvm_cpuid2 *kvm_cpuid;
 	unsigned int max_entries = 100;
 
 	// allocate space for cpuid we get from KVM
-	kvm_cpuid = calloc(1, sizeof(*kvm_cpuid) +
-	                   (max_entries * sizeof(kvm_cpuid->entries[0])) );
+	kvm_cpuid = calloc(1, sizeof(*kvm_cpuid) + (max_entries * sizeof(kvm_cpuid->entries[0])));
 	kvm_cpuid->nent = max_entries;
 
 	kvm_ioctl(kvm, KVM_GET_SUPPORTED_CPUID, kvm_cpuid);
@@ -468,13 +558,9 @@ static void setup_cpuid(int kvm, int vcpufd)
 static int vcpu_loop(void)
 {
 	int ret;
-	struct kvm_mp_state state = { KVM_MP_STATE_RUNNABLE };
-
-	// be sure that the multiprocessor is runable
-	kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
 
 	while (1) {
-		ret = kvm_ioctl(vcpufd, KVM_RUN, NULL);
+		ret = ioctl(vcpufd, KVM_RUN, NULL);
 
 		if(ret == -1) {
 			switch(errno) {
@@ -584,23 +670,18 @@ static int vcpu_loop(void)
 	return 0;
 }
 
-static int vcpu_init(uint32_t id)
+static int vcpu_init(void)
 {
-	size_t mmap_size;
-
-	vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, id);
-
-	/* Setup registers and memory. */
-	setup_system(vcpufd, guest_mem, id);
-
+	struct kvm_mp_state state = { KVM_MP_STATE_RUNNABLE };
 	struct kvm_regs regs = {
 		.rip = elf_entry,	// entry point to HermitCore
 		.rflags = 0x2,		// POR value required by x86 architecture
 	};
-	kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
+
+	vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, cpuid);
 
 	/* Map the shared kvm_run structure and following data. */
-	mmap_size = (size_t) kvm_ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, NULL);
+	size_t mmap_size = (size_t) kvm_ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, NULL);
 
 	if (mmap_size < sizeof(*run))
 		err(1, "KVM: invalid VCPU_MMAP_SIZE: %zd", mmap_size);
@@ -611,21 +692,90 @@ static int vcpu_init(uint32_t id)
 
 	setup_cpuid(kvm, vcpufd);
 
-	// only one core is able to enter startup code
-	// => the wait for the predecessor core
-	while (*((volatile uint32_t*) (mboot + 0x20)) < id)
-		pthread_yield();
-	*((volatile uint32_t*) (mboot + 0x30)) = id;
+	// be sure that the multiprocessor is runable
+	kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
+
+	if (restart) {
+		char fname[MAX_FNAME];
+		struct kvm_sregs sregs;
+
+		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
+
+		FILE* f = fopen(fname, "r");
+		if (f == NULL) {
+			err(1, "fopen: unable to open file");
+		}
+
+		fread(&sregs, sizeof(sregs), 1, f);
+		fread(&regs, sizeof(regs), 1, f);
+
+		fclose(f);
+
+		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
+		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
+
+		if (cpuid > 0)
+			pthread_barrier_wait(&barrier);
+	} else {
+		/* Setup registers and memory. */
+		setup_system(vcpufd, guest_mem, cpuid);
+		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
+
+		// only one core is able to enter startup code
+		// => the wait for the predecessor core
+		while (*((volatile uint32_t*) (mboot + 0x20)) < cpuid)
+			pthread_yield();
+		*((volatile uint32_t*) (mboot + 0x30)) = cpuid;
+	}
 
 	return 0;
 }
 
+static void save_cpu_state(void)
+{
+	struct kvm_regs regs;
+	struct kvm_sregs sregs;
+	char fname[MAX_FNAME];
+	ssize_t i, j;
+
+	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
+	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
+
+	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
+
+	FILE* f = fopen(fname, "w");
+	if (f == NULL) {
+		err(1, "fopen: unable to open file");
+	}
+
+	fwrite(&sregs, sizeof(sregs), 1, f);
+	fwrite(&regs, sizeof(regs), 1, f);
+
+	fclose(f);
+}
+
+static void sigusr_handler(int signum)
+{
+	pthread_barrier_wait(&barrier);
+
+	save_cpu_state();
+
+	pthread_barrier_wait(&barrier);
+}
+
 static void* uhyve_thread(void* arg)
 {
-	const size_t id = (size_t) arg;
+	struct sigaction sa;
+
+	cpuid = (size_t) arg;
+
+	/* Install timer_handler as the signal handler for SIGVTALRM. */
+	memset(&sa, 0x00, sizeof(sa));
+	sa.sa_handler = &sigusr_handler;
+	sigaction(SIGUSR1, &sa, NULL);
 
 	// create new cpu
-	vcpu_init(id);
+	vcpu_init();
 
 	// run cpu loop until thread gets killed
 	const size_t ret = vcpu_loop();
@@ -641,9 +791,23 @@ int uhyve_init(char *path)
 	// register routine to close the VM
 	atexit(uhyve_exit);
 
-	const char* hermit_memory = getenv("HERMIT_MEM");
-	if (hermit_memory)
-		guest_size = memparse(hermit_memory);
+	FILE* f = fopen("checkpoint/chk_config.txt", "r");
+	if (f != NULL) {
+		restart = 1;
+
+		fscanf(f, "number of cores: %u\n", &ncores);
+		fscanf(f, "memory size: 0x%zx\n", &guest_size);
+		fscanf(f, "checkpoint number: %u\n", &no_checkpoint);
+		fscanf(f, "entry point: 0x%zx", &elf_entry);
+
+		printf("Restart from checkpoint %u (ncores, %d, mem size 0x%zx)\n", no_checkpoint, ncores, guest_size);
+
+		fclose(f);
+	} else {
+		const char* hermit_memory = getenv("HERMIT_MEM");
+		if (hermit_memory)
+			guest_size = memparse(hermit_memory);
+	}
 
 	kvm = open("/dev/kvm", O_RDWR | O_CLOEXEC);
 	if (kvm < 0)
@@ -661,12 +825,17 @@ int uhyve_init(char *path)
 	assert(guest_size < KVM_32BIT_GAP_SIZE);
 
 	/* Allocate page-aligned guest memory. */
-	guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+	guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS /*| MAP_HUGETLB | MAP_HUGE_2MB*/, -1, 0);
 	if (guest_mem == MAP_FAILED)
 		err(1, "mmap failed");
 
-	if (load_kernel(guest_mem, path) != 0)
-		exit(EXIT_FAILURE);
+	if (restart) {
+		if (load_checkpoint(guest_mem) != 0)
+			exit(EXIT_FAILURE);
+	} else {
+		if (load_kernel(guest_mem, path) != 0)
+			exit(EXIT_FAILURE);
+	}
 
 	/* Map it to the second page frame (to avoid the real-mode IDT at 0). */
 	struct kvm_userspace_memory_region kvm_region = {
@@ -679,15 +848,116 @@ int uhyve_init(char *path)
 	kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
 	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
 
+	pthread_barrier_init(&barrier, NULL, ncores);
+	cpuid = 0;
+
 	// create first CPU, it will be the boot processor by default
-	return vcpu_init(0);
+	return vcpu_init();
+}
+
+static void timer_handler(int signum)
+{
+	struct stat st = {0};
+	size_t flag = no_checkpoint > 0 ? PG_DIRTY : PG_ACCESSED;
+	char fname[MAX_FNAME];
+	struct timeval begin, end;
+
+	gettimeofday(&begin, NULL);
+
+	for(size_t i = 0; i < ncores; i++)
+		if (vcpu_threads[i] != pthread_self())
+			pthread_kill(vcpu_threads[i], SIGUSR1);
+
+	if (stat("checkpoint", &st) == -1)
+		mkdir("checkpoint", 0700);
+
+	pthread_barrier_wait(&barrier);
+
+	save_cpu_state();
+
+	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_mem.dat", no_checkpoint);
+
+	FILE* f = fopen(fname, "w");
+	if (f == NULL) {
+		err(1, "fopen: unable to open file");
+	}
+
+	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
+	for(size_t i=0; i<(1 << PAGE_MAP_BITS)-1; i++) {
+		if (pml4[i] & PG_PRESENT) {
+			pml4[i] = pml4[i] & ~(PG_DIRTY|PG_ACCESSED);
+			//printf("pml[%zd] 0x%zx\n", i, pml4[i]);
+			size_t* pdpt = (size_t*) (guest_mem+(pml4[i] & PAGE_MASK));
+			for(size_t j=0; j<(1 << PAGE_MAP_BITS)-1; j++) {
+				if (pdpt[j] & PG_PRESENT) {
+					pdpt[j] = pdpt[j] & ~(PG_DIRTY|PG_ACCESSED);
+					//printf("\tpdpt[%zd] 0x%zx\n", j, pdpt[j]);
+					size_t* pgd = (size_t*) (guest_mem+(pdpt[i] & PAGE_MASK));
+					for(size_t k=0; k<(1 << PAGE_MAP_BITS)-1; k++) {
+						if (pgd[k] & PG_PRESENT) {
+							//if ((pgd[k] & (PG_ACCESSED|PG_PSE)) == PG_ACCESSED)
+							//	printf("\t\tpgd[%zd] 0x%zx\n", k, pgd[k]);
+							if (!(pgd[k] & PG_PSE)) {
+								pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+								size_t* pgt = (size_t*) (guest_mem+(pgd[k] & PAGE_MASK));
+								for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
+									if (pgt[l] & PG_PRESENT) {
+										if (pgt[l] & flag) {
+											//printf("\t\t\t*pgt[%zd] 0x%zx\n", l, pgt[l] & ~PG_XD);
+											pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
+											fprintf(f, "%zd", pgt[l] & ~PG_XD);
+											fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), PAGE_SIZE, 1, f);
+										} else pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
+									}
+								}
+							} else if (pgd[k] & flag) {
+								//printf("\t\t*pgd[%zd] 0x%zx\n", k, pgd[k]);
+								pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+								fprintf(f, "%zd", pgd[k] & ~PG_XD);
+								fwrite((size_t*) (guest_mem + (pgd[k] & PAGE_2M_MASK)), (1L << PAGE_2M_BITS), 1, f);
+							} else pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	fclose(f);
+
+	pthread_barrier_wait(&barrier);
+
+	// update configuration file
+	f = fopen("checkpoint/chk_config.txt", "w");
+	if (f == NULL) {
+		err(1, "fopen: unable to open file");
+	}
+
+	fprintf(f, "number of cores: %u\n", ncores);
+	fprintf(f, "memory size: 0x%zx\n", guest_size);
+	fprintf(f, "checkpoint number: %u\n", no_checkpoint);
+	fprintf(f, "entry point: 0x%zx", elf_entry);
+
+	fclose(f);
+
+	gettimeofday(&end, NULL);
+	size_t msec = (end.tv_sec - begin.tv_sec) * 1000;
+  msec += (end.tv_usec - begin.tv_usec) / 1000;
+	printf("Create checkpoint %u in %zd ms\n", no_checkpoint, msec);
+
+	no_checkpoint++;
 }
 
 int uhyve_loop(void)
 {
 	const char* hermit_cpus = getenv("HERMIT_CPUS");
-	if (hermit_cpus)
+	const char* hermit_check = getenv("HERMIT_CHECKPOINT");
+	int ts = 0;
+
+	if (!restart && hermit_cpus)
 		ncores = (uint32_t) atoi(hermit_cpus);
+	if (hermit_check)
+		ts = atoi(hermit_check);
 
 	*((uint32_t*) (mboot+0x24)) = ncores;
 
@@ -702,6 +972,31 @@ int uhyve_loop(void)
 	// start threads to create VCPUs
 	for(size_t i = 1; i < ncores; i++)
 		pthread_create(&vcpu_threads[i], NULL, uhyve_thread, (void*) i);
+
+	if (ts > 0)
+	{
+		struct sigaction sa;
+		struct itimerval timer;
+
+		/* Install timer_handler as the signal handler for SIGVTALRM. */
+		memset(&sa, 0x00, sizeof(sa));
+		sa.sa_handler = &timer_handler;
+		sigaction(SIGVTALRM, &sa, NULL);
+
+		/* Configure the timer to expire after "ts" sec... */
+		timer.it_value.tv_sec = ts;
+		timer.it_value.tv_usec = 0;
+		/* ... and every "ts" sec after that. */
+		timer.it_interval.tv_sec = ts;
+		timer.it_interval.tv_usec = 0;
+		/* Start a virtual timer. It counts down whenever this process is executing. */
+		setitimer(ITIMER_VIRTUAL, &timer, NULL);
+	}
+
+	if (restart) {
+		pthread_barrier_wait(&barrier);
+		no_checkpoint++;
+	}
 
 	// Run first CPU
 	return vcpu_loop();
