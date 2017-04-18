@@ -6,6 +6,7 @@ include(../cmake/HermitCore-Paths.cmake)
 add_compile_options(-std=c99)
 
 add_executable(proxy proxy.c uhyve.c)
+target_compile_options(proxy PUBLIC -pthread)
 target_link_libraries(proxy -pthread)
 
 install(TARGETS proxy
