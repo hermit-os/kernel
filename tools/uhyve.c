@@ -328,6 +328,11 @@ static int load_checkpoint(uint8_t* mem)
 		if (f == NULL)
 			return -1;
 
+		struct kvm_irqchip irqchip;
+		if (fread(&irqchip, sizeof(irqchip), 1, f) != 1)
+			err(1, "fread failed");
+		kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
+
 		while (fread(&location, sizeof(location), 1, f) == 1) {
 			if (location & PG_PSE)
 				ret = fread((size_t*) (mem + (location & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f);
@@ -616,8 +621,7 @@ static int vcpu_loop(void)
 			case UHYVE_PORT_EXIT: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 
-					printf("%s\n", klog);
-					printf("exit code %d\n", *(int*)(guest_mem+data));
+					//printf("%s\n", klog);
 					exit(*(int*)(guest_mem+data));
 					break;
 				}
@@ -713,6 +717,7 @@ static int vcpu_init(void)
 		struct kvm_lapic_state lapic;
 		struct kvm_xsave xsave;
 		struct kvm_xcrs xcrs;
+		struct kvm_vcpu_events events;
 
 		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -734,16 +739,19 @@ static int vcpu_init(void)
 			err(1, "fread failed");
 		if (fread(&xcrs, sizeof(xcrs), 1, f) != 1)
 			err(1, "fread failed");
+		if (fread(&events, sizeof(events), 1, f) != 1)
+			err(1, "fread failed");
 
 		fclose(f);
 
 		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
-		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
+		kvm_ioctl(vcpufd, KVM_SET_XCRS, &xcrs);
 		kvm_ioctl(vcpufd, KVM_SET_LAPIC, &lapic);
+		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
-		kvm_ioctl(vcpufd, KVM_GET_XCRS, &xcrs);
+		kvm_ioctl(vcpufd, KVM_SET_VCPU_EVENTS, &events);
 
 		if (cpuid > 0)
 			pthread_barrier_wait(&barrier);
@@ -775,6 +783,7 @@ static void save_cpu_state(void)
 	struct kvm_lapic_state lapic;
 	struct kvm_xsave xsave;
 	struct kvm_xcrs xcrs;
+	struct kvm_vcpu_events events;
 	char fname[MAX_FNAME];
 	int n = 0;
 
@@ -796,12 +805,13 @@ static void save_cpu_state(void)
 
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
-	kvm_ioctl(vcpufd, KVM_GET_FPU, &fpu);
 	msr_data.info.nmsrs = n;
 	kvm_ioctl(vcpufd, KVM_GET_MSRS, &msr_data);
-	kvm_ioctl(vcpufd, KVM_GET_LAPIC, &lapic);
-	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
 	kvm_ioctl(vcpufd, KVM_GET_XCRS, &xcrs);
+	kvm_ioctl(vcpufd, KVM_GET_LAPIC, &lapic);
+	kvm_ioctl(vcpufd, KVM_GET_FPU, &fpu);
+	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
+	kvm_ioctl(vcpufd, KVM_GET_VCPU_EVENTS, &events);
 
 	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -823,6 +833,8 @@ static void save_cpu_state(void)
 	if (fwrite(&xsave, sizeof(xsave), 1, f) != 1)
 		err(1, "fwrite failed");
 	if (fwrite(&xcrs, sizeof(xcrs), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&events, sizeof(events), 1, f) != 1)
 		err(1, "fwrite failed");
 
 	fclose(f);
@@ -903,14 +915,6 @@ int uhyve_init(char *path)
 	if (guest_mem == MAP_FAILED)
 		err(1, "mmap failed");
 
-	if (restart) {
-		if (load_checkpoint(guest_mem) != 0)
-			exit(EXIT_FAILURE);
-	} else {
-		if (load_kernel(guest_mem, path) != 0)
-			exit(EXIT_FAILURE);
-	}
-
 	/* Map it to the second page frame (to avoid the real-mode IDT at 0). */
 	struct kvm_userspace_memory_region kvm_region = {
 		.slot = 0,
@@ -921,6 +925,14 @@ int uhyve_init(char *path)
 
 	kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
 	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
+
+	if (restart) {
+		if (load_checkpoint(guest_mem) != 0)
+			exit(EXIT_FAILURE);
+	} else {
+		if (load_kernel(guest_mem, path) != 0)
+			exit(EXIT_FAILURE);
+	}
 
 	pthread_barrier_init(&barrier, NULL, ncores);
 	cpuid = 0;
@@ -955,6 +967,11 @@ static void timer_handler(int signum)
 	if (f == NULL) {
 		err(1, "fopen: unable to open file");
 	}
+
+	struct kvm_irqchip irqchip;
+	kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &irqchip);
+	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
+		err(1, "fwrite failed");
 
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
 	for(size_t i=0; i<(1 << PAGE_MAP_BITS); i++) {
