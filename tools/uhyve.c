@@ -333,15 +333,22 @@ static int load_checkpoint(uint8_t* mem)
 			err(1, "fread failed");
 		kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
 
+#if 0
+		if (fread(guest_mem, guest_size, 1, f) != 1)
+			err(1, "fread failed");
+#else
 		while (fread(&location, sizeof(location), 1, f) == 1) {
 			if (location & PG_PSE)
 				ret = fread((size_t*) (mem + (location & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f);
 			else
 				ret = fread((size_t*) (mem + (location & PAGE_MASK)), (1UL << PAGE_BITS), 1, f);
 
-			if (ret != 1)
+			if (ret != 1) {
+				fprintf(stderr, "Unable to read checkpoint: ret = %d", ret);
 				err(1, "fread failed");
+			}
 		}
+#endif
 
 		fclose(f);
 	}
@@ -621,7 +628,7 @@ static int vcpu_loop(void)
 			case UHYVE_PORT_EXIT: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 
-					//printf("%s\n", klog);
+					printf("%s\n", klog);
 					exit(*(int*)(guest_mem+data));
 					break;
 				}
@@ -973,6 +980,10 @@ static void timer_handler(int signum)
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
 		err(1, "fwrite failed");
 
+#if 0
+	if (fwrite(guest_mem, guest_size, 1, f) != 1)
+		err(1, "fwrite failed");
+#else
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
 	for(size_t i=0; i<(1 << PAGE_MAP_BITS); i++) {
 		if (!(pml4[i] & PG_PRESENT))
@@ -983,7 +994,7 @@ static void timer_handler(int signum)
 			if (!(pdpt[j] & PG_PRESENT))
 				continue;
 			//printf("\tpdpt[%zd] 0x%zx\n", j, pdpt[j]);
-			size_t* pgd = (size_t*) (guest_mem+(pdpt[i] & PAGE_MASK));
+			size_t* pgd = (size_t*) (guest_mem+(pdpt[j] & PAGE_MASK));
 			for(size_t k=0; k<(1 << PAGE_MAP_BITS); k++) {
 				if (!(pgd[k] & PG_PRESENT))
 					continue;
@@ -995,7 +1006,7 @@ static void timer_handler(int signum)
 							//pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
 							if (fwrite(pgt+l, sizeof(size_t), 1, f) != 1)
 								err(1, "fwrite failed");
-							if (fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), PAGE_SIZE, 1, f) != 1)
+							if (fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), (1UL << PAGE_BITS), 1, f) != 1)
 								err(1, "fwrite failed");
 						}
 					}
@@ -1010,6 +1021,7 @@ static void timer_handler(int signum)
 			}
 		}
 	}
+#endif
 
 	fclose(f);
 
