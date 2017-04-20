@@ -64,6 +64,7 @@
 #include "proxy.h"
 
 #define MAX_FNAME	256
+#define MAX_MSR_ENTRIES	50
 
 #define GUEST_OFFSET		0x0
 #define CPUID_FUNC_PERFMON	0x0A
@@ -310,8 +311,9 @@ static ssize_t pread_in_full(int fd, void *buf, size_t count, off_t offset)
 static int load_checkpoint(uint8_t* mem)
 {
 	char fname[MAX_FNAME];
-	size_t addr;
+	size_t location;
 	size_t paddr = elf_entry;
+	int ret;
 
 	if (!klog)
 		klog = mem+paddr+0x5000-GUEST_OFFSET;
@@ -326,11 +328,14 @@ static int load_checkpoint(uint8_t* mem)
 		if (f == NULL)
 			return -1;
 
-		while (fscanf(f, "%zd", &addr) != EOF) {
-			if (addr & PG_PSE)
-				fread((size_t*) (mem + (addr & PAGE_2M_MASK)), (1ULL << PAGE_2M_BITS), 1, f);
+		while (fread(&location, sizeof(location), 1, f) == 1) {
+			if (location & PG_PSE)
+				ret = fread((size_t*) (mem + (location & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f);
 			else
-				fread((size_t*) (mem + (addr & PAGE_MASK)), (1ULL << PAGE_BITS), 1, f);
+				ret = fread((size_t*) (mem + (location & PAGE_MASK)), (1UL << PAGE_BITS), 1, f);
+
+			if (ret != 1)
+				err(1, "fread failed");
 		}
 
 		fclose(f);
@@ -586,7 +591,7 @@ static int vcpu_loop(void)
 			return 0;
 
 		case KVM_EXIT_MMIO:
-			err(1, "KVM: unhandled KVM_EXIT_MMIO at 0x%llx", run->mmio.phys_addr);
+			err(1, "KVM: unhandled KVM_EXIT_MMIO at 0x%llx\n", run->mmio.phys_addr);
 			break;
 
 		case KVM_EXIT_IO:
@@ -611,6 +616,8 @@ static int vcpu_loop(void)
 			case UHYVE_PORT_EXIT: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 
+					printf("%s\n", klog);
+					printf("exit code %d\n", *(int*)(guest_mem+data));
 					exit(*(int*)(guest_mem+data));
 					break;
 				}
@@ -640,22 +647,22 @@ static int vcpu_loop(void)
 					break;
 				}
 			default:
-				err(1, "KVM: unhandled KVM_EXIT_IO at port 0x%x, direction %d", run->io.port, run->io.direction);
+				err(1, "KVM: unhandled KVM_EXIT_IO at port 0x%x, direction %d\n", run->io.port, run->io.direction);
 				break;
 			}
 			break;
 
 		case KVM_EXIT_FAIL_ENTRY:
-			err(1, "KVM: entry failure: hw_entry_failure_reason=0x%llx",
+			err(1, "KVM: entry failure: hw_entry_failure_reason=0x%llx\n",
 				run->fail_entry.hardware_entry_failure_reason);
 			break;
 
 		case KVM_EXIT_INTERNAL_ERROR:
-			err(1, "KVM: internal error exit: suberror = 0x%x", run->internal.suberror);
+			err(1, "KVM: internal error exit: suberror = 0x%x\n", run->internal.suberror);
 			break;
 
 		case KVM_EXIT_SHUTDOWN:
-			err(1, "KVM: receive shutdown command");
+			err(1, "KVM: receive shutdown command\n");
 			break;
 
 		default:
@@ -698,21 +705,45 @@ static int vcpu_init(void)
 	if (restart) {
 		char fname[MAX_FNAME];
 		struct kvm_sregs sregs;
+		struct kvm_fpu fpu;
+		struct {
+			struct kvm_msrs info;
+			struct kvm_msr_entry entries[MAX_MSR_ENTRIES];
+		} msr_data;
+		struct kvm_lapic_state lapic;
+		struct kvm_xsave xsave;
+		struct kvm_xcrs xcrs;
 
 		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
 		FILE* f = fopen(fname, "r");
-		if (f == NULL) {
+		if (f == NULL)
 			err(1, "fopen: unable to open file");
-		}
 
-		fread(&sregs, sizeof(sregs), 1, f);
-		fread(&regs, sizeof(regs), 1, f);
+		if (fread(&sregs, sizeof(sregs), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&regs, sizeof(regs), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&fpu, sizeof(fpu), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&msr_data, sizeof(msr_data), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&lapic, sizeof(lapic), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&xsave, sizeof(xsave), 1, f) != 1)
+			err(1, "fread failed");
+		if (fread(&xcrs, sizeof(xcrs), 1, f) != 1)
+			err(1, "fread failed");
 
 		fclose(f);
 
 		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
+		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
+		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
+		kvm_ioctl(vcpufd, KVM_SET_LAPIC, &lapic);
+		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
+		kvm_ioctl(vcpufd, KVM_GET_XCRS, &xcrs);
 
 		if (cpuid > 0)
 			pthread_barrier_wait(&barrier);
@@ -733,13 +764,44 @@ static int vcpu_init(void)
 
 static void save_cpu_state(void)
 {
+	struct {
+		struct kvm_msrs info;
+		struct kvm_msr_entry entries[MAX_MSR_ENTRIES];
+	} msr_data;
+	struct kvm_msr_entry *msrs = msr_data.entries;
 	struct kvm_regs regs;
 	struct kvm_sregs sregs;
+	struct kvm_fpu fpu;
+	struct kvm_lapic_state lapic;
+	struct kvm_xsave xsave;
+	struct kvm_xcrs xcrs;
 	char fname[MAX_FNAME];
-	ssize_t i, j;
+	int n = 0;
+
+	/* define the list of required MSRs */
+	msrs[n++].index = MSR_IA32_APICBASE;
+	msrs[n++].index = MSR_IA32_SYSENTER_CS;
+	msrs[n++].index = MSR_IA32_SYSENTER_ESP;
+	msrs[n++].index = MSR_IA32_SYSENTER_EIP;
+	msrs[n++].index = MSR_IA32_CR_PAT;
+	msrs[n++].index = MSR_IA32_PLATFORM_ID;
+	msrs[n++].index = MSR_IA32_MISC_ENABLE;
+	msrs[n++].index = MSR_CSTAR;
+	msrs[n++].index = MSR_STAR;
+	msrs[n++].index = MSR_EFER;
+	msrs[n++].index = MSR_LSTAR;
+	msrs[n++].index = MSR_GS_BASE;
+	msrs[n++].index = MSR_FS_BASE;
+	msrs[n++].index = MSR_KERNEL_GS_BASE;
 
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
+	kvm_ioctl(vcpufd, KVM_GET_FPU, &fpu);
+	msr_data.info.nmsrs = n;
+	kvm_ioctl(vcpufd, KVM_GET_MSRS, &msr_data);
+	kvm_ioctl(vcpufd, KVM_GET_LAPIC, &lapic);
+	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
+	kvm_ioctl(vcpufd, KVM_GET_XCRS, &xcrs);
 
 	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -748,8 +810,20 @@ static void save_cpu_state(void)
 		err(1, "fopen: unable to open file");
 	}
 
-	fwrite(&sregs, sizeof(sregs), 1, f);
-	fwrite(&regs, sizeof(regs), 1, f);
+	if (fwrite(&sregs, sizeof(sregs), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&regs, sizeof(regs), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&fpu, sizeof(fpu), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&msr_data, sizeof(msr_data), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&lapic, sizeof(lapic), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&xsave, sizeof(xsave), 1, f) != 1)
+		err(1, "fwrite failed");
+	if (fwrite(&xcrs, sizeof(xcrs), 1, f) != 1)
+		err(1, "fwrite failed");
 
 	fclose(f);
 }
@@ -858,18 +932,18 @@ int uhyve_init(char *path)
 static void timer_handler(int signum)
 {
 	struct stat st = {0};
-	size_t flag = no_checkpoint > 0 ? PG_DIRTY : PG_ACCESSED;
+	const size_t flag = no_checkpoint > 0 ? PG_DIRTY : PG_ACCESSED;
 	char fname[MAX_FNAME];
 	struct timeval begin, end;
 
 	gettimeofday(&begin, NULL);
 
+	if (stat("checkpoint", &st) == -1)
+		mkdir("checkpoint", 0700);
+
 	for(size_t i = 0; i < ncores; i++)
 		if (vcpu_threads[i] != pthread_self())
 			pthread_kill(vcpu_threads[i], SIGUSR1);
-
-	if (stat("checkpoint", &st) == -1)
-		mkdir("checkpoint", 0700);
 
 	pthread_barrier_wait(&barrier);
 
@@ -883,41 +957,38 @@ static void timer_handler(int signum)
 	}
 
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
-	for(size_t i=0; i<(1 << PAGE_MAP_BITS)-1; i++) {
-		if (pml4[i] & PG_PRESENT) {
-			pml4[i] = pml4[i] & ~(PG_DIRTY|PG_ACCESSED);
-			//printf("pml[%zd] 0x%zx\n", i, pml4[i]);
-			size_t* pdpt = (size_t*) (guest_mem+(pml4[i] & PAGE_MASK));
-			for(size_t j=0; j<(1 << PAGE_MAP_BITS)-1; j++) {
-				if (pdpt[j] & PG_PRESENT) {
-					pdpt[j] = pdpt[j] & ~(PG_DIRTY|PG_ACCESSED);
-					//printf("\tpdpt[%zd] 0x%zx\n", j, pdpt[j]);
-					size_t* pgd = (size_t*) (guest_mem+(pdpt[i] & PAGE_MASK));
-					for(size_t k=0; k<(1 << PAGE_MAP_BITS)-1; k++) {
-						if (pgd[k] & PG_PRESENT) {
-							//if ((pgd[k] & (PG_ACCESSED|PG_PSE)) == PG_ACCESSED)
-							//	printf("\t\tpgd[%zd] 0x%zx\n", k, pgd[k]);
-							if (!(pgd[k] & PG_PSE)) {
-								pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
-								size_t* pgt = (size_t*) (guest_mem+(pgd[k] & PAGE_MASK));
-								for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
-									if (pgt[l] & PG_PRESENT) {
-										if (pgt[l] & flag) {
-											//printf("\t\t\t*pgt[%zd] 0x%zx\n", l, pgt[l] & ~PG_XD);
-											pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
-											fprintf(f, "%zd", pgt[l] & ~PG_XD);
-											fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), PAGE_SIZE, 1, f);
-										} else pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
-									}
-								}
-							} else if (pgd[k] & flag) {
-								//printf("\t\t*pgd[%zd] 0x%zx\n", k, pgd[k]);
-								pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
-								fprintf(f, "%zd", pgd[k] & ~PG_XD);
-								fwrite((size_t*) (guest_mem + (pgd[k] & PAGE_2M_MASK)), (1L << PAGE_2M_BITS), 1, f);
-							} else pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+	for(size_t i=0; i<(1 << PAGE_MAP_BITS); i++) {
+		if (!(pml4[i] & PG_PRESENT))
+			continue;
+		//printf("pml[%zd] 0x%zx\n", i, pml4[i]);
+		size_t* pdpt = (size_t*) (guest_mem+(pml4[i] & PAGE_MASK));
+		for(size_t j=0; j<(1 << PAGE_MAP_BITS); j++) {
+			if (!(pdpt[j] & PG_PRESENT))
+				continue;
+			//printf("\tpdpt[%zd] 0x%zx\n", j, pdpt[j]);
+			size_t* pgd = (size_t*) (guest_mem+(pdpt[i] & PAGE_MASK));
+			for(size_t k=0; k<(1 << PAGE_MAP_BITS); k++) {
+				if (!(pgd[k] & PG_PRESENT))
+					continue;
+				if (!(pgd[k] & PG_PSE)) {
+					size_t* pgt = (size_t*) (guest_mem+(pgd[k] & PAGE_MASK));
+					for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
+						if ((pgt[l] & (PG_PRESENT|flag)) == (PG_PRESENT|flag)) {
+							//printf("\t\t\t*pgt[%zd] 0x%zx\n", l, pgt[l] & ~PG_XD);
+							//pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
+							if (fwrite(pgt+l, sizeof(size_t), 1, f) != 1)
+								err(1, "fwrite failed");
+							if (fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), PAGE_SIZE, 1, f) != 1)
+								err(1, "fwrite failed");
 						}
 					}
+				} else if (pgd[k] & flag) {
+					//printf("\t\t*pgd[%zd] 0x%zx\n", k, pgd[k] & ~PG_XD);
+					//pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+					if (fwrite(pgd+k, sizeof(size_t), 1, f) != 1)
+						err(1, "fwrite failed");
+					if (fwrite((size_t*) (guest_mem + (pgd[k] & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f) != 1)
+						err(1, "fwrite failed");
 				}
 			}
 		}
@@ -942,7 +1013,7 @@ static void timer_handler(int signum)
 
 	gettimeofday(&end, NULL);
 	size_t msec = (end.tv_sec - begin.tv_sec) * 1000;
-  msec += (end.tv_usec - begin.tv_usec) / 1000;
+	msec += (end.tv_usec - begin.tv_usec) / 1000;
 	printf("Create checkpoint %u in %zd ms\n", no_checkpoint, msec);
 
 	no_checkpoint++;
