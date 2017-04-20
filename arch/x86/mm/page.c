@@ -160,9 +160,9 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 
 					/* Reference the new table within its parent */
 #if 0
-					self[lvl][vpn] = paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED;
+					self[lvl][vpn] = paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED | PG_DIRTY;
 #else
-					self[lvl][vpn] = (paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED) & ~PG_XD;
+					self[lvl][vpn] = (paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED | PG_DIRTY) & ~PG_XD;
 #endif
 
 					/* Fill new table with zeros */
@@ -178,7 +178,7 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 					send_ipi = flush = 1;
 				}
 
-				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED;
+				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED | PG_DIRTY;
 
 				if (flush)
 					/* There's already a page mapped at this address.

@@ -176,7 +176,7 @@ start64:
     mov rdi, rax
     shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add rdi, boot_pgt
-    or rax, 0x103             ; set present, global and writable bits
+    or rax, 0x23              ; set present, accessed and writable bits
     mov QWORD [rdi], rax
 Lno_mbinfo:
     ; remap kernel
@@ -184,7 +184,7 @@ Lno_mbinfo:
     shr rdi, 18       ; (edi >> 21) * 8 (index for boot_pgd)
     add rdi, boot_pgd
     mov rax, [base]
-    or rax, 0x83      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
+    or rax, 0xA3      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
     xor rcx, rcx
     mov rsi, 510*0x200000
     sub rsi, kernel_start
