@@ -481,7 +481,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		reset_vector = (char*) vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE);
 		page_map((size_t)reset_vector, 0x00, 1, PG_RW|PG_GLOBAL|PG_PCD);
 		reset_vector += 0x467; // add base address of the reset vector
-		LOG_INFO("Map reset vector to %p\n", reset_vector);
+		LOG_DEBUG("Map reset vector to %p\n", reset_vector);
 	}
 
 	*((volatile unsigned short *) (reset_vector+2)) = start_eip >> 4;
@@ -570,7 +570,7 @@ int smp_init(void)
 	if (ncores <= 1)
 		return -EINVAL;
 
-	LOG_INFO("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+	LOG_DEBUG("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
 
 	/*
 	 * dirty hack: Reserve memory for the bootup code.
@@ -611,7 +611,7 @@ int smp_init(void)
 		}
 	}
 
-	LOG_INFO("%d cores online\n", atomic_int32_read(&cpu_online));
+	LOG_DEBUG("%d cores online\n", atomic_int32_read(&cpu_online));
 
 	return 0;
 }
@@ -908,7 +908,7 @@ int smp_start(void)
 	// reset APIC and set id
 	lapic_reset();
 
-	LOG_INFO("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
+	LOG_DEBUG("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
 	gdt_flush();
