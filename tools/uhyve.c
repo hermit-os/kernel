@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <sched.h>
@@ -145,7 +146,7 @@
 	ret; \
 	})
 
-static uint32_t restart = 0;
+static bool restart = false;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
 static uint8_t* klog = NULL;
@@ -587,6 +588,10 @@ static int vcpu_loop(void)
 {
 	int ret;
 
+        pthread_barrier_wait(&barrier);
+	if (restart && cpuid == 0)
+                no_checkpoint++;
+
 	while (1) {
 		ret = ioctl(vcpufd, KVM_RUN, NULL);
 
@@ -770,9 +775,6 @@ static int vcpu_init(void)
 		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
 		kvm_ioctl(vcpufd, KVM_SET_VCPU_EVENTS, &events);
-
-		if (cpuid > 0)
-			pthread_barrier_wait(&barrier);
 	} else {
 		/* Setup registers and memory. */
 		setup_system(vcpufd, guest_mem, cpuid);
@@ -806,7 +808,6 @@ static void save_cpu_state(void)
 	int n = 0;
 
 	/* define the list of required MSRs */
-	memset(&msr_data, 0x00, sizeof(msr_data));
 	msrs[n++].index = MSR_IA32_APICBASE;
 	msrs[n++].index = MSR_IA32_SYSENTER_CS;
 	msrs[n++].index = MSR_IA32_SYSENTER_ESP;
@@ -835,25 +836,25 @@ static void save_cpu_state(void)
 
 	FILE* f = fopen(fname, "w");
 	if (f == NULL) {
-		err(1, "fopen: unable to open file");
+		err(1, "fopen: unable to open file\n");
 	}
 
 	if (fwrite(&sregs, sizeof(sregs), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&regs, sizeof(regs), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&fpu, sizeof(fpu), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&msr_data, sizeof(msr_data), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&lapic, sizeof(lapic), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&xsave, sizeof(xsave), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&xcrs, sizeof(xcrs), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 	if (fwrite(&events, sizeof(events), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed\n");
 
 	fclose(f);
 }
@@ -897,7 +898,7 @@ int uhyve_init(char *path)
 
 	FILE* f = fopen("checkpoint/chk_config.txt", "r");
 	if (f != NULL) {
-		restart = 1;
+		restart = true;
 
 		fscanf(f, "number of cores: %u\n", &ncores);
 		fscanf(f, "memory size: 0x%zx\n", &guest_size);
@@ -1104,11 +1105,6 @@ int uhyve_loop(void)
 		timer.it_interval.tv_usec = 0;
 		/* Start a virtual timer. It counts down whenever this process is executing. */
 		setitimer(ITIMER_REAL, &timer, NULL);
-	}
-
-	if (restart) {
-		pthread_barrier_wait(&barrier);
-		no_checkpoint++;
 	}
 
 	// Run first CPU
