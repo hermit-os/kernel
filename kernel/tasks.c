@@ -520,8 +520,9 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 	spinlock_irqsave_unlock(&table_lock);
 
-	if (!ret)
-		LOG_INFO("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+	if (!ret) {
+		LOG_DEBUG("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+	}
 
 out:
 	if (ret) {
