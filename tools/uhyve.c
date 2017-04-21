@@ -64,7 +64,7 @@
 #include "proxy.h"
 
 #define MAX_FNAME	256
-#define MAX_MSR_ENTRIES	50
+#define MAX_MSR_ENTRIES	25
 
 #define GUEST_OFFSET		0x0
 #define CPUID_FUNC_PERFMON	0x0A
@@ -333,11 +333,12 @@ static int load_checkpoint(uint8_t* mem)
 			err(1, "fread failed");
 		kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
 
-#if 0
+#if 1
 		if (fread(guest_mem, guest_size, 1, f) != 1)
 			err(1, "fread failed");
 #else
 		while (fread(&location, sizeof(location), 1, f) == 1) {
+			//printf("location 0x%zx\n", location);
 			if (location & PG_PSE)
 				ret = fread((size_t*) (mem + (location & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f);
 			else
@@ -452,6 +453,14 @@ out:
 /// features according to our needs.
 static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 {
+	static int tsc = -1;
+
+	if (tsc < 0) {
+		tsc = ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
+		if (tsc < 0)
+			tsc = 0;
+	}
+
 	for (uint32_t i = 0; i < kvm_cpuid->nent; i++) {
 		struct kvm_cpuid_entry2 *entry = &kvm_cpuid->entries[i];
 
@@ -459,6 +468,8 @@ static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 		case 1:
 			// CPUID to define basic cpu features
 			entry->ecx |= (1U << 31); // propagate that we are running on a hypervisor
+			if (tsc)
+				entry->ecx |= (1U << 24); // enable TSC deadline feature
 			entry->edx |= (1U <<  5); // enable msr support
 			break;
 
@@ -751,10 +762,10 @@ static int vcpu_init(void)
 
 		fclose(f);
 
-		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
-		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
 		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
 		kvm_ioctl(vcpufd, KVM_SET_XCRS, &xcrs);
+		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
+		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
 		kvm_ioctl(vcpufd, KVM_SET_LAPIC, &lapic);
 		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
@@ -795,12 +806,12 @@ static void save_cpu_state(void)
 	int n = 0;
 
 	/* define the list of required MSRs */
+	memset(&msr_data, 0x00, sizeof(msr_data));
 	msrs[n++].index = MSR_IA32_APICBASE;
 	msrs[n++].index = MSR_IA32_SYSENTER_CS;
 	msrs[n++].index = MSR_IA32_SYSENTER_ESP;
 	msrs[n++].index = MSR_IA32_SYSENTER_EIP;
 	msrs[n++].index = MSR_IA32_CR_PAT;
-	msrs[n++].index = MSR_IA32_PLATFORM_ID;
 	msrs[n++].index = MSR_IA32_MISC_ENABLE;
 	msrs[n++].index = MSR_CSTAR;
 	msrs[n++].index = MSR_STAR;
@@ -809,10 +820,10 @@ static void save_cpu_state(void)
 	msrs[n++].index = MSR_GS_BASE;
 	msrs[n++].index = MSR_FS_BASE;
 	msrs[n++].index = MSR_KERNEL_GS_BASE;
+	msr_data.info.nmsrs = n;
 
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
-	msr_data.info.nmsrs = n;
 	kvm_ioctl(vcpufd, KVM_GET_MSRS, &msr_data);
 	kvm_ioctl(vcpufd, KVM_GET_XCRS, &xcrs);
 	kvm_ioctl(vcpufd, KVM_GET_LAPIC, &lapic);
@@ -893,7 +904,7 @@ int uhyve_init(char *path)
 		fscanf(f, "checkpoint number: %u\n", &no_checkpoint);
 		fscanf(f, "entry point: 0x%zx", &elf_entry);
 
-		printf("Restart from checkpoint %u (ncores, %d, mem size 0x%zx)\n", no_checkpoint, ncores, guest_size);
+		printf("Restart from checkpoint %u (ncores %d, mem size 0x%zx)\n", no_checkpoint, ncores, guest_size);
 
 		fclose(f);
 	} else {
@@ -980,38 +991,40 @@ static void timer_handler(int signum)
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
 		err(1, "fwrite failed");
 
-#if 0
+#if 1
 	if (fwrite(guest_mem, guest_size, 1, f) != 1)
 		err(1, "fwrite failed");
 #else
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
 	for(size_t i=0; i<(1 << PAGE_MAP_BITS); i++) {
-		if (!(pml4[i] & PG_PRESENT))
+		if ((pml4[i] & PG_PRESENT) != PG_PRESENT)
 			continue;
 		//printf("pml[%zd] 0x%zx\n", i, pml4[i]);
 		size_t* pdpt = (size_t*) (guest_mem+(pml4[i] & PAGE_MASK));
 		for(size_t j=0; j<(1 << PAGE_MAP_BITS); j++) {
-			if (!(pdpt[j] & PG_PRESENT))
+			if ((pdpt[j] & PG_PRESENT) != PG_PRESENT)
 				continue;
 			//printf("\tpdpt[%zd] 0x%zx\n", j, pdpt[j]);
 			size_t* pgd = (size_t*) (guest_mem+(pdpt[j] & PAGE_MASK));
 			for(size_t k=0; k<(1 << PAGE_MAP_BITS); k++) {
-				if (!(pgd[k] & PG_PRESENT))
+				if ((pgd[k] & PG_PRESENT) != PG_PRESENT)
 					continue;
-				if (!(pgd[k] & PG_PSE)) {
+				//printf("\t\tpgd[%zd] 0x%zx\n", k, pgd[k] & ~PG_XD);
+				if ((pgd[k] & PG_PSE) != PG_PSE) {
 					size_t* pgt = (size_t*) (guest_mem+(pgd[k] & PAGE_MASK));
 					for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
 						if ((pgt[l] & (PG_PRESENT|flag)) == (PG_PRESENT|flag)) {
-							//printf("\t\t\t*pgt[%zd] 0x%zx\n", l, pgt[l] & ~PG_XD);
+							//printf("\t\t\t*pgt[%zd] 0x%zx, 4KB\n", l, pgt[l] & ~PG_XD);
 							//pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
-							if (fwrite(pgt+l, sizeof(size_t), 1, f) != 1)
+							size_t pgt_entry = pgt[l] & ~PG_PSE; // because PAT use the same bit as PSE
+							if (fwrite(&pgt_entry, sizeof(size_t), 1, f) != 1)
 								err(1, "fwrite failed");
 							if (fwrite((size_t*) (guest_mem + (pgt[l] & PAGE_MASK)), (1UL << PAGE_BITS), 1, f) != 1)
 								err(1, "fwrite failed");
 						}
 					}
-				} else if (pgd[k] & flag) {
-					//printf("\t\t*pgd[%zd] 0x%zx\n", k, pgd[k] & ~PG_XD);
+				} else if ((pgd[k] & flag) == flag) {
+					//printf("\t\t*pgd[%zd] 0x%zx, 2MB\n", k, pgd[k] & ~PG_XD);
 					//pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
 					if (fwrite(pgd+k, sizeof(size_t), 1, f) != 1)
 						err(1, "fwrite failed");
@@ -1081,7 +1094,7 @@ int uhyve_loop(void)
 		/* Install timer_handler as the signal handler for SIGVTALRM. */
 		memset(&sa, 0x00, sizeof(sa));
 		sa.sa_handler = &timer_handler;
-		sigaction(SIGVTALRM, &sa, NULL);
+		sigaction(SIGALRM, &sa, NULL);
 
 		/* Configure the timer to expire after "ts" sec... */
 		timer.it_value.tv_sec = ts;
@@ -1090,7 +1103,7 @@ int uhyve_loop(void)
 		timer.it_interval.tv_sec = ts;
 		timer.it_interval.tv_usec = 0;
 		/* Start a virtual timer. It counts down whenever this process is executing. */
-		setitimer(ITIMER_VIRTUAL, &timer, NULL);
+		setitimer(ITIMER_REAL, &timer, NULL);
 	}
 
 	if (restart) {
