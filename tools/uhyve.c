@@ -332,7 +332,14 @@ static int load_checkpoint(uint8_t* mem)
 		struct kvm_irqchip irqchip;
 		if (fread(&irqchip, sizeof(irqchip), 1, f) != 1)
 			err(1, "fread failed");
-		kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
+		if (i == no_checkpoint-1)
+			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
+
+		struct kvm_clock_data clock;
+		if (fread(&clock, sizeof(clock), 1, f) != 1)
+			err(1, "fread failed");
+		if (i == no_checkpoint-1)
+			kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);
 
 #if 1
 		if (fread(guest_mem, guest_size, 1, f) != 1)
@@ -726,9 +733,6 @@ static int vcpu_init(void)
 
 	setup_cpuid(kvm, vcpufd);
 
-	// be sure that the multiprocessor is runable
-	kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
-
 	if (restart) {
 		char fname[MAX_FNAME];
 		struct kvm_sregs sregs;
@@ -741,6 +745,7 @@ static int vcpu_init(void)
 		struct kvm_xsave xsave;
 		struct kvm_xcrs xcrs;
 		struct kvm_vcpu_events events;
+		struct kvm_mp_state mp_state;
 
 		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -749,21 +754,23 @@ static int vcpu_init(void)
 			err(1, "fopen: unable to open file");
 
 		if (fread(&sregs, sizeof(sregs), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&regs, sizeof(regs), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&fpu, sizeof(fpu), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&msr_data, sizeof(msr_data), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&lapic, sizeof(lapic), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&xsave, sizeof(xsave), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&xcrs, sizeof(xcrs), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
 		if (fread(&events, sizeof(events), 1, f) != 1)
-			err(1, "fread failed");
+			err(1, "fread failed\n");
+		if (fread(&mp_state, sizeof(mp_state), 1, f) != 1)
+			err(1, "fread failed\n");
 
 		fclose(f);
 
@@ -775,7 +782,11 @@ static int vcpu_init(void)
 		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
 		kvm_ioctl(vcpufd, KVM_SET_VCPU_EVENTS, &events);
+		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
 	} else {
+		// be sure that the multiprocessor is runable
+		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
+
 		/* Setup registers and memory. */
 		setup_system(vcpufd, guest_mem, cpuid);
 		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
@@ -804,6 +815,7 @@ static void save_cpu_state(void)
 	struct kvm_xsave xsave;
 	struct kvm_xcrs xcrs;
 	struct kvm_vcpu_events events;
+	struct kvm_mp_state mp_state;
 	char fname[MAX_FNAME];
 	int n = 0;
 
@@ -821,6 +833,7 @@ static void save_cpu_state(void)
 	msrs[n++].index = MSR_GS_BASE;
 	msrs[n++].index = MSR_FS_BASE;
 	msrs[n++].index = MSR_KERNEL_GS_BASE;
+	//msrs[n++].index = MSR_IA32_FEATURE_CONTROL;
 	msr_data.info.nmsrs = n;
 
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
@@ -831,6 +844,7 @@ static void save_cpu_state(void)
 	kvm_ioctl(vcpufd, KVM_GET_FPU, &fpu);
 	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
 	kvm_ioctl(vcpufd, KVM_GET_VCPU_EVENTS, &events);
+	kvm_ioctl(vcpufd, KVM_GET_MP_STATE, &mp_state);
 
 	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -854,6 +868,8 @@ static void save_cpu_state(void)
 	if (fwrite(&xcrs, sizeof(xcrs), 1, f) != 1)
 		err(1, "fwrite failed\n");
 	if (fwrite(&events, sizeof(events), 1, f) != 1)
+		err(1, "fwrite failed\n");
+	if (fwrite(&mp_state, sizeof(mp_state), 1, f) != 1)
 		err(1, "fwrite failed\n");
 
 	fclose(f);
@@ -990,6 +1006,11 @@ static void timer_handler(int signum)
 	struct kvm_irqchip irqchip;
 	kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &irqchip);
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
+		err(1, "fwrite failed");
+
+	struct kvm_clock_data clock;
+	kvm_ioctl(vmfd, KVM_GET_CLOCK, &clock);
+	if (fwrite(&clock, sizeof(clock), 1, f) != 1)
 		err(1, "fwrite failed");
 
 #if 1
