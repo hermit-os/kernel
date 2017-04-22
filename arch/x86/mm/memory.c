@@ -295,9 +295,8 @@ int memory_init(void)
 		atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
 		atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
 
-		//initialize free list, at first we use onyl memory below kernel_start
-		init_list.start = 0x100000;
-		init_list.end = (size_t) &kernel_start;
+		init_list.start = PAGE_2M_FLOOR(base + image_size);
+		init_list.end = limit;
 	}
 
 	// determine allocated memory, we use 2MB pages to map the kernel
@@ -360,25 +359,7 @@ int memory_init(void)
 				}
 			}
 		}
-	} else {
-		free_list_t* last = &init_list;
-		size_t start_addr = PAGE_2M_FLOOR((size_t) &kernel_start + image_size);
-                size_t end_addr = limit;
-
-		last->next = kmalloc(sizeof(free_list_t));
-		if (BUILTIN_EXPECT(!last->next, 0))
-			goto oom;
-
-		// add memory above image size
-		LOG_INFO("Add region 0x%zx - 0x%zx\n", start_addr, end_addr);
-
-		last->next->prev = last;
-		last = last->next;
-		last->next = NULL;
-		last->start = start_addr;
-		last->end = end_addr;
 	}
-
 
 	return ret;
 
