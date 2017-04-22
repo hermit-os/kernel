@@ -107,7 +107,7 @@ int is_proxy(void)
 	{
 		// search in the command line for the "proxy" hint
 		char* found = strstr((char*) (size_t) mb_info->cmdline, "-proxy");
-		if (!found)
+		if (found)
 			return 1;
 	}
 	return 0;
