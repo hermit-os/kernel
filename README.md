@@ -112,6 +112,8 @@ $ make
 $ make install
 ```
 
+**Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
+
 ## Testing
 
 ### As multi-kernel within a virtual machine
