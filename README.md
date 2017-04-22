@@ -104,8 +104,15 @@ $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 ```
 
 assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
-directory.
+directory. To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
 
+```bash
+$ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin -DCMAKE_INSTALL_PREFIX=/home/user/hermit ..
+$ make
+$ make install
+```
+
+**Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
 
 ## Testing
 
