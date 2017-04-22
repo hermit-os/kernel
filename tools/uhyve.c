@@ -139,6 +139,8 @@
 #define PAGE_MAP_BITS	9
 #define PAGE_LEVELS		4
 
+#define CHECKPOINT_VERBOSE	1
+
 #define kvm_ioctl(fd, cmd, arg) ({ \
 	const int ret = ioctl(fd, cmd, arg); \
 	if(ret == -1) \
@@ -920,9 +922,9 @@ int uhyve_init(char *path)
 		fscanf(f, "memory size: 0x%zx\n", &guest_size);
 		fscanf(f, "checkpoint number: %u\n", &no_checkpoint);
 		fscanf(f, "entry point: 0x%zx", &elf_entry);
-
+#if CHECKPOINT_VERBOSE
 		printf("Restart from checkpoint %u (ncores %d, mem size 0x%zx)\n", no_checkpoint, ncores, guest_size);
-
+#endif
 		fclose(f);
 	} else {
 		const char* hermit_memory = getenv("HERMIT_MEM");
@@ -981,9 +983,11 @@ static void timer_handler(int signum)
 	struct stat st = {0};
 	const size_t flag = no_checkpoint > 0 ? PG_DIRTY : PG_ACCESSED;
 	char fname[MAX_FNAME];
+#if CHECKPOINT_VERBOSE
 	struct timeval begin, end;
 
 	gettimeofday(&begin, NULL);
+#endif
 
 	if (stat("checkpoint", &st) == -1)
 		mkdir("checkpoint", 0700);
@@ -1075,11 +1079,12 @@ static void timer_handler(int signum)
 
 	fclose(f);
 
+#if CHECKPOINT_VERBOSE
 	gettimeofday(&end, NULL);
 	size_t msec = (end.tv_sec - begin.tv_sec) * 1000;
 	msec += (end.tv_usec - begin.tv_usec) / 1000;
 	printf("Create checkpoint %u in %zd ms\n", no_checkpoint, msec);
-
+#endif
 	no_checkpoint++;
 }
 
