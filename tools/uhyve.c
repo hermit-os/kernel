@@ -160,7 +160,7 @@ static int kvm = -1, vmfd = -1;
 static uint32_t no_checkpoint = 0;
 static pthread_barrier_t barrier;
 static __thread struct kvm_run *run = NULL;
-static __thread int vcpufd = 1;
+static __thread int vcpufd = -1;
 static __thread uint32_t cpuid = 0;
 
 static uint64_t memparse(const char *ptr)
