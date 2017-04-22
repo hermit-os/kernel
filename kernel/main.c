@@ -253,10 +253,10 @@ success:
 
 			ip_counter++;
 		}
-	}
 
-	if (!ip_2_ip4(&default_netif.ip_addr)->addr)
-		return -ENODEV;
+		if (!ip_2_ip4(&default_netif.ip_addr)->addr)
+			return -ENODEV;
+	}
 
 	return 0;
 }
@@ -406,7 +406,7 @@ static int initd(void* arg)
 	// initialize network
 	err = init_netifs();
 
-	if ((err != 0) || is_proxy())
+	if ((err != 0) || !is_proxy())
 	{
 		char* dummy[] = {"app_name", NULL};
 
