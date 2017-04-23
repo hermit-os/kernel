@@ -1098,6 +1098,7 @@ int uhyve_init(char *path)
 
 	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
 
+#ifdef KVM_CAP_X2APIC_API
 	// enable x2APIC support
 	struct kvm_enable_cap cap = {
 		.cap = KVM_CAP_X2APIC_API,
@@ -1105,7 +1106,7 @@ int uhyve_init(char *path)
 		.args[0] = KVM_X2APIC_API_USE_32BIT_IDS|KVM_X2APIC_API_DISABLE_BROADCAST_QUIRK,
 	};
 	kvm_ioctl(vmfd, KVM_ENABLE_CAP, &cap);
-
+#endif
 
 	// try to detect KVM extensions
 	tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
