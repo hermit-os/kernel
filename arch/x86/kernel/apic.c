@@ -666,7 +666,7 @@ int apic_calibration(void)
 	apic_initialized = 1;
 	atomic_int32_inc(&cpu_online);
 
-	if(is_single_kernel()) {
+	if (is_single_kernel()) {
 		// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
 		outportb(0xA1, 0xFF);
 		outportb(0x21, 0xFF);
