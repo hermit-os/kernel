@@ -149,6 +149,8 @@
 	})
 
 static bool restart = false;
+static bool tsc_deadline = false;
+static bool verbose = false;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
 static uint8_t* klog = NULL;
@@ -158,6 +160,7 @@ static uint64_t elf_entry;
 static pthread_t* vcpu_threads = NULL;
 static int kvm = -1, vmfd = -1;
 static uint32_t no_checkpoint = 0;
+static pthread_mutex_t kvm_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t barrier;
 static __thread struct kvm_run *run = NULL;
 static __thread int vcpufd = -1;
@@ -199,7 +202,7 @@ static uint64_t memparse(const char *ptr)
 	return size;
 }
 
-/// Just close file descriptor if not already done
+// Just close file descriptor if not already done
 static inline void close_fd(int* fd)
 {
 	if(*fd != -1) {
@@ -208,36 +211,49 @@ static inline void close_fd(int* fd)
 	}
 }
 
-static void sig_func(int sig)
+static void uhyve_exit(void* arg)
 {
-	(void) sig;
+	if (pthread_mutex_trylock(&kvm_lock))
+	{
+		close_fd(&vcpufd);
+		return;
+	}
 
-	close_fd(&vcpufd);
-	pthread_exit(NULL);
-}
-
-static void uhyve_exit(void)
-{
 	// only the main thread will execute this
 	if (vcpu_threads) {
-		for(uint32_t i = 1; i < ncores; i++) {
+		for(uint32_t i = 0; i < ncores; i++) {
+			if (pthread_self() == vcpu_threads[i])
+				continue;
+
 			pthread_kill(vcpu_threads[i], SIGTERM);
+		}
+	}
+
+	close_fd(&vcpufd);
+}
+
+static void uhyve_atexit(void)
+{
+	uhyve_exit(NULL);
+
+	if (vcpu_threads) {
+		for(uint32_t i = 0; i < ncores; i++) {
+			if (pthread_self() == vcpu_threads[i])
+				continue;
 			pthread_join(vcpu_threads[i], NULL);
 		}
 
 		free(vcpu_threads);
 	}
 
-	char* verbose = getenv("HERMIT_VERBOSE");
-	if (klog && verbose && (strcmp(verbose, "0") != 0))
+	if (klog && verbose)
 	{
-		puts("\nDump kernel log:");
-		puts("================\n");
-		printf("%s\n", klog);
+		fputs("\nDump kernel log:\n", stderr);
+		fputs("================\n", stderr);
+		fprintf(stderr, "%s\n", klog);
 	}
 
 	// clean up and close KVM
-	close_fd(&vcpufd);
 	close_fd(&vmfd);
 	close_fd(&kvm);
 }
@@ -367,6 +383,80 @@ static int load_checkpoint(uint8_t* mem)
 	return 0;
 }
 
+static inline void show_dtable(const char *name, struct kvm_dtable *dtable)
+{
+	fprintf(stderr, " %s                 %016llx  %08hx\n", name, (uint64_t) dtable->base, (uint16_t) dtable->limit);
+}
+
+static inline void show_segment(const char *name, struct kvm_segment *seg)
+{
+	fprintf(stderr, " %s       %04hx      %016llx  %08x  %02hhx    %x %x   %x  %x %x %x %x\n",
+		name, (uint16_t) seg->selector, (uint64_t) seg->base, (uint32_t) seg->limit,
+		(uint8_t) seg->type, seg->present, seg->dpl, seg->db, seg->s, seg->l, seg->g, seg->avl);
+}
+
+void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
+{
+	unsigned long cr0, cr2, cr3;
+	unsigned long cr4, cr8;
+	unsigned long rax, rbx, rcx;
+	unsigned long rdx, rsi, rdi;
+	unsigned long rbp,  r8,  r9;
+	unsigned long r10, r11, r12;
+	unsigned long r13, r14, r15;
+	unsigned long rip, rsp;
+	unsigned long rflags;
+	int i;
+
+	rflags = regs->rflags;
+	rip = regs->rip; rsp = regs->rsp;
+	rax = regs->rax; rbx = regs->rbx; rcx = regs->rcx;
+	rdx = regs->rdx; rsi = regs->rsi; rdi = regs->rdi;
+	rbp = regs->rbp; r8  = regs->r8;  r9  = regs->r9;
+	r10 = regs->r10; r11 = regs->r11; r12 = regs->r12;
+	r13 = regs->r13; r14 = regs->r14; r15 = regs->r15;
+
+	fprintf(stderr, "\n Dump state of CPU %d\n", id);
+	fprintf(stderr, "\n Registers:\n");
+	fprintf(stderr, " ----------\n");
+	fprintf(stderr, " rip: %016lx   rsp: %016lx flags: %016lx\n", rip, rsp, rflags);
+	fprintf(stderr, " rax: %016lx   rbx: %016lx   rcx: %016lx\n", rax, rbx, rcx);
+	fprintf(stderr, " rdx: %016lx   rsi: %016lx   rdi: %016lx\n", rdx, rsi, rdi);
+	fprintf(stderr, " rbp: %016lx    r8: %016lx    r9: %016lx\n", rbp, r8,  r9);
+	fprintf(stderr, " r10: %016lx   r11: %016lx   r12: %016lx\n", r10, r11, r12);
+	fprintf(stderr, " r13: %016lx   r14: %016lx   r15: %016lx\n", r13, r14, r15);
+
+	cr0 = sregs->cr0; cr2 = sregs->cr2; cr3 = sregs->cr3;
+	cr4 = sregs->cr4; cr8 = sregs->cr8;
+
+	fprintf(stderr, " cr0: %016lx   cr2: %016lx   cr3: %016lx\n", cr0, cr2, cr3);
+	fprintf(stderr, " cr4: %016lx   cr8: %016lx\n", cr4, cr8);
+	fprintf(stderr, "\n Segment registers:\n");
+	fprintf(stderr,   " ------------------\n");
+	fprintf(stderr, " register  selector  base              limit     type  p dpl db s l g avl\n");
+	show_segment("cs ", &sregs->cs);
+	show_segment("ss ", &sregs->ss);
+	show_segment("ds ", &sregs->ds);
+	show_segment("es ", &sregs->es);
+	show_segment("fs ", &sregs->fs);
+	show_segment("gs ", &sregs->gs);
+	show_segment("tr ", &sregs->tr);
+	show_segment("ldt", &sregs->ldt);
+	show_dtable("gdt", &sregs->gdt);
+	show_dtable("idt", &sregs->idt);
+
+	fprintf(stderr, "\n APIC:\n");
+	fprintf(stderr,   " -----\n");
+	fprintf(stderr, " efer: %016llx  apic base: %016llx\n",
+		(uint64_t) sregs->efer, (uint64_t) sregs->apic_base);
+
+	fprintf(stderr, "\n Interrupt bitmap:\n");
+	fprintf(stderr,   " -----------------\n");
+	for (i = 0; i < (KVM_NR_INTERRUPTS + 63) / 64; i++)
+		fprintf(stderr, " %016llx", (uint64_t) sregs->interrupt_bitmap[i]);
+	fprintf(stderr, "\n");
+}
+
 static int load_kernel(uint8_t* mem, char* path)
 {
 	Elf64_Ehdr hdr;
@@ -463,14 +553,6 @@ out:
 /// features according to our needs.
 static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 {
-	static int tsc = -1;
-
-	if (tsc < 0) {
-		tsc = ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER);
-		if (tsc < 0)
-			tsc = 0;
-	}
-
 	for (uint32_t i = 0; i < kvm_cpuid->nent; i++) {
 		struct kvm_cpuid_entry2 *entry = &kvm_cpuid->entries[i];
 
@@ -478,7 +560,7 @@ static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 		case 1:
 			// CPUID to define basic cpu features
 			entry->ecx |= (1U << 31); // propagate that we are running on a hypervisor
-			if (tsc)
+			if (tsc_deadline)
 				entry->ecx |= (1U << 24); // enable TSC deadline feature
 			entry->edx |= (1U <<  5); // enable msr support
 			break;
@@ -510,11 +592,8 @@ static void setup_system_page_tables(struct kvm_sregs *sregs, uint8_t *mem)
 
 	/*
 	 * For simplicity we currently use 2MB pages and only a single
-	 * PML4/PDPTE/PDE.  Sanity check that the guest size is a multiple of the
-	 * page size and will fit in a single PDE (512 entries).
+	 * PML4/PDPTE/PDE.
 	 */
-	assert((guest_size & (GUEST_PAGE_SIZE - 1)) == 0);
-	assert(guest_size <= (GUEST_PAGE_SIZE * 512));
 
 	memset(pml4, 0x00, 4096);
 	memset(pdpte, 0x00, 4096);
@@ -522,7 +601,7 @@ static void setup_system_page_tables(struct kvm_sregs *sregs, uint8_t *mem)
 
 	*pml4 = BOOT_PDPTE | (X86_PDPT_P | X86_PDPT_RW);
 	*pdpte = BOOT_PDE | (X86_PDPT_P | X86_PDPT_RW);
-	for (paddr = 0; paddr < guest_size; paddr += GUEST_PAGE_SIZE, pde++)
+	for (paddr = 0; paddr < 0x20000000ULL; paddr += GUEST_PAGE_SIZE, pde++)
 		*pde = paddr | (X86_PDPT_P | X86_PDPT_RW | X86_PDPT_PS);
 
 	sregs->cr3 = BOOT_PML4;
@@ -653,8 +732,10 @@ static int vcpu_loop(void)
 			case UHYVE_PORT_EXIT: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 
-					printf("%s\n", klog);
-					exit(*(int*)(guest_mem+data));
+					if (cpuid)
+						pthread_exit((int*)(guest_mem+data));
+					else
+						exit(*(int*)(guest_mem+data));
 					break;
 				}
 
@@ -715,7 +796,7 @@ static int vcpu_loop(void)
 
 static int vcpu_init(void)
 {
-	struct kvm_mp_state state = { KVM_MP_STATE_RUNNABLE };
+	struct kvm_mp_state mp_state = { KVM_MP_STATE_RUNNABLE };
 	struct kvm_regs regs = {
 		.rip = elf_entry,	// entry point to HermitCore
 		.rflags = 0x2,		// POR value required by x86 architecture
@@ -747,7 +828,6 @@ static int vcpu_init(void)
 		struct kvm_xsave xsave;
 		struct kvm_xcrs xcrs;
 		struct kvm_vcpu_events events;
-		struct kvm_mp_state mp_state;
 
 		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -776,18 +856,25 @@ static int vcpu_init(void)
 
 		fclose(f);
 
-		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
-		kvm_ioctl(vcpufd, KVM_SET_XCRS, &xcrs);
+		//pthread_mutex_lock(&kvm_lock);
+		//show_registers(cpuid, &regs, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
+		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
+		kvm_ioctl(vcpufd, KVM_SET_XCRS, &xcrs);
+		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
 		kvm_ioctl(vcpufd, KVM_SET_LAPIC, &lapic);
 		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
 		kvm_ioctl(vcpufd, KVM_SET_VCPU_EVENTS, &events);
-		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
+
+		kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
+		kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
+		//show_registers(cpuid, &regs, &sregs);
+		//pthread_mutex_unlock(&kvm_lock);
 	} else {
 		// be sure that the multiprocessor is runable
-		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &state);
+		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
 
 		/* Setup registers and memory. */
 		setup_system(vcpufd, guest_mem, cpuid);
@@ -838,6 +925,7 @@ static void save_cpu_state(void)
 	//msrs[n++].index = MSR_IA32_FEATURE_CONTROL;
 	msr_data.info.nmsrs = n;
 
+	//pthread_mutex_lock(&kvm_lock);
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 	kvm_ioctl(vcpufd, KVM_GET_MSRS, &msr_data);
@@ -847,6 +935,8 @@ static void save_cpu_state(void)
 	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
 	kvm_ioctl(vcpufd, KVM_GET_VCPU_EVENTS, &events);
 	kvm_ioctl(vcpufd, KVM_GET_MP_STATE, &mp_state);
+	//show_registers(cpuid, &regs, &sregs);
+	//pthread_mutex_unlock(&kvm_lock);
 
 	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -888,7 +978,10 @@ static void sigusr_handler(int signum)
 
 static void* uhyve_thread(void* arg)
 {
+	size_t ret;
 	struct sigaction sa;
+
+	pthread_cleanup_push(uhyve_exit, NULL);
 
 	cpuid = (size_t) arg;
 
@@ -901,18 +994,21 @@ static void* uhyve_thread(void* arg)
 	vcpu_init();
 
 	// run cpu loop until thread gets killed
-	const size_t ret = vcpu_loop();
+	ret = vcpu_loop();
+
+	pthread_cleanup_pop(1);
 
 	return (void*) ret;
 }
 
 int uhyve_init(char *path)
 {
-	// register signal handler before going multithread
-	signal(SIGTERM, sig_func);
+	char* v = getenv("HERMIT_VERBOSE");
+	if (v && (strcmp(v, "0") != 0))
+		verbose = true;
 
 	// register routine to close the VM
-	atexit(uhyve_exit);
+	atexit(uhyve_atexit);
 
 	FILE* f = fopen("checkpoint/chk_config.txt", "r");
 	if (f != NULL) {
@@ -944,15 +1040,43 @@ int uhyve_init(char *path)
 	/* Create the virtual machine */
 	vmfd = kvm_ioctl(kvm, KVM_CREATE_VM, 0);
 
-	// TODO: we have to create a gap  for PCI
-	assert(guest_size < KVM_32BIT_GAP_SIZE);
+	uint64_t identity_base = 0xfffbc000;
+	if (ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_SYNC_MMU) > 0) {
+		/* Allows up to 16M BIOSes. */
+		identity_base = 0xfeffc000;
 
-	/* Allocate page-aligned guest memory. */
-	guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS /*| MAP_HUGETLB | MAP_HUGE_2MB*/, -1, 0);
-	if (guest_mem == MAP_FAILED)
-		err(1, "mmap failed");
+		kvm_ioctl(vmfd, KVM_SET_IDENTITY_MAP_ADDR, &identity_base);
+	}
+	kvm_ioctl(vmfd, KVM_SET_TSS_ADDR, identity_base + 0x1000);
 
-	/* Map it to the second page frame (to avoid the real-mode IDT at 0). */
+	/*
+	 * Allocate page-aligned guest memory.
+	 *
+	 * TODO: support of huge pages
+	 */
+	if (guest_size < KVM_32BIT_GAP_START) {
+		guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (guest_mem == MAP_FAILED)
+			err(1, "mmap failed");
+	} else {
+		guest_size += + KVM_32BIT_GAP_SIZE;
+		guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+		if (guest_mem == MAP_FAILED)
+			err(1, "mmap failed");
+
+		/*
+		 * We mprotect the gap PROT_NONE so that if we accidently write to it, we will know.
+		 */
+		mprotect(guest_mem + KVM_32BIT_GAP_START, KVM_32BIT_GAP_SIZE, PROT_NONE);
+	}
+
+	/*
+	 * The KSM feature is intended for applications that generate
+	 * many instances of the same data (e.g., virtualization systems
+	 * such as KVM). It can consume a lot of processing power!
+	 */
+	//madvise(guest_mem, guest_size, MADV_MERGEABLE);
+
 	struct kvm_userspace_memory_region kvm_region = {
 		.slot = 0,
 		.guest_phys_addr = GUEST_OFFSET,
@@ -960,8 +1084,31 @@ int uhyve_init(char *path)
 		.userspace_addr = (uint64_t) guest_mem,
 	};
 
-	kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+	if (guest_size <= KVM_32BIT_GAP_START - GUEST_OFFSET) {
+		kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+	} else {
+		kvm_region.memory_size = KVM_32BIT_GAP_START - GUEST_OFFSET;
+		kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+
+		kvm_region.slot = 1;
+		kvm_region.guest_phys_addr = KVM_32BIT_GAP_START+KVM_32BIT_GAP_SIZE;
+		kvm_region.memory_size = guest_size - KVM_32BIT_GAP_SIZE - KVM_32BIT_GAP_START + GUEST_OFFSET;
+		kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+	}
+
 	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
+
+	// enable x2APIC support
+	struct kvm_enable_cap cap = {
+		.cap = KVM_CAP_X2APIC_API,
+		.flags = 0,
+		.args[0] = KVM_X2APIC_API_USE_32BIT_IDS|KVM_X2APIC_API_DISABLE_BROADCAST_QUIRK,
+	};
+	kvm_ioctl(vmfd, KVM_ENABLE_CAP, &cap);
+
+
+	// try to detect KVM extensions
+	tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
 
 	if (restart) {
 		if (load_checkpoint(guest_mem) != 0)
