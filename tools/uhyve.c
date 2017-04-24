@@ -149,7 +149,8 @@
 	})
 
 static bool restart = false;
-static bool tsc_deadline = false;
+static bool cap_tsc_deadline = false;
+static bool cap_irqchip = false;
 static bool verbose = false;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
@@ -351,11 +352,11 @@ static int load_checkpoint(uint8_t* mem)
 		if (f == NULL)
 			return -1;
 
-		struct kvm_irqchip irqchip;
+		/*struct kvm_irqchip irqchip;
 		if (fread(&irqchip, sizeof(irqchip), 1, f) != 1)
 			err(1, "fread failed");
-		if (i == no_checkpoint-1)
-			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);
+		if (cap_irqchip && (i == no_checkpoint-1))
+			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);*/
 
 		struct kvm_clock_data clock;
 		if (fread(&clock, sizeof(clock), 1, f) != 1)
@@ -389,27 +390,27 @@ static int load_checkpoint(uint8_t* mem)
 
 static inline void show_dtable(const char *name, struct kvm_dtable *dtable)
 {
-	fprintf(stderr, " %s                 %016llx  %08hx\n", name, (uint64_t) dtable->base, (uint16_t) dtable->limit);
+	fprintf(stderr, " %s                 %016zx  %08hx\n", name, (size_t) dtable->base, (uint16_t) dtable->limit);
 }
 
 static inline void show_segment(const char *name, struct kvm_segment *seg)
 {
-	fprintf(stderr, " %s       %04hx      %016llx  %08x  %02hhx    %x %x   %x  %x %x %x %x\n",
-		name, (uint16_t) seg->selector, (uint64_t) seg->base, (uint32_t) seg->limit,
+	fprintf(stderr, " %s       %04hx      %016zx  %08x  %02hhx    %x %x   %x  %x %x %x %x\n",
+		name, (uint16_t) seg->selector, (size_t) seg->base, (uint32_t) seg->limit,
 		(uint8_t) seg->type, seg->present, seg->dpl, seg->db, seg->s, seg->l, seg->g, seg->avl);
 }
 
 void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
 {
-	unsigned long cr0, cr2, cr3;
-	unsigned long cr4, cr8;
-	unsigned long rax, rbx, rcx;
-	unsigned long rdx, rsi, rdi;
-	unsigned long rbp,  r8,  r9;
-	unsigned long r10, r11, r12;
-	unsigned long r13, r14, r15;
-	unsigned long rip, rsp;
-	unsigned long rflags;
+	size_t cr0, cr2, cr3;
+	size_t cr4, cr8;
+	size_t rax, rbx, rcx;
+	size_t rdx, rsi, rdi;
+	size_t rbp,  r8,  r9;
+	size_t r10, r11, r12;
+	size_t r13, r14, r15;
+	size_t rip, rsp;
+	size_t rflags;
 	int i;
 
 	rflags = regs->rflags;
@@ -423,18 +424,18 @@ void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
 	fprintf(stderr, "\n Dump state of CPU %d\n", id);
 	fprintf(stderr, "\n Registers:\n");
 	fprintf(stderr, " ----------\n");
-	fprintf(stderr, " rip: %016lx   rsp: %016lx flags: %016lx\n", rip, rsp, rflags);
-	fprintf(stderr, " rax: %016lx   rbx: %016lx   rcx: %016lx\n", rax, rbx, rcx);
-	fprintf(stderr, " rdx: %016lx   rsi: %016lx   rdi: %016lx\n", rdx, rsi, rdi);
-	fprintf(stderr, " rbp: %016lx    r8: %016lx    r9: %016lx\n", rbp, r8,  r9);
-	fprintf(stderr, " r10: %016lx   r11: %016lx   r12: %016lx\n", r10, r11, r12);
-	fprintf(stderr, " r13: %016lx   r14: %016lx   r15: %016lx\n", r13, r14, r15);
+	fprintf(stderr, " rip: %016zx   rsp: %016zx flags: %016zx\n", rip, rsp, rflags);
+	fprintf(stderr, " rax: %016zx   rbx: %016zx   rcx: %016zx\n", rax, rbx, rcx);
+	fprintf(stderr, " rdx: %016zx   rsi: %016zx   rdi: %016zx\n", rdx, rsi, rdi);
+	fprintf(stderr, " rbp: %016zx    r8: %016zx    r9: %016zx\n", rbp, r8,  r9);
+	fprintf(stderr, " r10: %016zx   r11: %016zx   r12: %016zx\n", r10, r11, r12);
+	fprintf(stderr, " r13: %016zx   r14: %016zx   r15: %016zx\n", r13, r14, r15);
 
 	cr0 = sregs->cr0; cr2 = sregs->cr2; cr3 = sregs->cr3;
 	cr4 = sregs->cr4; cr8 = sregs->cr8;
 
-	fprintf(stderr, " cr0: %016lx   cr2: %016lx   cr3: %016lx\n", cr0, cr2, cr3);
-	fprintf(stderr, " cr4: %016lx   cr8: %016lx\n", cr4, cr8);
+	fprintf(stderr, " cr0: %016zx   cr2: %016zx   cr3: %016zx\n", cr0, cr2, cr3);
+	fprintf(stderr, " cr4: %016zx   cr8: %016zx\n", cr4, cr8);
 	fprintf(stderr, "\n Segment registers:\n");
 	fprintf(stderr,   " ------------------\n");
 	fprintf(stderr, " register  selector  base              limit     type  p dpl db s l g avl\n");
@@ -451,13 +452,13 @@ void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
 
 	fprintf(stderr, "\n APIC:\n");
 	fprintf(stderr,   " -----\n");
-	fprintf(stderr, " efer: %016llx  apic base: %016llx\n",
-		(uint64_t) sregs->efer, (uint64_t) sregs->apic_base);
+	fprintf(stderr, " efer: %016zx  apic base: %016zx\n",
+		(size_t) sregs->efer, (size_t) sregs->apic_base);
 
 	fprintf(stderr, "\n Interrupt bitmap:\n");
 	fprintf(stderr,   " -----------------\n");
 	for (i = 0; i < (KVM_NR_INTERRUPTS + 63) / 64; i++)
-		fprintf(stderr, " %016llx", (uint64_t) sregs->interrupt_bitmap[i]);
+		fprintf(stderr, " %016zx", (size_t) sregs->interrupt_bitmap[i]);
 	fprintf(stderr, "\n");
 }
 
@@ -564,7 +565,7 @@ static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 		case 1:
 			// CPUID to define basic cpu features
 			entry->ecx |= (1U << 31); // propagate that we are running on a hypervisor
-			if (tsc_deadline)
+			if (cap_tsc_deadline)
 				entry->ecx |= (1U << 24); // enable TSC deadline feature
 			entry->edx |= (1U <<  5); // enable msr support
 			break;
@@ -1122,7 +1123,8 @@ int uhyve_init(char *path)
 #endif
 
 	// try to detect KVM extensions
-	tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
+	cap_tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
+	cap_irqchip = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQCHIP) <= 0 ? false : true;
 
 	if (restart) {
 		if (load_checkpoint(guest_mem) != 0)
@@ -1172,10 +1174,13 @@ static void timer_handler(int signum)
 		err(1, "fopen: unable to open file");
 	}
 
-	struct kvm_irqchip irqchip;
-	kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &irqchip);
+	/*struct kvm_irqchip irqchip;
+	if (cap_irqchip)
+		kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &irqchip);
+	else
+		memset(&irqchip, 0x00, sizeof(irqchip));
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed");*/
 
 	struct kvm_clock_data clock;
 	kvm_ioctl(vmfd, KVM_GET_CLOCK, &clock);
