@@ -28,6 +28,8 @@
  * 15.1.2017: extend original version (https://github.com/Solo5/solo5)
  *            for HermitCore
  * 25.2.2017: add SMP support to enable more than one core
+ * 24.4.2017: add checkpoint/restore support,
+ *            remove memory limit
  */
 
 #define _GNU_SOURCE
@@ -164,10 +166,6 @@ static pthread_barrier_t barrier;
 static __thread struct kvm_run *run = NULL;
 static __thread int vcpufd = -1;
 static __thread uint32_t cpuid = 0;
-
-static inline void mb(void) {
-	__asm__ volatile("mfence":::"memory");
-}
 
 static uint64_t memparse(const char *ptr)
 {
@@ -398,7 +396,7 @@ static inline void show_segment(const char *name, struct kvm_segment *seg)
 		(uint8_t) seg->type, seg->present, seg->dpl, seg->db, seg->s, seg->l, seg->g, seg->avl);
 }
 
-void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
+static void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
 {
 	size_t cr0, cr2, cr3;
 	size_t cr4, cr8;
@@ -458,6 +456,17 @@ void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sregs)
 	for (i = 0; i < (KVM_NR_INTERRUPTS + 63) / 64; i++)
 		fprintf(stderr, " %016zx", (size_t) sregs->interrupt_bitmap[i]);
 	fprintf(stderr, "\n");
+}
+
+static int print_registers(void)
+{
+	struct kvm_regs regs;
+	struct kvm_sregs sregs;
+
+	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
+	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
+
+	show_registers(cpuid, &regs, &sregs);
 }
 
 static int load_kernel(uint8_t* mem, char* path)
@@ -785,6 +794,8 @@ static int vcpu_loop(void)
 			err(1, "KVM: receive shutdown command\n");
 			break;
 
+		case KVM_EXIT_DEBUG:
+			print_registers();
 		default:
 			fprintf(stderr, "KVM: unhandled exit: exit_reason = 0x%x\n", run->exit_reason);
 			exit(EXIT_FAILURE);
@@ -875,7 +886,6 @@ static int vcpu_init(void)
 		kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 		//show_registers(cpuid, &regs, &sregs);
 		//pthread_mutex_unlock(&kvm_lock);
-		mb();
 	} else {
 		// be sure that the multiprocessor is runable
 		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
@@ -968,14 +978,12 @@ static void save_cpu_state(void)
 	if (fwrite(&mp_state, sizeof(mp_state), 1, f) != 1)
 		err(1, "fwrite failed\n");
 
+	fflush(f);
 	fclose(f);
 }
 
 static void sigusr_handler(int signum)
 {
-	// memory barrier
-	mb();
-
 	pthread_barrier_wait(&barrier);
 
 	save_cpu_state();
@@ -995,7 +1003,7 @@ static void* uhyve_thread(void* arg)
 	/* Install timer_handler as the signal handler for SIGVTALRM. */
 	memset(&sa, 0x00, sizeof(sa));
 	sa.sa_handler = &sigusr_handler;
-	sigaction(SIGUSR1, &sa, NULL);
+	sigaction(SIGRTMIN, &sa, NULL);
 
 	// create new cpu
 	vcpu_init();
@@ -1133,7 +1141,6 @@ int uhyve_init(char *path)
 
 	pthread_barrier_init(&barrier, NULL, ncores);
 	cpuid = 0;
-	mb();
 
 	// create first CPU, it will be the boot processor by default
 	return vcpu_init();
@@ -1154,10 +1161,7 @@ static void timer_handler(int signum)
 
 	for(size_t i = 0; i < ncores; i++)
 		if (vcpu_threads[i] != pthread_self())
-			pthread_kill(vcpu_threads[i], SIGUSR1);
-
-	// memory barrier
-	mb();
+			pthread_kill(vcpu_threads[i], SIGRTMIN);
 
 	pthread_barrier_wait(&barrier);
 
@@ -1228,6 +1232,7 @@ static void timer_handler(int signum)
 	}
 #endif
 
+	fflush(f);
 	fclose(f);
 
 	pthread_barrier_wait(&barrier);
