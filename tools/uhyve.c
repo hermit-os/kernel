@@ -166,6 +166,10 @@ static __thread struct kvm_run *run = NULL;
 static __thread int vcpufd = -1;
 static __thread uint32_t cpuid = 0;
 
+static inline void mb(void) {
+	__asm__ volatile("mfence":::"memory");
+}
+
 static uint64_t memparse(const char *ptr)
 {
 	// local pointer to end of parsed string
@@ -872,6 +876,7 @@ static int vcpu_init(void)
 		kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 		//show_registers(cpuid, &regs, &sregs);
 		//pthread_mutex_unlock(&kvm_lock);
+		mb();
 	} else {
 		// be sure that the multiprocessor is runable
 		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
@@ -969,6 +974,9 @@ static void save_cpu_state(void)
 
 static void sigusr_handler(int signum)
 {
+	// memory barrier
+	mb();
+
 	pthread_barrier_wait(&barrier);
 
 	save_cpu_state();
@@ -1070,12 +1078,17 @@ int uhyve_init(char *path)
 		mprotect(guest_mem + KVM_32BIT_GAP_START, KVM_32BIT_GAP_SIZE, PROT_NONE);
 	}
 
-	/*
-	 * The KSM feature is intended for applications that generate
-	 * many instances of the same data (e.g., virtualization systems
-	 * such as KVM). It can consume a lot of processing power!
-	 */
-	//madvise(guest_mem, guest_size, MADV_MERGEABLE);
+	char* merge = getenv("HERMIT_MERGEABLE");
+	if (merge && (strcmp(merge, "0") != 0)) {
+		/*
+		 * The KSM feature is intended for applications that generate
+		 * many instances of the same data (e.g., virtualization systems
+		 * such as KVM). It can consume a lot of processing power!
+		 */
+		madvise(guest_mem, guest_size, MADV_MERGEABLE);
+		if (verbose)
+			fprintf(stderr, "VM uses KSN feature \"mergeable\" to reduce the memory footprint.\n");
+	}
 
 	struct kvm_userspace_memory_region kvm_region = {
 		.slot = 0,
@@ -1121,6 +1134,7 @@ int uhyve_init(char *path)
 
 	pthread_barrier_init(&barrier, NULL, ncores);
 	cpuid = 0;
+	mb();
 
 	// create first CPU, it will be the boot processor by default
 	return vcpu_init();
@@ -1143,6 +1157,9 @@ static void timer_handler(int signum)
 	for(size_t i = 0; i < ncores; i++)
 		if (vcpu_threads[i] != pthread_self())
 			pthread_kill(vcpu_threads[i], SIGUSR1);
+
+	// memory barrier
+	mb();
 
 	pthread_barrier_wait(&barrier);
 
