@@ -328,6 +328,98 @@ static ssize_t pread_in_full(int fd, void *buf, size_t count, off_t offset)
 	return total;
 }
 
+static int load_kernel(uint8_t* mem, char* path)
+{
+	Elf64_Ehdr hdr;
+	Elf64_Phdr *phdr = NULL;
+	size_t buflen;
+	int fd, ret;
+	int first_load = 1;
+
+	fd = open(path, O_RDONLY);
+	if (fd == -1)
+	{
+		perror("Unable to open file");
+		return -1;
+	}
+
+	ret = pread_in_full(fd, &hdr, sizeof(hdr), 0);
+	if (ret < 0)
+		goto out;
+
+	//  check if the program is a HermitCore file
+	if (hdr.e_ident[EI_MAG0] != ELFMAG0
+	    || hdr.e_ident[EI_MAG1] != ELFMAG1
+	    || hdr.e_ident[EI_MAG2] != ELFMAG2
+	    || hdr.e_ident[EI_MAG3] != ELFMAG3
+	    || hdr.e_ident[EI_CLASS] != ELFCLASS64
+	    || hdr.e_ident[EI_OSABI] != HERMIT_ELFOSABI
+	    || hdr.e_type != ET_EXEC || hdr.e_machine != EM_X86_64) {
+		fprintf(stderr, "Inavlide HermitCore file!\n");
+		goto out;
+	}
+
+	elf_entry = hdr.e_entry;
+
+	buflen = hdr.e_phentsize * hdr.e_phnum;
+	phdr = malloc(buflen);
+	if (!phdr) {
+		fprintf(stderr, "Not enough memory\n");
+		goto out;
+	}
+
+	ret = pread_in_full(fd, phdr, buflen, hdr.e_phoff);
+	if (ret < 0)
+		goto out;
+
+	/*
+	 * Load all segments with type "LOAD" from the file at offset
+	 * p_offset, and copy that into in memory.
+	 */
+	for (Elf64_Half ph_i = 0; ph_i < hdr.e_phnum; ph_i++)
+	{
+		uint64_t paddr = phdr[ph_i].p_paddr;
+		size_t offset = phdr[ph_i].p_offset;
+		size_t filesz = phdr[ph_i].p_filesz;
+		size_t memsz = phdr[ph_i].p_memsz;
+
+		if (phdr[ph_i].p_type != PT_LOAD)
+			continue;
+
+		//printf("Kernel location 0x%zx, file size 0x%zx, memory size 0x%zx\n", paddr, filesz, memsz);
+
+		ret = pread_in_full(fd, mem+paddr-GUEST_OFFSET, filesz, offset);
+		if (ret < 0)
+			goto out;
+		if (!klog)
+			klog = mem+paddr+0x5000-GUEST_OFFSET;
+		if (!mboot)
+			mboot = mem+paddr-GUEST_OFFSET;
+
+		if (first_load) {
+			first_load = 0;
+
+			// initialize kernel
+			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x08)) = paddr; // physical start address
+			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x10)) = guest_size;   // physical limit
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x18)) = get_cpufreq();
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x24)) = 1; // number of used cpus
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
+			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
+		}
+		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) += memsz; // total kernel size
+	}
+
+out:
+	if (phdr)
+		free(phdr);
+
+	close(fd);
+
+	return 0;
+}
+
 static int load_checkpoint(uint8_t* mem)
 {
 	char fname[MAX_FNAME];
@@ -467,98 +559,6 @@ static int print_registers(void)
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 
 	show_registers(cpuid, &regs, &sregs);
-}
-
-static int load_kernel(uint8_t* mem, char* path)
-{
-	Elf64_Ehdr hdr;
-	Elf64_Phdr *phdr = NULL;
-	size_t buflen;
-	int fd, ret;
-	int first_load = 1;
-
-	fd = open(path, O_RDONLY);
-	if (fd == -1)
-	{
-		perror("Unable to open file");
-		return -1;
-	}
-
-	ret = pread_in_full(fd, &hdr, sizeof(hdr), 0);
-	if (ret < 0)
-		goto out;
-
-	//  check if the program is a HermitCore file
-	if (hdr.e_ident[EI_MAG0] != ELFMAG0
-	    || hdr.e_ident[EI_MAG1] != ELFMAG1
-	    || hdr.e_ident[EI_MAG2] != ELFMAG2
-	    || hdr.e_ident[EI_MAG3] != ELFMAG3
-	    || hdr.e_ident[EI_CLASS] != ELFCLASS64
-	    || hdr.e_ident[EI_OSABI] != HERMIT_ELFOSABI
-	    || hdr.e_type != ET_EXEC || hdr.e_machine != EM_X86_64) {
-		fprintf(stderr, "Inavlide HermitCore file!\n");
-		goto out;
-	}
-
-	elf_entry = hdr.e_entry;
-
-	buflen = hdr.e_phentsize * hdr.e_phnum;
-	phdr = malloc(buflen);
-	if (!phdr) {
-		fprintf(stderr, "Not enough memory\n");
-		goto out;
-	}
-
-	ret = pread_in_full(fd, phdr, buflen, hdr.e_phoff);
-	if (ret < 0)
-		goto out;
-
-	/*
-	 * Load all segments with type "LOAD" from the file at offset
-	 * p_offset, and copy that into in memory.
-	 */
-	for (Elf64_Half ph_i = 0; ph_i < hdr.e_phnum; ph_i++)
-	{
-		uint64_t paddr = phdr[ph_i].p_paddr;
-		size_t offset = phdr[ph_i].p_offset;
-		size_t filesz = phdr[ph_i].p_filesz;
-		size_t memsz = phdr[ph_i].p_memsz;
-
-		if (phdr[ph_i].p_type != PT_LOAD)
-			continue;
-
-		//printf("Kernel location 0x%zx, file size 0x%zx, memory size 0x%zx\n", paddr, filesz, memsz);
-
-		ret = pread_in_full(fd, mem+paddr-GUEST_OFFSET, filesz, offset);
-		if (ret < 0)
-			goto out;
-		if (!klog)
-			klog = mem+paddr+0x5000-GUEST_OFFSET;
-		if (!mboot)
-			mboot = mem+paddr-GUEST_OFFSET;
-
-		if (first_load) {
-			first_load = 0;
-
-			// initialize kernel
-			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x08)) = paddr; // physical start address
-			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x10)) = guest_size;   // physical limit
-			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x18)) = get_cpufreq();
-			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x24)) = 1; // number of used cpus
-			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
-			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
-			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
-		}
-		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) += memsz; // total kernel size
-	}
-
-out:
-	if (phdr)
-		free(phdr);
-
-	close(fd);
-
-	return 0;
 }
 
 /// Filter CPUID functions that are not supported by the hypervisor and enable
@@ -978,7 +978,6 @@ static void save_cpu_state(void)
 	if (fwrite(&mp_state, sizeof(mp_state), 1, f) != 1)
 		err(1, "fwrite failed\n");
 
-	fflush(f);
 	fclose(f);
 }
 
@@ -1232,7 +1231,6 @@ static void timer_handler(int signum)
 	}
 #endif
 
-	fflush(f);
 	fclose(f);
 
 	pthread_barrier_wait(&barrier);
