@@ -128,10 +128,10 @@ Within the QEMU session you can start HermitCore application just the same as
 traditional Linux programs:
 
 ```bash
-(QEMU) $ /hermit/extra/tests/hello
+(QEMU) $ /hermit/x86_64-hermit/extra/tests/hello
 smpboot: CPU 1 is now offline
 Hello World!!!
-argv[0] = /hermit/extra/tests/hello
+argv[0] = /hermit/x86_64-hermit/extra/tests/hello
 Receive signal with number 30
 Hostname: hermit.localdomain
 x86: Booting SMP configuration:
@@ -144,14 +144,14 @@ HermitCore. Per NUMA node (= HermitCore isle) there is a directory called
 `isleX` under `/sys/hermit` , where `X` represents the NUMA node ID.
 
 The demo applications are located in the directories
-`/hermit/extra/{tests,benchmarks}`. A HermitCore loader is already registered.
+`/hermit/x86_64-hermit/extra/{tests,benchmarks}`. A HermitCore loader is already registered.
 By starting a HermitCore application, a proxy will be executed on the Linux
 system, while the HermitCore binary will be started on isle 0 with cpu 1. To
 change the default behavior, the environment variable `HERMIT_ISLE` is used to
 specify the (memory) location of the isle, while the environment variable
 `HERMIT_CPUS` is used to specify the cores.
 
-For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/extra/tests/hello` starts
+For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/x86_64-hermit/extra/tests/hello` starts
 a HelloWorld demo on the HermitCore isle 1, which uses the cores 3 to 5. The
 output messages are forwarded to the Linux proxy and printed on the Linux
 system.
@@ -180,9 +180,9 @@ $ cd build
 $ make install DESTDIR=~/hermit-build
 $ cd ~/hermit-build/opt/hermit
 $ # using QEMU
-$ HERMIT_ISLE=qemu bin/proxy extra/tests/hello
+$ HERMIT_ISLE=qemu bin/proxy x86_64-hermit/extra/tests/hello
 $ # using uHyve
-$ HERMIT_ISLE=uhyve bin/proxy extra/tests/hello
+$ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
 ```
 
 With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
@@ -211,7 +211,7 @@ The following command starts the stream benchmark in a virtual machine, which
 has 4 cores and 6GB memory.
 
 ```bash
-$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy extra/benchmarks/stream
+$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
 ```
 
 
@@ -303,7 +303,7 @@ default on port 1234. When run via proxy (`HERMIT_ISLE=qemu`), set
 `HERMIT_DEBUG=1`.
 
 ```
-$ gdb extra/tests/hello
+$ gdb x86_64-hermit/extra/tests/hello
 (gdb) target extended-remote :1234
 Remote debugging using :1234
 0xffffffff8100b542 in ?? ()
