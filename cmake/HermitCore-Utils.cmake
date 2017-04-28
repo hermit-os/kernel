@@ -124,12 +124,12 @@ function(install_local_targets PATH)
 	endif()
 
 	install(TARGETS ${_TARGETS}
-		DESTINATION ${PATH})
+		DESTINATION ${TARGET_ARCH}/${PATH})
 
 	# if there are any .map files for profiling, install them too
 	foreach(TARGET ${_TARGETS})
 		install(FILES $<TARGET_FILE:${TARGET}>.map
-			DESTINATION ${PATH}
+			DESTINATION ${TARGET_ARCH}/${PATH}
 			OPTIONAL)
 	endforeach()
 endfunction(install_local_targets)
