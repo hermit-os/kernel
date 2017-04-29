@@ -11,7 +11,7 @@ approach (like
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
-![HermitCore Demo](http://www.hermitcore.org/img/demo.gif)
+[![HermitCore Demo](http://www.hermitcore.org/img/demo.gif)](https://asciinema.org/a/42857)
 
 On the startup of HermitCore applications, cores are isolated from the Linux
 system enabling bare-metal execution of on these cores. This approach achieves
