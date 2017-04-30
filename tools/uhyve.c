@@ -21,7 +21,7 @@
 
 /* We used several existing projects as guides
  * kvmtest.c: http://lwn.net/Articles/658512/
- * lkvm: http://github.com/clearlinux/kvmtool
+ * Solo5: https://github.com/Solo5/solo5
  */
 
 /*
@@ -207,7 +207,7 @@ static uint64_t memparse(const char *ptr)
 // Just close file descriptor if not already done
 static inline void close_fd(int* fd)
 {
-	if(*fd != -1) {
+	if (*fd != -1) {
 		close(*fd);
 		*fd = -1;
 	}
