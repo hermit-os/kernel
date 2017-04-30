@@ -450,13 +450,13 @@ static int load_checkpoint(uint8_t* mem)
 		if (cap_irqchip && (i == no_checkpoint-1))
 			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);*/
 
-		struct kvm_clock_data clock;
+		/*struct kvm_clock_data clock;
 		if (fread(&clock, sizeof(clock), 1, f) != 1)
 			err(1, "fread failed");
 		if (i == no_checkpoint-1)
-			kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);
+			kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);*/
 
-#if 1
+#if 0
 		if (fread(guest_mem, guest_size, 1, f) != 1)
 			err(1, "fread failed");
 #else
@@ -1189,12 +1189,12 @@ static void timer_handler(int signum)
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
 		err(1, "fwrite failed");*/
 
-	struct kvm_clock_data clock;
+	/*struct kvm_clock_data clock;
 	kvm_ioctl(vmfd, KVM_GET_CLOCK, &clock);
 	if (fwrite(&clock, sizeof(clock), 1, f) != 1)
-		err(1, "fwrite failed");
+		err(1, "fwrite failed");*/
 
-#if 1
+#if 0
 	if (fwrite(guest_mem, guest_size, 1, f) != 1)
 		err(1, "fwrite failed");
 #else
@@ -1218,7 +1218,7 @@ static void timer_handler(int signum)
 					for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
 						if ((pgt[l] & (PG_PRESENT|flag)) == (PG_PRESENT|flag)) {
 							//printf("\t\t\t*pgt[%zd] 0x%zx, 4KB\n", l, pgt[l] & ~PG_XD);
-							//pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
+							pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
 							size_t pgt_entry = pgt[l] & ~PG_PSE; // because PAT use the same bit as PSE
 							if (fwrite(&pgt_entry, sizeof(size_t), 1, f) != 1)
 								err(1, "fwrite failed");
@@ -1228,7 +1228,7 @@ static void timer_handler(int signum)
 					}
 				} else if ((pgd[k] & flag) == flag) {
 					//printf("\t\t*pgd[%zd] 0x%zx, 2MB\n", k, pgd[k] & ~PG_XD);
-					//pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+					pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
 					if (fwrite(pgd+k, sizeof(size_t), 1, f) != 1)
 						err(1, "fwrite failed");
 					if (fwrite((size_t*) (guest_mem + (pgd[k] & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f) != 1)
