@@ -159,6 +159,7 @@ static uint8_t* mboot = NULL;
 static size_t guest_size = 0x20000000ULL;
 static uint64_t elf_entry;
 static pthread_t* vcpu_threads = NULL;
+static int* vcpu_fds = NULL;
 static int kvm = -1, vmfd = -1;
 static uint32_t no_checkpoint = 0;
 static pthread_mutex_t kvm_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -246,6 +247,9 @@ static void uhyve_atexit(void)
 
 		free(vcpu_threads);
 	}
+
+	if (vcpu_fds)
+		free(vcpu_fds);
 
 	if (klog && verbose)
 	{
@@ -688,9 +692,11 @@ static int vcpu_loop(void)
 {
 	int ret;
 
-        pthread_barrier_wait(&barrier);
-	if (restart && cpuid == 0)
-                no_checkpoint++;
+	if (restart) {
+		pthread_barrier_wait(&barrier);
+		if (cpuid == 0)
+			no_checkpoint++;
+	}
 
 	while (1) {
 		ret = ioctl(vcpufd, KVM_RUN, NULL);
@@ -816,7 +822,7 @@ static int vcpu_init(void)
 		.rflags = 0x2,		// POR value required by x86 architecture
 	};
 
-	vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, cpuid);
+	vcpu_fds[cpuid] = vcpufd = kvm_ioctl(vmfd, KVM_CREATE_VCPU, cpuid);
 
 	/* Map the shared kvm_run structure and following data. */
 	size_t mmap_size = (size_t) kvm_ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, NULL);
@@ -870,8 +876,6 @@ static int vcpu_init(void)
 
 		fclose(f);
 
-		//pthread_mutex_lock(&kvm_lock);
-		//show_registers(cpuid, &regs, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_SREGS, &sregs);
 		kvm_ioctl(vcpufd, KVM_SET_REGS, &regs);
 		kvm_ioctl(vcpufd, KVM_SET_MSRS, &msr_data);
@@ -881,11 +885,6 @@ static int vcpu_init(void)
 		kvm_ioctl(vcpufd, KVM_SET_FPU, &fpu);
 		kvm_ioctl(vcpufd, KVM_SET_XSAVE, &xsave);
 		kvm_ioctl(vcpufd, KVM_SET_VCPU_EVENTS, &events);
-
-		kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
-		kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
-		//show_registers(cpuid, &regs, &sregs);
-		//pthread_mutex_unlock(&kvm_lock);
 	} else {
 		// be sure that the multiprocessor is runable
 		kvm_ioctl(vcpufd, KVM_SET_MP_STATE, &mp_state);
@@ -939,7 +938,6 @@ static void save_cpu_state(void)
 	//msrs[n++].index = MSR_IA32_FEATURE_CONTROL;
 	msr_data.info.nmsrs = n;
 
-	//pthread_mutex_lock(&kvm_lock);
 	kvm_ioctl(vcpufd, KVM_GET_SREGS, &sregs);
 	kvm_ioctl(vcpufd, KVM_GET_REGS, &regs);
 	kvm_ioctl(vcpufd, KVM_GET_MSRS, &msr_data);
@@ -949,8 +947,6 @@ static void save_cpu_state(void)
 	kvm_ioctl(vcpufd, KVM_GET_XSAVE, &xsave);
 	kvm_ioctl(vcpufd, KVM_GET_VCPU_EVENTS, &events);
 	kvm_ioctl(vcpufd, KVM_GET_MP_STATE, &mp_state);
-	//show_registers(cpuid, &regs, &sregs);
-	//pthread_mutex_unlock(&kvm_lock);
 
 	snprintf(fname, MAX_FNAME, "checkpoint/chk%u_core%u.dat", no_checkpoint, cpuid);
 
@@ -1039,7 +1035,19 @@ int uhyve_init(char *path)
 		const char* hermit_memory = getenv("HERMIT_MEM");
 		if (hermit_memory)
 			guest_size = memparse(hermit_memory);
+
+		const char* hermit_cpus = getenv("HERMIT_CPUS");
+		if (hermit_cpus)
+			ncores = (uint32_t) atoi(hermit_cpus);
 	}
+
+	vcpu_threads = (pthread_t*) calloc(ncores, sizeof(pthread_t));
+	if (!vcpu_threads)
+		err(1, "Not enough memory");
+
+	vcpu_fds = (int*) calloc(ncores, sizeof(int));
+	if (!vcpu_fds)
+		err(1, "Not enough memory");
 
 	kvm = open("/dev/kvm", O_RDWR | O_CLOEXEC);
 	if (kvm < 0)
@@ -1260,20 +1268,13 @@ static void timer_handler(int signum)
 
 int uhyve_loop(void)
 {
-	const char* hermit_cpus = getenv("HERMIT_CPUS");
 	const char* hermit_check = getenv("HERMIT_CHECKPOINT");
 	int ts = 0;
 
-	if (!restart && hermit_cpus)
-		ncores = (uint32_t) atoi(hermit_cpus);
 	if (hermit_check)
 		ts = atoi(hermit_check);
 
 	*((uint32_t*) (mboot+0x24)) = ncores;
-
-	vcpu_threads = (pthread_t*) calloc(ncores, sizeof(pthread_t));
-	if (!vcpu_threads)
-		err(1, "Not enough memory");
 
 	// First CPU is special because it will boot the system. Other CPUs will
 	// be booted linearily after the first one.
