@@ -427,7 +427,7 @@ out:
 	return 0;
 }
 
-static int load_checkpoint(uint8_t* mem)
+static int load_checkpoint(uint8_t* mem, char* path)
 {
 	char fname[MAX_FNAME];
 	size_t location;
@@ -438,6 +438,19 @@ static int load_checkpoint(uint8_t* mem)
 		klog = mem+paddr+0x5000-GUEST_OFFSET;
 	if (!mboot)
 		mboot = mem+paddr-GUEST_OFFSET;
+
+
+#ifdef USE_DIRTY_LOG
+	/*
+	 * if we use KVM's dirty page logging, we have to load
+	 * the elf image because most parts are readonly sections
+	 * and aren't able to detect by KVM's dirty page logging
+	 * technique.
+	 */
+	ret = load_kernel(mem, path);
+	if (ret)
+		return ret;
+#endif
 
 	for(uint32_t i=0; i<=no_checkpoint; i++)
 	{
@@ -464,18 +477,6 @@ static int load_checkpoint(uint8_t* mem)
 		if (fread(guest_mem, guest_size, 1, f) != 1)
 			err(1, "fread failed");
 #else
-#ifdef USE_DIRTY_LOG
-		/*
-		 * if we use KVM's dirty page logging, the first
-		 * checkpoint is a copy of the full guest memory
-		 */
-		if (i == 0) {
-			if (fread(guest_mem, guest_size, 1, f) != 1)
-				err(1, "fread failed");
-			fclose(f);
-			continue;
-		}
-#endif
 
 		while (fread(&location, sizeof(location), 1, f) == 1) {
 			//printf("location 0x%zx\n", location);
@@ -1125,7 +1126,11 @@ int uhyve_init(char *path)
 		.guest_phys_addr = GUEST_OFFSET,
 		.memory_size = guest_size,
 		.userspace_addr = (uint64_t) guest_mem,
+#ifdef USE_DIRTY_LOG
+		.flags = KVM_MEM_LOG_DIRTY_PAGES,
+#else
 		.flags = 0,
+#endif
 	};
 
 	if (guest_size <= KVM_32BIT_GAP_START - GUEST_OFFSET) {
@@ -1157,7 +1162,7 @@ int uhyve_init(char *path)
 	cap_irqchip = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQCHIP) <= 0 ? false : true;
 
 	if (restart) {
-		if (load_checkpoint(guest_mem) != 0)
+		if (load_checkpoint(guest_mem, path) != 0)
 			exit(EXIT_FAILURE);
 	} else {
 		if (load_kernel(guest_mem, path) != 0)
@@ -1225,73 +1230,47 @@ static void timer_handler(int signum)
 	// do we create our first checkpoint
 	if (dlog.dirty_bitmap == NULL)
 	{
-		struct kvm_userspace_memory_region kvm_region = {
-			.slot = 0,
-			.guest_phys_addr = GUEST_OFFSET,
-			.memory_size = guest_size,
-			.userspace_addr = (uint64_t) guest_mem,
-			.flags = KVM_MEM_LOG_DIRTY_PAGES,
-		};
-
 		// besure that all paddings are zero
 		memset(&dlog, 0x00, sizeof(dlog));
-
-		// enable KVM's dirty page logging
-		if (guest_size <= KVM_32BIT_GAP_START - GUEST_OFFSET) {
-			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
-		} else {
-			kvm_region.memory_size = KVM_32BIT_GAP_START - GUEST_OFFSET;
-			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
-
-			kvm_region.slot = 1;
-			kvm_region.guest_phys_addr = KVM_32BIT_GAP_START+KVM_32BIT_GAP_SIZE;
-			kvm_region.memory_size = guest_size - KVM_32BIT_GAP_SIZE - KVM_32BIT_GAP_START + GUEST_OFFSET;
-			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
-		}
 
 		dlog.dirty_bitmap = malloc(dirty_log_size * sizeof(size_t));
 		if (dlog.dirty_bitmap == NULL)
 			err(1, "malloc failed!\n");
+	}
+	memset(dlog.dirty_bitmap, 0x00, dirty_log_size * sizeof(size_t));
 
-		if (fwrite(guest_mem, guest_size, 1, f) != 1)
-			err(1, "fwrite failed");
-	} else {
-		memset(dlog.dirty_bitmap, 0x00, dirty_log_size * sizeof(size_t));
-
-		dlog.slot = 0;
+	dlog.slot = 0;
 nextslot:
-		kvm_ioctl(vmfd, KVM_GET_DIRTY_LOG, &dlog);
+	kvm_ioctl(vmfd, KVM_GET_DIRTY_LOG, &dlog);
 
-		for(size_t i=0; i<dirty_log_size; i++)
+	for(size_t i=0; i<dirty_log_size; i++)
+	{
+		size_t value = ((size_t*) dlog.dirty_bitmap)[i];
+
+		if (value)
 		{
-			size_t value = ((size_t*) dlog.dirty_bitmap)[i];
-
-			if (value)
+			for(size_t j=0; j<sizeof(size_t)*8; j++)
 			{
-				for(size_t j=0; j<sizeof(size_t)*8; j++)
+				size_t test = 1ULL << j;
+
+				if ((value & test) == test)
 				{
-					size_t test = 1ULL << j;
+					size_t addr = (i*sizeof(size_t)*8+j)*PAGE_SIZE;
 
-					if ((value & test) == test)
-					{
-						size_t addr = (i*sizeof(size_t)*8+j)*PAGE_SIZE;
-
-						//if (addr >= guest_size)
-						//	continue;
-
-						if (fwrite(&addr, sizeof(size_t), 1, f) != 1)
-							err(1, "fwrite failed");
-						if (fwrite((size_t*) (guest_mem + addr), PAGE_SIZE, 1, f) != 1)
-							err(1, "fwrite failed");
-					}
+					if (fwrite(&addr, sizeof(size_t), 1, f) != 1)
+						err(1, "fwrite failed");
+					if (fwrite((size_t*) (guest_mem + addr), PAGE_SIZE, 1, f) != 1)
+						err(1, "fwrite failed");
 				}
 			}
 		}
+	}
 
-		if ((dlog.slot == 0) && (guest_size > KVM_32BIT_GAP_START - GUEST_OFFSET)) {
-			dlog.slot = 1;
-			goto nextslot;
-		}
+	// do we have to check the second slot?
+	if ((dlog.slot == 0) && (guest_size > KVM_32BIT_GAP_START - GUEST_OFFSET)) {
+		dlog.slot = 1;
+		memset(dlog.dirty_bitmap, 0x00, dirty_log_size * sizeof(size_t));
+		goto nextslot;
 	}
 #else
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
