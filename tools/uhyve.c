@@ -66,6 +66,9 @@
 #include "uhyve-syscalls.h"
 #include "proxy.h"
 
+// define this macro to create checkpoints with KVM's dirty log
+//#define USE_DIRTY_LOG
+
 #define MAX_FNAME	256
 #define MAX_MSR_ENTRIES	25
 
@@ -450,16 +453,30 @@ static int load_checkpoint(uint8_t* mem)
 		if (cap_irqchip && (i == no_checkpoint-1))
 			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);*/
 
-		/*struct kvm_clock_data clock;
-		if (fread(&clock, sizeof(clock), 1, f) != 1)
-			err(1, "fread failed");
-		if (i == no_checkpoint-1)
-			kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);*/
+		//struct kvm_clock_data clock;
+		//if (fread(&clock, sizeof(clock), 1, f) != 1)
+		//	err(1, "fread failed");
+		// only the last checkpoint has to set the clock
+		//if (i == no_checkpoint)
+		//	kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);
 
 #if 0
 		if (fread(guest_mem, guest_size, 1, f) != 1)
 			err(1, "fread failed");
 #else
+#ifdef USE_DIRTY_LOG
+		/*
+		 * if we use KVM's dirty page logging, the first
+		 * checkpoint is a copy of the full guest memory
+		 */
+		if (i == 0) {
+			if (fread(guest_mem, guest_size, 1, f) != 1)
+				err(1, "fread failed");
+			fclose(f);
+			continue;
+		}
+#endif
+
 		while (fread(&location, sizeof(location), 1, f) == 1) {
 			//printf("location 0x%zx\n", location);
 			if (location & PG_PSE)
@@ -1108,6 +1125,7 @@ int uhyve_init(char *path)
 		.guest_phys_addr = GUEST_OFFSET,
 		.memory_size = guest_size,
 		.userspace_addr = (uint64_t) guest_mem,
+		.flags = 0,
 	};
 
 	if (guest_size <= KVM_32BIT_GAP_START - GUEST_OFFSET) {
@@ -1197,6 +1215,84 @@ static void timer_handler(int signum)
 #if 0
 	if (fwrite(guest_mem, guest_size, 1, f) != 1)
 		err(1, "fwrite failed");
+#elif defined(USE_DIRTY_LOG)
+	static struct kvm_dirty_log dlog = {
+		.slot = 0,
+		.dirty_bitmap = NULL
+	};
+	size_t dirty_log_size = (guest_size >> PAGE_BITS) / sizeof(size_t);
+
+	// do we create our first checkpoint
+	if (dlog.dirty_bitmap == NULL)
+	{
+		struct kvm_userspace_memory_region kvm_region = {
+			.slot = 0,
+			.guest_phys_addr = GUEST_OFFSET,
+			.memory_size = guest_size,
+			.userspace_addr = (uint64_t) guest_mem,
+			.flags = KVM_MEM_LOG_DIRTY_PAGES,
+		};
+
+		// besure that all paddings are zero
+		memset(&dlog, 0x00, sizeof(dlog));
+
+		// enable KVM's dirty page logging
+		if (guest_size <= KVM_32BIT_GAP_START - GUEST_OFFSET) {
+			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+		} else {
+			kvm_region.memory_size = KVM_32BIT_GAP_START - GUEST_OFFSET;
+			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+
+			kvm_region.slot = 1;
+			kvm_region.guest_phys_addr = KVM_32BIT_GAP_START+KVM_32BIT_GAP_SIZE;
+			kvm_region.memory_size = guest_size - KVM_32BIT_GAP_SIZE - KVM_32BIT_GAP_START + GUEST_OFFSET;
+			kvm_ioctl(vmfd, KVM_SET_USER_MEMORY_REGION, &kvm_region);
+		}
+
+		dlog.dirty_bitmap = malloc(dirty_log_size * sizeof(size_t));
+		if (dlog.dirty_bitmap == NULL)
+			err(1, "malloc failed!\n");
+
+		if (fwrite(guest_mem, guest_size, 1, f) != 1)
+			err(1, "fwrite failed");
+	} else {
+		memset(dlog.dirty_bitmap, 0x00, dirty_log_size * sizeof(size_t));
+
+		dlog.slot = 0;
+nextslot:
+		kvm_ioctl(vmfd, KVM_GET_DIRTY_LOG, &dlog);
+
+		for(size_t i=0; i<dirty_log_size; i++)
+		{
+			size_t value = ((size_t*) dlog.dirty_bitmap)[i];
+
+			if (value)
+			{
+				for(size_t j=0; j<sizeof(size_t)*8; j++)
+				{
+					size_t test = 1ULL << j;
+
+					if ((value & test) == test)
+					{
+						size_t addr = (i*sizeof(size_t)*8+j)*PAGE_SIZE;
+
+						//if (addr >= guest_size)
+						//	continue;
+
+						if (fwrite(&addr, sizeof(size_t), 1, f) != 1)
+							err(1, "fwrite failed");
+						if (fwrite((size_t*) (guest_mem + addr), PAGE_SIZE, 1, f) != 1)
+							err(1, "fwrite failed");
+					}
+				}
+			}
+		}
+
+		if ((dlog.slot == 0) && (guest_size > KVM_32BIT_GAP_START - GUEST_OFFSET)) {
+			dlog.slot = 1;
+			goto nextslot;
+		}
+	}
 #else
 	size_t* pml4 = (size_t*) (guest_mem+elf_entry+PAGE_SIZE);
 	for(size_t i=0; i<(1 << PAGE_MAP_BITS); i++) {
