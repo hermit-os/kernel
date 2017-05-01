@@ -434,6 +434,10 @@ static int load_checkpoint(uint8_t* mem, char* path)
 	size_t location;
 	size_t paddr = elf_entry;
 	int ret;
+	struct timeval begin, end;
+
+	if (verbose)
+		gettimeofday(&begin, NULL);
 
 	if (!klog)
 		klog = mem+paddr+0x5000-GUEST_OFFSET;
@@ -498,6 +502,13 @@ static int load_checkpoint(uint8_t* mem, char* path)
 #endif
 
 		fclose(f);
+	}
+
+	if (verbose) {
+		gettimeofday(&end, NULL);
+		size_t msec = (end.tv_sec - begin.tv_sec) * 1000;
+		msec += (end.tv_usec - begin.tv_usec) / 1000;
+		fprintf(stderr, "Load checkpoint %u in %zd ms\n", no_checkpoint, msec);
 	}
 
 	return 0;
