@@ -227,7 +227,7 @@ static void uhyve_exit(void* arg)
 
 	// only the main thread will execute this
 	if (vcpu_threads) {
-		for(uint32_t i = 0; i < ncores; i++) {
+		for(uint32_t i=0; i<ncores; i++) {
 			if (pthread_self() == vcpu_threads[i])
 				continue;
 
@@ -1046,11 +1046,18 @@ static void* uhyve_thread(void* arg)
 	return (void*) ret;
 }
 
+void sigterm_handler(int signum)
+{
+	pthread_exit(0);
+}
+
 int uhyve_init(char *path)
 {
 	char* v = getenv("HERMIT_VERBOSE");
 	if (v && (strcmp(v, "0") != 0))
 		verbose = true;
+
+	signal(SIGTERM, sigterm_handler);
 
 	// register routine to close the VM
 	atexit(uhyve_atexit);
