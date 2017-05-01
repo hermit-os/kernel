@@ -154,6 +154,7 @@
 static bool restart = false;
 static bool cap_tsc_deadline = false;
 static bool cap_irqchip = false;
+static bool cap_adjust_clock_stable = false;
 static bool verbose = false;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
@@ -466,12 +467,16 @@ static int load_checkpoint(uint8_t* mem, char* path)
 		if (cap_irqchip && (i == no_checkpoint-1))
 			kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &irqchip);*/
 
-		//struct kvm_clock_data clock;
-		//if (fread(&clock, sizeof(clock), 1, f) != 1)
-		//	err(1, "fread failed");
+		struct kvm_clock_data clock;
+		if (fread(&clock, sizeof(clock), 1, f) != 1)
+			err(1, "fread failed");
 		// only the last checkpoint has to set the clock
-		//if (i == no_checkpoint)
-		//	kvm_ioctl(vmfd, KVM_SET_CLOCK, &clock);
+		if (cap_adjust_clock_stable && (i == no_checkpoint)) {
+			struct kvm_clock_data data = {};
+
+			data.clock = clock.clock;
+			kvm_ioctl(vmfd, KVM_SET_CLOCK, &data);
+		}
 
 #if 0
 		if (fread(guest_mem, guest_size, 1, f) != 1)
@@ -1160,6 +1165,7 @@ int uhyve_init(char *path)
 	// try to detect KVM extensions
 	cap_tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
 	cap_irqchip = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQCHIP) <= 0 ? false : true;
+	cap_adjust_clock_stable = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_ADJUST_CLOCK) == KVM_CLOCK_TSC_STABLE ? true : false;
 
 	if (restart) {
 		if (load_checkpoint(guest_mem, path) != 0)
@@ -1204,7 +1210,7 @@ static void timer_handler(int signum)
 		err(1, "fopen: unable to open file");
 	}
 
-	/*struct kvm_irqchip irqchip;
+	/*struct kvm_irqchip irqchip = {};
 	if (cap_irqchip)
 		kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &irqchip);
 	else
@@ -1212,10 +1218,10 @@ static void timer_handler(int signum)
 	if (fwrite(&irqchip, sizeof(irqchip), 1, f) != 1)
 		err(1, "fwrite failed");*/
 
-	/*struct kvm_clock_data clock;
+	struct kvm_clock_data clock = {};
 	kvm_ioctl(vmfd, KVM_GET_CLOCK, &clock);
 	if (fwrite(&clock, sizeof(clock), 1, f) != 1)
-		err(1, "fwrite failed");*/
+		err(1, "fwrite failed");
 
 #if 0
 	if (fwrite(guest_mem, guest_size, 1, f) != 1)
