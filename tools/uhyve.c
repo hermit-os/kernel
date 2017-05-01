@@ -951,6 +951,7 @@ static void save_cpu_state(void)
 	msrs[n++].index = MSR_IA32_SYSENTER_EIP;
 	msrs[n++].index = MSR_IA32_CR_PAT;
 	msrs[n++].index = MSR_IA32_MISC_ENABLE;
+	msrs[n++].index = MSR_IA32_TSC;
 	msrs[n++].index = MSR_CSTAR;
 	msrs[n++].index = MSR_STAR;
 	msrs[n++].index = MSR_EFER;
@@ -1165,7 +1166,9 @@ int uhyve_init(char *path)
 	// try to detect KVM extensions
 	cap_tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
 	cap_irqchip = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQCHIP) <= 0 ? false : true;
+#ifdef KVM_CLOCK_TSC_STABLE
 	cap_adjust_clock_stable = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_ADJUST_CLOCK) == KVM_CLOCK_TSC_STABLE ? true : false;
+#endif
 
 	if (restart) {
 		if (load_checkpoint(guest_mem, path) != 0)
