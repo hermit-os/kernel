@@ -7,6 +7,8 @@
 *.pyc
 *.callgrind
 *.xray
+*.o
+*.ko
 **/build/*
 .idea/*
 qemu-vlan0.pcap
