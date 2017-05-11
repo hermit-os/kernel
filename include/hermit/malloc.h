@@ -71,6 +71,8 @@ typedef union buddy {
 		uint8_t exponent;
 		/// Must be equal to BUDDY_MAGIC for a valid memory block
 		uint16_t magic;
+		/// padding to gurantee a sizeof 32Byte
+		uint8_t padding[28];
 	} prefix;
 } buddy_t;
 

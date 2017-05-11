@@ -39,7 +39,7 @@
 #include <asm/page.h>
 #include <asm/multiboot.h>
 
-#define TLS_OFFSET	8
+#define TLS_OFFSET	0
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
