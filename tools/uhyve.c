@@ -156,6 +156,7 @@ static bool cap_tsc_deadline = false;
 static bool cap_irqchip = false;
 static bool cap_adjust_clock_stable = false;
 static bool verbose = false;
+static bool full_checkpoint = false;
 static uint32_t ncores = 1;
 static uint8_t* guest_mem = NULL;
 static uint8_t* klog = NULL;
@@ -435,6 +436,7 @@ static int load_checkpoint(uint8_t* mem, char* path)
 	size_t paddr = elf_entry;
 	int ret;
 	struct timeval begin, end;
+	uint32_t i;
 
 	if (verbose)
 		gettimeofday(&begin, NULL);
@@ -457,7 +459,8 @@ static int load_checkpoint(uint8_t* mem, char* path)
 		return ret;
 #endif
 
-	for(uint32_t i=0; i<=no_checkpoint; i++)
+	i = full_checkpoint ? no_checkpoint : 0;
+	for(; i<=no_checkpoint; i++)
 	{
 		snprintf(fname, MAX_FNAME, "checkpoint/chk%u_mem.dat", i);
 
@@ -1064,12 +1067,16 @@ int uhyve_init(char *path)
 
 	FILE* f = fopen("checkpoint/chk_config.txt", "r");
 	if (f != NULL) {
+		int tmp = 0;
 		restart = true;
 
 		fscanf(f, "number of cores: %u\n", &ncores);
 		fscanf(f, "memory size: 0x%zx\n", &guest_size);
 		fscanf(f, "checkpoint number: %u\n", &no_checkpoint);
 		fscanf(f, "entry point: 0x%zx", &elf_entry);
+		fscanf(f, "full checkpoint: %d", &tmp);
+		full_checkpoint = tmp ? true : false;
+
 		if (verbose)
 			fprintf(stderr, "Restart from checkpoint %u (ncores %d, mem size 0x%zx)\n", no_checkpoint, ncores, guest_size);
 		fclose(f);
@@ -1081,6 +1088,10 @@ int uhyve_init(char *path)
 		const char* hermit_cpus = getenv("HERMIT_CPUS");
 		if (hermit_cpus)
 			ncores = (uint32_t) atoi(hermit_cpus);
+
+		const char* full_chk = getenv("HERMIT_FULLCHECKPOINT");
+		if (full_chk && (strcmp(full_chk, "0") != 0))
+			full_checkpoint = true;
 	}
 
 	vcpu_threads = (pthread_t*) calloc(ncores, sizeof(pthread_t));
@@ -1133,7 +1144,7 @@ int uhyve_init(char *path)
 		mprotect(guest_mem + KVM_32BIT_GAP_START, KVM_32BIT_GAP_SIZE, PROT_NONE);
 	}
 
-	char* merge = getenv("HERMIT_MERGEABLE");
+	const char* merge = getenv("HERMIT_MERGEABLE");
 	if (merge && (strcmp(merge, "0") != 0)) {
 		/*
 		 * The KSM feature is intended for applications that generate
@@ -1206,7 +1217,7 @@ int uhyve_init(char *path)
 static void timer_handler(int signum)
 {
 	struct stat st = {0};
-	const size_t flag = no_checkpoint > 0 ? PG_DIRTY : PG_ACCESSED;
+	const size_t flag = (!full_checkpoint && (no_checkpoint > 0)) ? PG_DIRTY : PG_ACCESSED;
 	char fname[MAX_FNAME];
 	struct timeval begin, end;
 
@@ -1355,6 +1366,10 @@ nextslot:
 	fprintf(f, "memory size: 0x%zx\n", guest_size);
 	fprintf(f, "checkpoint number: %u\n", no_checkpoint);
 	fprintf(f, "entry point: 0x%zx", elf_entry);
+	if (full_checkpoint)
+		fprintf(f, "full checkpoint: 1");
+	else
+		fprintf(f, "full checkpoint: 0");
 
 	fclose(f);
 
