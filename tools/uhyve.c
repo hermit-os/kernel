@@ -1331,7 +1331,8 @@ nextslot:
 					for(size_t l=0; l<(1 << PAGE_MAP_BITS); l++) {
 						if ((pgt[l] & (PG_PRESENT|flag)) == (PG_PRESENT|flag)) {
 							//printf("\t\t\t*pgt[%zd] 0x%zx, 4KB\n", l, pgt[l] & ~PG_XD);
-							pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
+							if (!full_checkpoint)
+								pgt[l] = pgt[l] & ~(PG_DIRTY|PG_ACCESSED);
 							size_t pgt_entry = pgt[l] & ~PG_PSE; // because PAT use the same bit as PSE
 							if (fwrite(&pgt_entry, sizeof(size_t), 1, f) != 1)
 								err(1, "fwrite failed");
@@ -1341,7 +1342,8 @@ nextslot:
 					}
 				} else if ((pgd[k] & flag) == flag) {
 					//printf("\t\t*pgd[%zd] 0x%zx, 2MB\n", k, pgd[k] & ~PG_XD);
-					pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
+					if (!full_checkpoint)
+						pgd[k] = pgd[k] & ~(PG_DIRTY|PG_ACCESSED);
 					if (fwrite(pgd+k, sizeof(size_t), 1, f) != 1)
 						err(1, "fwrite failed");
 					if (fwrite((size_t*) (guest_mem + (pgd[k] & PAGE_2M_MASK)), (1UL << PAGE_2M_BITS), 1, f) != 1)
