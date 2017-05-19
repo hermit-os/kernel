@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <malloc.h>
 
 #ifndef NUM_THREADS
 #define NUM_THREADS     3
@@ -15,6 +16,8 @@
 #define SIZE    16384
 #endif
 
+__thread void* buf;
+
 void* perform_work( void* argument )
 {
     int passed_in_value;
@@ -23,9 +26,7 @@ void* perform_work( void* argument )
     printf( "Hello World! It's me, thread with argument %d!\n", passed_in_value );
 
     /* optionally: insert more useful stuff here */
-    int i;
-    void* buf;
-    for(i=0; i<NUM_ITER; i++)
+    for(int i=0; i<NUM_ITER; i++)
     {
         buf = malloc(SIZE*i);
         free(buf);
