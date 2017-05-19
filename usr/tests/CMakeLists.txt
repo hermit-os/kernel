@@ -9,6 +9,10 @@ add_executable(hello++ hello++.cpp)
 add_executable(hellof hellof.f90)
 add_executable(pi pi.go)
 
+add_executable(test-malloc test-malloc.c)
+add_executable(test-malloc-mt test-malloc-mt.c)
+target_link_libraries(test-malloc-mt pthread)
+
 add_executable(server server.go)
 target_link_libraries(server netgo)
 
