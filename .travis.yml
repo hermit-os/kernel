@@ -17,6 +17,8 @@ script:
   - cd build
   - cmake ..
   - make -j1 package
+  - cd ..
+  - ./tests.sh
 
 deploy:
   on: master
