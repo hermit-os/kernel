@@ -114,9 +114,6 @@ boot_pgt:
 SECTION .ktext
 align 4
 start64:
-    ; store pointer to the multiboot information
-    mov [mb_info], QWORD rdx
-
     ; reset registers to kill any stale realmode selectors
     xor eax, eax
     mov ds, eax
@@ -133,6 +130,9 @@ start64:
     mov eax, DWORD [cpu_online]
     cmp eax, 0
     jne Lno_pml4_init
+
+    ; store pointer to the multiboot information
+    mov [mb_info], QWORD rdx
 
     ; relocate page tables
     mov rdi, boot_pml4
