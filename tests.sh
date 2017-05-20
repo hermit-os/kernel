@@ -4,13 +4,13 @@
 # it is written only for internal tests via Travis CI
 
 TDIR=build/local_prefix/work/hermit/x86_64-hermit/extra
-FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/tests/pi $TDIR/benchmarks/stream $TDIR/benchmarks/basic $TDIR/tests/signals $TDIR/tests/test-malloc $TDIR/tests/test-malloc-mt"
+FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/tests/pi $TDIR/benchmarks/stream $TDIR/benchmarks/basic $TDIR/tests/signals $TDIR/tests/test-malloc"
 PROXY=build/local_prefix/work/hermit/bin/proxy
 
-for f in $FILES; do echo "check $f..."; timeout --kill-after=5m 5m $PROXY $f || exit 1; done
+for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
 
 # test echo server at port 8000
-HERMIT_APP_PORT=8000 $PROXY $TDIR/tests/server &
+HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_VERBOSE=1 HERMIT_APP_PORT=8000 $PROXY $TDIR/tests/server &
 sleep 10
 curl http://127.0.0.1:8000/help
 sleep 1
