@@ -5,7 +5,7 @@
 
 TDIR=build/local_prefix/work/hermit/x86_64-hermit/extra
 FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/tests/pi $TDIR/benchmarks/stream $TDIR/benchmarks/basic $TDIR/tests/signals $TDIR/tests/test-malloc $TDIR/tests/test-malloc-mt"
-PROXY=build/local_prefix/work/hermit/bin/proxy/bin/proxy
+PROXY=build/local_prefix/work/hermit/bin/proxy
 
 for f in $FILES; do echo "check $f..."; timeout --kill-after=5m 5m $PROXY $f || exit 1; done
 
