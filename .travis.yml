@@ -17,7 +17,7 @@ script:
   - cd build
   - cmake ..
   - make -j1 package
-  - cd ..
+  - cd $TRAVIS_BUILD_DIR
   - ./tests.sh
 
 deploy:
