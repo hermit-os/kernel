@@ -7,7 +7,7 @@ TDIR=build/local_prefix/work/hermit/x86_64-hermit/extra
 FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/tests/pi $TDIR/benchmarks/stream $TDIR/benchmarks/basic $TDIR/tests/signals $TDIR/tests/test-malloc"
 PROXY=build/local_prefix/work/hermit/bin/proxy
 
-for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
+#for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
 
 # test echo server at port 8000
 HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_VERBOSE=1 HERMIT_APP_PORT=8000 $PROXY $TDIR/tests/server &
