@@ -175,7 +175,7 @@ static uint32_t get_frequency_from_mbinfo(void)
 	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
 	{
 		// search in the command line for cpu frequency
-		char* found = strstr((char*) mb_info->cmdline, "-freq");
+		char* found = strstr((char*) (size_t)mb_info->cmdline, "-freq");
 		if (!found)
 			return 0;
 
