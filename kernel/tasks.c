@@ -674,6 +674,8 @@ int wakeup_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_BLOCKED) {
+		LOG_DEBUG("wakeup task %d\n", id);
+
 		task->status = TASK_READY;
 		ret = 0;
 
@@ -711,6 +713,8 @@ int block_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_RUNNING) {
+		LOG_DEBUG("block task %d\n", id);
+
 		task->status = TASK_BLOCKED;
 
 		spinlock_irqsave_lock(&readyqueues[core_id].lock);
