@@ -424,6 +424,56 @@ out:
 	return ret;
 }
 
+int sys_spinlock_init(spinlock_t** lock)
+{
+	int ret;
+
+	if (BUILTIN_EXPECT(!lock, 0))
+		return -EINVAL;
+
+	*lock = (spinlock_t*) kmalloc(sizeof(spinlock_t));
+	if (BUILTIN_EXPECT(!(*lock), 0))
+		return -ENOMEM;
+
+	ret = spinlock_init(*lock);
+	if (ret) {
+		kfree(*lock);
+		*lock = NULL;
+	}
+
+	return ret;
+}
+
+int sys_spinlock_destroy(spinlock_t* lock)
+{
+	int ret;
+
+	if (BUILTIN_EXPECT(!lock, 0))
+		return -EINVAL;
+
+	ret = spinlock_destroy(lock);
+	if (!ret)
+		kfree(lock);
+
+	return ret;
+}
+
+int sys_spinlock_lock(spinlock_t* lock)
+{
+	if (BUILTIN_EXPECT(!lock, 0))
+		return -EINVAL;
+
+	return spinlock_lock(lock);
+}
+
+int sys_spinlock_unlock(spinlock_t* lock)
+{
+	if (BUILTIN_EXPECT(!lock, 0))
+		return -EINVAL;
+
+	return spinlock_unlock(lock);
+}
+
 void sys_msleep(unsigned int ms)
 {
 	if (ms * TIMER_FREQ / 1000 > 0)
