@@ -1,8 +1,9 @@
-#include <pthread.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <malloc.h>
+#include <pthread.h>
 
 #ifndef NUM_THREADS
 #define NUM_THREADS     3
@@ -18,12 +19,12 @@
 
 __thread void* buf;
 
-void* perform_work( void* argument )
+static void* perform_work( void* argument )
 {
     int passed_in_value;
 
     passed_in_value = *( ( int* )argument );
-    printf( "Hello World! It's me, thread with argument %d!\n", passed_in_value );
+    printf( "Hello World! It's me, thread %d with argument %d!\n", getpid(), passed_in_value );
 
     /* optionally: insert more useful stuff here */
     for(int i=0; i<NUM_ITER; i++)
@@ -32,12 +33,6 @@ void* perform_work( void* argument )
         free(buf);
     }
     malloc_stats();
-    pthread_t id = pthread_self();
-#ifndef LINUX 
-    printf("thread %lu finished allocation\n", id.x);
-#else
-    printf("thread %u finished allocation\n", id);
-#endif
 
     return NULL;
 }
@@ -54,7 +49,7 @@ int main( int argc, char** argv )
     {
         thread_args[ index ] = index;
         printf("In main: creating thread %d\n", index);
-        result_code = pthread_create( &threads[index], NULL, perform_work, &thread_args[index] );
+        result_code = pthread_create( threads + index, NULL, perform_work, &thread_args[index] );
         assert( !result_code );
     }
 
