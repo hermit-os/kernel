@@ -38,6 +38,7 @@
 #include <hermit/spinlock_types.h>
 #include <hermit/tasks_types.h>
 #include <hermit/errno.h>
+#include <hermit/tasks.h>
 #include <asm/atomic.h>
 #include <asm/processor.h>
 #include <asm/irqflags.h>
@@ -103,7 +104,8 @@ inline static int spinlock_lock(spinlock_t* s) {
 #if 1
 	ticket = atomic_int32_inc(&s->queue);
 	while(atomic_int32_read(&s->dequeue) != ticket) {
-		PAUSE;
+		//PAUSE;
+		check_scheduling();
 	}
 	s->owner = curr_task->id;
 	s->counter = 1;
@@ -193,7 +195,8 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
 
 	ticket = atomic_int32_inc(&s->queue);
 	while (atomic_int32_read(&s->dequeue) != ticket) {
-		PAUSE;
+		//PAUSE;
+		check_scheduling();
 	}
 
 	s->coreid = CORE_ID;
