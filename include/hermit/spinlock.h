@@ -195,8 +195,7 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
 
 	ticket = atomic_int32_inc(&s->queue);
 	while (atomic_int32_read(&s->dequeue) != ticket) {
-		//PAUSE;
-		check_scheduling();
+		PAUSE;
 	}
 
 	s->coreid = CORE_ID;
