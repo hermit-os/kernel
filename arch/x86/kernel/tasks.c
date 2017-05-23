@@ -39,7 +39,10 @@
 #include <asm/page.h>
 #include <asm/multiboot.h>
 
-#define TLS_OFFSET	0
+#define TLS_ALIGNBITS		5
+#define TLS_ALIGNSIZE		(1L << TLS_ALIGNBITS)
+#define TSL_ALIGNMASK		((~0L) << TLS_ALIGNBITS)
+#define TLS_FLOOR(addr)		((((size_t)addr) + TLS_ALIGNSIZE - 1) & TSL_ALIGNMASK)
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -64,20 +67,20 @@ static int init_tls(void)
 		curr_task->tls_addr = (size_t) &tls_start;
 		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
 
-		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET + sizeof(size_t));
+		tls_addr = kmalloc(curr_task->tls_size + TLS_ALIGNSIZE + sizeof(size_t));
 		if (BUILTIN_EXPECT(!tls_addr, 0)) {
 			LOG_ERROR("load_task: heap is missing!\n");
 			return -ENOMEM;
 		}
 
-		memset(tls_addr, 0x00, TLS_OFFSET);
-		memcpy((void*) (tls_addr+TLS_OFFSET), (void*) curr_task->tls_addr, curr_task->tls_size);
-		fs = (size_t) tls_addr + curr_task->tls_size + TLS_OFFSET;
+		memset(tls_addr, 0x00, TLS_ALIGNSIZE);
+		memcpy((void*) TLS_FLOOR(tls_addr), (void*) curr_task->tls_addr, curr_task->tls_size);
+		fs = (size_t) TLS_FLOOR(tls_addr) + curr_task->tls_size;
 		*((size_t*)fs) = fs;
 
 		// set fs register to the TLS segment
 		set_tls(fs);
-		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (size 0x%zx)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET, curr_task->tls_size);
+		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (size 0x%zx)\n", curr_task->id, CORE_ID, TLS_FLOOR(tls_addr), curr_task->tls_size);
 	} else set_tls(0); // no TLS => clear fs register
 
 	return 0;
