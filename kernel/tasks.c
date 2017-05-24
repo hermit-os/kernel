@@ -280,7 +280,7 @@ int multitasking_init(void)
 	task_table[0].ist_addr = (char*)&boot_ist;
 	set_per_core(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
 	set_per_core(current_task, task_table+0);
-  arch_init_task(task_table+0);
+	arch_init_task(task_table+0);
 
 	readyqueues[core_id].idle = task_table+0;
 
@@ -308,7 +308,7 @@ int set_idle_task(void)
 			task_table[i].heap = NULL;
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
-      arch_init_task(task_table+i);
+			arch_init_task(task_table+i);
 			ret = 0;
 
 			break;
