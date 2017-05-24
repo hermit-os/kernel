@@ -52,8 +52,8 @@ typedef struct { volatile int64_t counter; } atomic_int64_t;
  * This function will atomically exchange the value of an atomic variable and
  * return its old value. Is used in locking-operations.\n
  * \n
- * Intel manuals: If a memory operand is referenced, the processor's locking 
- * protocol is automatically implemented for the duration of the exchange 
+ * Intel manuals: If a memory operand is referenced, the processor's locking
+ * protocol is automatically implemented for the duration of the exchange
  * operation, regardless of the presence or absence of the LOCK prefix.
  *
  * @param d Pointer to the atomic_int_64_t with the value you want to exchange
@@ -79,7 +79,7 @@ inline static int64_t atomic_int64_test_and_set(atomic_int64_t* d, int64_t ret)
 inline static int64_t atomic_int64_add(atomic_int64_t *d, int64_t i)
 {
 	int64_t res = i;
-	asm volatile(LOCK "xaddq %0, %1" : "=r"(i) : "m"(d->counter), "0"(i) : "memory", "cc");
+	asm volatile(LOCK "xaddq %0, %1" : "+r"(i), "+m"(d->counter) : : "memory", "cc");
 	return res+i;
 }
 
@@ -95,7 +95,7 @@ inline static int64_t atomic_int64_add(atomic_int64_t *d, int64_t i)
  */
 inline static int64_t atomic_int64_sub(atomic_int64_t *d, int64_t i)
 {
-        return atomic_int64_add(d, -i);
+	return atomic_int64_add(d, -i);
 }
 
 /** @brief Atomic increment by one
@@ -105,7 +105,9 @@ inline static int64_t atomic_int64_sub(atomic_int64_t *d, int64_t i)
  * @param d The atomic_int64_t var you want to increment
  */
 inline static int64_t atomic_int64_inc(atomic_int64_t* d) {
-	return atomic_int64_add(d, 1);
+	int64_t res = 1;
+	asm volatile(LOCK "xaddq %0, %1" : "+r"(res), "+m"(d->counter) : : "memory", "cc");
+	return ++res;
 }
 
 /** @brief Atomic decrement by one
@@ -115,7 +117,9 @@ inline static int64_t atomic_int64_inc(atomic_int64_t* d) {
  * @param d The atomic_int64_t var you want to decrement
  */
 inline static int64_t atomic_int64_dec(atomic_int64_t* d) {
-	return atomic_int64_add(d, -1);
+	int64_t res = -1;
+	asm volatile(LOCK "xaddq %0, %1" : "+r"(res), "+m"(d->counter) : : "memory", "cc");
+	return --res;
 }
 
 /** @brief Read out an atomic_int64_t var
@@ -132,7 +136,7 @@ inline static int64_t atomic_int64_read(atomic_int64_t *d) {
 
 /** @brief Set the value of an atomic_int64_t var
  *
- * This function is for convenience: It sets the internal value of 
+ * This function is for convenience: It sets the internal value of
  * an atomic_int64_t var for you.
  *
  * @param d Pointer to the atomic_int64_t var you want to set
