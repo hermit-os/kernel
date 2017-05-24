@@ -44,9 +44,9 @@ extern "C" {
 /** @brief Spinlock structure */
 typedef struct spinlock {
 	/// Internal queue
-	atomic_int32_t queue;
-	/// Internal dequeue 
-	atomic_int32_t dequeue;
+	atomic_int64_t queue;
+	/// Internal dequeue
+	atomic_int64_t dequeue;
 	/// Owner of this spinlock structure
 	tid_t owner;
 	/// Internal counter var
@@ -55,9 +55,9 @@ typedef struct spinlock {
 
 typedef struct spinlock_irqsave {
 	/// Internal queue
-	atomic_int32_t queue;
+	atomic_int64_t queue;
 	/// Internal dequeue
-	atomic_int32_t dequeue;
+	atomic_int64_t dequeue;
 	/// Core Id of the lock owner
 	uint32_t coreid;
 	/// Internal counter var
