@@ -60,8 +60,8 @@ inline static int spinlock_init(spinlock_t* s) {
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
 
-	atomic_int32_set(&s->queue, 0);
-	atomic_int32_set(&s->dequeue, 1);
+	atomic_int64_set(&s->queue, 0);
+	atomic_int64_set(&s->dequeue, 1);
 	s->owner = MAX_TASKS;
 	s->counter = 0;
 
@@ -69,7 +69,7 @@ inline static int spinlock_init(spinlock_t* s) {
 }
 
 /** @brief Destroy spinlock after use
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
@@ -83,13 +83,13 @@ inline static int spinlock_destroy(spinlock_t* s) {
 	return 0;
 }
 
-/** @brief Lock spinlock at entry of critical section 
+/** @brief Lock spinlock at entry of critical section
  * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
 inline static int spinlock_lock(spinlock_t* s) {
-	int32_t ticket;
+	int64_t ticket;
 	task_t* curr_task;
 
 	if (BUILTIN_EXPECT(!s, 0))
@@ -101,23 +101,18 @@ inline static int spinlock_lock(spinlock_t* s) {
 		return 0;
 	}
 
-#if 1
-	ticket = atomic_int32_inc(&s->queue);
-	while(atomic_int32_read(&s->dequeue) != ticket) {
-		//PAUSE;
-		check_scheduling();
+	ticket = atomic_int64_inc(&s->queue);
+	while(atomic_int64_read(&s->dequeue) != ticket) {
+		PAUSE;
 	}
 	s->owner = curr_task->id;
 	s->counter = 1;
-#else
-	while( atomic_int32_test_and_set(&s->dequeue,0) );
-#endif
 
 	return 0;
 }
 
-/** @brief Unlock spinlock on exit of critical section 
- * @return 
+/** @brief Unlock spinlock on exit of critical section
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
@@ -128,11 +123,7 @@ inline static int spinlock_unlock(spinlock_t* s) {
 	s->counter--;
 	if (!s->counter) {
 		s->owner = MAX_TASKS;
-#if 1
-		atomic_int32_inc(&s->dequeue);
-#else
-		atomic_int32_set(&s->dequeue,1);
-#endif
+		atomic_int64_inc(&s->dequeue);
 	}
 
 	return 0;
@@ -142,7 +133,7 @@ inline static int spinlock_unlock(spinlock_t* s) {
  *
  * Initialize each irqsave spinlock before use!
  *
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
@@ -150,8 +141,8 @@ inline static int spinlock_irqsave_init(spinlock_irqsave_t* s) {
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
 
-	atomic_int32_set(&s->queue, 0);
-	atomic_int32_set(&s->dequeue, 1);
+	atomic_int64_set(&s->queue, 0);
+	atomic_int64_set(&s->dequeue, 1);
 	s->flags = 0;
 	s->coreid = (uint32_t)-1;
 	s->counter = 0;
@@ -160,7 +151,7 @@ inline static int spinlock_irqsave_init(spinlock_irqsave_t* s) {
 }
 
 /** @brief Destroy irqsave spinlock after use
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
@@ -176,13 +167,13 @@ inline static int spinlock_irqsave_destroy(spinlock_irqsave_t* s) {
 }
 
 /** @brief Lock spinlock on entry of critical section and disable interrupts
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
 inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
+	int64_t ticket;
 	uint8_t flags;
-	int32_t ticket;
 
 	if (BUILTIN_EXPECT(!s, 0))
 		return -EINVAL;
@@ -193,8 +184,8 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
 		return 0;
 	}
 
-	ticket = atomic_int32_inc(&s->queue);
-	while (atomic_int32_read(&s->dequeue) != ticket) {
+	ticket = atomic_int64_inc(&s->queue);
+	while (atomic_int64_read(&s->dequeue) != ticket) {
 		PAUSE;
 	}
 
@@ -206,7 +197,7 @@ inline static int spinlock_irqsave_lock(spinlock_irqsave_t* s) {
 }
 
 /** @brief Unlock spinlock on exit of critical section and re-enable interrupts
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
@@ -222,7 +213,7 @@ inline static int spinlock_irqsave_unlock(spinlock_irqsave_t* s) {
 		s->coreid = (uint32_t) -1;
 		s->flags = 0;
 
-		atomic_int32_inc(&s->dequeue);
+		atomic_int64_inc(&s->dequeue);
 
 		irq_nested_enable(flags);
 	}
