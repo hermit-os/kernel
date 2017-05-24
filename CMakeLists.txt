@@ -198,10 +198,10 @@ set(CPACK_PACKAGE_NAME libhermit)
 set(CPACK_SYSTEM_NAME all)
 
 set(CPACK_PACKAGE_VERSION_MAJOR 0)
-set(CPACK_PACKAGE_VERSION_MINOR 1)
+set(CPACK_PACKAGE_VERSION_MINOR 2)
 set(CPACK_PACKAGE_VERSION_PATCH 0)
 
-set(CPACK_PACKAGE_CONTACT "Daniel Krebs <github@daniel-krebs.net>")
+set(CPACK_PACKAGE_CONTACT "Stefan Lankes <slankes@eonerc.rwth-aachen.de>")
 
 # build .deb, .rpm and .tar.bz2 packages
 set(CPACK_GENERATOR DEB;RPM;TBZ2)
