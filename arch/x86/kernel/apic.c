@@ -667,6 +667,7 @@ int apic_calibration(void)
 	atomic_int32_inc(&cpu_online);
 
 	if (is_single_kernel()) {
+		LOG_INFO("Disable PIC\n");
 		// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
 		outportb(0xA1, 0xFF);
 		outportb(0x21, 0xFF);
@@ -683,6 +684,7 @@ int apic_calibration(void)
 		}
 
 		// now, we don't longer need the IOAPIC timer and turn it off
+		LOG_INFO("IOAPIC timer\n");
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
 
