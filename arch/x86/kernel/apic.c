@@ -684,7 +684,7 @@ int apic_calibration(void)
 		}
 
 		// now, we don't longer need the IOAPIC timer and turn it off
-		LOG_INFO("IOAPIC timer\n");
+		LOG_INFO("Disable IOAPIC timer\n");
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
 
