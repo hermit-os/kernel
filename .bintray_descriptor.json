@@ -5,7 +5,7 @@
         "subject": "rwth-os",
         "website_url": "http://www.hermitcore.org",
         "issue_tracker_url": "https://github.com/RWTH-OS/HermitCore/issues",
-        "vcs_url": "https://github.com/RWTH-OS/pthread-embedded.git",
+        "vcs_url": "https://github.com/RWTH-OS/HermitCore.git",
         "github_release_notes_file": "RELEASE",
         "licenses": ["Revised BSD"],
         "public_download_numbers": false,
@@ -28,7 +28,7 @@
         "deb_architecture": "amd64",
 	  "override": 1}
     },
-    {"includePattern": "build/(libhermit[^/]*rpm$)", "uploadPattern": "$1", "override": 1}
+    {"includePattern": "build/(libhermit[^/]*rpm$)", "uploadPattern": "$1", "override": 1},
     {"includePattern": "build/(libhermit[^/]*tar.bz2$)", "uploadPattern": "$1", "override": 1}
     ],
     "publish": true
