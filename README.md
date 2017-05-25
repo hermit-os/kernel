@@ -27,6 +27,10 @@ cloud computing applications. It is the result of a research project at RWTH
 Aachen University and is currently an experimental approach, i.e., not
 production ready. Please use it with caution.
 
+## Contributing
+
+HermitCore is being developed on [GitHub](https://github.com/RWTH-OS/HermitCore).
+Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com).
 
 ## Requirements
 
