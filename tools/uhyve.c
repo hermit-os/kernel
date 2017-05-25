@@ -806,8 +806,10 @@ static int vcpu_loop(void)
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 					uhyve_close_t* uhyve_close = (uhyve_close_t*) (guest_mem+data);
 
-					if (uhyve_close->ret > 2)
+					if (uhyve_close->fd > 2)
 						uhyve_close->ret = close(uhyve_close->fd);
+					else
+						uhyve_close->ret = 0;
 					break;
 				}
 
