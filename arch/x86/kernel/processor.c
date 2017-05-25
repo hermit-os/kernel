@@ -172,17 +172,16 @@ static void fpu_init_xsave(union fpu_state* fpu)
 
 static uint32_t get_frequency_from_mbinfo(void)
 {
-#if 0
 	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
 	{
 		// search in the command line for cpu frequency
-		char* found = strstr((char*) mb_info->cmdline, "-freq");
+		char* found = strstr((char*) (size_t)mb_info->cmdline, "-freq");
 		if (!found)
 			return 0;
 
 		return atoi(found+strlen("-freq"));
 	}
-#endif
+
 	return 0;
 }
 
@@ -553,7 +552,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -572,6 +571,7 @@ int cpu_detection(void) {
 			has_vmx() ? "VMX " : "",
 			has_rdtscp() ? "RDTSCP " : "",
 			has_fsgsbase() ? "FSGSBASE " : "",
+			has_sgx() ? "SGX " : "",
 			has_mwait() ? "MWAIT " : "",
 			has_clflush() ? "CLFLUSH " : "",
 			has_bmi1() ? "BMI1 " : "",
@@ -580,10 +580,14 @@ int cpu_detection(void) {
 			has_rtm() ? "RTM " : "",
 			has_hle() ? "HLE " : "",
 			has_cqm() ? "CQM " : "",
+			has_clflushopt() ? "CLFLUSHOPT " : "",
+			has_clwb() ? "CLWB " : "",
 			has_avx512f() ? "AVX512F " : "",
 			has_avx512cd() ? "AVX512CD " : "",
 			has_avx512pf() ? "AVX512PF " : "",
-			has_avx512er() ? "AVX512ER " : "");
+			has_avx512er() ? "AVX512ER " : "",
+			has_avx512vl() ? "AVX512VL " : "",
+			has_avx512bw() ? "AVX512BW " : "");
 	}
 
 	if (first_time && has_osxsave()) {

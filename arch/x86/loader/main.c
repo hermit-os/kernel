@@ -43,7 +43,7 @@ extern const void kernel_end;
 extern const void bss_start;
 extern const void bss_end;
 
-static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file_size)
+static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file_size, size_t mem_size)
 {
 	const size_t displacement = 0x200000ULL - (phyaddr & 0x1FFFFFULL);
 
@@ -63,7 +63,7 @@ static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file
 	*((uint64_t*) (viraddr + 0x10)) = limit;   // physical limit
 	*((uint32_t*) (viraddr + 0x24)) = 1; // number of used cpus
 	*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
-	*((uint64_t*) (viraddr + 0x38)) = file_size;
+	*((uint64_t*) (viraddr + 0x38)) = mem_size;
 	*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
 
 	// move file to a 2 MB boundary
@@ -85,6 +85,7 @@ void main(void)
 	size_t phyaddr = 0;
 	elf_header_t* header = NULL;
 	uint32_t file_size = 0;
+	size_t mem_size = 0;
 
 	// initialize .bss section
 	memset((void*)&bss_start, 0x00, ((size_t) &bss_end - (size_t) &bss_start));
@@ -171,6 +172,7 @@ void main(void)
 				if (!phyaddr)
 					phyaddr = prog_header->offset + (size_t)header;
 				file_size = prog_header->virt_addr + PAGE_FLOOR(prog_header->file_size) - viraddr;
+				mem_size += prog_header->mem_size;
 			}
 			break;
 		case ELF_PT_GNU_STACK:	// Indicates stack executability => nothing to do
@@ -182,7 +184,7 @@ void main(void)
 		}
 	}
 
-	if (BUILTIN_EXPECT(load_code(viraddr, phyaddr, limit, file_size), 0))
+	if (BUILTIN_EXPECT(load_code(viraddr, phyaddr, limit, file_size, mem_size), 0))
 		goto failed;
 
 	kprintf("Entry point: 0x%zx\n", header->entry);

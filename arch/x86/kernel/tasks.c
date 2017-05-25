@@ -37,15 +37,54 @@
 #include <hermit/logging.h>
 #include <asm/tss.h>
 #include <asm/page.h>
+#include <asm/multiboot.h>
+
+#define TLS_ALIGNBITS		5
+#define TLS_ALIGNSIZE		(1L << TLS_ALIGNBITS)
+#define TSL_ALIGNMASK		((~0L) << TLS_ALIGNBITS)
+#define TLS_FLOOR(addr)		((((size_t)addr) + TLS_ALIGNSIZE - 1) & TSL_ALIGNMASK)
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
  */
+extern const void tls_start;
+extern const void tls_end;
 extern const void percore_start;
 extern const void percore_end0;
 
 extern uint64_t base;
+
+static int init_tls(void)
+{
+	task_t* curr_task = per_core(current_task);
+
+	// do we have a thread local storage?
+	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
+		char* tls_addr = NULL;
+		size_t fs;
+
+		curr_task->tls_addr = (size_t) &tls_start;
+		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
+
+		tls_addr = kmalloc(curr_task->tls_size + TLS_ALIGNSIZE + sizeof(size_t));
+		if (BUILTIN_EXPECT(!tls_addr, 0)) {
+			LOG_ERROR("load_task: heap is missing!\n");
+			return -ENOMEM;
+		}
+
+		memset(tls_addr, 0x00, TLS_ALIGNSIZE);
+		memcpy((void*) TLS_FLOOR(tls_addr), (void*) curr_task->tls_addr, curr_task->tls_size);
+		fs = (size_t) TLS_FLOOR(tls_addr) + curr_task->tls_size;
+		*((size_t*)fs) = fs;
+
+		// set fs register to the TLS segment
+		set_tls(fs);
+		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (size 0x%zx)\n", curr_task->id, CORE_ID, TLS_FLOOR(tls_addr), curr_task->tls_size);
+	} else set_tls(0); // no TLS => clear fs register
+
+	return 0;
+}
 
 static int thread_entry(void* arg, size_t ep)
 {
@@ -58,6 +97,22 @@ static int thread_entry(void* arg, size_t ep)
 	entry_point_t call_ep = (entry_point_t) ep;
 	call_ep(arg);
 
+	return 0;
+}
+
+int is_proxy(void)
+{
+	if (is_uhyve())
+		return 0;
+	if (!is_single_kernel())
+		return 1;
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
+	{
+		// search in the command line for the "proxy" hint
+		char* found = strstr((char*) (size_t) mb_info->cmdline, "-proxy");
+		if (found)
+			return 1;
+	}
 	return 0;
 }
 

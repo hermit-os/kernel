@@ -39,12 +39,6 @@
 #define __HERMIT_read	4
 #define __HERMIT_lseek	5
 
-typedef enum {
-  BAREMETAL = 0,
-  QEMU,
-  UHYVE
-} monitor_t;
-
 int uhyve_init(char *path);
 int uhyve_loop(void);
 
