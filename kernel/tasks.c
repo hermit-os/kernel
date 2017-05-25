@@ -37,16 +37,15 @@
 #include <hermit/syscall.h>
 #include <hermit/memory.h>
 #include <hermit/logging.h>
-#include <asm/tss.h>
 #include <asm/processor.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
  */
-extern const void tls_start;
-extern const void tls_end;
 extern atomic_int32_t cpu_online;
+
+volatile uint32_t go_down = 0;
 
 #define TLS_OFFSET	8
 
@@ -196,6 +195,34 @@ static void readyqueues_remove(uint32_t core_id, task_t* task)
 }
 
 
+void fpu_handler(void)
+{
+	task_t* task = per_core(current_task);
+	uint32_t core_id = CORE_ID;
+
+	task->flags |= TASK_FPU_USED;
+
+	if (!(task->flags & TASK_FPU_INIT))  {
+		// use the FPU at the first time => Initialize FPU
+		fpu_init(&task->fpu);
+		task->flags |= TASK_FPU_INIT;
+	}
+
+	if (readyqueues[core_id].fpu_owner == task->id)
+		return;
+
+	spinlock_irqsave_lock(&readyqueues[core_id].lock);
+	// did another already use the the FPU? => save FPU state
+	if (readyqueues[core_id].fpu_owner) {
+		save_fpu_state(&(task_table[readyqueues[core_id].fpu_owner].fpu));
+		task_table[readyqueues[core_id].fpu_owner].flags &= ~TASK_FPU_USED;
+	}
+	readyqueues[core_id].fpu_owner = task->id;
+	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
+
+	restore_fpu_state(&task->fpu);
+}
+
 void check_scheduling(void)
 {
 	if (!is_irq_enabled())
@@ -253,44 +280,11 @@ int multitasking_init(void)
 	task_table[0].ist_addr = (char*)&boot_ist;
 	set_per_core(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
 	set_per_core(current_task, task_table+0);
-	set_tss((size_t) task_table[0].stack + KERNEL_STACK_SIZE - 0x10, (size_t) task_table[0].ist_addr + KERNEL_STACK_SIZE - 0x10);
+	arch_init_task(task_table+0);
 
 	readyqueues[core_id].idle = task_table+0;
 
 	return 0;
-}
-
-
-/* interrupt handler to save / restore the FPU context */
-void fpu_handler(struct state *s)
-{
-	(void) s;
-
-	task_t* task = per_core(current_task);
-	uint32_t core_id = CORE_ID;
-
-	clts(); // clear the TS flag of cr0
-	task->flags |= TASK_FPU_USED;
-
-	if (!(task->flags & TASK_FPU_INIT))  {
-		// use the FPU at the first time => Initialize FPU
-		fpu_init(&task->fpu);
-		task->flags |= TASK_FPU_INIT;
-	}
-
-	if (readyqueues[core_id].fpu_owner == task->id)
-		return;
-
-	spinlock_irqsave_lock(&readyqueues[core_id].lock);
-	// did another already use the the FPU? => save FPU state
-	if (readyqueues[core_id].fpu_owner) {
-		save_fpu_state(&(task_table[readyqueues[core_id].fpu_owner].fpu));
-		task_table[readyqueues[core_id].fpu_owner].flags &= ~TASK_FPU_USED;
-	}
-	readyqueues[core_id].fpu_owner = task->id;
-	spinlock_irqsave_unlock(&readyqueues[core_id].lock);
-
-	restore_fpu_state(&task->fpu);
 }
 
 
@@ -314,7 +308,7 @@ int set_idle_task(void)
 			task_table[i].heap = NULL;
 			readyqueues[core_id].idle = task_table+i;
 			set_per_core(current_task, readyqueues[core_id].idle);
-			set_tss((size_t) task_table[i].stack + KERNEL_STACK_SIZE - 0x10, (size_t) task_table[i].ist_addr + KERNEL_STACK_SIZE - 0x10);
+			arch_init_task(task_table+i);
 			ret = 0;
 
 			break;
@@ -325,39 +319,6 @@ int set_idle_task(void)
 
 	return ret;
 }
-
-
-int init_tls(void)
-{
-	task_t* curr_task = per_core(current_task);
-
-	// do we have a thread local storage?
-	if (((size_t) &tls_end - (size_t) &tls_start) > 0) {
-		char* tls_addr = NULL;
-		size_t fs;
-
-		curr_task->tls_addr = (size_t) &tls_start;
-		curr_task->tls_size = (size_t) &tls_end - (size_t) &tls_start;
-
-		tls_addr = kmalloc(curr_task->tls_size + TLS_OFFSET + sizeof(size_t));
-		if (BUILTIN_EXPECT(!tls_addr, 0)) {
-			LOG_ERROR("load_task: heap is missing!\n");
-			return -ENOMEM;
-		}
-
-		memset(tls_addr, 0x00, TLS_OFFSET);
-		memcpy((void*) (tls_addr+TLS_OFFSET), (void*) curr_task->tls_addr, curr_task->tls_size);
-		fs = (size_t) tls_addr + curr_task->tls_size + TLS_OFFSET;
-		*((size_t*)fs) = fs;
-
-		// set fs register to the TLS segment
-		set_tls(fs);
-		LOG_INFO("TLS of task %d on core %d starts at 0x%zx (size 0x%zx)\n", curr_task->id, CORE_ID, tls_addr + TLS_OFFSET, curr_task->tls_size);
-	} else set_tls(0); // no TLS => clear fs register
-
-	return 0;
-}
-
 
 void finish_task_switch(void)
 {
@@ -559,8 +520,9 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 
 	spinlock_irqsave_unlock(&table_lock);
 
-	if (!ret)
-		LOG_INFO("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+	if (!ret) {
+		LOG_DEBUG("start new thread %d on core %d with stack address %p\n", i, core_id, stack);
+	}
 
 out:
 	if (ret) {
@@ -712,6 +674,8 @@ int wakeup_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_BLOCKED) {
+		LOG_DEBUG("wakeup task %d\n", id);
+
 		task->status = TASK_READY;
 		ret = 0;
 
@@ -749,6 +713,8 @@ int block_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_RUNNING) {
+		LOG_DEBUG("block task %d\n", id);
+
 		task->status = TASK_BLOCKED;
 
 		spinlock_irqsave_lock(&readyqueues[core_id].lock);

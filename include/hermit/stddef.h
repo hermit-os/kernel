@@ -42,10 +42,13 @@
 extern "C" {
 #endif
 
+// size of the whole application
+extern const size_t image_size;
+
 #define TIMER_FREQ	100 /* in HZ */
 #define CLOCK_TICK_RATE	1193182 /* 8254 chip's internal oscillator frequency */
 #define CACHE_LINE	64
-#define HEAP_START	(PAGE_2M_FLOOR((size_t)&kernel_end) + 4*PAGE_SIZE)
+#define HEAP_START	(PAGE_2M_FLOOR((size_t)&kernel_start + image_size) + 4*PAGE_SIZE)
 #define HEAP_SIZE	(1ULL << 32)
 #define KMSG_SIZE	0x1000
 #define INT_SYSCALL	0x80

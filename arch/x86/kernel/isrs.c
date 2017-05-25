@@ -82,10 +82,11 @@ extern void isr29(void);
 extern void isr30(void);
 extern void isr31(void);
 
-static void fault_handler(struct state *s);
-extern void fpu_handler(struct state *s);
+static void arch_fault_handler(struct state *s);
+static void arch_fpu_handler(struct state *s);
+extern void fpu_handler(void);
 
-/* 
+/*
  * This is a very repetitive function... it's not hard, it's
  * just annoying. As you can see, we set the first 32 entries
  * in the IDT to the first 32 ISRs. We can't use a for loop
@@ -94,7 +95,7 @@ extern void fpu_handler(struct state *s);
  * flags to 0x8E. This means that the entry is present, is
  * running in ring 0 (kernel level), and has the lower 5 bits
  * set to the required '14', which is represented by 'E' in
- * hex. 
+ * hex.
  */
 void isrs_install(void)
 {
@@ -174,11 +175,11 @@ void isrs_install(void)
 
 	// install the default handler
 	for(i=0; i<32; i++)
-		irq_install_handler(i, fault_handler);
+		irq_install_handler(i, arch_fault_handler);
 
 	// set hanlder for fpu exceptions
 	irq_uninstall_handler(7);
-	irq_install_handler(7, fpu_handler);
+	irq_install_handler(7, arch_fpu_handler);
 }
 
 /** @brief Exception messages
@@ -186,29 +187,39 @@ void isrs_install(void)
  * This is a simple string array. It contains the message that
  * corresponds to each and every exception. We get the correct
  * message by accessing it like this:
- * exception_message[interrupt_number] 
+ * exception_message[interrupt_number]
  */
-static const char *exception_messages[] = { 
-	"Division By Zero", "Debug", "Non Maskable Interrupt", 
+static const char *exception_messages[] = {
+	"Division By Zero", "Debug", "Non Maskable Interrupt",
 	"Breakpoint", "Into Detected Overflow", "Out of Bounds", "Invalid Opcode",
-	"No Coprocessor", "Double Fault", "Coprocessor Segment Overrun", "Bad TSS", 
-	"Segment Not Present", "Stack Fault", "General Protection Fault", "Page Fault", 
-	"Unknown Interrupt", "Coprocessor Fault", "Alignment Check", "Machine Check", 
+	"No Coprocessor", "Double Fault", "Coprocessor Segment Overrun", "Bad TSS",
+	"Segment Not Present", "Stack Fault", "General Protection Fault", "Page Fault",
+	"Unknown Interrupt", "Coprocessor Fault", "Alignment Check", "Machine Check",
 	"SIMD Floating-Point", "Virtualization", "Reserved", "Reserved", "Reserved",
 	"Reserved", "Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
 	"Reserved", "Reserved" };
 
-/* 
+/* interrupt handler to save / restore the FPU context */
+static void arch_fpu_handler(struct state *s)
+{
+	(void) s;
+
+	clts(); // clear the TS flag of cr0
+
+	fpu_handler();
+}
+
+/*
  * All of our Exception handling Interrupt Service Routines will
  * point to this function. This will tell us what exception has
- * occured! Right now, we simply abort the current task. 
+ * occured! Right now, we simply abort the current task.
  * All ISRs disable interrupts while they are being
  * serviced as a 'locking' mechanism to prevent an IRQ from
  * happening and messing up kernel data structures
  */
-static void fault_handler(struct state *s)
+static void arch_fault_handler(struct state *s)
 {
-	
+
 	if (s->int_no < 32)
 		LOG_INFO("%s", exception_messages[s->int_no]);
 	else

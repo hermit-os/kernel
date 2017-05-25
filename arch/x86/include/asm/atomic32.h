@@ -52,8 +52,8 @@ typedef struct { volatile int32_t counter; } atomic_int32_t;
  * This function will atomically exchange the value of an atomic variable and
  * return its old value. Is used in locking-operations.\n
  * \n
- * Intel manuals: If a memory operand is referenced, the processor's locking 
- * protocol is automatically implemented for the duration of the exchange 
+ * Intel manuals: If a memory operand is referenced, the processor's locking
+ * protocol is automatically implemented for the duration of the exchange
  * operation, regardless of the presence or absence of the LOCK prefix.
  *
  * @param d Pointer to the atomic_int_32_t with the value you want to exchange
@@ -79,7 +79,7 @@ inline static int32_t atomic_int32_test_and_set(atomic_int32_t* d, int32_t ret)
 inline static int32_t atomic_int32_add(atomic_int32_t *d, int32_t i)
 {
 	int32_t res = i;
-	asm volatile(LOCK "xaddl %0, %1" : "=r"(i) : "m"(d->counter), "0"(i) : "memory", "cc");
+	asm volatile(LOCK "xaddl %0, %1" : "+r"(i), "+m"(d->counter) : : "memory", "cc");
 	return res+i;
 }
 
@@ -95,7 +95,7 @@ inline static int32_t atomic_int32_add(atomic_int32_t *d, int32_t i)
  */
 inline static int32_t atomic_int32_sub(atomic_int32_t *d, int32_t i)
 {
-        return atomic_int32_add(d, -i);
+    return atomic_int32_add(d, -i);
 }
 
 /** @brief Atomic increment by one
@@ -105,7 +105,9 @@ inline static int32_t atomic_int32_sub(atomic_int32_t *d, int32_t i)
  * @param d The atomic_int32_t var you want to increment
  */
 inline static int32_t atomic_int32_inc(atomic_int32_t* d) {
-	return atomic_int32_add(d, 1);
+	int32_t res = 1;
+	asm volatile(LOCK "xaddl %0, %1" : "+r"(res), "+m"(d->counter) : : "memory", "cc");
+	return ++res;
 }
 
 /** @brief Atomic decrement by one
@@ -115,7 +117,9 @@ inline static int32_t atomic_int32_inc(atomic_int32_t* d) {
  * @param d The atomic_int32_t var you want to decrement
  */
 inline static int32_t atomic_int32_dec(atomic_int32_t* d) {
-	return atomic_int32_add(d, -1);
+	int32_t res = -1;
+	asm volatile(LOCK "xaddl %0, %1" : "+r"(res), "+m"(d->counter) : : "memory", "cc");
+	return --res;
 }
 
 /** @brief Read out an atomic_int32_t var
@@ -132,7 +136,7 @@ inline static int32_t atomic_int32_read(atomic_int32_t *d) {
 
 /** @brief Set the value of an atomic_int32_t var
  *
- * This function is for convenience: It sets the internal value of 
+ * This function is for convenience: It sets the internal value of
  * an atomic_int32_t var for you.
  *
  * @param d Pointer to the atomic_int32_t var you want to set

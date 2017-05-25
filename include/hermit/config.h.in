@@ -1,51 +1,26 @@
-/* include/hermit/config.h.in.  Generated from configure.ac by autoheader.  */
+#cmakedefine MAX_CORES			(@MAX_CORES@)
+#cmakedefine MAX_TASKS			(@MAX_TASKS@)
+#cmakedefine MAX_ISLE			(@MAX_ISLE@)
+#cmakedefine KERNEL_STACK_SIZE	(@KERNEL_STACK_SIZE@)
+#cmakedefine DEFAULT_STACK_SIZE	(@DEFAULT_STACK_SIZE@)
+#cmakedefine PACKAGE_VERSION 	"@PACKAGE_VERSION@"
+#cmakedefine MAX_FNAME			(@MAX_FNAME@)
 
-#undef MAX_CORES
-#undef MAX_TASKS
-#undef MAX_ISLE
-#undef MAX_FNAME
-#undef SAVE_FPU
-#undef CONFIG_VGA
-#undef VIDEO_MEM_ADDR
+#cmakedefine SAVE_FPU
+
+#cmakedefine DYNAMIC_TICKS
 
 /* Define to use machine specific version of memcpy */
-#undef HAVE_ARCH_MEMCPY
+#cmakedefine HAVE_ARCH_MEMCPY
 
 /* Define to use machine specific version of memset */
-#undef HAVE_ARCH_MEMSET
+#cmakedefine HAVE_ARCH_MEMSET
 
 /* Define to use machine specific version of strcpy */
-#undef HAVE_ARCH_STRCPY
+#cmakedefine HAVE_ARCH_STRCPY
 
 /* Define to use machine specific version of strlen */
-#undef HAVE_ARCH_STRLEN
+#cmakedefine HAVE_ARCH_STRLEN
 
 /* Define to use machine specific version of strncpy */
-#undef HAVE_ARCH_STRNCPY
-
-/* Define the stack size of the idle task */
-#undef KERNEL_STACK_SIZE
-
-/* Define the default stack size */
-#undef DEFAULT_STACK_SIZE
-
-/* Define the maximum number of running tasks */
-#undef MAX_TASKS
-
-/* Define to the address where bug reports for this package should be sent. */
-#undef PACKAGE_BUGREPORT
-
-/* Define to the full name of this package. */
-#undef PACKAGE_NAME
-
-/* Define to the full name and version of this package. */
-#undef PACKAGE_STRING
-
-/* Define to the one symbol short name of this package. */
-#undef PACKAGE_TARNAME
-
-/* Define to the home page for this package. */
-#undef PACKAGE_URL
-
-/* Define to the version of this package. */
-#undef PACKAGE_VERSION
+#cmakedefine HAVE_ARCH_STRNCPY

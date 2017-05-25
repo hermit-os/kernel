@@ -70,7 +70,6 @@ static const int sobufsize = 131072;
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 extern const void hbss_start;
 extern const void tls_start;
 extern const void tls_end;
@@ -119,7 +118,7 @@ static int hermit_init(void)
 	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
 
 	// initialize .kbss sections
-	memset((void*)&hbss_start, 0x00, ((size_t) &kernel_end - (size_t) &hbss_start));
+	memset((void*)&hbss_start, 0x00, (size_t) &__bss_start - (size_t) &hbss_start);
 
 	// initialize .percore section => copy first section to all other sections
 	for(i=1; i<MAX_CORES; i++)
@@ -132,10 +131,6 @@ static int hermit_init(void)
 	multitasking_init();
 	memory_init();
 	signal_init();
-
-#ifndef CONFIG_VGA
-	uart_init();
-#endif
 
 	return 0;
 }
@@ -237,20 +232,17 @@ success:
 		netifapi_dhcp_start(&default_netif);
 
 		int mscnt = 0;
+		int ip_counter = 0;
 		/* wait for ip address */
-		while(!ip_2_ip4(&default_netif.ip_addr)->addr) {
+		while(!ip_2_ip4(&default_netif.ip_addr)->addr && (ip_counter < 20)) {
 			uint64_t end_tsc, start_tsc = rdtsc();
 
-#if 1
 			do {
 				if (ip_2_ip4(&default_netif.ip_addr)->addr)
 					return 0;
 				check_workqueues();
 				end_tsc = rdtsc();
 			} while(((end_tsc - start_tsc) / (get_cpu_frequency() * 1000)) < DHCP_FINE_TIMER_MSECS);
-#else
-			sys_msleep(DHCP_FINE_TIMER_MSECS);
-#endif
 
 			dhcp_fine_tmr();
 			mscnt += DHCP_FINE_TIMER_MSECS;
@@ -258,7 +250,12 @@ success:
 				dhcp_coarse_tmr();
 				mscnt = 0;
 			}
+
+			ip_counter++;
 		}
+
+		if (!ip_2_ip4(&default_netif.ip_addr)->addr)
+			return -ENODEV;
 	}
 
 	return 0;
@@ -274,10 +271,10 @@ int network_shutdown(void)
 		lwip_close(s);
 	}
 
-        mmnif_shutdown();
+	mmnif_shutdown();
 	//stats_display();
 
-        return 0;
+	return 0;
 }
 
 #if MAX_CORES > 1
@@ -382,6 +379,9 @@ static int initd(void* arg)
 
 	LOG_INFO("Initd is running\n");
 
+	// initialized bss section
+	memset((void*)&__bss_start, 0x00, (size_t) &kernel_start + image_size - (size_t) &__bss_start);
+
 	// setup heap
 	if (!curr_task->heap)
 		curr_task->heap = (vma_t*) kmalloc(sizeof(vma_t));
@@ -404,9 +404,9 @@ static int initd(void* arg)
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	// initialize network
-	init_netifs();
+	err = init_netifs();
 
-	if (is_uhyve())
+	if ((err != 0) || !is_proxy())
 	{
 		char* dummy[] = {"app_name", NULL};
 
@@ -416,16 +416,6 @@ static int initd(void* arg)
 
 		return 0;
 	}
-
-#if 0
-	if (is_single_kernel()) {
-		char* dummy[] = {"app_name", NULL};
-
-		libc_start(1, dummy, NULL);
-
-		return 0;
-	}
-#endif
 
 	// initialize iRCCE
 	if (!is_single_kernel())
@@ -585,9 +575,9 @@ int hermit_main(void)
 
 	LOG_INFO("This is Hermit %s, build date %u\n", PACKAGE_VERSION, &__DATE__);
 	LOG_INFO("Isle %d of %d possible isles\n", isle, possible_isles);
-	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
+	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, (size_t)&kernel_start + image_size);
 	LOG_INFO("TLS image starts at %p and ends at %p (size 0x%zx)\n", &tls_start, &tls_end, ((size_t) &tls_end) - ((size_t) &tls_start));
-	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
+	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, (size_t)&kernel_start + image_size);
 	LOG_INFO("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	LOG_INFO("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	LOG_INFO("Processor frequency: %u MHz\n", get_cpu_frequency());
@@ -595,6 +585,7 @@ int hermit_main(void)
 	LOG_INFO("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
 	LOG_INFO("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	LOG_INFO("Core %d is the boot processor\n", boot_processor);
+	LOG_INFO("System is able to use %d processors\n", possible_cpus);
 	if (hbmem_base)
 		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
 

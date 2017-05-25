@@ -1,26 +1,24 @@
 sudo: required
 dist: trusty
 git:
-  submodules: false
+  submodules: true
 language: c
 compiler: gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - travis_retry sudo apt-get -qq update
-  - travis_retry sudo apt-get install -y curl qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev
-  #- sudo apt-get install -y --force-yes binutils-hermit gcc-hermit-bootstrap
+  - travis_retry sudo apt-get install -y curl wget qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev rpm
   - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
   - git submodule update --init lwip usr/libomp
 
 script:
-  - cd ..
-  - mv HermitCore libhermit-0.1
-  - tar -czf libhermit_0.1.orig.tar.gz libhermit-0.1 --exclude=.git
-  - cd libhermit-0.1
-  - debuild -e PATH -e CFLAGS_FOR_TARGET -e GOFLAGS_FOR_TARGET -e FCFLAGS_FOR_TARGET -e FFLAGS_FOR_TARGET -e CXXFLAGS_FOR_TARGET -us -uc -j2
-  - sudo dpkg -i ../libhermit*_amd64.deb
-  - make -j2 examples
-  - make test
+  - source cmake/local-cmake.sh
+  - mkdir build
+  - cd build
+  - cmake ..
+  - make -j1 package
+  - cd $TRAVIS_BUILD_DIR
+  - ./tests.sh
 
 deploy:
   on: master
@@ -30,16 +28,3 @@ deploy:
     secure: wo0yLY7xhGZYDqdB05UE+IOXXgYhAwj+zvtZh3ET2253hy35y74cDKMBNGfynH0aauPk8EFmN/LJoYaV/T9QF6pc1bilbqSg1/LJuL7hjAVVFaBSjwlE/Wbbb+EHNX5CR3qmC42SUvbrU+0WNvRu7WJBpZIoH9EtPv2Cj7uRV9+7Mtp/O3Ykl3E5LgkF5iA6Lo03TN+bZ1Vog5MbuJagDTpNa18vJ3jVYaed5gqOkghYYDpc5U9yxN3debS7/8MCl3u9V9uanMAyjc6wtbvJLotVkUwdXK8u9FohuWQ4pTEQ/QspLDDBuxaS3kLNWtzBMNQn6rcYIOWWKyD3uqvIhqjcErX7WChf3oGS1XPFfTHebNrHyV4KGvzkMAJUR/1qC5f4nZCsvgPv/35d702nky3Di2/WZsjD5zUR9g3+vPO8mnM3z8eA6ShVJcxezZ73Co3p0ZnBaF3J438bAKiT4nlrbIVpRzZzo/5nYTx//SefXSAmYCILr/y7xTYBqjfjMQHQZEMZSvJYRPbtP7eVCfWGEa2tG4rQndegUtwS+n1r8atcESL9eeUUM6sa1QzZYDYVseOc9GWcB7SIJzPOm8QTuTlkISHMGJ8FY+KHorP15VkVlr0EZ5c7KY0cBIbWoZGNQTg9+nSgChyf7ElNbAxPiCZsR0zafjMDhfcnzco=
   key:
     secure: JfsqEUO3Z60yGfuK5RSzwMoWZtaYflZtW7QE6R1DVMPEQ+CytzEdV2JaTpY14xz4yz1YpBBuQ0P3Q3e2rf/ORp8N8j7/5m3gfiDi8bRH3gX10r6vCQaUBilj0pz3amWUacxwBUEYR/f1029OnJ1qug30f4ARk7DWyuAePt0OboDXZ3j4JOi8xfXKTzofyKGugU4EuzhmKAbpHaBoX97g8z+gETC+wsBEYio8iD2h0ZOe/qZ0S+JGYkphIKcxpQazKdi3YrmWm0BUZsQRtkgoH7KUZm8vqfOUyVOrK+UGOTz4vXqCWHZ+wG1QRrGPUv8ehLrB26y2o02mmaDWQhM+I3RtllL06JDvDw40xjRImYtzg6xr7Mvl0OTQHprXrkN8gw2IbIivV8v31O46Ov+KIaN3CCx1IncnllBWjEXAIs4zPtvNj2Ad338JTkI/opHmPG0DI0DKE36r8wPZYTs/pHVpc3xEzwKYDklJkICjMLUakUGKppS7eKzKGRMjWvbT0vM/U7hHUcz0lA+BUoXedNmJQ1wBT85Ud8uobuKS4C8QmlgIuF1PI2+6LJr5LsCGZRvg7Pl1SPc3ZQLPHX4ggoLAnZZJiV/0ZPCn7XCLiUS1qws37l0uZT1zJQMFLsw9MGuP58tpT7WDuYYAwma/pL+OKC/JKoDhuJwM1I7wB4s=
-env:
-  global:
-    - PATH=$PATH:/opt/hermit/bin/
-    - HERMIT_ISLE=qemu
-    - HERMIT_CPUS=1
-    - HERMIT_MEM="512M"
-    - HERMIT_KVM="0"
-    - HERMIT_VERBOSE="1"
-    - CFLAGS_FOR_TARGET="-m64 -O3 -ftree-vectorize"
-    - GOFLAGS_FOR_TARGET"=-m64 -O3 -ftree-vectorize"
-    - FCFLAGS_FOR_TARGET"=-m64 -O3 -ftree-vectorize"
-    - FFLAGS_FOR_TARGET="-m64 -O3 -ftree-vectorize"
-    - CXXFLAGS_FOR_TARGET="-m64 -O3 -ftree-vectorize"

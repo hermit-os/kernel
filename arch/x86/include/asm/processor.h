@@ -41,6 +41,7 @@
 #include <asm/apic.h>
 #include <asm/irqflags.h>
 #include <asm/pci.h>
+#include <asm/tss.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -89,6 +90,7 @@ extern "C" {
 // feature list 0x00000007:0
 #define CPU_FEATURE_FSGSBASE			(1 << 0)
 #define CPU_FEATURE_TSC_ADJUST			(1 << 1)
+#define CPU_FEATURE_SGX			(1 << 2)
 #define CPU_FEATURE_BMI1			(1 << 3)
 #define CPU_FEATURE_HLE				(1 << 4)
 #define CPU_FEATURE_AVX2			(1 << 5)
@@ -110,6 +112,8 @@ extern "C" {
 #define CPU_FEATURE_AVX512ER			(1 << 27)
 #define CPU_FEATURE_AVX512CD			(1 << 28)
 #define CPU_FEATURE_SHA_NI			(1 << 29)
+#define CPU_FEATURE_AVX512BW		(1 << 30)
+#define CPU_FEATURE_AVX512VL		(1 <<31)
 
 // feature list 0x00000006
 #define CPU_FEATURE_IDA				(1 << 0)
@@ -407,6 +411,10 @@ inline static uint32_t has_fsgsbase(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_FSGSBASE);
 }
 
+inline static uint32_t has_sgx(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_SGX);
+}
+
 inline static uint32_t has_avx2(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
 }
@@ -431,6 +439,14 @@ inline static uint32_t has_rtm(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_RTM);
 }
 
+inline static uint32_t has_clflushopt(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_CLFLUSHOPT);
+}
+
+inline static uint32_t has_clwb(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_CLWB);
+}
+
 inline static uint32_t has_avx512f(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_AVX512F);
 }
@@ -445,6 +461,14 @@ inline static uint32_t has_avx512er(void) {
 
 inline static uint32_t has_avx512cd(void) {
 	return (cpu_info.feature4 & CPU_FEATURE_AVX512CD);
+}
+
+inline static uint32_t has_avx512bw(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512BW);
+}
+
+inline static uint32_t has_avx512vl(void) {
+	return (cpu_info.feature4 & CPU_FEATURE_AVX512VL);
 }
 
 inline static uint32_t has_rdtscp(void) {
@@ -720,6 +744,16 @@ static inline void mwait(unsigned long eax, unsigned long ecx)
 static inline void clflush(volatile void *addr)
 {
 	asm volatile("clflush %0" : "+m" (*(volatile char *)addr));
+}
+
+static inline void clwb(volatile void *addr)
+{
+	asm volatile("clwb %0" : "+m" (*(volatile char *)addr));
+}
+
+static inline void  clflushopt(volatile void *addr)
+{
+	asm volatile("clflushopt %0" : "+m" (*(volatile char *)addr));
 }
 
 #if 0

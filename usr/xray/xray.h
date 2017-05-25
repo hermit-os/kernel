@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 #define XRAY_NO_INSTRUMENT  __attribute__((no_instrument_function))
-#define XRAY_INLINE __attribute__((always_inline, no_instrument_function))
+#define XRAY_INLINE __attribute__((always_inline, no_instrument_function)) inline
 
 #if defined(XRAY)
 

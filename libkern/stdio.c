@@ -32,7 +32,6 @@
 #include <hermit/spinlock.h>
 #include <asm/atomic.h>
 #include <asm/processor.h>
-#include <asm/vga.h>
 #include <asm/uart.h>
 
 static atomic_int32_t kmsg_counter = ATOMIC_INIT(-1);
@@ -46,13 +45,7 @@ spinlock_irqsave_t stdio_lock = SPINLOCK_IRQSAVE_INIT;
 int koutput_init(void)
 {
 	if (is_single_kernel())
-	{
-#ifdef CONFIG_VGA
-		vga_init();
-#else
-		uart_early_init(NULL);
-#endif
-	}
+		uart_init();
 
 	return 0;
 }
@@ -68,13 +61,8 @@ int kputchar(int c)
 	pos = atomic_int32_inc(&kmsg_counter);
 	kmessages[pos % KMSG_SIZE] = (unsigned char) c;
 
-	if (is_single_kernel()) {
-#ifdef CONFIG_VGA
-		vga_putchar(c);
-#else
+	if (is_single_kernel())
 		uart_putchar(c);
-#endif
-	}
 
 	return 1;
 }
@@ -90,13 +78,8 @@ int kputs(const char *str)
 		kmessages[pos % KMSG_SIZE] = str[i];
 	}
 
-	if (is_single_kernel()) {
-#ifdef CONFIG_VGA
-		vga_puts(str);
-#else
+	if (is_single_kernel())
 		uart_puts(str);
-#endif
-	}
 
 	spinlock_irqsave_unlock(&stdio_lock);
 
