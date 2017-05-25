@@ -456,8 +456,8 @@ static int lapic_reset(void)
 		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	if (max_lvt >= 5)
 		lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
-	lapic_write(APIC_LINT0, 0x7C);	// connect LINT0 to idt entry 124
-	lapic_write(APIC_LINT1, 0x7D);	// connect LINT1 to idt entry 125
+	lapic_write(APIC_LINT0, 0x00010000);	// disable LINT0
+	lapic_write(APIC_LINT1, 0x00010000);	// disable LINT1
 	lapic_write(APIC_LVT_ER, 0x7E);	// connect error to idt entry 126
 
 	return 0;
@@ -1091,12 +1091,6 @@ static void apic_shutdown(struct state * s)
 	LOG_DEBUG("Receive shutdown interrupt\n");
 }
 
-static void apic_lint0(struct state * s)
-{
-	// Currently nothing to do
-	LOG_INFO("Receive LINT0 interrupt\n");
-}
-
 int apic_init(void)
 {
 	int ret;
@@ -1111,7 +1105,6 @@ int apic_init(void)
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
-	irq_install_handler(124, apic_lint0);
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else
