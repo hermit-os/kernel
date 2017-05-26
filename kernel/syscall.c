@@ -90,7 +90,7 @@ typedef struct {
 void NORETURN sys_exit(int arg)
 {
 	if (is_uhyve()) {
-		uhyve_send(UHYVE_PORT_EXIT, (unsigned) (size_t) &arg);
+		uhyve_send(UHYVE_PORT_EXIT, (unsigned) virt_to_phys((size_t) &arg));
 	} else {
 		sys_exit_t sysargs = {__NR_exit, arg};
 
