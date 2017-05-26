@@ -104,10 +104,12 @@ static void qemu_fini(void)
 		unlink(pidname);
 
 		if (id >= 0) {
-			int status = 0;
+			int ret;
 
-			kill(id, SIGINT);
-			wait(&status);
+			do {
+				ret = kill(id, SIGINT);
+				sched_yield();
+			} while((ret < 0) && (errno == ESRCH));
 		}
 	}
 
