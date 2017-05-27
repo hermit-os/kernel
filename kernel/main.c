@@ -40,6 +40,7 @@
 #include <asm/irq.h>
 #include <asm/page.h>
 #include <asm/uart.h>
+#include <asm/multiboot.h>
 
 #include <lwip/init.h>
 #include <lwip/sys.h>
@@ -586,6 +587,8 @@ int hermit_main(void)
 	LOG_INFO("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	LOG_INFO("Core %d is the boot processor\n", boot_processor);
 	LOG_INFO("System is able to use %d processors\n", possible_cpus);
+	if (mb_info)
+		LOG_INFO("Kernel cmdline: %s\n", (char*) (size_t) mb_info->cmdline);
 	if (hbmem_base)
 		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
 
