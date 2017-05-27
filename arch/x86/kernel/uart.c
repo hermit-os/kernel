@@ -99,28 +99,28 @@
 
 #define DEFAULT_UART_PORT 	0xc110
 
-static size_t	iobase = 0;
+extern size_t	uartport;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
 	uint8_t c = 0;
 
-	if (iobase)
-		c = inportb(iobase + off);
+	if (uartport)
+		c = inportb(uartport + off);
 
 	return c;
 }
 
 static inline void write_to_uart(uint32_t off, unsigned char c)
 {
-	if (iobase)
-		outportb(iobase + off, c);
+	if (uartport)
+		outportb(uartport + off, c);
 }
 
 /* Puts a single character on a serial device */
 int uart_putchar(unsigned char c)
 {
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	write_to_uart(UART_TX, c);
@@ -133,7 +133,7 @@ int uart_puts(const char *text)
 {
 	size_t i, len = strlen(text);
 
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	for (i = 0; i < len; i++)
@@ -188,6 +188,9 @@ int uart_init(void)
 	if (is_uhyve())
 		return 0;
 
+	if (uartport)
+		return uart_config();
+
 	pci_info_t pci_info;
 	uint32_t bar = 0;
 
@@ -205,15 +208,16 @@ int uart_init(void)
 		goto Lsuccess;
 
 	// default value of our QEMU configuration
-	iobase = DEFAULT_UART_PORT;
+	uartport = DEFAULT_UART_PORT;
 
 	// configure uart
-	return uart_config();;
+	return uart_config();
 
 Lsuccess:
-	iobase = pci_info.base[bar];
+	uartport = pci_info.base[bar];
+
 	//irq_install_handler(32+pci_info.irq, uart_handler);
-	kprintf("UART uses io address 0x%x\n", iobase);
+	kprintf("UART uses io address 0x%x\n", uartport);
 
 	// configure uart
 	return uart_config();

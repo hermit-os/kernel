@@ -92,28 +92,28 @@
 
 #define DEFAULT_UART_PORT	0 //0xc110
 
-static size_t	iobase = 0;
+size_t	uartport = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
 	uint8_t c;
 
-	if (iobase)
-		c = inportb(iobase + off);
+	if (uartport)
+		c = inportb(uartport + off);
 
 	return c;
 }
 
 static void write_to_uart(uint32_t off, unsigned char c)
 {
-	if (iobase)
-		outportb(iobase + off, c);
+	if (uartport)
+		outportb(uartport + off, c);
 }
 
 /* Puts a single character on a serial device */
 int uart_putchar(unsigned char c)
 {
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	write_to_uart(UART_TX, c);
@@ -126,7 +126,7 @@ int uart_puts(const char *text)
 {
 	size_t i, len = strlen(text);
 
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	for (i = 0; i < len; i++)
@@ -137,7 +137,7 @@ int uart_puts(const char *text)
 
 static int uart_config(void)
 {
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	/*
@@ -181,24 +181,16 @@ extern const void kernel_start;
 
 int uart_early_init(char* cmdline)
 {
-#if 1
-	// default value of our QEMU configuration
-	iobase = DEFAULT_UART_PORT;
-#else
-	if (BUILTIN_EXPECT(!cmdline, 0))
-		return -EINVAL;
+	char* str = NULL;
 
-	char* str = strstr(cmdline, "uart=");
-	if (!str)
-		return -EINVAL;
-
-	if (strncmp(str, "uart=io:", 8) == 0) {
-		iobase = strtol(str+8, (char **)NULL, 16);
-		if (!iobase)
-			iobase = DEFAULT_UART_PORT;
-			return -EINVAL;
+	if (!cmdline || ((str = strstr(cmdline, "uart=io:")) == NULL)) {
+		// default value of our QEMU configuration
+		uartport = DEFAULT_UART_PORT;
+	} else {
+			uartport = strtol(str+8, (char **)NULL, 16);
+			if (!uartport)
+				uartport = DEFAULT_UART_PORT;
 	}
-#endif
 
 	// configure uart
 	return uart_config();
@@ -206,6 +198,9 @@ int uart_early_init(char* cmdline)
 
 int uart_init(void)
 {
+	if (uartport)
+		return 0;
+
 #ifdef CONFIG_PCI
 	pci_info_t pci_info;
 	uint32_t bar = 0;
@@ -223,20 +218,20 @@ int uart_init(void)
 	if (pci_get_device_info(0x1b36, 0x0004, &pci_info) == 0)
 		goto Lsuccess;
 
-	iobase = DEFAULT_UART_PORT;
+	uartport = DEFAULT_UART_PORT;
 
 	return uart_config();
 
 Lsuccess:
-	iobase = pci_info.base[bar];
+	uartport = pci_info.base[bar];
 	//irq_install_handler(32+pci_info.irq, uart_handler);
-	kprintf("UART uses io address 0x%x\n", iobase);
+	kprintf("UART uses io address 0x%x\n", uartport);
 
 	// configure uart
 	return uart_config();
 #else
 	// default value of our QEMU configuration
-	iobase = DEFAULT_UART_PORT;
+	uartport = DEFAULT_UART_PORT;
 
 	// configure uart
 	return uart_config();

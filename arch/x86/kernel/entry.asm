@@ -69,6 +69,7 @@ align 4
     global hbmem_size
     global uhyve
     global image_size
+    global uartport
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -93,6 +94,7 @@ align 4
     hbmem_base dq 0
     hbmem_size dq 0
     uhyve dd 0
+    uartport dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096

@@ -25,25 +25,60 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __STRING_H__
-#define __STRING_H__
+/**
+ * author Stefan Lankes
+ * @file include/limits.h
+ * @brief Define constants related to numerical value-ranges of variable types
+ *
+ * This file contains define constants for the numerical
+ * ranges of the most typical variable types.
+ */
 
-#include <stddef.h>
+#ifndef __ARCH_LIMITS_H__
+#define __ARCH_LIMITS_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void *memcpy(void *dest, const void *src, size_t count);
-void *memset(void *dest, int val, size_t count);
-size_t strlen(const char *str);
-char *strncpy(char *dest, const char *src, size_t n);
-char *strcpy(char *dest, const char *src);
-int strcmp(const char *s1, const char *s2);
-int strncmp(const char *s1, const char *s2, size_t n);
-char *_strstr(const char *s, const char *find);
+/** Number of bits in a char */
+#define	CHAR_BIT	8
 
-#define strstr(s, find) _strstr((s), (find))
+/** Maximum value for a signed char */
+#define	SCHAR_MAX	0x7f
+/** Minimum value for a signed char */
+#define	SCHAR_MIN	(-0x7f - 1)
+
+/** Maximum value for an unsigned char */
+#define	UCHAR_MAX	0xff
+
+/** Maximum value for an unsigned short */
+#define	USHRT_MAX	0xffff
+/** Maximum value for a short */
+#define	SHRT_MAX	0x7fff
+/** Minimum value for a short */
+#define	SHRT_MIN	(-0x7fff - 1)
+
+/** Maximum value for an unsigned int */
+#define	UINT_MAX	0xffffffffU
+/** Maximum value for an int */
+#define	INT_MAX		0x7fffffff
+/** Minimum value for an int */
+#define	INT_MIN	(-0x7fffffff - 1)
+
+/** Maximum value for an unsigned long */
+#define	ULONG_MAX	0xffffffffUL
+/** Maximum value for a long */
+#define	LONG_MAX	0x7fffffffL
+/** Minimum value for a long */
+#define	LONG_MIN	(-0x7fffffffL - 1)
+
+/** Maximum value for an unsigned long long */
+#define	ULLONG_MAX	0xffffffffffffffffULL
+/** Maximum value for a long long */
+#define	LLONG_MAX	0x7fffffffffffffffLL
+/** Minimum value for a long long */
+#define	LLONG_MIN	(-0x7fffffffffffffffLL - 1)
 
 #ifdef __cplusplus
 }
