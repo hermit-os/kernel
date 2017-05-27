@@ -42,6 +42,7 @@ extern const void kernel_start;
 extern const void kernel_end;
 extern const void bss_start;
 extern const void bss_end;
+extern size_t uartport;
 
 static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file_size, size_t mem_size)
 {
@@ -65,6 +66,7 @@ static int load_code(size_t viraddr, size_t phyaddr, size_t limit, uint32_t file
 	*((uint32_t*) (viraddr + 0x30)) = 0; // apicid
 	*((uint64_t*) (viraddr + 0x38)) = mem_size;
 	*((uint32_t*) (viraddr + 0x60)) = 1; // numa nodes
+	*((uint64_t*) (viraddr + 0x98)) = uartport;
 
 	// move file to a 2 MB boundary
 	for(size_t va = viraddr+(npages << PAGE_BITS)+displacement-sizeof(uint8_t); va >= viraddr+displacement; va-=sizeof(uint8_t))
