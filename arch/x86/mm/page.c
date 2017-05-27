@@ -325,11 +325,11 @@ int page_init(void)
 		LOG_INFO("Detect Go runtime! Consequently, HermitCore zeroed heap.\n");
 	}
 
-	if (mb_info && ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK))) {
-		LOG_INFO("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
-		// reserve 2 pages for long cmdline strings
-		page_map(((size_t) mb_info->cmdline) & PAGE_MASK, ((size_t) mb_info->cmdline) & PAGE_MASK, 2, PG_GLOBAL|PG_RW|PG_PRESENT);
-	}
+	// reserve 2 pages for long cmdline strings
+	if (mb_info && (((size_t)mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)))
+		page_map(((size_t) mb_info->cmdline) & PAGE_MASK, ((size_t) mb_info->cmdline) & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
+	if (mb_info && ((((size_t)mb_info->cmdline + PAGE_SIZE) & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)))
+		page_map(((size_t) mb_info->cmdline + PAGE_SIZE) & PAGE_MASK, ((size_t) mb_info->cmdline + PAGE_SIZE) & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
 
 	/* Replace default pagefault handler */
 	irq_uninstall_handler(14);
