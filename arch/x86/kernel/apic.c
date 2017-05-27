@@ -723,7 +723,7 @@ static int apic_probe(void)
 
 found_mp:
 	if (!apic_mp) {
-		LOG_ERROR("Didn't find MP config table\n");
+		LOG_INFO("Didn't find MP config table\n");
 		goto no_mp;
 	}
 
