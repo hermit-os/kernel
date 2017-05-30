@@ -45,6 +45,7 @@
 #define	PCI_CFRV	0x08	/* Configuration Revision */
 #define	PCI_CFLT	0x0c	/* Configuration Latency Timer */
 #define	PCI_CBIO	0x10	/* Configuration Base IO Address */
+#define PCI_CSID	0x2C	/* Configuration Subsystem Id & Subsystem Vendor Id */
 #define	PCI_CFIT	0x3c	/* Configuration Interrupt */
 #define	PCI_CFDA	0x40	/* Configuration Driver Area */
 
@@ -101,6 +102,11 @@ static uint32_t pci_conf_read(uint32_t bus, uint32_t slot, uint32_t off)
 	return data;
 }
 
+static inline uint32_t pci_subid(uint32_t bus, uint32_t slot)
+{
+	return pci_conf_read(bus, slot, PCI_CSID);
+}
+
 static inline uint32_t pci_what_irq(uint32_t bus, uint32_t slot)
 {
 	return pci_conf_read(bus, slot, PCI_CFIT) & 0xFF;
@@ -139,11 +145,11 @@ static inline uint32_t pci_what_size(uint32_t bus, uint32_t slot, uint32_t nr)
 int pci_init(void)
 {
 	uint32_t slot, bus;
-	
+
 	for (bus = 0; bus < MAX_BUS; bus++)
 		for (slot = 0; slot < MAX_SLOTS; slot++)
 			adapters[bus][slot] = pci_conf_read(bus, slot, PCI_CFID);
-	
+
 	return 0;
 }
 
@@ -160,13 +166,14 @@ int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info
 	for (bus = 0; bus < MAX_BUS; bus++) {
 		for (slot = 0; slot < MAX_SLOTS; slot++) {
 			if (adapters[bus][slot] != -1) {
-				if (((adapters[bus][slot] & 0xffff) == vendor_id) && 
+				if (((adapters[bus][slot] & 0xffff) == vendor_id) &&
 				   (((adapters[bus][slot] & 0xffff0000) >> 16) == device_id)) {
 					for(i=0; i<6; i++) {
 						info->base[i] = pci_what_iobase(bus, slot, i);
 						info->size[i] = (info->base[i]) ? pci_what_size(bus, slot, i) : 0;
 					}
 					info->irq = pci_what_irq(bus, slot);
+					info->subid = pci_subid(bus, slot);
 					if (bus_master)
 						pci_bus_master(bus, slot);
 					return 0;
@@ -195,7 +202,7 @@ int print_pci_adapters(void)
 		if (adapters[bus][slot] != -1) {
 				counter++;
 				LOG_INFO("%d) Vendor ID: 0x%x  Device Id: 0x%x\n",
-					counter, adapters[bus][slot] & 0xffff, 
+					counter, adapters[bus][slot] & 0xffff,
 					(adapters[bus][slot] & 0xffff0000) >> 16);
 
 #ifdef WITH_PCI_IDS

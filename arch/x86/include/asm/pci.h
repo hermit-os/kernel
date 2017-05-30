@@ -26,7 +26,7 @@
  */
 
 
-/** 
+/**
  * @author Stefan Lankes
  * @file arch/x86/include/asm/pci.h
  * @brief functions related to PCI initialization and information
@@ -45,6 +45,7 @@ extern "C" {
 typedef struct {
 	uint32_t base[6];
 	uint32_t size[6];
+	uint32_t subid;
 	uint32_t irq;
 } pci_info_t;
 
@@ -59,7 +60,7 @@ int pci_init(void);
  * @param info Pointer to the record pci_info_t where among other the IObase address will be stored
  * @param enable_bus_master If true, the bus mastering will be enabled.
  *
- * @return 
+ * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
