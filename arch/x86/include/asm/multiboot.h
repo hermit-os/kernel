@@ -144,5 +144,7 @@ typedef struct multiboot_mod_list multiboot_module_t;
 /// Pointer to multiboot structure
 /// This pointer is declared at set by entry.asm
 extern const multiboot_info_t* const mb_info;
+extern char* cmdline;
+extern size_t cmdsize;
 
 #endif

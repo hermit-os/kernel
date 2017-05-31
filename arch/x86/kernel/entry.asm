@@ -70,6 +70,8 @@ align 4
     global uhyve
     global image_size
     global uartport
+    global cmdline
+    global cmdsize
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -95,6 +97,8 @@ align 4
     hbmem_size dq 0
     uhyve dd 0
     uartport dq 0
+    cmdline	dq 0
+    cmdsize	dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
