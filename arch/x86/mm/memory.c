@@ -337,9 +337,9 @@ int memory_init(void)
 					if (start_addr < (size_t)mb_info)
 						start_addr = PAGE_FLOOR((size_t)mb_info);
 
-					if (mb_info->flags & MULTIBOOT_INFO_CMDLINE) {
-						if (start_addr < (size_t) mb_info->cmdline+2*PAGE_SIZE)
-							start_addr = PAGE_FLOOR((size_t) mb_info->cmdline+2*PAGE_SIZE);
+					if ((mb_info->flags & MULTIBOOT_INFO_CMDLINE) && cmdline) {
+						if (start_addr < (size_t) cmdline+cmdsize)
+							start_addr = PAGE_FLOOR((size_t) cmdline+cmdsize);
 					}
 
 					if (start_addr >= end_addr)

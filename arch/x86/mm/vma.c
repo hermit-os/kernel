@@ -37,11 +37,17 @@ int vma_arch_init(void)
 		if (BUILTIN_EXPECT(ret, 0))
 			goto out;
 
-		if ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
-			// reserve 2 pages for long cmdline strings
-			ret = vma_add((size_t)mb_info->cmdline & PAGE_MASK, ((size_t)mb_info->cmdline & PAGE_MASK) + 2*PAGE_SIZE, VMA_READ|VMA_WRITE);
-			if (BUILTIN_EXPECT(ret, 0))
-				goto out;
+		if ((mb_info->flags & MULTIBOOT_INFO_CMDLINE) && cmdline) {
+			size_t i = 0;
+			while(((size_t) cmdline + i) <= ((size_t) cmdline + cmdsize))
+			{
+				if ((((size_t)cmdline + i) & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
+					ret = vma_add(((size_t)cmdline + i) & PAGE_MASK, (((size_t)cmdline + i) & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
+					if (BUILTIN_EXPECT(ret, 0))
+						goto out;
+					i += PAGE_SIZE;
+				}
+			}
 		}
 	}
 

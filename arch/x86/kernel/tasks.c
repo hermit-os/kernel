@@ -106,10 +106,10 @@ int is_proxy(void)
 		return 0;
 	if (!is_single_kernel())
 		return 1;
-	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE) && (cmdline))
 	{
 		// search in the command line for the "proxy" hint
-		char* found = strstr((char*) (size_t) mb_info->cmdline, "-proxy");
+		char* found = strstr((char*) (size_t) cmdline, "-proxy");
 		if (found)
 			return 1;
 	}
