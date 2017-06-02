@@ -154,9 +154,6 @@ static int uart_config(void)
 	/* disable interrupts */
 	write_to_uart(UART_IER, 0);
 
-	/* DTR + RTS */
-	write_to_uart(UART_MCR, UART_MCR_DTR|UART_MCR_RTS);
-
 	/*
 	 * 8bit word length
 	 * 1 stop bit
@@ -180,8 +177,6 @@ static int uart_config(void)
 
 	return 0;
 }
-
-extern const void kernel_start;
 
 int uart_init(void)
 {

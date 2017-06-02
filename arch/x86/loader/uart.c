@@ -150,9 +150,6 @@ static int uart_config(void)
 	/* disable interrupts */
 	write_to_uart(UART_IER, 0);
 
-	/* DTR + RTS */
-	write_to_uart(UART_MCR, UART_MCR_DTR|UART_MCR_RTS);
-
 	/*
 	 * 8bit word length
 	 * 1 stop bit
@@ -177,65 +174,21 @@ static int uart_config(void)
 	return 0;
 }
 
-extern const void kernel_start;
-
-int uart_early_init(char* cmdline)
+int uart_init(const char* cmdline)
 {
-	char* str = NULL;
+	char* str;
 
-	if (!cmdline || ((str = strstr(cmdline, "uart=io:")) == NULL)) {
-		// default value of our QEMU configuration
+	if (!uartport && cmdline && ((str = strstr(cmdline, "uart=io:")) != NULL))
+		uartport = strtol(str+8, (char **)NULL, 16);
+
+	if (!uartport)
 		uartport = DEFAULT_UART_PORT;
-	} else {
-			uartport = strtol(str+8, (char **)NULL, 16);
-			if (!uartport)
-				uartport = DEFAULT_UART_PORT;
-	}
 
-	// configure uart
-	return uart_config();
-}
-
-int uart_init(void)
-{
-	if (uartport)
+	if (!uartport)
 		return 0;
 
-#ifdef CONFIG_PCI
-	pci_info_t pci_info;
-	uint32_t bar = 0;
-
-	// Searching for Intel's UART device
-	if (pci_get_device_info(0x8086, 0x0936, &pci_info) == 0)
-		goto Lsuccess;
- 	// Searching for Qemu's UART device
-	if (pci_get_device_info(0x1b36, 0x0002, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 2x UART device (pci-serial-2x)
-	if (pci_get_device_info(0x1b36, 0x0003, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 4x UART device (pci-serial-4x)
-	if (pci_get_device_info(0x1b36, 0x0004, &pci_info) == 0)
-		goto Lsuccess;
-
-	uartport = DEFAULT_UART_PORT;
-
-	return uart_config();
-
-Lsuccess:
-	uartport = pci_info.base[bar];
-	//irq_install_handler(32+pci_info.irq, uart_handler);
-	kprintf("UART uses io address 0x%x\n", uartport);
-
 	// configure uart
 	return uart_config();
-#else
-	// default value of our QEMU configuration
-	uartport = DEFAULT_UART_PORT;
-
-	// configure uart
-	return uart_config();
-#endif
 }
 
 #endif

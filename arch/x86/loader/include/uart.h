@@ -34,17 +34,11 @@
 extern "C" {
 #endif
 
-/** @brief Initialize UART output
- *
- * @return Returns 0 on success
- */
-int uart_init(void);
-
 /** @brief Initialize UART output without a device check
  *
  * @return Returns 0 on success
  */
-int uart_early_init(char*);
+int uart_init(const char*);
 
 /** @brief Simple string output on a serial device.
  *
@@ -56,7 +50,7 @@ int uart_puts(const char *text);
 
 /** @brief Simple character output on a serial device.
  *
- * @return The original input character casted to int 
+ * @return The original input character casted to int
  */
 int uart_putchar(unsigned char c);
 
