@@ -111,8 +111,18 @@ static inline unsigned char read_from_uart(uint32_t off)
 	return c;
 }
 
+static inline int is_transmit_empty(void)
+{
+	if (uartport)
+		return inportb(uartport + UART_LSR) & 0x20;
+
+	return 1;
+}
+
 static inline void write_to_uart(uint32_t off, unsigned char c)
 {
+	while (is_transmit_empty() == 0) { PAUSE; }
+
 	if (uartport)
 		outportb(uartport + off, c);
 }
