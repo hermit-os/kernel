@@ -106,6 +106,7 @@ void main(void)
 		cmdline_size = strlen(cmdline);
 	}
 
+	// enable paging
 	page_init();
 
 	if (mb_info) {
