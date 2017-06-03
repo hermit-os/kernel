@@ -26,6 +26,7 @@
  */
 
 #include <hermit/vma.h>
+#include <hermit/logging.h>
 #include <asm/multiboot.h>
 
 int vma_arch_init(void)
@@ -38,15 +39,18 @@ int vma_arch_init(void)
 			goto out;
 
 		if ((mb_info->flags & MULTIBOOT_INFO_CMDLINE) && cmdline) {
+			LOG_INFO("vma_arch_init: map cmdline %p (size 0x%zd)", cmdline, cmdsize);
+
 			size_t i = 0;
-			while(((size_t) cmdline + i) <= ((size_t) cmdline + cmdsize))
+			while(((size_t) cmdline + i) < ((size_t) cmdline + cmdsize))
 			{
 				if ((((size_t)cmdline + i) & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
 					ret = vma_add(((size_t)cmdline + i) & PAGE_MASK, (((size_t)cmdline + i) & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
 					if (BUILTIN_EXPECT(ret, 0))
 						goto out;
-					i += PAGE_SIZE;
 				}
+
+				i += PAGE_SIZE;
 			}
 		}
 	}
