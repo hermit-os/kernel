@@ -150,13 +150,6 @@ static int uart_config(void)
 	if (!uartport)
 		return 0;
 
-	/*
-	 * enable FIFOs
-	 * clear RX and TX FIFO
-	 * set irq trigger to 8 bytes
-	 */
-	write_to_uart(UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT | UART_FCR_TRIGGER_1);
-
 	/* disable interrupts */
 	write_to_uart(UART_IER, 0);
 
@@ -172,14 +165,20 @@ static int uart_config(void)
 	write_to_uart(UART_LCR, lcr);
 
 	/*
-	 * set baudrate to 9600
+	 * set baudrate to 38400
 	 */
-	uint32_t divisor = 1843200 / 9600; // 115200;
-	write_to_uart(UART_DLL, divisor & 0xff);
-	write_to_uart(UART_DLM, (divisor >> 8) & 0xff);
+	write_to_uart(UART_DLL, 0x03);
+	write_to_uart(UART_DLM, 0x00);
 
 	/* set DLAB=0 */
 	write_to_uart(UART_LCR, lcr & (~UART_LCR_DLAB));
+
+	/*
+	 * enable FIFOs
+	 * clear RX and TX FIFO
+	 * set irq trigger to 8 bytes
+	 */
+	write_to_uart(UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT | UART_FCR_TRIGGER_1);
 
 	return 0;
 }
