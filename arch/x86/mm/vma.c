@@ -25,6 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <hermit/stdio.h>
 #include <hermit/vma.h>
 #include <hermit/logging.h>
 #include <asm/multiboot.h>
