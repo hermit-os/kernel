@@ -86,7 +86,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 
 	for(buffer_index=0; buffer_index<vq->vring.num; buffer_index++) {
 		if (!vq->vring.desc[buffer_index].len) {
-			LOG_INFO("vioif_output: buffer %u is free\n", buffer_index);
+			LOG_DEBUG("vioif_output: buffer %u is free\n", buffer_index);
 			break;
 		}
 	}
@@ -100,17 +100,17 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 	pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 #endif
 
+	vq->vring.desc[buffer_index].addr = vq->phys_buffer + buffer_index * VIOIF_BUFFER_SIZE;
+	vq->vring.desc[buffer_index].len = p->tot_len + sizeof(struct virtio_net_hdr);
+	vq->vring.desc[buffer_index].flags = 0;
+	// we send only one buffer because it is large enough for our packet
+	vq->vring.desc[buffer_index].next = 0; //(buffer_index+1) % vq->vring.num;
+
 	struct virtio_net_hdr* hdr = (struct virtio_net_hdr*)  (vq->virt_buffer + buffer_index * VIOIF_BUFFER_SIZE);
 	memset(hdr, 0x00, sizeof(*hdr));
 	// NOTE: packet is fully checksummed => flag is set to zero
 	//hdr->flags = VIRTIO_NET_HDR_F_NEEDS_CSUM;
 	//hdr->csum_offset = p->tot_len;
-
-	vq->vring.desc[buffer_index].addr = vq->phys_buffer + buffer_index * VIOIF_BUFFER_SIZE;
-	vq->vring.desc[buffer_index].len = p->tot_len;
-	vq->vring.desc[buffer_index].flags = 0;
-	// we send only one buffer because it is large enough for our packet
-	vq->vring.desc[buffer_index].next = 0; //(buffer_index+1) % vq->vring.num;
 
 	/*
 	 * q traverses through linked list of pbuf's
@@ -158,9 +158,9 @@ static void vioif_rx_inthandler(struct netif* netif)
 		struct vring_used_elem* used = &vq->vring.used->ring[vq->last_seen_used % vq->vring.num];
 		struct virtio_net_hdr* hdr = (struct virtio_net_hdr*) (vq->virt_buffer + used->id * VIOIF_BUFFER_SIZE);
 
-		LOG_INFO("vq->vring.used->idx %d, vq->vring.used->flags %d, vq->last_seen_used %d\n", vq->vring.used->idx, vq->vring.used->flags, vq->last_seen_used);
-		LOG_INFO("used id %d, len %d\n", used->id, used->len);
-		LOG_INFO("hdr len %d, flags %d\n", hdr->hdr_len, hdr->flags);
+		LOG_DEBUG("vq->vring.used->idx %d, vq->vring.used->flags %d, vq->last_seen_used %d\n", vq->vring.used->idx, vq->vring.used->flags, vq->last_seen_used);
+		LOG_DEBUG("used id %d, len %d\n", used->id, used->len);
+		LOG_DEBUG("hdr len %d, flags %d\n", hdr->hdr_len, hdr->flags);
 
 		struct pbuf* p = pbuf_alloc(PBUF_RAW, used->len, PBUF_POOL);
 		if (p) {
