@@ -104,7 +104,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 	memset(hdr, 0x00, sizeof(*hdr));
 	// NOTE: packet is fully checksummed => flag is set to zero
 	//hdr->flags = VIRTIO_NET_HDR_F_NEEDS_CSUM;
-	//hdr->checksum_offset = p->tot_len;
+	//hdr->csum_offset = p->tot_len;
 
 	vq->vring.desc[buffer_index].addr = vq->phys_buffer + buffer_index * VIOIF_BUFFER_SIZE;
 	vq->vring.desc[buffer_index].len = p->tot_len;
