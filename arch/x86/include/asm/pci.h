@@ -45,9 +45,10 @@ extern "C" {
 typedef struct {
 	uint32_t base[6];
 	uint32_t size[6];
-	uint32_t subid;
 	uint32_t irq;
 } pci_info_t;
+
+#define PCI_IGNORE_SUBID	(0)
 
 /** @brief Initialize the PCI environment
  */
@@ -56,7 +57,8 @@ int pci_init(void);
 /** @brief Determine the IObase address and the interrupt number of a specific device
  *
  * @param vendor_id The device's vendor ID
- * @param device_id the device's ID
+ * @param device_id The device's ID
+ * @param subystem_id The subsystem DI
  * @param info Pointer to the record pci_info_t where among other the IObase address will be stored
  * @param enable_bus_master If true, the bus mastering will be enabled.
  *
@@ -64,7 +66,7 @@ int pci_init(void);
  * - 0 on success
  * - -EINVAL (-22) on failure
  */
-int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info, int8_t enble_bus_master);
+int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, uint32_t subsystem_id, pci_info_t* info, int8_t enble_bus_master);
 
 /** @brief Print information of existing pci adapters
  *

@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2010 Stefan Lankes, Chair for Operating Systems,
  *                               RWTH Aachen University
  *
@@ -68,7 +68,7 @@ typedef struct {
 	uint32_t device;
 } board_t;
 
-static board_t board_tbl[] = 
+static board_t board_tbl[] =
 {
 	{"RealTek", "RealTek RTL8139", 0x10ec, 0x8139},
 	{"RealTek", "RealTek RTL8129 Fast Ethernet", 0x10ec, 0x8129},
@@ -307,7 +307,7 @@ err_t rtl8139if_init(struct netif* netif)
 
 	tmp8 = 0;
 	while (board_tbl[tmp8].vendor_str) {
-		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, &pci_info, 1) == 0)
+		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 			break;
 		tmp8++;
 	}
@@ -388,8 +388,8 @@ err_t rtl8139if_init(struct netif* netif)
 	outportb(rtl8139if->iobase + CR, CR_RST);
 
 	/*
-	 * The RST bit must be checked to make sure that the chip has finished the reset. 
-	 * If the RST bit is high (1), then the reset is still in operation. 
+	 * The RST bit must be checked to make sure that the chip has finished the reset.
+	 * If the RST bit is high (1), then the reset is still in operation.
 	 */
 	udelay(10000);
 	tmp16 = 10000;
@@ -419,7 +419,7 @@ err_t rtl8139if_init(struct netif* netif)
 	outportb(rtl8139if->iobase + CONFIG1, 0);
 
 	// disable driver loaded and lanwake bits, turn driver loaded bit back on
-	outportb(rtl8139if->iobase + CONFIG1, 
+	outportb(rtl8139if->iobase + CONFIG1,
 		(inportb(rtl8139if->iobase + CONFIG1) & ~(CONFIG1_DVRLOAD | CONFIG1_LWACT)) | CONFIG1_DVRLOAD);
 
 	// unlock config register
@@ -430,7 +430,7 @@ err_t rtl8139if_init(struct netif* netif)
 	 * AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
 	 * AM - Accept Multicast: Accept multicast packets.
 	 * APM - Accept Physical Match: Accept packets send to NIC's MAC address.
-	 * AAP - Accept All Packets. Accept all packets (run in promiscuous mode). 
+	 * AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
 	 */
 	outportl(rtl8139if->iobase + RCR, RCR_MXDMA2|RCR_MXDMA1|RCR_MXDMA0|RCR_AB|RCR_AM|RCR_APM|RCR_AAP); // The WRAP bit isn't set!
 
@@ -456,7 +456,7 @@ err_t rtl8139if_init(struct netif* netif)
 	if (tmp16 & BMCR_SPD1000)
 		speed = 1000;
 	else if (tmp16 & BMCR_SPD100)
-		speed = 100; 
+		speed = 100;
 	else
 		speed = 10;
 	// Enable Receive and Transmitter
