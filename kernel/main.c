@@ -59,6 +59,7 @@
 #include <net/mmnif.h>
 #include <net/rtl8139.h>
 #include <net/e1000.h>
+#include <net/vioif.h>
 
 #define HERMIT_PORT	0x494E
 #define HERMIT_MAGIC	0x7E317
@@ -216,6 +217,8 @@ static int init_netifs(void)
 
 		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, vioif_init, ethernet_input)) == ERR_OK)
+			goto success;
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
 			goto success;
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, e1000if_init, ethernet_input)) == ERR_OK)
