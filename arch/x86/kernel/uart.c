@@ -202,16 +202,16 @@ int uart_init(void)
 	uint32_t bar = 0;
 
 	// Searching for Intel's UART device
-	if (pci_get_device_info(0x8086, 0x0936, &pci_info, 1) == 0)
+	if (pci_get_device_info(0x8086, 0x0936, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 		goto Lsuccess;
 	// Searching for Qemu's UART device
-	if (pci_get_device_info(0x1b36, 0x0002, &pci_info, 1) == 0)
+	if (pci_get_device_info(0x1b36, 0x0002, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 		goto Lsuccess;
 	// Searching for Qemu's 2x UART device (pci-serial-2x)
-	if (pci_get_device_info(0x1b36, 0x0003, &pci_info, 1) == 0)
+	if (pci_get_device_info(0x1b36, 0x0003, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 		goto Lsuccess;
 	// Searching for Qemu's 4x UART device (pci-serial-4x)
-	if (pci_get_device_info(0x1b36, 0x0004, &pci_info, 1) == 0)
+	if (pci_get_device_info(0x1b36, 0x0004, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 		goto Lsuccess;
 
 	// default value of our QEMU configuration

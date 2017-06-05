@@ -153,7 +153,7 @@ int pci_init(void)
 	return 0;
 }
 
-int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info, int8_t bus_master)
+int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, uint32_t subsystem_id, pci_info_t* info, int8_t bus_master)
 {
 	uint32_t slot, bus, i;
 
@@ -167,13 +167,13 @@ int pci_get_device_info(uint32_t vendor_id, uint32_t device_id, pci_info_t* info
 		for (slot = 0; slot < MAX_SLOTS; slot++) {
 			if (adapters[bus][slot] != -1) {
 				if (((adapters[bus][slot] & 0xffff) == vendor_id) &&
-				   (((adapters[bus][slot] & 0xffff0000) >> 16) == device_id)) {
+				   (((adapters[bus][slot] & 0xffff0000) >> 16) == device_id) &&
+				   (((pci_subid(bus, slot) >> 16) & subsystem_id) == subsystem_id)) {
 					for(i=0; i<6; i++) {
 						info->base[i] = pci_what_iobase(bus, slot, i);
 						info->size[i] = (info->base[i]) ? pci_what_size(bus, slot, i) : 0;
 					}
 					info->irq = pci_what_irq(bus, slot);
-					info->subid = pci_subid(bus, slot);
 					if (bus_master)
 						pci_bus_master(bus, slot);
 					return 0;
