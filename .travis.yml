@@ -20,6 +20,9 @@ script:
   - cd $TRAVIS_BUILD_DIR
   - ./tests.sh
 
+notifications:
+  slack: hermitcore:UtcfeEXkbpx3WyIDK2Wm2beS
+
 deploy:
   on: master
   provider: bintray
