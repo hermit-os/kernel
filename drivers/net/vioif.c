@@ -51,6 +51,7 @@
 #define VENDOR_ID 0x1AF4
 #define VIOIF_BUFFER_SIZE 0x2048
 #define MIN(a, b)	(a) < (b) ? (a) : (b)
+#define QUEUE_LIMIT 256
 
 static struct netif* mynetif = NULL;
 
@@ -277,6 +278,11 @@ static int vioif_queue_setup(vioif_t* dev, uint32_t index)
 	}
 	memset((void*)vring_base, 0x00, total_size);
 	vring_init(&vq->vring, num, vring_base, PAGE_SIZE);
+
+	if (num > QUEUE_LIMIT) {
+		vq->vring.num = num = QUEUE_LIMIT;
+		LOG_INFO("vioif: set queue limit to %u (index %u)\n", vq->vring.num, index);
+	}
 
 	vq->virt_buffer = (uint64_t) page_alloc(num*VIOIF_BUFFER_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(!vq->virt_buffer, 0)) {
