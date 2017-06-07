@@ -166,6 +166,14 @@ void reschedule(void);
  */
 int wakeup_task(tid_t);
 
+/** @brief Wake up a core_id
+ *
+ * Wakeup core to be sure that
+ * the core isn't in halt state
+ *
+ * @param core_id Specifies the core
+ */
+void wakeup_core(uint32_t core_id);
 
 /** @brief Block current task
  *

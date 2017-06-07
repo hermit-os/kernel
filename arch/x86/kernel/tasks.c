@@ -196,7 +196,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 void wait_for_task(void)
 {
 	if (!has_mwait()) {
-		PAUSE;
+		HALT;
 	} else {
 		void* queue = get_readyqueue();
 

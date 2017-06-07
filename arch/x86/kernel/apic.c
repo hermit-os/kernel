@@ -1033,6 +1033,24 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 	return 0;
 }
 
+void wakeup_core(uint32_t core_id)
+{
+	// if mwait is available, an IPI isn't required to wakeup the core
+	if (has_mwait())
+		return;
+
+	// no self IPI required
+	if (core_id == CORE_ID)
+		return;
+
+	// no IPI required if core is offline
+	if (!online[core_id])
+		return;
+
+	LOG_DEBUG("wakeup core %d\n", core_id);
+	apic_send_ipi(core_id, 82+32);
+}
+
 static void apic_err_handler(struct state *s)
 {
 	LOG_ERROR("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
@@ -1091,6 +1109,11 @@ static void apic_shutdown(struct state * s)
 	LOG_DEBUG("Receive shutdown interrupt\n");
 }
 
+static void apic_wakeup_handler(struct state * s)
+{
+	LOG_DEBUG("Receive wakeup interrupt\n");
+}
+
 int apic_init(void)
 {
 	int ret;
@@ -1105,6 +1128,7 @@ int apic_init(void)
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
+	irq_install_handler(82+32, apic_wakeup_handler);
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else
