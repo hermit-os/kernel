@@ -176,6 +176,10 @@ static void readyqueues_push_back(uint32_t core_id, task_t* task)
 
 	// increase the number of ready tasks
 	readyqueues[core_id].nr_tasks++;
+
+	// should we wakeup the core?
+	if (readyqueues[core_id].nr_tasks == 1)
+		wakeup_core(core_id);
 }
 
 
@@ -483,7 +487,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].stack = stack;
 			task_table[i].prio = prio;
 			task_table[i].heap = curr_task->heap;
-                        task_table[i].start_tick = get_clock_tick();
+			task_table[i].start_tick = get_clock_tick();
 			task_table[i].last_tsc = 0;
 			task_table[i].parent = curr_task->id;
 			task_table[i].tls_addr = curr_task->tls_addr;
@@ -513,6 +517,9 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 				readyqueues[core_id].queue[prio-1].last->next = task_table+i;
 				readyqueues[core_id].queue[prio-1].last = task_table+i;
 			}
+			// should we wakeup the core?
+			if (readyqueues[core_id].nr_tasks == 1)
+				wakeup_core(core_id);
 			spinlock_irqsave_unlock(&readyqueues[core_id].lock);
  			break;
 		}
