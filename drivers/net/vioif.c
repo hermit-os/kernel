@@ -53,6 +53,10 @@
 #define MIN(a, b)	(a) < (b) ? (a) : (b)
 #define QUEUE_LIMIT 256
 
+/* NOTE: RX queue is 0, TX queue is 1 - Virtio Std. §5.1.2  */
+#define TX_NUM	1
+#define RX_NUM	0
+
 static struct netif* mynetif = NULL;
 
 static inline void vioif_enable_interrupts(virt_queue_t* vq)
@@ -74,8 +78,7 @@ static inline void vioif_disable_interrupts(virt_queue_t* vq)
 static err_t vioif_output(struct netif* netif, struct pbuf* p)
 {
 	vioif_t* vioif = netif->state;
-	/* NOTE: RX queue is 0, TX queue is 1 - Virtio Std. §5.1.2  */
-	virt_queue_t* vq = &vioif->queues[1];
+	virt_queue_t* vq = &vioif->queues[TX_NUM];
 	struct pbuf *q;
 	uint32_t i;
 	uint16_t buffer_index;
@@ -91,6 +94,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 			break;
 		}
 	}
+	LOG_DEBUG("vioif: found free buffer %d\n", buffer_index);
 
 	if (BUILTIN_EXPECT(buffer_index >= vq->vring.num, 0)) {
 		LOG_ERROR("vioif_output: too many packets at once\n");
@@ -152,7 +156,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 static void vioif_rx_inthandler(struct netif* netif)
 {
 	vioif_t* vioif = mynetif->state;
-	virt_queue_t* vq = &vioif->queues[0];
+	virt_queue_t* vq = &vioif->queues[RX_NUM];
 
 	while(vq->last_seen_used != vq->vring.used->idx)
 	{
@@ -253,62 +257,62 @@ static void vioif_handler(struct state* s)
 	mb();
 }
 
-static int vioif_queue_setup(vioif_t* dev, uint32_t index)
+static int vioif_queue_setup(vioif_t* dev)
 {
-	virt_queue_t* vq = &dev->queues[index];
-	unsigned int num;
+	virt_queue_t* vq;
 	uint32_t total_size;
+	unsigned int num;
 
-    memset(vq, 0x00, sizeof(virt_queue_t));
+	for (uint32_t index=0; index<VIOIF_NUM_QUEUES; index++) {
+		vq = &dev->queues[index];
 
-	// determine queue size
-	outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
-    num = inportl(dev->iobase+VIRTIO_PCI_QUEUE_NUM);
-    if (!num) return -1;
+	    memset(vq, 0x00, sizeof(virt_queue_t));
 
-	LOG_INFO("vioif: queue_size %u (index %u)\n", num, index);
+		// determine queue size
+		outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
+	    num = inportl(dev->iobase+VIRTIO_PCI_QUEUE_NUM);
+	    if (!num) return -1;
 
-	total_size = vring_size(num, PAGE_SIZE);
+		LOG_INFO("vioif: queue_size %u (index %u)\n", num, index);
 
-	// allocate and init memory for the virtual queue
-	void* vring_base = page_alloc(total_size, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
-	if (BUILTIN_EXPECT(!vring_base, 0)) {
-		LOG_INFO("Not enough memory to create queue %u\n", index);
-		return -1;
-	}
-	memset((void*)vring_base, 0x00, total_size);
-	vring_init(&vq->vring, num, vring_base, PAGE_SIZE);
+		total_size = vring_size(num, PAGE_SIZE);
 
-	if (num > QUEUE_LIMIT) {
-		vq->vring.num = num = QUEUE_LIMIT;
-		LOG_INFO("vioif: set queue limit to %u (index %u)\n", vq->vring.num, index);
-	}
-
-	vq->virt_buffer = (uint64_t) page_alloc(num*VIOIF_BUFFER_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
-	if (BUILTIN_EXPECT(!vq->virt_buffer, 0)) {
-		LOG_INFO("Not enough memory to create buffer %u\n", index);
-		return -1;
-	}
-	vq->phys_buffer = virt_to_phys(vq->virt_buffer);
-
-	for(int i=0; i<num; i++) {
-		vq->vring.desc[i].addr = vq->phys_buffer + i * VIOIF_BUFFER_SIZE;
-		if (index == 0) {
-			/* NOTE: RX queue is 0, TX queue is 1 - Virtio Std. §5.1.2  */
-			vq->vring.desc[i].len = VIOIF_BUFFER_SIZE;
-			vq->vring.desc[i].flags = VRING_DESC_F_WRITE;
-			/*if (i != num-1) {
-				vq->vring.desc[i].flags |= VRING_DESC_F_NEXT;
-				vq->vring.desc[i].next = i+1;
-			}*/
-			vq->vring.avail->ring[vq->vring.avail->idx % num] = i;
-			vq->vring.avail->idx++;
+		// allocate and init memory for the virtual queue
+		void* vring_base = page_alloc(total_size, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+		if (BUILTIN_EXPECT(!vring_base, 0)) {
+			LOG_INFO("Not enough memory to create queue %u\n", index);
+			return -1;
 		}
-	}
+		memset((void*)vring_base, 0x00, total_size);
+		vring_init(&vq->vring, num, vring_base, PAGE_SIZE);
 
-	// register buffer
-	outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
-	outportl(dev->iobase+VIRTIO_PCI_QUEUE_PFN, virt_to_phys((size_t) vring_base) >> PAGE_BITS);
+		if (num > QUEUE_LIMIT) {
+			vq->vring.num = num = QUEUE_LIMIT;
+			LOG_INFO("vioif: set queue limit to %u (index %u)\n", vq->vring.num, index);
+		}
+
+		vq->virt_buffer = (uint64_t) page_alloc(num*VIOIF_BUFFER_SIZE, VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+		if (BUILTIN_EXPECT(!vq->virt_buffer, 0)) {
+			LOG_INFO("Not enough memory to create buffer %u\n", index);
+			return -1;
+		}
+		vq->phys_buffer = virt_to_phys(vq->virt_buffer);
+
+		for(int i=0; i<num; i++) {
+			vq->vring.desc[i].addr = vq->phys_buffer + i * VIOIF_BUFFER_SIZE;
+			if (index == RX_NUM) {
+				/* NOTE: RX queue is 0, TX queue is 1 - Virtio Std. §5.1.2  */
+				vq->vring.desc[i].len = VIOIF_BUFFER_SIZE;
+				vq->vring.desc[i].flags = VRING_DESC_F_WRITE;
+				vq->vring.avail->ring[vq->vring.avail->idx % num] = i;
+				vq->vring.avail->idx++;
+			}
+		}
+
+		// register buffer
+		outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
+		outportl(dev->iobase+VIRTIO_PCI_QUEUE_PFN, virt_to_phys((size_t) vring_base) >> PAGE_BITS);
+	}
 
 	return 0;
 }
@@ -364,6 +368,10 @@ err_t vioif_init(struct netif* netif)
 		return ERR_ARG;
 	}
 
+	required = features;
+	// disable unsupported features
+	required &= ~(1UL << VIRTIO_NET_F_MRG_RXBUF);
+
 	LOG_INFO("wanted guest features 0x%x\n", required);
 	outportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES, required);
 	LOG_INFO("current guest features 0x%x\n", inportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES));
@@ -383,12 +391,10 @@ err_t vioif_init(struct netif* netif)
 	LWIP_DEBUGF(NETIF_DEBUG, ("\n"));
 
 	// Setup virt queues
-    for (i=0; i<VIOIF_NUM_QUEUES; i++) {
-		if (BUILTIN_EXPECT(vioif_queue_setup(vioif, i) < 0, 0)) {
-			outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_FAILED);
-			kfree(vioif);
-			return ERR_ARG;
-		}
+	if (BUILTIN_EXPECT(vioif_queue_setup(vioif) < 0, 0)) {
+		outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_FAILED);
+		kfree(vioif);
+		return ERR_ARG;
 	}
 
 	netif->state = vioif;
@@ -411,14 +417,19 @@ err_t vioif_init(struct netif* netif)
 	/* downward functions */
 	netif->output = etharp_output;
 	netif->linkoutput = vioif_output;
-	/* maximum transfer unit */
-	netif->mtu = 1500;
+	/* set maximum transfer unit
+	 * Google Compute Platform supports only a MTU from 1460
+	 */
+	netif->mtu = 1460;
 	/* broadcast capability */
 	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP | NETIF_FLAG_MLD6;
 #if LWIP_IPV6
-	netif->output_ip6 = ethip6_output;
-	netif_create_ip6_linklocal_address(netif, 1);
-	netif->ip6_autoconfig_enabled = 1;
+	if (required & (1UL << VIRTIO_NET_F_GUEST_TSO6))
+	{
+		netif->output_ip6 = ethip6_output;
+		netif_create_ip6_linklocal_address(netif, 1);
+		netif->ip6_autoconfig_enabled = 1;
+	}
 #endif
 
 	// tell the device that the drivers is initialized
