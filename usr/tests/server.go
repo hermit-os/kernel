@@ -16,12 +16,12 @@ import (
 func main() {
 	fmt.Println("This is an \"echo\" server that displays request parameters.")
 	fmt.Println("Start the server and send a http request to it (e.g.")
-	fmt.Println("curl http://localhost:8000/help). The server uses port 8000.")
+	fmt.Println("curl http://localhost:80/help). The server uses port 80.")
 	fmt.Println("If KVM is implicitly started by our proxy, please open the port by")
-	fmt.Println("setting the environment variable HERMIT_APP_PORT to 8000.")
+	fmt.Println("setting the environment variable HERMIT_APP_PORT to 80.")
 
 	http.HandleFunc("/", handler)
-	log.Fatal(http.ListenAndServe(":8000", nil))
+	log.Fatal(http.ListenAndServe(":80", nil))
 }
 
 //!+handler
