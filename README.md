@@ -110,6 +110,7 @@ $ mkdir build
 $ cd build
 $ cmake ..
 $ make
+$ sudo make install
 ```
 
 If your toolchain is not located in `/opt/hermit/bin` then you have to supply
