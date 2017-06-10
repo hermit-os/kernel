@@ -49,6 +49,7 @@ typedef struct vioif {
 	/* Add whatever per-interface state that is needed here. */
 	uint32_t		iomem;
 	uint32_t		iobase;
+	uint32_t		features;
 	uint8_t			msix_enabled;
 	uint8_t			irq;
 	uint8_t			polling;
