@@ -217,7 +217,7 @@ static void vioif_handler(struct state* s)
 {
 	vioif_t* vioif = mynetif->state;
 
-	LOG_DEBUG("Receive interrupt\n");
+	LOG_DEBUG("vioif: receive interrupt\n");
 
 	// reset interrupt by reading the isr port
 	uint8_t isr = inportb(vioif->iobase+VIRTIO_PCI_ISR);
