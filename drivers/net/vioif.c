@@ -105,7 +105,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 	pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 #endif
 
-	const size_t hdr_sz = vioif->features & VIRTIO_F_VERSION_1 ? sizeof(struct virtio_net_hdr) : sizeof(struct virtio_net_hdr_v1);
+	const size_t hdr_sz = sizeof(struct virtio_net_hdr);
 	// NOTE: packet is fully checksummed => all flags are set to zero
 	memset((void*) (vq->virt_buffer + buffer_index * VIOIF_BUFFER_SIZE), 0x00, hdr_sz);
 
@@ -141,7 +141,7 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 	 * Notify the changes
 	 * NOTE: RX queue is 0, TX queue is 1 - Virtio Std. §5.1.2
 	 */
-    outportl(vioif->iobase+VIRTIO_PCI_QUEUE_NOTIFY, 1);
+    outportw(vioif->iobase+VIRTIO_PCI_QUEUE_NOTIFY, TX_NUM);
 
 #if ETH_PAD_SIZE
 	pbuf_header(p, ETH_PAD_SIZE); /* reclaim the padding word */
@@ -159,7 +159,7 @@ static void vioif_rx_inthandler(struct netif* netif)
 
 	while(vq->last_seen_used != vq->vring.used->idx)
 	{
-		const size_t hdr_sz = vioif->features & VIRTIO_F_VERSION_1 ? sizeof(struct virtio_net_hdr) : sizeof(struct virtio_net_hdr_v1);
+		const size_t hdr_sz = sizeof(struct virtio_net_hdr);
 		struct vring_used_elem* used = &vq->vring.used->ring[vq->last_seen_used % vq->vring.num];
 		struct virtio_net_hdr* hdr = (struct virtio_net_hdr*) (vq->virt_buffer + used->id * VIOIF_BUFFER_SIZE);
 
@@ -271,9 +271,9 @@ static int vioif_queue_setup(vioif_t* dev)
 	    memset(vq, 0x00, sizeof(virt_queue_t));
 
 		// determine queue size
-		outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
-	    num = inportl(dev->iobase+VIRTIO_PCI_QUEUE_NUM);
-	    if (!num) return -1;
+		outportw(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
+		num = inportw(dev->iobase+VIRTIO_PCI_QUEUE_NUM);
+		if (!num) return -1;
 
 		LOG_INFO("vioif: queue_size %u (index %u)\n", num, index);
 
@@ -312,7 +312,7 @@ static int vioif_queue_setup(vioif_t* dev)
 		}
 
 		// register buffer
-		outportl(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
+		outportw(dev->iobase+VIRTIO_PCI_QUEUE_SEL, index);
 		outportl(dev->iobase+VIRTIO_PCI_QUEUE_PFN, virt_to_phys((size_t) vring_base) >> PAGE_BITS);
 	}
 
@@ -362,7 +362,8 @@ err_t vioif_init(struct netif* netif)
 	LOG_INFO("host features 0x%x\n", inportl(vioif->iobase + VIRTIO_PCI_HOST_FEATURES));
 
 	uint32_t features = inportl(vioif->iobase + VIRTIO_PCI_HOST_FEATURES);
-	uint32_t required = (1UL << VIRTIO_NET_F_MAC) | (1UL << VIRTIO_NET_F_STATUS) | (1ULL << VIRTIO_NET_F_CSUM);
+	uint32_t required = (1UL << VIRTIO_NET_F_MAC) | (1UL << VIRTIO_NET_F_STATUS);
+
 	if ((features & required) != required) {
 		LOG_ERROR("Host isn't able to fulfill HermireCore's requirements\n");
 		outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_FAILED);
@@ -371,11 +372,13 @@ err_t vioif_init(struct netif* netif)
 	}
 
 	required = features;
-	// disable unsupported features
-	required &= ~(1UL << VIRTIO_NET_F_MRG_RXBUF);
-	required &= ~(1ULL << VIRTIO_NET_F_MQ);
-	// currently, we build always checksums
-	required &= ~(1UL << VIRTIO_NET_F_CSUM);
+	required &= ~(1UL << VIRTIO_NET_F_CTRL_VQ);
+    required &= ~(1UL << VIRTIO_NET_F_GUEST_TSO4);
+    required &= ~(1UL << VIRTIO_NET_F_GUEST_TSO6);
+    required &= ~(1UL << VIRTIO_NET_F_GUEST_UFO);
+    required &= ~(1UL << VIRTIO_RING_F_EVENT_IDX);
+    required &= ~(1UL << VIRTIO_NET_F_MRG_RXBUF);
+	required &= ~(1UL << VIRTIO_NET_F_MQ);
 
 	LOG_INFO("wanted guest features 0x%x\n", required);
 	outportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES, required);
@@ -384,6 +387,15 @@ err_t vioif_init(struct netif* netif)
 
 	// tell the device that the features are OK
 	outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_ACKNOWLEDGE|VIRTIO_CONFIG_S_DRIVER|VIRTIO_CONFIG_S_FEATURES_OK);
+
+	// check if the host accept these features
+	uint8_t status = inportb(vioif->iobase + VIRTIO_PCI_STATUS);
+	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+		LOG_ERROR("device features are ignored: status 0x%x\n", (uint32_t) status);
+		outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_FAILED);
+		kfree(vioif);
+		return ERR_ARG;
+	}
 
 	/* hardware address length */
 	netif->hwaddr_len = ETHARP_HWADDR_LEN;
@@ -430,12 +442,9 @@ err_t vioif_init(struct netif* netif)
 	/* broadcast capability */
 	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP | NETIF_FLAG_MLD6;
 #if LWIP_IPV6
-	if (required & (1UL << VIRTIO_NET_F_GUEST_TSO6))
-	{
-		netif->output_ip6 = ethip6_output;
-		netif_create_ip6_linklocal_address(netif, 1);
-		netif->ip6_autoconfig_enabled = 1;
-	}
+	netif->output_ip6 = ethip6_output;
+	netif_create_ip6_linklocal_address(netif, 1);
+	netif->ip6_autoconfig_enabled = 1;
 #endif
 
 	// tell the device that the drivers is initialized
