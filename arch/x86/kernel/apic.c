@@ -1048,7 +1048,7 @@ void wakeup_core(uint32_t core_id)
 		return;
 
 	LOG_DEBUG("wakeup core %d\n", core_id);
-	apic_send_ipi(core_id, 82+32);
+	apic_send_ipi(core_id, 83+32);
 }
 
 static void apic_err_handler(struct state *s)
@@ -1128,7 +1128,7 @@ int apic_init(void)
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
-	irq_install_handler(82+32, apic_wakeup_handler);
+	irq_install_handler(83+32, apic_wakeup_handler);
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else
