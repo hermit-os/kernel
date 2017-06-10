@@ -212,7 +212,7 @@ int hermit_kill(tid_t dest, int signum)
 	return 0;
 }
 
-void signal_init()
+void signal_init(void)
 {
 	// initialize per-core signal queue
 	for(int i = 0; i < MAX_CORES; i++) {
