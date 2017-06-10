@@ -105,24 +105,23 @@ static err_t vioif_output(struct netif* netif, struct pbuf* p)
 	pbuf_header(p, -ETH_PAD_SIZE); /* drop the padding word */
 #endif
 
+	const size_t hdr_sz = vioif->features & VIRTIO_F_VERSION_1 ? sizeof(struct virtio_net_hdr) : sizeof(struct virtio_net_hdr_v1);
+	// NOTE: packet is fully checksummed => all flags are set to zero
+	memset((void*) (vq->virt_buffer + buffer_index * VIOIF_BUFFER_SIZE), 0x00, hdr_sz);
+
 	vq->vring.desc[buffer_index].addr = vq->phys_buffer + buffer_index * VIOIF_BUFFER_SIZE;
-	vq->vring.desc[buffer_index].len = p->tot_len + sizeof(struct virtio_net_hdr);
+	vq->vring.desc[buffer_index].len = p->tot_len + hdr_sz;
 	vq->vring.desc[buffer_index].flags = 0;
 	// we send only one buffer because it is large enough for our packet
 	vq->vring.desc[buffer_index].next = 0; //(buffer_index+1) % vq->vring.num;
 
-	struct virtio_net_hdr* hdr = (struct virtio_net_hdr*)  (vq->virt_buffer + buffer_index * VIOIF_BUFFER_SIZE);
-	memset(hdr, 0x00, sizeof(*hdr));
-	// NOTE: packet is fully checksummed => flag is set to zero
-	//hdr->flags = VIRTIO_NET_HDR_F_NEEDS_CSUM;
-	//hdr->csum_offset = p->tot_len;
 
 	/*
 	 * q traverses through linked list of pbuf's
 	 * This list MUST consist of a single packet ONLY
 	 */
 	for (q = p, i = 0; q != 0; q = q->next) {
-		memcpy((void*) (vq->virt_buffer + sizeof(*hdr) + buffer_index * VIOIF_BUFFER_SIZE + i), q->payload, q->len);
+		memcpy((void*) (vq->virt_buffer + hdr_sz + buffer_index * VIOIF_BUFFER_SIZE + i), q->payload, q->len);
 		i += q->len;
 	}
 
@@ -160,6 +159,7 @@ static void vioif_rx_inthandler(struct netif* netif)
 
 	while(vq->last_seen_used != vq->vring.used->idx)
 	{
+		const size_t hdr_sz = vioif->features & VIRTIO_F_VERSION_1 ? sizeof(struct virtio_net_hdr) : sizeof(struct virtio_net_hdr_v1);
 		struct vring_used_elem* used = &vq->vring.used->ring[vq->last_seen_used % vq->vring.num];
 		struct virtio_net_hdr* hdr = (struct virtio_net_hdr*) (vq->virt_buffer + used->id * VIOIF_BUFFER_SIZE);
 
@@ -177,7 +177,7 @@ static void vioif_rx_inthandler(struct netif* netif)
 #endif
 			for(q=p, pos=0; q!=NULL; q=q->next) {
 				memcpy((uint8_t*) q->payload,
-					(uint8_t*) (vq->virt_buffer + sizeof(struct virtio_net_hdr) + used->id * VIOIF_BUFFER_SIZE + pos),
+					(uint8_t*) (vq->virt_buffer + hdr_sz + used->id * VIOIF_BUFFER_SIZE + pos),
 					q->len);
 				pos += q->len;
 			}
@@ -216,6 +216,8 @@ static void vioif_poll(void* ctx)
 static void vioif_handler(struct state* s)
 {
 	vioif_t* vioif = mynetif->state;
+
+	LOG_DEBUG("Receive interrupt\n");
 
 	// reset interrupt by reading the isr port
 	uint8_t isr = inportb(vioif->iobase+VIRTIO_PCI_ISR);
@@ -371,10 +373,14 @@ err_t vioif_init(struct netif* netif)
 	required = features;
 	// disable unsupported features
 	required &= ~(1UL << VIRTIO_NET_F_MRG_RXBUF);
+	required &= ~(1ULL << VIRTIO_NET_F_MQ);
+	// currently, we build always checksums
+	required &= ~(1UL << VIRTIO_NET_F_CSUM);
 
 	LOG_INFO("wanted guest features 0x%x\n", required);
 	outportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES, required);
-	LOG_INFO("current guest features 0x%x\n", inportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES));
+	vioif->features = inportl(vioif->iobase + VIRTIO_PCI_GUEST_FEATURES);
+	LOG_INFO("current guest features 0x%x\n", vioif->features);
 
 	// tell the device that the features are OK
 	outportb(vioif->iobase + VIRTIO_PCI_STATUS, VIRTIO_CONFIG_S_ACKNOWLEDGE|VIRTIO_CONFIG_S_DRIVER|VIRTIO_CONFIG_S_FEATURES_OK);
