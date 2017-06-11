@@ -60,8 +60,18 @@ such as:
 
  * QEMU (`apt-get install qemu-system-x86`)
 
+## Building HermitCore
 
-## CMake requirements
+### Preliminary work
+
+To build HermitCore from source (without compiler), the repository with its submodules has to be cloned.
+
+```bash
+$ git clone git@github.com:RWTH-OS/HermitCore.git
+$ cd HermitCore
+$ git submodule init
+$ git submodule update
+```
 
 We require a fairly recent version of CMake (`3.7`) which is not yet present in
 most Linux distributions. We therefore provide a helper script that fetches the
@@ -91,14 +101,16 @@ cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74
 So before you build HermitCore you have to source the `local-cmake.sh` script
 everytime you open a new terminal.
 
-	
-## Building HermitCore
+### Building the library perating systems and its examples
+
+To build HermitCore go to the directory with the source code, create a `build` directory and call `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
 $ cd build
 $ cmake ..
 $ make
+$ sudo make install
 ```
 
 If your toolchain is not located in `/opt/hermit/bin` then you have to supply
