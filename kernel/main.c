@@ -174,11 +174,15 @@ static int init_netifs(void)
 	LOG_INFO("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
-	if (is_uhyve())
+	if (is_uhyve()) {
+		LOG_INFO("HermitCore is running on uhyve!\n");
 		return -ENODEV;
+	}
 
 	if (!is_single_kernel())
 	{
+		LOG_INFO("HermitCore is running side-by-side to Linux!\n");
+
 		/* Set network address variables */
 		IP_ADDR4(&gw, 192,168,28,1);
 		IP_ADDR4(&ipaddr, 192,168,28,isle+2);
