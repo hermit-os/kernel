@@ -1033,24 +1033,6 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 	return 0;
 }
 
-void wakeup_core(uint32_t core_id)
-{
-	// if mwait is available, an IPI isn't required to wakeup the core
-	if (has_mwait())
-		return;
-
-	// no self IPI required
-	if (core_id == CORE_ID)
-		return;
-
-	// no IPI required if core is offline
-	if (!online[core_id])
-		return;
-
-	LOG_DEBUG("wakeup core %d\n", core_id);
-	apic_send_ipi(core_id, 83+32);
-}
-
 static void apic_err_handler(struct state *s)
 {
 	LOG_ERROR("Got APIC error 0x%x\n", lapic_read(APIC_ESR));
