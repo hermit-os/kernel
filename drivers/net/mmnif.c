@@ -686,8 +686,6 @@ err_t mmnif_init(struct netif *netif)
 	/* maximum transfer unit */
 	netif->mtu = 1500;
 
-	/* broadcast capability, keep all default flags */
-	//netif->flags |= NETIF_FLAG_BROADCAST;
 	/* set link up */
 	netif->flags |= NETIF_FLAG_LINK_UP;
 
