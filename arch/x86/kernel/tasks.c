@@ -207,3 +207,17 @@ void wait_for_task(void)
 		mwait(0x2 /* 0x2 = c3, 0xF = c0 */, 1 /* break on interrupt flag */);
 	}
 }
+
+void wakeup_core(uint32_t core_id)
+{
+	// if mwait is available, an IPI isn't required to wakeup the core
+	if (has_mwait())
+		return;
+
+	// no self IPI required
+	if (core_id == CORE_ID)
+		return;
+
+	LOG_DEBUG("wakeup core %d\n", core_id);
+	apic_send_ipi(core_id, 83+32);
+}
