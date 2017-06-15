@@ -334,7 +334,7 @@ int page_init(void)
 			page_map(((size_t) cmdline + i) & PAGE_MASK, ((size_t) cmdline + i) & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
 			i += PAGE_SIZE;
 		}
-	}
+	} else cmdline = 0;
 
 	/* Replace default pagefault handler */
 	irq_uninstall_handler(14);
