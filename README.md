@@ -365,3 +365,7 @@ you are able to analyze the file.
 
 If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, QEMU establishes
 a monitor which is available via telnet at port 18767.
+
+# Credits
+
+HermitCore's Emoji is provided free by [EmojiOne](https://www.gfxmag.com/crab-emoji-vector-icon/) Attribution 4.0 International (CC BY 4.0).
