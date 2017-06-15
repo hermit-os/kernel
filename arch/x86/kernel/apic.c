@@ -918,12 +918,6 @@ int smp_start(void)
 	// install IDT
 	idt_install();
 
-	/*
-	 * we turned on paging
-	 * => now, we are able to register our task
-	 */
-	register_task();
-
 	// enable additional cpu features
 	cpu_detection();
 
@@ -937,6 +931,12 @@ int smp_start(void)
 	write_cr0(cr0);
 
 	set_idle_task();
+
+	/*
+	 * TSS is set, pagining is enabled
+	 * => now, we are able to register our task
+	 */
+	register_task();
 
 	irq_enable();
 
@@ -1091,11 +1091,6 @@ static void apic_shutdown(struct state * s)
 	LOG_DEBUG("Receive shutdown interrupt\n");
 }
 
-static void apic_wakeup_handler(struct state * s)
-{
-	LOG_DEBUG("Receive wakeup interrupt\n");
-}
-
 int apic_init(void)
 {
 	int ret;
@@ -1110,7 +1105,6 @@ int apic_init(void)
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
-	irq_install_handler(83+32, apic_wakeup_handler);
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else
