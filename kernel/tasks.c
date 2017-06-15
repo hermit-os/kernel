@@ -537,11 +537,6 @@ out:
 		destroy_stack(ist, KERNEL_STACK_SIZE);
 	}
 
-#if 0
-	if (core_id != CORE_ID)
-		apic_send_ipi(core_id, 121);
-#endif
-
 	return ret;
 }
 
@@ -640,11 +635,6 @@ out:
 		destroy_stack(ist, KERNEL_STACK_SIZE);
 		kfree(counter);
 	}
-
-#if 0
-	if (core_id != CORE_ID)
-		apic_send_ipi(core_id, 121);
-#endif
 
 	return ret;
 }
