@@ -174,11 +174,15 @@ static int init_netifs(void)
 	LOG_INFO("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
-	if (is_uhyve())
+	if (is_uhyve()) {
+		LOG_INFO("HermitCore is running on uhyve!\n");
 		return -ENODEV;
+	}
 
 	if (!is_single_kernel())
 	{
+		LOG_INFO("HermitCore is running side-by-side to Linux!\n");
+
 		/* Set network address variables */
 		IP_ADDR4(&gw, 192,168,28,1);
 		IP_ADDR4(&ipaddr, 192,168,28,isle+2);
@@ -191,16 +195,11 @@ static int init_netifs(void)
 		 *  - gw : the gateway wicht should be used
 		 *  - mmnif_init : the initialization which has to be done in order to use our interface
 		 *  - ip_input : tells him that he should use ip_input
-		 */
-#if LWIP_TCPIP_CORE_LOCKING_INPUT
-		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
-#else
-		/*
+		 *
 		 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ip_input instead of tcpip_input
 		 */
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
-#endif
 		{
 			LOG_ERROR("Unable to add the intra network interface: err = %d\n", err);
 			return -ENODEV;

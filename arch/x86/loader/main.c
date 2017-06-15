@@ -103,7 +103,7 @@ void main(void)
 
 	if (mb_info && mb_info->cmdline) {
 		cmdline = (size_t) mb_info->cmdline;
-		cmdline_size = strlen(cmdline);
+		cmdline_size = strlen((char*)cmdline);
 	}
 
 	// enable paging
