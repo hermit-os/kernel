@@ -1084,11 +1084,16 @@ void shutdown_system(void)
 	}
 }
 
-static void apic_shutdown(struct state * s)
+static void apic_shutdown(struct state* s)
 {
 	go_down = 1;
 
 	LOG_DEBUG("Receive shutdown interrupt\n");
+}
+
+static void apic_wakeup(struct state* s)
+{
+	LOG_DEBUG("Receive wakeup interrupt\n");
 }
 
 int apic_init(void)
@@ -1100,6 +1105,7 @@ int apic_init(void)
 		return ret;
 
 	// set APIC error handler
+	irq_install_handler(121, apic_wakeup);
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
 	irq_install_handler(80+32, apic_tlb_handler);
