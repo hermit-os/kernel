@@ -219,5 +219,5 @@ void wakeup_core(uint32_t core_id)
 		return;
 
 	LOG_DEBUG("wakeup core %d\n", core_id);
-	apic_send_ipi(core_id, 83+32);
+	apic_send_ipi(core_id, 121);
 }
