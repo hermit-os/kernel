@@ -100,20 +100,6 @@ rcce_mpb_t* rcce_mpb = NULL;
 
 extern void signal_init();
 
-#if 0
-static int foo(void* arg)
-{
-	int i;
-
-	for(i=0; i<5; i++) {
-		LOG_INFO("hello from %s\n", (char*) arg);
-		sleep(1);
-	}
-
-	return 0;
-}
-#endif
-
 static int hermit_init(void)
 {
 	uint32_t i;
@@ -294,8 +280,6 @@ int smp_main(void)
 	while(atomic_int32_read(&cpu_online) < atomic_int32_read(&possible_cpus))
 		PAUSE;
 
-	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
-
 	while(1) {
 		check_workqueues();
 		wait_for_task();
@@ -402,9 +386,6 @@ static int initd(void* arg)
 	// property of the first page
 	vma_free(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE);
 	vma_add(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE, VMA_HEAP|VMA_USER);
-
-	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
-	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	// initialize network
 	err = init_netifs();
@@ -609,7 +590,7 @@ int hermit_main(void)
 	print_status();
 	//vma_dump();
 
-	create_kernel_task_on_core(NULL, initd, NULL, NORMAL_PRIO, boot_processor);
+	//create_kernel_task_on_core(NULL, initd, NULL, NORMAL_PRIO, boot_processor);
 
 	while(1) {
 		check_workqueues();
