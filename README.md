@@ -1,3 +1,6 @@
+<img width="100" align="right" src="img/hermitcore_logo.png" />
+
+
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
 [![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
