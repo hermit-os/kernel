@@ -90,33 +90,40 @@
 #define UART_MCR_RTS		0x02 /* RTS complement */
 #define UART_MCR_DTR		0x01 /* DTR complement */
 
-static uint8_t	mmio = 0;
-static size_t	iobase = 0;
+#define DEFAULT_UART_PORT	0 //0xc110
+
+size_t	uartport = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
 	uint8_t c;
 
-	if (mmio)
-		c = *((const volatile unsigned char*) (iobase + off));
-	else
-		c = inportb(iobase + off);
+	if (uartport)
+		c = inportb(uartport + off);
 
 	return c;
 }
 
+static inline int is_transmit_empty(void)
+{
+	if (uartport)
+		return inportb(uartport + UART_LSR) & 0x20;
+
+	return 1;
+}
+
 static void write_to_uart(uint32_t off, unsigned char c)
 {
-	if (mmio)
-		*((volatile unsigned char*) (iobase + off)) = c;
-	else
-		outportb(iobase + off, c);
+	while (is_transmit_empty() == 0) ;
+
+	if (uartport)
+		outportb(uartport + off, c);
 }
 
 /* Puts a single character on a serial device */
 int uart_putchar(unsigned char c)
 {
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	write_to_uart(UART_TX, c);
@@ -129,7 +136,7 @@ int uart_puts(const char *text)
 {
 	size_t i, len = strlen(text);
 
-	if (!iobase)
+	if (!uartport)
 		return 0;
 
 	for (i = 0; i < len; i++)
@@ -140,18 +147,11 @@ int uart_puts(const char *text)
 
 static int uart_config(void)
 {
-	/*
-	 * enable FIFOs
-	 * clear RX and TX FIFO
-	 * set irq trigger to 8 bytes
-	 */
-	write_to_uart(UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT | UART_FCR_TRIGGER_1);
+	if (!uartport)
+		return 0;
 
 	/* disable interrupts */
 	write_to_uart(UART_IER, 0);
-
-	/* DTR + RTS */
-	write_to_uart(UART_MCR, UART_MCR_DTR|UART_MCR_RTS);
 
 	/*
 	 * 8bit word length
@@ -165,110 +165,39 @@ static int uart_config(void)
 	write_to_uart(UART_LCR, lcr);
 
 	/*
-	 * set baudrate to 115200
+	 * set baudrate to 38400
 	 */
-	uint32_t divisor = 1843200 / 115200;
-	write_to_uart(UART_DLL, divisor & 0xff);
-	write_to_uart(UART_DLM, (divisor >> 8) & 0xff);
+	write_to_uart(UART_DLL, 0x03);
+	write_to_uart(UART_DLM, 0x00);
 
 	/* set DLAB=0 */
 	write_to_uart(UART_LCR, lcr & (~UART_LCR_DLAB));
 
+	/*
+	 * enable FIFOs
+	 * clear RX and TX FIFO
+	 * set irq trigger to 8 bytes
+	 */
+	write_to_uart(UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT | UART_FCR_TRIGGER_1);
+
 	return 0;
 }
 
-extern const void kernel_start;
-
-int uart_early_init(char* cmdline)
+int uart_init(const char* cmdline)
 {
-#if 1
-	// default value of our QEMU configuration
-	iobase = 0xc110;
-#else
-	if (BUILTIN_EXPECT(!cmdline, 0))
-		return -EINVAL;
+	char* str;
 
-	char* str = strstr(cmdline, "uart=");
-	if (!str)
-		return -EINVAL;
+	if (!uartport && cmdline && ((str = strstr(cmdline, "uart=io:")) != NULL))
+		uartport = strtol(str+8, (char **)NULL, 16);
 
-	if (strncmp(str, "uart=io:", 8) == 0) {
-		iobase = strtol(str+8, (char **)NULL, 16);
-		if (!iobase)
-			return -EINVAL;
-		mmio = 0;
-	} else if (strncmp(str, "uart=mmio:", 10) == 0) {
-		iobase = strtol(str+10, (char **)NULL, 16);
-		if (!iobase)
-			return -EINVAL;
-		if (iobase >= PAGE_MAP_ENTRIES*PAGE_SIZE) {
-			/* at this point we use the boot page table
-			 * => IO address is not mapped
-			 * => dirty hack, map device before the kernel
-			 */
-			int err;
-			size_t newaddr = ((size_t) &kernel_start - PAGE_SIZE);
+	if (!uartport)
+		uartport = DEFAULT_UART_PORT;
 
-			err = page_map_bootmap(newaddr & PAGE_MASK, iobase & PAGE_MASK, PG_GLOBAL | PG_ACCESSED | PG_DIRTY | PG_RW | PG_PCD);
-			if (BUILTIN_EXPECT(err, 0)) {
-				iobase = 0;
-				return err;
-			}
-			iobase = newaddr;
-		}
-		mmio = 1;
-	}
-#endif
+	if (!uartport)
+		return 0;
 
 	// configure uart
 	return uart_config();
-}
-
-int uart_init(void)
-{
-#ifdef CONFIG_PCI
-	pci_info_t pci_info;
-	uint32_t bar = 0;
-
-	// Searching for Intel's UART device
-	if (pci_get_device_info(0x8086, 0x0936, iobase, &pci_info) == 0)
-		goto Lsuccess;
- 	// Searching for Qemu's UART device
-	if (pci_get_device_info(0x1b36, 0x0002, iobase, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 2x UART device (pci-serial-2x)
-	if (pci_get_device_info(0x1b36, 0x0003, iobase, &pci_info) == 0)
-		goto Lsuccess;
-	// Searching for Qemu's 4x UART device (pci-serial-4x)
-	if (pci_get_device_info(0x1b36, 0x0004, iobase, &pci_info) == 0)
-		goto Lsuccess;
-
-	return -1;
-
-Lsuccess:
-	iobase = pci_info.base[bar];
-	//irq_install_handler(32+pci_info.irq, uart_handler);
-	if (pci_info.type[0]) {
-		mmio = 0;
-		kprintf("UART uses io address 0x%x\n", iobase);
-	} else {
-		mmio = 1;
-		page_map(iobase & PAGE_MASK, iobase & PAGE_MASK, 1, PG_GLOBAL | PG_ACCESSED | PG_DIRTY | PG_RW | PG_PCD);
-		kprintf("UART uses mmio address 0x%x\n", iobase);
-		vma_add(iobase, iobase + PAGE_SIZE, VMA_READ|VMA_WRITE);
-	}
-
-	// configure uart
-	return uart_config();
-#else
-	// per default we use COM1...
-	if (!iobase)
-		iobase = 0x3F8;
-	mmio = 0;
-
-	// configure uart
-	return uart_config();
-#endif
 }
 
 #endif

@@ -27,27 +27,18 @@
 
 #include <string.h>
 #include <multiboot.h>
-#include <vga.h>
 #include <uart.h>
 
 int koutput_init(void)
 {
-#ifdef CONFIG_VGA
-	vga_init();
-#else
-	uart_early_init((char*) mb_info->cmdline);
-#endif
+	uart_init((const char*) (size_t)mb_info->cmdline);
 
 	return 0;
 }
 
 int kputchar(int c)
 {
-#ifdef CONFIG_VGA
-	vga_putchar(c);
-#else
 	uart_putchar(c);
-#endif
 
 	return 1;
 }

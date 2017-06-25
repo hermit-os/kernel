@@ -40,6 +40,7 @@
 #include <asm/irq.h>
 #include <asm/page.h>
 #include <asm/uart.h>
+#include <asm/multiboot.h>
 
 #include <lwip/init.h>
 #include <lwip/sys.h>
@@ -58,6 +59,7 @@
 #include <net/mmnif.h>
 #include <net/rtl8139.h>
 #include <net/e1000.h>
+#include <net/vioif.h>
 
 #define HERMIT_PORT	0x494E
 #define HERMIT_MAGIC	0x7E317
@@ -70,7 +72,6 @@ static const int sobufsize = 131072;
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 extern const void hbss_start;
 extern const void tls_start;
 extern const void tls_end;
@@ -119,7 +120,7 @@ static int hermit_init(void)
 	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
 
 	// initialize .kbss sections
-	memset((void*)&hbss_start, 0x00, ((size_t) &kernel_end - (size_t) &hbss_start));
+	memset((void*)&hbss_start, 0x00, (size_t) &__bss_start - (size_t) &hbss_start);
 
 	// initialize .percore section => copy first section to all other sections
 	for(i=1; i<MAX_CORES; i++)
@@ -132,10 +133,6 @@ static int hermit_init(void)
 	multitasking_init();
 	memory_init();
 	signal_init();
-
-#ifndef CONFIG_VGA
-	uart_init();
-#endif
 
 	return 0;
 }
@@ -177,8 +174,15 @@ static int init_netifs(void)
 	LOG_INFO("TCP/IP initialized.\n");
 	sys_sem_free(&sem);
 
+	if (is_uhyve()) {
+		LOG_INFO("HermitCore is running on uhyve!\n");
+		return -ENODEV;
+	}
+
 	if (!is_single_kernel())
 	{
+		LOG_INFO("HermitCore is running side-by-side to Linux!\n");
+
 		/* Set network address variables */
 		IP_ADDR4(&gw, 192,168,28,1);
 		IP_ADDR4(&ipaddr, 192,168,28,isle+2);
@@ -191,16 +195,11 @@ static int init_netifs(void)
 		 *  - gw : the gateway wicht should be used
 		 *  - mmnif_init : the initialization which has to be done in order to use our interface
 		 *  - ip_input : tells him that he should use ip_input
-		 */
-#if LWIP_TCPIP_CORE_LOCKING_INPUT
-		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
-#else
-		/*
+		 *
 		 * Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ip_input instead of tcpip_input
 		 */
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, mmnif_init, ip_input)) != ERR_OK)
-#endif
 		{
 			LOG_ERROR("Unable to add the intra network interface: err = %d\n", err);
 			return -ENODEV;
@@ -217,6 +216,8 @@ static int init_netifs(void)
 
 		/* Note: Our drivers guarantee that the input function will be called in the context of the tcpip thread.
 		 * => Therefore, we are able to use ethernet_input instead of tcpip_input */
+		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, vioif_init, ethernet_input)) == ERR_OK)
+			goto success;
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, rtl8139if_init, ethernet_input)) == ERR_OK)
 			goto success;
 		if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, e1000if_init, ethernet_input)) == ERR_OK)
@@ -234,20 +235,17 @@ success:
 		netifapi_dhcp_start(&default_netif);
 
 		int mscnt = 0;
+		int ip_counter = 0;
 		/* wait for ip address */
-		while(!ip_2_ip4(&default_netif.ip_addr)->addr) {
+		while(!ip_2_ip4(&default_netif.ip_addr)->addr && (ip_counter < 20)) {
 			uint64_t end_tsc, start_tsc = rdtsc();
 
-#if 1
 			do {
 				if (ip_2_ip4(&default_netif.ip_addr)->addr)
 					return 0;
 				check_workqueues();
 				end_tsc = rdtsc();
 			} while(((end_tsc - start_tsc) / (get_cpu_frequency() * 1000)) < DHCP_FINE_TIMER_MSECS);
-#else
-			sys_msleep(DHCP_FINE_TIMER_MSECS);
-#endif
 
 			dhcp_fine_tmr();
 			mscnt += DHCP_FINE_TIMER_MSECS;
@@ -255,7 +253,12 @@ success:
 				dhcp_coarse_tmr();
 				mscnt = 0;
 			}
+
+			ip_counter++;
 		}
+
+		if (!ip_2_ip4(&default_netif.ip_addr)->addr)
+			return -ENODEV;
 	}
 
 	return 0;
@@ -271,10 +274,10 @@ int network_shutdown(void)
 		lwip_close(s);
 	}
 
-        mmnif_shutdown();
+	mmnif_shutdown();
 	//stats_display();
 
-        return 0;
+	return 0;
 }
 
 #if MAX_CORES > 1
@@ -379,6 +382,9 @@ static int initd(void* arg)
 
 	LOG_INFO("Initd is running\n");
 
+	// initialized bss section
+	memset((void*)&__bss_start, 0x00, (size_t) &kernel_start + image_size - (size_t) &__bss_start);
+
 	// setup heap
 	if (!curr_task->heap)
 		curr_task->heap = (vma_t*) kmalloc(sizeof(vma_t));
@@ -401,17 +407,18 @@ static int initd(void* arg)
 	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	// initialize network
-	init_netifs();
+	err = init_netifs();
 
-#if 0
-	if (is_single_kernel()) {
+	if ((err != 0) || !is_proxy())
+	{
 		char* dummy[] = {"app_name", NULL};
 
-		libc_start(1, dummy, NULL);
+		LOG_INFO("Boot time: %d ms\n", (get_clock_tick() * 1000) / TIMER_FREQ);
+		// call user code
+		libc_start(1, dummy, NULL); //argc, argv, environ);
 
 		return 0;
 	}
-#endif
 
 	// initialize iRCCE
 	if (!is_single_kernel())
@@ -571,9 +578,9 @@ int hermit_main(void)
 
 	LOG_INFO("This is Hermit %s, build date %u\n", PACKAGE_VERSION, &__DATE__);
 	LOG_INFO("Isle %d of %d possible isles\n", isle, possible_isles);
-	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, &kernel_end);
+	LOG_INFO("Kernel starts at %p and ends at %p\n", &kernel_start, (size_t)&kernel_start + image_size);
 	LOG_INFO("TLS image starts at %p and ends at %p (size 0x%zx)\n", &tls_start, &tls_end, ((size_t) &tls_end) - ((size_t) &tls_start));
-	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, &kernel_end);
+	LOG_INFO("BBS starts at %p and ends at %p\n", &hbss_start, (size_t)&kernel_start + image_size);
 	LOG_INFO("Per core data starts at %p and ends at %p\n", &percore_start, &percore_end);
 	LOG_INFO("Per core size 0x%zx\n", (size_t) &percore_end0 - (size_t) &percore_start);
 	LOG_INFO("Processor frequency: %u MHz\n", get_cpu_frequency());
@@ -581,6 +588,9 @@ int hermit_main(void)
 	LOG_INFO("Current allocated memory: %zd KiB\n", atomic_int64_read(&total_allocated_pages) * PAGE_SIZE / 1024ULL);
 	LOG_INFO("Current available memory: %zd MiB\n", atomic_int64_read(&total_available_pages) * PAGE_SIZE / (1024ULL*1024ULL));
 	LOG_INFO("Core %d is the boot processor\n", boot_processor);
+	LOG_INFO("System is able to use %d processors\n", possible_cpus);
+	if (mb_info)
+		LOG_INFO("Kernel cmdline: %s\n", (char*) (size_t) mb_info->cmdline);
 	if (hbmem_base)
 		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
 

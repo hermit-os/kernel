@@ -42,10 +42,13 @@
 extern "C" {
 #endif
 
+// size of the whole application
+extern const size_t image_size;
+
 #define TIMER_FREQ	100 /* in HZ */
 #define CLOCK_TICK_RATE	1193182 /* 8254 chip's internal oscillator frequency */
 #define CACHE_LINE	64
-#define HEAP_START	(PAGE_2M_FLOOR((size_t)&kernel_end) + 4*PAGE_SIZE)
+#define HEAP_START	(PAGE_2M_FLOOR((size_t)&kernel_start + image_size) + 4*PAGE_SIZE)
 #define HEAP_SIZE	(1ULL << 32)
 #define KMSG_SIZE	0x1000
 #define INT_SYSCALL	0x80
@@ -55,6 +58,13 @@ extern "C" {
 #define BYTE_ORDER             LITTLE_ENDIAN
 
 #define DYNAMIC_TICKS
+
+#define UHYVE_PORT_WRITE	0x499
+#define UHYVE_PORT_OPEN		0x500
+#define UHYVE_PORT_CLOSE	0x501
+#define UHYVE_PORT_READ		0x502
+#define UHYVE_PORT_EXIT		0x503
+#define UHYVE_PORT_LSEEK	0x504
 
 #define BUILTIN_EXPECT(exp, b)		__builtin_expect((exp), (b))
 //#define BUILTIN_EXPECT(exp, b)	(exp)

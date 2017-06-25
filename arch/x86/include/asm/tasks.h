@@ -30,7 +30,7 @@
  * @file arch/x86/include/asm/tasks.h
  * @brief Task related structure definitions
  *
- * This file contains the task_t structure definition 
+ * This file contains the task_t structure definition
  * and task state define constants
  */
 
@@ -55,7 +55,7 @@ void switch_context(size_t** stack);
  * @param task Pointer to the task structure
  * @param ep The entry point for code execution
  * @param arg Arguments list pointer for the task's stack
- * @param core_id Id of the core, which is firstly used by the task 
+ * @param core_id Id of the core, which is firstly used by the task
  * @return
  * - 0 on success
  * - -EINVAL (-22) on failure
@@ -75,6 +75,13 @@ static inline int jump_to_user_code(size_t ep, size_t stack)
 	asm volatile ("push %0; push %1; push $0x41202; push %2; push %3; iretq" :: "r"(0x33ULL), "r"(stack), "r"(0x2bULL), "r"(ep) : "memory");
 
 	return 0;
+}
+
+/** @brief Architecture dependent initialize routine
+ */
+static inline void arch_init_task(task_t* task)
+{
+	set_tss((size_t) task->stack + KERNEL_STACK_SIZE - 0x10, (size_t) task->ist_addr + KERNEL_STACK_SIZE - 0x10);
 }
 
 #ifdef __cplusplus

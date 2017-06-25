@@ -34,7 +34,7 @@
 #ifndef __TIME_H__
 #define __TIME_H__
 
-#include <asm/apic.h>
+#include <asm/time.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -84,12 +84,6 @@ static inline void sleep(unsigned int sec) { timer_wait(sec*TIMER_FREQ); }
 /** @brief Get milliseconds since system boot
  */
 static inline uint64_t get_uptime() { return (get_clock_tick() * 1000) / TIMER_FREQ; }
-
-static inline int timer_deadline(uint32_t t) { return apic_timer_deadline(t); }
-
-static inline void timer_disable(void) { apic_disable_timer(); }
-
-static inline int timer_is_running(void) { return apic_timer_is_running(); }
 
 #ifdef __cplusplus
 }

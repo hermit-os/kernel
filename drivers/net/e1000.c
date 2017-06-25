@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright 2012 Stefan Lankes, Chair for Operating Systems,
  *                               RWTH Aachen University
  *
@@ -58,7 +58,7 @@ typedef struct {
 	uint32_t device;
 } board_t;
 
-static board_t board_tbl[] = 
+static board_t board_tbl[] =
 {
 	{"Intel", "Intel E1000 (82542)", 0x8086, 0x1000},
 	{"Intel", "Intel E1000 (82543GC FIBER)", 0x8086, 0x1001},
@@ -67,7 +67,7 @@ static board_t board_tbl[] =
 	{"Intel", "Intel E1000 (82544EI FIBER)", 0x8086, 0x1009},
 	{"Intel", "Intel E1000 (82544GC COPPER)", 0x8086, 0x100C},
 	{"Intel", "Intel E1000 (82544GC LOM)", 0x8086, 0x100D},
-	{"Intel", "Intel E1000 (82540EM)", 0x8086, 0x100E},	
+	{"Intel", "Intel E1000 (82540EM)", 0x8086, 0x100E},
 	{"Intel", "Intel E1000 (82540EM LOM)", 0x8086, 0x1015},
 	{"Intel", "Intel E1000 (82540EP LOM)", 0x8086, 0x1016},
 	{"Intel", "Intel E1000 (82540EP)", 0x8086, 0x1017},
@@ -132,7 +132,7 @@ static uint16_t eeprom_read(volatile uint8_t* base, uint8_t addr)
 
 	e1000_write(base, E1000_EERD, 1 | ((uint32_t)(addr) << 8));
 
-	while(!((tmp = e1000_read(base, E1000_EERD)) & (1 << 4))) 
+	while(!((tmp = e1000_read(base, E1000_EERD)) & (1 << 4)))
 		udelay(1);
 
 	data = (uint16_t)((tmp >> 16) & 0xFFFF);
@@ -148,7 +148,7 @@ static uint16_t eeprom_read(uint8_t* base, uint8_t addr)
 
 	e1000_write(base, E1000_EERD, 1 | ((uint32_t)(addr) << 2));
 
-	while(!((tmp = e1000_read(base, E1000_EERD)) & (1 << 1))) 
+	while(!((tmp = e1000_read(base, E1000_EERD)) & (1 << 1)))
 		udelay(1);
 
 	data = (uint16_t)((tmp >> 16) & 0xFFFF);
@@ -198,7 +198,7 @@ static err_t e1000if_output(struct netif* netif, struct pbuf* p)
 
 	// update the tail so the hardware knows it's ready
 	e1000if->tx_tail = (e1000if->tx_tail + 1) % NUM_TX_DESCRIPTORS;
-	e1000_write(e1000if->bar0, E1000_TDT, e1000if->tx_tail);	
+	e1000_write(e1000if->bar0, E1000_TDT, e1000if->tx_tail);
 
 #if ETH_PAD_SIZE
 	pbuf_header(p, ETH_PAD_SIZE); /* reclaim the padding word */
@@ -256,7 +256,7 @@ static void e1000_rx_inthandler(struct netif* netif)
 			LINK_STATS_INC(link.drop);
 		}
 
-no_eop:		
+no_eop:
 		e1000if->rx_desc[e1000if->rx_tail].status = 0;
 
 		// update tail and write the value to the device
@@ -333,12 +333,12 @@ err_t e1000if_init(struct netif* netif)
 	uint16_t tmp16, speed, cold = 0x40;
 	uint8_t tmp8, is64bit, mem_type, prefetch;
 	static uint8_t num = 0;
-	
+
 	LWIP_ASSERT("netif != NULL", (netif != NULL));
 
 	tmp8 = 0;
 	while (board_tbl[tmp8].vendor_str) {
-		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, &pci_info, 1) == 0)
+		if (pci_get_device_info(board_tbl[tmp8].vendor, board_tbl[tmp8].device, PCI_IGNORE_SUBID, &pci_info, 1) == 0)
 			break;
 		tmp8++;
 	}
@@ -394,7 +394,7 @@ err_t e1000if_init(struct netif* netif)
 		goto oom;
 	memset((void*) e1000if->tx_desc, 0x00, NUM_TX_DESCRIPTORS*sizeof(tx_desc_t));
 
-	LWIP_DEBUGF(NETIF_DEBUG, ("e1000if_init: Found %s at mmio 0x%x (size 0x%x), irq %u\n", board_tbl[tmp8].device_str, 
+	LWIP_DEBUGF(NETIF_DEBUG, ("e1000if_init: Found %s at mmio 0x%x (size 0x%x), irq %u\n", board_tbl[tmp8].device_str,
 		pci_info.base[0] & ~0xF, pci_info.size[0], e1000if->irq));
 	//LWIP_DEBUGF(NETIF_DEBUG, ("e1000if_init: Map iobase to %p\n", e1000if->bar0));
 	LWIP_DEBUGF(NETIF_DEBUG, ("e1000if_init: is64bit %u, prefetch %u\n", is64bit, prefetch));
@@ -439,7 +439,7 @@ err_t e1000if_init(struct netif* netif)
 
 	// transmit buffer length; NUM_TX_DESCRIPTORS 16-byte descriptors
 	e1000_write(e1000if->bar0, E1000_TDLEN , (uint32_t)(NUM_TX_DESCRIPTORS * sizeof(tx_desc_t)));
-	
+
 	// setup head and tail pointers
 	e1000_write(e1000if->bar0, E1000_TDH, 0);
 	e1000_write(e1000if->bar0, E1000_TDT, 0);
@@ -472,7 +472,7 @@ err_t e1000if_init(struct netif* netif)
 	tmp32 = 0;
 	for(tmp8=0; tmp8<2; tmp8++)
 		((uint8_t*) &tmp32)[tmp8] = netif->hwaddr[tmp8+4];
-	e1000_write(e1000if->bar0, E1000_RA+4, tmp32 | (1 << 31)); // set also AV bit to check incoming packets 
+	e1000_write(e1000if->bar0, E1000_RA+4, tmp32 | (1 << 31)); // set also AV bit to check incoming packets
 
 	/* Zero out the other receive addresses. */
 	for (tmp8=1; tmp8<16; tmp8++) {

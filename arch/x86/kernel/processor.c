@@ -49,6 +49,8 @@ extern atomic_int32_t current_boot_id;
 extern void isrsyscall(void);
 
 cpu_info_t cpu_info = { 0, 0, 0, 0, 0};
+static char cpu_vendor[13] = {[0 ... 12] = 0};
+static char cpu_brand[4*3*sizeof(uint32_t)+1] = {[0 ... 4*3*sizeof(uint32_t)] = 0};
 extern uint32_t cpu_freq;
 
 static void default_save_fpu_state(union fpu_state* state)
@@ -170,17 +172,16 @@ static void fpu_init_xsave(union fpu_state* fpu)
 
 static uint32_t get_frequency_from_mbinfo(void)
 {
-#if 0
-	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE))
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE) && (cmdline))
 	{
 		// search in the command line for cpu frequency
-		char* found = strstr((char*) mb_info->cmdline, "-freq");
+		char* found = strstr((char*) (size_t)cmdline, "-freq");
 		if (!found)
 			return 0;
 
 		return atoi(found+strlen("-freq"));
 	}
-#endif
+
 	return 0;
 }
 
@@ -189,52 +190,37 @@ static uint32_t get_frequency_from_mbinfo(void)
 // Identification and the CPUID Instruction".
 static uint32_t get_frequency_from_brand(void)
 {
-	char brand[4*3*sizeof(uint32_t)+1];
-	uint32_t eax = 0, ebx = 0;
-	uint32_t ecx = 0, edx = 0;
 	uint32_t index, multiplier = 0;
-	uint32_t* bint = (uint32_t*) brand;
 
-	memset(brand, 0x00, sizeof(brand));
-
-	cpuid(0x80000000, &eax, &ebx, &ecx, &edx);
-	if (eax >= 0x80000004)
+	for(index=0; index<sizeof(cpu_brand)-2; index++)
 	{
-		cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
-		cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
-		cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
-		LOG_INFO("Processor: %s\n", brand);
-
-		for(index=0; index<sizeof(brand)-2; index++)
+		if ((cpu_brand[index+1] == 'H') && (cpu_brand[index+2] == 'z'))
 		{
-			if ((brand[index+1] == 'H') && (brand[index+2] == 'z'))
-			{
-				if (brand[index] == 'M')
-					multiplier = 1;
-				else if (brand[index] == 'G')
-					multiplier = 1000;
-				else if (brand[index] == 'T')
-					multiplier = 1000000;
+			if (cpu_brand[index] == 'M')
+				multiplier = 1;
+			else if (cpu_brand[index] == 'G')
+				multiplier = 1000;
+			else if (cpu_brand[index] == 'T')
+				multiplier = 1000000;
+		}
+
+		if (multiplier > 0) {
+			uint32_t freq;
+
+			// Compute frequency (in MHz) from brand string
+			if (cpu_brand[index-3] == '.') { // If format is “x.xx”
+				freq  = (uint32_t)(cpu_brand[index-4] - '0') * multiplier;
+				freq += (uint32_t)(cpu_brand[index-2] - '0') * (multiplier / 10);
+				freq += (uint32_t)(cpu_brand[index-1] - '0') * (multiplier / 100);
+			} else { // If format is xxxx
+				freq  = (uint32_t)(cpu_brand[index-4] - '0') * 1000;
+				freq += (uint32_t)(cpu_brand[index-3] - '0') * 100;
+				freq += (uint32_t)(cpu_brand[index-2] - '0') * 10;
+				freq += (uint32_t)(cpu_brand[index-1] - '0');
+				freq *= multiplier;
 			}
 
-			if (multiplier > 0) {
-				uint32_t freq;
-
-				// Compute frequency (in MHz) from brand string
-				if (brand[index-3] == '.') { // If format is “x.xx”
-					freq  = (uint32_t)(brand[index-4] - '0') * multiplier;
-					freq += (uint32_t)(brand[index-2] - '0') * (multiplier / 10);
-					freq += (uint32_t)(brand[index-1] - '0') * (multiplier / 100);
-				} else { // If format is xxxx
-					freq  = (uint32_t)(brand[index-4] - '0') * 1000;
-					freq += (uint32_t)(brand[index-3] - '0') * 100;
-					freq += (uint32_t)(brand[index-2] - '0') * 10;
-					freq += (uint32_t)(brand[index-1] - '0');
-					freq *= multiplier;
-				}
-
-				return freq;
-			}
+			return freq;
 		}
 	}
 
@@ -407,7 +393,7 @@ static void check_est(uint8_t out)
 
 int cpu_detection(void) {
 	uint64_t xcr0;
-	uint32_t a=0, b=0, c=0, d=0, level = 0;
+	uint32_t a=0, b=0, c=0, d=0, level = 0, extended = 0;
 	uint32_t family, model, stepping;
 	size_t cr0, cr4;
 	uint8_t first_time = 0;
@@ -415,10 +401,10 @@ int cpu_detection(void) {
 	if (!cpu_info.feature1) {
 		first_time = 1;
 
-		cpuid(0, &level, &b, &c, &d);
-		LOG_INFO("cpuid level %d\n", level);
+		cpuid(0, &level, (uint32_t*) cpu_vendor, (uint32_t*)(cpu_vendor+8), (uint32_t*)(cpu_vendor+4));
+		kprintf("cpuid level %d\n", level);
+		kprintf("CPU vendor: %s\n", cpu_vendor);
 
-		a = b = c = d = 0;
 		cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
 		family   = (a & 0x00000F00) >> 8;
@@ -427,18 +413,29 @@ int cpu_detection(void) {
 		if ((family == 6) && (model < 3) && (stepping < 3))
 			cpu_info.feature1 &= ~CPU_FEATURE_SEP;
 
-		cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
-		cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
+		cpuid(0x80000000, &extended, &b, &c, &d);
+		if (extended >= 0x80000001)
+			cpuid(0x80000001, &a, &b, &c, &cpu_info.feature3);
+		if (extended >= 0x80000008) {
+			uint32_t* bint = (uint32_t*) cpu_brand;
+
+			cpuid(0x80000002, bint+0, bint+1, bint+2, bint+3);
+			cpuid(0x80000003, bint+4, bint+5, bint+6, bint+7);
+			cpuid(0x80000004, bint+8, bint+9, bint+10, bint+11);
+			kprintf("Processor: %s\n", cpu_brand);
+		}
+		if (extended >= 0x80000008)
+			cpuid(0x80000008, &cpu_info.addr_width, &b, &c, &d);
 
 		/* Additional Intel-defined flags: level 0x00000007 */
-        	if (level >= 0x00000007) {
+		if (level >= 0x00000007) {
 			a = b = c = d = 0;
 			cpuid(7, &a, &cpu_info.feature4, &c, &d);
 		}
 	}
 
 	if (first_time) {
-		LOG_INFO("Paging features: %s%s%s%s%s%s%s%s\n",
+		kprintf("Paging features: %s%s%s%s%s%s%s%s\n",
 				(cpu_info.feature1 & CPU_FEATURE_PSE) ? "PSE (2/4Mb) " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PAE) ? "PAE " : "",
 				(cpu_info.feature1 & CPU_FEATURE_PGE) ? "PGE " : "",
@@ -448,10 +445,10 @@ int cpu_detection(void) {
 				(cpu_info.feature3 & CPU_FEATURE_1GBHP) ? "PSE (1Gb) " : "",
 				(cpu_info.feature3 & CPU_FEATURE_LM) ? "LM" : "");
 
-		LOG_INFO("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
-		LOG_INFO("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
-		LOG_INFO("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
-		LOG_INFO("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
+		kprintf("Physical adress-width: %u bits\n", cpu_info.addr_width & 0xff);
+		kprintf("Linear adress-width: %u bits\n", (cpu_info.addr_width >> 8) & 0xff);
+		kprintf("Sysenter instruction: %s\n", (cpu_info.feature1 & CPU_FEATURE_SEP) ? "available" : "unavailable");
+		kprintf("Syscall instruction: %s\n", (cpu_info.feature3 & CPU_FEATURE_SYSCALL) ? "available" : "unavailable");
 	}
 
 	//TODO: add check for SMEP and SMAP
@@ -509,7 +506,8 @@ int cpu_detection(void) {
 			xcr0 |= 0xE0;
 		xsetbv(0, xcr0);
 
-		LOG_INFO("Set XCR0 to 0x%llx\n", xgetbv(0));
+		if (first_time)
+			kprintf("Set XCR0 to 0x%llx\n", xgetbv(0));
 	}
 
 	// libos => currently no support of syscalls
@@ -520,7 +518,7 @@ int cpu_detection(void) {
 		wrmsr(MSR_LSTAR, (size_t) &isrsyscall);
 		//  clear IF flag during an interrupt
 		wrmsr(MSR_SYSCALL_MASK, EFLAGS_TF|EFLAGS_DF|EFLAGS_IF|EFLAGS_AC|EFLAGS_NT);
-	} else LOG_INFO("Processor doesn't support syscalls\n");
+	} else kprintf("Processor doesn't support syscalls\n");
 #endif
 
 	if (has_nx())
@@ -554,7 +552,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -573,6 +571,7 @@ int cpu_detection(void) {
 			has_vmx() ? "VMX " : "",
 			has_rdtscp() ? "RDTSCP " : "",
 			has_fsgsbase() ? "FSGSBASE " : "",
+			has_sgx() ? "SGX " : "",
 			has_mwait() ? "MWAIT " : "",
 			has_clflush() ? "CLFLUSH " : "",
 			has_bmi1() ? "BMI1 " : "",
@@ -581,10 +580,14 @@ int cpu_detection(void) {
 			has_rtm() ? "RTM " : "",
 			has_hle() ? "HLE " : "",
 			has_cqm() ? "CQM " : "",
+			has_clflushopt() ? "CLFLUSHOPT " : "",
+			has_clwb() ? "CLWB " : "",
 			has_avx512f() ? "AVX512F " : "",
 			has_avx512cd() ? "AVX512CD " : "",
 			has_avx512pf() ? "AVX512PF " : "",
-			has_avx512er() ? "AVX512ER " : "");
+			has_avx512er() ? "AVX512ER " : "",
+			has_avx512vl() ? "AVX512VL " : "",
+			has_avx512bw() ? "AVX512BW " : "");
 	}
 
 	if (first_time && has_osxsave()) {
@@ -616,15 +619,11 @@ int cpu_detection(void) {
 	check_est(first_time);
 
 	if (first_time && on_hypervisor()) {
-		uint32_t c, d;
 		char vendor_id[13];
 
 		LOG_INFO("HermitCore is running on a hypervisor!\n");
 
-		cpuid(0x40000000, &a, &b, &c, &d);
-		memcpy(vendor_id, &b, 4);
-		memcpy(vendor_id + 4, &c, 4);
-		memcpy(vendor_id + 8, &d, 4);
+		cpuid(0x40000000, &a, (uint32_t*)vendor_id, (uint32_t*)(vendor_id+4), (uint32_t*)(vendor_id+8));
 		vendor_id[12] = '\0';
 
 		LOG_INFO("Hypervisor Vendor Id: %s\n", vendor_id);

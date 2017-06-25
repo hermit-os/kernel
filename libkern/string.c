@@ -10,8 +10,8 @@
 
 #include <hermit/string.h>
 
-#ifndef HAVE_ARCH_MEMCPY
-void *memcpy(void *dest, const void *src, size_t count)
+#if !HAVE_ARCH_MEMCPY
+void *_memcpy(void *dest, const void *src, size_t count)
 {
 	size_t i;
 
@@ -20,13 +20,13 @@ void *memcpy(void *dest, const void *src, size_t count)
 
 	for (i = 0; i < count; i++)
 		((char*)dest)[i] = ((char*)src)[i];
-	
+
 	return dest;
 }
 #endif
 
-#ifndef HAVE_ARCH_MEMSET
-void *memset(void *dest, int val, size_t count)
+#if !HAVE_ARCH_MEMSET
+void *_memset(void *dest, int val, size_t count)
 {
 	size_t i;
 
@@ -40,8 +40,8 @@ void *memset(void *dest, int val, size_t count)
 }
 #endif
 
-#ifndef HAVE_ARCH_MEMCMP
-int memcmp(const void *s1, const void *s2, size_t n)
+#if !HAVE_ARCH_MEMCMP
+int _memcmp(const void *s1, const void *s2, size_t n)
 {
 	if (n != 0) {
 		const unsigned char *p1 = s1, *p2 = s2;
@@ -56,8 +56,8 @@ int memcmp(const void *s1, const void *s2, size_t n)
 }
 #endif
 
-#ifndef HAVE_ARCH_STRLEN
-size_t strlen(const char *str)
+#if !HAVE_ARCH_STRLEN
+size_t _strlen(const char *str)
 {
 	size_t len = 0;
 
@@ -71,8 +71,8 @@ size_t strlen(const char *str)
 }
 #endif
 
-#ifndef HAVE_ARCH_STRNCPY
-char* strncpy(char *dest, const char *src, size_t n)
+#if !HAVE_ARCH_STRNCPY
+char* _strncpy(char *dest, const char *src, size_t n)
 {
 	size_t i;
 
@@ -90,8 +90,8 @@ char* strncpy(char *dest, const char *src, size_t n)
 }
 #endif
 
-#ifndef HAVE_ARCH_STRCPY
-char* strcpy(char *dest, const char *src)
+#if !HAVE_ARCH_STRCPY
+char* _strcpy(char *dest, const char *src)
 {
         size_t i;
 
@@ -106,8 +106,8 @@ char* strcpy(char *dest, const char *src)
 }
 #endif
 
-#ifndef HAVE_ARCH_STRCMP
-int strcmp(const char *s1, const char *s2)
+#if !HAVE_ARCH_STRCMP
+int _strcmp(const char *s1, const char *s2)
 {
 	while (*s1 != '\0' && *s1 == *s2) {
 		s1++;
@@ -118,8 +118,8 @@ int strcmp(const char *s1, const char *s2)
 }
 #endif
 
-#ifndef HAVE_ARCH_STRNCMP
-int strncmp(const char *s1, const char *s2, size_t n)
+#if !HAVE_ARCH_STRNCMP
+int _strncmp(const char *s1, const char *s2, size_t n)
 {
 	if (BUILTIN_EXPECT(n == 0, 0))
 		return 0;

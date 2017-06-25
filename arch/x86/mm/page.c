@@ -49,7 +49,6 @@
 /* Note that linker symbols are not variables, they have no memory
  * allocated for maintaining a value, rather their address is their value. */
 extern const void kernel_start;
-//extern const void kernel_end;
 
 /// This page is reserved for copying
 #define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
@@ -81,6 +80,7 @@ static size_t* const self[PAGE_LEVELS] = {
 	(size_t *) 0xFFFFFFFFFFFFF000
 };
 
+#if 0
 /** An other self-reference for page_map_copy() */
 static size_t * const other[PAGE_LEVELS] = {
 	(size_t *) 0xFFFFFF0000000000,
@@ -89,17 +89,30 @@ static size_t * const other[PAGE_LEVELS] = {
 	(size_t *) 0xFFFFFFFFFFFFE000
 };
 #endif
+#endif
 
 static uint8_t expect_zeroed_pages = 0;
 
 size_t virt_to_phys(size_t addr)
 {
-	size_t vpn   = addr >> PAGE_BITS;	// virtual page number
-	size_t entry = self[0][vpn];		// page table entry
-	size_t off   = addr  & ~PAGE_MASK;	// offset within page
-	size_t phy   = entry &  PAGE_MASK;	// physical page frame number
+	if ((addr > (size_t) &kernel_start) &&
+	    (addr <= PAGE_2M_FLOOR((size_t) &kernel_start + image_size)))
+	{
+		size_t vpn   = addr >> (PAGE_2M_BITS);	// virtual page number
+		size_t entry = self[1][vpn];		// page table entry
+		size_t off   = addr  & ~PAGE_2M_MASK;	// offset within page
+		size_t phy   = entry &  PAGE_2M_MASK;	// physical page frame number
 
-	return phy | off;
+		return phy | off;
+
+	} else {
+		size_t vpn   = addr >> PAGE_BITS;	// virtual page number
+		size_t entry = self[0][vpn];		// page table entry
+		size_t off   = addr  & ~PAGE_MASK;	// offset within page
+		size_t phy   = entry &  PAGE_MASK;	// physical page frame number
+
+		return phy | off;
+	}
 }
 
 /*
@@ -141,15 +154,15 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 				if (!(self[lvl][vpn] & PG_PRESENT)) {
 					/* There's no table available which covers the region.
 					 * Therefore we need to create a new empty table. */
-					size_t phyaddr = get_pages(1);
-					if (BUILTIN_EXPECT(!phyaddr, 0))
+					size_t paddr = get_pages(1);
+					if (BUILTIN_EXPECT(!paddr, 0))
 						goto out;
 
 					/* Reference the new table within its parent */
 #if 0
-					self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED;
+					self[lvl][vpn] = paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED | PG_DIRTY;
 #else
-					self[lvl][vpn] = (phyaddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED) & ~PG_XD;
+					self[lvl][vpn] = (paddr | bits | PG_PRESENT | PG_USER | PG_RW | PG_ACCESSED | PG_DIRTY) & ~PG_XD;
 #endif
 
 					/* Fill new table with zeros */
@@ -165,7 +178,7 @@ int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8
 					send_ipi = flush = 1;
 				}
 
-				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED;
+				self[lvl][vpn] = phyaddr | bits | PG_PRESENT | PG_ACCESSED | PG_DIRTY;
 
 				if (flush)
 					/* There's already a page mapped at this address.
@@ -312,10 +325,16 @@ int page_init(void)
 		LOG_INFO("Detect Go runtime! Consequently, HermitCore zeroed heap.\n");
 	}
 
-	if (mb_info && ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK))) {
-		LOG_INFO("Map multiboot cmdline 0x%x into the virtual address space\n", mb_info->cmdline);
-		page_map((size_t) mb_info->cmdline & PAGE_MASK, mb_info->cmdline & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
-	}
+	if (mb_info && (mb_info->flags & MULTIBOOT_INFO_CMDLINE) && (cmdline))
+	{
+		size_t i = 0;
+
+		while(((size_t) cmdline + i) <= ((size_t) cmdline + cmdsize))
+		{
+			page_map(((size_t) cmdline + i) & PAGE_MASK, ((size_t) cmdline + i) & PAGE_MASK, 1, PG_GLOBAL|PG_RW|PG_PRESENT);
+			i += PAGE_SIZE;
+		}
+	} else cmdline = 0;
 
 	/* Replace default pagefault handler */
 	irq_uninstall_handler(14);
