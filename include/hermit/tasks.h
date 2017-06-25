@@ -133,16 +133,6 @@ int create_kernel_task(tid_t* id, entry_point_t ep, void* args, uint8_t prio);
  */
 int create_kernel_task_on_core(tid_t* id, entry_point_t ep, void* args, uint8_t prio, uint32_t core_id);
 
-
-/** @brief Create a thread local storage for the current task
- *
- * @return
- * - 0 on success
- * - -EONMEM on failure
- */
-int init_tls(void);
-
-
 /** @brief Cleanup function for the task termination
  *
  * On termination, the task call this function to cleanup its address space.
@@ -176,6 +166,14 @@ void reschedule(void);
  */
 int wakeup_task(tid_t);
 
+/** @brief Wake up a core_id
+ *
+ * Wakeup core to be sure that
+ * the core isn't in halt state
+ *
+ * @param core_id Specifies the core
+ */
+void wakeup_core(uint32_t core_id);
 
 /** @brief Block current task
  *
@@ -196,7 +194,7 @@ void wait_for_task(void);
  *
  * @return
  *  - address of the readyqueue
- */ 
+ */
 void* get_readyqueue(void);
 
 /** @brief Get a process control block
@@ -279,6 +277,10 @@ static inline void check_workqueues(void)
 	// call with invalid interrupt number
 	check_workqueues_in_irqhandler(-1);
 }
+
+/** @brief check if a proxy is available
+ */
+int is_proxy(void);
 
 #ifdef __cplusplus
 }

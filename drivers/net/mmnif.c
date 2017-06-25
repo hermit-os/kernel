@@ -678,7 +678,7 @@ err_t mmnif_init(struct netif *netif)
 	num++;
 
 	/* downward functions */
-	netif->output = mmnif_link_layer;
+	netif->output = (netif_output_fn) mmnif_link_layer;
 
 	/* there is no special link layer just the ip layer */
 	netif->linkoutput = mmnif_tx;
@@ -686,8 +686,6 @@ err_t mmnif_init(struct netif *netif)
 	/* maximum transfer unit */
 	netif->mtu = 1500;
 
-	/* broadcast capability, keep all default flags */
-	//netif->flags |= NETIF_FLAG_BROADCAST;
 	/* set link up */
 	netif->flags |= NETIF_FLAG_LINK_UP;
 

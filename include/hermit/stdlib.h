@@ -121,13 +121,17 @@ void page_free(void* addr, size_t sz);
  *
  * @return Long value of the parsed numerical string
  */
-long strtol(const char* str, char** endptr, int base);
+long _strtol(const char* str, char** endptr, int base);
+
+#define strtol(str, endptr, base)	_strtol((str), (endptr), (base))
 
 /** @brief String to unsigned long
  *
  * @return Unsigned long value of the parsed numerical string
  */
-unsigned long strtoul(const char* nptr, char** endptr, int base);
+unsigned long _strtoul(const char* nptr, char** endptr, int base);
+
+#define strtoul(nptr, endptr, base)	_strtoul((nptr), (endptr), (base))
 
 /** @brief ASCII to integer
  *
@@ -137,7 +141,7 @@ unsigned long strtoul(const char* nptr, char** endptr, int base);
  */
 static inline int atoi(const char *str)
 {
-	return (int)strtol(str, (char **)NULL, 10);
+	return (int)_strtol(str, (char **)NULL, 10);
 }
 
 #ifdef __cplusplus

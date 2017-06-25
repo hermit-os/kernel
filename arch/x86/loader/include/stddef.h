@@ -85,6 +85,14 @@ typedef char int8_t;
 /// 16 bit wide char type
 typedef unsigned short wchar_t;
 
+/** @brief String to long
+ *
+ * @return Long value of the parsed numerical string
+ */
+long _strtol(const char* str, char** endptr, int base);
+
+#define strtol(str, endptr, base)	_strtol((str), (endptr), (base))
+
 #ifdef __cplusplus
 }
 #endif

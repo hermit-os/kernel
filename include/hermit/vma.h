@@ -87,7 +87,7 @@ typedef struct vma {
 /** @brief Initalize the kernelspace VMA list
  *
  * Reserves several system-relevant virtual memory regions:
- *  - The kernel (kernel_start - kernel_end)
+ *  - The kernel (image_size)
  *  - Init Ramdisk
  *
  * @return
@@ -96,7 +96,17 @@ typedef struct vma {
  */
 int vma_init(void);
 
-/** @brief Add a new virtual memory area to the list of VMAs 
+/** @brief Initalize the kernelspace VMA list
+ *
+ * Reserves several architecture-relevant virtual memory regions
+ *
+ * @return
+ *  - 0 on success
+ *  - <0 on failure
+ */
+int vma_arch_init(void);
+
+/** @brief Add a new virtual memory area to the list of VMAs
  *
  * @param start Start address of the new area
  * @param end End address of the new area

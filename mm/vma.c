@@ -32,18 +32,16 @@
 #include <hermit/spinlock.h>
 #include <hermit/errno.h>
 #include <hermit/logging.h>
-#include <asm/multiboot.h>
 
-/* 
+/*
  * Note that linker symbols are not variables, they have no memory allocated for
  * maintaining a value, rather their address is their value.
  */
 extern const void kernel_start;
-extern const void kernel_end;
 
 /*
  * Kernel space VMA list and lock
- * 
+ *
  * For bootstrapping we initialize the VMA list with one empty VMA
  * (start == end) and expand this VMA by calls to vma_alloc()
  */
@@ -51,19 +49,17 @@ static vma_t vma_boot = { VMA_MIN, VMA_MIN, VMA_HEAP };
 static vma_t* vma_list = &vma_boot;
 static spinlock_irqsave_t vma_lock = SPINLOCK_IRQSAVE_INIT;
 
-// TODO: we might move the architecture specific VMA regions to a
-//       seperate function arch_vma_init()
 int vma_init(void)
 {
 	int ret;
 
 	LOG_INFO("vma_init: reserve vma region 0x%llx - 0x%llx\n",
 		PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_end));
+		PAGE_2M_FLOOR((size_t) &kernel_start + image_size));
 
 	// add Kernel
 	ret  = vma_add(PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_end),
+		PAGE_2M_FLOOR((size_t) &kernel_start + image_size),
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
@@ -73,24 +69,9 @@ int vma_init(void)
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
 
-#ifdef CONFIG_VGA
-	// add VGA video memory
-	ret = vma_add(VIDEO_MEM_ADDR, VIDEO_MEM_ADDR + PAGE_SIZE, VMA_READ|VMA_WRITE);
-	if (BUILTIN_EXPECT(ret, 0))
-		goto out;
-#endif
-
-	if (mb_info) {
-		ret = vma_add((size_t)mb_info & PAGE_MASK, ((size_t)mb_info & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
-		if (BUILTIN_EXPECT(ret, 0))
-			goto out;
-
-		if ((mb_info->cmdline & PAGE_MASK) != ((size_t) mb_info & PAGE_MASK)) {
-			ret = vma_add((size_t)mb_info->cmdline & PAGE_MASK, ((size_t)mb_info->cmdline & PAGE_MASK) + PAGE_SIZE, VMA_READ|VMA_WRITE);
-			if (BUILTIN_EXPECT(ret, 0))
-				goto out;
-		}
-	}
+	// we might move the architecture specific VMA regions to a
+	// seperate function vma_arch_init()
+	ret = vma_arch_init();
 
 out:
 	return ret;

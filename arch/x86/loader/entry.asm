@@ -99,32 +99,24 @@ stublet:
     ; Interpret multiboot information
     mov DWORD [mb_info], ebx
 
-    ; Initialize CPU features
-    call cpu_init
-
-    pop ebx ; restore pointer to multiboot structure
-    lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
-    jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
-
 ; This will set up the x86 control registers:
 ; Caching and the floating point unit are enabled
 ; Bootstrap page tables are loaded and page size
 ; extensions (huge pages) enabled.
-global cpu_init
 cpu_init:
 
 ; initialize page tables
 
     ; map vga 1:1
-    push edi
-    mov eax, VIDEO_MEM_ADDR   ; map vga
-    and eax, 0xFFFFF000       ; page align lower half
-    mov edi, eax
-    shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add edi, boot_pgt
-    or eax, 0x113             ; set present, global, writable and cache disable bits
-    mov DWORD [edi], eax
-    pop edi
+    ; push edi
+    ; mov eax, VIDEO_MEM_ADDR   ; map vga
+    ; and eax, 0xFFFFF000       ; page align lower half
+    ; mov edi, eax
+    ; shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
+    ; add edi, boot_pgt
+    ; or eax, 0x13             ; set present, writable and cache disable bits
+    ; mov DWORD [edi], eax
+    ; pop edi
 
     ; map multiboot info 1:1
     push edi
@@ -133,7 +125,7 @@ cpu_init:
     mov edi, eax
     shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add edi, boot_pgt
-    or eax, 0x101             ; set present and global bits
+    or eax, 0x3               ; set present and writable bits
     mov DWORD [edi], eax
     pop edi
 
@@ -151,7 +143,7 @@ L0: cmp ecx, ebx
     mov edi, eax
     shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add edi, boot_pgt
-    or eax, 0x103             ; set present, global and writable bits
+    or eax, 0x3               ; set present and writable bits
     mov DWORD [edi], eax
     add ecx, 0x1000
     jmp L0
@@ -188,22 +180,21 @@ L1:
     test edx, 1 << 29 ; Test if the LM-bit, which is bit 29, is set in the D-register.
     jz Linvalid ; They aren't, there is no long mode.
 
+    ; Set CR3
+    mov eax, boot_pml4
+    ;or eax, (1 << 0)        ; set present bit
+    mov cr3, eax
 
-    ; we need to enable PAE modus
+	; we need to enable PAE modus
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-    ; switch to the compatibility mode (which is part of long mode)
+	; switch to the compatibility mode (which is part of long mode)
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
     wrmsr
-
-    ; Set CR3
-    mov eax, boot_pml4
-    or eax, (1 << 0)        ; set present bit
-    mov cr3, eax
 
     ; Set CR4
     mov eax, cr4
@@ -221,7 +212,9 @@ L1:
     or eax, (1 << 31)       ; enable paging
     mov cr0, eax
 
-    ret
+	;pop ebx ; restore pointer to multiboot structure
+    lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
+    jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
 
 ; there is no long mode
 Linvalid:
@@ -244,7 +237,7 @@ start64:
 
     ; jump to the boot processors's C code
     extern main
-    call main
+    jmp main
     jmp $
 
 SECTION .data
@@ -262,17 +255,17 @@ boot_stack:
 ; Bootstrap page tables are used during the initialization.
 ALIGN 4096
 boot_pml4:
-    DQ boot_pdpt + 0x107 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pdpt + 0x7  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
 boot_pdpt:
-    DQ boot_pgd + 0x107  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pgd + 0x7   ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
 boot_pgd:
-    DQ boot_pgt + 0x107  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x303 ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_SELF (self-reference)
+    DQ boot_pgt + 0x7   ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
 boot_pgt:
     times 512 DQ 0
 

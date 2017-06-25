@@ -1,4 +1,3 @@
-
 ; Copyright (c) 2010-2015, Stefan Lankes, RWTH Aachen University
 ; All rights reserved.
 ;
@@ -29,12 +28,11 @@
 ; perhaps setting up the GDT and segments. Please note that interrupts
 ; are disabled at this point: More on interrupts later!
 
-%include "config.inc"
+%include "hermit/config.asm"
 
 [BITS 64]
 
 extern kernel_start		; defined in linker script
-extern kernel_end
 
 MSR_FS_BASE equ 0xc0000100
 MSR_GS_BASE equ 0xc0000101
@@ -69,6 +67,11 @@ align 4
     global mb_info
     global hbmem_base
     global hbmem_size
+    global uhyve
+    global image_size
+    global uartport
+    global cmdline
+    global cmdsize
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -92,6 +95,10 @@ align 4
     mb_info dq 0
     hbmem_base dq 0
     hbmem_size dq 0
+    uhyve dd 0
+    uartport dq 0
+    cmdline	dq 0
+    cmdsize	dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -113,9 +120,6 @@ boot_pgt:
 SECTION .ktext
 align 4
 start64:
-    ; store pointer to the multiboot information
-    mov [mb_info], QWORD rdx
-
     ; reset registers to kill any stale realmode selectors
     xor eax, eax
     mov ds, eax
@@ -133,10 +137,8 @@ start64:
     cmp eax, 0
     jne Lno_pml4_init
 
-    ; determine full image size
-    mov rax, kernel_end
-    sub rax, kernel_start
-    mov QWORD [image_size], rax
+    ; store pointer to the multiboot information
+    mov [mb_info], QWORD rdx
 
     ; relocate page tables
     mov rdi, boot_pml4
@@ -172,16 +174,6 @@ start64:
     add rax, [base]
     mov QWORD [rdi+511*8], rax
 
-%ifdef CONFIG_VGA
-    ; map vga 1:1
-    mov rax, VIDEO_MEM_ADDR   ; map vga
-    and rax, ~0xFFF           ; page align lower half
-    mov rdi, rax
-    shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add rdi, boot_pgt
-    or rax, 0x113             ; set present, global, writable and cache disable bits
-    mov QWORD [rdi], rax
-%endif
     ; map multiboot info
     mov rax, QWORD [mb_info]
     and rax, ~0xFFF           ; page align lower half
@@ -190,7 +182,7 @@ start64:
     mov rdi, rax
     shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
     add rdi, boot_pgt
-    or rax, 0x103             ; set present, global and writable bits
+    or rax, 0x23              ; set present, accessed and writable bits
     mov QWORD [rdi], rax
 Lno_mbinfo:
     ; remap kernel
@@ -198,13 +190,18 @@ Lno_mbinfo:
     shr rdi, 18       ; (edi >> 21) * 8 (index for boot_pgd)
     add rdi, boot_pgd
     mov rax, [base]
-    or rax, 0x83      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
+    or rax, 0xA3      ; PG_GLOBAL isn't required because HermitCore is a single-address space OS
     xor rcx, rcx
+    mov rsi, 510*0x200000
+    sub rsi, kernel_start
 Lremap:
     mov QWORD [rdi], rax
     add rax, 0x200000
     add rcx, 0x200000
     add rdi, 8
+    ; note: the whole code segement muust fit in the first pgd
+    cmp rcx, rsi
+    jnb Lno_pml4_init
     cmp rcx, QWORD [image_size]
     jb Lremap
 
@@ -609,7 +606,7 @@ common_switch:
     call get_current_stack     ; get new rsp
     mov rsp, rax
 
-%ifdef SAVE_FPU
+%ifidn SAVE_FPU,ON
     ; set task switched flag
     mov rax, cr0
     or rax, 8
@@ -665,6 +662,12 @@ Lgo3:
 
     add rsp, 16
     iretq
+
+global is_uhyve
+align 64
+is_uhyve:
+   mov eax, DWORD [uhyve]
+   ret
 
 global is_single_kernel
 align 64

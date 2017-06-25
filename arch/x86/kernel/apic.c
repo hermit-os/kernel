@@ -42,7 +42,7 @@
 #include <asm/io.h>
 #include <asm/page.h>
 #include <asm/apic.h>
-#include "boot.h"
+#include <hermit/boot.h>
 
 /*
  * Note that linker symbols are not variables, they have no memory allocated for
@@ -408,6 +408,7 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 	return NULL;
 }
 
+#if 0
 static size_t search_ebda(void) {
 	size_t ptr=PAGE_CEIL(0x400), vptr=0xF0000;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
@@ -421,12 +422,13 @@ static size_t search_ebda(void) {
 
 	uint16_t addr = *((uint16_t*) (vptr+0x40E));
 	LOG_INFO("Found EBDA at 0x%x!\n", (uint32_t)addr);
- 
+
 	// unmap page via mapping a zero page
 	page_unmap(vptr, 1);
 
 	return (size_t) addr;
 }
+#endif
 
 static int lapic_reset(void)
 {
@@ -454,8 +456,8 @@ static int lapic_reset(void)
 		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	if (max_lvt >= 5)
 		lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
-	lapic_write(APIC_LINT0, 0x7C);	// connect LINT0 to idt entry 124
-	lapic_write(APIC_LINT1, 0x7D);	// connect LINT1 to idt entry 125
+	lapic_write(APIC_LINT0, 0x00010000);	// disable LINT0
+	lapic_write(APIC_LINT1, 0x00010000);	// disable LINT1
 	lapic_write(APIC_LVT_ER, 0x7E);	// connect error to idt entry 126
 
 	return 0;
@@ -479,7 +481,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		reset_vector = (char*) vma_alloc(PAGE_SIZE, VMA_READ|VMA_WRITE);
 		page_map((size_t)reset_vector, 0x00, 1, PG_RW|PG_GLOBAL|PG_PCD);
 		reset_vector += 0x467; // add base address of the reset vector
-		LOG_INFO("Map reset vector to %p\n", reset_vector);
+		LOG_DEBUG("Map reset vector to %p\n", reset_vector);
 	}
 
 	*((volatile unsigned short *) (reset_vector+2)) = start_eip >> 4;
@@ -546,7 +548,7 @@ static int wakeup_ap(uint32_t start_eip, uint32_t id)
 		set_ipi_dest(id);
 		lapic_write(APIC_ICR1, APIC_DM_STARTUP|(start_eip >> 12));
 		if (traditional_delay)
-	                udelay(200);
+			udelay(200);
 		else
 			udelay(10);
 
@@ -568,7 +570,7 @@ int smp_init(void)
 	if (ncores <= 1)
 		return -EINVAL;
 
-	LOG_INFO("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
+	LOG_DEBUG("CR0 of core %u: 0x%x\n", apic_cpu_id(), read_cr0());
 
 	/*
 	 * dirty hack: Reserve memory for the bootup code.
@@ -609,7 +611,7 @@ int smp_init(void)
 		}
 	}
 
-	LOG_INFO("%d cores online\n", atomic_int32_read(&cpu_online));
+	LOG_DEBUG("%d cores online\n", atomic_int32_read(&cpu_online));
 
 	return 0;
 }
@@ -664,7 +666,8 @@ int apic_calibration(void)
 	apic_initialized = 1;
 	atomic_int32_inc(&cpu_online);
 
-	if(is_single_kernel()) {
+	if (is_single_kernel()) {
+		LOG_INFO("Disable PIC\n");
 		// Now, HermitCore is able to use the APIC => Therefore, we disable the PIC
 		outportb(0xA1, 0xFF);
 		outportb(0x21, 0xFF);
@@ -681,6 +684,7 @@ int apic_calibration(void)
 		}
 
 		// now, we don't longer need the IOAPIC timer and turn it off
+		LOG_INFO("Disable IOAPIC timer\n");
 		ioapic_intoff(2, apic_processors[boot_processor]->id);
 	}
 
@@ -694,7 +698,7 @@ int apic_calibration(void)
 
 static int apic_probe(void)
 {
-	size_t addr, ebda;
+	size_t addr;
 	uint32_t i, j, count;
 	int isa_bus = -1;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
@@ -703,10 +707,12 @@ static int apic_probe(void)
 	if (has_nx())
 		flags |= PG_XD;
 
-	ebda = search_ebda();
+#if 0
+	size_t ebda = search_ebda();
 	apic_mp = search_mptable(ebda, ebda+0x400);
 	if (apic_mp)
 		goto found_mp;
+#endif
 
 	apic_mp = search_mptable(0xF0000, 0x100000);
 	if (apic_mp)
@@ -717,7 +723,7 @@ static int apic_probe(void)
 
 found_mp:
 	if (!apic_mp) {
-		LOG_ERROR("Didn't find MP config table\n");
+		LOG_INFO("Didn't find MP config table\n");
 		goto no_mp;
 	}
 
@@ -887,7 +893,8 @@ no_mp:
 		boot_processor = 0;
 	apic_mp = NULL;
 	apic_config = NULL;
-	ncores = 1;
+	if (!is_uhyve())
+		ncores = 1;
 	goto check_lapic;
 }
 
@@ -903,19 +910,13 @@ int smp_start(void)
 	// reset APIC and set id
 	lapic_reset();
 
-	LOG_INFO("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
+	LOG_DEBUG("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
 	gdt_flush();
 
 	// install IDT
 	idt_install();
-
-	/*
-	 * we turned on paging
-	 * => now, we are able to register our task
-	 */
-	register_task();
 
 	// enable additional cpu features
 	cpu_detection();
@@ -930,6 +931,12 @@ int smp_start(void)
 	write_cr0(cr0);
 
 	set_idle_task();
+
+	/*
+	 * TSS is set, pagining is enabled
+	 * => now, we are able to register our task
+	 */
+	register_task();
 
 	irq_enable();
 
@@ -1077,19 +1084,16 @@ void shutdown_system(void)
 	}
 }
 
-volatile uint32_t go_down = 0;
-
-static void apic_shutdown(struct state * s)
+static void apic_shutdown(struct state* s)
 {
 	go_down = 1;
 
 	LOG_DEBUG("Receive shutdown interrupt\n");
 }
 
-static void apic_lint0(struct state * s)
+static void apic_wakeup(struct state* s)
 {
-	// Currently nothing to do
-	LOG_INFO("Receive LINT0 interrupt\n");
+	LOG_DEBUG("Receive wakeup interrupt\n");
 }
 
 int apic_init(void)
@@ -1101,12 +1105,12 @@ int apic_init(void)
 		return ret;
 
 	// set APIC error handler
+	irq_install_handler(121, apic_wakeup);
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
 	irq_install_handler(81+32, apic_shutdown);
-	irq_install_handler(124, apic_lint0);
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else

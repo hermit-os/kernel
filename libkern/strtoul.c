@@ -32,9 +32,9 @@
  * From: @(#)strtoul.c	8.1 (Berkeley) 6/4/93
  */
 
-/* 
+/*
  * The code has been taken from FreeBSD (sys/libkern/strtoul.c) and is consequently
- * BSD-licensed. Unnecessary functions have been removed and all typedefs required 
+ * BSD-licensed. Unnecessary functions have been removed and all typedefs required
  * have been added.
  */
 
@@ -50,7 +50,7 @@
  * alphabets and digits are each contiguous.
  */
 unsigned long
-strtoul(nptr, endptr, base)
+_strtoul(nptr, endptr, base)
 	const char *nptr;
 	char **endptr;
 	int base;
@@ -109,4 +109,3 @@ strtoul(nptr, endptr, base)
 		*((const char **)endptr) = any ? s - 1 : nptr;
 	return (acc);
 }
-

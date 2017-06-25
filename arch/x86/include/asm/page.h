@@ -36,19 +36,23 @@
 
 #include <hermit/stddef.h>
 #include <hermit/stdlib.h>
+#include <asm/processor.h>
 
 #ifndef __PAGE_H__
 #define __PAGE_H__
 
 /// Page offset bits
 #define PAGE_BITS		12
+#define PAGE_2M_BITS		21
 /// The size of a single page in bytes
 #define PAGE_SIZE		( 1L << PAGE_BITS)
 /// Mask the page address without page map flags and XD flag
 #if 0
 #define PAGE_MASK		((~0L) << PAGE_BITS)
+#define PAGE_2M_MASK		(~0L) << PAGE_2M_BITS)
 #else
 #define PAGE_MASK		(((~0L) << PAGE_BITS) & ~PG_XD)
+#define PAGE_2M_MASK		(((~0L) << PAGE_2M_BITS) & ~PG_XD)
 #endif
 
 #if 0
@@ -140,6 +144,8 @@ static inline size_t sign_extend(ssize_t addr, int bits)
 
 /// Disable execution for this page
 #define PG_XD			(1L << 63)
+
+#define PG_NX			(has_nx() ? PG_XD : 0)
 
 /** @brief Converts a virtual address to a physical
  *
