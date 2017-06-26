@@ -53,6 +53,20 @@ $ sudo apt-get -qq update
 $ sudo apt-get install binutils-hermit newlib-hermit pthread-embedded-hermit gcc-hermit libhermit
 ```
 
+For non-Debian based systems, a docker image with the complete toolchain is provided and can be installed as follows:
+
+```bash
+$ docker pull rwthos/hermitcore
+```
+
+The following commad starts within the new docker container a shell and mounts from the host system the directory `~/src` to `/src`:
+
+```bash
+$ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
+```
+
+Within the shell the croos toolchain can be used to build HermitCore applications.
+
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 
 Depending on how you want to use HermitCore, you might need additional packages
