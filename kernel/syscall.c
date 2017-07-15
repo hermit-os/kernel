@@ -290,11 +290,11 @@ ssize_t sys_sbrk(ssize_t incr)
 		heap->end += incr;
 
 		// reserve VMA regions
-		if (PAGE_CEIL(heap->end) > PAGE_CEIL(ret)) {
+		if (PAGE_FLOOR(heap->end) > PAGE_FLOOR(ret)) {
 			// region is already reserved for the heap, we have to change the
 			// property
-			vma_free(PAGE_CEIL(ret), PAGE_FLOOR(heap->end));
-			vma_add(PAGE_CEIL(ret), PAGE_FLOOR(heap->end), VMA_HEAP|VMA_USER);
+			vma_free(PAGE_FLOOR(ret), PAGE_CEIL(heap->end));
+			vma_add(PAGE_FLOOR(ret), PAGE_CEIL(heap->end), VMA_HEAP|VMA_USER);
 		}
 	} else ret = -ENOMEM;
 

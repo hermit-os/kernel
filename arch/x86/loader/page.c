@@ -45,7 +45,7 @@ extern const void kernel_start;
 extern const void kernel_end;
 
 /// This page is reserved for copying
-#define PAGE_TMP		(PAGE_FLOOR((size_t) &kernel_start) - PAGE_SIZE)
+#define PAGE_TMP		(PAGE_CEIL((size_t) &kernel_start) - PAGE_SIZE)
 
 /** This PGD table is initialized in entry.asm */
 extern size_t* boot_map;
@@ -188,12 +188,12 @@ int page_init(void)
 
 		// already mapped => entry.asm
 		//addr = (size_t) mb_info & PAGE_MASK;
-		//npages = PAGE_FLOOR(sizeof(*mb_info)) >> PAGE_BITS;
+		//npages = PAGE_CEIL(sizeof(*mb_info)) >> PAGE_BITS;
 		//page_map(addr, addr, npages, PG_GLOBAL);
 
 		if (mb_info->flags & MULTIBOOT_INFO_MODS) {
 			addr = mb_info->mods_addr;
-			npages = PAGE_FLOOR(mb_info->mods_count*sizeof(multiboot_module_t)) >> PAGE_BITS;
+			npages = PAGE_CEIL(mb_info->mods_count*sizeof(multiboot_module_t)) >> PAGE_BITS;
 			ret = page_map(addr, addr, npages, PG_GLOBAL);
 			kprintf("Map module info at 0x%lx (ret %d)\n", addr, ret);
 
@@ -202,14 +202,14 @@ int page_init(void)
 			// at first we determine the first free page
 			for(int i=0; i<mb_info->mods_count; i++) {
 				if (first_page < mmodule[i].mod_end)
-					first_page = PAGE_FLOOR(mmodule[i].mod_end);
+					first_page = PAGE_CEIL(mmodule[i].mod_end);
 			}
 
 			// we map only the first page of each module (= ELF file) because
 			// we need only the program header of the ELF file
 			for(int i=0; i<mb_info->mods_count; i++) {
 				addr = mmodule[i].mod_start;
-				npages = PAGE_FLOOR(mmodule[i].mod_end - mmodule[i].mod_start) >> PAGE_BITS;
+				npages = PAGE_CEIL(mmodule[i].mod_end - mmodule[i].mod_start) >> PAGE_BITS;
 				ret = page_map(addr, addr, 1 /*npages*/, PG_GLOBAL);
 				kprintf("Map first page of module %d at 0x%lx (ret %d)\n", i, addr, ret);
 				kprintf("Module %d consists %zd\n", i, npages);
