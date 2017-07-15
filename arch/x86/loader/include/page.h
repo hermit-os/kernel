@@ -86,12 +86,12 @@ static inline size_t sign_extend(ssize_t addr, int bits)
 #endif
 
 /// The number of entries in a page map table
-#define PAGE_MAP_ENTRIES	       (1L << PAGE_MAP_BITS)
+#define PAGE_MAP_ENTRIES	(1L << PAGE_MAP_BITS)
 
 /// Align to next page
-#define PAGE_FLOOR(addr)        (((addr) + PAGE_SIZE - 1) & PAGE_MASK)
+#define PAGE_CEIL(addr)		(((addr) + PAGE_SIZE - 1) & PAGE_MASK)
 /// Align to page
-#define PAGE_CEIL(addr)         ( (addr)                  & PAGE_MASK)
+#define PAGE_FLOOR(addr)	( (addr)                  & PAGE_MASK)
 
 /// Page is present
 #define PG_PRESENT		(1 << 0)

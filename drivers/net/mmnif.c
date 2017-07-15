@@ -594,7 +594,7 @@ err_t mmnif_init(struct netif *netif)
 		goto out;
 	}
 
-	err = vma_add((size_t)header_start_address, PAGE_FLOOR((size_t)header_start_address + ((nodes * header_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	err = vma_add((size_t)header_start_address, PAGE_CEIL((size_t)header_start_address + ((nodes * header_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(err, 0)) {
 		LOG_ERROR("mmnif init(): vma_add failed for header_start_address %p\n", header_start_address);
 		goto out;
@@ -620,7 +620,7 @@ err_t mmnif_init(struct netif *netif)
 		goto out;
 	}
 
-	err = vma_add((size_t)heap_start_address, PAGE_FLOOR((size_t)heap_start_address + ((nodes * heap_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	err = vma_add((size_t)heap_start_address, PAGE_CEIL((size_t)heap_start_address + ((nodes * heap_size) >> PAGE_BITS)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(!heap_start_address, 0))
 	{
 		LOG_ERROR("mmnif init(): vma_add failed for heap_start_address %p\n", heap_start_address);

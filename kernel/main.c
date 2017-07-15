@@ -342,8 +342,8 @@ static int initd(void* arg)
 	}
 
 	curr_task->heap->flags = VMA_HEAP|VMA_USER;
-	curr_task->heap->start = PAGE_FLOOR(heap);
-	curr_task->heap->end = PAGE_FLOOR(heap);
+	curr_task->heap->start = PAGE_CEIL(heap);
+	curr_task->heap->end = PAGE_CEIL(heap);
 
 	// region is already reserved for the heap, we have to change the
 	// property of the first page

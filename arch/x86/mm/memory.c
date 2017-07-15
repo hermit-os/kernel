@@ -194,13 +194,13 @@ void* page_alloc(size_t sz, uint32_t flags)
 {
 	size_t viraddr = 0;
 	size_t phyaddr;
-	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
+	uint32_t npages = PAGE_CEIL(sz) >> PAGE_BITS;
 	size_t pflags = PG_PRESENT|PG_GLOBAL|PG_XD;
 
 	if (BUILTIN_EXPECT(!npages, 0))
 		goto oom;
 
-	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
+	viraddr = vma_alloc(PAGE_CEIL(sz), flags);
 	if (BUILTIN_EXPECT(!viraddr, 0))
 		goto oom;
 
@@ -238,10 +238,10 @@ void page_free(void* viraddr, size_t sz)
 
 	phyaddr = virt_to_phys((size_t)viraddr);
 
-	vma_free((size_t) viraddr, (size_t) viraddr + PAGE_FLOOR(sz));
+	vma_free((size_t) viraddr, (size_t) viraddr + PAGE_CEIL(sz));
 
 	if (phyaddr)
-		put_pages(phyaddr, PAGE_FLOOR(sz) >> PAGE_BITS);
+		put_pages(phyaddr, PAGE_CEIL(sz) >> PAGE_BITS);
 }
 
 int memory_init(void)
@@ -267,13 +267,13 @@ int memory_init(void)
 			// mark first available memory slot as free
 			for(; mmap < mmap_end; mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size)) {
 				if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
-					start_addr = PAGE_FLOOR(mmap->addr);
-					end_addr = PAGE_CEIL(mmap->addr + mmap->len);
+					start_addr = PAGE_CEIL(mmap->addr);
+					end_addr = PAGE_FLOOR(mmap->addr + mmap->len);
 
 					LOG_INFO("Free region 0x%zx - 0x%zx\n", start_addr, end_addr);
 
 					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR((size_t) &kernel_start + image_size))) {
-						init_list.start = PAGE_2M_FLOOR((size_t) &kernel_start + image_size);
+						init_list.start = PAGE_2M_CEIL((size_t) &kernel_start + image_size);
 						init_list.end = end_addr;
 
 						LOG_INFO("Add region 0x%zx - 0x%zx\n", init_list.start, init_list.end);
@@ -295,13 +295,13 @@ int memory_init(void)
 		atomic_int64_add(&total_pages, (limit-base) >> PAGE_BITS);
 		atomic_int64_add(&total_available_pages, (limit-base) >> PAGE_BITS);
 
-		init_list.start = PAGE_2M_FLOOR(base + image_size);
+		init_list.start = PAGE_2M_CEIL(base + image_size);
 		init_list.end = limit;
 	}
 
 	// determine allocated memory, we use 2MB pages to map the kernel
-	atomic_int64_add(&total_allocated_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
-	atomic_int64_sub(&total_available_pages, PAGE_2M_FLOOR(image_size) >> PAGE_BITS);
+	atomic_int64_add(&total_allocated_pages, PAGE_2M_CEIL(image_size) >> PAGE_BITS);
+	atomic_int64_sub(&total_available_pages, PAGE_2M_CEIL(image_size) >> PAGE_BITS);
 
 	LOG_INFO("free list starts at 0x%zx, limit 0x%zx\n", init_list.start, init_list.end);
 
@@ -324,10 +324,10 @@ int memory_init(void)
 			for(; mmap < mmap_end; mmap = (multiboot_memory_map_t*) ((size_t) mmap + sizeof(uint32_t) + mmap->size))
 			{
 				if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE) {
-					start_addr = PAGE_FLOOR(mmap->addr);
-					end_addr = PAGE_CEIL(mmap->addr + mmap->len);
+					start_addr = PAGE_CEIL(mmap->addr);
+					end_addr = PAGE_FLOOR(mmap->addr + mmap->len);
 
-					if ((start_addr <= base) && (end_addr >= PAGE_2M_FLOOR(base+image_size)))
+					if ((start_addr <= base) && (end_addr >= PAGE_2M_CEIL(base+image_size)))
 						end_addr = base;
 
 					// ignore everything below 1M => reserve for I/O devices
@@ -335,11 +335,11 @@ int memory_init(void)
 						start_addr = GAP_BELOW;
 
 					if (start_addr < (size_t)mb_info)
-						start_addr = PAGE_FLOOR((size_t)mb_info);
+						start_addr = PAGE_CEIL((size_t)mb_info);
 
 					if ((mb_info->flags & MULTIBOOT_INFO_CMDLINE) && cmdline) {
 						if (start_addr < (size_t) cmdline+cmdsize)
-							start_addr = PAGE_FLOOR((size_t) cmdline+cmdsize);
+							start_addr = PAGE_CEIL((size_t) cmdline+cmdsize);
 					}
 
 					if (start_addr >= end_addr)

@@ -54,12 +54,12 @@ int vma_init(void)
 	int ret;
 
 	LOG_INFO("vma_init: reserve vma region 0x%llx - 0x%llx\n",
-		PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_start + image_size));
+		PAGE_2M_FLOOR((size_t) &kernel_start),
+		PAGE_2M_CEIL((size_t) &kernel_start + image_size));
 
 	// add Kernel
-	ret  = vma_add(PAGE_2M_CEIL((size_t) &kernel_start),
-		PAGE_2M_FLOOR((size_t) &kernel_start + image_size),
+	ret  = vma_add(PAGE_2M_FLOOR((size_t) &kernel_start),
+		PAGE_2M_CEIL((size_t) &kernel_start + image_size),
 		VMA_READ|VMA_WRITE|VMA_EXECUTE|VMA_CACHEABLE);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto out;
