@@ -41,6 +41,7 @@ the HermitCore kernel and applications you need:
  * Netwide Assember (NASM)
  * recent host compiler such as GCC
  * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads
+ * Rust compiler
 
 ### HermitCore cross-toolchain
 
