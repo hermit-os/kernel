@@ -2,7 +2,9 @@ sudo: required
 dist: trusty
 git:
   submodules: true
-language: c
+language: c rust
+rust:
+  - nightly
 compiler: gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
@@ -12,8 +14,6 @@ before_install:
   - git submodule update --init lwip usr/libomp
 
 script:
-  - curl https://sh.rustup.rs -sSf | sh
-  - rustup install nightly
   - source cmake/local-cmake.sh
   - mkdir build
   - cd build
