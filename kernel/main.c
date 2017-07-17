@@ -98,7 +98,8 @@ extern volatile int libc_sd;
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
 
-extern void signal_init();
+extern void signal_init(void);
+extern void rust_main(void);
 
 static int hermit_init(void)
 {
@@ -537,6 +538,8 @@ int hermit_main(void)
 		LOG_INFO("Kernel cmdline: %s\n", (char*) (size_t) mb_info->cmdline);
 	if (hbmem_base)
 		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
+	LOG_INFO("rust_main at %p\n", rust_main);
+	rust_main();
 
 #if 0
 	print_pci_adapters();

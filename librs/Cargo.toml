@@ -1,0 +1,14 @@
+[package]
+name = "hermit-rs"
+version = "0.2.0"
+authors = [
+        "Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
+]
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+rlibc = "0.1.4"		# Low-level functions like memcpy.
+spin = "0.3.4"		# Spinlocks.
+x86 = "0.6.0"		# CPU data structures.

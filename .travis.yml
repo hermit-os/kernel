@@ -12,6 +12,8 @@ before_install:
   - git submodule update --init lwip usr/libomp
 
 script:
+  - curl https://sh.rustup.rs -sSf | sh
+  - rustup install nightly
   - source cmake/local-cmake.sh
   - mkdir build
   - cd build
