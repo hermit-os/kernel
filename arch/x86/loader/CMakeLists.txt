@@ -24,7 +24,7 @@ target_link_libraries(arch_x86_loader
 	"-T ${CMAKE_CURRENT_LIST_DIR}/link.ld"
 	"-z max-page-size=4096"
 	-Wl,--build-id=none		# required because CMake links with gcc, not ld
-	-nostdlib)
+	-nostdlib -static)
 
 # tools/proxy looks for `ldhermit.elf`
 set_target_properties(arch_x86_loader PROPERTIES
