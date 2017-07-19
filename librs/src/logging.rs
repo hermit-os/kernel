@@ -25,7 +25,7 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#![allow(dead_code, unused_macros)]
+#![allow(unused_macros)]
 
 /// An enum representing the available verbosity levels of the logger.
 #[derive(Copy, Clone)]
