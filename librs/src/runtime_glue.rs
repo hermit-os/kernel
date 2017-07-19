@@ -29,6 +29,8 @@
 //! or something, but which we need to provide manually because we're on
 //! bare metal.
 
+#![allow(private_no_mangle_fns)]
+
 #[lang = "eh_personality"]
 	extern "C" fn eh_personality() {
 }
