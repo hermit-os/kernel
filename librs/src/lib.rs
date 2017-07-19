@@ -37,15 +37,22 @@
 extern crate rlibc;
 extern crate spin;
 
-// These need to be visible to the linker, so we need to export them.
-pub use runtime_glue::*;
-
 #[macro_use]
 mod macros;
+#[macro_use]
+mod logging;
 mod runtime_glue;
 mod console;
+
+// These need to be visible to the linker, so we need to export them.
+pub use runtime_glue::*;
+pub use logging::*;
 
 #[no_mangle]
 pub extern "C" fn rust_main() {
 	println!("Hello from Rust!");
+
+	info!("hello");
+	//warn!("warning");
+	//error!("oops");
 }
