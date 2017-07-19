@@ -52,7 +52,7 @@ pub use logging::*;
 pub extern "C" fn rust_main() {
 	println!("Hello from Rust!");
 
-	info!("hello");
+	//info!("hello");
 	//warn!("warning");
 	//error!("oops");
 }
