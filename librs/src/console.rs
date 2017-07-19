@@ -29,7 +29,7 @@ use core::fmt;
 use spin::Mutex;
 
 extern {
-	pub fn kputs(s: &[u8]) -> i32;
+	pub fn kputs(s: *const u8) -> i32;
 }
 
 pub struct Console;
@@ -38,7 +38,7 @@ impl fmt::Write for Console {
 	/// print string as kernel message.
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		unsafe {
-			kputs(s.as_bytes()); 
+			kputs(s.as_ptr());
 		}
 		Ok(())
 	}
