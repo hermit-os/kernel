@@ -9,6 +9,6 @@ authors = [
 crate-type = ["staticlib"]
 
 [dependencies]
-rlibc = "0.1.4"		# Low-level functions like memcpy.
-spin = "0.3.4"		# Spinlocks.
-x86 = "0.6.0"		# CPU data structures.
+rlibc = "1.0.0"	# Low-level functions like memcpy.
+spin = "0.4.5"		# Spinlocks.
+x86 = "0.8.1"		# CPU data structures.
