@@ -64,17 +64,16 @@ macro_rules! info {
 		let current_level = LOGGER.log_level as u8;
 		let cmp_level = LogLevel::INFO as u8;
 
-        if current_level >= cmp_level {
-            println!("[INFO] {}", $fmt);
-        }
-    });
+		if current_level >= cmp_level {
+			println!(concat!("[INFO] ", $fmt));
+		}
+	});
 	($fmt:expr, $($arg:tt)*) => ({
 		let current_level = LOGGER.log_level as u8;
 		let cmp_level = LogLevel::INFO as u8;
 
 		if current_level >= cmp_level {
-			print!("[INFO] ")
-			println!($fmt, $($arg)*);
+			println!(concat!("[INFO] ", $fmt), $($arg)*);
 		}
 	});
 }
@@ -86,7 +85,7 @@ macro_rules! warn {
 		let cmp_level = LogLevel::WARNING as u8;
 
         if current_level >= cmp_level {
-            println!("[WARNING] {}", $fmt);
+            println!(concat!("[WARNING] ", $fmt));
         }
     });
 	($fmt:expr, $($arg:tt)*) => ({
@@ -94,8 +93,7 @@ macro_rules! warn {
 		let cmp_level = LogLevel::WARNING  as u8;
 
 		if current_level >= cmp_level {
-			print!("[WARNING] ")
-			println!($fmt, $($arg)*);
+			println!(concat!("[WARNING] ", $fmt), $($arg)*);
 		}
 	});
 }
@@ -107,7 +105,7 @@ macro_rules! error {
 		let cmp_level = LogLevel::ERROR as u8;
 
         if current_level >= cmp_level {
-            println!("[ERROR] {}", $fmt);
+            println!(concat!("[ERROR] ", $fmt));
         }
     });
 	($fmt:expr, $($arg:tt)*) => ({
@@ -115,8 +113,7 @@ macro_rules! error {
 		let cmp_level = LogLevel::ERROR  as u8;
 
 		if current_level >= cmp_level {
-			print!("[ERROR] ")
-			println!($fmt, $($arg)*);
+			println!(concat!("[ERROR] ", $fmt), $($arg)*);
 		}
 	});
 }
@@ -128,7 +125,7 @@ macro_rules! debug {
 		let cmp_level = LogLevel::DEBUG as u8;
 
         if current_level >= cmp_level {
-            println!("[DEBUG] {}", $fmt);
+            println!(concat!("[DEBUG] ", $fmt));
         }
     });
 	($fmt:expr, $($arg:tt)*) => ({
@@ -136,8 +133,7 @@ macro_rules! debug {
 		let cmp_level = LogLevel::DEBUG  as u8;
 
 		if current_level >= cmp_level {
-			print!("[DEBUG] ")
-			println!($fmt, $($arg)*);
+			println!(concat!("[DEBUG] ", $fmt), $($arg)*);
 		}
 	});
 }

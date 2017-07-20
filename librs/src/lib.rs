@@ -48,11 +48,14 @@ mod console;
 pub use runtime_glue::*;
 pub use logging::*;
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+
 #[no_mangle]
 pub extern "C" fn rust_main() {
-	println!("Hello from Rust!");
+	info!("Hello from HermitCore's Rust runtime! v{}", VERSION);
 
-	//info!("hello");
+	//info!("info");
 	//warn!("warning");
+	//debug!("debug");
 	//error!("oops");
 }

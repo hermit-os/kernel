@@ -14,5 +14,6 @@
     "no-compiler-rt": true,
     "archive-format": "gnu"
     "code-model": "kernel"
-    "relocation-model": "static" 
+    "relocation-model": "static"
+	"panic-strategy": "abort"
 }
