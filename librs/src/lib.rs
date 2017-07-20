@@ -36,6 +36,11 @@
 
 extern crate rlibc;
 extern crate spin;
+extern crate x86;
+
+// These need to be visible to the linker, so we need to export them.
+pub use runtime_glue::*;
+pub use logging::*;
 
 #[macro_use]
 mod macros;
@@ -43,16 +48,15 @@ mod macros;
 mod logging;
 mod runtime_glue;
 mod console;
-
-// These need to be visible to the linker, so we need to export them.
-pub use runtime_glue::*;
-pub use logging::*;
+mod arch;
 
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 #[no_mangle]
 pub extern "C" fn rust_main() {
-	info!("Hello from HermitCore's Rust runtime! v{}", VERSION);
+	info!("HermitCore's Rust runtime! v{}", VERSION);
+
+	arch::processor::cpu_init();
 
 	//info!("info");
 	//warn!("warning");
