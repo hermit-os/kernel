@@ -54,7 +54,7 @@ const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 pub extern "C" fn rust_main() {
 	info!("HermitCore's Rust runtime! v{}", VERSION);
 
-	arch::processor::cpu_init();
+	arch::processor::cpu_detection();
 
 	//info!("info");
 	//warn!("warning");
