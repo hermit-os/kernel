@@ -27,6 +27,7 @@
 #![allow(dead_code)]
 
 use logging::*;
+use spin;
 
 // feature list 0x00000001 (ebx)
 const CPU_FEATURE_FPU : u32 = (1 << 0);
@@ -293,8 +294,8 @@ impl CpuInfo {
 		let stepping : u32;
 
 		unsafe {
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(level), "={ecx}"(c), "={edx}"(d) : "0"(0), "2"(0));
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(f2), "={edx}"(f1) : "0"(1), "2"(0));
+			asm!("cpuid" : "={eax}"(a), "={ebx}"(level), "={ecx}"(c), "={edx}"(d) : "0"(0), "2"(0) :: "volatile");
+			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(f2), "={edx}"(f1) : "0"(1), "2"(0) :: "volatile");
 			family   = (a & 0x00000F00u32) >> 8;
 			model    = (a & 0x000000F0u32) >> 4;
 			stepping =  a & 0x0000000Fu32;
@@ -302,12 +303,12 @@ impl CpuInfo {
 				f1 &= 0 ^ CPU_FEATURE_SEP;
 			}
 
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(c), "={edx}"(f3) : "0"(0x80000001u32), "2"(0));
-			asm!("cpuid" : "={eax}"(width), "={ebx}"(b), "={ecx}"(c), "={edx}"(d) : "0"(0x80000008u32), "2"(0));
+			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(c), "={edx}"(f3) : "0"(0x80000001u32), "2"(0) :: "volatile");
+			asm!("cpuid" : "={eax}"(width), "={ebx}"(b), "={ecx}"(c), "={edx}"(d) : "0"(0x80000008u32), "2"(0) :: "volatile");
 
 			/* Additional Intel-defined flags: level 0x00000007 */
 			if level >= 0x00000007u32 {
-				asm!("cpuid" : "={eax}"(a), "={ebx}"(f4), "={ecx}"(c), "={edx}"(d) : "0"(0x7u32), "2"(0));
+				asm!("cpuid" : "={eax}"(a), "={ebx}"(f4), "={ecx}"(c), "={edx}"(d) : "0"(0x7u32), "2"(0) :: "volatile");
 			} else { f4 = 0 };
 		}
 
@@ -567,10 +568,26 @@ static mut CPU_INFO : CpuInfo = CpuInfo {
 	feature4 : 0,
 	addr_width : 0
 };
+static CPU_INIT: spin::Once<()> = spin::Once::new();
 
-pub fn cpu_init() {
+/// Returns a reference to CpuInfo, which describes all CPU features.
+/// The return value is only valid if cpu_detection is already called an initialized
+/// the system.
+pub fn get_cpuinfo() -> &'static CpuInfo {
 	unsafe {
-		CPU_INFO = CpuInfo::new();
-		CPU_INFO.print_infos();
+		&CPU_INFO
 	}
+}
+
+/// Determine CPU features and activates all by HermitCore supported features
+pub fn cpu_detection() {
+	// A synchronization primitive which can be used to run a one-time global initialization.
+	CPU_INIT.call_once(|| {
+		unsafe {
+			CPU_INFO = CpuInfo::new();
+		}
+	});
+
+	let cpu_info = get_cpuinfo();
+	cpu_info.print_infos();
 }
