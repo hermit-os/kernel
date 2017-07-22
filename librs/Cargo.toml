@@ -12,3 +12,4 @@ crate-type = ["staticlib"]
 rlibc = "1.0.0"	# Low-level functions like memcpy.
 spin = "0.4.5"	# Spinlocks.
 x86 = "0.8.1"	# CPU data structures.
+raw-cpuid = "3.0.0"

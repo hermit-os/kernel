@@ -35,6 +35,7 @@
 extern crate rlibc;
 extern crate spin;
 extern crate x86;
+extern crate raw_cpuid;
 
 // These need to be visible to the linker, so we need to export them.
 pub use runtime_glue::*;
