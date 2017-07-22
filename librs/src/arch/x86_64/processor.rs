@@ -28,6 +28,7 @@
 
 use logging::*;
 use spin;
+use raw_cpuid::*;
 
 // feature list 0x00000001 (ebx)
 const CPU_FEATURE_FPU : u32 = (1 << 0);
@@ -275,41 +276,43 @@ pub struct CpuInfo {
 	addr_width : u32
 }
 
+/// Execute CPUID instruction with eax, ebx, ecx and edx register set.
+/// Note: This is a low-level function to query cpuid directly.
+#[warn(unused_assignments)]
+fn cpuid4(mut eax: u32, mut ebx: u32, mut ecx: u32, mut edx: u32) -> CpuIdResult {
+	unsafe {
+        asm!("cpuid" : "+{eax}"(eax) "+{ebx}"(ebx) "+{ecx}"(ecx) "+{edx}"(edx) ::: "volatile");
+    }
+
+	CpuIdResult { eax: eax, ebx: ebx, ecx: ecx, edx: edx }
+}
+
 impl CpuInfo {
-	#[allow(unused_variables)]
-	#[warn(unused_assignments)]
 	fn new() -> Self {
-		let mut a : u32;
-		let mut b : u32;
-		let mut c : u32;
-		let mut d : u32;
-		let mut f1 : u32;
-		let f2 : u32;
-		let f3 : u32;
-		let f4 : u32;
-		let width : u32;
-		let family : u32;
-		let model : u32;
-		let level : u32;
-		let stepping : u32;
+		let mut cpuid: CpuIdResult = cpuid4(0, 0, 0, 0);
+		let level: u32 = cpuid.ebx;
 
-		unsafe {
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(level), "={ecx}"(c), "={edx}"(d) : "0"(0), "2"(0) :: "volatile");
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(f2), "={edx}"(f1) : "0"(1), "2"(0) :: "volatile");
-			family   = (a & 0x00000F00u32) >> 8;
-			model    = (a & 0x000000F0u32) >> 4;
-			stepping =  a & 0x0000000Fu32;
-			if (family == 6) && (model < 3) && (stepping < 3) {
-				f1 &= 0 ^ CPU_FEATURE_SEP;
-			}
+		cpuid = cpuid4(1, 0, 0, 0);
+		let mut f1: u32 = cpuid.edx;
+		let f2: u32 = cpuid.ecx;
+		let family: u32 = (cpuid.eax & 0x00000F00u32) >> 8;
+		let model: u32 = (cpuid.eax & 0x000000F0u32) >> 4;
+		let stepping: u32 =  cpuid.eax & 0x0000000Fu32;
+		if (family == 6) && (model < 3) && (stepping < 3) {
+			f1 &= 0 ^ CPU_FEATURE_SEP;
+		}
 
-			asm!("cpuid" : "={eax}"(a), "={ebx}"(b), "={ecx}"(c), "={edx}"(f3) : "0"(0x80000001u32), "2"(0) :: "volatile");
-			asm!("cpuid" : "={eax}"(width), "={ebx}"(b), "={ecx}"(c), "={edx}"(d) : "0"(0x80000008u32), "2"(0) :: "volatile");
+		cpuid = cpuid4(0x80000001u32, 0, 0, 0);
+		let f3: u32 = cpuid.edx;
 
-			/* Additional Intel-defined flags: level 0x00000007 */
-			if level >= 0x00000007u32 {
-				asm!("cpuid" : "={eax}"(a), "={ebx}"(f4), "={ecx}"(c), "={edx}"(d) : "0"(0x7u32), "2"(0) :: "volatile");
-			} else { f4 = 0 };
+		cpuid = cpuid4(0x80000008u32, 0, 0, 0);
+		let width: u32 = cpuid.eax;
+
+		let mut f4: u32 = 0;
+		/* Additional Intel-defined flags: level 0x00000007 */
+		if level >= 0x00000007u32 {
+			cpuid = cpuid4(0x7u32, 0, 0, 0);
+			f4 = cpuid.ebx;
 		}
 
 		CpuInfo{
