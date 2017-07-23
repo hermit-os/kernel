@@ -12,8 +12,8 @@
     "eliminate-frame-pointer": true,
     "linker-is-gnu": true,
     "no-compiler-rt": true,
-    "archive-format": "gnu"
-    "code-model": "kernel"
-    "relocation-model": "static"
-	"panic-strategy": "abort"
+    "archive-format": "gnu",
+    "code-model": "kernel",
+    "relocation-model": "static",
+    "panic-strategy": "abort"
 }
