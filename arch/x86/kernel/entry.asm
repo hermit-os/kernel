@@ -199,7 +199,7 @@ Lremap:
     add rax, 0x200000
     add rcx, 0x200000
     add rdi, 8
-    ; note: the whole code segement muust fit in the first pgd
+    ; note: the whole code segement have to fit in the first pgd
     cmp rcx, rsi
     jnb Lno_pml4_init
     cmp rcx, QWORD [image_size]
