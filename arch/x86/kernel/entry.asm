@@ -194,6 +194,7 @@ Lno_mbinfo:
     xor rcx, rcx
     mov rsi, 510*0x200000
     sub rsi, kernel_start
+    mov r11, QWORD [image_size]
 Lremap:
     mov QWORD [rdi], rax
     add rax, 0x200000
@@ -202,7 +203,7 @@ Lremap:
     ; note: the whole code segement has to fit in the first pgd
     cmp rcx, rsi
     jnb Lno_pml4_init
-    cmp rcx, QWORD [image_size]
+    cmp rcx, r11
     jb Lremap
 
 Lno_pml4_init:
