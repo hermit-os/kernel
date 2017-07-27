@@ -70,10 +70,6 @@ void check_ticks(void)
 }
 #endif
 
-static void wakeup_handler(struct state *s)
-{
-}
-
 /*
  * Handles the timer. In this case, it's very simple: We
  * increment the 'timer_ticks' variable every time the
@@ -187,7 +183,6 @@ int timer_init(void)
 	 */
 	irq_install_handler(32, timer_handler);
 	irq_install_handler(123, timer_handler);
-	irq_install_handler(121, wakeup_handler);
 
 #ifdef DYNAMIC_TICKS
 	boot_tsc = has_rdtscp() ? rdtscp(NULL) : rdtsc();
