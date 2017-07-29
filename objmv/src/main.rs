@@ -21,7 +21,11 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#![feature(rustc_private)]
+
 extern crate regex;
+#[macro_use]
+extern crate log;
 
 use regex::RegexSet;
 use std::str;
@@ -68,11 +72,11 @@ fn rename_sections(fname: String)
 				.expect("objcopy failed to start");
 
 			if !status.success() {
-				panic!("unable to rename sections!")
+				warn!("unable to rename sections!")
 			}
 		}
 	} else {
-		panic!("unable to determine section names");
+		warn!("unable to determine section names");
 	}
 }
 
