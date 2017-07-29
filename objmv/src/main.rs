@@ -72,11 +72,11 @@ fn rename_sections(fname: String)
 				.expect("objcopy failed to start");
 
 			if !status.success() {
-				warn!("unable to rename sections!")
+				warn!("Unable to rename sections in {}", fname);
 			}
 		}
 	} else {
-		warn!("unable to determine section names");
+		warn!("Unable to determine section names in {}", fname);
 	}
 }
 
