@@ -1063,8 +1063,10 @@ void shutdown_system(void)
 	if (if_bootprocessor)
 		LOG_INFO("Disable APIC\n");
 
-	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
-	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
+	if (max_lvt >= 4)
+		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
+	if (max_lvt >= 5)
+		lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
 	lapic_write(APIC_SVR, 0x00);	// disable the apic
 
 	// disable x2APIC
