@@ -176,7 +176,7 @@ static inline void lapic_timer_set_counter(uint32_t counter)
 
 static inline void lapic_timer_disable(void)
 {
-	lapic_write(APIC_LVT_TSR, 0x10000);
+	lapic_write(APIC_LVT_T, 0x10000);
 }
 
 static inline void lapic_timer_oneshot(void)
