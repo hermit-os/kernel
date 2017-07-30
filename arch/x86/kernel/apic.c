@@ -1041,6 +1041,7 @@ static void apic_err_handler(struct state *s)
 void shutdown_system(void)
 {
 	int if_bootprocessor = (boot_processor == apic_cpu_id());
+	uint32_t max_lvt;
 
 	irq_disable();
 
@@ -1063,6 +1064,7 @@ void shutdown_system(void)
 	if (if_bootprocessor)
 		LOG_INFO("Disable APIC\n");
 
+	max_lvt = apic_lvt_entries();
 	if (max_lvt >= 4)
 		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
 	if (max_lvt >= 5)
