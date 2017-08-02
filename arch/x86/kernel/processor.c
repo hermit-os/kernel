@@ -472,6 +472,8 @@ int cpu_detection(void) {
 		cr4 |= CR4_PGE;
 	if (has_fsgsbase())
 		cr4 |= CR4_FSGSBASE;
+	if (has_mce())
+		cr4 |= CR4_MCE;		// enable machine check exceptions
 	//if (has_vmx())
 	//	cr4 |= CR4_VMXE;
 	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc

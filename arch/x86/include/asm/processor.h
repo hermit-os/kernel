@@ -52,6 +52,7 @@ extern "C" {
 #define CPU_FEATURE_PSE			(1 << 3)
 #define CPU_FEATURE_MSR			(1 << 5)
 #define CPU_FEATURE_PAE			(1 << 6)
+#define CPU_FEATURE_MCE			(1 << 7)
 #define CPU_FEATURE_APIC		(1 << 9)
 #define CPU_FEATURE_SEP			(1 << 11)
 #define CPU_FEATURE_PGE			(1 << 13)
@@ -306,6 +307,10 @@ inline static uint32_t has_fpu(void) {
 
 inline static uint32_t has_msr(void) {
 	return (cpu_info.feature1 & CPU_FEATURE_MSR);
+}
+
+inline static uint32_t has_mce(void) {
+	return (cpu_info.feature1 & CPU_FEATURE_MCE);
 }
 
 inline static uint32_t has_apic(void) {
