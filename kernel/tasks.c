@@ -67,7 +67,6 @@ static readyqueues_t readyqueues[1] = {[0] = {task_table+0, NULL, 0, 0, 0, {[0 .
 #endif
 
 DEFINE_PER_CORE(task_t*, current_task, task_table+0);
-DEFINE_PER_CORE(char*, kernel_stack, NULL);
 
 #if MAX_CORES > 1
 DEFINE_PER_CORE(uint32_t, __core_id, 0);
@@ -282,7 +281,6 @@ int multitasking_init(void)
 	task_table[0].prio = IDLE_PRIO;
 	task_table[0].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 	task_table[0].ist_addr = (char*)&boot_ist;
-	set_per_core(kernel_stack, task_table[0].stack + KERNEL_STACK_SIZE - 0x10);
 	set_per_core(current_task, task_table+0);
 	arch_init_task(task_table+0);
 
@@ -307,7 +305,6 @@ int set_idle_task(void)
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
 			task_table[i].ist_addr = create_stack(KERNEL_STACK_SIZE);
-			set_per_core(kernel_stack, task_table[i].stack + KERNEL_STACK_SIZE - 0x10);
 			task_table[i].prio = IDLE_PRIO;
 			task_table[i].heap = NULL;
 			readyqueues[core_id].idle = task_table+i;

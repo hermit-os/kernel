@@ -126,7 +126,6 @@ size_t* get_current_stack(void)
 	else
 		stptr = (stptr + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F;
 
-	set_per_core(kernel_stack, stptr);
 	set_tss(stptr, (size_t) curr_task->ist_addr + KERNEL_STACK_SIZE - 0x10);
 
 	return curr_task->last_stack_pointer;
