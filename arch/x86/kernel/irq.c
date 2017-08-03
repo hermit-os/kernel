@@ -290,7 +290,7 @@ size_t** irq_handler(struct state *s)
 
 	size_t** ret = NULL;
 
-	if(BUILTIN_EXPECT(s->int_no >= MAX_HANDLERS, 0)) {
+	if (BUILTIN_EXPECT(s->int_no >= MAX_HANDLERS, 0)) {
 		LOG_ERROR("Invalid IRQ number %d\n", s->int_no);
 		return NULL;
 	}

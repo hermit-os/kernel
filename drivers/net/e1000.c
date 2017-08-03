@@ -370,11 +370,11 @@ err_t e1000if_init(struct netif* netif)
 	netif->state = e1000if;
 	mynetif = netif;
 
-	e1000if->bar0 = (uint8_t*) vma_alloc(PAGE_FLOOR(pci_info.size[0]), VMA_READ|VMA_WRITE);
+	e1000if->bar0 = (uint8_t*) vma_alloc(PAGE_CEIL(pci_info.size[0]), VMA_READ|VMA_WRITE);
 	if (BUILTIN_EXPECT(!e1000if->bar0, 0))
 		goto oom;
 
-	int ret = page_map((size_t)e1000if->bar0, PAGE_CEIL(pci_info.base[0]), PAGE_FLOOR(pci_info.size[0]) >> PAGE_BITS, PG_GLOBAL|PG_RW|PG_PCD);
+	int ret = page_map((size_t)e1000if->bar0, PAGE_FLOOR(pci_info.base[0]), PAGE_CEIL(pci_info.size[0]) >> PAGE_BITS, PG_GLOBAL|PG_RW|PG_PCD);
 	if (BUILTIN_EXPECT(ret, 0))
 		goto oom;
 

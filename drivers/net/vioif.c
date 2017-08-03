@@ -436,7 +436,7 @@ err_t vioif_init(struct netif* netif)
 	netif->output = etharp_output;
 	netif->linkoutput = vioif_output;
 	/* set maximum transfer unit
-	 * Google Compute Platform supports only a MTU from 1460
+	 * Google Compute Platform supports only a MTU of 1460
 	 */
 	netif->mtu = 1460;
 	/* broadcast capability */

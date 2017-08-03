@@ -270,7 +270,7 @@ static void wait_hermit_available(void)
 		return;
 
 	int fd = inotify_init();
-	if ( fd < 0 ) {
+	if (fd < 0) {
 		perror( "inotify_init" );
 		exit(1);
 	}
@@ -522,7 +522,7 @@ static int multi_init(char *path)
 	free(result);
 
 	// wait until HermitCore is sucessfully booted
-	//wait_hermit_available();
+	wait_hermit_available();
 
 	return 0;
 }

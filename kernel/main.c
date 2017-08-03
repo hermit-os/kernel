@@ -100,20 +100,6 @@ rcce_mpb_t* rcce_mpb = NULL;
 
 extern void signal_init();
 
-#if 0
-static int foo(void* arg)
-{
-	int i;
-
-	for(i=0; i<5; i++) {
-		LOG_INFO("hello from %s\n", (char*) arg);
-		sleep(1);
-	}
-
-	return 0;
-}
-#endif
-
 static int hermit_init(void)
 {
 	uint32_t i;
@@ -294,8 +280,6 @@ int smp_main(void)
 	while(atomic_int32_read(&cpu_online) < atomic_int32_read(&possible_cpus))
 		PAUSE;
 
-	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
-
 	while(1) {
 		check_workqueues();
 		wait_for_task();
@@ -326,43 +310,6 @@ static int init_rcce(void)
 
 	return 0;
 }
-
-#if 0
-// some stress tests
-static void lock_test(void)
-{
-	uint64_t start, end;
-	int i;
-	static spinlock_t _lock = SPINLOCK_INIT;
-	static sem_t _sem = SEM_INIT(1);
-
-	start = rdtsc();
-
-	for(i=0; i<10000; i++)
-	{
-		spinlock_lock(&_lock);
-		NOP;
-		spinlock_unlock(&_lock);
-	}
-
-	end = rdtsc();
-
-	LOG_INFO("locks %lld (iterations %d)\n", end-start, i);
-
-	start = rdtsc();
-
-	for(i=0; i<10000; i++)
-	{
-		sem_wait(&_sem, 0);
-		NOP;
-		sem_post(&_sem);
-	}
-
-	end = rdtsc();
-
-	LOG_INFO("sem %lld (iterations %d)\n", end-start, i);
-}
-#endif
 
 int libc_start(int argc, char** argv, char** env);
 
@@ -395,16 +342,13 @@ static int initd(void* arg)
 	}
 
 	curr_task->heap->flags = VMA_HEAP|VMA_USER;
-	curr_task->heap->start = PAGE_FLOOR(heap);
-	curr_task->heap->end = PAGE_FLOOR(heap);
+	curr_task->heap->start = PAGE_CEIL(heap);
+	curr_task->heap->end = PAGE_CEIL(heap);
 
 	// region is already reserved for the heap, we have to change the
 	// property of the first page
 	vma_free(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE);
 	vma_add(curr_task->heap->start, curr_task->heap->start+PAGE_SIZE, VMA_HEAP|VMA_USER);
-
-	//create_kernel_task(NULL, foo, "foo1", NORMAL_PRIO);
-	//create_kernel_task(NULL, foo, "foo2", NORMAL_PRIO);
 
 	// initialize network
 	err = init_netifs();

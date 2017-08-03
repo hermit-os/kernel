@@ -183,7 +183,7 @@ void main(void)
 					viraddr = prog_header->virt_addr;
 				if (!phyaddr)
 					phyaddr = prog_header->offset + (size_t)header;
-				file_size = prog_header->virt_addr + PAGE_FLOOR(prog_header->file_size) - viraddr;
+				file_size = prog_header->virt_addr + PAGE_CEIL(prog_header->file_size) - viraddr;
 				mem_size += prog_header->mem_size;
 			}
 			break;

@@ -176,7 +176,7 @@ static inline void lapic_timer_set_counter(uint32_t counter)
 
 static inline void lapic_timer_disable(void)
 {
-	lapic_write(APIC_LVT_TSR, 0x10000);
+	lapic_write(APIC_LVT_T, 0x10000);
 }
 
 static inline void lapic_timer_oneshot(void)
@@ -364,7 +364,7 @@ int apic_enable_timer(void)
 }
 
 static apic_mp_t* search_mptable(size_t base, size_t limit) {
-	size_t ptr=PAGE_CEIL(base), vptr=0;
+	size_t ptr=PAGE_FLOOR(base), vptr=0;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
 	apic_mp_t* tmp;
 	uint32_t i;
@@ -410,7 +410,7 @@ static apic_mp_t* search_mptable(size_t base, size_t limit) {
 
 #if 0
 static size_t search_ebda(void) {
-	size_t ptr=PAGE_CEIL(0x400), vptr=0xF0000;
+	size_t ptr=PAGE_FLOOR(0x400), vptr=0xF0000;
 	size_t flags = PG_GLOBAL | PG_RW | PG_PCD;
 
 	// protec apic by the NX flags
@@ -580,8 +580,8 @@ int smp_init(void)
 	 * Wakeup the other cores via IPI. They start at this address
 	 * in real mode, switch to protected and finally they jump to smp_main.
 	 */
-	page_map(SMP_SETUP_ADDR, SMP_SETUP_ADDR, PAGE_FLOOR(sizeof(boot_code)) >> PAGE_BITS, PG_RW|PG_GLOBAL);
-	vma_add(SMP_SETUP_ADDR, SMP_SETUP_ADDR + PAGE_FLOOR(sizeof(boot_code)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
+	page_map(SMP_SETUP_ADDR, SMP_SETUP_ADDR, PAGE_CEIL(sizeof(boot_code)) >> PAGE_BITS, PG_RW|PG_GLOBAL);
+	vma_add(SMP_SETUP_ADDR, SMP_SETUP_ADDR + PAGE_CEIL(sizeof(boot_code)), VMA_READ|VMA_WRITE|VMA_CACHEABLE);
 	memcpy((void*)SMP_SETUP_ADDR, boot_code, sizeof(boot_code));
 
 	for(i=0; i<sizeof(boot_code); i++)
@@ -1041,6 +1041,7 @@ static void apic_err_handler(struct state *s)
 void shutdown_system(void)
 {
 	int if_bootprocessor = (boot_processor == apic_cpu_id());
+	uint32_t max_lvt;
 
 	irq_disable();
 
@@ -1063,8 +1064,11 @@ void shutdown_system(void)
 	if (if_bootprocessor)
 		LOG_INFO("Disable APIC\n");
 
-	lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
-	lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
+	max_lvt = apic_lvt_entries();
+	if (max_lvt >= 4)
+		lapic_write(APIC_LVT_TSR, 0x10000);	// disable thermal sensor interrupt
+	if (max_lvt >= 5)
+		lapic_write(APIC_LVT_PMC, 0x10000);	// disable performance counter interrupt
 	lapic_write(APIC_SVR, 0x00);	// disable the apic
 
 	// disable x2APIC

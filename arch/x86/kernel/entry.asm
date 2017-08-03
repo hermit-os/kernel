@@ -97,8 +97,8 @@ align 4
     hbmem_size dq 0
     uhyve dd 0
     uartport dq 0
-    cmdline	dq 0
-    cmdsize	dq 0
+    cmdline dq 0
+    cmdsize dq 0
 
 ; Bootstrap page tables are used during the initialization.
 align 4096
@@ -194,15 +194,16 @@ Lno_mbinfo:
     xor rcx, rcx
     mov rsi, 510*0x200000
     sub rsi, kernel_start
+    mov r11, QWORD [image_size]
 Lremap:
     mov QWORD [rdi], rax
     add rax, 0x200000
     add rcx, 0x200000
     add rdi, 8
-    ; note: the whole code segement muust fit in the first pgd
+    ; note: the whole code segement has to fit in the first pgd
     cmp rcx, rsi
     jnb Lno_pml4_init
-    cmp rcx, QWORD [image_size]
+    cmp rcx, r11
     jb Lremap
 
 Lno_pml4_init:
@@ -278,9 +279,9 @@ gdt_flush:
     global isr%1
     align 64
     isr%1:
-        push byte 0 ; pseudo error code
-        push byte %1
-        jmp common_stub
+    push byte 0 ; pseudo error code
+    push byte %1
+    jmp common_stub
 %endmacro
 
 ; Similar to isrstub_pseudo_error, but without pushing
@@ -290,8 +291,8 @@ gdt_flush:
     global isr%1
     align 64
     isr%1:
-        push byte %1
-        jmp common_stub
+    push byte %1
+    jmp common_stub
 %endmacro
 
 ; Create isr entries, where the number after the
@@ -343,9 +344,9 @@ isrstub_pseudo_error 9
     global irq%1
     align 64
     irq%1:
-        push byte 0 ; pseudo error code
-        push byte 32+%1
-        jmp common_stub
+    push byte 0 ; pseudo error code
+    push byte 32+%1
+    jmp common_stub
 %endmacro
 
 ; Create entries for the interrupts 0 to 23
@@ -366,15 +367,15 @@ global wakeup
 align 64
 wakeup:
     push byte 0 ; pseudo error code
-	push byte 121
-	jmp common_stub
+    push byte 121
+    jmp common_stub
 
 global mmnif_irq
 align 64
 mmnif_irq:
     push byte 0 ; pseudo error code
-	push byte 122
-	jmp common_stub
+    push byte 122
+    jmp common_stub
 
 global apic_timer
 align 64
