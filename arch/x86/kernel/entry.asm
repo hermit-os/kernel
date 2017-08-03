@@ -416,7 +416,6 @@ extern irq_handler
 extern get_current_stack
 extern finish_task_switch
 extern syscall_handler
-extern kernel_stack
 
 global getcontext
 align 64
