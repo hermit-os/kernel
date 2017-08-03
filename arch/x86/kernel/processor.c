@@ -472,6 +472,8 @@ int cpu_detection(void) {
 		cr4 |= CR4_PGE;
 	if (has_fsgsbase())
 		cr4 |= CR4_FSGSBASE;
+	if (has_mce())
+		cr4 |= CR4_MCE;		// enable machine check exceptions
 	//if (has_vmx())
 	//	cr4 |= CR4_VMXE;
 	cr4 &= ~CR4_TSD;		// => every privilege level is able to use rdtsc
@@ -552,7 +554,7 @@ int cpu_detection(void) {
 		a = b = c = d = 0;
                 cpuid(1, &a, &b, &cpu_info.feature2, &cpu_info.feature1);
 
-		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
+		LOG_INFO("CPU features: %s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n",
 			has_sse() ? "SSE " : "",
 			has_sse2() ? "SSE2 " : "",
 			has_sse3() ? "SSE3 " : "",
@@ -564,6 +566,7 @@ int cpu_detection(void) {
 			has_fma() ? "FMA " : "",
 			has_movbe() ? "MOVBE " : "",
 			has_x2apic() ? "X2APIC " : "",
+			has_mce() ? "MCE " : "",
 			has_fpu() ? "FPU " : "",
 			has_fxsr() ? "FXSR " : "",
 			has_xsave() ? "XSAVE " : "",

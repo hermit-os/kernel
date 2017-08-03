@@ -134,13 +134,13 @@ void buddy_dump(void)
 void* palloc(size_t sz, uint32_t flags)
 {
 	size_t phyaddr, viraddr, bits;
-	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
+	uint32_t npages = PAGE_CEIL(sz) >> PAGE_BITS;
 	int err;
 
 	LOG_DEBUG("palloc(%zd) (%u pages)\n", sz, npages);
 
 	// get free virtual address space
-	viraddr = vma_alloc(PAGE_FLOOR(sz), flags);
+	viraddr = vma_alloc(PAGE_CEIL(sz), flags);
 	if (BUILTIN_EXPECT(!viraddr, 0))
 		return NULL;
 
@@ -168,7 +168,7 @@ void* palloc(size_t sz, uint32_t flags)
 void* create_stack(size_t sz)
 {
 	size_t phyaddr, viraddr, bits;
-	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
+	uint32_t npages = PAGE_CEIL(sz) >> PAGE_BITS;
 	int err;
 
 	LOG_DEBUG("create_stack(0x%zx) (%u pages)\n", DEFAULT_STACK_SIZE, npages);
@@ -204,7 +204,7 @@ void* create_stack(size_t sz)
 int destroy_stack(void* viraddr, size_t sz)
 {
 	size_t phyaddr;
-	uint32_t npages = PAGE_FLOOR(sz) >> PAGE_BITS;
+	uint32_t npages = PAGE_CEIL(sz) >> PAGE_BITS;
 
 	LOG_DEBUG("destroy_stack(0x%zx) (size 0x%zx)\n", viraddr, DEFAULT_STACK_SIZE);
 

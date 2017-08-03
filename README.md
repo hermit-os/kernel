@@ -3,7 +3,7 @@
 
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
+[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=devel)](https://travis-ci.org/RWTH-OS/HermitCore)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
 The project [HermitCore]( http://www.hermitcore.org ) is a new
@@ -55,6 +55,20 @@ $ echo "deb [trusted=yes] https://dl.bintray.com/rwth-os/hermitcore vivid main" 
 $ sudo apt-get -qq update
 $ sudo apt-get install binutils-hermit newlib-hermit pthread-embedded-hermit gcc-hermit libhermit
 ```
+
+For non-Debian based systems, a docker image with the complete toolchain is provided and can be installed as follows:
+
+```bash
+$ docker pull rwthos/hermitcore
+```
+
+The following commad starts within the new docker container a shell and mounts from the host system the directory `~/src` to `/src`:
+
+```bash
+$ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
+```
+
+Within the shell the croos toolchain can be used to build HermitCore applications.
 
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 

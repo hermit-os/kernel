@@ -195,6 +195,9 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 
 void wait_for_task(void)
 {
+#if 1
+	HALT;
+#else
 	if (!has_mwait()) {
 		HALT;
 	} else {
@@ -206,13 +209,16 @@ void wait_for_task(void)
 		monitor(queue, 0, 0);
 		mwait(0x2 /* 0x2 = c3, 0xF = c0 */, 1 /* break on interrupt flag */);
 	}
+#endif
 }
 
 void wakeup_core(uint32_t core_id)
 {
+#if 0
 	// if mwait is available, an IPI isn't required to wakeup the core
 	if (has_mwait())
 		return;
+#endif
 
 	// no self IPI required
 	if (core_id == CORE_ID)
