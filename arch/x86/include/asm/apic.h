@@ -48,6 +48,8 @@ extern "C" {
 #define APIC_SVR		0x00F0
 /// Error Status Register
 #define APIC_ESR		0x0280
+/// Corrected Machine-Check Error Interrupt Register
+#define APIC_CMCI		0x02F0
 /// Interrupt Command Register [bits 0-31]
 #define APIC_ICR1		0x0300
 /// Interrupt Command Register [bits 32-63]
