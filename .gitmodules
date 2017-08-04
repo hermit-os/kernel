@@ -6,3 +6,6 @@
 	path = usr/libomp
 	url = https://github.com/RWTH-OS/libomp_oss.git
 	branch = hermit
+[submodule "librs/rust"]
+	path = librs/rust
+	url = https://github.com/RWTH-OS/rust.git

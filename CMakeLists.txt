@@ -68,30 +68,40 @@ add_dependencies(hermit-bootstrap ${X86_KERNEL_TARGET})
 
 # add external project hermit-rs
 ExternalProject_Add(
-    hermit-rs
+    objmv
     DOWNLOAD_COMMAND ""
     CONFIGURE_COMMAND ""
     BUILD_COMMAND cargo build --release
+    BINARY_DIR "${CMAKE_SOURCE_DIR}/objmv"
+    INSTALL_COMMAND ""
+    LOG_BUILD ON)
+
+# add external project hermit-rs
+ExternalProject_Add(
+    hermit-rs
+    DOWNLOAD_COMMAND ""
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND make all
     BINARY_DIR "${CMAKE_SOURCE_DIR}/librs"
     INSTALL_COMMAND ""
     LOG_BUILD ON)
 
+# Create dependency of hermit-rs objmv
+add_dependencies(hermit-rs objmv)
 # Create dependency of hermit-boostrap hermit-rs
 add_dependencies(hermit-bootstrap hermit-rs)
 
 add_custom_command(
 	TARGET
 		hermit-rs POST_BUILD
-	# convert rust library to hermitcore's osabi
-	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore ${CMAKE_SOURCE_DIR}/librs/target/release/libhermit_rs.a
-
 	# rename sections in rust library
 	COMMAND
-		${CMAKE_OBJCOPY} --rename-section .bss=.kbss
-						--rename-section .text=.ktext
-						--rename-section .data=.kdata
-						${CMAKE_SOURCE_DIR}/librs/target/release/libhermit_rs.a
+		${CMAKE_SOURCE_DIR}/objmv/target/release/objmv
+						${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
+
+	# convert rust library to hermitcore's osabi
+	COMMAND
+		${CMAKE_ELFEDIT} --output-osabi HermitCore ${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
 
 	# copy libhermit_rs.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
@@ -100,7 +110,7 @@ add_custom_command(
 		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_LIB_DIR}
 	COMMAND
 		${CMAKE_COMMAND} -E copy_if_different
-							${CMAKE_SOURCE_DIR}/librs/target/release/libhermit_rs.a
+							${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
 							${LOCAL_PREFIX_ARCH_LIB_DIR}/)
 
 add_custom_command(
@@ -115,7 +125,7 @@ add_custom_command(
 
 	# merge libhermit.a and libhermit_rs.a
 	COMMAND
-		${CMAKE_AR} x ${CMAKE_SOURCE_DIR}/librs/target/release/libhermit_rs.a
+		${CMAKE_AR} x ${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
 	COMMAND
 		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
 	COMMAND
@@ -248,7 +258,7 @@ set(CPACK_SYSTEM_NAME all)
 
 set(CPACK_PACKAGE_VERSION_MAJOR 0)
 set(CPACK_PACKAGE_VERSION_MINOR 2)
-set(CPACK_PACKAGE_VERSION_PATCH 1)
+set(CPACK_PACKAGE_VERSION_PATCH 2)
 
 set(CPACK_PACKAGE_CONTACT "Stefan Lankes <slankes@eonerc.rwth-aachen.de>")
 

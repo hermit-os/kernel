@@ -35,6 +35,7 @@
 #include <asm/tss.h>
 #include <asm/page.h>
 
+#if 0
 #define MAX_IST		3
 
 gdt_ptr_t		gp;
@@ -160,3 +161,4 @@ void gdt_install(void)
 	/* Flush out the old GDT and install the new changes! */
 	gdt_flush();
 }
+#endif

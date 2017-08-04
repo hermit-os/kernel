@@ -140,6 +140,7 @@ start64:
     ; store pointer to the multiboot information
     mov [mb_info], QWORD rdx
 
+	;
     ; relocate page tables
     mov rdi, boot_pml4
     mov rax, QWORD [rdi]
@@ -255,15 +256,15 @@ Lsmp_main:
     jmp $
 %endif
 
-ALIGN 64
-global gdt_flush
+;ALIGN 64
+;global gdt_flush
 extern gp
 
 ; This will set up our new segment registers and is declared in
 ; C as 'extern void gdt_flush();'
-gdt_flush:
-    lgdt [gp]
-    ret
+;gdt_flush:
+;    lgdt [gp]
+;    ret
 
 ; The first 32 interrupt service routines (ISR) entries correspond to exceptions.
 ; Some exceptions will push an error code onto the stack which is specific to
