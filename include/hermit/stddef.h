@@ -83,9 +83,6 @@ typedef unsigned int tid_t;
 struct task;
 DECLARE_PER_CORE(struct task*, current_task);
 
-/* allows fast access to the kernel stack */
-DECLARE_PER_CORE(char*, kernel_stack);
-
 #if MAX_CORES > 1
 /* allows fast access to the core id */
 DECLARE_PER_CORE(uint32_t, __core_id);
