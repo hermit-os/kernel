@@ -905,12 +905,7 @@ extern int set_idle_task(void);
 #if MAX_CORES > 1
 int smp_start(void)
 {
-	x2apic_enable();
-
-	// reset APIC and set id
-	lapic_reset();
-
-	LOG_DEBUG("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
+	LOG_DEBUG("Try to initialize processor (local id %d)\n", atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
 	gdt_flush();
@@ -921,6 +916,12 @@ int smp_start(void)
 	// enable additional cpu features
 	cpu_detection();
 
+	x2apic_enable();
+
+	// reset APIC
+	lapic_reset();
+
+	LOG_DEBUG("Processor %d (local id %d) is entering its idle task\n", apic_cpu_id(), atomic_int32_read(&current_boot_id));
 	LOG_DEBUG("CR0 of core %u: 0x%x\n", atomic_int32_read(&current_boot_id), read_cr0());
 	online[atomic_int32_read(&current_boot_id)] = 1;
 
