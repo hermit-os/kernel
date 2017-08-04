@@ -100,6 +100,7 @@ rcce_mpb_t* rcce_mpb = NULL;
 
 extern void signal_init(void);
 extern void rust_main(void);
+extern void rust_init(void);
 
 static int hermit_init(void)
 {
@@ -114,6 +115,7 @@ static int hermit_init(void)
 		memcpy((char*) &percore_start + i*sz, (char*) &percore_start, sz);
 
 	koutput_init();
+	rust_init();
 	system_init();
 	irq_init();
 	timer_init();

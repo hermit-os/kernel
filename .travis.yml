@@ -2,6 +2,9 @@ sudo: required
 dist: trusty
 git:
   submodules: true
+env:
+  global:
+    - PATH=$PATH:~/.cargo/bin
 language: c
 compiler: gcc
 before_install:
@@ -9,10 +12,9 @@ before_install:
   - travis_retry sudo apt-get -qq update
   - travis_retry sudo apt-get install -y curl wget qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev rpm
   - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
-  - git submodule update --init lwip usr/libomp
 
 script:
-  - curl -s https://static.rust-lang.org/rustup.sh | sh -s -- --channel=nightly
+  - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
   - source cmake/local-cmake.sh
   - mkdir build
   - cd build

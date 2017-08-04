@@ -21,26 +21,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/// Determin the Id of the current CPU
-macro_rules! core_id {
-	() => ( 0 );
-}
+#![allow(dead_code)]
 
-/// Print formatted text to our console.
-///
-/// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
-/// for HermitCore.
-macro_rules! print {
-	($($arg:tt)*) => ({
-		use core::fmt::Write;
-		$crate::console::CONSOLE.lock().write_fmt(format_args!($($arg)*)).unwrap();
-	});
-}
+pub const MAX_CORES : usize = 512;
+pub const KERNEL_STACK_SIZE : usize = 8192;
 
-/// Print formatted text to our console, followed by a newline.
-///
-/// From https://doc.rust-lang.org/nightly/std/macro.println!.html
-macro_rules! println {
-	($fmt:expr) => (print!(concat!($fmt, "\n")));
-	($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
-}
+#[cfg(target_arch="x86_64")]
+pub  const PAGE_SIZE : usize = 4096;
