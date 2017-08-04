@@ -202,9 +202,9 @@ Lremap:
     add rdi, 8
     ; note: the whole code segement has to fit in the first pgd
     cmp rcx, rsi
-    jnb Lno_pml4_init
+    jnl Lno_pml4_init
     cmp rcx, r11
-    jb Lremap
+    jl Lremap
 
 Lno_pml4_init:
     ; Set CR3
@@ -416,7 +416,6 @@ extern irq_handler
 extern get_current_stack
 extern finish_task_switch
 extern syscall_handler
-extern kernel_stack
 
 global getcontext
 align 64

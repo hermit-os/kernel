@@ -45,6 +45,8 @@
 #include <netif/etharp.h>
 #include <net/e1000.h>
 
+#if USE_E1000
+
 #define RX_BUF_LEN      (2048)
 #define TX_BUF_LEN      (1792)
 
@@ -603,3 +605,5 @@ oom:
 
 	return ERR_MEM;
 }
+
+#endif

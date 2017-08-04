@@ -126,7 +126,6 @@ size_t* get_current_stack(void)
 	else
 		stptr = (stptr + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F;
 
-	set_per_core(kernel_stack, stptr);
 	set_tss(stptr, (size_t) curr_task->ist_addr + KERNEL_STACK_SIZE - 0x10);
 
 	return curr_task->last_stack_pointer;
@@ -193,9 +192,11 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 	return 0;
 }
 
+#define USE_MWAIT
+
 void wait_for_task(void)
 {
-#if 1
+#ifndef USE_MWAIT
 	HALT;
 #else
 	if (!has_mwait()) {
@@ -214,7 +215,7 @@ void wait_for_task(void)
 
 void wakeup_core(uint32_t core_id)
 {
-#if 0
+#ifdef USE_MWAIT
 	// if mwait is available, an IPI isn't required to wakeup the core
 	if (has_mwait())
 		return;
