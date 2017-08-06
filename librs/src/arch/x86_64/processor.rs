@@ -299,11 +299,20 @@ impl CpuInfo {
 			f1 &= 0 ^ CPU_FEATURE_SEP;
 		}
 
-		cpuid = cpuid4(0x80000001u32, 0, 0, 0);
-		let f3: u32 = cpuid.edx;
+		cpuid = cpuid4(0x80000000u32, 0, 0, 0);
+		let extended: u32 = cpuid.eax;
 
-		cpuid = cpuid4(0x80000008u32, 0, 0, 0);
-		let width: u32 = cpuid.eax;
+		let mut f3: u32 = 0;
+		if extended >= 0x80000001u32 {
+			cpuid = cpuid4(0x80000001u32, 0, 0, 0);
+			f3 = cpuid.edx;
+		}
+
+		let mut width: u32 = 0;
+		if extended >= 0x80000008u32 {
+			cpuid = cpuid4(0x80000008u32, 0, 0, 0);
+			width = cpuid.eax;
+		}
 
 		let mut f4: u32 = 0;
 		/* Additional Intel-defined flags: level 0x00000007 */
