@@ -26,7 +26,9 @@ notifications:
   slack: hermitcore:UtcfeEXkbpx3WyIDK2Wm2beS
 
 deploy:
-  on: master
+  on: 
+    branch: master
+    condition: "$CC = gcc"
   provider: bintray
   file: .bintray_descriptor.json
   user:
