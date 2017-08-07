@@ -6,7 +6,9 @@ env:
   global:
     - PATH=$PATH:~/.cargo/bin
 language: c
-compiler: gcc
+compiler:
+  - clang
+  - gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - travis_retry sudo apt-get -qq update
@@ -27,7 +29,9 @@ notifications:
   slack: hermitcore:UtcfeEXkbpx3WyIDK2Wm2beS
 
 deploy:
-  on: master
+  on: 
+    branch: master
+    condition: "$CC = gcc"
   provider: bintray
   file: .bintray_descriptor.json
   user:
