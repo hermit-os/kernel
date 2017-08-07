@@ -25,7 +25,7 @@
  */
 
 #ifndef __CTYPE_H_
-#define __CYTPE_H_
+#define __CTYPE_H_
 
 /** Returns true if the value of 'c' is an ASCII-charater */
 static inline int isascii(int c) 
