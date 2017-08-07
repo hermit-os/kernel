@@ -30,12 +30,20 @@ if (HAS_INLINE_FUNCTIONS)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -finline-functions")
 endif()
 
-target_link_libraries(arch_x86_loader
-	arch_x86_loader_asm
-	"-Wl,-T -Wl,${CMAKE_CURRENT_LIST_DIR}/link.ld"
-	"-z max-page-size=4096"
-	-Wl,--build-id=none		# required because CMake links with gcc, not ld
-	-nostdlib -static)
+set(CMAKE_LINKER_NAME ld CACHE STRING "Name of the binutils linker")
+mark_as_advanced(CMAKE_LINKER_NAME)
+
+find_program(CMAKE_LINKER ${CMAKE_LINKER_NAME})
+mark_as_advanced(CMAKE_LINKER)
+
+if(NOT CMAKE_LINKER)
+	message(FATAL_ERROR "Could not find the GNU LD linker: ${CMAKE_LINKER_NAME}")
+endif()
+
+set(CMAKE_C_LINK_EXECUTABLE "${CMAKE_LINKER} <CMAKE_C_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> <LINK_LIBRARIES>")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -T ${CMAKE_CURRENT_LIST_DIR}/link.ld -z max-page-size=4096 --build-id=none -nostdlib -static")
+
+target_link_libraries(arch_x86_loader arch_x86_loader_asm)
 
 # tools/proxy looks for `ldhermit.elf`
 set_target_properties(arch_x86_loader PROPERTIES
