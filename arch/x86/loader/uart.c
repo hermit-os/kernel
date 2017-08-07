@@ -96,7 +96,7 @@ size_t	uartport = 0;
 
 static inline unsigned char read_from_uart(uint32_t off)
 {
-	uint8_t c;
+	uint8_t c = 0;
 
 	if (uartport)
 		c = inportb(uartport + off);
