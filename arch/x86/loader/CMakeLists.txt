@@ -17,7 +17,7 @@ target_include_directories(arch_x86_loader
 
 target_compile_options(arch_x86_loader
 	PRIVATE -O2 -Wall -m64 -std=gnu99 -ffreestanding -mno-red-zone
-			-fstrength-reduce -fomit-frame-pointer -finline-functions)
+			-fomit-frame-pointer)
 
 target_link_libraries(arch_x86_loader
 	arch_x86_loader_asm
