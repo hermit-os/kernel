@@ -21,7 +21,7 @@ target_compile_options(arch_x86_loader
 
 target_link_libraries(arch_x86_loader
 	arch_x86_loader_asm
-	"-T ${CMAKE_CURRENT_LIST_DIR}/link.ld"
+	"-Wl,-T -Wl,${CMAKE_CURRENT_LIST_DIR}/link.ld"
 	"-z max-page-size=4096"
 	-Wl,--build-id=none		# required because CMake links with gcc, not ld
 	-nostdlib -static)
