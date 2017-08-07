@@ -20,7 +20,6 @@ script:
   - cmake ..
   - make -j1 package
   - cd $TRAVIS_BUILD_DIR
-  - ls -la /home/travis/build/RWTH-OS/HermitCore/build/local_prefix/opt/hermit/bin/
   - ./tests.sh
 
 notifications:
