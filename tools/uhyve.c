@@ -591,7 +591,7 @@ static void show_registers(int id, struct kvm_regs* regs, struct kvm_sregs* sreg
 	fprintf(stderr, "\n");
 }
 
-static int print_registers(void)
+static void print_registers(void)
 {
 	struct kvm_regs regs;
 	struct kvm_sregs sregs;
