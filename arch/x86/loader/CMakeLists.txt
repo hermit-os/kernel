@@ -17,7 +17,7 @@ target_include_directories(arch_x86_loader
 
 target_compile_options(arch_x86_loader
 	PRIVATE -O2 -Wall -m64 -std=gnu99 -ffreestanding -mno-red-zone
-			-fomit-frame-pointer -fno-builtin -nostdlib -nostdinc)
+			-fomit-frame-pointer -fno-builtin -nostdlib -nostdinc -mno-sse -mno-avx -mno-mmx -mno-3dnow)
 
 include(CheckCCompilerFlag)
 check_c_compiler_flag(-fstrength-reduce HAS_STRENGTH_REDUCE)
