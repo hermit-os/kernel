@@ -19,6 +19,17 @@ target_compile_options(arch_x86_loader
 	PRIVATE -O2 -Wall -m64 -std=gnu99 -ffreestanding -mno-red-zone
 			-fomit-frame-pointer)
 
+include(CheckCCompilerFlag)
+check_c_compiler_flag(-fstrength-reduce HAS_STRENGTH_REDUCE)
+if (HAS_STRENGTH_REDUCE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fstrength-reduce")
+endif()
+
+check_c_compiler_flag(-finline-functions HAS_INLINE_FUNCTIONS)
+if (HAS_INLINE_FUNCTIONS)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -finline-functions")
+endif()
+
 target_link_libraries(arch_x86_loader
 	arch_x86_loader_asm
 	"-Wl,-T -Wl,${CMAKE_CURRENT_LIST_DIR}/link.ld"
