@@ -3,7 +3,9 @@ dist: trusty
 git:
   submodules: true
 language: c
-compiler: gcc
+compiler:
+  - clang
+  - gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - travis_retry sudo apt-get -qq update
