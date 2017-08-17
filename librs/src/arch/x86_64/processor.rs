@@ -330,192 +330,192 @@ impl CpuInfo {
 		}
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_fpu(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_FPU) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_msr(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_MSR) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_apic(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_APIC) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_fxsr(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_FXSR) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_clflush(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_CLFLUSH) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sse(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_SSE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_pat(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_PAT) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sse2(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_SSE2) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_pge(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_PGE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sep(&self) -> bool {
 		(self.feature1 & CPU_FEATURE_SEP) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_movbe(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_MOVBE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_fma(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_FMA) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_mwait(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_MWAIT) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_vmx(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_VMX) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_est(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_EST) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sse3(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_SSE3) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_dca(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_DCA) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sse4_1(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_SSE4_1) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_sse4_2(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_SSE4_2) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_x2apic(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_X2APIC) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_xsave(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_XSAVE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_osxsave(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_OSXSAVE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_AVX) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_rdrand(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_RDRAND) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn on_hypervisor(&self) -> bool {
 		(self.feature2 & CPU_FEATURE_HYPERVISOR) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_nx(&self) -> bool {
 		(self.feature3 & CPU_FEATURE_NX) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_fsgsbase(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_FSGSBASE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx2(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_AVX2) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_bmi1(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_BMI1) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_bmi2(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_BMI2) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_hle(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_HLE) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_cqm(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_CQM) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_rtm(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_RTM) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx512f(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_AVX512F) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx512pf(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_AVX512PF) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx512er(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_AVX512ER) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_avx512cd(&self) -> bool {
 		(self.feature4 & CPU_FEATURE_AVX512CD) != 0
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub const fn has_rdtscp(&self) -> bool {
 		(self.feature3 & CPU_FEATURE_RDTSCP) != 0
 	}
