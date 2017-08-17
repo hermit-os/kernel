@@ -29,7 +29,7 @@ notifications:
   slack: hermitcore:UtcfeEXkbpx3WyIDK2Wm2beS
 
 deploy:
-  on: 
+  on:
     branch: master
     condition: "$CC = gcc"
   provider: bintray

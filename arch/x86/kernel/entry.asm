@@ -256,16 +256,6 @@ Lsmp_main:
     jmp $
 %endif
 
-;ALIGN 64
-;global gdt_flush
-extern gp
-
-; This will set up our new segment registers and is declared in
-; C as 'extern void gdt_flush();'
-;gdt_flush:
-;    lgdt [gp]
-;    ret
-
 ; The first 32 interrupt service routines (ISR) entries correspond to exceptions.
 ; Some exceptions will push an error code onto the stack which is specific to
 ; the exception caused. To decrease the complexity, we handle this by pushing a
