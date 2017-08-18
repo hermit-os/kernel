@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+ // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
 //
 // MIT License
 //
@@ -60,21 +60,18 @@ const GDT_FLAG_32_BIT: u8 = 0x40;
 const GDT_FLAG_64_BIT: u8 = 0x20;
 
 // a TSS descriptor is twice larger than a code/data descriptor
-const GDT_ENTRIES : usize = (6+MAX_CORES*2);
-const MAX_IST : usize = 3;
+const GDT_ENTRIES: usize = (6+MAX_CORES*2);
+const MAX_IST: usize = 3;
 
 // thread_local on a static mut, signals that the value of this static may
 // change depending on the current thread.
 static mut GDT: [GdtEntry; GDT_ENTRIES] = [GdtEntry::new(0, 0, 0, 0); GDT_ENTRIES];
-static mut GDTR: DescriptorTablePointer = DescriptorTablePointer {
-    limit: 0, //x((size_of::<GdtEntry>() * GDT_ENTRIES) - 1) as u16,
-    base: 0 //GDT.as_ptr() as u64
-};
+static mut GDTR: DescriptorTablePointer = DescriptorTablePointer { limit: 0, base: 0 };
 static mut TSS_BUFFER: TssBuffer = TssBuffer::new();
 static STACK_TABLE: [[IrqStack; MAX_IST]; MAX_CORES] = [[IrqStack::new(); MAX_IST]; MAX_CORES];
 
 extern "C" {
-	static boot_stack: [u8; MAX_CORES*KERNEL_STACK_SIZE*MAX_IST];
+	static boot_stack: [u8; MAX_CORES*KERNEL_STACK_SIZE];
 }
 
 #[derive(Copy, Clone)]
@@ -107,53 +104,31 @@ impl GdtEntry {
     }
 }
 
-/// definition of the tast state segment structure
 #[derive(Copy, Clone)]
 #[repr(C, packed)]
 struct TaskStateSegment {
-	res0: u16,	// reserved entries
-	res1: u16,	// reserved entries
-	rsp0: u64,
-	rsp1: u64,
-	rsp2: u64,
-	res2: u32,	// reserved entries
-	res3: u32,	// reserved entries
-	ist1: u64,
-	ist2: u64,
-	ist3: u64,
-	ist4: u64,
-	ist5: u64,
-	ist6: u64,
-	ist7: u64,
-	res4: u32,	// reserved entries
-	res5: u32,	// reserved entries
-	res6: u16,
-	bitmap: u16,
+    reserved: u32,
+    /// The full 64-bit canonical forms of the stack pointers (RSP) for privilege levels 0-2.
+	rsp: [u64; 3],
+    reserved2: u64,
+    /// The full 64-bit canonical forms of the interrupt stack table (IST) pointers.
+    ist: [u64; 7],
+    reserved3: u64,
+    reserved4: u16,
+    /// The 16-bit offset to the I/O permission bit map from the 64-bit TSS base.
+    iomap_base: u16,
 }
 
 impl TaskStateSegment {
-    /// Creates a new TSS with zeroed privilege and interrupt stack table and a zero
-    /// `iomap_base`.
-    pub const fn new() -> TaskStateSegment {
+    const fn new() -> TaskStateSegment {
         TaskStateSegment {
-			res0: 0,	// reserved entries
-			res1: 0,	// reserved entries
-			rsp0: 0,
-			rsp1: 0,
-			rsp2: 0,
-			res2: 0,	// reserved entries
-			res3: 0,	// reserved entries
-			ist1: 0,
-			ist2: 0,
-			ist3: 0,
-			ist4: 0,
-			ist5: 0,
-			ist6: 0,
-			ist7: 0,
-			res4: 0,	// reserved entries
-			res5: 0,	// reserved entries
-			res6: 0,
-			bitmap: 0,
+            reserved: 0,
+            rsp: [0; 3],
+            reserved2: 0,
+            ist: [0; 7],
+            reserved3: 0,
+            reserved4: 0,
+            iomap_base: 0,
         }
     }
 }
@@ -161,7 +136,7 @@ impl TaskStateSegment {
 // workaround to use th enew repr(align) feature
 // currently, it is only supported by structs
 // => map all TSS in a struct
-#[repr(C, align(4096))]
+#[repr(align(4096))]
 struct TssBuffer {
 	tss: [TaskStateSegment; MAX_CORES],
 }
@@ -203,99 +178,97 @@ impl IrqStack {
 /// finally to load the new GDT and to update the
 /// new segment registers
 #[no_mangle]
-pub extern fn gdt_install()
+pub unsafe fn gdt_install()
 {
-	unsafe {
-		// Setup the GDT pointer and limit
-		GDTR.limit = ((size_of::<GdtEntry>() * GDT_ENTRIES) - 1) as u16;
-    	GDTR.base = (&GDT as *const _) as u64;
+	let mut num: usize = 0;
 
-		let mut num: usize = 0;
+	GDTR.limit = (size_of::<GdtEntry>() * GDT.len() - 1) as u16;
+	GDTR.base = GDT.as_ptr() as u64;
 
-		/* Our NULL descriptor */
-		GDT[num] = GdtEntry::new(0, 0, 0, 0);
-		num += 1;
+	/* Our NULL descriptor */
+	GDT[num] = GdtEntry::new(0, 0, 0, 0);
+	num += 1;
 
-		/*
-		 * The second entry is our Code Segment. The base address
-		 * is 0, the limit is 4 GByte, it uses 4KByte granularity,
-		 * and is a Code Segment descriptor.
-		 */
-		GDT[num] = GdtEntry::new(0, 0,
-			GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
-		num += 1;
+	/*
+	 * The second entry is our Code Segment. The base address
+	 * is 0, the limit is 4 GByte, it uses 4KByte granularity,
+	 * and is a Code Segment descriptor.
+	 */
+	GDT[num] = GdtEntry::new(0, 0,
+		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
+	num += 1;
 
-		/*
-		 * The third entry is our Data Segment. It's EXACTLY the
-		 * same as our code segment, but the descriptor type in
-		 * this entry's access byte says it's a Data Segment
-		 */
-		GDT[num] = GdtEntry::new(0, 0,
-			GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
-		num += 1;
+	/*
+	 * The third entry is our Data Segment. It's EXACTLY the
+	 * same as our code segment, but the descriptor type in
+	 * this entry's access byte says it's a Data Segment
+	 */
+	GDT[num] = GdtEntry::new(0, 0,
+		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
+	num += 1;
 
-		/*
-		 * Create code segment for 32bit user-space applications (ring 3)
-		 */
-		GDT[num] = GdtEntry::new(0, 0xFFFFFFFF,
-			GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
-		num += 1;
+	/*
+	 * Create code segment for 32bit user-space applications (ring 3)
+	 */
+	GDT[num] = GdtEntry::new(0, 0xFFFFFFFF,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT,
+		GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
+	num += 1;
 
-		/*
-		 * Create data segment for 32bit user-space applications (ring 3)
-		 */
-		GDT[num] = GdtEntry::new(0, 0xFFFFFFFF,
-			GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
-		num += 1;
+	/*
+	 * Create data segment for 32bit user-space applications (ring 3)
+	 */
+	GDT[num] = GdtEntry::new(0, 0xFFFFFFFF,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT,
+		GDT_FLAG_32_BIT | GDT_FLAG_4K_GRAN);
+	num += 1;
 
-		/*
-		 * Create code segment for 64bit user-space applications (ring 3)
-		 */
-		GDT[num] = GdtEntry::new(0, 0,
-			GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
-		num += 1;
+	/*
+	 * Create code segment for 64bit user-space applications (ring 3)
+	 */
+	GDT[num] = GdtEntry::new(0, 0,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_CODESEG | GDT_FLAG_PRESENT,
+		GDT_FLAG_64_BIT);
+	num += 1;
 
-		/*
-		 * Create data segment for 64bit user-space applications (ring 3)
-		 */
-		GDT[num] = GdtEntry::new(0, 0,
-			GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
-		num += 1;
+	/*
+	 * Create data segment for 64bit user-space applications (ring 3)
+	 */
+	GDT[num] = GdtEntry::new(0, 0,
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
+	num += 1;
 
-		/*
-		 * Create TSS for each core (we use these segments for task switching)
-		 */
-		 for i in 0..MAX_CORES {
-			 TSS_BUFFER.tss[i].rsp0 = (&(boot_stack[0]) as *const _) as u64;
-			 TSS_BUFFER.tss[i].rsp0 += ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
-			 TSS_BUFFER.tss[i].ist1 = 0; // ist will created per task
-			 TSS_BUFFER.tss[i].ist2 = (&(STACK_TABLE[i][2 /*IST number */ - 2]) as *const _) as u64;
-			 TSS_BUFFER.tss[i].ist2 += (KERNEL_STACK_SIZE - 0x10) as u64;
-			 TSS_BUFFER.tss[i].ist3 = (&(STACK_TABLE[i][3 /*IST number */ - 2]) as *const _) as u64;
-			 TSS_BUFFER.tss[i].ist3 += (KERNEL_STACK_SIZE - 0x10) as u64;
-			 TSS_BUFFER.tss[i].ist4 = (&(STACK_TABLE[i][4 /*IST number */ - 2]) as *const _) as u64;
-			 TSS_BUFFER.tss[i].ist4 += (KERNEL_STACK_SIZE - 0x10) as u64;
+	/*
+	 * Create TSS for each core (we use these segments for task switching)
+	 */
+	for i in 0..MAX_CORES {
+		TSS_BUFFER.tss[i].rsp[0] = (&(boot_stack[0]) as *const _) as u64;
+		TSS_BUFFER.tss[i].rsp[0] += ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
+		TSS_BUFFER.tss[i].ist[0] = 0; // ist will created per task
+		TSS_BUFFER.tss[i].ist[1] = (&(STACK_TABLE[i][2 /*IST number */ - 2]) as *const _) as u64;
+		TSS_BUFFER.tss[i].ist[1] += (KERNEL_STACK_SIZE - 0x10) as u64;
+		TSS_BUFFER.tss[i].ist[2] = (&(STACK_TABLE[i][3 /*IST number */ - 2]) as *const _) as u64;
+		TSS_BUFFER.tss[i].ist[2] += (KERNEL_STACK_SIZE - 0x10) as u64;
+		TSS_BUFFER.tss[i].ist[3] = (&(STACK_TABLE[i][4 /*IST number */ - 2]) as *const _) as u64;
+		TSS_BUFFER.tss[i].ist[3] += (KERNEL_STACK_SIZE - 0x10) as u64;
 
-			 let tss_ptr = &(TSS_BUFFER.tss[i]) as *const TaskStateSegment;
-			 GDT[num+i*2] = GdtEntry::new(tss_ptr as u32, (size_of::<TaskStateSegment>()-1) as u32,
-			 	GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
-		 }
-
-		 lgdt(&GDTR);
+		let tss_ptr = &(TSS_BUFFER.tss[i]) as *const TaskStateSegment;
+		GDT[num+i*2] = GdtEntry::new(tss_ptr as u32, size_of::<TaskStateSegment>() as u32,
+			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
 	}
+
+	gdt_flush();
 }
 
 #[no_mangle]
-pub extern fn set_tss(rsp0: u64, ist1: u64)
+pub unsafe fn set_tss(rsp: u64, ist: u64)
 {
-	unsafe {
-		TSS_BUFFER.tss[core_id!()].rsp0 = rsp0;
-		TSS_BUFFER.tss[core_id!()].ist1 = ist1;
-	}
+	TSS_BUFFER.tss[core_id!()].rsp[0] = rsp;
+	TSS_BUFFER.tss[core_id!()].ist[0] = ist;
 }
 
 #[no_mangle]
-pub extern fn gdt_flush()
+pub unsafe fn gdt_flush()
 {
-	unsafe { lgdt(&GDTR); }
+	lgdt(&GDTR);
 }
