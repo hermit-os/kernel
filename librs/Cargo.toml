@@ -13,6 +13,10 @@ rlibc = "1.0.0"	# Low-level functions like memcpy.
 spin = "0.4.5"	# Spinlocks.
 raw-cpuid = "3.0.0"
 
+#[dependencies.lazy_static]
+#version = "0.2.8"
+#features = ["spin_no_std"]
+
 [dependencies.x86]
 version = "0.7"
 default-features = false
@@ -30,7 +34,7 @@ codegen-units = 1  # controls whether the compiler passes `-C codegen-units`
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
-opt-level = 3
+opt-level = 2
 debug = false
 rpath = false
 lto = true
