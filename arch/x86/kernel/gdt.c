@@ -153,7 +153,7 @@ void gdt_install(void)
 		task_state_segments[i].ist3 = (size_t) stack_table[i] + (3 /*IST number */ - 1) * KERNEL_STACK_SIZE - 0x10;
 		task_state_segments[i].ist4 = (size_t) stack_table[i] + (4 /*IST number */ - 1) * KERNEL_STACK_SIZE - 0x10;
 
-		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t)-1,
+		gdt_set_gate(num+i*2, (unsigned long) (task_state_segments+i), sizeof(tss_t),
 			GDT_FLAG_PRESENT | GDT_FLAG_TSS | GDT_FLAG_RING0, 0);
 	}
 
