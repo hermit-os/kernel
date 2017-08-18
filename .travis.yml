@@ -18,6 +18,9 @@ before_install:
 script:
   - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
   - source cmake/local-cmake.sh
+  - cd librs
+  - make runtime
+  - cd -
   - mkdir build
   - cd build
   - cmake ..
