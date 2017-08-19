@@ -121,10 +121,11 @@ SECTION .ktext
 align 4
 start64:
     ; reset registers to kill any stale realmode selectors
-    xor eax, eax
+    mov eax, 0x10
     mov ds, eax
     mov ss, eax
     mov es, eax
+    xor eax, eax
     mov fs, eax
     mov gs, eax
 
