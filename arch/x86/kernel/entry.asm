@@ -264,6 +264,16 @@ extern gp
 ; C as 'extern void gdt_flush();'
 gdt_flush:
     lgdt [gp]
+    ; reload the segment descriptors
+    mov eax, 0x10
+    mov ds, eax
+    mov es, eax
+    mov ss, eax
+    xor eax, eax
+    mov fs, eax
+    mov gs, eax
+    jmp 0x08:flush2
+flush2:
     ret
 
 ; The first 32 interrupt service routines (ISR) entries correspond to exceptions.
