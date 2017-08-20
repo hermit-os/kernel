@@ -272,7 +272,10 @@ gdt_flush:
     xor eax, eax
     mov fs, eax
     mov gs, eax
-    jmp 0x08:flush2
+    ; create pseudo interrupt to set cs
+    push 0x08
+    push flush2
+    iretq
 flush2:
     ret
 
