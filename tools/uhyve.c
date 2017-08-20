@@ -836,11 +836,13 @@ static int vcpu_loop(void)
 			break;
 
 		case KVM_EXIT_SHUTDOWN:
+			print_registers();
 			err(1, "KVM: receive shutdown command\n");
 			break;
 
 		case KVM_EXIT_DEBUG:
 			print_registers();
+
 		default:
 			fprintf(stderr, "KVM: unhandled exit: exit_reason = 0x%x\n", run->exit_reason);
 			exit(EXIT_FAILURE);
