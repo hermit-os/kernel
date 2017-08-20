@@ -273,11 +273,13 @@ gdt_flush:
     mov fs, eax
     mov gs, eax
     ; create pseudo interrupt to set cs
-    push 0x08
-    push flush2
+    push QWORD 0x10             ; SS
+    push rsp                    ; RSP
+    add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
+    pushfq                      ; RFLAGS
+    push QWORD 0x08             ; CS
+    push QWORD rollback         ; RIP
     iretq
-flush2:
-    ret
 
 ; The first 32 interrupt service routines (ISR) entries correspond to exceptions.
 ; Some exceptions will push an error code onto the stack which is specific to
