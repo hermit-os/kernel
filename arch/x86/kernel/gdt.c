@@ -117,7 +117,7 @@ void gdt_install(void)
 	 * this entry's access byte says it's a Data Segment
 	 */
 	gdt_set_gate(num++, 0, 0,
-		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
+		GDT_FLAG_RING0 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
 
 	/*
 	 * Create code segment for 32bit user-space applications (ring 3)
@@ -141,7 +141,7 @@ void gdt_install(void)
 	 * Create data segment for 64bit user-space applications (ring 3)
 	 */
 	gdt_set_gate(num++, 0, 0,
-		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, 0);
+		GDT_FLAG_RING3 | GDT_FLAG_SEGMENT | GDT_FLAG_DATASEG | GDT_FLAG_PRESENT, GDT_FLAG_64_BIT);
 
 	/*
 	 * Create TSS for each core (we use these segments for task switching)
