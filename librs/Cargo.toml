@@ -34,7 +34,7 @@ codegen-units = 1  # controls whether the compiler passes `-C codegen-units`
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
-opt-level = 2
+opt-level = 3
 debug = false
 rpath = false
 lto = true
