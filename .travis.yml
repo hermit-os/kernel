@@ -7,7 +7,7 @@ env:
     - PATH=$PATH:~/.cargo/bin
 language: c
 compiler:
-  - clang
+  #- clang
   - gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
