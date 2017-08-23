@@ -25,7 +25,6 @@ script:
   - cd build
   - cmake ..
   - make package
-  - cat /home/travis/build/RWTH-OS/HermitCore/build/hermit-rs-prefix/src/hermit-rs-stamp/hermit-rs-build-*.log
   - cd $TRAVIS_BUILD_DIR
   - ./tests.sh
 
