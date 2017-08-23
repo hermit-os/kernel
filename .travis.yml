@@ -7,7 +7,7 @@ env:
     - PATH=$PATH:~/.cargo/bin
 language: c
 compiler:
-  #- clang
+  - clang
   - gcc
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
@@ -24,7 +24,7 @@ script:
   - mkdir build
   - cd build
   - cmake ..
-  - make -j1 package
+  - make VERBOSE=1 -j1 package
   - cd $TRAVIS_BUILD_DIR
   - ./tests.sh
 
