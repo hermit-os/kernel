@@ -111,7 +111,7 @@ typedef struct {
 } __attribute__ ((packed)) gdt_ptr_t;
 
 // a TSS descriptor is twice larger than a code/data descriptor
-#define GDT_ENTRIES	(6+MAX_CORES*2)
+#define GDT_ENTRIES	(7+MAX_CORES*2)
 
 #if GDT_ENTRIES > 8192
 #error Too many GDT entries!
