@@ -37,9 +37,9 @@
 #define PAGE_SIZE		( 1L << PAGE_BITS)
 /// Mask the page address without page map flags and XD flag
 #ifdef CONFIG_X86_32
-#define PAGE_MASK		(-1L << PAGE_BITS)
+#define PAGE_MASK		(~0UL << PAGE_BITS)
 #elif defined(CONFIG_X86_64)
-#define PAGE_MASK		((-1L << PAGE_BITS) & ~PG_XD)
+#define PAGE_MASK		((~0UL << PAGE_BITS) & ~PG_XD)
 #endif
 
 #ifdef CONFIG_X86_32

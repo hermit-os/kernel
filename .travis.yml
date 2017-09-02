@@ -1,19 +1,92 @@
 sudo: required
 dist: trusty
+language: c
+
 git:
   submodules: true
 env:
   global:
     - PATH=$PATH:~/.cargo/bin
-language: c
-compiler:
-  - clang
-  - gcc
+matrix:
+  include:
+    - compiler:     gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-4.9
+      env:
+          - COMPILERCXX=g++-4.9
+          - COMPILERC=gcc-4.9
+          - DEPLOY=true
+    - compiler:     gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-5
+      env:
+          - COMPILERCXX=g++-5
+          - COMPILERC=gcc-5
+    - compiler:     gcc
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+      env:
+          - COMPILERCXX=g++-6
+          - COMPILERC=gcc-6
+    - compiler:     clang
+      env:
+          - COMPILERC=clang
+          - COMPILERCXX=clang++
+          - CLANGV=3.8.1
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+    - compiler:     clang
+      env:
+          - COMPILERC=clang
+          - COMPILERCXX=clang++
+          - CLANGV=3.9.1
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+    - compiler:     clang
+      env:
+          - COMPILERC=clang
+          - COMPILERCXX=clang++
+          - CLANGV=4.0.1
+          - RUNCLANGTIDY=TRUE
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - g++-6
+
+
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - travis_retry sudo apt-get -qq update
   - travis_retry sudo apt-get install -y curl wget qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev rpm g++-multilib
   - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
+  - git submodule update --init lwip usr/libomp
+  # download clang
+  - mkdir $HOME/clang+llvm
+  - export PATH=$HOME/clang+llvm/bin:$PATH
+  - if [ -n "$CLANGV" ]; then wget http://llvm.org/releases/$CLANGV/clang+llvm-$CLANGV-x86_64-linux-gnu-debian8.tar.xz -O $HOME/clang+llvm.tar.xz; fi
+  - if [ -n "$CLANGV" ]; then tar xf $HOME/clang+llvm.tar.xz -C $HOME/clang+llvm --strip-components 1; fi
 
 script:
   - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
@@ -23,8 +96,8 @@ script:
   - cd -
   - mkdir build
   - cd build
-  - cmake ..
-  - make package
+  - cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=true ..
+  - CC=$COMPILERC CXX=$COMPILERCXX make -j1 package
   - cd $TRAVIS_BUILD_DIR
   - ./tests.sh
 
@@ -34,7 +107,7 @@ notifications:
 deploy:
   on:
     branch: master
-    condition: "$CC = gcc"
+    condition: $DEPLOY = true
   provider: bintray
   file: .bintray_descriptor.json
   user:
