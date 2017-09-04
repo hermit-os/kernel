@@ -52,16 +52,13 @@
 #include <lwip/sockets.h>
 #include <lwip/err.h>
 #include <lwip/stats.h>
+#include <lwip/ethip6.h>
 #include <netif/etharp.h>
 
 #include "uhyve-net.h"
 
-static int uhyve_net_init_ok = 0;
+static int8_t uhyve_net_init_ok = 0;
 static struct netif* mynetif = NULL;
-
-#define PING_DEBUG 1
-
-#define HLEN_ETHER 6
 
 static int uhyve_net_write_sync(uint8_t *data, int n)
 {
@@ -255,7 +252,7 @@ err_t uhyve_netif_init (struct netif* netif) {
 
 	LOG_INFO("uhyve_netif_init: Found uhyve_net interface\n");
 
-	LWIP_DEBUGF(NETIF_DEBUG, ("uhyve_netif_init: MAC Address "));
+	LWIP_DEBUGF(NETIF_DEBUG, ("uhyve_netif_init: MAC address "));
 	char *hermit_mac = hermit_net_mac_str();
 	for (tmp8=0; tmp8 < ETHARP_HWADDR_LEN; tmp8++) {
 		netif->hwaddr[tmp8] = dehex(*hermit_mac++) << 4;
@@ -267,9 +264,9 @@ err_t uhyve_netif_init (struct netif* netif) {
 	uhyve_netif->ethaddr = (struct eth_addr *)netif->hwaddr;
 
 	if (ETHARP_SUPPORT_VLAN) {
-		kprintf("ETHARP_SUPPORT_VLAN: enabled\n");
+		LOG_INFO("ETHARP_SUPPORT_VLAN: enabled\n");
 	} else {
-		kprintf("ETHARP_SUPPORT_VLAN: disabled\n");
+		LOG_INFO("ETHARP_SUPPORT_VLAN: disabled\n");
 	}
 
 	netif->name[0] = 'e';
@@ -281,15 +278,14 @@ err_t uhyve_netif_init (struct netif* netif) {
 	/* maximum transfer unit */
 	netif->mtu = 1500;
 	/* broadcast capability */
-	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP /* | NETIF_FLAG_MLD6*/;
+	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP  | NETIF_FLAG_MLD6;
 
-/*
 #if LWIP_IPV6
 	netif->output_ip6 = ethip6_output;
 	netif_create_ip6_linklocal_address(netif, 1);
 	netif->ip6_autoconfig_enabled = 1;
 #endif
-*/
+
 	LOG_INFO("uhyve_netif_init: OK\n");
 	uhyve_net_init_ok = 1;
 	return ERR_OK;
