@@ -220,16 +220,37 @@ With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
 Please note that the loader requires QEMU and uses per default *KVM*.
 Furthermore, it expects that the executable is called `qemu-system-x86_64`.
 
-With `HERMIT_ISLE=hyve`, the application will be started within a thin
+With `HERMIT_ISLE=uhyve`, the application will be started within a thin
 hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
-uHyve has a considerably smaller startup time than QEMU, but lacks some features
+uhyve has a considerably smaller startup time than QEMU, but lacks some features
 such as GDB debugging.
+In principle, it is an extension of [ukvm](https://www.usenix.org/sites/default/files/conference/protected-files/hotcloud16_slides_williams.pdf).
 
 In this context, the environment variable `HERMIT_CPUS` specifies the number of
 cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
 defines the memory size of the virtual machine. The suffix of *M* or *G* can be
 used to specify a value in megabytes or gigabytes respectively. Per default, the
 loader initializes a system with one core and 2 GiB RAM.
+
+To enable an ethernet device for `uhyve`, we have to setup a tap device on the
+host system. For instance, the following command establish a tap device
+`tap100` on Linux:
+
+```bash
+$ sudo ip tuntap add tap100 mode tap
+$ sudo ip addr add 10.0.5.1/24 dev tap100
+$ sudo ip link set dev tap100 up
+```
+
+Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address.
+The default address, could be overloaded by the environment variable `HERMIT_IP`:
+To enable the device, `HERMIT_NETIF` has to set the name of the tap device.
+For instance, the following command starts an HermitCore application with `uhyve`
+and network support:
+
+```bash
+$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.2" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
+```
 
 The virtual machine opens two TCP/IP ports. One is used for the communication
 between HermitCore application and its proxy. The second port is used to create
@@ -254,7 +275,7 @@ A [modified Linux kernel](https://github.com/RWTH-OS/linux) has to be installed.
 Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to
 `centos`, which is compatible to the current CentOS 7 kernel. Configure the
 kernel with `make menuconfig` for your system. Be sure, that the option
-`CONFIG_HERMIT_CORE` in `Processor type and features` is enabled. 
+`CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 
 ```bash
 $ git clone https://github.com/RWTH-OS/linux
