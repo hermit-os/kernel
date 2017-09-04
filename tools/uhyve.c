@@ -64,6 +64,7 @@
 
 #include "uhyve-cpu.h"
 #include "uhyve-syscalls.h"
+#include "uhyve-net.h"
 #include "proxy.h"
 
 // define this macro to create checkpoints with KVM's dirty log
@@ -151,6 +152,12 @@
 	ret; \
 	})
 
+// Networkports
+#define UHYVE_PORT_NETINFO		0x505
+#define UHYVE_PORT_NETWRITE		0x506
+#define UHYVE_PORT_NETREAD		0x507
+#define UHYVE_PORT_NETSTAT		0x508
+
 static bool restart = false;
 static bool cap_tsc_deadline = false;
 static bool cap_irqchip = false;
@@ -165,7 +172,7 @@ static size_t guest_size = 0x20000000ULL;
 static uint64_t elf_entry;
 static pthread_t* vcpu_threads = NULL;
 static int* vcpu_fds = NULL;
-static int kvm = -1, vmfd = -1;
+static int kvm = -1, vmfd = -1, netfd = -1;
 static uint32_t no_checkpoint = 0;
 static pthread_mutex_t kvm_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t barrier;
@@ -813,6 +820,50 @@ static int vcpu_loop(void)
 					break;
 				}
 
+				case UHYVE_PORT_NETINFO: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netinfo_t* uhyve_netinfo = (uhyve_netinfo_t*)(guest_mem+data);
+					memcpy(uhyve_netinfo->mac_str, uhyve_get_mac(), 18);
+					break;
+				}
+
+				case UHYVE_PORT_NETWRITE: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netwrite_t* uhyve_netwrite = (uhyve_netwrite_t*)(guest_mem + data);
+					int ret;
+					ret = write(netfd, guest_mem + (size_t)uhyve_netwrite->data, uhyve_netwrite->len);
+					assert(uhyve_netwrite->len == ret);
+					uhyve_netwrite->ret = 0;
+					break;
+				}
+
+				case UHYVE_PORT_NETREAD: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netread_t* uhyve_netread = (uhyve_netread_t*)(guest_mem + data);
+					int ret;
+					ret = read(netfd, guest_mem + (size_t)uhyve_netread->data, uhyve_netread->len);
+					if ((ret == 0) || (ret == -1 && errno == EAGAIN)) {
+						uhyve_netread->ret = -1;
+						break;
+					}
+					assert(ret > 0);
+					uhyve_netread->len = ret;
+					uhyve_netread->ret = 0;
+					break;
+				}
+
+				case UHYVE_PORT_NETSTAT: {
+					unsigned status = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netstat_t* uhyve_netstat = (uhyve_netstat_t*)(guest_mem + status);
+					char* str = getenv("HERMIT_NETIF");
+					if (str) {
+						uhyve_netstat->status = 1;
+					} else {
+						uhyve_netstat->status = 0;
+					}
+					break;
+				}
+
 			case UHYVE_PORT_LSEEK: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 					uhyve_lseek_t* uhyve_lseek = (uhyve_lseek_t*) (guest_mem+data);
@@ -1183,6 +1234,14 @@ int uhyve_init(char *path)
 	}
 
 	kvm_ioctl(vmfd, KVM_CREATE_IRQCHIP, NULL);
+
+	const char* netif_str = getenv("HERMIT_NETIF");
+	if (netif_str)
+	{
+		//TODO: strncmp for different network interfaces
+		// for example tun/tap device or uhyvetap device
+		netfd = uhyve_net_init(netif_str);
+	}
 
 #ifdef KVM_CAP_X2APIC_API
 	// enable x2APIC support
