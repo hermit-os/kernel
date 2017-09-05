@@ -57,7 +57,7 @@ typedef struct {
         int status;
 } __attribute__((packed)) uhyve_netstat_t;
 
-int uhyve_net_init(char *hermit_netif);
-const uint8_t* uhyve_get_mac(void);
+int uhyve_net_init(const char *hermit_netif);
+char* uhyve_get_mac(void);
 
 #endif
