@@ -104,7 +104,7 @@ int attach_linux_tap(const char *dev) {
 }
 
 //---------------------------------- GET MAC ----------------------------------------------//
-const uint8_t* uhyve_get_mac(void) {
+char* uhyve_get_mac(void) {
 	return netinfo.mac_str;
 }
 
@@ -163,7 +163,7 @@ int uhyve_set_mac(void) {
 }
 
 //-------------------------------------- SETUP NETWORK ---------------------------------------------//
-int uhyve_net_init(char *netif)
+int uhyve_net_init(const char *netif)
 {
 	if (netif == NULL) {
 		err(1, "ERROR: no netif defined\n");
