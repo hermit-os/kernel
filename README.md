@@ -233,7 +233,7 @@ used to specify a value in megabytes or gigabytes respectively. Per default, the
 loader initializes a system with one core and 2 GiB RAM.
 
 To enable an ethernet device for `uhyve`, we have to setup a tap device on the
-host system. For instance, the following command establish a tap device
+host system. For instance, the following command establish the tap device
 `tap100` on Linux:
 
 ```bash
@@ -243,10 +243,10 @@ $ sudo ip link set dev tap100 up
 ```
 
 Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address.
-The default address, could be overloaded by the environment variable `HERMIT_IP`:
-To enable the device, `HERMIT_NETIF` has to set the name of the tap device.
-For instance, the following command starts an HermitCore application with `uhyve`
-and network support:
+The default address, could be overloaded by the environment variable `HERMIT_IP`.
+To enable the device, `HERMIT_NETIF` must be set to the name of the tap device.
+For instance, the following command starts an HermitCore application within `uhyve`
+and enable the network support:
 
 ```bash
 $ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.2" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
