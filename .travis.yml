@@ -93,8 +93,9 @@ script:
   - cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=true ..
   - CC=$COMPILERC CXX=$COMPILERCXX make -j1 package
   - cd $TRAVIS_BUILD_DIR
+  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep tools/ | xargs -P 1 -I{} clang-tidy -p build/tools-prefix/src/tools-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
+  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep arch/x86/loader/ | xargs -P 1 -I{} clang-tidy -p build/arch_x86_loader-prefix/src/arch_x86_loader-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
   - ./tests.sh
-
 
 notifications:
   slack: hermitcore:UtcfeEXkbpx3WyIDK2Wm2beS
