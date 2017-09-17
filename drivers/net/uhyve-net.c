@@ -44,6 +44,7 @@
 #include <hermit/mailbox.h>
 #include <hermit/logging.h>
 #include <asm/io.h>
+#include <asm/irq.h>
 #include <sys/poll.h>
 #include <lwip/sys.h>
 #include <lwip/netif.h>
@@ -56,6 +57,8 @@
 #include <netif/etharp.h>
 
 #include "uhyve-net.h"
+
+#define UHYVE_IRQ	11
 
 static int8_t uhyve_net_init_ok = 0;
 static struct netif* mynetif = NULL;
@@ -72,20 +75,24 @@ static int uhyve_net_write_sync(uint8_t *data, int n)
 	return uhyve_netwrite.ret;
 }
 
-int uhyve_net_stat(void) {
+int uhyve_net_stat(void)
+{
         volatile uhyve_netstat_t uhyve_netstat;
+
         outportl(UHYVE_PORT_NETSTAT, (unsigned)virt_to_phys((size_t)&uhyve_netstat));
+
         return uhyve_netstat.status;
 }
 
 static int uhyve_net_read_sync(uint8_t *data, int *n)
 {
 	volatile uhyve_netread_t uhyve_netread;
+
 	uhyve_netread.data = (uint8_t*)virt_to_phys((size_t)data);
 	uhyve_netread.len = *n;
 	uhyve_netread.ret = 0;
-	outportl(UHYVE_PORT_NETREAD, (unsigned)virt_to_phys((size_t)&uhyve_netread));
 
+	outportl(UHYVE_PORT_NETREAD, (unsigned)virt_to_phys((size_t)&uhyve_netread));
 	*n = uhyve_netread.len;
 
 	return uhyve_netread.ret;
@@ -122,10 +129,12 @@ static err_t uhyve_netif_output(struct netif* netif, struct pbuf* p)
 	uint8_t transmitid = uhyve_netif->tx_queue % TX_BUF_NUM;
 	uint32_t i;
 	struct pbuf *q;
+
 	if(BUILTIN_EXPECT((uhyve_netif->tx_queue - uhyve_netif->tx_complete) > (TX_BUF_NUM - 1), 0)) {
 		LOG_ERROR("uhyve_netif_output: too many packets at once\n");
 		return ERR_IF;
 	}
+
 	if(BUILTIN_EXPECT(p->tot_len > 1792, 0)) {
 		LOG_ERROR("uhyve_netif_output: packet (%i bytes) is longer than 1792 bytes\n", p->tot_len);
 		return ERR_IF;
@@ -163,25 +172,24 @@ static err_t uhyve_netif_output(struct netif* netif, struct pbuf* p)
 	uhyve_netif->tx_complete++;
 	uhyve_netif->tx_inuse[transmitid] = 0;
 //	LOG_INFO("Transmit OK | queue = %i, complete = %i \n", uhyve_netif->tx_queue, uhyve_netif->tx_complete);
-	return ERR_OK;
 
+	return ERR_OK;
 }
 
 //------------------------------- POLLING ----------------------------------------
 
-//uint64_t last_poll = 0;
-static int polling;
-void uhyve_netif_poll(void) {
-	if (!uhyve_net_init_ok || polling) {
+static void uhyve_netif_poll(struct netif* netif)
+{
+	if (!uhyve_net_init_ok)
 		return;
-	}
-	polling = 1;
-	uhyve_netif_t* uhyve_netif = mynetif->state;
+
+	uhyve_netif_t* uhyve_netif = netif->state;
 	int len = RX_BUF_LEN;
 	struct pbuf *p = NULL;
 	struct pbuf *q;
-	if (uhyve_net_read_sync(uhyve_netif->rx_buf, &len) == 0) {
 
+	if (uhyve_net_read_sync(uhyve_netif->rx_buf, &len) == 0)
+	{
 #if ETH_PAD_SIZE
 		len += ETH_PAD_SIZE; /*allow room for Ethernet padding */
 #endif
@@ -200,19 +208,24 @@ void uhyve_netif_poll(void) {
 #endif
 			LINK_STATS_INC(link.recv);
 			//forward packet to LwIP
-			mynetif->input(p, mynetif);
+			netif->input(p, mynetif);
 		} else {
 			LOG_ERROR("uhyve_netif_poll: not enough memory!\n");
 			LINK_STATS_INC(link.memerr);
 			LINK_STATS_INC(link.drop);
 		}
 	}
-	polling = 0;
+}
+
+static void uhyve_irqhandler(struct state* s)
+{
+	uhyve_netif_poll(mynetif);
 }
 
 //--------------------------------- INIT -----------------------------------------
 
-err_t uhyve_netif_init (struct netif* netif) {
+err_t uhyve_netif_init (struct netif* netif)
+{
 	uhyve_netif_t* uhyve_netif;
 	uint8_t tmp8 = 0;
 	static uint8_t num = 0;
@@ -231,7 +244,7 @@ err_t uhyve_netif_init (struct netif* netif) {
 		kfree(uhyve_netif);
 		return ERR_MEM;
 	}
-	memset(uhyve_netif->rx_buf, 0x00, RX_BUF_LEN +16);
+	memset(uhyve_netif->rx_buf, 0x00, RX_BUF_LEN + 16);
 
 	uhyve_netif->tx_buf[0] = page_alloc(TX_BUF_NUM * TX_BUF_LEN, VMA_READ|VMA_WRITE);
 	if (!(uhyve_netif->tx_buf[0])) {
@@ -258,16 +271,13 @@ err_t uhyve_netif_init (struct netif* netif) {
 		netif->hwaddr[tmp8] = dehex(*hermit_mac++) << 4;
 		netif->hwaddr[tmp8] |= dehex(*hermit_mac++);
 		hermit_mac++;
-	LWIP_DEBUGF(NETIF_DEBUG, ("%02x ", netif->hwaddr[tmp8]));
+		LWIP_DEBUGF(NETIF_DEBUG, ("%02x ", netif->hwaddr[tmp8]));
 	}
 	LWIP_DEBUGF(NETIF_DEBUG, ("\n"));
 	uhyve_netif->ethaddr = (struct eth_addr *)netif->hwaddr;
 
-	if (ETHARP_SUPPORT_VLAN) {
-		LOG_INFO("ETHARP_SUPPORT_VLAN: enabled\n");
-	} else {
-		LOG_INFO("ETHARP_SUPPORT_VLAN: disabled\n");
-	}
+	LOG_INFO("uhye_netif uses irq %d\n", UHYVE_IRQ);
+	irq_install_handler(32+UHYVE_IRQ, uhyve_irqhandler);
 
 	netif->name[0] = 'e';
 	netif->name[1] = 'n';
@@ -278,7 +288,7 @@ err_t uhyve_netif_init (struct netif* netif) {
 	/* maximum transfer unit */
 	netif->mtu = 1500;
 	/* broadcast capability */
-	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP  | NETIF_FLAG_MLD6;
+	netif->flags |= NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP | NETIF_FLAG_IGMP | NETIF_FLAG_LINK_UP | NETIF_FLAG_MLD6;
 
 #if LWIP_IPV6
 	netif->output_ip6 = ethip6_output;
@@ -288,5 +298,6 @@ err_t uhyve_netif_init (struct netif* netif) {
 
 	LOG_INFO("uhyve_netif_init: OK\n");
 	uhyve_net_init_ok = 1;
+
 	return ERR_OK;
 }
