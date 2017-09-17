@@ -181,6 +181,8 @@ static int init_netifs(void)
 			LOG_INFO("set_default\n");
 			netifapi_netif_set_up(&default_netif);
 			LOG_INFO("set_up\n");
+		} else {
+			return -ENODEV;
 		}
 	} else if (!is_single_kernel()) {
 		LOG_INFO("HermitCore is running side-by-side to Linux!\n");

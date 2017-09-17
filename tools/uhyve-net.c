@@ -36,7 +36,8 @@
 static uhyve_netinfo_t netinfo;
 
 //-------------------------------------- ATTACH LINUX TAP -----------------------------------------//
-int attach_linux_tap(const char *dev) {
+int attach_linux_tap(const char *dev)
+{
 	struct ifreq ifr;
 	int fd, err;
 
@@ -52,7 +53,7 @@ int attach_linux_tap(const char *dev) {
 	fd = open("/dev/net/tun", O_RDWR | O_NONBLOCK);
 
 	// Initialize interface request for TAP interface
-	memset(&ifr, 0, sizeof(ifr));
+	memset(&ifr, 0x00, sizeof(ifr));
 
 	ifr.ifr_flags = IFF_TAP | IFF_NO_PI;
 	if (strlen(dev) > IFNAMSIZ) {
@@ -67,16 +68,17 @@ int attach_linux_tap(const char *dev) {
 	// create before a tap device with these commands:
 	//
 	// sudo ip tuntap add <devname> mode tap user <user>
-	// sudo ip addr add 10.0.5.1/24 dev <devname>
+	// sudo ip addr add 10.0.5.1/24 broadcast 10.0.5.255
 	// sudo ip link set dev <devname> up
 	//
 
-	if (ioctl(fd, TUNSETIFF, (void *)&ifr) == -1) {
+	if (ioctl(fd, TUNSETIFF, (void *)&ifr) < 0) {
 		err = errno;
 		close(fd);
 		errno = err;
 		return -1;
 	}
+
 	// If we got back a different device than the one requested, e.g. because
 	// the caller mistakenly passed in '%d' (yes, that's really in the Linux API)
 	// then fail
@@ -100,19 +102,23 @@ int attach_linux_tap(const char *dev) {
 		errno = ENODEV;
 		return -1;
 	}
+
 	return fd;
 }
 
 //---------------------------------- GET MAC ----------------------------------------------//
-char* uhyve_get_mac(void) {
+char* uhyve_get_mac(void)
+{
 	return netinfo.mac_str;
 }
 
 //---------------------------------- SET MAC ----------------------------------------------//
 
-int uhyve_set_mac(void) {
+int uhyve_set_mac(void)
+{
 	int mac_is_set = 0;
 	uint8_t guest_mac[6];
+
 	char* str = getenv("HERMIT_NETIF_MAC");
 	if (str)
 	{
@@ -125,7 +131,7 @@ int uhyve_set_mac(void) {
 			if(isxdigit(*v_macptr)) {
 				i++;
 			} else if (*v_macptr == ':') {
-				if (i /2 - 1 != s++ )
+				if (i / 2 - 1 != s++)
 					break;
 			} else {
 				s = -1;

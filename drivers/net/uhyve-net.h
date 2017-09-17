@@ -91,6 +91,5 @@ typedef struct uhyve_netif {
 
 err_t uhyve_netif_init(struct netif* netif);
 int uhyve_net_stat(void);
-void uhyve_netif_poll(void);
 
 #endif
