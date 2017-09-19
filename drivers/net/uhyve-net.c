@@ -279,6 +279,13 @@ err_t uhyve_netif_init (struct netif* netif)
 	LOG_INFO("uhye_netif uses irq %d\n", UHYVE_IRQ);
 	irq_install_handler(32+UHYVE_IRQ, uhyve_irqhandler);
 
+	/*
+	 * Initialize the snmp variables and counters inside the struct netif.
+	 * The last argument should be replaced with your link speed, in units
+	 * of bits per second.
+	 */
+	NETIF_INIT_SNMP(netif, snmp_ifType_ethernet_csmacd, 1000);
+
 	netif->name[0] = 'e';
 	netif->name[1] = 'n';
 	netif->num = num++;
