@@ -35,9 +35,9 @@
 
 #define MIN(a, b)	(a) < (b) ? (a) : (b)
 
-#define RX_BUF_LEN 8192
-#define TX_BUF_LEN 4096
-#define TX_BUF_NUM 4		//number of tx buffer
+#define RX_BUF_LEN 2048
+#define TX_BUF_LEN 2048
+#define TX_BUF_NUM 1		//number of tx buffer
 
 #define UHYVE_PORT_NETINFO      0x505
 #define UHYVE_PORT_NETWRITE     0x506
