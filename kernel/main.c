@@ -156,9 +156,6 @@ static int init_netifs(void)
 	if(sys_sem_new(&sem, 0) != ERR_OK)
 		LWIP_ASSERT("Failed to create semaphore", 0);
 
-	// part of bss => memset not required
-	//memset(&default_netif, 0x00, sizeof(struct netif));
-
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
 	LOG_INFO("TCP/IP initialized.\n");
