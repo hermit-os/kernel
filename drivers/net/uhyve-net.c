@@ -176,14 +176,21 @@ static err_t uhyve_netif_output(struct netif* netif, struct pbuf* p)
 	return ERR_OK;
 }
 
+static void consume_packet(void* ctx)
+{
+	struct pbuf *p = (struct pbuf*) ctx;
+
+	mynetif->input(p, mynetif);
+}
+
 //------------------------------- POLLING ----------------------------------------
 
-static void uhyve_netif_poll(struct netif* netif)
+static void uhyve_netif_poll(void)
 {
 	if (!uhyve_net_init_ok)
 		return;
 
-	uhyve_netif_t* uhyve_netif = netif->state;
+	uhyve_netif_t* uhyve_netif = mynetif->state;
 	int len = RX_BUF_LEN;
 	struct pbuf *p = NULL;
 	struct pbuf *q;
@@ -206,9 +213,13 @@ static void uhyve_netif_poll(struct netif* netif)
 #if ETH_PAD_SIZE
 			pbuf_header(p, ETH_PAD_SIZE); /*reclaim the padding word */
 #endif
-			LINK_STATS_INC(link.recv);
+
+
 			//forward packet to LwIP
-			netif->input(p, mynetif);
+			if (tcpip_callback_with_block(consume_packet, p, 0) == ERR_OK)
+				LINK_STATS_INC(link.recv);
+			else
+				LINK_STATS_INC(link.drop);
 		} else {
 			LOG_ERROR("uhyve_netif_poll: not enough memory!\n");
 			LINK_STATS_INC(link.memerr);
@@ -219,7 +230,7 @@ static void uhyve_netif_poll(struct netif* netif)
 
 static void uhyve_irqhandler(struct state* s)
 {
-	uhyve_netif_poll(mynetif);
+	uhyve_netif_poll();
 }
 
 //--------------------------------- INIT -----------------------------------------
