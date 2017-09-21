@@ -215,11 +215,13 @@ static void uhyve_netif_poll(void)
 #endif
 
 
-			//forward packet to LwIP
-			if (tcpip_callback_with_block(consume_packet, p, 0) == ERR_OK)
+			//forward packet to the IP thread
+			if (tcpip_callback_with_block(consume_packet, p, 0) == ERR_OK) {
 				LINK_STATS_INC(link.recv);
-			else
+			} else {
 				LINK_STATS_INC(link.drop);
+				pbuf_free(p);
+			}
 		} else {
 			LOG_ERROR("uhyve_netif_poll: not enough memory!\n");
 			LINK_STATS_INC(link.memerr);
