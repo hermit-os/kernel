@@ -248,7 +248,7 @@ void apic_eoi(size_t int_no)
 	 * then we use the APIC
 	 */
 	if (apic_is_enabled() || int_no >= 48) {
-		lapic_write(APIC_EOI, 0);
+		lapic_write(APIC_EOI, APIC_EOI_ACK);
 	} else {
 		/*
 		 * If the IDT entry that was invoked was greater-than-or-equal to 40
@@ -1001,7 +1001,7 @@ int ipi_tlb_flush(void)
 
 static void apic_tlb_handler(struct state *s)
 {
-	LOG_INFO("Receive IPI at core %d to flush the TLB\n", CORE_ID);
+	LOG_DEBUG("Receive IPI at core %d to flush the TLB\n", CORE_ID);
 	write_cr3(read_cr3());
 }
 #endif
@@ -1108,7 +1108,7 @@ static void apic_shutdown(struct state* s)
 
 static void apic_wakeup(struct state* s)
 {
-	LOG_INFO("Receive wakeup interrupt\n");
+	LOG_DEBUG("Receive wakeup interrupt\n");
 }
 
 int apic_init(void)
