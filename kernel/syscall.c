@@ -58,6 +58,36 @@ extern int32_t isle;
 extern int32_t possible_isles;
 extern volatile int libc_sd;
 
+static inline int socket_send(int fd, const 	void* buf, size_t len)
+{
+	int ret, sz = 0;
+
+	do {
+		ret = lwip_write(fd, (char*)buf + sz, len-sz);
+		if (ret >= 0)
+			sz += ret;
+		else
+			return ret;
+	} while(sz < len);
+
+	return len;
+}
+
+static inline int socket_recv(int fd, void* buf, size_t len)
+{
+	int ret, sz = 0;
+
+	do {
+		ret = lwip_read(fd, (char*)buf + sz, len-sz);
+		if (ret >= 0)
+			sz += ret;
+		else
+			return ret;
+	} while(sz < len);
+
+	return len;
+}
+
 tid_t sys_getpid(void)
 {
 	task_t* task = per_core(current_task);
@@ -99,7 +129,7 @@ void NORETURN sys_exit(int arg)
 		{
 			int s = libc_sd;
 
-			lwip_write(s, &sysargs, sizeof(sysargs));
+			socket_send(s, &sysargs, sizeof(sysargs));
 			libc_sd = -1;
 
 			spinlock_irqsave_unlock(&lwip_lock);
@@ -158,22 +188,15 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 	}
 
 	int s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
+	socket_send(s, &sysargs, sizeof(sysargs));
 
-	lwip_read(s, &j, sizeof(j));
+	socket_recv(s, &j, sizeof(j));
 	if (j > 0)
 	{
-		ssize_t i = 0;
-
-		while(i < j)
-		{
-			ret = lwip_read(s, buf+i, j-i);
-			if (ret < 0) {
-				spinlock_irqsave_unlock(&lwip_lock);
-				return ret;
-			}
-
-			i += ret;
+		ret = socket_recv(s, buf, j);
+		if (ret < 0) {
+			spinlock_irqsave_unlock(&lwip_lock);
+			return ret;
 		}
 	}
 
@@ -238,12 +261,12 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 	}
 
 	int s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
+	socket_send(s, &sysargs, sizeof(sysargs));
 
 	i=0;
 	while(i < len)
 	{
-		ret = lwip_write(s, (char*)buf+i, len-i);
+		ret = socket_send(s, (char*)buf+i, len-i);
 		if (ret < 0) {
 			spinlock_irqsave_unlock(&lwip_lock);
 			return ret;
@@ -252,11 +275,8 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 		i += ret;
 	}
 
-	if (fd > 2) {
-		ret = lwip_read(s, &i, sizeof(i));
-		if (ret < 0)
-			i = ret;
-	} else i = len;
+	if (fd > 2)
+		i = socket_recv(s, &i, sizeof(i));
 
 	spinlock_irqsave_unlock(&lwip_lock);
 
@@ -336,35 +356,35 @@ int sys_open(const char* name, int flags, int mode)
 	//i = 0;
 	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	ret = lwip_write(s, &sysnr, sizeof(sysnr));
+	ret = socket_send(s, &sysnr, sizeof(sysnr));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(s, &len, sizeof(len));
+	ret = socket_send(s, &len, sizeof(len));
 	if (ret < 0)
 		goto out;
 
 	i=0;
 	while(i<len)
 	{
-		ret = lwip_write(s, name+i, len-i);
+		ret = socket_send(s, name+i, len-i);
 		if (ret < 0)
 			goto out;
 		i += ret;
 	}
 
-	ret = lwip_write(s, &flags, sizeof(flags));
+	ret = socket_send(s, &flags, sizeof(flags));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(s, &mode, sizeof(mode));
+	ret = socket_send(s, &mode, sizeof(mode));
 	if (ret < 0)
 		goto out;
 
 	//i = 1;
 	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	lwip_read(s, &ret, sizeof(ret));
+	socket_recv(s, &ret, sizeof(ret));
 
 out:
 	spinlock_irqsave_unlock(&lwip_lock);
@@ -411,10 +431,10 @@ int sys_close(int fd)
 	}
 
 	s = libc_sd;
-	ret = lwip_write(s, &sysargs, sizeof(sysargs));
+	ret = socket_send(s, &sysargs, sizeof(sysargs));
 	if (ret != sizeof(sysargs))
 		goto out;
-	lwip_read(s, &ret, sizeof(ret));
+	socket_recv(s, &ret, sizeof(ret));
 
 out:
 	spinlock_irqsave_unlock(&lwip_lock);
@@ -586,8 +606,8 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 	}
 
 	s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
-	lwip_read(s, &off, sizeof(off));
+	socket_send(s, &sysargs, sizeof(sysargs));
+	socket_recv(s, &off, sizeof(off));
 
 	spinlock_irqsave_unlock(&lwip_lock);
 
