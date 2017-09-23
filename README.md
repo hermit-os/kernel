@@ -147,7 +147,77 @@ $ make install
 
 ## Testing
 
+### As classical standalone unikernel within a virtual machine
+
+HermitCore applications can be directly started as standalone kernel within a
+virtual machine. In this case,
+[iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf ) is not
+supported.
+
+```bash
+$ cd build
+$ make install DESTDIR=~/hermit-build
+$ cd ~/hermit-build/opt/hermit
+$ # using QEMU
+$ HERMIT_ISLE=qemu bin/proxy x86_64-hermit/extra/tests/hello
+$ # using uHyve
+$ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
+```
+
+With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
+Please note that the loader requires QEMU and uses per default *KVM*.
+Furthermore, it expects that the executable is called `qemu-system-x86_64`.
+
+With `HERMIT_ISLE=uhyve`, the application will be started within a thin
+hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
+uhyve has a considerably smaller startup time than QEMU, but lacks some features
+such as GDB debugging.
+In principle, it is an extension of [ukvm](https://www.usenix.org/sites/default/files/conference/protected-files/hotcloud16_slides_williams.pdf).
+
+In this context, the environment variable `HERMIT_CPUS` specifies the number of
+cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
+defines the memory size of the virtual machine. The suffix of *M* or *G* can be
+used to specify a value in megabytes or gigabytes respectively. Per default, the
+loader initializes a system with one core and 2 GiB RAM.
+For instance, the following command starts the stream benchmark in a virtual machine, which
+has 4 cores and 6GB memory.
+
+```bash
+$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
+```
+
+To enable an ethernet device for `uhyve`, we have to setup a tap device on the
+host system. For instance, the following command establish the tap device
+`tap100` on Linux:
+
+```bash
+$ sudo ip tuntap add tap100 mode tap
+$ sudo ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap100
+$ sudo ip link set dev tap100 up
+$ sudo bash -c 'echo 1 > /proc/sys/net/ipv4/conf/tap100/proxy_arp'
+```
+
+Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address, `10.0.5.1`
+for the gateway and `255.255.255.0` as network mask.
+The default configuration could be overloaded by the environment variable
+`HERMIT_IP`, `HERMIT_GATEWAY` and `HERMIT_MASk`.
+To enable the device, `HERMIT_NETIF` must be set to the name of the tap device.
+For instance, the following command starts an HermitCore application within `uhyve`
+and enable the network support:
+
+```bash
+$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.3" HERMIT_GATEWAY="10.0.5.1" HERMIT_MASk="255.255.255.0" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
+```
+
+If `qemu` is used as hyervisor, the virtual machine emulates an RTL8139 ethernet interface and opens at least one TCP/IP ports.
+It is used for the communication between HermitCore application and its proxy.
+With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication.
+
+
 ### As multi-kernel within a virtual machine
+
+Boot the test image of a minimal Linux system within a VM.
+For this, go to the build directory and boot the image by our makefiles.
 
 ```bash
 $ cd build
@@ -197,77 +267,6 @@ address `192.168.28.2` for isle 0 and is increased by one for every isle.
 
 More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}`
 which is a shared directory between the host and QEMU.
-
-
-### As classical standalone unikernel within a virtual machine
-
-HermitCore applications can be directly started as standalone kernel within a
-virtual machine. In this case,
-[iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf ) is not
-supported.
-
-```bash
-$ cd build
-$ make install DESTDIR=~/hermit-build
-$ cd ~/hermit-build/opt/hermit
-$ # using QEMU
-$ HERMIT_ISLE=qemu bin/proxy x86_64-hermit/extra/tests/hello
-$ # using uHyve
-$ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
-```
-
-With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
-Please note that the loader requires QEMU and uses per default *KVM*.
-Furthermore, it expects that the executable is called `qemu-system-x86_64`.
-
-With `HERMIT_ISLE=uhyve`, the application will be started within a thin
-hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
-uhyve has a considerably smaller startup time than QEMU, but lacks some features
-such as GDB debugging.
-In principle, it is an extension of [ukvm](https://www.usenix.org/sites/default/files/conference/protected-files/hotcloud16_slides_williams.pdf).
-
-In this context, the environment variable `HERMIT_CPUS` specifies the number of
-cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
-defines the memory size of the virtual machine. The suffix of *M* or *G* can be
-used to specify a value in megabytes or gigabytes respectively. Per default, the
-loader initializes a system with one core and 2 GiB RAM.
-
-To enable an ethernet device for `uhyve`, we have to setup a tap device on the
-host system. For instance, the following command establish the tap device
-`tap100` on Linux:
-
-```bash
-$ sudo ip tuntap add tap100 mode tap
-$ sudo ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap100
-$ sudo ip link set dev tap100 up
-$ sudo bash -c 'echo 1 > /proc/sys/net/ipv4/conf/tap100/proxy_arp'
-```
-
-Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address,  `10.0.5.1`
-for the gateway and `255.255.255.0` as network mask.
-The default configuration could be overloaded by the environment variable
-`HERMIT_IP`, `HERMIT_GATEWAY` and `HERMIT_MASk`.
-To enable the device, `HERMIT_NETIF` must be set to the name of the tap device.
-For instance, the following command starts an HermitCore application within `uhyve`
-and enable the network support:
-
-```bash
-$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.3" HERMIT_GATEWAY="10.0.5.1" HERMIT_MASk="255.255.255.0" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
-```
-
-The virtual machine opens two TCP/IP ports. One is used for the communication
-between HermitCore application and its proxy. The second port is used to create
-a connection via telnet to QEMU's system monitor. With the environment variable
-`HERMIT_PORT`, the default port (18766) can be changed for the communication
-between the HermitCore application and its proxy. The connection to the system
-monitor used automatically `HERMIT_PORT+1`, i.e., the default port is 18767.
-
-The following command starts the stream benchmark in a virtual machine, which
-has 4 cores and 6GB memory.
-
-```bash
-$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
-```
 
 
 ### As multi-kernel on a real machine
@@ -400,3 +399,5 @@ you are able to analyze the file.
 
 If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, QEMU establishes
 a monitor which is available via telnet at port 18767.
+With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication between the HermitCore application and its proxy.
+The connection to the system monitor used automatically `HERMIT_PORT+1`, i.e., the default port is 18767.
