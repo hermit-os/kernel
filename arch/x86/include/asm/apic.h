@@ -44,6 +44,8 @@ extern "C" {
 #define APIC_TPR		0x0080
 /// EOI Register
 #define APIC_EOI		0x00B0
+/// Required for future compatiblity
+#define	APIC_EOI_ACK		0x0000
 /// Spurious Interrupt Vector Register
 #define APIC_SVR		0x00F0
 /// Error Status Register
