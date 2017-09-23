@@ -115,7 +115,7 @@ cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74
 So before you build HermitCore you have to source the `local-cmake.sh` script
 everytime you open a new terminal.
 
-### Building the library perating systems and its examples
+### Building the library operating systems and its examples
 
 To build HermitCore go to the directory with the source code, create a `build` directory and call `cmake` followed by `make`.
 
