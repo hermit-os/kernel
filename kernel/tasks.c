@@ -163,7 +163,7 @@ static void timer_queue_push(uint32_t core_id, task_t* task)
 }
 
 
-static void readyqueues_push_back(uint32_t core_id, task_t* task)
+static inline void readyqueues_push_back(uint32_t core_id, task_t* task)
 {
 	// idle task (prio=0) doesn't have a queue
 	task_list_t* readyqueue = &readyqueues[core_id].queue[task->prio - 1];
@@ -172,17 +172,10 @@ static void readyqueues_push_back(uint32_t core_id, task_t* task)
 
 	// update priority bitmap
 	readyqueues[core_id].prio_bitmap |= (1 << task->prio);
-
-	// increase the number of ready tasks
-	readyqueues[core_id].nr_tasks++;
-
-	// should we wakeup the core?
-	if (readyqueues[core_id].nr_tasks == 1)
-		wakeup_core(core_id);
 }
 
 
-static void readyqueues_remove(uint32_t core_id, task_t* task)
+static inline void readyqueues_remove(uint32_t core_id, task_t* task)
 {
 	// idle task (prio=0) doesn't have a queue
 	task_list_t* readyqueue = &readyqueues[core_id].queue[task->prio - 1];
@@ -192,9 +185,6 @@ static void readyqueues_remove(uint32_t core_id, task_t* task)
 	// no valid task in queue => update priority bitmap
 	if (readyqueue->first == NULL)
 		readyqueues[core_id].prio_bitmap &= ~(1 << task->prio);
-
-	// reduce the number of ready tasks
-	readyqueues[core_id].nr_tasks--;
 }
 
 
@@ -668,7 +658,7 @@ int wakeup_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_BLOCKED) {
-		LOG_DEBUG("wakeup task %d\n", id);
+		LOG_DEBUG("wakeup task %d on core %d\n", id, core_id);
 
 		task->status = TASK_READY;
 		ret = 0;
@@ -684,6 +674,15 @@ int wakeup_task(tid_t id)
 
 		// add task to the ready queue
 		readyqueues_push_back(core_id, task);
+
+		// increase the number of ready tasks
+		readyqueues[core_id].nr_tasks++;
+
+		// should we wakeup the core?
+		if (readyqueues[core_id].nr_tasks == 1)
+			wakeup_core(core_id);
+
+		LOG_DEBUG("update nr_tasks on core %d to %d\n", core_id, readyqueues[core_id].nr_tasks);
 
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 	}
@@ -707,7 +706,7 @@ int block_task(tid_t id)
 	core_id = task->last_core;
 
 	if (task->status == TASK_RUNNING) {
-		LOG_DEBUG("block task %d\n", id);
+		LOG_DEBUG("block task %d on core %d\n", id, core_id);
 
 		task->status = TASK_BLOCKED;
 
@@ -715,6 +714,10 @@ int block_task(tid_t id)
 
 		// remove task from ready queue
 		readyqueues_remove(core_id, task);
+
+		// reduce the number of ready tasks
+		readyqueues[core_id].nr_tasks--;
+		LOG_DEBUG("update nr_tasks on core %d to %d\n", core_id, readyqueues[core_id].nr_tasks);
 
 		spinlock_irqsave_unlock(&readyqueues[core_id].lock);
 
