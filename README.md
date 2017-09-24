@@ -120,7 +120,7 @@ everytime you open a new terminal.
 
 ### Building the library operating systems and its examples
 
-To build HermitCore go to the directory with the source code, create a `build` directory and call `cmake` followed by `make`.
+To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new dirctory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
@@ -137,8 +137,9 @@ its location to the `cmake` command above like so:
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 ```
 
-assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
-directory. To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
+Assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
+directory.
+To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
 
 ```bash
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin -DCMAKE_INSTALL_PREFIX=/home/user/hermit ..
@@ -151,12 +152,14 @@ $ make install
 ## Proxy
 
 Part of HermitCore is a small helper tool, which is called *proxy*.
-This tool helps to start HermitCore applications within VM or bare-metal on a NUMA node and is a bridge to the Linux system.
+This tool helps to start HermitCore applications within a virtual machine or bare-metal on a NUMA node.
+In principle it is a bridge to the Linux system.
 If the proxy is register as loader to the Linux system, HermitCore applications can be started like common Linux applications.
 The proxy can be registered with following command.
 
 ```bash
 $ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
+$ # dirct call of a HermitCore appliaction
 $ /opt/hermit/x86_64-hermit/extra/tests/hello
 ```
 
