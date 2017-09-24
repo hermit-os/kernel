@@ -3,7 +3,7 @@
 
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
+[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=devel)](https://travis-ci.org/RWTH-OS/HermitCore)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
 The project [HermitCore]( http://www.hermitcore.org ) is a new
@@ -403,7 +403,7 @@ you are able to analyze the file.
 If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, QEMU establishes
 a monitor which is available via telnet at port 18767.
 With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication between the HermitCore application and its proxy.
-The connection to the system monitor used automatically `HERMIT_PORT+1`, i.e., the default port is 18767.
+The connection to the system monitor is automatically set to `HERMIT_PORT+1`, i.e., the default port is 18767.
 
 ## Credits
 
