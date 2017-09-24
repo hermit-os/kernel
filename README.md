@@ -25,7 +25,7 @@ is realized by means of an IP interface.
 In addition to the multi-kernel approach described above, HermitCore can be used
 as a classical standalone unikernel as well. In this case, HermitCore runs a
 single-kernel exclusively on the hardware or within a virtual machine. This
-reduces the resource demand and loweres the boot time which is critical for
+reduces the resource demand and lowers the boot time which is critical for
 cloud computing applications. It is the result of a research project at RWTH
 Aachen University and is currently an experimental approach, i.e., not
 production ready. Please use it with caution.
@@ -68,7 +68,7 @@ The following commad starts within the new docker container a shell and mounts f
 $ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
 ```
 
-Within the shell the croos toolchain can be used to build HermitCore applications.
+Within the shell the cross-toolchain can be used to build HermitCore applications.
 
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 
@@ -112,7 +112,7 @@ cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74
 
 -- Unpacking CMake
 -- Local CMake v3.7.2 installed to cmake/cmake-3.7.2-Linux-x86_64
--- Next time you source this script, no download will be neccessary
+-- Next time you source this script, no download will be necessary
 ```
 
 So before you build HermitCore you have to source the `local-cmake.sh` script
@@ -120,7 +120,7 @@ everytime you open a new terminal.
 
 ### Building the library operating systems and its examples
 
-To build HermitCore go to the directory with the source code, create a `build` directory and call `cmake` followed by `make`.
+To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new directory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
@@ -137,8 +137,9 @@ its location to the `cmake` command above like so:
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 ```
 
-assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
-directory. To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
+Assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
+directory.
+To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
 
 ```bash
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin -DCMAKE_INSTALL_PREFIX=/home/user/hermit ..
@@ -147,6 +148,28 @@ $ make install
 ```
 
 **Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
+
+## Proxy
+
+Part of HermitCore is a small helper tool, which is called *proxy*.
+This tool helps to start HermitCore applications within a virtual machine or bare-metal on a NUMA node.
+In principle it is a bridge to the Linux system.
+If the proxy is register as loader to the Linux system, HermitCore applications can be started like common Linux applications.
+The proxy can be registered with following command.
+
+```bash
+$ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
+$ # dirct call of a HermitCore appliaction
+$ /opt/hermit/x86_64-hermit/extra/tests/hello
+```
+
+Otherwise the proxy must be started directly and get the path to HermitCore application as argument.
+Afterwards, the proxy start the HermitCore applications within a VM ore bare-metal on a NUMA node.
+
+```bash
+$ # using QEMU
+$ HERMIT_ISLE=qemu /opt/hermit/bin/proxy /opt/hermit/x86_64-hermit/extra/tests/hello
+```
 
 ## Testing
 
