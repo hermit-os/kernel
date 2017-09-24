@@ -25,7 +25,7 @@ is realized by means of an IP interface.
 In addition to the multi-kernel approach described above, HermitCore can be used
 as a classical standalone unikernel as well. In this case, HermitCore runs a
 single-kernel exclusively on the hardware or within a virtual machine. This
-reduces the resource demand and loweres the boot time which is critical for
+reduces the resource demand and lowers the boot time which is critical for
 cloud computing applications. It is the result of a research project at RWTH
 Aachen University and is currently an experimental approach, i.e., not
 production ready. Please use it with caution.
@@ -68,7 +68,7 @@ The following commad starts within the new docker container a shell and mounts f
 $ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
 ```
 
-Within the shell the croos toolchain can be used to build HermitCore applications.
+Within the shell the cross-toolchain can be used to build HermitCore applications.
 
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 
@@ -112,7 +112,7 @@ cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74
 
 -- Unpacking CMake
 -- Local CMake v3.7.2 installed to cmake/cmake-3.7.2-Linux-x86_64
--- Next time you source this script, no download will be neccessary
+-- Next time you source this script, no download will be necessary
 ```
 
 So before you build HermitCore you have to source the `local-cmake.sh` script
@@ -120,7 +120,7 @@ everytime you open a new terminal.
 
 ### Building the library operating systems and its examples
 
-To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new dirctory `cmake` followed by `make`.
+To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new directory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
