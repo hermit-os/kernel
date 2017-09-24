@@ -148,6 +148,26 @@ $ make install
 
 **Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
 
+## Proxy
+
+Part of HermitCore is a small helper tool, which is called *proxy*.
+This tool helps to start HermitCore applications within VM or bare-metal on a NUMA node and is a bridge to the Linux system.
+If the proxy is register as loader to the Linux system, HermitCore applications can be started like common Linux applications.
+The proxy can be registered with following command.
+
+```bash
+$ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
+$ /opt/hermit/x86_64-hermit/extra/tests/hello
+```
+
+Otherwise the proxy must be started directly and get the path to HermitCore application as argument.
+Afterwards, the proxy start the HermitCore applications within a VM ore bare-metal on a NUMA node.
+
+```bash
+$ # using QEMU
+$ HERMIT_ISLE=qemu /opt/hermit/bin/proxy /opt/hermit/x86_64-hermit/extra/tests/hello
+```
+
 ## Testing
 
 ### As classical standalone unikernel within a virtual machine
