@@ -47,7 +47,7 @@ extern const void kernel_start;
  */
 static vma_t vma_boot = { VMA_MIN, VMA_MIN, VMA_HEAP };
 static vma_t* vma_list = &vma_boot;
-static spinlock_irqsave_t vma_lock = SPINLOCK_IRQSAVE_INIT;
+spinlock_irqsave_t hermit_mm_lock = SPINLOCK_IRQSAVE_INIT;
 
 int vma_init(void)
 {
@@ -79,7 +79,7 @@ out:
 
 size_t vma_alloc(size_t size, uint32_t flags)
 {
-	spinlock_irqsave_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &hermit_mm_lock;
 	vma_t** list = &vma_list;
 
 	LOG_DEBUG("vma_alloc: size = %#lx, flags = %#x\n", size, flags);
@@ -144,7 +144,7 @@ found:
 
 int vma_free(size_t start, size_t end)
 {
-	spinlock_irqsave_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &hermit_mm_lock;
 	vma_t* vma;
 	vma_t** list = &vma_list;
 
@@ -206,7 +206,7 @@ int vma_free(size_t start, size_t end)
 
 int vma_add(size_t start, size_t end, uint32_t flags)
 {
-	spinlock_irqsave_t* lock = &vma_lock;
+	spinlock_irqsave_t* lock = &hermit_mm_lock;
 	vma_t** list = &vma_list;
 	int ret = 0;
 
@@ -280,7 +280,7 @@ void vma_dump(void)
 	}
 
 	LOG_INFO("VMAs:\n");
-	spinlock_irqsave_lock(&vma_lock);
+	spinlock_irqsave_lock(&hermit_mm_lock);
 	print_vma(&vma_boot);
-	spinlock_irqsave_unlock(&vma_lock);
+	spinlock_irqsave_unlock(&hermit_mm_lock);
 }

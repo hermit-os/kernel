@@ -60,6 +60,7 @@
 #include <net/rtl8139.h>
 #include <net/e1000.h>
 #include <net/vioif.h>
+#include <net/uhyve-net.h>
 
 #define HERMIT_PORT	0x494E
 #define HERMIT_MAGIC	0x7E317
@@ -94,6 +95,9 @@ extern int32_t isle;
 extern int32_t possible_isles;
 extern uint32_t boot_processor;
 extern volatile int libc_sd;
+extern uint8_t hcip[4];
+extern uint8_t hcgateway[4];
+extern uint8_t hcmask[4];
 
 islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
@@ -155,9 +159,6 @@ static int init_netifs(void)
 	if(sys_sem_new(&sem, 0) != ERR_OK)
 		LWIP_ASSERT("Failed to create semaphore", 0);
 
-	// part of bss => memset not required
-	//memset(&default_netif, 0x00, sizeof(struct netif));
-
 	tcpip_init(tcpip_init_done, &sem);
 	sys_sem_wait(&sem);
 	LOG_INFO("TCP/IP initialized.\n");
@@ -165,11 +166,25 @@ static int init_netifs(void)
 
 	if (is_uhyve()) {
 		LOG_INFO("HermitCore is running on uhyve!\n");
-		return -ENODEV;
-	}
+		if (uhyve_net_stat()) {
+			/* Set network address variables */
+			IP_ADDR4(&gw, hcgateway[0], hcgateway[1], hcgateway[2], hcgateway[3]);
+			IP_ADDR4(&ipaddr, hcip[0], hcip[1], hcip[2], hcip[3]);
+			IP_ADDR4(&netmask, hcmask[0], hcmask[1], hcmask[2], hcmask[3]);
 
-	if (!is_single_kernel())
-	{
+			if ((err = netifapi_netif_add(&default_netif, ip_2_ip4(&ipaddr), ip_2_ip4(&netmask), ip_2_ip4(&gw), NULL, uhyve_netif_init, ethernet_input)) != ERR_OK) {
+				LOG_ERROR("Unable to add the uhyve_net network interface: err = %d\n", err);
+				return -ENODEV;
+			}
+			/*tell lqip all initialization is done and we want to set it up */
+			netifapi_netif_set_default(&default_netif);
+			LOG_INFO("set_default\n");
+			netifapi_netif_set_up(&default_netif);
+			LOG_INFO("set_up\n");
+		} else {
+			return -ENODEV;
+		}
+	} else if (!is_single_kernel()) {
 		LOG_INFO("HermitCore is running side-by-side to Linux!\n");
 
 		/* Set network address variables */

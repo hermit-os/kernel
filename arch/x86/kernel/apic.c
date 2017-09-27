@@ -247,8 +247,8 @@ void apic_eoi(size_t int_no)
 	 * If the IDT entry that was invoked was greater-than-or-equal to 48,
 	 * then we use the APIC
 	 */
-	if (apic_is_enabled() || int_no >= 123) {
-		lapic_write(APIC_EOI, 0);
+	if (apic_is_enabled() || int_no >= 48) {
+		lapic_write(APIC_EOI, APIC_EOI_ACK);
 	} else {
 		/*
 		 * If the IDT entry that was invoked was greater-than-or-equal to 40
@@ -963,6 +963,11 @@ int ipi_tlb_flush(void)
 				continue;
 
 			LOG_DEBUG("Send IPI to %zd\n", i);
+			/*
+			 * Make previous memory operations globally visible before
+			 * sending the IPI through x2apic wrmsr. => serializing
+			 */
+			mb();
 			wrmsr(0x830, (i << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|112);
 		}
 		irq_nested_enable(flags);
@@ -1009,6 +1014,11 @@ int apic_send_ipi(uint64_t dest, uint8_t irq)
 	if (has_x2apic()) {
 		flags = irq_nested_disable();
 		LOG_DEBUG("send IPI %d to %lld\n", (int)irq, dest);
+		/*
+		 * Make previous memory operations globally visible before
+		 * sending the IPI through x2apic wrmsr. => serializing
+		 */
+		mb();
 		wrmsr(0x830, (dest << 32)|APIC_INT_ASSERT|APIC_DM_FIXED|irq);
 		irq_nested_enable(flags);
 	} else {

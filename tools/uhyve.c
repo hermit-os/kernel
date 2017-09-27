@@ -45,10 +45,10 @@
 #include <sched.h>
 #include <signal.h>
 #include <limits.h>
-#include <assert.h>
 #include <pthread.h>
 #include <elf.h>
 #include <err.h>
+#include <poll.h>
 #include <sys/wait.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
@@ -57,6 +57,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/eventfd.h>
 #include <linux/const.h>
 #include <linux/kvm.h>
 #include <asm/msr-index.h>
@@ -64,6 +65,7 @@
 
 #include "uhyve-cpu.h"
 #include "uhyve-syscalls.h"
+#include "uhyve-net.h"
 #include "proxy.h"
 
 // define this macro to create checkpoints with KVM's dirty log
@@ -151,10 +153,24 @@
 	ret; \
 	})
 
+// Networkports
+#define UHYVE_PORT_NETINFO		0x505
+#define UHYVE_PORT_NETWRITE		0x506
+#define UHYVE_PORT_NETREAD		0x507
+#define UHYVE_PORT_NETSTAT		0x508
+
+#define UHYVE_IRQ	11
+
+#define IOAPIC_DEFAULT_BASE	0xfec00000
+#define APIC_DEFAULT_BASE	0xfee00000
+
+
 static bool restart = false;
 static bool cap_tsc_deadline = false;
 static bool cap_irqchip = false;
 static bool cap_adjust_clock_stable = false;
+static bool cap_irqfd = false;
+static bool cap_vapic = false;
 static bool verbose = false;
 static bool full_checkpoint = false;
 static uint32_t ncores = 1;
@@ -164,8 +180,9 @@ static uint8_t* mboot = NULL;
 static size_t guest_size = 0x20000000ULL;
 static uint64_t elf_entry;
 static pthread_t* vcpu_threads = NULL;
+static pthread_t net_thread;
 static int* vcpu_fds = NULL;
-static int kvm = -1, vmfd = -1;
+static int kvm = -1, vmfd = -1, netfd = -1, efd = -1;
 static uint32_t no_checkpoint = 0;
 static pthread_mutex_t kvm_lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_barrier_t barrier;
@@ -234,6 +251,9 @@ static void uhyve_exit(void* arg)
 
 			pthread_kill(vcpu_threads[i], SIGTERM);
 		}
+
+		if (netfd > 0)
+			pthread_kill(net_thread, SIGTERM);
 	}
 
 	close_fd(&vcpufd);
@@ -416,6 +436,40 @@ static int load_kernel(uint8_t* mem, char* path)
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x30)) = 0; // apicid
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x60)) = 1; // numa nodes
 			*((uint32_t*) (mem+paddr-GUEST_OFFSET + 0x94)) = 1; // announce uhyve
+
+
+			char* str = getenv("HERMIT_IP");
+			if (str) {
+				uint32_t ip[4];
+
+				sscanf(str, "%u.%u.%u.%u",	ip+0, ip+1, ip+2, ip+3);
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB0)) = (uint8_t) ip[0];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB1)) = (uint8_t) ip[1];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB2)) = (uint8_t) ip[2];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB3)) = (uint8_t) ip[3];
+			}
+
+			str = getenv("HERMIT_GATEWAY");
+			if (str) {
+				uint32_t ip[4];
+
+				sscanf(str, "%u.%u.%u.%u",	ip+0, ip+1, ip+2, ip+3);
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB4)) = (uint8_t) ip[0];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB5)) = (uint8_t) ip[1];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB6)) = (uint8_t) ip[2];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB7)) = (uint8_t) ip[3];
+			}
+			str = getenv("HERMIT_MASK");
+			if (str) {
+				uint32_t ip[4];
+
+				sscanf(str, "%u.%u.%u.%u",	ip+0, ip+1, ip+2, ip+3);
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB8)) = (uint8_t) ip[0];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xB9)) = (uint8_t) ip[1];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xBA)) = (uint8_t) ip[2];
+				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xBB)) = (uint8_t) ip[3];
+			}
+
 		}
 		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) += memsz; // total kernel size
 	}
@@ -759,6 +813,49 @@ static void setup_cpuid(int kvm, int vcpufd)
 	free(kvm_cpuid);
 }
 
+static void* wait_for_packet(void* arg)
+{
+	int ret;
+	struct pollfd fds = {	.fd = netfd,
+							.events = POLLIN,
+							.revents  = 0};
+
+	while(1)
+	{
+		fds.revents = 0;
+
+		ret = poll(&fds, 1, -1000);
+
+		if (ret < 0 && errno == EINTR)
+			continue;
+
+		if (ret < 0)
+			perror("poll()");
+		else if (ret) {
+			uint64_t event_counter = 1;
+			write(efd, &event_counter, sizeof(event_counter));
+		}
+	}
+
+	return NULL;
+}
+
+static inline void check_network(void)
+{
+	// should we start the network thread?
+	if ((efd < 0) && (getenv("HERMIT_NETIF"))) {
+		struct kvm_irqfd irqfd = {};
+
+		efd = eventfd(0, 0);
+		irqfd.fd = efd;
+		irqfd.gsi = UHYVE_IRQ;
+		kvm_ioctl(vmfd, KVM_IRQFD, &irqfd);
+
+		if (pthread_create(&net_thread, NULL, wait_for_packet, NULL))
+			err(1, "unable to create thread");
+	}
+}
+
 static int vcpu_loop(void)
 {
 	int ret;
@@ -847,6 +944,51 @@ static int vcpu_loop(void)
 					break;
 				}
 
+			case UHYVE_PORT_NETINFO: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netinfo_t* uhyve_netinfo = (uhyve_netinfo_t*)(guest_mem+data);
+					memcpy(uhyve_netinfo->mac_str, uhyve_get_mac(), 18);
+					// guest configure the ethernet device => start network thread
+					check_network();
+					break;
+				}
+
+			case UHYVE_PORT_NETWRITE: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netwrite_t* uhyve_netwrite = (uhyve_netwrite_t*)(guest_mem + data);
+					uhyve_netwrite->ret = 0;
+					ret = write(netfd, guest_mem + (size_t)uhyve_netwrite->data, uhyve_netwrite->len);
+					if (ret >= 0) {
+						uhyve_netwrite->ret = 0;
+						uhyve_netwrite->len = ret;
+					} else {
+						uhyve_netwrite->ret = -1;
+					}
+					break;
+				}
+
+			case UHYVE_PORT_NETREAD: {
+					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netread_t* uhyve_netread = (uhyve_netread_t*)(guest_mem + data);
+					ret = read(netfd, guest_mem + (size_t)uhyve_netread->data, uhyve_netread->len);
+					if (ret > 0) {
+						uhyve_netread->len = ret;
+						uhyve_netread->ret = 0;
+					} else uhyve_netread->ret = -1;
+					break;
+				}
+
+			case UHYVE_PORT_NETSTAT: {
+					unsigned status = *((unsigned*)((size_t)run+run->io.data_offset));
+					uhyve_netstat_t* uhyve_netstat = (uhyve_netstat_t*)(guest_mem + status);
+					char* str = getenv("HERMIT_NETIF");
+					if (str)
+						uhyve_netstat->status = 1;
+					else
+						uhyve_netstat->status = 0;
+					break;
+				}
+
 			case UHYVE_PORT_LSEEK: {
 					unsigned data = *((unsigned*)((size_t)run+run->io.data_offset));
 					uhyve_lseek_t* uhyve_lseek = (uhyve_lseek_t*) (guest_mem+data);
@@ -854,6 +996,7 @@ static int vcpu_loop(void)
 					uhyve_lseek->offset = lseek(uhyve_lseek->fd, uhyve_lseek->offset, uhyve_lseek->whence);
 					break;
 				}
+
 			default:
 				err(1, "KVM: unhandled KVM_EXIT_IO at port 0x%x, direction %d\n", run->io.port, run->io.direction);
 				break;
@@ -909,6 +1052,7 @@ static int vcpu_init(void)
 	if (run == MAP_FAILED)
 		err(1, "KVM: VCPU mmap failed");
 
+	run->apic_base = APIC_DEFAULT_BASE;
 	setup_cpuid(kvm, vcpufd);
 
 	if (restart) {
@@ -1171,7 +1315,7 @@ int uhyve_init(char *path)
 		if (guest_mem == MAP_FAILED)
 			err(1, "mmap failed");
 	} else {
-		guest_size += + KVM_32BIT_GAP_SIZE;
+		guest_size += KVM_32BIT_GAP_SIZE;
 		guest_mem = mmap(NULL, guest_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 		if (guest_mem == MAP_FAILED)
 			err(1, "mmap failed");
@@ -1230,12 +1374,36 @@ int uhyve_init(char *path)
 	kvm_ioctl(vmfd, KVM_ENABLE_CAP, &cap);
 #endif
 
+	// initialited IOAPIC with HermitCore's default settings
+	struct kvm_irqchip chip;
+	chip.chip_id = KVM_IRQCHIP_IOAPIC;
+	kvm_ioctl(vmfd, KVM_GET_IRQCHIP, &chip);
+	for(int i=0; i<KVM_IOAPIC_NUM_PINS; i++) {
+		chip.chip.ioapic.redirtbl[i].fields.vector = 0x20+i;
+		chip.chip.ioapic.redirtbl[i].fields.delivery_mode = 0;
+		chip.chip.ioapic.redirtbl[i].fields.dest_mode = 0;
+		chip.chip.ioapic.redirtbl[i].fields.delivery_status = 0;
+		chip.chip.ioapic.redirtbl[i].fields.polarity = 0;
+		chip.chip.ioapic.redirtbl[i].fields.remote_irr = 0;
+		chip.chip.ioapic.redirtbl[i].fields.trig_mode = 0;
+		chip.chip.ioapic.redirtbl[i].fields.mask = i != 2 ? 0 : 1;
+		chip.chip.ioapic.redirtbl[i].fields.dest_id = 0;
+	}
+	kvm_ioctl(vmfd, KVM_SET_IRQCHIP, &chip);
+
 	// try to detect KVM extensions
 	cap_tsc_deadline = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_TSC_DEADLINE_TIMER) <= 0 ? false : true;
 	cap_irqchip = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQCHIP) <= 0 ? false : true;
 #ifdef KVM_CLOCK_TSC_STABLE
 	cap_adjust_clock_stable = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_ADJUST_CLOCK) == KVM_CLOCK_TSC_STABLE ? true : false;
 #endif
+	cap_irqfd = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_IRQFD) <= 0 ? false : true;
+	if (!cap_irqfd)
+		err(1, "the support of KVM_CAP_IRQFD is curently required");
+	// TODO: add VAPIC support
+	cap_vapic = kvm_ioctl(vmfd, KVM_CHECK_EXTENSION, KVM_CAP_VAPIC) <= 0 ? false : true;
+	//if (cap_vapic)
+	//	printf("System supports vapic\n");
 
 	if (restart) {
 		if (load_checkpoint(guest_mem, path) != 0)
@@ -1249,7 +1417,19 @@ int uhyve_init(char *path)
 	cpuid = 0;
 
 	// create first CPU, it will be the boot processor by default
-	return vcpu_init();
+	int ret = vcpu_init();
+
+	const char* netif_str = getenv("HERMIT_NETIF");
+	if (netif_str)
+	{
+		// TODO: strncmp for different network interfaces
+		// for example tun/tap device or uhyvetap device
+		netfd = uhyve_net_init(netif_str);
+		if (netfd < 0)
+			err(1, "unable to initialized network");
+	}
+
+	return ret;
 }
 
 static void timer_handler(int signum)

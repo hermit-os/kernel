@@ -58,6 +58,36 @@ extern int32_t isle;
 extern int32_t possible_isles;
 extern volatile int libc_sd;
 
+static inline int socket_send(int fd, const 	void* buf, size_t len)
+{
+	int ret, sz = 0;
+
+	do {
+		ret = lwip_write(fd, (char*)buf + sz, len-sz);
+		if (ret >= 0)
+			sz += ret;
+		else
+			return ret;
+	} while(sz < len);
+
+	return len;
+}
+
+static inline int socket_recv(int fd, void* buf, size_t len)
+{
+	int ret, sz = 0;
+
+	do {
+		ret = lwip_read(fd, (char*)buf + sz, len-sz);
+		if (ret >= 0)
+			sz += ret;
+		else
+			return ret;
+	} while(sz < len);
+
+	return len;
+}
+
 tid_t sys_getpid(void)
 {
 	task_t* task = per_core(current_task);
@@ -99,7 +129,7 @@ void NORETURN sys_exit(int arg)
 		{
 			int s = libc_sd;
 
-			lwip_write(s, &sysargs, sizeof(sysargs));
+			socket_send(s, &sysargs, sizeof(sysargs));
 			libc_sd = -1;
 
 			spinlock_irqsave_unlock(&lwip_lock);
@@ -131,17 +161,8 @@ typedef struct {
 
 ssize_t sys_read(int fd, char* buf, size_t len)
 {
-	if (is_uhyve()) {
-                uhyve_read_t uhyve_args = {fd, (char*) virt_to_phys((size_t) buf), len, -1};
-
-                uhyve_send(UHYVE_PORT_READ, (unsigned)virt_to_phys((size_t)&uhyve_args));
-
-                return uhyve_args.ret;
-        }
-
 	sys_read_t sysargs = {__NR_read, fd, len};
 	ssize_t j, ret;
-	int s;
 
 	// do we have an LwIP file descriptor?
 	if (fd & LWIP_FD_BIT) {
@@ -152,29 +173,30 @@ ssize_t sys_read(int fd, char* buf, size_t len)
 		return ret;
 	}
 
+	if (is_uhyve()) {
+		uhyve_read_t uhyve_args = {fd, (char*) virt_to_phys((size_t) buf), len, -1};
+
+		uhyve_send(UHYVE_PORT_READ, (unsigned)virt_to_phys((size_t)&uhyve_args));
+
+		return uhyve_args.ret;
+	}
+
 	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0) {
 		spinlock_irqsave_unlock(&lwip_lock);
 		return -ENOSYS;
 	}
 
-	s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
+	int s = libc_sd;
+	socket_send(s, &sysargs, sizeof(sysargs));
 
-	lwip_read(s, &j, sizeof(j));
+	socket_recv(s, &j, sizeof(j));
 	if (j > 0)
 	{
-		ssize_t i = 0;
-
-		while(i < j)
-		{
-			ret = lwip_read(s, buf+i, j-i);
-			if (ret < 0) {
-				spinlock_irqsave_unlock(&lwip_lock);
-				return ret;
-			}
-
-			i += ret;
+		ret = socket_recv(s, buf, j);
+		if (ret < 0) {
+			spinlock_irqsave_unlock(&lwip_lock);
+			return ret;
 		}
 	}
 
@@ -203,18 +225,9 @@ typedef struct {
 ssize_t sys_write(int fd, const char* buf, size_t len)
 {
 	if (BUILTIN_EXPECT(!buf, 0))
-		return -1;
-
-	if (is_uhyve()) {
-		uhyve_write_t uhyve_args = {fd, (const char*) virt_to_phys((size_t) buf), len};
-
-		uhyve_send(UHYVE_PORT_WRITE, (unsigned)virt_to_phys((size_t)&uhyve_args));
-
-		return uhyve_args.len;
-	}
+		return -EINVAL;
 
 	ssize_t i, ret;
-	int s;
 	sys_write_t sysargs = {__NR_write, fd, len};
 
 	// do we have an LwIP file descriptor?
@@ -224,6 +237,14 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 			return -errno;
 
 		return ret;
+	}
+
+	if (is_uhyve()) {
+		uhyve_write_t uhyve_args = {fd, (const char*) virt_to_phys((size_t) buf), len};
+
+		uhyve_send(UHYVE_PORT_WRITE, (unsigned)virt_to_phys((size_t)&uhyve_args));
+
+		return uhyve_args.len;
 	}
 
 	spinlock_irqsave_lock(&lwip_lock);
@@ -239,13 +260,13 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 		return len;
 	}
 
-	s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
+	int s = libc_sd;
+	socket_send(s, &sysargs, sizeof(sysargs));
 
 	i=0;
 	while(i < len)
 	{
-		ret = lwip_write(s, (char*)buf+i, len-i);
+		ret = socket_send(s, (char*)buf+i, len-i);
 		if (ret < 0) {
 			spinlock_irqsave_unlock(&lwip_lock);
 			return ret;
@@ -254,11 +275,8 @@ ssize_t sys_write(int fd, const char* buf, size_t len)
 		i += ret;
 	}
 
-	if (fd > 2) {
-		ret = lwip_read(s, &i, sizeof(i));
-		if (ret < 0)
-			i = ret;
-	} else i = len;
+	if (fd > 2)
+		i = socket_recv(s, &i, sizeof(i));
 
 	spinlock_irqsave_unlock(&lwip_lock);
 
@@ -338,35 +356,35 @@ int sys_open(const char* name, int flags, int mode)
 	//i = 0;
 	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	ret = lwip_write(s, &sysnr, sizeof(sysnr));
+	ret = socket_send(s, &sysnr, sizeof(sysnr));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(s, &len, sizeof(len));
+	ret = socket_send(s, &len, sizeof(len));
 	if (ret < 0)
 		goto out;
 
 	i=0;
 	while(i<len)
 	{
-		ret = lwip_write(s, name+i, len-i);
+		ret = socket_send(s, name+i, len-i);
 		if (ret < 0)
 			goto out;
 		i += ret;
 	}
 
-	ret = lwip_write(s, &flags, sizeof(flags));
+	ret = socket_send(s, &flags, sizeof(flags));
 	if (ret < 0)
 		goto out;
 
-	ret = lwip_write(s, &mode, sizeof(mode));
+	ret = socket_send(s, &mode, sizeof(mode));
 	if (ret < 0)
 		goto out;
 
 	//i = 1;
 	//lwip_setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
 
-	lwip_read(s, &ret, sizeof(ret));
+	socket_recv(s, &ret, sizeof(ret));
 
 out:
 	spinlock_irqsave_unlock(&lwip_lock);
@@ -386,14 +404,6 @@ typedef struct {
 
 int sys_close(int fd)
 {
-	if (is_uhyve()) {
-		uhyve_close_t uhyve_close = {fd, -1};
-
-		uhyve_send(UHYVE_PORT_CLOSE, (unsigned)virt_to_phys((size_t) &uhyve_close));
-
-		return uhyve_close.ret;
-	}
-
 	int ret, s;
 	sys_close_t sysargs = {__NR_close, fd};
 
@@ -406,6 +416,14 @@ int sys_close(int fd)
 		return 0;
 	}
 
+	if (is_uhyve()) {
+		uhyve_close_t uhyve_close = {fd, -1};
+
+		uhyve_send(UHYVE_PORT_CLOSE, (unsigned)virt_to_phys((size_t) &uhyve_close));
+
+		return uhyve_close.ret;
+	}
+
 	spinlock_irqsave_lock(&lwip_lock);
 	if (libc_sd < 0) {
 		ret = 0;
@@ -413,10 +431,10 @@ int sys_close(int fd)
 	}
 
 	s = libc_sd;
-	ret = lwip_write(s, &sysargs, sizeof(sysargs));
+	ret = socket_send(s, &sysargs, sizeof(sysargs));
 	if (ret != sizeof(sysargs))
 		goto out;
-	lwip_read(s, &ret, sizeof(ret));
+	socket_recv(s, &ret, sizeof(ret));
 
 out:
 	spinlock_irqsave_unlock(&lwip_lock);
@@ -588,8 +606,8 @@ off_t sys_lseek(int fd, off_t offset, int whence)
 	}
 
 	s = libc_sd;
-	lwip_write(s, &sysargs, sizeof(sysargs));
-	lwip_read(s, &off, sizeof(off));
+	socket_send(s, &sysargs, sizeof(sysargs));
+	socket_recv(s, &off, sizeof(off));
 
 	spinlock_irqsave_unlock(&lwip_lock);
 

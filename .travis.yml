@@ -99,6 +99,8 @@ script:
   - cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=true ..
   - CC=$COMPILERC CXX=$COMPILERCXX make -j1 package
   - cd $TRAVIS_BUILD_DIR
+  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep tools/ | xargs -P 1 -I{} clang-tidy -p build/tools-prefix/src/tools-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
+  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep arch/x86/loader/ | xargs -P 1 -I{} clang-tidy -p build/arch_x86_loader-prefix/src/arch_x86_loader-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
   - ./tests.sh
 
 notifications:
@@ -114,3 +116,20 @@ deploy:
     secure: wo0yLY7xhGZYDqdB05UE+IOXXgYhAwj+zvtZh3ET2253hy35y74cDKMBNGfynH0aauPk8EFmN/LJoYaV/T9QF6pc1bilbqSg1/LJuL7hjAVVFaBSjwlE/Wbbb+EHNX5CR3qmC42SUvbrU+0WNvRu7WJBpZIoH9EtPv2Cj7uRV9+7Mtp/O3Ykl3E5LgkF5iA6Lo03TN+bZ1Vog5MbuJagDTpNa18vJ3jVYaed5gqOkghYYDpc5U9yxN3debS7/8MCl3u9V9uanMAyjc6wtbvJLotVkUwdXK8u9FohuWQ4pTEQ/QspLDDBuxaS3kLNWtzBMNQn6rcYIOWWKyD3uqvIhqjcErX7WChf3oGS1XPFfTHebNrHyV4KGvzkMAJUR/1qC5f4nZCsvgPv/35d702nky3Di2/WZsjD5zUR9g3+vPO8mnM3z8eA6ShVJcxezZ73Co3p0ZnBaF3J438bAKiT4nlrbIVpRzZzo/5nYTx//SefXSAmYCILr/y7xTYBqjfjMQHQZEMZSvJYRPbtP7eVCfWGEa2tG4rQndegUtwS+n1r8atcESL9eeUUM6sa1QzZYDYVseOc9GWcB7SIJzPOm8QTuTlkISHMGJ8FY+KHorP15VkVlr0EZ5c7KY0cBIbWoZGNQTg9+nSgChyf7ElNbAxPiCZsR0zafjMDhfcnzco=
   key:
     secure: JfsqEUO3Z60yGfuK5RSzwMoWZtaYflZtW7QE6R1DVMPEQ+CytzEdV2JaTpY14xz4yz1YpBBuQ0P3Q3e2rf/ORp8N8j7/5m3gfiDi8bRH3gX10r6vCQaUBilj0pz3amWUacxwBUEYR/f1029OnJ1qug30f4ARk7DWyuAePt0OboDXZ3j4JOi8xfXKTzofyKGugU4EuzhmKAbpHaBoX97g8z+gETC+wsBEYio8iD2h0ZOe/qZ0S+JGYkphIKcxpQazKdi3YrmWm0BUZsQRtkgoH7KUZm8vqfOUyVOrK+UGOTz4vXqCWHZ+wG1QRrGPUv8ehLrB26y2o02mmaDWQhM+I3RtllL06JDvDw40xjRImYtzg6xr7Mvl0OTQHprXrkN8gw2IbIivV8v31O46Ov+KIaN3CCx1IncnllBWjEXAIs4zPtvNj2Ad338JTkI/opHmPG0DI0DKE36r8wPZYTs/pHVpc3xEzwKYDklJkICjMLUakUGKppS7eKzKGRMjWvbT0vM/U7hHUcz0lA+BUoXedNmJQ1wBT85Ud8uobuKS4C8QmlgIuF1PI2+6LJr5LsCGZRvg7Pl1SPc3ZQLPHX4ggoLAnZZJiV/0ZPCn7XCLiUS1qws37l0uZT1zJQMFLsw9MGuP58tpT7WDuYYAwma/pL+OKC/JKoDhuJwM1I7wB4s=
+
+after_deploy:
+  - docker login -u $DOCKER_USER -p $DOCKER_PASS
+  - export REPO=rwthos/hermitcore
+  - export TAG=`if [ "$TRAVIS_BRANCH" == "master" ]; then echo "latest"; else echo $TRAVIS_BRANCH ; fi`
+  - cd docker
+  - docker build -f Dockerfile -t $REPO:$COMMIT .
+  - docker tag $REPO:$COMMIT $REPO:$TAG
+  - docker tag $REPO:$COMMIT $REPO:travis-$TRAVIS_BUILD_NUMBER
+  - docker push $REPO
+  - cd -
+
+env:
+  global:
+  - COMMIT=${TRAVIS_COMMIT::8}
+  - secure: GDWIzwLeCd12zT9cM0dEBBAVE345oT2ECQiaUTj6zIEhncKxDD2yE56eMpj0X9UCCjKLzTmJ4j8vD/cwB96Z43k+yiLHV+sa3pGnE8JAbgmbbbLTmSuyQQcCR4GQ4nzK48ylOygwmilBpUAH+Vw0jIFspeUD1j8KtKosXWBNPmWhwXDXWh1ae1fDYXxycaVAiUQrufNBs2dMSYrL0Dqsvj3HVla37dkzior2DM3kuWoE9kU61tLbBcwJn3GTMXdy10tIGLZzS+ZDU+ETbKadAlOZ58DsK3wLlgSloRJqBCzpJfCXpS7tU5kHIPyfAXgB5rBtWfyiSx6je171XEuxONl48BRyOI1O0Dqc8UiJ+W6eyqUyGoEPJ6r6r1oAbvcr4Ebf+sRtfj4PjnopIGzIrPNc1uebCgKpD2nQIO9P4XnwH/EbOU4My+kr5JPL8O0x4kottQeWr9v5nuhfBgknZpMIvncip9N9eek4aSMzfkAymmf7HBcPTMhb/v6xlwluqKsDE+c4WDQ2NhivpsDpqDZujhDh75MMFq7TlLRHlHNr64P7pz0A0xC2TJK9mC9u+WrwdpIFEsyDIiSSiOJ8GGgr5NK+dnXKZBy3b4/pk/TJciItk1W37RYiP1H4sVa+37VZ3VMUAwPVb1vgPG1r1XND/asjR/zzT374O/l0vNM=
+  - secure: TZy4F5ZdcUu5iaSaxNRK6qGzW20GMVI8E6Ol7lZnb5qXzGyZHZCYdT6eW5rLTsKvMriSrO9++GHx5iSSaG23Y9WiMWC4rpKzuax9vVB/1EbbBu1i6I+GaO5agR+isf6PPlPBVvn84Lzky1O2kLtdgSUmu5cJZnbSRfG8utWemNmPgBQ4wgRtujz5xLdgv98NYsCCLR13cwWE3Cd3uZb4vEF1qkjgwn9XKbemWCB3mlI2ZgTdAPl8cv/T+PP2Pou7B7E5qOBcVb/GA3uXtgX0Y7bJxLeCetCkP39hmRZ0idr6BnSrSYwgCnbmf8LNTYaz0mKLwRxMu6wHkvYcvPjaGfawHB/6NJvDtjjIzohnTe3V15VktUKPnfiLV60NKjCYyiPIOKwsviFeC+H2NHSr0LWXKjoolzxiaOy4CrcsizwGBF8dcDYjPf6wdt2+7DUDXJtAscaa/eCCSxkG9Ls7FZIuLiQKFzTAAimtkGyIFcvtWvtP/6axcxVyP+0AJeFsgAt6hUfYBeHzlO/6yAM24YaVOjqPfTE9EebJtey0C7u7kruuqefywr5YqSfSrKcel+8wZNVIJTLPHrp+KpNqkfXt65uzC2q08z34c8kkKYWRA5nMVj4OLlecAtyvhpW0WOlWaeMBlJ1FRaJ/+U/PFUI2BjDHG3rIKqepA749huc=
