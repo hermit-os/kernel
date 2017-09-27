@@ -1,6 +1,9 @@
+<img width="100" align="right" src="img/hermitcore_logo.png" />
+
+
 # HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
 
-[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=devel)](https://travis-ci.org/RWTH-OS/HermitCore)
+[![Build Status](https://travis-ci.org/RWTH-OS/HermitCore.svg?branch=master)](https://travis-ci.org/RWTH-OS/HermitCore)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
 The project [HermitCore]( http://www.hermitcore.org ) is a new
@@ -22,7 +25,7 @@ is realized by means of an IP interface.
 In addition to the multi-kernel approach described above, HermitCore can be used
 as a classical standalone unikernel as well. In this case, HermitCore runs a
 single-kernel exclusively on the hardware or within a virtual machine. This
-reduces the resource demand and loweres the boot time which is critical for
+reduces the resource demand and lowers the boot time which is critical for
 cloud computing applications. It is the result of a research project at RWTH
 Aachen University and is currently an experimental approach, i.e., not
 production ready. Please use it with caution.
@@ -66,7 +69,7 @@ The following commad starts within the new docker container a shell and mounts f
 $ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
 ```
 
-Within the shell the croos toolchain can be used to build HermitCore applications.
+Within the shell the cross-toolchain can be used to build HermitCore applications.
 
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
 
@@ -110,15 +113,15 @@ cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74
 
 -- Unpacking CMake
 -- Local CMake v3.7.2 installed to cmake/cmake-3.7.2-Linux-x86_64
--- Next time you source this script, no download will be neccessary
+-- Next time you source this script, no download will be necessary
 ```
 
 So before you build HermitCore you have to source the `local-cmake.sh` script
 everytime you open a new terminal.
 
-### Building the library perating systems and its examples
+### Building the library operating systems and its examples
 
-To build HermitCore go to the directory with the source code, create a `build` directory and call `cmake` followed by `make`.
+To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new directory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
@@ -135,8 +138,9 @@ its location to the `cmake` command above like so:
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 ```
 
-assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
-directory. To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
+Assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
+directory.
+To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
 
 ```bash
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin -DCMAKE_INSTALL_PREFIX=/home/user/hermit ..
@@ -146,9 +150,101 @@ $ make install
 
 **Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
 
+## Proxy
+
+Part of HermitCore is a small helper tool, which is called *proxy*.
+This tool helps to start HermitCore applications within a virtual machine or bare-metal on a NUMA node.
+In principle it is a bridge to the Linux system.
+If the proxy is register as loader to the Linux system, HermitCore applications can be started like common Linux applications.
+The proxy can be registered with following command.
+
+```bash
+$ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
+$ # dirct call of a HermitCore appliaction
+$ /opt/hermit/x86_64-hermit/extra/tests/hello
+```
+
+Otherwise the proxy must be started directly and get the path to HermitCore application as argument.
+Afterwards, the proxy start the HermitCore applications within a VM ore bare-metal on a NUMA node.
+
+```bash
+$ # using QEMU
+$ HERMIT_ISLE=qemu /opt/hermit/bin/proxy /opt/hermit/x86_64-hermit/extra/tests/hello
+```
+
 ## Testing
 
+### As classical standalone unikernel within a virtual machine
+
+HermitCore applications can be directly started as standalone kernel within a
+virtual machine. In this case,
+[iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf ) is not
+supported.
+
+```bash
+$ cd build
+$ make install DESTDIR=~/hermit-build
+$ cd ~/hermit-build/opt/hermit
+$ # using QEMU
+$ HERMIT_ISLE=qemu bin/proxy x86_64-hermit/extra/tests/hello
+$ # using uHyve
+$ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
+```
+
+With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
+Please note that the loader requires QEMU and uses per default *KVM*.
+Furthermore, it expects that the executable is called `qemu-system-x86_64`.
+
+With `HERMIT_ISLE=uhyve`, the application will be started within a thin
+hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
+uhyve has a considerably smaller startup time than QEMU, but lacks some features
+such as GDB debugging.
+In principle, it is an extension of [ukvm](https://www.usenix.org/sites/default/files/conference/protected-files/hotcloud16_slides_williams.pdf).
+
+In this context, the environment variable `HERMIT_CPUS` specifies the number of
+cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
+defines the memory size of the virtual machine. The suffix of *M* or *G* can be
+used to specify a value in megabytes or gigabytes respectively. Per default, the
+loader initializes a system with one core and 2 GiB RAM.
+For instance, the following command starts the stream benchmark in a virtual machine, which
+has 4 cores and 6GB memory.
+
+```bash
+$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
+```
+
+To enable an ethernet device for `uhyve`, we have to setup a tap device on the
+host system. For instance, the following command establish the tap device
+`tap100` on Linux:
+
+```bash
+$ sudo ip tuntap add tap100 mode tap
+$ sudo ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap100
+$ sudo ip link set dev tap100 up
+$ sudo bash -c 'echo 1 > /proc/sys/net/ipv4/conf/tap100/proxy_arp'
+```
+
+Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address, `10.0.5.1`
+for the gateway and `255.255.255.0` as network mask.
+The default configuration could be overloaded by the environment variable
+`HERMIT_IP`, `HERMIT_GATEWAY` and `HERMIT_MASk`.
+To enable the device, `HERMIT_NETIF` must be set to the name of the tap device.
+For instance, the following command starts an HermitCore application within `uhyve`
+and enable the network support:
+
+```bash
+$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.3" HERMIT_GATEWAY="10.0.5.1" HERMIT_MASk="255.255.255.0" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
+```
+
+If `qemu` is used as hyervisor, the virtual machine emulates an RTL8139 ethernet interface and opens at least one TCP/IP ports.
+It is used for the communication between HermitCore application and its proxy.
+With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication.
+
+
 ### As multi-kernel within a virtual machine
+
+Boot the test image of a minimal Linux system within a VM.
+For this, go to the build directory and boot the image by our makefiles.
 
 ```bash
 $ cd build
@@ -200,53 +296,6 @@ More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}`
 which is a shared directory between the host and QEMU.
 
 
-### As classical standalone unikernel within a virtual machine
-
-HermitCore applications can be directly started as standalone kernel within a
-virtual machine. In this case,
-[iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf ) is not
-supported.
-
-```bash
-$ cd build
-$ make install DESTDIR=~/hermit-build
-$ cd ~/hermit-build/opt/hermit
-$ # using QEMU
-$ HERMIT_ISLE=qemu bin/proxy x86_64-hermit/extra/tests/hello
-$ # using uHyve
-$ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
-```
-
-With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
-Please note that the loader requires QEMU and uses per default *KVM*.
-Furthermore, it expects that the executable is called `qemu-system-x86_64`.
-
-With `HERMIT_ISLE=hyve`, the application will be started within a thin
-hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
-uHyve has a considerably smaller startup time than QEMU, but lacks some features
-such as GDB debugging.
-
-In this context, the environment variable `HERMIT_CPUS` specifies the number of
-cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
-defines the memory size of the virtual machine. The suffix of *M* or *G* can be
-used to specify a value in megabytes or gigabytes respectively. Per default, the
-loader initializes a system with one core and 2 GiB RAM.
-
-The virtual machine opens two TCP/IP ports. One is used for the communication
-between HermitCore application and its proxy. The second port is used to create
-a connection via telnet to QEMU's system monitor. With the environment variable
-`HERMIT_PORT`, the default port (18766) can be changed for the communication
-between the HermitCore application and its proxy. The connection to the system
-monitor used automatically `HERMIT_PORT+1`, i.e., the default port is 18767.
-
-The following command starts the stream benchmark in a virtual machine, which
-has 4 cores and 6GB memory.
-
-```bash
-$ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
-```
-
-
 ### As multi-kernel on a real machine
 
 *Note*: to launch HermitCore applications, root privileges are required.
@@ -255,7 +304,7 @@ A [modified Linux kernel](https://github.com/RWTH-OS/linux) has to be installed.
 Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to
 `centos`, which is compatible to the current CentOS 7 kernel. Configure the
 kernel with `make menuconfig` for your system. Be sure, that the option
-`CONFIG_HERMIT_CORE` in `Processor type and features` is enabled. 
+`CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
 
 ```bash
 $ git clone https://github.com/RWTH-OS/linux
@@ -377,3 +426,9 @@ you are able to analyze the file.
 
 If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, QEMU establishes
 a monitor which is available via telnet at port 18767.
+With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication between the HermitCore application and its proxy.
+The connection to the system monitor is automatically set to `HERMIT_PORT+1`, i.e., the default port is 18767.
+
+## Credits
+
+HermitCore's Emoji is provided free by [EmojiOne](https://www.gfxmag.com/crab-emoji-vector-icon/).

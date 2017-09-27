@@ -144,6 +144,23 @@ static inline int atoi(const char *str)
 	return (int)_strtol(str, (char **)NULL, 10);
 }
 
+/** @brief Checks whether c is a hexdecimal digit character.
+ *
+ * @return A value different from zero if indeed c is a hexadecimal digit.
+ * Zero otherwise.
+ */
+static inline int isxdigit(int c)
+{
+	if ((c >= '0') && (c <= '9'))
+		return 1;
+	else if ((c >= 'A') && (c <= 'F'))
+		return 1;
+	else if ((c >= 'a') && (c <= 'f'))
+		return 1;
+
+	return 0;
+}
+
 #ifdef __cplusplus
 }
 #endif
