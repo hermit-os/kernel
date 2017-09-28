@@ -4,9 +4,6 @@ language: c
 
 git:
   submodules: true
-env:
-  global:
-    - PATH=$PATH:~/.cargo/bin
 matrix:
   include:
     - compiler:     gcc
@@ -130,6 +127,7 @@ after_deploy:
 
 env:
   global:
+  - PATH=${PATH}:${HOME}/.cargo/bin
   - COMMIT=${TRAVIS_COMMIT::8}
   - secure: GDWIzwLeCd12zT9cM0dEBBAVE345oT2ECQiaUTj6zIEhncKxDD2yE56eMpj0X9UCCjKLzTmJ4j8vD/cwB96Z43k+yiLHV+sa3pGnE8JAbgmbbbLTmSuyQQcCR4GQ4nzK48ylOygwmilBpUAH+Vw0jIFspeUD1j8KtKosXWBNPmWhwXDXWh1ae1fDYXxycaVAiUQrufNBs2dMSYrL0Dqsvj3HVla37dkzior2DM3kuWoE9kU61tLbBcwJn3GTMXdy10tIGLZzS+ZDU+ETbKadAlOZ58DsK3wLlgSloRJqBCzpJfCXpS7tU5kHIPyfAXgB5rBtWfyiSx6je171XEuxONl48BRyOI1O0Dqc8UiJ+W6eyqUyGoEPJ6r6r1oAbvcr4Ebf+sRtfj4PjnopIGzIrPNc1uebCgKpD2nQIO9P4XnwH/EbOU4My+kr5JPL8O0x4kottQeWr9v5nuhfBgknZpMIvncip9N9eek4aSMzfkAymmf7HBcPTMhb/v6xlwluqKsDE+c4WDQ2NhivpsDpqDZujhDh75MMFq7TlLRHlHNr64P7pz0A0xC2TJK9mC9u+WrwdpIFEsyDIiSSiOJ8GGgr5NK+dnXKZBy3b4/pk/TJciItk1W37RYiP1H4sVa+37VZ3VMUAwPVb1vgPG1r1XND/asjR/zzT374O/l0vNM=
   - secure: TZy4F5ZdcUu5iaSaxNRK6qGzW20GMVI8E6Ol7lZnb5qXzGyZHZCYdT6eW5rLTsKvMriSrO9++GHx5iSSaG23Y9WiMWC4rpKzuax9vVB/1EbbBu1i6I+GaO5agR+isf6PPlPBVvn84Lzky1O2kLtdgSUmu5cJZnbSRfG8utWemNmPgBQ4wgRtujz5xLdgv98NYsCCLR13cwWE3Cd3uZb4vEF1qkjgwn9XKbemWCB3mlI2ZgTdAPl8cv/T+PP2Pou7B7E5qOBcVb/GA3uXtgX0Y7bJxLeCetCkP39hmRZ0idr6BnSrSYwgCnbmf8LNTYaz0mKLwRxMu6wHkvYcvPjaGfawHB/6NJvDtjjIzohnTe3V15VktUKPnfiLV60NKjCYyiPIOKwsviFeC+H2NHSr0LWXKjoolzxiaOy4CrcsizwGBF8dcDYjPf6wdt2+7DUDXJtAscaa/eCCSxkG9Ls7FZIuLiQKFzTAAimtkGyIFcvtWvtP/6axcxVyP+0AJeFsgAt6hUfYBeHzlO/6yAM24YaVOjqPfTE9EebJtey0C7u7kruuqefywr5YqSfSrKcel+8wZNVIJTLPHrp+KpNqkfXt65uzC2q08z34c8kkKYWRA5nMVj4OLlecAtyvhpW0WOlWaeMBlJ1FRaJ/+U/PFUI2BjDHG3rIKqepA749huc=
