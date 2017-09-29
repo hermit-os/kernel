@@ -87,6 +87,7 @@ before_install:
 
 script:
   - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+  - cargo --version # dump version of ther Rust toolchain
   - source cmake/local-cmake.sh
   - cd librs
   - make runtime
