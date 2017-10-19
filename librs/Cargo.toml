@@ -18,7 +18,7 @@ raw-cpuid = "3.0.0"
 #features = ["spin_no_std"]
 
 [dependencies.x86]
-version = "0.7"
+path = "../../rust-x86"
 default-features = false
 
 # The development profile, used for `cargo build`.
