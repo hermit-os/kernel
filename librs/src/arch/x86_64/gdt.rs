@@ -132,6 +132,9 @@ pub unsafe fn gdt_install()
 			GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&(TSS_BUFFER.tss[i]), PrivilegeLevel::Ring0));
 		}
 
+		// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
+		// implement new_gdtp and the underlying functions as "const fn" and do this call already in the
+		// initialization of GDTR.
 		GDTR = DescriptorTablePointer::new_gdtp(&GDT);
 	});
 
