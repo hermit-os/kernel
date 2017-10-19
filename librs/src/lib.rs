@@ -30,7 +30,6 @@
 #![feature(asm, const_fn, lang_items, repr_align, attr_literals)]
 #![no_std]
 
-extern crate rlibc;
 extern crate spin;
 extern crate x86;
 extern crate raw_cpuid;
