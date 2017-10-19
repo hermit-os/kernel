@@ -977,7 +977,7 @@ void udelay(uint32_t usecs);
 /// Register a task's TSS at GDT
 static inline void register_task(void)
 {
-	uint16_t sel = (apic_cpu_id()*2+7) << 3;
+	uint16_t sel = (GDT_FIRST_TSS + apic_cpu_id()*2) << 3;
 
 	asm volatile ("ltr %%ax" : : "a"(sel));
 }
