@@ -22,10 +22,11 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use spin;
-use x86::bits64::irq::IdtEntry;
+use x86::bits64::irq::{IdtEntry, Type};
 use x86::shared::dtables::{self, DescriptorTablePointer};
 use x86::shared::paging::VAddr;
 use x86::shared::PrivilegeLevel;
+use x86::shared::segmentation::SegmentSelector;
 
 /// Declare an IDT of 256 entries.
 /// Although not all entries are used, the rest exists as a bit
@@ -39,11 +40,11 @@ static IDT_INIT: spin::Once<()> = spin::Once::new();
 
 
 /// Set an entry in the IDT.
+/// TODO: Replace flags parameter by dpl, maybe type.
 #[no_mangle]
-pub fn idt_set_gate(num: u8, base: VAddr, sel: u16, flags: u8, idx: u8)
+pub fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags: u8, idx: u8)
 {
-	let mut entry: IdtEntry = IdtEntry::new(base, sel, PrivilegeLevel::Ring0, true);
-	entry.reserved0 = idx;
+	let entry: IdtEntry = IdtEntry::new(base, sel, PrivilegeLevel::Ring0, Type::InterruptGate, idx);
 
 	unsafe { IDT[num as usize] = entry; }
 }
