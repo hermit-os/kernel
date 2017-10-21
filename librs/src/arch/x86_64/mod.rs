@@ -23,3 +23,4 @@
 
 pub mod processor;
 pub mod gdt;
+pub mod idt;

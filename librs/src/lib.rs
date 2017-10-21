@@ -41,6 +41,7 @@ pub use consts::*;
 
 #[cfg(target_arch="x86_64")]
 pub use arch::gdt::*;
+pub use arch::idt::*;
 
 #[macro_use]
 mod macros;
