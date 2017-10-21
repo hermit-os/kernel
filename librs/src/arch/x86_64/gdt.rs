@@ -133,9 +133,8 @@ pub unsafe fn gdt_install()
 		}
 
 		// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
-		// implement new_gdtp and the underlying functions as "const fn" and do this call already in the
-		// initialization of GDTR.
-		GDTR = DescriptorTablePointer::new_gdtp(&GDT);
+		// implement "new" as "const fn" and do this call already in the initialization of GDTR.
+		GDTR = DescriptorTablePointer::new(&GDT);
 	});
 
 	gdt_flush();
