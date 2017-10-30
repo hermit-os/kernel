@@ -129,6 +129,7 @@ int page_set_flags(size_t viraddr, uint32_t npages, int flags)
 	return -EINVAL;
 }
 
+#if 0
 int __page_map(size_t viraddr, size_t phyaddr, size_t npages, size_t bits, uint8_t do_ipi)
 {
 	int lvl, ret = -ENOMEM;
@@ -200,6 +201,7 @@ out:
 
 	return ret;
 }
+#endif
 
 int page_unmap(size_t viraddr, size_t npages)
 {
