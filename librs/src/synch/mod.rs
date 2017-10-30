@@ -21,49 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/*
- * First version is derived and adapted for HermitCore from
- * Philipp Oppermann's excellent series of blog posts (http://blog.phil-opp.com/)
- * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
- */
 
-#![feature(asm, attr_literals, const_fn, lang_items, repr_align)]
-#![no_std]
+//! Synchronization primitives
 
-extern crate spin;
-extern crate x86;
-extern crate raw_cpuid;
-
-// These need to be visible to the linker, so we need to export them.
-pub use runtime_glue::*;
-pub use logging::*;
-pub use consts::*;
-
-#[cfg(target_arch="x86_64")]
-pub use arch::gdt::*;
-pub use arch::idt::*;
-
-#[macro_use]
-mod macros;
-
-#[macro_use]
-mod logging;
-
-
-mod arch;
-mod console;
-mod consts;
-mod runtime_glue;
-mod synch;
-
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-#[no_mangle]
-pub extern "C" fn rust_init() {
-	info!("HermitCore's Rust runtime! v{}", VERSION);
-}
-
-#[no_mangle]
-pub extern "C" fn rust_main() {
-	arch::processor::cpu_detection();
-}
+pub mod spinlock;

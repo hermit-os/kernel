@@ -21,49 +21,52 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/*
- * First version is derived and adapted for HermitCore from
- * Philipp Oppermann's excellent series of blog posts (http://blog.phil-opp.com/)
- * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
- */
-
-#![feature(asm, attr_literals, const_fn, lang_items, repr_align)]
-#![no_std]
-
-extern crate spin;
-extern crate x86;
-extern crate raw_cpuid;
-
-// These need to be visible to the linker, so we need to export them.
-pub use runtime_glue::*;
-pub use logging::*;
-pub use consts::*;
-
-#[cfg(target_arch="x86_64")]
-pub use arch::gdt::*;
-pub use arch::idt::*;
-
-#[macro_use]
-mod macros;
-
-#[macro_use]
-mod logging;
-
-
-mod arch;
-mod console;
-mod consts;
-mod runtime_glue;
-mod synch;
-
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
-
-#[no_mangle]
-pub extern "C" fn rust_init() {
-	info!("HermitCore's Rust runtime! v{}", VERSION);
+/// Enable Interrupts
+#[inline(always)]
+pub fn irq_enable() {
+	unsafe { asm!("sti" ::: "memory" : "volatile") };
 }
 
-#[no_mangle]
-pub extern "C" fn rust_main() {
-	arch::processor::cpu_detection();
+/// Disable Interrupts
+#[inline(always)]
+pub fn irq_disable() {
+	unsafe { asm!("cli" ::: "memory" : "volatile") };
+}
+
+/// Determines, if the interrupt flags (IF) is set
+#[inline(always)]
+pub fn is_irq_enabled() -> bool
+{
+	let rflags: u64;
+
+	unsafe { asm!("pushf; pop $0": "=r"(rflags) :: "memory" : "volatile") };
+	if (rflags & (1u64 << 9)) !=  0 {
+		return true;
+	}
+
+	false
+}
+
+/// Disable IRQs (nested)
+///
+/// Disable IRQs when unsure if IRQs were enabled at all.
+/// This function together with irq_nested_enable can be used
+/// in situations when interrupts shouldn't be activated if they
+/// were not activated before calling this function.
+#[inline(always)]
+pub fn irq_nested_disable() -> bool {
+	let was_enabled = is_irq_enabled();
+	irq_disable();
+	was_enabled
+}
+
+/// Enable IRQs (nested)
+///
+/// Can be used in conjunction with irq_nested_disable() to only enable
+/// interrupts again if they were enabled before.
+#[inline(always)]
+pub fn irq_nested_enable(was_enabled: bool) {
+	if was_enabled == true {
+		irq_enable();
+	}
 }

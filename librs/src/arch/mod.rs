@@ -23,7 +23,7 @@
 
 // Export our platform-specific modules.
 #[cfg(target_arch="x86_64")]
-pub use self::x86_64::{processor, gdt, idt};
+pub use self::x86_64::{gdt, idt, irq, processor};
 
 // Implementations for x86_64.
 #[cfg(target_arch="x86_64")]

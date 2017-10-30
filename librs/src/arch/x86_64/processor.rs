@@ -600,3 +600,10 @@ pub fn cpu_detection() {
 	let cpu_info = get_cpuinfo();
 	cpu_info.print_infos();
 }
+
+#[inline(always)]
+pub fn pause() {
+	unsafe {
+		asm!("pause" :::: "volatile");
+	}
+}
