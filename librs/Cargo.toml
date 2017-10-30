@@ -9,13 +9,13 @@ authors = [
 crate-type = ["staticlib"]
 
 [dependencies]
-rlibc = "1.0.0"	# Low-level functions like memcpy.
-spin = "0.4.5"	# Spinlocks.
+bitflags = "1.0.0"
 raw-cpuid = "3.0.0"
+spin = "0.4.6"
 
-#[dependencies.lazy_static]
-#version = "0.2.8"
-#features = ["spin_no_std"]
+[dependencies.lazy_static]
+version = "0.2.9"
+features = ["spin_no_std"]
 
 [dependencies.x86]
 path = "../../rust-x86"

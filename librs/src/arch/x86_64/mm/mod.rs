@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,8 +21,4 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-pub mod gdt;
-pub mod idt;
-pub mod irq;
-pub mod mm;
-pub mod processor;
+pub mod paging;

@@ -27,8 +27,14 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![feature(asm, attr_literals, const_fn, lang_items, repr_align)]
+#![feature(asm, attr_literals, const_fn, lang_items, repr_align, specialization)]
 #![no_std]
+
+#[macro_use]
+extern crate bitflags;
+
+#[macro_use]
+extern crate lazy_static;
 
 extern crate spin;
 extern crate x86;
@@ -42,6 +48,7 @@ pub use consts::*;
 #[cfg(target_arch="x86_64")]
 pub use arch::gdt::*;
 pub use arch::idt::*;
+pub use arch::mm::paging::*;
 
 #[macro_use]
 mod macros;

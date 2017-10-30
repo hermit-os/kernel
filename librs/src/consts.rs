@@ -25,6 +25,3 @@
 
 pub const MAX_CORES : usize = 512;
 pub const KERNEL_STACK_SIZE : usize = 8192;
-
-#[cfg(target_arch="x86_64")]
-pub  const PAGE_SIZE : usize = 4096;
