@@ -86,6 +86,10 @@ ExternalProject_Add(
     INSTALL_COMMAND ""
     LOG_BUILD ON)
 
+add_custom_target(doc
+	COMMAND cargo rustdoc -- --no-defaults --passes collapse-docs --passes unindent-comments
+	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/librs")
+
 # Create dependency of hermit-rs objmv
 add_dependencies(hermit-rs objmv)
 # Create dependency of hermit-boostrap hermit-rs
