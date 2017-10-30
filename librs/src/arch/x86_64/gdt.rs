@@ -97,7 +97,7 @@ impl IrqStack {
 /// finally to load the new GDT and to update the
 /// new segment registers
 #[no_mangle]
-pub unsafe fn gdt_install()
+pub unsafe extern "C" fn gdt_install()
 {
 	GDT_INIT.call_once(|| {
 		/* The NULL descriptor is already inserted as the first entry. */
@@ -141,14 +141,14 @@ pub unsafe fn gdt_install()
 }
 
 #[no_mangle]
-pub unsafe fn set_tss(rsp: u64, ist: u64)
+pub unsafe extern "C" fn set_tss(rsp: u64, ist: u64)
 {
 	TSS_BUFFER.tss[core_id!()].rsp[0] = rsp;
 	TSS_BUFFER.tss[core_id!()].ist[0] = ist;
 }
 
 #[no_mangle]
-pub unsafe fn gdt_flush()
+pub unsafe extern "C" fn gdt_flush()
 {
 	dtables::lgdt(&GDTR);
 

@@ -1,4 +1,5 @@
-// Copyright (c) 2017 Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -42,7 +43,7 @@ static IDT_INIT: spin::Once<()> = spin::Once::new();
 /// Set an entry in the IDT.
 /// TODO: Replace flags parameter by dpl, maybe type.
 #[no_mangle]
-pub fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags: u8, idx: u8)
+pub extern "C" fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags: u8, idx: u8)
 {
 	let entry: IdtEntry = IdtEntry::new(base, sel, PrivilegeLevel::Ring0, Type::InterruptGate, idx);
 
@@ -50,7 +51,7 @@ pub fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags: u8, idx: 
 }
 
 #[no_mangle]
-pub unsafe fn idt_install()
+pub unsafe extern "C" fn idt_install()
 {
 	IDT_INIT.call_once(|| {
 		// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
