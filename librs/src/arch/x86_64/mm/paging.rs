@@ -23,6 +23,7 @@
 
 use core::marker::PhantomData;
 use synch::spinlock::*;
+use logging::*;
 
 extern "C" {
 	fn get_pages(npages: usize) -> usize;
@@ -296,18 +297,20 @@ struct PageTable<L> {
 
 /// A trait defining methods every page table has to implement.
 /// This additional trait is necessary to make use of Rust's specialization feature and provide a default
-/// implementation of the map_page method.
+/// implementation of some methods.
 trait PageTableMethods {
-	fn map_page_to_this_table<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool;
+	fn map_page_in_this_table<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool;
 	fn map_page<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool;
+	fn unmap_page_in_this_table<S: PageSize>(&mut self, page: Page<S>);
+	fn unmap_page<S: PageSize>(&mut self, page: Page<S>);
 }
 
 impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
-	/// Maps a single page to the given physical address in this table.
+	/// Maps a single page in this table to the given physical address.
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
 	///
 	/// Must only be called if a page of this size is mapped at this page table level!
-	fn map_page_to_this_table<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool {
+	fn map_page_in_this_table<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool {
 		assert!(L::LEVEL == S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
@@ -321,13 +324,32 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		flush
 	}
 
+	/// Unmaps a single page in this table.
+	///
+	/// Must only be called if a page of this size is mapped at this page table level!
+	fn unmap_page_in_this_table<S: PageSize>(&mut self, page: Page<S>) {
+		assert!(L::LEVEL == S::MAP_LEVEL);
+		let index = page.table_index::<L>();
+
+		self.entries[index].zero();
+		unsafe { page.flush_from_tlb() };
+	}
+
 	/// Maps a single page to the given physical address.
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
 	///
-	/// This is the default implementation that just calls the map_page_to_this_table method.
+	/// This is the default implementation that just calls the map_page_in_this_table method.
 	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
 	default fn map_page<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool {
-		self.map_page_to_this_table::<S>(page, physical_address, flags)
+		self.map_page_in_this_table::<S>(page, physical_address, flags)
+	}
+
+	/// Unmaps a single page.
+	///
+	/// This is the default implementation that just calls the unmap_page_in_this_table method.
+	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
+	default fn unmap_page<S: PageSize>(&mut self, page: Page<S>) {
+		self.unmap_page_in_this_table::<S>(page);
 	}
 }
 
@@ -341,46 +363,66 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 		assert!(L::LEVEL >= S::MAP_LEVEL);
 
 		if L::LEVEL > S::MAP_LEVEL {
-			let next_table = self.next_table_for_page::<S>(page);
-			next_table.map_page::<S>(page, physical_address, flags)
+			let index = page.table_index::<L>();
+
+			// Does the table exist yet?
+			if !self.entries[index].is_present() {
+				// Allocate a single 4KiB page for the new entry and mark it as a valid, writable subtable.
+				let physical_address = unsafe { get_pages(1) };
+				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
+
+				// Mark all entries as unused in the newly created table.
+				let subtable = self.subtable::<S>(page);
+				for entry in subtable.entries.iter_mut() {
+					entry.zero();
+				}
+			}
+
+			let subtable = self.subtable::<S>(page);
+			subtable.map_page::<S>(page, physical_address, flags)
 		} else {
 			// Calling the default implementation from a specialized one is not supported (yet),
 			// so we have to resort to an extra function.
-			self.map_page_to_this_table::<S>(page, physical_address, flags)
+			self.map_page_in_this_table::<S>(page, physical_address, flags)
+		}
+	}
+
+	/// Unmaps a single page.
+	///
+	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
+	/// It overrides the default implementation above.
+	fn unmap_page<S: PageSize>(&mut self, page: Page<S>) {
+		assert!(L::LEVEL >= S::MAP_LEVEL);
+
+		if L::LEVEL > S::MAP_LEVEL {
+			let index = page.table_index::<L>();
+			assert!(self.entries[index].is_present());
+
+			let subtable = self.subtable::<S>(page);
+			subtable.unmap_page::<S>(page);
+		} else {
+			// Calling the default implementation from a specialized one is not supported (yet),
+			// so we have to resort to an extra function.
+			self.unmap_page_in_this_table::<S>(page);
 		}
 	}
 }
 
 impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTableLevel {
 	/// Returns the next subtable for the given page in the page table hierarchy.
-	/// If the table does not exist yet, it is created.
 	///
 	/// Must only be called if a page of this size is mapped in a subtable!
-	fn next_table_for_page<S: PageSize>(&mut self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
+	fn subtable<S: PageSize>(&self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
 		assert!(L::LEVEL > S::MAP_LEVEL);
-		let index = page.table_index::<L>();
 
 		// Calculate the address of the subtable.
+		let index = page.table_index::<L>();
 		let table_address = self as *const PageTable<L> as usize;
-		let next_table_address = (table_address << PAGE_MAP_BITS) | (index << PAGE_BITS);
-		let next_table = unsafe { &mut *(next_table_address as *mut PageTable<L::SubtableLevel>) };
-
-		// Does the table exist yet?
-		if !self.entries[index].is_present() {
-			// Allocate a single 4KiB page for the new entry and mark it as a valid, writable subtable.
-			let physical_address = unsafe { get_pages(1) };
-			self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
-
-			// Mark all entries as unused in the newly created table.
-			for entry in next_table.entries.iter_mut() {
-				entry.zero();
-			}
-		}
-
-		next_table
+		let subtable_address = (table_address << PAGE_MAP_BITS) | (index << PAGE_BITS);
+		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
 	}
 
-	/// Maps a range of pages.
+	/// Maps a continuous range of pages.
 	///
 	/// # Arguments
 	///
@@ -402,16 +444,43 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 			unsafe { ipi_tlb_flush() };
 		}
 	}
+
+	/// Unmaps a continuous range of pages.
+	fn unmap_pages<S: PageSize>(&mut self, range: PageIter<S>) {
+		for page in range {
+			self.unmap_page::<S>(page);
+		}
+
+		unsafe { ipi_tlb_flush() };
+	}
 }
 
 
 
-#[no_mangle]
-pub extern "C" fn __page_map(viraddr: usize, phyaddr: usize, npages: usize, bits: usize, do_ipi: u8) -> i32 {
+#[inline]
+fn get_page_range(viraddr: usize, npages: usize) -> PageIter<BasePageSize> {
 	let first_page = Page::<BasePageSize>::including_address(viraddr);
 	let last_page = Page::<BasePageSize>::including_address(viraddr + (npages - 1) * BasePageSize::SIZE);
-	let range = Page::<BasePageSize>::range(first_page, last_page);
+	Page::<BasePageSize>::range(first_page, last_page)
+}
 
+#[no_mangle]
+pub extern "C" fn __page_map(viraddr: usize, phyaddr: usize, npages: usize, bits: usize, do_ipi: u8) -> i32 {
+	debug!("__page_map({:#X}, {:#X}, {}, {:#X}, {})", viraddr, phyaddr, npages, bits, do_ipi);
+
+	let range = get_page_range(viraddr, npages);
 	ROOT_PAGETABLE.lock().map_pages(range, phyaddr, PageTableEntryFlags::from_bits_truncate(bits), do_ipi > 0);
+	0
+}
+
+#[no_mangle]
+pub extern "C" fn page_unmap(viraddr: usize, npages: usize) -> i32 {
+	debug!("page_unmap({:#X}, {})", viraddr, npages);
+
+	if npages > 0 {
+		let range = get_page_range(viraddr, npages);
+		ROOT_PAGETABLE.lock().unmap_pages(range);
+	}
+
 	0
 }
