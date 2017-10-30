@@ -601,6 +601,14 @@ pub fn cpu_detection() {
 	cpu_info.print_infos();
 }
 
+pub fn halt() {
+	loop {
+		unsafe {
+			asm!("hlt" :::: "volatile");
+		}
+	}
+}
+
 #[inline(always)]
 pub fn pause() {
 	unsafe {

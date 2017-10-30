@@ -26,15 +26,19 @@
 
 #![allow(private_no_mangle_fns)]
 
-#[lang = "eh_personality"]
-	extern "C" fn eh_personality() {
-}
+use arch;
 
-#[lang = "panic_fmt"] #[no_mangle]
+#[lang = "eh_personality"]
+extern "C" fn eh_personality() {}
+
+#[lang = "panic_fmt"]
+#[no_mangle]
 extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -> !
 {
 	println!("PANIC: {}:{}: {}", file, line, args);
-	loop {}
+	loop {
+		arch::processor::halt();
+	}
 }
 
 #[no_mangle]
@@ -42,5 +46,7 @@ extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -
 pub fn _Unwind_Resume()
 {
 	println!("UNWIND!");
-	loop {}
+	loop {
+		arch::processor::halt();
+	}
 }
