@@ -908,7 +908,7 @@ int smp_start(void)
 	LOG_DEBUG("Try to initialize processor (local id %d)\n", atomic_int32_read(&current_boot_id));
 
 	// use the same gdt like the boot processors
-	gdt_flush();
+	gdt_install();
 
 	// install IDT
 	idt_install();

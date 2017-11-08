@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -27,9 +28,10 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![feature(asm, attr_literals, const_fn, lang_items, repr_align, specialization)]
+#![feature(asm, attr_literals, const_fn, lang_items, linkage, repr_align, specialization)]
 #![no_std]
 
+// EXTERNAL CRATES
 #[macro_use]
 extern crate bitflags;
 
@@ -40,37 +42,76 @@ extern crate spin;
 extern crate x86;
 extern crate raw_cpuid;
 
-// These need to be visible to the linker, so we need to export them.
-pub use runtime_glue::*;
-pub use logging::*;
-pub use consts::*;
-
-#[cfg(target_arch="x86_64")]
-pub use arch::gdt::*;
-pub use arch::idt::*;
-pub use arch::mm::paging::*;
-
+// MODULES
 #[macro_use]
 mod macros;
 
 #[macro_use]
 mod logging;
 
-
 mod arch;
 mod console;
 mod consts;
+mod mm;
 mod runtime_glue;
 mod synch;
+mod tasks;
 
-const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+// IMPORTS
+pub use consts::*;
+pub use logging::*;
+pub use runtime_glue::*;
 
-#[no_mangle]
-pub extern "C" fn rust_init() {
-	info!("HermitCore's Rust runtime! v{}", VERSION);
+#[cfg(target_arch="x86_64")]
+pub use arch::gdt::*;
+pub use arch::idt::*;
+pub use arch::mm::paging::*;
+pub use arch::processor::*;
+
+use core::ptr;
+
+extern "C" {
+	static __bss_start: u8;
+	static mut hbss_start: u8;
+	static percore_start: u8;
+	static percore_end0: u8;
+
+	fn koutput_init() -> i32;
+	fn multitasking_init() -> i32;
+	fn hermit_main() -> i32;
 }
 
+// FUNCTIONS
+unsafe fn sections_init() {
+	// Initialize .kbss sections
+	ptr::write_bytes(
+		&mut hbss_start as *mut u8,
+		0,
+		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize
+	);
+
+	// Initialize .percore sections
+	// Copy the section for the first CPU to all others.
+	let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
+	for i in 1..MAX_CORES {
+		ptr::copy_nonoverlapping(
+			&percore_start as *const u8,
+			(&percore_start as *const u8 as usize + i*size) as *mut u8,
+			size
+		);
+	}
+}
+
+/// Entry Point of HermitCore
+/// (called from entry.asm)
 #[no_mangle]
-pub extern "C" fn rust_main() {
-	arch::processor::cpu_detection();
+pub unsafe extern "C" fn rust_main() {
+	sections_init();
+	koutput_init();
+
+	info!("Welcome to HermitCore {}!", env!("CARGO_PKG_VERSION"));
+	arch::system_init();
+
+	multitasking_init();
+	hermit_main();
 }

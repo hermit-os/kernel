@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,10 +21,4 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
-
-// Implementations for x86_64.
-#[cfg(target_arch="x86_64")]
-pub mod x86_64;
+pub mod vma;

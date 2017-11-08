@@ -39,6 +39,17 @@ static mut IDT: [IdtEntry; IDT_ENTRIES] = [IdtEntry::MISSING; IDT_ENTRIES];
 static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer { base: 0 as *const IdtEntry, limit: 0 };
 static IDT_INIT: spin::Once<()> = spin::Once::new();
 
+pub fn install() {
+	unsafe {
+		IDT_INIT.call_once(|| {
+			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
+			// implement "new" as "const fn" and do this call already in the initialization of IDTP.
+			IDTP = DescriptorTablePointer::new(&IDT);
+		});
+
+		dtables::lidt(&IDTP);
+	}
+}
 
 /// Set an entry in the IDT.
 /// TODO: Replace flags parameter by dpl, maybe type.
@@ -51,13 +62,6 @@ pub extern "C" fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn idt_install()
-{
-	IDT_INIT.call_once(|| {
-		// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
-		// implement "new" as "const fn" and do this call already in the initialization of IDTP.
-		IDTP = DescriptorTablePointer::new(&IDT);
-	});
-
-	dtables::lidt(&IDTP);
+pub unsafe extern "C" fn idt_install() {
+	install();
 }

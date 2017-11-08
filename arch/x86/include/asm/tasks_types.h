@@ -154,11 +154,9 @@ typedef struct ucontext {
 	stack_t		uc_stack;
 } ucontext_t;
 
-typedef void (*handle_fpu_state)(union fpu_state* state);
-
-extern handle_fpu_state save_fpu_state;
-extern handle_fpu_state restore_fpu_state;
-extern handle_fpu_state fpu_init;
+void save_fpu_state(union fpu_state* state);
+void restore_fpu_state(union fpu_state* state);
+void fpu_init(union fpu_state* state);
 
 #ifdef __cplusplus
 }

@@ -103,32 +103,6 @@ islelock_t* rcce_lock = NULL;
 rcce_mpb_t* rcce_mpb = NULL;
 
 extern void signal_init(void);
-extern void rust_main(void);
-extern void rust_init(void);
-
-static int hermit_init(void)
-{
-	uint32_t i;
-	size_t sz = (size_t) &percore_end0 - (size_t) &percore_start;
-
-	// initialize .kbss sections
-	memset((void*)&hbss_start, 0x00, (size_t) &__bss_start - (size_t) &hbss_start);
-
-	// initialize .percore section => copy first section to all other sections
-	for(i=1; i<MAX_CORES; i++)
-		memcpy((char*) &percore_start + i*sz, (char*) &percore_start, sz);
-
-	koutput_init();
-	rust_init();
-	system_init();
-	irq_init();
-	timer_init();
-	multitasking_init();
-	memory_init();
-	signal_init();
-
-	return 0;
-}
 
 static void print_status(void)
 {
@@ -537,7 +511,6 @@ out:
 
 int hermit_main(void)
 {
-	hermit_init();
 	system_calibration(); // enables also interrupts
 
 	LOG_INFO("This is Hermit %s, build date %u\n", PACKAGE_VERSION, &__DATE__);
@@ -557,8 +530,6 @@ int hermit_main(void)
 		LOG_INFO("Kernel cmdline: %s\n", (char*) (size_t) mb_info->cmdline);
 	if (hbmem_base)
 		LOG_INFO("Found high bandwidth memory at 0x%zx (size 0x%zx)\n", hbmem_base, hbmem_size);
-	LOG_INFO("rust_main at %p\n", rust_main);
-	rust_main();
 
 #if 0
 	print_pci_adapters();

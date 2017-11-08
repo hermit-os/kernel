@@ -25,6 +25,7 @@
 #![allow(dead_code)]
 #![allow(private_no_mangle_fns)]
 
+use arch::x86_64::percore::*;
 use consts::*;
 use spin;
 use x86::bits64::segmentation::*;
@@ -50,6 +51,9 @@ static GDT_INIT: spin::Once<()> = spin::Once::new();
 
 extern "C" {
 	static boot_stack: [u8; MAX_CORES*KERNEL_STACK_SIZE];
+
+	#[link_section = ".percore"]
+	static __core_id: u32;
 }
 
 // workaround to use the new repr(align) feature
@@ -96,67 +100,67 @@ impl IrqStack {
 /// pointer, set up the entries in our GDT, and then
 /// finally to load the new GDT and to update the
 /// new segment registers
-#[no_mangle]
-pub unsafe extern "C" fn gdt_install()
+pub fn install()
 {
-	GDT_INIT.call_once(|| {
-		/* The NULL descriptor is already inserted as the first entry. */
+	unsafe {
+		GDT_INIT.call_once(|| {
+			/* The NULL descriptor is already inserted as the first entry. */
 
-		/*
-		 * The second entry is a 64-bit Code Segment in kernel-space (ring 0).
-		 * All other parameters are ignored.
-		 */
-		GDT[GDT_KERNEL_CODE] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+			/*
+			* The second entry is a 64-bit Code Segment in kernel-space (ring 0).
+			* All other parameters are ignored.
+			*/
+			GDT[GDT_KERNEL_CODE] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
 
-		/*
-		 * The third entry is a 64-bit Data Segment in kernel-space (ring 0).
-		 * All other parameters are ignored.
-		 */
-		GDT[GDT_KERNEL_DATA] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+			/*
+			* The third entry is a 64-bit Data Segment in kernel-space (ring 0).
+			* All other parameters are ignored.
+			*/
+			GDT[GDT_KERNEL_DATA] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
 
-		/*
-		 * Create TSS for each core (we use these segments for task switching)
-		 */
-		for i in 0..MAX_CORES {
-			TSS_BUFFER.tss[i].rsp[0] = (&(boot_stack[0]) as *const _) as u64;
-			TSS_BUFFER.tss[i].rsp[0] += ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
-			TSS_BUFFER.tss[i].ist[0] = 0; // ist will created per task
-			TSS_BUFFER.tss[i].ist[1] = (&(STACK_TABLE[i][2 /*IST number */ - 2]) as *const _) as u64;
-			TSS_BUFFER.tss[i].ist[1] += (KERNEL_STACK_SIZE - 0x10) as u64;
-			TSS_BUFFER.tss[i].ist[2] = (&(STACK_TABLE[i][3 /*IST number */ - 2]) as *const _) as u64;
-			TSS_BUFFER.tss[i].ist[2] += (KERNEL_STACK_SIZE - 0x10) as u64;
-			TSS_BUFFER.tss[i].ist[3] = (&(STACK_TABLE[i][4 /*IST number */ - 2]) as *const _) as u64;
-			TSS_BUFFER.tss[i].ist[3] += (KERNEL_STACK_SIZE - 0x10) as u64;
+			/*
+			* Create TSS for each core (we use these segments for task switching)
+			*/
+			for i in 0..MAX_CORES {
+				TSS_BUFFER.tss[i].rsp[0] = (&(boot_stack[0]) as *const _) as u64;
+				TSS_BUFFER.tss[i].rsp[0] += ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
+				TSS_BUFFER.tss[i].ist[0] = 0; // ist will created per task
+				TSS_BUFFER.tss[i].ist[1] = (&(STACK_TABLE[i][2 /*IST number */ - 2]) as *const _) as u64;
+				TSS_BUFFER.tss[i].ist[1] += (KERNEL_STACK_SIZE - 0x10) as u64;
+				TSS_BUFFER.tss[i].ist[2] = (&(STACK_TABLE[i][3 /*IST number */ - 2]) as *const _) as u64;
+				TSS_BUFFER.tss[i].ist[2] += (KERNEL_STACK_SIZE - 0x10) as u64;
+				TSS_BUFFER.tss[i].ist[3] = (&(STACK_TABLE[i][4 /*IST number */ - 2]) as *const _) as u64;
+				TSS_BUFFER.tss[i].ist[3] += (KERNEL_STACK_SIZE - 0x10) as u64;
 
-			let idx = GDT_FIRST_TSS + i*2;
-			GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&(TSS_BUFFER.tss[i]), PrivilegeLevel::Ring0));
-		}
+				let idx = GDT_FIRST_TSS + i*2;
+				GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&(TSS_BUFFER.tss[i]), PrivilegeLevel::Ring0));
+			}
 
-		// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
-		// implement "new" as "const fn" and do this call already in the initialization of GDTR.
-		GDTR = DescriptorTablePointer::new(&GDT);
-	});
+			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
+			// implement "new" as "const fn" and do this call already in the initialization of GDTR.
+			GDTR = DescriptorTablePointer::new(&GDT);
+		});
 
-	gdt_flush();
+		dtables::lgdt(&GDTR);
+
+		// Reload the segment descriptors
+		set_cs(SegmentSelector::new(GDT_KERNEL_CODE as u16, PrivilegeLevel::Ring0));
+		load_ds(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+		load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+	}
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn set_tss(rsp: u64, ist: u64)
 {
-	TSS_BUFFER.tss[core_id!()].rsp[0] = rsp;
-	TSS_BUFFER.tss[core_id!()].ist[0] = ist;
+	let core_id = __core_id.per_core() as usize;
+	TSS_BUFFER.tss[core_id].rsp[0] = rsp;
+	TSS_BUFFER.tss[core_id].ist[0] = ist;
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn gdt_flush()
+pub extern "C" fn gdt_install()
 {
-	dtables::lgdt(&GDTR);
-
-	// Reload the segment descriptors
-	set_cs(SegmentSelector::new(GDT_KERNEL_CODE as u16, PrivilegeLevel::Ring0));
-	load_ds(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
-	load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
-	load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
-	//load_fs(SegmentSelector::new(GDT_KERNEL_DATA as u16));
-	//load_gs(SegmentSelector::new(GDT_KERNEL_DATA as u16));
+	install();
 }
