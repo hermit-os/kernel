@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,21 +21,37 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/// Print formatted text to our console.
-///
-/// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
-/// for HermitCore.
-macro_rules! print {
-	($($arg:tt)*) => ({
-		use core::fmt::Write;
-		$crate::console::CONSOLE.lock().write_fmt(format_args!($($arg)*)).unwrap();
-	});
+use core::mem;
+
+
+pub trait PerCoreVariable {
+	type VarType;
+	unsafe fn per_core(&self) -> Self::VarType;
+	unsafe fn set_per_core(&self, value: Self::VarType);
 }
 
-/// Print formatted text to our console, followed by a newline.
-///
-/// From https://doc.rust-lang.org/nightly/std/macro.println!.html
-macro_rules! println {
-	($fmt:expr) => (print!(concat!($fmt, "\n")));
-	($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+impl<T> PerCoreVariable for T {
+	type VarType = T;
+
+	#[inline]
+	unsafe fn per_core(&self) -> T {
+		let value: T;
+
+		match mem::size_of::<T>() {
+			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self)),
+			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self)),
+			_ => panic!("Invalid operand size for per_core"),
+		}
+
+		value
+	}
+
+	#[inline]
+	unsafe fn set_per_core(&self, value: T) {
+		match mem::size_of::<T>() {
+			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self)),
+			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self)),
+			_ => panic!("Invalid operand size for set_per_core"),
+		}
+	}
 }
