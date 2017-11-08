@@ -240,9 +240,9 @@ Lno_pml4_init:
 L1:
     mov rbp, rsp
 
-    ; jump to the boot processors's C code
-    extern hermit_main
-    call hermit_main
+    ; jump to the boot processors' Rust code
+    extern rust_main
+    call rust_main
     jmp $
 
 %if MAX_CORES > 1

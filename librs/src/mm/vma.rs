@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,10 +21,16 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
-
-// Implementations for x86_64.
-#[cfg(target_arch="x86_64")]
-pub mod x86_64;
+#[repr(C)]
+pub struct vma_t {
+	/// Start address of the memory area
+	pub start: usize,
+	/// End address of the memory area
+	pub end: usize,
+	/// Type flags field
+	pub flags: u32,
+	/// Pointer of next VMA element in the list
+	pub next: *const vma_t,
+	/// Pointer to previous VMA element in the list
+	pub prev: *const vma_t,
+}

@@ -171,7 +171,7 @@ int enable_timer_irq(void)
  * the appropriate ISRs to the correct entries in the IDT.\n
  * This is just like installing the exception handlers
  */
-static int irq_install(void)
+int irq_install(void)
 {
 	irq_remap();
 
@@ -251,15 +251,6 @@ static int irq_install(void)
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);
 	idt_set_gate(127, (size_t)apic_svr, KERNEL_CODE_SELECTOR,
 		IDT_FLAG_PRESENT|IDT_FLAG_RING0|IDT_FLAG_32BIT|IDT_FLAG_INTTRAP, 1);
-
-	return 0;
-}
-
-int irq_init(void)
-{
-	idt_install();
-	isrs_install();
-	irq_install();
 
 	return 0;
 }

@@ -302,23 +302,23 @@ extern cpu_info_t cpu_info;
 int cpu_detection(void);
 
 inline static uint32_t has_fpu(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_FPU);
+	return 1;
 }
 
 inline static uint32_t has_msr(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_MSR);
+	return 1;
 }
 
 inline static uint32_t has_mce(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_MCE);
+	return 1;
 }
 
 inline static uint32_t has_apic(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_APIC);
+	return 1;
 }
 
 inline static uint32_t has_fxsr(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_FXSR);
+	return 1;
 }
 
 inline static uint32_t has_clflush(void) {
@@ -326,7 +326,7 @@ inline static uint32_t has_clflush(void) {
 }
 
 inline static uint32_t has_sse(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_SSE);
+	return 1;
 }
 
 inline static uint32_t has_pat(void) {
@@ -334,7 +334,7 @@ inline static uint32_t has_pat(void) {
 }
 
 inline static uint32_t has_sse2(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_SSE2);
+	return 1;
 }
 
 inline static uint32_t has_pge(void)
@@ -409,7 +409,7 @@ inline static uint32_t on_hypervisor(void) {
 
 inline static uint32_t has_nx(void)
 {
-	return (cpu_info.feature3 & CPU_FEATURE_NX);
+	return 1;
 }
 
 inline static uint32_t has_fsgsbase(void) {
@@ -650,13 +650,9 @@ static inline void write_cr8(size_t val)
 	asm volatile("movq %0, %%cr8" :: "r" (val) : "memory");
 }
 
-typedef size_t (*func_read_fsgs)(void);
-typedef void (*func_write_fsgs)(size_t);
-
-extern func_read_fsgs readfs;
-extern func_read_fsgs readgs;
-extern func_write_fsgs writefs;
-extern func_write_fsgs writegs;
+size_t readfs(void);
+size_t readgs(void);
+void writefs(size_t);
 
 /** @brife Get thread local storage
  *

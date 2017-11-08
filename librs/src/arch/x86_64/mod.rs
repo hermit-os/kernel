@@ -22,8 +22,39 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use logging::*;
+
+// MODULES
 pub mod gdt;
 pub mod idt;
 pub mod irq;
 pub mod mm;
+pub mod percore;
 pub mod processor;
+
+extern "C" {
+	fn irq_install() -> i32;
+	fn isrs_install();
+	fn memory_init() -> i32;
+	fn signal_init();
+	fn timer_init() -> i32;
+}
+
+// FUNCTIONS
+pub fn system_init() {
+	gdt::install();
+	processor::detect_features();
+	processor::configure();
+	mm::paging::map_cmdline();
+	processor::detect_frequency();
+	processor::print_information();
+	idt::install();
+
+	unsafe {
+		isrs_install();
+		irq_install();
+		timer_init();
+		memory_init();
+		signal_init();
+	}
+}
