@@ -11,7 +11,7 @@
 	url = https://github.com/RWTH-OS/rust.git
 [submodule "librs/crates/x86"]
 	path = librs/crates/x86
-	url = https://github.com/ColinFinck/rust-x86.git
+	url = https://github.com/RWTH-OS/rust-x86.git
 	branch = all-merged
 [submodule "librs/crates/raw_cpuid"]
 	path = librs/crates/raw_cpuid
