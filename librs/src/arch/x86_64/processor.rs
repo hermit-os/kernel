@@ -27,9 +27,9 @@ use core::{fmt, ptr, slice, str};
 use logging::*;
 use raw_cpuid::*;
 use tasks::*;
-use x86::bits64::time::*;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
+use x86::shared::time::*;
 
 
 extern "C" {
