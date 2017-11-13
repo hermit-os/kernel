@@ -223,7 +223,7 @@ int set_timer(uint64_t deadline);
 /** @brief check is a timer is expired
  *
  */
-void check_timers(void);
+//void check_timers(void);
 
 
 /** @brief Abort current task */
@@ -246,7 +246,7 @@ int network_shutdown(void);
 #ifdef DYNAMIC_TICKS
 /** @brief check, if the tick counter has to be updated
  */
-void check_ticks(void);
+//void check_ticks(void);
 #endif
 
 
@@ -255,20 +255,7 @@ void check_ticks(void);
 void shutdown_system(void);
 
 extern volatile uint32_t go_down;
-static inline void check_workqueues_in_irqhandler(int irq)
-{
-#ifdef DYNAMIC_TICKS
-	// Increment ticks
-	check_ticks();
-#endif
-
-	check_timers();
-
-	if (go_down)
-		shutdown_system();
-	if (irq < 0)
-		check_scheduling();
-}
+extern void check_workqueues_in_irqhandler(int irq);
 
 static inline void check_workqueues(void)
 {

@@ -290,7 +290,8 @@ err_t uhyve_netif_init (struct netif* netif)
 	uhyve_netif->ethaddr = (struct eth_addr *)netif->hwaddr;
 
 	LOG_INFO("uhye_netif uses irq %d\n", UHYVE_IRQ);
-	irq_install_handler(32+UHYVE_IRQ, uhyve_irqhandler);
+	// TODO: Port this to Rust!!!!
+	//irq_install_handler(32+UHYVE_IRQ, uhyve_irqhandler);
 
 	/*
 	 * Initialize the snmp variables and counters inside the struct netif.

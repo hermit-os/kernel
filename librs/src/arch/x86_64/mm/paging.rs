@@ -21,7 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::irq::*;
+use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::fmt;
@@ -47,11 +47,9 @@ extern "C" {
 	static image_size: usize;
 	static kernel_start: u8;
 
-	fn apic_eoi(int_no: usize);
 	fn get_pages(npages: usize) -> usize;
 	fn get_zeroed_page() -> usize;
 	fn ipi_tlb_flush() -> i32;
-	fn irq_install_handler(irq: u32, handler: unsafe extern "C" fn(s: *const state)) -> i32;
 }
 
 lazy_static! {
@@ -589,36 +587,36 @@ pub extern "C" fn getpagesize() -> i32 {
 	BasePageSize::SIZE as i32
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn page_fault_handler(s: *const state) {
-	debug!("page_fault_handler({:#X})", s as usize);
+fn page_fault_handler(state_ref: &irq::state) {
+	debug!("page_fault_handler{:#X}", state_ref as *const _ as usize);
 
-	let virtual_address = control_regs::cr2();
-	let task = current_task.per_core().as_ref().expect("No task in page_fault_handler");
+	let virtual_address = unsafe { control_regs::cr2() };
+	let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
 
-	if !task.heap.is_null() && virtual_address >= (*task.heap).start && virtual_address < (*task.heap).end {
-		let mut locked_root_table = ROOT_PAGETABLE.lock();
-		let page = Page::<BasePageSize>::including_address(virtual_address);
+	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
+		if virtual_address >= heap.start && virtual_address < heap.end {
+			let mut locked_root_table = ROOT_PAGETABLE.lock();
+			let page = Page::<BasePageSize>::including_address(virtual_address);
 
-		if locked_root_table.get_page_table_entry(page).is_none() {
-			let physical_address = if runtime_osinit.is_null() { get_pages(1) } else { get_zeroed_page() };
-			locked_root_table.map_page::<BasePageSize>(page, physical_address, PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE);
+			if locked_root_table.get_page_table_entry(page).is_none() {
+				let physical_address = unsafe { if runtime_osinit.is_null() { get_pages(1) } else { get_zeroed_page() } };
+				locked_root_table.map_page::<BasePageSize>(page, physical_address, PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE);
+			}
+
+			return;
 		}
-	} else {
-		let pferror = PageFaultError { bits: (*s).error };
-
-		error!("Page Fault Exception ({}) on core {} at cs:ip = {:#X}:{:#X}, fs = {:#X}, gs = {:#X}, rflags = {:#X}, task = {}, virtual_address = {:#X}, error = {}",
-			(*s).int_no, __core_id.per_core(), (*s).cs, (*s).rip, (*s).fs, (*s).gs, (*s).rflags, task.id, virtual_address, pferror);
-		error!("rax = {:#X}, rbx = {:#X}, rcx = {:#X}, rdx = {:#X}, rbp = {:#X}, rsp = {:#X}, rdi = {:#X}, rsi = {:#X}, r8 = {:#X}, r9 = {:#X}, r10 = {:#X}, r11 = {:#X}, r12 = {:#X}, r13 = {:#X}, r14 = {:#X}, r15 = {:#X}",
-			(*s).rax, (*s).rbx, (*s).rcx, (*s).rdx, (*s).rbp, (*s).rsp, (*s).rdi, (*s).rsi, (*s).r8, (*s).r9, (*s).r10, (*s).r11, (*s).r12, (*s).r13, (*s).r14, (*s).r15);
-
-		if !task.heap.is_null() {
-			error!("Heap {:#X} - {:#X}", (*task.heap).start, (*task.heap).end);
-		}
-
-		apic_eoi((*s).int_no as usize);
-		panic!();
 	}
+
+	// Anything else is an error!
+	let pferror = PageFaultError { bits: state_ref.error };
+	error!("Page Fault Exception, {}", state_ref);
+	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
+	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
+		error!("Heap {:#X} - {:#X}", heap.start, heap.end);
+	}
+
+	irq::eoi(state_ref.int_no);
+	panic!();
 }
 
 #[no_mangle]
@@ -661,7 +659,7 @@ pub unsafe extern "C" fn page_init() -> i32 {
 		info!("Detected Go runtime! HermitCore will return zeroed pages.");
 	}
 
-	irq_install_handler(14, page_fault_handler);
+	irq::set_handler(14, page_fault_handler);
 	0
 }
 

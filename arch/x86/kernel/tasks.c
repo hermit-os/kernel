@@ -126,7 +126,7 @@ size_t* get_current_stack(void)
 	else
 		stptr = (stptr + DEFAULT_STACK_SIZE - sizeof(size_t)) & ~0x1F;
 
-	set_tss(stptr, (size_t) curr_task->ist_addr + KERNEL_STACK_SIZE - 0x10);
+	set_tss(stptr); //, (size_t) curr_task->ist_addr + KERNEL_STACK_SIZE - 0x10);
 
 	return curr_task->last_stack_pointer;
 }
@@ -144,7 +144,7 @@ int create_default_frame(task_t* task, entry_point_t ep, void* arg, uint32_t cor
 		return -EINVAL;
 
 	LOG_INFO("Task %d uses memory region [%p - %p] as stack\n", task->id, task->stack, (char*) task->stack + DEFAULT_STACK_SIZE - 1);
-	LOG_INFO("Task %d uses memory region [%p - %p] as IST1\n", task->id, task->ist_addr, (char*) task->ist_addr + KERNEL_STACK_SIZE - 1);
+	//LOG_INFO("Task %d uses memory region [%p - %p] as IST1\n", task->id, task->ist_addr, (char*) task->ist_addr + KERNEL_STACK_SIZE - 1);
 
 	memset(task->stack, 0xCD, DEFAULT_STACK_SIZE);
 

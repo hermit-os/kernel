@@ -500,7 +500,8 @@ err_t e1000if_init(struct netif* netif)
 	e1000_flush(e1000if->bar0);
 
 	// set IRQ handler
-	irq_install_handler(e1000if->irq+32, e1000if_handler);
+	// TODO: Port this to Rust!!!!
+	//irq_install_handler(e1000if->irq+32, e1000if_handler);
 
 	/* make sure receives are disabled while setting up the descriptors */
 	tmp32 = e1000_read(e1000if->bar0, E1000_RCTL);
@@ -595,7 +596,7 @@ oom:
 			// TODO: unmap e1000if->bar0
 		}
 
-		irq_uninstall_handler(e1000if->irq+32);
+		//irq_uninstall_handler(e1000if->irq+32);
 
 		kfree(e1000if);
 	}

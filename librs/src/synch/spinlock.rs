@@ -21,12 +21,13 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch::irq;
+use arch::processor;
 use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use core::cell::UnsafeCell;
 use core::marker::Sync;
 use core::fmt;
 use core::ops::{Drop, Deref, DerefMut};
-use arch;
 
 /// This type provides a lock based on busy waiting to realize mutual exclusion of tasks.
 ///
@@ -72,7 +73,6 @@ pub struct Spinlock<T: ?Sized>
 /// When the guard falls out of scope it will release the lock.
 pub struct SpinlockGuard<'a, T: ?Sized + 'a>
 {
-	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	data: &'a mut T,
 }
@@ -107,7 +107,7 @@ impl<T: ?Sized> Spinlock<T>
 	fn obtain_lock(&self) {
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			arch::processor::pause();
+			processor::pause();
 		}
 	}
 
@@ -116,7 +116,6 @@ impl<T: ?Sized> Spinlock<T>
 		self.obtain_lock();
 		SpinlockGuard
 		{
-			//queue: &self.queue,
 			dequeue: &self.dequeue,
 			data: unsafe { &mut *self.data.get() },
 		}
@@ -205,7 +204,6 @@ pub struct SpinlockIrqSave<T: ?Sized>
 /// When the guard falls out of scope it will release the lock.
 pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a>
 {
-	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	irq: &'a AtomicBool,
 	data: &'a mut T,
@@ -242,10 +240,10 @@ impl<T: ?Sized> SpinlockIrqSave<T>
 	fn obtain_lock(&self) {
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			arch::processor::pause();
+			processor::pause();
 		}
 
-		self.irq.store(arch::irq::irq_nested_disable(), Ordering::SeqCst);
+		self.irq.store(irq::nested_disable(), Ordering::SeqCst);
 	}
 
 	pub fn lock(&self) -> SpinlockIrqSaveGuard<T>
@@ -253,7 +251,6 @@ impl<T: ?Sized> SpinlockIrqSave<T>
 		self.obtain_lock();
 		SpinlockIrqSaveGuard
 		{
-			//queue: &self.queue,
 			dequeue: &self.dequeue,
 			irq: &self.irq,
 			data: unsafe { &mut *self.data.get() },
@@ -293,8 +290,8 @@ impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T>
 	/// The dropping of the SpinlockGuard will release the lock it was created from.
 	fn drop(&mut self)
 	{
-		let irq =  self.irq.swap(false, Ordering::SeqCst);
+		let irq = self.irq.swap(false, Ordering::SeqCst);
 		self.dequeue.fetch_add(1, Ordering::SeqCst);
-		arch::irq::irq_nested_enable(irq);
+		irq::nested_enable(irq);
 	}
 }

@@ -54,8 +54,8 @@ volatile uint32_t go_down = 0;
  * A task's id will be its position in this array.
  */
 static task_t task_table[MAX_TASKS] = { \
-        [0]                 = {0, TASK_IDLE, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}, \
-        [1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, NULL, TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}};
+        [0]                 = {0, TASK_IDLE, 0, NULL, NULL, /*NULL,*/ TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}, \
+        [1 ... MAX_TASKS-1] = {0, TASK_INVALID, 0, NULL, NULL, /*NULL,*/ TASK_DEFAULT_FLAGS, 0, 0, 0, 0, NULL, 0, NULL, NULL, 0, 0, 0, NULL, FPU_STATE_INIT}};
 
 static spinlock_irqsave_t table_lock = SPINLOCK_IRQSAVE_INIT;
 
@@ -73,7 +73,6 @@ DEFINE_PER_CORE(uint32_t, __core_id, 0);
 #endif
 
 extern const void boot_stack;
-extern const void boot_ist;
 
 
 static void update_timer(task_t* first)
@@ -270,7 +269,7 @@ int multitasking_init(void)
 
 	task_table[0].prio = IDLE_PRIO;
 	task_table[0].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
-	task_table[0].ist_addr = (char*)&boot_ist;
+	//task_table[0].ist_addr = (char*)&boot_ist;
 	set_per_core(current_task, task_table+0);
 	arch_init_task(task_table+0);
 
@@ -294,7 +293,7 @@ int set_idle_task(void)
 			task_table[i].last_core = core_id;
 			task_table[i].last_stack_pointer = NULL;
 			task_table[i].stack = (char*) ((size_t)&boot_stack + core_id * KERNEL_STACK_SIZE);
-			task_table[i].ist_addr = create_stack(KERNEL_STACK_SIZE);
+			//task_table[i].ist_addr = create_stack(KERNEL_STACK_SIZE);
 			task_table[i].prio = IDLE_PRIO;
 			task_table[i].heap = NULL;
 			readyqueues[core_id].idle = task_table+i;
@@ -334,10 +333,10 @@ void finish_task_switch(void)
 				old->heap = NULL;
 			}
 
-			if (old->ist_addr) {
+			/*if (old->ist_addr) {
 				destroy_stack(old->ist_addr, KERNEL_STACK_SIZE);
 				old->ist_addr = NULL;
-			}
+			}*/
 
 			old->last_stack_pointer = NULL;
 
@@ -449,11 +448,11 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
 
-	ist =  create_stack(KERNEL_STACK_SIZE);
+	/*ist =  create_stack(KERNEL_STACK_SIZE);
 	if (BUILTIN_EXPECT(!ist, 0)) {
 		destroy_stack(stack, DEFAULT_STACK_SIZE);
 		return -ENOMEM;
-	}
+	}*/
 
 	spinlock_irqsave_lock(&table_lock);
 
@@ -479,7 +478,7 @@ int clone_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio)
 			task_table[i].parent = curr_task->id;
 			task_table[i].tls_addr = curr_task->tls_addr;
 			task_table[i].tls_size = curr_task->tls_size;
-			task_table[i].ist_addr = ist;
+			//task_table[i].ist_addr = ist;
 			task_table[i].lwip_err = 0;
 			task_table[i].signal_handler = NULL;
 
@@ -551,11 +550,11 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 	if (BUILTIN_EXPECT(!stack, 0))
 		return -ENOMEM;
 
-	ist = create_stack(KERNEL_STACK_SIZE);
+	/*ist = create_stack(KERNEL_STACK_SIZE);
 	if (BUILTIN_EXPECT(!ist, 0)) {
 		destroy_stack(stack, DEFAULT_STACK_SIZE);
 		return -ENOMEM;
-	}
+	}*/
 
 	counter = kmalloc(sizeof(atomic_int64_t));
 	if (BUILTIN_EXPECT(!counter, 0)) {
@@ -579,7 +578,7 @@ int create_task(tid_t* id, entry_point_t ep, void* arg, uint8_t prio, uint32_t c
 			task_table[i].start_tick = get_clock_tick();
 			task_table[i].last_tsc = 0;
 			task_table[i].parent = 0;
-			task_table[i].ist_addr = ist;
+			//task_table[i].ist_addr = ist;
 			task_table[i].tls_addr = 0;
 			task_table[i].tls_size = 0;
 			task_table[i].lwip_err = 0;

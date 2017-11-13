@@ -32,25 +32,32 @@ use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
 use x86::shared::PrivilegeLevel;
 use x86::shared::dtables::{self, DescriptorTablePointer};
+use x86::shared::task::*;
 
-const GDT_KERNEL_CODE: usize = 1;
-const GDT_KERNEL_DATA: usize = 2;
-const GDT_FIRST_TSS:   usize = 3;
+pub const GDT_KERNEL_CODE: u16 = 1;
+pub const GDT_KERNEL_DATA: u16 = 2;
+pub const GDT_FIRST_TSS:   u16 = 3;
 
-// a TSS descriptor is twice larger than a code/data descriptor
+/// A TSS descriptor is twice larger than a code/data descriptor.
 const GDT_ENTRIES: usize = (3+MAX_CORES*2);
-const MAX_IST: usize = 3;
+
+/// We use IST1 through IST4.
+/// Each critical exception (NMI, Double Fault, Machine Check) gets a dedicated one while IST1 is shared for all other
+/// interrupts. See also irq.rs.
+const IST_ENTRIES: usize = 4;
 
 // thread_local on a static mut, signals that the value of this static may
 // change depending on the current thread.
 static mut GDT: [SegmentDescriptor; GDT_ENTRIES] = [SegmentDescriptor::NULL; GDT_ENTRIES];
 static mut GDTR: DescriptorTablePointer<SegmentDescriptor> = DescriptorTablePointer { base: 0 as *const SegmentDescriptor, limit: 0 };
 static mut TSS_BUFFER: TssBuffer = TssBuffer::new();
-static STACK_TABLE: [[IrqStack; MAX_IST]; MAX_CORES] = [[IrqStack::new(); MAX_IST]; MAX_CORES];
 static GDT_INIT: spin::Once<()> = spin::Once::new();
 
+/// Reserve space for all ISTs for each core.
+static STACK_TABLE: [[IrqStack; IST_ENTRIES]; MAX_CORES] = [[IrqStack::new(); IST_ENTRIES]; MAX_CORES];
+
 extern "C" {
-	static boot_stack: [u8; MAX_CORES*KERNEL_STACK_SIZE];
+	static boot_stack: *const u8;
 
 	#[link_section = ".percore"]
 	static __core_id: u32;
@@ -104,36 +111,31 @@ pub fn install()
 {
 	unsafe {
 		GDT_INIT.call_once(|| {
-			/* The NULL descriptor is already inserted as the first entry. */
+			// The NULL descriptor is already inserted as the first entry.
 
-			/*
-			* The second entry is a 64-bit Code Segment in kernel-space (ring 0).
-			* All other parameters are ignored.
-			*/
-			GDT[GDT_KERNEL_CODE] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+			// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
+			// All other parameters are ignored.
+			GDT[GDT_KERNEL_CODE as usize] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
 
-			/*
-			* The third entry is a 64-bit Data Segment in kernel-space (ring 0).
-			* All other parameters are ignored.
-			*/
-			GDT[GDT_KERNEL_DATA] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+			// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
+			// All other parameters are ignored.
+			GDT[GDT_KERNEL_DATA as usize] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
 
-			/*
-			* Create TSS for each core (we use these segments for task switching)
-			*/
+			// Create a TSS for each core.
 			for i in 0..MAX_CORES {
-				TSS_BUFFER.tss[i].rsp[0] = (&(boot_stack[0]) as *const _) as u64;
-				TSS_BUFFER.tss[i].rsp[0] += ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
-				TSS_BUFFER.tss[i].ist[0] = 0; // ist will created per task
-				TSS_BUFFER.tss[i].ist[1] = (&(STACK_TABLE[i][2 /*IST number */ - 2]) as *const _) as u64;
-				TSS_BUFFER.tss[i].ist[1] += (KERNEL_STACK_SIZE - 0x10) as u64;
-				TSS_BUFFER.tss[i].ist[2] = (&(STACK_TABLE[i][3 /*IST number */ - 2]) as *const _) as u64;
-				TSS_BUFFER.tss[i].ist[2] += (KERNEL_STACK_SIZE - 0x10) as u64;
-				TSS_BUFFER.tss[i].ist[3] = (&(STACK_TABLE[i][4 /*IST number */ - 2]) as *const _) as u64;
-				TSS_BUFFER.tss[i].ist[3] += (KERNEL_STACK_SIZE - 0x10) as u64;
+				// entry.asm has reserved space for a boot stack for each core.
+				// Every task has its own stack, so this boot stack is only used by the Idle task on each core.
+				// When switching to another task on this core, this entry will be replaced.
+				TSS_BUFFER.tss[i].rsp[0] = boot_stack as u64 + ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
 
-				let idx = GDT_FIRST_TSS + i*2;
-				GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&(TSS_BUFFER.tss[i]), PrivilegeLevel::Ring0));
+				// We have reserved space for the ISTs for each core.
+				// They are only needed once for each core, not per task.
+				for j in 0..IST_ENTRIES {
+					TSS_BUFFER.tss[i].ist[j] = &STACK_TABLE[i][j] as *const _ as u64 + (KERNEL_STACK_SIZE - 0x10) as u64;
+				}
+
+				let idx = GDT_FIRST_TSS as usize + i*2;
+				GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&TSS_BUFFER.tss[i], PrivilegeLevel::Ring0));
 			}
 
 			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
@@ -148,15 +150,20 @@ pub fn install()
 		load_ds(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 		load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+
+		// Reload the task register to point to the proper TSS.
+		let core_id = __core_id.per_core() as u16;
+		let sel = SegmentSelector::new(GDT_FIRST_TSS as u16 + core_id*2, PrivilegeLevel::Ring0);
+		load_tr(sel);
 	}
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn set_tss(rsp: u64, ist: u64)
+pub unsafe extern "C" fn set_tss(rsp: u64/*, ist: u64*/)
 {
 	let core_id = __core_id.per_core() as usize;
 	TSS_BUFFER.tss[core_id].rsp[0] = rsp;
-	TSS_BUFFER.tss[core_id].ist[0] = ist;
+	//TSS_BUFFER.tss[core_id].ist[0] = ist;
 }
 
 #[no_mangle]

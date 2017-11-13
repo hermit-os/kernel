@@ -220,5 +220,6 @@ void signal_init(void)
 		             SIGNAL_BUFFER_SIZE, sizeof(sig_t));
 	}
 
-	irq_install_handler(SIGNAL_IRQ, _signal_irq_handler);
+	// TODO: Port this to Rust!!
+	//irq_install_handler(SIGNAL_IRQ, _signal_irq_handler);
 }
