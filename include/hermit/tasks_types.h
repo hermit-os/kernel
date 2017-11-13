@@ -82,7 +82,7 @@ typedef struct task {
 	/// start address of the stack 
 	void*			stack;
 	/// interrupt stack for IST1
-	void*			ist_addr;
+	//void*			ist_addr;
 	/// Additional status flags. For instance, to signalize the using of the FPU
 	uint8_t			flags;
 	/// Task priority

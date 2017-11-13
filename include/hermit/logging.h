@@ -48,7 +48,7 @@ enum {
 #define LOG_LEVEL_VERBOSE_PREFIX	"VERBOSE"
 
 #ifndef LOG_LEVEL
-    #define LOG_LEVEL LOG_LEVEL_INFO
+    #define LOG_LEVEL LOG_LEVEL_VERBOSE
 #endif
 
 // Gratefully taken from Leushenko @ http://stackoverflow.com/a/19017591

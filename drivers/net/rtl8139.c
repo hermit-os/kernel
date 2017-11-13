@@ -367,7 +367,8 @@ err_t rtl8139if_init(struct netif* netif)
 	// determine the hardware revision
 	//tmp32 = (tmp32 & TCR_HWVERID) >> TCR_HWOFFSET;
 
-	irq_install_handler(rtl8139if->irq+32, rtl8139if_handler);
+	// TODO: Port this to Rust!!!!
+	//irq_install_handler(rtl8139if->irq+32, rtl8139if_handler);
 
 	/* hardware address length */
 	netif->hwaddr_len = ETHARP_HWADDR_LEN;

@@ -22,6 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch::x86_64::gdt;
 use spin;
 use x86::bits64::irq::{IdtEntry, Type};
 use x86::shared::dtables::{self, DescriptorTablePointer};
@@ -33,7 +34,7 @@ use x86::shared::segmentation::SegmentSelector;
 /// Although not all entries are used, the rest exists as a bit
 /// of a trap. If any undefined IDT entry is hit, it will cause
 /// an "Unhandled Interrupt" exception.
-const IDT_ENTRIES: usize = 256;
+pub const IDT_ENTRIES: usize = 256;
 
 static mut IDT: [IdtEntry; IDT_ENTRIES] = [IdtEntry::MISSING; IDT_ENTRIES];
 static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer { base: 0 as *const IdtEntry, limit: 0 };
@@ -52,13 +53,20 @@ pub fn install() {
 }
 
 /// Set an entry in the IDT.
-/// TODO: Replace flags parameter by dpl, maybe type.
-#[no_mangle]
-pub extern "C" fn idt_set_gate(num: u8, base: VAddr, sel: SegmentSelector, flags: u8, idx: u8)
+///
+/// # Arguments
+///
+/// * `index`     - 8-bit index of the interrupt gate to set.
+/// * `handler`   - Handler function to call for this interrupt/exception.
+/// * `ist_index` - Index of the Interrupt Stack Table (IST) to switch to.
+///                 A zero value means that the stack won't be switched, a value of 1 refers to the first IST entry, etc.
+#[inline]
+pub fn set_gate(index: u8, handler: unsafe extern "C" fn(), ist_index: u8)
 {
-	let entry: IdtEntry = IdtEntry::new(base, sel, PrivilegeLevel::Ring0, Type::InterruptGate, idx);
+	let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, PrivilegeLevel::Ring0);
+	let entry = IdtEntry::new(VAddr::from_usize(handler as usize), sel, PrivilegeLevel::Ring0, Type::InterruptGate, ist_index);
 
-	unsafe { IDT[num as usize] = entry; }
+	unsafe { IDT[index as usize] = entry; }
 }
 
 #[no_mangle]

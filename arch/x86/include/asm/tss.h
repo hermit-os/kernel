@@ -61,7 +61,7 @@ typedef struct {
 
 /** @brief Set rsp0 & ist1 in TSS of the current core
  */
-void set_tss(size_t rsp0, size_t ist1);
+void set_tss(size_t rsp0); //, size_t ist1);
 
 #ifdef __cplusplus
 }

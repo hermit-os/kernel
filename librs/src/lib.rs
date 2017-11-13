@@ -56,17 +56,25 @@ mod mm;
 mod runtime_glue;
 mod synch;
 mod tasks;
+mod timer;
 
 // IMPORTS
+#[cfg(target_arch="x86_64")]
+mod arch_specific {
+	pub use arch::gdt::*;
+	pub use arch::idt::*;
+	pub use arch::irq::*;
+	pub use arch::mm::paging::*;
+	pub use arch::pit::*;
+	pub use arch::processor::*;
+}
+
+pub use arch_specific::*;
 pub use consts::*;
 pub use logging::*;
 pub use runtime_glue::*;
-
-#[cfg(target_arch="x86_64")]
-pub use arch::gdt::*;
-pub use arch::idt::*;
-pub use arch::mm::paging::*;
-pub use arch::processor::*;
+pub use tasks::*;
+pub use timer::*;
 
 use core::ptr;
 

@@ -21,12 +21,11 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::processor::*;
+use arch::processor;
 use mm::vma::*;
 
 extern "C" {
 	fn check_scheduling();
-	fn check_ticks();
 	fn check_timers();
 	fn shutdown_system();
 
@@ -50,7 +49,7 @@ pub struct task_t {
 	/// start address of the stack
 	pub stack: usize,
 	/// interrupt stack for IST1
-	pub ist_addr: usize,
+	//pub ist_addr: usize,
 	/// Additional status flags. For instance, to signalize the using of the FPU
 	pub flags: u8,
 	/// Task priority
@@ -78,13 +77,14 @@ pub struct task_t {
 	/// Handler for (POSIX) Signals - TODO!!
 	pub signal_handler: usize,
 	// FPU state
-	pub fpu_state: XSaveArea,
+	pub fpu_state: processor::XSaveArea,
 }
 
-pub unsafe fn check_workqueues_in_irqhandler(irq: i32)
+#[no_mangle]
+pub unsafe extern "C" fn check_workqueues_in_irqhandler(irq: i32)
 {
 	// Increment ticks
-	check_ticks();
+	processor::update_ticks();
 
 	check_timers();
 

@@ -693,7 +693,8 @@ err_t mmnif_init(struct netif *netif)
 	netif->hwaddr_len = 0;
 
 	// set interrupt handler
-	irq_install_handler(MMNIF_IRQ, mmnif_irqhandler);
+	// TODO: Port this to Rust!!!!
+	//irq_install_handler(MMNIF_IRQ, mmnif_irqhandler);
 
 	LOG_INFO("mmnif init complete\n");
 

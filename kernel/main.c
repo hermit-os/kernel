@@ -263,9 +263,10 @@ int network_shutdown(void)
 #if MAX_CORES > 1
 int smp_main(void)
 {
-	timer_init();
+	//timer_init();
 #ifdef DYNAMIC_TICKS
-	enable_dynticks();
+	if (apic_is_enabled())
+		apic_disable_timer();
 #endif
 
 	print_status();
@@ -536,7 +537,8 @@ int hermit_main(void)
 #endif
 
 #ifdef DYNAMIC_TICKS
-	enable_dynticks();
+	if (apic_is_enabled())
+		apic_disable_timer();
 #endif
 
 	/* wait for the other cpus */

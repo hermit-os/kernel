@@ -81,7 +81,7 @@ static inline int jump_to_user_code(size_t ep, size_t stack)
  */
 static inline void arch_init_task(task_t* task)
 {
-	set_tss((size_t) task->stack + KERNEL_STACK_SIZE - 0x10, (size_t) task->ist_addr + KERNEL_STACK_SIZE - 0x10);
+	set_tss((size_t) task->stack + KERNEL_STACK_SIZE - 0x10); //, (size_t) task->ist_addr + KERNEL_STACK_SIZE - 0x10);
 }
 
 #ifdef __cplusplus

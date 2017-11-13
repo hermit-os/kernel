@@ -290,13 +290,13 @@ extern "C" {
 #define EFER_FFXSR				(1 << 14)
 #define EFER_TCE				(1 << 15)
 
-typedef struct {
+/*typedef struct {
 	uint32_t feature1, feature2;
 	uint32_t feature3, feature4;
 	uint32_t addr_width;
-} cpu_info_t;
+} cpu_info_t;*/
 
-extern cpu_info_t cpu_info;
+//extern cpu_info_t cpu_info;
 
 // determine the cpu features
 int cpu_detection(void);
@@ -322,7 +322,7 @@ inline static uint32_t has_fxsr(void) {
 }
 
 inline static uint32_t has_clflush(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_CLFLUSH);
+	return 0; //(cpu_info.feature1 & CPU_FEATURE_CLFLUSH);
 }
 
 inline static uint32_t has_sse(void) {
@@ -330,7 +330,7 @@ inline static uint32_t has_sse(void) {
 }
 
 inline static uint32_t has_pat(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_PAT);
+	return 0; //(cpu_info.feature1 & CPU_FEATURE_PAT);
 }
 
 inline static uint32_t has_sse2(void) {
@@ -339,72 +339,72 @@ inline static uint32_t has_sse2(void) {
 
 inline static uint32_t has_pge(void)
 {
-	return (cpu_info.feature1 & CPU_FEATURE_PGE);
+	return 0; //(cpu_info.feature1 & CPU_FEATURE_PGE);
 }
 
 inline static uint32_t has_sep(void) {
-	return (cpu_info.feature1 & CPU_FEATURE_SEP);
+	return 0; //(cpu_info.feature1 & CPU_FEATURE_SEP);
 }
 
 inline static uint32_t has_movbe(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_MOVBE);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_MOVBE);
 }
 
 inline static uint32_t has_fma(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_FMA);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_FMA);
 }
 
 inline static uint32_t has_mwait(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_MWAIT);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_MWAIT);
 }
 
 inline static uint32_t has_vmx(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_VMX);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_VMX);
 }
 
 inline static uint32_t has_est(void)
 {
-	return (cpu_info.feature2 & CPU_FEATURE_EST);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_EST);
 }
 
 inline static uint32_t has_sse3(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_SSE3);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_SSE3);
 }
 
 inline static uint32_t has_dca(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_DCA);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_DCA);
 }
 
 inline static uint32_t has_sse4_1(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_SSE4_1);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_SSE4_1);
 }
 
 inline static uint32_t has_sse4_2(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_SSE4_2);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_SSE4_2);
 }
 
 inline static uint32_t has_x2apic(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_X2APIC);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_X2APIC);
 }
 
 inline static uint32_t has_xsave(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_XSAVE);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_XSAVE);
 }
 
 inline static uint32_t has_osxsave(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_OSXSAVE);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_OSXSAVE);
 }
 
 inline static uint32_t has_avx(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_AVX);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_AVX);
 }
 
 inline static uint32_t has_rdrand(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_RDRAND);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_RDRAND);
 }
 
 inline static uint32_t on_hypervisor(void) {
-	return (cpu_info.feature2 & CPU_FEATURE_HYPERVISOR);
+	return 0; //(cpu_info.feature2 & CPU_FEATURE_HYPERVISOR);
 }
 
 inline static uint32_t has_nx(void)
@@ -413,71 +413,71 @@ inline static uint32_t has_nx(void)
 }
 
 inline static uint32_t has_fsgsbase(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_FSGSBASE);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_FSGSBASE);
 }
 
 inline static uint32_t has_sgx(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_SGX);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_SGX);
 }
 
 inline static uint32_t has_avx2(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX2);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX2);
 }
 
 inline static uint32_t has_bmi1(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_BMI1);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_BMI1);
 }
 
 inline static uint32_t has_bmi2(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_BMI2);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_BMI2);
 }
 
 inline static uint32_t has_hle(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_HLE);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_HLE);
 }
 
 inline static uint32_t has_cqm(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_CQM);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_CQM);
 }
 
 inline static uint32_t has_rtm(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_RTM);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_RTM);
 }
 
 inline static uint32_t has_clflushopt(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_CLFLUSHOPT);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_CLFLUSHOPT);
 }
 
 inline static uint32_t has_clwb(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_CLWB);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_CLWB);
 }
 
 inline static uint32_t has_avx512f(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512F);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512F);
 }
 
 inline static uint32_t has_avx512pf(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512PF);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512PF);
 }
 
 inline static uint32_t has_avx512er(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512ER);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512ER);
 }
 
 inline static uint32_t has_avx512cd(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512CD);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512CD);
 }
 
 inline static uint32_t has_avx512bw(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512BW);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512BW);
 }
 
 inline static uint32_t has_avx512vl(void) {
-	return (cpu_info.feature4 & CPU_FEATURE_AVX512VL);
+	return 0; //(cpu_info.feature4 & CPU_FEATURE_AVX512VL);
 }
 
 inline static uint32_t has_rdtscp(void) {
-	return (cpu_info.feature3 & CPU_FEATURE_RDTSCP);
+	return 0; //(cpu_info.feature3 & CPU_FEATURE_RDTSCP);
 }
 
 /// clear TS bit in cr0
@@ -1000,7 +1000,7 @@ inline static int system_calibration(void)
 	write_cr0(cr0);
 
 	irq_enable();
-	detect_cpu_frequency();
+	//detect_cpu_frequency();
 	apic_calibration();
 
 	return 0;

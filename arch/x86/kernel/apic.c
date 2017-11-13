@@ -1060,7 +1060,7 @@ void shutdown_system(void)
 		LOG_INFO("Try to shutdown HermitCore\n");
 
 		//vma_dump();
-		dump_pstate();
+		//dump_pstate();
 
 		while(atomic_int32_read(&cpu_online) != 1)
 			PAUSE;
@@ -1087,7 +1087,8 @@ void shutdown_system(void)
 		x2apic_disable();
 
 	if (if_bootprocessor) {
-		print_irq_stats();
+		// TODO: Port this to Rust!!
+		//print_irq_stats();
 		LOG_INFO("System goes down...\n");
 	}
 
@@ -1120,12 +1121,13 @@ int apic_init(void)
 		return ret;
 
 	// set APIC error handler
-	irq_install_handler(121, apic_wakeup);
+	// TODO: Port this to Rust!!!!
+	/*irq_install_handler(121, apic_wakeup);
 	irq_install_handler(126, apic_err_handler);
 #if MAX_CORES > 1
 	irq_install_handler(80+32, apic_tlb_handler);
 #endif
-	irq_install_handler(81+32, apic_shutdown);
+	irq_install_handler(81+32, apic_shutdown);*/
 	if (apic_processors[boot_processor])
 		LOG_INFO("Boot processor %u (ID %u)\n", boot_processor, apic_processors[boot_processor]->id);
 	else

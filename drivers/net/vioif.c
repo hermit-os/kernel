@@ -418,7 +418,8 @@ err_t vioif_init(struct netif* netif)
 	netif->state = vioif;
 	mynetif = netif;
 
-	irq_install_handler(vioif->irq+32, vioif_handler);
+	// TODO: Port this to Rust!!!!
+	//irq_install_handler(vioif->irq+32, vioif_handler);
 
 	/*
 	 * Initialize the snmp variables and counters inside the struct netif.

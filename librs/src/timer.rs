@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,46 +21,24 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use logging::*;
-
-// MODULES
-pub mod gdt;
-pub mod idt;
-pub mod irq;
-pub mod isr;
-pub mod mm;
-pub mod percore;
-pub mod pic;
-pub mod pit;
-pub mod processor;
-
-extern "C" {
-	fn memory_init() -> i32;
-	fn signal_init();
+#[repr(C)]
+pub struct timeval {
+	pub tv_sec: i64,
+	pub tv_usec: i64,
 }
 
-// FUNCTIONS
-pub fn system_init() {
-	gdt::install();
-	idt::install();
-	processor::detect_features();
-	processor::configure();
-	mm::paging::map_cmdline();
-	pic::remap();
-	pit::deinit();
-	isr::install();
-	irq::install();
-	irq::enable();
-	processor::detect_frequency();
-	processor::print_information();
+#[repr(C)]
+pub struct itimerval {
+	pub it_interval: timeval,
+	pub it_value: timeval,
+}
 
-	loop {
-		info!("Moin");
-		unsafe { processor::udelay(1_000_000); }
-	}
+#[no_mangle]
+pub extern "C" fn getitimer(which: i32, value: *mut itimerval) -> i32 {
+	0
+}
 
-	unsafe {
-		memory_init();
-		signal_init();
-	}
+#[no_mangle]
+pub extern "C" fn setitimer(which: i32, value: *const itimerval, ovalue: *mut itimerval) -> i32 {
+	0
 }
