@@ -182,17 +182,6 @@ start64:
     add rax, [base]
     mov QWORD [rdi+511*8], rax
 
-    ; map multiboot info
-    mov rax, QWORD [mb_info]
-    and rax, ~0xFFF           ; page align lower half
-    cmp rax, 0
-    je Lno_mbinfo
-    mov rdi, rax
-    shr rdi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add rdi, boot_pgt
-    or rax, 0x23              ; set present, accessed and writable bits
-    mov QWORD [rdi], rax
-Lno_mbinfo:
     ; remap kernel
     mov rdi, kernel_start
     shr rdi, 18       ; (edi >> 21) * 8 (index for boot_pgd)

@@ -44,6 +44,7 @@ extern "C" {
 
 	static cmdline: *const u8;
 	static cmdsize: usize;
+	static mb_info: usize;
 	static image_size: usize;
 	static kernel_start: u8;
 
@@ -215,6 +216,11 @@ struct Page<S: PageSize> {
 }
 
 impl<S: PageSize> Page<S> {
+	/// Return the stored virtual address.
+	fn address(&self) -> usize {
+		self.virtual_address
+	}
+
 	/// Flushes this page from the TLB of this CPU.
 	unsafe fn flush_from_tlb(&self) {
 		asm!("invlpg ($0)" :: "r"(self.virtual_address) : "memory");
@@ -640,15 +646,20 @@ pub extern "C" fn page_unmap(viraddr: usize, npages: usize) -> i32 {
 	0
 }
 
-pub fn map_cmdline() {
+/// Add read-only, execute-disable identity page mappings for the supplied
+/// Multiboot information and command line.
+pub fn map_boot_info() {
 	unsafe {
+		if mb_info > 0 {
+			let page = Page::<BasePageSize>::including_address(mb_info);
+			ROOT_PAGETABLE.lock().map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
+		}
+
 		if cmdsize > 0 {
-			// Add a read-only, execute-disable page mapping to enable access to the provided command line.
 			let first_page = Page::<BasePageSize>::including_address(cmdline as usize);
 			let last_page = Page::<BasePageSize>::including_address(cmdline as usize + cmdsize - 1);
 			let range = Page::<BasePageSize>::range(first_page, last_page);
-
-			ROOT_PAGETABLE.lock().map_pages(range, cmdline as usize & !(BasePageSize::SIZE - 1), PageTableEntryFlags::EXECUTE_DISABLE, true);
+			ROOT_PAGETABLE.lock().map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 		}
 	}
 }
@@ -668,9 +679,9 @@ pub unsafe extern "C" fn virt_to_phys(addr: usize) -> usize {
 	debug!("virt_to_phys({:#X})", addr);
 
 	// HACK: Currently, we use 2MiB pages only for the kernel.
-	let kernel_end: usize = ((&kernel_start as *const u8 as usize + image_size) & !(LargePageSize::SIZE - 1)).saturating_add(LargePageSize::SIZE);
+	let kernel_end: usize = Page::<LargePageSize>::including_address(&kernel_start as *const u8 as usize + image_size).address().saturating_add(LargePageSize::SIZE);
 
-	if addr >= (&kernel_start as *const u8 as usize) && addr <= kernel_end {
+	if addr >= (&kernel_start as *const u8 as usize) && addr < kernel_end {
 		let page = Page::<LargePageSize>::including_address(addr);
 		let address = ROOT_PAGETABLE.lock().get_page_table_entry(page).expect("Entry not present").address();
 		let offset = addr & (LargePageSize::SIZE - 1);
