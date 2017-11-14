@@ -46,7 +46,7 @@ pub fn system_init() {
 	idt::install();
 	processor::detect_features();
 	processor::configure();
-	mm::paging::map_cmdline();
+	mm::paging::map_boot_info();
 	pic::remap();
 	pit::deinit();
 	isr::install();
