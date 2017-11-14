@@ -511,14 +511,6 @@ pub fn configure() {
 	if supports_xsave() {
 		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
 		cr4.insert(CR4_ENABLE_OS_XSAVE);
-
-		// Enable saving the context for all known vector extensions.
-		let mut xcr0 = unsafe { xcr0() };
-		xcr0.insert(XCR0_FPU_MMX_STATE | XCR0_SSE_STATE);
-
-		if supports_avx() {
-			xcr0.insert(XCR0_AVX_STATE);
-		}
 	}
 
 	// Enable FSGSBASE if available to read and write FS and GS faster.
@@ -534,6 +526,22 @@ pub fn configure() {
 	}
 
 	unsafe { cr4_write(cr4); }
+
+	//
+	// XCR0 CONFIGURATION
+	//
+	if supports_xsave() {
+		// Enable saving the context for all known vector extensions.
+		// Must happen after CR4_ENABLE_OS_XSAVE has been set.
+		let mut xcr0 = unsafe { xcr0() };
+		xcr0.insert(XCR0_FPU_MMX_STATE | XCR0_SSE_STATE);
+
+		if supports_avx() {
+			xcr0.insert(XCR0_AVX_STATE);
+		}
+
+		unsafe { xcr0_write(xcr0); }
+	}
 
 	//
 	// MSR CONFIGURATION
