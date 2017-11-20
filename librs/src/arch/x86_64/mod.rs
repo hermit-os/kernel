@@ -22,9 +22,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use logging::*;
-
-// MODULES
 pub mod gdt;
 pub mod idt;
 pub mod irq;
@@ -35,10 +32,17 @@ pub mod pic;
 pub mod pit;
 pub mod processor;
 
+use logging::*;
+
+
 extern "C" {
+	static image_size: usize;
+	static kernel_start: u8;
+
 	fn memory_init() -> i32;
 	fn signal_init();
 }
+
 
 // FUNCTIONS
 pub fn system_init() {
@@ -46,7 +50,7 @@ pub fn system_init() {
 	idt::install();
 	processor::detect_features();
 	processor::configure();
-	mm::paging::map_boot_info();
+	::mm::init();
 	pic::remap();
 	pit::deinit();
 	isr::install();
@@ -61,7 +65,6 @@ pub fn system_init() {
 	}
 
 	unsafe {
-		memory_init();
 		signal_init();
 	}
 }

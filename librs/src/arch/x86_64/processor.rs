@@ -658,18 +658,18 @@ pub fn update_ticks() {
 	}
 }
 
-#[no_mangle]
+/*#[no_mangle]
 pub extern "C" fn cpu_detection() -> i32 {
 	configure();
 	0
-}
+}*/
 
 #[no_mangle]
 pub extern "C" fn get_cpu_frequency() -> u32 {
 	unsafe { CPU_FREQUENCY.get() as u32 }
 }
 
-#[no_mangle]
+/*#[no_mangle]
 pub unsafe extern "C" fn fpu_init(fpu_state: *mut XSaveArea) {
 	if supports_xsave() {
 		ptr::write_bytes(fpu_state, 0, 1);
@@ -699,7 +699,7 @@ pub unsafe extern "C" fn save_fpu_state(fpu_state: *mut XSaveArea) {
 	} else {
 		asm!("fxsave $0; fnclex" : "=*m"(fpu_state) :: "memory");
 	}
-}
+}*/
 
 #[no_mangle]
 pub unsafe extern "C" fn readfs() -> usize {

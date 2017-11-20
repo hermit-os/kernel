@@ -22,11 +22,13 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::irq;
+use arch::x86_64::mm;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use core::fmt;
+use core::{fmt, ptr};
 use core::marker::PhantomData;
 use logging::*;
+use multiboot;
 use synch::spinlock::*;
 use tasks::*;
 use x86::shared::*;
@@ -44,22 +46,18 @@ extern "C" {
 
 	static cmdline: *const u8;
 	static cmdsize: usize;
-	static mb_info: usize;
-	static image_size: usize;
-	static kernel_start: u8;
+	static mb_info: multiboot::PAddr;
 
-	fn get_pages(npages: usize) -> usize;
-	fn get_zeroed_page() -> usize;
 	fn ipi_tlb_flush() -> i32;
 }
+
 
 lazy_static! {
 	static ref ROOT_PAGETABLE: SpinlockIrqSave<&'static mut PageTable<PML4>> =
 		SpinlockIrqSave::new(unsafe { &mut *(0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>) });
 }
 
-
-/// Number of Offset bits of a virtual address for a 4KiB page, which are shifted away to get its Page Frame Number (PFN).
+/// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
 
 /// Number of bits of the index in each table (PML4, PDPT, PDT, PGT).
@@ -73,7 +71,7 @@ bitflags! {
 	/// Possible flags for an entry in either table (PML4, PDPT, PDT, PGT)
 	///
 	/// See Intel Vol. 3A, Tables 4-14 through 4-19
-	struct PageTableEntryFlags: usize {
+	pub struct PageTableEntryFlags: usize {
 		/// Set if this entry is valid and points to a page or table.
 		const PRESENT = 1 << 0;
 
@@ -96,7 +94,7 @@ bitflags! {
 		/// Only for page entries: Set if software has written to the memory referenced by this entry.
 		const DIRTY = 1 << 6;
 
-		/// Only for page entries in PDPT or PDT: Set if this entry references a 1GiB (PDPT) or 2MiB (PDT) page.
+		/// Only for page entries in PDPT or PDT: Set if this entry references a 1 GiB (PDPT) or 2 MiB (PDT) page.
 		const HUGE_PAGE = 1 << 7;
 
 		/// Only for page entries: Set if this address translation is global for all tasks and does not need to
@@ -116,14 +114,14 @@ impl PageTableEntryFlags {
 
 /// An entry in either table (PML4, PDPT, PDT, PGT)
 #[derive(Clone, Copy)]
-struct PageTableEntry {
+pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
 	physical_address_and_flags: usize
 }
 
 impl PageTableEntry {
 	/// Return the stored physical address.
-	fn address(&self) -> usize {
+	pub fn address(&self) -> usize {
 		self.physical_address_and_flags & !(BasePageSize::SIZE - 1) & !(PageTableEntryFlags::EXECUTE_DISABLE).bits()
 	}
 
@@ -133,7 +131,7 @@ impl PageTableEntry {
 	}
 
 	/// Returns whether this entry is valid (present).
-	fn is_present(&self) -> bool {
+	pub fn is_present(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 
@@ -145,12 +143,12 @@ impl PageTableEntry {
 	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT and ACCESSED flags are set automatically)
 	fn set(&mut self, physical_address: usize, flags: PageTableEntryFlags) {
 		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
-			// HUGE_PAGE may indicate a 2MiB or 1GiB page.
-			// We don't know this here, so we can only verify that at least the offset bits for a 2MiB page are zero.
-			assert!(physical_address & (LargePageSize::SIZE - 1) == 0, "Physical address not on 2MiB page boundary (physical_address = {:#X})", physical_address);
+			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
+			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
+			assert!(physical_address & (LargePageSize::SIZE - 1) == 0, "Physical address not on 2 MiB page boundary (physical_address = {:#X})", physical_address);
 		} else {
-			// Verify that the offset bits for a 4KiB page are zero.
-			assert!(physical_address & (BasePageSize::SIZE - 1) == 0, "Physical address not on 4KiB page boundary (physical_address = {:#X})", physical_address);
+			// Verify that the offset bits for a 4 KiB page are zero.
+			assert!(physical_address & (BasePageSize::SIZE - 1) == 0, "Physical address not on 4 KiB page boundary (physical_address = {:#X})", physical_address);
 		}
 
 		// Verify that the physical address does not exceed the CPU's physical address width.
@@ -164,7 +162,7 @@ impl PageTableEntry {
 ///
 /// This is defined as a subtrait of Copy to enable #[derive(Clone, Copy)] for Page.
 /// Currently, deriving implementations for these traits only works if all dependent types implement it as well.
-trait PageSize: Copy {
+pub trait PageSize: Copy {
 	/// The page size in bytes.
 	const SIZE: usize;
 
@@ -177,27 +175,27 @@ trait PageSize: Copy {
 	const MAP_EXTRA_FLAG: PageTableEntryFlags;
 }
 
-/// A 4KiB page mapped in the PGT.
+/// A 4 KiB page mapped in the PGT.
 #[derive(Clone, Copy)]
-enum BasePageSize {}
+pub enum BasePageSize {}
 impl PageSize for BasePageSize {
 	const SIZE: usize = 4096;
 	const MAP_LEVEL: usize = 0;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
 
-/// A 2MiB page mapped in the PDT.
+/// A 2 MiB page mapped in the PDT.
 #[derive(Clone, Copy)]
-enum LargePageSize {}
+pub enum LargePageSize {}
 impl PageSize for LargePageSize {
 	const SIZE: usize = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
 
-/// A 1GiB page mapped in the PDPT.
+/// A 1 GiB page mapped in the PDPT.
 #[derive(Clone, Copy)]
-enum HugePageSize {}
+pub enum HugePageSize {}
 impl PageSize for HugePageSize {
 	const SIZE: usize = 1024 * 1024 * 1024;
 	const MAP_LEVEL: usize = 2;
@@ -249,9 +247,17 @@ impl<S: PageSize> Page<S> {
 		}
 
 		Self {
-			virtual_address: virtual_address & !(S::SIZE - 1),
+			virtual_address: align_down!(virtual_address, S::SIZE),
 			size: PhantomData,
 		}
+	}
+
+	/// Returns a Page after the given virtual address.
+	/// That means, the address is rounded up to a page size boundary.
+	fn after_address(virtual_address: usize) -> Self {
+		let mut page = Self::including_address(virtual_address);
+		page.virtual_address += S::SIZE;
+		page
 	}
 
 	/// Returns a PageIter to iterate from the given first Page to the given last Page (inclusive).
@@ -457,8 +463,8 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
-				// Allocate a single 4KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = unsafe { get_pages(1) };
+				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
+				let physical_address = mm::physicalmem::allocate(BasePageSize::SIZE);
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
@@ -580,33 +586,37 @@ impl fmt::Display for PageFaultError {
 }
 
 
-
-#[inline]
-fn get_page_range(viraddr: usize, npages: usize) -> PageIter<BasePageSize> {
-	let first_page = Page::<BasePageSize>::including_address(viraddr);
-	let last_page = Page::<BasePageSize>::including_address(viraddr + (npages - 1) * BasePageSize::SIZE);
-	Page::<BasePageSize>::range(first_page, last_page)
-}
-
-#[no_mangle]
-pub extern "C" fn getpagesize() -> i32 {
-	BasePageSize::SIZE as i32
-}
-
 fn page_fault_handler(state_ref: &irq::state) {
 	debug!("page_fault_handler{:#X}", state_ref as *const _ as usize);
 
 	let virtual_address = unsafe { control_regs::cr2() };
 	let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
 
+	// Is there a heap associated to the current task?
 	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
+		// Is the requested virtual address within the boundary of that heap.
 		if virtual_address >= heap.start && virtual_address < heap.end {
+			// Then the task may access the page at that virtual address.
 			let mut locked_root_table = ROOT_PAGETABLE.lock();
 			let page = Page::<BasePageSize>::including_address(virtual_address);
 
+			// Is the page already mapped in the page table?
 			if locked_root_table.get_page_table_entry(page).is_none() {
-				let physical_address = unsafe { if runtime_osinit.is_null() { get_pages(1) } else { get_zeroed_page() } };
-				locked_root_table.map_page::<BasePageSize>(page, physical_address, PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE);
+				// No, then create a mapping.
+				let physical_address = mm::physicalmem::allocate(BasePageSize::SIZE);
+				locked_root_table.map_page::<BasePageSize>(
+					page,
+					physical_address,
+					PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE
+				);
+
+				// If our application is a Go application (detected by the presence of the
+				// weak symbol "runtime_osinit"), we have to return a zeroed page.
+				unsafe {
+					if !runtime_osinit.is_null() {
+						ptr::write_bytes(page.address() as *mut u8, 0, BasePageSize::SIZE);
+					}
+				}
 			}
 
 			return;
@@ -625,16 +635,33 @@ fn page_fault_handler(state_ref: &irq::state) {
 	panic!();
 }
 
-#[no_mangle]
-pub extern "C" fn __page_map(viraddr: usize, phyaddr: usize, npages: usize, bits: usize, do_ipi: u8) -> i32 {
-	debug!("__page_map({:#X}, {:#X}, {}, {:#X}, {})", viraddr, phyaddr, npages, bits, do_ipi);
-
-	let range = get_page_range(viraddr, npages);
-	ROOT_PAGETABLE.lock().map_pages(range, phyaddr, PageTableEntryFlags::from_bits_truncate(bits), do_ipi > 0);
-	0
+#[inline]
+fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter<S> {
+	let first_page = Page::<S>::including_address(virtual_address);
+	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE);
+	Page::range(first_page, last_page)
 }
 
+pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
+	let range = get_page_range::<S>(virtual_address, count);
+	ROOT_PAGETABLE.lock().map_pages(range, physical_address, flags, do_ipi);
+}
+
+pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
+	let page = Page::<S>::including_address(virtual_address);
+	ROOT_PAGETABLE.lock().get_page_table_entry(page)
+}
+
+
+
+
+
 #[no_mangle]
+pub extern "C" fn getpagesize() -> i32 {
+	BasePageSize::SIZE as i32
+}
+
+/*#[no_mangle]
 pub extern "C" fn page_unmap(viraddr: usize, npages: usize) -> i32 {
 	debug!("page_unmap({:#X}, {})", viraddr, npages);
 
@@ -644,14 +671,13 @@ pub extern "C" fn page_unmap(viraddr: usize, npages: usize) -> i32 {
 	}
 
 	0
-}
+}*/
 
-/// Add read-only, execute-disable identity page mappings for the supplied
-/// Multiboot information and command line.
-pub fn map_boot_info() {
+pub fn init() {
+	// Add read-only, execute-disable identity page mappings for the supplied Multiboot information and command line.
 	unsafe {
 		if mb_info > 0 {
-			let page = Page::<BasePageSize>::including_address(mb_info);
+			let page = Page::<BasePageSize>::including_address(mb_info as usize);
 			ROOT_PAGETABLE.lock().map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
 		}
 
@@ -662,26 +688,17 @@ pub fn map_boot_info() {
 			ROOT_PAGETABLE.lock().map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 		}
 	}
-}
 
-#[no_mangle]
-pub unsafe extern "C" fn page_init() -> i32 {
-	if !runtime_osinit.is_null() {
-		info!("Detected Go runtime! HermitCore will return zeroed pages.");
-	}
-
+	// Install the Page Fault handler.
 	irq::set_handler(14, page_fault_handler);
-	0
 }
 
-#[no_mangle]
+/*#[no_mangle]
 pub unsafe extern "C" fn virt_to_phys(addr: usize) -> usize {
 	debug!("virt_to_phys({:#X})", addr);
 
-	// HACK: Currently, we use 2MiB pages only for the kernel.
-	let kernel_end: usize = Page::<LargePageSize>::including_address(&kernel_start as *const u8 as usize + image_size).address().saturating_add(LargePageSize::SIZE);
-
-	if addr >= (&kernel_start as *const u8 as usize) && addr < kernel_end {
+	// HACK: Currently, we use 2 MiB pages only for the kernel.
+	if addr >= mm::kernel_start_address() && addr < mm::kernel_end_address() {
 		let page = Page::<LargePageSize>::including_address(addr);
 		let address = ROOT_PAGETABLE.lock().get_page_table_entry(page).expect("Entry not present").address();
 		let offset = addr & (LargePageSize::SIZE - 1);
@@ -692,4 +709,4 @@ pub unsafe extern "C" fn virt_to_phys(addr: usize) -> usize {
 		let offset = addr & (BasePageSize::SIZE - 1);
 		address | offset
 	}
-}
+}*/

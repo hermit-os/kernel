@@ -210,8 +210,9 @@ pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a>
 }
 
 // Same unsafe impls as `std::sync::Mutex`
-unsafe impl<T: ?Sized + Send> Sync for SpinlockIrqSave<T> {}
-unsafe impl<T: ?Sized + Send> Send for SpinlockIrqSave<T> {}
+// TODO: Check if we can really drop the Send requirement on the type here!!
+unsafe impl<T: ?Sized> Sync for SpinlockIrqSave<T> {}
+unsafe impl<T: ?Sized> Send for SpinlockIrqSave<T> {}
 
 impl<T> SpinlockIrqSave<T>
 {

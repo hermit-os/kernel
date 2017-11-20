@@ -1,0 +1,149 @@
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
+//
+// MIT License
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+//! Implementation of a Doubly Linked List in Safe Rust using reference-counting.
+//!
+//! In contrast to collections provided by Rust, this implementation can insert
+//! and remove entries at a specific position in O(1) given an iterator.
+
+use alloc::rc::Rc;
+use core::cell::RefCell;
+
+
+pub struct DoublyLinkedList<T> {
+	head: Option<Rc<RefCell<Node<T>>>>,
+	tail: Option<Rc<RefCell<Node<T>>>>,
+}
+
+pub struct Node<T> {
+	pub value: T,
+	prev: Option<Rc<RefCell<Node<T>>>>,
+	next: Option<Rc<RefCell<Node<T>>>>,
+}
+
+impl<T> Node<T> {
+	fn new(value: T) -> Rc<RefCell<Self>> {
+		Rc::new(RefCell::new(Self { value: value, prev: None, next: None }))
+	}
+}
+
+impl<T> DoublyLinkedList<T> {
+	pub const fn new() -> Self {
+		Self { head: None, tail: None }
+	}
+
+	pub fn push(&mut self, value: T) {
+		let new_node = Node::new(value);
+
+		// Check if we already have any nodes in the list.
+		match self.tail.take() {
+			Some(tail) => {
+				// We become the next node of the old list tail and the old list tail becomes our previous node.
+				tail.borrow_mut().next = Some(new_node.clone());
+				new_node.borrow_mut().prev = Some(tail);
+			},
+			None => {
+				// No nodes yet, so we become the new list head.
+				self.head = Some(new_node.clone());
+			}
+		}
+
+		// In any case, we become the new list tail.
+		self.tail = Some(new_node);
+	}
+
+	pub fn insert_after(&mut self, value: T, node: Rc<RefCell<Node<T>>>) {
+		let new_node = Node::new(value);
+		let mut node_borrowed = node.borrow_mut();
+
+		{
+			let mut new_node_borrowed = new_node.borrow_mut();
+
+			// Check if the given node is the last one in the list.
+			match node_borrowed.next.take() {
+				Some(next_node) => {
+					// It is not, so its next node now becomes our next node.
+					new_node_borrowed.next = Some(next_node);
+				},
+				None => {
+					// It is, so we become the new list tail.
+					self.tail = Some(new_node.clone());
+				}
+			}
+
+			// The given node becomes our previous node.
+			new_node_borrowed.prev = Some(node.clone());
+		}
+
+		// We become the next node of the given node.
+		node_borrowed.next = Some(new_node);
+	}
+
+	pub fn remove(&mut self, node: Rc<RefCell<Node<T>>>) {
+		// Unmount the previous and next nodes of the node to remove.
+		let (prev, next) = {
+			let mut borrowed = node.borrow_mut();
+			(borrowed.prev.take(), borrowed.next.take())
+		};
+
+		// Clone the next node, so we can still check it after remounting.
+		let next_clone = next.clone();
+
+		// Check the previous node.
+		// If we have one, remount the next node to that previous one, skipping our node to remove.
+		// If not, the next node becomes the new list head.
+		match prev {
+			Some(ref prev_node) => prev_node.borrow_mut().next = next,
+			None => self.head = next
+		}
+
+		// Check the cloned next node.
+		// If we have one, remount the previous node to that next one, skipping our node to remove.
+		// If not, the previous node becomes the new list tail.
+		match next_clone {
+			Some(ref next_node) => next_node.borrow_mut().prev = prev,
+			None => self.tail = prev
+		}
+	}
+
+	pub fn iter(&self) -> Iter<T> {
+		Iter::<T> { current: self.head.as_ref().map(|node| node.clone()) }
+	}
+}
+
+pub struct Iter<T> {
+	current: Option<Rc<RefCell<Node<T>>>>
+}
+
+impl<T> Iterator for Iter<T> {
+	type Item = Rc<RefCell<Node<T>>>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		// If we have a current node, replace it by a clone of the next node.
+		// Then we can still return the (previously) current one.
+		self.current.take().map(|node| {
+			self.current = node.borrow().next.clone();
+			node
+		})
+	}
+}
