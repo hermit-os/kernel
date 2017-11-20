@@ -158,8 +158,8 @@ pub fn install()
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn set_tss(rsp: u64/*, ist: u64*/)
+/*#[no_mangle]
+pub unsafe extern "C" fn set_tss(rsp: u64, ist: u64)
 {
 	let core_id = __core_id.per_core() as usize;
 	TSS_BUFFER.tss[core_id].rsp[0] = rsp;
@@ -170,4 +170,4 @@ pub unsafe extern "C" fn set_tss(rsp: u64/*, ist: u64*/)
 pub extern "C" fn gdt_install()
 {
 	install();
-}
+}*/

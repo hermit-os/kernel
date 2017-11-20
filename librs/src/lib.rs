@@ -28,19 +28,22 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![feature(asm, attr_literals, const_fn, lang_items, linkage, repr_align, specialization)]
+#![feature(alloc, allocator_api, asm, attr_literals, const_fn, global_allocator, lang_items, linkage, repr_align, specialization)]
 #![no_std]
 
 // EXTERNAL CRATES
+extern crate alloc;
+
 #[macro_use]
 extern crate bitflags;
 
 #[macro_use]
 extern crate lazy_static;
 
+extern crate multiboot;
+extern crate raw_cpuid;
 extern crate spin;
 extern crate x86;
-extern crate raw_cpuid;
 
 // MODULES
 #[macro_use]
@@ -50,8 +53,10 @@ mod macros;
 mod logging;
 
 mod arch;
+mod collections;
 mod console;
 mod consts;
+mod dummies;
 mod mm;
 mod runtime_glue;
 mod synch;
@@ -61,22 +66,24 @@ mod timer;
 // IMPORTS
 #[cfg(target_arch="x86_64")]
 mod arch_specific {
-	pub use arch::gdt::*;
-	pub use arch::idt::*;
 	pub use arch::irq::*;
 	pub use arch::mm::paging::*;
-	pub use arch::pit::*;
 	pub use arch::processor::*;
 }
 
 pub use arch_specific::*;
-pub use consts::*;
-pub use logging::*;
-pub use runtime_glue::*;
+pub use dummies::*;
 pub use tasks::*;
 pub use timer::*;
 
+use consts::*;
 use core::ptr;
+use logging::*;
+use mm::allocator;
+
+#[global_allocator]
+static ALLOCATOR: allocator::HermitAllocator = allocator::HermitAllocator;
+
 
 extern "C" {
 	static __bss_start: u8;
@@ -120,6 +127,6 @@ pub unsafe extern "C" fn rust_main() {
 	info!("Welcome to HermitCore {}!", env!("CARGO_PKG_VERSION"));
 	arch::system_init();
 
-	multitasking_init();
-	hermit_main();
+	//multitasking_init();
+	//hermit_main();
 }

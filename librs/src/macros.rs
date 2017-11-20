@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -20,6 +21,18 @@
 // LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+macro_rules! align_down {
+	($value:expr, $alignment:expr) => ({
+		($value & !($alignment - 1))
+	});
+}
+
+macro_rules! align_up {
+	($value:expr, $alignment:expr) => ({
+		($value & !($alignment - 1) + $alignment)
+	});
+}
 
 /// Print formatted text to our console.
 ///

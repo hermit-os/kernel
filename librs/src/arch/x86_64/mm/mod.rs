@@ -22,3 +22,12 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 pub mod paging;
+pub mod physicalmem;
+pub mod virtualmem;
+
+
+pub fn init() {
+	paging::init();
+	physicalmem::init();
+	virtualmem::init();
+}

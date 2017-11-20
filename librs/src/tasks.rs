@@ -22,7 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::processor;
-use mm::vma::*;
+
 
 extern "C" {
 	fn check_scheduling();
@@ -78,6 +78,20 @@ pub struct task_t {
 	pub signal_handler: usize,
 	// FPU state
 	pub fpu_state: processor::XSaveArea,
+}
+
+#[repr(C)]
+pub struct vma_t {
+	/// Start address of the memory area
+	pub start: usize,
+	/// End address of the memory area
+	pub end: usize,
+	/// Type flags field
+	pub flags: u32,
+	/// Pointer of next VMA element in the list
+	pub next: *const vma_t,
+	/// Pointer to previous VMA element in the list
+	pub prev: *const vma_t,
 }
 
 #[no_mangle]

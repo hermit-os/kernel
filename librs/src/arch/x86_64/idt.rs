@@ -69,7 +69,7 @@ pub fn set_gate(index: u8, handler: unsafe extern "C" fn(), ist_index: u8)
 	unsafe { IDT[index as usize] = entry; }
 }
 
-#[no_mangle]
+/*#[no_mangle]
 pub unsafe extern "C" fn idt_install() {
 	install();
-}
+}*/
