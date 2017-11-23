@@ -21,6 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch::x86_64::apic;
 use arch::x86_64::irq;
 use arch::x86_64::mm;
 use arch::x86_64::percore::*;
@@ -31,13 +32,9 @@ use logging::*;
 use multiboot;
 use synch::spinlock::*;
 use tasks::*;
-use x86::shared::*;
 
 
 extern "C" {
-	#[link_section = ".percore"]
-	static __core_id: u32;
-
 	#[link_section = ".percore"]
 	static current_task: *const task_t;
 
@@ -47,8 +44,6 @@ extern "C" {
 	static cmdline: *const u8;
 	static cmdsize: usize;
 	static mb_info: multiboot::PAddr;
-
-	fn ipi_tlb_flush() -> i32;
 }
 
 
@@ -527,6 +522,7 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
 	///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
 	/// * `do_ipi` - Whether to flush the TLB of the other CPUs as well if existing entries were updated.
+	///              Don't set this to true before the APIC has been initialized!
 	fn map_pages<S: PageSize>(&mut self, range: PageIter<S>, physical_address: usize, flags: PageTableEntryFlags, do_ipi: bool) {
 		let mut current_physical_address = physical_address;
 		let mut send_ipi = false;
@@ -536,8 +532,9 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 			current_physical_address += S::SIZE;
 		}
 
+		// You are responsible for not setting do_ipi to true before the APIC has been initialized.
 		if do_ipi && send_ipi {
-			unsafe { ipi_tlb_flush() };
+			apic::ipi_tlb_flush();
 		}
 	}
 
@@ -546,8 +543,6 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 		for page in range {
 			self.unmap_page::<S>(page);
 		}
-
-		unsafe { ipi_tlb_flush() };
 	}
 }
 
@@ -586,8 +581,10 @@ impl fmt::Display for PageFaultError {
 }
 
 
-fn page_fault_handler(state_ref: &irq::state) {
-	debug!("page_fault_handler{:#X}", state_ref as *const _ as usize);
+pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+	panic!("page_fault_handler ToDo!");
+
+	/*debug!("page_fault_handler{:#X}", state_ref as *const _ as usize);
 
 	let virtual_address = unsafe { control_regs::cr2() };
 	let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
@@ -631,8 +628,7 @@ fn page_fault_handler(state_ref: &irq::state) {
 		error!("Heap {:#X} - {:#X}", heap.start, heap.end);
 	}
 
-	irq::eoi(state_ref.int_no);
-	panic!();
+	processor::halt();*/
 }
 
 #[inline]
@@ -652,6 +648,10 @@ pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTable
 	ROOT_PAGETABLE.lock().get_page_table_entry(page)
 }
 
+pub fn unmap<S: PageSize>(virtual_address: usize, count: usize) {
+	let range = get_page_range::<S>(virtual_address, count);
+	ROOT_PAGETABLE.lock().unmap_pages(range);
+}
 
 
 
@@ -688,9 +688,6 @@ pub fn init() {
 			ROOT_PAGETABLE.lock().map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 		}
 	}
-
-	// Install the Page Fault handler.
-	irq::set_handler(14, page_fault_handler);
 }
 
 /*#[no_mangle]

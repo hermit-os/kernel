@@ -898,7 +898,7 @@ void reschedule(void)
 	uint8_t flags;
 
 	flags = irq_nested_disable();
-	if ((stack = scheduler()))
-		switch_context(stack);
+	/*if ((stack = scheduler()))
+		switch_context(stack);*/
 	irq_nested_enable(flags);
 }

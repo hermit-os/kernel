@@ -23,5 +23,5 @@
 
 #![allow(dead_code)]
 
-pub const MAX_CORES : usize = 512;
+pub const MAX_CORES : usize = 256;
 pub const KERNEL_STACK_SIZE : usize = 8192;

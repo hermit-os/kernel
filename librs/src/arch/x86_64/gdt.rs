@@ -158,16 +158,16 @@ pub fn install()
 	}
 }
 
-/*#[no_mangle]
-pub unsafe extern "C" fn set_tss(rsp: u64, ist: u64)
+/*#[inline(always)]
+pub unsafe fn set_kernel_stack(stack: usize, ist: usize)
 {
-	let core_id = __core_id.per_core() as usize;
-	TSS_BUFFER.tss[core_id].rsp[0] = rsp;
-	//TSS_BUFFER.tss[core_id].ist[0] = ist;
-}
+	TSS.0.rsp[0] = stack as u64;
+	TSS.0.ist[0] = ist as u64;
+}*/
 
 #[no_mangle]
-pub extern "C" fn gdt_install()
+pub unsafe extern "C" fn set_current_kernel_stack()
 {
-	install();
-}*/
+	/*let (rsp, ist) = scheduler::get_current_stack();
+	set_kernel_stack(rsp + KERNEL_STACK_SIZE - 0x10, ist + KERNEL_STACK_SIZE - 0x10);*/
+}

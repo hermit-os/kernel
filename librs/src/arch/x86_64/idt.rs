@@ -61,15 +61,10 @@ pub fn install() {
 /// * `ist_index` - Index of the Interrupt Stack Table (IST) to switch to.
 ///                 A zero value means that the stack won't be switched, a value of 1 refers to the first IST entry, etc.
 #[inline]
-pub fn set_gate(index: u8, handler: unsafe extern "C" fn(), ist_index: u8)
+pub fn set_gate(index: u8, handler: usize, ist_index: u8)
 {
 	let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, PrivilegeLevel::Ring0);
-	let entry = IdtEntry::new(VAddr::from_usize(handler as usize), sel, PrivilegeLevel::Ring0, Type::InterruptGate, ist_index);
+	let entry = IdtEntry::new(VAddr::from_usize(handler), sel, PrivilegeLevel::Ring0, Type::InterruptGate, ist_index);
 
 	unsafe { IDT[index as usize] = entry; }
 }
-
-/*#[no_mangle]
-pub unsafe extern "C" fn idt_install() {
-	install();
-}*/

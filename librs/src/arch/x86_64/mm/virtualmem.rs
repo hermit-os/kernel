@@ -48,7 +48,7 @@ pub fn init() {
 }
 
 pub fn allocate(size: usize) -> usize {
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = KERNEL_FREE_LIST.lock().allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
@@ -56,10 +56,11 @@ pub fn allocate(size: usize) -> usize {
 }
 
 pub fn deallocate(virtual_address: usize, size: usize) {
-	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} < KERNEL_END_ADDRESS", virtual_address);
-	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} >= KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
+	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
+	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
+	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
-	assert!(result.is_ok(), "Could not deallocate virtual memory address {:#X} with size {:#X}", virtual_address, size);
+	assert!(result.is_ok(), "Could not deallocate virtual address {:#X} with size {:#X}", virtual_address, size);
 }

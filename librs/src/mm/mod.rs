@@ -24,7 +24,7 @@
 pub mod allocator;
 
 use arch;
-use arch::mm::paging::{BasePageSize, PageSize};
+use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 
 
 extern "C" {
@@ -72,7 +72,7 @@ pub fn allocate(size: usize) -> usize {
 		virtual_address,
 		physical_address,
 		count,
-		arch::mm::paging::PageTableEntryFlags::WRITABLE | arch::mm::paging::PageTableEntryFlags::EXECUTE_DISABLE,
+		PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
 		true
 	);
 
