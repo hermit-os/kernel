@@ -22,8 +22,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::percore::*;
+use arch::x86_64::pic;
 use arch::x86_64::pit;
 use core::{fmt, ptr, slice, str};
 use logging::*;
@@ -40,10 +42,9 @@ extern "C" {
 
 	static cmdline: *const u8;
 	static cmdsize: usize;
-	static current_boot_id: i32;
-	static mut Lpatch0: u8;
-	static mut Lpatch1: u8;
-	static mut Lpatch2: u8;
+	static current_boot_id: u32;
+	static mut fs_patch0: u8;
+	static mut fs_patch1: u8;
 	static percore_start: u8;
 	static percore_end0: u8;
 }
@@ -75,6 +76,7 @@ static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
 static mut SUPPORTS_1GIB_PAGES: bool = false;
 static mut SUPPORTS_AVX: bool = false;
 static mut SUPPORTS_FSGSBASE: bool = false;
+static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
 
@@ -175,7 +177,7 @@ impl CpuFrequency {
 		CpuFrequency { mhz: 0, source: CpuFrequencySources::Invalid }
 	}
 
-	unsafe fn detect_from_cmdline(&mut self) -> bool {
+	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		if cmdsize > 0 {
 			let slice = slice::from_raw_parts(cmdline, cmdsize);
 			let cmdline_str = str::from_utf8_unchecked(slice);
@@ -187,26 +189,24 @@ impl CpuFrequency {
 
 				self.mhz = mhz_str.parse().expect("Could not parse -freq command line as number");
 				self.source = CpuFrequencySources::CommandLine;
-				true
-			} else {
-				false
+				return Ok(());
 			}
-		} else {
-			false
 		}
+
+		Err(())
 	}
 
-	unsafe fn detect_from_cpuid_frequency_info(&mut self, cpuid: &CpuId) -> bool {
+	unsafe fn detect_from_cpuid_frequency_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		if let Some(info) = cpuid.get_processor_frequency_info() {
 			self.mhz = info.processor_base_frequency();
 			self.source = CpuFrequencySources::CpuIdFrequencyInfo;
-			true
+			Ok(())
 		} else {
-			false
+			Err(())
 		}
 	}
 
-	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> bool {
+	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
 		let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
 
@@ -221,27 +221,26 @@ impl CpuFrequency {
 			if let (Some(thousand), '.', Some(hundred), Some(ten)) = (thousand_char.to_digit(10), decimal_char, hundred_char.to_digit(10), ten_char.to_digit(10)) {
 				self.mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
 				self.source = CpuFrequencySources::CpuIdBrandString;
-				true
-			} else {
-				false
+				return Ok(());
 			}
-		} else {
-			false
 		}
+
+		Err(())
 	}
 
-	fn measure_frequency_timer_handler(state_ref: &irq::state) {
+	fn measure_frequency_timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
 		unsafe { MEASUREMENT_TIMER_TICKS += 1; }
+		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
-	fn measure_frequency(&mut self) -> bool {
+	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// Measure the CPU frequency by counting 3 ticks of a 100Hz timer.
 		let tick_count = 3;
 		let measurement_frequency = 100;
 
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
-		irq::set_handler(pit::PIT_INTERRUPT_NUMBER, Self::measure_frequency_timer_handler);
+		idt::set_gate(pit::PIT_INTERRUPT_NUMBER, Self::measure_frequency_timer_handler as usize, 1);
 		pit::init(measurement_frequency);
 
 		// Determine the current timer tick.
@@ -282,15 +281,15 @@ impl CpuFrequency {
 		let cycle_count = abs_diff(start, end);
 		self.mhz = (measurement_frequency * cycle_count / (1_000_000 * tick_count)) as u16;
 		self.source = CpuFrequencySources::Measurement;
-		true
+		Ok(())
 	}
 
 	unsafe fn detect(&mut self) {
 		let cpuid = CpuId::new();
 		self.detect_from_cmdline()
-			|| self.detect_from_cpuid_frequency_info(&cpuid)
-			|| self.detect_from_cpuid_brand_string(&cpuid)
-			|| self.measure_frequency();
+			.or_else(|_e| self.detect_from_cpuid_frequency_info(&cpuid))
+			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
+			.or_else(|_e| self.measure_frequency());
 	}
 
 	fn get(&self) -> u16 {
@@ -337,7 +336,6 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_rdrand() { write!(f, "RDRAND ")?; }
 		if self.feature_info.has_fma() { write!(f, "FMA ")?; }
 		if self.feature_info.has_movbe() { write!(f, "MOVBE ")?; }
-		if self.feature_info.has_x2apic() { write!(f, "X2APIC ")?; }
 		if self.feature_info.has_mce() { write!(f, "MCE ")?; }
 		if self.feature_info.has_fxsave_fxstor() { write!(f, "FXSR ")?; }
 		if self.feature_info.has_xsave() { write!(f, "XSAVE ")?; }
@@ -467,6 +465,7 @@ pub fn detect_features() {
 		SUPPORTS_1GIB_PAGES = extended_function_info.has_1gib_pages();
 		SUPPORTS_AVX = feature_info.has_avx();
 		SUPPORTS_FSGSBASE = extended_feature_info.has_fsgsbase();
+		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
 
 		if extended_function_info.has_rdtscp() {
@@ -486,6 +485,9 @@ pub fn configure() {
 	// Enable the FPU.
 	cr0.insert(CR0_MONITOR_COPROCESSOR | CR0_NUMERIC_ERROR);
 	cr0.remove(CR0_EMULATE_COPROCESSOR);
+
+	// Call the IRQ7 handler on the first FPU access.
+	cr0.insert(CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
 	cr0.insert(CR0_WRITE_PROTECT);
@@ -519,9 +521,8 @@ pub fn configure() {
 
 		// Use NOPs to patch out jumps over FSGSBASE usage in entry.asm.
 		unsafe {
-			ptr::write_bytes(&mut Lpatch0 as *mut u8, 0x90, 2);
-			ptr::write_bytes(&mut Lpatch1 as *mut u8, 0x90, 2);
-			ptr::write_bytes(&mut Lpatch2 as *mut u8, 0x90, 2);
+			ptr::write_bytes(&mut fs_patch0 as *mut u8, 0x90, 2);
+			ptr::write_bytes(&mut fs_patch1 as *mut u8, 0x90, 2);
 		}
 	}
 
@@ -561,7 +562,6 @@ pub fn configure() {
 		let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
 		let offset = current_boot_id as usize * size;
 		writegs(offset);
-		wrmsr(IA32_KERNEL_GS_BASE, 0);
 	}
 
 	// Initialize the core ID.
@@ -584,8 +584,7 @@ pub fn print_information() {
 	let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
-	info!("");
-	info!("=============================== CPU INFORMATION ===============================");
+	info!("\n=============================== CPU INFORMATION ===============================");
 	info!("Model:                  {}", brand_string);
 	unsafe {
 	info!("Frequency:              {}", CPU_FREQUENCY);
@@ -595,8 +594,7 @@ pub fn print_information() {
 	info!("Physical Address Width: {} bits", get_physical_address_bits());
 	info!("Linear Address Width:   {} bits", get_linear_address_bits());
 	info!("Supports 1GiB Pages:    {}", if supports_1gib_pages() { "Yes" } else { "No" });
-	info!("===============================================================================");
-	info!("");
+	info!("===============================================================================\n");
 }
 
 #[inline]
@@ -622,6 +620,11 @@ pub fn supports_avx() -> bool {
 #[inline]
 pub fn supports_fsgsbase() -> bool {
 	unsafe { SUPPORTS_FSGSBASE }
+}
+
+#[inline]
+pub fn supports_x2apic() -> bool {
+	unsafe { SUPPORTS_X2APIC }
 }
 
 #[inline]
@@ -751,12 +754,12 @@ fn abs_diff(a: u64, b: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn udelay(usecs: u32) {
+pub extern "C" fn udelay(usecs: u32) {
 	let deadline = get_cpu_frequency() as u64 * usecs as u64;
-	let start = TIMESTAMP_FUNCTION();
+	let start = unsafe { TIMESTAMP_FUNCTION() };
 
 	loop {
-		let end = TIMESTAMP_FUNCTION();
+		let end = unsafe { TIMESTAMP_FUNCTION() };
 
 		let cycle_count = abs_diff(start, end);
 		if cycle_count >= deadline {
@@ -765,7 +768,7 @@ pub unsafe extern "C" fn udelay(usecs: u32) {
 
 		// If we still have enough cycles left, check if any work can be done in the meantime.
 		if deadline - cycle_count > 50000 {
-			check_workqueues_in_irqhandler(-1);
+			//check_workqueues_in_irqhandler(-1);
 		}
 	}
 }

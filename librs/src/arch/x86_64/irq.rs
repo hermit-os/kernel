@@ -23,10 +23,10 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::idt;
-use arch::x86_64::percore::*;
-use arch::x86_64::pic;
+use arch::x86_64::mm::paging;
 use arch::x86_64::processor;
-use core::{fmt, mem};
+use core::fmt;
+use logging::*;
 use tasks::*;
 use x86::shared::flags::*;
 
@@ -42,35 +42,6 @@ extern "C" {
 	fn get_highest_priority() -> u32;
 	fn scheduler() -> *const *const usize;
 
-	// Defined in entry.asm using the irqstub macro.
-	fn irq0();
-	fn irq1();
-	fn irq2();
-	fn irq3();
-	fn irq4();
-	fn irq5();
-	fn irq6();
-	fn irq7();
-	fn irq8();
-	fn irq9();
-	fn irq10();
-	fn irq11();
-	fn irq12();
-	fn irq13();
-	fn irq14();
-	fn irq15();
-	fn irq16();
-	fn irq17();
-	fn irq18();
-	fn irq19();
-	fn irq20();
-	fn irq21();
-	fn irq22();
-	fn irq23();
-	fn irq80();
-	fn irq81();
-	fn irq82();
-
 	fn wakeup();
 	fn mmnif_irq();
 	fn apic_timer();
@@ -80,78 +51,46 @@ extern "C" {
 	fn apic_svr();
 }
 
-
-static mut IRQ_HANDLERS: [usize; idt::IDT_ENTRIES] = [0; idt::IDT_ENTRIES];
-
-/// This defines what the stack looks like after the task context is saved.
-/// See also: arch/x86/include/asm/stddef.h
+// Derived from Philipp Oppermann's blog
+// => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
+/// Represents the exception stack frame pushed by the CPU on exception entry.
 #[repr(C)]
-pub struct state {
-	/// GS register
-	pub gs: u64,
-	/// FS register for TLS support
-	pub fs: u64,
-	/// R15 register
-	pub r15: u64,
-	/// R14 register
-	pub r14: u64,
-	/// R13 register
-	pub r13: u64,
-	/// R12 register
-	pub r12: u64,
-	/// R11 register
-	pub r11: u64,
-	/// R10 register
-	pub r10: u64,
-	/// R9 register
-	pub r9: u64,
-	/// R8 register
-	pub r8: u64,
-	/// RDI register
-	pub rdi: u64,
-	/// RSI register
-	pub rsi: u64,
-	/// RBP register
-	pub rbp: u64,
-	/// (pseudo) RSP register
-	pub rsp: u64,
-	/// RBX register
-	pub rbx: u64,
-	/// RDX register
-	pub rdx: u64,
-	/// RCX register
-	pub rcx: u64,
-	/// RAX register
-	pub rax: u64,
-
-	/// Interrupt number
-	pub int_no: u64,
-
-	/// pushed by the processor automatically
-	pub error: u64,
-	pub rip: u64,
-	pub cs: u64,
-	pub rflags: u64,
-	pub userrsp: u64,
-	pub ss: u64,
+pub struct ExceptionStackFrame {
+    /// This value points to the instruction that should be executed when the interrupt
+    /// handler returns. For most interrupts, this value points to the instruction immediately
+    /// following the last executed instruction. However, for some exceptions (e.g., page faults),
+    /// this value points to the faulting instruction, so that the instruction is restarted on
+    /// return. See the documentation of the `Idt` fields for more details.
+    pub instruction_pointer: u64,
+    /// The code segment selector, padded with zeros.
+    pub code_segment: u64,
+    /// The flags register before the interrupt handler was invoked.
+    pub cpu_flags: u64,
+    /// The stack pointer at the time of the interrupt.
+    pub stack_pointer: u64,
+    /// The stack segment descriptor at the time of the interrupt (often zero in 64-bit mode).
+    pub stack_segment: u64,
 }
 
-impl fmt::Display for state {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let core_id = unsafe { __core_id.per_core() };
-		let task = unsafe { current_task.per_core().as_ref().expect("current_task on core is NULL!") };
+impl fmt::Debug for ExceptionStackFrame {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        struct Hex(u64);
+        impl fmt::Debug for Hex {
+            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "{:#x}", self.0)
+            }
+        }
 
-		writeln!(f, "Interrupt {} on core {} at {:#X}:{:#X}, fs = {:#X}, gs = {:#X}, rflags = {:#X}, error = {:#X}, task = {}", self.int_no, core_id, self.cs, self.rip, self.fs, self.gs, self.rflags, self.error, task.id).unwrap();
-		write!(f, "rax = {:#X}, rbx = {:#X}, rcx = {:#X}, rdx = {:#X}, rbp = {:#X}, rsp = {:#X}, rdi = {:#X}, rsi = {:#X}, r8 = {:#X}, r9 = {:#X}, r10 = {:#X}, r11 = {:#X}, r12 = {:#X}, r13 = {:#X}, r14 = {:#X}, r15 = {:#X}",
-			self.rax, self.rbx, self.rcx, self.rdx, self.rbp, self.rsp, self.rdi, self.rsi, self.r8, self.r9, self.r10, self.r11, self.r12, self.r13, self.r14, self.r15)
-	}
+        let mut s = f.debug_struct("ExceptionStackFrame");
+        s.field("instruction_pointer", &Hex(self.instruction_pointer));
+        s.field("code_segment", &Hex(self.code_segment));
+        s.field("cpu_flags", &Hex(self.cpu_flags));
+        s.field("stack_pointer", &Hex(self.stack_pointer));
+        s.field("stack_segment", &Hex(self.stack_segment));
+        s.finish()
+    }
 }
 
-
-#[inline]
-pub fn set_handler(index: u8, handler: fn(&state)) {
-	unsafe { IRQ_HANDLERS[index as usize] = handler as usize };
-}
 
 /// Enable Interrupts
 #[inline]
@@ -189,86 +128,151 @@ pub fn nested_enable(was_enabled: bool) {
 	}
 }
 
-pub fn eoi(int_no: u64) {
-	if unsafe { apic_is_enabled() } > 0 || int_no >= 48 {
-		panic!("Called unimplemented APIC code path!");
-	} else {
-		pic::eoi(int_no as u8);
-	}
-}
-
 pub fn install() {
-	// Set gates to the IRQ stubs generated in entry.asm for the 24 IRQs.
-	idt::set_gate(32, irq0, 1);
-	idt::set_gate(33, irq1, 1);
-	idt::set_gate(34, irq2, 1);
-	idt::set_gate(35, irq3, 1);
-	idt::set_gate(36, irq4, 1);
-	idt::set_gate(37, irq5, 1);
-	idt::set_gate(38, irq6, 1);
-	idt::set_gate(39, irq7, 1);
-	idt::set_gate(40, irq8, 1);
-	idt::set_gate(41, irq9, 1);
-	idt::set_gate(42, irq10, 1);
-	idt::set_gate(43, irq11, 1);
-	idt::set_gate(44, irq12, 1);
-	idt::set_gate(45, irq13, 1);
-	idt::set_gate(46, irq14, 1);
-	idt::set_gate(47, irq15, 1);
-	idt::set_gate(48, irq16, 1);
-	idt::set_gate(49, irq17, 1);
-	idt::set_gate(50, irq18, 1);
-	idt::set_gate(51, irq19, 1);
-	idt::set_gate(52, irq20, 1);
-	idt::set_gate(53, irq21, 1);
-	idt::set_gate(54, irq22, 1);
-	idt::set_gate(55, irq23, 1);
-
-	idt::set_gate(112, irq80, 1);
-	idt::set_gate(113, irq81, 1);
-	idt::set_gate(114, irq82, 1);
-
-	idt::set_gate(121, wakeup, 1);
-	idt::set_gate(122, mmnif_irq, 1);
-
-	// Add APIC gates.
-	idt::set_gate(123, apic_timer, 1);
-	idt::set_gate(124, apic_lint0, 1);
-	idt::set_gate(125, apic_lint1, 1);
-	idt::set_gate(126, apic_error, 1);
-	idt::set_gate(127, apic_svr, 1);
+	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
+	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
+	// Some critical exceptions also get their own stacks to always execute on a known good stack:
+	//   - Non-Maskable Interrupt Exception (IST2)
+	//   - Double Fault Exception (IST3)
+	//   - Machine Check Exception (IST4)
+	//
+	// Refer to Intel Vol. 3A, 6.14.5 Interrupt Stack Table.
+	idt::set_gate(0, divide_error_exception as usize, 1);
+	idt::set_gate(1, debug_exception as usize, 1);
+	idt::set_gate(2, nmi_exception as usize, 2);
+	idt::set_gate(3, breakpoint_exception as usize, 1);
+	idt::set_gate(4, overflow_exception as usize, 1);
+	idt::set_gate(5, bound_range_exceeded_exception as usize, 1);
+	idt::set_gate(6, invalid_opcode_exception as usize, 1);
+	idt::set_gate(7, device_not_available_exception as usize, 1);
+	idt::set_gate(8, double_fault_exception as usize, 3);
+	idt::set_gate(9, coprocessor_segment_overrun_exception as usize, 1);
+	idt::set_gate(10, invalid_tss_exception as usize, 1);
+	idt::set_gate(11, segment_not_present_exception as usize, 1);
+	idt::set_gate(12, stack_segment_fault_exception as usize, 1);
+	idt::set_gate(13, general_protection_exception as usize, 1);
+	idt::set_gate(14, paging::page_fault_handler as usize, 1);
+	idt::set_gate(15, reserved_exception as usize, 1);
+	idt::set_gate(16, floating_point_exception as usize, 1);
+	idt::set_gate(17, alignment_check_exception as usize, 1);
+	idt::set_gate(18, machine_check_exception as usize, 4);
+	idt::set_gate(19, simd_floating_point_exception as usize, 1);
+	idt::set_gate(20, virtualization_exception as usize, 1);
+	idt::set_gate(21, reserved_exception as usize, 1);
+	idt::set_gate(22, reserved_exception as usize, 1);
+	idt::set_gate(23, reserved_exception as usize, 1);
+	idt::set_gate(24, reserved_exception as usize, 1);
+	idt::set_gate(25, reserved_exception as usize, 1);
+	idt::set_gate(26, reserved_exception as usize, 1);
+	idt::set_gate(27, reserved_exception as usize, 1);
+	idt::set_gate(28, reserved_exception as usize, 1);
+	idt::set_gate(29, reserved_exception as usize, 1);
+	idt::set_gate(30, reserved_exception as usize, 1);
+	idt::set_gate(31, reserved_exception as usize, 1);
 }
 
 
-#[no_mangle]
-pub extern "C" fn irq_handler(state_ptr: *const state) -> *const *const usize {
-	let mut ret = 0 as *const *const usize;
 
-	let state_ref = unsafe { state_ptr.as_ref().expect("state_ptr is NULL!") };
-	assert!(state_ref.int_no < idt::IDT_ENTRIES as u64, "Got invalid IRQ {}", state_ref.int_no);
+extern "x86-interrupt" fn divide_error_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Divide Error (#DE) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
 
-	let handler_address = unsafe { IRQ_HANDLERS[state_ref.int_no as usize] };
-	assert!(handler_address > 0, "No handler installed for IRQ {}", state_ref.int_no);
+extern "x86-interrupt" fn debug_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Debug (#DB) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
 
-	let handler = unsafe { mem::transmute::<usize, fn(&state)>(handler_address) };
-	handler(state_ref);
+extern "x86-interrupt" fn nmi_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Non-Maskable Interrupt (NMI) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
 
-	// Check that this is not the IRQ handler used during CPU initialization to measure the frequency.
-	if processor::get_cpu_frequency() > 0 {
-		unsafe {
-			check_workqueues_in_irqhandler(state_ref.int_no as i32);
+extern "x86-interrupt" fn breakpoint_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Breakpoint (#BP) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
 
-			let task = current_task.per_core().as_ref().expect("current_task on core is NULL!");
-			if state_ref.int_no == 32 || state_ref.int_no == 123 {
-				// This is a timer interrupt. Check if this unblocks any tasks.
-				ret = scheduler();
-			} else if state_ref.int_no >= 32 && get_highest_priority() > task.prio as u32 {
-				// There is a ready task with a higher priority.
-				ret = scheduler();
-			}
-		}
-	}
+extern "x86-interrupt" fn overflow_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Overflow (#OF) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
 
-	eoi(state_ref.int_no);
-	ret
+extern "x86-interrupt" fn bound_range_exceeded_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("BOUND Range Exceeded (#BR) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Invalid Opcode (#UD) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn device_not_available_exception(stack_frame: &mut ExceptionStackFrame) {
+	// We set the CR0_TASK_SWITCHED flag every time we switch to a task.
+	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
+	// We have to clear the CR0_TASK_SWITCHED here and save the FPU context of the old task.
+
+	unsafe { asm!("clts"); }
+	panic!("FPU ToDo");
+}
+
+extern "x86-interrupt" fn double_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
+	error!("Double Fault (#DF) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("CoProcessor Segment Overrun (#MF) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn invalid_tss_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Invalid TSS (#TS) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn segment_not_present_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Segment Not Present (#NP) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn stack_segment_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
+	error!("Stack Segment Fault (#SS) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn general_protection_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
+	error!("General Protection (#GP) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn floating_point_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Floating-Point Error (#MF) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn alignment_check_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Alignment Check (#AC) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn machine_check_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Machine Check (#MC) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn simd_floating_point_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("SIMD Floating-Point (#XM) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn virtualization_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
+	processor::halt();
+}
+
+extern "x86-interrupt" fn reserved_exception(stack_frame: &mut ExceptionStackFrame) {
+	error!("Reserved Exception: {:#?}", stack_frame);
+	processor::halt();
 }

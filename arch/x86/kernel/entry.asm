@@ -1,27 +1,26 @@
-; Copyright (c) 2010-2015, Stefan Lankes, RWTH Aachen University
-; All rights reserved.
+; Copyright (c) 2010-2017 Stefan Lankes, RWTH Aachen University
+;               2017 Colin Finck, RWTH Aachen University
 ;
-; Redistribution and use in source and binary forms, with or without
-; modification, are permitted provided that the following conditions are met:
-;    * Redistributions of source code must retain the above copyright
-;      notice, this list of conditions and the following disclaimer.
-;    * Redistributions in binary form must reproduce the above copyright
-;      notice, this list of conditions and the following disclaimer in the
-;      documentation and/or other materials provided with the distribution.
-;    * Neither the name of the University nor the names of its contributors
-;      may be used to endorse or promote products derived from this software
-;      without specific prior written permission.
+; MIT License
 ;
-; THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-; ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-; WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-; DISCLAIMED. IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE FOR ANY
-; DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-; (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-; ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-; (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+; Permission is hereby granted, free of charge, to any person obtaining
+; a copy of this software and associated documentation files (the
+; "Software"), to deal in the Software without restriction, including
+; without limitation the rights to use, copy, modify, merge, publish,
+; distribute, sublicense, and/or sell copies of the Software, and to
+; permit persons to whom the Software is furnished to do so, subject to
+; the following conditions:
+;
+; The above copyright notice and this permission notice shall be
+; included in all copies or substantial portions of the Software.
+;
+; THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+; EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+; MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+; NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+; LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+; OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+; WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ; This is the kernel's entry point. We could either call main here,
 ; or we can use this to setup the stack or other nice stuff, like
@@ -35,8 +34,6 @@
 extern kernel_start		; defined in linker script
 
 MSR_FS_BASE equ 0xc0000100
-MSR_GS_BASE equ 0xc0000101
-MSR_KERNEL_GS_BASE equ 0xc0000102
 
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
@@ -229,9 +226,9 @@ Lno_pml4_init:
 L1:
     mov rbp, rsp
 
-    ; jump to the boot processors' Rust code
-    extern rust_main
-    call rust_main
+    ; jump to the boot processors' entry point
+    extern boot_processor_main
+    call boot_processor_main
     jmp $
 
 %if MAX_CORES > 1
@@ -247,163 +244,13 @@ Lsmp_main:
     mov rsp, rax
     mov rbp, rsp
 
-    extern smp_start
-    call smp_start
+    extern application_processor_main
+    call application_processor_main
     jmp $
 %endif
 
-; The first 32 interrupt service routines (ISR) entries correspond to exceptions.
-; Some exceptions will push an error code onto the stack which is specific to
-; the exception caused. To decrease the complexity, we handle this by pushing a
-; Dummy error code of 0 onto the stack for any ISR that doesn't push an error
-; code already.
-;
-; ISRs are registered as "Interrupt Gate".
-; Therefore, the interrupt flag (IF) is already cleared.
 
-; NASM macro which pushs also an pseudo error code
-%macro isrstub_pseudo_error 1
-    global isr%1
-    align 64
-    isr%1:
-    push byte 0 ; pseudo error code
-    push byte %1
-    jmp common_stub
-%endmacro
-
-; Similar to isrstub_pseudo_error, but without pushing
-; a pseudo error code => The error code is already
-; on the stack.
-%macro isrstub 1
-    global isr%1
-    align 64
-    isr%1:
-    push byte %1
-    jmp common_stub
-%endmacro
-
-; Create isr entries, where the number after the
-; pseudo error code represents following interrupts:
-; 0: Divide By Zero Exception
-; 1: Debug Exception
-; 2: Non Maskable Interrupt Exception
-; 3: Int 3 Exception
-; 4: INTO Exception
-; 5: Out of Bounds Exception
-; 6: Invalid Opcode Exception
-; 7: Coprocessor Not Available Exception
-%assign i 0
-%rep    8
-    isrstub_pseudo_error i
-%assign i i+1
-%endrep
-
-; 8: Double Fault Exception (With Error Code!)
-isrstub 8
-
-; 9: Coprocessor Segment Overrun Exception
-isrstub_pseudo_error 9
-
-; 10: Bad TSS Exception (With Error Code!)
-; 11: Segment Not Present Exception (With Error Code!)
-; 12: Stack Fault Exception (With Error Code!)
-; 13: General Protection Fault Exception (With Error Code!)
-; 14: Page Fault Exception (With Error Code!)
-%assign i 10
-%rep 5
-    isrstub i
-%assign i i+1
-%endrep
-
-; 15: Reserved Exception
-; 16: Floating Point Exception
-; 17: Alignment Check Exception
-; 18: Machine Check Exception
-; 19-31: Reserved
-%assign i 15
-%rep    17
-    isrstub_pseudo_error i
-%assign i i+1
-%endrep
-
-; NASM macro for asynchronous interrupts (no exceptions)
-%macro irqstub 1
-    global irq%1
-    align 64
-    irq%1:
-    push byte 0 ; pseudo error code
-    push byte 32+%1
-    jmp common_stub
-%endmacro
-
-; Create entries for the interrupts 0 to 23
-%assign i 0
-%rep    24
-    irqstub i
-%assign i i+1
-%endrep
-
-; Create entries for the interrupts 80 to 82
-%assign i 80
-%rep 3
-  irqstub i
-%assign i i+1
-%endrep
-
-global wakeup
-align 64
-wakeup:
-    push byte 0 ; pseudo error code
-    push byte 121
-    jmp common_stub
-
-global mmnif_irq
-align 64
-mmnif_irq:
-    push byte 0 ; pseudo error code
-    push byte 122
-    jmp common_stub
-
-global apic_timer
-align 64
-apic_timer:
-    push byte 0 ; pseudo error code
-    push byte 123
-    jmp common_stub
-
-global apic_lint0
-align 64
-apic_lint0:
-    push byte 0 ; pseudo error code
-    push byte 124
-    jmp common_stub
-
-global apic_lint1
-align 64
-apic_lint1:
-    push byte 0 ; pseudo error code
-    push byte 125
-    jmp common_stub
-
-global apic_error
-align 64
-apic_error:
-    push byte 0 ; pseudo error code
-    push byte 126
-    jmp common_stub
-
-global apic_svr
-align 64
-apic_svr:
-    push byte 0 ; pseudo error code
-    push byte 127
-    jmp common_stub
-
-extern irq_handler
-extern get_current_stack
-extern finish_task_switch
-extern syscall_handler
-
+; Required for Go applications
 global getcontext
 align 64
 getcontext:
@@ -433,6 +280,7 @@ getcontext:
     sti
     ret
 
+; Required for Go applications
 global setcontext
 align 64
 setcontext:
@@ -460,6 +308,7 @@ setcontext:
     sti
     ret
 
+; Required for Go applications
 global __startcontext
 align 64
 __startcontext:
@@ -475,180 +324,95 @@ Lno_context:
     call exit
     jmp $
 
-global switch_context
-align 64
-switch_context:
-    ; by entering a function the DF flag has to be cleared => see ABI
-    cld
-    ; create on the stack a pseudo interrupt
-    ; afterwards, we switch to the task with iret
-    push QWORD 0x10             ; SS
-    push rsp                    ; RSP
-    add QWORD [rsp], 0x08       ; => value of rsp before the creation of a pseudo interrupt
-    pushfq                      ; RFLAGS
-    push QWORD 0x08             ; CS
-    push QWORD rollback         ; RIP
-    push QWORD 0x00edbabe       ; Error code
-    push QWORD 0x00             ; Interrupt number
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push QWORD [rsp+9*8]
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    ; push fs and gs registers
-global Lpatch0
-Lpatch0:
-    jmp short Lrdfsgs1  ; we patch later this jump to enable rdfsbase/rdgsbase
-    rdfsbase rax
-    rdgsbase rdx
-    push rax
-    push rdx
-    jmp short Lgo1
-Lrdfsgs1:
-    mov ecx, MSR_FS_BASE
-    rdmsr
-    sub rsp, 8
-    mov DWORD [rsp+4], edx
-    mov DWORD [rsp], eax
-    mov ecx, MSR_GS_BASE
-    rdmsr
-    sub rsp, 8
-    mov DWORD [rsp+4], edx
-    mov DWORD [rsp], eax
-Lgo1:
 
-    mov rax, rdi		; rdi contains the address to store the old rsp
+global switch
+align 8
+switch:
+	; rdi => the address to store the old rsp
+	; rsi => stack pointer of the new task
 
-    jmp common_switch
+	; save context
+	pushfq							; push control register
+	push rax
+	push rcx
+	push rdx
+	push rbx
+	push rsp						; determine rsp before storing the context
+	add QWORD [rsp], 6*8
+	push rbp
+	push rsi
+	push rdi
+	push r8
+	push r9
+	push r10
+	push r11
+	push r12
+	push r13
+	push r14
+	push r15
 
-align 64
-rollback:
-    ret
+	; push the fs register used for Thread-Local Storage
+global fs_patch0
+fs_patch0:
+	jmp short rdfs_old_way
+	rdfsbase rax
+	push rax
+	jmp short fs_saved
+rdfs_old_way:
+	mov ecx, MSR_FS_BASE
+	rdmsr
+	sub rsp, 8
+	mov DWORD [rsp+4], edx
+	mov DWORD [rsp], eax
+fs_saved:
 
-align 64
-common_stub:
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push QWORD [rsp+9*8]        ; push user-space rsp, which is already on the stack
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    ; push fs and gs registers
-global Lpatch1
-Lpatch1:
-    jmp short Lrdfsgs2  ; we patch later this jump to enable rdfsbase/rdgsbase
-    rdfsbase rax
-    rdgsbase rdx
-    push rax
-    push rdx
-    jmp short Lgo2
-Lrdfsgs2:
-    mov ecx, MSR_FS_BASE
-    rdmsr
-    sub rsp, 8
-    mov DWORD [rsp+4], edx
-    mov DWORD [rsp], eax
-    mov ecx, MSR_GS_BASE
-    rdmsr
-    sub rsp, 8
-    mov DWORD [rsp+4], edx
-    mov DWORD [rsp], eax
-Lgo2:
-    ; do we interrupt user-level code?
-    cmp QWORD [rsp+24+18*8], 0x08
-    je short kernel_space1
-    swapgs  ; set GS to the kernel selector
-kernel_space1:
+	mov QWORD [rdi], rsp			; store old rsp
+	mov rsp, rsi
 
-    ; use the same handler for interrupts and exceptions
-    mov rdi, rsp
-    call irq_handler
+	; Set task switched flag
+	mov rax, cr0
+	or rax, 8
+	mov cr0, rax
 
-    cmp rax, 0
-    je no_context_switch
+	; set stack pointer in TSS
+	extern set_current_kernel_stack
+	call set_current_kernel_stack
 
-common_switch:
-    mov QWORD [rax], rsp       ; store old rsp
-    call get_current_stack     ; get new rsp
-    mov rsp, rax
+	; restore the fs register
+global fs_patch1
+fs_patch1:
+	jmp short wrfs_old_way
+	pop rax
+	wrfsbase rax
+	jmp short fs_restored
+wrfs_old_way:
+	mov ecx, MSR_FS_BASE
+	mov edx, DWORD [rsp+4]
+	mov eax, DWORD [rsp]
+	wrmsr
+	add esp, 8
+fs_restored:
 
-%ifidn SAVE_FPU,ON
-    ; set task switched flag
-    mov rax, cr0
-    or rax, 8
-    mov cr0, rax
-%endif
+	; restore remaining context
+	pop r15
+	pop r14
+	pop r13
+	pop r12
+	pop r11
+	pop r10
+	pop r9
+	pop r8
+	pop rdi
+	pop rsi
+	pop rbp
+	add rsp, 8
+	pop rbx
+	pop rdx
+	pop rcx
+	pop rax
+	popfq
 
-    ; call cleanup code
-    call finish_task_switch
-
-no_context_switch:
-    ; do we interrupt user-level code?
-    cmp QWORD [rsp+24+18*8], 0x08
-    je short kernel_space2
-    swapgs  ; set GS to the user-level selector
-kernel_space2:
-    ; restore fs / gs register
-global Lpatch2
-Lpatch2:
-    jmp short Lwrfsgs    ; we patch later this jump to enable wrfsbase/wrgsbase
-    pop r15
-    ;wrgsbase r15        ; currently, we don't use the gs register
-    pop r15
-    wrfsbase r15
-    jmp short Lgo3
-Lwrfsgs:
-    ;mov ecx, MSR_GS_BASE
-    ;mov edx, DWORD [rsp+4]
-    ;mov eax, DWORD [rsp]
-    add rsp, 8
-    ;wrmsr               ; currently, we don't use the gs register
-    mov ecx, MSR_FS_BASE
-    mov edx, DWORD [rsp+4]
-    mov eax, DWORD [rsp]
-    add rsp, 8
-    wrmsr
-Lgo3:
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rbp
-    add rsp, 8
-    pop rbx
-    pop rdx
-    pop rcx
-    pop rax
-
-    add rsp, 16
-    iretq
+	ret
 
 global is_uhyve
 align 64

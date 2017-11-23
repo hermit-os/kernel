@@ -32,8 +32,8 @@ const PIC2_DATA_PORT:    u16 = 0xA1;
 const PIC_EOI_COMMAND:   u8  = 0x20;
 
 
-pub fn disable() {
-	// Mask all interrupts on both PICs.
+/// Mask all interrupts on both PICs.
+pub fn mask_all() {
 	unsafe {
 		outb(PIC1_DATA_PORT, 0xFF);
 		outb(PIC2_DATA_PORT, 0xFF);

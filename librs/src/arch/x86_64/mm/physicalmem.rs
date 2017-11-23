@@ -94,7 +94,7 @@ pub fn init() {
 }
 
 pub fn allocate(size: usize) -> usize {
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = PHYSICAL_FREE_LIST.lock().allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory", size);
@@ -102,9 +102,9 @@ pub fn allocate(size: usize) -> usize {
 }
 
 pub fn deallocate(physical_address: usize, size: usize) {
-	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} < KERNEL_END_ADDRESS", physical_address);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
+	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
-	assert!(result.is_ok(), "Could not deallocate physical memory address {:#X} with size {:#X}", physical_address, size);
+	assert!(result.is_ok(), "Could not deallocate physical address {:#X} with size {:#X}", physical_address, size);
 }

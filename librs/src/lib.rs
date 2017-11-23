@@ -28,7 +28,7 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![feature(alloc, allocator_api, asm, attr_literals, const_fn, global_allocator, lang_items, linkage, repr_align, specialization)]
+#![feature(abi_x86_interrupt, alloc, allocator_api, asm, attr_literals, const_fn, global_allocator, iterator_step_by, lang_items, linkage, repr_align, specialization)]
 #![no_std]
 
 // EXTERNAL CRATES
@@ -66,6 +66,7 @@ mod timer;
 // IMPORTS
 #[cfg(target_arch="x86_64")]
 mod arch_specific {
+	pub use arch::gdt::*;
 	pub use arch::irq::*;
 	pub use arch::mm::paging::*;
 	pub use arch::processor::*;
@@ -117,16 +118,23 @@ unsafe fn sections_init() {
 	}
 }
 
-/// Entry Point of HermitCore
+/// Entry Point of HermitCore for the Boot Processor
 /// (called from entry.asm)
 #[no_mangle]
-pub unsafe extern "C" fn rust_main() {
+pub unsafe extern "C" fn boot_processor_main() {
 	sections_init();
 	koutput_init();
 
 	info!("Welcome to HermitCore {}!", env!("CARGO_PKG_VERSION"));
-	arch::system_init();
+	arch::boot_processor_init();
 
 	//multitasking_init();
 	//hermit_main();
+}
+
+/// Entry Point of HermitCore for an Application Processor
+// (called from entry.asm)
+#[no_mangle]
+pub unsafe extern "C" fn application_processor_main() {
+	arch::application_processor_init();
 }

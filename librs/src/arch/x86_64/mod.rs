@@ -22,10 +22,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+pub mod apic;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
-pub mod isr;
 pub mod mm;
 pub mod percore;
 pub mod pic;
@@ -33,38 +33,56 @@ pub mod pit;
 pub mod processor;
 
 use logging::*;
+use synch::spinlock::*;
 
 
 extern "C" {
-	static image_size: usize;
-	static kernel_start: u8;
+	static mut cpu_online: u32;
+}
 
-	fn memory_init() -> i32;
-	fn signal_init();
+
+lazy_static! {
+	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
+		Spinlock::new(unsafe { &mut cpu_online });
 }
 
 
 // FUNCTIONS
-pub fn system_init() {
+pub fn boot_processor_init() {
 	gdt::install();
 	idt::install();
 	processor::detect_features();
 	processor::configure();
 	::mm::init();
 	pic::remap();
-	pit::deinit();
-	isr::install();
+	pic::mask_all();
 	irq::install();
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
 
+	CPU_ONLINE.lock().saturating_add(1);
+
+	apic::init();
+	apic::print_information();
+
 	loop {
 		info!("Moin");
-		unsafe { processor::udelay(1_000_000); }
+		processor::udelay(1_000_000);
 	}
 
-	unsafe {
+	/*unsafe {
 		signal_init();
-	}
+	}*/
+}
+
+pub fn application_processor_init() {
+	gdt::install();
+	idt::install();
+	processor::configure();
+	apic::init_x2apic();
+	apic::init_local_apic();
+	irq::enable();
+
+	CPU_ONLINE.lock().saturating_add(1);
 }
