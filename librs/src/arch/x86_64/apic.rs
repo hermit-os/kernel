@@ -21,6 +21,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
+
 use alloc::vec::Vec;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
@@ -34,9 +36,6 @@ use logging::*;
 use mm;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
-
-/// TODO!!!
-static SMP_BOOT_CODE: [u8; 1] = [0; 1];
 
 
 extern "C" {

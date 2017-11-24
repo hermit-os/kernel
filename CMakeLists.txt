@@ -67,31 +67,61 @@ set_target_properties(hermit-bootstrap PROPERTIES
 add_dependencies(hermit-bootstrap ${X86_KERNEL_TARGET})
 
 # add external project hermit-rs
-ExternalProject_Add(
-    objmv
-    DOWNLOAD_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build --release
-    BINARY_DIR "${CMAKE_SOURCE_DIR}/objmv"
-    INSTALL_COMMAND ""
-    LOG_BUILD ON)
+add_custom_target(objmv
+	COMMAND
+		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/objmv
+	COMMAND
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/objmv
+		cargo build --release
+	WORKING_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/objmv")
 
 # add external project hermit-rs
-ExternalProject_Add(
-    hermit-rs
-    DOWNLOAD_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND make all
-    BINARY_DIR "${CMAKE_SOURCE_DIR}/librs"
-    INSTALL_COMMAND ""
-    LOG_BUILD ON)
+add_custom_target(hermit_rs_dir
+	COMMAND
+		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/hermit-rs)
+
+add_custom_command(
+	OUTPUT
+		${CMAKE_BINARY_DIR}/hermit-rs/smp_boot_code.rs
+	DEPENDS
+		hermit_rs_dir
+	DEPENDS
+		${CMAKE_SOURCE_DIR}/arch/x86/kernel/boot.asm
+	COMMAND
+		nasm -f bin -o boot.bin ${CMAKE_SOURCE_DIR}/arch/x86/kernel/boot.asm
+	COMMAND
+		echo -n "pub static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
+	COMMAND
+		stat -c %s boot.bin >> smp_boot_code.rs
+	COMMAND
+		echo "] = [" >> smp_boot_code.rs
+	COMMAND
+		hexdump -v -e "7/1 \"0x%02X, \" 1/1 \" 0x%02X,\\n\"" boot.bin >> smp_boot_code.rs
+	COMMAND
+		echo "];" >> smp_boot_code.rs
+	WORKING_DIRECTORY
+		${CMAKE_BINARY_DIR}/hermit-rs
+	VERBATIM)
+
+add_custom_target(hermit-rs
+	DEPENDS
+		objmv
+	DEPENDS
+		${CMAKE_BINARY_DIR}/hermit-rs/smp_boot_code.rs
+	COMMAND
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit-rs
+		cargo build --release --target x86_64-hermit
+	WORKING_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/librs")
 
 add_custom_target(doc
-	COMMAND cargo rustdoc -- --no-defaults --passes collapse-docs --passes unindent-comments
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/librs")
+	COMMAND
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit-rs
+		cargo rustdoc -- --no-defaults --passes collapse-docs --passes unindent-comments
+	WORKING_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/librs")
 
-# Create dependency of hermit-rs objmv
-add_dependencies(hermit-rs objmv)
 # Create dependency of hermit-boostrap hermit-rs
 add_dependencies(hermit-bootstrap hermit-rs)
 
@@ -100,12 +130,13 @@ add_custom_command(
 		hermit-rs POST_BUILD
 	# rename sections in rust library
 	COMMAND
-		${CMAKE_SOURCE_DIR}/objmv/target/release/objmv
-						${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
+		${CMAKE_BINARY_DIR}/objmv/release/objmv
+		${CMAKE_BINARY_DIR}/hermit-rs/x86_64-hermit/release/libhermit_rs.a
 
 	# convert rust library to hermitcore's osabi
 	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore ${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
+		${CMAKE_ELFEDIT} --output-osabi HermitCore
+		${CMAKE_BINARY_DIR}/hermit-rs/x86_64-hermit/release/libhermit_rs.a
 
 	# copy libhermit_rs.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
@@ -114,7 +145,7 @@ add_custom_command(
 		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_LIB_DIR}
 	COMMAND
 		${CMAKE_COMMAND} -E copy_if_different
-							${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
+							${CMAKE_BINARY_DIR}/hermit-rs/x86_64-hermit/release/libhermit_rs.a
 							${LOCAL_PREFIX_ARCH_LIB_DIR}/)
 
 add_custom_command(
@@ -129,7 +160,7 @@ add_custom_command(
 
 	# merge libhermit.a and libhermit_rs.a
 	COMMAND
-		${CMAKE_AR} x ${CMAKE_SOURCE_DIR}/librs/target/x86_64-hermit/release/libhermit_rs.a
+		${CMAKE_AR} x ${CMAKE_BINARY_DIR}/hermit-rs/x86_64-hermit/release/libhermit_rs.a
 	COMMAND
 		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
 	COMMAND
