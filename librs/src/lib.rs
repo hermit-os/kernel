@@ -28,7 +28,21 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![feature(abi_x86_interrupt, alloc, allocator_api, asm, attr_literals, const_fn, global_allocator, iterator_step_by, lang_items, linkage, repr_align, specialization)]
+#![feature(abi_x86_interrupt)]
+#![feature(alloc)]
+#![feature(allocator_api)]
+#![feature(asm)]
+#![feature(attr_literals)]
+#![feature(const_fn)]
+#![feature(const_atomic_bool_new)]
+#![feature(const_atomic_usize_new)]
+#![feature(const_unsafe_cell_new)]
+#![feature(global_allocator)]
+#![feature(iterator_step_by)]
+#![feature(lang_items)]
+#![feature(linkage)]
+#![feature(repr_align)]
+#![feature(specialization)]
 #![no_std]
 
 // EXTERNAL CRATES
