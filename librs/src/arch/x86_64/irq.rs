@@ -26,30 +26,9 @@ use arch::x86_64::idt;
 use arch::x86_64::mm::paging;
 use arch::x86_64::processor;
 use core::fmt;
-use logging::*;
 use tasks::*;
 use x86::shared::flags::*;
 
-
-extern "C" {
-	#[link_section = ".percore"]
-	static __core_id: u32;
-
-	#[link_section = ".percore"]
-	static current_task: *const task_t;
-
-	fn apic_is_enabled() -> i32;
-	fn get_highest_priority() -> u32;
-	fn scheduler() -> *const *const usize;
-
-	fn wakeup();
-	fn mmnif_irq();
-	fn apic_timer();
-	fn apic_lint0();
-	fn apic_lint1();
-	fn apic_error();
-	fn apic_svr();
-}
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
@@ -213,7 +192,7 @@ extern "x86-interrupt" fn device_not_available_exception(stack_frame: &mut Excep
 	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
 	// We have to clear the CR0_TASK_SWITCHED here and save the FPU context of the old task.
 
-	unsafe { asm!("clts"); }
+	unsafe { asm!("clts" :::: "volatile"); }
 	panic!("FPU ToDo");
 }
 

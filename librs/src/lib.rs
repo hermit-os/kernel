@@ -93,7 +93,6 @@ pub use timer::*;
 
 use consts::*;
 use core::ptr;
-use logging::*;
 use mm::allocator;
 
 #[global_allocator]

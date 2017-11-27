@@ -28,10 +28,10 @@ use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::{fmt, ptr};
 use core::marker::PhantomData;
-use logging::*;
 use multiboot;
 use synch::spinlock::*;
 use tasks::*;
+use x86::shared::control_regs;
 
 
 extern "C" {
@@ -581,13 +581,10 @@ impl fmt::Display for PageFaultError {
 }
 
 
-pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame) {
-	panic!("page_fault_handler ToDo!");
-
-	/*debug!("page_fault_handler{:#X}", state_ref as *const _ as usize);
-
+pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame, error_code: u64) {
 	let virtual_address = unsafe { control_regs::cr2() };
-	let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
+
+	/*let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
 
 	// Is there a heap associated to the current task?
 	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
@@ -618,17 +615,18 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 
 			return;
 		}
-	}
+	}*/
 
 	// Anything else is an error!
-	let pferror = PageFaultError { bits: state_ref.error };
-	error!("Page Fault Exception, {}", state_ref);
+	let pferror = PageFaultError { bits: error_code };
+	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
-	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
-		error!("Heap {:#X} - {:#X}", heap.start, heap.end);
-	}
 
-	processor::halt();*/
+	/*if let Some(ref heap) = unsafe { task.heap.as_ref() } {
+		error!("Heap {:#X} - {:#X}", heap.start, heap.end);
+	}*/
+
+	processor::halt();
 }
 
 #[inline]

@@ -39,6 +39,8 @@ impl FreeList {
 	}
 
 	pub fn allocate(&mut self, size: usize) -> Result<usize, ()> {
+		debug!("Allocating {} bytes from Free List {:#X}", size, self as *const Self as usize);
+
 		for m in self.list.iter() {
 			let (region_start, region_size) = {
 				let borrowed = m.borrow();
@@ -47,9 +49,11 @@ impl FreeList {
 
 			if region_size > size {
 				m.borrow_mut().value.start += size;
+				debug!("resizing existing and returning {:#X}", region_start);
 				return Ok(region_start);
 			} else if region_size == size {
 				self.list.remove(m);
+				debug!("removing existing and returning {:#X}", region_start);
 				return Ok(region_start);
 			}
 		}
@@ -57,7 +61,8 @@ impl FreeList {
 		Err(())
 	}
 
-	pub fn deallocate(&mut self, address: usize, size: usize) -> Result<(), ()> {
+	pub fn deallocate(&mut self, address: usize, size: usize) {
+		debug!("Deallocating {} bytes at {:#X} from Free List {:#X}", size, address, self as *const Self as usize);
 		let end = address + size;
 
 		for m in self.list.iter() {
@@ -66,24 +71,30 @@ impl FreeList {
 				(borrowed.value.start, borrowed.value.end)
 			};
 
+			debug!("DEALLOCATE - region_start: {:#X}, region_end: {:#X}, address: {:#X}, size: {:#X}", region_start, region_end, address, size);
+
 			if region_start == end {
 				// The deallocated memory extends this free memory region to the left.
 				m.borrow_mut().value.start = address;
-				return Ok(());
+				return;
 			} else if region_end == address {
 				// The deallocated memory extends this free memory region to the right.
 				m.borrow_mut().value.end = end;
-				return Ok(());
-			} else if address > region_end {
+				return;
+			} else if end < region_start {
 				// The deallocated memory does not extend any memory region and needs an own entry in the Free List.
-				// This entry is inserted right after the last memory region before our address.
+				// We search the list from low to high addresses and insert us before the first entry that has a
+				// higher address than us.
 				let entry = FreeListEntry { start: address, end: end };
-				self.list.insert_after(entry, m);
-				return Ok(());
+				self.list.insert_before(entry, m);
+				return;
 			}
 		}
 
-		// This should never happen!
-		Err(())
+		// We could not find an entry with a higher address than us.
+		// So we become the new last entry in the list.
+		let entry = FreeListEntry { start: address, end: end };
+		let tail = self.list.tail().unwrap();
+		self.list.insert_after(entry, tail);
 	}
 }

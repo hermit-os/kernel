@@ -21,7 +21,18 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use core::mem;
+use arch::x86_64::processor;
+use core::{mem, ptr};
+
+
+extern "C" {
+	#[link_section = ".percore"]
+	static __core_id: u32;
+
+	static current_boot_id: u32;
+	static percore_end0: u8;
+	static percore_start: u8;
+}
 
 
 pub trait PerCoreVariable {
@@ -38,8 +49,8 @@ impl<T> PerCoreVariable for T {
 		let value: T;
 
 		match mem::size_of::<T>() {
-			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self)),
-			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self)),
+			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self) :: "volatile"),
+			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self) :: "volatile"),
 			_ => panic!("Invalid operand size for per_core"),
 		}
 
@@ -49,9 +60,26 @@ impl<T> PerCoreVariable for T {
 	#[inline]
 	unsafe fn set_per_core(&self, value: T) {
 		match mem::size_of::<T>() {
-			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self)),
-			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self)),
+			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self) :: "volatile"),
+			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self) :: "volatile"),
 			_ => panic!("Invalid operand size for set_per_core"),
 		}
 	}
+}
+
+#[inline]
+pub fn core_id() -> u32 {
+	unsafe { __core_id.per_core() }
+}
+
+pub fn init() {
+	// Initialize the GS register, which is used for the per_core offset.
+	unsafe {
+		let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
+		let offset = ptr::read_volatile(&current_boot_id) as usize * size;
+		processor::writegs(offset);
+	}
+
+	// Initialize the core ID.
+	unsafe { __core_id.set_per_core(current_boot_id); }
 }

@@ -28,7 +28,6 @@ use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
 use core::{fmt, ptr, slice, str};
-use logging::*;
 use raw_cpuid::*;
 use tasks::*;
 use x86::shared::control_regs::*;
@@ -42,11 +41,8 @@ extern "C" {
 
 	static cmdline: *const u8;
 	static cmdsize: usize;
-	static current_boot_id: u32;
 	static mut fs_patch0: u8;
 	static mut fs_patch1: u8;
-	static percore_start: u8;
-	static percore_end0: u8;
 }
 
 #[link_section = ".percore"]
@@ -228,7 +224,7 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	fn measure_frequency_timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+	extern "x86-interrupt" fn measure_frequency_timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
 		unsafe { MEASUREMENT_TIMER_TICKS += 1; }
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
@@ -289,7 +285,8 @@ impl CpuFrequency {
 		self.detect_from_cmdline()
 			.or_else(|_e| self.detect_from_cpuid_frequency_info(&cpuid))
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
-			.or_else(|_e| self.measure_frequency());
+			.or_else(|_e| self.measure_frequency())
+			.unwrap();
 	}
 
 	fn get(&self) -> u16 {
@@ -306,7 +303,7 @@ impl fmt::Display for CpuFrequency {
 
 struct CpuFeaturePrinter {
 	feature_info: FeatureInfo,
-	extended_feature_info: ExtendedFeatures,
+	extended_feature_info: Option<ExtendedFeatures>,
 	extended_function_info: ExtendedFunctionInfo,
 }
 
@@ -314,7 +311,7 @@ impl CpuFeaturePrinter {
 	fn new(cpuid: &CpuId) -> Self {
 		CpuFeaturePrinter {
 			feature_info: cpuid.get_feature_info().expect("CPUID Feature Info not available!"),
-			extended_feature_info: cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!"),
+			extended_feature_info: cpuid.get_extended_feature_info(),
 			extended_function_info: cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!"),
 		}
 	}
@@ -330,7 +327,6 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_sse41() { write!(f, "SSE4.1 ")?; }
 		if self.feature_info.has_sse42() { write!(f, "SSE4.2 ")?; }
 		if self.feature_info.has_avx() { write!(f, "AVX ")?; }
-		if self.extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
 		if self.feature_info.has_eist() { write!(f, "EIST ")?; }
 		if self.feature_info.has_aesni() { write!(f, "AESNI ")?; }
 		if self.feature_info.has_rdrand() { write!(f, "RDRAND ")?; }
@@ -343,14 +339,19 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_function_info.has_rdtscp() { write!(f, "RDTSCP ")?; }
 		if self.feature_info.has_monitor_mwait() { write!(f, "MWAIT ")?; }
 		if self.feature_info.has_clflush() { write!(f, "CLFLUSH ")?; }
-		if self.extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
-		if self.extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
-		if self.extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
 		if self.feature_info.has_dca() { write!(f, "DCA ")?; }
-		if self.extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
-		if self.extended_feature_info.has_hle() { write!(f, "HLE ")?; }
-		if self.extended_feature_info.has_qm() { write!(f, "CQM ")?; }
-		if self.extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
+
+		if let Some(ref extended_feature_info) = self.extended_feature_info {
+			if extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
+			if extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
+			if extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
+			if extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
+			if extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
+			if extended_feature_info.has_hle() { write!(f, "HLE ")?; }
+			if extended_feature_info.has_qm() { write!(f, "CQM ")?; }
+			if extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
+		}
+
 		Ok(())
 	}
 }
@@ -456,7 +457,6 @@ pub fn detect_features() {
 	// Detect CPU features
 	let cpuid = CpuId::new();
 	let feature_info = cpuid.get_feature_info().expect("CPUID Feature Info not available!");
-	let extended_feature_info = cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!");
 	let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
 
 	unsafe {
@@ -464,9 +464,12 @@ pub fn detect_features() {
 		LINEAR_ADDRESS_BITS = extended_function_info.linear_address_bits().expect("CPUID Linear Address Bits not available!");
 		SUPPORTS_1GIB_PAGES = extended_function_info.has_1gib_pages();
 		SUPPORTS_AVX = feature_info.has_avx();
-		SUPPORTS_FSGSBASE = extended_feature_info.has_fsgsbase();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
+
+		if let Some(extended_feature_info) = cpuid.get_extended_feature_info() {
+			SUPPORTS_FSGSBASE = extended_feature_info.has_fsgsbase();
+		}
 
 		if extended_function_info.has_rdtscp() {
 			TIMESTAMP_FUNCTION = get_timestamp_rdtscp;
@@ -557,16 +560,6 @@ pub fn configure() {
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	unsafe { writefs(0); }
 
-	// Initialize the GS register, which is used for the per_core offset.
-	unsafe {
-		let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
-		let offset = current_boot_id as usize * size;
-		writegs(offset);
-	}
-
-	// Initialize the core ID.
-	unsafe { __core_id.set_per_core(current_boot_id as u32); }
-
 	//
 	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
 	//
@@ -584,7 +577,8 @@ pub fn print_information() {
 	let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
-	info!("\n=============================== CPU INFORMATION ===============================");
+	info!("");
+	info!("=============================== CPU INFORMATION ===============================");
 	info!("Model:                  {}", brand_string);
 	unsafe {
 	info!("Frequency:              {}", CPU_FREQUENCY);
@@ -594,7 +588,8 @@ pub fn print_information() {
 	info!("Physical Address Width: {} bits", get_physical_address_bits());
 	info!("Linear Address Width:   {} bits", get_linear_address_bits());
 	info!("Supports 1GiB Pages:    {}", if supports_1gib_pages() { "Yes" } else { "No" });
-	info!("===============================================================================\n");
+	info!("===============================================================================");
+	info!("");
 }
 
 #[inline]
@@ -688,9 +683,9 @@ pub unsafe extern "C" fn fpu_init(fpu_state: *mut XSaveArea) {
 pub unsafe extern "C" fn restore_fpu_state(fpu_state: *const XSaveArea) {
 	if supports_xsave() {
 		let bitmask: u32 = !0;
-		asm!("xrstorq $0" :: "*m"(fpu_state), "{eax}"(bitmask), "{edx}"(bitmask));
+		asm!("xrstorq $0" :: "*m"(fpu_state), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
 	} else {
-		asm!("fxrstor $0" :: "*m"(fpu_state));
+		asm!("fxrstor $0" :: "*m"(fpu_state) :: "volatile");
 	}
 }
 
@@ -698,9 +693,9 @@ pub unsafe extern "C" fn restore_fpu_state(fpu_state: *const XSaveArea) {
 pub unsafe extern "C" fn save_fpu_state(fpu_state: *mut XSaveArea) {
 	if supports_xsave() {
 		let bitmask: u32 = !0;
-		asm!("xsaveq $0" : "=*m"(fpu_state) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory");
+		asm!("xsaveq $0" : "=*m"(fpu_state) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
 	} else {
-		asm!("fxsave $0; fnclex" : "=*m"(fpu_state) :: "memory");
+		asm!("fxsave $0; fnclex" : "=*m"(fpu_state) :: "memory" : "volatile");
 	}
 }*/
 
@@ -708,7 +703,7 @@ pub unsafe extern "C" fn save_fpu_state(fpu_state: *mut XSaveArea) {
 pub unsafe extern "C" fn readfs() -> usize {
 	if supports_fsgsbase() {
 		let fs: usize;
-		asm!("rdfsbase $0" : "=r"(fs) :: "memory");
+		asm!("rdfsbase $0" : "=r"(fs) :: "memory" : "volatile");
 		fs
 	} else {
 		rdmsr(IA32_FS_BASE) as usize
@@ -718,7 +713,7 @@ pub unsafe extern "C" fn readfs() -> usize {
 #[no_mangle]
 pub unsafe extern "C" fn writefs(fs: usize) {
 	if supports_fsgsbase() {
-		asm!("wrfsbase $0" :: "r"(fs));
+		asm!("wrfsbase $0" :: "r"(fs) :: "volatile");
 	} else {
 		wrmsr(IA32_FS_BASE, fs as u64);
 	}
@@ -727,7 +722,7 @@ pub unsafe extern "C" fn writefs(fs: usize) {
 #[no_mangle]
 pub unsafe extern "C" fn writegs(gs: usize) {
 	if supports_fsgsbase() {
-		asm!("wrgsbase $0" :: "r"(gs));
+		asm!("wrgsbase $0" :: "r"(gs) :: "volatile");
 	} else {
 		wrmsr(IA32_GS_BASE, gs as u64);
 	}
@@ -735,16 +730,16 @@ pub unsafe extern "C" fn writegs(gs: usize) {
 
 #[inline]
 unsafe fn get_timestamp_rdtsc() -> u64 {
-	asm!("lfence" ::: "memory");
+	asm!("lfence" ::: "memory" : "volatile");
 	let value = rdtsc();
-	asm!("lfence" ::: "memory");
+	asm!("lfence" ::: "memory" : "volatile");
 	value
 }
 
 #[inline]
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	let value = rdtscp();
-	asm!("lfence" ::: "memory");
+	asm!("lfence" ::: "memory" : "volatile");
 	value
 }
 
