@@ -61,6 +61,5 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	let result = KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
-	assert!(result.is_ok(), "Could not deallocate virtual address {:#X} with size {:#X}", virtual_address, size);
+	KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
 }

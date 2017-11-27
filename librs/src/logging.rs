@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//               2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,7 +22,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![allow(unused_macros)]
 
 /// An enum representing the available verbosity levels of the logger.
 #[derive(Copy, Clone)]
@@ -54,84 +54,46 @@ pub struct KernelLogger {
 }
 
 /// default logger to handle kernel messages
-pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::INFO };
+pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::DEBUG };
+
+
+macro_rules! printlog {
+	($fmt:expr, $type:expr, $cmp_level:expr) => ({
+		let current_level = $crate::logging::LOGGER.log_level as u8;
+
+		if current_level >= ($cmp_level as u8) {
+			println!(concat!("[{}][{}] ", $fmt), $crate::arch::percore::core_id(), $type);
+		}
+	});
+	($fmt:expr, $type:expr, $cmp_level:expr, $($arg:tt)*) => ({
+		let current_level = $crate::logging::LOGGER.log_level as u8;
+
+		if current_level >= ($cmp_level as u8) {
+			println!(concat!("[{}][{}] ", $fmt), $crate::arch::percore::core_id(), $type, $($arg)*);
+		}
+	});
+}
 
 /// Print formatted info text to our console, followed by a newline.
 macro_rules! info {
-	($fmt:expr) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::INFO as u8;
-
-		if current_level >= cmp_level {
-			println!(concat!("[INFO] ", $fmt));
-		}
-	});
-	($fmt:expr, $($arg:tt)*) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::INFO as u8;
-
-		if current_level >= cmp_level {
-			println!(concat!("[INFO] ", $fmt), $($arg)*);
-		}
-	});
+	($fmt:expr) => (printlog!($fmt, "INFO", $crate::logging::LogLevel::INFO));
+	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "INFO", $crate::logging::LogLevel::INFO, $($arg)*));
 }
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! warn {
-	($fmt:expr) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::WARNING as u8;
-
-        if current_level >= cmp_level {
-            println!(concat!("[WARNING] ", $fmt));
-        }
-    });
-	($fmt:expr, $($arg:tt)*) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::WARNING  as u8;
-
-		if current_level >= cmp_level {
-			println!(concat!("[WARNING] ", $fmt), $($arg)*);
-		}
-	});
+	($fmt:expr) => (printlog!($fmt, "WARNING", $crate::logging::LogLevel::WARNING));
+	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "WARNING", $crate::logging::LogLevel::WARNING, $($arg)*));
 }
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! error {
-	($fmt:expr) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::ERROR as u8;
-
-        if current_level >= cmp_level {
-            println!(concat!("[ERROR] ", $fmt));
-        }
-    });
-	($fmt:expr, $($arg:tt)*) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::ERROR  as u8;
-
-		if current_level >= cmp_level {
-			println!(concat!("[ERROR] ", $fmt), $($arg)*);
-		}
-	});
+	($fmt:expr) => (printlog!($fmt, "ERROR", $crate::logging::LogLevel::ERROR));
+	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "ERROR", $crate::logging::LogLevel::ERROR, $($arg)*));
 }
 
 /// Print formatted debuf messages to our console, followed by a newline.
 macro_rules! debug {
-	($fmt:expr) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::DEBUG as u8;
-
-        if current_level >= cmp_level {
-            println!(concat!("[DEBUG] ", $fmt));
-        }
-    });
-	($fmt:expr, $($arg:tt)*) => ({
-		let current_level = LOGGER.log_level as u8;
-		let cmp_level = LogLevel::DEBUG  as u8;
-
-		if current_level >= cmp_level {
-			println!(concat!("[DEBUG] ", $fmt), $($arg)*);
-		}
-	});
+	($fmt:expr) => (printlog!($fmt, "DEBUG", $crate::logging::LogLevel::DEBUG));
+	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "DEBUG", $crate::logging::LogLevel::DEBUG, $($arg)*));
 }

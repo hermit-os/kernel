@@ -58,9 +58,6 @@ static STACK_TABLE: [[IrqStack; IST_ENTRIES]; MAX_CORES] = [[IrqStack::new(); IS
 
 extern "C" {
 	static boot_stack: *const u8;
-
-	#[link_section = ".percore"]
-	static __core_id: u32;
 }
 
 // workaround to use the new repr(align) feature
@@ -152,7 +149,7 @@ pub fn install()
 		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 
 		// Reload the task register to point to the proper TSS.
-		let core_id = __core_id.per_core() as u16;
+		let core_id = core_id() as u16;
 		let sel = SegmentSelector::new(GDT_FIRST_TSS as u16 + core_id*2, PrivilegeLevel::Ring0);
 		load_tr(sel);
 	}

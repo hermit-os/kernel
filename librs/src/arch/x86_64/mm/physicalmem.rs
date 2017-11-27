@@ -105,6 +105,5 @@ pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	let result = PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
-	assert!(result.is_ok(), "Could not deallocate physical address {:#X} with size {:#X}", physical_address, size);
+	PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
 }

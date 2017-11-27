@@ -52,6 +52,14 @@ impl<T> DoublyLinkedList<T> {
 		Self { head: None, tail: None }
 	}
 
+	pub fn head(&self) -> Option<Rc<RefCell<Node<T>>>> {
+		self.head.as_ref().map(|node| node.clone())
+	}
+
+	pub fn tail(&self) -> Option<Rc<RefCell<Node<T>>>> {
+		self.tail.as_ref().map(|node| node.clone())
+	}
+
 	pub fn push(&mut self, value: T) {
 		let new_node = Node::new(value);
 
@@ -70,6 +78,33 @@ impl<T> DoublyLinkedList<T> {
 
 		// In any case, we become the new list tail.
 		self.tail = Some(new_node);
+	}
+
+	pub fn insert_before(&mut self, value: T, node: Rc<RefCell<Node<T>>>) {
+		let new_node = Node::new(value);
+		let mut node_borrowed = node.borrow_mut();
+
+		{
+			let mut new_node_borrowed = new_node.borrow_mut();
+
+			// Check if the given node is the first one in the list.
+			match node_borrowed.prev.take() {
+				Some(prev_node) => {
+					// It is not, so its previous node now becomes our previous node.
+					new_node_borrowed.prev = Some(prev_node);
+				},
+				None => {
+					// It is, so we become the new list head.
+					self.head = Some(new_node.clone());
+				}
+			}
+
+			// The given node becomes our next node.
+			new_node_borrowed.next = Some(node.clone());
+		}
+
+		// We become the previous node of the given node.
+		node_borrowed.prev = Some(new_node);
 	}
 
 	pub fn insert_after(&mut self, value: T, node: Rc<RefCell<Node<T>>>) {

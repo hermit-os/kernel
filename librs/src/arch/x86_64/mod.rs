@@ -32,14 +32,12 @@ pub mod pic;
 pub mod pit;
 pub mod processor;
 
-use logging::*;
 use synch::spinlock::*;
 
 
 extern "C" {
 	static mut cpu_online: u32;
 }
-
 
 lazy_static! {
 	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
@@ -49,6 +47,7 @@ lazy_static! {
 
 // FUNCTIONS
 pub fn boot_processor_init() {
+	percore::init();
 	gdt::install();
 	idt::install();
 	processor::detect_features();
@@ -61,7 +60,7 @@ pub fn boot_processor_init() {
 	processor::detect_frequency();
 	processor::print_information();
 
-	CPU_ONLINE.lock().saturating_add(1);
+	**CPU_ONLINE.lock() += 1;
 
 	apic::init();
 	apic::print_information();
@@ -77,6 +76,9 @@ pub fn boot_processor_init() {
 }
 
 pub fn application_processor_init() {
+	percore::init();
+	debug!("Application Processor Initializing");
+
 	gdt::install();
 	idt::install();
 	processor::configure();
@@ -84,5 +86,5 @@ pub fn application_processor_init() {
 	apic::init_local_apic();
 	irq::enable();
 
-	CPU_ONLINE.lock().saturating_add(1);
+	**CPU_ONLINE.lock() += 1;
 }
