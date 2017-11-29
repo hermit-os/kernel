@@ -26,7 +26,6 @@ use collections::{FreeList, FreeListEntry};
 use core::{mem, slice};
 use mm;
 use multiboot;
-use synch::spinlock::*;
 
 
 extern "C" {
@@ -35,7 +34,7 @@ extern "C" {
 }
 
 
-static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static PHYSICAL_FREE_LIST: FreeList = FreeList::new();
 
 
 fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
@@ -56,7 +55,7 @@ fn detect_from_multiboot_info() -> bool {
 		m.memory_type() == multiboot::MemoryType::Available &&
 		m.base_address() + m.length() > mm::kernel_end_address() as u64
 	);
-	let mut locked_list = PHYSICAL_FREE_LIST.lock();
+	let mut locked_list = PHYSICAL_FREE_LIST.list.lock();
 
 	for m in ram_regions {
 		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
@@ -69,7 +68,7 @@ fn detect_from_multiboot_info() -> bool {
 			start: start_address,
 			end: (m.base_address() + m.length()) as usize
 		};
-		locked_list.list.push(entry);
+		locked_list.push(entry);
 	}
 
 	true
@@ -84,7 +83,7 @@ fn detect_from_limits() -> bool {
 		start: mm::kernel_end_address(),
 		end: unsafe { limit }
 	};
-	PHYSICAL_FREE_LIST.lock().list.push(entry);
+	PHYSICAL_FREE_LIST.list.lock().push(entry);
 
 	true
 }
@@ -96,7 +95,7 @@ pub fn init() {
 pub fn allocate(size: usize) -> usize {
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	let result = PHYSICAL_FREE_LIST.lock().allocate(size);
+	let result = PHYSICAL_FREE_LIST.allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory", size);
 	result.unwrap()
 }
@@ -105,5 +104,5 @@ pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
+	PHYSICAL_FREE_LIST.deallocate(physical_address, size);
 }

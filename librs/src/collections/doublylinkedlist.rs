@@ -28,6 +28,7 @@
 
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use core::mem;
 
 
 pub struct DoublyLinkedList<T> {
@@ -42,7 +43,7 @@ pub struct Node<T> {
 }
 
 impl<T> Node<T> {
-	fn new(value: T) -> Rc<RefCell<Self>> {
+	pub fn new(value: T) -> Rc<RefCell<Self>> {
 		Rc::new(RefCell::new(Self { value: value, prev: None, next: None }))
 	}
 }
@@ -80,8 +81,7 @@ impl<T> DoublyLinkedList<T> {
 		self.tail = Some(new_node);
 	}
 
-	pub fn insert_before(&mut self, value: T, node: Rc<RefCell<Node<T>>>) {
-		let new_node = Node::new(value);
+	pub fn insert_before(&mut self, new_node: Rc<RefCell<Node<T>>>, node: Rc<RefCell<Node<T>>>) {
 		let mut node_borrowed = node.borrow_mut();
 
 		{
@@ -107,8 +107,7 @@ impl<T> DoublyLinkedList<T> {
 		node_borrowed.prev = Some(new_node);
 	}
 
-	pub fn insert_after(&mut self, value: T, node: Rc<RefCell<Node<T>>>) {
-		let new_node = Node::new(value);
+	pub fn insert_after(&mut self, new_node: Rc<RefCell<Node<T>>>, node: Rc<RefCell<Node<T>>>) {
 		let mut node_borrowed = node.borrow_mut();
 
 		{
@@ -134,7 +133,8 @@ impl<T> DoublyLinkedList<T> {
 		node_borrowed.next = Some(new_node);
 	}
 
-	pub fn remove(&mut self, node: Rc<RefCell<Node<T>>>) {
+	#[must_use]
+	pub fn remove(&mut self, node: Rc<RefCell<Node<T>>>) -> (Option<Rc<RefCell<Node<T>>>>, Option<Rc<RefCell<Node<T>>>>) {
 		// Unmount the previous and next nodes of the node to remove.
 		let (prev, next) = {
 			let mut borrowed = node.borrow_mut();
@@ -147,18 +147,22 @@ impl<T> DoublyLinkedList<T> {
 		// Check the previous node.
 		// If we have one, remount the next node to that previous one, skipping our node to remove.
 		// If not, the next node becomes the new list head.
-		match prev {
-			Some(ref prev_node) => prev_node.borrow_mut().next = next,
-			None => self.head = next
-		}
+		let old1 = match prev {
+			Some(ref prev_node) => mem::replace(&mut prev_node.borrow_mut().next, next),
+			None => mem::replace(&mut self.head, next)
+		};
 
 		// Check the cloned next node.
 		// If we have one, remount the previous node to that next one, skipping our node to remove.
 		// If not, the previous node becomes the new list tail.
-		match next_clone {
-			Some(ref next_node) => next_node.borrow_mut().prev = prev,
-			None => self.tail = prev
-		}
+		let old2 = match next_clone {
+			Some(ref next_node) => mem::replace(&mut next_node.borrow_mut().prev, prev),
+			None => mem::replace(&mut self.tail, prev)
+		};
+
+		// Return the replaced node Options, where one of them owns the memory to the removed node.
+		// This way, the caller can control when the associated memory is dropped and possibly release a spinlock first.
+		(old1, old2)
 	}
 
 	pub fn iter(&self) -> Iter<T> {

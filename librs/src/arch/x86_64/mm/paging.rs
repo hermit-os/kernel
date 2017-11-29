@@ -23,7 +23,7 @@
 
 use arch::x86_64::apic;
 use arch::x86_64::irq;
-use arch::x86_64::mm;
+use arch::x86_64::mm::physicalmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::{fmt, ptr};
@@ -46,11 +46,13 @@ extern "C" {
 	static mb_info: multiboot::PAddr;
 }
 
-
 lazy_static! {
-	static ref ROOT_PAGETABLE: SpinlockIrqSave<&'static mut PageTable<PML4>> =
-		SpinlockIrqSave::new(unsafe { &mut *(0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>) });
+	static ref ENTRY_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 }
+
+
+/// Pointer to the root page table (PML4)
+const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>;
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -117,16 +119,14 @@ pub struct PageTableEntry {
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(&self) -> usize {
+		// Prevent others from modifying a page table entry while we read one.
+		let _lock = ENTRY_LOCK.lock();
 		self.physical_address_and_flags & !(BasePageSize::SIZE - 1) & !(PageTableEntryFlags::EXECUTE_DISABLE).bits()
 	}
 
-	/// Zero this entry to mark it as unused.
-	fn zero(&mut self) {
-		self.physical_address_and_flags = 0;
-	}
-
 	/// Returns whether this entry is valid (present).
-	pub fn is_present(&self) -> bool {
+	fn is_present(&self) -> bool {
+		let _lock = ENTRY_LOCK.lock();
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 
@@ -149,6 +149,8 @@ impl PageTableEntry {
 		// Verify that the physical address does not exceed the CPU's physical address width.
 		assert!(physical_address >> processor::get_physical_address_bits() == 0, "Physical address exceeds CPU's physical address width (physical_address = {:#X})", physical_address);
 
+		// Prevent others from modifying a page table entry while we set one.
+		let _lock = ENTRY_LOCK.lock();
 		self.physical_address_and_flags = physical_address | (PageTableEntryFlags::PRESENT | PageTableEntryFlags::ACCESSED | flags).bits();
 	}
 }
@@ -215,8 +217,8 @@ impl<S: PageSize> Page<S> {
 	}
 
 	/// Flushes this page from the TLB of this CPU.
-	unsafe fn flush_from_tlb(&self) {
-		asm!("invlpg ($0)" :: "r"(self.virtual_address) : "memory");
+	fn flush_from_tlb(&self) {
+		unsafe { asm!("invlpg ($0)" :: "r"(self.virtual_address) : "memory" : "volatile"); }
 	}
 
 	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
@@ -357,8 +359,6 @@ trait PageTableMethods {
 	fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry>;
 	fn map_page_in_this_table<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool;
 	fn map_page<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool;
-	fn unmap_page_in_this_table<S: PageSize>(&mut self, page: Page<S>);
-	fn unmap_page<S: PageSize>(&mut self, page: Page<S>);
 }
 
 impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
@@ -374,21 +374,10 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		self.entries[index].set(physical_address, PageTableEntryFlags::DIRTY | S::MAP_EXTRA_FLAG | flags);
 
 		if flush {
-			unsafe { page.flush_from_tlb() };
+			page.flush_from_tlb();
 		}
 
 		flush
-	}
-
-	/// Unmaps a single page in this table.
-	///
-	/// Must only be called if a page of this size is mapped at this page table level!
-	fn unmap_page_in_this_table<S: PageSize>(&mut self, page: Page<S>) {
-		assert!(L::LEVEL == S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-
-		self.entries[index].zero();
-		unsafe { page.flush_from_tlb() };
 	}
 
 	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
@@ -413,14 +402,6 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
 	default fn map_page<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool {
 		self.map_page_in_this_table::<S>(page, physical_address, flags)
-	}
-
-	/// Unmaps a single page.
-	///
-	/// This is the default implementation that just calls the unmap_page_in_this_table method.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
-	default fn unmap_page<S: PageSize>(&mut self, page: Page<S>) {
-		self.unmap_page_in_this_table::<S>(page);
 	}
 }
 
@@ -459,13 +440,14 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = mm::physicalmem::allocate(BasePageSize::SIZE);
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE);
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
+				let _lock = ENTRY_LOCK.lock();
 				for entry in subtable.entries.iter_mut() {
-					entry.zero();
+					entry.physical_address_and_flags = 0;
 				}
 			}
 
@@ -475,26 +457,6 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 			// Calling the default implementation from a specialized one is not supported (yet),
 			// so we have to resort to an extra function.
 			self.map_page_in_this_table::<S>(page, physical_address, flags)
-		}
-	}
-
-	/// Unmaps a single page.
-	///
-	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
-	/// It overrides the default implementation above.
-	fn unmap_page<S: PageSize>(&mut self, page: Page<S>) {
-		assert!(L::LEVEL >= S::MAP_LEVEL);
-
-		if L::LEVEL > S::MAP_LEVEL {
-			let index = page.table_index::<L>();
-			assert!(self.entries[index].is_present());
-
-			let subtable = self.subtable::<S>(page);
-			subtable.unmap_page::<S>(page);
-		} else {
-			// Calling the default implementation from a specialized one is not supported (yet),
-			// so we have to resort to an extra function.
-			self.unmap_page_in_this_table::<S>(page);
 		}
 	}
 }
@@ -535,13 +497,6 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 		// You are responsible for not setting do_ipi to true before the APIC has been initialized.
 		if do_ipi && send_ipi {
 			apic::ipi_tlb_flush();
-		}
-	}
-
-	/// Unmaps a continuous range of pages.
-	fn unmap_pages<S: PageSize>(&mut self, range: PageIter<S>) {
-		for page in range {
-			self.unmap_page::<S>(page);
 		}
 	}
 }
@@ -637,20 +592,20 @@ fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter
 }
 
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
+	debug!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
+
 	let range = get_page_range::<S>(virtual_address, count);
-	ROOT_PAGETABLE.lock().map_pages(range, physical_address, flags, do_ipi);
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	root_pagetable.map_pages(range, physical_address, flags, do_ipi);
 }
 
 pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
+	debug!("Page Table Entry for {:#X}", virtual_address);
+
 	let page = Page::<S>::including_address(virtual_address);
-	ROOT_PAGETABLE.lock().get_page_table_entry(page)
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	root_pagetable.get_page_table_entry(page)
 }
-
-pub fn unmap<S: PageSize>(virtual_address: usize, count: usize) {
-	let range = get_page_range::<S>(virtual_address, count);
-	ROOT_PAGETABLE.lock().unmap_pages(range);
-}
-
 
 
 
@@ -659,31 +614,21 @@ pub extern "C" fn getpagesize() -> i32 {
 	BasePageSize::SIZE as i32
 }
 
-/*#[no_mangle]
-pub extern "C" fn page_unmap(viraddr: usize, npages: usize) -> i32 {
-	debug!("page_unmap({:#X}, {})", viraddr, npages);
-
-	if npages > 0 {
-		let range = get_page_range(viraddr, npages);
-		ROOT_PAGETABLE.lock().unmap_pages(range);
-	}
-
-	0
-}*/
-
 pub fn init() {
 	// Add read-only, execute-disable identity page mappings for the supplied Multiboot information and command line.
 	unsafe {
+		let root_pagetable = &mut *PML4_ADDRESS;
+
 		if mb_info > 0 {
 			let page = Page::<BasePageSize>::including_address(mb_info as usize);
-			ROOT_PAGETABLE.lock().map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
+			root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
 		}
 
 		if cmdsize > 0 {
 			let first_page = Page::<BasePageSize>::including_address(cmdline as usize);
 			let last_page = Page::<BasePageSize>::including_address(cmdline as usize + cmdsize - 1);
 			let range = Page::<BasePageSize>::range(first_page, last_page);
-			ROOT_PAGETABLE.lock().map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
+			root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 		}
 	}
 }

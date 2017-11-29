@@ -24,10 +24,9 @@
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::{FreeList, FreeListEntry};
 use mm;
-use synch::spinlock::*;
 
 
-static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static KERNEL_FREE_LIST: FreeList = FreeList::new();
 
 /// End of the virtual memory address space reserved for kernel memory (1 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
@@ -44,13 +43,13 @@ pub fn init() {
 		start: mm::kernel_end_address(),
 		end: KERNEL_VIRTUAL_MEMORY_END
 	};
-	KERNEL_FREE_LIST.lock().list.push(entry);
+	KERNEL_FREE_LIST.list.lock().push(entry);
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	let result = KERNEL_FREE_LIST.lock().allocate(size);
+	let result = KERNEL_FREE_LIST.allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
 	result.unwrap()
 }
@@ -61,5 +60,5 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
+	KERNEL_FREE_LIST.deallocate(virtual_address, size);
 }

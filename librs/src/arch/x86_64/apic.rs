@@ -189,39 +189,41 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 }
 
 fn detect_multiprocessor_configuration_table(start_address: usize, end_address: usize) -> Result<usize, ()> {
-	for page_address in (start_address..end_address).step_by(BasePageSize::SIZE) {
-		// Identity-map this possible page of the MultiProcessor Floating Pointer Structure.
-		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE, false);
+	// Trigger page mapping in the first iteration!
+	let mut current_page = 0;
 
-		// Look for the MultiProcessor Floating Pointer Structure in all possible 4-byte aligned addresses within this page.
-		for address in (page_address..(page_address + BasePageSize::SIZE)).step_by(4) {
-			// Verify the signature to find out if this is really a MultiProcessor Floating Pointer Structure.
-			let mp_floating = unsafe { & *(address as *const MultiProcessorFloatingPointer) };
-			let signature = unsafe { str::from_utf8_unchecked(&mp_floating.signature) };
-
-			if signature == "_MP_" {
-				// It is, so verify that it conforms to MultiProcessor Specification 1.4 and comes with a MultiProcessor Configuration Table.
-				assert!(
-					mp_floating.spec_rev == 4,
-					"MultiProcessor Specification 1.4 is required, but the system reports version 1.{} (according to structure at {:#X})", mp_floating.spec_rev, address
-				);
-				assert!(
-					mp_floating.length == 1,
-					"MultiProcessor Floating Pointer Structure at {:#X} has invalid length {:#X}", address, mp_floating.length
-				);
-				assert!(
-					mp_floating.features[0] == 0,
-					"A MultiProcessor Configuration Table is required, but the system relies on a default configuration (according to structure at {:#X})", address
-				);
-
-				// We were successful! Return a pointer to the MultiProcessor Configuration Table.
-				debug!("Found version 1.4 MultiProcessor Floating Pointer Structure at {:#X}, with Configuration Table at {:#X}.", address, mp_floating.configuration_table_ptr as usize);
-				return Ok(mp_floating.configuration_table_ptr as usize);
-			}
+	// Look for the MultiProcessor Floating Pointer Structure in all possible 4-byte aligned addresses within this range.
+	for current_address in (start_address..end_address).step_by(4) {
+		// Have we crossed a page boundary in the last iteration?
+		if current_address / BasePageSize::SIZE > current_page {
+			// Identity-map this possible page of the MultiProcessor Floating Pointer Structure.
+			paging::map::<BasePageSize>(current_address, current_address, 1, PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE, false);
+			current_page = current_address / BasePageSize::SIZE;
 		}
 
-		// This page did not contain a MultiProcessor Floating Pointer Structure, so unmap it again.
-		paging::unmap::<BasePageSize>(page_address, 1);
+		// Verify the signature to find out if this is really a MultiProcessor Floating Pointer Structure.
+		let mp_floating = unsafe { & *(current_address as *const MultiProcessorFloatingPointer) };
+		let signature = unsafe { str::from_utf8_unchecked(&mp_floating.signature) };
+
+		if signature == "_MP_" {
+			// It is, so verify that it conforms to MultiProcessor Specification 1.4 and comes with a MultiProcessor Configuration Table.
+			assert!(
+				mp_floating.spec_rev == 4,
+				"MultiProcessor Specification 1.4 is required, but the system reports version 1.{} (according to structure at {:#X})", mp_floating.spec_rev, current_address
+			);
+			assert!(
+				mp_floating.length == 1,
+				"MultiProcessor Floating Pointer Structure at {:#X} has invalid length {:#X}", current_address, mp_floating.length
+			);
+			assert!(
+				mp_floating.features[0] == 0,
+				"A MultiProcessor Configuration Table is required, but the system relies on a default configuration (according to structure at {:#X})", current_address
+			);
+
+			// We were successful! Return a pointer to the MultiProcessor Configuration Table.
+			debug!("Found version 1.4 MultiProcessor Floating Pointer Structure at {:#X}, with Configuration Table at {:#X}.", current_address, mp_floating.configuration_table_ptr as usize);
+			return Ok(mp_floating.configuration_table_ptr as usize);
+		}
 	}
 
 	// We found no MultiProcessor Floating Pointer Structure.
@@ -468,6 +470,7 @@ fn init_application_processors() {
 			// Set the Local APIC ID for the next CPU we initialize.
 			unsafe { current_boot_id.set_per_core(*apic_id as u32); }
 
+			// Send an INIT IPI.
 			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_TRIGGERED | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_INIT);
 			processor::udelay(200);
 
@@ -492,16 +495,18 @@ fn init_application_processors() {
 }
 
 pub fn ipi_tlb_flush() {
-	let core_id = core_id() as u8;
+	if unsafe { ptr::read_volatile(&cpu_online) } > 1 {
+		let core_id = core_id() as u8;
 
-	// Ensure that all memory operations have completed before issuing a TLB flush.
-	unsafe { asm!("mfence" ::: "memory" : "volatile"); }
+		// Ensure that all memory operations have completed before issuing a TLB flush.
+		unsafe { asm!("mfence" ::: "memory" : "volatile"); }
 
-	// Send an IPI with our TLB Flush interrupt number to all other CPUs.
-	for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
-		if *apic_id != core_id {
-			let destination = (*apic_id as u64) << 32;
-			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_DELIVERY_MODE_FIXED | (TLB_FLUSH_INTERRUPT_NUMBER as u64));
+		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
+		for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
+			if *apic_id != core_id {
+				let destination = (*apic_id as u64) << 32;
+				local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_DELIVERY_MODE_FIXED | (TLB_FLUSH_INTERRUPT_NUMBER as u64));
+			}
 		}
 	}
 }
