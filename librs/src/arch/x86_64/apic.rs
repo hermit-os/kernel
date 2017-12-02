@@ -45,14 +45,15 @@ extern "C" {
 
 const APIC_ICR2: usize = 0x0310;
 
-const APIC_EOI_ACK: u64                   = 0;
-const APIC_ICR_DELIVERY_MODE_FIXED: u64   = 0x000;
-const APIC_ICR_DELIVERY_MODE_INIT: u64    = 0x500;
-const APIC_ICR_DELIVERY_MODE_STARTUP: u64 = 0x600;
-const APIC_ICR_LEVEL_TRIGGERED: u64       = 1 << 15;
-const APIC_ICR_LEVEL_ASSERT: u64          = 1 << 14;
-const APIC_LVT_MASK: u64                  = 1 << 16;
-const APIC_SIVR_ENABLED: u64              = 1 << 8;
+const APIC_EOI_ACK: u64                     = 0;
+const APIC_ICR_DELIVERY_MODE_FIXED: u64     = 0x000;
+const APIC_ICR_DELIVERY_MODE_INIT: u64      = 0x500;
+const APIC_ICR_DELIVERY_MODE_STARTUP: u64   = 0x600;
+const APIC_ICR_DELIVERY_STATUS_PENDING: u32 = 1 << 12;
+const APIC_ICR_LEVEL_TRIGGERED: u64         = 1 << 15;
+const APIC_ICR_LEVEL_ASSERT: u64            = 1 << 14;
+const APIC_LVT_MASK: u64                    = 1 << 16;
+const APIC_SIVR_ENABLED: u64                = 1 << 8;
 
 const CMOS_ADDRESS_PORT: u16                         = 0x70;
 const CMOS_DATA_PORT: u16                            = 0x71;
@@ -505,7 +506,7 @@ pub fn ipi_tlb_flush() {
 		for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
 			if *apic_id != core_id {
 				let destination = (*apic_id as u64) << 32;
-				local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_DELIVERY_MODE_FIXED | (TLB_FLUSH_INTERRUPT_NUMBER as u64));
+				local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED | (TLB_FLUSH_INTERRUPT_NUMBER as u64));
 			}
 		}
 	}
@@ -527,12 +528,20 @@ fn local_apic_write(x2apic_msr: u32, mut value: u64) {
 			*icr2 = destination;
 
 			// The remaining data without the destination will now be written into ICR1.
-			value &= 0xFFFF_FFFF;
 		}
 
 		// Write the value.
-		let value_ref = unsafe { &mut *(address as *mut u64) };
-		*value_ref = value;
+		let value_ref = unsafe { &mut *(address as *mut u32) };
+		*value_ref = value as u32;
+
+		if x2apic_msr == IA32_X2APIC_ICR {
+			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
+			// Wait until the CPU clears it.
+			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
+			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0 {
+				processor::pause();
+			}
+		}
 	}
 }
 
