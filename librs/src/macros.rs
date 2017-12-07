@@ -40,16 +40,13 @@ macro_rules! align_up {
 /// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
 /// for HermitCore.
 macro_rules! print {
-	($($arg:tt)*) => ({
+	($($arg:tt)+) => ({
 		use core::fmt::Write;
-		$crate::console::CONSOLE.lock().write_fmt(format_args!($($arg)*)).unwrap();
+		$crate::console::CONSOLE.lock().write_fmt(format_args!($($arg)+)).unwrap();
 	});
 }
 
 /// Print formatted text to our console, followed by a newline.
-///
-/// From https://doc.rust-lang.org/nightly/std/macro.println!.html
 macro_rules! println {
-	($fmt:expr) => (print!(concat!($fmt, "\n")));
-	($fmt:expr, $($arg:tt)*) => (print!(concat!($fmt, "\n"), $($arg)*));
+	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
 }

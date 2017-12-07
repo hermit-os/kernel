@@ -577,19 +577,19 @@ pub fn print_information() {
 	let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
-	info!("");
-	info!("=============================== CPU INFORMATION ===============================");
-	info!("Model:                  {}", brand_string);
+	infoheader!(" CPU INFORMATION ");
+	infoentry!("Model", brand_string);
+
 	unsafe {
-	info!("Frequency:              {}", CPU_FREQUENCY);
-	info!("SpeedStep Technology:   {}", CPU_SPEEDSTEP);
+		infoentry!("Frequency", CPU_FREQUENCY);
+		infoentry!("SpeedStep Technology", CPU_SPEEDSTEP);
 	}
-	info!("Features:               {}", feature_printer);
-	info!("Physical Address Width: {} bits", get_physical_address_bits());
-	info!("Linear Address Width:   {} bits", get_linear_address_bits());
-	info!("Supports 1GiB Pages:    {}", if supports_1gib_pages() { "Yes" } else { "No" });
-	info!("===============================================================================");
-	info!("");
+
+	infoentry!("Features", feature_printer);
+	infoentry!("Physical Address Width", "{} bits", get_physical_address_bits());
+	infoentry!("Linear Address Width", "{} bits", get_linear_address_bits());
+	infoentry!("Supports 1GiB Pages", if supports_1gib_pages() { "Yes" } else { "No" });
+	infofooter!();
 }
 
 #[inline]

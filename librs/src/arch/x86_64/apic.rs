@@ -546,10 +546,8 @@ fn local_apic_write(x2apic_msr: u32, mut value: u64) {
 }
 
 pub fn print_information() {
-	info!("");
-	info!("========================= MULTIPROCESSOR INFORMATION ==========================");
-	info!("APIC in use:            {}", if processor::supports_x2apic() { "x2APIC" } else { "xAPIC" });
-	info!("Initialized CPUs:       {}", unsafe { ptr::read_volatile(&cpu_online) });
-	info!("===============================================================================");
-	info!("");
+	infoheader!(" MULTIPROCESSOR INFORMATION ");
+	infoentry!("APIC in use", if processor::supports_x2apic() { "x2APIC" } else { "xAPIC" });
+	infoentry!("Initialized CPUs", unsafe { ptr::read_volatile(&cpu_online) });
+	infofooter!();
 }
