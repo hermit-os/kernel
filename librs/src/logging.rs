@@ -58,42 +58,56 @@ pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::DEBUG };
 
 
 macro_rules! printlog {
-	($fmt:expr, $type:expr, $cmp_level:expr) => ({
+	($type:expr, $cmp_level:expr, $($arg:tt)+) => ({
 		let current_level = $crate::logging::LOGGER.log_level as u8;
 
 		if current_level >= ($cmp_level as u8) {
-			println!(concat!("[{}][{}] ", $fmt), $crate::arch::percore::core_id(), $type);
-		}
-	});
-	($fmt:expr, $type:expr, $cmp_level:expr, $($arg:tt)*) => ({
-		let current_level = $crate::logging::LOGGER.log_level as u8;
-
-		if current_level >= ($cmp_level as u8) {
-			println!(concat!("[{}][{}] ", $fmt), $crate::arch::percore::core_id(), $type, $($arg)*);
+			println!("[{}][{}] {}", $crate::arch::percore::core_id(), $type, format_args!($($arg)+));
 		}
 	});
 }
 
 /// Print formatted info text to our console, followed by a newline.
 macro_rules! info {
-	($fmt:expr) => (printlog!($fmt, "INFO", $crate::logging::LogLevel::INFO));
-	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "INFO", $crate::logging::LogLevel::INFO, $($arg)*));
+	($($arg:tt)+) => (printlog!("INFO", $crate::logging::LogLevel::INFO, $($arg)+));
+}
+
+macro_rules! infoheader {
+	// This should work on paper, but it's currently not supported :(
+	// Refer to https://github.com/rust-lang/rust/issues/46569
+	/*($($arg:tt)+) => ({
+		info!("");
+		info!("{:=^80}", format_args!($($arg)+));
+	});*/
+	($str:expr) => ({
+		info!("");
+		info!("{:=^80}", $str);
+	});
+}
+
+macro_rules! infoentry {
+	($str:expr, $rhs:expr) => (infoentry!($str, "{}", $rhs));
+	($str:expr, $($arg:tt)+) => (info!("{:30}{}", concat!($str, ":"), format_args!($($arg)+)));
+}
+
+macro_rules! infofooter {
+	() => ({
+		info!("{:=^80}", '=');
+		info!("");
+	});
 }
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! warn {
-	($fmt:expr) => (printlog!($fmt, "WARNING", $crate::logging::LogLevel::WARNING));
-	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "WARNING", $crate::logging::LogLevel::WARNING, $($arg)*));
+	($($arg:tt)+) => (printlog!("WARNING", $crate::logging::LogLevel::WARNING, $($arg)+));
 }
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! error {
-	($fmt:expr) => (printlog!($fmt, "ERROR", $crate::logging::LogLevel::ERROR));
-	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "ERROR", $crate::logging::LogLevel::ERROR, $($arg)*));
+	($($arg:tt)+) => (printlog!("ERROR", $crate::logging::LogLevel::ERROR, $($arg)+));
 }
 
-/// Print formatted debuf messages to our console, followed by a newline.
+/// Print formatted debug messages to our console, followed by a newline.
 macro_rules! debug {
-	($fmt:expr) => (printlog!($fmt, "DEBUG", $crate::logging::LogLevel::DEBUG));
-	($fmt:expr, $($arg:tt)*) => (printlog!($fmt, "DEBUG", $crate::logging::LogLevel::DEBUG, $($arg)*));
+	($($arg:tt)+) => (printlog!("DEBUG", $crate::logging::LogLevel::DEBUG, $($arg)+));
 }
