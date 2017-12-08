@@ -29,7 +29,6 @@ use arch::x86_64::processor;
 use core::{fmt, ptr};
 use core::marker::PhantomData;
 use multiboot;
-use synch::spinlock::*;
 use tasks::*;
 use x86::shared::control_regs;
 
@@ -44,10 +43,6 @@ extern "C" {
 	static cmdline: *const u8;
 	static cmdsize: usize;
 	static mb_info: multiboot::PAddr;
-}
-
-lazy_static! {
-	static ref ENTRY_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 }
 
 
@@ -119,14 +114,11 @@ pub struct PageTableEntry {
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(&self) -> usize {
-		// Prevent others from modifying a page table entry while we read one.
-		let _lock = ENTRY_LOCK.lock();
 		self.physical_address_and_flags & !(BasePageSize::SIZE - 1) & !(PageTableEntryFlags::EXECUTE_DISABLE).bits()
 	}
 
 	/// Returns whether this entry is valid (present).
 	fn is_present(&self) -> bool {
-		let _lock = ENTRY_LOCK.lock();
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 
@@ -149,8 +141,6 @@ impl PageTableEntry {
 		// Verify that the physical address does not exceed the CPU's physical address width.
 		assert!(physical_address >> processor::get_physical_address_bits() == 0, "Physical address exceeds CPU's physical address width (physical_address = {:#X})", physical_address);
 
-		// Prevent others from modifying a page table entry while we set one.
-		let _lock = ENTRY_LOCK.lock();
 		self.physical_address_and_flags = physical_address | (PageTableEntryFlags::PRESENT | PageTableEntryFlags::ACCESSED | flags).bits();
 	}
 }
@@ -445,7 +435,6 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
-				let _lock = ENTRY_LOCK.lock();
 				for entry in subtable.entries.iter_mut() {
 					entry.physical_address_and_flags = 0;
 				}
@@ -600,7 +589,7 @@ pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: 
 }
 
 pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
-	debug!("Page Table Entry for {:#X}", virtual_address);
+	debug!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };

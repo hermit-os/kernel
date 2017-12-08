@@ -70,7 +70,7 @@ impl HermitAllocatorInfo {
 	}
 }
 
-pub static mut ALLOCATOR_INFO: HermitAllocatorInfo = HermitAllocatorInfo::new();
+static mut ALLOCATOR_INFO: HermitAllocatorInfo = HermitAllocatorInfo::new();
 
 pub struct HermitAllocator;
 
@@ -124,4 +124,8 @@ fn dealloc_system(virtual_address: usize, layout: Layout) {
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
 	mm::deallocate(virtual_address, size);
+}
+
+pub fn init() {
+	unsafe { ALLOCATOR_INFO.switch_to_system_allocator(); }
 }
