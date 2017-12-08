@@ -22,15 +22,25 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 pub mod allocator;
+pub mod freelist;
+mod mmlock;
+mod nodepool;
 
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use mm::mmlock::MmLock;
+use mm::nodepool::NodePool;
+use synch::spinlock::SpinlockIrqSave;
 
 
 extern "C" {
 	static image_size: usize;
 	static kernel_start: u8;
 }
+
+
+static MM_LOCK: MmLock = MmLock::new();
+pub static mut POOL: NodePool = NodePool::new();
 
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
@@ -58,12 +68,19 @@ pub fn init() {
 	}
 
 	arch::mm::init();
-	unsafe { self::allocator::ALLOCATOR_INFO.switch_to_system_allocator(); }
+	self::allocator::init();
+}
+
+pub fn print_information() {
+	arch::mm::physicalmem::print_information();
+	arch::mm::virtualmem::print_information();
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
+
+	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
 	let virtual_address = arch::mm::virtualmem::allocate(size);
@@ -84,7 +101,13 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(virtual_address >= kernel_end_address(), "Virtual address {:#X} < KERNEL_END_ADDRESS", virtual_address);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
 
-	let entry = arch::mm::paging::page_table_entry::<BasePageSize>(virtual_address).expect("Page is not mapped");
-	arch::mm::virtualmem::deallocate(virtual_address, size);
-	arch::mm::physicalmem::deallocate(entry.address(), size);
+	let _lock = MM_LOCK.lock();
+	unsafe { POOL.maintain(); }
+
+	if let Some(entry) = arch::mm::paging::page_table_entry::<BasePageSize>(virtual_address) {
+		arch::mm::virtualmem::deallocate(virtual_address, size);
+		arch::mm::physicalmem::deallocate(entry.address(), size);
+	} else {
+		panic!("No page table entry for virtual address {:#X}", virtual_address);
+	}
 }

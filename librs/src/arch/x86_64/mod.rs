@@ -32,6 +32,7 @@ pub mod pic;
 pub mod pit;
 pub mod processor;
 
+use alloc::vec::Vec;
 use synch::spinlock::*;
 
 
@@ -53,6 +54,7 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 	::mm::init();
+	::mm::print_information();
 	pic::remap();
 	pic::mask_all();
 	irq::install();
@@ -67,7 +69,7 @@ pub fn boot_processor_init() {
 
 	loop {
 		info!("Moin");
-		processor::udelay(1_000_000);
+		processor::udelay(5_000_000);
 	}
 
 	/*unsafe {

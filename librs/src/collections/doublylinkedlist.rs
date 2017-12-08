@@ -28,7 +28,6 @@
 
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use core::mem;
 
 
 pub struct DoublyLinkedList<T> {
@@ -61,19 +60,24 @@ impl<T> DoublyLinkedList<T> {
 		self.tail.as_ref().map(|node| node.clone())
 	}
 
-	pub fn push(&mut self, value: T) {
-		let new_node = Node::new(value);
+	pub fn push(&mut self, new_node: Rc<RefCell<Node<T>>>) {
+		{
+			let mut new_node_borrowed = new_node.borrow_mut();
 
-		// Check if we already have any nodes in the list.
-		match self.tail.take() {
-			Some(tail) => {
-				// We become the next node of the old list tail and the old list tail becomes our previous node.
-				tail.borrow_mut().next = Some(new_node.clone());
-				new_node.borrow_mut().prev = Some(tail);
-			},
-			None => {
-				// No nodes yet, so we become the new list head.
-				self.head = Some(new_node.clone());
+			// We expect a node that is currently not mounted to any list.
+			assert!(new_node_borrowed.prev.is_none() && new_node_borrowed.next.is_none());
+
+			// Check if we already have any nodes in the list.
+			match self.tail.take() {
+				Some(tail) => {
+					// We become the next node of the old list tail and the old list tail becomes our previous node.
+					tail.borrow_mut().next = Some(new_node.clone());
+					new_node_borrowed.prev = Some(tail);
+				},
+				None => {
+					// No nodes yet, so we become the new list head.
+					self.head = Some(new_node.clone());
+				}
 			}
 		}
 
@@ -87,10 +91,14 @@ impl<T> DoublyLinkedList<T> {
 		{
 			let mut new_node_borrowed = new_node.borrow_mut();
 
+			// We expect a node that is currently not mounted to any list.
+			assert!(new_node_borrowed.prev.is_none() && new_node_borrowed.next.is_none());
+
 			// Check if the given node is the first one in the list.
 			match node_borrowed.prev.take() {
 				Some(prev_node) => {
 					// It is not, so its previous node now becomes our previous node.
+					prev_node.borrow_mut().next = Some(new_node.clone());
 					new_node_borrowed.prev = Some(prev_node);
 				},
 				None => {
@@ -113,10 +121,14 @@ impl<T> DoublyLinkedList<T> {
 		{
 			let mut new_node_borrowed = new_node.borrow_mut();
 
+			// We expect a node that is currently not mounted to any list.
+			assert!(new_node_borrowed.prev.is_none() && new_node_borrowed.next.is_none());
+
 			// Check if the given node is the last one in the list.
 			match node_borrowed.next.take() {
 				Some(next_node) => {
 					// It is not, so its next node now becomes our next node.
+					next_node.borrow_mut().prev = Some(new_node.clone());
 					new_node_borrowed.next = Some(next_node);
 				},
 				None => {
@@ -133,8 +145,7 @@ impl<T> DoublyLinkedList<T> {
 		node_borrowed.next = Some(new_node);
 	}
 
-	#[must_use]
-	pub fn remove(&mut self, node: Rc<RefCell<Node<T>>>) -> (Option<Rc<RefCell<Node<T>>>>, Option<Rc<RefCell<Node<T>>>>) {
+	pub fn remove(&mut self, node: Rc<RefCell<Node<T>>>) {
 		// Unmount the previous and next nodes of the node to remove.
 		let (prev, next) = {
 			let mut borrowed = node.borrow_mut();
@@ -147,22 +158,18 @@ impl<T> DoublyLinkedList<T> {
 		// Check the previous node.
 		// If we have one, remount the next node to that previous one, skipping our node to remove.
 		// If not, the next node becomes the new list head.
-		let old1 = match prev {
-			Some(ref prev_node) => mem::replace(&mut prev_node.borrow_mut().next, next),
-			None => mem::replace(&mut self.head, next)
+		match prev {
+			Some(ref prev_node) => prev_node.borrow_mut().next = next,
+			None => self.head = next
 		};
 
 		// Check the cloned next node.
 		// If we have one, remount the previous node to that next one, skipping our node to remove.
 		// If not, the previous node becomes the new list tail.
-		let old2 = match next_clone {
-			Some(ref next_node) => mem::replace(&mut next_node.borrow_mut().prev, prev),
-			None => mem::replace(&mut self.tail, prev)
+		match next_clone {
+			Some(ref next_node) => next_node.borrow_mut().prev = prev,
+			None => self.tail = prev
 		};
-
-		// Return the replaced node Options, where one of them owns the memory to the removed node.
-		// This way, the caller can control when the associated memory is dropped and possibly release a spinlock first.
-		(old1, old2)
 	}
 
 	pub fn iter(&self) -> Iter<T> {

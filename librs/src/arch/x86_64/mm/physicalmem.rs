@@ -22,9 +22,10 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use collections::{FreeList, FreeListEntry};
+use collections::Node;
 use core::{mem, slice};
 use mm;
+use mm::freelist::{FreeList, FreeListEntry};
 use multiboot;
 
 
@@ -33,9 +34,7 @@ extern "C" {
 	static mb_info: multiboot::PAddr;
 }
 
-
-static PHYSICAL_FREE_LIST: FreeList = FreeList::new();
-
+static mut PHYSICAL_FREE_LIST: FreeList = FreeList::new();
 
 fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
 	unsafe {
@@ -44,9 +43,9 @@ fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
 	}
 }
 
-fn detect_from_multiboot_info() -> bool {
+fn detect_from_multiboot_info() -> Result<(), ()> {
 	if unsafe { mb_info } == 0 {
-		return false;
+		return Err(());
 	}
 
 	let mb = unsafe { multiboot::Multiboot::new(mb_info, paddr_to_slice).unwrap() };
@@ -55,7 +54,7 @@ fn detect_from_multiboot_info() -> bool {
 		m.memory_type() == multiboot::MemoryType::Available &&
 		m.base_address() + m.length() > mm::kernel_end_address() as u64
 	);
-	let mut locked_list = PHYSICAL_FREE_LIST.list.lock();
+	let mut i = 0;
 
 	for m in ram_regions {
 		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
@@ -64,38 +63,46 @@ fn detect_from_multiboot_info() -> bool {
 			m.base_address() as usize
 		};
 
-		let entry = FreeListEntry {
-			start: start_address,
-			end: (m.base_address() + m.length()) as usize
-		};
-		locked_list.push(entry);
+		let entry = Node::new(
+			FreeListEntry {
+				start: start_address,
+				end: (m.base_address() + m.length()) as usize
+			}
+		);
+		unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
+
+		i += 1;
 	}
 
-	true
+	Ok(())
 }
 
-fn detect_from_limits() -> bool {
+fn detect_from_limits() -> Result<(), ()> {
 	if unsafe { limit } == 0 {
-		return false;
+		return Err(());
 	}
 
-	let entry = FreeListEntry {
-		start: mm::kernel_end_address(),
-		end: unsafe { limit }
-	};
-	PHYSICAL_FREE_LIST.list.lock().push(entry);
+	let entry = Node::new(
+		FreeListEntry {
+			start: mm::kernel_end_address(),
+			end: unsafe { limit }
+		}
+	);
+	unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
 
-	true
+	Ok(())
 }
 
 pub fn init() {
-	detect_from_multiboot_info() || detect_from_limits() || panic!("Could not detect RAM");
+	detect_from_multiboot_info()
+		.or_else(|_e| detect_from_limits())
+		.unwrap();
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	let result = PHYSICAL_FREE_LIST.allocate(size);
+	let result = unsafe { PHYSICAL_FREE_LIST.allocate(size) };
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory", size);
 	result.unwrap()
 }
@@ -104,5 +111,9 @@ pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	PHYSICAL_FREE_LIST.deallocate(physical_address, size);
+	unsafe { PHYSICAL_FREE_LIST.deallocate(physical_address, size); }
+}
+
+pub fn print_information() {
+	unsafe { PHYSICAL_FREE_LIST.print_information(" PHYSICAL MEMORY FREE LIST "); }
 }
