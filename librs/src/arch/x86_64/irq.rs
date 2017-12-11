@@ -74,13 +74,13 @@ impl fmt::Debug for ExceptionStackFrame {
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe { asm!("sti") };
+	unsafe { asm!("sti" :::: "volatile") };
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { asm!("cli") };
+	unsafe { asm!("cli" :::: "volatile") };
 }
 
 /// Disable IRQs (nested)
@@ -149,7 +149,6 @@ pub fn install() {
 	idt::set_gate(30, reserved_exception as usize, 1);
 	idt::set_gate(31, reserved_exception as usize, 1);
 }
-
 
 
 extern "x86-interrupt" fn divide_error_exception(stack_frame: &mut ExceptionStackFrame) {

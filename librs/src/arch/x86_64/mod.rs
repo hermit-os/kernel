@@ -73,8 +73,7 @@ pub fn boot_processor_init() {
 	vga::init();
 	::mm::init();
 	::mm::print_information();
-	pic::remap();
-	pic::mask_all();
+	pic::init();
 	irq::install();
 	irq::enable();
 	processor::detect_frequency();
