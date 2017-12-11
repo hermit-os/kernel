@@ -77,22 +77,22 @@ macro_rules! infoheader {
 	// Refer to https://github.com/rust-lang/rust/issues/46569
 	/*($($arg:tt)+) => ({
 		info!("");
-		info!("{:=^80}", format_args!($($arg)+));
+		info!("{:=^70}", format_args!($($arg)+));
 	});*/
 	($str:expr) => ({
 		info!("");
-		info!("{:=^80}", $str);
+		info!("{:=^70}", $str);
 	});
 }
 
 macro_rules! infoentry {
 	($str:expr, $rhs:expr) => (infoentry!($str, "{}", $rhs));
-	($str:expr, $($arg:tt)+) => (info!("{:30}{}", concat!($str, ":"), format_args!($($arg)+)));
+	($str:expr, $($arg:tt)+) => (info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 
 macro_rules! infofooter {
 	() => ({
-		info!("{:=^80}", '=');
+		info!("{:=^70}", '=');
 		info!("");
 	});
 }
