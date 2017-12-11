@@ -76,7 +76,6 @@ const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
-static mut IO_APIC_ADDRESS: usize = 0;
 static mut LOCAL_APIC_ADDRESS: usize = 0;
 
 /// Stores the Local APIC IDs of all CPUs.
@@ -143,8 +142,6 @@ struct IoApicEntry {
 	flags: u8,
 	address: u32,
 }
-
-const IOAPIC_FLAG_ENABLED: u8 = 1 << 0;
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -259,8 +256,6 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 	};
 
 	// Loop through all table entries.
-	let mut found_ioapic = false;
-
 	for _i in 0..mp_config_header.entry_count {
 		// Have we crossed a page boundary in the last iteration?
 		if current_address / BasePageSize::SIZE > current_page {
@@ -305,24 +300,8 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 			},
 			&2 => {
 				// I/O APIC
-				assert!(!found_ioapic, "Found more than one I/O APIC in the MultiProcessor Configuration Table");
-				unsafe {
-					let ioapic = & *(current_address as *const IoApicEntry);
-					debug!("Found I/O APIC entry: {:?}", ioapic);
-
-					if ioapic.flags & IOAPIC_FLAG_ENABLED > 0 {
-						debug!("Mapping I/O APIC at {:#X} to virtual address {:#X}", ioapic.address as usize, IO_APIC_ADDRESS);
-
-						paging::map::<BasePageSize>(
-							IO_APIC_ADDRESS,
-							ioapic.address as usize,
-							1,
-							PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-							false
-						);
-						found_ioapic = true;
-					}
-				}
+				let ioapic = unsafe { & *(current_address as *const IoApicEntry) };
+				debug!("Found I/O APIC entry: {:?}", ioapic);
 
 				current_address += mem::size_of::<IoApicEntry>();
 			},
@@ -356,10 +335,6 @@ pub fn eoi() {
 }
 
 pub fn init() {
-	// Reserve a virtual memory address for the I/O APIC.
-	// Put it just below the kernel to not clash with kernel memory management.
-	unsafe { IO_APIC_ADDRESS = mm::kernel_start_address() - BasePageSize::SIZE; }
-
 	// Detect CPUs and APICs from the MultiProcessor Configuration Table (according to Intel MultiProcessor Specification 1.4).
 	// ACPI is currently not supported.
 	let local_apic_physical_address = detect_from_multiprocessor_specification()
@@ -371,7 +346,7 @@ pub fn init() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication. Map this page just below the kernel.
 		unsafe {
-			LOCAL_APIC_ADDRESS = IO_APIC_ADDRESS - BasePageSize::SIZE;
+			LOCAL_APIC_ADDRESS = mm::kernel_start_address() - BasePageSize::SIZE;
 			debug!("Mapping Local APIC at {:#X} to virtual address {:#X}", local_apic_physical_address, LOCAL_APIC_ADDRESS);
 
 			paging::map::<BasePageSize>(
