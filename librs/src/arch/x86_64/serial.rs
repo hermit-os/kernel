@@ -69,6 +69,11 @@ impl SerialPort {
 	}
 
 	pub fn write_byte(&self, byte: u8) {
+		// LF newline characters need to be extended to CRLF over a real serial port.
+		if byte == b'\n' {
+			self.write_to_register(UART_TX, b'\r');
+		}
+
 		self.write_to_register(UART_TX, byte);
 	}
 
