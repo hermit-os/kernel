@@ -32,6 +32,7 @@ pub mod pic;
 pub mod pit;
 pub mod processor;
 pub mod serial;
+pub mod vga;
 
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
@@ -60,6 +61,7 @@ pub fn message_output_init() {
 
 pub fn output_message_byte(byte: u8) {
 	COM1.write_byte(byte);
+	vga::write_byte(byte);
 }
 
 pub fn boot_processor_init() {
@@ -68,6 +70,7 @@ pub fn boot_processor_init() {
 	idt::install();
 	processor::detect_features();
 	processor::configure();
+	vga::init();
 	::mm::init();
 	::mm::print_information();
 	pic::remap();
@@ -94,8 +97,6 @@ pub fn boot_processor_init() {
 
 pub fn application_processor_init() {
 	percore::init();
-	debug!("Application Processor Initializing");
-
 	gdt::install();
 	idt::install();
 	processor::configure();
@@ -103,5 +104,6 @@ pub fn application_processor_init() {
 	apic::init_local_apic();
 	irq::enable();
 
+	debug!("Initialized Application Processor");
 	**CPU_ONLINE.lock() += 1;
 }
