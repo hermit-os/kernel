@@ -31,9 +31,14 @@ pub mod percore;
 pub mod pic;
 pub mod pit;
 pub mod processor;
+pub mod serial;
 
-use alloc::vec::Vec;
-use synch::spinlock::*;
+use arch::x86_64::serial::SerialPort;
+use synch::spinlock::Spinlock;
+
+
+const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
+const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 
 extern "C" {
@@ -45,8 +50,18 @@ lazy_static! {
 		Spinlock::new(unsafe { &mut cpu_online });
 }
 
+static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
+
 
 // FUNCTIONS
+pub fn message_output_init() {
+	COM1.init(SERIAL_PORT_BAUDRATE);
+}
+
+pub fn output_message_byte(byte: u8) {
+	COM1.write_byte(byte);
+}
+
 pub fn boot_processor_init() {
 	percore::init();
 	gdt::install();

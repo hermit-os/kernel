@@ -104,10 +104,6 @@ extern "C" {
 	static mut hbss_start: u8;
 	static percore_start: u8;
 	static percore_end0: u8;
-
-	fn koutput_init() -> i32;
-	fn multitasking_init() -> i32;
-	fn hermit_main() -> i32;
 }
 
 // FUNCTIONS
@@ -136,7 +132,7 @@ unsafe fn sections_init() {
 #[no_mangle]
 pub unsafe extern "C" fn boot_processor_main() {
 	sections_init();
-	koutput_init();
+	arch::message_output_init();
 
 	info!("Welcome to HermitCore {}!", env!("CARGO_PKG_VERSION"));
 	arch::boot_processor_init();
