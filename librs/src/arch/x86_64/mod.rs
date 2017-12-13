@@ -28,6 +28,7 @@ pub mod idt;
 pub mod irq;
 pub mod mm;
 pub mod percore;
+pub mod pci;
 pub mod pic;
 pub mod pit;
 pub mod processor;
@@ -78,6 +79,8 @@ pub fn boot_processor_init() {
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
+	pci::init();
+	pci::print_information();
 
 	**CPU_ONLINE.lock() += 1;
 
