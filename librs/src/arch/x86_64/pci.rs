@@ -44,6 +44,10 @@ const PCI_CLASS_REGISTER:     u32 = 0x08;
 const PCI_BAR0_REGISTER:      u32 = 0x10;
 const PCI_INTERRUPT_REGISTER: u32 = 0x3C;
 
+pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
+pub const PCI_BASE_ADDRESS_64BIT:    u32 = 1 << 2;
+pub const PCI_BASE_ADDRESS_MASK:     u32 = 0xFFFF_FFFF_FFFF_FFF0;
+
 
 lazy_static! {
 	static ref PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
@@ -60,6 +64,7 @@ pub struct PciAdapter {
 	pub subclass_id: u8,
 	pub programming_interface_id: u8,
 	pub base_addresses: [u32; 6],
+	pub base_sizes: [u32; 6],
 	pub irq: u8,
 }
 
@@ -68,8 +73,16 @@ impl PciAdapter {
 		let class_ids = read_config(bus, device, PCI_CLASS_REGISTER);
 
 		let mut base_addresses: [u32; 6] = [0; 6];
+		let mut base_sizes: [u32; 6] = [0; 6];
 		for i in 0..6 {
-			base_addresses[i] = read_config(bus, device, PCI_BAR0_REGISTER + (i as u32) << 2);
+			let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
+			base_addresses[i] = read_config(bus, device, register);
+
+			if base_addresses[i] > 0 {
+				write_config(bus, device, register, u32::MAX);
+				base_sizes[i] = !(read_config(bus, device, register) & PCI_BASE_ADDRESS_MASK) + 1;
+				write_config(bus, device, register, base_addresses[i]);
+			}
 		}
 
 		let interrupt_info = read_config(bus, device, PCI_INTERRUPT_REGISTER);
@@ -83,6 +96,7 @@ impl PciAdapter {
 			subclass_id: (class_ids >> 16) as u8,
 			programming_interface_id: (class_ids >> 8) as u8,
 			base_addresses: base_addresses,
+			base_sizes: base_sizes,
 			irq: interrupt_info as u8,
 		}
 	}
