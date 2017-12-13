@@ -25,13 +25,14 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
+use mm::POOL;
 
 
 static mut KERNEL_FREE_LIST: FreeList = FreeList::new();
 
-/// End of the virtual memory address space reserved for kernel memory (1 GiB).
+/// End of the virtual memory address space reserved for kernel memory (4 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: usize = 0x4000_0000;
+const KERNEL_VIRTUAL_MEMORY_END: usize = 0x1_0000_0000;
 
 /// End of the virtual memory address space reserved for task memory (128 TiB).
 /// This is the maximum contiguous virtual memory area possible with current x86-64 CPUs, which only support 48-bit
@@ -50,6 +51,7 @@ pub fn init() {
 }
 
 pub fn allocate(size: usize) -> usize {
+	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = unsafe { KERNEL_FREE_LIST.allocate(size) };
@@ -61,9 +63,23 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
 	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
 	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	unsafe { KERNEL_FREE_LIST.deallocate(virtual_address, size); }
+}
+
+pub fn reserve(virtual_address: usize, size: usize) {
+	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
+	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
+	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(size > 0);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
+
+	unsafe {
+		POOL.maintain();
+		KERNEL_FREE_LIST.reserve(virtual_address, size);
+	}
 }
 
 pub fn print_information() {

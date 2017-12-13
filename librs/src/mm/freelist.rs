@@ -142,6 +142,56 @@ impl FreeList {
 		}
 	}
 
+	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), ()> {
+		let end = address + size;
+
+		for node in self.list.iter() {
+			let (region_start, region_end) = {
+				let borrowed = node.borrow();
+				(borrowed.value.start, borrowed.value.end)
+			};
+
+			// There are 4 possible cases of finding the free space we want to reserve.
+			if region_start == address && region_end == end {
+				// We found free space that has exactly the address and size of the block we want to reserve.
+				// Remove it.
+				self.list.remove(node.clone());
+				unsafe { mm::POOL.list.push(node); }
+				return Ok(());
+			} else if region_start < address && region_end == end {
+				// We found free space in which the block we want to reserve lies right-aligned.
+				// Resize the free space to end at our block.
+				node.borrow_mut().value.end = address;
+				return Ok(());
+			} else if region_start == address && region_end > end {
+				// We found free space in which the block we want to reserve lies left-aligned.
+				// Resize the free space to begin where our block ends.
+				node.borrow_mut().value.start = end;
+				return Ok(());
+			} else if region_start < address && region_end > end {
+				// We found free space that covers the block we want to reserve.
+				// Resize the free space to end at our block and add another free space entry that begins where our block ends.
+				node.borrow_mut().value.end = address;
+
+				let new_node = unsafe { mm::POOL.list.head().unwrap() };
+				unsafe { mm::POOL.list.remove(new_node.clone()); }
+
+				{
+					let mut new_node_borrowed = new_node.borrow_mut();
+					new_node_borrowed.value.start = end;
+					new_node_borrowed.value.end = region_end;
+				}
+
+				self.list.insert_after(new_node, node);
+				return Ok(());
+			}
+		}
+
+		// Our Free List contains no block covering the given address and size.
+		// This is an error, because we have to reserve the address to prevent it from being used differently.
+		Err(())
+	}
+
 	pub fn print_information(&self, header: &str) {
 		infoheader!(header);
 
