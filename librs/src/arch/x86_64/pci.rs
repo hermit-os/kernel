@@ -92,47 +92,35 @@ impl fmt::Display for PciAdapter {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		// Look for the best matching class name in the PCI Database.
 		let mut class_name = "Unknown Class";
-		let mut i = 0;
-		while CLASSES[i].name.chars().next().is_some() {
-			if CLASSES[i].id == self.class_id {
-				class_name = CLASSES[i].name;
-				let mut j = 0;
-				while CLASSES[i].subclasses[j].name.chars().next().is_some() {
-					if CLASSES[i].subclasses[j].id == self.subclass_id {
-						class_name = CLASSES[i].subclasses[j].name;
+		for ref c in CLASSES {
+			if c.id == self.class_id {
+				class_name = c.name;
+				for ref sc in c.subclasses {
+					if sc.id == self.subclass_id {
+						class_name = sc.name;
 						break;
 					}
-
-					j += 1;
 				}
 
 				break;
 			}
-
-			i += 1;
 		}
 
 		// Look for the vendor and device name in the PCI Database.
 		let mut vendor_name = "Unknown Vendor";
 		let mut device_name = "Unknown Device";
-		let mut i = 0;
-		while VENDORS[i].name.chars().next().is_some() {
-			if VENDORS[i].id == self.vendor_id {
-				vendor_name = VENDORS[i].name;
-				let mut j = 0;
-				while VENDORS[i].devices[j].name.chars().next().is_some() {
-					if VENDORS[i].devices[j].id == self.device_id {
-						device_name = VENDORS[i].devices[j].name;
+		for ref v in VENDORS {
+			if v.id == self.vendor_id {
+				vendor_name = v.name;
+				for ref d in v.devices {
+					if d.id == self.device_id {
+						device_name = d.name;
 						break;
 					}
-
-					j += 1;
 				}
 
 				break;
 			}
-
-			i += 1;
 		}
 
 		// Output detailed readable information about this device.
