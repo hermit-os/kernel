@@ -100,6 +100,7 @@ pub fn init() {
 }
 
 pub fn allocate(size: usize) -> usize {
+	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	let result = unsafe { PHYSICAL_FREE_LIST.allocate(size) };
@@ -109,6 +110,7 @@ pub fn allocate(size: usize) -> usize {
 
 pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
+	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
 	unsafe { PHYSICAL_FREE_LIST.deallocate(physical_address, size); }

@@ -77,9 +77,6 @@ pub fn print_information() {
 }
 
 pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
-
 	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
@@ -97,10 +94,6 @@ pub fn allocate(size: usize) -> usize {
 }
 
 pub fn deallocate(virtual_address: usize, size: usize) {
-	assert!(size > 0);
-	assert!(virtual_address >= kernel_end_address(), "Virtual address {:#X} < KERNEL_END_ADDRESS", virtual_address);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size is not a multiple of 4 KiB (size = {:#X})", size);
-
 	let _lock = MM_LOCK.lock();
 	unsafe { POOL.maintain(); }
 
