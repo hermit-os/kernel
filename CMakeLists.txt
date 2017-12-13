@@ -66,7 +66,7 @@ set_target_properties(hermit-bootstrap PROPERTIES
 # dependency makes sure that this is done before hermit is linked
 add_dependencies(hermit-bootstrap ${X86_KERNEL_TARGET})
 
-# add external project hermit-rs
+# add external project objmv
 add_custom_target(objmv
 	COMMAND
 		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/objmv
@@ -76,10 +76,33 @@ add_custom_target(objmv
 	WORKING_DIRECTORY
 		"${CMAKE_SOURCE_DIR}/objmv")
 
+# add external project pci_ids_parser
+add_custom_target(pci_ids_parser
+	COMMAND
+		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/pci_ids_parser
+	COMMAND
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/pci_ids_parser
+		cargo build --release
+	WORKING_DIRECTORY
+		"${CMAKE_SOURCE_DIR}/pci_ids_parser")
+
 # add external project hermit-rs
 add_custom_target(hermit_rs_dir
 	COMMAND
 		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/hermit-rs)
+
+add_custom_command(
+	OUTPUT
+		${CMAKE_BINARY_DIR}/hermit-rs/pcidata.rs
+	DEPENDS
+		pci_ids_parser
+	DEPENDS
+		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+	COMMAND
+		${CMAKE_BINARY_DIR}/pci_ids_parser/release/pci_ids_parser
+		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+		${CMAKE_BINARY_DIR}/hermit-rs/pcidata.rs
+	VERBATIM)
 
 add_custom_command(
 	OUTPUT
@@ -107,6 +130,8 @@ add_custom_command(
 add_custom_target(hermit-rs
 	DEPENDS
 		objmv
+	DEPENDS
+		${CMAKE_BINARY_DIR}/hermit-rs/pcidata.rs
 	DEPENDS
 		${CMAKE_BINARY_DIR}/hermit-rs/smp_boot_code.rs
 	COMMAND

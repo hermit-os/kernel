@@ -1,0 +1,6 @@
+[package]
+name = "pci_ids_parser"
+version = "0.1.0"
+authors = ["Colin Finck <colin.finck@rwth-aachen.de>"]
+
+[dependencies]
