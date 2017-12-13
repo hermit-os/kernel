@@ -224,15 +224,12 @@ struct Device {
 				output += &format!("\t\t\tProgrammingInterface {{ id: 0x{:02X}, name: \"{}\" }},\n", pi.id, pi.name);
 			}
 
-			output += &format!("\t\t\tProgrammingInterface {{ id: 0, name: \"\" }}\n");
 			output += &format!("\t\t] }},\n");
 		}
 
-		output += &format!("\t\tSubclass {{ id: 0, name: \"\", programming_interfaces: &[] }}\n");
 		output += &format!("\t] }},\n");
 	}
 
-	output += &format!("\tClass {{ id: 0, name: \"\", subclasses: &[] }}\n");
 	output += &format!("];\n\n");
 
 	output += &format!("static VENDORS: &[Vendor] = &[\n");
@@ -243,11 +240,9 @@ struct Device {
 			output += &format!("\t\tDevice {{ id: 0x{:04X}, name: \"{}\" }},\n", d.id, sanitize(&d.name));
 		}
 
-		output += &format!("\t\tDevice {{ id: 0, name: \"\" }}\n");
 		output += &format!("\t] }},\n");
 	}
 
-	output += &format!("\tVendor {{ id: 0, name: \"\", devices: &[] }}\n");
 	output += &format!("];\n");
 
 	f.write_all(output.as_bytes()).unwrap();
