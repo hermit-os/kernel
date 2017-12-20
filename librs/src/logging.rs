@@ -24,6 +24,7 @@
 
 
 /// An enum representing the available verbosity levels of the logger.
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 pub enum LogLevel {
 	/// Disable all our put messages

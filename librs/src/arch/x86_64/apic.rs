@@ -169,7 +169,7 @@ struct LocalInterruptEntry {
 }
 
 
-extern "x86-interrupt" fn tlb_flush_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("tlb_flush_handler");
 	unsafe { cr3_write(cr3()); }
 	eoi();
@@ -488,7 +488,7 @@ pub fn ipi_tlb_flush() {
 	}
 }
 
-fn local_apic_write(x2apic_msr: u32, mut value: u64) {
+fn local_apic_write(x2apic_msr: u32, value: u64) {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just write the given value to the given MSR.
 		unsafe { wrmsr(x2apic_msr, value); }

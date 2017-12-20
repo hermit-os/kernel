@@ -76,10 +76,11 @@ pub fn reserve(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
 
-	unsafe {
+	let result = unsafe {
 		POOL.maintain();
-		KERNEL_FREE_LIST.reserve(virtual_address, size);
-	}
+		KERNEL_FREE_LIST.reserve(virtual_address, size)
+	};
+	assert!(result.is_ok(), "Could not reserve {:#X} bytes of virtual memory at {:#X}", size, virtual_address);
 }
 
 pub fn print_information() {

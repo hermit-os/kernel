@@ -32,7 +32,6 @@
 //! Doing a check per CPU core is sufficient, because our kernel code runs
 //! single-threaded on each CPU core.
 
-use arch;
 use arch::percore::*;
 use core::sync::atomic::{AtomicIsize, Ordering};
 use synch::spinlock::{SpinlockIrqSave, SpinlockIrqSaveGuard};

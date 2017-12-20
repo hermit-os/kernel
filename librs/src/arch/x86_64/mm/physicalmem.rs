@@ -54,7 +54,6 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		m.memory_type() == multiboot::MemoryType::Available &&
 		m.base_address() + m.length() > mm::kernel_end_address() as u64
 	);
-	let mut i = 0;
 
 	for m in ram_regions {
 		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
@@ -70,8 +69,6 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			}
 		);
 		unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
-
-		i += 1;
 	}
 
 	Ok(())

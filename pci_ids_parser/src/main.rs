@@ -26,15 +26,9 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 
-struct ProgrammingInterface {
-	id: u8,
-	name: String,
-}
-
 struct Subclass {
 	id: u8,
 	name: String,
-	programming_interfaces: Vec<ProgrammingInterface>,
 }
 
 struct Class {
@@ -75,20 +69,6 @@ fn parse_subclass(line: &str, classes: &mut Vec<Class>) {
 		Subclass {
 			id: subclass_id,
 			name: subclass_name.to_string(),
-			programming_interfaces: Vec::new()
-		}
-	);
-}
-
-fn parse_programming_interface(line: &str, classes: &mut Vec<Class>) {
-	let progif_id = u8::from_str_radix(&line[2..4], 16).unwrap();
-	let progif_name = &line[6..];
-	let last_class = classes.last_mut().expect("Found a progif definition without a class");
-	let last_subclass = last_class.subclasses.last_mut().expect("Found a progif definition without a subclass");
-	last_subclass.programming_interfaces.push(
-		ProgrammingInterface {
-			id: progif_id,
-			name: progif_name.to_string(),
 		}
 	);
 }
@@ -157,7 +137,7 @@ fn main() {
 					Some('\t') => {
 						// A line like "		30  XHCI" or "		0e11 4091  Smart Array 6i"
 						if in_class {
-							parse_programming_interface(&line, &mut classes);
+							// Programming Interfaces are ignored.
 						} else {
 							// Subsystems are ignored.
 						}
@@ -192,12 +172,6 @@ struct Class {
 struct Subclass {
 	id: u8,
 	name: &'static str,
-	programming_interfaces: &'static [ProgrammingInterface],
-}
-
-struct ProgrammingInterface {
-	id: u8,
-	name: &'static str,
 }
 
 struct Vendor {
@@ -218,13 +192,7 @@ struct Device {
 		output += &format!("\tClass {{ id: 0x{:02X}, name: \"{}\", subclasses: &[\n", c.id, c.name);
 
 		for sc in &c.subclasses {
-			output += &format!("\t\tSubclass {{ id: 0x{:02X}, name: \"{}\", programming_interfaces: &[\n", sc.id, sc.name);
-
-			for pi in &sc.programming_interfaces {
-				output += &format!("\t\t\tProgrammingInterface {{ id: 0x{:02X}, name: \"{}\" }},\n", pi.id, pi.name);
-			}
-
-			output += &format!("\t\t] }},\n");
+			output += &format!("\t\tSubclass {{ id: 0x{:02X}, name: \"{}\" }},\n", sc.id, sc.name);
 		}
 
 		output += &format!("\t] }},\n");

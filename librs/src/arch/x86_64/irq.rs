@@ -26,7 +26,6 @@ use arch::x86_64::idt;
 use arch::x86_64::mm::paging;
 use arch::x86_64::processor;
 use core::fmt;
-use tasks::*;
 use x86::shared::flags::*;
 
 
@@ -186,7 +185,7 @@ extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: &mut ExceptionSt
 	processor::halt();
 }
 
-extern "x86-interrupt" fn device_not_available_exception(stack_frame: &mut ExceptionStackFrame) {
+extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut ExceptionStackFrame) {
 	// We set the CR0_TASK_SWITCHED flag every time we switch to a task.
 	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
 	// We have to clear the CR0_TASK_SWITCHED here and save the FPU context of the old task.

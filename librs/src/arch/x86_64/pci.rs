@@ -46,7 +46,7 @@ const PCI_INTERRUPT_REGISTER: u32 = 0x3C;
 
 pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
 pub const PCI_BASE_ADDRESS_64BIT:    u32 = 1 << 2;
-pub const PCI_BASE_ADDRESS_MASK:     u32 = 0xFFFF_FFFF_FFFF_FFF0;
+pub const PCI_BASE_ADDRESS_MASK:     u32 = 0xFFFF_FFF0;
 
 
 lazy_static! {

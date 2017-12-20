@@ -34,11 +34,11 @@ pub struct itimerval {
 }
 
 #[no_mangle]
-pub extern "C" fn getitimer(which: i32, value: *mut itimerval) -> i32 {
+pub extern "C" fn getitimer(_which: i32, _value: *mut itimerval) -> i32 {
 	0
 }
 
 #[no_mangle]
-pub extern "C" fn setitimer(which: i32, value: *const itimerval, ovalue: *mut itimerval) -> i32 {
+pub extern "C" fn setitimer(_which: i32, _value: *const itimerval, _ovalue: *mut itimerval) -> i32 {
 	0
 }

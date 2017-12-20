@@ -24,9 +24,8 @@
 use arch::x86_64::apic;
 use arch::x86_64::irq;
 use arch::x86_64::mm::physicalmem;
-use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use core::{fmt, ptr};
+use core::fmt;
 use core::marker::PhantomData;
 use multiboot;
 use tasks::*;
@@ -237,14 +236,6 @@ impl<S: PageSize> Page<S> {
 			virtual_address: align_down!(virtual_address, S::SIZE),
 			size: PhantomData,
 		}
-	}
-
-	/// Returns a Page after the given virtual address.
-	/// That means, the address is rounded up to a page size boundary.
-	fn after_address(virtual_address: usize) -> Self {
-		let mut page = Self::including_address(virtual_address);
-		page.virtual_address += S::SIZE;
-		page
 	}
 
 	/// Returns a PageIter to iterate from the given first Page to the given last Page (inclusive).

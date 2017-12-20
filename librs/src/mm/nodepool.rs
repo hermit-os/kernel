@@ -22,8 +22,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use collections::{DoublyLinkedList, Node};
-use core::mem;
-use mm;
 use mm::freelist::FreeListEntry;
 
 
@@ -104,9 +102,10 @@ impl NodePool {
 		self.maintenance_in_progress = false;
 	}
 
+	#[allow(dead_code)]
 	pub fn print_information(&self) {
 		let mut i = 0;
-		for node in self.list.iter() {
+		for _node in self.list.iter() {
 			i += 1;
 		}
 

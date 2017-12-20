@@ -94,6 +94,7 @@ impl<T> Spinlock<T>
 	}
 
 	/// Consumes this mutex, returning the underlying data.
+	#[allow(dead_code)]
 	pub fn into_inner(self) -> T {
 		// We know statically that there are no outstanding references to
 		// `self` so there's no need to lock.
@@ -229,6 +230,7 @@ impl<T> SpinlockIrqSave<T>
 	}
 
 	/// Consumes this mutex, returning the underlying data.
+	#[allow(dead_code)]
 	pub fn into_inner(self) -> T {
 		// We know statically that there are no outstanding references to
 		// `self` so there's no need to lock.
