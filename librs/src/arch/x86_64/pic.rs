@@ -30,7 +30,7 @@ const PIC1_DATA_PORT:    u16 = 0x21;
 const PIC2_COMMAND_PORT: u16 = 0xA0;
 const PIC2_DATA_PORT:    u16 = 0xA1;
 
-const PIC1_INTERRUPT_OFFSET: u8 = 32;
+pub const PIC1_INTERRUPT_OFFSET: u8 = 32;
 const PIC2_INTERRUPT_OFFSET: u8 = 40;
 const SPURIOUS_IRQ_NUMBER:   u8 = 7;
 
