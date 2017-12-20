@@ -30,7 +30,6 @@ use arch::x86_64::pit;
 use core::{fmt, ptr, slice, str};
 use core::sync::atomic::hint_core_should_pause;
 use raw_cpuid::*;
-use tasks::*;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
 use x86::shared::time::*;
@@ -222,7 +221,7 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	extern "x86-interrupt" fn measure_frequency_timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+	extern "x86-interrupt" fn measure_frequency_timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 		unsafe { MEASUREMENT_TIMER_TICKS += 1; }
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}

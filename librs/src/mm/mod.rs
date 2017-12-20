@@ -30,7 +30,6 @@ use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use mm::mmlock::MmLock;
 use mm::nodepool::NodePool;
-use synch::spinlock::SpinlockIrqSave;
 
 
 extern "C" {

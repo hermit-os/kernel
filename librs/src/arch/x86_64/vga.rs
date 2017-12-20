@@ -65,7 +65,7 @@ struct VgaScreen {
 impl VgaScreen {
 	const fn new() -> Self {
 		Self {
-			buffer: unsafe { VGA_BUFFER_ADDRESS as *mut _ },
+			buffer: VGA_BUFFER_ADDRESS as *mut _,
 			current_col: 0,
 			current_row: 0,
 			is_initialized: false
