@@ -580,15 +580,7 @@ fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter
 	Page::range(first_page, last_page)
 }
 
-pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
-	debug!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
-
-	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
-	root_pagetable.map_pages(range, physical_address, flags, do_ipi);
-}
-
-pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
+pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
 	debug!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
@@ -596,6 +588,23 @@ pub fn page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTable
 	root_pagetable.get_page_table_entry(page)
 }
 
+pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
+	debug!("Getting physical address for {:#X}", virtual_address);
+
+	let page = Page::<S>::including_address(virtual_address);
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let address = root_pagetable.get_page_table_entry(page).expect("Entry not present").address();
+	let offset = virtual_address & (S::SIZE - 1);
+	address | offset
+}
+
+pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
+	debug!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
+
+	let range = get_page_range::<S>(virtual_address, count);
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	root_pagetable.map_pages(range, physical_address, flags, do_ipi);
+}
 
 
 #[no_mangle]
@@ -621,21 +630,3 @@ pub fn init() {
 		}
 	}
 }
-
-/*#[no_mangle]
-pub unsafe extern "C" fn virt_to_phys(addr: usize) -> usize {
-	debug!("virt_to_phys({:#X})", addr);
-
-	// HACK: Currently, we use 2 MiB pages only for the kernel.
-	if addr >= mm::kernel_start_address() && addr < mm::kernel_end_address() {
-		let page = Page::<LargePageSize>::including_address(addr);
-		let address = ROOT_PAGETABLE.lock().get_page_table_entry(page).expect("Entry not present").address();
-		let offset = addr & (LargePageSize::SIZE - 1);
-		address | offset
-	} else {
-		let page = Page::<BasePageSize>::including_address(addr);
-		let address = ROOT_PAGETABLE.lock().get_page_table_entry(page).expect("Entry not present").address();
-		let offset = addr & (BasePageSize::SIZE - 1);
-		address | offset
-	}
-}*/
