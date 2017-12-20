@@ -97,7 +97,7 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	let _lock = MM_LOCK.lock();
 	unsafe { POOL.maintain(); }
 
-	if let Some(entry) = arch::mm::paging::page_table_entry::<BasePageSize>(virtual_address) {
+	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 		arch::mm::physicalmem::deallocate(entry.address(), size);
 	} else {

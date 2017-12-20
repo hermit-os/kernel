@@ -110,7 +110,7 @@ impl FreeList {
 				// Get that entry from the node pool.
 				// We search the list from low to high addresses and insert us before the first entry that has a
 				// higher address than us.
-				let new_node = unsafe { mm::POOL.list.head().unwrap() };
+				let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when attempting insert_before") };
 				unsafe { mm::POOL.list.remove(new_node.clone()); }
 
 				{
@@ -126,7 +126,7 @@ impl FreeList {
 
 		// We could not find an entry with a higher address than us.
 		// So we become the new last entry in the list. Get that entry from the node pool.
-		let new_node = unsafe { mm::POOL.list.head().unwrap() };
+		let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when attempting insert_after") };
 		unsafe { mm::POOL.list.remove(new_node.clone()); }
 
 		{
@@ -173,7 +173,7 @@ impl FreeList {
 				// Resize the free space to end at our block and add another free space entry that begins where our block ends.
 				node.borrow_mut().value.end = address;
 
-				let new_node = unsafe { mm::POOL.list.head().unwrap() };
+				let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when reserving memory") };
 				unsafe { mm::POOL.list.remove(new_node.clone()); }
 
 				{
