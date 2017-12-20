@@ -24,7 +24,7 @@
 
 use arch;
 use core::fmt;
-use synch::spinlock::Spinlock;
+use synch::spinlock::SpinlockIrqSave;
 
 pub struct Console;
 
@@ -46,4 +46,4 @@ impl fmt::Write for Console {
 	}
 }
 
-pub static CONSOLE: Spinlock<Console> = Spinlock::new(Console);
+pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console);
