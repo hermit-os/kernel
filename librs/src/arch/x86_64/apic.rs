@@ -31,6 +31,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use consts::*;
+use core::sync::atomic::hint_core_should_pause;
 use core::{mem, ptr, str};
 use mm;
 use x86::shared::control_regs::*;
@@ -514,7 +515,7 @@ fn local_apic_write(x2apic_msr: u32, mut value: u64) {
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
 			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0 {
-				processor::pause();
+				hint_core_should_pause();
 			}
 		}
 	}

@@ -22,6 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::processor;
+use core::sync::atomic::hint_core_should_pause;
 use x86::shared::io::*;
 
 const UART_TX: u16 = 0;
@@ -62,7 +63,7 @@ impl SerialPort {
 
 	fn write_to_register(&self, register: u16, byte: u8) {
 		while self.is_transmitting() {
-			processor::pause();
+			hint_core_should_pause();
 		}
 
 		unsafe { outb(self.port_address + register, byte); }
