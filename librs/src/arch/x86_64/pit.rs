@@ -27,7 +27,7 @@ use x86::shared::io::*;
 
 
 const PIT_CLOCK: u64 = 1193182;
-pub const PIT_INTERRUPT_NUMBER: u8 = 32;
+pub const PIT_INTERRUPT_NUMBER: u8 = pic::PIC1_INTERRUPT_OFFSET + 0;
 
 const PIT_CHANNEL0_DATA_PORT: u16 = 0x40;
 const PIT_CHANNEL1_DATA_PORT: u16 = 0x41;
