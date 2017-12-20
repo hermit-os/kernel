@@ -28,6 +28,7 @@ use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
 use core::{fmt, ptr, slice, str};
+use core::sync::atomic::hint_core_should_pause;
 use raw_cpuid::*;
 use tasks::*;
 use x86::shared::control_regs::*;
@@ -36,9 +37,6 @@ use x86::shared::time::*;
 
 
 extern "C" {
-	#[link_section = ".percore"]
-	static __core_id: u32;
-
 	static cmdline: *const u8;
 	static cmdsize: usize;
 	static mut fs_patch0: u8;
@@ -251,7 +249,7 @@ impl CpuFrequency {
 				break tick;
 			}
 
-			pause();
+			hint_core_should_pause();
 		};
 
 		// Count the number of CPU cycles during 3 timer ticks.
@@ -263,7 +261,7 @@ impl CpuFrequency {
 				break;
 			}
 
-			pause();
+			hint_core_should_pause();
 		}
 
 		let end = unsafe { TIMESTAMP_FUNCTION() };
@@ -632,13 +630,6 @@ pub fn halt() {
 		unsafe {
 			asm!("hlt" :::: "volatile");
 		}
-	}
-}
-
-#[inline(always)]
-pub fn pause() {
-	unsafe {
-		asm!("pause" :::: "volatile");
 	}
 }
 
