@@ -71,6 +71,7 @@ mod arch;
 mod collections;
 mod console;
 mod consts;
+mod drivers;
 mod dummies;
 mod mm;
 mod runtime_glue;
