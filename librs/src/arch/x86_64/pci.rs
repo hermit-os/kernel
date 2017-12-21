@@ -100,6 +100,12 @@ impl PciAdapter {
 			irq: interrupt_info as u8,
 		}
 	}
+
+	pub fn make_bus_master(&self) {
+		let mut command = read_config(self.bus, self.device, PCI_COMMAND_REGISTER);
+		command |= PCI_COMMAND_BUSMASTER;
+		write_config(self.bus, self.device, PCI_COMMAND_REGISTER, command);
+	}
 }
 
 impl fmt::Display for PciAdapter {
@@ -185,12 +191,6 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 	}
 
 	None
-}
-
-pub fn make_bus_master(adapter: &PciAdapter) {
-	let mut command = read_config(adapter.bus, adapter.device, PCI_COMMAND_REGISTER);
-	command |= PCI_COMMAND_BUSMASTER;
-	write_config(adapter.bus, adapter.device, PCI_COMMAND_REGISTER, command);
 }
 
 pub fn init() {
