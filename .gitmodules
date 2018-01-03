@@ -17,3 +17,6 @@
 	path = librs/crates/raw_cpuid
 	url = https://github.com/ColinFinck/rust-cpuid.git
 	branch = extended-brand-string-fix
+[submodule "crates/rlibc"]
+	path = crates/rlibc
+	url = https://github.com/RWTH-OS/rlibc.git
