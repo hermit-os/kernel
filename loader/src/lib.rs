@@ -33,7 +33,7 @@
 #[macro_use]
 extern crate bitflags;
 
-extern crate multiboot;
+extern crate hermit_multiboot;
 
 #[allow(unused_extern_crates)]
 extern crate rlibc;
@@ -48,19 +48,21 @@ mod elf;
 mod macros;
 
 mod paging;
+mod physicalmem;
 mod runtime_glue;
 mod serial;
 
 // IMPORTS
-use core::{mem, ptr, slice};
+use core::ptr;
 use elf::*;
+use hermit_multiboot::Multiboot;
 use paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use serial::SerialPort;
 
 extern "C" {
 	static bss_end: u8;
 	static mut bss_start: u8;
-	static mb_info: multiboot::PAddr;
+	static mb_info: usize;
 }
 
 // CONSTANTS
@@ -84,13 +86,6 @@ pub fn output_message_byte(byte: u8) {
 	COM1.write_byte(byte);
 }
 
-fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-	unsafe {
-		let ptr = mem::transmute(p);
-		Some(slice::from_raw_parts(ptr, sz))
-	}
-}
-
 unsafe fn sections_init() {
 	// Initialize .bss section
 	ptr::write_bytes(
@@ -109,24 +104,55 @@ pub unsafe extern "C" fn loader_main() {
 
 	loaderlog!("Started");
 
+	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Got no Multiboot information");
-	paging::init();
+	loaderlog!("Found Multiboot information at {:#X}", mb_info);
+	let page_address = align_down!(mb_info, BasePageSize::SIZE);
+	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
-	// Parse the Multiboot info and find the first module.
-	let mb = multiboot::Multiboot::new(mb_info, paddr_to_slice).unwrap();
-	let app = mb.modules().expect("Could not find any modules in Multiboot info")
-		.next().expect("Could not access the first module");
-	assert!(app.start > 0);
+	// Load the Multiboot information and identity-map the modules information.
+	let mb = Multiboot::new(mb_info);
+	let modules_address = mb.modules_address().expect("Could not find any modules in the Multiboot information");
+	let page_address = align_down!(modules_address, BasePageSize::SIZE);
+	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+
+	// Iterate through all modules.
+	// Collect the start address of the first module and the highest end address of all modules.
+	let modules = mb.modules().unwrap();
+	let mut start_address = 0;
+	let mut end_address = 0;
+
+	for m in modules {
+		if start_address == 0 {
+			start_address = m.start_address();
+		}
+
+		if m.end_address() > end_address {
+			end_address = m.end_address();
+		}
+	}
+
+	// Memory after the highest end address is unused and available for the physical memory manager.
+	// However, we want to move the HermitCore Application to the next 2 MB boundary.
+	// So add this boundary and align up the address to be on the safe side.
+	end_address += LargePageSize::SIZE;
+	physicalmem::init(align_up!(end_address, LargePageSize::SIZE));
+
+	// Identity-map the first module.
+	assert!(start_address > 0);
+	loaderlog!("Found an ELF module at {:#X}", start_address);
+	let page_address = align_down!(start_address, BasePageSize::SIZE);
+	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 	// Verify that this module is a HermitCore ELF executable.
-	let header = & *(app.start as *const ElfHeader);
+	let header = & *(start_address as *const ElfHeader);
 	assert!(header.ident.magic == ELF_MAGIC);
 	assert!(header.ident._class == ELF_CLASS_64);
 	assert!(header.ident.data == ELF_DATA_2LSB);
 	assert!(header.ident.pad[0] == ELF_PAD_HERMIT);
 	assert!(header.ty == ELF_ET_EXEC);
 	assert!(header.machine == ELF_EM_X86_64);
-	loaderlog!("Found a HermitCore Application ELF file at {:#X}", app.start);
+	loaderlog!("This is a HermitCore Application");
 
 	// Get all necessary information about the ELF executable.
 	let mut physical_address = 0;
@@ -135,10 +161,10 @@ pub unsafe extern "C" fn loader_main() {
 	let mut mem_size = 0;
 
 	for i in 0..header.ph_entry_count {
-		let program_header = & *((app.start as usize + header.ph_offset + (i * header.ph_entry_size) as usize) as *const ElfProgramHeader);
+		let program_header = & *((start_address + header.ph_offset + (i * header.ph_entry_size) as usize) as *const ElfProgramHeader);
 		if program_header.ty == ELF_PT_LOAD {
 			if physical_address == 0 {
-				physical_address = app.start as usize + program_header.offset;
+				physical_address = start_address + program_header.offset;
 			}
 
 			if virtual_address == 0 {
@@ -169,8 +195,13 @@ pub unsafe extern "C" fn loader_main() {
 	*((virtual_address + HERMIT_KERNEL_OFFSET_BASE) as *mut usize) = new_physical_address;
 	*((virtual_address + HERMIT_KERNEL_OFFSET_IMAGE_SIZE) as *mut usize) = mem_size;
 
-	if let Some(cmdline) = mb.command_line() {
-		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDLINE) as *mut usize) = cmdline.as_ptr() as usize;
+	if let Some(address) = mb.command_line_address() {
+		// Identity-map the command line.
+		let page_address = align_down!(address, BasePageSize::SIZE);
+		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+
+		let cmdline = mb.command_line().unwrap();
+		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDLINE) as *mut usize) = address;
 		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDSIZE) as *mut usize) = cmdline.len();
 	}
 
@@ -179,9 +210,9 @@ pub unsafe extern "C" fn loader_main() {
 		*((virtual_address + displacement + i) as *mut u8) = *((virtual_address + i) as *const u8);
 	}
 
-	// Remap the virtual address to the new physical address, now as a large page.
-	let page_count = file_size / LargePageSize::SIZE;
-	paging::map::<LargePageSize>(virtual_address, new_physical_address, page_count, PageTableEntryFlags::WRITABLE);
+	// Remap the virtual address to the new physical address.
+	let page_count = file_size / BasePageSize::SIZE;
+	paging::map::<BasePageSize>(virtual_address, new_physical_address, page_count, PageTableEntryFlags::WRITABLE);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!("Jumping to HermitCore Application Entry Point at {:#X}", header.entry);

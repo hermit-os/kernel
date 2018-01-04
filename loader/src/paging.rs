@@ -22,12 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use core::marker::PhantomData;
-use multiboot;
-
-
-extern "C" {
-	static mb_info: multiboot::PAddr;
-}
+use physicalmem;
 
 
 /// Pointer to the root page table (PML4)
@@ -168,11 +163,6 @@ struct Page<S: PageSize> {
 }
 
 impl<S: PageSize> Page<S> {
-	/// Return the stored virtual address.
-	fn address(&self) -> usize {
-		self.virtual_address
-	}
-
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(&self) {
 		unsafe { asm!("invlpg ($0)" :: "r"(self.virtual_address) : "memory" : "volatile"); }
@@ -384,17 +374,15 @@ impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L> where L::
 
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
-				panic!("Table does not exist");
-
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				/*let physical_address = physicalmem::allocate(BasePageSize::SIZE);
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE);
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
 				for entry in subtable.entries.iter_mut() {
 					entry.physical_address_and_flags = 0;
-				}*/
+				}
 			}
 
 			let subtable = self.subtable::<S>(page);
@@ -450,11 +438,4 @@ pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
 	root_pagetable.map_pages(range, physical_address, flags);
-}
-
-pub unsafe fn init() {
-	// Add a read-only, execute-disable identity page mapping for the supplied Multiboot information.
-	let root_pagetable = &mut *PML4_ADDRESS;
-	let page = Page::<BasePageSize>::including_address(mb_info as usize);
-	root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
 }
