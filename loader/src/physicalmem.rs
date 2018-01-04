@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,30 +21,23 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-//! Minor functions that Rust really expects to be defined by the compiler,
-//! but which we need to provide manually because we're on bare metal.
+use paging::{BasePageSize, PageSize};
 
-#![allow(private_no_mangle_fns)]
+static mut CURRENT_ADDRESS: usize = 0;
 
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
 
-#[lang = "panic_fmt"]
-#[no_mangle]
-extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -> !
-{
-	loaderlog!("PANIC: {}:{}: {}", file, line, args);
-	loop {
-		unsafe { asm!("hlt" :::: "volatile"); }
-	}
+pub fn init(address: usize) {
+	unsafe { CURRENT_ADDRESS = address; }
 }
 
-#[no_mangle]
-#[allow(non_snake_case)]
-pub fn _Unwind_Resume()
-{
-	loaderlog!("UNWIND!");
-	loop {
-		unsafe { asm!("hlt" :::: "volatile"); }
+pub fn allocate(size: usize) -> usize {
+	assert!(size > 0);
+	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
+
+	unsafe {
+		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
+		let address = CURRENT_ADDRESS;
+		CURRENT_ADDRESS += size;
+		address
 	}
 }
