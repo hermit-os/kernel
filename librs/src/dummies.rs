@@ -1,32 +1,66 @@
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
+//
+// MIT License
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+use arch;
+use syscall::tid_t;
+
+type entry_point_t = extern "C" fn(usize) -> i32;
+
+#[link_section = ".percore"]
 #[no_mangle]
-pub extern "C" fn __page_map() { panic!("__page_map"); }
+pub static mut current_task_lwip_errno: i32 = 0;
 
 #[no_mangle]
-pub extern "C" fn cpu_detection() { panic!("cpu_detection"); }
+pub static mut rcce_lock: usize = 0;
+
 
 #[no_mangle]
-pub extern "C" fn fpu_init() { panic!("fpu_init"); }
+pub extern "C" fn block_current_task() -> i32 {
+	panic!("block_current_task is unimplemented");
+}
 
 #[no_mangle]
-pub extern "C" fn gdt_install() { panic!("gdt_install"); }
+pub extern "C" fn create_kernel_task_on_core(id: *mut tid_t, ep: entry_point_t, args: usize, prio: u8, core_id: u32) -> i32 {
+	panic!("create_kernel_task_on_core is unimplemented");
+}
 
 #[no_mangle]
-pub extern "C" fn idt_install() { panic!("idt_install"); }
+pub extern "C" fn do_abort() -> ! {
+	panic!("do_abort is unimplemented");
+}
 
 #[no_mangle]
-pub extern "C" fn page_init() { panic!("page_init"); }
+pub extern "C" fn kputchar(character: i32) -> i32 {
+	arch::output_message_byte(character as u8);
+	1
+}
 
 #[no_mangle]
-pub extern "C" fn page_unmap() { panic!("page_unmap"); }
+pub extern "C" fn reschedule() {
+	panic!("reschedule is unimplemented");
+}
 
 #[no_mangle]
-pub extern "C" fn restore_fpu_state() { panic!("restore_fpu_state"); }
-
-#[no_mangle]
-pub extern "C" fn save_fpu_state() { panic!("save_fpu_state"); }
-
-#[no_mangle]
-pub extern "C" fn set_tss() { panic!("set_tss"); }
-
-#[no_mangle]
-pub extern "C" fn virt_to_phys() { panic!("virt_to_phys"); }
+pub extern "C" fn wakeup_task(id: tid_t) -> i32 {
+	panic!("wakeup_task is unimplemented");
+}

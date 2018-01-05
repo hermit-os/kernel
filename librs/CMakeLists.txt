@@ -45,7 +45,8 @@ add_custom_command(
 		${CMAKE_BINARY_DIR}/hermit_rs
 	VERBATIM)
 
-# Add the Cargo project to build the Rust library libhermit_rs.a.
+# Add the Cargo project to build the Rust library.
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/release/libhermit_rs.a")
 add_custom_target(hermit_rs
 	DEPENDS
 		objmv
@@ -74,16 +75,15 @@ add_custom_command(
 
 	# Rename sections in Rust library
 	COMMAND
-		${CMAKE_BINARY_DIR}/objmv/release/objmv
-		${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/release/libhermit_rs.a
+		${CMAKE_BINARY_DIR}/objmv/release/objmv ${HERMIT_RS}
 
 	# Convert Rust library to HermitCore's osabi
 	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore
-		${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/release/libhermit_rs.a)
+		${CMAKE_ELFEDIT} --output-osabi HermitCore ${HERMIT_RS})
 
 # The entry point
 add_library(hermit_entry OBJECT "src/arch/x86_64/entry.asm")
+#set_source_files_properties("src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
 add_custom_target(hermit_entry_edited
 	DEPENDS
 		hermit_entry
@@ -101,6 +101,12 @@ add_kernel_module_sources("lwip" "${LWIP_SRC}/core/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv4/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv6/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/netif/*.c")
+
+# libkern needed for LwIP
+add_kernel_module_sources("libkern" "${CMAKE_SOURCE_DIR}/libkern/*.c")
+
+# Support for Go applications that currently cannot be implemented in Rust
+add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/*.c")
 
 # Set options for the C sources.
 get_kernel_modules(KERNEL_MODULES)
@@ -147,7 +153,7 @@ add_custom_command(
 
 	# Merge the Rust library into the C library.
 	COMMAND
-		${CMAKE_AR} x ${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/release/libhermit_rs.a
+		${CMAKE_AR} x ${HERMIT_RS}
 	COMMAND
 		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
 	COMMAND

@@ -26,13 +26,15 @@ use core::{mem, ptr};
 
 
 extern "C" {
-	#[link_section = ".percore"]
-	static __core_id: u32;
-
 	static current_boot_id: u32;
 	static percore_end0: u8;
 	static percore_start: u8;
 }
+
+#[link_section = ".percore"]
+#[no_mangle]
+/// APIC ID of the current CPU Core.
+pub static mut __core_id: u32 = 0;
 
 
 pub trait PerCoreVariable {
