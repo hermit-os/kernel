@@ -2,14 +2,15 @@
 name = "hermit-rs"
 version = "0.2.2"
 authors = [
-        "Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
+	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
+	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
 
 [lib]
 crate-type = ["staticlib"]
 
 [dependencies]
-bitflags = "1.0.0"
+bitflags = "1.0.1"
 multiboot = "0.3.0"
 spin = "0.4.6"
 

@@ -73,10 +73,11 @@ mod console;
 mod consts;
 mod drivers;
 mod dummies;
+mod errno;
 mod mm;
 mod runtime_glue;
 mod synch;
-mod tasks;
+mod syscall;
 mod timer;
 
 // IMPORTS
@@ -90,7 +91,7 @@ mod arch_specific {
 
 pub use arch_specific::*;
 pub use dummies::*;
-pub use tasks::*;
+pub use syscall::*;
 pub use timer::*;
 
 use consts::*;

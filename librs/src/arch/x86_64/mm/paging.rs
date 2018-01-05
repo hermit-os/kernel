@@ -28,14 +28,10 @@ use arch::x86_64::processor;
 use core::fmt;
 use core::marker::PhantomData;
 use multiboot;
-use tasks::*;
 use x86::shared::control_regs;
 
 
 extern "C" {
-	#[link_section = ".percore"]
-	static current_task: *const task_t;
-
 	#[linkage = "extern_weak"]
 	static runtime_osinit: *const u8;
 
