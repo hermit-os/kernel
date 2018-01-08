@@ -27,7 +27,8 @@ use arch::x86_64::mm::physicalmem;
 use arch::x86_64::processor;
 use core::fmt;
 use core::marker::PhantomData;
-use multiboot;
+use hermit_multiboot::Multiboot;
+use mm;
 use x86::shared::control_regs;
 
 
@@ -37,7 +38,7 @@ extern "C" {
 
 	static cmdline: *const u8;
 	static cmdsize: usize;
-	static mb_info: multiboot::PAddr;
+	static mb_info: usize;
 }
 
 
@@ -606,12 +607,22 @@ pub fn init() {
 
 		if mb_info > 0 {
 			let page = Page::<BasePageSize>::including_address(mb_info as usize);
+			assert!(page.address() < mm::kernel_start_address(), "Multiboot information is not below Kernel start address!");
+			root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
+
+			// Map the "Memory Map" information too.
+			let mb = Multiboot::new(mb_info);
+			let page = Page::<BasePageSize>::including_address(
+				mb.memory_map_address().expect("Could not find a memory map in the Multiboot information")
+			);
+			assert!(page.address() < mm::kernel_start_address(), "Multiboot Memory Map is not below Kernel start address!");
 			root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
 		}
 
 		if cmdsize > 0 {
 			let first_page = Page::<BasePageSize>::including_address(cmdline as usize);
 			let last_page = Page::<BasePageSize>::including_address(cmdline as usize + cmdsize - 1);
+			assert!(last_page.address() < mm::kernel_start_address(), "Command line is not below Kernel start address!");
 			let range = Page::<BasePageSize>::range(first_page, last_page);
 			root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 		}

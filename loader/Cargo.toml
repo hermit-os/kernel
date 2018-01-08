@@ -17,7 +17,7 @@ path = "../crates/rlibc"    # Low-level functions like memcpy.
 features = ["nightly"]
 
 [dependencies.x86]
-path = "../librs/crates/x86"
+path = "../crates/x86"
 default-features = false
 
 # The release profile, used for `cargo build --release`.

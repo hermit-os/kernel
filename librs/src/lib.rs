@@ -52,10 +52,11 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+extern crate hermit_multiboot;
+
 #[macro_use]
 extern crate lazy_static;
 
-extern crate multiboot;
 extern crate raw_cpuid;
 extern crate spin;
 extern crate x86;
