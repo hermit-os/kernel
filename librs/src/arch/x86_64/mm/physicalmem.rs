@@ -23,49 +23,42 @@
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
-use core::{mem, slice};
+use hermit_multiboot::Multiboot;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
-use multiboot;
 
 
 extern "C" {
 	static limit: usize;
-	static mb_info: multiboot::PAddr;
+	static mb_info: usize;
 }
 
 static mut PHYSICAL_FREE_LIST: FreeList = FreeList::new();
 
-fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-	unsafe {
-		let ptr = mem::transmute(p);
-		Some(slice::from_raw_parts(ptr, sz))
-	}
-}
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
 	if unsafe { mb_info } == 0 {
 		return Err(());
 	}
 
-	let mb = unsafe { multiboot::Multiboot::new(mb_info, paddr_to_slice).unwrap() };
-	let all_regions = mb.memory_regions().expect("No memory regions supplied by multiboot information!");
+	let mb = unsafe { Multiboot::new(mb_info) };
+	let all_regions = mb.memory_map().expect("Could not find a memory map in the Multiboot information");
 	let ram_regions = all_regions.filter(|m|
-		m.memory_type() == multiboot::MemoryType::Available &&
-		m.base_address() + m.length() > mm::kernel_end_address() as u64
+		m.is_available() &&
+		m.base_address() + m.length() > mm::kernel_end_address()
 	);
 
 	for m in ram_regions {
-		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
+		let start_address = if m.base_address() <= mm::kernel_start_address() {
 			mm::kernel_end_address()
 		} else {
-			m.base_address() as usize
+			m.base_address()
 		};
 
 		let entry = Node::new(
 			FreeListEntry {
 				start: start_address,
-				end: (m.base_address() + m.length()) as usize
+				end: m.base_address() + m.length()
 			}
 		);
 		unsafe { PHYSICAL_FREE_LIST.list.push(entry); }

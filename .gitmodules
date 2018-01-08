@@ -6,15 +6,12 @@
 	path = usr/libomp
 	url = https://github.com/RWTH-OS/libomp_oss.git
 	branch = hermit
-[submodule "librs/rust"]
-	path = librs/rust
-	url = https://github.com/RWTH-OS/rust.git
-[submodule "librs/crates/x86"]
-	path = librs/crates/x86
+[submodule "crates/x86"]
+	path = crates/x86
 	url = https://github.com/RWTH-OS/rust-x86.git
 	branch = all-merged
-[submodule "librs/crates/raw_cpuid"]
-	path = librs/crates/raw_cpuid
+[submodule "crates/raw_cpuid"]
+	path = crates/raw_cpuid
 	url = https://github.com/ColinFinck/rust-cpuid.git
 	branch = extended-brand-string-fix
 [submodule "crates/rlibc"]

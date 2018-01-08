@@ -11,18 +11,20 @@ crate-type = ["staticlib"]
 
 [dependencies]
 bitflags = "1.0.1"
-multiboot = "0.3.0"
 spin = "0.4.6"
+
+[dependencies.hermit-multiboot]
+path = "../crates/hermit-multiboot"
 
 [dependencies.lazy_static]
 version = "0.2.9"
 features = ["spin_no_std"]
 
 [dependencies.raw-cpuid]
-path = "crates/raw_cpuid"
+path = "../crates/raw_cpuid"
 
 [dependencies.x86]
-path = "crates/x86"
+path = "../crates/x86"
 default-features = false
 
 # The development profile, used for `cargo build`.
