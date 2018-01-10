@@ -161,7 +161,21 @@ add_custom_command(
 
 	# Redefine _Unwind_Resume to avoid collision with libgcc.a
 	COMMAND
-		${CMAKE_OBJCOPY} --redefine-sym _Unwind_Resume=_Unwind_Resume_rs $<TARGET_FILE:hermit-bootstrap>)
+		${CMAKE_OBJCOPY} --redefine-sym _Unwind_Resume=_Unwind_Resume_rs $<TARGET_FILE:hermit-bootstrap>
+
+	# Copy libhermit.a into local prefix directory so that all subsequent
+	# targets can link against the freshly built version (as opposed to
+	# linking against the one supplied by the toolchain)
+	COMMAND
+		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_LIB_DIR}
+	COMMAND
+		${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:hermit-bootstrap> ${LOCAL_PREFIX_ARCH_LIB_DIR}/
+
+	# and also copy headers into local prefix
+	COMMAND
+		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit
+	COMMAND
+		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/)
 
 # Deploy libhermit.a and headers for package creation
 install(TARGETS hermit-bootstrap
