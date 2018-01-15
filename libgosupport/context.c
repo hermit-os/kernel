@@ -25,12 +25,31 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <hermit/stdarg.h>
 #include <hermit/stddef.h>
-#include <hermit/stdio.h>
-#include <hermit/tasks.h>
-#include <hermit/errno.h>
-#include <hermit/syscall.h>
-#include <hermit/logging.h>
+
+typedef struct {
+	uint16_t control_word;
+	uint16_t unused1;
+	uint16_t status_word;
+	uint16_t unused2;
+	uint16_t tags;
+	uint16_t unused3;
+	uint32_t eip;
+	uint16_t cs_selector;
+	uint32_t opcode:11;
+	uint32_t unused4:5;
+	uint32_t data_offset;
+	uint16_t data_selector;
+	uint16_t unused5;
+} fenv_t;
+
+typedef struct ucontext {
+	mregs_t		uc_mregs;
+	fenv_t		uc_fenv;
+	struct ucontext	*uc_link;
+	stack_t		uc_stack;
+} ucontext_t;
 
 void __startcontext(void);
 
