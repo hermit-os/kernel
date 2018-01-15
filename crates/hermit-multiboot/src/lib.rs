@@ -59,7 +59,7 @@ struct MultibootHeader {
 	cmdline: u32,
 	mods_count: u32,
 	mods_addr: u32,
-	elf_symbols: [u32; 3],
+	elf_symbols: [u32; 4],
 	mmap_length: u32,
 	mmap_addr: u32,
 	drives_length: u32,
@@ -137,7 +137,7 @@ impl Multiboot {
 		self.memory_map_address().map(|address|
 			MemoryMapIter {
 				current: address,
-				end: self.header.mmap_length as usize,
+				end: address + self.header.mmap_length as usize,
 			}
 		)
 	}
@@ -166,6 +166,7 @@ impl Module {
 
 const MEMORY_TYPE_AVAILABLE_RAM: u32 = 1;
 
+#[repr(C, packed)]
 pub struct MemoryMapEntry {
 	size: u32,
 	base_addr: u64,
@@ -199,7 +200,7 @@ impl Iterator for MemoryMapIter {
 	type Item = &'static MemoryMapEntry;
 
 	fn next(&mut self) -> Option<&'static MemoryMapEntry> {
-		if self.current <= self.end {
+		if self.current < self.end {
 			let entry = unsafe { & *(self.current as *const MemoryMapEntry) };
 			self.current += entry.size as usize + 4;
 			Some(entry)
