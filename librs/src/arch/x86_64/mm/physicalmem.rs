@@ -47,8 +47,11 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		m.is_available() &&
 		m.base_address() + m.length() > mm::kernel_end_address()
 	);
+	let mut found_ram = false;
 
 	for m in ram_regions {
+		found_ram = true;
+
 		let start_address = if m.base_address() <= mm::kernel_start_address() {
 			mm::kernel_end_address()
 		} else {
@@ -64,6 +67,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
 	}
 
+	assert!(found_ram, "Could not find any available RAM in the Multiboot Memory Map");
 	Ok(())
 }
 
