@@ -105,24 +105,27 @@ pub unsafe extern "C" fn loader_main() {
 	loaderlog!("Started");
 
 	// Identity-map the Multiboot information.
-	assert!(mb_info > 0, "Got no Multiboot information");
+	assert!(mb_info > 0, "Could not find Multiboot information");
 	loaderlog!("Found Multiboot information at {:#X}", mb_info);
 	let page_address = align_down!(mb_info, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 	// Load the Multiboot information and identity-map the modules information.
 	let mb = Multiboot::new(mb_info);
-	let modules_address = mb.modules_address().expect("Could not find any modules in the Multiboot information");
+	let modules_address = mb.modules_address().expect("Could not find module information in the Multiboot information");
 	let page_address = align_down!(modules_address, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
 	let modules = mb.modules().unwrap();
+	let mut found_module = false;
 	let mut start_address = 0;
 	let mut end_address = 0;
 
 	for m in modules {
+		found_module = true;
+
 		if start_address == 0 {
 			start_address = m.start_address();
 		}
@@ -139,6 +142,7 @@ pub unsafe extern "C" fn loader_main() {
 	physicalmem::init(align_up!(end_address, LargePageSize::SIZE));
 
 	// Identity-map the first module.
+	assert!(found_module, "Could not find a single module in the Multiboot information");
 	assert!(start_address > 0);
 	loaderlog!("Found an ELF module at {:#X}", start_address);
 	let page_address = align_down!(start_address, BasePageSize::SIZE);
