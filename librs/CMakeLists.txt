@@ -68,32 +68,17 @@ add_custom_target(doc
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
-# Post-process the compiled Rust library.
-add_custom_command(
-	TARGET
-		hermit_rs POST_BUILD
 
-	# Rename sections in Rust library
-	COMMAND
-		${CMAKE_BINARY_DIR}/objmv/release/objmv ${HERMIT_RS}
+# Now define "kernel modules", which are built into object libraries.
+# It is important that ASM and C sources are not mixed in a single module and ASM modules are suffixed with "_asm"!
+add_definitions(-D__KERNEL__)
 
-	# Convert Rust library to HermitCore's osabi
-	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore ${HERMIT_RS})
-
-# The entry point
-add_library(hermit_entry OBJECT "src/arch/x86_64/entry.asm")
-#set_source_files_properties("src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
-add_custom_target(hermit_entry_edited
-	DEPENDS
-		hermit_entry
-	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore
-		"${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/hermit_entry.dir/src/arch/x86_64/entry.asm.obj")
-list(APPEND KERNEL_OBJECTS $<TARGET_OBJECTS:hermit_entry>)
+# arch
+add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm")
+add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/sighandler.asm")
+add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/switch.asm")
 
 # LwIP
-add_definitions(-D__KERNEL__)
 set(LWIP_SRC ${CMAKE_SOURCE_DIR}/lwip/src)
 add_kernel_module_sources("lwip" "${LWIP_SRC}/api/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/arch/*.c")
@@ -106,58 +91,63 @@ add_kernel_module_sources("lwip" "${LWIP_SRC}/netif/*.c")
 add_kernel_module_sources("libkern" "${CMAKE_SOURCE_DIR}/libkern/*.c")
 
 # Support for Go applications that currently cannot be implemented in Rust
-add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/*.c")
+add_kernel_module_sources("libgosupport_asm" "${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
+add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/context.c")
 
-# Set options for the C sources.
+
+# Add object libraries and set options for the defined kernel modules.
 get_kernel_modules(KERNEL_MODULES)
 foreach(MODULE ${KERNEL_MODULES})
 	get_kernel_module_sources(SOURCES ${MODULE})
 
-	# Maintain a list of all objects that will end up in libhermit.a
+	# Maintain a list of all objects that will end up in the ASM/C library.
 	list(APPEND KERNEL_OBJECTS $<TARGET_OBJECTS:${MODULE}>)
 
 	add_library(${MODULE} OBJECT ${SOURCES})
+	add_dependencies(${MODULE} hermit_rs)
 
-	target_compile_options(${MODULE}
-		PRIVATE ${HERMIT_KERNEL_FLAGS})
+	# Set C compiler options and include directories for non-ASM modules
+	if(NOT "${MODULE}" MATCHES "_asm$")
+		target_compile_options(${MODULE}
+			PRIVATE ${HERMIT_KERNEL_FLAGS})
 
-	target_include_directories(${MODULE}
-		PUBLIC ${HERMIT_KERNEL_INCLUDES})
+		target_include_directories(${MODULE}
+			PUBLIC ${HERMIT_KERNEL_INCLUDES})
+	endif()
 
 	# Suppress all LwIP compiler warnings. Not our code, so we cannot fix
 	if("${MODULE}" STREQUAL "lwip")
-		target_compile_options(${MODULE}
-			PRIVATE -w)
+		target_compile_options(${MODULE} PRIVATE -w)
 	endif()
 endforeach()
 
-# Build the C library libhermit.a out of the entry point and kernel modules.
+# Set a source-level dependency from the entry point on the Rust library.
+# This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.
+set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
+
+# Build all kernel modules into a single static library.
 add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
-set_target_properties(hermit-bootstrap PROPERTIES
-	ARCHIVE_OUTPUT_NAME hermit)
-add_dependencies(hermit-bootstrap
-	hermit_entry_edited
-	hermit_rs)
+set_target_properties(hermit-bootstrap PROPERTIES ARCHIVE_OUTPUT_NAME hermit)
 
-# Post-process the compiled C library.
+# Post-process the static library.
 add_custom_command(
-	TARGET
-		hermit-bootstrap POST_BUILD
+	TARGET hermit-bootstrap POST_BUILD
 
-	# Rename sections in final library
-	COMMAND
-		${CMAKE_OBJCOPY} --rename-section .bss=.kbss
-						 --rename-section .text=.ktext
-						 --rename-section .data=.kdata
-						 $<TARGET_FILE:hermit-bootstrap>
-
-	# Merge the Rust library into the C library.
+	# Merge the Rust library into this static library.
 	COMMAND
 		${CMAKE_AR} x ${HERMIT_RS}
 	COMMAND
 		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
 	COMMAND
 		${CMAKE_COMMAND} -E remove *.o
+
+	# Convert the combined library to HermitCore's osabi
+	COMMAND
+		${CMAKE_ELFEDIT} --output-osabi HermitCore $<TARGET_FILE:hermit-bootstrap>
+
+	# Rename sections in the combined library to separate this kernel data from later user data.
+	COMMAND
+		${CMAKE_BINARY_DIR}/objmv/release/objmv $<TARGET_FILE:hermit-bootstrap>
 
 	# Redefine _Unwind_Resume to avoid collision with libgcc.a
 	COMMAND
