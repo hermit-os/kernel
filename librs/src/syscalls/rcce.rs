@@ -21,23 +21,17 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use paging::{BasePageSize, PageSize};
-
-static mut CURRENT_ADDRESS: usize = 0;
-
-
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
+#[no_mangle]
+pub extern "C" fn sys_rcce_init(session_id: i32) -> i32 {
+	panic!("sys_rcce_init is unimplemented");
 }
 
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
+#[no_mangle]
+pub extern "C" fn sys_rcce_malloc(session_id: i32, ue: i32) -> usize {
+	panic!("sys_rcce_malloc is unimplemented");
+}
 
-	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
-	}
+#[no_mangle]
+pub extern "C" fn sys_rcce_fini(session_id: i32) -> i32 {
+	panic!("sys_rcce_fini is unimplemented");
 }

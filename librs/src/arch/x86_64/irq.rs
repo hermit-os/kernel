@@ -24,8 +24,8 @@
 
 use arch::x86_64::idt;
 use arch::x86_64::mm::paging;
-use arch::x86_64::processor;
 use core::fmt;
+use scheduler;
 use x86::shared::flags::*;
 
 
@@ -152,37 +152,37 @@ pub fn install() {
 
 extern "x86-interrupt" fn divide_error_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Divide Error (#DE) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn debug_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Debug (#DB) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn nmi_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Non-Maskable Interrupt (NMI) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn breakpoint_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Breakpoint (#BP) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn overflow_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Overflow (#OF) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn bound_range_exceeded_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("BOUND Range Exceeded (#BR) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Invalid Opcode (#UD) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut ExceptionStackFrame) {
@@ -196,60 +196,60 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut Exce
 
 extern "x86-interrupt" fn double_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
 	error!("Double Fault (#DF) Exception: {:#?}, error {:#X}", stack_frame, error_code);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("CoProcessor Segment Overrun (#MF) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn invalid_tss_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Invalid TSS (#TS) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn segment_not_present_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Segment Not Present (#NP) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn stack_segment_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
 	error!("Stack Segment Fault (#SS) Exception: {:#?}, error {:#X}", stack_frame, error_code);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn general_protection_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
 	error!("General Protection (#GP) Exception: {:#?}, error {:#X}", stack_frame, error_code);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn floating_point_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Floating-Point Error (#MF) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn alignment_check_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Alignment Check (#AC) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn machine_check_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Machine Check (#MC) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn simd_floating_point_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("SIMD Floating-Point (#XM) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn virtualization_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn reserved_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Reserved Exception: {:#?}", stack_frame);
-	processor::halt();
+	scheduler::abort();
 }

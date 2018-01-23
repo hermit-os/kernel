@@ -35,7 +35,6 @@
  */
 
 #include <hermit/stddef.h>
-#include <asm/string.h>
 
 #ifdef __cplusplus
 extern "C" {

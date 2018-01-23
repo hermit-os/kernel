@@ -106,10 +106,10 @@ impl PageTableEntry {
 		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
-			assert!(physical_address & (LargePageSize::SIZE - 1) == 0, "Physical address not on 2 MiB page boundary (physical_address = {:#X})", physical_address);
+			assert!(physical_address % LargePageSize::SIZE == 0, "Physical address is not on a 2 MiB page boundary (physical_address = {:#X})", physical_address);
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
-			assert!(physical_address & (BasePageSize::SIZE - 1) == 0, "Physical address not on 4 KiB page boundary (physical_address = {:#X})", physical_address);
+			assert!(physical_address % BasePageSize::SIZE == 0, "Physical address is not on a 4 KiB page boundary (physical_address = {:#X})", physical_address);
 		}
 
 		self.physical_address_and_flags = physical_address | (PageTableEntryFlags::PRESENT | PageTableEntryFlags::ACCESSED | flags).bits();

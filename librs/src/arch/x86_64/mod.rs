@@ -33,8 +33,10 @@ pub mod pic;
 pub mod pit;
 pub mod processor;
 pub mod serial;
+pub mod task;
 pub mod vga;
 
+pub use arch::x86_64::gdt::get_boot_stacks;
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
 
@@ -68,12 +70,13 @@ pub fn output_message_byte(byte: u8) {
 pub fn boot_processor_init() {
 	percore::init();
 	gdt::install();
-	idt::install();
 	processor::detect_features();
 	processor::configure();
 	vga::init();
 	::mm::init();
 	::mm::print_information();
+	gdt::create_tss();
+	idt::install();
 	pic::init();
 	irq::install();
 	irq::enable();
@@ -84,22 +87,14 @@ pub fn boot_processor_init() {
 
 	**CPU_ONLINE.lock() += 1;
 
-	apic::init();
-	apic::print_information();
-
-	loop {
-		info!("Moin");
-		processor::udelay(5_000_000);
-	}
-
-	/*unsafe {
-		signal_init();
-	}*/
+	//apic::init();
+	//apic::print_information();
 }
 
 pub fn application_processor_init() {
 	percore::init();
 	gdt::install();
+	gdt::create_tss();
 	idt::install();
 	processor::configure();
 	apic::init_x2apic();

@@ -21,23 +21,41 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use paging::{BasePageSize, PageSize};
+// TEMPORARY DUMMY
+type Semaphore = u8;
 
-static mut CURRENT_ADDRESS: usize = 0;
 
-
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
+#[no_mangle]
+pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
+	panic!("sys_sem_init is unimplemented");
 }
 
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
+#[no_mangle]
+pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+	panic!("sys_sem_destroy is unimplemented");
+}
 
-	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
-	}
+#[no_mangle]
+pub extern "C" fn sys_sem_wait(sem: *const Semaphore) -> i32 {
+	panic!("sys_sem_wait is unimplemented");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
+	panic!("sys_sem_post is unimplemented");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
+	panic!("sys_sem_trywait is unimplemented");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+	panic!("sys_sem_timedwait is unimplemented");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+	panic!("sys_sem_cancelablewait is unimplemented");
 }

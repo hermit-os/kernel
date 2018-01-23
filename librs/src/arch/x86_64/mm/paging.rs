@@ -24,11 +24,13 @@
 use arch::x86_64::apic;
 use arch::x86_64::irq;
 use arch::x86_64::mm::physicalmem;
+use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use core::fmt;
+use core::{fmt, ptr};
 use core::marker::PhantomData;
 use hermit_multiboot::Multiboot;
 use mm;
+use scheduler;
 use x86::shared::control_regs;
 
 
@@ -128,10 +130,10 @@ impl PageTableEntry {
 		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
-			assert!(physical_address & (LargePageSize::SIZE - 1) == 0, "Physical address not on 2 MiB page boundary (physical_address = {:#X})", physical_address);
+			assert!(physical_address % LargePageSize::SIZE == 0, "Physical address is not on a 2 MiB page boundary (physical_address = {:#X})", physical_address);
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
-			assert!(physical_address & (BasePageSize::SIZE - 1) == 0, "Physical address not on 4 KiB page boundary (physical_address = {:#X})", physical_address);
+			assert!(physical_address % BasePageSize::SIZE == 0, "Physical address is not on a 4 KiB page boundary (physical_address = {:#X})", physical_address);
 		}
 
 		// Verify that the physical address does not exceed the CPU's physical address width.
@@ -515,50 +517,44 @@ impl fmt::Display for PageFaultError {
 
 pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame, error_code: u64) {
 	let virtual_address = unsafe { control_regs::cr2() };
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	let task = core_scheduler.get_current_task();
 
-	/*let task = unsafe { current_task.per_core().as_ref().expect("task is NULL!") };
-
-	// Is there a heap associated to the current task?
-	if let Some(ref heap) = unsafe { task.heap.as_ref() } {
-		// Is the requested virtual address within the boundary of that heap.
+	// Is a heap associated to the current task?
+	if let Some(ref heap) = task.borrow().heap {
+		// Is the requested virtual address within the boundary of that heap?
 		if virtual_address >= heap.start && virtual_address < heap.end {
-			// Then the task may access the page at that virtual address.
-			let mut locked_root_table = ROOT_PAGETABLE.lock();
-			let page = Page::<BasePageSize>::including_address(virtual_address);
+			// Then allocate physical memory for a 2 MiB page and map it to this virtual address.
+			let physical_address = physicalmem::allocate_aligned(LargePageSize::SIZE, LargePageSize::SIZE);
+			let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+			let page = Page::<LargePageSize>::including_address(virtual_address);
 
-			// Is the page already mapped in the page table?
-			if locked_root_table.get_page_table_entry(page).is_none() {
-				// No, then create a mapping.
-				let physical_address = mm::physicalmem::allocate(BasePageSize::SIZE);
-				locked_root_table.map_page::<BasePageSize>(
-					page,
-					physical_address,
-					PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE
-				);
+			debug!("Mapping 2 MiB page for program heap ({:#X} => {:#X})", page.address(), physical_address);
+			root_pagetable.map_page(
+				page,
+				physical_address,
+				PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE
+			);
 
-				// If our application is a Go application (detected by the presence of the
-				// weak symbol "runtime_osinit"), we have to return a zeroed page.
-				unsafe {
-					if !runtime_osinit.is_null() {
-						ptr::write_bytes(page.address() as *mut u8, 0, BasePageSize::SIZE);
-					}
+			// If our application is a Go application (detected by the presence of the
+			// weak symbol "runtime_osinit"), we have to return a zeroed page.
+			unsafe {
+				if !runtime_osinit.is_null() {
+					ptr::write_bytes(page.address() as *mut u8, 0, LargePageSize::SIZE);
 				}
 			}
 
 			return;
+		} else {
+			debug!("boundary violation: {:#X} >= {:#X} && {:#X} < {:#X}", virtual_address, heap.start, virtual_address, heap.end);
 		}
-	}*/
+	}
 
 	// Anything else is an error!
 	let pferror = PageFaultError { bits: error_code };
 	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
-
-	/*if let Some(ref heap) = unsafe { task.heap.as_ref() } {
-		error!("Heap {:#X} - {:#X}", heap.start, heap.end);
-	}*/
-
-	processor::halt();
+	scheduler::abort();
 }
 
 #[inline]

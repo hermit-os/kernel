@@ -21,23 +21,47 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use paging::{BasePageSize, PageSize};
+use console;
+use core::fmt::Write;
+use core::{slice, str};
+use errno::*;
 
-static mut CURRENT_ADDRESS: usize = 0;
 
-
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
+#[no_mangle]
+pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
+	info!("sys_open is unimplemented, returning -ENOSYS");
+	-ENOSYS
 }
 
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
+#[no_mangle]
+pub extern "C" fn sys_close(fd: i32) -> i32 {
+	info!("sys_close is unimplemented, returning -ENOSYS");
+	-ENOSYS
+}
+
+#[no_mangle]
+pub extern "C" fn sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
+	panic!("sys_read is unimplemented, returning -ENOSYS");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
+	info!("sys_write is halfplemented");
 
 	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
+		let slice = slice::from_raw_parts(buf, len);
+		console::CONSOLE.lock().write_str(str::from_utf8_unchecked(slice)).unwrap();
 	}
+
+	0
+}
+
+#[no_mangle]
+pub extern "C" fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
+	panic!("sys_lseek is unimplemented");
+}
+
+#[no_mangle]
+pub extern "C" fn sys_stat(file: *const u8, st: usize) -> i32 {
+	-ENOSYS
 }

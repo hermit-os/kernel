@@ -24,4 +24,5 @@
 
 //! Synchronization primitives
 
+pub mod semaphore;
 pub mod spinlock;

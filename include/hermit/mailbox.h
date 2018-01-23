@@ -30,8 +30,7 @@
 
 #include <hermit/string.h>
 #include <hermit/mailbox_types.h>
-#include <hermit/tasks.h>
-#include <hermit/semaphore.h>
+#include <hermit/syscall.h>
 #include <hermit/errno.h>
 
 #ifdef __cplusplus
@@ -45,10 +44,10 @@ extern "C" {
 	\
 		memset(m->buffer, 0x00, sizeof(type)*MAILBOX_SIZE); \
 		m->wpos = m->rpos = 0; \
-		sem_init(&m->mails, 0); \
-		sem_init(&m->boxes, MAILBOX_SIZE); \
-		spinlock_init(&m->rlock); \
-		spinlock_init(&m->wlock); \
+		sys_sem_init(&m->mails, 0); \
+		sys_sem_init(&m->boxes, MAILBOX_SIZE); \
+		sys_spinlock_init(&m->rlock); \
+		sys_spinlock_init(&m->wlock); \
 	\
 		return 0; \
 	}\
@@ -57,10 +56,10 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m, 0)) \
 			return -EINVAL; \
 	\
-		sem_destroy(&m->mails); \
-		sem_destroy(&m->boxes); \
-		spinlock_destroy(&m->rlock); \
-		spinlock_destroy(&m->wlock); \
+		sys_sem_destroy(m->mails); \
+		sys_sem_destroy(m->boxes); \
+		sys_spinlock_destroy(&m->rlock); \
+		sys_spinlock_destroy(&m->wlock); \
 	\
 		return 0; \
 	} \
@@ -69,12 +68,12 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m, 0)) \
 			return -EINVAL; \
 	\
-		sem_wait(&m->boxes, 0); \
-		spinlock_lock(&m->wlock); \
+		sys_sem_wait(m->boxes); \
+		sys_spinlock_lock(&m->wlock); \
 		m->buffer[m->wpos] = mail; \
 		m->wpos = (m->wpos+1) % MAILBOX_SIZE; \
-		spinlock_unlock(&m->wlock); \
-		sem_post(&m->mails); \
+		sys_spinlock_unlock(&m->wlock); \
+		sys_sem_post(m->mails); \
 	\
 		return 0; \
 	} \
@@ -83,13 +82,13 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m, 0)) \
 			return -EINVAL; \
 	\
-		if (sem_trywait(&m->boxes)) \
+		if (sys_sem_trywait(m->boxes)) \
 			return -EBUSY; \
-		spinlock_lock(&m->wlock); \
+		sys_spinlock_lock(&m->wlock); \
 		m->buffer[m->wpos] = mail; \
 		m->wpos = (m->wpos+1) % MAILBOX_SIZE; \
-		spinlock_unlock(&m->wlock); \
-		sem_post(&m->mails); \
+		sys_spinlock_unlock(&m->wlock); \
+		sys_sem_post(m->mails); \
 	\
 		return 0; \
 	} \
@@ -100,13 +99,17 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m || !mail, 0)) \
 			return -EINVAL; \
 	\
-		err = sem_wait(&m->mails, ms); \
+		if (ms == 0) \
+			err = sys_sem_wait(m->mails); \
+		else \
+			err = sys_sem_timedwait(m->mails, ms); \
+	\
 		if (err) return err; \
-		spinlock_lock(&m->rlock); \
+		sys_spinlock_lock(&m->rlock); \
 		*mail = m->buffer[m->rpos]; \
 		m->rpos = (m->rpos+1) % MAILBOX_SIZE; \
-		spinlock_unlock(&m->rlock); \
-		sem_post(&m->boxes); \
+		sys_spinlock_unlock(&m->rlock); \
+		sys_sem_post(m->boxes); \
 	\
 		return 0; \
 	} \
@@ -115,13 +118,13 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m || !mail, 0)) \
 			return -EINVAL; \
 	\
-		if (sem_trywait(&m->mails) != 0) \
+		if (sys_sem_trywait(m->mails) != 0) \
 			return -EINVAL; \
-		spinlock_lock(&m->rlock); \
+		sys_spinlock_lock(&m->rlock); \
 		*mail = m->buffer[m->rpos]; \
 		m->rpos = (m->rpos+1) % MAILBOX_SIZE; \
-		spinlock_unlock(&m->rlock); \
-		sem_post(&m->boxes); \
+		sys_spinlock_unlock(&m->rlock); \
+		sys_sem_post(m->boxes); \
 	\
 		return 0; \
 	}\

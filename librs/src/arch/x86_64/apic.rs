@@ -34,6 +34,7 @@ use consts::*;
 use core::sync::atomic::hint_core_should_pause;
 use core::{mem, ptr, str};
 use mm;
+use scheduler;
 use x86::shared::control_regs::*;
 use x86::shared::io::*;
 use x86::shared::msr::*;
@@ -178,13 +179,13 @@ extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionSta
 extern "x86-interrupt" fn error_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
 	error!("APIC LVT Error Interrupt: {:#?}", stack_frame);
 	eoi();
-	processor::halt();
+	scheduler::abort();
 }
 
 extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
 	error!("Spurious Interrupt: {:#?}", stack_frame);
 	eoi();
-	processor::halt();
+	scheduler::abort();
 }
 
 fn detect_multiprocessor_configuration_table(start_address: usize, end_address: usize) -> Result<usize, ()> {

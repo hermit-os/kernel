@@ -21,23 +21,27 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use paging::{BasePageSize, PageSize};
+use arch;
+use synch::spinlock::Spinlock;
 
-static mut CURRENT_ADDRESS: usize = 0;
-
-
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
+lazy_static! {
+	static ref PARK_MILLER_LEHMER_SEED: Spinlock<u32> =
+		Spinlock::new(arch::processor::get_timestamp() as u32);
 }
 
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
+fn generate_park_miller_lehmer_random_number() -> u32 {
+	let mut seed = PARK_MILLER_LEHMER_SEED.lock();
+	let random = (((*seed) as u64 * 48271) % 2147483647) as u32;
+	*seed = random;
+	random
+}
+
+#[no_mangle]
+pub extern "C" fn sys_rand() -> u32 {
+	if let Some(value) = arch::processor::generate_random_number() {
+		value
+	} else {
+		generate_park_miller_lehmer_random_number()
 	}
 }

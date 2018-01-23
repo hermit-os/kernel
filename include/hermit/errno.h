@@ -11,7 +11,6 @@
 #define __ERRNO_H__
 
 #include <hermit/config.h>
-#include <asm/stddef.h>
 
 #define	EPERM		 1	/* Operation not permitted */
 #define	ENOENT		 2	/* No such file or directory */
