@@ -45,7 +45,6 @@
  */
 
 #include <hermit/string.h>
-#include <hermit/spinlock.h>
 
 /* HermitCore use only the 64bit version */
 #define __64BIT__

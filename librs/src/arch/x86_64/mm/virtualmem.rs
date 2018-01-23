@@ -52,7 +52,7 @@ pub fn init() {
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
+	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
 	let result = unsafe { KERNEL_FREE_LIST.allocate(size) };
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
@@ -62,9 +62,9 @@ pub fn allocate(size: usize) -> usize {
 pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
 	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
 	assert!(size > 0);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
+	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
 	unsafe { KERNEL_FREE_LIST.deallocate(virtual_address, size); }
 }
@@ -72,9 +72,9 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 pub fn reserve(virtual_address: usize, size: usize) {
 	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
 	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address & (BasePageSize::SIZE - 1) == 0, "Virtual address {:#X} is not aligned to {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
 	assert!(size > 0);
-	assert!(size & (BasePageSize::SIZE - 1) == 0, "Size {:#X} is not aligned to {:#X}", size, BasePageSize::SIZE);
+	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
 	let result = unsafe {
 		POOL.maintain();
@@ -85,4 +85,14 @@ pub fn reserve(virtual_address: usize, size: usize) {
 
 pub fn print_information() {
 	unsafe { KERNEL_FREE_LIST.print_information(" KERNEL VIRTUAL MEMORY FREE LIST "); }
+}
+
+#[inline]
+pub fn task_heap_start() -> usize {
+	KERNEL_VIRTUAL_MEMORY_END
+}
+
+#[inline]
+pub fn task_heap_end() -> usize {
+	TASK_VIRTUAL_MEMORY_END
 }

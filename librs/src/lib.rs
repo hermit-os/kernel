@@ -77,8 +77,9 @@ mod dummies;
 mod errno;
 mod mm;
 mod runtime_glue;
+mod scheduler;
 mod synch;
-mod syscall;
+mod syscalls;
 mod timer;
 
 // IMPORTS
@@ -92,9 +93,10 @@ mod arch_specific {
 
 pub use arch_specific::*;
 pub use dummies::*;
-pub use syscall::*;
+pub use syscalls::*;
 pub use timer::*;
 
+use arch::percore::*;
 use consts::*;
 use core::ptr;
 use mm::allocator;
@@ -104,19 +106,30 @@ static ALLOCATOR: allocator::HermitAllocator = allocator::HermitAllocator;
 
 
 extern "C" {
-	static __bss_start: u8;
+	static mut __bss_start: u8;
 	static mut hbss_start: u8;
+	static mut libc_sd: i32;
+	static kernel_end: u8;
 	static percore_start: u8;
 	static percore_end0: u8;
+
+	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 }
 
 // FUNCTIONS
 unsafe fn sections_init() {
-	// Initialize .kbss sections
+	// Initialize .kbss sections for the kernel.
 	ptr::write_bytes(
 		&mut hbss_start as *mut u8,
 		0,
 		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize
+	);
+
+	// Initialize .bss sections for the user program.
+	ptr::write_bytes(
+		&mut __bss_start as *mut u8,
+		0,
+		&kernel_end as *const u8 as usize - &__bss_start as *const u8 as usize
 	);
 
 	// Initialize .percore sections
@@ -131,6 +144,17 @@ unsafe fn sections_init() {
 	}
 }
 
+extern "C" fn initd(_arg: usize) {
+	// TODO: Setup Heap
+	// TODO: Setup Networking
+	// TODO: argc, argv, environ
+
+	let argc = 0;
+	let argv = 0 as *mut *mut u8;
+	let environ = 0 as *mut *mut u8;
+	unsafe { libc_start(argc, argv, environ); }
+}
+
 /// Entry Point of HermitCore for the Boot Processor
 /// (called from entry.asm)
 #[no_mangle]
@@ -140,13 +164,28 @@ pub unsafe extern "C" fn boot_processor_main() {
 
 	info!("Welcome to HermitCore {}!", env!("CARGO_PKG_VERSION"));
 	arch::boot_processor_init();
+	scheduler::init();
+	scheduler::add_current_core();
 
-	//multitasking_init();
-	//hermit_main();
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	core_scheduler.spawn(
+		initd,
+		0,
+		scheduler::task::REALTIME_PRIO,
+		Some(arch::mm::virtualmem::task_heap_start())
+	);
+
+	loop {
+		core_scheduler.reschedule();
+		if scheduler::number_of_tasks() == 0 {
+			arch::processor::shutdown();
+		}
+		arch::processor::halt();
+	}
 }
 
 /// Entry Point of HermitCore for an Application Processor
-// (called from entry.asm)
+/// (called from entry.asm)
 #[no_mangle]
 pub unsafe extern "C" fn application_processor_main() {
 	arch::application_processor_init();

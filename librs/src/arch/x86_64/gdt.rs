@@ -22,12 +22,13 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![allow(dead_code)]
-#![allow(private_no_mangle_fns)]
-
 use arch::x86_64::percore::*;
 use consts::*;
+use core::mem;
+use mm;
 use spin;
+use scheduler;
+use scheduler::task::KernelStack;
 use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
 use x86::shared::PrivilegeLevel;
@@ -38,7 +39,7 @@ pub const GDT_KERNEL_CODE: u16 = 1;
 pub const GDT_KERNEL_DATA: u16 = 2;
 pub const GDT_FIRST_TSS:   u16 = 3;
 
-/// A TSS descriptor is twice larger than a code/data descriptor.
+/// A TSS descriptor is twice as large as a code/data descriptor.
 const GDT_ENTRIES: usize = (3+MAX_CORES*2);
 
 /// We use IST1 through IST4.
@@ -52,9 +53,6 @@ static mut GDT: [SegmentDescriptor; GDT_ENTRIES] = [SegmentDescriptor::NULL; GDT
 static mut GDTR: DescriptorTablePointer<SegmentDescriptor> = DescriptorTablePointer { base: 0 as *const SegmentDescriptor, limit: 0 };
 static mut TSS_BUFFER: TssBuffer = TssBuffer::new();
 static GDT_INIT: spin::Once<()> = spin::Once::new();
-
-/// Reserve space for all ISTs for each core.
-static STACK_TABLE: [[IrqStack; IST_ENTRIES]; MAX_CORES] = [[IrqStack::new(); IST_ENTRIES]; MAX_CORES];
 
 extern "C" {
 	static boot_stack: *const u8;
@@ -76,36 +74,12 @@ impl TssBuffer {
 	}
 }
 
-// workaround to use the new repr(align) feature
-// currently, it is only supported by structs
-// => map stacks in a struct
-#[derive(Copy)]
-#[repr(C, align(4096))]
-struct IrqStack {
-	buffer: [u8; KERNEL_STACK_SIZE],
-}
-
-impl Clone for IrqStack {
-    fn clone(&self) -> IrqStack
-	{
-		*self
-	}
-}
-
-impl IrqStack {
-	pub const fn new() -> IrqStack {
-		IrqStack {
-			buffer: [0; KERNEL_STACK_SIZE],
-		}
-	}
-}
 
 /// This will setup the special GDT
 /// pointer, set up the entries in our GDT, and then
 /// finally to load the new GDT and to update the
 /// new segment registers
-pub fn install()
-{
+pub fn install() {
 	unsafe {
 		GDT_INIT.call_once(|| {
 			// The NULL descriptor is already inserted as the first entry.
@@ -117,23 +91,6 @@ pub fn install()
 			// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
 			// All other parameters are ignored.
 			GDT[GDT_KERNEL_DATA as usize] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
-
-			// Create a TSS for each core.
-			for i in 0..MAX_CORES {
-				// entry.asm has reserved space for a boot stack for each core.
-				// Every task has its own stack, so this boot stack is only used by the Idle task on each core.
-				// When switching to another task on this core, this entry will be replaced.
-				TSS_BUFFER.tss[i].rsp[0] = boot_stack as u64 + ((i+1) * KERNEL_STACK_SIZE - 0x10) as u64;
-
-				// We have reserved space for the ISTs for each core.
-				// They are only needed once for each core, not per task.
-				for j in 0..IST_ENTRIES {
-					TSS_BUFFER.tss[i].ist[j] = &STACK_TABLE[i][j] as *const _ as u64 + (KERNEL_STACK_SIZE - 0x10) as u64;
-				}
-
-				let idx = GDT_FIRST_TSS as usize + i*2;
-				GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&TSS_BUFFER.tss[i], PrivilegeLevel::Ring0));
-			}
 
 			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
 			// implement "new" as "const fn" and do this call already in the initialization of GDTR.
@@ -147,24 +104,51 @@ pub fn install()
 		load_ds(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 		load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+	}
+}
 
-		// Reload the task register to point to the proper TSS.
-		let core_id = core_id() as u16;
-		let sel = SegmentSelector::new(GDT_FIRST_TSS as u16 + core_id*2, PrivilegeLevel::Ring0);
+pub fn create_tss() {
+	let core_id = core_id() as usize;
+
+	unsafe {
+		// entry.asm has reserved space for a boot stack for each core.
+		// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
+		// When switching to another task on this core, this entry is replaced.
+		TSS_BUFFER.tss[core_id].rsp[0] = boot_stack as u64 + ((core_id+1) * KERNEL_STACK_SIZE - 0x10) as u64;
+
+		// Allocate all ISTs for this core.
+		// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
+		for i in 0..IST_ENTRIES {
+			TSS_BUFFER.tss[core_id].ist[i] = mm::allocate(mem::size_of::<KernelStack>()) as u64 + KERNEL_STACK_SIZE as u64 - 0x10;
+		}
+
+		// Add this TSS to the GDT.
+		let idx = GDT_FIRST_TSS as usize + core_id*2;
+		GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&TSS_BUFFER.tss[core_id], PrivilegeLevel::Ring0));
+
+		// Load it.
+		let sel = SegmentSelector::new(idx as u16, PrivilegeLevel::Ring0);
 		load_tr(sel);
 	}
 }
 
-/*#[inline(always)]
-pub unsafe fn set_kernel_stack(stack: usize, ist: usize)
-{
-	TSS.0.rsp[0] = stack as u64;
-	TSS.0.ist[0] = ist as u64;
-}*/
+pub fn get_boot_stacks() -> (usize, usize) {
+	let core_id = core_id() as usize;
+
+	unsafe {
+		let stack = TSS_BUFFER.tss[core_id].rsp[0] as usize;
+		let ist = TSS_BUFFER.tss[core_id].ist[0] as usize;
+		(stack, ist)
+	}
+}
 
 #[no_mangle]
-pub unsafe extern "C" fn set_current_kernel_stack()
-{
-	/*let (rsp, ist) = scheduler::get_current_stack();
-	set_kernel_stack(rsp + KERNEL_STACK_SIZE - 0x10, ist + KERNEL_STACK_SIZE - 0x10);*/
+pub unsafe extern "C" fn set_current_kernel_stack() {
+	let core_id = core_id() as usize;
+	let core_scheduler = scheduler::get_scheduler(core_id as u32);
+	let task = core_scheduler.get_current_task();
+	let task_borrowed = task.borrow();
+
+	TSS_BUFFER.tss[core_id].rsp[0] = (task_borrowed.stack as usize + KERNEL_STACK_SIZE - 0x10) as u64;
+	TSS_BUFFER.tss[core_id].ist[0] = (task_borrowed.ist as usize + KERNEL_STACK_SIZE - 0x10) as u64;
 }

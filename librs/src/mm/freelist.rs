@@ -21,7 +21,9 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use collections::DoublyLinkedList;
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use collections::{DoublyLinkedList, Node};
 use mm;
 
 
@@ -63,6 +65,83 @@ impl FreeList {
 			}
 		}
 
+		Err(())
+	}
+
+	#[inline]
+	fn allocate_address_for_node(&mut self, address: usize, end: usize, node: Rc<RefCell<Node<FreeListEntry>>>) -> bool {
+		let (region_start, region_end) = {
+			let borrowed = node.borrow();
+			(borrowed.value.start, borrowed.value.end)
+		};
+
+		// There are 4 possible cases of finding the free space we want to reserve.
+		if region_start == address && region_end == end {
+			// We found free space that has exactly the address and size of the block we want to allocate.
+			// Remove it.
+			self.list.remove(node.clone());
+			unsafe { mm::POOL.list.push(node); }
+			return true;
+		} else if region_start < address && region_end == end {
+			// We found free space in which the block we want to allocate lies right-aligned.
+			// Resize the free space to end at our block.
+			node.borrow_mut().value.end = address;
+			return true;
+		} else if region_start == address && region_end > end {
+			// We found free space in which the block we want to allocate lies left-aligned.
+			// Resize the free space to begin where our block ends.
+			node.borrow_mut().value.start = end;
+			return true;
+		} else if region_start < address && region_end > end {
+			// We found free space that covers the block we want to allocate.
+			// Resize the free space to end at our block and add another free space entry that begins where our block ends.
+			node.borrow_mut().value.end = address;
+
+			let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when reserving memory") };
+			unsafe { mm::POOL.list.remove(new_node.clone()); }
+
+			{
+				let mut new_node_borrowed = new_node.borrow_mut();
+				new_node_borrowed.value.start = end;
+				new_node_borrowed.value.end = region_end;
+			}
+
+			self.list.insert_after(new_node, node);
+			return true;
+		}
+
+		false
+	}
+
+	pub fn allocate_aligned(&mut self, size: usize, alignment: usize) -> Result<usize, ()> {
+		debug!("Allocating {} bytes from Free List {:#X} aligned to {} bytes", size, self as *const Self as usize, alignment);
+
+		for node in self.list.iter() {
+			// Align up the start address of the current node in the list to the desired alignment.
+			// Then let allocate_address_for_node check if this node is suitable and alter it respectively.
+			let address = align_up!(node.borrow().value.start, alignment);
+			let end = address + size;
+			if self.allocate_address_for_node(address, end, node) {
+				return Ok(address);
+			}
+		}
+
+		Err(())
+	}
+
+	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), ()> {
+		debug!("Reserving {} bytes at address {:#X} in Free List {:#X}", size, address, self as *const Self as usize);
+		let end = address + size;
+
+		for node in self.list.iter() {
+			// Let allocate_address_for_node check if this node contains the desired address.
+			if self.allocate_address_for_node(address, end, node) {
+				return Ok(());
+			}
+		}
+
+		// Our Free List contains no block covering the given address and size.
+		// This is an error, because we have to reserve the address to prevent it from being used differently.
 		Err(())
 	}
 
@@ -139,56 +218,6 @@ impl FreeList {
 		} else {
 			self.list.push(new_node);
 		}
-	}
-
-	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), ()> {
-		let end = address + size;
-
-		for node in self.list.iter() {
-			let (region_start, region_end) = {
-				let borrowed = node.borrow();
-				(borrowed.value.start, borrowed.value.end)
-			};
-
-			// There are 4 possible cases of finding the free space we want to reserve.
-			if region_start == address && region_end == end {
-				// We found free space that has exactly the address and size of the block we want to reserve.
-				// Remove it.
-				self.list.remove(node.clone());
-				unsafe { mm::POOL.list.push(node); }
-				return Ok(());
-			} else if region_start < address && region_end == end {
-				// We found free space in which the block we want to reserve lies right-aligned.
-				// Resize the free space to end at our block.
-				node.borrow_mut().value.end = address;
-				return Ok(());
-			} else if region_start == address && region_end > end {
-				// We found free space in which the block we want to reserve lies left-aligned.
-				// Resize the free space to begin where our block ends.
-				node.borrow_mut().value.start = end;
-				return Ok(());
-			} else if region_start < address && region_end > end {
-				// We found free space that covers the block we want to reserve.
-				// Resize the free space to end at our block and add another free space entry that begins where our block ends.
-				node.borrow_mut().value.end = address;
-
-				let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when reserving memory") };
-				unsafe { mm::POOL.list.remove(new_node.clone()); }
-
-				{
-					let mut new_node_borrowed = new_node.borrow_mut();
-					new_node_borrowed.value.start = end;
-					new_node_borrowed.value.end = region_end;
-				}
-
-				self.list.insert_after(new_node, node);
-				return Ok(());
-			}
-		}
-
-		// Our Free List contains no block covering the given address and size.
-		// This is an error, because we have to reserve the address to prevent it from being used differently.
-		Err(())
 	}
 
 	pub fn print_information(&self, header: &str) {

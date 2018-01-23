@@ -181,8 +181,8 @@ pub unsafe extern "C" fn loader_main() {
 	}
 
 	// Verify the information.
-	assert!(physical_address & (BasePageSize::SIZE - 1) == 0);
-	assert!(virtual_address & (LargePageSize::SIZE - 1) == 0);
+	assert!(physical_address % BasePageSize::SIZE == 0);
+	assert!(virtual_address % LargePageSize::SIZE == 0);
 	assert!(file_size > 0);
 	assert!(mem_size > 0);
 	loaderlog!("File Size: {} Bytes", file_size);

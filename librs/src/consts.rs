@@ -21,7 +21,11 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#![allow(dead_code)]
+/// Define the size of the kernel stack
+pub const KERNEL_STACK_SIZE : usize = 16384;
 
+/// Maximum number of cores supported
 pub const MAX_CORES : usize = 256;
-pub const KERNEL_STACK_SIZE : usize = 8192;
+
+/// Maximum number of priorities
+pub const NO_PRIORITIES: usize = 32;

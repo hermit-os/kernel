@@ -54,9 +54,17 @@ typedef unsigned int tid_t;
 extern "C" {
 #endif
 
+/* Opaque structures */
 struct sem;
 typedef struct sem sem_t;
 
+struct spinlock;
+typedef struct spinlock spinlock_t;
+
+struct spinlock_irqsave;
+typedef struct spinlock spinlock_irqsave_t;
+
+typedef void (*entry_point_t)(void*);
 typedef void (*signal_handler_t)(int);
 
 /*
@@ -81,8 +89,18 @@ int sys_sem_init(sem_t** sem, unsigned int value);
 int sys_sem_destroy(sem_t* sem);
 int sys_sem_wait(sem_t* sem);
 int sys_sem_post(sem_t* sem);
+int sys_sem_trywait(sem_t* sem);
 int sys_sem_timedwait(sem_t *sem, unsigned int ms);
 int sys_sem_cancelablewait(sem_t* sem, unsigned int ms);
+int sys_spinlock_init(spinlock_t** lock);
+int sys_spinlock_destroy(spinlock_t* lock);
+int sys_spinlock_lock(spinlock_t* lock);
+int sys_spinlock_unlock(spinlock_t* lock);
+int sys_spinlock_irqsave_init(spinlock_irqsave_t** lock);
+int sys_spinlock_irqsave_destroy(spinlock_irqsave_t* lock);
+int sys_spinlock_irqsave_lock(spinlock_irqsave_t* lock);
+int sys_spinlock_irqsave_unlock(spinlock_irqsave_t* lock);
+int sys_spawn(tid_t* id, entry_point_t func, void* arg, unsigned char prio, unsigned int core_id);
 int sys_clone(tid_t* id, void* ep, void* argv);
 off_t sys_lseek(int fd, off_t offset, int whence);
 size_t sys_get_ticks(void);
@@ -92,6 +110,7 @@ int sys_rcce_fini(int session_id);
 void sys_yield(void);
 int sys_kill(tid_t dest, int signum);
 int sys_signal(signal_handler_t handler);
+unsigned int sys_rand();
 
 struct ucontext;
 typedef struct ucontext ucontext_t;

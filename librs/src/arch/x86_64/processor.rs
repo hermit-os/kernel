@@ -69,6 +69,7 @@ static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
 static mut SUPPORTS_1GIB_PAGES: bool = false;
 static mut SUPPORTS_AVX: bool = false;
 static mut SUPPORTS_FSGSBASE: bool = false;
+static mut SUPPORTS_RDRAND: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
@@ -252,7 +253,7 @@ impl CpuFrequency {
 		};
 
 		// Count the number of CPU cycles during 3 timer ticks.
-		let start = unsafe { TIMESTAMP_FUNCTION() };
+		let start = get_timestamp();
 
 		loop {
 			let tick = unsafe { MEASUREMENT_TIMER_TICKS };
@@ -263,7 +264,7 @@ impl CpuFrequency {
 			hint_core_should_pause();
 		}
 
-		let end = unsafe { TIMESTAMP_FUNCTION() };
+		let end = get_timestamp();
 
 		// Deinitialize the PIT again.
 		// Now we can calculate our CPU frequency and implement a constant frequency tick counter
@@ -461,6 +462,7 @@ pub fn detect_features() {
 		LINEAR_ADDRESS_BITS = extended_function_info.linear_address_bits().expect("CPUID Linear Address Bits not available!");
 		SUPPORTS_1GIB_PAGES = extended_function_info.has_1gib_pages();
 		SUPPORTS_AVX = feature_info.has_avx();
+		SUPPORTS_RDRAND = feature_info.has_rdrand();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
 
@@ -589,6 +591,16 @@ pub fn print_information() {
 	infofooter!();
 }
 
+pub fn generate_random_number() -> Option<u32> {
+	if unsafe { SUPPORTS_RDRAND } {
+		let value: u32;
+		unsafe { asm!("rdrand $0" : "=r"(value) ::: "volatile"); }
+		Some(value)
+	} else {
+		None
+	}
+}
+
 #[inline]
 pub fn get_linear_address_bits() -> u8 {
 	unsafe { LINEAR_ADDRESS_BITS }
@@ -624,18 +636,40 @@ pub fn supports_xsave() -> bool {
 	unsafe { SUPPORTS_XSAVE }
 }
 
+/// Search the least significant bit
+#[inline(always)]
+pub fn lsb(i: u64) -> u64 {
+	let ret: u64;
+
+	if i == 0 {
+		ret = !0;
+	} else {
+		unsafe { asm!("bsf $1, $0" : "=r"(ret) : "r"(i) : "cc" : "volatile"); }
+	}
+
+	ret
+}
+
+/// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
+	unsafe {
+		asm!("hlt" :::: "volatile");
+	}
+}
+
+/// Shutdown the system
+pub fn shutdown() -> ! {
+	info!("Shutting down system");
+
 	loop {
-		unsafe {
-			asm!("hlt" :::: "volatile");
-		}
+		halt();
 	}
 }
 
 pub fn update_ticks() {
 	unsafe {
 		let last_cycles = last_rdtsc.per_core();
-		let current_cycles = TIMESTAMP_FUNCTION();
+		let current_cycles = get_timestamp();
 		let cycle_count = abs_diff(last_cycles, current_cycles);
 		let tick_count = cycle_count * TIMER_FREQUENCY / (get_cpu_frequency() as u64 * 1_000_000);
 
@@ -719,6 +753,11 @@ pub unsafe extern "C" fn writegs(gs: usize) {
 }
 
 #[inline]
+pub fn get_timestamp() -> u64 {
+	unsafe { TIMESTAMP_FUNCTION() }
+}
+
+#[inline]
 unsafe fn get_timestamp_rdtsc() -> u64 {
 	asm!("lfence" ::: "memory" : "volatile");
 	let value = rdtsc();
@@ -741,10 +780,10 @@ fn abs_diff(a: u64, b: u64) -> u64 {
 #[no_mangle]
 pub extern "C" fn udelay(usecs: u32) {
 	let deadline = get_cpu_frequency() as u64 * usecs as u64;
-	let start = unsafe { TIMESTAMP_FUNCTION() };
+	let start = get_timestamp();
 
 	loop {
-		let end = unsafe { TIMESTAMP_FUNCTION() };
+		let end = get_timestamp();
 
 		let cycle_count = abs_diff(start, end);
 		if cycle_count >= deadline {

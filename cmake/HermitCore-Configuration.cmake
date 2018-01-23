@@ -13,7 +13,7 @@ set(MAX_ISLE "8" CACHE STRING
 set(MAX_FNAME "128" CACHE STRING
 	"Define the maximum length of a file name")
 
-set(KERNEL_STACK_SIZE 8192 CACHE STRING
+set(KERNEL_STACK_SIZE 16384 CACHE STRING
 	"Kernel stack size in bytes")
 
 set(DEFAULT_STACK_SIZE 262144 CACHE STRING

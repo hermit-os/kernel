@@ -36,7 +36,6 @@
 
 #include <hermit/config.h>
 #include <asm/stddef.h>
-#include <asm/irqflags.h>
 
 #ifdef __cplusplus
 extern "C" {

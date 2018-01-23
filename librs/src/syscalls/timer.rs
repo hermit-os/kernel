@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//               2017 Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,21 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef __ARCH_GDT_H__
-#define __ARCH_GDT_H__
-
-// See also: librs/src/arc/x86_64/gdt.rs
-#define GDT_FIRST_TSS	3
-
-/** @brief Installs the global descriptor table
- * Implemented in Rust (librs/src/arc/x86_64/gdt.rs)
- *
- * The installation involves the following steps:
- * - set up the special GDT pointer 
- * - set up the entries in our GDT
- * - load the new GDT
- * - update the segment registers 
- */
-void gdt_install(void);
-
-#endif
+#[no_mangle]
+pub extern "C" fn sys_get_ticks() -> usize {
+	panic!("sys_get_ticks is unimplemented");
+}

@@ -22,9 +22,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch;
-use syscall::tid_t;
+use syscalls::tid_t;
 
-type entry_point_t = extern "C" fn(usize) -> i32;
 
 #[link_section = ".percore"]
 #[no_mangle]
@@ -40,13 +39,8 @@ pub extern "C" fn block_current_task() -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn create_kernel_task_on_core(id: *mut tid_t, ep: entry_point_t, args: usize, prio: u8, core_id: u32) -> i32 {
-	panic!("create_kernel_task_on_core is unimplemented");
-}
-
-#[no_mangle]
-pub extern "C" fn do_abort() -> ! {
-	panic!("do_abort is unimplemented");
+pub extern "C" fn do_exit(arg: i32) -> ! {
+	panic!("do_exit is unimplemented");
 }
 
 #[no_mangle]

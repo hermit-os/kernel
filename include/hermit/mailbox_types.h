@@ -34,7 +34,7 @@
 #ifndef __MAILBOX_TYPES_H__
 #define __MAILBOX_TYPES_H__
 
-#include <hermit/semaphore_types.h>
+#include <hermit/syscall.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,9 +54,10 @@ typedef struct {
 	typedef struct mailbox_##name { \
 		type buffer[MAILBOX_SIZE]; \
 		int wpos, rpos; \
-		sem_t mails; \
-		sem_t boxes; \
-		spinlock_t rlock, wlock; \
+		sem_t* mails; \
+		sem_t* boxes; \
+		spinlock_t* rlock; \
+		spinlock_t* wlock; \
 	} mailbox_##name##_t;
 
 MAILBOX_TYPES(wait_msg, wait_msg_t)
