@@ -27,7 +27,7 @@ use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
-use core::{fmt, ptr, slice, str};
+use core::{fmt, ptr, slice, str, u32};
 use core::sync::atomic::hint_core_should_pause;
 use raw_cpuid::*;
 use x86::shared::control_regs::*;
@@ -130,13 +130,81 @@ pub struct XSaveBndcsr {
 }
 
 #[repr(C, align(64))]
-pub struct XSaveArea {
+pub struct FPUState {
 	pub legacy_region: XSaveLegacyRegion,
 	pub header: XSaveHeader,
 	pub avx_state: XSaveAVXState,
 	pub lwp_state: XSaveLWPState,
 	pub bndregs: XSaveBndregs,
 	pub bndcsr: XSaveBndcsr,
+}
+
+impl FPUState {
+	pub const fn new() -> Self {
+		Self {
+			// Set FPU-related values to their default values after initialization.
+			// Refer to Intel Vol. 3A, Table 9-1. IA-32 and Intel 64 Processor States Following Power-up, Reset, or INIT
+			legacy_region: XSaveLegacyRegion {
+				fpu_control_word: 0x37F,
+				fpu_status_word: 0,
+				fpu_tag_word: 0xFFFF,
+				fpu_opcode: 0,
+				fpu_instruction_pointer: 0,
+				fpu_instruction_pointer_high_or_cs: 0,
+				fpu_data_pointer: 0,
+				fpu_data_pointer_high_or_ds: 0,
+				mxcsr: 0x1F80,
+				mxcsr_mask: 0,
+				st_space: [0; 8*16],
+				xmm_space: [0; 16*16],
+				padding: [0; 96],
+			},
+
+			header: XSaveHeader {
+				xstate_bv: 0,
+				xcomp_bv: 0,
+				reserved: [0; 6],
+			},
+			avx_state: XSaveAVXState {
+				ymmh_space: [0; 16*16],
+			},
+			lwp_state: XSaveLWPState {
+				lwpcb_address: 0,
+				flags: 0,
+				buffer_head_offset: 0,
+				buffer_base: 0,
+				buffer_size: 0,
+				filters: 0,
+				saved_event_record: [0; 4],
+				event_counter: [0; 16],
+			},
+			bndregs: XSaveBndregs {
+				bound_registers: [0; 4*16],
+			},
+			bndcsr: XSaveBndcsr {
+				bndcfgu_register: 0,
+				bndstatus_register: 0,
+			}
+		}
+	}
+
+	pub fn restore(&self) {
+		if supports_xsave() {
+			let bitmask = u32::MAX;
+			unsafe { asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile"); }
+		} else {
+			unsafe { asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile"); }
+		}
+	}
+
+	pub fn save(&mut self) {
+		if supports_xsave() {
+			let bitmask: u32 = u32::MAX;
+			unsafe { asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile"); }
+		} else {
+			unsafe { asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile"); }
+		}
+	}
 }
 
 
@@ -680,75 +748,33 @@ pub fn update_ticks() {
 	}
 }
 
-/*#[no_mangle]
-pub extern "C" fn cpu_detection() -> i32 {
-	configure();
-	0
-}*/
-
-#[no_mangle]
-pub extern "C" fn get_cpu_frequency() -> u32 {
+pub fn get_cpu_frequency() -> u32 {
 	unsafe { CPU_FREQUENCY.get() as u32 }
 }
 
-/*#[no_mangle]
-pub unsafe extern "C" fn fpu_init(fpu_state: *mut XSaveArea) {
-	if supports_xsave() {
-		ptr::write_bytes(fpu_state, 0, 1);
-	} else {
-		ptr::write_bytes(&mut (*fpu_state).legacy_region as *mut XSaveLegacyRegion, 0, 1);
-	}
-
-	(*fpu_state).legacy_region.fpu_control_word = 0x37f;
-	(*fpu_state).legacy_region.mxcsr = 0x1f80;
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn restore_fpu_state(fpu_state: *const XSaveArea) {
-	if supports_xsave() {
-		let bitmask: u32 = !0;
-		asm!("xrstorq $0" :: "*m"(fpu_state), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
-	} else {
-		asm!("fxrstor $0" :: "*m"(fpu_state) :: "volatile");
-	}
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn save_fpu_state(fpu_state: *mut XSaveArea) {
-	if supports_xsave() {
-		let bitmask: u32 = !0;
-		asm!("xsaveq $0" : "=*m"(fpu_state) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
-	} else {
-		asm!("fxsave $0; fnclex" : "=*m"(fpu_state) :: "memory" : "volatile");
-	}
-}*/
-
-#[no_mangle]
-pub unsafe extern "C" fn readfs() -> usize {
+pub fn readfs() -> usize {
 	if supports_fsgsbase() {
 		let fs: usize;
-		asm!("rdfsbase $0" : "=r"(fs) :: "memory" : "volatile");
+		unsafe { asm!("rdfsbase $0" : "=r"(fs) :: "memory" : "volatile"); }
 		fs
 	} else {
-		rdmsr(IA32_FS_BASE) as usize
+		unsafe { rdmsr(IA32_FS_BASE) as usize }
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn writefs(fs: usize) {
+pub fn writefs(fs: usize) {
 	if supports_fsgsbase() {
-		asm!("wrfsbase $0" :: "r"(fs) :: "volatile");
+		unsafe { asm!("wrfsbase $0" :: "r"(fs) :: "volatile"); }
 	} else {
-		wrmsr(IA32_FS_BASE, fs as u64);
+		unsafe { wrmsr(IA32_FS_BASE, fs as u64); }
 	}
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn writegs(gs: usize) {
+pub fn writegs(gs: usize) {
 	if supports_fsgsbase() {
-		asm!("wrgsbase $0" :: "r"(gs) :: "volatile");
+		unsafe { asm!("wrgsbase $0" :: "r"(gs) :: "volatile"); }
 	} else {
-		wrmsr(IA32_GS_BASE, gs as u64);
+		unsafe { wrmsr(IA32_GS_BASE, gs as u64); }
 	}
 }
 

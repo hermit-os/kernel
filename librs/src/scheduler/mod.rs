@@ -54,6 +54,8 @@ pub struct PerCoreScheduler {
 	current_task: Rc<RefCell<Task>>,
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
+	/// Task that currently owns the FPU
+	fpu_owner: Rc<RefCell<Task>>,
 	/// Queue of tasks, which are ready
 	ready_queue: SpinlockIrqSave<PriorityTaskQueue>,
 	/// Queue of tasks, which are finished and can be released
@@ -125,6 +127,18 @@ impl PerCoreScheduler {
 		};
 
 		self.ready_queue.lock().push(prio, task);
+	}
+
+	/// Save the FPU context for the current FPU owner and restore it for the current task,
+	/// which wants to use the FPU now.
+	pub fn fpu_switch(&mut self) {
+		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+			debug!("Switching FPU owner from task {} to {}", self.fpu_owner.borrow().id, self.current_task.borrow().id);
+
+			self.fpu_owner.borrow_mut().last_fpu_state.save();
+			self.current_task.borrow().last_fpu_state.restore();
+			self.fpu_owner = self.current_task.clone();
+		}
 	}
 
 	fn get_next_task(&mut self) -> Option<Rc<RefCell<Task>>> {
@@ -241,7 +255,8 @@ pub fn add_current_core() {
 	let per_core_scheduler = PerCoreScheduler {
 		core_id: core_id,
 		current_task: idle_task.clone(),
-		idle_task: idle_task,
+		idle_task: idle_task.clone(),
+		fpu_owner: idle_task,
 		ready_queue: SpinlockIrqSave::new(PriorityTaskQueue::new()),
 		finished_tasks: SpinlockIrqSave::new(VecDeque::new()),
 	};
