@@ -258,6 +258,8 @@ pub struct Task {
 	pub prio: Priority,
 	/// Last stack pointer before a context switch to another task
 	pub last_stack_pointer: usize,
+	/// Last FPU state before a context switch to another task using the FPU
+	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
 	pub core_id: u32,
 	/// points to the next task within a task queue
@@ -298,6 +300,7 @@ impl Task {
 			status: task_status,
 			prio: task_prio,
 			last_stack_pointer: 0,
+			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
 			next: None,
 			stack: stack,
@@ -313,6 +316,7 @@ impl Task {
 			status: TaskStatus::TaskIdle,
 			prio: LOW_PRIO,
 			last_stack_pointer: 0,
+			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
 			next: None,
 			stack: stack as *mut KernelStack,

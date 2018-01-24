@@ -24,6 +24,7 @@
 
 use arch::x86_64::idt;
 use arch::x86_64::mm::paging;
+use arch::x86_64::percore::*;
 use core::fmt;
 use scheduler;
 use x86::shared::flags::*;
@@ -188,10 +189,13 @@ extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: &mut ExceptionSt
 extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut ExceptionStackFrame) {
 	// We set the CR0_TASK_SWITCHED flag every time we switch to a task.
 	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
-	// We have to clear the CR0_TASK_SWITCHED here and save the FPU context of the old task.
 
+	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
 	unsafe { asm!("clts" :::: "volatile"); }
-	panic!("FPU ToDo");
+
+	// Let the scheduler set up the FPU for the current task.
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	core_scheduler.fpu_switch();
 }
 
 extern "x86-interrupt" fn double_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
