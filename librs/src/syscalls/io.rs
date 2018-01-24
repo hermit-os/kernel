@@ -23,7 +23,7 @@
 
 use console;
 use core::fmt::Write;
-use core::{slice, str};
+use core::{isize, slice, str};
 use errno::*;
 
 
@@ -47,13 +47,14 @@ pub extern "C" fn sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
 #[no_mangle]
 pub extern "C" fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
 	info!("sys_write is halfplemented");
+	assert!(len <= isize::MAX as usize);
 
 	unsafe {
 		let slice = slice::from_raw_parts(buf, len);
 		console::CONSOLE.lock().write_str(str::from_utf8_unchecked(slice)).unwrap();
 	}
 
-	0
+	len as isize
 }
 
 #[no_mangle]
