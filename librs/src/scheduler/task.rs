@@ -298,9 +298,9 @@ pub struct Task {
 	/// Stack for interrupt handling
 	pub ist: *mut KernelStack,
 	/// Task heap area
-	pub heap: Option<TaskHeap>,
+	pub heap: Option<Rc<RefCell<TaskHeap>>>,
 	/// Task Thread-Local-Storage (TLS)
-	pub tls: Option<TaskTLS>
+	pub tls: Option<Rc<RefCell<TaskTLS>>>
 }
 
 pub trait TaskFrame {
@@ -336,7 +336,7 @@ impl Task {
 			next: None,
 			stack: stack,
 			ist: ist,
-			heap: heap_start.map(|start| TaskHeap { start: start, end: start }),
+			heap: heap_start.map(|start| Rc::new(RefCell::new(TaskHeap { start: start, end: start }))),
 			tls: None,
 		}
 	}
@@ -355,6 +355,26 @@ impl Task {
 			ist: ist as *mut KernelStack,
 			heap: None,
 			tls: None,
+		}
+	}
+
+	pub fn clone(tid: TaskId, core_id: u32, task: &Task) -> Task {
+		let stack = mm::allocate(mem::size_of::<KernelStack>()) as *mut KernelStack;
+		let ist = mm::allocate(mem::size_of::<KernelStack>()) as *mut KernelStack;
+		debug!("Allocating stack {:#X} and IST {:#X} for task {} cloned from task {}", stack as usize, ist as usize, tid, task.id);
+
+		Task {
+			id: tid,
+			status: TaskStatus::TaskReady,
+			prio: task.prio,
+			last_stack_pointer: 0,
+			last_fpu_state: arch::processor::FPUState::new(),
+			core_id: core_id,
+			next: None,
+			stack: stack,
+			ist: ist,
+			heap: task.heap.clone(),
+			tls: task.tls.clone(),
 		}
 	}
 }

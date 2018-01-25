@@ -129,6 +129,35 @@ impl PerCoreScheduler {
 		self.ready_queue.lock().push(prio, task);
 	}
 
+	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+		// Get the scheduler for the next available core.
+		let schedulers = unsafe { SCHEDULERS.as_mut().unwrap() };
+		let mut iter = schedulers.iter_mut();
+		let mut next_scheduler = iter.next().unwrap().1;
+		for (id, scheduler) in iter {
+			if *id > self.core_id {
+				next_scheduler = scheduler;
+				break;
+			}
+		}
+
+		// Get the current task.
+		let task_borrowed = self.current_task.borrow();
+
+		// Clone the current task.
+		let tid = get_tid();
+		let mut task = Rc::new(RefCell::new(Task::clone(tid, next_scheduler.core_id, &task_borrowed)));
+		task.borrow_mut().create_stack_frame(func, arg);
+
+		// Add it to the task lists.
+		next_scheduler.ready_queue.lock().push(task_borrowed.prio, task.clone());
+		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, task); }
+		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+
+		info!("Creating task {} by cloning task {}", tid, task_borrowed.id);
+		tid
+	}
+
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
 	pub fn fpu_switch(&mut self) {

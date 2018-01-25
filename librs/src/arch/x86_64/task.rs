@@ -24,9 +24,11 @@
 
 //! Architecture dependent interface to initialize a task
 
+use alloc::rc::Rc;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use consts::*;
+use core::cell::RefCell;
 use core::{mem, ptr};
 use scheduler;
 use scheduler::task::{Task, TaskFrame, TaskTLS};
@@ -96,7 +98,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		let core_scheduler = scheduler::get_scheduler(core_id());
 		let task = core_scheduler.get_current_task();
 		debug!("Set up TLS for task {} at address {:#X}", task.borrow().id, tls.address());
-		task.borrow_mut().tls = Some(tls);
+		task.borrow_mut().tls = Some(Rc::new(RefCell::new(tls)));
 	}
 
 	// Call the actual entry point of the task.
