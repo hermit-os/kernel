@@ -38,6 +38,7 @@ use x86::shared::time::*;
 extern "C" {
 	static cmdline: *const u8;
 	static cmdsize: usize;
+	static mut cpu_freq: u32;
 	static mut fs_patch0: u8;
 	static mut fs_patch1: u8;
 }
@@ -625,7 +626,7 @@ pub fn configure() {
 	unsafe { wrmsr(IA32_EFER, efer); }
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.
-	unsafe { writefs(0); }
+	writefs(0);
 
 	//
 	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
@@ -635,7 +636,12 @@ pub fn configure() {
 
 
 pub fn detect_frequency() {
-	unsafe { CPU_FREQUENCY.detect(); }
+	unsafe {
+		CPU_FREQUENCY.detect();
+
+		// newlib uses this value in its get_cpufreq function in crt0.c!
+		cpu_freq = CPU_FREQUENCY.get() as u32;
+	}
 }
 
 pub fn print_information() {
