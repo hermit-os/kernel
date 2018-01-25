@@ -78,12 +78,13 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	let heap = borrowed.heap.as_mut().expect("Calling sys_sbrk on a task without an associated heap");
 
 	// Adjust the heap of the current task.
-	assert!(heap.start >= task_heap_start, "heap.start {:#X} is not >= task_heap_start {:#X}", heap.start, task_heap_start);
-	let old_end = heap.end;
-	heap.end = (old_end as isize + incr) as usize;
-	assert!(heap.end <= task_heap_end, "New heap.end {:#X} is not <= task_heap_end {:#X}", heap.end, task_heap_end);
+	let mut heap_borrowed = heap.borrow_mut();
+	assert!(heap_borrowed.start >= task_heap_start, "heap.start {:#X} is not >= task_heap_start {:#X}", heap_borrowed.start, task_heap_start);
+	let old_end = heap_borrowed.end;
+	heap_borrowed.end = (old_end as isize + incr) as usize;
+	assert!(heap_borrowed.end <= task_heap_end, "New heap.end {:#X} is not <= task_heap_end {:#X}", heap_borrowed.end, task_heap_end);
 
-	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap.end);
+	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap_borrowed.end);
 
 	// We're done! The page fault handler will map the new virtual memory area to physical memory
 	// as soon as the task accesses it for the first time.
@@ -96,8 +97,15 @@ pub extern "C" fn sys_msleep(ms: u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clone(id: *const tid_t, ep: usize, argv: usize) -> i32 {
-	panic!("sys_clone is unimplemented");
+pub extern "C" fn sys_clone(id: *mut tid_t, func: extern "C" fn(usize), arg: usize) -> i32 {
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	let task_id = core_scheduler.clone(func, arg);
+
+	if !id.is_null() {
+		unsafe { *id = task_id.into() as u32; }
+	}
+
+	0
 }
 
 #[no_mangle]
