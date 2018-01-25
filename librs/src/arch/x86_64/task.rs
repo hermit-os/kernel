@@ -25,10 +25,16 @@
 //! Architecture dependent interface to initialize a task
 
 use arch::x86_64::percore::*;
+use arch::x86_64::processor;
 use consts::*;
 use core::{mem, ptr};
 use scheduler;
-use scheduler::task::{Task, TaskFrame};
+use scheduler::task::{Task, TaskFrame, TaskTLS};
+
+extern "C" {
+	static tls_start: u8;
+	static tls_end: u8;
+}
 
 #[repr(C, packed)]
 pub struct State {
@@ -77,6 +83,26 @@ extern "C" fn leave_task() -> ! {
 	core_scheduler.exit(0);
 }
 
+extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
+	// Check if the task (process or thread) uses Thread-Local-Storage.
+	let tls_size = unsafe { &tls_end as *const u8 as usize - &tls_start as *const u8 as usize };
+	if tls_size > 0 {
+		// Allocate TLS memory, copy over the TLS variables, and set the FS register accordingly.
+		let tls = TaskTLS::new(tls_size);
+		unsafe { ptr::copy_nonoverlapping(&tls_start as *const u8, tls.address() as *mut u8, tls_size); }
+		processor::writefs(tls.address() + tls_size);
+
+		// Associate the TLS memory to the current task.
+		let core_scheduler = scheduler::get_scheduler(core_id());
+		let task = core_scheduler.get_current_task();
+		debug!("Set up TLS for task {} at address {:#X}", task.borrow().id, tls.address());
+		task.borrow_mut().tls = Some(tls);
+	}
+
+	// Call the actual entry point of the task.
+	func(arg);
+}
+
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		unsafe {
@@ -99,8 +125,9 @@ impl TaskFrame for Task {
 			ptr::write_bytes(state as *mut u8, 0, mem::size_of::<State>());
 
 			(*state).rsp = (stack as usize + mem::size_of::<State>()) as u64;
-			(*state).rip = func as u64;
-			(*state).rdi = arg as u64;
+			(*state).rip = task_entry as u64;
+			(*state).rdi = func as u64;
+			(*state).rsi = arg as u64;
 			(*state).rflags = 0x1202u64;
 
 			/* Set the task's stack pointer entry to the stack we have crafted right now. */

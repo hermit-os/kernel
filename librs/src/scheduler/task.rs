@@ -24,6 +24,7 @@
 
 use alloc::rc::Rc;
 use arch;
+use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::lsb;
 use consts::*;
 use core::cell::RefCell;
@@ -247,6 +248,34 @@ pub struct TaskHeap {
 	pub end: usize,
 }
 
+pub struct TaskTLS {
+	address: usize,
+	size: usize,
+}
+
+impl TaskTLS {
+	pub fn new(size: usize) -> Self {
+		// We allocate in BasePageSize granularity, so we don't have to manually impose an
+		// additional alignment for TLS variables.
+		let memory_size = align_up!(size, BasePageSize::SIZE);
+		Self {
+			address: mm::allocate(memory_size),
+			size: memory_size
+		}
+	}
+
+	pub fn address(&self) -> usize {
+		self.address
+	}
+}
+
+impl Drop for TaskTLS {
+    fn drop(&mut self) {
+		mm::deallocate(self.address, self.size);
+	}
+}
+
+
 /// A task control block, which identifies either a process or a thread
 #[repr(align(64))]
 pub struct Task {
@@ -270,6 +299,8 @@ pub struct Task {
 	pub ist: *mut KernelStack,
 	/// Task heap area
 	pub heap: Option<TaskHeap>,
+	/// Task Thread-Local-Storage (TLS)
+	pub tls: Option<TaskTLS>
 }
 
 pub trait TaskFrame {
@@ -306,6 +337,7 @@ impl Task {
 			stack: stack,
 			ist: ist,
 			heap: heap_start.map(|start| TaskHeap { start: start, end: start }),
+			tls: None,
 		}
 	}
 
@@ -322,6 +354,7 @@ impl Task {
 			stack: stack as *mut KernelStack,
 			ist: ist as *mut KernelStack,
 			heap: None,
+			tls: None,
 		}
 	}
 }
