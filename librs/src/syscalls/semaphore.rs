@@ -21,33 +21,66 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// TEMPORARY DUMMY
-type Semaphore = u8;
+use alloc::boxed::Box;
+use errno::*;
+use synch::semaphore::Semaphore;
 
 
 #[no_mangle]
 pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
-	panic!("sys_sem_init is unimplemented");
+	if sem.is_null() {
+		return -EINVAL;
+	}
+
+	let boxed_semaphore = Box::new(Semaphore::new(value as isize));
+	unsafe { *sem = Box::into_raw(boxed_semaphore); }
+	0
 }
 
 #[no_mangle]
 pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
-	panic!("sys_sem_destroy is unimplemented");
+	if sem.is_null() {
+		return -EINVAL;
+	}
+
+	unsafe { Box::from_raw(sem); }
+	0
 }
 
 #[no_mangle]
 pub extern "C" fn sys_sem_wait(sem: *const Semaphore) -> i32 {
-	panic!("sys_sem_wait is unimplemented");
+	if sem.is_null() {
+		return -EINVAL;
+	}
+
+	let semaphore = unsafe { & *sem };
+	semaphore.acquire();
+	0
 }
 
 #[no_mangle]
 pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
-	panic!("sys_sem_post is unimplemented");
+	if sem.is_null() {
+		return -EINVAL;
+	}
+
+	let semaphore = unsafe { & *sem };
+	semaphore.release();
+	0
 }
 
 #[no_mangle]
 pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
-	panic!("sys_sem_trywait is unimplemented");
+	if sem.is_null() {
+		return -EINVAL;
+	}
+
+	let semaphore = unsafe { & *sem };
+	if semaphore.try_acquire() {
+		0
+	} else {
+		-ECANCELED
+	}
 }
 
 #[no_mangle]
