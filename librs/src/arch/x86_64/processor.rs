@@ -44,17 +44,15 @@ extern "C" {
 }
 
 #[link_section = ".percore"]
-#[no_mangle]
-/// Value returned by RDTSC/RDTSCP last time we checked.
-pub static mut last_rdtsc: u64 = 0;
+/// Value returned by RDTSC/RDTSCP last time we updated the timer ticks.
+static mut last_rdtsc: u64 = 0;
 
 #[link_section = ".percore"]
-#[no_mangle]
 /// Counted ticks of a timer with the constant frequency specified in TIMER_FREQUENCY.
-pub static mut timer_ticks: u64 = 0;
+static mut timer_ticks: usize = 0;
 
 /// Timer frequency in Hz for the timer_ticks.
-pub const TIMER_FREQUENCY: u64 = 100;
+pub const TIMER_FREQUENCY: usize = 100;
 
 const EFER_NXE: u64 = 1 << 11;
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -341,7 +339,7 @@ impl CpuFrequency {
 		pit::deinit();
 
 		// Calculate the CPU frequency out of this measurement.
-		let cycle_count = abs_diff(start, end);
+		let cycle_count = end - start;
 		self.mhz = (measurement_frequency * cycle_count / (1_000_000 * tick_count)) as u16;
 		self.source = CpuFrequencySources::Measurement;
 		Ok(())
@@ -740,22 +738,24 @@ pub fn shutdown() -> ! {
 	}
 }
 
-pub fn update_ticks() {
+pub fn update_timer_ticks() -> usize {
 	unsafe {
-		let last_cycles = last_rdtsc.per_core();
 		let current_cycles = get_timestamp();
-		let cycle_count = abs_diff(last_cycles, current_cycles);
-		let tick_count = cycle_count * TIMER_FREQUENCY / (get_cpu_frequency() as u64 * 1_000_000);
+		let added_cycles = current_cycles - last_rdtsc.per_core();
+		let added_ticks = added_cycles as usize * TIMER_FREQUENCY / (get_frequency() as usize * 1_000_000);
+		let ticks = timer_ticks.per_core() + added_ticks;
 
-		if tick_count > 0 {
-			timer_ticks.set_per_core(timer_ticks.per_core() + tick_count);
+		if added_ticks > 0 {
+			timer_ticks.set_per_core(ticks);
 			last_rdtsc.set_per_core(current_cycles);
 		}
+
+		ticks
 	}
 }
 
-pub fn get_cpu_frequency() -> u32 {
-	unsafe { CPU_FREQUENCY.get() as u32 }
+pub fn get_frequency() -> u16 {
+	unsafe { CPU_FREQUENCY.get() }
 }
 
 pub fn readfs() -> usize {
@@ -804,27 +804,13 @@ unsafe fn get_timestamp_rdtscp() -> u64 {
 	value
 }
 
-#[inline]
-fn abs_diff(a: u64, b: u64) -> u64 {
-	if a > b { a - b } else { b - a }
-}
-
+/// Delay execution by the given number of microseconds using busy-waiting.
+///
+/// Exported unmangled for the Go runtime.
 #[no_mangle]
-pub extern "C" fn udelay(usecs: u32) {
-	let deadline = get_cpu_frequency() as u64 * usecs as u64;
-	let start = get_timestamp();
-
-	loop {
-		let end = get_timestamp();
-
-		let cycle_count = abs_diff(start, end);
-		if cycle_count >= deadline {
-			break;
-		}
-
-		// If we still have enough cycles left, check if any work can be done in the meantime.
-		if deadline - cycle_count > 50000 {
-			//check_workqueues_in_irqhandler(-1);
-		}
+pub extern "C" fn udelay(usecs: u64) {
+	let end = get_timestamp() + get_frequency() as u64 * usecs;
+	while get_timestamp() < end {
+		hint_core_should_pause();
 	}
 }

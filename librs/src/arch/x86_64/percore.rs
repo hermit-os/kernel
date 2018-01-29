@@ -32,9 +32,8 @@ extern "C" {
 }
 
 #[link_section = ".percore"]
-#[no_mangle]
 /// APIC ID of the current CPU Core.
-pub static mut __core_id: u32 = 0;
+static mut __core_id: u32 = 0;
 
 
 pub trait PerCoreVariable {

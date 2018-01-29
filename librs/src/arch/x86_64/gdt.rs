@@ -55,7 +55,7 @@ static mut TSS_BUFFER: TssBuffer = TssBuffer::new();
 static GDT_INIT: spin::Once<()> = spin::Once::new();
 
 extern "C" {
-	static boot_stack: *const u8;
+	static boot_stack: u8;
 }
 
 // workaround to use the new repr(align) feature
@@ -114,7 +114,7 @@ pub fn create_tss() {
 		// entry.asm has reserved space for a boot stack for each core.
 		// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 		// When switching to another task on this core, this entry is replaced.
-		TSS_BUFFER.tss[core_id].rsp[0] = boot_stack as u64 + ((core_id+1) * KERNEL_STACK_SIZE - 0x10) as u64;
+		TSS_BUFFER.tss[core_id].rsp[0] = &boot_stack as *const u8 as u64 + ((core_id+1) * KERNEL_STACK_SIZE - 0x10) as u64;
 
 		// Allocate all ISTs for this core.
 		// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.

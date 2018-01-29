@@ -32,7 +32,7 @@ use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use consts::*;
 use core::sync::atomic::hint_core_should_pause;
-use core::{mem, ptr, str};
+use core::{mem, ptr, str, u32};
 use mm;
 use scheduler;
 use x86::shared::control_regs::*;
@@ -42,11 +42,12 @@ use x86::shared::msr::*;
 
 extern "C" {
 	static cpu_online: u32;
-	static current_boot_id: u32;
+	static mut current_boot_id: u32;
 }
 
 const APIC_ICR2: usize = 0x0310;
 
+const APIC_DIV_CONF_DIVIDE_BY_128: u64      = 0b1010;
 const APIC_EOI_ACK: u64                     = 0;
 const APIC_ICR_DELIVERY_MODE_FIXED: u64     = 0x000;
 const APIC_ICR_DELIVERY_MODE_INIT: u64      = 0x500;
@@ -66,6 +67,8 @@ const CMOS_SHUTDOWN_STATUS_JMP_DWORD_WITHOUT_EOI: u8 = 0x0A;
 const RESET_VECTOR_OFFSET: usize = 0x467;
 
 const TLB_FLUSH_INTERRUPT_NUMBER: u8 = 112;
+const WAKEUP_INTERRUPT_NUMBER: u8    = 121;
+pub const TIMER_INTERRUPT_NUMBER: u8 = 123;
 const ERROR_INTERRUPT_NUMBER: u8     = 126;
 const SPURIOUS_INTERRUPT_NUMBER: u8  = 127;
 
@@ -81,8 +84,13 @@ const X2APIC_ENABLE: u64 = 1 << 10;
 static mut LOCAL_APIC_ADDRESS: usize = 0;
 
 /// Stores the Local APIC IDs of all CPUs.
-/// As Rust currently implements no way of zero-initializing a global Vec in a no_std environment, we have to encapsulate it in an Option...
+/// As Rust currently implements no way of zero-initializing a global Vec in a no_std environment,
+/// we have to encapsulate it in an Option...
 static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
+
+/// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
+/// after a single tick of the timer specified by processor::TIMER_FREQUENCY.
+static mut CALIBRATED_COUNTER_VALUE: usize = 0;
 
 
 #[repr(C, packed)]
@@ -171,13 +179,15 @@ struct LocalInterruptEntry {
 
 
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
-	debug!("tlb_flush_handler");
+	debug!("Received TLB Flush Interrupt");
 	unsafe { cr3_write(cr3()); }
 	eoi();
 }
 
 extern "x86-interrupt" fn error_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
-	error!("APIC LVT Error Interrupt: {:#?}", stack_frame);
+	error!("APIC LVT Error Interrupt");
+	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
+	error!("{:#?}", stack_frame);
 	eoi();
 	scheduler::abort();
 }
@@ -186,6 +196,11 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 	error!("Spurious Interrupt: {:#?}", stack_frame);
 	eoi();
 	scheduler::abort();
+}
+
+extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+	debug!("Received Wakeup Interrupt");
+	eoi();
 }
 
 fn detect_multiprocessor_configuration_table(start_address: usize, end_address: usize) -> Result<usize, ()> {
@@ -365,29 +380,78 @@ pub fn init() {
 	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 1);
 	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 1);
 	idt::set_gate(SPURIOUS_INTERRUPT_NUMBER, spurious_interrupt_handler as usize, 1);
+	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 1);
 
 	// Initialize interrupt handling over APIC.
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.
 	init_local_apic();
 
-	// Initialize additional application processors.
-	init_application_processors();
+	// Calibrate the APIC Timer once and use the calibration value for all CPUs.
+	calibrate_timer();
 }
 
 pub fn init_local_apic() {
-	// Mask out all interrupts we never need.
+	// Mask out all interrupts we don't need right now.
 	local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);
 	local_apic_write(IA32_X2APIC_LVT_THERMAL, APIC_LVT_MASK);
 	local_apic_write(IA32_X2APIC_LVT_PMI, APIC_LVT_MASK);
 	local_apic_write(IA32_X2APIC_LVT_LINT0, APIC_LVT_MASK);
 	local_apic_write(IA32_X2APIC_LVT_LINT1, APIC_LVT_MASK);
 
-	// Set the interrupt number of the APIC LVT Error interrupt.
+	// Set the interrupt number of the Error interrupt.
 	local_apic_write(IA32_X2APIC_LVT_ERROR, ERROR_INTERRUPT_NUMBER as u64);
 
 	// Finally, enable the Local APIC by setting the interrupt number for spurious interrupts
 	// and providing the enable bit.
 	local_apic_write(IA32_X2APIC_SIVR, APIC_SIVR_ENABLED | (SPURIOUS_INTERRUPT_NUMBER as u64));
+}
+
+fn calibrate_timer() {
+	// The APIC Timer is used to provide a one-shot interrupt for the tickless timer
+	// implemented through processor::update_timer_ticks.
+	// Therefore calibrate it relative to processor::TIMER_FREQUENCY, count 3 ticks here for accuracy.
+	let tick_count = 3;
+	let cycles_per_tick = processor::get_frequency() as u64 * 1_000_000 / processor::TIMER_FREQUENCY as u64;
+	let cycles = tick_count * cycles_per_tick;
+
+	// Disable interrupts for calibration accuracy and initialize the counter.
+	// Dividing by the maximum value of 128 still provides enough accuracy for later setting timeouts in the range
+	// of milliseconds, but especially allows for long timeouts.
+	irq::disable();
+	local_apic_write(IA32_X2APIC_DIV_CONF, APIC_DIV_CONF_DIVIDE_BY_128);
+	local_apic_write(IA32_X2APIC_INIT_COUNT, u32::MAX as u64);
+
+	// Wait until the 3 ticks have elapsed.
+	let end = processor::get_timestamp() + cycles;
+	while processor::get_timestamp() < end {
+		hint_core_should_pause();
+	}
+
+	// Save the difference of the initial value and current value as the result of the calibration
+	// and reenable interrupts.
+	unsafe {
+		CALIBRATED_COUNTER_VALUE = ((u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT)) / tick_count as u32) as usize;
+		debug!(
+			"Calibrated APIC Timer with a counter value of {} for a single tick of a {} Hz timer",
+			CALIBRATED_COUNTER_VALUE,
+			processor::TIMER_FREQUENCY
+		);
+	}
+	irq::enable();
+}
+
+pub fn set_oneshot_timer(wakeup_time: Option<usize>) {
+	if let Some(wt) = wakeup_time {
+		// Calculate the relative timeout from the absolute wakeup time.
+		let ticks = wt - processor::update_timer_ticks();
+
+		// Enable the APIC Timer and let it start by setting the initial counter value.
+		local_apic_write(IA32_X2APIC_LVT_TIMER, TIMER_INTERRUPT_NUMBER as u64);
+		local_apic_write(IA32_X2APIC_INIT_COUNT, (unsafe { CALIBRATED_COUNTER_VALUE } * ticks) as u64);
+	} else {
+		// Disable the APIC Timer.
+		local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);
+	}
 }
 
 pub fn init_x2apic() {
@@ -400,9 +464,9 @@ pub fn init_x2apic() {
 	}
 }
 
-/// Initialize all Application Processors as described in Intel MultiProcessor Specification 1.4, B.4.
+/// Boot all Application Processors as described in Intel MultiProcessor Specification 1.4, B.4.
 /// We only run the procedure for xAPIC and x2APIC here. The older 82489DX APIC has never been available for x86-64.
-fn init_application_processors() {
+pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(SMP_BOOT_CODE.len() < BasePageSize::SIZE, "SMP Boot Code is larger than a page");
 	debug!("SMP boot code is {} bytes long", SMP_BOOT_CODE.len());
@@ -446,7 +510,7 @@ fn init_application_processors() {
 			let current_cpu_online = unsafe { ptr::read_volatile(&cpu_online) };
 
 			// Set the Local APIC ID for the next CPU we initialize.
-			unsafe { current_boot_id.set_per_core(*apic_id as u32); }
+			unsafe { ptr::write_volatile(&mut current_boot_id, *apic_id as u32); }
 
 			// Send an INIT IPI.
 			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_TRIGGERED | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_INIT);
@@ -489,14 +553,46 @@ pub fn ipi_tlb_flush() {
 	}
 }
 
+/// Gets the Core ID (here Local APIC ID) for a given sequential CPU number.
+/// Both numbers often match, but don't need to (e.g. when a core has been disabled).
+#[inline]
+pub fn get_core_id_for_cpu_number(cpu_number: usize) -> Option<u32> {
+	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+	if cpu_number < apic_ids.len() {
+		Some(apic_ids[cpu_number] as u32)
+	} else {
+		None
+	}
+}
+
+/// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
+pub fn wakeup_core(core_to_wakeup: u32) {
+	if core_to_wakeup != core_id() {
+		let destination = (core_to_wakeup as u64) << 32;
+		local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED | (WAKEUP_INTERRUPT_NUMBER as u64));
+	}
+}
+
+/// Translate the x2APIC MSR into an xAPIC memory address.
+#[inline]
+fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> usize {
+	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as usize & 0xFF) << 4) }
+}
+
+fn local_apic_read(x2apic_msr: u32) -> u32 {
+	if processor::supports_x2apic() {
+		// x2APIC is simple, we can just read from the given MSR.
+		unsafe { rdmsr(x2apic_msr) as u32 }
+	} else {
+		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *const u32) }
+	}
+}
+
 fn local_apic_write(x2apic_msr: u32, value: u64) {
 	if processor::supports_x2apic() {
 		// x2APIC is simple, we can just write the given value to the given MSR.
 		unsafe { wrmsr(x2apic_msr, value); }
 	} else {
-		// Translate the x2APIC register into an xAPIC memory address.
-		let address = unsafe { LOCAL_APIC_ADDRESS } + ((x2apic_msr as usize & 0xFF) << 4);
-
 		if x2apic_msr == IA32_X2APIC_ICR {
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
@@ -508,7 +604,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 		}
 
 		// Write the value.
-		let value_ref = unsafe { &mut *(address as *mut u32) };
+		let value_ref = unsafe { &mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *mut u32) };
 		*value_ref = value as u32;
 
 		if x2apic_msr == IA32_X2APIC_ICR {

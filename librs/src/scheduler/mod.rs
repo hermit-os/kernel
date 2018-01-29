@@ -27,6 +27,7 @@ pub mod task;
 use alloc::btree_map::*;
 use alloc::rc::Rc;
 use alloc::VecDeque;
+use arch;
 use arch::irq;
 use arch::percore::*;
 use core::cell::RefCell;
@@ -39,6 +40,7 @@ extern "C" {
 }
 
 
+static NEXT_CPU_NUMBER: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicUsize = AtomicUsize::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Option<BTreeMap<u32, PerCoreScheduler>> = None;
@@ -60,6 +62,8 @@ pub struct PerCoreScheduler {
 	ready_queue: SpinlockIrqSave<PriorityTaskQueue>,
 	/// Queue of tasks, which are finished and can be released
 	finished_tasks: SpinlockIrqSave<VecDeque<TaskId>>,
+	/// Queue of blocked tasks, sorted by wakeup time.
+	pub blocked_tasks: SpinlockIrqSave<BlockedTaskQueue>,
 }
 
 impl PerCoreScheduler {
@@ -71,7 +75,7 @@ impl PerCoreScheduler {
 	pub fn spawn(&self, func: extern "C" fn(usize), arg: usize, prio: Priority, heap_start: Option<usize>) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
-		let mut task = Rc::new(RefCell::new(Task::new(tid, self.core_id, TaskStatus::TaskReady, prio, heap_start)));
+		let task = Rc::new(RefCell::new(Task::new(tid, self.core_id, TaskStatus::TaskReady, prio, heap_start)));
 		task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
@@ -102,51 +106,35 @@ impl PerCoreScheduler {
 		panic!("exit failed!")
 	}
 
-	/// Block the current task.
-	pub fn block(&mut self) -> Rc<RefCell<Task>> {
-		// Get the current task.
-		let mut task_borrowed = self.current_task.borrow_mut();
-		assert!(task_borrowed.status == TaskStatus::TaskRunning, "Trying to block a task which is not running");
+	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+		// Get the Core ID of the next CPU.
+		let core_id = {
+			// Increase the CPU number by 1.
+			let cpu_number = NEXT_CPU_NUMBER.fetch_add(1, Ordering::SeqCst);
 
-		// Block the task.
-		info!("Blocking task {}", task_borrowed.id);
-		task_borrowed.status = TaskStatus::TaskBlocked;
-		self.current_task.clone()
-	}
-
-	/// Wake up a specified blocked task.
-	pub fn wakeup(&mut self, task: Rc<RefCell<Task>>) {
-		let prio = {
-			let mut task_borrowed = task.borrow_mut();
-			assert!(task_borrowed.core_id == self.core_id, "Trying to wake up task {} which isn't scheduled on this core", task_borrowed.id);
-			assert!(task_borrowed.status == TaskStatus::TaskBlocked, "Trying to wake up task {} which is not blocked", task_borrowed.id);
-
-			info!("Waking up task {}", task_borrowed.id);
-			task_borrowed.status = TaskStatus::TaskReady;
-			task_borrowed.prio
+			// Translate this CPU number to a Core ID.
+			// Both numbers often match, but don't need to (e.g. when a Core has been disabled).
+			match arch::get_core_id_for_cpu_number(cpu_number) {
+				Some(core_id) => {
+					core_id
+				},
+				None => {
+					// This CPU number does not exist, so start over again with CPU number 0 = Core ID 0.
+					NEXT_CPU_NUMBER.store(0, Ordering::SeqCst);
+					0
+				}
+			}
 		};
 
-		self.ready_queue.lock().push(prio, task);
-	}
-
-	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
-		// Get the scheduler for the next available core.
-		let schedulers = unsafe { SCHEDULERS.as_mut().unwrap() };
-		let mut iter = schedulers.iter_mut();
-		let mut next_scheduler = iter.next().unwrap().1;
-		for (id, scheduler) in iter {
-			if *id > self.core_id {
-				next_scheduler = scheduler;
-				break;
-			}
-		}
+		// Get the scheduler of that core.
+		let next_scheduler = get_scheduler(core_id);
 
 		// Get the current task.
 		let task_borrowed = self.current_task.borrow();
 
 		// Clone the current task.
 		let tid = get_tid();
-		let mut task = Rc::new(RefCell::new(Task::clone(tid, next_scheduler.core_id, &task_borrowed)));
+		let task = Rc::new(RefCell::new(Task::clone(tid, core_id, &task_borrowed)));
 		task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
@@ -154,7 +142,13 @@ impl PerCoreScheduler {
 		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, task); }
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
-		info!("Creating task {} by cloning task {}", tid, task_borrowed.id);
+		info!("Creating task {} on core {} by cloning task {}", tid, core_id, task_borrowed.id);
+
+		// If that CPU has been running the Idle task, it may be in a HALT state and needs to be woken up.
+		if next_scheduler.current_task.borrow().status == TaskStatus::TaskIdle {
+			arch::wakeup_core(core_id);
+		}
+
 		tid
 	}
 
@@ -281,6 +275,7 @@ pub fn add_current_core() {
 	unsafe { TASKS.as_ref().unwrap().lock().insert(tid, idle_task.clone()); }
 
 	// Initialize a scheduler for this core.
+	debug!("Initializing scheduler for this core with idle task {}", tid);
 	let per_core_scheduler = PerCoreScheduler {
 		core_id: core_id,
 		current_task: idle_task.clone(),
@@ -288,6 +283,7 @@ pub fn add_current_core() {
 		fpu_owner: idle_task,
 		ready_queue: SpinlockIrqSave::new(PriorityTaskQueue::new()),
 		finished_tasks: SpinlockIrqSave::new(VecDeque::new()),
+		blocked_tasks: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 	};
 	unsafe { SCHEDULERS.as_mut().unwrap().insert(core_id, per_core_scheduler); }
 }

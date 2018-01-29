@@ -22,7 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /// Define the size of the kernel stack
-pub const KERNEL_STACK_SIZE : usize = 16384;
+pub const KERNEL_STACK_SIZE : usize = 32768;
 
 /// Maximum number of cores supported
 pub const MAX_CORES : usize = 256;

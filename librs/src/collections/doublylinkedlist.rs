@@ -29,7 +29,6 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 
-
 pub struct DoublyLinkedList<T> {
 	head: Option<Rc<RefCell<Node<T>>>>,
 	tail: Option<Rc<RefCell<Node<T>>>>,
@@ -174,6 +173,12 @@ impl<T> DoublyLinkedList<T> {
 
 	pub fn iter(&self) -> Iter<T> {
 		Iter::<T> { current: self.head.as_ref().map(|node| node.clone()) }
+	}
+}
+
+impl<T> Default for DoublyLinkedList<T> {
+	fn default() -> Self {
+		Self { head: None, tail: None }
 	}
 }
 
