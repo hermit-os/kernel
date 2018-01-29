@@ -22,17 +22,17 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 mod io;
+mod processor;
 mod random;
 mod rcce;
 mod semaphore;
 mod spinlock;
 mod tasks;
-mod timer;
 
 pub use self::io::*;
+pub use self::processor::*;
 pub use self::random::*;
 pub use self::rcce::*;
 pub use self::semaphore::*;
 pub use self::spinlock::*;
 pub use self::tasks::*;
-pub use self::timer::*;

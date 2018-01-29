@@ -32,10 +32,13 @@ pub mod pci;
 pub mod pic;
 pub mod pit;
 pub mod processor;
+pub mod scheduler;
 pub mod serial;
-pub mod task;
 pub mod vga;
 
+pub use arch::x86_64::apic::get_core_id_for_cpu_number;
+pub use arch::x86_64::apic::set_oneshot_timer;
+pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
@@ -84,19 +87,23 @@ pub fn boot_processor_init() {
 	processor::print_information();
 	pci::init();
 	pci::print_information();
+	apic::init();
+	scheduler::install_timer_handler();
 
 	**CPU_ONLINE.lock() += 1;
+}
 
-	//apic::init();
-	//apic::print_information();
+pub fn boot_application_processors() {
+	apic::boot_application_processors();
+	apic::print_information();
 }
 
 pub fn application_processor_init() {
 	percore::init();
 	gdt::install();
+	processor::configure();
 	gdt::create_tss();
 	idt::install();
-	processor::configure();
 	apic::init_x2apic();
 	apic::init_local_apic();
 	irq::enable();

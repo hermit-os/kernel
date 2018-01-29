@@ -159,6 +159,7 @@ extern "C" fn initd(_arg: usize) {
 /// (called from entry.asm)
 #[no_mangle]
 pub unsafe extern "C" fn boot_processor_main() {
+	// Initialize the kernel and hardware.
 	sections_init();
 	arch::message_output_init();
 
@@ -166,7 +167,9 @@ pub unsafe extern "C" fn boot_processor_main() {
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();
+	arch::boot_application_processors();
 
+	// Start the initd task.
 	let core_scheduler = scheduler::get_scheduler(core_id());
 	core_scheduler.spawn(
 		initd,
@@ -175,6 +178,7 @@ pub unsafe extern "C" fn boot_processor_main() {
 		Some(arch::mm::virtualmem::task_heap_start())
 	);
 
+	// Run the scheduler loop for the boot processor.
 	loop {
 		core_scheduler.reschedule();
 		if scheduler::number_of_tasks() == 0 {
@@ -189,4 +193,11 @@ pub unsafe extern "C" fn boot_processor_main() {
 #[no_mangle]
 pub unsafe extern "C" fn application_processor_main() {
 	arch::application_processor_init();
+	scheduler::add_current_core();
+	let core_scheduler = scheduler::get_scheduler(core_id());
+
+	loop {
+		core_scheduler.reschedule();
+		arch::processor::halt();
+	}
 }

@@ -93,7 +93,12 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 
 #[no_mangle]
 pub extern "C" fn sys_msleep(ms: u32) {
-	panic!("sys_msleep is unimplemented");
+	if ms > 0 {
+		let wakeup_time = arch::processor::update_timer_ticks() + (ms as usize) * arch::processor::TIMER_FREQUENCY / 1000;
+		let core_scheduler = scheduler::get_scheduler(core_id());
+		let current_task = core_scheduler.get_current_task();
+		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
+	}
 }
 
 #[no_mangle]

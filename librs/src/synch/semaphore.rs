@@ -24,7 +24,7 @@
 use arch::percore::*;
 use core::marker::Sync;
 use scheduler;
-use scheduler::task::PriorityTaskQueue;
+use scheduler::task::{PriorityTaskQueue, WakeupReason};
 use synch::spinlock::*;
 
 /// A counting, blocking, semaphore.
@@ -62,12 +62,6 @@ pub struct Semaphore {
 	queue: SpinlockIrqSave<PriorityTaskQueue>
 }
 
-/// An RAII guard which will release a resource acquired from a semaphore when
-/// dropped.
-pub struct SemaphoreGuard<'a> {
-	sem: &'a Semaphore,
-}
-
 impl Semaphore {
 	/// Creates a new semaphore with the initial count specified.
 	///
@@ -82,28 +76,44 @@ impl Semaphore {
 	}
 
 	/// Acquires a resource of this semaphore, blocking the current thread until
-	/// it can do so.
+	/// it can do so or until the wakeup time has elapsed.
 	///
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
-	pub fn acquire(&self) {
+	pub fn acquire(&self, wakeup_time: Option<usize>) -> bool {
+		// Try to acquire the semaphore right away.
+		if self.try_acquire() {
+			return true;
+		}
+
+		// We couldn't acquire it, so we have to block the current task.
+		// First get the current task.
+		let core_scheduler = scheduler::get_scheduler(core_id());
+		let current_task = core_scheduler.get_current_task();
+
 		loop {
-			let mut count = self.value.lock();
+			// Now block the task.
+			core_scheduler.blocked_tasks.lock().add(current_task.clone(), wakeup_time);
+			self.queue.lock().push(current_task.borrow().prio, current_task.clone());
 
-			if *count > 0 {
-				*count -= 1;
-				return;
-			} else {
-				let core_scheduler = scheduler::get_scheduler(core_id());
-				let blocked_task = core_scheduler.block();
-				let prio = blocked_task.borrow().prio;
-				self.queue.lock().push(prio, blocked_task);
+			// Switch to the next task.
+			core_scheduler.reschedule();
 
-				// release lock
-				drop(count);
-				// switch to the next task
-				core_scheduler.reschedule();
+			// When we're here, we have been woken up again, either because the semaphore
+			// has been released or because the wakeup time has elapsed.
+			// Try to acquire it again.
+			if self.try_acquire() {
+				// Successfully acquired the semaphore.
+				return true;
+			} else if current_task.borrow().last_wakeup_reason == WakeupReason::Timer {
+				// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
+				// Don't try again and return the failure status.
+				return false;
 			}
+
+			// Apparently, we have been woken up because the semaphore has been released,
+			// but someone else has just been faster before we could acquire it.
+			// So block us again in the next iteration.
 		}
 	}
 
@@ -129,27 +139,8 @@ impl Semaphore {
 		// Wake up any task that has been waiting for this semaphore.
 		if let Some(task) = self.queue.lock().pop() {
 			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-			core_scheduler.wakeup(task);
+			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
 		}
-	}
-
-	/// Acquires a resource of this semaphore, returning an RAII guard to
-	/// release the semaphore when dropped.
-	///
-	/// This function is semantically equivalent to an `acquire` followed by a
-	/// `release` when the guard returned is dropped.
-	pub fn access(&mut self) -> SemaphoreGuard {
-		self.acquire();
-		SemaphoreGuard { sem: self }
-	}
-}
-
-impl<'a> Drop for SemaphoreGuard<'a>
-{
-	/// The dropping of the SemaphoreGuard will release the lock it was created from.
-	fn drop(&mut self)
-	{
-		self.sem.release();
 	}
 }
 

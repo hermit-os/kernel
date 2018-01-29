@@ -25,6 +25,9 @@
 //! Architecture dependent interface to initialize a task
 
 use alloc::rc::Rc;
+use arch::x86_64::apic;
+use arch::x86_64::idt;
+use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use consts::*;
@@ -136,4 +139,14 @@ impl TaskFrame for Task {
 			self.last_stack_pointer = stack as usize;
 		}
 	}
+}
+
+extern "x86-interrupt" fn timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	core_scheduler.blocked_tasks.lock().handle_waiting_tasks();
+	apic::eoi();
+}
+
+pub fn install_timer_handler() {
+	idt::set_gate(apic::TIMER_INTERRUPT_NUMBER, timer_handler as usize, 1);
 }

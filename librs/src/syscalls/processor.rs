@@ -21,7 +21,9 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch;
+
 #[no_mangle]
 pub extern "C" fn sys_get_ticks() -> usize {
-	panic!("sys_get_ticks is unimplemented");
+	arch::processor::update_timer_ticks()
 }
