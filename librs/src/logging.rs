@@ -38,15 +38,19 @@ pub enum LogLevel {
 	/// The "warn" level.
 	///
 	/// Designates hazardous situations.
- 	WARNING,
+	WARNING,
 	/// The "info" level.
 	///
 	/// Designates useful information.
- 	INFO,
+	INFO,
 	// The "debug" level.
 	///
 	/// Designates lower priority information.
- 	DEBUG
+	DEBUG,
+	// The "debug_mem" level.
+	///
+	/// Designates lower priority information of the memory management (high frequency!).
+	DEBUG_MEM,
 }
 
 /// Data structures to filter kernel messages
@@ -111,4 +115,9 @@ macro_rules! error {
 /// Print formatted debug messages to our console, followed by a newline.
 macro_rules! debug {
 	($($arg:tt)+) => (printlog!("DEBUG", $crate::logging::LogLevel::DEBUG, $($arg)+));
+}
+
+/// Print formatted debug messages to our console, followed by a newline.
+macro_rules! debug_mem {
+	($($arg:tt)+) => (printlog!("DEBUG_MEM", $crate::logging::LogLevel::DEBUG_MEM, $($arg)+));
 }

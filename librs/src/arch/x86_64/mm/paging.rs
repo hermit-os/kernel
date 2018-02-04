@@ -531,7 +531,7 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 			let root_pagetable = unsafe { &mut *PML4_ADDRESS };
 			let page = Page::<LargePageSize>::including_address(virtual_address);
 
-			debug!("Mapping 2 MiB page for program heap ({:#X} => {:#X})", page.address(), physical_address);
+			debug_mem!("Mapping 2 MiB page for task heap ({:#X} => {:#X})", page.address(), physical_address);
 			root_pagetable.map_page(
 				page,
 				physical_address,
@@ -542,6 +542,7 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 			// weak symbol "runtime_osinit"), we have to return a zeroed page.
 			unsafe {
 				if !runtime_osinit.is_null() {
+					debug_mem!("Go application detected, returning a zeroed page");
 					ptr::write_bytes(page.address() as *mut u8, 0, LargePageSize::SIZE);
 				}
 			}
@@ -565,7 +566,7 @@ fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
-	debug!("Looking up Page Table Entry for {:#X}", virtual_address);
+	debug_mem!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
@@ -573,7 +574,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageT
 }
 
 pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
-	debug!("Getting physical address for {:#X}", virtual_address);
+	debug_mem!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
@@ -583,7 +584,7 @@ pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
 }
 
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
-	debug!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
+	debug_mem!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
