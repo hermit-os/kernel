@@ -65,7 +65,7 @@ impl HermitAllocatorInfo {
 	}
 
 	pub fn switch_to_system_allocator(&mut self) {
-		debug!("Switching to the System Allocator");
+		debug_mem!("Switching to the System Allocator");
 		self.is_bootstrapping = false;
 	}
 }
@@ -99,7 +99,7 @@ unsafe impl<'a> Alloc for &'a HermitAllocator {
 /// An allocation using the always available Bootstrap Allocator.
 unsafe fn alloc_bootstrap(layout: Layout) -> Result<*mut u8, AllocErr> {
 	let ptr = &mut ALLOCATOR_INFO.heap[ALLOCATOR_INFO.index] as *mut u8;
-	debug!("Allocating {} bytes at {:#X} using the Bootstrap Allocator", layout.size(), ptr as usize);
+	debug_mem!("Allocating {} bytes at {:#X} using the Bootstrap Allocator", layout.size(), ptr as usize);
 
 	// Bump the heap index and align it up to the next BOOTSTRAP_HEAP_ALIGNMENT boundary.
 	ALLOCATOR_INFO.index = align_up!(ALLOCATOR_INFO.index + layout.size(), BOOTSTRAP_HEAP_ALIGNMENT);
@@ -112,7 +112,7 @@ unsafe fn alloc_bootstrap(layout: Layout) -> Result<*mut u8, AllocErr> {
 
 /// An allocation using the initialized System Allocator.
 fn alloc_system(layout: Layout) -> Result<*mut u8, AllocErr> {
-	debug!("Allocating {} bytes using the System Allocator", layout.size());
+	debug_mem!("Allocating {} bytes using the System Allocator", layout.size());
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
 	Ok(mm::allocate(size) as *mut u8)
@@ -120,7 +120,7 @@ fn alloc_system(layout: Layout) -> Result<*mut u8, AllocErr> {
 
 /// A deallocation using the initialized System Allocator.
 fn dealloc_system(virtual_address: usize, layout: Layout) {
-	debug!("Deallocating {} bytes at {:#X} using the System Allocator", layout.size(), virtual_address);
+	debug_mem!("Deallocating {} bytes at {:#X} using the System Allocator", layout.size(), virtual_address);
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
 	mm::deallocate(virtual_address, size);

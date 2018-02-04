@@ -49,7 +49,7 @@ impl NodePool {
 			return;
 		}
 
-		debug!("Pool Maintenance!");
+		debug_mem!("Pool Maintenance!");
 		self.maintenance_in_progress = true;
 
 		// Keep the desired minimum number of entries in the pool and move the rest into the local nodes_to_remove list.
