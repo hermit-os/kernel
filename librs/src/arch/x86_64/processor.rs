@@ -27,7 +27,7 @@ use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
-use core::{fmt, ptr, slice, str, u32};
+use core::{fmt, slice, str, u32};
 use core::sync::atomic::hint_core_should_pause;
 use raw_cpuid::*;
 use x86::shared::control_regs::*;
@@ -39,8 +39,6 @@ extern "C" {
 	static cmdline: *const u8;
 	static cmdsize: usize;
 	static mut cpu_freq: u32;
-	static mut fs_patch0: u8;
-	static mut fs_patch1: u8;
 }
 
 #[link_section = ".percore"]
@@ -67,7 +65,6 @@ static mut LINEAR_ADDRESS_BITS: u8 = 0;
 static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
 static mut SUPPORTS_1GIB_PAGES: bool = false;
 static mut SUPPORTS_AVX: bool = false;
-static mut SUPPORTS_FSGSBASE: bool = false;
 static mut SUPPORTS_RDRAND: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
@@ -410,7 +407,6 @@ impl fmt::Display for CpuFeaturePrinter {
 			if extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
 			if extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
 			if extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
-			if extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
 			if extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
 			if extended_feature_info.has_hle() { write!(f, "HLE ")?; }
 			if extended_feature_info.has_qm() { write!(f, "CQM ")?; }
@@ -533,10 +529,6 @@ pub fn detect_features() {
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
 
-		if let Some(extended_feature_info) = cpuid.get_extended_feature_info() {
-			SUPPORTS_FSGSBASE = extended_feature_info.has_fsgsbase();
-		}
-
 		if extended_function_info.has_rdtscp() {
 			TIMESTAMP_FUNCTION = get_timestamp_rdtscp;
 		}
@@ -582,17 +574,6 @@ pub fn configure() {
 	if supports_xsave() {
 		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
 		cr4.insert(CR4_ENABLE_OS_XSAVE);
-	}
-
-	// Enable FSGSBASE if available to read and write FS and GS faster.
-	if supports_fsgsbase() {
-		cr4.insert(CR4_ENABLE_FSGSBASE);
-
-		// Use NOPs to patch out jumps over FSGSBASE usage in entry.asm.
-		unsafe {
-			ptr::write_bytes(&mut fs_patch0 as *mut u8, 0x90, 2);
-			ptr::write_bytes(&mut fs_patch1 as *mut u8, 0x90, 2);
-		}
 	}
 
 	unsafe { cr4_write(cr4); }
@@ -694,11 +675,6 @@ pub fn supports_avx() -> bool {
 }
 
 #[inline]
-pub fn supports_fsgsbase() -> bool {
-	unsafe { SUPPORTS_FSGSBASE }
-}
-
-#[inline]
 pub fn supports_x2apic() -> bool {
 	unsafe { SUPPORTS_X2APIC }
 }
@@ -759,29 +735,15 @@ pub fn get_frequency() -> u16 {
 }
 
 pub fn readfs() -> usize {
-	if supports_fsgsbase() {
-		let fs: usize;
-		unsafe { asm!("rdfsbase $0" : "=r"(fs) :: "memory" : "volatile"); }
-		fs
-	} else {
-		unsafe { rdmsr(IA32_FS_BASE) as usize }
-	}
+	unsafe { rdmsr(IA32_FS_BASE) as usize }
 }
 
 pub fn writefs(fs: usize) {
-	if supports_fsgsbase() {
-		unsafe { asm!("wrfsbase $0" :: "r"(fs) :: "volatile"); }
-	} else {
-		unsafe { wrmsr(IA32_FS_BASE, fs as u64); }
-	}
+	unsafe { wrmsr(IA32_FS_BASE, fs as u64); }
 }
 
 pub fn writegs(gs: usize) {
-	if supports_fsgsbase() {
-		unsafe { asm!("wrgsbase $0" :: "r"(gs) :: "volatile"); }
-	} else {
-		unsafe { wrmsr(IA32_GS_BASE, gs as u64); }
-	}
+	unsafe { wrmsr(IA32_GS_BASE, gs as u64); }
 }
 
 #[inline]
