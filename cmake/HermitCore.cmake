@@ -72,8 +72,7 @@ set(HERMIT_KERNEL_INCLUDES
     ${CMAKE_BINARY_DIR}/include
     ${HERMIT_ROOT}/include
     ${HERMIT_ROOT}/arch/${HERMIT_ARCH}/include
-    ${HERMIT_ROOT}/lwip/src/include
-    ${HERMIT_ROOT}/drivers)
+    ${HERMIT_ROOT}/lwip/src/include)
 
 # HACK: when CMake detects compilers it taints CMAKE_INSTALL_PREFIX, so in
 #       order to rely on that variable (we redefine it), enable all languages

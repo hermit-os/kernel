@@ -165,6 +165,8 @@ add_custom_command(
 	COMMAND
 		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit
 	COMMAND
+		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/
+	COMMAND
 		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/)
 
 # Deploy libhermit.a and headers for package creation
@@ -175,8 +177,7 @@ install(TARGETS hermit-bootstrap
 install(DIRECTORY include/hermit
 	DESTINATION ${TARGET_ARCH}/include/
 	COMPONENT bootstrap
-	FILES_MATCHING
-		PATTERN *.h)
+	FILES_MATCHING PATTERN *.h)
 
 # Provide custom target to only install libhermit without its runtimes which is
 # needed during the compilation of the cross toolchain

@@ -29,7 +29,8 @@ build_external(loader ${HERMIT_ROOT}/loader "")
 build_external(libiomp ${HERMIT_ROOT}/usr/libomp ""
 		-DHERMIT=1
 		-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-		-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/${TARGET_ARCH})
+		-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/${TARGET_ARCH}
+		-DLOCAL_PREFIX_ARCH_INCLUDE_DIR=${LOCAL_PREFIX_ARCH_INCLUDE_DIR})
 
 # libomp is part of HermitCore's runtime and should be available before any
 # application will link

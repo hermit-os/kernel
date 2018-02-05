@@ -4,8 +4,8 @@
 	branch = path2rs
 [submodule "usr/libomp"]
 	path = usr/libomp
-	url = https://github.com/RWTH-OS/libomp_oss.git
-	branch = hermit
+	url = https://github.com/ColinFinck/libomp_oss.git
+	branch = path2rs
 [submodule "crates/x86"]
 	path = crates/x86
 	url = https://github.com/RWTH-OS/rust-x86.git

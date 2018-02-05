@@ -30,6 +30,3 @@ set(LOCAL_PREFIX_ARCH_INCLUDE_DIR ${LOCAL_PREFIX_ARCH_DIR}/include)
 # will link prefarably against libraries in this directory in order to test
 # changes in the kernel
 set(LOCAL_PREFIX_ARCH_LIB_DIR ${LOCAL_PREFIX_ARCH_DIR}/lib)
-
-# generated configs will be put here
-set(GENERATED_CONFIG_DIR ${CMAKE_BINARY_DIR}/include)
