@@ -54,10 +54,10 @@ typedef struct {
 	typedef struct mailbox_##name { \
 		type buffer[MAILBOX_SIZE]; \
 		int wpos, rpos; \
-		sem_t* mails; \
-		sem_t* boxes; \
-		spinlock_t* rlock; \
-		spinlock_t* wlock; \
+		HermitSemaphore* mails; \
+		HermitSemaphore* boxes; \
+		HermitSpinlock* rlock; \
+		HermitSpinlock* wlock; \
 	} mailbox_##name##_t;
 
 MAILBOX_TYPES(wait_msg, wait_msg_t)

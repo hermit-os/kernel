@@ -684,18 +684,16 @@ pub fn supports_xsave() -> bool {
 	unsafe { SUPPORTS_XSAVE }
 }
 
-/// Search the least significant bit
+/// Search the most significant bit
 #[inline(always)]
-pub fn lsb(i: u64) -> u64 {
-	let ret: u64;
-
-	if i == 0 {
-		ret = !0;
+pub fn msb(value: u64) -> Option<u64> {
+	if value > 0 {
+		let ret: u64;
+		unsafe { asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile"); }
+		Some(ret)
 	} else {
-		unsafe { asm!("bsf $1, $0" : "=r"(ret) : "r"(i) : "cc" : "volatile"); }
+		None
 	}
-
-	ret
 }
 
 /// The halt function stops the processor until the next interrupt arrives
@@ -767,10 +765,8 @@ unsafe fn get_timestamp_rdtscp() -> u64 {
 }
 
 /// Delay execution by the given number of microseconds using busy-waiting.
-///
-/// Exported unmangled for the Go runtime.
-#[no_mangle]
-pub extern "C" fn udelay(usecs: u64) {
+#[inline]
+pub fn udelay(usecs: u64) {
 	let end = get_timestamp() + get_frequency() as u64 * usecs;
 	while get_timestamp() < end {
 		hint_core_should_pause();

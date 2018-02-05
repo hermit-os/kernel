@@ -25,13 +25,14 @@
 use alloc::rc::Rc;
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize};
-use arch::processor::lsb;
+use arch::processor::msb;
 use collections::{DoublyLinkedList, Node};
 use consts::*;
 use core::cell::RefCell;
 use core::{fmt, mem};
 use mm;
 use scheduler;
+use spin::RwLock;
 
 
 /// The status of the task - used for scheduling
@@ -92,10 +93,14 @@ impl fmt::Display for Priority {
 	}
 }
 
-pub const REALTIME_PRIO: Priority = Priority::from(0);
-pub const HIGH_PRIO: Priority = Priority::from(0);
-pub const NORMAL_PRIO: Priority = Priority::from(24);
-pub const LOW_PRIO: Priority = Priority::from(NO_PRIORITIES as u8 - 1);
+pub const HIGH_PRIO: Priority = Priority::from(3);
+pub const NORMAL_PRIO: Priority = Priority::from(2);
+pub const LOW_PRIO: Priority = Priority::from(1);
+pub const IDLE_PRIO: Priority = Priority::from(0);
+
+/// Maximum number of priorities
+pub const NO_PRIORITIES: usize = 4;
+
 
 #[repr(align(64))]
 pub struct KernelStack {
@@ -139,7 +144,7 @@ impl PriorityTaskQueue {
 		}
 	}
 
-	/// Add task by its priority to the queue
+	/// Add a task by its priority to the queue
 	pub fn push(&mut self, prio: Priority, task: Rc<RefCell<Task>>) {
 		let i = prio.into() as usize;
 		assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
@@ -149,7 +154,7 @@ impl PriorityTaskQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let first_task = self.queues[queue_index].iter().next();
+		let first_task = self.queues[queue_index].head();
 		first_task.map(|task| {
 			self.queues[queue_index].remove(task.clone());
 
@@ -163,18 +168,22 @@ impl PriorityTaskQueue {
 
 	/// Pop the task with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<Rc<RefCell<Task>>> {
-		self.pop_with_prio(LOW_PRIO)
+		if let Some(i) = msb(self.prio_bitmap) {
+			return self.pop_from_queue(i as usize);
+		}
+
+		None
 	}
 
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
-		let i = lsb(self.prio_bitmap);
-
-		if i <= prio.into() as u64 {
-			self.pop_from_queue(i as usize)
-		} else {
-			None
+		if let Some(i) = msb(self.prio_bitmap) {
+			if i >= prio.into() as u64 {
+				return self.pop_from_queue(i as usize);
+			}
 		}
+
+		None
 	}
 }
 
@@ -206,7 +215,7 @@ impl TaskTLS {
 }
 
 impl Drop for TaskTLS {
-    fn drop(&mut self) {
+	fn drop(&mut self) {
 		mm::deallocate(self.address, self.size);
 	}
 }
@@ -232,7 +241,7 @@ pub struct Task {
 	/// Stack for interrupt handling
 	pub ist: *mut KernelStack,
 	/// Task heap area
-	pub heap: Option<Rc<RefCell<TaskHeap>>>,
+	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
@@ -271,7 +280,7 @@ impl Task {
 			core_id: core_id,
 			stack: stack as *mut KernelStack,
 			ist: ist as *mut KernelStack,
-			heap: heap_start.map(|start| Rc::new(RefCell::new(TaskHeap { start: start, end: start }))),
+			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
 		}
@@ -284,7 +293,7 @@ impl Task {
 		Task {
 			id: tid,
 			status: TaskStatus::TaskIdle,
-			prio: LOW_PRIO,
+			prio: IDLE_PRIO,
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,

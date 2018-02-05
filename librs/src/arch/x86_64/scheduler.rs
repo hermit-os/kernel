@@ -98,6 +98,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		// Associate the TLS memory to the current task.
 		let core_scheduler = scheduler::get_scheduler(core_id());
 		let task = core_scheduler.get_current_task();
+		debug!("Set up TLS for task {} at address {:#X}", task.borrow().id, tls.address());
 		task.borrow_mut().tls = Some(Rc::new(RefCell::new(tls)));
 	}
 

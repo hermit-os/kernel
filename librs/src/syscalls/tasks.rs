@@ -78,27 +78,46 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	let heap = borrowed.heap.as_mut().expect("Calling sys_sbrk on a task without an associated heap");
 
 	// Adjust the heap of the current task.
-	let mut heap_borrowed = heap.borrow_mut();
-	assert!(heap_borrowed.start >= task_heap_start, "heap.start {:#X} is not >= task_heap_start {:#X}", heap_borrowed.start, task_heap_start);
-	let old_end = heap_borrowed.end;
-	heap_borrowed.end = (old_end as isize + incr) as usize;
-	assert!(heap_borrowed.end <= task_heap_end, "New heap.end {:#X} is not <= task_heap_end {:#X}", heap_borrowed.end, task_heap_end);
+	let heap_borrowed = heap.borrow();
+	let mut heap_locked = heap_borrowed.write();
+	assert!(heap_locked.start >= task_heap_start, "heap start {:#X} is not >= task_heap_start {:#X}", heap_locked.start, task_heap_start);
+	let old_end = heap_locked.end;
+	heap_locked.end = (old_end as isize + incr) as usize;
+	assert!(heap_locked.end <= task_heap_end, "New heap end {:#X} is not <= task_heap_end {:#X}", heap_locked.end, task_heap_end);
 
-	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap_borrowed.end);
+	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap_locked.end);
 
 	// We're done! The page fault handler will map the new virtual memory area to physical memory
 	// as soon as the task accesses it for the first time.
 	old_end
 }
 
+// TODO: Rename this function to sys_usleep for consistency and change the call in GCC's libgo/runtime/yield.c
+// This is a breaking change though!
+// Not doing this yet allows us to use the same GCC for the HermitCore C version and HermitCore-rs.
 #[no_mangle]
-pub extern "C" fn sys_msleep(ms: u32) {
-	if ms > 0 {
-		let wakeup_time = arch::processor::update_timer_ticks() + (ms as usize) * arch::processor::TIMER_FREQUENCY / 1000;
+pub extern "C" fn udelay(usecs: u32) {
+	let ticks = (usecs as usize / 1000) * arch::processor::TIMER_FREQUENCY / 1000;
+
+	if ticks > 0 {
+		// Enough time to set a wakeup timer and block the current task.
+		debug!("udelay waiting {} ticks", ticks);
+		let wakeup_time = arch::processor::update_timer_ticks() + ticks;
 		let core_scheduler = scheduler::get_scheduler(core_id());
 		let current_task = core_scheduler.get_current_task();
 		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
+
+		// Switch to the next task.
+		core_scheduler.scheduler();
+	} else if usecs > 0 {
+		// Not enough time to set a wakeup timer, so just do busy-waiting.
+		arch::processor::udelay(usecs as u64);
 	}
+}
+
+#[no_mangle]
+pub extern "C" fn sys_msleep(ms: u32) {
+	udelay(ms * 1000);
 }
 
 #[no_mangle]
@@ -115,7 +134,8 @@ pub extern "C" fn sys_clone(id: *mut tid_t, func: extern "C" fn(usize), arg: usi
 
 #[no_mangle]
 pub extern "C" fn sys_yield() {
-	panic!("sys_yield is unimplemented");
+	let core_scheduler = scheduler::get_scheduler(core_id());
+	core_scheduler.scheduler();
 }
 
 #[no_mangle]

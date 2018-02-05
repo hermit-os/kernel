@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//               2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,10 +23,10 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::percore::*;
-use core::marker::Sync;
 use scheduler;
 use scheduler::task::{PriorityTaskQueue, WakeupReason};
-use synch::spinlock::*;
+use synch::spinlock::SpinlockIrqSave;
+
 
 /// A counting, blocking, semaphore.
 ///
@@ -97,7 +98,7 @@ impl Semaphore {
 			self.queue.lock().push(current_task.borrow().prio, current_task.clone());
 
 			// Switch to the next task.
-			core_scheduler.reschedule();
+			core_scheduler.scheduler();
 
 			// When we're here, we have been woken up again, either because the semaphore
 			// has been released or because the wakeup time has elapsed.
@@ -143,7 +144,3 @@ impl Semaphore {
 		}
 	}
 }
-
-// Same unsafe impls as `Semaphore`
-unsafe impl Sync for Semaphore {}
-unsafe impl Send for Semaphore {}

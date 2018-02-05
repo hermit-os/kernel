@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//               2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -24,5 +25,6 @@
 
 //! Synchronization primitives
 
+pub mod recmutex;
 pub mod semaphore;
 pub mod spinlock;

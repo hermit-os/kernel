@@ -80,21 +80,11 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
-mod timer;
 
 // IMPORTS
-#[cfg(target_arch="x86_64")]
-mod arch_specific {
-	pub use arch::gdt::*;
-	pub use arch::irq::*;
-	pub use arch::mm::paging::*;
-	pub use arch::processor::*;
-}
-
-pub use arch_specific::*;
+pub use arch::*;
 pub use dummies::*;
 pub use syscalls::*;
-pub use timer::*;
 
 use arch::percore::*;
 use consts::*;
@@ -174,13 +164,13 @@ pub unsafe extern "C" fn boot_processor_main() {
 	core_scheduler.spawn(
 		initd,
 		0,
-		scheduler::task::REALTIME_PRIO,
+		scheduler::task::HIGH_PRIO,
 		Some(arch::mm::virtualmem::task_heap_start())
 	);
 
 	// Run the scheduler loop for the boot processor.
 	loop {
-		core_scheduler.reschedule();
+		core_scheduler.scheduler();
 		if scheduler::number_of_tasks() == 0 {
 			arch::processor::shutdown();
 		}
@@ -197,7 +187,7 @@ pub unsafe extern "C" fn application_processor_main() {
 	let core_scheduler = scheduler::get_scheduler(core_id());
 
 	loop {
-		core_scheduler.reschedule();
+		core_scheduler.scheduler();
 		arch::processor::halt();
 	}
 }

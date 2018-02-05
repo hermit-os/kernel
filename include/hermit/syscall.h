@@ -55,14 +55,18 @@ extern "C" {
 #endif
 
 /* Opaque structures */
-struct sem;
-typedef struct sem sem_t;
+struct _HermitRecursiveMutex;
+typedef struct _HermitRecursiveMutex HermitRecursiveMutex;
 
-struct spinlock;
-typedef struct spinlock spinlock_t;
+struct _HermitSemaphore;
+typedef struct _HermitSemaphore HermitSemaphore;
 
-struct spinlock_irqsave;
-typedef struct spinlock spinlock_irqsave_t;
+struct _HermitSpinlock;
+typedef struct _HermitSpinlock HermitSpinlock;
+
+struct _HermitSpinlockIrqSave;
+typedef struct _HermitSpinlockIrqSave HermitSpinlockIrqSave;
+
 
 typedef void (*entry_point_t)(void*);
 typedef void (*signal_handler_t)(int);
@@ -85,21 +89,25 @@ ssize_t sys_sbrk(ssize_t incr);
 int sys_open(const char* name, int flags, int mode);
 int sys_close(int fd);
 void sys_msleep(unsigned int ms);
-int sys_sem_init(sem_t** sem, unsigned int value);
-int sys_sem_destroy(sem_t* sem);
-int sys_sem_wait(sem_t* sem);
-int sys_sem_post(sem_t* sem);
-int sys_sem_trywait(sem_t* sem);
-int sys_sem_timedwait(sem_t *sem, unsigned int ms);
-int sys_sem_cancelablewait(sem_t* sem, unsigned int ms);
-int sys_spinlock_init(spinlock_t** lock);
-int sys_spinlock_destroy(spinlock_t* lock);
-int sys_spinlock_lock(spinlock_t* lock);
-int sys_spinlock_unlock(spinlock_t* lock);
-int sys_spinlock_irqsave_init(spinlock_irqsave_t** lock);
-int sys_spinlock_irqsave_destroy(spinlock_irqsave_t* lock);
-int sys_spinlock_irqsave_lock(spinlock_irqsave_t* lock);
-int sys_spinlock_irqsave_unlock(spinlock_irqsave_t* lock);
+int sys_recmutex_init(HermitRecursiveMutex** recmutex);
+int sys_recmutex_destroy(HermitRecursiveMutex* recmutex);
+int sys_recmutex_lock(HermitRecursiveMutex* recmutex);
+int sys_recmutex_unlock(HermitRecursiveMutex* recmutex);
+int sys_sem_init(HermitSemaphore** sem, unsigned int value);
+int sys_sem_destroy(HermitSemaphore* sem);
+int sys_sem_wait(HermitSemaphore* sem);
+int sys_sem_post(HermitSemaphore* sem);
+int sys_sem_trywait(HermitSemaphore* sem);
+int sys_sem_timedwait(HermitSemaphore *sem, unsigned int ms);
+int sys_sem_cancelablewait(HermitSemaphore* sem, unsigned int ms);
+int sys_spinlock_init(HermitSpinlock** lock);
+int sys_spinlock_destroy(HermitSpinlock* lock);
+int sys_spinlock_lock(HermitSpinlock* lock);
+int sys_spinlock_unlock(HermitSpinlock* lock);
+int sys_spinlock_irqsave_init(HermitSpinlockIrqSave** lock);
+int sys_spinlock_irqsave_destroy(HermitSpinlockIrqSave* lock);
+int sys_spinlock_irqsave_lock(HermitSpinlockIrqSave* lock);
+int sys_spinlock_irqsave_unlock(HermitSpinlockIrqSave* lock);
 int sys_spawn(tid_t* id, entry_point_t func, void* arg, unsigned char prio, unsigned int core_id);
 int sys_clone(tid_t* id, void* ep, void* argv);
 off_t sys_lseek(int fd, off_t offset, int whence);
