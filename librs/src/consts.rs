@@ -27,5 +27,3 @@ pub const KERNEL_STACK_SIZE : usize = 32768;
 /// Maximum number of cores supported
 pub const MAX_CORES : usize = 256;
 
-/// Maximum number of priorities
-pub const NO_PRIORITIES: usize = 32;

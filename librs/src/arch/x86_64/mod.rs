@@ -40,6 +40,7 @@ pub use arch::x86_64::apic::get_core_id_for_cpu_number;
 pub use arch::x86_64::apic::set_oneshot_timer;
 pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;
+pub use arch::x86_64::gdt::set_current_kernel_stack;
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
 

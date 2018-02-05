@@ -1,4 +1,4 @@
-// Copyright (c) 2018 Colin Finck, RWTH Aachen University
+// Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,22 +21,20 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-mod io;
-mod processor;
-mod random;
-mod recmutex;
-mod rcce;
-mod semaphore;
-mod spinlock;
-mod tasks;
-mod timer;
+#[repr(C)]
+pub struct timeval {
+	pub tv_sec: i64,
+	pub tv_usec: i64,
+}
 
-pub use self::io::*;
-pub use self::processor::*;
-pub use self::random::*;
-pub use self::rcce::*;
-pub use self::recmutex::*;
-pub use self::semaphore::*;
-pub use self::spinlock::*;
-pub use self::tasks::*;
-pub use self::timer::*;
+#[repr(C)]
+pub struct itimerval {
+	pub it_interval: timeval,
+	pub it_value: timeval,
+}
+
+// Used by GCC's Go runtime, but doesn't need an implementation in HermitCore.
+#[no_mangle]
+pub extern "C" fn setitimer(_which: i32, _value: *const itimerval, _ovalue: *mut itimerval) -> i32 {
+	0
+}

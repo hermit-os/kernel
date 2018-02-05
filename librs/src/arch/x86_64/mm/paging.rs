@@ -523,9 +523,10 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 	// Is a heap associated to the current task?
 	if let Some(ref heap) = task.borrow().heap {
 		let heap_borrowed = heap.borrow();
+		let heap_locked = heap_borrowed.read();
 
 		// Is the requested virtual address within the boundary of that heap?
-		if virtual_address >= heap_borrowed.start && virtual_address < heap_borrowed.end {
+		if virtual_address >= heap_locked.start && virtual_address < heap_locked.end {
 			// Then allocate physical memory for a 2 MiB page and map it to this virtual address.
 			let physical_address = physicalmem::allocate_aligned(LargePageSize::SIZE, LargePageSize::SIZE);
 			let root_pagetable = unsafe { &mut *PML4_ADDRESS };
