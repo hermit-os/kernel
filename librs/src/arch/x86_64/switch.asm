@@ -1,4 +1,5 @@
 ; Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+;               2018 Colin Finck, RWTH Aachen University
 ;
 ; MIT License
 ;
@@ -33,13 +34,11 @@ switch:
 	; rsi => stack pointer of the new task
 
 	; save context
-	pushfq							; push control register
+	pushfq
 	push rax
 	push rcx
 	push rdx
 	push rbx
-	push rsp						; determine rsp before storing the context
-	add QWORD [rsp], 6*8
 	push rbp
 	push rsi
 	push rdi
@@ -53,21 +52,15 @@ switch:
 	push r15
 
 	; push the fs register used for Thread-Local Storage
-global fs_patch0
-fs_patch0:
-	jmp short rdfs_old_way
-	rdfsbase rax
-	push rax
-	jmp short fs_saved
-rdfs_old_way:
 	mov ecx, MSR_FS_BASE
 	rdmsr
 	sub rsp, 8
 	mov DWORD [rsp+4], edx
 	mov DWORD [rsp], eax
-fs_saved:
 
-	mov QWORD [rdi], rsp			; store old rsp
+	; store the old stack pointer in the dereferenced first parameter
+	; and load the new stack pointer in the second parameter.
+	mov QWORD [rdi], rsp
 	mov rsp, rsi
 
 	; Set task switched flag
@@ -80,19 +73,11 @@ fs_saved:
 	call set_current_kernel_stack
 
 	; restore the fs register
-global fs_patch1
-fs_patch1:
-	jmp short wrfs_old_way
-	pop rax
-	wrfsbase rax
-	jmp short fs_restored
-wrfs_old_way:
 	mov ecx, MSR_FS_BASE
 	mov edx, DWORD [rsp+4]
 	mov eax, DWORD [rsp]
 	wrmsr
 	add esp, 8
-fs_restored:
 
 	; restore remaining context
 	pop r15
@@ -106,7 +91,6 @@ fs_restored:
 	pop rdi
 	pop rsi
 	pop rbp
-	add rsp, 8
 	pop rbx
 	pop rdx
 	pop rcx
