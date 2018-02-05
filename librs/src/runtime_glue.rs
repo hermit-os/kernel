@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+//               2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -35,7 +36,7 @@ extern "C" fn eh_personality() {}
 #[no_mangle]
 extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -> !
 {
-	println!("PANIC: {}:{}: {}", file, line, args);
+	println!("[{}][!!!PANIC!!!] {}:{}: {}", arch::percore::core_id(), file, line, args);
 	loop {
 		arch::processor::halt();
 	}
@@ -45,7 +46,7 @@ extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -
 #[allow(non_snake_case)]
 pub fn _Unwind_Resume()
 {
-	println!("UNWIND!");
+	println!("[{}][!!!UNWIND!!!]", arch::percore::core_id());
 	loop {
 		arch::processor::halt();
 	}
