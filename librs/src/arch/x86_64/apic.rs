@@ -443,7 +443,9 @@ fn calibrate_timer() {
 pub fn set_oneshot_timer(wakeup_time: Option<usize>) {
 	if let Some(wt) = wakeup_time {
 		// Calculate the relative timeout from the absolute wakeup time.
-		let ticks = wt - processor::update_timer_ticks();
+		// Maintain a minimum value of one tick, otherwise the timer interrupt does not fire at all.
+		let current_time = processor::update_timer_ticks();
+		let ticks = if wt > current_time { wt - current_time } else { 1 };
 
 		// Enable the APIC Timer and let it start by setting the initial counter value.
 		local_apic_write(IA32_X2APIC_LVT_TIMER, TIMER_INTERRUPT_NUMBER as u64);
