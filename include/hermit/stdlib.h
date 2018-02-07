@@ -37,7 +37,6 @@
 #ifndef __STDLIB_H__
 #define __STDLIB_H__
 
-#include <hermit/config.h>
 #include <hermit/stddef.h>
 
 #ifdef __cplusplus

@@ -22,81 +22,70 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
+
+use alloc::boxed::Box;
+use arch::x86_64::mm::paging::PageTableEntryFlags;
 use arch::x86_64::percore::*;
-use consts::*;
 use core::mem;
 use mm;
-use spin;
-use scheduler;
-use scheduler::task::KernelStack;
+use scheduler::task::TaskStatus;
 use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
 use x86::shared::PrivilegeLevel;
 use x86::shared::dtables::{self, DescriptorTablePointer};
 use x86::shared::task::*;
 
+
+extern "C" {
+	static current_stack_address: usize;
+}
+
+
 pub const GDT_KERNEL_CODE: u16 = 1;
 pub const GDT_KERNEL_DATA: u16 = 2;
 pub const GDT_FIRST_TSS:   u16 = 3;
 
-/// A TSS descriptor is twice as large as a code/data descriptor.
-const GDT_ENTRIES: usize = (3+MAX_CORES*2);
+/// We dynamically allocate a GDT large enough to hold the maximum number of entries.
+const GDT_ENTRIES: usize = 8192;
 
 /// We use IST1 through IST4.
 /// Each critical exception (NMI, Double Fault, Machine Check) gets a dedicated one while IST1 is shared for all other
 /// interrupts. See also irq.rs.
 const IST_ENTRIES: usize = 4;
 
-// thread_local on a static mut, signals that the value of this static may
-// change depending on the current thread.
-static mut GDT: [SegmentDescriptor; GDT_ENTRIES] = [SegmentDescriptor::NULL; GDT_ENTRIES];
+static mut GDT: *mut Gdt = 0 as *mut Gdt;
 static mut GDTR: DescriptorTablePointer<SegmentDescriptor> = DescriptorTablePointer { base: 0 as *const SegmentDescriptor, limit: 0 };
-static mut TSS_BUFFER: TssBuffer = TssBuffer::new();
-static GDT_INIT: spin::Once<()> = spin::Once::new();
 
-extern "C" {
-	static boot_stack: u8;
+struct Gdt {
+	entries: [SegmentDescriptor; GDT_ENTRIES]
 }
 
-// workaround to use the new repr(align) feature
-// currently, it is only supported by structs
-// => map all TSS in a struct
-#[repr(align(4096))]
-struct TssBuffer {
-	tss: [TaskStateSegment; MAX_CORES],
-}
 
-impl TssBuffer {
-	const fn new() -> TssBuffer {
-		TssBuffer {
-			tss: [TaskStateSegment::new(); MAX_CORES],
-		}
+pub fn init() {
+	unsafe {
+		// Dynamically allocate memory for the GDT.
+		GDT = mm::allocate(mem::size_of::<Gdt>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut Gdt;
+
+		// The NULL descriptor is always the first entry.
+		(*GDT).entries[0] = SegmentDescriptor::NULL;
+
+		// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
+		// All other parameters are ignored.
+		(*GDT).entries[GDT_KERNEL_CODE as usize] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+
+		// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
+		// All other parameters are ignored.
+		(*GDT).entries[GDT_KERNEL_DATA as usize] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+
+		// Let GDTR point to our newly crafted GDT.
+		GDTR = DescriptorTablePointer::new(&((*GDT).entries));
 	}
 }
 
-
-/// This will setup the special GDT
-/// pointer, set up the entries in our GDT, and then
-/// finally to load the new GDT and to update the
-/// new segment registers
-pub fn install() {
+pub fn add_current_core() {
 	unsafe {
-		GDT_INIT.call_once(|| {
-			// The NULL descriptor is already inserted as the first entry.
-
-			// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
-			// All other parameters are ignored.
-			GDT[GDT_KERNEL_CODE as usize] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
-
-			// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
-			// All other parameters are ignored.
-			GDT[GDT_KERNEL_DATA as usize] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
-
-			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
-			// implement "new" as "const fn" and do this call already in the initialization of GDTR.
-			GDTR = DescriptorTablePointer::new(&GDT);
-		});
-
+		// Load the GDT for the current core.
 		dtables::lgdt(&GDTR);
 
 		// Reload the segment descriptors
@@ -105,50 +94,52 @@ pub fn install() {
 		load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
 	}
-}
 
-pub fn create_tss() {
-	let core_id = core_id() as usize;
+	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
+	let mut boxed_tss = Box::new(TaskStateSegment::new());
+
+	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
+	// When switching to another task on this core, this entry is replaced.
+	boxed_tss.rsp[0] = (unsafe { current_stack_address } + KERNEL_STACK_SIZE - 0x10) as u64;
+
+	// Allocate all ISTs for this core.
+	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
+	for i in 0..IST_ENTRIES {
+		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
+		boxed_tss.ist[i] = (ist + KERNEL_STACK_SIZE - 0x10) as u64;
+	}
 
 	unsafe {
-		// entry.asm has reserved space for a boot stack for each core.
-		// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
-		// When switching to another task on this core, this entry is replaced.
-		TSS_BUFFER.tss[core_id].rsp[0] = &boot_stack as *const u8 as u64 + ((core_id+1) * KERNEL_STACK_SIZE - 0x10) as u64;
-
-		// Allocate all ISTs for this core.
-		// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
-		for i in 0..IST_ENTRIES {
-			TSS_BUFFER.tss[core_id].ist[i] = mm::allocate(mem::size_of::<KernelStack>()) as u64 + KERNEL_STACK_SIZE as u64 - 0x10;
-		}
-
 		// Add this TSS to the GDT.
-		let idx = GDT_FIRST_TSS as usize + core_id*2;
-		GDT[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(&TSS_BUFFER.tss[core_id], PrivilegeLevel::Ring0));
+		let idx = GDT_FIRST_TSS as usize + (core_id() as usize)*2;
+		(*GDT).entries[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(boxed_tss.as_ref(), PrivilegeLevel::Ring0));
 
 		// Load it.
 		let sel = SegmentSelector::new(idx as u16, PrivilegeLevel::Ring0);
 		load_tr(sel);
+
+		// Store it in the PerCoreVariables structure for further manipulation.
+		let tss = Box::into_raw(boxed_tss);
+		PERCORE.tss.set(tss);
 	}
 }
 
 pub fn get_boot_stacks() -> (usize, usize) {
-	let core_id = core_id() as usize;
+	let tss = unsafe { &(*PERCORE.tss.get()) };
 
-	unsafe {
-		let stack = TSS_BUFFER.tss[core_id].rsp[0] as usize;
-		let ist = TSS_BUFFER.tss[core_id].ist[0] as usize;
-		(stack, ist)
-	}
+	let stack = tss.rsp[0] as usize;
+	let ist = tss.ist[0] as usize;
+	(stack, ist)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn set_current_kernel_stack() {
-	let core_id = core_id() as usize;
-	let core_scheduler = scheduler::get_scheduler(core_id as u32);
-	let task = core_scheduler.get_current_task();
-	let task_borrowed = task.borrow();
+pub extern "C" fn set_current_kernel_stack() {
+	let core_scheduler = core_scheduler();
+	let task_borrowed = core_scheduler.current_task.borrow();
+	let stack_size = if task_borrowed.status == TaskStatus::TaskIdle { KERNEL_STACK_SIZE } else { DEFAULT_STACK_SIZE };
 
-	TSS_BUFFER.tss[core_id].rsp[0] = (task_borrowed.stack as usize + KERNEL_STACK_SIZE - 0x10) as u64;
-	TSS_BUFFER.tss[core_id].ist[0] = (task_borrowed.ist as usize + KERNEL_STACK_SIZE - 0x10) as u64;
+	let tss = unsafe { &mut (*PERCORE.tss.get()) };
+
+	tss.rsp[0] = (task_borrowed.stack + stack_size - 0x10) as u64;
+	tss.ist[0] = (task_borrowed.ist + KERNEL_STACK_SIZE - 0x10) as u64;
 }

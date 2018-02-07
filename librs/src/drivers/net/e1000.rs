@@ -373,10 +373,10 @@ impl E1000NetworkAdapter {
 		e1000.flush();
 
 		// Initialize the TX buffer and descriptor memory.
-		e1000.tx_buffers = mm::allocate(mem::size_of::<TxBufferType>()) as *mut TxBufferType;
+		e1000.tx_buffers = mm::allocate(mem::size_of::<TxBufferType>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut TxBufferType;
 		unsafe { ptr::write_bytes(e1000.tx_buffers, 0, 1); }
 
-		e1000.tx_descriptors = mm::allocate(mem::size_of::<TxDescriptorType>()) as *mut TxDescriptorType;
+		e1000.tx_descriptors = mm::allocate(mem::size_of::<TxDescriptorType>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut TxDescriptorType;
 		unsafe { ptr::write_bytes(e1000.tx_descriptors, 0, 1); }
 
 		for i in 0..NUM_TX_DESCRIPTORS {
@@ -492,10 +492,10 @@ impl E1000NetworkAdapter {
 		e1000.read_register(E1000_ICR_REGISTER);
 
 		// Initialize the RX buffer and descriptor memory.
-		e1000.rx_buffers = mm::allocate(mem::size_of::<RxBufferType>()) as *mut RxBufferType;
+		e1000.rx_buffers = mm::allocate(mem::size_of::<RxBufferType>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut RxBufferType;
 		unsafe { ptr::write_bytes(e1000.rx_buffers, 0, 1); }
 
-		e1000.rx_descriptors = mm::allocate(mem::size_of::<RxDescriptorType>()) as *mut RxDescriptorType;
+		e1000.rx_descriptors = mm::allocate(mem::size_of::<RxDescriptorType>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut RxDescriptorType;
 		unsafe { ptr::write_bytes(e1000.rx_descriptors, 0, 1); }
 
 		for i in 0..NUM_RX_DESCRIPTORS {

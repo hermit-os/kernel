@@ -34,17 +34,15 @@ pub type tid_t = u32;
 
 #[no_mangle]
 pub extern "C" fn sys_getpid() -> tid_t {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	let task = core_scheduler.get_current_task();
-	let borrowed = task.borrow();
+	let core_scheduler = core_scheduler();
+	let borrowed = core_scheduler.current_task.borrow();
 	borrowed.id.into() as tid_t
 }
 
 #[no_mangle]
 pub extern "C" fn sys_getprio(id: *const tid_t) -> i32 {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	let task = core_scheduler.get_current_task();
-	let borrowed = task.borrow();
+	let core_scheduler = core_scheduler();
+	let borrowed = core_scheduler.current_task.borrow();
 
 	if id.is_null() || unsafe {*id} == borrowed.id.into() as u32 {
 		borrowed.prio.into() as i32
@@ -54,14 +52,13 @@ pub extern "C" fn sys_getprio(id: *const tid_t) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_setprio(id: *const tid_t, prio: i32) -> i32 {
+pub extern "C" fn sys_setprio(_id: *const tid_t, _prio: i32) -> i32 {
 	-ENOSYS
 }
 
 #[no_mangle]
 pub extern "C" fn sys_exit(arg: i32) -> ! {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	core_scheduler.exit(arg);
+	core_scheduler().exit(arg);
 }
 
 #[no_mangle]
@@ -72,9 +69,8 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	assert!(task_heap_end <= isize::MAX as usize);
 
 	// Get the heap of the current task on the current core.
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	let task = core_scheduler.get_current_task();
-	let mut borrowed = task.borrow_mut();
+	let core_scheduler = core_scheduler();
+	let mut borrowed = core_scheduler.current_task.borrow_mut();
 	let heap = borrowed.heap.as_mut().expect("Calling sys_sbrk on a task without an associated heap");
 
 	// Adjust the heap of the current task.
@@ -103,8 +99,8 @@ pub extern "C" fn udelay(usecs: u32) {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("udelay waiting {} ticks", ticks);
 		let wakeup_time = arch::processor::update_timer_ticks() + ticks;
-		let core_scheduler = scheduler::get_scheduler(core_id());
-		let current_task = core_scheduler.get_current_task();
+		let core_scheduler = core_scheduler();
+		let current_task = core_scheduler.current_task.clone();
 		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
 
 		// Switch to the next task.
@@ -122,7 +118,7 @@ pub extern "C" fn sys_msleep(ms: u32) {
 
 #[no_mangle]
 pub extern "C" fn sys_clone(id: *mut tid_t, func: extern "C" fn(usize), arg: usize) -> i32 {
-	let core_scheduler = scheduler::get_scheduler(core_id());
+	let core_scheduler = core_scheduler();
 	let task_id = core_scheduler.clone(func, arg);
 
 	if !id.is_null() {
@@ -134,8 +130,7 @@ pub extern "C" fn sys_clone(id: *mut tid_t, func: extern "C" fn(usize), arg: usi
 
 #[no_mangle]
 pub extern "C" fn sys_yield() {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	core_scheduler.scheduler();
+	core_scheduler().scheduler();
 }
 
 #[no_mangle]

@@ -21,6 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch;
 use console;
 use core::fmt::Write;
 use core::{isize, slice, str};
@@ -65,4 +66,9 @@ pub extern "C" fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
 #[no_mangle]
 pub extern "C" fn sys_stat(file: *const u8, st: usize) -> i32 {
 	-ENOSYS
+}
+
+#[no_mangle]
+pub extern "C" fn sys_putchar(character: u8) {
+	arch::output_message_byte(character);
 }

@@ -517,11 +517,10 @@ impl fmt::Display for PageFaultError {
 
 pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame, error_code: u64) {
 	let virtual_address = unsafe { control_regs::cr2() };
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	let task = core_scheduler.get_current_task();
+	let core_scheduler = core_scheduler();
 
 	// Is a heap associated to the current task?
-	if let Some(ref heap) = task.borrow().heap {
+	if let Some(ref heap) = core_scheduler.current_task.borrow().heap {
 		let heap_borrowed = heap.borrow();
 		let heap_locked = heap_borrowed.read();
 

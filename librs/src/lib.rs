@@ -71,9 +71,7 @@ mod logging;
 mod arch;
 mod collections;
 mod console;
-mod consts;
 mod drivers;
-mod dummies;
 mod errno;
 mod mm;
 mod runtime_glue;
@@ -83,11 +81,9 @@ mod syscalls;
 
 // IMPORTS
 pub use arch::*;
-pub use dummies::*;
 pub use syscalls::*;
 
 use arch::percore::*;
-use consts::*;
 use core::ptr;
 use mm::allocator;
 
@@ -100,8 +96,6 @@ extern "C" {
 	static mut hbss_start: u8;
 	static mut libc_sd: i32;
 	static kernel_end: u8;
-	static percore_start: u8;
-	static percore_end0: u8;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 }
@@ -121,17 +115,6 @@ unsafe fn sections_init() {
 		0,
 		&kernel_end as *const u8 as usize - &__bss_start as *const u8 as usize
 	);
-
-	// Initialize .percore sections
-	// Copy the section for the first CPU to all others.
-	let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
-	for i in 1..MAX_CORES {
-		ptr::copy_nonoverlapping(
-			&percore_start as *const u8,
-			(&percore_start as *const u8 as usize + i*size) as *mut u8,
-			size
-		);
-	}
 }
 
 extern "C" fn initd(_arg: usize) {
@@ -160,7 +143,7 @@ pub unsafe extern "C" fn boot_processor_main() {
 	arch::boot_application_processors();
 
 	// Start the initd task.
-	let core_scheduler = scheduler::get_scheduler(core_id());
+	let core_scheduler = core_scheduler();
 	core_scheduler.spawn(
 		initd,
 		0,
@@ -184,7 +167,7 @@ pub unsafe extern "C" fn boot_processor_main() {
 pub unsafe extern "C" fn application_processor_main() {
 	arch::application_processor_init();
 	scheduler::add_current_core();
-	let core_scheduler = scheduler::get_scheduler(core_id());
+	let core_scheduler = core_scheduler();
 
 	loop {
 		core_scheduler.scheduler();

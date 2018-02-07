@@ -22,6 +22,10 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #[no_mangle]
+pub static mut rcce_lock: usize = 0;
+
+
+#[no_mangle]
 pub extern "C" fn sys_rcce_init(session_id: i32) -> i32 {
 	panic!("sys_rcce_init is unimplemented");
 }

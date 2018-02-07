@@ -22,7 +22,9 @@
 ; OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 ; WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-section .text
+extern set_current_kernel_stack
+
+section .ktext
 bits 64
 
 MSR_FS_BASE equ 0xc0000100
@@ -69,7 +71,6 @@ switch:
 	mov cr0, rax
 
 	; set stack pointer in TSS
-	extern set_current_kernel_stack
 	call set_current_kernel_stack
 
 	; restore the fs register

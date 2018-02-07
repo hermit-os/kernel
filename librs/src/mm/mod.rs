@@ -75,7 +75,7 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-pub fn allocate(size: usize) -> usize {
+pub fn allocate(size: usize, extra_flags: PageTableEntryFlags) -> usize {
 	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
@@ -85,7 +85,7 @@ pub fn allocate(size: usize) -> usize {
 		virtual_address,
 		physical_address,
 		count,
-		PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
+		PageTableEntryFlags::WRITABLE | extra_flags,
 		true
 	);
 

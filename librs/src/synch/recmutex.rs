@@ -47,9 +47,12 @@ impl RecursiveMutex {
 
 	pub fn acquire(&self) {
 		// Get the current task ID.
-		let core_scheduler = scheduler::get_scheduler(core_id());
-		let current_task = core_scheduler.get_current_task();
-		let tid = current_task.borrow().id;
+		let core_scheduler = core_scheduler();
+		let current_task = core_scheduler.current_task.clone();
+		let (prio, tid) = {
+			let borrowed = current_task.borrow();
+			(borrowed.prio, borrowed.id)
+		};
 
 		loop {
 			{
@@ -76,7 +79,7 @@ impl RecursiveMutex {
 			// The mutex is currently acquired by another task.
 			// Block the current task and add it to the wakeup queue.
 			core_scheduler.blocked_tasks.lock().add(current_task.clone(), None);
-			self.queue.lock().push(current_task.borrow().prio, current_task.clone());
+			self.queue.lock().push(prio, current_task.clone());
 
 			// Switch to the next task.
 			core_scheduler.scheduler();
@@ -86,9 +89,8 @@ impl RecursiveMutex {
 	pub fn release(&self) {
 		// Get the current task ID.
 		let tid = {
-			let core_scheduler = scheduler::get_scheduler(core_id());
-			let current_task = core_scheduler.get_current_task();
-			let borrowed = current_task.borrow();
+			let core_scheduler = core_scheduler();
+			let borrowed = core_scheduler.current_task.borrow();
 			borrowed.id
 		};
 

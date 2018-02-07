@@ -34,7 +34,6 @@
 #ifndef __STDIO_H__
 #define __STDIO_H__
 
-#include <hermit/config.h>
 #include <hermit/stddef.h>
 #include <hermit/stdarg.h>
 

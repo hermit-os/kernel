@@ -34,7 +34,7 @@
 //! It manages all memory >= KERNEL_END_ADDRESS.
 
 use alloc::heap::{Alloc, AllocErr, Layout};
-use arch::mm::paging::{BasePageSize, PageSize};
+use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use mm;
 
 
@@ -115,7 +115,7 @@ fn alloc_system(layout: Layout) -> Result<*mut u8, AllocErr> {
 	debug_mem!("Allocating {} bytes using the System Allocator", layout.size());
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	Ok(mm::allocate(size) as *mut u8)
+	Ok(mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut u8)
 }
 
 /// A deallocation using the initialized System Allocator.
