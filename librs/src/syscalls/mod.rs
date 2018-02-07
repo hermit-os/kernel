@@ -22,6 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 mod io;
+mod lwip;
 mod processor;
 mod random;
 mod recmutex;
@@ -32,6 +33,7 @@ mod tasks;
 mod timer;
 
 pub use self::io::*;
+pub use self::lwip::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::rcce::*;

@@ -24,16 +24,16 @@
 
 //! Architecture dependent interface to initialize a task
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
+
 use alloc::rc::Rc;
 use arch::x86_64::apic;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use consts::*;
 use core::cell::RefCell;
 use core::{mem, ptr};
-use scheduler;
 use scheduler::task::{Task, TaskFrame, TaskTLS};
 
 extern "C" {
@@ -82,8 +82,7 @@ struct State {
 }
 
 extern "C" fn leave_task() -> ! {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	core_scheduler.exit(0);
+	core_scheduler().exit(0);
 }
 
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
@@ -96,10 +95,9 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		processor::writefs(tls.address() + tls_size);
 
 		// Associate the TLS memory to the current task.
-		let core_scheduler = scheduler::get_scheduler(core_id());
-		let task = core_scheduler.get_current_task();
-		debug!("Set up TLS for task {} at address {:#X}", task.borrow().id, tls.address());
-		task.borrow_mut().tls = Some(Rc::new(RefCell::new(tls)));
+		let core_scheduler = core_scheduler();
+		debug!("Set up TLS for task {} at address {:#X}", core_scheduler.current_task.borrow().id, tls.address());
+		core_scheduler.current_task.borrow_mut().tls = Some(Rc::new(RefCell::new(tls)));
 	}
 
 	// Call the actual entry point of the task.
@@ -110,10 +108,10 @@ impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		unsafe {
 			// Mark the entire stack with 0xCD.
-			ptr::write_bytes((*self.stack).bottom() as *mut u8, 0xCD, KERNEL_STACK_SIZE);
+			ptr::write_bytes(self.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
 
 			// Set a marker for debugging at the very top.
-			let mut stack = ((*self.stack).top() - 0x10) as *mut u64;
+			let mut stack = (self.stack + DEFAULT_STACK_SIZE - 0x10) as *mut u64;
 			*stack = 0xDEADBEEFu64;
 
 			// Put the leave_task function on the stack.
@@ -138,9 +136,8 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "x86-interrupt" fn timer_handler(stack_frame: &mut irq::ExceptionStackFrame) {
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	core_scheduler.blocked_tasks.lock().handle_waiting_tasks();
+extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+	core_scheduler().blocked_tasks.lock().handle_waiting_tasks();
 	apic::eoi();
 }
 

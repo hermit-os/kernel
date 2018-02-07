@@ -89,13 +89,14 @@ impl Semaphore {
 
 		// We couldn't acquire it, so we have to block the current task.
 		// First get the current task.
-		let core_scheduler = scheduler::get_scheduler(core_id());
-		let current_task = core_scheduler.get_current_task();
+		let core_scheduler = core_scheduler();
+		let current_task = core_scheduler.current_task.clone();
+		let prio = current_task.borrow().prio;
 
 		loop {
 			// Now block the task.
 			core_scheduler.blocked_tasks.lock().add(current_task.clone(), wakeup_time);
-			self.queue.lock().push(current_task.borrow().prio, current_task.clone());
+			self.queue.lock().push(prio, current_task.clone());
 
 			// Switch to the next task.
 			core_scheduler.scheduler();

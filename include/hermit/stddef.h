@@ -34,7 +34,6 @@
  * @brief Definition of basic data types
  */
 
-#include <hermit/config.h>
 #include <asm/stddef.h>
 
 #ifdef __cplusplus
@@ -45,18 +44,12 @@ extern "C" {
 extern const size_t image_size;
 
 #define TIMER_FREQ	100 /* in HZ */
-#define CLOCK_TICK_RATE	1193182 /* 8254 chip's internal oscillator frequency */
 #define CACHE_LINE	64
-#define HEAP_START	(PAGE_2M_CEIL((size_t)&kernel_start + image_size) + 4*PAGE_SIZE)
-#define HEAP_SIZE	(1ULL << 32)
 #define KMSG_SIZE	0x1000
 #define INT_SYSCALL	0x80
 #define MAILBOX_SIZE	128
-//#define WITH_PCI_IDS
 
 #define BYTE_ORDER             LITTLE_ENDIAN
-
-#define DYNAMIC_TICKS
 
 #define UHYVE_PORT_WRITE	0x499
 #define UHYVE_PORT_OPEN		0x500
@@ -73,22 +66,6 @@ extern const size_t image_size;
 
 /// represents a task identifier
 typedef unsigned int tid_t;
-
-#define DECLARE_PER_CORE(type, name) extern type name __attribute__ ((section (".percore")))
-#define DEFINE_PER_CORE(type, name, def_value) type name __attribute__ ((section (".percore"))) = def_value
-#define DEFINE_PER_CORE_STATIC(type, name, def_value) static type name __attribute__ ((section (".percore"))) = def_value
-
-/* needed to find the task, which is currently running on this core */
-struct task;
-DECLARE_PER_CORE(struct task*, current_task);
-
-#if MAX_CORES > 1
-/* allows fast access to the core id */
-DECLARE_PER_CORE(uint32_t, __core_id);
-#define CORE_ID per_core(__core_id)
-#else
-#define CORE_ID 0
-#endif
 
 #ifdef __cplusplus
 }

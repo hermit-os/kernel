@@ -22,14 +22,15 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
+
 use alloc::rc::Rc;
 use arch;
-use arch::mm::paging::{BasePageSize, PageSize};
+use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::processor::msb;
 use collections::{DoublyLinkedList, Node};
-use consts::*;
 use core::cell::RefCell;
-use core::{fmt, mem};
+use core::fmt;
 use mm;
 use scheduler;
 use spin::RwLock;
@@ -100,34 +101,6 @@ pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
 pub const NO_PRIORITIES: usize = 4;
-
-
-#[repr(align(64))]
-pub struct KernelStack {
-	buffer: [u8; KERNEL_STACK_SIZE]
-}
-
-impl KernelStack {
-	pub fn top(&self) -> usize {
-		(&(self.buffer[KERNEL_STACK_SIZE - 1]) as *const _) as usize
-	}
-
-	pub fn bottom(&self) -> usize {
-		(&(self.buffer[0]) as *const _) as usize
-	}
-}
-
-/// The stack is too large to use the default debug trait. => create our own.
-impl fmt::Debug for KernelStack {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for x in self.buffer.iter() {
-			write!(f, "{:X}", x)?;
-		}
-
-		Ok(())
-	}
-}
-
 
 /// Realize a priority queue for tasks
 pub struct PriorityTaskQueue {
@@ -204,7 +177,7 @@ impl TaskTLS {
 		// additional alignment for TLS variables.
 		let memory_size = align_up!(size, BasePageSize::SIZE);
 		Self {
-			address: mm::allocate(memory_size),
+			address: mm::allocate(memory_size, PageTableEntryFlags::EXECUTE_DISABLE),
 			size: memory_size
 		}
 	}
@@ -237,15 +210,17 @@ pub struct Task {
 	/// ID of the core this task is running on
 	pub core_id: u32,
 	/// Stack of the task
-	pub stack: *mut KernelStack,
+	pub stack: usize,
 	/// Stack for interrupt handling
-	pub ist: *mut KernelStack,
+	pub ist: usize,
 	/// Task heap area
 	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
+	/// lwIP error code for this task
+	pub lwip_errno: i32,
 }
 
 pub trait TaskFrame {
@@ -259,16 +234,23 @@ impl Drop for Task {
 			debug!("Deallocating stack {:#X} and IST {:#X} for task {}", self.stack as usize, self.ist as usize, self.id);
 
 			// deallocate stacks
-			mm::deallocate(self.stack as usize, mem::size_of::<KernelStack>());
-			mm::deallocate(self.ist as usize, mem::size_of::<KernelStack>());
+			mm::deallocate(self.stack as usize, DEFAULT_STACK_SIZE);
+			mm::deallocate(self.ist as usize, DEFAULT_STACK_SIZE);
 		}
 	}
 }
 
 impl Task {
+	#[inline]
+	fn allocate_stacks() -> (usize, usize) {
+		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
+		let stack = mm::allocate(DEFAULT_STACK_SIZE, PageTableEntryFlags::empty());
+		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
+		(stack, ist)
+	}
+
 	pub fn new(tid: TaskId, core_id: u32, task_status: TaskStatus, task_prio: Priority, heap_start: Option<usize>) -> Task {
-		let stack = mm::allocate(mem::size_of::<KernelStack>());
-		let ist = mm::allocate(mem::size_of::<KernelStack>());
+		let (stack, ist) = Task::allocate_stacks();
 		debug!("Allocating stack {:#X} and IST {:#X} for task {}", stack, ist, tid);
 
 		Task {
@@ -278,11 +260,12 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stack: stack as *mut KernelStack,
-			ist: ist as *mut KernelStack,
+			stack: stack,
+			ist: ist,
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			lwip_errno: 0,
 		}
 	}
 
@@ -297,18 +280,18 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stack: stack as *mut KernelStack,
-			ist: ist as *mut KernelStack,
+			stack: stack,
+			ist: ist,
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			lwip_errno: 0,
 		}
 	}
 
 	pub fn clone(tid: TaskId, core_id: u32, task: &Task) -> Task {
-		let stack = mm::allocate(mem::size_of::<KernelStack>()) as *mut KernelStack;
-		let ist = mm::allocate(mem::size_of::<KernelStack>()) as *mut KernelStack;
-		debug!("Allocating stack {:#X} and IST {:#X} for task {} cloned from task {}", stack as usize, ist as usize, tid, task.id);
+		let (stack, ist) = Task::allocate_stacks();
+		debug!("Allocating stack {:#X} and IST {:#X} for task {} cloned from task {}", stack, ist, tid, task.id);
 
 		Task {
 			id: tid,
@@ -322,6 +305,7 @@ impl Task {
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
+			lwip_errno: 0,
 		}
 	}
 }

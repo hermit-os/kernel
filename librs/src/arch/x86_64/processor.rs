@@ -41,18 +41,9 @@ extern "C" {
 	static mut cpu_freq: u32;
 }
 
-#[link_section = ".percore"]
-/// Value returned by RDTSC/RDTSCP last time we updated the timer ticks.
-static mut last_rdtsc: u64 = 0;
-
-#[link_section = ".percore"]
-/// Counted ticks of a timer with the constant frequency specified in TIMER_FREQUENCY.
-static mut timer_ticks: usize = 0;
-
-/// Timer frequency in Hz for the timer_ticks.
+/// Timer frequency in Hz for the ticks counted in update_timer_ticks.
 pub const TIMER_FREQUENCY: usize = 100;
 
-const EFER_NXE: u64 = 1 << 11;
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
@@ -594,16 +585,6 @@ pub fn configure() {
 		unsafe { xcr0_write(xcr0); }
 	}
 
-	//
-	// MSR CONFIGURATION
-	//
-	let mut efer = unsafe { rdmsr(IA32_EFER) };
-
-	// Enable support for the EXECUTE_DISABLE paging bit.
-	// No need to check for support here, it is always supported in x86-64 long mode.
-	efer |= EFER_NXE;
-	unsafe { wrmsr(IA32_EFER, efer); }
-
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	writefs(0);
 
@@ -715,13 +696,13 @@ pub fn shutdown() -> ! {
 pub fn update_timer_ticks() -> usize {
 	unsafe {
 		let current_cycles = get_timestamp();
-		let added_cycles = current_cycles - last_rdtsc.per_core();
+		let added_cycles = current_cycles - PERCORE.last_rdtsc.get();
 		let added_ticks = added_cycles as usize * TIMER_FREQUENCY / (get_frequency() as usize * 1_000_000);
-		let ticks = timer_ticks.per_core() + added_ticks;
+		let ticks = PERCORE.timer_ticks.get() + added_ticks;
 
 		if added_ticks > 0 {
-			timer_ticks.set_per_core(ticks);
-			last_rdtsc.set_per_core(current_cycles);
+			PERCORE.last_rdtsc.set(current_cycles);
+			PERCORE.timer_ticks.set(ticks);
 		}
 
 		ticks

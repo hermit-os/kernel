@@ -45,6 +45,7 @@
  */
 
 #include <hermit/string.h>
+#include <hermit/syscall.h>
 
 /* HermitCore use only the 64bit version */
 #define __64BIT__
@@ -462,11 +463,6 @@ int kvprintf(char const *fmt, void (*func) (int, void *), void *arg, int radix,
 }
 
 /*
- * Print directly a character on the screen
- */
-extern int kputchar(int);
-
-/*
  * A wrapper function for kputchar because
  * kvprintf needs an output function, which possesses two arguments.
  * The first arguments defines the output character, the second could be used to pass
@@ -474,7 +470,7 @@ extern int kputchar(int);
  */
 static void _putchar(int c, void *arg)
 {
-	kputchar(c);
+	sys_putchar((unsigned char)c);
 }
 
 int kprintf(const char *fmt, ...)

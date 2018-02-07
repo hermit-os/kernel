@@ -41,6 +41,7 @@ pub use arch::x86_64::apic::set_oneshot_timer;
 pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;
 pub use arch::x86_64::gdt::set_current_kernel_stack;
+pub use arch::x86_64::percore::PERCORE;
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
 
@@ -62,7 +63,10 @@ static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 
 // FUNCTIONS
+
+/// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
+	percore::init();
 	COM1.init(SERIAL_PORT_BAUDRATE);
 }
 
@@ -71,15 +75,15 @@ pub fn output_message_byte(byte: u8) {
 	vga::write_byte(byte);
 }
 
+/// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
-	percore::init();
-	gdt::install();
 	processor::detect_features();
 	processor::configure();
 	vga::init();
 	::mm::init();
 	::mm::print_information();
-	gdt::create_tss();
+	gdt::init();
+	gdt::add_current_core();
 	idt::install();
 	pic::init();
 	irq::install();
@@ -94,16 +98,18 @@ pub fn boot_processor_init() {
 	**CPU_ONLINE.lock() += 1;
 }
 
+/// Boots all available Application Processors.
+/// Called after the Boot Processor has been fully initialized along with its scheduler.
 pub fn boot_application_processors() {
 	apic::boot_application_processors();
 	apic::print_information();
 }
 
+/// Application Processor initialization
 pub fn application_processor_init() {
 	percore::init();
-	gdt::install();
 	processor::configure();
-	gdt::create_tss();
+	gdt::add_current_core();
 	idt::install();
 	apic::init_x2apic();
 	apic::init_local_apic();

@@ -194,8 +194,7 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut Exce
 	unsafe { asm!("clts" :::: "volatile"); }
 
 	// Let the scheduler set up the FPU for the current task.
-	let core_scheduler = scheduler::get_scheduler(core_id());
-	core_scheduler.fpu_switch();
+	core_scheduler().fpu_switch();
 }
 
 extern "x86-interrupt" fn double_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {

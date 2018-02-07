@@ -21,8 +21,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
@@ -30,7 +32,6 @@ use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use consts::*;
 use core::sync::atomic::hint_core_should_pause;
 use core::{mem, ptr, str, u32};
 use mm;
@@ -42,7 +43,8 @@ use x86::shared::msr::*;
 
 extern "C" {
 	static cpu_online: u32;
-	static mut current_boot_id: u32;
+	static mut current_stack_address: usize;
+	static mut current_percore_address: usize;
 }
 
 const APIC_ICR2: usize = 0x0310;
@@ -78,6 +80,8 @@ const SPURIOUS_INTERRUPT_NUMBER: u8  = 127;
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
 const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
+
+const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x04;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -293,10 +297,8 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 				debug!("Found CPU entry: {:?}", cpu);
 
 				if cpu.flags & CPU_FLAG_ENABLED > 0 {
-					assert!(local_apic_ids.len() < MAX_CORES, "MultiProcessor Configuration Table contains more than the maximum supported {} CPUs", MAX_CORES);
-
 					if cpu.flags & CPU_FLAG_BOOT_PROCESSOR > 0 {
-						// When HermitCore first boots up, current_boot_id is initialized with 0.
+						// When HermitCore first boots up, core_id is initialized to 0.
 						// For each application processor, it is later initialized with its Local APIC ID.
 						// Consequently, the Local APIC ID for the boot processor must be 0 as well, or we will
 						// run into inconsistencies when addressing CPUs in IPIs.
@@ -478,14 +480,8 @@ pub fn boot_application_processors() {
 	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, PageTableEntryFlags::WRITABLE, false);
 	unsafe { ptr::copy_nonoverlapping(&SMP_BOOT_CODE as *const u8, SMP_BOOT_CODE_ADDRESS as *mut u8, SMP_BOOT_CODE.len()); }
 
-	// Find the placeholder in the code and replace it by the PML4 page table address in CR3.
-	for i in 0..SMP_BOOT_CODE.len() {
-		let placeholder = unsafe { &mut *((SMP_BOOT_CODE_ADDRESS + i) as *mut u32) };
-		if *placeholder == 0xDEADBEAF {
-			*placeholder = unsafe { cr3() as u32 };
-			break;
-		}
-	}
+	// Pass the PML4 page table address to the boot code.
+	unsafe { *((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32; }
 
 	// Initialize the CMOS Shutdown Status Byte to let the Application Processor perform a JMP without EOI.
 	unsafe {
@@ -508,11 +504,17 @@ pub fn boot_application_processors() {
 			let destination = (*apic_id as u64) << 32;
 			debug!("Waking up CPU with Local APIC ID {}", *apic_id);
 
+			// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
+			// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
+			let stack = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::empty());
+			let boxed_percore = Box::new(PerCoreVariables::new(*apic_id as u32));
+			unsafe {
+				ptr::write_volatile(&mut current_stack_address, stack);
+				ptr::write_volatile(&mut current_percore_address, Box::into_raw(boxed_percore) as usize);
+			}
+
 			// Save the current number of initialized CPUs.
 			let current_cpu_online = unsafe { ptr::read_volatile(&cpu_online) };
-
-			// Set the Local APIC ID for the next CPU we initialize.
-			unsafe { ptr::write_volatile(&mut current_boot_id, *apic_id as u32); }
 
 			// Send an INIT IPI.
 			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_TRIGGERED | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_INIT);

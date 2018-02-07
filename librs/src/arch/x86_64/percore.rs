@@ -23,64 +23,105 @@
 
 use arch::x86_64::processor;
 use core::{mem, ptr};
+use scheduler::PerCoreScheduler;
+use x86::bits64::task::TaskStateSegment;
 
 
 extern "C" {
-	static current_boot_id: u32;
-	static percore_end0: u8;
-	static percore_start: u8;
+	static current_percore_address: usize;
 }
 
-#[link_section = ".percore"]
-/// APIC ID of the current CPU Core.
-static mut __core_id: u32 = 0;
+
+#[no_mangle]
+pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
 
-pub trait PerCoreVariable {
-	type VarType;
-	unsafe fn per_core(&self) -> Self::VarType;
-	unsafe fn set_per_core(&self, value: Self::VarType);
+pub struct PerCoreVariables {
+	/// APIC ID of this CPU Core.
+	core_id: PerCoreVariable<u32>,
+	/// Scheduler for this CPU Core.
+	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
+	/// Task State Segment (TSS) allocated for this CPU Core.
+	pub tss: PerCoreVariable<*mut TaskStateSegment>,
+	/// Value returned by RDTSC/RDTSCP last time the timer ticks were updated in processor::update_timer_ticks.
+	pub last_rdtsc: PerCoreVariable<u64>,
+	/// Counted ticks of a timer with the constant frequency specified in processor::TIMER_FREQUENCY.
+	pub timer_ticks: PerCoreVariable<usize>,
 }
 
-impl<T> PerCoreVariable for T {
-	type VarType = T;
+impl PerCoreVariables {
+	pub const fn new(core_id: u32) -> Self {
+		Self {
+			core_id: PerCoreVariable::new(core_id),
+			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
+			tss: PerCoreVariable::new(0 as *mut TaskStateSegment),
+			last_rdtsc: PerCoreVariable::new(0),
+			timer_ticks: PerCoreVariable::new(0),
+		}
+	}
+}
+
+
+#[repr(C)]
+pub struct PerCoreVariable<T> {
+	data: T,
+}
+
+impl<T> PerCoreVariable<T> {
+	const fn new(value: T) -> Self {
+		Self { data: value }
+	}
 
 	#[inline]
-	unsafe fn per_core(&self) -> T {
+	unsafe fn offset(&self) -> usize {
+		let base = &PERCORE as *const _ as usize;
+		let field = self as *const _ as usize;
+		field - base
+	}
+
+	#[inline]
+	pub unsafe fn get(&self) -> T {
 		let value: T;
 
 		match mem::size_of::<T>() {
-			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self) :: "volatile"),
-			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self) :: "volatile"),
-			_ => panic!("Invalid operand size for per_core"),
+			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile"),
+			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile"),
+			_ => panic!("Invalid operand size for get"),
 		}
 
 		value
 	}
 
 	#[inline]
-	unsafe fn set_per_core(&self, value: T) {
+	pub unsafe fn set(&self, value: T) {
 		match mem::size_of::<T>() {
-			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self) :: "volatile"),
-			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self) :: "volatile"),
-			_ => panic!("Invalid operand size for set_per_core"),
+			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile"),
+			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile"),
+			_ => panic!("Invalid operand size for set"),
 		}
 	}
 }
 
+
 #[inline]
 pub fn core_id() -> u32 {
-	unsafe { __core_id.per_core() }
+	unsafe { PERCORE.core_id.get() }
+}
+
+#[inline]
+pub fn core_scheduler() -> &'static mut PerCoreScheduler {
+	unsafe { &mut *PERCORE.scheduler.get() }
+}
+
+#[inline]
+pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
+	unsafe { PERCORE.scheduler.set(scheduler); }
 }
 
 pub fn init() {
-	// Initialize the GS register, which is used for the per_core offset.
 	unsafe {
-		let size = &percore_end0 as *const u8 as usize - &percore_start as *const u8 as usize;
-		let offset = ptr::read_volatile(&current_boot_id) as usize * size;
-		processor::writegs(offset);
+		// Store the address to the PerCoreVariables structure allocated for this core in GS.
+		let address = ptr::read_volatile(&current_percore_address);
+		processor::writegs(address);
 	}
-
-	// Initialize the core ID.
-	unsafe { __core_id.set_per_core(current_boot_id); }
 }

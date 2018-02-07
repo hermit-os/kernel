@@ -24,6 +24,7 @@
 
 pub mod task;
 
+use alloc::boxed::Box;
 use alloc::btree_map::*;
 use alloc::rc::Rc;
 use alloc::VecDeque;
@@ -36,14 +37,14 @@ use scheduler::task::*;
 use synch::spinlock::*;
 
 extern "C" {
-	fn switch(old_stack: *const usize, new_stack: usize);
+	fn switch(old_stack: *mut usize, new_stack: usize);
 }
 
 
 static NEXT_CPU_NUMBER: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicUsize = AtomicUsize::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Option<BTreeMap<u32, PerCoreScheduler>> = None;
+static mut SCHEDULERS: Option<BTreeMap<u32, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
 static mut TASKS: Option<SpinlockIrqSave<BTreeMap<TaskId, Rc<RefCell<Task>>>>> = None;
 static TID_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -53,7 +54,7 @@ pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	core_id: u32,
 	/// Task which is currently running
-	current_task: Rc<RefCell<Task>>,
+	pub current_task: Rc<RefCell<Task>>,
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
 	/// Task that currently owns the FPU
@@ -69,10 +70,6 @@ pub struct PerCoreScheduler {
 }
 
 impl PerCoreScheduler {
-	pub fn get_current_task(&self) -> Rc<RefCell<Task>> {
-		self.current_task.clone()
-	}
-
 	/// Spawn a new task.
 	pub fn spawn(&self, func: extern "C" fn(usize), arg: usize, prio: Priority, heap_start: Option<usize>) -> TaskId {
 		// Create the new task.
@@ -190,7 +187,7 @@ impl PerCoreScheduler {
 				self.finished_tasks.lock().push_back(borrowed.id);
 			}
 
-			(borrowed.id, &borrowed.last_stack_pointer as *const usize)
+			(borrowed.id, &mut borrowed.last_stack_pointer as *mut usize)
 		};
 
 		// Handle the new task and get information about it.
@@ -290,7 +287,7 @@ pub fn init() {
 
 #[inline]
 pub fn abort() {
-	get_scheduler(core_id()).exit(-1);
+	core_scheduler().exit(-1);
 }
 
 /// Add a per-core scheduler for the current core.
@@ -305,7 +302,7 @@ pub fn add_current_core() {
 
 	// Initialize a scheduler for this core.
 	debug!("Initializing scheduler for this core with idle task {}", tid);
-	let per_core_scheduler = PerCoreScheduler {
+	let boxed_scheduler = Box::new(PerCoreScheduler {
 		core_id: core_id,
 		current_task: idle_task.clone(),
 		idle_task: idle_task.clone(),
@@ -314,13 +311,16 @@ pub fn add_current_core() {
 		finished_tasks: SpinlockIrqSave::new(VecDeque::new()),
 		blocked_tasks: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 		last_task_switch_tick: 0,
-	};
-	unsafe { SCHEDULERS.as_mut().unwrap().insert(core_id, per_core_scheduler); }
+	});
+
+	let scheduler = Box::into_raw(boxed_scheduler);
+	set_core_scheduler(scheduler);
+	unsafe { SCHEDULERS.as_mut().unwrap().insert(core_id, &(*scheduler)); }
 }
 
-pub fn get_scheduler(core_id: u32) -> &'static mut PerCoreScheduler {
+pub fn get_scheduler(core_id: u32) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	let result = unsafe { SCHEDULERS.as_mut().unwrap().get_mut(&core_id) };
+	let result = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) };
 	assert!(result.is_some(), "Trying to get the scheduler for core {}, but it isn't available", core_id);
 	result.unwrap()
 }

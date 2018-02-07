@@ -1,16 +1,11 @@
 project(librs C ASM_NASM)
 
-# Create a directory for our Rust output.
-add_custom_target(hermit_rs_dir
-	COMMAND
-		${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/hermit_rs)
+configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
 
 # Preprocess the PCI IDs into a Rust array.
 add_custom_command(
 	OUTPUT
 		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-	DEPENDS
-		hermit_rs_dir
 	DEPENDS
 		pci_ids_parser
 	DEPENDS
@@ -26,19 +21,17 @@ add_custom_command(
 	OUTPUT
 		${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
 	DEPENDS
-		hermit_rs_dir
-	DEPENDS
 		${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
 	COMMAND
 		nasm -f bin -o boot.bin ${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
 	COMMAND
-		echo -n "pub static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
+		echo -n "static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
 	COMMAND
 		stat -c %s boot.bin >> smp_boot_code.rs
 	COMMAND
 		echo "] = [" >> smp_boot_code.rs
 	COMMAND
-		hexdump -v -e "7/1 \"0x%02X, \" 1/1 \" 0x%02X,\\n\"" boot.bin >> smp_boot_code.rs
+		hexdump -v -e "1/1 \"0x%02X,\"" boot.bin >> smp_boot_code.rs
 	COMMAND
 		echo "];" >> smp_boot_code.rs
 	WORKING_DIRECTORY
@@ -165,9 +158,7 @@ add_custom_command(
 	COMMAND
 		${CMAKE_COMMAND} -E make_directory ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit
 	COMMAND
-		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/
-	COMMAND
-		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_BINARY_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/)
+		${CMAKE_COMMAND} -E copy_if_different ${CMAKE_SOURCE_DIR}/include/hermit/*.h ${LOCAL_PREFIX_ARCH_INCLUDE_DIR}/hermit/)
 
 # Deploy libhermit.a and headers for package creation
 install(TARGETS hermit-bootstrap

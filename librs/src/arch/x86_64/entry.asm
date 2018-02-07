@@ -22,16 +22,22 @@
 ; OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 ; WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-; This is the kernel's entry point. We could either call main here,
-; or we can use this to setup the stack or other nice stuff, like
-; perhaps setting up the GDT and segments. Please note that interrupts
-; are disabled at this point: More on interrupts later!
+
+; This is the entry point called by a Multiboot-compliant loader for the
+; boot processor, or by boot.asm for an application processor.
+
 
 %include "hermit/config.asm"
+
+MSR_EFER     equ 0xC0000080
+EFER_NXE     equ (1 << 11)
 
 [BITS 64]
 
 extern kernel_start		; defined in linker script
+extern boot_processor_main
+extern application_processor_main
+extern PERCORE
 
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
@@ -70,6 +76,8 @@ align 4
     global hcip
     global hcgateway
     global hcmask
+    global current_stack_address
+    global current_percore_address
     base dq 0
     limit dq 0
     cpu_freq dd 0
@@ -100,23 +108,8 @@ align 4
     hcip db  10,0,5,2
     hcgateway db 10,0,5,1
     hcmask db 255,255,255,0
-
-; Bootstrap page tables are used during the initialization.
-align 4096
-boot_pml4:
-    DQ boot_pdpt + 0x27  ; PG_PRESENT | PG_RW | PG_USER | PG_ACCESSED
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x223 ; PG_PRESENT | PG_RW | PG_ACCESSED | PG_SELF (self-reference)
-boot_pdpt:
-    DQ boot_pgd + 0x23   ; PG_PRESENT | PG_RW | PG_ACCESSED
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x223 ; PG_PRESENT | PG_RW | PG_ACCESSED | PG_SELF (self-reference)
-boot_pgd:
-    DQ boot_pgt + 0x23   ; PG_PRESENT | PG_RW | PG_ACCESSED
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x223 ; PG_PRESENT | PG_RW | PG_ACCESSED | PG_SELF (self-reference)
-boot_pgt:
-    times 512 DQ 0
+    current_stack_address dq boot_stack_bottom
+    current_percore_address dq PERCORE
 
 SECTION .ktext
 align 4
@@ -134,15 +127,25 @@ start64:
     ; => see ABI
     cld
 
+    ; set default stack pointer
+    mov rsp, [current_stack_address]
+    add rsp, (KERNEL_STACK_SIZE - 0x10)
+    mov rbp, rsp
+
+    ; Is this an Application Processor?
     xor rax, rax
     mov eax, DWORD [cpu_online]
     cmp eax, 0
-    jne Lno_pml4_init
+    je boot_processor_init
 
+    ; Then we're done and just call into the Application Processor Rust entry point.
+    call application_processor_main
+    jmp $
+
+boot_processor_init:
     ; store pointer to the multiboot information
     mov [mb_info], QWORD rdx
 
-	;
     ; relocate page tables
     mov rdi, boot_pml4
     mov rax, QWORD [rdi]
@@ -194,66 +197,52 @@ Lremap:
     add rdi, 8
     ; note: the whole code segement has to fit in the first pgd
     cmp rcx, rsi
-    jnl Lno_pml4_init
+    jnl Lremap_done
     cmp rcx, r11
     jl Lremap
+Lremap_done:
 
-Lno_pml4_init:
     ; Set CR3
     mov rax, boot_pml4
     sub rax, kernel_start
     add rax, [base]
-    or rax, (1 << 0)          ; set present bit
     mov cr3, rax
 
-%if MAX_CORES > 1
-    mov eax, DWORD [cpu_online]
-    cmp eax, 0
-    jne Lsmp_main
-%endif
+    ; Set EFER.NXE to enable early access to EXECUTE_DISABLE-protected memory.
+    mov ecx, MSR_EFER
+    rdmsr
+    or eax, EFER_NXE
+    wrmsr
 
-    ; set default stack pointer
-    mov rsp, boot_stack
-    add rsp, KERNEL_STACK_SIZE-16
-    xor rax, rax
-    mov eax, [boot_processor]
-    cmp eax, -1
-    je L1
-    imul eax, KERNEL_STACK_SIZE
-    add rsp, rax
-L1:
-    mov rbp, rsp
-
-    ; jump to the boot processors' entry point
-    extern boot_processor_main
+    ; Call into the Boot Processor Rust entry point.
     call boot_processor_main
     jmp $
-
-%if MAX_CORES > 1
-ALIGN 64
-Lsmp_main:
-    xor rax, rax
-    mov eax, DWORD [current_boot_id]
-
-    ; set default stack pointer
-    imul rax, KERNEL_STACK_SIZE
-    add rax, boot_stack
-    add rax, KERNEL_STACK_SIZE-16
-    mov rsp, rax
-    mov rbp, rsp
-
-    extern application_processor_main
-    call application_processor_main
-    jmp $
-%endif
 
 
 SECTION .data
 
+; This stack is used by the Boot Processor only.
 align 4096
-global boot_stack
-boot_stack:
-    TIMES (MAX_CORES*KERNEL_STACK_SIZE) DB 0xcd
+boot_stack_bottom:
+    TIMES KERNEL_STACK_SIZE DB 0xcd
+boot_stack_top:
+
+; These page tables are used for bootstrapping and normal operation later.
+align 4096
+boot_pml4:
+    DQ boot_pdpt + 0x3   ; PG_PRESENT | PG_RW
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+boot_pdpt:
+    DQ boot_pgd + 0x3    ; PG_PRESENT | PG_RW
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+boot_pgd:
+    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+boot_pgt:
+    times 512 DQ 0
 
 ; add some hints to the ELF file
 SECTION .note.GNU-stack noalloc noexec nowrite progbits

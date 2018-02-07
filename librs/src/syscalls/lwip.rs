@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,9 +21,14 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/// Define the size of the kernel stack
-pub const KERNEL_STACK_SIZE : usize = 32768;
+use arch::percore::*;
 
-/// Maximum number of cores supported
-pub const MAX_CORES : usize = 256;
+#[no_mangle]
+pub extern "C" fn sys_lwip_get_errno() -> i32 {
+	core_scheduler().current_task.borrow().lwip_errno
+}
 
+#[no_mangle]
+pub extern "C" fn sys_lwip_set_errno(errno: i32) {
+	core_scheduler().current_task.borrow_mut().lwip_errno = errno;
+}
