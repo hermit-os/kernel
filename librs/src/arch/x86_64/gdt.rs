@@ -134,12 +134,16 @@ pub fn get_boot_stacks() -> (usize, usize) {
 
 #[no_mangle]
 pub extern "C" fn set_current_kernel_stack() {
-	let core_scheduler = core_scheduler();
-	let task_borrowed = core_scheduler.current_task.borrow();
-	let stack_size = if task_borrowed.status == TaskStatus::TaskIdle { KERNEL_STACK_SIZE } else { DEFAULT_STACK_SIZE };
+	let current_task_locked = core_scheduler().current_task.read();
+	let current_task_borrowed = current_task_locked.borrow();
+	let stack_size = if current_task_borrowed.status == TaskStatus::TaskIdle {
+		KERNEL_STACK_SIZE
+	} else {
+		DEFAULT_STACK_SIZE
+	};
 
 	let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-	tss.rsp[0] = (task_borrowed.stack + stack_size - 0x10) as u64;
-	tss.ist[0] = (task_borrowed.ist + KERNEL_STACK_SIZE - 0x10) as u64;
+	tss.rsp[0] = (current_task_borrowed.stack + stack_size - 0x10) as u64;
+	tss.ist[0] = (current_task_borrowed.ist + KERNEL_STACK_SIZE - 0x10) as u64;
 }

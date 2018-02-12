@@ -34,6 +34,7 @@ use arch::percore::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use scheduler::task::*;
+use spin::RwLock;
 use synch::spinlock::*;
 
 extern "C" {
@@ -54,7 +55,7 @@ pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	core_id: u32,
 	/// Task which is currently running
-	pub current_task: Rc<RefCell<Task>>,
+	pub current_task: RwLock<Rc<RefCell<Task>>>,
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
 	/// Task that currently owns the FPU
@@ -90,12 +91,13 @@ impl PerCoreScheduler {
 	pub fn exit(&mut self, exit_code: i32) -> ! {
 		{
 			// Get the current task.
-			let mut task_borrowed = self.current_task.borrow_mut();
-			assert!(task_borrowed.status != TaskStatus::TaskIdle, "Trying to terminate the idle task");
+			let mut current_task_locked = self.current_task.write();
+			let mut current_task_borrowed = current_task_locked.borrow_mut();
+			assert!(current_task_borrowed.status != TaskStatus::TaskIdle, "Trying to terminate the idle task");
 
 			// Finish the task and reschedule.
-			info!("Finishing task {} with exit code {}", task_borrowed.id, exit_code);
-			task_borrowed.status = TaskStatus::TaskFinished;
+			info!("Finishing task {} with exit code {}", current_task_borrowed.id, exit_code);
+			current_task_borrowed.status = TaskStatus::TaskFinished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
 		}
 
@@ -129,22 +131,25 @@ impl PerCoreScheduler {
 		let next_scheduler = get_scheduler(core_id);
 
 		// Get the current task.
-		let task_borrowed = self.current_task.borrow();
+		let current_task_locked = self.current_task.read();
+		let current_task_borrowed = current_task_locked.borrow();
 
 		// Clone the current task.
 		let tid = get_tid();
-		let task = Rc::new(RefCell::new(Task::clone(tid, core_id, &task_borrowed)));
-		task.borrow_mut().create_stack_frame(func, arg);
+		let clone_task = Rc::new(RefCell::new(Task::clone(tid, core_id, &current_task_borrowed)));
+		clone_task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
-		next_scheduler.ready_queue.lock().push(task_borrowed.prio, task.clone());
-		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, task); }
+		// Lock the ready_queue and keep it locked while we check current_task.
+		next_scheduler.ready_queue.lock().push(current_task_borrowed.prio, clone_task.clone());
+		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, clone_task); }
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
-		info!("Creating task {} on core {} by cloning task {}", tid, core_id, task_borrowed.id);
+		info!("Creating task {} on core {} by cloning task {}", tid, core_id, current_task_borrowed.id);
 
 		// If that CPU has been running the Idle task, it may be in a HALT state and needs to be woken up.
-		if next_scheduler.current_task.borrow().status == TaskStatus::TaskIdle {
+		let task_locked = next_scheduler.current_task.read();
+		if task_locked.borrow().status == TaskStatus::TaskIdle {
 			arch::wakeup_core(core_id);
 		}
 
@@ -154,12 +159,14 @@ impl PerCoreScheduler {
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
 	pub fn fpu_switch(&mut self) {
-		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
-			debug!("Switching FPU owner from task {} to {}", self.fpu_owner.borrow().id, self.current_task.borrow().id);
+		let current_task_locked = self.current_task.read();
+
+		if !Rc::ptr_eq(&current_task_locked, &self.fpu_owner) {
+			debug!("Switching FPU owner from task {} to {}", self.fpu_owner.borrow().id, current_task_locked.borrow().id);
 
 			self.fpu_owner.borrow_mut().last_fpu_state.save();
-			self.current_task.borrow().last_fpu_state.restore();
-			self.fpu_owner = self.current_task.clone();
+			current_task_locked.borrow().last_fpu_state.restore();
+			self.fpu_owner = current_task_locked.clone();
 		}
 	}
 
@@ -172,58 +179,23 @@ impl PerCoreScheduler {
 		}
 	}
 
-	fn switch_to_task(&mut self, new_task: Rc<RefCell<Task>>) {
-		// Handle the current task and get information about it.
-		let (id, last_stack_pointer) = {
-			let mut borrowed = self.current_task.borrow_mut();
-
-			if borrowed.status == TaskStatus::TaskRunning {
-				// Mark the running task as ready again and add it back to the queue.
-				borrowed.status = TaskStatus::TaskReady;
-				self.ready_queue.lock().push(borrowed.prio, self.current_task.clone());
-			} else if borrowed.status == TaskStatus::TaskFinished {
-				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
-				borrowed.status = TaskStatus::TaskInvalid;
-				self.finished_tasks.lock().push_back(borrowed.id);
-			}
-
-			(borrowed.id, &mut borrowed.last_stack_pointer as *mut usize)
-		};
-
-		// Handle the new task and get information about it.
-		let (new_id, new_stack_pointer) = {
-			let mut borrowed = new_task.borrow_mut();
-
-			if borrowed.status != TaskStatus::TaskIdle {
-				// Mark the new task as running.
-				borrowed.status = TaskStatus::TaskRunning;
-			}
-
-			(borrowed.id, borrowed.last_stack_pointer)
-		};
-
-		// Finally do the switch.
-		debug!("Switching task from {} to {} ({:#X}, *{:#X} => {:#X})", id, new_id,
-			last_stack_pointer as usize, unsafe { *last_stack_pointer }, new_stack_pointer);
-		self.current_task = new_task;
-		self.last_task_switch_tick = arch::processor::update_timer_ticks();
-		unsafe { switch(last_stack_pointer, new_stack_pointer); }
-	}
-
 	/// Triggers the scheduler to reschedule the tasks
 	pub fn scheduler(&mut self) {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
 		self.cleanup_tasks();
 
-		let flags = irq::nested_disable();
-		let mut new_task = None;
+		irq::disable();
 
-		// Get information about the current task.
-		let (prio, status) = {
-			let borrowed = self.current_task.borrow();
-			(borrowed.prio, borrowed.status)
+		// Lock the current task while we change it and get information about it.
+		let mut current_task_locked = self.current_task.write();
+
+		let (id, last_stack_pointer, prio, status) = {
+			let mut borrowed = current_task_locked.borrow_mut();
+			(borrowed.id, &mut borrowed.last_stack_pointer as *mut usize, borrowed.prio, borrowed.status)
 		};
+
+		let mut new_task = None;
 
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
@@ -260,12 +232,64 @@ impl PerCoreScheduler {
 			}
 		}
 
-		// If we set a new task, switch to this task.
 		if let Some(task) = new_task {
-			self.switch_to_task(task);
-		}
+			// There is a new task we want to switch to.
 
-		irq::nested_enable(flags);
+			// Handle the current task.
+			if status == TaskStatus::TaskRunning {
+				// Mark the running task as ready again and add it back to the queue.
+				current_task_locked.borrow_mut().status = TaskStatus::TaskReady;
+				self.ready_queue.lock().push(prio, current_task_locked.clone());
+			} else if status == TaskStatus::TaskFinished {
+				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
+				current_task_locked.borrow_mut().status = TaskStatus::TaskInvalid;
+				self.finished_tasks.lock().push_back(id);
+			}
+
+			// Handle the new task and get information about it.
+			let (new_id, new_stack_pointer) = {
+				let mut borrowed = task.borrow_mut();
+				if borrowed.status != TaskStatus::TaskIdle {
+					// Mark the new task as running.
+					borrowed.status = TaskStatus::TaskRunning;
+				}
+
+				(borrowed.id, borrowed.last_stack_pointer)
+			};
+
+			// Tell the scheduler about the new task.
+			debug!("Switching task from {} to {} (stack {:#X} => {:#X})", id, new_id,
+				unsafe { *last_stack_pointer }, new_stack_pointer);
+			*current_task_locked = task;
+			self.last_task_switch_tick = arch::processor::update_timer_ticks();
+
+			// Unlock current_task and reenable interrupts.
+			drop(current_task_locked);
+			irq::enable();
+
+			// Finally save our current context and restore the context of the new task.
+			unsafe { switch(last_stack_pointer, new_stack_pointer); }
+		} else {
+			// There is no new task to switch to.
+
+			// If this is the Boot Processor and all tasks have finished, it's time to shut down the OS.
+			if core_id() == 0 && NO_TASKS.load(Ordering::SeqCst) == 0 {
+				arch::processor::shutdown();
+			}
+
+			// Unlock current_task before possibly sending the CPU into a HALT state.
+			drop(current_task_locked);
+
+			if status == TaskStatus::TaskIdle {
+				// We are now running the Idle task.
+				// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
+				// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
+				irq::enable_and_wait();
+			} else {
+				// We now run a real task. Just reenable interrupts.
+				irq::enable();
+			}
+		}
 	}
 }
 
@@ -304,7 +328,7 @@ pub fn add_current_core() {
 	debug!("Initializing scheduler for this core with idle task {}", tid);
 	let boxed_scheduler = Box::new(PerCoreScheduler {
 		core_id: core_id,
-		current_task: idle_task.clone(),
+		current_task: RwLock::new(idle_task.clone()),
 		idle_task: idle_task.clone(),
 		fpu_owner: idle_task,
 		ready_queue: SpinlockIrqSave::new(PriorityTaskQueue::new()),
@@ -323,9 +347,4 @@ pub fn get_scheduler(core_id: u32) -> &'static PerCoreScheduler {
 	let result = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) };
 	assert!(result.is_some(), "Trying to get the scheduler for core {}, but it isn't available", core_id);
 	result.unwrap()
-}
-
-/// Return the current number of tasks.
-pub fn number_of_tasks() -> usize {
-	NO_TASKS.load(Ordering::SeqCst)
 }

@@ -95,9 +95,10 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		processor::writefs(tls.address() + tls_size);
 
 		// Associate the TLS memory to the current task.
-		let core_scheduler = core_scheduler();
-		debug!("Set up TLS for task {} at address {:#X}", core_scheduler.current_task.borrow().id, tls.address());
-		core_scheduler.current_task.borrow_mut().tls = Some(Rc::new(RefCell::new(tls)));
+		let current_task_locked = core_scheduler().current_task.write();
+		let mut current_task_borrowed = current_task_locked.borrow_mut();
+		debug!("Set up TLS for task {} at address {:#X}", current_task_borrowed.id, tls.address());
+		current_task_borrowed.tls = Some(Rc::new(RefCell::new(tls)));
 	}
 
 	// Call the actual entry point of the task.

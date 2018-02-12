@@ -48,7 +48,7 @@ impl RecursiveMutex {
 	pub fn acquire(&self) {
 		// Get the current task ID.
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.clone();
+		let current_task = core_scheduler.current_task.read().clone();
 		let (prio, tid) = {
 			let borrowed = current_task.borrow();
 			(borrowed.prio, borrowed.id)
@@ -89,9 +89,9 @@ impl RecursiveMutex {
 	pub fn release(&self) {
 		// Get the current task ID.
 		let tid = {
-			let core_scheduler = core_scheduler();
-			let borrowed = core_scheduler.current_task.borrow();
-			borrowed.id
+			let current_task_locked = core_scheduler().current_task.read();
+			let current_task_borrowed = current_task_locked.borrow();
+			current_task_borrowed.id
 		};
 
 		// Lock the entire RecursiveMutexData structure and do some sanity checks.

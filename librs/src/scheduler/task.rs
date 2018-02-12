@@ -340,7 +340,8 @@ impl BlockedTaskQueue {
 		core_scheduler.ready_queue.lock().push(prio, task);
 
 		// If that CPU has been running the Idle task, it may be in a HALT state and needs to be woken up.
-		if core_scheduler.current_task.borrow().status == TaskStatus::TaskIdle {
+		let task_locked = core_scheduler.current_task.read();
+		if task_locked.borrow().status == TaskStatus::TaskIdle {
 			arch::wakeup_core(core_id);
 		}
 	}
