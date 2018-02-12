@@ -520,7 +520,9 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 	let core_scheduler = core_scheduler();
 
 	// Is a heap associated to the current task?
-	if let Some(ref heap) = core_scheduler.current_task.borrow().heap {
+	let current_task_locked = core_scheduler.current_task.read();
+
+	if let Some(ref heap) = current_task_locked.borrow().heap {
 		let heap_borrowed = heap.borrow();
 		let heap_locked = heap_borrowed.read();
 

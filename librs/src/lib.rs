@@ -151,13 +151,9 @@ pub unsafe extern "C" fn boot_processor_main() {
 		Some(arch::mm::virtualmem::task_heap_start())
 	);
 
-	// Run the scheduler loop for the boot processor.
+	// Run the scheduler loop.
 	loop {
 		core_scheduler.scheduler();
-		if scheduler::number_of_tasks() == 0 {
-			arch::processor::shutdown();
-		}
-		arch::processor::halt();
 	}
 }
 
@@ -169,8 +165,8 @@ pub unsafe extern "C" fn application_processor_main() {
 	scheduler::add_current_core();
 	let core_scheduler = core_scheduler();
 
+	// Run the scheduler loop.
 	loop {
 		core_scheduler.scheduler();
-		arch::processor::halt();
 	}
 }
