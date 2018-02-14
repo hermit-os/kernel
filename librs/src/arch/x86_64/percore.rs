@@ -22,7 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::processor;
-use core::{mem, ptr};
+use core::ptr;
 use scheduler::PerCoreScheduler;
 use x86::bits64::task::TaskStateSegment;
 
@@ -67,6 +67,11 @@ pub struct PerCoreVariable<T> {
 	data: T,
 }
 
+pub trait PerCoreVariableMethods<T> {
+	unsafe fn get(&self) -> T;
+	unsafe fn set(&self, value: T);
+}
+
 impl<T> PerCoreVariable<T> {
 	const fn new(value: T) -> Self {
 		Self { data: value }
@@ -78,27 +83,42 @@ impl<T> PerCoreVariable<T> {
 		let field = self as *const _ as usize;
 		field - base
 	}
+}
 
+// Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
+// Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
+// The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
+impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
-	pub unsafe fn get(&self) -> T {
+	default unsafe fn get(&self) -> T {
 		let value: T;
-
-		match mem::size_of::<T>() {
-			4 => asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile"),
-			8 => asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile"),
-			_ => panic!("Invalid operand size for get"),
-		}
-
+		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
-	pub unsafe fn set(&self, value: T) {
-		match mem::size_of::<T>() {
-			4 => asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile"),
-			8 => asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile"),
-			_ => panic!("Invalid operand size for set"),
-		}
+	default unsafe fn set(&self, value: T) {
+		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+	}
+}
+
+// Define and implement a trait to mark all 32-bit variables used inside PerCoreVariables.
+pub trait Is32BitVariable {}
+impl Is32BitVariable for u32 {}
+
+// For all types implementing the Is32BitVariable trait above, implement the PerCoreVariableMethods
+// trait functions using 32-bit memory moves.
+impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
+	#[inline]
+	unsafe fn get(&self) -> T {
+		let value: T;
+		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		value
+	}
+
+	#[inline]
+	unsafe fn set(&self, value: T) {
+		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
