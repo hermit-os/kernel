@@ -8,5 +8,3 @@ add_compile_options(${HERMIT_APP_FLAGS})
 link_directories(${LOCAL_PREFIX_ARCH_LIB_DIR})
 include_directories(BEFORE ${LOCAL_PREFIX_ARCH_INCLUDE_DIR})
 
-# Remove unused sections to kill dependencies to software floating-point functions and keep the binaries small.
-link_libraries(-Wl,--gc-sections)

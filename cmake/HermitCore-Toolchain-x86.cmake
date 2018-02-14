@@ -8,11 +8,14 @@ set(TARGET_ARCH x86_64-hermit)
 
 set(CMAKE_SYSTEM_NAME Generic)
 
-# point CMake to our toolchain
-set(CMAKE_C_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gcc)
-set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-g++)
-set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gfortran)
-set(CMAKE_Go_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gccgo)
+# Point CMake to our toolchain
+# In Debug mode, the Rust-compiled libhermit.a contains references to non-existing software floating-point functions (like __floatundisf).
+# We have to remove these with a linker flag as early as possible.
+set(GC_SECTIONS_FLAG "-Wl,--gc-sections")
+set(CMAKE_C_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gcc ${GC_SECTIONS_FLAG})
+set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-g++ ${GC_SECTIONS_FLAG})
+set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gfortran ${GC_SECTIONS_FLAG})
+set(CMAKE_Go_COMPILER "${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gccgo" "${GC_SECTIONS_FLAG}")
 
 # hinting the prefix and location is needed in order to correctly detect
 # binutils

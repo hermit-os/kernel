@@ -34,6 +34,8 @@ if(NOT CMAKE_Go_COMPILER)
       PATHS ${Go_BIN_PATH}
     )
   endif()
+else()
+  _cmake_find_compiler_path(Go)
 endif()
 mark_as_advanced(CMAKE_Go_COMPILER)
 
