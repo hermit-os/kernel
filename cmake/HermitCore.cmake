@@ -11,6 +11,18 @@ if(NOT HERMIT_ARCH)
 	set(HERMIT_ARCH x86)
 endif()
 
+if(NOT CMAKE_BUILD_TYPE)
+	set(CMAKE_BUILD_TYPE Release)
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES Release)
+	set(CARGO_BUILDTYPE_OUTPUT "release")
+	set(CARGO_BUILDTYPE_PARAMETER "--release")
+else()
+	set(CARGO_BUILDTYPE_OUTPUT "debug")
+	set(CARGO_BUILDTYPE_PARAMETER "")
+endif()
+
 if(PROFILING)
 	# link everything against XRay
 	link_libraries(-lxray)

@@ -39,7 +39,7 @@ add_custom_command(
 	VERBATIM)
 
 # Add the Cargo project to build the Rust library.
-set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/release/libhermit_rs.a")
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
 	DEPENDS
 		objmv
@@ -49,7 +49,7 @@ add_custom_target(hermit_rs
 		${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs
-		cargo build --release --target x86_64-hermit
+		cargo build ${CARGO_BUILDTYPE_PARAMETER} --target x86_64-hermit
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
