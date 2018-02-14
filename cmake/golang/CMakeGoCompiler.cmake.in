@@ -2,6 +2,7 @@
 # file Copyright.txt or https://cmake.org/licensing for details.
 
 set(CMAKE_Go_COMPILER "@CMAKE_Go_COMPILER@")
+set(CMAKE_Go_COMPILER_ARG1 "@CMAKE_Go_COMPILER_ARG1@")
 set(CMAKE_Go_COMPILER_LOADED 1)
 
 set(CMAKE_Go_SOURCE_FILE_EXTENSIONS go)
