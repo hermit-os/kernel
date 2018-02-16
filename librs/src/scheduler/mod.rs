@@ -91,7 +91,7 @@ impl PerCoreScheduler {
 	pub fn exit(&mut self, exit_code: i32) -> ! {
 		{
 			// Get the current task.
-			let mut current_task_locked = self.current_task.write();
+			let current_task_locked = self.current_task.write();
 			let mut current_task_borrowed = current_task_locked.borrow_mut();
 			assert!(current_task_borrowed.status != TaskStatus::TaskIdle, "Trying to terminate the idle task");
 
@@ -195,13 +195,16 @@ impl PerCoreScheduler {
 			(borrowed.id, &mut borrowed.last_stack_pointer as *mut usize, borrowed.prio, borrowed.status)
 		};
 
+		// Lock the ready queue while we change it.
+		let mut ready_queue_locked = self.ready_queue.lock();
+
 		let mut new_task = None;
 
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
 			// Check if a task with a higher priority is available.
 			let higher_prio = Priority::from(prio.into() + 1);
-			if let Some(task) = self.ready_queue.lock().pop_with_prio(higher_prio) {
+			if let Some(task) = ready_queue_locked.pop_with_prio(higher_prio) {
 				// This higher priority task becomes the new task.
 				debug!("Task with a higher priority is available.");
 				new_task = Some(task);
@@ -211,7 +214,7 @@ impl PerCoreScheduler {
 				// Check if our current task has been running for at least a single timer tick.
 				if arch::processor::update_timer_ticks() > self.last_task_switch_tick {
 					// Check if a task with our own priority is available.
-					if let Some(task) = self.ready_queue.lock().pop_with_prio(prio) {
+					if let Some(task) = ready_queue_locked.pop_with_prio(prio) {
 						// This task becomes the new task.
 						debug!("Time slice expired for current task.");
 						new_task = Some(task);
@@ -221,7 +224,7 @@ impl PerCoreScheduler {
 		} else {
 			// No task is currently running.
 			// Check if there is any available task and get the one with the highest priority.
-			if let Some(task) = self.ready_queue.lock().pop() {
+			if let Some(task) = ready_queue_locked.pop() {
 				// This available task becomes the new task.
 				debug!("Task is available.");
 				new_task = Some(task);
@@ -239,7 +242,7 @@ impl PerCoreScheduler {
 			if status == TaskStatus::TaskRunning {
 				// Mark the running task as ready again and add it back to the queue.
 				current_task_locked.borrow_mut().status = TaskStatus::TaskReady;
-				self.ready_queue.lock().push(prio, current_task_locked.clone());
+				ready_queue_locked.push(prio, current_task_locked.clone());
 			} else if status == TaskStatus::TaskFinished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
 				current_task_locked.borrow_mut().status = TaskStatus::TaskInvalid;
@@ -263,7 +266,8 @@ impl PerCoreScheduler {
 			*current_task_locked = task;
 			self.last_task_switch_tick = arch::processor::update_timer_ticks();
 
-			// Unlock current_task and reenable interrupts.
+			// Unlock everything and reenable interrupts.
+			drop(ready_queue_locked);
 			drop(current_task_locked);
 			irq::enable();
 
@@ -277,7 +281,8 @@ impl PerCoreScheduler {
 				arch::processor::shutdown();
 			}
 
-			// Unlock current_task before possibly sending the CPU into a HALT state.
+			// Unlock everything before possibly sending the CPU into a HALT state.
+			drop(ready_queue_locked);
 			drop(current_task_locked);
 
 			if status == TaskStatus::TaskIdle {
