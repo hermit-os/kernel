@@ -325,6 +325,7 @@ impl BlockedTaskQueue {
 	}
 
 	fn wakeup_task(task: Rc<RefCell<Task>>, reason: WakeupReason) {
+		// Get the Core ID and priority of the task to wake up.
 		let (core_id, prio) = {
 			let mut borrowed = task.borrow_mut();
 			info!("Waking up task {} on core {}", borrowed.id, borrowed.core_id);
@@ -336,12 +337,15 @@ impl BlockedTaskQueue {
 			(borrowed.core_id, borrowed.prio)
 		};
 
+		// Get the scheduler of that core.
 		let core_scheduler = scheduler::get_scheduler(core_id);
-		core_scheduler.ready_queue.lock().push(prio, task);
 
-		// If that CPU has been running the Idle task, it may be in a HALT state and needs to be woken up.
-		let task_locked = core_scheduler.current_task.read();
-		if task_locked.borrow().status == TaskStatus::TaskIdle {
+		// Add the task to the ready queue.
+		let mut state_locked = core_scheduler.state.lock();
+		state_locked.ready_queue.push(prio, task);
+
+		// Wake up the CPU if needed.
+		if state_locked.is_halted {
 			arch::wakeup_core(core_id);
 		}
 	}

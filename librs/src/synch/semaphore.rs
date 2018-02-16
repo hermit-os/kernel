@@ -90,7 +90,7 @@ impl Semaphore {
 		// We couldn't acquire it, so we have to block the current task.
 		// First get the current task.
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.read().clone();
+		let current_task = core_scheduler.current_task.clone();
 		let prio = current_task.borrow().prio;
 
 		loop {
