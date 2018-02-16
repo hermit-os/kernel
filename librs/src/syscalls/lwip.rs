@@ -25,13 +25,11 @@ use arch::percore::*;
 
 #[no_mangle]
 pub extern "C" fn sys_lwip_get_errno() -> i32 {
-	let current_task_locked = core_scheduler().current_task.read();
-	let lwip_errno = current_task_locked.borrow().lwip_errno;
+	let lwip_errno = core_scheduler().current_task.borrow().lwip_errno;
 	lwip_errno
 }
 
 #[no_mangle]
 pub extern "C" fn sys_lwip_set_errno(errno: i32) {
-	let current_task_locked = core_scheduler().current_task.write();
-	current_task_locked.borrow_mut().lwip_errno = errno;
+	core_scheduler().current_task.borrow_mut().lwip_errno = errno;
 }

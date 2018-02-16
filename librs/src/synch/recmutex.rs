@@ -48,7 +48,7 @@ impl RecursiveMutex {
 	pub fn acquire(&self) {
 		// Get the current task ID.
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.read().clone();
+		let current_task = core_scheduler.current_task.clone();
 		let (prio, tid) = {
 			let borrowed = current_task.borrow();
 			(borrowed.prio, borrowed.id)
@@ -89,8 +89,7 @@ impl RecursiveMutex {
 	pub fn release(&self) {
 		// Get the current task ID.
 		let tid = {
-			let current_task_locked = core_scheduler().current_task.read();
-			let current_task_borrowed = current_task_locked.borrow();
+			let current_task_borrowed = core_scheduler().current_task.borrow();
 			current_task_borrowed.id
 		};
 

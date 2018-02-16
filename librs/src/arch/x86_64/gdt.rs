@@ -134,8 +134,7 @@ pub fn get_boot_stacks() -> (usize, usize) {
 
 #[no_mangle]
 pub extern "C" fn set_current_kernel_stack() {
-	let current_task_locked = core_scheduler().current_task.read();
-	let current_task_borrowed = current_task_locked.borrow();
+	let current_task_borrowed = core_scheduler().current_task.borrow();
 	let stack_size = if current_task_borrowed.status == TaskStatus::TaskIdle {
 		KERNEL_STACK_SIZE
 	} else {
