@@ -134,13 +134,13 @@ pub extern "C" fn sys_yield() {
 
 #[no_mangle]
 pub extern "C" fn sys_kill(dest: tid_t, signum: i32) -> i32 {
-	info!("sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}", dest, signum);
+	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}", dest, signum);
 	-ENOSYS
 }
 
 #[no_mangle]
 pub extern "C" fn sys_signal(handler: signal_handler_t) -> i32 {
-	info!("sys_signal is unimplemented");
+	debug!("sys_signal is unimplemented");
 	0
 }
 

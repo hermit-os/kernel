@@ -30,13 +30,13 @@ use errno::*;
 
 #[no_mangle]
 pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
-	info!("sys_open is unimplemented, returning -ENOSYS");
+	debug!("sys_open is unimplemented, returning -ENOSYS");
 	-ENOSYS
 }
 
 #[no_mangle]
 pub extern "C" fn sys_close(fd: i32) -> i32 {
-	info!("sys_close is unimplemented, returning -ENOSYS");
+	debug!("sys_close is unimplemented, returning -ENOSYS");
 	-ENOSYS
 }
 
@@ -47,7 +47,7 @@ pub extern "C" fn sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
 
 #[no_mangle]
 pub extern "C" fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
-	info!("sys_write is halfplemented");
+	debug!("sys_write is halfplemented");
 	assert!(len <= isize::MAX as usize);
 
 	unsafe {
