@@ -28,6 +28,13 @@ use scheduler::task::{PriorityTaskQueue, WakeupReason};
 use synch::spinlock::SpinlockIrqSave;
 
 
+struct SemaphoreState {
+	/// Resource available count
+	count: isize,
+	/// Priority queue of waiting tasks
+	queue: PriorityTaskQueue,
+}
+
 /// A counting, blocking, semaphore.
 ///
 /// Semaphores are a form of atomic counter where access is only granted if the
@@ -57,10 +64,7 @@ use synch::spinlock::SpinlockIrqSave;
 /// Interface is derived from https://doc.rust-lang.org/1.7.0/src/std/sync/semaphore.rs.html
 /// ```
 pub struct Semaphore {
-	/// Resource available count
-	value: SpinlockIrqSave<isize>,
-	/// Priority queue of waiting tasks
-	queue: SpinlockIrqSave<PriorityTaskQueue>
+	state: SpinlockIrqSave<SemaphoreState>
 }
 
 impl Semaphore {
@@ -69,10 +73,12 @@ impl Semaphore {
 	/// The count specified can be thought of as a number of resources, and a
 	/// call to `acquire` or `access` will block until at least one resource is
 	/// available. It is valid to initialize a semaphore with a negative count.
-	pub fn new(count: isize) -> Semaphore {
-		Semaphore {
-			value: SpinlockIrqSave::new(count),
-			queue: SpinlockIrqSave::new(PriorityTaskQueue::new())
+	pub fn new(count: isize) -> Self {
+		Self {
+			state: SpinlockIrqSave::new(SemaphoreState {
+				count: count,
+				queue: PriorityTaskQueue::new(),
+			}),
 		}
 	}
 
@@ -82,48 +88,45 @@ impl Semaphore {
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
 	pub fn acquire(&self, wakeup_time: Option<usize>) -> bool {
-		// Try to acquire the semaphore right away.
-		if self.try_acquire() {
-			return true;
-		}
-
-		// We couldn't acquire it, so we have to block the current task.
-		// First get the current task.
+		// Reset last_wakeup_reason and get the priority of the current task.
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.clone();
-		let prio = current_task.borrow().prio;
+		let prio = {
+			let mut borrowed = core_scheduler.current_task.borrow_mut();
+			borrowed.last_wakeup_reason = WakeupReason::Custom;
+			borrowed.prio
+		};
 
+		// Loop until we have acquired the semaphore.
 		loop {
-			// Now block the task.
-			core_scheduler.blocked_tasks.lock().add(current_task.clone(), wakeup_time);
-			self.queue.lock().push(prio, current_task.clone());
+			{
+				let mut locked_state = self.state.lock();
+
+				if locked_state.count > 0 {
+					// Successfully acquired the semaphore.
+					locked_state.count -= 1;
+					return true;
+				} else if core_scheduler.current_task.borrow().last_wakeup_reason == WakeupReason::Timer {
+					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
+					// Don't try again and return the failure status.
+					return false;
+				}
+
+				// We couldn't acquire the semaphore.
+				// Block the current task and add it to the wakeup queue.
+				core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), wakeup_time);
+				locked_state.queue.push(prio, core_scheduler.current_task.clone());
+			}
 
 			// Switch to the next task.
 			core_scheduler.scheduler();
-
-			// When we're here, we have been woken up again, either because the semaphore
-			// has been released or because the wakeup time has elapsed.
-			// Try to acquire it again.
-			if self.try_acquire() {
-				// Successfully acquired the semaphore.
-				return true;
-			} else if current_task.borrow().last_wakeup_reason == WakeupReason::Timer {
-				// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
-				// Don't try again and return the failure status.
-				return false;
-			}
-
-			// Apparently, we have been woken up because the semaphore has been released,
-			// but someone else has just been faster before we could acquire it.
-			// So block us again in the next iteration.
 		}
 	}
 
 	pub fn try_acquire(&self) -> bool {
-		let mut count = self.value.lock();
+		let mut locked_state = self.state.lock();
 
-		if *count > 0 {
-			*count -= 1;
+		if locked_state.count > 0 {
+			locked_state.count -= 1;
 			true
 		} else {
 			false
@@ -135,11 +138,11 @@ impl Semaphore {
 	/// This will increment the number of resources in this semaphore by 1 and
 	/// will notify any pending waiters in `acquire` or `access` if necessary.
 	pub fn release(&self) {
-		let mut count = self.value.lock();
-		*count += 1;
+		let mut locked_state = self.state.lock();
+		locked_state.count += 1;
 
 		// Wake up any task that has been waiting for this semaphore.
-		if let Some(task) = self.queue.lock().pop() {
+		if let Some(task) = locked_state.queue.pop() {
 			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
 			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
 		}
