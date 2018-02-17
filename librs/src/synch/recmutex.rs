@@ -27,59 +27,59 @@ use scheduler::task::{PriorityTaskQueue, TaskId};
 use synch::spinlock::Spinlock;
 
 
-pub struct RecursiveMutexData {
+struct RecursiveMutexState {
 	current_tid: Option<TaskId>,
-	counter: usize,
+	count: usize,
+	queue: PriorityTaskQueue,
 }
 
 pub struct RecursiveMutex {
-	data: Spinlock<RecursiveMutexData>,
-	queue: Spinlock<PriorityTaskQueue>,
+	state: Spinlock<RecursiveMutexState>,
 }
 
 impl RecursiveMutex {
 	pub fn new() -> Self {
 		Self {
-			data: Spinlock::new(RecursiveMutexData { current_tid: None, counter: 0 }),
-			queue: Spinlock::new(PriorityTaskQueue::new()),
+			state: Spinlock::new(RecursiveMutexState {
+				current_tid: None,
+				count: 0,
+				queue: PriorityTaskQueue::new(),
+			}),
 		}
 	}
 
 	pub fn acquire(&self) {
-		// Get the current task ID.
+		// Get information about the current task.
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.clone();
 		let (prio, tid) = {
-			let borrowed = current_task.borrow();
+			let borrowed = core_scheduler.current_task.borrow();
 			(borrowed.prio, borrowed.id)
 		};
 
 		loop {
 			{
-				// Lock the entire RecursiveMutexData structure within this scope, so all its fields are
-				// modified in one atomic operation.
-				let mut lock = self.data.lock();
+				let mut locked_state = self.state.lock();
 
 				// Is the mutex currently acquired?
-				if let Some(current_tid) = lock.current_tid {
+				if let Some(current_tid) = locked_state.current_tid {
 					// Has it been acquired by the same task?
 					if current_tid == tid {
 						// Yes, so just increment the counter (recursive mutex behavior).
-						lock.counter += 1;
+						locked_state.count += 1;
 						return;
 					}
 				} else {
 					// The mutex is currently not acquired, so we become its new owner.
-					lock.current_tid = Some(tid);
-					lock.counter = 1;
+					locked_state.current_tid = Some(tid);
+					locked_state.count = 1;
 					return;
 				}
-			}
 
-			// The mutex is currently acquired by another task.
-			// Block the current task and add it to the wakeup queue.
-			core_scheduler.blocked_tasks.lock().add(current_task.clone(), None);
-			self.queue.lock().push(prio, current_task.clone());
+				// The mutex is currently acquired by another task.
+				// Block the current task and add it to the wakeup queue.
+				core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), None);
+				locked_state.queue.push(prio, core_scheduler.current_task.clone());
+			}
 
 			// Switch to the next task.
 			core_scheduler.scheduler();
@@ -87,26 +87,19 @@ impl RecursiveMutex {
 	}
 
 	pub fn release(&self) {
-		// Get the current task ID.
-		let tid = {
-			let current_task_borrowed = core_scheduler().current_task.borrow();
-			current_task_borrowed.id
-		};
+		let mut locked_state = self.state.lock();
 
-		// Lock the entire RecursiveMutexData structure and do some sanity checks.
-		let mut lock = self.data.lock();
-		let current_tid = lock.current_tid.expect("Trying to release a RecursiveMutex which has not been acquired");
-		assert!(current_tid == tid);
+		// We could do a sanity check here whether the RecursiveMutex is actually held by the current task.
+		// But let's just trust our code using this function for the sake of simplicity and performance.
 
 		// Decrement the counter (recursive mutex behavior).
-		lock.counter -= 1;
-		if lock.counter == 0 {
-			// Release the entire recursive mutex and drop the spinlock before waking up tasks.
-			lock.current_tid = None;
-			drop(lock);
+		locked_state.count -= 1;
+		if locked_state.count == 0 {
+			// Release the entire recursive mutex.
+			locked_state.current_tid = None;
 
-			// Wake up a task that has been waiting for this mutex.
-			if let Some(task) = self.queue.lock().pop() {
+			// Wake up any task that has been waiting for this mutex.
+			if let Some(task) = locked_state.queue.pop() {
 				let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
 				core_scheduler.blocked_tasks.lock().custom_wakeup(task);
 			}
