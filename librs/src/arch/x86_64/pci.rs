@@ -29,7 +29,7 @@ use synch::spinlock::Spinlock;
 use x86::shared::io::*;
 
 
-const PCI_MAX_BUS_NUMBER: u8 = 8;
+const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
 
 const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
