@@ -342,6 +342,8 @@ impl E1000NetworkAdapter {
 		let base_size = e1000.pci_adapter.base_sizes[0] as usize;
 
 		// Map the base address and mark it as reserved in the virtual memory free list.
+		// TODO: Can we just use virtualmem::allocate() to properly allocate a range of virtual addresses for the physical E1000 base address?
+		//       That should be more reliable than doing an identity-mapping and assuming the memory range to be unused.
 		paging::map::<BasePageSize>(
 			e1000.base_address,
 			e1000.base_address,
