@@ -1,5 +1,21 @@
 project(librs C ASM_NASM)
 
+if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
+	find_package(Git)
+	if(GIT_FOUND)
+		execute_process(
+			COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+			WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+			OUTPUT_VARIABLE GIT_COMMIT_HASH
+			RESULT_VARIABLE GIT_CALL_RESULT
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+		)
+		if(GIT_CALL_RESULT EQUAL 0)
+			set(COMMIT_HASH "${GIT_COMMIT_HASH}")
+		endif()
+	endif()
+endif()
+
 configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
 
 # Preprocess the PCI IDs into a Rust array.
