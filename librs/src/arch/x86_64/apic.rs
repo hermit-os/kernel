@@ -30,6 +30,7 @@ use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use arch::x86_64::mm::virtualmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::sync::atomic::hint_core_should_pause;
@@ -363,9 +364,9 @@ pub fn init() {
 	init_x2apic();
 	if !processor::supports_x2apic() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
-		// It uses a mapped page for communication. Map this page just below the kernel.
+		// It uses a mapped page for communication.
 		unsafe {
-			LOCAL_APIC_ADDRESS = mm::kernel_start_address() - BasePageSize::SIZE;
+			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
 			debug!("Mapping Local APIC at {:#X} to virtual address {:#X}", local_apic_physical_address, LOCAL_APIC_ADDRESS);
 
 			paging::map::<BasePageSize>(
@@ -469,7 +470,8 @@ pub fn init_x2apic() {
 }
 
 /// Boot all Application Processors as described in Intel MultiProcessor Specification 1.4, B.4.
-/// We only run the procedure for xAPIC and x2APIC here. The older 82489DX APIC has never been available for x86-64.
+/// Even though https://wiki.osdev.org/Symmetric_Multiprocessing states that INIT IPIs are not required anymore, at least
+/// QEMU still needs them.
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(SMP_BOOT_CODE.len() < BasePageSize::SIZE, "SMP Boot Code is larger than a page");
@@ -489,9 +491,9 @@ pub fn boot_application_processors() {
 		outb(CMOS_DATA_PORT, CMOS_SHUTDOWN_STATUS_JMP_DWORD_WITHOUT_EOI);
 	}
 
-	// Get us another virtual address just below the kernel to map the reset vector.
+	// Get us another virtual address to map the reset vector.
 	// Then put in the CS:IP address of the boot code.
-	let reset_vector_address = unsafe { LOCAL_APIC_ADDRESS - BasePageSize::SIZE };
+	let reset_vector_address = virtualmem::allocate(BasePageSize::SIZE);
 	paging::map::<BasePageSize>(reset_vector_address, 0, 1, PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE, false);
 	let reset_vector = unsafe { &mut *((reset_vector_address + RESET_VECTOR_OFFSET) as *mut u32) };
 	*reset_vector = (SMP_BOOT_CODE_ADDRESS << 12) as u32;
