@@ -1,10 +1,10 @@
 [submodule "lwip"]
 	path = lwip
-	url = https://github.com/ColinFinck/LwIP.git
+	url = https://github.com/RWTH-OS/LwIP.git
 	branch = path2rs
 [submodule "usr/libomp"]
 	path = usr/libomp
-	url = https://github.com/ColinFinck/libomp_oss.git
+	url = https://github.com/RWTH-OS/libomp_oss.git
 	branch = path2rs
 [submodule "crates/x86"]
 	path = crates/x86
@@ -12,7 +12,7 @@
 	branch = all-merged
 [submodule "crates/raw_cpuid"]
 	path = crates/raw_cpuid
-	url = https://github.com/ColinFinck/rust-cpuid.git
+	url = https://github.com/RWTH-OS/rust-cpuid.git
 	branch = extended-brand-string-fix
 [submodule "crates/rlibc"]
 	path = crates/rlibc
