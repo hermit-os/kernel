@@ -28,7 +28,6 @@ extern crate regex;
 extern crate log;
 
 use regex::RegexSet;
-use std::str;
 use std::env;
 use std::process::Command;
 use std::vec::Vec;
