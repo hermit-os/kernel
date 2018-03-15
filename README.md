@@ -14,6 +14,12 @@ approach (like
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
+_We decided to develop the kernel in the future in [Rust](https://www.rust-lang.org).
+We promise that this will make it easier to maintain and to extend our kernel.
+All code beside the kernel will be still developed in their preffered languag (C/C++/Go/Fortran)._
+
+_This branch represents the transmission from C to Rust._
+
 ![HermitCore Demo](img/demo.gif)
 
 On the startup of HermitCore applications, cores are isolated from the Linux
@@ -49,7 +55,7 @@ the HermitCore kernel and applications you need:
 ### HermitCore cross-toolchain
 
 We provide prebuilt packages (currently Debian-based only) of the HermitCore
-toolchain, which can be installed as follows:
+toolchain. The packages based on the master branch and can be installed as follows:
 
 ```bash
 $ echo "deb [trusted=yes] https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
