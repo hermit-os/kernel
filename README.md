@@ -14,11 +14,11 @@ approach (like
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
-_We decided to develop the kernel in the future in [Rust](https://www.rust-lang.org).
+__We decided to develop the kernel in [Rust](https://www.rust-lang.org).
 We promise that this will make it easier to maintain and to extend our kernel.
-All code beside the kernel will be still developed in their preffered languag (C/C++/Go/Fortran)._
+All code beside the kernel will be still developed in their prefered language (C/C++/Go/Fortran).__
 
-_This branch represents the transmission from C to Rust._
+__Consequently, this branch represents the transmission from C to Rust.__
 
 ![HermitCore Demo](img/demo.gif)
 
