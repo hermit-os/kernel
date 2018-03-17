@@ -358,7 +358,7 @@ pub fn init() {
 	// Detect CPUs and APICs from the MultiProcessor Configuration Table (according to Intel MultiProcessor Specification 1.4).
 	// ACPI is currently not supported.
 	let local_apic_physical_address = detect_from_multiprocessor_specification()
-		.unwrap_or_else(|_e| panic!("HermitCore requires a MultiProcessor Specification 1.4 compliant system"));
+		.expect("HermitCore requires a MultiProcessor Specification 1.4 compliant system");
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	init_x2apic();
