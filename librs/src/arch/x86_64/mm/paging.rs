@@ -273,13 +273,13 @@ impl<S: PageSize> Iterator for PageIter<S> {
 /// An interface to allow for a generic implementation of struct PageTable for all 4 page tables.
 /// Must be implemented by all page tables.
 trait PageTableLevel {
-	/// Numeric page table level (from 0 for PGT through 3 for PML4) to enable numeric comparisons.
+	/// Numeric page table level (from 0 for PT through 3 for PML4) to enable numeric comparisons.
 	const LEVEL: usize;
 }
 
 /// An interface for page tables with sub page tables (all except PGT).
 /// Having both PageTableLevel and PageTableLevelWithSubtables leverages Rust's typing system to provide
-/// a next_table_for_page method only for those that have sub page tables.
+/// a subtable method only for those that have sub page tables.
 ///
 /// Kudos to Philipp Oppermann for the trick!
 trait PageTableLevelWithSubtables: PageTableLevel {
@@ -303,26 +303,26 @@ impl PageTableLevel for PDPT {
 }
 
 impl PageTableLevelWithSubtables for PDPT {
-	type SubtableLevel = PDT;
+	type SubtableLevel = PD;
 }
 
-/// A Page Directory Table (PDT), with numeric level 1 and PGT subtables.
-enum PDT {}
-impl PageTableLevel for PDT {
+/// A Page Directory (PD), with numeric level 1 and PT subtables.
+enum PD {}
+impl PageTableLevel for PD {
 	const LEVEL: usize = 1;
 }
 
-impl PageTableLevelWithSubtables for PDT {
-	type SubtableLevel = PGT;
+impl PageTableLevelWithSubtables for PD {
+	type SubtableLevel = PT;
 }
 
-/// A Page Table (PGT), with numeric level 0 and no subtables.
-enum PGT {}
-impl PageTableLevel for PGT {
+/// A Page Table (PT), with numeric level 0 and no subtables.
+enum PT {}
+impl PageTableLevel for PT {
 	const LEVEL: usize = 0;
 }
 
-/// Representation of any page table (PML4, PDPT, PDT, PGT) in memory.
+/// Representation of any page table (PML4, PDPT, PD, PT) in memory.
 /// Parameter L supplies information for Rust's typing system to distinguish between the different tables.
 struct PageTable<L> {
 	/// Each page table has 512 entries (can be calculated using PAGE_MAP_BITS).
