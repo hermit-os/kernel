@@ -199,7 +199,6 @@ extern "x86-interrupt" fn error_interrupt_handler(stack_frame: &mut irq::Excepti
 
 extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
 	error!("Spurious Interrupt: {:#?}", stack_frame);
-	eoi();
 	scheduler::abort();
 }
 
