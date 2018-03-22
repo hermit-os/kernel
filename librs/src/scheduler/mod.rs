@@ -85,7 +85,7 @@ impl PerCoreScheduler {
 		task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
-		self.state.lock().ready_queue.push(prio, task.clone());
+		self.state.lock().ready_queue.push(task.clone());
 		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, task); }
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
@@ -145,7 +145,7 @@ impl PerCoreScheduler {
 
 		// Add it to the task lists.
 		let mut state_locked = next_scheduler.state.lock();
-		state_locked.ready_queue.push(current_task_borrowed.prio, clone_task.clone());
+		state_locked.ready_queue.push(clone_task.clone());
 		unsafe { TASKS.as_ref().unwrap().lock().insert(tid, clone_task); }
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
@@ -242,7 +242,7 @@ impl PerCoreScheduler {
 			if status == TaskStatus::TaskRunning {
 				// Mark the running task as ready again and add it back to the queue.
 				self.current_task.borrow_mut().status = TaskStatus::TaskReady;
-				state_locked.ready_queue.push(prio, self.current_task.clone());
+				state_locked.ready_queue.push(self.current_task.clone());
 			} else if status == TaskStatus::TaskFinished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
 				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;

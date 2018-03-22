@@ -88,13 +88,9 @@ impl Semaphore {
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
 	pub fn acquire(&self, wakeup_time: Option<usize>) -> bool {
-		// Reset last_wakeup_reason and get the priority of the current task.
+		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
-		let prio = {
-			let mut borrowed = core_scheduler.current_task.borrow_mut();
-			borrowed.last_wakeup_reason = WakeupReason::Custom;
-			borrowed.prio
-		};
+		core_scheduler.current_task.borrow_mut().last_wakeup_reason = WakeupReason::Custom;
 
 		// Loop until we have acquired the semaphore.
 		loop {
@@ -108,13 +104,14 @@ impl Semaphore {
 				} else if core_scheduler.current_task.borrow().last_wakeup_reason == WakeupReason::Timer {
 					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
 					// Don't try again and return the failure status.
+					locked_state.queue.remove(core_scheduler.current_task.clone());
 					return false;
 				}
 
 				// We couldn't acquire the semaphore.
 				// Block the current task and add it to the wakeup queue.
 				core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), wakeup_time);
-				locked_state.queue.push(prio, core_scheduler.current_task.clone());
+				locked_state.queue.push(core_scheduler.current_task.clone());
 			}
 
 			// Switch to the next task.
