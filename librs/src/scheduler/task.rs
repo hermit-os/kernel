@@ -118,8 +118,8 @@ impl PriorityTaskQueue {
 	}
 
 	/// Add a task by its priority to the queue
-	pub fn push(&mut self, prio: Priority, task: Rc<RefCell<Task>>) {
-		let i = prio.into() as usize;
+	pub fn push(&mut self, task: Rc<RefCell<Task>>) {
+		let i = task.borrow().prio.into() as usize;
 		assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
 		self.prio_bitmap |= 1 << i;
@@ -157,6 +157,24 @@ impl PriorityTaskQueue {
 		}
 
 		None
+	}
+
+	/// Remove a specific task from the priority queue.
+	pub fn remove(&mut self, task: Rc<RefCell<Task>>) {
+		let i = task.borrow().prio.into() as usize;
+		assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
+
+		for node in self.queues[i].iter() {
+			if Rc::ptr_eq(&node.borrow().value, &task) {
+				self.queues[i].remove(node.clone());
+
+				if self.queues[i].head().is_none() {
+					self.prio_bitmap &= !(1 << i as u64);
+				}
+
+				break;
+			}
+		}
 	}
 }
 
@@ -325,8 +343,8 @@ impl BlockedTaskQueue {
 	}
 
 	fn wakeup_task(task: Rc<RefCell<Task>>, reason: WakeupReason) {
-		// Get the Core ID and priority of the task to wake up.
-		let (core_id, prio) = {
+		// Get the Core ID of the task to wake up.
+		let core_id = {
 			let mut borrowed = task.borrow_mut();
 			info!("Waking up task {} on core {}", borrowed.id, borrowed.core_id);
 
@@ -334,7 +352,7 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskReady;
 			borrowed.last_wakeup_reason = reason;
 
-			(borrowed.core_id, borrowed.prio)
+			borrowed.core_id
 		};
 
 		// Get the scheduler of that core.
@@ -342,7 +360,7 @@ impl BlockedTaskQueue {
 
 		// Add the task to the ready queue.
 		let mut state_locked = core_scheduler.state.lock();
-		state_locked.ready_queue.push(prio, task);
+		state_locked.ready_queue.push(task);
 
 		// Wake up the CPU if needed.
 		if state_locked.is_halted {
