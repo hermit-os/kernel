@@ -38,7 +38,6 @@ use core::{mem, ptr, str, u32};
 use mm;
 use scheduler;
 use x86::shared::control_regs::*;
-use x86::shared::io::*;
 use x86::shared::msr::*;
 
 
@@ -60,14 +59,6 @@ const APIC_ICR_LEVEL_TRIGGERED: u64         = 1 << 15;
 const APIC_ICR_LEVEL_ASSERT: u64            = 1 << 14;
 const APIC_LVT_MASK: u64                    = 1 << 16;
 const APIC_SIVR_ENABLED: u64                = 1 << 8;
-
-const CMOS_ADDRESS_PORT: u16                         = 0x70;
-const CMOS_DATA_PORT: u16                            = 0x71;
-const CMOS_SHUTDOWN_STATUS: u8                       = 0x0F;
-const CMOS_SHUTDOWN_STATUS_JMP_DWORD_WITHOUT_EOI: u8 = 0x0A;
-
-/// Warm Reset Vector at CS=0x40, IP=0x67
-const RESET_VECTOR_OFFSET: usize = 0x467;
 
 const TLB_FLUSH_INTERRUPT_NUMBER: u8 = 112;
 const WAKEUP_INTERRUPT_NUMBER: u8    = 121;
@@ -468,9 +459,10 @@ pub fn init_x2apic() {
 	}
 }
 
-/// Boot all Application Processors as described in Intel MultiProcessor Specification 1.4, B.4.
-/// Even though https://wiki.osdev.org/Symmetric_Multiprocessing states that INIT IPIs are not required anymore, at least
-/// QEMU still needs them.
+/// Boot all Application Processors
+/// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
+/// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
+/// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(SMP_BOOT_CODE.len() < BasePageSize::SIZE, "SMP Boot Code is larger than a page");
@@ -483,19 +475,6 @@ pub fn boot_application_processors() {
 
 	// Pass the PML4 page table address to the boot code.
 	unsafe { *((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32; }
-
-	// Initialize the CMOS Shutdown Status Byte to let the Application Processor perform a JMP without EOI.
-	unsafe {
-		outb(CMOS_ADDRESS_PORT, CMOS_SHUTDOWN_STATUS);
-		outb(CMOS_DATA_PORT, CMOS_SHUTDOWN_STATUS_JMP_DWORD_WITHOUT_EOI);
-	}
-
-	// Get us another virtual address to map the reset vector.
-	// Then put in the CS:IP address of the boot code.
-	let reset_vector_address = virtualmem::allocate(BasePageSize::SIZE);
-	paging::map::<BasePageSize>(reset_vector_address, 0, 1, PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE, false);
-	let reset_vector = unsafe { &mut *((reset_vector_address + RESET_VECTOR_OFFSET) as *mut u32) };
-	*reset_vector = (SMP_BOOT_CODE_ADDRESS << 12) as u32;
 
 	// Now wake up each application processor.
 	let core_id = core_id() as u8;
@@ -524,12 +503,8 @@ pub fn boot_application_processors() {
 			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_TRIGGERED | APIC_ICR_DELIVERY_MODE_INIT);
 			processor::udelay(10000);
 
-			// Send two STARTUP IPIs and wait the 200usec as per the specification.
-			for _i in 0..1 {
-				local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_DELIVERY_MODE_STARTUP | ((SMP_BOOT_CODE_ADDRESS as u64) >> 12));
-				processor::udelay(200);
-			}
-
+			// Send a STARTUP IPI.
+			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_DELIVERY_MODE_STARTUP | ((SMP_BOOT_CODE_ADDRESS as u64) >> 12));
 			debug!("Waiting for it to respond");
 
 			// Wait until the application processor has finished initializing.
