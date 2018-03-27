@@ -235,12 +235,10 @@ boot_pml4:
     DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
 boot_pdpt:
     DQ boot_pgd + 0x3    ; PG_PRESENT | PG_RW
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
 boot_pgd:
     DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
 boot_pgt:
     times 512 DQ 0
 
