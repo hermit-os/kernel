@@ -33,7 +33,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
-use core::sync::atomic::hint_core_should_pause;
+use core::sync::atomic::spin_loop_hint;
 use core::{mem, ptr, str, u32};
 use mm;
 use scheduler;
@@ -417,7 +417,7 @@ fn calibrate_timer() {
 	// Wait until the 3 ticks have elapsed.
 	let end = processor::get_timestamp() + cycles;
 	while processor::get_timestamp() < end {
-		hint_core_should_pause();
+		spin_loop_hint();
 	}
 
 	// Save the difference of the initial value and current value as the result of the calibration
@@ -592,7 +592,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
 			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0 {
-				hint_core_should_pause();
+				spin_loop_hint();
 			}
 		}
 	}

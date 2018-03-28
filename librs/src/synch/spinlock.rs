@@ -22,7 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::irq;
-use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering, hint_core_should_pause};
+use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering, spin_loop_hint};
 use core::cell::UnsafeCell;
 use core::marker::Sync;
 use core::fmt;
@@ -108,7 +108,7 @@ impl<T: ?Sized> Spinlock<T>
 	fn obtain_lock(&self) {
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			hint_core_should_pause();
+			spin_loop_hint();
 		}
 	}
 
@@ -246,7 +246,7 @@ impl<T: ?Sized> SpinlockIrqSave<T>
 
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			hint_core_should_pause();
+			spin_loop_hint();
 		}
 
 		self.irq.store(irq, Ordering::SeqCst);

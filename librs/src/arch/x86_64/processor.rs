@@ -28,7 +28,7 @@ use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
 use core::{fmt, slice, str, u32};
-use core::sync::atomic::hint_core_should_pause;
+use core::sync::atomic::spin_loop_hint;
 use raw_cpuid::*;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
@@ -304,7 +304,7 @@ impl CpuFrequency {
 				break tick;
 			}
 
-			hint_core_should_pause();
+			spin_loop_hint();
 		};
 
 		// Count the number of CPU cycles during 3 timer ticks.
@@ -316,7 +316,7 @@ impl CpuFrequency {
 				break;
 			}
 
-			hint_core_should_pause();
+			spin_loop_hint();
 		}
 
 		let end = get_timestamp();
@@ -750,6 +750,6 @@ unsafe fn get_timestamp_rdtscp() -> u64 {
 pub fn udelay(usecs: u64) {
 	let end = get_timestamp() + get_frequency() as u64 * usecs;
 	while get_timestamp() < end {
-		hint_core_should_pause();
+		spin_loop_hint();
 	}
 }

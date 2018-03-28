@@ -23,9 +23,7 @@
 
 #![feature(asm)]
 #![feature(const_fn)]
-#![feature(hint_core_should_pause)]
 #![feature(lang_items)]
-#![feature(repr_align)]
 #![feature(specialization)]
 #![no_std]
 

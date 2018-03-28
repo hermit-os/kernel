@@ -39,7 +39,6 @@
 #![feature(const_atomic_usize_new)]
 #![feature(const_unsafe_cell_new)]
 #![feature(global_allocator)]
-#![feature(hint_core_should_pause)]
 #![feature(iterator_step_by)]
 #![feature(lang_items)]
 #![feature(linkage)]
