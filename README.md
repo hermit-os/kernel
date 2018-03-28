@@ -51,6 +51,8 @@ the HermitCore kernel and applications you need:
  * recent host compiler such as GCC
  * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads
  * [Rust compiler (nightly release)](https://www.rust-lang.org/en-US/install.html)
+ * Install [xargo](https://github.com/japaric/xargo) with `cargo install xargo`
+ * Xargo depends on the rust source code, which we can install with `rustup component add rust-src`.
 
 ### HermitCore cross-toolchain
 
@@ -88,7 +90,7 @@ such as:
 
 ### Preliminary work
 
-To build HermitCore from source (without compiler), the repository with its submodules has to be cloned.
+To build HermitCore from source (without the toolchain), the repository with its submodules has to be cloned.
 
 ```bash
 $ git clone git@github.com:RWTH-OS/HermitCore.git
