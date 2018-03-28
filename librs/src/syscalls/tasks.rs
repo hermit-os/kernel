@@ -23,10 +23,12 @@
 
 use arch;
 use arch::percore::*;
+use alloc::rc::Rc;
 use core::isize;
+use core::cell::RefCell;
 use errno::*;
 use scheduler;
-use scheduler::task::Priority;
+use scheduler::task::{Priority,TaskId};
 
 pub type signal_handler_t = extern "C" fn(i32);
 pub type tid_t = u32;
@@ -151,4 +153,29 @@ pub extern "C" fn sys_spawn(id: *mut tid_t, func: extern "C" fn(usize), arg: usi
 	}
 
 	0
+}
+
+#[no_mangle]
+pub extern "C" fn reschedule() {
+	// Switch to the next task.
+	core_scheduler().scheduler();
+}
+
+// just to be backward compatible to the C version
+#[no_mangle]
+pub extern "C" fn do_exit(arg: i32) -> ! {
+	core_scheduler().exit(arg);
+}
+
+#[no_mangle]
+pub extern "C" fn block_current_task() {
+	let core_scheduler = core_scheduler();
+
+	// Block the current task and add it to the wakeup queue.
+	core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), None);
+}
+
+#[no_mangle]
+pub extern "C" fn wakeup_task(id: tid_t) {
+	core_scheduler().blocked_tasks.lock().wakeup_by_id(TaskId::from(id as usize));
 }

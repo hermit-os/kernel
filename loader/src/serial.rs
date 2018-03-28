@@ -21,7 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use core::sync::atomic::hint_core_should_pause;
+use core::sync::atomic::spin_loop_hint;
 use x86::shared::io::*;
 
 const UART_TX: u16 = 0;
@@ -62,7 +62,7 @@ impl SerialPort {
 
 	fn write_to_register(&self, register: u16, byte: u8) {
 		while self.is_transmitting() {
-			hint_core_should_pause();
+			spin_loop_hint();
 		}
 
 		unsafe { outb(self.port_address + register, byte); }
