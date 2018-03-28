@@ -64,8 +64,8 @@ add_custom_target(hermit_rs
 	DEPENDS
 		${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
 	COMMAND
-		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs
-		cargo build ${CARGO_BUILDTYPE_PARAMETER} --target x86_64-hermit
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/librs
+		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target x86_64-hermit
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
