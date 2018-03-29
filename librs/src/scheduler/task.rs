@@ -441,40 +441,6 @@ impl BlockedTaskQueue {
 		}
 	}
 
-	pub fn wakeup_by_id(&mut self, id: TaskId)
-	{
-		let mut first_task = true;
-		let mut iter = self.list.iter();
-
-		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
-			let task_id;
-
-			{
-				let task = &node.borrow().value.task;
-				task_id = task.borrow().id;
-			}
-
-			if task_id == id {
-				// Remove it from the list of blocked tasks and wake it up.
-				self.list.remove(node.clone());
-				Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Custom);
-
-				// If this is the first task, adjust the One-Shot Timer to fire at the
-				// next task's wakeup time (if any).
-				if first_task {
-					if let Some(next_node) = iter.next() {
-						arch::set_oneshot_timer(next_node.borrow().value.wakeup_time);
-					}
-				}
-
-				break;
-			}
-
-			first_task = false;
-		}
-	}
-
 	/// Wakes up all tasks whose wakeup time has elapsed.
 	///
 	/// Should be called by the One-Shot Timer interrupt handler when the wakeup time for
