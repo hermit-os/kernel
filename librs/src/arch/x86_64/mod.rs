@@ -46,7 +46,7 @@ use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
 
 
-const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
+const SERIAL_PORT_ADDRESS: u16 = 0xc110; //0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 
