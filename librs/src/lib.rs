@@ -42,7 +42,6 @@
 #![feature(iterator_step_by)]
 #![feature(lang_items)]
 #![feature(linkage)]
-#![feature(repr_align)]
 #![feature(specialization)]
 #![no_std]
 
