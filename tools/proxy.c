@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/inotify.h>
 #include <sys/ioctl.h>
@@ -70,6 +71,8 @@ typedef enum {
   QEMU,
   UHYVE
 } monitor_t;
+
+bool verbose = false;
 
 static monitor_t monitor = BAREMETAL;
 static int sobufsize = 131072;
@@ -129,33 +132,13 @@ static void exit_handler(int sig)
 
 static char* get_append_string(void)
 {
-	char line[2048];
-	char* match;
-	char* point;
+	uint32_t freq = get_cpufreq();
+	if (freq == 0)
+		return "-freq0 -proxy";
 
-	FILE* fp = fopen("/proc/cpuinfo", "r");
-	if (!fp)
-		return "-freq0";
+	snprintf(cmdline, MAX_PATH, "\"-freq%u -proxy\"", freq);
 
-	while(fgets(line, 2048, fp)) {
-		if ((match = strstr(line, "cpu MHz")) == NULL)
-			continue;
-
-		// scan strinf for the next number
-		for(; (*match < 0x30) || (*match > 0x39); match++)
-			;
-
-		for(point = match; ((*point != '.') && (*point != '\0')); point++)
-			;
-		*point = '\0';
-
-		snprintf(cmdline, MAX_PATH, "\"-freq%s -proxy\"", match);
-		fclose(fp);
-
-		return cmdline;
-	}
-
-	return "-freq0";
+	return cmdline;
 }
 
 static int env_init(char *path)
@@ -316,7 +299,17 @@ static int qemu_init(char *path)
 	char port_str[MAX_PATH];
 	pid_t qemu_pid;
 	char* qemu_str = "qemu-system-x86_64";
-	char* qemu_argv[] = {qemu_str, "-daemonize", "-display", "none", "-smp", "1", "-m", "2G", "-pidfile", pidname, "-net", "nic,model=rtl8139", "-net", hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0", "-kernel", loader_path, "-initrd", path, "-append", get_append_string(), NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+	char* qemu_argv[] = {qemu_str, "-daemonize", "-display", "none", "-smp", "1",
+		"-m", "2G", "-pidfile", pidname, "-net", "nic,model=rtl8139", "-net",
+		hostfwd, "-chardev", chardev_file, "-device", "pci-serial,chardev=gnc0",
+		"-kernel", loader_path, "-initrd", path, "-append", get_append_string(),
+		"-no-acpi", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+		NULL, NULL, NULL, NULL};
+
+#ifdef __aarch64__
+	fprintf(stderr, "QEMU as hypervisor is currently not supported for aarch64\n");
+	exit(1);
+#endif
 
 	str = getenv("HERMIT_CPUS");
 	if (str)
@@ -424,8 +417,7 @@ static int qemu_init(char *path)
 		qemu_argv[i+1] = "dump";
 	}
 
-	str = getenv("HERMIT_VERBOSE");
-	if (str && (strcmp(str, "0") != 0))
+	if (verbose)
 	{
 		printf("qemu startup command: ");
 
@@ -468,6 +460,11 @@ static int multi_init(char *path)
 	FILE* file;
 	char isle_path[MAX_PATH];
 	char* result;
+
+#ifdef __aarch64__
+	fprintf(stderr, "The multi-kernel version is currently not supported for aarch64\n");
+	exit(1);
+#endif 
 
 	// set path to temporary file
 	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/path", isle_nr);
@@ -529,11 +526,10 @@ static int multi_init(char *path)
 
 static void dump_log(void)
 {
-	char* str = getenv("HERMIT_VERBOSE");
 	FILE* file;
 	char line[2048];
 
-	if (!(str && (strcmp(str, "0") != 0)))
+	if (!verbose)
 		return;
 
 	if (monitor == BAREMETAL)
@@ -896,150 +892,156 @@ int socket_loop(int argc, char **argv)
 	struct sockaddr_in serv_name;
 
 #if 0
-		// check if mmnif interface is available
-		if (!qemu) {
-			struct ifreq ethreq;
+	// check if mmnif interface is available
+	if (!qemu) {
+		struct ifreq ethreq;
 
-			memset(&ethreq, 0, sizeof(ethreq));
-			strncpy(ethreq.ifr_name, "mmnif", IFNAMSIZ);
+		memset(&ethreq, 0, sizeof(ethreq));
+		strncpy(ethreq.ifr_name, "mmnif", IFNAMSIZ);
 
-			while(1) {
-				/* this socket doesn't really matter, we just need a descriptor
-				 * to perform the ioctl on */
-				s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-				ioctl(s, SIOCGIFFLAGS, &ethreq);
-				close(s);
+		while(1) {
+			/* this socket doesn't really matter, we just need a descriptor
+			 * to perform the ioctl on */
+			s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+			ioctl(s, SIOCGIFFLAGS, &ethreq);
+			close(s);
 
-				if (ethreq.ifr_flags & (IFF_UP|IFF_RUNNING))
-					break;
-			}
-			sched_yield();
+			if (ethreq.ifr_flags & (IFF_UP|IFF_RUNNING))
+				break;
 		}
+		sched_yield();
+	}
 #endif
 
-		/* create a socket */
-		s = socket(PF_INET, SOCK_STREAM, 0);
-		if (s < 0)
-		{
-			perror("Proxy: socket creation error");
-			exit(1);
+	/* create a socket */
+	s = socket(PF_INET, SOCK_STREAM, 0);
+	if (s < 0)
+	{
+		perror("Proxy: socket creation error");
+		exit(1);
+	}
+
+	setsockopt(s, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
+	setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
+	i = 1;
+	setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
+	i = 0;
+	setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char *) &i, sizeof(i));
+
+	/* server address  */
+	memset((char *) &serv_name, 0x00, sizeof(serv_name));
+	serv_name.sin_family = AF_INET;
+	if (monitor == QEMU)
+		serv_name.sin_addr = INADDR(127, 0, 0, 1);
+	else
+		serv_name.sin_addr = HERMIT_IP(isle_nr);
+	serv_name.sin_port = htons(port);
+
+	i = 0;
+retry:
+	ret = connect(s, (struct sockaddr*)&serv_name, sizeof(serv_name));
+	if (ret < 0)
+	{
+		i++;
+		if (i <= 10) {
+			usleep(10000);
+			goto retry;
 		}
-
-		setsockopt(s, SOL_SOCKET, SO_RCVBUF, (char *) &sobufsize, sizeof(sobufsize));
-		setsockopt(s, SOL_SOCKET, SO_SNDBUF, (char *) &sobufsize, sizeof(sobufsize));
-		i = 1;
-		setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (char *) &i, sizeof(i));
-		i = 0;
-		setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (char *) &i, sizeof(i));
-
-		/* server address  */
-		memset((char *) &serv_name, 0x00, sizeof(serv_name));
-		serv_name.sin_family = AF_INET;
-		if (monitor == QEMU)
-			serv_name.sin_addr = INADDR(127, 0, 0, 1);
-		else
-			serv_name.sin_addr = HERMIT_IP(isle_nr);
-		serv_name.sin_port = htons(port);
-
-		i = 0;
-	retry:
-		ret = connect(s, (struct sockaddr*)&serv_name, sizeof(serv_name));
-		if (ret < 0)
-		{
-			i++;
-			if (i <= 10) {
-				usleep(10000);
-				goto retry;
-			}
-			perror("Proxy -- connection error");
-			close(s);
-			exit(1);
-		}
-
-		ret = write(s, &magic, sizeof(magic));
-		if (ret < 0)
-			goto out;
-
-		// forward program arguments to HermitCore
-		// argv[0] is path of this proxy so we strip it
-
-		argv++;
-		argc--;
-
-		ret = write(s, &argc, sizeof(argc));
-		if (ret < 0)
-			goto out;
-
-		for(i=0; i<argc; i++)
-		{
-			int len = strlen(argv[i])+1;
-
-			j = 0;
-			while (j < sizeof(len))
-			{
-				ret = write(s, ((char*)&len)+j, sizeof(len)-j);
-				if (ret < 0)
-					goto out;
-				j += ret;
-			}
-
-			j = 0;
-			while (j < len)
-			{
-				ret = write(s, argv[i]+j, len-j);
-				if (ret < 0)
-					goto out;
-				j += ret;
-			}
-		}
-
-		// send environment
-		i = 0;
-		while(environ[i])
-			i++;
-
-		ret = write(s, &i, sizeof(i));
-		if (ret < 0)
-			goto out;
-
-		for(i=0; environ[i] ;i++)
-		{
-			int len = strlen(environ[i])+1;
-
-			j = 0;
-			while (j < sizeof(len))
-			{
-				ret = write(s, ((char*)&len)+j, sizeof(len)-j);
-				if (ret < 0)
-					goto out;
-				j += ret;
-			}
-
-			j = 0;
-			while (j < len)
-			{
-				ret = write(s, environ[i]+j, len-j);
-				if (ret < 0)
-					goto out;
-				j += ret;
-			}
-		}
-
-		ret = handle_syscalls(s);
-
+		perror("Proxy -- connection error");
 		close(s);
+		exit(1);
+	}
 
-		return ret;
+	ret = write(s, &magic, sizeof(magic));
+	if (ret < 0)
+		goto out;
 
-	out:
-		perror("Proxy -- communication error");
-		close(s);
-		return 1;
+	// forward program arguments to HermitCore
+	// argv[0] is path of this proxy so we strip it
+
+	argv++;
+	argc--;
+
+	ret = write(s, &argc, sizeof(argc));
+	if (ret < 0)
+		goto out;
+
+	for(i=0; i<argc; i++)
+	{
+		int len = strlen(argv[i])+1;
+
+		j = 0;
+		while (j < sizeof(len))
+		{
+			ret = write(s, ((char*)&len)+j, sizeof(len)-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
+
+		j = 0;
+		while (j < len)
+		{
+			ret = write(s, argv[i]+j, len-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
+	}
+
+	// send environment
+	i = 0;
+	while(environ[i])
+		i++;
+
+	ret = write(s, &i, sizeof(i));
+	if (ret < 0)
+		goto out;
+
+	for(i=0; environ[i] ;i++)
+	{
+		int len = strlen(environ[i])+1;
+
+		j = 0;
+		while (j < sizeof(len))
+		{
+			ret = write(s, ((char*)&len)+j, sizeof(len)-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
+
+		j = 0;
+		while (j < len)
+		{
+			ret = write(s, environ[i]+j, len-j);
+			if (ret < 0)
+				goto out;
+			j += ret;
+		}
+	}
+
+	ret = handle_syscalls(s);
+
+	close(s);
+
+	return ret;
+
+out:
+	perror("Proxy -- communication error");
+	close(s);
+	return 1;
 }
 
 int main(int argc, char **argv)
 {
 	int ret;
+
+	char* v = getenv("HERMIT_VERBOSE");
+	if (v && (strcmp(v, "0") != 0)) {
+		//fprintf(stderr, "Start proxy in verbose mode\n");
+		verbose = true;
+	}
 
 	ret = env_init(argv[1]);
 	if (ret)
@@ -1048,7 +1050,7 @@ int main(int argc, char **argv)
 
 	switch(monitor) {
 	case UHYVE:
-		return uhyve_loop();
+		return uhyve_loop(argc, argv);
 
 	case BAREMETAL:
 	case QEMU:

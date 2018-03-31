@@ -25,31 +25,11 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __PROXY_H__
-#define __PROXY_H__
-
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
-
-#include <unistd.h>
-#include <stdlib.h>
 #include <stdint.h>
 
-#define HERMIT_ELFOSABI	0x42
+#ifndef __PROXY_UTILS_H__
+#define __PROXY_UTILS_H__
 
-#define __HERMIT_exit	0
-#define __HERMIT_write	1
-#define __HERMIT_open	2
-#define __HERMIT_close	3
-#define __HERMIT_read	4
-#define __HERMIT_lseek	5
-
-int uhyve_init(char *path);
-int uhyve_loop(int argc, char **argv);
-
-// define some helper functions
-uint32_t get_cpufreq(void);
-ssize_t pread_in_full(int fd, void *buf, size_t count, off_t offset);
+uint64_t memparse(const char *ptr);
 
 #endif

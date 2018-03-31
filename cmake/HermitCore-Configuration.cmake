@@ -12,3 +12,7 @@ set(KERNEL_STACK_SIZE 32768 CACHE STRING
 
 set(DEFAULT_STACK_SIZE 262144 CACHE STRING
 	"Task stack size in bytes")
+
+set(MAX_ARGC_ENVC 128 CACHE STRING
+        "Maximum number of command line parameters and enviroment variables
+        forwarded to uhyve")
