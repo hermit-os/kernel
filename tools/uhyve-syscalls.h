@@ -21,15 +21,6 @@
 #include <unistd.h>
 #include <stddef.h>
 
-typedef enum {
-	UHYVE_PORT_WRITE	= 0x499,
-	UHYVE_PORT_OPEN		= 0x500,
-	UHYVE_PORT_CLOSE	= 0x501,
-	UHYVE_PORT_READ		= 0x502,
-	UHYVE_PORT_EXIT		= 0x503,
-	UHYVE_PORT_LSEEK	= 0x504
-} uhyve_syscall_t;
-
 typedef struct {
 	int fd;
 	const char* buf;

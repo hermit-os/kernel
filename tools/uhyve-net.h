@@ -21,10 +21,7 @@
 #include <sys/ioctl.h>
 #include <err.h>
 
-#include "uhyve-cpu.h"
-
-static char *netif;
-static int netfd;
+extern int netfd;
 
 // UHYVE_PORT_NETINFO
 typedef struct {
