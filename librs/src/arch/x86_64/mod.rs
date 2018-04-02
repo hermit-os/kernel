@@ -44,7 +44,8 @@ pub use arch::x86_64::gdt::set_current_kernel_stack;
 pub use arch::x86_64::percore::PERCORE;
 use arch::x86_64::serial::SerialPort;
 use synch::spinlock::Spinlock;
-
+use utils::is_uhyve;
+use x86::shared::io::*;
 
 const SERIAL_PORT_ADDRESS: u16 = 0xc110; //0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -64,6 +65,14 @@ static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 // FUNCTIONS
 
+/// forward a request to the hypervisor uhyve
+pub fn uhyve_send(port: u16, data: usize)
+{
+	unsafe {
+		outl(port, data as u32);
+	}
+}
+
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
 	percore::init();
@@ -72,26 +81,34 @@ pub fn message_output_init() {
 
 pub fn output_message_byte(byte: u8) {
 	COM1.write_byte(byte);
-	vga::write_byte(byte);
+	if is_uhyve() == false {
+		vga::write_byte(byte);
+	}
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
-	vga::init();
+	if is_uhyve() == false {
+		vga::init();
+	}
 	::mm::init();
 	::mm::print_information();
 	gdt::init();
 	gdt::add_current_core();
 	idt::install();
-	pic::init();
+	if is_uhyve() == false {
+		pic::init();
+	}
 	irq::install();
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
-	pci::init();
-	pci::print_information();
+	if is_uhyve() == false {
+		pci::init();
+		pci::print_information();
+	}
 	apic::init();
 	scheduler::install_timer_handler();
 

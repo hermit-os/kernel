@@ -39,6 +39,7 @@ use mm;
 use scheduler;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
+use utils::is_uhyve;
 
 
 extern "C" {
@@ -340,6 +341,14 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 	Ok(mp_config_header.local_apic_address as usize)
 }
 
+fn detect_from_uhyve() -> Result<usize, ()> {
+	if is_uhyve() == true {
+		return Ok(0xFEE00000 as usize);
+	}
+
+	Err(())
+}
+
 pub fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
@@ -347,7 +356,8 @@ pub fn eoi() {
 pub fn init() {
 	// Detect CPUs and APICs from the MultiProcessor Configuration Table (according to Intel MultiProcessor Specification 1.4).
 	// ACPI is currently not supported.
-	let local_apic_physical_address = detect_from_multiprocessor_specification()
+	let local_apic_physical_address = detect_from_uhyve()
+		.or_else(|_e| detect_from_multiprocessor_specification())
 		.expect("HermitCore requires a MultiProcessor Specification 1.4 compliant system");
 
 	// Initialize x2APIC or xAPIC, depending on what's available.

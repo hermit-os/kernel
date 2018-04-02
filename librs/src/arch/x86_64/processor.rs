@@ -33,6 +33,7 @@ use raw_cpuid::*;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
 use x86::shared::time::*;
+use utils::is_uhyve;
 
 
 extern "C" {
@@ -201,6 +202,7 @@ enum CpuFrequencySources {
 	CpuIdFrequencyInfo,
 	CpuIdBrandString,
 	Measurement,
+	Hypervisor,
 }
 
 impl fmt::Display for CpuFrequencySources {
@@ -210,6 +212,7 @@ impl fmt::Display for CpuFrequencySources {
 			&CpuFrequencySources::CpuIdFrequencyInfo => write!(f, "CPUID Frequency Info"),
 			&CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
 			&CpuFrequencySources::Measurement => write!(f, "Measurement"),
+			&CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -277,12 +280,28 @@ impl CpuFrequency {
 		Err(())
 	}
 
+	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		unsafe {
+				if cpu_freq > 0 {
+					self.mhz = cpu_freq as u16;
+					self.source = CpuFrequencySources::Hypervisor;
+					return Ok(());
+				}
+		}
+
+		Err(())
+	}
+
 	extern "x86-interrupt" fn measure_frequency_timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 		unsafe { MEASUREMENT_TIMER_TICKS += 1; }
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
 	fn measure_frequency(&mut self) -> Result<(), ()> {
+		if is_uhyve() == true {
+			return Err(());
+		}
+
 		// Measure the CPU frequency by counting 3 ticks of a 100Hz timer.
 		let tick_count = 3;
 		let measurement_frequency = 100;
@@ -335,7 +354,8 @@ impl CpuFrequency {
 
 	unsafe fn detect(&mut self) {
 		let cpuid = CpuId::new();
-		self.detect_from_cmdline()
+		self.detect_from_hypervisor()
+			.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_frequency_info(&cpuid))
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 			.or_else(|_e| self.measure_frequency())

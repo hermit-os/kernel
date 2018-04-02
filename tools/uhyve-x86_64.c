@@ -159,7 +159,6 @@ extern size_t guest_size;
 extern pthread_barrier_t barrier;
 extern pthread_t* vcpu_threads;
 extern uint64_t elf_entry;
-extern uint8_t* klog;
 extern bool verbose;
 extern bool full_checkpoint;
 extern uint32_t no_checkpoint;
@@ -732,8 +731,6 @@ int load_checkpoint(uint8_t* mem, char* path)
 	if (verbose)
 		gettimeofday(&begin, NULL);
 
-	if (!klog)
-		klog = mem+paddr+0x5000-GUEST_OFFSET;
 	if (!mboot)
 		mboot = mem+paddr-GUEST_OFFSET;
 
@@ -992,8 +989,6 @@ int load_kernel(uint8_t* mem, char* path)
 		ret = pread_in_full(fd, mem+paddr-GUEST_OFFSET, filesz, offset);
 		if (ret < 0)
 			goto out;
-		if (!klog)
-			klog = mem+paddr+0x5000-GUEST_OFFSET;
 		if (!mboot)
 			mboot = mem+paddr-GUEST_OFFSET;
 
@@ -1042,7 +1037,7 @@ int load_kernel(uint8_t* mem, char* path)
 				*((uint8_t*) (mem+paddr-GUEST_OFFSET + 0xBB)) = (uint8_t) ip[3];
 			}
 
-			*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0xbc)) = guest_mem;
+			//*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0xbc)) = guest_mem;
 		}
 		*((uint64_t*) (mem+paddr-GUEST_OFFSET + 0x38)) += memsz; // total kernel size
 	}

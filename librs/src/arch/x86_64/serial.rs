@@ -23,6 +23,7 @@
 
 use core::sync::atomic::spin_loop_hint;
 use x86::shared::io::*;
+use utils::is_uhyve;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;
@@ -57,6 +58,10 @@ impl SerialPort {
 	}
 
 	fn is_transmitting(&self) -> bool {
+		if is_uhyve() == true {
+			return false;
+		}
+
 		(self.read_from_register(UART_LSR) & UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER == 0)
 	}
 
@@ -78,6 +83,10 @@ impl SerialPort {
 	}
 
 	pub fn init(&self, baudrate: u32) {
+		if is_uhyve() == true {
+			return;
+		}
+
 		// Disable port interrupt.
 		self.write_to_register(UART_IER, 0);
 

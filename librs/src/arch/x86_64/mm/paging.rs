@@ -582,6 +582,15 @@ pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
 	address | offset
 }
 
+pub fn virtual_to_physical(virtual_address: usize) -> usize {
+	if virtual_address >= mm::kernel_start_address() &&
+	   virtual_address < mm::kernel_end_address() {
+		   return get_physical_address::<LargePageSize>(virtual_address);
+	}
+
+	get_physical_address::<BasePageSize>(virtual_address)
+}
+
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
 	debug_mem!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
 

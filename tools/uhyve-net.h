@@ -27,7 +27,7 @@ extern int netfd;
 typedef struct {
 	/* OUT */
 	char mac_str[18];
-} __attribute__((packed)) uhyve_netinfo_t;
+} uhyve_netinfo_t;
 
 // UHYVE_PORT_NETWRITE
 typedef struct {
@@ -36,7 +36,7 @@ typedef struct {
 	size_t len;
 	/* OUT */
 	int ret;
-} __attribute__((packed)) uhyve_netwrite_t;
+} uhyve_netwrite_t;
 
 // UHYVE_PORT_NETREAD
 typedef struct {
@@ -46,13 +46,13 @@ typedef struct {
 	size_t len;
 	/* OUT */
 	int ret;
-} __attribute__((packed)) uhyve_netread_t;
+} uhyve_netread_t;
 
 // UHYVE_PORT_NETSTAT
 typedef struct {
         /* IN */
         int status;
-} __attribute__((packed)) uhyve_netstat_t;
+} uhyve_netstat_t;
 
 int uhyve_net_init(const char *hermit_netif);
 char* uhyve_get_mac(void);

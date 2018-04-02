@@ -25,31 +25,31 @@ typedef struct {
 	int fd;
 	const char* buf;
 	size_t len;
-} __attribute__((packed)) uhyve_write_t;
+} uhyve_write_t;
 
 typedef struct {
 	const char* name;
 	int flags;
 	int mode;
 	int ret;
-} __attribute__((packed)) uhyve_open_t;
+} uhyve_open_t;
 
 typedef struct {
 	int fd;
 	int ret;
-} __attribute__((packed)) uhyve_close_t;
+} uhyve_close_t;
 
 typedef struct {
 	int fd;
 	char* buf;
 	size_t len;
 	ssize_t ret;
-} __attribute__((packed)) uhyve_read_t;
+} uhyve_read_t;
 
 typedef struct {
 	int fd;
 	off_t offset;
 	int whence;
-} __attribute__((packed)) uhyve_lseek_t;
+} uhyve_lseek_t;
 
 #endif // UHYVE_SYSCALLS_H

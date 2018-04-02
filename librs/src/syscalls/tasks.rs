@@ -28,7 +28,7 @@ use core::isize;
 use core::cell::RefCell;
 use errno::*;
 use scheduler;
-use scheduler::task::{Priority,TaskId};
+use scheduler::task::Priority;
 
 pub type signal_handler_t = extern "C" fn(i32);
 pub type tid_t = u32;
@@ -54,11 +54,6 @@ pub extern "C" fn sys_getprio(id: *const tid_t) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_setprio(_id: *const tid_t, _prio: i32) -> i32 {
 	-ENOSYS
-}
-
-#[no_mangle]
-pub extern "C" fn sys_exit(arg: i32) -> ! {
-	core_scheduler().exit(arg);
 }
 
 #[no_mangle]
