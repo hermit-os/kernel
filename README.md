@@ -185,9 +185,7 @@ $ HERMIT_ISLE=qemu /opt/hermit/bin/proxy /opt/hermit/x86_64-hermit/extra/tests/h
 ### As classical standalone unikernel within a virtual machine
 
 HermitCore applications can be directly started as standalone kernel within a
-virtual machine. In this case,
-[iRCCE](http://www.lfbs.rwth-aachen.de/publications/files/iRCCE.pdf ) is not
-supported.
+virtual machine.
 
 ```bash
 $ cd build

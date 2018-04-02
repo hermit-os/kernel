@@ -36,10 +36,6 @@ build_external(libiomp ${HERMIT_ROOT}/usr/libomp ""
 # application will link
 add_dependencies(hermit libiomp)
 
-## iRCCE
-build_external(ircce ${HERMIT_ROOT}/usr/ircce "")
-add_dependencies(hermit ircce)
-
 ## XRay profiler
 build_external(xray ${HERMIT_ROOT}/usr/xray "")
 add_dependencies(hermit xray)
