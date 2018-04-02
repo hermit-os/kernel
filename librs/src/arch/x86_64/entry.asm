@@ -128,7 +128,7 @@ start64:
     cld
 
     ; set default stack pointer
-    mov rsp, [current_stack_address]
+    mov rsp, QWORD [current_stack_address]
     add rsp, (KERNEL_STACK_SIZE - 0x10)
     mov rbp, rsp
 
@@ -225,7 +225,6 @@ SECTION .data
 align 4096
 boot_stack_bottom:
     TIMES KERNEL_STACK_SIZE DB 0xcd
-boot_stack_top:
 
 ; These page tables are used for bootstrapping and normal operation later.
 align 4096

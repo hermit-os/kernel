@@ -74,6 +74,7 @@ mod collections;
 mod console;
 mod drivers;
 mod errno;
+mod utils;
 mod mm;
 mod runtime_glue;
 mod scheduler;
@@ -87,6 +88,7 @@ pub use syscalls::*;
 use arch::percore::*;
 use core::ptr;
 use mm::allocator;
+use utils::is_uhyve;
 
 #[global_allocator]
 static ALLOCATOR: allocator::HermitAllocator = allocator::HermitAllocator;
@@ -141,7 +143,10 @@ pub unsafe extern "C" fn boot_processor_main() {
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();
-	arch::boot_application_processors();
+	if is_uhyve() == false {
+		arch::boot_application_processors();
+	}
+	syscalls::init();
 
 	// Start the initd task.
 	let core_scheduler = core_scheduler();

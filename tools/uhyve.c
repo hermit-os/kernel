@@ -78,7 +78,6 @@ size_t guest_size = 0x20000000ULL;
 bool full_checkpoint = false;
 pthread_barrier_t barrier;
 pthread_t* vcpu_threads = NULL;
-uint8_t* klog = NULL;
 uint8_t* guest_mem = NULL;
 uint32_t no_checkpoint = 0;
 uint32_t ncores = 1;
@@ -101,12 +100,12 @@ typedef struct {
 	int argsz[MAX_ARGC_ENVC];
 	int envc;
 	int envsz[MAX_ARGC_ENVC];
-} __attribute__ ((packed)) uhyve_cmdsize_t;
+} uhyve_cmdsize_t;
 
 typedef struct {
 	char **argv;
 	char **envp;
-} __attribute__ ((packed)) uhyve_cmdval_t;
+} uhyve_cmdval_t;
 
 static uint64_t memparse(const char *ptr)
 {
@@ -179,16 +178,6 @@ static void uhyve_exit(void* arg)
 	close_fd(&vcpufd);
 }
 
-static void dump_log(void)
-{
-	if (klog && verbose)
-	{
-		fputs("\nDump kernel log:\n", stderr);
-		fputs("================\n", stderr);
-		fprintf(stderr, "%s\n", klog);
-	}
-}
-
 static void uhyve_atexit(void)
 {
 	uhyve_exit(NULL);
@@ -205,8 +194,6 @@ static void uhyve_atexit(void)
 
 	if (vcpu_fds)
 		free(vcpu_fds);
-
-	dump_log();
 
 	// clean up and close KVM
 	close_fd(&vmfd);
@@ -314,7 +301,8 @@ static int vcpu_loop(void)
 				raddr = *((unsigned*)((size_t)run+run->io.data_offset));
 			}
 
-			//printf("port 0x%x\n", run->io.port);
+			//if (port != UHYCE_PORT_UART)
+			//	printf("port 0x%x\n", run->io.port);
 			switch (port) {
 			case UHYVE_PORT_WRITE: {
 					uhyve_write_t* uhyve_write = (uhyve_write_t*) (guest_mem+raddr);
@@ -446,6 +434,12 @@ static int vcpu_loop(void)
 					break;
 				}
 
+			case UHYCE_PORT_UART: {
+					if (verbose)
+						fprintf(stderr, "%c", raddr);
+					break;
+				}
+
 			default:
 				err(1, "KVM: unhandled KVM_EXIT_IO / KVM_EXIT_MMIO at port 0x%lx\n", port);
 				break;
@@ -466,7 +460,6 @@ static int vcpu_loop(void)
 
 		case KVM_EXIT_DEBUG:
 			print_registers();
-			dump_log();
 			exit(EXIT_FAILURE);
 
 		default:

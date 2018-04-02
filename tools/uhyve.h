@@ -30,6 +30,7 @@
 
 #include <err.h>
 
+#define UHYCE_PORT_UART			0xc110
 #define UHYVE_PORT_WRITE		0x400
 #define UHYVE_PORT_OPEN			0x440
 #define UHYVE_PORT_CLOSE		0x480
