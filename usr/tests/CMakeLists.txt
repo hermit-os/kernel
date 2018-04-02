@@ -17,9 +17,6 @@ target_link_libraries(test-malloc-mt pthread)
 add_executable(server server.go)
 target_link_libraries(server netgo)
 
-add_executable(RCCE_minimum RCCE_minimum.c)
-target_link_libraries(RCCE_minimum ircce)
-
 add_executable(thr_hello thr_hello.c)
 target_compile_options(thr_hello PRIVATE -pthread)
 target_link_libraries(thr_hello pthread)
