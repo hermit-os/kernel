@@ -22,7 +22,7 @@ add_subdirectory(librs)
 # be relocated for installation
 
 ## HermitCore's own tools such as Qemu/KVM proxy
-build_external(tools ${HERMIT_ROOT}/tools "")
+build_external(proxy ${HERMIT_ROOT}/proxy "")
 build_external(loader ${HERMIT_ROOT}/loader "")
 
 ## Intel's OpenMP runtime for x86 (libomp)
