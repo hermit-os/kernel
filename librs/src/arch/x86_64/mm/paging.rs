@@ -24,6 +24,7 @@
 use arch::x86_64::apic;
 use arch::x86_64::irq;
 use arch::x86_64::mm::physicalmem;
+use arch::x86_64::mm::virtualmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::{fmt, ptr};
@@ -582,13 +583,26 @@ pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
 	address | offset
 }
 
+/// Translate a virtual memory address to a physical one.
+/// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: usize) -> usize {
-	if virtual_address >= mm::kernel_start_address() &&
-	   virtual_address < mm::kernel_end_address() {
-		   return get_physical_address::<LargePageSize>(virtual_address);
+	if virtual_address < mm::kernel_start_address() {
+		// Parts of the memory below the kernel image are identity-mapped.
+		// However, this range should never be used in a virtual_to_physical call.
+		panic!("Trying to get the physical address of {:#X}, which is too low", virtual_address);
+	} else if virtual_address < mm::kernel_end_address() {
+		// The kernel image is mapped in 2 MiB pages.
+		get_physical_address::<LargePageSize>(virtual_address)
+	} else if virtual_address < virtualmem::task_heap_start() {
+		// The kernel memory is mapped in 4 KiB pages.
+		get_physical_address::<BasePageSize>(virtual_address)
+	} else if virtual_address < virtualmem::task_heap_end() {
+		// The application memory is mapped in 2 MiB pages.
+		get_physical_address::<LargePageSize>(virtual_address)
+	} else {
+		// This range is currently unused by HermitCore.
+		panic!("Trying to get the physical address of {:#X}, which is too high", virtual_address);
 	}
-
-	get_physical_address::<BasePageSize>(virtual_address)
 }
 
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
