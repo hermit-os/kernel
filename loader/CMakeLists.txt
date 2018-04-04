@@ -6,7 +6,7 @@ project(loader C ASM_NASM)
 set(LOADER_RS "${CMAKE_BINARY_DIR}/loader/x86_64-hermit/release/libhermit_loader.a")
 add_custom_target(loader_rs
 	COMMAND
-		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/loader RUST_TARGET_PATH=`pwd`
+		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/loader RUST_TARGET_PATH=`pwd`/../target
 		xargo build --release --target x86_64-hermit
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
