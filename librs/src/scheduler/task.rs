@@ -100,7 +100,7 @@ pub const LOW_PRIO: Priority = Priority::from(1);
 pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
-pub const NO_PRIORITIES: usize = 4;
+pub const NO_PRIORITIES: usize = 31;
 
 /// Realize a priority queue for tasks
 pub struct PriorityTaskQueue {

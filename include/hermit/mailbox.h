@@ -58,8 +58,8 @@ extern "C" {
 	\
 		sys_sem_destroy(m->mails); \
 		sys_sem_destroy(m->boxes); \
-		sys_spinlock_destroy(&m->rlock); \
-		sys_spinlock_destroy(&m->wlock); \
+		sys_spinlock_destroy(m->rlock); \
+		sys_spinlock_destroy(m->wlock); \
 	\
 		return 0; \
 	} \
@@ -68,11 +68,11 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m, 0)) \
 			return -EINVAL; \
 	\
-		sys_sem_wait(m->boxes); \
-		sys_spinlock_lock(&m->wlock); \
+		sys_sem_timedwait(m->boxes, 0); \
+		sys_spinlock_lock(m->wlock); \
 		m->buffer[m->wpos] = mail; \
 		m->wpos = (m->wpos+1) % MAILBOX_SIZE; \
-		sys_spinlock_unlock(&m->wlock); \
+		sys_spinlock_unlock(m->wlock); \
 		sys_sem_post(m->mails); \
 	\
 		return 0; \
@@ -84,10 +84,10 @@ extern "C" {
 	\
 		if (sys_sem_trywait(m->boxes)) \
 			return -EBUSY; \
-		sys_spinlock_lock(&m->wlock); \
+		sys_spinlock_lock(m->wlock); \
 		m->buffer[m->wpos] = mail; \
 		m->wpos = (m->wpos+1) % MAILBOX_SIZE; \
-		sys_spinlock_unlock(&m->wlock); \
+		sys_spinlock_unlock(m->wlock); \
 		sys_sem_post(m->mails); \
 	\
 		return 0; \
@@ -99,16 +99,12 @@ extern "C" {
 		if (BUILTIN_EXPECT(!m || !mail, 0)) \
 			return -EINVAL; \
 	\
-		if (ms == 0) \
-			err = sys_sem_wait(m->mails); \
-		else \
-			err = sys_sem_timedwait(m->mails, ms); \
-	\
-		if (err) return err; \
-		sys_spinlock_lock(&m->rlock); \
+		err = sys_sem_timedwait(m->mails, ms); \
+		if (err) return SYS_ARCH_TIMEOUT; \
+		sys_spinlock_lock(m->rlock); \
 		*mail = m->buffer[m->rpos]; \
 		m->rpos = (m->rpos+1) % MAILBOX_SIZE; \
-		sys_spinlock_unlock(&m->rlock); \
+		sys_spinlock_unlock(m->rlock); \
 		sys_sem_post(m->boxes); \
 	\
 		return 0; \
@@ -120,22 +116,15 @@ extern "C" {
 	\
 		if (sys_sem_trywait(m->mails) != 0) \
 			return -EINVAL; \
-		sys_spinlock_lock(&m->rlock); \
+		sys_spinlock_lock(m->rlock); \
 		*mail = m->buffer[m->rpos]; \
 		m->rpos = (m->rpos+1) % MAILBOX_SIZE; \
-		sys_spinlock_unlock(&m->rlock); \
+		sys_spinlock_unlock(m->rlock); \
 		sys_sem_post(m->boxes); \
 	\
 		return 0; \
 	}\
 
-MAILBOX(wait_msg, wait_msg_t)
-MAILBOX(int32, int32_t)
-MAILBOX(int16, int16_t)
-MAILBOX(int8, int8_t)
-MAILBOX(uint32, uint32_t)
-MAILBOX(uint16, uint16_t)
-MAILBOX(uint8, uint8_t)
 MAILBOX(ptr, void*)
 
 #ifdef __cplusplus

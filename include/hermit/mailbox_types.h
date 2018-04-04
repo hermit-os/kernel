@@ -60,13 +60,6 @@ typedef struct {
 		HermitSpinlock* wlock; \
 	} mailbox_##name##_t;
 
-MAILBOX_TYPES(wait_msg, wait_msg_t)
-MAILBOX_TYPES(int32, int32_t)
-MAILBOX_TYPES(int16, int16_t)
-MAILBOX_TYPES(int8, int8_t)
-MAILBOX_TYPES(uint32, uint32_t)
-MAILBOX_TYPES(uint16, uint16_t)
-MAILBOX_TYPES(uint8, uint8_t)
 MAILBOX_TYPES(ptr, void*)
 
 #ifdef __cplusplus

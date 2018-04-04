@@ -101,6 +101,7 @@ extern "C" {
 	static kernel_end: u8;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
+    fn init_lwip();
 }
 
 // FUNCTIONS
@@ -124,6 +125,9 @@ extern "C" fn initd(_arg: usize) {
 	// TODO: Setup Heap
 	// TODO: Setup Networking
 	// TODO: argc, argv, environ
+
+	// initialize LwIP library
+	unsafe { init_lwip(); }
 
 	let argc = 0;
 	let argv = 0 as *mut *mut u8;

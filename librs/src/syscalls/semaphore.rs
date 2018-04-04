@@ -52,11 +52,6 @@ pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_wait(sem: *const Semaphore) -> i32 {
-	sys_sem_timedwait(sem, 0)
-}
-
-#[no_mangle]
 pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;

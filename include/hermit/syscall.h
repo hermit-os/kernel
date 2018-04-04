@@ -98,10 +98,10 @@ int sys_recmutex_lock(HermitRecursiveMutex* recmutex);
 int sys_recmutex_unlock(HermitRecursiveMutex* recmutex);
 int sys_sem_init(HermitSemaphore** sem, unsigned int value);
 int sys_sem_destroy(HermitSemaphore* sem);
-int sys_sem_wait(HermitSemaphore* sem);
 int sys_sem_post(HermitSemaphore* sem);
 int sys_sem_trywait(HermitSemaphore* sem);
 int sys_sem_timedwait(HermitSemaphore *sem, unsigned int ms);
+#define sys_sem_wait(sem)	sys_sem_timedwait(sem, 0)
 int sys_sem_cancelablewait(HermitSemaphore* sem, unsigned int ms);
 int sys_spinlock_init(HermitSpinlock** lock);
 int sys_spinlock_destroy(HermitSpinlock* lock);
@@ -115,9 +115,6 @@ int sys_spawn(tid_t* id, entry_point_t func, void* arg, unsigned char prio, unsi
 int sys_clone(tid_t* id, void* ep, void* argv);
 off_t sys_lseek(int fd, off_t offset, int whence);
 size_t sys_get_ticks(void);
-int sys_rcce_init(int session_id);
-size_t sys_rcce_malloc(int session_id, int ue);
-int sys_rcce_fini(int session_id);
 void sys_yield(void);
 int sys_kill(tid_t dest, int signum);
 int sys_signal(signal_handler_t handler);
@@ -161,31 +158,6 @@ int setcontext(ucontext_t *ucp);
 #define __NR_clone		27
 #define __NR_sem_cancelablewait	28
 #define __NR_get_ticks		29
-
-#ifndef __KERNEL__
-inline static long
-syscall(int nr, unsigned long arg0, unsigned long arg1, unsigned long arg2)
-{
-	long res;
-
-	// note: syscall stores the return address in rcx and rflags in r11
-	asm volatile ("syscall"
-		: "=a" (res)
-		: "a" (nr), "D" (arg0), "S" (arg1), "d" (arg2)
-		: "memory", "%rcx", "%r11");
-
-	return res;
-}
-
-#define SYSCALL0(NR) \
-	syscall(NR, 0, 0, 0)
-#define SYSCALL1(NR, ARG0) \
-	syscall(NR, (unsigned long)ARG0, 0, 0)
-#define SYSCALL2(NR, ARG0, ARG1) \
-	syscall(NR, (unsigned long)ARG0, (unsigned long)ARG1, 0)
-#define SYSCALL3(NR, ARG0, ARG1, ARG2) \
-	syscall(NR, (unsigned long)ARG0, (unsigned long)ARG1, (unsigned long)ARG2)
-#endif // __KERNEL__
 
 #ifdef __cplusplus
 }
