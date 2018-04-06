@@ -34,6 +34,7 @@ pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
+#[cfg(feature = "vga")]
 pub mod vga;
 
 pub use arch::x86_64::apic::get_core_id_for_cpu_number;
@@ -81,7 +82,8 @@ pub fn message_output_init() {
 
 pub fn output_message_byte(byte: u8) {
 	COM1.write_byte(byte);
-	if is_uhyve() == false {
+	if cfg!(feature = "vga") && is_uhyve() == false {
+		#[cfg(feature = "vga")]
 		vga::write_byte(byte);
 	}
 }
@@ -90,7 +92,8 @@ pub fn output_message_byte(byte: u8) {
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
-	if is_uhyve() == false {
+	if cfg!(feature = "vga") && is_uhyve() == false {
+		#[cfg(feature = "vga")]
 		vga::init();
 	}
 	::mm::init();
