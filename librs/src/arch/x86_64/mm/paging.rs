@@ -605,6 +605,11 @@ pub fn virtual_to_physical(virtual_address: usize) -> usize {
 	}
 }
 
+#[no_mangle]
+pub extern "C" fn virt_to_phys(virtual_address: usize) -> usize {
+	virtual_to_physical(virtual_address)
+}
+
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
 	debug_mem!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
 
