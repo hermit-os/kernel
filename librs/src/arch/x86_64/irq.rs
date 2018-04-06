@@ -157,8 +157,21 @@ pub fn install() {
 	idt::set_gate(29, reserved_exception as usize, 1);
 	idt::set_gate(30, reserved_exception as usize, 1);
 	idt::set_gate(31, reserved_exception as usize, 1);
+
+	for i in 32..idt::IDT_ENTRIES {
+		idt::set_gate(i as u8, unhandled_interrupt as usize, 1);
+	}
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
+{
+	idt::set_gate(irq_number as u8, handler, 1);
+}
+
+extern "x86-interrupt" fn unhandled_interrupt(stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt");
+}
 
 extern "x86-interrupt" fn divide_error_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Divide Error (#DE) Exception: {:#?}", stack_frame);
