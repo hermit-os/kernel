@@ -96,9 +96,6 @@ add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv4/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv6/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/netif/*.c")
 
-# libkern needed for LwIP
-add_kernel_module_sources("libkern" "${CMAKE_SOURCE_DIR}/libkern/*.c")
-
 # Support for Go applications that currently cannot be implemented in Rust
 add_kernel_module_sources("libgosupport_asm" "${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
 add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/context.c")
