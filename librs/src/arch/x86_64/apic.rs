@@ -24,6 +24,7 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
+use core::fmt;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::idt;
@@ -61,6 +62,13 @@ const APIC_ICR_LEVEL_ASSERT: u64            = 1 << 14;
 const APIC_LVT_MASK: u64                    = 1 << 16;
 const APIC_SIVR_ENABLED: u64                = 1 << 8;
 
+/// Register index: ID
+const IOAPIC_REG_ID: u32					= 0x0000;
+/// Register index: version
+const IOAPIC_REG_VER: u32					= 0x0001;
+/// Redirection table base
+const IOAPIC_REG_TABLE: u32					= 0x0010;
+
 const TLB_FLUSH_INTERRUPT_NUMBER: u8 = 112;
 const WAKEUP_INTERRUPT_NUMBER: u8    = 121;
 pub const TIMER_INTERRUPT_NUMBER: u8 = 123;
@@ -79,6 +87,7 @@ const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x04;
 const X2APIC_ENABLE: u64 = 1 << 10;
 
 static mut LOCAL_APIC_ADDRESS: usize = 0;
+static mut IOAPIC_ADDRESS: usize = 0;
 
 /// Stores the Local APIC IDs of all CPUs.
 /// As Rust currently implements no way of zero-initializing a global Vec in a no_std environment,
@@ -148,6 +157,24 @@ struct IoApicEntry {
 	version: u8,
 	flags: u8,
 	address: u32,
+}
+
+impl fmt::Display for IoApicEntry {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ entry type: {}, ", self.entry_type)?;
+		write!(f, "id: {}, ", self.id)?;
+		write!(f, "version: {}, ", self.version)?;
+		write!(f, "flags: {}, ", self.flags)?;
+		write!(f, "address: 0x{:x} }}", self.address)
+	}
+}
+
+/// IO APIC MMIO structure: write reg, then read or write data.
+#[repr(C)]
+struct IRQ_REDIRECT {
+	reg: u32,
+	pad: [u32; 3],
+	data: u32
 }
 
 #[derive(Debug)]
@@ -268,6 +295,10 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 		CPU_LOCAL_APIC_IDS.as_mut().unwrap()
 	};
 
+	let current_address_orig = current_address;
+
+	current_address = current_address_orig;
+
 	// Loop through all table entries.
 	for _i in 0..mp_config_header.entry_count {
 		// Have we crossed a page boundary in the last iteration?
@@ -312,7 +343,20 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 			&2 => {
 				// I/O APIC
 				let ioapic = unsafe { & *(current_address as *const IoApicEntry) };
-				debug!("Found I/O APIC entry: {:?}", ioapic);
+				debug!("Found I/O APIC entry: {}", ioapic);
+
+				unsafe {
+					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
+					debug!("Mapping IOAPIC at {:#X} to virtual address {:#X}", ioapic.address, IOAPIC_ADDRESS);
+
+					paging::map::<BasePageSize>(
+						IOAPIC_ADDRESS,
+						ioapic.address as usize,
+						1,
+						PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE,
+						false
+					);
+				}
 
 				current_address += mem::size_of::<IoApicEntry>();
 			},
@@ -349,7 +393,8 @@ fn detect_from_uhyve() -> Result<usize, ()> {
 	Err(())
 }
 
-pub fn eoi() {
+#[no_mangle]
+pub extern "C" fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
 
@@ -391,6 +436,59 @@ pub fn init() {
 
 	// Calibrate the APIC Timer once and use the calibration value for all CPUs.
 	calibrate_timer();
+
+	// init ioapic
+	init_ioapic();
+}
+
+fn init_ioapic() {
+	let max_entry = ioapic_max_redirection_entry()+1;
+	info!("IOAPIC has {} entries", max_entry);
+
+	// now lets turn everything else on
+	for i in 0..max_entry {
+		if i != 2 {
+			ioapic_inton(i, 0 /*apic_processors[boot_processor]->id*/).unwrap();
+		} else {
+			// now, we don't longer need the IOAPIC timer and turn it off
+			info!("Disable IOAPIC timer");
+			ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
+		}
+	}
+}
+
+fn ioapic_inton(irq: u8, apicid: u8) -> Result<(), ()>
+{
+	if irq > 24 {
+		error!("IOAPIC: trying to turn on irq {} which is too high\n", irq);
+		return Err(());
+	}
+
+	let off = (irq*2) as u32;
+	let ioredirect_upper: u32 = (apicid as u32) << 24;
+	let ioredirect_lower: u32 = (0x20+irq) as u32;
+
+	ioapic_write(IOAPIC_REG_TABLE+off, ioredirect_lower);
+	ioapic_write(IOAPIC_REG_TABLE+1+off, ioredirect_upper);
+
+	Ok(())
+}
+
+fn ioapic_intoff(irq: u32, apicid: u32) -> Result<(), ()>
+{
+	if irq > 24 {
+		error!("IOAPIC: trying to turn off irq {} which is too high\n", irq);
+		return Err(());
+	}
+
+	let off = (irq*2) as u32;
+	let ioredirect_upper: u32 = ((apicid as u32) << 24) | (1 << 16); // turn it off (start masking)
+	let ioredirect_lower: u32 = (0x20+irq) as u32;
+
+	ioapic_write(IOAPIC_REG_TABLE+off, ioredirect_lower);
+	ioapic_write(IOAPIC_REG_TABLE+1+off, ioredirect_upper);
+
+	Ok(())
 }
 
 pub fn init_local_apic() {
@@ -403,6 +501,9 @@ pub fn init_local_apic() {
 
 	// Set the interrupt number of the Error interrupt.
 	local_apic_write(IA32_X2APIC_LVT_ERROR, ERROR_INTERRUPT_NUMBER as u64);
+
+	// allow all interrupts
+	local_apic_write(IA32_X2APIC_TPR, 0x00);
 
 	// Finally, enable the Local APIC by setting the interrupt number for spurious interrupts
 	// and providing the enable bit.
@@ -576,6 +677,32 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 	} else {
 		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *const u32) }
 	}
+}
+
+fn ioapic_write(reg: u32, value: u32)
+{
+	let ioapic = unsafe { &mut *((IOAPIC_ADDRESS) as *mut IoApicReg) };
+
+	ioapic.reg = reg;
+	ioapic.data = value;
+}
+
+fn ioapic_read(reg: u32) -> u32
+{
+	let ioapic = unsafe { &mut *((IOAPIC_ADDRESS) as *mut IoApicReg) };
+
+	ioapic.reg = reg;
+	ioapic.data
+}
+
+fn ioapic_version() -> u32
+{
+	ioapic_read(IOAPIC_REG_VER) & 0xFF
+}
+
+fn ioapic_max_redirection_entry() -> u8
+{
+	((ioapic_read(IOAPIC_REG_VER) >> 16) & 0xFF) as u8
 }
 
 fn local_apic_write(x2apic_msr: u32, value: u64) {

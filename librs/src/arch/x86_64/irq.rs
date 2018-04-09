@@ -23,6 +23,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::idt;
+use arch::x86_64::apic;
 use arch::x86_64::mm::paging;
 use arch::x86_64::percore::*;
 use core::fmt;
@@ -116,6 +117,41 @@ pub fn nested_enable(was_enabled: bool) {
 	}
 }
 
+extern {
+	fn irq0();
+	fn irq1();
+	fn irq2();
+	fn irq3();
+	fn irq4();
+	fn irq5();
+	fn irq6();
+	fn irq7();
+	fn irq8();
+	fn irq9();
+	fn irq10();
+	fn irq11();
+	fn irq12();
+	fn irq13();
+	fn irq14();
+	fn irq15();
+	fn irq16();
+	fn irq17();
+	fn irq18();
+	fn irq19();
+	fn irq20();
+	fn irq21();
+	fn irq22();
+	fn irq23();
+	fn irq24();
+	fn irq25();
+	fn irq26();
+	fn irq27();
+	fn irq28();
+	fn irq29();
+	fn irq30();
+	fn irq31();
+}
+
 pub fn install() {
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
 	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
@@ -158,19 +194,60 @@ pub fn install() {
 	idt::set_gate(30, reserved_exception as usize, 1);
 	idt::set_gate(31, reserved_exception as usize, 1);
 
-	for i in 32..idt::IDT_ENTRIES {
-		idt::set_gate(i as u8, unhandled_interrupt as usize, 1);
+	idt::set_gate(32, irq0 as usize, 1);
+	idt::set_gate(33, irq1 as usize, 1);
+	idt::set_gate(34, irq2 as usize, 1);
+	idt::set_gate(35, irq3 as usize, 1);
+	idt::set_gate(36, irq4 as usize, 1);
+	idt::set_gate(37, irq5 as usize, 1);
+	idt::set_gate(38, irq6 as usize, 1);
+	idt::set_gate(39, irq7 as usize, 1);
+	idt::set_gate(40, irq8 as usize, 1);
+	idt::set_gate(41, irq9 as usize, 1);
+	idt::set_gate(42, irq10 as usize, 1);
+	idt::set_gate(43, irq11 as usize, 1);
+	idt::set_gate(44, irq12 as usize, 1);
+	idt::set_gate(45, irq13 as usize, 1);
+	idt::set_gate(46, irq14 as usize, 1);
+	idt::set_gate(47, irq15 as usize, 1);
+	idt::set_gate(48, irq16 as usize, 1);
+	idt::set_gate(49, irq17 as usize, 1);
+	idt::set_gate(50, irq18 as usize, 1);
+	idt::set_gate(51, irq19 as usize, 1);
+	idt::set_gate(52, irq20 as usize, 1);
+	idt::set_gate(53, irq21 as usize, 1);
+	idt::set_gate(54, irq22 as usize, 1);
+	idt::set_gate(55, irq23 as usize, 1);
+	idt::set_gate(56, irq24 as usize, 1);
+	idt::set_gate(57, irq25 as usize, 1);
+	idt::set_gate(58, irq26 as usize, 1);
+	idt::set_gate(59, irq27 as usize, 1);
+	idt::set_gate(60, irq28 as usize, 1);
+	idt::set_gate(61, irq29 as usize, 1);
+	idt::set_gate(62, irq30 as usize, 1);
+	idt::set_gate(63, irq31 as usize, 1);
+
+	for i in 64..idt::IDT_ENTRIES {
+		idt::set_gate(i as u8, unknown_interrupt as usize, 1);
 	}
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
+pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 {
-	idt::set_gate(irq_number as u8, handler, 1);
+	info!("Install handler for interrupt {}", irq_number);
+	idt::set_gate((32+irq_number) as u8, handler, 1);
 }
 
-extern "x86-interrupt" fn unhandled_interrupt(stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt");
+#[no_mangle]
+pub extern "C" fn unhandled_interrupt(irq_number: u64) {
+	info!("Receive unhandled interrupt {}", irq_number);
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unknown_interrupt(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unknown interrupt");
+	apic::eoi();
 }
 
 extern "x86-interrupt" fn divide_error_exception(stack_frame: &mut ExceptionStackFrame) {
