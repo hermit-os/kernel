@@ -33,7 +33,7 @@ pub trait SyscallInterface : Send + Sync {
 		core_scheduler().exit(arg);
 	}
 
-	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
+	fn open(&self, _name: *const u8, _flags: i32, _mode: i32) -> i32 {
 		debug!("open is unimplemented, returning -ENOSYS");
 		-ENOSYS
 	}
@@ -48,7 +48,7 @@ pub trait SyscallInterface : Send + Sync {
 		-EINVAL
 	}
 
-	fn read(&self, fd: i32, buf: *mut u8, len: usize) -> isize {
+	fn read(&self, _fd: i32, _buf: *mut u8, _len: usize) -> isize {
 		debug!("read is unimplemented, returning -ENOSYS");
 		-ENOSYS as isize
 	}
@@ -69,12 +69,12 @@ pub trait SyscallInterface : Send + Sync {
 		len as isize
 	}
 
-	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
+	fn lseek(&self, _fd: i32, _offset: isize, _whence: i32) -> isize {
 		debug!("lseek is unimplemented");
 		-ENOSYS as isize
 	}
 
-	fn stat(&self, file: *const u8, st: usize) -> i32 {
+	fn stat(&self, _file: *const u8, _st: usize) -> i32 {
 		debug!("stat is unimplemented");
 		-ENOSYS
 	}

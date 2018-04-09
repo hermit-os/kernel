@@ -72,7 +72,6 @@ mod logging;
 mod arch;
 mod collections;
 mod console;
-mod drivers;
 mod errno;
 mod utils;
 mod mm;
@@ -86,6 +85,7 @@ pub use arch::*;
 pub use syscalls::*;
 
 use arch::percore::*;
+use processor::get_frequency;
 use core::ptr;
 use mm::allocator;
 use utils::is_uhyve;
@@ -102,6 +102,7 @@ extern "C" {
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 	fn init_lwip();
+	fn init_rtl8139_netif(freq: u32) -> i32;
 	fn init_uhyve_netif() -> i32;
 }
 
@@ -123,10 +124,6 @@ unsafe fn sections_init() {
 }
 
 extern "C" fn initd(_arg: usize) {
-	// TODO: Setup Heap
-	// TODO: Setup Networking
-	// TODO: argc, argv, environ
-
 	// initialize LwIP library
 	unsafe { init_lwip(); }
 
@@ -134,12 +131,23 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running on uhyve!");
 
 		unsafe { init_uhyve_netif(); }
-	}
 
-	let argc = 0;
-	let argv = 0 as *mut *mut u8;
-	let environ = 0 as *mut *mut u8;
-	unsafe { libc_start(argc, argv, environ); }
+		let argc = 0;
+		let argv = 0 as *mut *mut u8;
+		let environ = 0 as *mut *mut u8;
+
+		unsafe { libc_start(argc, argv, environ); }
+	} else {
+		let err;
+
+		unsafe { err = init_rtl8139_netif(get_frequency() as u32); }
+
+		let argc = 0;
+		let argv = 0 as *mut *mut u8;
+		let environ = 0 as *mut *mut u8;
+
+		unsafe { libc_start(argc, argv, environ); }
+	}
 }
 
 /// Entry Point of HermitCore for the Boot Processor

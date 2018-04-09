@@ -60,7 +60,6 @@ pub fn install() {
 /// * `handler`   - Handler function to call for this interrupt/exception.
 /// * `ist_index` - Index of the Interrupt Stack Table (IST) to switch to.
 ///                 A zero value means that the stack won't be switched, a value of 1 refers to the first IST entry, etc.
-#[inline]
 pub fn set_gate(index: u8, handler: usize, ist_index: u8)
 {
 	let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, PrivilegeLevel::Ring0);
