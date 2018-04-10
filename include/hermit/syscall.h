@@ -71,6 +71,14 @@ typedef struct _HermitSpinlockIrqSave HermitSpinlockIrqSave;
 typedef void (*entry_point_t)(void*);
 typedef void (*signal_handler_t)(int);
 
+
+/* Task priorities */
+#define HIGH_PRIO	3
+#define NORMAL_PRIO	2
+#define LOW_PRIO	1
+#define IDLE_PRIO	0
+
+
 /*
  * HermitCore is a libOS.
  * => classical system calls are realized as normal function
