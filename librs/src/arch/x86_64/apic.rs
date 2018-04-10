@@ -25,6 +25,8 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
 use core::fmt;
+use core::ptr::read_volatile;
+use core::ptr::write_volatile;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::idt;
@@ -167,14 +169,6 @@ impl fmt::Display for IoApicEntry {
 		write!(f, "flags: {}, ", self.flags)?;
 		write!(f, "address: 0x{:x} }}", self.address)
 	}
-}
-
-/// IO APIC MMIO structure: write reg, then read or write data.
-#[repr(C)]
-struct IRQ_REDIRECT {
-	reg: u32,
-	pad: [u32; 3],
-	data: u32
 }
 
 #[derive(Debug)]
@@ -482,8 +476,8 @@ fn ioapic_intoff(irq: u32, apicid: u32) -> Result<(), ()>
 	}
 
 	let off = (irq*2) as u32;
-	let ioredirect_upper: u32 = ((apicid as u32) << 24) | (1 << 16); // turn it off (start masking)
-	let ioredirect_lower: u32 = (0x20+irq) as u32;
+	let ioredirect_upper: u32 = ((apicid as u32) << 24);
+	let ioredirect_lower: u32 = ((0x20+irq) as u32) | (1 << 16); // turn it off (start masking)
 
 	ioapic_write(IOAPIC_REG_TABLE+off, ioredirect_lower);
 	ioapic_write(IOAPIC_REG_TABLE+1+off, ioredirect_upper);
@@ -681,18 +675,22 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32)
 {
-	let ioapic = unsafe { &mut *((IOAPIC_ADDRESS) as *mut IoApicReg) };
-
-	ioapic.reg = reg;
-	ioapic.data = value;
+	unsafe {
+		ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
+		ptr::write_volatile((IOAPIC_ADDRESS + 4*mem::size_of::<u32>()) as *mut u32, value);
+	}
 }
 
 fn ioapic_read(reg: u32) -> u32
 {
-	let ioapic = unsafe { &mut *((IOAPIC_ADDRESS) as *mut IoApicReg) };
+	let value;
 
-	ioapic.reg = reg;
-	ioapic.data
+	unsafe {
+		ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
+		value = ptr::read_volatile((IOAPIC_ADDRESS + 4*mem::size_of::<u32>()) as *const u32);
+	}
+
+	value
 }
 
 fn ioapic_version() -> u32
