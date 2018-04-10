@@ -82,13 +82,19 @@ int main(int argc, char** argv)
 	// Start the second task with the same priority on the boot processor.
 	sys_spawn(NULL, second_task, NULL, HIGH_PRIO, 0);
 
-	// Do the benchmark.
+	// Initialize the benchmark.
 	printf("taskswitch test\n");
 	printf("===============\n");
 
 	finished = false;
 	sum = 0;
 
+	// Warm up
+	sys_yield();
+	sys_yield();
+
+	// Run the benchmark.
+	sum = 0;
 	for(i = 0; i < N; i++)
 	{
 #ifdef DEBUG_MESSAGES
