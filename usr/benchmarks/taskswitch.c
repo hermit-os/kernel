@@ -21,9 +21,36 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+///////////////////////////////////////
+//// HERMITCORE RUST-SPECIFIC CODE ////
+
+#include <hermit/syscall.h>
+
+inline static void create_second_task(void (*entry_point)(void*))
+{
+	sys_spawn(NULL, entry_point, NULL, HIGH_PRIO, 0);
+}
+
+inline static void consume_task_time(void)
+{
+	// Spending >10ms in the second task guarantees that the scheduler
+	// switches back to the first task on sys_yield().
+	// Calling sys_msleep(ms) with ms < 10 enforces busy-waiting!
+	sys_msleep(6);
+	sys_msleep(6);
+}
+
+inline static void switch_task(void)
+{
+	sys_yield();
+}
+
+
+///////////////////////////////////
+//// THE ACTUAL BENCHMARK CODE ////
+
 #include <stdbool.h>
 #include <stdio.h>
-#include <hermit/syscall.h>
 
 // You can enable this for debugging without any effect on the measurement.
 //#define DEBUG_MESSAGES
@@ -39,7 +66,6 @@ inline static unsigned long long rdtsc(void)
 	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
 	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
 }
-
 
 void second_task(void* arg)
 {
@@ -61,16 +87,12 @@ void second_task(void* arg)
 		printf("Hello from task 2\n");
 #endif
 
-		// Spending >10ms in the second task guarantees that the scheduler
-		// switches back to the first task on sys_yield().
-		// Calling sys_msleep(ms) with ms < 10 enforces busy-waiting!
-		sys_msleep(6);
-		sys_msleep(6);
+		consume_task_time();
 
 		// Save the current Time Stamp Counter value and switch back to the
 		// first task.
 		start = rdtsc();
-		sys_yield();
+		switch_task();
 	}
 }
 
@@ -80,7 +102,7 @@ int main(int argc, char** argv)
 	unsigned long long end;
 
 	// Start the second task with the same priority on the boot processor.
-	sys_spawn(NULL, second_task, NULL, HIGH_PRIO, 0);
+	create_second_task(second_task);
 
 	// Initialize the benchmark.
 	printf("taskswitch test\n");
@@ -90,8 +112,8 @@ int main(int argc, char** argv)
 	sum = 0;
 
 	// Warm up
-	sys_yield();
-	sys_yield();
+	switch_task();
+	switch_task();
 
 	// Run the benchmark.
 	sum = 0;
@@ -101,16 +123,12 @@ int main(int argc, char** argv)
 		printf("Hello from task 1\n");
 #endif
 
-		// Spending >10ms in the first task guarantees that the scheduler
-		// switches to the second task on sys_yield().
-		// Calling sys_msleep(ms) with ms < 10 enforces busy-waiting!
-		sys_msleep(6);
-		sys_msleep(6);
+		consume_task_time();
 
 		// Save the current Time Stamp Counter value and switch to the second
 		// task.
 		start = rdtsc();
-		sys_yield();
+		switch_task();
 
 		// Calculate the cycle difference and add it to the sum.
 		end = rdtsc();
@@ -125,7 +143,7 @@ int main(int argc, char** argv)
 
 	// Finish the second task gracefully.
 	finished = true;
-	sys_yield();
+	switch_task();
 
 	return 0;
 }
