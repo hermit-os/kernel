@@ -281,12 +281,10 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		unsafe {
-				if cpu_freq > 0 {
-					self.mhz = cpu_freq as u16;
-					self.source = CpuFrequencySources::Hypervisor;
-					return Ok(());
-				}
+		if cpu_freq > 0 {
+			self.mhz = cpu_freq as u16;
+			self.source = CpuFrequencySources::Hypervisor;
+			return Ok(());
 		}
 
 		Err(())

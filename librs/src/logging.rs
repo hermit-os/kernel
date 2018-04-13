@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+	// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
 //               2017 Colin Finck, RWTH Aachen University
 //
 // MIT License
@@ -30,27 +30,27 @@ pub enum LogLevel {
 	/// Disable all our put messages
 	///
 	/// Designates without information
-	DISABLED = 0,
+	Disabled = 0,
 	/// The "error" level.
 	///
 	/// Designates very serious errors.
-	ERROR,
+	Error,
 	/// The "warn" level.
 	///
 	/// Designates hazardous situations.
-	WARNING,
+	Warning,
 	/// The "info" level.
 	///
 	/// Designates useful information.
-	INFO,
+	Info,
 	// The "debug" level.
 	///
 	/// Designates lower priority information.
-	DEBUG,
+	Debug,
 	// The "debug_mem" level.
 	///
 	/// Designates lower priority information of the memory management (high frequency!).
-	DEBUG_MEM,
+	DebugMem,
 }
 
 /// Data structures to filter kernel messages
@@ -59,7 +59,7 @@ pub struct KernelLogger {
 }
 
 /// default logger to handle kernel messages
-pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::DEBUG };
+pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::Debug };
 
 
 macro_rules! printlog {
@@ -74,7 +74,7 @@ macro_rules! printlog {
 
 /// Print formatted info text to our console, followed by a newline.
 macro_rules! info {
-	($($arg:tt)+) => (printlog!("INFO", $crate::logging::LogLevel::INFO, $($arg)+));
+	($($arg:tt)+) => (printlog!("INFO", $crate::logging::LogLevel::Info, $($arg)+));
 }
 
 macro_rules! infoheader {
@@ -104,20 +104,20 @@ macro_rules! infofooter {
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! warn {
-	($($arg:tt)+) => (printlog!("WARNING", $crate::logging::LogLevel::WARNING, $($arg)+));
+	($($arg:tt)+) => (printlog!("WARNING", $crate::logging::LogLevel::Warning, $($arg)+));
 }
 
 /// Print formatted warnings to our console, followed by a newline.
 macro_rules! error {
-	($($arg:tt)+) => (printlog!("ERROR", $crate::logging::LogLevel::ERROR, $($arg)+));
+	($($arg:tt)+) => (printlog!("ERROR", $crate::logging::LogLevel::Error, $($arg)+));
 }
 
 /// Print formatted debug messages to our console, followed by a newline.
 macro_rules! debug {
-	($($arg:tt)+) => (printlog!("DEBUG", $crate::logging::LogLevel::DEBUG, $($arg)+));
+	($($arg:tt)+) => (printlog!("DEBUG", $crate::logging::LogLevel::Debug, $($arg)+));
 }
 
 /// Print formatted debug messages to our console, followed by a newline.
 macro_rules! debug_mem {
-	($($arg:tt)+) => (printlog!("DEBUG_MEM", $crate::logging::LogLevel::DEBUG_MEM, $($arg)+));
+	($($arg:tt)+) => (printlog!("DEBUG_MEM", $crate::logging::LogLevel::DebugMem, $($arg)+));
 }

@@ -23,25 +23,23 @@
 
 use arch;
 use arch::percore::*;
-use alloc::rc::Rc;
 use core::isize;
-use core::cell::RefCell;
 use errno::*;
 use scheduler;
 use scheduler::task::Priority;
 
-pub type signal_handler_t = extern "C" fn(i32);
-pub type tid_t = u32;
+pub type SignalHandler = extern "C" fn(i32);
+pub type Tid = u32;
 
 
 #[no_mangle]
-pub extern "C" fn sys_getpid() -> tid_t {
+pub extern "C" fn sys_getpid() -> Tid {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
-	current_task_borrowed.id.into() as tid_t
+	current_task_borrowed.id.into() as Tid
 }
 
 #[no_mangle]
-pub extern "C" fn sys_getprio(id: *const tid_t) -> i32 {
+pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
 
 	if id.is_null() || unsafe {*id} == current_task_borrowed.id.into() as u32 {
@@ -52,7 +50,7 @@ pub extern "C" fn sys_getprio(id: *const tid_t) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_setprio(_id: *const tid_t, _prio: i32) -> i32 {
+pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
 }
 
@@ -111,7 +109,7 @@ pub extern "C" fn sys_msleep(ms: u32) {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clone(id: *mut tid_t, func: extern "C" fn(usize), arg: usize) -> i32 {
+pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
@@ -127,19 +125,19 @@ pub extern "C" fn sys_yield() {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_kill(dest: tid_t, signum: i32) -> i32 {
+pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}", dest, signum);
 	-ENOSYS
 }
 
 #[no_mangle]
-pub extern "C" fn sys_signal(handler: signal_handler_t) -> i32 {
+pub extern "C" fn sys_signal(handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
 	0
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(id: *mut tid_t, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: u32) -> i32 {
+pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: u32) -> i32 {
 	let core_scheduler = scheduler::get_scheduler(core_id);
 	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio), None);
 
