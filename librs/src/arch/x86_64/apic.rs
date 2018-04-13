@@ -25,8 +25,6 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
 use core::fmt;
-use core::ptr::read_volatile;
-use core::ptr::write_volatile;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::idt;
@@ -65,6 +63,7 @@ const APIC_LVT_MASK: u64                    = 1 << 16;
 const APIC_SIVR_ENABLED: u64                = 1 << 8;
 
 /// Register index: ID
+#[allow(dead_code)]
 const IOAPIC_REG_ID: u32					= 0x0000;
 /// Register index: version
 const IOAPIC_REG_VER: u32					= 0x0001;
@@ -437,7 +436,7 @@ pub fn init() {
 
 fn init_ioapic() {
 	let max_entry = ioapic_max_redirection_entry()+1;
-	info!("IOAPIC has {} entries", max_entry);
+	info!("IOAPIC v{} has {} entries", ioapic_version(), max_entry);
 
 	// now lets turn everything else on
 	for i in 0..max_entry {
@@ -476,7 +475,7 @@ fn ioapic_intoff(irq: u32, apicid: u32) -> Result<(), ()>
 	}
 
 	let off = (irq*2) as u32;
-	let ioredirect_upper: u32 = ((apicid as u32) << 24);
+	let ioredirect_upper: u32 = (apicid as u32) << 24;
 	let ioredirect_lower: u32 = ((0x20+irq) as u32) | (1 << 16); // turn it off (start masking)
 
 	ioapic_write(IOAPIC_REG_TABLE+off, ioredirect_lower);
