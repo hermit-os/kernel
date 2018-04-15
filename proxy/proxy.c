@@ -464,7 +464,7 @@ static int multi_init(char *path)
 #ifdef __aarch64__
 	fprintf(stderr, "The multi-kernel version is currently not supported for aarch64\n");
 	exit(1);
-#endif 
+#endif
 
 	// set path to temporary file
 	snprintf(isle_path, MAX_PATH, "/sys/hermit/isle%d/path", isle_nr);
@@ -955,7 +955,7 @@ retry:
 	ret = write(s, &magic, sizeof(magic));
 	if (ret < 0)
 		goto out;
-
+#if 0
 	// forward program arguments to HermitCore
 	// argv[0] is path of this proxy so we strip it
 
@@ -1020,6 +1020,7 @@ retry:
 			j += ret;
 		}
 	}
+#endif
 
 	ret = handle_syscalls(s);
 

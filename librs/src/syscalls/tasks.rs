@@ -131,7 +131,7 @@ pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_signal(handler: SignalHandler) -> i32 {
+pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
 	0
 }
