@@ -431,7 +431,9 @@ pub fn init() {
 	calibrate_timer();
 
 	// init ioapic
-	init_ioapic();
+	if is_uhyve() == false {
+		init_ioapic();
+	}
 }
 
 fn init_ioapic() {
