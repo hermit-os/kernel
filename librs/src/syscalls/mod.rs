@@ -32,6 +32,7 @@ mod tasks;
 mod timer;
 mod syscalls;
 mod uhyve;
+mod proxy;
 
 pub use self::lwip::*;
 pub use self::processor::*;
@@ -43,7 +44,15 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use self::syscalls::*;
 use self::uhyve::*;
+use self::proxy::{Proxy,setup_connection};
 use utils::is_uhyve;
+use synch::spinlock::SpinlockIrqSave;
+
+const LWIP_FD_BIT: i32	= (1 << 30);
+
+extern "C" {
+	fn get_proxy_socket() -> i32;
+}
 
 struct SingleKernel;
 
@@ -55,12 +64,22 @@ impl SingleKernel {
 
 impl SyscallInterface for SingleKernel {}
 
+pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 static mut SYS: &'static SyscallInterface = &SingleKernel::new();
 
 pub fn init()
 {
 	if is_uhyve() == true {
 		unsafe { SYS = &Uhyve::new(); }
+	} else {
+		unsafe {
+			let fd = get_proxy_socket();
+
+			if fd >= 0 {
+				SYS = &Proxy::new();
+				setup_connection(fd);
+			}
+		}
 	}
 }
 

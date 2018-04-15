@@ -97,7 +97,6 @@ static ALLOCATOR: allocator::HermitAllocator = allocator::HermitAllocator;
 extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
-	static mut libc_sd: i32;
 	static kernel_end: u8;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
@@ -131,6 +130,7 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running on uhyve!");
 
 		unsafe { init_uhyve_netif(); }
+		syscalls::init();
 
 		let argc = 0;
 		let argv = 0 as *mut *mut u8;
@@ -141,12 +141,21 @@ extern "C" fn initd(_arg: usize) {
 		let err;
 
 		unsafe { err = init_rtl8139_netif(get_frequency() as u32); }
+		syscalls::init();
 
-		let argc = 0;
-		let argv = 0 as *mut *mut u8;
-		let environ = 0 as *mut *mut u8;
+		if err == 0 {
+			let argc = 0;
+			let argv = 0 as *mut *mut u8;
+			let environ = 0 as *mut *mut u8;
 
-		unsafe { libc_start(argc, argv, environ); }
+			unsafe { libc_start(argc, argv, environ); }
+		} else {
+			let argc = 0;
+			let argv = 0 as *mut *mut u8;
+			let environ = 0 as *mut *mut u8;
+
+			unsafe { libc_start(argc, argv, environ); }
+		}
 	}
 }
 
@@ -165,7 +174,6 @@ pub unsafe extern "C" fn boot_processor_main() {
 	if is_uhyve() == false {
 		arch::boot_application_processors();
 	}
-	syscalls::init();
 
 	// Start the initd task.
 	let core_scheduler = core_scheduler();
