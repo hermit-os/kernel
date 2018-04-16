@@ -43,6 +43,7 @@
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(specialization)]
+#![allow(unused_macros)]
 #![no_std]
 
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
@@ -91,7 +92,7 @@ use mm::allocator;
 use utils::is_uhyve;
 
 #[global_allocator]
-static ALLOCATOR: allocator::HermitAllocator = allocator::HermitAllocator;
+static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAllocator;
 
 
 extern "C" {

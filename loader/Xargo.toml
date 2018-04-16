@@ -1,0 +1,2 @@
+[target.x86_64-hermit.dependencies]
+alloc = {}
