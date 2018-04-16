@@ -78,7 +78,6 @@ before_install:
   - travis_retry sudo apt-get -qq update
   - travis_retry sudo apt-get install -y curl wget qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev rpm g++-multilib
   - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
-  - git submodule update --init
   # download clang
   - mkdir $HOME/clang+llvm
   - export PATH=$HOME/clang+llvm/bin:$PATH
