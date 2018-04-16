@@ -91,6 +91,12 @@ script:
   - cargo install xargo
   - rustup component add rust-src
   - source cmake/local-cmake.sh
+  - git clone -b path2rs https://github.com/RWTH-OS/pthread-embedded.git
+  - cd pthread-embedded
+  - ./configure --target=x86_64-hermit --prefix=/opt/hermit
+  - make
+  - sudo make install
+  - cd -
   - mkdir build
   - cd build
   - cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=true ..

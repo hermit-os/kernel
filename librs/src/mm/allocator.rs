@@ -33,10 +33,10 @@
 //! As soon as all required data structures have been set up, the "System Allocator" is used.
 //! It manages all memory >= KERNEL_END_ADDRESS.
 
-use alloc::heap::{Alloc, AllocErr, Layout};
+use alloc::heap::Layout;
+use core::alloc::{GlobalAlloc, Opaque};
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use mm;
-
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
@@ -74,8 +74,8 @@ static mut ALLOCATOR_INFO: HermitAllocatorInfo = HermitAllocatorInfo::new();
 
 pub struct HermitAllocator;
 
-unsafe impl<'a> Alloc for &'a HermitAllocator {
-	unsafe fn alloc(&mut self, layout: Layout) -> Result<*mut u8, AllocErr> {
+unsafe impl<'a> GlobalAlloc for &'a HermitAllocator {
+	unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
 		if ALLOCATOR_INFO.is_bootstrapping {
 			alloc_bootstrap(layout)
 		} else {
@@ -83,7 +83,7 @@ unsafe impl<'a> Alloc for &'a HermitAllocator {
 		}
 	}
 
-	unsafe fn dealloc(&mut self, ptr: *mut u8, layout: Layout) {
+	unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
 		let address = ptr as usize;
 
 		// We never deallocate memory of the Bootstrap Allocator.
@@ -97,7 +97,7 @@ unsafe impl<'a> Alloc for &'a HermitAllocator {
 }
 
 /// An allocation using the always available Bootstrap Allocator.
-unsafe fn alloc_bootstrap(layout: Layout) -> Result<*mut u8, AllocErr> {
+unsafe fn alloc_bootstrap(layout: Layout) -> *mut Opaque {
 	let ptr = &mut ALLOCATOR_INFO.heap[ALLOCATOR_INFO.index] as *mut u8;
 	debug_mem!("Allocating {} bytes at {:#X} using the Bootstrap Allocator", layout.size(), ptr as usize);
 
@@ -107,15 +107,15 @@ unsafe fn alloc_bootstrap(layout: Layout) -> Result<*mut u8, AllocErr> {
 		panic!("Bootstrap Allocator Overflow! Increase BOOTSTRAP_HEAP_SIZE.");
 	}
 
-	Ok(ptr)
+	ptr as *mut Opaque
 }
 
 /// An allocation using the initialized System Allocator.
-fn alloc_system(layout: Layout) -> Result<*mut u8, AllocErr> {
+fn alloc_system(layout: Layout) -> *mut Opaque {
 	debug_mem!("Allocating {} bytes using the System Allocator", layout.size());
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	Ok(mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut u8)
+	mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut Opaque
 }
 
 /// A deallocation using the initialized System Allocator.
