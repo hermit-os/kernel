@@ -93,6 +93,7 @@ script:
   - source cmake/local-cmake.sh
   - git clone -b path2rs https://github.com/RWTH-OS/pthread-embedded.git
   - cd pthread-embedded
+  - export PATH=/opt/hermit/bin:$PATH
   - ./configure --target=x86_64-hermit --prefix=/opt/hermit
   - make
   - sudo make install
