@@ -127,7 +127,6 @@ struct MultiProcessorConfigurationTableHeader {
 	reserved: u8,
 }
 
-#[derive(Debug)]
 #[repr(C, packed)]
 struct CpuEntry {
 	entry_type: u8,
@@ -139,10 +138,20 @@ struct CpuEntry {
 	reserved: u64,
 }
 
+impl fmt::Display for CpuEntry {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ entry type: {}, ", self.entry_type)?;
+		write!(f, "local_apic_id: {}, ", self.local_apic_id)?;
+		write!(f, "local_apic_version: {}, ", self.local_apic_version)?;
+		write!(f, "flags: {}, ", self.flags)?;
+		unsafe {write!(f, "signature: 0x{:x}, ", self.signature)?; }
+		unsafe { write!(f, "features: 0x{:x} }}", self.features) }
+	}
+}
+
 const CPU_FLAG_ENABLED: u8        = 1 << 0;
 const CPU_FLAG_BOOT_PROCESSOR: u8 = 1 << 1;
 
-#[derive(Debug)]
 #[repr(C, packed)]
 struct BusEntry {
 	entry_type: u8,
@@ -150,7 +159,14 @@ struct BusEntry {
 	type_string: [u8; 6],
 }
 
-#[derive(Debug)]
+impl fmt::Display for BusEntry {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ entry type: {}, ", self.entry_type)?;
+		write!(f, "id: {}, ", self.id)?;
+		write!(f, "type_string: {:?} }}", self.type_string)
+	}
+}
+
 #[repr(C, packed)]
 struct IoApicEntry {
 	entry_type: u8,
@@ -166,11 +182,10 @@ impl fmt::Display for IoApicEntry {
 		write!(f, "id: {}, ", self.id)?;
 		write!(f, "version: {}, ", self.version)?;
 		write!(f, "flags: {}, ", self.flags)?;
-		write!(f, "address: 0x{:x} }}", self.address)
+		unsafe { write!(f, "address: 0x{:x} }}", self.address) }
 	}
 }
 
-#[derive(Debug)]
 #[repr(C, packed)]
 struct IoInterruptEntry {
 	entry_type: u8,
@@ -182,7 +197,18 @@ struct IoInterruptEntry {
 	destination_ioapic_intin: u8,
 }
 
-#[derive(Debug)]
+impl fmt::Display for IoInterruptEntry {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ entry type: {}, ", self.entry_type)?;
+		write!(f, "interrupt_type: {}, ", self.interrupt_type)?;
+		unsafe { write!(f, "flags: 0x{:x}, ", self.flags)?; }
+		write!(f, "source_bus_id: {}, ", self.source_bus_id)?;
+		write!(f, "source_bus_irq: {}, ", self.source_bus_irq)?;
+		write!(f, "destination_ioapic_id: {}, ", self.destination_ioapic_id)?;
+		write!(f, "destination_ioapic_intin: {} }}", self.destination_ioapic_intin)
+	}
+}
+
 #[repr(C, packed)]
 struct LocalInterruptEntry {
 	entry_type: u8,
@@ -194,6 +220,17 @@ struct LocalInterruptEntry {
 	destination_local_apic_lintin: u8,
 }
 
+impl fmt::Display for LocalInterruptEntry {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ entry type: {}, ", self.entry_type)?;
+		write!(f, "interrupt_type: {}, ", self.interrupt_type)?;
+		unsafe { write!(f, "flags: 0x{:x}, ", self.flags)?; }
+		write!(f, "source_bus_id: {}, ", self.source_bus_id)?;
+		write!(f, "source_bus_irq: {}, ", self.source_bus_irq)?;
+		write!(f, "destination_local_apic_id: {}, ", self.destination_local_apic_id)?;
+		write!(f, "destination_local_apic_lintin: {} }}", self.destination_local_apic_lintin)
+	}
+}
 
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
@@ -310,7 +347,7 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 			&0 => {
 				// CPU
 				let cpu = unsafe { & *(current_address as *const CpuEntry) };
-				debug!("Found CPU entry: {:?}", cpu);
+				debug!("Found CPU entry: {}", cpu);
 
 				if cpu.flags & CPU_FLAG_ENABLED > 0 {
 					if cpu.flags & CPU_FLAG_BOOT_PROCESSOR > 0 {
@@ -329,7 +366,7 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 			&1 => {
 				// Bus
 				let bus = unsafe { & *(current_address as *const BusEntry) };
-				debug!("Found Bus entry: {:?}", bus);
+				debug!("Found Bus entry: {}", bus);
 
 				current_address += mem::size_of::<BusEntry>();
 			},
@@ -356,14 +393,14 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 			&3 => {
 				// I/O Interrupt Assignment
 				let io_interrupt = unsafe { & *(current_address as *const IoInterruptEntry) };
-				debug!("Found I/O Interrupt entry: {:?}", io_interrupt);
+				debug!("Found I/O Interrupt entry: {}", io_interrupt);
 
 				current_address += mem::size_of::<IoInterruptEntry>();
 			},
 			&4 => {
 				// Local Interrupt Assignment
 				let local_interrupt = unsafe { & *(current_address as *const LocalInterruptEntry) };
-				debug!("Found Local Interrupt entry: {:?}", local_interrupt);
+				debug!("Found Local Interrupt entry: {}", local_interrupt);
 
 				current_address += mem::size_of::<LocalInterruptEntry>();
 			},
