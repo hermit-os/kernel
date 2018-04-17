@@ -21,7 +21,7 @@ script:
   - cd pthread-embedded
   - export PATH=/opt/hermit/bin:$PATH
   - ./configure --target=x86_64-hermit --prefix=/opt/hermit
-  - make
+  - make V=1
   - sudo make install
   - cd -
   - mkdir build
