@@ -4,85 +4,12 @@ language: c
 
 git:
   submodules: true
-matrix:
-  include:
-    - compiler:     gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-4.9
-      env:
-          - COMPILERCXX=g++-4.9
-          - COMPILERC=gcc-4.9
-          - DEPLOY=true
-    - compiler:     gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-5
-      env:
-          - COMPILERCXX=g++-5
-          - COMPILERC=gcc-5
-    - compiler:     gcc
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-      env:
-          - COMPILERCXX=g++-6
-          - COMPILERC=gcc-6
-    - compiler:     clang
-      env:
-          - COMPILERC=clang
-          - COMPILERCXX=clang++
-          - CLANGV=3.8.1
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-    - compiler:     clang
-      env:
-          - COMPILERC=clang
-          - COMPILERCXX=clang++
-          - CLANGV=3.9.1
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-    - compiler:     clang
-      env:
-          - COMPILERC=clang
-          - COMPILERCXX=clang++
-          - CLANGV=4.0.1
-          - RUNCLANGTIDY=TRUE
-      addons:
-        apt:
-          sources:
-            - ubuntu-toolchain-r-test
-          packages:
-            - g++-6
-
 
 before_install:
   - echo "deb https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
   - travis_retry sudo apt-get -qq update
   - travis_retry sudo apt-get install -y curl wget qemu-system-x86 nasm texinfo libmpfr-dev libmpc-dev libgmp-dev libisl-dev flex bison packaging-dev rpm g++-multilib binutils
   - travis_retry sudo apt-get install -y --force-yes binutils-hermit libhermit newlib-hermit pthread-embedded-hermit gcc-hermit
-  # download clang
-  - mkdir $HOME/clang+llvm
-  - export PATH=$HOME/clang+llvm/bin:$PATH
-  - if [ -n "$CLANGV" ]; then wget http://llvm.org/releases/$CLANGV/clang+llvm-$CLANGV-x86_64-linux-gnu-debian8.tar.xz -O $HOME/clang+llvm.tar.xz; fi
-  - if [ -n "$CLANGV" ]; then tar xf $HOME/clang+llvm.tar.xz -C $HOME/clang+llvm --strip-components 1; fi
 
 script:
   - curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
@@ -100,11 +27,9 @@ script:
   - mkdir build
   - cd build
   - cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=true ..
-  - CC=$COMPILERC CXX=$COMPILERCXX make -j1 package
+  - make -j1 package
   - cat $TRAVIS_BUILD_DIR/build/hermit-rs-prefix/src/hermit-rs-stamp/hermit-rs-build-*.log
   - cd $TRAVIS_BUILD_DIR
-  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep proxy/ | xargs -P 1 -I{} clang-tidy -p build/proxy-prefix/src/proxy-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
-  - if [ -n "$RUNCLANGTIDY" ]; then git ls-files "*.c" |grep arch/x86/loader/ | xargs -P 1 -I{} clang-tidy -p build/arch_x86_loader-prefix/src/arch_x86_loader-build/compile_commands.json -header-filter="^((?\!build).)*$" {}; fi
   - ./tests.sh
 
 notifications:
