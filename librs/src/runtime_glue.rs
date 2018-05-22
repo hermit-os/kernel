@@ -42,6 +42,15 @@ extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -
 	}
 }
 
+#[lang = "oom"]
+#[no_mangle]
+pub fn rust_oom() -> ! {
+	println!("[{}][!!!OOM!!!]", arch::percore::core_id());
+	loop {
+		arch::processor::halt();
+	}
+}
+
 #[no_mangle]
 #[allow(non_snake_case)]
 pub fn _Unwind_Resume()
