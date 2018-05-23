@@ -1,4 +1,5 @@
 // Copyright (c) 2018 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,18 +22,20 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use syscalls::syscalls::SyscallInterface;
+use syscalls::interfaces::SyscallInterface;
 use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::lwip::sys_lwip_get_errno;
 use arch::processor::halt;
 use core::mem;
 
 extern "C" {
+	fn get_proxy_socket() -> i32;
 	fn lwip_write(fd: i32, buf: *const u8, len: usize) -> i32;
 	fn lwip_read(fd: i32, buf: *mut u8, len: usize) -> i32;
 	fn lwip_close(fd: i32) -> i32;
 	fn c_strlen(buf: *const u8) -> usize;
 }
+
 
 const HERMIT_MAGIC: i32	= 0x7E317;
 
@@ -83,7 +86,7 @@ fn proxy_write<T>(buf: *const T) {
 	}
 }
 
-pub fn setup_connection(fd: i32) {
+fn setup_connection(fd: i32) {
 	info!("Setup connection to proxy!");
 
 	unsafe {
@@ -104,6 +107,12 @@ pub fn setup_connection(fd: i32) {
 	//proxy_read(&mut argc as *mut i32);
 }
 
+
+//
+// TODO: Use a big "tagged union" (aka Rust "enum") with #[repr(C)] for these structures
+// once https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md
+// has been implemented.
+//
 #[repr(C)]
 struct SysWrite {
 	sysnr: i32,
@@ -200,15 +209,16 @@ impl SysLseek {
 	}
 }
 
+
 pub struct Proxy;
 
-impl Proxy {
-	pub const fn new() -> Proxy {
-		Proxy {}
-	}
-}
-
 impl SyscallInterface for Proxy {
+	fn init(&self) {
+		let fd = unsafe { get_proxy_socket() };
+		assert!(fd >= 0);
+		setup_connection(fd);
+	}
+
 	fn exit(&self, arg: i32) -> ! {
 		let guard = LWIP_LOCK.lock();
 

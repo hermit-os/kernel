@@ -1,4 +1,5 @@
 // Copyright (c) 2018 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,6 +22,13 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+mod generic;
+mod proxy;
+mod uhyve;
+
+pub use self::generic::*;
+pub use self::proxy::*;
+pub use self::uhyve::*;
 use arch;
 use arch::percore::*;
 use console;
@@ -28,7 +36,12 @@ use core::fmt::Write;
 use core::{isize, slice, str};
 use errno::*;
 
+
 pub trait SyscallInterface : Send + Sync {
+	fn init(&self) {
+		// Interface-specific initialization steps.
+	}
+
 	fn exit(&self, arg: i32) -> ! {
 		core_scheduler().exit(arg);
 	}

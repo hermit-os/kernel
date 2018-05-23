@@ -73,8 +73,9 @@ mod logging;
 mod arch;
 mod collections;
 mod console;
+mod environment;
 mod errno;
-mod utils;
+mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;
 mod scheduler;
@@ -89,7 +90,6 @@ use arch::percore::*;
 use processor::get_frequency;
 use core::ptr;
 use mm::allocator;
-use utils::is_uhyve;
 
 #[global_allocator]
 static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAllocator;
@@ -127,37 +127,40 @@ extern "C" fn initd(_arg: usize) {
 	// initialize LwIP library
 	unsafe { init_lwip(); }
 
-	if is_uhyve() == true {
+	// Initialize the specific network interface.
+	let mut err = 0;
+
+	if environment::is_uhyve() {
+		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-
 		unsafe { init_uhyve_netif(); }
-		syscalls::init();
-
-		let argc = 0;
-		let argv = 0 as *mut *mut u8;
-		let environ = 0 as *mut *mut u8;
-
-		unsafe { libc_start(argc, argv, environ); }
+	} else if !environment::is_single_kernel() {
+		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
+		info!("HermitCore is running side-by-side to Linux!");
+		//unsafe { init_mmnif_netif(); }
 	} else {
-		let err;
-
-		unsafe { err = init_rtl8139_netif(get_frequency() as u32); }
-		syscalls::init();
-
-		if err == 0 {
-			let argc = 0;
-			let argv = 0 as *mut *mut u8;
-			let environ = 0 as *mut *mut u8;
-
-			unsafe { libc_start(argc, argv, environ); }
-		} else {
-			let argc = 0;
-			let argv = 0 as *mut *mut u8;
-			let environ = 0 as *mut *mut u8;
-
-			unsafe { libc_start(argc, argv, environ); }
-		}
+		// Initialize the RTL8139 interface using DHCP.
+		err = unsafe { init_rtl8139_netif(get_frequency() as u32) };
 	}
+
+	// Check if a network interface has been initialized.
+	if err == 0 {
+		info!("Successfully initialized a network interface!");
+		syscalls::enable_networking();
+
+		if environment::is_proxy() {
+			// TODO: Get argc, argv, environ over "proxy", call libc_start, and return.
+		}
+	} else {
+		warn!("Could not initialize a network interface (error code {})", err);
+		warn!("Starting HermitCore without network support");
+	}
+
+	// Start the application without any arguments and environment variables.
+	let argc = 0;
+	let argv = 0 as *mut *mut u8;
+	let environ = 0 as *mut *mut u8;
+	unsafe { libc_start(argc, argv, environ); }
 }
 
 /// Entry Point of HermitCore for the Boot Processor
@@ -172,7 +175,8 @@ pub unsafe extern "C" fn boot_processor_main() {
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();
-	if is_uhyve() == false {
+
+	if environment::is_single_kernel() && !environment::is_uhyve() {
 		arch::boot_application_processors();
 	}
 

@@ -21,12 +21,12 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use syscalls::syscalls::SyscallInterface;
+use syscalls::interfaces::SyscallInterface;
 use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::lwip::sys_lwip_get_errno;
 use arch::mm::paging;
 use arch::processor::halt;
-use arch::uhyve_send;
+use x86::shared::io::*;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
 const UHYVE_PORT_OPEN:	u16 = 0x440;
@@ -40,12 +40,11 @@ extern "C" {
 	fn lwip_read(fd: i32, buf: *mut u8, len: usize) -> i32;
 }
 
-pub struct Uhyve;
 
-impl Uhyve {
-	pub const fn new() -> Uhyve {
-		Uhyve {}
-	}
+/// forward a request to the hypervisor uhyve
+fn uhyve_send(port: u16, data: usize)
+{
+	unsafe { outl(port, data as u32); }
 }
 
 #[repr(C)]
@@ -147,6 +146,9 @@ impl SysLseek {
 		}
 	}
 }
+
+
+pub struct Uhyve;
 
 impl SyscallInterface for Uhyve {
 	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
