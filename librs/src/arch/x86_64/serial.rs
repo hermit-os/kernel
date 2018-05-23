@@ -22,8 +22,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use core::sync::atomic::spin_loop_hint;
+use environment;
 use x86::shared::io::*;
-use utils::is_uhyve;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;
@@ -58,7 +58,8 @@ impl SerialPort {
 	}
 
 	fn is_transmitting(&self) -> bool {
-		if is_uhyve() == true {
+		// The virtual serial port in uhyve is never blocked.
+		if environment::is_uhyve() {
 			return false;
 		}
 
@@ -83,7 +84,8 @@ impl SerialPort {
 	}
 
 	pub fn init(&self, baudrate: u32) {
-		if is_uhyve() == true {
+		// The virtual serial port is always initialized in uhyve.
+		if environment::is_uhyve() {
 			return;
 		}
 

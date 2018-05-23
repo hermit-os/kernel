@@ -65,6 +65,7 @@ align 4
     global heap_size
     global header_size
     global disable_x2apic
+    global single_kernel
     global mb_info
     global hbmem_base
     global hbmem_size

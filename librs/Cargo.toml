@@ -9,6 +9,10 @@ authors = [
 [lib]
 crate-type = ["staticlib"]
 
+[features]
+#default = ["vga"]
+vga = []
+
 [dependencies]
 bitflags = "1.0.1"
 spin = "0.4.6"

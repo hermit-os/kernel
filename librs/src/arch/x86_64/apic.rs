@@ -36,11 +36,11 @@ use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::sync::atomic::spin_loop_hint;
 use core::{mem, ptr, str, u32};
+use environment;
 use mm;
 use scheduler;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
-use utils::is_uhyve;
 
 
 extern "C" {
@@ -325,10 +325,6 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 		CPU_LOCAL_APIC_IDS.as_mut().unwrap()
 	};
 
-	let current_address_orig = current_address;
-
-	current_address = current_address_orig;
-
 	// Loop through all table entries.
 	for _i in 0..mp_config_header.entry_count {
 		// Have we crossed a page boundary in the last iteration?
@@ -416,7 +412,7 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 }
 
 fn detect_from_uhyve() -> Result<usize, ()> {
-	if is_uhyve() == true {
+	if environment::is_uhyve() {
 		return Ok(0xFEE00000 as usize);
 	}
 
@@ -468,7 +464,7 @@ pub fn init() {
 	calibrate_timer();
 
 	// init ioapic
-	if is_uhyve() == false {
+	if !environment::is_uhyve() {
 		init_ioapic();
 	}
 }

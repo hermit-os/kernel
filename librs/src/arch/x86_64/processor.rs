@@ -27,18 +27,16 @@ use arch::x86_64::irq;
 use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
-use core::{fmt, slice, str, u32};
+use core::{fmt, u32};
 use core::sync::atomic::spin_loop_hint;
+use environment;
 use raw_cpuid::*;
 use x86::shared::control_regs::*;
 use x86::shared::msr::*;
 use x86::shared::time::*;
-use utils::is_uhyve;
 
 
 extern "C" {
-	static cmdline: *const u8;
-	static cmdsize: usize;
 	static mut cpu_freq: u32;
 }
 
@@ -230,22 +228,14 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		if cmdsize > 0 {
-			let slice = slice::from_raw_parts(cmdline, cmdsize);
-			let cmdline_str = str::from_utf8_unchecked(slice);
-
-			let freq_find = cmdline_str.find("-freq");
-			if freq_find.is_some() {
-				let cmdline_freq_str = cmdline_str.split_at(freq_find.unwrap() + "-freq".len()).1;
-				let mhz_str = cmdline_freq_str.split(' ').next().expect("Invalid -freq command line");
-
-				self.mhz = mhz_str.parse().expect("Could not parse -freq command line as number");
-				self.source = CpuFrequencySources::CommandLine;
-				return Ok(());
-			}
+		let mhz = environment::get_command_line_cpu_frequency();
+		if mhz > 0 {
+			self.mhz = mhz;
+			self.source = CpuFrequencySources::CommandLine;
+			Ok(())
+		} else {
+			Err(())
 		}
-
-		Err(())
 	}
 
 	unsafe fn detect_from_cpuid_frequency_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
@@ -296,7 +286,8 @@ impl CpuFrequency {
 	}
 
 	fn measure_frequency(&mut self) -> Result<(), ()> {
-		if is_uhyve() == true {
+		// The PIC is not initialized for uhyve, so we cannot measure anything.
+		if environment::is_uhyve() {
 			return Err(());
 		}
 

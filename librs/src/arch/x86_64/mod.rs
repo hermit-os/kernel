@@ -44,9 +44,9 @@ pub use arch::x86_64::gdt::get_boot_stacks;
 pub use arch::x86_64::gdt::set_current_kernel_stack;
 pub use arch::x86_64::percore::PERCORE;
 use arch::x86_64::serial::SerialPort;
+use environment;
+use kernel_message_buffer;
 use synch::spinlock::Spinlock;
-use utils::is_uhyve;
-use x86::shared::io::*;
 
 const SERIAL_PORT_ADDRESS: u16 = 0xc110; //0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -66,25 +66,29 @@ static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 // FUNCTIONS
 
-/// forward a request to the hypervisor uhyve
-pub fn uhyve_send(port: u16, data: usize)
-{
-	unsafe {
-		outl(port, data as u32);
-	}
-}
-
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
 	percore::init();
-	COM1.init(SERIAL_PORT_BAUDRATE);
+
+	if environment::is_single_kernel() {
+		// We can only initialize the serial port here, because VGA requires processor
+		// configuration first.
+		COM1.init(SERIAL_PORT_BAUDRATE);
+	}
 }
 
 pub fn output_message_byte(byte: u8) {
-	COM1.write_byte(byte);
-	if cfg!(feature = "vga") && is_uhyve() == false {
+	if environment::is_single_kernel() {
+		// Output messages to the serial port and VGA screen in unikernel mode.
+		COM1.write_byte(byte);
+
+		// vga::write_byte() checks if VGA support has been initialized,
+		// so we don't need any additional if clause around it.
 		#[cfg(feature = "vga")]
 		vga::write_byte(byte);
+	} else {
+		// Output messages to the kernel message buffer in multi-kernel mode.
+		kernel_message_buffer::write_byte(byte);
 	}
 }
 
@@ -92,26 +96,33 @@ pub fn output_message_byte(byte: u8) {
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
-	if cfg!(feature = "vga") && is_uhyve() == false {
+
+	if cfg!(feature = "vga") && environment::is_single_kernel() && !environment::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
+
 	::mm::init();
 	::mm::print_information();
+	environment::init();
 	gdt::init();
 	gdt::add_current_core();
 	idt::install();
-	if is_uhyve() == false {
+
+	if !environment::is_uhyve() {
 		pic::init();
 	}
+
 	irq::install();
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
-	if is_uhyve() == false {
+
+	if environment::is_single_kernel() && !environment::is_uhyve() {
 		pci::init();
 		pci::print_information();
 	}
+
 	apic::init();
 	scheduler::install_timer_handler();
 
