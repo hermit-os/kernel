@@ -66,7 +66,10 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	unsafe { KERNEL_FREE_LIST.deallocate(virtual_address, size); }
+	unsafe {
+		POOL.maintain();
+		KERNEL_FREE_LIST.deallocate(virtual_address, size);
+	}
 }
 
 pub fn reserve(virtual_address: usize, size: usize) {

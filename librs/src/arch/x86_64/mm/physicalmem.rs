@@ -117,6 +117,8 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 	result.unwrap()
 }
 
+/// This function must only be called from mm::deallocate!
+/// Otherwise, it may fail due to an empty node pool (POOL.maintain() is called in virtualmem::deallocate)
 pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(physical_address >= mm::kernel_end_address(), "Physical address {:#X} is not >= KERNEL_END_ADDRESS", physical_address);
 	assert!(size > 0);

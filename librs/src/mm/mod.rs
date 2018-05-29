@@ -94,7 +94,6 @@ pub fn allocate(size: usize, extra_flags: PageTableEntryFlags) -> usize {
 
 pub fn deallocate(virtual_address: usize, size: usize) {
 	let _lock = MM_LOCK.lock();
-	unsafe { POOL.maintain(); }
 
 	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
 		arch::mm::virtualmem::deallocate(virtual_address, size);
