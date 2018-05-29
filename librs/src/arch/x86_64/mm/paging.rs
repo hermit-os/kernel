@@ -226,7 +226,7 @@ impl<S: PageSize> Page<S> {
 	/// Returns a Page including the given virtual address.
 	/// That means, the address is rounded down to a page size boundary.
 	fn including_address(virtual_address: usize) -> Self {
-		assert!(Self::is_valid_address(virtual_address));
+		assert!(Self::is_valid_address(virtual_address), "Virtual address {:#X} is invalid", virtual_address);
 
 		if S::SIZE == 1024 * 1024 * 1024 {
 			assert!(processor::supports_1gib_pages());
@@ -618,6 +618,15 @@ pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: 
 	root_pagetable.map_pages(range, physical_address, flags, do_ipi);
 }
 
+pub fn identity_map(start_address: usize, end_address: usize) {
+	let first_page = Page::<BasePageSize>::including_address(start_address);
+	let last_page = Page::<BasePageSize>::including_address(end_address);
+	assert!(last_page.address() < mm::kernel_start_address(), "Address {:#X} to be identity-mapped is not below Kernel start address", last_page.address());
+
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let range = Page::<BasePageSize>::range(first_page, last_page);
+	root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
+}
 
 #[no_mangle]
 pub extern "C" fn getpagesize() -> i32 {
@@ -625,30 +634,19 @@ pub extern "C" fn getpagesize() -> i32 {
 }
 
 pub fn init() {
-	// Add read-only, execute-disable identity page mappings for the supplied Multiboot information and command line.
+	// Identity-map the supplied Multiboot information and command line.
 	unsafe {
-		let root_pagetable = &mut *PML4_ADDRESS;
-
 		if mb_info > 0 {
-			let page = Page::<BasePageSize>::including_address(mb_info as usize);
-			assert!(page.address() < mm::kernel_start_address(), "Multiboot information is not below Kernel start address!");
-			root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
+			identity_map(mb_info as usize, mb_info as usize);
 
 			// Map the "Memory Map" information too.
 			let mb = Multiboot::new(mb_info);
-			let page = Page::<BasePageSize>::including_address(
-				mb.memory_map_address().expect("Could not find a memory map in the Multiboot information")
-			);
-			assert!(page.address() < mm::kernel_start_address(), "Multiboot Memory Map is not below Kernel start address!");
-			root_pagetable.map_page(page, page.address(), PageTableEntryFlags::EXECUTE_DISABLE);
+			let memory_map_address = mb.memory_map_address().expect("Could not find a memory map in the Multiboot information");
+			identity_map(memory_map_address, memory_map_address);
 		}
 
 		if cmdsize > 0 {
-			let first_page = Page::<BasePageSize>::including_address(cmdline as usize);
-			let last_page = Page::<BasePageSize>::including_address(cmdline as usize + cmdsize - 1);
-			assert!(last_page.address() < mm::kernel_start_address(), "Command line is not below Kernel start address!");
-			let range = Page::<BasePageSize>::range(first_page, last_page);
-			root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
+			identity_map(cmdline as usize, cmdline as usize + cmdsize - 1);
 		}
 	}
 }
