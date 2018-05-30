@@ -362,8 +362,7 @@ fn search_s5_in_table(table: AcpiTable) {
 
 			// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
 			// This mustn't be the case for the "_S5_" object.
-			// Additionally, NumElements is expected to be 4 for the "_S5_" object.
-			if pkg_length & 0b11000000 == 0 && num_elements == 4 {
+			if pkg_length & 0b11000000 == 0 && num_elements > 0 {
 				// The next byte is an opcode describing the data.
 				// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
 				// However, if the data is a zero or one byte, this may also be indicated by the opcode.
