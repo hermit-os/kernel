@@ -32,22 +32,24 @@ use arch;
 use arch::irq;
 use arch::percore::*;
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use scheduler::task::*;
 use synch::spinlock::*;
+use syscalls::*;
 
 extern "C" {
 	fn switch(old_stack: *mut usize, new_stack: usize);
 }
 
 
+static LAST_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 static NEXT_CPU_NUMBER: AtomicUsize = AtomicUsize::new(1);
-static NO_TASKS: AtomicUsize = AtomicUsize::new(0);
+static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Option<BTreeMap<u32, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
 static mut TASKS: Option<SpinlockIrqSave<BTreeMap<TaskId, Rc<RefCell<Task>>>>> = None;
-static TID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 
 struct SchedulerState {
@@ -101,6 +103,7 @@ impl PerCoreScheduler {
 			assert!(current_task_borrowed.status != TaskStatus::TaskIdle, "Trying to terminate the idle task");
 
 			// Finish the task and reschedule.
+			LAST_EXIT_CODE.store(exit_code, Ordering::SeqCst);
 			info!("Finishing task {} with exit code {}", current_task_borrowed.id, exit_code);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
@@ -260,6 +263,12 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
+			// If this is the Boot Processor and only the lwIP TCP/IP task is left, it's time to shut down the OS.
+			if core_id() == 0 && new_id.into() == get_lwip_tcpip_task_id() && NO_TASKS.load(Ordering::SeqCst) == 1 {
+				debug!("Only lwIP TCP/IP task is left");
+				sys_shutdown();
+			}
+
 			// Tell the scheduler about the new task.
 			debug!("Switching task from {} to {} (stack {:#X} => {:#X})", id, new_id,
 				unsafe { *last_stack_pointer }, new_stack_pointer);
@@ -277,7 +286,7 @@ impl PerCoreScheduler {
 
 			// If this is the Boot Processor and all tasks have finished, it's time to shut down the OS.
 			if core_id() == 0 && NO_TASKS.load(Ordering::SeqCst) == 0 {
-				arch::processor::shutdown();
+				sys_shutdown();
 			}
 
 			if status == TaskStatus::TaskIdle {
@@ -347,6 +356,10 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe { SCHEDULERS.as_mut().unwrap().insert(core_id, &(*scheduler)); }
+}
+
+pub fn get_last_exit_code() -> i32 {
+	LAST_EXIT_CODE.load(Ordering::SeqCst)
 }
 
 pub fn get_scheduler(core_id: u32) -> &'static PerCoreScheduler {

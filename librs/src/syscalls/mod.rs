@@ -65,8 +65,8 @@ pub fn enable_networking() {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_exit(arg: i32) -> ! {
-	unsafe { SYS.exit(arg) }
+pub extern "C" fn sys_shutdown() -> ! {
+	unsafe { SYS.shutdown() }
 }
 
 #[no_mangle]

@@ -55,6 +55,11 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn sys_exit(arg: i32) -> ! {
+	core_scheduler().exit(arg);
+}
+
+#[no_mangle]
 pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
 	let task_heap_start = arch::mm::virtualmem::task_heap_start();

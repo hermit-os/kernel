@@ -21,11 +21,12 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use syscalls::interfaces::SyscallInterface;
-use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
-use syscalls::lwip::sys_lwip_get_errno;
+use arch;
 use arch::mm::paging;
-use arch::processor::halt;
+use scheduler;
+use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
+use syscalls::interfaces::SyscallInterface;
+use syscalls::lwip::sys_lwip_get_errno;
 use x86::shared::io::*;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
@@ -169,14 +170,14 @@ impl SyscallInterface for Uhyve {
 		sysclose.ret
 	}
 
-	fn exit(&self, arg: i32) -> ! {
-		let mut sysexit = SysExit::new(arg);
+	fn shutdown(&self) -> ! {
+		let mut sysexit = SysExit::new(scheduler::get_last_exit_code());
 		let raw_mut = &mut sysexit as *mut SysExit;
 
 		uhyve_send(UHYVE_PORT_EXIT, paging::virtual_to_physical(raw_mut as usize));
 
 		loop {
-			halt();
+			arch::processor::halt();
 		}
 	}
 

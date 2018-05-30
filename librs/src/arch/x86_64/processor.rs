@@ -22,6 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch::x86_64::acpi;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::percore::*;
@@ -696,6 +697,7 @@ pub fn halt() {
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
+	acpi::poweroff();
 
 	loop {
 		halt();

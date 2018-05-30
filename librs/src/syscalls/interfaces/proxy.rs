@@ -22,11 +22,12 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use syscalls::interfaces::SyscallInterface;
-use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
-use syscalls::lwip::sys_lwip_get_errno;
-use arch::processor::halt;
+use arch;
 use core::mem;
+use scheduler;
+use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
+use syscalls::interfaces::SyscallInterface;
+use syscalls::lwip::sys_lwip_get_errno;
 
 extern "C" {
 	fn get_proxy_socket() -> i32;
@@ -219,17 +220,14 @@ impl SyscallInterface for Proxy {
 		setup_connection(fd);
 	}
 
-	fn exit(&self, arg: i32) -> ! {
-		let guard = LWIP_LOCK.lock();
+	fn shutdown(&self) -> ! {
+		let _guard = LWIP_LOCK.lock();
 
-		let sysargs = SysExit::new(arg);
+		let sysargs = SysExit::new(scheduler::get_last_exit_code());
 		proxy_write(&sysargs as *const SysExit);
 
-		// release lock
-		drop(guard);
-
 		loop {
-			halt();
+			arch::processor::halt();
 		}
 	}
 

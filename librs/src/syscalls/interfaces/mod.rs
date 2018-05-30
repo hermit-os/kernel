@@ -30,7 +30,6 @@ pub use self::generic::*;
 pub use self::proxy::*;
 pub use self::uhyve::*;
 use arch;
-use arch::percore::*;
 use console;
 use core::fmt::Write;
 use core::{isize, slice, str};
@@ -42,8 +41,8 @@ pub trait SyscallInterface : Send + Sync {
 		// Interface-specific initialization steps.
 	}
 
-	fn exit(&self, arg: i32) -> ! {
-		core_scheduler().exit(arg);
+	fn shutdown(&self) -> ! {
+		arch::processor::shutdown();
 	}
 
 	fn open(&self, _name: *const u8, _flags: i32, _mode: i32) -> i32 {
