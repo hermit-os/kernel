@@ -25,7 +25,8 @@ version = "0.2.9"
 features = ["spin_no_std"]
 
 [dependencies.raw-cpuid]
-path = "../crates/raw_cpuid"
+version = "3.1.0"
+features = ["nightly"]
 
 [dependencies.x86]
 path = "../crates/x86"
