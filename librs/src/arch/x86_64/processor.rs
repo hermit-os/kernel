@@ -198,7 +198,6 @@ impl FPUState {
 enum CpuFrequencySources {
 	Invalid,
 	CommandLine,
-	CpuIdFrequencyInfo,
 	CpuIdBrandString,
 	Measurement,
 	Hypervisor,
@@ -208,7 +207,6 @@ impl fmt::Display for CpuFrequencySources {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match self {
 			&CpuFrequencySources::CommandLine => write!(f, "Command Line"),
-			&CpuFrequencySources::CpuIdFrequencyInfo => write!(f, "CPUID Frequency Info"),
 			&CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
 			&CpuFrequencySources::Measurement => write!(f, "Measurement"),
 			&CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
@@ -233,16 +231,6 @@ impl CpuFrequency {
 		if mhz > 0 {
 			self.mhz = mhz;
 			self.source = CpuFrequencySources::CommandLine;
-			Ok(())
-		} else {
-			Err(())
-		}
-	}
-
-	unsafe fn detect_from_cpuid_frequency_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		if let Some(info) = cpuid.get_processor_frequency_info() {
-			self.mhz = info.processor_base_frequency();
-			self.source = CpuFrequencySources::CpuIdFrequencyInfo;
 			Ok(())
 		} else {
 			Err(())
@@ -346,7 +334,6 @@ impl CpuFrequency {
 		let cpuid = CpuId::new();
 		self.detect_from_hypervisor()
 			.or_else(|_e| self.detect_from_cmdline())
-			.or_else(|_e| self.detect_from_cpuid_frequency_info(&cpuid))
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 			.or_else(|_e| self.measure_frequency())
 			.expect("Could not determine the processor frequency");
