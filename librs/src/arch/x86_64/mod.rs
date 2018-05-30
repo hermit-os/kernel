@@ -22,6 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+pub mod acpi;
 pub mod apic;
 pub mod gdt;
 pub mod idt;
@@ -123,6 +124,7 @@ pub fn boot_processor_init() {
 		pci::print_information();
 	}
 
+	acpi::init();
 	apic::init();
 	scheduler::install_timer_handler();
 
