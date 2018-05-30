@@ -98,6 +98,7 @@ int sys_open(const char* name, int flags, int mode);
 int sys_close(int fd);
 void sys_putchar(const unsigned char character);
 int sys_lwip_get_errno();
+void sys_lwip_register_tcpip_task(tid_t id);
 void sys_lwip_set_errno(int errno);
 void sys_msleep(unsigned int ms);
 int sys_recmutex_init(HermitRecursiveMutex** recmutex);

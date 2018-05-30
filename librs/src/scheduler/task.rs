@@ -56,14 +56,14 @@ pub enum WakeupReason {
 
 /// Unique identifier for a task (i.e. `pid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
-pub struct TaskId(usize);
+pub struct TaskId(u32);
 
 impl TaskId {
-	pub const fn into(self) -> usize {
+	pub const fn into(self) -> u32 {
 		self.0
 	}
 
-	pub const fn from(x: usize) -> Self {
+	pub const fn from(x: u32) -> Self {
 		TaskId(x)
 	}
 }
