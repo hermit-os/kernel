@@ -24,9 +24,9 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
-use core::fmt;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use arch::x86_64::acpi;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::mm::paging;
@@ -35,7 +35,7 @@ use arch::x86_64::mm::virtualmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::sync::atomic::spin_loop_hint;
-use core::{mem, ptr, str, u32};
+use core::{fmt, mem, ptr, str, u32};
 use environment;
 use mm;
 use scheduler;
@@ -101,136 +101,53 @@ static mut CALIBRATED_COUNTER_VALUE: usize = 0;
 
 
 #[repr(C, packed)]
-struct MultiProcessorFloatingPointer {
-	signature: [u8; 4],
-	configuration_table_ptr: u32,
-	length: u8,
-	spec_rev: u8,
-	checksum: u8,
-	features: [u8; 5],
-}
-
-#[repr(C, packed)]
-struct MultiProcessorConfigurationTableHeader {
-	signature: [u8; 4],
-	base_table_length: u16,
-	spec_rev: u8,
-	checksum: u8,
-	oem_id: [u8; 8],
-	product_id: [u8; 12],
-	oem_table_ptr: u32,
-	oem_table_size: u16,
-	entry_count: u16,
+struct AcpiMadtHeader {
 	local_apic_address: u32,
-	extended_table_length: u16,
-	extended_table_checksum: u8,
+	flags: u32,
+}
+
+#[repr(C, packed)]
+struct AcpiMadtRecordHeader {
+	entry_type: u8,
+	length: u8,
+}
+
+#[repr(C, packed)]
+struct ProcessorLocalApicRecord {
+	acpi_processor_id: u8,
+	apic_id: u8,
+	flags: u32,
+}
+
+impl fmt::Display for ProcessorLocalApicRecord {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{{ acpi_processor_id: {}, ", {self.acpi_processor_id})?;
+		write!(f, "apic_id: {}, ", {self.apic_id})?;
+		write!(f, "flags: {} }}", {self.flags})?;
+		Ok(())
+	}
+}
+
+const CPU_FLAG_ENABLED: u32 = 1 << 0;
+
+#[repr(C, packed)]
+struct IoApicRecord {
+	id: u8,
 	reserved: u8,
-}
-
-#[repr(C, packed)]
-struct CpuEntry {
-	entry_type: u8,
-	local_apic_id: u8,
-	local_apic_version: u8,
-	flags: u8,
-	signature: u32,
-	features: u32,
-	reserved: u64,
-}
-
-impl fmt::Display for CpuEntry {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{{ entry type: {}, ", self.entry_type)?;
-		write!(f, "local_apic_id: {}, ", self.local_apic_id)?;
-		write!(f, "local_apic_version: {}, ", self.local_apic_version)?;
-		write!(f, "flags: {}, ", self.flags)?;
-		unsafe {write!(f, "signature: 0x{:x}, ", self.signature)?; }
-		unsafe { write!(f, "features: 0x{:x} }}", self.features) }
-	}
-}
-
-const CPU_FLAG_ENABLED: u8        = 1 << 0;
-const CPU_FLAG_BOOT_PROCESSOR: u8 = 1 << 1;
-
-#[repr(C, packed)]
-struct BusEntry {
-	entry_type: u8,
-	id: u8,
-	type_string: [u8; 6],
-}
-
-impl fmt::Display for BusEntry {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{{ entry type: {}, ", self.entry_type)?;
-		write!(f, "id: {}, ", self.id)?;
-		write!(f, "type_string: {:?} }}", self.type_string)
-	}
-}
-
-#[repr(C, packed)]
-struct IoApicEntry {
-	entry_type: u8,
-	id: u8,
-	version: u8,
-	flags: u8,
 	address: u32,
+	global_system_interrupt_base: u32,
 }
 
-impl fmt::Display for IoApicEntry {
+impl fmt::Display for IoApicRecord {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{{ entry type: {}, ", self.entry_type)?;
-		write!(f, "id: {}, ", self.id)?;
-		write!(f, "version: {}, ", self.version)?;
-		write!(f, "flags: {}, ", self.flags)?;
-		unsafe { write!(f, "address: 0x{:x} }}", self.address) }
+		write!(f, "{{ id: {}, ", {self.id})?;
+		write!(f, "reserved: {}, ", {self.reserved})?;
+		write!(f, "address: {:#X}, ", {self.address})?;
+		write!(f, "global_system_interrupt_base: {} }}", {self.global_system_interrupt_base})?;
+		Ok(())
 	}
 }
 
-#[repr(C, packed)]
-struct IoInterruptEntry {
-	entry_type: u8,
-	interrupt_type: u8,
-	flags: u16,
-	source_bus_id: u8,
-	source_bus_irq: u8,
-	destination_ioapic_id: u8,
-	destination_ioapic_intin: u8,
-}
-
-impl fmt::Display for IoInterruptEntry {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{{ entry type: {}, ", self.entry_type)?;
-		write!(f, "interrupt_type: {}, ", self.interrupt_type)?;
-		unsafe { write!(f, "flags: 0x{:x}, ", self.flags)?; }
-		write!(f, "source_bus_id: {}, ", self.source_bus_id)?;
-		write!(f, "source_bus_irq: {}, ", self.source_bus_irq)?;
-		write!(f, "destination_ioapic_id: {}, ", self.destination_ioapic_id)?;
-		write!(f, "destination_ioapic_intin: {} }}", self.destination_ioapic_intin)
-	}
-}
-
-#[repr(C, packed)]
-struct LocalInterruptEntry {
-	entry_type: u8,
-	interrupt_type: u8,
-	flags: u16,
-	source_bus_id: u8,
-	source_bus_irq: u8,
-	destination_local_apic_id: u8,
-	destination_local_apic_lintin: u8,
-}
-
-impl fmt::Display for LocalInterruptEntry {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{{ entry type: {}, ", self.entry_type)?;
-		write!(f, "interrupt_type: {}, ", self.interrupt_type)?;
-		unsafe { write!(f, "flags: 0x{:x}, ", self.flags)?; }
-		write!(f, "source_bus_id: {}, ", self.source_bus_id)?;
-		write!(f, "source_bus_irq: {}, ", self.source_bus_irq)?;
-		write!(f, "destination_local_apic_id: {}, ", self.destination_local_apic_id)?;
-		write!(f, "destination_local_apic_lintin: {} }}", self.destination_local_apic_lintin)
-	}
-}
 
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
@@ -256,68 +173,14 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackF
 	eoi();
 }
 
-fn detect_multiprocessor_configuration_table(start_address: usize, end_address: usize) -> Result<usize, ()> {
-	// Trigger page mapping in the first iteration!
-	let mut current_page = 0;
 
-	// Look for the MultiProcessor Floating Pointer Structure in all possible 4-byte aligned addresses within this range.
-	for current_address in (start_address..end_address).step_by(4) {
-		// Have we crossed a page boundary in the last iteration?
-		if current_address / BasePageSize::SIZE > current_page {
-			// Identity-map this possible page of the MultiProcessor Floating Pointer Structure.
-			paging::map::<BasePageSize>(current_address, current_address, 1, PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE, false);
-			current_page = current_address / BasePageSize::SIZE;
-		}
-
-		// Verify the signature to find out if this is really a MultiProcessor Floating Pointer Structure.
-		let mp_floating = unsafe { & *(current_address as *const MultiProcessorFloatingPointer) };
-		let signature = unsafe { str::from_utf8_unchecked(&mp_floating.signature) };
-
-		if signature == "_MP_" {
-			// It is, so verify that it conforms to MultiProcessor Specification 1.4 and comes with a MultiProcessor Configuration Table.
-			assert!(
-				mp_floating.spec_rev == 4,
-				"MultiProcessor Specification 1.4 is required, but the system reports version 1.{} (according to structure at {:#X})", mp_floating.spec_rev, current_address
-			);
-			assert!(
-				mp_floating.length == 1,
-				"MultiProcessor Floating Pointer Structure at {:#X} has invalid length {:#X}", current_address, mp_floating.length
-			);
-			assert!(
-				mp_floating.features[0] == 0,
-				"A MultiProcessor Configuration Table is required, but the system relies on a default configuration (according to structure at {:#X})", current_address
-			);
-
-			// We were successful! Return a pointer to the MultiProcessor Configuration Table.
-			debug!("Found version 1.4 MultiProcessor Floating Pointer Structure at {:#X}, with Configuration Table at {:#X}.", current_address, mp_floating.configuration_table_ptr as usize);
-			return Ok(mp_floating.configuration_table_ptr as usize);
-		}
-	}
-
-	// We found no MultiProcessor Floating Pointer Structure.
-	Err(())
-}
-
-fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
-	// We require a system conforming to Intel MultiProcessor Specification 1.4.
-	// The specification gives three locations where the MultiProcessor Floating Pointer Structure can be found.
-	// However, experiments have shown that only searching between 0xF_0000 and 0xF_FFFF is sufficient.
-	let mut current_address = detect_multiprocessor_configuration_table(0xF_0000, 0xF_FFFF)?;
-	let mut current_page = current_address / BasePageSize::SIZE;
-
-	// Identity-map the MultiProcessor Configuration Table.
-	// Require it to be below the kernel start address (2 MiB), because everything above is managed by HermitCore without gaps.
-	assert!(current_address < mm::kernel_start_address(), "MultiProcessor Configuration Table address {:#X} is not < KERNEL_START_ADDRESS", current_address);
-	let mut map_address = align_down!(current_address, BasePageSize::SIZE);
-	paging::map::<BasePageSize>(map_address, map_address, 1, PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE, false);
-
-	// Verify the signature to find out if this is really a MultiProcessor Configuration Table.
-	let mp_config_header = unsafe { & *(current_address as *const MultiProcessorConfigurationTableHeader) };
-	let signature = unsafe { str::from_utf8_unchecked(&mp_config_header.signature) };
-	assert!(signature == "PCMP", "MultiProcessor Configuration Table at {:#X} has invalid signature", current_address);
+fn detect_from_acpi() -> Result<usize, ()> {
+	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
+	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");
+	let madt_header = unsafe { & *(madt.table_start_address() as *const AcpiMadtHeader) };
 
 	// Jump to the actual table entries (after the table header).
-	current_address += mem::size_of::<MultiProcessorConfigurationTableHeader>();
+	let mut current_address = madt.table_start_address() + mem::size_of::<AcpiMadtHeader>();
 
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
 	let local_apic_ids = unsafe {
@@ -326,89 +189,49 @@ fn detect_from_multiprocessor_specification() -> Result<usize, ()> {
 	};
 
 	// Loop through all table entries.
-	for _i in 0..mp_config_header.entry_count {
-		// Have we crossed a page boundary in the last iteration?
-		if current_address / BasePageSize::SIZE > current_page {
-			// Then we need to map another page for the MultiProcessor Configuration Table.
-			map_address = align_down!(current_address, BasePageSize::SIZE);
-			assert!(map_address < mm::kernel_start_address(), "Additional MultiProcessor Configuration Table address {:#X} is not < KERNEL_START_ADDRESS", map_address);
-			paging::map::<BasePageSize>(map_address, map_address, 1, PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE, false);
+	while current_address < madt.table_end_address() {
+		let record = unsafe { & *(current_address as *const AcpiMadtRecordHeader) };
+		current_address += mem::size_of::<AcpiMadtRecordHeader>();
 
-			current_page += 1;
-		}
+		match record.entry_type {
+			0 => {
+				// Processor Local APIC
+				let processor_local_apic_record = unsafe { & *(current_address as *const ProcessorLocalApicRecord) };
+				debug!("Found Processor Local APIC record: {}", processor_local_apic_record);
 
-		// Check what entry we have.
-		let entry_type = unsafe { & *(current_address as *const u8) };
-		match entry_type {
-			&0 => {
-				// CPU
-				let cpu = unsafe { & *(current_address as *const CpuEntry) };
-				debug!("Found CPU entry: {}", cpu);
-
-				if cpu.flags & CPU_FLAG_ENABLED > 0 {
-					if cpu.flags & CPU_FLAG_BOOT_PROCESSOR > 0 {
-						// When HermitCore first boots up, core_id is initialized to 0.
-						// For each application processor, it is later initialized with its Local APIC ID.
-						// Consequently, the Local APIC ID for the boot processor must be 0 as well, or we will
-						// run into inconsistencies when addressing CPUs in IPIs.
-						assert!(cpu.local_apic_id == 0, "The Boot Processor has Local APIC ID {}. This is not supported!", cpu.local_apic_id);
-					}
-
-					local_apic_ids.push(cpu.local_apic_id);
+				if processor_local_apic_record.flags & CPU_FLAG_ENABLED > 0 {
+					local_apic_ids.push(processor_local_apic_record.apic_id);
 				}
-
-				current_address += mem::size_of::<CpuEntry>();
 			},
-			&1 => {
-				// Bus
-				let bus = unsafe { & *(current_address as *const BusEntry) };
-				debug!("Found Bus entry: {}", bus);
-
-				current_address += mem::size_of::<BusEntry>();
-			},
-			&2 => {
+			1 => {
 				// I/O APIC
-				let ioapic = unsafe { & *(current_address as *const IoApicEntry) };
-				debug!("Found I/O APIC entry: {}", ioapic);
+				let ioapic_record = unsafe { & *(current_address as *const IoApicRecord) };
+				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
 					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
-					debug!("Mapping IOAPIC at {:#X} to virtual address {:#X}", ioapic.address, IOAPIC_ADDRESS);
+					debug!("Mapping IOAPIC at {:#X} to virtual address {:#X}", ioapic_record.address, IOAPIC_ADDRESS);
 
 					paging::map::<BasePageSize>(
 						IOAPIC_ADDRESS,
-						ioapic.address as usize,
+						ioapic_record.address as usize,
 						1,
 						PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE,
 						false
 					);
 				}
-
-				current_address += mem::size_of::<IoApicEntry>();
-			},
-			&3 => {
-				// I/O Interrupt Assignment
-				let io_interrupt = unsafe { & *(current_address as *const IoInterruptEntry) };
-				debug!("Found I/O Interrupt entry: {}", io_interrupt);
-
-				current_address += mem::size_of::<IoInterruptEntry>();
-			},
-			&4 => {
-				// Local Interrupt Assignment
-				let local_interrupt = unsafe { & *(current_address as *const LocalInterruptEntry) };
-				debug!("Found Local Interrupt entry: {}", local_interrupt);
-
-				current_address += mem::size_of::<LocalInterruptEntry>();
 			},
 			_ => {
-				panic!("MultiProcessor Configuration Table contains invalid entry of type {}", entry_type);
+				// Just ignore other entries for now.
 			}
 		}
+
+		current_address += record.length as usize - mem::size_of::<AcpiMadtRecordHeader>();
 	}
 
-	// Successfully derived all information from the MultiProcessor tables.
+	// Successfully derived all information from the MADT.
 	// Return the physical address of the Local APIC.
-	Ok(mp_config_header.local_apic_address as usize)
+	Ok(madt_header.local_apic_address as usize)
 }
 
 fn detect_from_uhyve() -> Result<usize, ()> {
@@ -425,11 +248,10 @@ pub extern "C" fn eoi() {
 }
 
 pub fn init() {
-	// Detect CPUs and APICs from the MultiProcessor Configuration Table (according to Intel MultiProcessor Specification 1.4).
-	// ACPI is currently not supported.
+	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()
-		.or_else(|_e| detect_from_multiprocessor_specification())
-		.expect("HermitCore requires a MultiProcessor Specification 1.4 compliant system");
+		.or_else(|_e| detect_from_acpi())
+		.expect("HermitCore requires an APIC system");
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	init_x2apic();
