@@ -91,7 +91,7 @@ impl Multiboot {
 	}
 
 	pub fn command_line_address(&self) -> Option<usize> {
-		if self.header.flags.contains(Flags::MULTIBOOT_INFO_CMDLINE) {
+		if {self.header.flags}.contains(Flags::MULTIBOOT_INFO_CMDLINE) {
 			Some(self.header.cmdline as usize)
 		} else {
 			None
@@ -111,7 +111,7 @@ impl Multiboot {
 	}
 
 	pub fn modules_address(&self) -> Option<usize> {
-		if self.header.flags.contains(Flags::MULTIBOOT_INFO_MODS) {
+		if {self.header.flags}.contains(Flags::MULTIBOOT_INFO_MODS) {
 			Some(self.header.mods_addr as usize)
 		} else {
 			None
@@ -126,7 +126,7 @@ impl Multiboot {
 	}
 
 	pub fn memory_map_address(&self) -> Option<usize> {
-		if self.header.flags.contains(Flags::MULTIBOOT_INFO_MEM_MAP) {
+		if {self.header.flags}.contains(Flags::MULTIBOOT_INFO_MEM_MAP) {
 			Some(self.header.mmap_addr as usize)
 		} else {
 			None
