@@ -1,7 +1,7 @@
 <img width="100" align="right" src="img/hermitcore_logo.png" />
 
 
-# HermitCore - A lightweight unikernel for a scalable and predictable runtime behavior
+# HermitCore - A Rust-based, lightweight unikernel for a scalable and predictable runtime behavior
 
 [![Build Status](https://travis-ci.org/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.org/hermitcore/libhermit)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
@@ -18,27 +18,15 @@ __We decided to develop the kernel in [Rust](https://www.rust-lang.org).
 We promise that this will make it easier to maintain and to extend our kernel.
 All code beside the kernel will be still developed in their prefered language (C/C++/Go/Fortran).__
 
-__Consequently, this branch represents the transmission from C to Rust.__
-
-![HermitCore Demo](img/demo.gif)
-
-On the startup of HermitCore applications, cores are isolated from the Linux
-system enabling bare-metal execution of on these cores. This approach achieves
-lower OS jitter and a better scalability compared to full-weight kernels.
-Inter-kernel communication between HermitCore applications and the Linux system
-is realized by means of an IP interface.
-
-In addition to the multi-kernel approach described above, HermitCore can be used
-as a classical standalone unikernel as well. In this case, HermitCore runs a
-single-kernel exclusively on the hardware or within a virtual machine. This
-reduces the resource demand and lowers the boot time which is critical for
-cloud computing applications. It is the result of a research project at RWTH
-Aachen University and is currently an experimental approach, i.e., not
-production ready. Please use it with caution.
+__Consequently, this branch represents the transmission from C to Rust.
+Currently, the Rust-based version supports not all features of the [C-based version](https://github.com/hermitcore/libhermit).
+However, it is a starting point and runs within a hypervisor.
+The multi-kernel approach is currently in the Rust-based version not yet fully
+supported and under development.__
 
 ## Contributing
 
-HermitCore is being developed on [GitHub](https://github.com/RWTH-OS/HermitCore).
+HermitCore is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
 Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com).
 
 ## Requirements
@@ -56,30 +44,16 @@ the HermitCore kernel and applications you need:
 
 ### HermitCore cross-toolchain
 
-We provide prebuilt packages (currently Debian-based only) of the HermitCore
+We provide prebuilt packages (currently Ubuntu 18.04 only) of the HermitCore
 toolchain. The packages based on the master branch and can be installed as follows:
 
 ```bash
-$ echo "deb [trusted=yes] https://dl.bintray.com/rwth-os/hermitcore vivid main" | sudo tee -a /etc/apt/sources.list
+$ echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | sudo tee -a /etc/apt/sources.list
 $ sudo apt-get -qq update
-$ sudo apt-get install binutils-hermit newlib-hermit pthread-embedded-hermit gcc-hermit libhermit
+$ sudo apt-get install binutils-hermit newlib-hermit pte-hermit-rs gcc-hermit libhermit
 ```
 
-For non-Debian based systems, a docker image with the complete toolchain is provided and can be installed as follows:
-
-```bash
-$ docker pull rwthos/hermitcore
-```
-
-The following commad starts within the new docker container a shell and mounts from the host system the directory `~/src` to `/src`:
-
-```bash
-$ docker run -i -t -v ~/src:/src rwthos/hermitcore:latest
-```
-
-Within the shell the cross-toolchain can be used to build HermitCore applications.
-
-If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/RWTH-OS/hermit-toolchain), which contains scripts to build the whole toolchain.
+If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/hermitcore/hermit-toolchain), which contains scripts to build the whole toolchain.
 
 Depending on how you want to use HermitCore, you might need additional packages
 such as:
@@ -90,46 +64,20 @@ such as:
 
 ### Preliminary work
 
-To build HermitCore from source (without the toolchain), the repository with its submodules has to be cloned.
+To use the Rust-based version, HermitCore has to build from source, the
+repository with its submodules has to be clone.
 
 ```bash
-$ git clone git@github.com:RWTH-OS/HermitCore.git
-$ cd HermitCore
+$ git clone git@github.com:hermitcore/libhermit-rs.git
+$ cd libhermit-rs
 $ git submodule init
 $ git submodule update
 ```
 
-We require a fairly recent version of CMake (`3.7`) which is not yet present in
-most Linux distributions. We therefore provide a helper script that fetches the
-required CMake binaries from the upstream project and stores them locally, so
-you only need to download it once.
-
-```bash
-$ . cmake/local-cmake.sh
--- Downloading CMake
---2017-03-28 16:13:37--  https://cmake.org/files/v3.7/cmake-3.7.2-Linux-x86_64.tar.gz
-Loaded CA certificate '/etc/ssl/certs/ca-certificates.crt'
-Resolving cmake.org... 66.194.253.19
-Connecting to cmake.org|66.194.253.19|:443... connected.
-HTTP request sent, awaiting response... 200 OK
-Length: 30681434 (29M) [application/x-gzip]
-Saving to: ‘cmake-3.7.2-Linux-x86_64.tar.gz’
-
-cmake-3.7.2-Linux-x86_64.tar.gz         100%[===================>]  29,26M  3,74MB/s    in 12s     
-
-2017-03-28 16:13:50 (2,48 MB/s) - ‘cmake-3.7.2-Linux-x86_64.tar.gz’ saved [30681434/30681434]
-
--- Unpacking CMake
--- Local CMake v3.7.2 installed to cmake/cmake-3.7.2-Linux-x86_64
--- Next time you source this script, no download will be necessary
-```
-
-So before you build HermitCore you have to source the `local-cmake.sh` script
-everytime you open a new terminal.
-
 ### Building the library operating systems and its examples
 
-To build HermitCore go to the directory with the source code, create a `build` directory, and call in the new directory `cmake` followed by `make`.
+To build HermitCore, go to the directory with the source code,
+create a `build` directory, and call in the new directory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
@@ -247,125 +195,9 @@ It is used for the communication between HermitCore application and its proxy.
 With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication.
 
 
-### As multi-kernel within a virtual machine
-
-Boot the test image of a minimal Linux system within a VM.
-For this, go to the build directory and boot the image by our makefiles.
-
-```bash
-$ cd build
-$ make qemu
-$ # or 'make qemu-dep' to build HermitCore dependencies before
-```
-
-Within the QEMU session you can start HermitCore application just the same as
-traditional Linux programs:
-
-```bash
-(QEMU) $ /hermit/x86_64-hermit/extra/tests/hello
-smpboot: CPU 1 is now offline
-Hello World!!!
-argv[0] = /hermit/x86_64-hermit/extra/tests/hello
-Receive signal with number 30
-Hostname: hermit.localdomain
-x86: Booting SMP configuration:
-smpboot: Booting Node 0 Processor 1 APIC 0x1
-```
-
-Per default, the virtual machine has 10 cores, 2 NUMA nodes, and 8 GiB RAM.
-Inside the VM runs a small Linux system, which already includes the patches for
-HermitCore. Per NUMA node (= HermitCore isle) there is a directory called
-`isleX` under `/sys/hermit` , where `X` represents the NUMA node ID.
-
-The demo applications are located in the directories
-`/hermit/x86_64-hermit/extra/{tests,benchmarks}`. A HermitCore loader is already registered.
-By starting a HermitCore application, a proxy will be executed on the Linux
-system, while the HermitCore binary will be started on isle 0 with cpu 1. To
-change the default behavior, the environment variable `HERMIT_ISLE` is used to
-specify the (memory) location of the isle, while the environment variable
-`HERMIT_CPUS` is used to specify the cores.
-
-For instance, `HERMIT_ISLE=1 HERMIT_CPUS="3-5" /hermit/x86_64-hermit/extra/tests/hello` starts
-a HelloWorld demo on the HermitCore isle 1, which uses the cores 3 to 5. The
-output messages are forwarded to the Linux proxy and printed on the Linux
-system.
-
-HermitCore's kernel messages of `isleX` are available via `cat
-/sys/hermit/isleX/log`.
-
-There is a virtual IP device for the communication between the HermitCore isles
-and the Linux system (see output of `ifconfig`). Per default, the Linux system
-has the IP address `192.168.28.1`. The HermitCore isles starts with the IP
-address `192.168.28.2` for isle 0 and is increased by one for every isle.
-
-More HermitCore applications are available at `/hermit/usr/{tests,benchmarks}`
-which is a shared directory between the host and QEMU.
-
-
 ### As multi-kernel on a real machine
 
-*Note*: to launch HermitCore applications, root privileges are required.
-
-A [modified Linux kernel](https://github.com/RWTH-OS/linux) has to be installed.
-Afterwards switch to the branch `hermit` for a relative new vanilla kernel or to
-`centos`, which is compatible to the current CentOS 7 kernel. Configure the
-kernel with `make menuconfig` for your system. Be sure, that the option
-`CONFIG_HERMIT_CORE` in `Processor type and features` is enabled.
-
-```bash
-$ git clone https://github.com/RWTH-OS/linux
-$ cd linux
-$ # see comments above
-$ git checkout hermit
-$ make menuconfig
-$ make
-```
-
-Install the Linux kernel and its initial ramdisk on your system (see
-descriptions of your Linux distribution). We recommend to disable Linux NO_HZ
-feature by setting the kernel parameter `nohz=off`.
-
-Install HermitCore to your system (by default to `/opt/hermit`):
-
-```bash
-$ cd build
-$ sudo make install
-$ ls -l /opt/hermit
-```
-
-After a reboot of the system, register the HermitCore loader at your system with
-following command:
-
-```bash
-$ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
-```
-
-The IP device between HermitCore and Linux currently does not support IPv6.
-Consequently, disable it (might be slightly different on your distribution):
-
-```bash
-$ echo 'net.ipv6.conf.mmnif.disable_ipv6 = 1' | sudo tee /etc/sysctl.conf
-```
-
-Per default, the IP device uses a static IP address range. Linux has to use
-`162.168.28.1`, where HermitCore isles start with `192.168.28.2` (isle 0). The
-interface is `mmnif`.
-
-Please configure your network accordingly. For CentOS, you have to create the
-file `/etc/sysconfig/network-scripts/ifcfg-mmnif`:
-
-```
-DEVICE=mmnif
-BOOTPROTO=none
-ONBOOT=yes
-NETWORK=192.168.28.0
-NETMASK=255.255.255.0
-IPADDR=192.168.28.1
-NM_CONTROLLED=yes
-```
-
-You can now start applications the same way as from within a virtual machine
-(see description above).
+*Coming soon...*
 
 
 ## Building your own HermitCore applications
@@ -375,12 +207,6 @@ that is required is that you include
 `[...]/HermitCore/cmake/HermitCore-Application.cmake` in your application's
 `CMakeLists.txt`. It doesn't have to reside inside the HermitCore repository.
 Other than that, it should behave like normal CMake.
-
-
-## Profiling
-
-We provide profiling support via the XRay profiler. See `usr/xray/README.md` for
-more information on how to use it.
 
 
 ## Debugging
@@ -395,7 +221,6 @@ $ gdb x86_64-hermit/extra/tests/hello
 Remote debugging using :1234
 0xffffffff8100b542 in ?? ()
 ```
-
 
 ## Tips
 
