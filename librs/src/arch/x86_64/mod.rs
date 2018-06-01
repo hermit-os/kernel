@@ -122,9 +122,9 @@ pub fn boot_processor_init() {
 	if environment::is_single_kernel() && !environment::is_uhyve() {
 		pci::init();
 		pci::print_information();
+		acpi::init();
 	}
 
-	acpi::init();
 	apic::init();
 	scheduler::install_timer_handler();
 
