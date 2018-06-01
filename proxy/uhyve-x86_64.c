@@ -287,7 +287,8 @@ static void filter_cpuid(struct kvm_cpuid2 *kvm_cpuid)
 static void setup_system_64bit(struct kvm_sregs *sregs)
 {
 	sregs->cr0 |= X86_CR0_PE;
-	sregs->efer |= EFER_LME;
+	sregs->cr4 |= X86_CR4_PAE;
+	sregs->efer |= EFER_LME|EFER_LMA;
 }
 
 static void setup_system_page_tables(struct kvm_sregs *sregs, uint8_t *mem)
