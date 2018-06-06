@@ -50,6 +50,11 @@ cmake ..
 make -j1 package
 cat build/hermit-rs-prefix/src/hermit-rs-stamp/hermit-rs-build-*.log
 
+cd ..
+mkdir -p tmp
+dpkg-deb -R build/libhermit-0.3.0-all.deb tmp
+rm -rf build/*.deb build/_CPack_Packages
+
 fi
 
 TDIR=/work/build/local_prefix/opt/hermit/x86_64-hermit/extra
