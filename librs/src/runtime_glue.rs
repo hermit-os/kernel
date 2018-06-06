@@ -28,15 +28,21 @@
 #![allow(private_no_mangle_fns)]
 
 use arch;
+use core::panic::PanicInfo;
 
 #[lang = "eh_personality"]
 extern "C" fn eh_personality() {}
 
-#[lang = "panic_fmt"]
+// see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
+#[panic_implementation]
 #[no_mangle]
-extern "C" fn panic_fmt(args: ::core::fmt::Arguments, file: &str, line: usize) -> !
-{
-	println!("[{}][!!!PANIC!!!] {}:{}: {}", arch::percore::core_id(), file, line, args);
+fn panic(info: &PanicInfo) -> ! {
+	if let Some(location) = info.location() {
+		println!("panic occurred in file '{}' at line {}", location.file(), location.line());
+	} else {
+		println!("panic occurred but can't get location information...");
+	}
+
 	loop {
 		arch::processor::halt();
 	}
