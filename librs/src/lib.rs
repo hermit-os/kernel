@@ -44,6 +44,7 @@
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(specialization)]
+#![feature(panic_implementation)]
 #![allow(unused_macros)]
 #![no_std]
 

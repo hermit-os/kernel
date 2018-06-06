@@ -348,7 +348,7 @@ impl BlockedTaskQueue {
 		// Get the Core ID of the task to wake up.
 		let core_id = {
 			let mut borrowed = task.borrow_mut();
-			info!("Waking up task {} on core {}", borrowed.id, borrowed.core_id);
+			debug!("Waking up task {} on core {}", borrowed.id, borrowed.core_id);
 
 			assert!(borrowed.status == TaskStatus::TaskBlocked, "Trying to wake up task {} which is not blocked", borrowed.id);
 			borrowed.status = TaskStatus::TaskReady;
@@ -375,7 +375,7 @@ impl BlockedTaskQueue {
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
-			info!("Blocking task {}", borrowed.id);
+			debug!("Blocking task {}", borrowed.id);
 
 			assert!(borrowed.status == TaskStatus::TaskRunning, "Trying to block task {} which is not running", borrowed.id);
 			borrowed.status = TaskStatus::TaskBlocked;
