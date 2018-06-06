@@ -14,9 +14,9 @@ approach (like
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
-__We decided to develop the kernel in [Rust](https://www.rust-lang.org).
+__We decided to develop a version of the kernel in [Rust](https://www.rust-lang.org).
 We promise that this will make it easier to maintain and to extend our kernel.
-All code beside the kernel will be still developed in their prefered language (C/C++/Go/Fortran).__
+All code beside the kernel will be still developed in their preferred language (C/C++/Go/Fortran).__
 
 __Consequently, this branch represents the transmission from C to Rust.
 Currently, the Rust-based version supports not all features of the [C-based version](https://github.com/hermitcore/libhermit).
@@ -50,7 +50,7 @@ toolchain. The packages based on the C version branch and can be installed as fo
 ```bash
 $ echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | sudo tee -a /etc/apt/sources.list
 $ sudo apt-get -qq update
-$ sudo apt-get install binutils-hermit newlib-hermit pte-hermit-rs gcc-hermit libhermit
+$ sudo apt-get install binutils-hermit newlib-hermit pte-hermit-rs gcc-hermit libhermit-rs
 ```
 
 If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/hermitcore/hermit-toolchain), which contains scripts to build the whole toolchain.
