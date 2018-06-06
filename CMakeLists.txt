@@ -80,7 +80,7 @@ add_custom_target(qemu-dep
 
 ### Packaging
 
-set(CPACK_PACKAGE_NAME libhermit)
+set(CPACK_PACKAGE_NAME libhermit-rs)
 set(CPACK_SYSTEM_NAME all)
 
 set(CPACK_PACKAGE_VERSION_MAJOR 0)
