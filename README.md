@@ -45,7 +45,7 @@ the HermitCore kernel and applications you need:
 ### HermitCore cross-toolchain
 
 We provide prebuilt packages (currently Ubuntu 18.04 only) of the HermitCore
-toolchain. The packages based on the master branch and can be installed as follows:
+toolchain. The packages based on the C version branch and can be installed as follows:
 
 ```bash
 $ echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | sudo tee -a /etc/apt/sources.list
@@ -60,12 +60,12 @@ such as:
 
  * QEMU (`apt-get install qemu-system-x86`)
 
-## Building HermitCore
+## Building the Rust-based Kernel
 
 ### Preliminary work
 
-To use the Rust-based version, HermitCore has to build from source, the
-repository with its submodules has to be clone.
+To use the Rust-based version, HermitCore has to build from source. For this
+purpose, the repository with its submodules has to be clone.
 
 ```bash
 $ git clone git@github.com:hermitcore/libhermit-rs.git
@@ -76,8 +76,8 @@ $ git submodule update
 
 ### Building the library operating systems and its examples
 
-To build HermitCore, go to the directory with the source code,
-create a `build` directory, and call in the new directory `cmake` followed by `make`.
+To build Rust-based kernel and its examples, go to the directory with the source code,
+create a subdirectory `build`, and call in the new directory `cmake` followed by `make`.
 
 ```bash
 $ mkdir build
