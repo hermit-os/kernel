@@ -25,6 +25,7 @@
 #![feature(const_fn)]
 #![feature(lang_items)]
 #![feature(specialization)]
+#![feature(panic_implementation)]
 #![no_std]
 
 // EXTERNAL CRATES

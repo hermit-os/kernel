@@ -114,7 +114,7 @@ fn setup_connection(fd: i32) {
 // once https://github.com/rust-lang/rfcs/blob/master/text/2195-really-tagged-unions.md
 // has been implemented.
 //
-#[repr(C)]
+#[repr(C, packed)]
 struct SysWrite {
 	sysnr: i32,
 	fd: i32,
@@ -131,7 +131,7 @@ impl SysWrite {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysClose {
 	sysnr: i32,
 	fd: i32
@@ -146,7 +146,7 @@ impl SysClose {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysOpen {
 	sysnr: i32
 }
@@ -159,7 +159,7 @@ impl SysOpen {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysExit {
 	sysnr: i32,
 	arg: i32
@@ -174,7 +174,7 @@ impl SysExit {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysRead {
 	sysnr: i32,
 	fd: i32,
@@ -191,7 +191,7 @@ impl SysRead {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysLseek {
 	sysnr: i32,
 	fd: i32,
