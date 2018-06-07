@@ -25,7 +25,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
-use mm::POOL;
+use mm::{MM_LOCK, POOL};
 
 
 static mut KERNEL_FREE_LIST: FreeList = FreeList::new();
@@ -54,6 +54,7 @@ pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
+	let _lock = MM_LOCK.lock();
 	let result = unsafe { KERNEL_FREE_LIST.allocate(size) };
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
 	result.unwrap()
@@ -66,6 +67,7 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
+	let _lock = MM_LOCK.lock();
 	unsafe {
 		POOL.maintain();
 		KERNEL_FREE_LIST.deallocate(virtual_address, size);
@@ -79,6 +81,7 @@ pub fn reserve(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
+	let _lock = MM_LOCK.lock();
 	let result = unsafe {
 		POOL.maintain();
 		KERNEL_FREE_LIST.reserve(virtual_address, size)

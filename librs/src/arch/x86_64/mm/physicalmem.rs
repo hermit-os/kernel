@@ -26,7 +26,7 @@ use collections::Node;
 use hermit_multiboot::Multiboot;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
-use mm::POOL;
+use mm::{MM_LOCK, POOL};
 
 
 extern "C" {
@@ -98,6 +98,7 @@ pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
+	let _lock = MM_LOCK.lock();
 	let result = unsafe { PHYSICAL_FREE_LIST.allocate(size) };
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory", size);
 	result.unwrap()
@@ -109,6 +110,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 	assert!(size % alignment == 0, "Size {:#X} is not a multiple of the given alignment {:#X}", size, alignment);
 	assert!(alignment % BasePageSize::SIZE == 0, "Alignment {:#X} is not a multiple of {:#X}", alignment, BasePageSize::SIZE);
 
+	let _lock = MM_LOCK.lock();
 	let result = unsafe {
 		POOL.maintain();
 		PHYSICAL_FREE_LIST.allocate_aligned(size, alignment)
