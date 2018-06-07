@@ -18,10 +18,10 @@ RUN apt-get install -y --allow-unauthenticated binutils-hermit newlib-hermit pte
 
 # Install Rust toolchain
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
-RUN cargo install xargo
-RUN rustup component add rust-src
+RUN /root/.cargo/bin/cargo install xargo
+RUN /root/.cargo/bin/rustup component add rust-src
 
-ENV PATH="/opt/hermit/bin:${PATH}"
+ENV PATH="/opt/hermit/bin:/root/.cargo/bin:${PATH}"
 ENV EDITOR=vim
 
 CMD echo "This is a HermitCore's toolchain!"; /bin/bash
