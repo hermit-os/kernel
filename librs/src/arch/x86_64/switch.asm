@@ -78,7 +78,7 @@ switch:
 	mov edx, DWORD [rsp+4]
 	mov eax, DWORD [rsp]
 	wrmsr
-	add esp, 8
+	add rsp, 8
 
 	; restore remaining context
 	pop r15
