@@ -35,11 +35,17 @@ extern "C" fn eh_personality() {}
 #[panic_implementation]
 #[no_mangle]
 fn panic(info: &PanicInfo) -> ! {
+	loaderlog!("PANIC: ");
+
 	if let Some(location) = info.location() {
-		println!("panic occurred in file '{}' at line {}", location.file(), location.line());
-	} else {
-		println!("panic occurred but can't get location information...");
+		loaderlog!("{}:{}: ", location.file(), location.line());
 	}
+
+	if let Some(message) = info.message() {
+		loaderlog!("{}", message);
+	}
+
+	loaderlog!("\n");
 
 	loop {
 		unsafe { asm!("hlt" :::: "volatile"); }

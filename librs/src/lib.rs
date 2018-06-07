@@ -43,8 +43,9 @@
 #![feature(iterator_step_by)]
 #![feature(lang_items)]
 #![feature(linkage)]
-#![feature(specialization)]
 #![feature(panic_implementation)]
+#![feature(panic_info_message)]
+#![feature(specialization)]
 #![allow(unused_macros)]
 #![no_std]
 
