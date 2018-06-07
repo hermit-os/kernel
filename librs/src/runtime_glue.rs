@@ -37,11 +37,17 @@ extern "C" fn eh_personality() {}
 #[panic_implementation]
 #[no_mangle]
 fn panic(info: &PanicInfo) -> ! {
+	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
+
 	if let Some(location) = info.location() {
-		println!("panic occurred in file '{}' at line {}", location.file(), location.line());
-	} else {
-		println!("panic occurred but can't get location information...");
+		print!("{}:{}: ", location.file(), location.line());
 	}
+
+	if let Some(message) = info.message() {
+		print!("{}", message);
+	}
+
+	print!("\n");
 
 	loop {
 		arch::processor::halt();
