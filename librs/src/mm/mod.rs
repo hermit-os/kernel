@@ -38,7 +38,7 @@ extern "C" {
 }
 
 
-static MM_LOCK: MmLock = MmLock::new();
+pub static MM_LOCK: MmLock = MmLock::new();
 pub static mut POOL: NodePool = NodePool::new();
 
 
