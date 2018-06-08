@@ -10,7 +10,7 @@ The project [HermitCore]( http://www.hermitcore.org ) is a new
 [unikernel](http://unikernel.org) targeting a scalable and predictable runtime
 for high-performance and cloud computing. HermitCore extends the multi-kernel
 approach (like
-[McKernel](http://www-sys-aics.riken.jp/ResearchTopics/os/mckernel.html)) with
+[McKernel](https://www-sys-aics.riken.jp/ResearchTopics/os/mckernel/)) with
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
