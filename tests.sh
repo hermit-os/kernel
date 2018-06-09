@@ -52,7 +52,7 @@ cat build/hermit-rs-prefix/src/hermit-rs-stamp/hermit-rs-build-*.log
 
 cd ..
 mkdir -p tmp
-dpkg-deb -R build/libhermit-rs-0.3.0-all.deb tmp
+dpkg-deb -R build/libhermit-rs-0.3.1-all.deb tmp
 rm -rf build/*.deb build/_CPack_Packages
 
 fi
