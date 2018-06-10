@@ -176,7 +176,7 @@ pub unsafe extern "C" fn loader_main() {
 			}
 
 			file_size = program_header.virt_addr + align_up!(program_header.file_size, BasePageSize::SIZE) - virtual_address;
-			mem_size += program_header.mem_size;
+			mem_size = program_header.virt_addr - virtual_address + program_header.mem_size;
 		}
 	}
 
