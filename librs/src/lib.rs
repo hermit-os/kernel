@@ -160,7 +160,7 @@ extern "C" fn initd(_arg: usize) {
 
 	unsafe {
 		// Initialize .bss sections for the user program.
-	    ptr::write_bytes(
+		ptr::write_bytes(
 			&mut __bss_start as *mut u8,
 			0,
 			&kernel_start as *const u8 as usize + image_size as usize - &__bss_start as *const u8 as usize
