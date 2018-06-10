@@ -101,7 +101,8 @@ static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAlloca
 extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
-	static kernel_end: u8;
+	static kernel_start: u8;
+	static image_size: u64;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 	fn init_lwip();
@@ -116,13 +117,6 @@ unsafe fn sections_init() {
 		&mut hbss_start as *mut u8,
 		0,
 		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize
-	);
-
-	// Initialize .bss sections for the user program.
-	ptr::write_bytes(
-		&mut __bss_start as *mut u8,
-		0,
-		&kernel_end as *const u8 as usize - &__bss_start as *const u8 as usize
 	);
 }
 
@@ -163,7 +157,17 @@ extern "C" fn initd(_arg: usize) {
 	let argc = 0;
 	let argv = 0 as *mut *mut u8;
 	let environ = 0 as *mut *mut u8;
-	unsafe { libc_start(argc, argv, environ); }
+
+	unsafe {
+		// Initialize .bss sections for the user program.
+	    ptr::write_bytes(
+			&mut __bss_start as *mut u8,
+			0,
+			&kernel_start as *const u8 as usize + image_size as usize - &__bss_start as *const u8 as usize
+		);
+
+		libc_start(argc, argv, environ);
+	}
 }
 
 /// Entry Point of HermitCore for the Boot Processor
