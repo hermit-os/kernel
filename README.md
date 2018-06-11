@@ -18,7 +18,7 @@ __We decided to develop a version of the kernel in [Rust](https://www.rust-lang.
 We promise that this will make it easier to maintain and to extend our kernel.
 All code beside the kernel will be still developed in their preferred language (C/C++/Go/Fortran).__
 
-__Consequently, this branch represents the transmission from C to Rust.
+__Consequently, this branch represents the transition from C to Rust.
 Currently, the Rust-based version supports not all features of the [C-based version](https://github.com/hermitcore/libhermit).
 However, it is a starting point and runs within a hypervisor.
 The multi-kernel approach is currently in the Rust-based version not yet fully
