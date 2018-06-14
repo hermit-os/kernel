@@ -171,9 +171,12 @@ add_custom_command(
 	COMMAND
 		${CMAKE_BINARY_DIR}/objmv/release/objmv $<TARGET_FILE:hermit-bootstrap>
 
-	# Redefine _Unwind_Resume to avoid collision with libgcc.a
+	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
 	COMMAND
-		${CMAKE_OBJCOPY} --redefine-sym _Unwind_Resume=_Unwind_Resume_rs $<TARGET_FILE:hermit-bootstrap>
+		${CMAKE_OBJCOPY}
+		--redefine-sym rust_begin_unwind=HermitCore_Kernel_rust_begin_unwind
+		--redefine-sym rust_oom=HermitCore_Kernel_rust_oom
+		$<TARGET_FILE:hermit-bootstrap>
 
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
