@@ -33,8 +33,8 @@
 //! As soon as all required data structures have been set up, the "System Allocator" is used.
 //! It manages all memory >= KERNEL_END_ADDRESS.
 
-use alloc::heap::Layout;
-use core::alloc::{GlobalAlloc, Opaque};
+use alloc::allocator::Layout;
+use core::alloc::GlobalAlloc;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use mm;
 
@@ -75,7 +75,7 @@ static mut ALLOCATOR_INFO: HermitAllocatorInfo = HermitAllocatorInfo::new();
 pub struct HermitAllocator;
 
 unsafe impl<'a> GlobalAlloc for &'a HermitAllocator {
-	unsafe fn alloc(&self, layout: Layout) -> *mut Opaque {
+	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		if ALLOCATOR_INFO.is_bootstrapping {
 			alloc_bootstrap(layout)
 		} else {
@@ -83,7 +83,7 @@ unsafe impl<'a> GlobalAlloc for &'a HermitAllocator {
 		}
 	}
 
-	unsafe fn dealloc(&self, ptr: *mut Opaque, layout: Layout) {
+	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
 		let address = ptr as usize;
 
 		// We never deallocate memory of the Bootstrap Allocator.
@@ -97,7 +97,7 @@ unsafe impl<'a> GlobalAlloc for &'a HermitAllocator {
 }
 
 /// An allocation using the always available Bootstrap Allocator.
-unsafe fn alloc_bootstrap(layout: Layout) -> *mut Opaque {
+unsafe fn alloc_bootstrap(layout: Layout) -> *mut u8 {
 	let ptr = &mut ALLOCATOR_INFO.heap[ALLOCATOR_INFO.index] as *mut u8;
 	debug_mem!("Allocating {} bytes at {:#X} using the Bootstrap Allocator", layout.size(), ptr as usize);
 
@@ -107,15 +107,15 @@ unsafe fn alloc_bootstrap(layout: Layout) -> *mut Opaque {
 		panic!("Bootstrap Allocator Overflow! Increase BOOTSTRAP_HEAP_SIZE.");
 	}
 
-	ptr as *mut Opaque
+	ptr
 }
 
 /// An allocation using the initialized System Allocator.
-fn alloc_system(layout: Layout) -> *mut Opaque {
+fn alloc_system(layout: Layout) -> *mut u8 {
 	debug_mem!("Allocating {} bytes using the System Allocator", layout.size());
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut Opaque
+	mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut u8
 }
 
 /// A deallocation using the initialized System Allocator.
