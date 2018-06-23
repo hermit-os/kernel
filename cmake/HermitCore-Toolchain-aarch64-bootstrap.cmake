@@ -1,4 +1,4 @@
-include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-x86.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-aarch64.cmake)
 include_guard()
 
 set(CMAKE_C_COMPILER_WORKS 1 CACHE INTERNAL "")

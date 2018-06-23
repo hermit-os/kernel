@@ -18,56 +18,65 @@ endif()
 
 configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
 
-# Preprocess the PCI IDs into a Rust array.
-add_custom_command(
-	OUTPUT
-		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-	DEPENDS
-		pci_ids_parser
-	DEPENDS
-		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
-	COMMAND
-		${CMAKE_BINARY_DIR}/pci_ids_parser/release/pci_ids_parser
-		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
-		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-	VERBATIM)
+if("${HERMIT_ARCH}" STREQUAL "x86_64")
+	# Preprocess the PCI IDs into a Rust array.
+	add_custom_command(
+		OUTPUT
+			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
+		DEPENDS
+			pci_ids_parser
+		DEPENDS
+			${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+		COMMAND
+			${CMAKE_BINARY_DIR}/pci_ids_parser/release/pci_ids_parser
+			${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
+		VERBATIM)
+	add_custom_target(pcidata
+		DEPENDS
+			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs)
 
-# Preprocess the SMP Boot Code into a Rust array.
-add_custom_command(
-	OUTPUT
-		${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
-	DEPENDS
-		${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
-	COMMAND
-		nasm -f bin -o boot.bin ${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
-	COMMAND
-		echo -n "static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
-	COMMAND
-		stat -c %s boot.bin >> smp_boot_code.rs
-	COMMAND
-		echo "] = [" >> smp_boot_code.rs
-	COMMAND
-		hexdump -v -e "1/1 \"0x%02X,\"" boot.bin >> smp_boot_code.rs
-	COMMAND
-		echo "];" >> smp_boot_code.rs
-	WORKING_DIRECTORY
-		${CMAKE_BINARY_DIR}/hermit_rs
-	VERBATIM)
+	# Preprocess the SMP Boot Code into a Rust array.
+	add_custom_command(
+		OUTPUT
+			${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
+		DEPENDS
+			${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
+		COMMAND
+			nasm -f bin -o boot.bin ${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
+		COMMAND
+			echo -n "static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
+		COMMAND
+			stat -c %s boot.bin >> smp_boot_code.rs
+		COMMAND
+			echo "] = [" >> smp_boot_code.rs
+		COMMAND
+			hexdump -v -e "1/1 \"0x%02X,\"" boot.bin >> smp_boot_code.rs
+		COMMAND
+			echo "];" >> smp_boot_code.rs
+		WORKING_DIRECTORY
+			${CMAKE_BINARY_DIR}/hermit_rs
+		VERBATIM)
+	add_custom_target(smp_boot_code
+		DEPENDS
+			${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs)
+endif()
 
 # Add the Cargo project to build the Rust library.
-set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/x86_64-hermit/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${TARGET_ARCH}/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
 	DEPENDS
 		objmv
-	DEPENDS
-		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-	DEPENDS
-		${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/target
-		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target x86_64-hermit
+		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target ${TARGET_ARCH}
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
+
+if("${HERMIT_ARCH}" STREQUAL "x86_64")
+	add_dependencies(hermit_rs pcidata)
+	add_dependencies(hermit_rs smp_boot_code)
+endif()
 
 # Add a documentation target for the Cargo project.
 add_custom_target(doc
@@ -83,9 +92,11 @@ add_custom_target(doc
 add_definitions(-D__KERNEL__)
 
 # arch
-add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm")
-add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/sighandler.asm")
-add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/switch.asm")
+if("${HERMIT_ARCH}" STREQUAL "x86_64")
+	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm")
+	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/sighandler.asm")
+	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/switch.asm")
+endif()
 
 # LwIP
 set(LWIP_SRC ${CMAKE_SOURCE_DIR}/lwip/src)
@@ -97,7 +108,10 @@ add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv6/*.c")
 add_kernel_module_sources("lwip" "${LWIP_SRC}/netif/*.c")
 
 # Support for Go applications that currently cannot be implemented in Rust
-add_kernel_module_sources("libgosupport_asm" "${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
+if("${HERMIT_ARCH}" STREQUAL "x86_64")
+	add_kernel_module_sources("libgosupport_asm" "${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
+endif()
+
 add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/context.c")
 
 
@@ -129,7 +143,9 @@ endforeach()
 
 # Set a source-level dependency from the entry point on the Rust library.
 # This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.
-set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
+if("${HERMIT_ARCH}" STREQUAL "x86_64")
+	set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
+endif()
 
 # Build all kernel modules into a single static library.
 add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
@@ -155,9 +171,12 @@ add_custom_command(
 	COMMAND
 		${CMAKE_BINARY_DIR}/objmv/release/objmv $<TARGET_FILE:hermit-bootstrap>
 
-	# Redefine _Unwind_Resume to avoid collision with libgcc.a
+	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
 	COMMAND
-		${CMAKE_OBJCOPY} --redefine-sym _Unwind_Resume=_Unwind_Resume_rs $<TARGET_FILE:hermit-bootstrap>
+		${CMAKE_OBJCOPY}
+		--redefine-sym rust_begin_unwind=HermitCore_Kernel_rust_begin_unwind
+		--redefine-sym rust_oom=HermitCore_Kernel_rust_oom
+		$<TARGET_FILE:hermit-bootstrap>
 
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
