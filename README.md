@@ -53,7 +53,7 @@ $ sudo apt-get -qq update
 $ sudo apt-get install binutils-hermit newlib-hermit pte-hermit-rs gcc-hermit libhermit-rs
 ```
 
-If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/hermitcore/hermit-toolchain), which contains scripts to build the whole toolchain.
+If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/hermitcore/hermit-toolchain), which contains in the branch `path2rs` scripts to build the whole toolchain for the Rust-based version of HermitCore.
 
 Depending on how you want to use HermitCore, you might need additional packages
 such as:
