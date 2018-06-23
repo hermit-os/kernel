@@ -38,7 +38,6 @@
 #![feature(const_atomic_isize_new)]
 #![feature(const_atomic_usize_new)]
 #![feature(const_unsafe_cell_new)]
-#![feature(global_allocator)]
 #![feature(integer_atomics)]
 #![feature(iterator_step_by)]
 #![feature(lang_items)]
