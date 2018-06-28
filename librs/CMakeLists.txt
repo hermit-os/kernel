@@ -172,10 +172,15 @@ add_custom_command(
 		${CMAKE_BINARY_DIR}/objmv/release/objmv $<TARGET_FILE:hermit-bootstrap>
 
 	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
+	# Note that some of them only appear in Debug builds of HermitCore!
 	COMMAND
 		${CMAKE_OBJCOPY}
 		--redefine-sym rust_begin_unwind=HermitCore_Kernel_rust_begin_unwind
 		--redefine-sym rust_oom=HermitCore_Kernel_rust_oom
+		--redefine-sym __rust_alloc=HermitCore_Kernel___rust_alloc
+		--redefine-sym __rust_alloc_zeroed=HermitCore_Kernel___rust_alloc_zeroed
+		--redefine-sym __rust_dealloc=HermitCore_Kernel___rust_dealloc
+		--redefine-sym __rust_realloc=HermitCore_Kernel___rust_realloc
 		$<TARGET_FILE:hermit-bootstrap>
 
 	# Copy libhermit.a into local prefix directory so that all subsequent
