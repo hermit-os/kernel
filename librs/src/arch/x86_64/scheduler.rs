@@ -89,10 +89,29 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	// Check if the task (process or thread) uses Thread-Local-Storage.
 	let tls_size = unsafe { &tls_end as *const u8 as usize - &tls_start as *const u8 as usize };
 	if tls_size > 0 {
-		// Allocate TLS memory, copy over the TLS variables, and set the FS register accordingly.
-		let tls = TaskTLS::new(tls_size);
-		unsafe { ptr::copy_nonoverlapping(&tls_start as *const u8, tls.address() as *mut u8, tls_size); }
-		processor::writefs(tls.address() + tls_size);
+		// Yes, it does, so we have to allocate TLS memory.
+		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
+		let tls_allocation_size = tls_size + mem::size_of::<usize>();
+		let tls = TaskTLS::new(tls_allocation_size);
+
+		// The tls_pointer is the address to the end of the TLS area requested by the task.
+		let tls_pointer = tls.address() + tls_size;
+
+		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
+		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
+		processor::writefs(tls_pointer);
+
+		unsafe {
+			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
+			// This allows TLS variable values to be accessed by "mov rax, fs:0" and a later "lea rdx, [rax+VARIABLE_OFFSET]".
+			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
+			//
+			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
+			*(tls_pointer as *mut usize) = tls_pointer;
+
+			// Copy over TLS variables with their initial values.
+			ptr::copy_nonoverlapping(&tls_start as *const u8, tls.address() as *mut u8, tls_size);
+		}
 
 		// Associate the TLS memory to the current task.
 		let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
