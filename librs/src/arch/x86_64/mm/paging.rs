@@ -628,9 +628,9 @@ pub fn identity_map(start_address: usize, end_address: usize) {
 	root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
 }
 
-#[no_mangle]
-pub extern "C" fn getpagesize() -> i32 {
-	BasePageSize::SIZE as i32
+#[inline]
+pub fn get_application_page_size() -> usize {
+	LargePageSize::SIZE
 }
 
 pub fn init() {
