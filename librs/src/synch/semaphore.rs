@@ -87,7 +87,7 @@ impl Semaphore {
 	///
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
-	pub fn acquire(&self, wakeup_time: Option<usize>) -> bool {
+	pub fn acquire(&self, wakeup_time: Option<u64>) -> bool {
 		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
 		core_scheduler.current_task.borrow_mut().last_wakeup_reason = WakeupReason::Custom;

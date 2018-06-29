@@ -85,17 +85,12 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	old_end
 }
 
-// TODO: Rename this function to sys_usleep for consistency and change the call in GCC's libgo/runtime/yield.c
-// This is a breaking change though!
-// Not doing this yet allows us to use the same GCC for the HermitCore C version and HermitCore-rs.
 #[no_mangle]
-pub extern "C" fn udelay(usecs: u32) {
-	let ticks = (usecs as usize / 1000) * arch::processor::TIMER_FREQUENCY / 1000;
-
-	if ticks > 0 {
+pub extern "C" fn sys_usleep(usecs: u64) {
+	if usecs > (scheduler::TASK_TIME_SLICE as u64) {
 		// Enough time to set a wakeup timer and block the current task.
-		debug!("udelay waiting {} ticks", ticks);
-		let wakeup_time = arch::processor::update_timer_ticks() + ticks;
+		debug!("sys_usleep blocking the task for {} microseconds", usecs);
+		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		let current_task = core_scheduler.current_task.clone();
 		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
@@ -104,13 +99,8 @@ pub extern "C" fn udelay(usecs: u32) {
 		core_scheduler.scheduler();
 	} else if usecs > 0 {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
-		arch::processor::udelay(usecs as u64);
+		arch::processor::udelay(usecs);
 	}
-}
-
-#[no_mangle]
-pub extern "C" fn sys_msleep(ms: u32) {
-	udelay(ms * 1000);
 }
 
 #[no_mangle]
@@ -151,4 +141,19 @@ pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 	}
 
 	0
+}
+
+
+// TODO: Get rid of this function by changing the call to sys_usleep() in GCC's libgo/runtime/yield.c
+// This is a breaking change though!
+// Not doing this yet allows us to use the same GCC for the HermitCore C version and HermitCore-rs.
+#[no_mangle]
+pub extern "C" fn udelay(usecs: u32) {
+	sys_usleep(usecs as u64)
+}
+
+// TODO: This syscall is redundant when we already have sys_usleep() and should eventually be removed.
+#[no_mangle]
+pub extern "C" fn sys_msleep(ms: u32) {
+	sys_usleep((ms as u64) * 1000);
 }

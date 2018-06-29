@@ -25,7 +25,6 @@
 use arch::x86_64::acpi;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
-use arch::x86_64::percore::*;
 use arch::x86_64::pic;
 use arch::x86_64::pit;
 use core::{fmt, u32};
@@ -41,9 +40,6 @@ extern "C" {
 	static mut cpu_freq: u32;
 }
 
-/// Timer frequency in Hz for the ticks counted in update_timer_ticks.
-pub const TIMER_FREQUENCY: usize = 100;
-
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
@@ -57,6 +53,7 @@ static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
 static mut SUPPORTS_1GIB_PAGES: bool = false;
 static mut SUPPORTS_AVX: bool = false;
 static mut SUPPORTS_RDRAND: bool = false;
+static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
@@ -390,6 +387,7 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_monitor_mwait() { write!(f, "MWAIT ")?; }
 		if self.feature_info.has_clflush() { write!(f, "CLFLUSH ")?; }
 		if self.feature_info.has_dca() { write!(f, "DCA ")?; }
+		if self.feature_info.has_tsc_deadline() { write!(f, "TSC-DEADLINE ")?; }
 
 		if let Some(ref extended_feature_info) = self.extended_feature_info {
 			if extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
@@ -514,6 +512,7 @@ pub fn detect_features() {
 		SUPPORTS_1GIB_PAGES = extended_function_info.has_1gib_pages();
 		SUPPORTS_AVX = feature_info.has_avx();
 		SUPPORTS_RDRAND = feature_info.has_rdrand();
+		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
 
@@ -653,6 +652,11 @@ pub fn supports_avx() -> bool {
 }
 
 #[inline]
+pub fn supports_tsc_deadline() -> bool {
+	unsafe { SUPPORTS_TSC_DEADLINE }
+}
+
+#[inline]
 pub fn supports_x2apic() -> bool {
 	unsafe { SUPPORTS_X2APIC }
 }
@@ -691,20 +695,10 @@ pub fn shutdown() -> ! {
 	}
 }
 
-pub fn update_timer_ticks() -> usize {
-	unsafe {
-		let current_cycles = get_timestamp();
-		let added_cycles = current_cycles - PERCORE.last_rdtsc.get();
-		let added_ticks = added_cycles as usize * TIMER_FREQUENCY / (get_frequency() as usize * 1_000_000);
-		let ticks = PERCORE.timer_ticks.get() + added_ticks;
-
-		if added_ticks > 0 {
-			PERCORE.last_rdtsc.set(current_cycles);
-			PERCORE.timer_ticks.set(ticks);
-		}
-
-		ticks
-	}
+pub fn get_timer_ticks() -> u64 {
+	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
+	// and dividing it by the CPU frequency in MHz.
+	get_timestamp() / (get_frequency() as u64)
 }
 
 pub fn get_frequency() -> u16 {

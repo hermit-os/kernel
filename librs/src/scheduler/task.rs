@@ -332,7 +332,7 @@ impl Task {
 
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,
-	wakeup_time: Option<usize>,
+	wakeup_time: Option<u64>,
 }
 
 pub struct BlockedTaskQueue {
@@ -371,7 +371,7 @@ impl BlockedTaskQueue {
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
-	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<usize>) {
+	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
@@ -449,7 +449,7 @@ impl BlockedTaskQueue {
 	/// at least one task has elapsed.
 	pub fn handle_waiting_tasks(&mut self) {
 		// Get the current time.
-		let time = arch::processor::update_timer_ticks();
+		let time = arch::processor::get_timer_ticks();
 
 		// Loop through all blocked tasks.
 		for node in self.list.iter() {

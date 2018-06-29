@@ -42,6 +42,11 @@ extern "C" {
 }
 
 
+/// Time slice of a task in microseconds.
+/// When this time has elapsed and the scheduler is called, it may switch to another ready task.
+pub const TASK_TIME_SLICE: u64 = 10_000;
+
+
 static LAST_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 static NEXT_CPU_NUMBER: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
@@ -75,7 +80,7 @@ pub struct PerCoreScheduler {
 	/// Queue of blocked tasks, sorted by wakeup time.
 	pub blocked_tasks: SpinlockIrqSave<BlockedTaskQueue>,
 	/// Processor Timer Tick when we last switched the current task.
-	last_task_switch_tick: usize,
+	last_task_switch_tick: u64,
 }
 
 impl PerCoreScheduler {
@@ -214,8 +219,8 @@ impl PerCoreScheduler {
 			} else {
 				// No task with a higher priority is available, but a task with the same priority as ours may be available.
 				// We implement Round-Robin Scheduling for this case.
-				// Check if our current task has been running for at least a single timer tick.
-				if arch::processor::update_timer_ticks() > self.last_task_switch_tick {
+				// Check if our current task has been running for at least the task time slice.
+				if arch::processor::get_timer_ticks() > self.last_task_switch_tick + TASK_TIME_SLICE {
 					// Check if a task with our own priority is available.
 					if let Some(task) = state_locked.ready_queue.pop_with_prio(prio) {
 						// This task becomes the new task.
@@ -273,7 +278,7 @@ impl PerCoreScheduler {
 			debug!("Switching task from {} to {} (stack {:#X} => {:#X})", id, new_id,
 				unsafe { *last_stack_pointer }, new_stack_pointer);
 			self.current_task = task;
-			self.last_task_switch_tick = arch::processor::update_timer_ticks();
+			self.last_task_switch_tick = arch::processor::get_timer_ticks();
 
 			// Unlock the state and reenable interrupts.
 			drop(state_locked);
