@@ -30,7 +30,6 @@ mod recmutex;
 mod semaphore;
 mod spinlock;
 mod tasks;
-mod timer;
 
 pub use self::lwip::*;
 pub use self::processor::*;
@@ -39,7 +38,6 @@ pub use self::recmutex::*;
 pub use self::semaphore::*;
 pub use self::spinlock::*;
 pub use self::tasks::*;
-pub use self::timer::*;
 use environment;
 use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
