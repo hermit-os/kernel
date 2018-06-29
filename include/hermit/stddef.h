@@ -43,7 +43,7 @@ extern "C" {
 // size of the whole application
 extern const size_t image_size;
 
-#define TIMER_FREQ	100 /* in HZ */
+#define TIMER_FREQ	1000000 /* in HZ */
 #define CACHE_LINE	64
 #define KMSG_SIZE	0x1000
 #define INT_SYSCALL	0x80

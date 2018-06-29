@@ -24,6 +24,6 @@
 use arch;
 
 #[no_mangle]
-pub extern "C" fn sys_get_ticks() -> usize {
-	arch::processor::update_timer_ticks()
+pub extern "C" fn sys_get_ticks() -> u64 {
+	arch::processor::get_timer_ticks()
 }

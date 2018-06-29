@@ -86,7 +86,7 @@ pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 
 	// Calculate the absolute wakeup time in processor timer ticks out of the relative timeout in milliseconds.
 	let wakeup_time = if ms > 0 {
-		Some(arch::processor::update_timer_ticks() + (ms as usize) * arch::processor::TIMER_FREQUENCY / 1000)
+		Some(arch::processor::get_timer_ticks() + (ms as u64) * 1000)
 	} else {
 		None
 	};

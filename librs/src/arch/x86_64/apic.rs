@@ -35,7 +35,7 @@ use arch::x86_64::mm::virtualmem;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, mem, ptr, str, u32};
+use core::{cmp, fmt, mem, ptr, str, u32};
 use environment;
 use mm;
 use scheduler;
@@ -51,7 +51,7 @@ extern "C" {
 
 const APIC_ICR2: usize = 0x0310;
 
-const APIC_DIV_CONF_DIVIDE_BY_128: u64      = 0b1010;
+const APIC_DIV_CONF_DIVIDE_BY_8: u64        = 0b0010;
 const APIC_EOI_ACK: u64                     = 0;
 const APIC_ICR_DELIVERY_MODE_FIXED: u64     = 0x000;
 const APIC_ICR_DELIVERY_MODE_INIT: u64      = 0x500;
@@ -60,6 +60,7 @@ const APIC_ICR_DELIVERY_STATUS_PENDING: u32 = 1 << 12;
 const APIC_ICR_LEVEL_TRIGGERED: u64         = 1 << 15;
 const APIC_ICR_LEVEL_ASSERT: u64            = 1 << 14;
 const APIC_LVT_MASK: u64                    = 1 << 16;
+const APIC_LVT_TIMER_TSC_DEADLINE: u64      = 1 << 18;
 const APIC_SIVR_ENABLED: u64                = 1 << 8;
 
 /// Register index: ID
@@ -96,8 +97,8 @@ static mut IOAPIC_ADDRESS: usize = 0;
 static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
 
 /// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
-/// after a single tick of the timer specified by processor::TIMER_FREQUENCY.
-static mut CALIBRATED_COUNTER_VALUE: usize = 0;
+/// after 1 microsecond.
+static mut CALIBRATED_COUNTER_VALUE: u64 = 0;
 
 
 #[repr(C, packed)]
@@ -282,8 +283,11 @@ pub fn init() {
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.
 	init_local_apic();
 
-	// Calibrate the APIC Timer once and use the calibration value for all CPUs.
-	calibrate_timer();
+	if !processor::supports_tsc_deadline() {
+		// We have an older APIC Timer without TSC Deadline support, which has a maximum timeout
+		// and needs to be calibrated.
+		calibrate_timer();
+	}
 
 	// init ioapic
 	if !environment::is_uhyve() {
@@ -362,48 +366,55 @@ pub fn init_local_apic() {
 
 fn calibrate_timer() {
 	// The APIC Timer is used to provide a one-shot interrupt for the tickless timer
-	// implemented through processor::update_timer_ticks.
-	// Therefore calibrate it relative to processor::TIMER_FREQUENCY, count 3 ticks here for accuracy.
-	let tick_count = 3;
-	let cycles_per_tick = processor::get_frequency() as u64 * 1_000_000 / processor::TIMER_FREQUENCY as u64;
-	let cycles = tick_count * cycles_per_tick;
+	// implemented through processor::get_timer_ticks.
+	// Therefore determine a counter value for 1 microsecond, which is the resolution
+	// used throughout all of HermitCore. Wait 30ms for accuracy.
+	let microseconds = 30_000;
 
 	// Disable interrupts for calibration accuracy and initialize the counter.
-	// Dividing by the maximum value of 128 still provides enough accuracy for later setting timeouts in the range
-	// of milliseconds, but especially allows for long timeouts.
+	// Dividing the counter value by 8 still provides enough accuracy for 1 microsecond resolution,
+	// but allows for longer timeouts than a smaller divisor.
+	// For example, on an Intel Xeon E5-2650 v3 @ 2.30GHz, the counter is usually calibrated to
+	// 125, which allows for timeouts of approximately 34 seconds (u32::MAX / 125).
 	irq::disable();
-	local_apic_write(IA32_X2APIC_DIV_CONF, APIC_DIV_CONF_DIVIDE_BY_128);
+	local_apic_write(IA32_X2APIC_DIV_CONF, APIC_DIV_CONF_DIVIDE_BY_8);
 	local_apic_write(IA32_X2APIC_INIT_COUNT, u32::MAX as u64);
 
-	// Wait until the 3 ticks have elapsed.
-	let end = processor::get_timestamp() + cycles;
-	while processor::get_timestamp() < end {
-		spin_loop_hint();
-	}
+	// Wait until the calibration time has elapsed.
+	processor::udelay(microseconds);
 
 	// Save the difference of the initial value and current value as the result of the calibration
 	// and reenable interrupts.
 	unsafe {
-		CALIBRATED_COUNTER_VALUE = ((u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT)) / tick_count as u32) as usize;
-		debug!(
-			"Calibrated APIC Timer with a counter value of {} for a single tick of a {} Hz timer",
-			CALIBRATED_COUNTER_VALUE,
-			processor::TIMER_FREQUENCY
-		);
+		CALIBRATED_COUNTER_VALUE = ((u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT)) as u64) / microseconds;
+		debug!("Calibrated APIC Timer with a counter value of {} for 1 microsecond", CALIBRATED_COUNTER_VALUE);
 	}
 	irq::enable();
 }
 
-pub fn set_oneshot_timer(wakeup_time: Option<usize>) {
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
-		// Calculate the relative timeout from the absolute wakeup time.
-		// Maintain a minimum value of one tick, otherwise the timer interrupt does not fire at all.
-		let current_time = processor::update_timer_ticks();
-		let ticks = if wt > current_time { wt - current_time } else { 1 };
+		if processor::supports_tsc_deadline() {
+			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
+			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
+			// (see processor::get_timer_ticks).
+			let tsc_deadline = wt * (processor::get_frequency() as u64);
 
-		// Enable the APIC Timer and let it start by setting the initial counter value.
-		local_apic_write(IA32_X2APIC_LVT_TIMER, TIMER_INTERRUPT_NUMBER as u64);
-		local_apic_write(IA32_X2APIC_INIT_COUNT, (unsafe { CALIBRATED_COUNTER_VALUE } * ticks) as u64);
+			// Enable the APIC Timer in TSC-Deadline Mode and let it start by writing to the respective MSR.
+			local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_TIMER_TSC_DEADLINE | TIMER_INTERRUPT_NUMBER as u64);
+			unsafe { wrmsr(IA32_TSC_DEADLINE, tsc_deadline); }
+		} else {
+			// Calculate the relative timeout from the absolute wakeup time.
+			// Maintain a minimum value of one tick, otherwise the timer interrupt does not fire at all.
+			// The Timer Counter Register is also a 32-bit register, which we must not overflow for longer timeouts.
+			let current_time = processor::get_timer_ticks();
+			let ticks = if wt > current_time { wt - current_time } else { 1 };
+			let init_count = cmp::min(unsafe { CALIBRATED_COUNTER_VALUE } * ticks, u32::MAX as u64);
+
+			// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
+			local_apic_write(IA32_X2APIC_LVT_TIMER, TIMER_INTERRUPT_NUMBER as u64);
+			local_apic_write(IA32_X2APIC_INIT_COUNT, init_count);
+		}
 	} else {
 		// Disable the APIC Timer.
 		local_apic_write(IA32_X2APIC_LVT_TIMER, APIC_LVT_MASK);

@@ -43,10 +43,6 @@ pub struct PerCoreVariables {
 	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: PerCoreVariable<*mut TaskStateSegment>,
-	/// Value returned by RDTSC/RDTSCP last time the timer ticks were updated in processor::update_timer_ticks.
-	pub last_rdtsc: PerCoreVariable<u64>,
-	/// Counted ticks of a timer with the constant frequency specified in processor::TIMER_FREQUENCY.
-	pub timer_ticks: PerCoreVariable<usize>,
 }
 
 impl PerCoreVariables {
@@ -55,8 +51,6 @@ impl PerCoreVariables {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
 			tss: PerCoreVariable::new(0 as *mut TaskStateSegment),
-			last_rdtsc: PerCoreVariable::new(0),
-			timer_ticks: PerCoreVariable::new(0),
 		}
 	}
 }
