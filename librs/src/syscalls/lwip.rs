@@ -22,11 +22,12 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::percore::*;
+use core::u32;
 use syscalls::tasks::Tid;
 
 /// Task ID of the single TCP/IP Task spawned by lwIP.
-/// Can be safely initialized to zero, because this is the ID of the idle task.
-static mut LWIP_TCPIP_TASK_ID: Tid = 0;
+/// Initialized to u32::MAX by default, which is a very unlikely task ID.
+static mut LWIP_TCPIP_TASK_ID: Tid = u32::MAX;
 
 pub fn get_lwip_tcpip_task_id() -> Tid {
 	unsafe { LWIP_TCPIP_TASK_ID }
