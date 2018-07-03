@@ -79,7 +79,6 @@ mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
-mod posix;
 mod runtime_glue;
 mod scheduler;
 mod synch;
@@ -87,7 +86,6 @@ mod syscalls;
 
 // IMPORTS
 pub use arch::*;
-pub use posix::*;
 pub use syscalls::*;
 
 use arch::percore::*;

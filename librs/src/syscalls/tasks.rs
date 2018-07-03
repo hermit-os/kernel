@@ -27,6 +27,7 @@ use core::isize;
 use errno::*;
 use scheduler;
 use scheduler::task::Priority;
+use syscalls::timer::timespec;
 
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
@@ -101,6 +102,20 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
 		arch::processor::udelay(usecs);
 	}
+}
+
+#[no_mangle]
+pub extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
+	assert!(!rqtp.is_null(), "sys_nanosleep called with a zero rqtp parameter");
+	let requested_time = unsafe { & *rqtp };
+	if requested_time.tv_sec < 0 || requested_time.tv_nsec < 0 || requested_time.tv_nsec > 999_999_999 {
+		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
+		return -EINVAL;
+	}
+
+	let microseconds = (requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
+	sys_usleep(microseconds);
+	0
 }
 
 #[no_mangle]

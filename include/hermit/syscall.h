@@ -54,7 +54,7 @@ typedef unsigned int tid_t;
 extern "C" {
 #endif
 
-/* Opaque structures */
+/* Opaque structures (may point to Rust structures or be used to not clash with types defined by the C library) */
 struct _HermitRecursiveMutex;
 typedef struct _HermitRecursiveMutex HermitRecursiveMutex;
 
@@ -66,6 +66,12 @@ typedef struct _HermitSpinlock HermitSpinlock;
 
 struct _HermitSpinlockIrqSave;
 typedef struct _HermitSpinlockIrqSave HermitSpinlockIrqSave;
+
+struct _HermitTimespec;
+typedef struct _HermitTimespec HermitTimespec;
+
+struct _HermitTimeval;
+typedef struct _HermitTimeval HermitTimeval;
 
 
 typedef void (*entry_point_t)(void*);
@@ -101,6 +107,7 @@ int sys_lwip_get_errno();
 void sys_lwip_register_tcpip_task(tid_t id);
 void sys_lwip_set_errno(int errno);
 void sys_usleep(unsigned long usecs);
+int sys_nanosleep(const HermitTimespec* rqtp, HermitTimespec* rmtp);
 void sys_msleep(unsigned int ms);
 int sys_recmutex_init(HermitRecursiveMutex** recmutex);
 int sys_recmutex_destroy(HermitRecursiveMutex* recmutex);
@@ -122,9 +129,14 @@ int sys_spinlock_irqsave_destroy(HermitSpinlockIrqSave* lock);
 int sys_spinlock_irqsave_lock(HermitSpinlockIrqSave* lock);
 int sys_spinlock_irqsave_unlock(HermitSpinlockIrqSave* lock);
 int sys_spawn(tid_t* id, entry_point_t func, void* arg, unsigned char prio, unsigned int core_id);
+int sys_clock_getres(unsigned long clock_id, HermitTimespec* res);
+int sys_clock_gettime(unsigned long clock_id, HermitTimespec* tp);
+int sys_clock_nanosleep(unsigned long clock_id, int flags, const HermitTimespec* rqtp, HermitTimespec* rmtp);
+int sys_clock_settime(unsigned long clock_id, const HermitTimespec* tp);
 int sys_clone(tid_t* id, void* ep, void* argv);
+int sys_getpagesize(void);
+int sys_gettimeofday(HermitTimeval* tp, void* tz);
 off_t sys_lseek(int fd, off_t offset, int whence);
-unsigned long sys_get_ticks(void);
 void sys_yield(void);
 int sys_kill(tid_t dest, int signum);
 int sys_signal(signal_handler_t handler);
