@@ -28,7 +28,7 @@
 #include "rdtsc.h"
 
 #ifdef __hermit__
-extern unsigned int get_cpufreq();
+#include <hermit/syscall.h>
 #endif
 
 static inline void cpuid(unsigned func, unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx) {
@@ -115,7 +115,7 @@ uint64_t rdtsc_ticks_per_sec(void)
 uint64_t rdtsc_ticks_per_sec(void)
 {
 #ifdef __hermit__
-    uint64_t tps = (uint64_t) get_cpufreq() * 1000000ULL;
+    uint64_t tps = (uint64_t) sys_get_processor_frequency() * 1000000ULL;
 
     return tps;
 #else

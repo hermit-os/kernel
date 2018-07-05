@@ -416,40 +416,12 @@ checktick()
 #include <time.h>
 #include <sys/time.h>
 
-#ifdef __hermit__
-extern unsigned int get_cpufreq();
-static unsigned long long start_tsc;
-
-inline static unsigned long long rdtsc(void)
-{
-	unsigned long lo, hi;
-	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
-	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
-}
-
-__attribute__((constructor)) static void timer_init()
-{
-	start_tsc = rdtsc();
-}
-#endif
-
 double mysecond()
 {
-#ifndef __hermit__
-        struct timeval tp;
-        struct timezone tzp;
-        int i;
+	struct timeval tv;
 
-        i = gettimeofday(&tp,&tzp);
-        return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
-#else
-	double ret;
-
-	ret = ((double) (rdtsc() - start_tsc)) / ((double) get_cpufreq() * 1000000.0);
-	//printf("CPU frequency: %d MHz\n", get_cpufreq());
-
-	return ret;
-#endif
+	gettimeofday(&tv, NULL);
+	return ((double) tv.tv_sec + (double) tv.tv_usec * 1.e-6);
 }
 
 #ifndef abs
