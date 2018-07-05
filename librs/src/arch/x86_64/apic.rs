@@ -248,6 +248,10 @@ pub extern "C" fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
 }
 
+pub fn get_number_of_processors() -> u32 {
+	unsafe { ptr::read_volatile(&cpu_online) }
+}
+
 pub fn init() {
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()

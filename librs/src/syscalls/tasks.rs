@@ -105,6 +105,11 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 }
 
 #[no_mangle]
+pub extern "C" fn sys_msleep(ms: u32) {
+	sys_usleep((ms as u64) * 1000);
+}
+
+#[no_mangle]
 pub extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(!rqtp.is_null(), "sys_nanosleep called with a zero rqtp parameter");
 	let requested_time = unsafe { & *rqtp };
@@ -156,19 +161,4 @@ pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 	}
 
 	0
-}
-
-
-// TODO: Get rid of this function by changing the call to sys_usleep() in GCC's libgo/runtime/yield.c
-// This is a breaking change though!
-// Not doing this yet allows us to use the same GCC for the HermitCore C version and HermitCore-rs.
-#[no_mangle]
-pub extern "C" fn udelay(usecs: u32) {
-	sys_usleep(usecs as u64)
-}
-
-// TODO: This syscall is redundant when we already have sys_usleep() and should eventually be removed.
-#[no_mangle]
-pub extern "C" fn sys_msleep(ms: u32) {
-	sys_usleep((ms as u64) * 1000);
 }

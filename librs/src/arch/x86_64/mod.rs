@@ -39,6 +39,7 @@ pub mod serial;
 pub mod vga;
 
 pub use arch::x86_64::apic::get_core_id_for_cpu_number;
+pub use arch::x86_64::apic::get_number_of_processors;
 pub use arch::x86_64::apic::set_oneshot_timer;
 pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;

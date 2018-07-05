@@ -24,6 +24,7 @@
 
 mod interfaces;
 mod lwip;
+mod processor;
 mod random;
 mod recmutex;
 mod semaphore;
@@ -33,6 +34,7 @@ mod tasks;
 mod timer;
 
 pub use self::lwip::*;
+pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
 pub use self::semaphore::*;

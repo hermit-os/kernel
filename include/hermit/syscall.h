@@ -136,6 +136,8 @@ int sys_clock_settime(unsigned long clock_id, const HermitTimespec* tp);
 int sys_clone(tid_t* id, void* ep, void* argv);
 int sys_getpagesize(void);
 int sys_gettimeofday(HermitTimeval* tp, void* tz);
+unsigned int sys_get_number_of_processors(void);
+unsigned short sys_get_processor_frequency(void);
 off_t sys_lseek(int fd, off_t offset, int whence);
 void sys_yield(void);
 int sys_kill(tid_t dest, int signum);

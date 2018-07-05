@@ -51,6 +51,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <netdb.h>
+#include <hermit/syscall.h>
 
 typedef struct
 {
@@ -73,8 +74,6 @@ static int nPort = DEFAULTPORT;
 static const int sobufsize = 131072;
 static struct in_addr addr_local;
 static struct in_addr addr_server;
-
-extern unsigned int get_cpufreq(void);
 
 inline static unsigned long long rdtsc(void)
 {
@@ -150,7 +149,7 @@ static int TCPServer(void)
 	int nByte;
 	int err;
 	uint64_t start, end;
-	uint32_t freq = get_cpufreq(); /* in MHz */
+	uint32_t freq = sys_get_processor_frequency(); /* in MHz */
 
 	if ((cBuffer = InitBuffer(TMAXSIZE)) == NULL) {
     		printf("Netio: Not enough memory\n");
@@ -317,7 +316,7 @@ int TCP_Bench(void)
 	int rc, err;
 	int nByte;
 	uint64_t start, end;
-	uint32_t freq = get_cpufreq(); /* in MHz */
+	uint32_t freq = sys_get_processor_frequency(); /* in MHz */
 
 	if ((cBuffer = InitBuffer(TMAXSIZE)) == NULL)
 	{

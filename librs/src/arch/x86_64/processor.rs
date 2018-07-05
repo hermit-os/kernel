@@ -592,12 +592,7 @@ pub fn configure() {
 
 
 pub fn detect_frequency() {
-	unsafe {
-		CPU_FREQUENCY.detect();
-
-		// newlib uses this value in its get_cpufreq function in crt0.c!
-		cpu_freq = CPU_FREQUENCY.get() as u32;
-	}
+	unsafe { CPU_FREQUENCY.detect(); }
 }
 
 pub fn print_information() {
