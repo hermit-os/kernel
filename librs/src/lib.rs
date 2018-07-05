@@ -177,7 +177,7 @@ pub unsafe extern "C" fn boot_processor_main() {
 	sections_init();
 	arch::message_output_init();
 
-	info!("Welcome to HermitCore {} ({})", env!("CARGO_PKG_VERSION"), COMMIT_HASH);
+	info!("Welcome to HermitCore-rs {} ({})", env!("CARGO_PKG_VERSION"), COMMIT_HASH);
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();
