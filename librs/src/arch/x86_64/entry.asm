@@ -79,38 +79,38 @@ align 4
     global hcmask
     global current_stack_address
     global current_percore_address
-    base dq 0
-    limit dq 0
-    cpu_freq dd 0
-    boot_processor dd -1
-    cpu_online dd 0
-    possible_cpus dd 0
-    phy_rcce_internals dq 0
-    current_boot_id dd 0
-    isle dd -1
-    image_size dq 0
-    phy_isle_locks dq 0
-    heap_phy_start_address dq 0
-    header_phy_start_address dq 0
-    heap_size dd 0
-    header_size dd 0
-    possible_isles dd 1
-    heap_start_address dq 0
-    header_start_address dq 0
-    disable_x2apic dd 1
-    single_kernel dd 1
-    mb_info dq 0
-    hbmem_base dq 0
-    hbmem_size dq 0
-    uhyve dd 0
-    uartport dq 0
-    cmdline dq 0
-    cmdsize dq 0
-    hcip db  10,0,5,2
-    hcgateway db 10,0,5,1
-    hcmask db 255,255,255,0
-    current_stack_address dq boot_stack_bottom
-    current_percore_address dq PERCORE
+    base dq 0                                       ; 0x08
+    limit dq 0                                      ; 0x10
+    cpu_freq dd 0                                   ; 0x18
+    boot_processor dd -1                            ; 0x1c  UNUSED
+    cpu_online dd 0                                 ; 0x20
+    possible_cpus dd 0                              ; 0x24  UNUSED
+    phy_rcce_internals dq 0                         ; 0x28  UNUSED
+    current_boot_id dd 0                            ; 0x30
+    isle dd -1                                      ; 0x34  UNUSED
+    image_size dq 0                                 ; 0x38
+    phy_isle_locks dq 0                             ; 0x40  UNUSED
+    heap_phy_start_address dq 0                     ; 0x48  UNUSED
+    header_phy_start_address dq 0                   ; 0x50  UNUSED
+    heap_size dd 0                                  ; 0x58  UNUSED
+    header_size dd 0                                ; 0x5c  UNUSED
+    possible_isles dd 1                             ; 0x60  UNUSED
+    heap_start_address dq 0                         ; 0x64  UNUSED
+    header_start_address dq 0                       ; 0x6c  UNUSED
+    disable_x2apic dd 1                             ; 0x74  UNUSED
+    single_kernel dd 1                              ; 0x78
+    mb_info dq 0                                    ; 0x7c
+    hbmem_base dq 0                                 ; 0x84  UNUSED
+    hbmem_size dq 0                                 ; 0x8c  UNUSED
+    uhyve dd 0                                      ; 0x94
+    uartport dq 0                                   ; 0x98  UNUSED
+    cmdline dq 0                                    ; 0xa0
+    cmdsize dq 0                                    ; 0xa8
+    hcip db  10,0,5,2                               ; 0xb0, 0xb1, 0xb2, 0xb3
+    hcgateway db 10,0,5,1                           ; 0xb4, 0xb5, 0xb6, 0xb7
+    hcmask db 255,255,255,0                         ; 0xb8, 0xb9, 0xba, 0xbb
+    current_stack_address dq boot_stack_bottom      ; 0xbc
+    current_percore_address dq PERCORE              ; 0xc4
 
 SECTION .ktext
 align 4
