@@ -55,6 +55,9 @@ extern "C" {
 #endif
 
 /* Opaque structures (may point to Rust structures or be used to not clash with types defined by the C library) */
+struct _HermitItimerval;
+typedef struct _HermitItimerval HermitItimerval;
+
 struct _HermitRecursiveMutex;
 typedef struct _HermitRecursiveMutex HermitRecursiveMutex;
 
@@ -139,6 +142,7 @@ int sys_gettimeofday(HermitTimeval* tp, void* tz);
 unsigned int sys_get_number_of_processors(void);
 unsigned short sys_get_processor_frequency(void);
 off_t sys_lseek(int fd, off_t offset, int whence);
+int sys_setitimer(int which, const HermitItimerval* value, HermitItimerval* ovalue);
 void sys_yield(void);
 int sys_kill(tid_t dest, int signum);
 int sys_signal(signal_handler_t handler);
