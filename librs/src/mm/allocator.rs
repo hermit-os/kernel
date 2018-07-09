@@ -33,7 +33,7 @@
 //! As soon as all required data structures have been set up, the "System Allocator" is used.
 //! It manages all memory >= KERNEL_END_ADDRESS.
 
-use alloc::allocator::Layout;
+use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use mm;
