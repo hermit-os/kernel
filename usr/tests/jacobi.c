@@ -39,38 +39,14 @@
 #define CACHE_SIZE	(256*1024)
 #define ALIGN(x,a)	(((x)+(a)-1)&~((a)-1))
 
-extern unsigned int get_cpufreq();
-static unsigned long long start_tsc;
-
-inline static unsigned long long rdtsc(void)
-{
-	unsigned long lo, hi;
-	asm volatile ("rdtsc" : "=a"(lo), "=d"(hi) :: "memory");
-	return ((unsigned long long) hi << 32ULL | (unsigned long long) lo);
-}
-
-__attribute__((constructor)) static void timer_init()
-{
-	start_tsc = rdtsc();
-}
-
 double mysecond()
 {
-#if 0
 	struct timeval tp;
 	struct timezone tzp;
 	int i;
 
 	i = gettimeofday(&tp,&tzp);
 	return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
-#else
-	double ret;
-
-	ret = (double) (rdtsc() - start_tsc) / ((double) get_cpufreq() * 1000000.0);
-	//printf("CPU frequency: %d MHz\n", get_cpufreq());
-
-	return ret;
-#endif
 }
 
 
