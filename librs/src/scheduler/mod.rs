@@ -25,9 +25,8 @@
 pub mod task;
 
 use alloc::boxed::Box;
-use alloc::btree_map::*;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
-use alloc::VecDeque;
 use arch;
 use arch::irq;
 use arch::percore::*;
