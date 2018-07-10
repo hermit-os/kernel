@@ -77,6 +77,7 @@ align 4
     global hcip
     global hcgateway
     global hcmask
+    global host_logical_addr
     global current_stack_address
     global current_percore_address
     global boot_gtod
@@ -104,15 +105,16 @@ align 4
     hbmem_base dq 0                                 ; 0x84  UNUSED
     hbmem_size dq 0                                 ; 0x8c  UNUSED
     uhyve dd 0                                      ; 0x94
-    uartport dq 0                                   ; 0x98  UNUSED
+    uartport dq 0                                   ; 0x98
     cmdline dq 0                                    ; 0xa0
     cmdsize dq 0                                    ; 0xa8
     hcip db  10,0,5,2                               ; 0xb0, 0xb1, 0xb2, 0xb3
     hcgateway db 10,0,5,1                           ; 0xb4, 0xb5, 0xb6, 0xb7
     hcmask db 255,255,255,0                         ; 0xb8, 0xb9, 0xba, 0xbb
-    current_stack_address dq boot_stack_bottom      ; 0xbc
-    current_percore_address dq PERCORE              ; 0xc4
-    boot_gtod dq 0                                  ; 0xcc
+    host_logical_addr dq 0                          ; 0xbc  UNUSED
+    current_stack_address dq boot_stack_bottom      ; 0xc4
+    current_percore_address dq PERCORE              ; 0xcc
+    boot_gtod dq 0                                  ; 0xd4
 
 SECTION .ktext
 align 4

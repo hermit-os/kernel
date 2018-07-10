@@ -75,6 +75,10 @@ impl SerialPort {
 	}
 
 	pub fn write_byte(&self, byte: u8) {
+		if self.port_address == 0 {
+			return;
+		}
+
 		// LF newline characters need to be extended to CRLF over a real serial port.
 		if byte == b'\n' {
 			self.write_to_register(UART_TX, b'\r');
@@ -85,7 +89,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if environment::is_uhyve() {
+		if environment::is_uhyve() || self.port_address == 0 {
 			return;
 		}
 

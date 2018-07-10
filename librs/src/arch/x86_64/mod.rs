@@ -51,20 +51,20 @@ use environment;
 use kernel_message_buffer;
 use synch::spinlock::Spinlock;
 
-const SERIAL_PORT_ADDRESS: u16 = 0xc110; //0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 
 extern "C" {
 	static mut cpu_online: u32;
+	static uartport: u64;
 }
 
 lazy_static! {
+	static ref COM1: SerialPort =
+		SerialPort::new(unsafe { uartport } as u16);
 	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
 		Spinlock::new(unsafe { &mut cpu_online });
 }
-
-static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 
 // FUNCTIONS

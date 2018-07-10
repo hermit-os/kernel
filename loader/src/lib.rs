@@ -68,10 +68,11 @@ extern "C" {
 // CONSTANTS
 const HERMIT_KERNEL_OFFSET_BASE:       usize = 0x08;
 const HERMIT_KERNEL_OFFSET_IMAGE_SIZE: usize = 0x38;
+const HERMIT_KERNEL_OFFSET_UARTPORT:   usize = 0x98;
 const HERMIT_KERNEL_OFFSET_CMDLINE:    usize = 0xA0;
 const HERMIT_KERNEL_OFFSET_CMDSIZE:    usize = 0xA8;
 
-const SERIAL_PORT_ADDRESS: u16 = 0xc110; //0x3F8;
+const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 // VARIABLES
@@ -205,6 +206,7 @@ pub unsafe extern "C" fn loader_main() {
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 		let cmdline = mb.command_line().unwrap();
+		*((virtual_address + HERMIT_KERNEL_OFFSET_UARTPORT) as *mut usize) = SERIAL_PORT_ADDRESS as usize;
 		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDLINE) as *mut usize) = address;
 		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDSIZE) as *mut usize) = cmdline.len();
 	}
