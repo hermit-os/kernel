@@ -51,6 +51,16 @@ const CLOCK_MONOTONIC: u64 = 4;
 const TIMER_ABSTIME: i32 = 4;
 
 
+fn microseconds_to_timespec(microseconds: u64, result: &mut timespec) {
+	result.tv_sec = (microseconds / 1_000_000) as i64;
+	result.tv_nsec = ((microseconds % 1_000_000) * 1000) as i64;
+}
+
+fn microseconds_to_timeval(microseconds: u64, result: &mut timeval) {
+	result.tv_sec = (microseconds / 1_000_000) as i64;
+	result.tv_usec = (microseconds % 1_000_000) as i64;
+}
+
 #[no_mangle]
 pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	assert!(!res.is_null(), "sys_clock_getres called with a zero res parameter");
@@ -59,8 +69,7 @@ pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	match clock_id {
 		CLOCK_REALTIME | CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID | CLOCK_MONOTONIC => {
 			// All clocks in HermitCore have 1 microsecond resolution.
-			result.tv_sec = 0;
-			result.tv_nsec = 1000;
+			microseconds_to_timespec(1, result);
 			0
 		},
 		_ => {
@@ -76,10 +85,14 @@ pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	let result = unsafe { &mut *tp };
 
 	match clock_id {
-		CLOCK_MONOTONIC => {
-			let microseconds = arch::processor::get_timer_ticks();
-			result.tv_sec = (microseconds / 1_000_000) as i64;
-			result.tv_nsec = ((microseconds % 1_000_000) * 1000) as i64;
+		CLOCK_REALTIME | CLOCK_MONOTONIC => {
+			let mut microseconds = arch::processor::get_timer_ticks();
+
+			if clock_id == CLOCK_REALTIME {
+				microseconds += arch::get_boot_time();
+			}
+
+			microseconds_to_timespec(microseconds, result);
 			0
 		},
 		_ => {
@@ -103,12 +116,10 @@ pub extern "C" fn sys_clock_nanosleep(clock_id: u64, flags: i32, rqtp: *const ti
 			let mut microseconds = (requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
 
 			if flags & TIMER_ABSTIME > 0 {
-				if clock_id == CLOCK_MONOTONIC {
-					microseconds -= arch::processor::get_timer_ticks();
-				} else {
-					// HermitCore does not yet know about the time since the Unix epoch.
-					debug!("TIMER_ABSTIME for CLOCK_REALTIME is unimplemented, returning -EINVAL");
-					return -EINVAL;
+				microseconds -= arch::processor::get_timer_ticks();
+
+				if clock_id == CLOCK_REALTIME {
+					microseconds -= arch::get_boot_time();
 				}
 			}
 
@@ -131,10 +142,10 @@ pub extern "C" fn sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32
 #[no_mangle]
 pub extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
-		// We don't know the real time yet, so return a monotonic clock time starting at boot-up.
-		let microseconds = arch::processor::get_timer_ticks();
-		result.tv_sec = (microseconds / 1_000_000) as i64;
-		result.tv_usec = (microseconds % 1_000_000) as i64;
+		// Return the current time based on the wallclock time when we were booted up
+		// plus the current timer ticks.
+		let microseconds = arch::get_boot_time() + arch::processor::get_timer_ticks();
+		microseconds_to_timeval(microseconds, result);
 	}
 
 	if tz > 0 {

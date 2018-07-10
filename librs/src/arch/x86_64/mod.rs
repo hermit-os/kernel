@@ -35,6 +35,7 @@ pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
+pub mod systemtime;
 #[cfg(feature = "vga")]
 pub mod vga;
 
@@ -44,7 +45,7 @@ pub use arch::x86_64::apic::set_oneshot_timer;
 pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;
 pub use arch::x86_64::gdt::set_current_kernel_stack;
-pub use arch::x86_64::percore::PERCORE;
+pub use arch::x86_64::systemtime::get_boot_time;
 use arch::x86_64::serial::SerialPort;
 use environment;
 use kernel_message_buffer;
@@ -119,6 +120,7 @@ pub fn boot_processor_init() {
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
+	systemtime::init();
 
 	if environment::is_single_kernel() && !environment::is_uhyve() {
 		pci::init();

@@ -79,6 +79,7 @@ align 4
     global hcmask
     global current_stack_address
     global current_percore_address
+    global boot_gtod
     base dq 0                                       ; 0x08
     limit dq 0                                      ; 0x10
     cpu_freq dd 0                                   ; 0x18
@@ -111,6 +112,7 @@ align 4
     hcmask db 255,255,255,0                         ; 0xb8, 0xb9, 0xba, 0xbb
     current_stack_address dq boot_stack_bottom      ; 0xbc
     current_percore_address dq PERCORE              ; 0xc4
+    boot_gtod dq 0                                  ; 0xcc
 
 SECTION .ktext
 align 4
