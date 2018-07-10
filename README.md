@@ -1,12 +1,12 @@
 <img width="100" align="right" src="img/hermitcore_logo.png" />
 
 
-# HermitCore - A Rust-based, lightweight unikernel for a scalable and predictable runtime behavior
+# HermitCore-rs - A Rust-based, lightweight unikernel for a scalable and predictable runtime behavior
 
-[![Build Status](https://travis-ci.org/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.org/hermitcore/libhermit)
+[![Build Status](https://travis-ci.org/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.org/hermitcore/libhermit-rs)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
-The project [HermitCore]( http://www.hermitcore.org ) is a new
+[HermitCore]( http://www.hermitcore.org ) is a new
 [unikernel](http://unikernel.org) targeting a scalable and predictable runtime
 for high-performance and cloud computing. HermitCore extends the multi-kernel
 approach (like
@@ -14,58 +14,58 @@ approach (like
 unikernel features for a better programmability and scalability for hierarchical
 systems.
 
-__We decided to develop a version of the kernel in [Rust](https://www.rust-lang.org).
-We promise that this will make it easier to maintain and to extend our kernel.
-All code beside the kernel will be still developed in their preferred language (C/C++/Go/Fortran).__
+__We decided to develop a version of the kernel in [Rust](https://www.rust-lang.org) called *HermitCore-rs*.
+We promise that this will make it easier to maintain and extend our kernel.
+All code beside the kernel can still be developed in your preferred language (C/C++/Go/Fortran).__
 
-__Consequently, this branch represents the transition from C to Rust.
-Currently, the Rust-based version supports not all features of the [C-based version](https://github.com/hermitcore/libhermit).
+__This repository contains the Rust-based version of HermitCore.
+Currently, it does not support all features of the [C-based version](https://github.com/hermitcore/libhermit).
 However, it is a starting point and runs within a hypervisor.
-The multi-kernel approach is currently in the Rust-based version not yet fully
-supported and under development.__
+The multi-kernel approach has not yet been tested in it.__
 
 ## Contributing
 
-HermitCore is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
+HermitCore-rs is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
 Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com).
 
 ## Requirements
 
 The build process works currently only on **x86-based Linux** systems. To build
-the HermitCore kernel and applications you need:
+the HermitCore-rs kernel and applications you need:
 
  * CMake
  * Netwide Assember (NASM)
- * recent host compiler such as GCC
+ * Recent host compiler such as GCC
  * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads
  * [Rust compiler (nightly release)](https://www.rust-lang.org/en-US/install.html)
- * Install [xargo](https://github.com/japaric/xargo) with `cargo install xargo`
- * Xargo depends on the rust source code, which we can install with `rustup component add rust-src`.
+ * [xargo](https://github.com/japaric/xargo), which can be installed with `cargo install xargo`
+ * Rust source code for Xargo, which can be installed with `rustup component add rust-src`.
 
-### HermitCore cross-toolchain
+### HermitCore-rs cross-toolchain
 
-We provide prebuilt packages (currently Ubuntu 18.04 only) of the HermitCore
-toolchain. The packages based on the C version branch and can be installed as follows:
+We provide prebuilt packages (currently Ubuntu 18.04 only) of the HermitCore-rs
+toolchain. The packages can be installed as follows:
 
 ```bash
 $ echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | sudo tee -a /etc/apt/sources.list
 $ sudo apt-get -qq update
-$ sudo apt-get install binutils-hermit newlib-hermit pte-hermit-rs gcc-hermit libhermit-rs
+$ sudo apt-get install binutils-hermit newlib-hermit-rs pte-hermit-rs gcc-hermit-rs libhermit-rs
 ```
 
-If you want to build the toolchain yourself, have a look at the repository [hermit-toolchain](https://github.com/hermitcore/hermit-toolchain), which contains in the branch `path2rs` scripts to build the whole toolchain for the Rust-based version of HermitCore.
+If you want to build the toolchain yourself, have a look at the `path2rs` branch of the repository
+[hermit-toolchain](https://github.com/hermitcore/hermit-toolchain).
+It contains scripts to build the whole toolchain for HermitCore-rs.
 
-Depending on how you want to use HermitCore, you might need additional packages
+Depending on how you want to use HermitCore-rs, you might need additional packages
 such as:
 
  * QEMU (`apt-get install qemu-system-x86`)
 
-## Building the Rust-based Kernel
+## Building
 
 ### Preliminary work
 
-To use the Rust-based version, HermitCore has to build from source. For this
-purpose, the repository with its submodules has to be clone.
+As a first step, the repository and its submodules have to be cloned:
 
 ```bash
 $ git clone git@github.com:hermitcore/libhermit-rs.git
@@ -76,8 +76,8 @@ $ git submodule update
 
 ### Building the library operating systems and its examples
 
-To build Rust-based kernel and its examples, go to the directory with the source code,
-create a subdirectory `build`, and call in the new directory `cmake` followed by `make`.
+To build the Rust-based kernel and its examples, go to the directory with the source code
+and issue the following commands:
 
 ```bash
 $ mkdir build
@@ -96,7 +96,7 @@ $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin ..
 
 Assuming that binaries like `x86_64-hermit-gcc` and friends are located in that
 directory.
-To install your new version in the same directory, you have to set the installation path and to install HermitCore as follows:
+To install your new version in the same directory, you have to set the installation path and install HermitCore-rs as follows:
 
 ```bash
 $ cmake -DTOOLCHAIN_BIN_DIR=/home/user/hermit/bin -DCMAKE_INSTALL_PREFIX=/home/user/hermit ..
@@ -104,36 +104,40 @@ $ make
 $ make install
 ```
 
-**Note:** If you use the cross compiler outside of this repository, the compiler uses per default the library operating systems located by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
+**Note:** If you use the cross compiler outside of this repository, it uses the library operating system located
+by the toolchain (e.g. `/opt/hermit/x86_64-hermit/lib/libhermit.a`).
 
 ## Proxy
 
 Part of HermitCore is a small helper tool, which is called *proxy*.
 This tool helps to start HermitCore applications within a virtual machine or bare-metal on a NUMA node.
 In principle it is a bridge to the Linux system.
-If the proxy is register as loader to the Linux system, HermitCore applications can be started like common Linux applications.
-The proxy can be registered with following command.
+If the proxy is registered as loader to the Linux system, HermitCore applications can be started like common Linux applications.
+The proxy can be registered with the following command:
 
 ```bash
 $ sudo -c sh 'echo ":hermit:M:7:\\x42::/opt/hermit/bin/proxy:" > /proc/sys/fs/binfmt_misc/register'
-$ # dirct call of a HermitCore appliaction
+```
+
+Applications can then be directly called like:
+```bash
 $ /opt/hermit/x86_64-hermit/extra/tests/hello
 ```
 
-Otherwise the proxy must be started directly and get the path to HermitCore application as argument.
-Afterwards, the proxy start the HermitCore applications within a VM ore bare-metal on a NUMA node.
-
+Otherwise, the proxy must be started directly and needs the path to the HermitCore application as an argument:
 ```bash
 $ # using QEMU
 $ HERMIT_ISLE=qemu /opt/hermit/bin/proxy /opt/hermit/x86_64-hermit/extra/tests/hello
 ```
 
+Afterwards, the proxy starts the HermitCore application within a VM or bare-metal on a NUMA node.
+
 ## Testing
 
 ### As classical standalone unikernel within a virtual machine
 
-HermitCore applications can be directly started as standalone kernel within a
-virtual machine.
+HermitCore applications can be directly started as a standalone kernel within a
+virtual machine:
 
 ```bash
 $ cd build
@@ -146,29 +150,28 @@ $ HERMIT_ISLE=uhyve bin/proxy x86_64-hermit/extra/tests/hello
 ```
 
 With `HERMIT_ISLE=qemu`, the application will be started within a QEMU VM.
-Please note that the loader requires QEMU and uses per default *KVM*.
+Please note that the loader requires QEMU and uses *KVM* by default.
 Furthermore, it expects that the executable is called `qemu-system-x86_64`.
 
 With `HERMIT_ISLE=uhyve`, the application will be started within a thin
 hypervisor powered by Linux's KVM API and therefore requires *KVM* support.
-uhyve has a considerably smaller startup time than QEMU, but lacks some features
-such as GDB debugging.
+uhyve has a considerably smaller startup time than QEMU.
 In principle, it is an extension of [ukvm](https://www.usenix.org/sites/default/files/conference/protected-files/hotcloud16_slides_williams.pdf).
 
 In this context, the environment variable `HERMIT_CPUS` specifies the number of
-cpus (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
-defines the memory size of the virtual machine. The suffix of *M* or *G* can be
-used to specify a value in megabytes or gigabytes respectively. Per default, the
+CPUs (and no longer a range of core ids). Furthermore, the variable `HERMIT_MEM`
+defines the memory size of the virtual machine. The suffixes *M* and *G* can be
+used to specify a value in megabytes or gigabytes respectively. By default, the
 loader initializes a system with one core and 2 GiB RAM.
 For instance, the following command starts the stream benchmark in a virtual machine, which
-has 4 cores and 6GB memory.
+has 4 cores and 6GB memory:
 
 ```bash
 $ HERMIT_ISLE=qemu HERMIT_CPUS=4 HERMIT_MEM=6G bin/proxy x86_64-hermit/extra/benchmarks/stream
 ```
 
-To enable an ethernet device for `uhyve`, we have to setup a tap device on the
-host system. For instance, the following command establish the tap device
+To enable an Ethernet device for `uhyve`, we have to setup a tap device on the
+host system. For instance, the following command establishes the tap device
 `tap100` on Linux:
 
 ```bash
@@ -178,21 +181,21 @@ $ sudo ip link set dev tap100 up
 $ sudo bash -c 'echo 1 > /proc/sys/net/ipv4/conf/tap100/proxy_arp'
 ```
 
-Per default, `uhyve`'s network interface uses `10.0.5.2`as IP address, `10.0.5.1`
+By default, `uhyve`'s network interface uses `10.0.5.2`as IP address, `10.0.5.1`
 for the gateway and `255.255.255.0` as network mask.
-The default configuration could be overloaded by the environment variable
+The default configuration can be overwritten by the environment variables
 `HERMIT_IP`, `HERMIT_GATEWAY` and `HERMIT_MASk`.
 To enable the device, `HERMIT_NETIF` must be set to the name of the tap device.
 For instance, the following command starts an HermitCore application within `uhyve`
-and enable the network support:
+and enables the network support:
 
 ```bash
-$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.3" HERMIT_GATEWAY="10.0.5.1" HERMIT_MASk="255.255.255.0" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
+$ HERMIT_ISLE=uhyve HERMIT_IP="10.0.5.3" HERMIT_GATEWAY="10.0.5.1" HERMIT_MASK="255.255.255.0" HERMIT_NETIF=tap100 bin/proxy x86_64-hermit/extra/tests/hello
 ```
 
-If `qemu` is used as hyervisor, the virtual machine emulates an RTL8139 ethernet interface and opens at least one TCP/IP ports.
-It is used for the communication between HermitCore application and its proxy.
-With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication.
+If `qemu` is used as hyervisor, the virtual machine emulates an RTL8139 Ethernet interface and opens at least one TCP/IP port.
+It is used for the communication between the HermitCore application and its proxy.
+Using the environment variable `HERMIT_PORT`, the default communication port (18766) can be changed.
 
 
 ### As multi-kernel on a real machine
@@ -233,33 +236,33 @@ Please note, if the applications is started within a VM, the hypervisor has to
 support the specified architecture name.
 
 If QEMU is started by our proxy and the environment variable `HERMIT_KVM` is set
-to `0`, the virtual machine will be not accelerated by KVM. In this case, the
+to `0`, the virtual machine will not be accelerated by KVM. In this case, the
 `-mtune` flag should be avoided.
 
 ### TCP connections
 
-With the environment variable `HERMIT_APP_PORT`, an additional port can be open
-to establish an TCP/IP connection with your application.
+Using the environment variable `HERMIT_APP_PORT`, an additional port can be opened
+to establish a TCP/IP connection with your application.
 
 ### Dumping the kernel log
 
-By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints at
-termination the kernel log messages onto the screen.
+By setting the environment variable `HERMIT_VERBOSE` to `1`, the proxy prints
+the kernel log messages to the screen at termination.
 
 ### Network tracing
 
 By setting the environment variable `HERMIT_CAPTURE_NET` to `1` and
 `HERMIT_ISLE` to `qemu`, QEMU captures the network traffic and creates the trace
-file *qemu-vlan0.pcap*. For instance with [Wireshark](https://www.wireshark.org)
-you are able to analyze the file.
+file *qemu-vlan0.pcap*. You can analyze the file with e.g.
+[Wireshark](https://www.wireshark.org).
 
 ### Monitor
 
 If `HERMIT_MONITOR` is set to `1` and `HERMIT_ISLE` to `qemu`, QEMU establishes
 a monitor which is available via telnet at port 18767.
-With the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication between the HermitCore application and its proxy.
+Using the environment variable `HERMIT_PORT`, the default port (18766) can be changed for the communication between the HermitCore application and its proxy.
 The connection to the system monitor is automatically set to `HERMIT_PORT+1`, i.e., the default port is 18767.
 
 ## Credits
 
-HermitCore's Emoji is provided free by [EmojiOne](https://www.gfxmag.com/crab-emoji-vector-icon/).
+HermitCore's Emoji is provided for free by [EmojiOne](https://www.gfxmag.com/crab-emoji-vector-icon/).
