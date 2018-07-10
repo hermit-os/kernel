@@ -66,6 +66,10 @@ pub fn enable_networking() {
 	}
 }
 
+pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
+	unsafe { SYS.get_application_parameters() }
+}
+
 #[no_mangle]
 pub extern "C" fn sys_shutdown() -> ! {
 	unsafe { SYS.shutdown() }

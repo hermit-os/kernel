@@ -143,28 +143,23 @@ extern "C" fn initd(_arg: usize) {
 	if err == 0 {
 		info!("Successfully initialized a network interface!");
 		syscalls::enable_networking();
-
-		if environment::is_proxy() {
-			// TODO: Get argc, argv, environ over "proxy", call libc_start, and return.
-		}
 	} else {
 		warn!("Could not initialize a network interface (error code {})", err);
 		warn!("Starting HermitCore without network support");
 	}
 
-	// Start the application without any arguments and environment variables.
-	let argc = 0;
-	let argv = 0 as *mut *mut u8;
-	let environ = 0 as *mut *mut u8;
+	// Get the application arguments and environment variables.
+	let (argc, argv, environ) = syscalls::get_application_parameters();
 
 	unsafe {
-		// Initialize .bss sections for the user program.
+		// Initialize .bss sections for the application.
 		ptr::write_bytes(
 			&mut __bss_start as *mut u8,
 			0,
 			&kernel_start as *const u8 as usize + image_size as usize - &__bss_start as *const u8 as usize
 		);
 
+		// And finally start the application.
 		libc_start(argc, argv, environ);
 	}
 }
