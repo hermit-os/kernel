@@ -16,3 +16,4 @@
 [submodule "caves"]
 	path = caves
 	url = https://github.com/hermitcore/hermit-caves.git
+	branch = path2rs
