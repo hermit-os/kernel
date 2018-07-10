@@ -4,7 +4,7 @@ include_guard()
 # let user provide a different path to the toolchain
 set_default(TOOLCHAIN_BIN_DIR /opt/hermit/bin)
 
-set(TARGET_ARCH aarch64-hermit)
+set(TARGET_ARCH aarch64)
 set(HERMIT_KERNEL_FLAGS
 					-Wall -O2 -mgeneral-regs-only
 					-fno-var-tracking-assignments -fstrength-reduce
@@ -22,12 +22,12 @@ set(HERMIT_APP_FLAGS
 set(CMAKE_SYSTEM_NAME Generic)
 
 # point CMake to our toolchain
-set(CMAKE_C_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gcc)
-set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-g++)
-set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gfortran)
-set(CMAKE_Go_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-gccgo)
+set(CMAKE_C_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-hermit-gcc)
+set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-hermit-g++)
+set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-hermit-gfortran)
+set(CMAKE_Go_COMPILER ${TOOLCHAIN_BIN_DIR}/${TARGET_ARCH}-hermit-gccgo)
 
 # hinting the prefix and location is needed in order to correctly detect
 # binutils
-set(_CMAKE_TOOLCHAIN_PREFIX "${TARGET_ARCH}-")
+set(_CMAKE_TOOLCHAIN_PREFIX "${TARGET_ARCH}-hermit-")
 set(_CMAKE_TOOLCHAIN_LOCATION ${TOOLCHAIN_BIN_DIR})

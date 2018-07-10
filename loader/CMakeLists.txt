@@ -3,11 +3,11 @@ cmake_minimum_required(VERSION 3.7)
 project(loader C ASM_NASM)
 
 # Add the Cargo project to build the Rust library.
-set(LOADER_RS "${CMAKE_BINARY_DIR}/loader/x86_64-hermit/release/libhermit_loader.a")
+set(LOADER_RS "${CMAKE_BINARY_DIR}/loader/x86_64-unknown-hermit-kernel/release/libhermit_loader.a")
 add_custom_target(loader_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/loader RUST_TARGET_PATH=`pwd`/../target
-		xargo build --release --target x86_64-hermit
+		xargo build --release --target x86_64-unknown-hermit-kernel
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 

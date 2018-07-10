@@ -63,13 +63,13 @@ if("${HERMIT_ARCH}" STREQUAL "x86_64")
 endif()
 
 # Add the Cargo project to build the Rust library.
-set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${TARGET_ARCH}/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${TARGET_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
 	DEPENDS
 		objmv
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/target
-		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target ${TARGET_ARCH}
+		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target ${TARGET_ARCH}-unknown-hermit-kernel
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
@@ -199,11 +199,11 @@ add_custom_command(
 
 # Deploy libhermit.a and headers for package creation
 install(TARGETS hermit-bootstrap
-	DESTINATION ${TARGET_ARCH}/lib
+	DESTINATION ${TARGET_ARCH}-hermit/lib
 	COMPONENT bootstrap)
 
 install(DIRECTORY include/hermit
-	DESTINATION ${TARGET_ARCH}/include/
+	DESTINATION ${TARGET_ARCH}-hermit/include/
 	COMPONENT bootstrap
 	FILES_MATCHING PATTERN *.h)
 

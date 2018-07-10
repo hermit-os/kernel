@@ -1,2 +1,2 @@
-[target.x86_64-hermit.dependencies]
+[target.x86_64-unknown-hermit-kernel.dependencies]
 alloc = {}

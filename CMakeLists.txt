@@ -23,13 +23,16 @@ add_subdirectory(librs)
 
 ## HermitCore's own tools such as Qemu/KVM proxy
 build_external(caves ${HERMIT_ROOT}/caves "")
-build_external(loader ${HERMIT_ROOT}/loader "")
+
+if("${TARGET_ARCH}" STREQUAL "x86_64")
+	build_external(loader ${HERMIT_ROOT}/loader "")
+endif()
 
 ## Intel's OpenMP runtime for x86 (libomp)
 build_external(libiomp ${HERMIT_ROOT}/usr/libomp ""
 		-DHERMIT=1
 		-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-		-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/${TARGET_ARCH}
+		-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/${TARGET_ARCH}-hermit
 		-DLOCAL_PREFIX_ARCH_INCLUDE_DIR=${LOCAL_PREFIX_ARCH_INCLUDE_DIR})
 
 # libomp is part of HermitCore's runtime and should be available before any
