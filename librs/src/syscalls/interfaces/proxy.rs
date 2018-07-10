@@ -22,8 +22,9 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use alloc::vec::Vec;
 use arch;
-use core::mem;
+use core::{mem, slice};
 use scheduler;
 use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::interfaces::SyscallInterface;
@@ -59,33 +60,85 @@ fn proxy_close()
 	}
 }
 
-fn proxy_read<T>(buf: *mut T) {
-	let mut len: usize = 0;
+fn proxy_read_bytes(buf: &mut [u8]) {
+	let mut bytes_read = 0;
 
-	while len < mem::size_of::<T>() {
-		unsafe {
-			let ret = lwip_read(LIBC_SD, (buf as usize + len) as *mut u8, mem::size_of::<T>()-len);
+	while bytes_read < buf.len() {
+		let slice_remaining = &mut buf[bytes_read..];
+		let ptr = slice_remaining.as_mut_ptr();
 
-			if ret > 0 {
-				len = len + ret as usize;
-			}
+		let ret = unsafe { lwip_read(LIBC_SD, ptr, slice_remaining.len()) };
+		if ret > 0 {
+			bytes_read += ret as usize;
 		}
 	}
 }
 
-fn proxy_write<T>(buf: *const T) {
-	let mut len: usize = 0;
+fn proxy_read_value<T>(buf: &mut T) {
+	let byte_pointer = buf as *mut T as usize as *mut u8;
+	let byte_slice = unsafe { slice::from_raw_parts_mut(byte_pointer, mem::size_of::<T>()) };
+	proxy_read_bytes(byte_slice);
+}
 
-	while len < mem::size_of::<T>() {
-		unsafe {
-			let ret = lwip_write(LIBC_SD, (buf as usize + len) as *const u8, mem::size_of::<T>()-len);
+fn proxy_read_parameter_vector() -> (i32, *mut *mut u8) {
+	// proxy first sends the number of parameters.
+	let mut parameter_count: i32 = 0;
+	proxy_read_value(&mut parameter_count);
 
-			if ret > 0 {
-				len = len + ret as usize;
-			}
+	// Allocate a vector for that many pointers to C strings and iterate through each one.
+	let mut parameters = Vec::<*mut u8>::with_capacity(parameter_count as usize + 1);
+	for _i in 0..parameter_count {
+		// For each parameter, proxy first sends its length.
+		let mut parameter_length: i32 = 0;
+		proxy_read_value(&mut parameter_length);
+
+		// Allocate a vector for that many characters *and* preallocate it with uninitialized memory.
+		let mut parameter = Vec::<u8>::with_capacity(parameter_length as usize);
+		unsafe { parameter.set_len(parameter_length as usize); }
+
+		{
+			// Turn the vector into a slice and read all characters into it.
+			let parameter_slice = parameter.as_mut_slice();
+			proxy_read_bytes(parameter_slice);
+
+			// Finally, add this parameter to our parameters vector.
+			parameters.push(parameter_slice.as_mut_ptr());
+		}
+
+		// Make sure that Rust does not deallocate the memory for this parameter!
+		mem::forget(parameter);
+	}
+
+	// Add a final null parameter to indicate the end of the parameters list for C applications.
+	parameters.push(0 as *mut u8);
+
+	// Get a raw pointer to the parameters vector and make sure that Rust does not deallocate it.
+	let parameter_ptr = parameters.as_mut_slice().as_mut_ptr();
+	mem::forget(parameters);
+
+	(parameter_count, parameter_ptr)
+}
+
+fn proxy_write_bytes(buf: &[u8]) {
+	let mut bytes_written = 0;
+
+	while bytes_written < buf.len() {
+		let slice_remaining = &buf[bytes_written..];
+		let ptr = slice_remaining.as_ptr();
+
+		let ret = unsafe { lwip_write(LIBC_SD, ptr, slice_remaining.len()) };
+		if ret > 0 {
+			bytes_written += ret as usize;
 		}
 	}
 }
+
+fn proxy_write_value<T>(buf: &T) {
+	let byte_pointer = buf as *const T as usize as *const u8;
+	let byte_slice = unsafe { slice::from_raw_parts(byte_pointer, mem::size_of::<T>()) };
+	proxy_write_bytes(byte_slice);
+}
+
 
 fn setup_connection(fd: i32) {
 	info!("Setup connection to proxy!");
@@ -95,17 +148,14 @@ fn setup_connection(fd: i32) {
 	}
 
 	let mut magic: i32 = 0;
-	proxy_read(&mut magic as *mut i32);
+	proxy_read_value(&mut magic);
 
 	if magic != HERMIT_MAGIC {
 		proxy_close();
 		panic!("Invalid magic number {}", magic);
 	}
 
-	debug!("Receive magic number {}", magic);
-
-	//let mut argc: i32 = 0;
-	//proxy_read(&mut argc as *mut i32);
+	debug!("Received magic number {}", magic);
 }
 
 
@@ -220,11 +270,18 @@ impl SyscallInterface for Proxy {
 		setup_connection(fd);
 	}
 
+	fn get_application_parameters(&self) -> (i32, *mut *mut u8, *mut *mut u8) {
+		let (argc, argv) = proxy_read_parameter_vector();
+		let (_envc, environ) = proxy_read_parameter_vector();
+
+		(argc, argv, environ)
+	}
+
 	fn shutdown(&self) -> ! {
 		let _guard = LWIP_LOCK.lock();
 
 		let sysargs = SysExit::new(scheduler::get_last_exit_code());
-		proxy_write(&sysargs as *const SysExit);
+		proxy_write_value(&sysargs);
 
 		loop {
 			arch::processor::halt();
@@ -234,31 +291,19 @@ impl SyscallInterface for Proxy {
 	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
 		let _guard = LWIP_LOCK.lock();
 		let sysargs = SysOpen::new();
-		proxy_write(&sysargs as *const SysOpen);
+		proxy_write_value(&sysargs);
 
-		let len;
-		unsafe { len = c_strlen(name) + 1; }
-		proxy_write(&len as *const usize);
+		let name_length = unsafe { c_strlen(name) } + 1;
+		proxy_write_value(&name_length);
 
-		let mut i: usize = 0;
-		while i < len {
-			let ret;
+		let name_slice = unsafe { slice::from_raw_parts(name, name_length) };
+		proxy_write_bytes(name_slice);
 
-			unsafe {
-				ret = lwip_write(LIBC_SD, (name as usize + i) as *const u8, len-i);
-			}
-
-			if ret > 0 {
-				i = i + ret as usize;
-			}
-		}
-
-		proxy_write(&flags as *const i32);
-		proxy_write(&mode as *const i32);
+		proxy_write_value(&flags);
+		proxy_write_value(&mode);
 
 		let mut ret: i32 = 0;
-		proxy_read(&mut ret as *mut i32);
-
+		proxy_read_value(&mut ret);
 		ret
 	}
 
@@ -279,11 +324,10 @@ impl SyscallInterface for Proxy {
 		}
 
 		let sysargs = SysClose::new(fd);
-		proxy_write(&sysargs as *const SysClose);
+		proxy_write_value(&sysargs);
 
 		let mut ret: i32 = 0;
-		proxy_read(&mut ret as *mut i32);
-
+		proxy_read_value(&mut ret);
 		ret
 	}
 
@@ -304,28 +348,18 @@ impl SyscallInterface for Proxy {
 		}
 
 		let sysargs = SysRead::new(fd, len);
-		proxy_write(&sysargs as *const SysRead);
+		proxy_write_value(&sysargs);
 
-		let mut j: isize = 0;
-		proxy_read(&mut j as *mut isize);
+		let mut bytes_read: isize = 0;
+		proxy_read_value(&mut bytes_read);
 
-		if j > 0 {
-			let mut i: isize = 0;
-
-			while i < j {
-				let ret;
-
-				unsafe {
-					ret = lwip_read(LIBC_SD, (buf as isize + i) as *mut u8, (j-i) as usize);
-				}
-
-				if ret > 0 {
-					i = i + ret as isize;
-				}
-			}
+		if bytes_read > 0 {
+			assert!(bytes_read as usize <= len);
+			let buf_slice = unsafe { slice::from_raw_parts_mut(buf, bytes_read as usize) };
+			proxy_read_bytes(buf_slice);
 		}
 
-		j
+		bytes_read
 	}
 
 	fn write(&self, fd: i32, buf: *const u8, len: usize) -> isize {
@@ -345,37 +379,26 @@ impl SyscallInterface for Proxy {
 		}
 
 		let sysargs = SysWrite::new(fd, len);
-		proxy_write(&sysargs as *const SysWrite);
+		proxy_write_value(&sysargs);
 
-		let mut i: usize = 0;
+		let buf_slice = unsafe { slice::from_raw_parts(buf, len) };
+		proxy_write_bytes(buf_slice);
 
-		while i < len {
-			let ret;
-
-			unsafe {
-				ret = lwip_write(LIBC_SD, (buf as usize + i) as *const u8, len-i);
-			}
-
-			if ret > 0 {
-				i = i + ret as usize;
-			}
-		}
-
+		let mut bytes_written = len;
 		if fd > 2 {
-			proxy_read(&mut i as *mut usize);
+			proxy_read_value(&mut bytes_written);
 		}
 
-		i as isize
+		bytes_written as isize
 	}
 
 	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
 		let _guard = LWIP_LOCK.lock();
 		let sysargs = SysLseek::new(fd, offset, whence);
-		proxy_write(&sysargs as *const SysLseek);
+		proxy_write_value(&sysargs);
 
 		let mut ret: isize = 0;
-		proxy_read(&mut ret as *mut isize);
-
+		proxy_read_value(&mut ret);
 		ret
 	}
 }

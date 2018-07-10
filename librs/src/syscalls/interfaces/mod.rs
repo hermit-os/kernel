@@ -41,6 +41,14 @@ pub trait SyscallInterface : Send + Sync {
 		// Interface-specific initialization steps.
 	}
 
+	fn get_application_parameters(&self) -> (i32, *mut *mut u8, *mut *mut u8) {
+		let argc = 0;
+		let argv = 0 as *mut *mut u8;
+		let environ = 0 as *mut *mut u8;
+
+		(argc, argv, environ)
+	}
+
 	fn shutdown(&self) -> ! {
 		arch::processor::shutdown();
 	}
