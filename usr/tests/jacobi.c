@@ -29,7 +29,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <time.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -39,16 +38,19 @@
 #define CACHE_SIZE	(256*1024)
 #define ALIGN(x,a)	(((x)+(a)-1)&~((a)-1))
 
+/* A gettimeofday routine to give access to the wall
+   clock timer on most UNIX-like systems.  */
+
+#include <time.h>
+#include <sys/time.h>
+
 double mysecond()
 {
-	struct timeval tp;
-	struct timezone tzp;
-	int i;
+	struct timeval tv;
 
-	i = gettimeofday(&tp,&tzp);
-	return ( (double) tp.tv_sec + (double) tp.tv_usec * 1.e-6 );
+	gettimeofday(&tv, NULL);
+	return ((double) tv.tv_sec + (double) tv.tv_usec * 1.e-6);
 }
-
 
 static int generate_empty_matrix(double*** A , unsigned int N) {
 	unsigned int iCnt;
