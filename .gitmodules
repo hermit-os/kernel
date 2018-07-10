@@ -13,3 +13,6 @@
 [submodule "crates/rlibc"]
 	path = crates/rlibc
 	url = https://github.com/hermitcore/rlibc.git
+[submodule "caves"]
+	path = caves
+	url = https://github.com/hermitcore/hermit-caves.git
