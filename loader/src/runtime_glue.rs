@@ -28,9 +28,6 @@
 
 use core::panic::PanicInfo;
 
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
-
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
 #[panic_implementation]
 #[no_mangle]
