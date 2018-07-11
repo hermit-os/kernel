@@ -27,11 +27,9 @@
 
 #![allow(private_no_mangle_fns)]
 
+use alloc::alloc::Layout;
 use arch;
 use core::panic::PanicInfo;
-
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
 #[panic_implementation]
@@ -56,8 +54,8 @@ fn panic(info: &PanicInfo) -> ! {
 
 #[lang = "oom"]
 #[no_mangle]
-pub fn rust_oom() -> ! {
-	println!("[{}][!!!OOM!!!]", arch::percore::core_id());
+pub fn rust_oom(layout: Layout) -> ! {
+	println!("[{}][!!!OOM!!!] Memory allocation of {} bytes failed", arch::percore::core_id(), layout.size());
 	loop {
 		arch::processor::halt();
 	}
