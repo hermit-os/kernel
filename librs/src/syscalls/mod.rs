@@ -104,8 +104,3 @@ pub extern "C" fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
 pub extern "C" fn sys_stat(file: *const u8, st: usize) -> i32 {
 	unsafe { SYS.stat(file, st) }
 }
-
-#[no_mangle]
-pub extern "C" fn sys_putchar(character: u8) {
-	unsafe { SYS.putchar(character); }
-}

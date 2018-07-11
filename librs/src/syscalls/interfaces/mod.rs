@@ -98,8 +98,4 @@ pub trait SyscallInterface : Send + Sync {
 		debug!("stat is unimplemented");
 		-ENOSYS
 	}
-
-	fn putchar(&self, character: u8) {
-		arch::output_message_byte(character);
-	}
 }
