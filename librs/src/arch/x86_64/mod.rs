@@ -46,6 +46,7 @@ pub use arch::x86_64::apic::wakeup_core;
 pub use arch::x86_64::gdt::get_boot_stacks;
 pub use arch::x86_64::gdt::set_current_kernel_stack;
 pub use arch::x86_64::systemtime::get_boot_time;
+use arch::x86_64::percore::*;
 use arch::x86_64::serial::SerialPort;
 use environment;
 use kernel_message_buffer;
@@ -130,11 +131,10 @@ pub fn boot_processor_init() {
 
 	apic::init();
 	scheduler::install_timer_handler();
-
-	**CPU_ONLINE.lock() += 1;
+	finish_processor_init();
 }
 
-/// Boots all available Application Processors.
+/// Boots all available Application Processors on bare-metal or QEMU.
 /// Called after the Boot Processor has been fully initialized along with its scheduler.
 pub fn boot_application_processors() {
 	apic::boot_application_processors();
@@ -150,7 +150,25 @@ pub fn application_processor_init() {
 	apic::init_x2apic();
 	apic::init_local_apic();
 	irq::enable();
+	finish_processor_init();
+}
 
-	debug!("Initialized Application Processor");
+fn finish_processor_init() {
+	debug!("Initialized Processor");
+
+	if environment::is_uhyve() {
+		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
+		// their APIC IDs in advance.
+		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
+		// Fortunately, the Core IDs are guaranteed to be sequential and match the Local APIC IDs.
+		apic::add_local_apic_id(core_id() as u8);
+
+		// uhyve also boots each processor into entry.asm itself and does not use apic::boot_application_processors.
+		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
+		apic::init_next_processor_variables(core_id() + 1);
+	}
+
+	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
+	// to initialize the next processor.
 	**CPU_ONLINE.lock() += 1;
 }

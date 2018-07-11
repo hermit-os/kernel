@@ -175,6 +175,11 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackF
 }
 
 
+#[inline]
+pub fn add_local_apic_id(id: u8) {
+	unsafe { CPU_LOCAL_APIC_IDS.as_mut().unwrap().push(id); }
+}
+
 fn detect_from_acpi() -> Result<usize, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");
@@ -182,12 +187,6 @@ fn detect_from_acpi() -> Result<usize, ()> {
 
 	// Jump to the actual table entries (after the table header).
 	let mut current_address = madt.table_start_address() + mem::size_of::<AcpiMadtHeader>();
-
-	// Initialize an empty vector for the Local APIC IDs of all CPUs.
-	let local_apic_ids = unsafe {
-		CPU_LOCAL_APIC_IDS = Some(Vec::new());
-		CPU_LOCAL_APIC_IDS.as_mut().unwrap()
-	};
 
 	// Loop through all table entries.
 	while current_address < madt.table_end_address() {
@@ -201,7 +200,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 				debug!("Found Processor Local APIC record: {}", processor_local_apic_record);
 
 				if processor_local_apic_record.flags & CPU_FLAG_ENABLED > 0 {
-					local_apic_ids.push(processor_local_apic_record.apic_id);
+					add_local_apic_id(processor_local_apic_record.apic_id);
 				}
 			},
 			1 => {
@@ -253,6 +252,9 @@ pub fn get_number_of_processors() -> u32 {
 }
 
 pub fn init() {
+	// Initialize an empty vector for the Local APIC IDs of all CPUs.
+	unsafe { CPU_LOCAL_APIC_IDS = Some(Vec::new()); }
+
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()
 		.or_else(|_e| detect_from_acpi())
@@ -435,6 +437,18 @@ pub fn init_x2apic() {
 	}
 }
 
+/// Initialize the required entry.asm variables for the next CPU to be booted.
+pub fn init_next_processor_variables(apic_id: u32) {
+	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
+	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
+	let stack = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::empty());
+	let boxed_percore = Box::new(PerCoreVariables::new(apic_id));
+	unsafe {
+		ptr::write_volatile(&mut current_stack_address, stack);
+		ptr::write_volatile(&mut current_percore_address, Box::into_raw(boxed_percore) as usize);
+	}
+}
+
 /// Boot all Application Processors
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
@@ -457,17 +471,9 @@ pub fn boot_application_processors() {
 
 	for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
 		if *apic_id != core_id {
-			let destination = (*apic_id as u64) << 32;
 			debug!("Waking up CPU with Local APIC ID {}", *apic_id);
-
-			// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
-			// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-			let stack = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::empty());
-			let boxed_percore = Box::new(PerCoreVariables::new(*apic_id as u32));
-			unsafe {
-				ptr::write_volatile(&mut current_stack_address, stack);
-				ptr::write_volatile(&mut current_percore_address, Box::into_raw(boxed_percore) as usize);
-			}
+			let destination = (*apic_id as u64) << 32;
+			init_next_processor_variables(*apic_id as u32);
 
 			// Save the current number of initialized CPUs.
 			let current_cpu_online = unsafe { ptr::read_volatile(&cpu_online) };
