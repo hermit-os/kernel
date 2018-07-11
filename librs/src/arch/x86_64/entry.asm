@@ -137,19 +137,26 @@ start64:
     add rsp, (KERNEL_STACK_SIZE - 0x10)
     mov rbp, rsp
 
-    ; Is this an Application Processor?
-    xor rax, rax
+    ; Assume and then check whether this is an Application Processor.
+    ; Skip boot processor initialization steps in this case.
+    mov r8, application_processor_main
     mov eax, DWORD [cpu_online]
     cmp eax, 0
-    je boot_processor_init
-
-    ; Then we're done and just call into the Application Processor Rust entry point.
-    call application_processor_main
-    jmp $
+    jne boot_processor_init_done
 
 boot_processor_init:
+    ; Overwrite the entry point to call.
+    mov r8, boot_processor_main
+
     ; store pointer to the multiboot information
     mov [mb_info], QWORD rdx
+
+    ; Set EFER.NXE to enable early access to EXECUTE_DISABLE-protected memory.
+    ; For the Application Processor, this has already been done in boot.asm or by uhyve.
+    mov ecx, MSR_EFER
+    rdmsr
+    or eax, EFER_NXE
+    wrmsr
 
     ; relocate page tables
     mov rdi, boot_pml4
@@ -202,25 +209,21 @@ Lremap:
     add rdi, 8
     ; note: the whole code segement has to fit in the first pgd
     cmp rcx, rsi
-    jnl Lremap_done
+    jnl boot_processor_init_done
     cmp rcx, r11
     jl Lremap
-Lremap_done:
+boot_processor_init_done:
 
     ; Set CR3
+    ; If this is an Application Processor and we're running bare-metal/QEMU, this has already been done in boot.asm.
+    ; However, this step is required when running on uhyve.
     mov rax, boot_pml4
     sub rax, kernel_start
     add rax, [base]
     mov cr3, rax
 
-    ; Set EFER.NXE to enable early access to EXECUTE_DISABLE-protected memory.
-    mov ecx, MSR_EFER
-    rdmsr
-    or eax, EFER_NXE
-    wrmsr
-
-    ; Call into the Boot Processor Rust entry point.
-    call boot_processor_main
+    ; Call into the desired Rust entry point.
+    call r8
     jmp $
 
 ; NASM macro for asynchronous interrupts (no exceptions)
