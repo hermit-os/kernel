@@ -220,8 +220,8 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 	let days = days_since_epoch + 719468;
 	let era = days / 146097;
 	let day_of_era = days % 146097;
-	let year_of_era = (day_of_era + day_of_era/1460 + day_of_era/36524 - day_of_era/146096) / 365;
-	let year = (year_of_era + era * 400) as u16;
+	let year_of_era = (day_of_era - day_of_era/1460 + day_of_era/36524 - day_of_era/146096) / 365;
+	let mut year = (year_of_era + era * 400) as u16;
 	let day_of_year = day_of_era - (365*year_of_era + year_of_era/4 - year_of_era/100);
 	let internal_month = (5*day_of_year + 2)/153;
 	let day = (day_of_year - (153*internal_month+2)/5 + 1) as u8;
@@ -231,6 +231,10 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 		month += 3;
 	} else {
 		month -= 9;
+	}
+
+	if month <= 2 {
+		year += 1;
 	}
 
 	(year, month, day, hour, minute, second)
