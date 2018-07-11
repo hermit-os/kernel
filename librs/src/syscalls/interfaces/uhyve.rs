@@ -43,12 +43,15 @@ extern "C" {
 
 
 /// forward a request to the hypervisor uhyve
-fn uhyve_send(port: u16, data: usize)
+#[inline]
+fn uhyve_send<T>(port: u16, data: &mut T)
 {
-	unsafe { outl(port, data as u32); }
+	let ptr = data as *mut T;
+	let physical_address = paging::virtual_to_physical(ptr as usize);
+	unsafe { outl(port, physical_address as u32); }
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysExit {
 	arg: i32,
 }
@@ -61,7 +64,7 @@ impl SysExit {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysOpen {
 	name: *const u8,
 	flags: i32,
@@ -80,7 +83,7 @@ impl SysOpen {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysClose {
 	fd: i32,
 	ret: i32
@@ -95,7 +98,7 @@ impl SysClose {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysRead {
 	fd: i32,
 	buf: *const u8,
@@ -114,7 +117,7 @@ impl SysRead {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysWrite {
 	fd: i32,
 	buf: *const u8,
@@ -131,7 +134,7 @@ impl SysWrite {
 	}
 }
 
-#[repr(C)]
+#[repr(C, packed)]
 struct SysLseek {
 	fd: i32,
 	offset: isize,
@@ -154,27 +157,21 @@ pub struct Uhyve;
 impl SyscallInterface for Uhyve {
 	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
 		let mut sysopen = SysOpen::new(name, flags, mode);
-		let raw_mut = &mut sysopen as *mut SysOpen;
-
-		uhyve_send(UHYVE_PORT_OPEN, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
 
 		sysopen.ret
 	}
 
 	fn close(&self, fd: i32) -> i32 {
 		let mut sysclose = SysClose::new(fd);
-		let raw_mut = &mut sysclose as *mut SysClose;
-
-		uhyve_send(UHYVE_PORT_CLOSE, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
 
 		sysclose.ret
 	}
 
 	fn shutdown(&self) -> ! {
 		let mut sysexit = SysExit::new(scheduler::get_last_exit_code());
-		let raw_mut = &mut sysexit as *mut SysExit;
-
-		uhyve_send(UHYVE_PORT_EXIT, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_EXIT, &mut sysexit);
 
 		loop {
 			arch::processor::halt();
@@ -197,9 +194,7 @@ impl SyscallInterface for Uhyve {
 		}
 
 		let mut sysread = SysRead::new(fd, buf, len);
-		let raw_mut = &mut sysread as *mut SysRead;
-
-		uhyve_send(UHYVE_PORT_READ, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_READ, &mut sysread);
 
 		sysread.ret
 	}
@@ -220,18 +215,14 @@ impl SyscallInterface for Uhyve {
 		}
 
 		let mut syswrite = SysWrite::new(fd, buf, len);
-		let raw_mut = &mut syswrite as *mut SysWrite;
-
-		uhyve_send(UHYVE_PORT_WRITE, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
 		syswrite.len as isize
 	}
 
 	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
 		let mut syslseek = SysLseek::new(fd, offset, whence);
-		let raw_mut = &mut syslseek as *mut SysLseek;
-
-		uhyve_send(UHYVE_PORT_LSEEK, paging::virtual_to_physical(raw_mut as usize));
+		uhyve_send(UHYVE_PORT_LSEEK, &mut syslseek);
 
 		syslseek.offset
 	}
