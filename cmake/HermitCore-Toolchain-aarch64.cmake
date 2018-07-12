@@ -27,6 +27,10 @@ set(CMAKE_CXX_COMPILER ${TOOLCHAIN_BIN_DIR}/${HERMIT_ARCH}-hermit-g++)
 set(CMAKE_Fortran_COMPILER ${TOOLCHAIN_BIN_DIR}/${HERMIT_ARCH}-hermit-gfortran)
 set(CMAKE_Go_COMPILER ${TOOLCHAIN_BIN_DIR}/${HERMIT_ARCH}-hermit-gccgo)
 
+# Building a HermitCore application won't work before HermitCore is installed in /opt/hermit because of the missing libhermit.a
+# So only try to compile a static library for compiler testing.
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
 # hinting the prefix and location is needed in order to correctly detect
 # binutils
 set(_CMAKE_TOOLCHAIN_PREFIX "${HERMIT_ARCH}-hermit-")
