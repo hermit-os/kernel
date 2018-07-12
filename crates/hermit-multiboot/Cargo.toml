@@ -5,4 +5,4 @@ authors = ["Colin Finck <colin.finck@rwth-aachen.de>"]
 license = "MIT"
 
 [dependencies]
-bitflags = "1.0.1"
+bitflags = "1.0.3"
