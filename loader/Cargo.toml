@@ -7,7 +7,7 @@ authors = ["Colin Finck <colin.finck@rwth-aachen.de>"]
 crate-type = ["staticlib"]
 
 [dependencies]
-bitflags = "1.0.1"
+bitflags = "1.0.3"
 
 [dependencies.hermit-multiboot]
 path = "../crates/hermit-multiboot"
@@ -17,8 +17,8 @@ path = "../crates/rlibc"    # Low-level functions like memcpy.
 features = ["nightly"]
 
 [dependencies.x86]
-path = "../crates/x86"
-default-features = false
+version = "0.9.0"
+features = []
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
