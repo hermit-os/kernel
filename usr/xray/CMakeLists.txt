@@ -17,8 +17,8 @@ target_compile_definitions(xray
 
 # deployment
 install(TARGETS xray
-	DESTINATION ${TARGET_ARCH}-hermit/lib)
+	DESTINATION ${HERMIT_ARCH}-hermit/lib)
 install(FILES libxray.spec
-	DESTINATION ${TARGET_ARCH}-hermit/lib)
+	DESTINATION ${HERMIT_ARCH}-hermit/lib)
 install(FILES xray.h
-	DESTINATION ${TARGET_ARCH}-hermit/include)
+	DESTINATION ${HERMIT_ARCH}-hermit/include)
