@@ -126,12 +126,12 @@ function(install_local_targets PATH)
 	endif()
 
 	install(TARGETS ${_TARGETS}
-		DESTINATION ${TARGET_ARCH}-hermit/${PATH})
+		DESTINATION ${HERMIT_ARCH}-hermit/${PATH})
 
 	# if there are any .map files for profiling, install them too
 	foreach(TARGET ${_TARGETS})
 		install(FILES $<TARGET_FILE:${TARGET}>.map
-			DESTINATION ${TARGET_ARCH}-hermit/${PATH}
+			DESTINATION ${HERMIT_ARCH}-hermit/${PATH}
 			OPTIONAL)
 	endforeach()
 endfunction(install_local_targets)
