@@ -395,7 +395,6 @@ impl fmt::Display for CpuFeaturePrinter {
 			if extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
 			if extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
 			if extended_feature_info.has_hle() { write!(f, "HLE ")?; }
-			if extended_feature_info.has_qm() { write!(f, "CQM ")?; }
 			if extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
 		}
 
