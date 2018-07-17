@@ -25,7 +25,7 @@ version = "1.0.1"
 features = ["spin_no_std"]
 
 [dependencies.raw-cpuid]
-version = "3.1.0"
+version = "5.0.0"
 features = ["nightly"]
 
 [dependencies.x86]
