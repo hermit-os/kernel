@@ -4,14 +4,15 @@ include(../../cmake/HermitCore-Application.cmake)
 project(hermit_openmpbench C)
 
 add_executable(syncbench syncbench.c common.c)
-target_link_libraries(syncbench PUBLIC -liomp -pthread)
+target_link_libraries(syncbench PUBLIC -fopenmp)
 
 add_executable(taskbench taskbench.c common.c)
-target_link_libraries(taskbench PUBLIC -liomp -pthread)
+target_link_libraries(taskbench PUBLIC -fopenmp)
 
 add_library(common_sched STATIC common.c)
 target_compile_definitions(common_sched PUBLIC -DSCHEDBENCH)
-target_link_libraries(common_sched PUBLIC -liomp -pthread)
+target_compile_options(common_sched PUBLIC -fopenmp)
+target_link_libraries(common_sched PUBLIC -fopenmp)
 
 add_executable(schedbench schedbench.c)
 target_link_libraries(schedbench common_sched)

@@ -28,20 +28,11 @@ if("${HERMIT_ARCH}" STREQUAL "x86_64")
 	build_external(loader ${HERMIT_ROOT}/loader "")
 endif()
 
-## Intel's OpenMP runtime for x86 (libomp)
-build_external(libiomp ${HERMIT_ROOT}/usr/libomp ""
-		-DHERMIT=1
-		-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-		-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}/${HERMIT_ARCH}-hermit
-		-DLOCAL_PREFIX_ARCH_INCLUDE_DIR=${LOCAL_PREFIX_ARCH_INCLUDE_DIR})
-
-# libomp is part of HermitCore's runtime and should be available before any
-# application will link
-add_dependencies(hermit libiomp)
-
-## XRay profiler
-build_external(xray ${HERMIT_ROOT}/usr/xray "")
-add_dependencies(hermit xray)
+if(PROFILING)
+	## XRay profiler
+	build_external(xray ${HERMIT_ROOT}/usr/xray "")
+	add_dependencies(hermit xray)
+endif()
 
 ## Tests and benchmarks
 build_external(tests ${HERMIT_ROOT}/usr/tests hermit)

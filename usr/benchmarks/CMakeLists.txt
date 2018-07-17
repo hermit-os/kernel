@@ -11,7 +11,8 @@ add_executable(hg hg.c hist.c rdtsc.c run.c init.c opt.c report.c setup.c)
 add_executable(netio netio.c)
 
 add_executable(stream stream.c)
-target_link_libraries(stream -liomp -pthread)
+target_compile_options(stream PRIVATE -fopenmp)
+target_link_libraries(stream -fopenmp)
 
 add_executable(taskswitch taskswitch.c)
 

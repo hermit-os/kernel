@@ -34,7 +34,10 @@
 #include <stdlib.h>
 #include <math.h>
 #include <omp.h>
+
+#ifdef XRAY
 #include <xray.h>
+#endif
 
 #include "common.h"
 #include "syncbench.h"
@@ -43,11 +46,13 @@ omp_lock_t lock;
 
 int main(int argc, char **argv) {
 
+#ifdef XRAY
 	struct XRayTraceCapture* trace = XRayInit(
 				20,					// max. call depth
 				16 * 1000 * 1000,	// memory for report
 				13,					// frame count
 				"syncbench.map");
+#endif
 
     // Start Paraver tracing
 #ifdef PARAVERTRACE
@@ -58,6 +63,7 @@ int main(int argc, char **argv) {
 
     omp_init_lock(&lock);
 
+#ifdef XRAY
     /* GENERATE REFERENCE TIME */
 	XRayStartFrame(trace);
 	reference("reference time 1", &refer);
@@ -122,16 +128,19 @@ int main(int argc, char **argv) {
 	XRayStartFrame(trace);
 	benchmark("REDUCTION", &testred);
 	XRayEndFrame(trace);
+#endif
 
 #ifdef PARAVERTRACE
     Extrae_fini();
 #endif
 
+#ifdef XRAY
 	XRaySaveReport(trace,
 				   "syncbench.xray", // report file
 				   0.05f, // Only output funcs that have higher runtime [%]
 				   1000); // Only output funcs that have higher runtime [cycles]
 	XRayShutdown(trace);
+#endif
 
     finalise();
 
