@@ -35,7 +35,10 @@
 #include <string.h>
 #include <math.h>
 #include <omp.h>
+
+#ifdef XRAY
 #include <xray.h>
+#endif
 
 #include "common.h"
 
@@ -277,7 +280,9 @@ void reference(char *name, void (*refer)(void)) {
     int k;
     double start;
 
+#ifdef XRAY
 	XRayLabelFrame(name);
+#endif
 
     // Calculate the required number of innerreps
     innerreps = getinnerreps(refer);
@@ -322,7 +327,9 @@ void benchmark(char *name, void (*test)(void))
 
     intitest(name);
 
+#ifdef XRAY
 	XRayLabelFrame(name);
+#endif
 
     for (k=0; k<=outerreps; k++) {
 	start = getclock();

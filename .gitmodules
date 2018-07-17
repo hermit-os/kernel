@@ -2,10 +2,6 @@
 	path = lwip
 	url = https://github.com/hermitcore/LwIP.git
 	branch = path2rs
-[submodule "usr/libomp"]
-	path = usr/libomp
-	url = https://github.com/hermitcore/libomp_oss.git
-	branch = path2rs
 [submodule "crates/rlibc"]
 	path = crates/rlibc
 	url = https://github.com/hermitcore/rlibc.git
