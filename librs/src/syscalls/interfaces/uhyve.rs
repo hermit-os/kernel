@@ -110,7 +110,7 @@ impl SysRead {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
 		SysRead {
 			fd: fd,
-			buf: paging::virtual_to_physical(buf as usize) as *const u8,
+			buf: buf,
 			len: len,
 			ret: -1
 		}
@@ -128,7 +128,7 @@ impl SysWrite {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
 		SysWrite {
 			fd: fd,
-			buf: paging::virtual_to_physical(buf as usize) as *const u8,
+			buf: buf,
 			len: len
 		}
 	}
