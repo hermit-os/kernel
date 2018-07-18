@@ -116,6 +116,22 @@ align 4
     current_percore_address dq PERCORE              ; 0xcc
     boot_gtod dq 0                                  ; 0xd4
 
+; These page tables are used for bootstrapping and normal operation later.
+; They must be located at (entry point + 4096) for uhyve.
+align 4096
+boot_pml4:
+    DQ boot_pdpt + 0x3   ; PG_PRESENT | PG_RW
+    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
+    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
+boot_pdpt:
+    DQ boot_pgd + 0x3    ; PG_PRESENT | PG_RW
+    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
+boot_pgd:
+    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW
+    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
+boot_pgt:
+    times 512 DQ 0
+
 SECTION .ktext
 align 4
 start64:
@@ -283,21 +299,6 @@ SECTION .data
 align 4096
 boot_stack_bottom:
     TIMES KERNEL_STACK_SIZE DB 0xcd
-
-; These page tables are used for bootstrapping and normal operation later.
-align 4096
-boot_pml4:
-    DQ boot_pdpt + 0x3   ; PG_PRESENT | PG_RW
-    times 510 DQ 0       ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3   ; PG_PRESENT | PG_RW
-boot_pdpt:
-    DQ boot_pgd + 0x3    ; PG_PRESENT | PG_RW
-    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
-boot_pgd:
-    DQ boot_pgt + 0x3    ; PG_PRESENT | PG_RW
-    times 511 DQ 0       ; PAGE_MAP_ENTRIES - 2
-boot_pgt:
-    times 512 DQ 0
 
 ; add some hints to the ELF file
 SECTION .note.GNU-stack noalloc noexec nowrite progbits
