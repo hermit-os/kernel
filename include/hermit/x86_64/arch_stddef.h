@@ -25,47 +25,93 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __STDDEF_H__
-#define __STDDEF_H__
-
 /**
  * @author Stefan Lankes
- * @file include/hermit/stddef.h
- * @brief Definition of basic data types
+ * @file arch/x86/include/asm/stddef.h
+ * @brief Standard datatypes
+ *
+ * This file contains typedefs for standard datatypes for numerical and character values.
  */
 
-#include <arch_stddef.h>
+#ifndef __ARCH_STDDEF_H__
+#define __ARCH_STDDEF_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// size of the whole application
-extern const size_t image_size;
+// A popular type for addresses
+typedef unsigned long long size_t;
+/// Pointer differences
+typedef long long ptrdiff_t;
+#ifdef __KERNEL__
+typedef long long ssize_t;
+typedef long long off_t;
+#endif
 
-#define TIMER_FREQ	1000000 /* in HZ */
-#define CACHE_LINE	64
-#define KMSG_SIZE	0x1000
-#define INT_SYSCALL	0x80
-#define MAILBOX_SIZE	128
+/// Unsigned 64 bit integer
+typedef unsigned long uint64_t;
+/// Signed 64 bit integer
+typedef long int64_t;
+/// Unsigned 32 bit integer
+typedef unsigned int uint32_t;
+/// Signed 32 bit integer
+typedef int int32_t;
+/// Unsigned 16 bit integer
+typedef unsigned short uint16_t;
+/// Signed 16 bit integer
+typedef short int16_t;
+/// Unsigned 8 bit integer (/char)
+typedef unsigned char uint8_t;
+/// Signed 8 bit integer (/char)
+typedef char int8_t;
+/// 16 bit wide char type
+typedef unsigned short wchar_t;
 
-#define BYTE_ORDER             LITTLE_ENDIAN
+#ifndef _WINT_T
+#define _WINT_T
+typedef wchar_t wint_t;
+#endif
 
-#define UHYVE_PORT_WRITE	0x499
-#define UHYVE_PORT_OPEN		0x500
-#define UHYVE_PORT_CLOSE	0x501
-#define UHYVE_PORT_READ		0x502
-#define UHYVE_PORT_EXIT		0x503
-#define UHYVE_PORT_LSEEK	0x504
+/// This defines registers, which are saved for a "user-level" context swicth
+typedef struct mregs {
+	/// R15 register
+	uint64_t r15;
+	/// R14 register
+	uint64_t r14;
+	/// R13 register
+	uint64_t r13;
+	/// R12 register
+	uint64_t r12;
+	/// R9 register
+	uint64_t r9;
+	/// R8 register
+	uint64_t r8;
+	/// RDI register
+	uint64_t rdi;
+	/// RSI register
+	uint64_t rsi;
+	/// RBP register
+	uint64_t rbp;
+	/// RBX register
+	uint64_t rbx;
+	/// RDX register
+	uint64_t rdx;
+	/// RCX register
+	uint64_t rcx;
+	/// RSP register
+	uint64_t rsp;
+	/// RIP
+	uint64_t rip;
+	/// MXCSR
+	uint32_t mxcsr;
+} mregs_t;
 
-#define BUILTIN_EXPECT(exp, b)		__builtin_expect((exp), (b))
-//#define BUILTIN_EXPECT(exp, b)	(exp)
-#define NORETURN			__attribute__((noreturn))
-
-#define NULL 		((void*) 0)
-
-/// represents a task identifier
-typedef unsigned int tid_t;
+typedef struct {
+	void	*ss_sp;		/* Stack base or pointer.  */
+	int	ss_flags;	/* Flags.  */
+	size_t	ss_size;	/* Stack size.  */
+} stack_t;
 
 #ifdef __cplusplus
 }

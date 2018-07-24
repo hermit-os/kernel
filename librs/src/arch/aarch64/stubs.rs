@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,16 +21,44 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="aarch64")]
-pub use arch::aarch64::*;
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	// TODO
+	debug!("set_oneshot_timer stub");
+}
 
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
+pub fn wakeup_core(core_to_wakeup: usize) {
+	// TODO
+	debug!("wakeup_core stub");
+}
 
-// Platform-specific implementations
-#[cfg(target_arch="aarch64")]
-pub mod aarch64;
+#[no_mangle]
+pub extern "C" fn do_bad_mode() {
+}
 
-#[cfg(target_arch="x86_64")]
-pub mod x86_64;
+#[no_mangle]
+pub extern "C" fn do_error() {
+}
+
+#[no_mangle]
+pub extern "C" fn do_fiq() {
+}
+
+#[no_mangle]
+pub extern "C" fn do_irq() {
+}
+
+#[no_mangle]
+pub extern "C" fn do_sync() {
+}
+
+#[no_mangle]
+pub extern "C" fn eoi() {
+}
+
+#[no_mangle]
+pub extern "C" fn finish_task_switch() {
+}
+
+#[no_mangle]
+pub extern "C" fn get_current_stack() {
+}

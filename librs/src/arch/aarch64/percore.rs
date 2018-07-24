@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -21,28 +21,18 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::processor;
 use core::ptr;
 use scheduler::PerCoreScheduler;
-use x86::bits64::task::TaskStateSegment;
-
-
-extern "C" {
-	static current_percore_address: usize;
-}
-
 
 #[no_mangle]
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
 
 pub struct PerCoreVariables {
-	/// Sequential ID of this CPU Core.
+	/// APIC ID of this CPU Core.
 	core_id: PerCoreVariable<usize>,
 	/// Scheduler for this CPU Core.
 	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
-	/// Task State Segment (TSS) allocated for this CPU Core.
-	pub tss: PerCoreVariable<*mut TaskStateSegment>,
 }
 
 impl PerCoreVariables {
@@ -50,7 +40,6 @@ impl PerCoreVariables {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
-			tss: PerCoreVariable::new(0 as *mut TaskStateSegment),
 		}
 	}
 }
@@ -61,58 +50,29 @@ pub struct PerCoreVariable<T> {
 	data: T,
 }
 
-pub trait PerCoreVariableMethods<T> {
+pub trait PerCoreVariableMethods<T: Clone> {
 	unsafe fn get(&self) -> T;
-	unsafe fn set(&self, value: T);
+	unsafe fn set(&mut self, value: T);
 }
 
 impl<T> PerCoreVariable<T> {
 	const fn new(value: T) -> Self {
 		Self { data: value }
 	}
-
-	#[inline]
-	unsafe fn offset(&self) -> usize {
-		let base = &PERCORE as *const _ as usize;
-		let field = self as *const _ as usize;
-		field - base
-	}
 }
 
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
 // Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
 // The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
-impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
+impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> where T: Clone {
 	#[inline]
 	default unsafe fn get(&self) -> T {
-		let value: T;
-		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
-		value
+		self.data.clone()
 	}
 
 	#[inline]
-	default unsafe fn set(&self, value: T) {
-		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
-	}
-}
-
-// Define and implement a trait to mark all 32-bit variables used inside PerCoreVariables.
-pub trait Is32BitVariable {}
-impl Is32BitVariable for u32 {}
-
-// For all types implementing the Is32BitVariable trait above, implement the PerCoreVariableMethods
-// trait functions using 32-bit memory moves.
-impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
-	#[inline]
-	unsafe fn get(&self) -> T {
-		let value: T;
-		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
-		value
-	}
-
-	#[inline]
-	unsafe fn set(&self, value: T) {
-		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+	default unsafe fn set(&mut self, value: T) {
+		self.data = value;
 	}
 }
 
@@ -133,9 +93,5 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 }
 
 pub fn init() {
-	unsafe {
-		// Store the address to the PerCoreVariables structure allocated for this core in GS.
-		let address = ptr::read_volatile(&current_percore_address);
-		processor::writegs(address);
-	}
+	// TODO: Implement!
 }

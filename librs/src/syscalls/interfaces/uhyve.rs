@@ -27,6 +27,8 @@ use scheduler;
 use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::interfaces::SyscallInterface;
 use syscalls::lwip::sys_lwip_get_errno;
+
+#[cfg(target_arch = "x86_64")]
 use x86::shared::io::*;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
@@ -48,6 +50,8 @@ fn uhyve_send<T>(port: u16, data: &mut T)
 {
 	let ptr = data as *mut T;
 	let physical_address = paging::virtual_to_physical(ptr as usize);
+
+	#[cfg(target_arch = "x86_64")]
 	unsafe { outl(port, physical_address as u32); }
 }
 

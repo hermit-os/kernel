@@ -17,18 +17,18 @@ vga = []
 bitflags = "1.0.3"
 spin = "0.4.8"
 
-[dependencies.hermit-multiboot]
+[target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
 path = "../crates/hermit-multiboot"
 
 [dependencies.lazy_static]
 version = "1.0.1"
 features = ["spin_no_std"]
 
-[dependencies.raw-cpuid]
+[target.'cfg(target_arch = "x86_64")'.dependencies.raw-cpuid]
 version = "5.0.0"
 features = ["nightly"]
 
-[dependencies.x86]
+[target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.9.0"
 features = []
 

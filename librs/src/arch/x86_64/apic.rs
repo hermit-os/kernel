@@ -26,6 +26,7 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use arch;
 use arch::x86_64::acpi;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
@@ -91,7 +92,9 @@ const X2APIC_ENABLE: u64 = 1 << 10;
 static mut LOCAL_APIC_ADDRESS: usize = 0;
 static mut IOAPIC_ADDRESS: usize = 0;
 
-/// Stores the Local APIC IDs of all CPUs.
+/// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
+/// Both numbers often match, but don't need to (e.g. when a core has been disabled).
+///
 /// As Rust currently implements no way of zero-initializing a global Vec in a no_std environment,
 /// we have to encapsulate it in an Option...
 static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
@@ -245,10 +248,6 @@ fn detect_from_uhyve() -> Result<usize, ()> {
 #[no_mangle]
 pub extern "C" fn eoi() {
 	local_apic_write(IA32_X2APIC_EOI, APIC_EOI_ACK);
-}
-
-pub fn get_number_of_processors() -> u32 {
-	unsafe { ptr::read_volatile(&cpu_online) }
 }
 
 pub fn init() {
@@ -438,11 +437,11 @@ pub fn init_x2apic() {
 }
 
 /// Initialize the required entry.asm variables for the next CPU to be booted.
-pub fn init_next_processor_variables(apic_id: u32) {
+pub fn init_next_processor_variables(core_id: usize) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::empty());
-	let boxed_percore = Box::new(PerCoreVariables::new(apic_id));
+	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
 		ptr::write_volatile(&mut current_stack_address, stack);
 		ptr::write_volatile(&mut current_percore_address, Box::into_raw(boxed_percore) as usize);
@@ -467,16 +466,19 @@ pub fn boot_application_processors() {
 	unsafe { *((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32; }
 
 	// Now wake up each application processor.
-	let core_id = core_id() as u8;
+	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+	let core_id = core_id();
 
-	for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
-		if *apic_id != core_id {
-			debug!("Waking up CPU with Local APIC ID {}", *apic_id);
-			let destination = (*apic_id as u64) << 32;
-			init_next_processor_variables(*apic_id as u32);
+	for core_id_to_boot in 0..apic_ids.len() {
+		if core_id_to_boot != core_id {
+			let apic_id = apic_ids[core_id_to_boot];
+			let destination = (apic_id as u64) << 32;
+
+			debug!("Waking up CPU {} with Local APIC ID {}", core_id_to_boot, apic_id);
+			init_next_processor_variables(core_id_to_boot);
 
 			// Save the current number of initialized CPUs.
-			let current_cpu_online = unsafe { ptr::read_volatile(&cpu_online) };
+			let current_processor_count = arch::get_processor_count();
 
 			// Send an INIT IPI.
 			local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_TRIGGERED | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_INIT);
@@ -491,7 +493,7 @@ pub fn boot_application_processors() {
 
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.
-			while current_cpu_online == unsafe { ptr::read_volatile(&cpu_online) } {
+			while current_processor_count == arch::get_processor_count() {
 				processor::udelay(1000);
 			}
 		}
@@ -499,38 +501,30 @@ pub fn boot_application_processors() {
 }
 
 pub fn ipi_tlb_flush() {
-	if unsafe { ptr::read_volatile(&cpu_online) } > 1 {
-		let core_id = core_id() as u8;
+	if arch::get_processor_count() > 1 {
+		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+		let core_id = core_id();
 
 		// Ensure that all memory operations have completed before issuing a TLB flush.
 		unsafe { asm!("mfence" ::: "memory" : "volatile"); }
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
-		for apic_id in unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().iter() } {
-			if *apic_id != core_id {
-				let destination = (*apic_id as u64) << 32;
+		for core_id_to_interrupt in 0..apic_ids.len() {
+			if core_id_to_interrupt != core_id {
+				let local_apic_id = apic_ids[core_id_to_interrupt];
+				let destination = (local_apic_id as u64) << 32;
 				local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED | (TLB_FLUSH_INTERRUPT_NUMBER as u64));
 			}
 		}
 	}
 }
 
-/// Gets the Core ID (here Local APIC ID) for a given sequential CPU number.
-/// Both numbers often match, but don't need to (e.g. when a core has been disabled).
-#[inline]
-pub fn get_core_id_for_cpu_number(cpu_number: usize) -> Option<u32> {
-	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
-	if cpu_number < apic_ids.len() {
-		Some(apic_ids[cpu_number] as u32)
-	} else {
-		None
-	}
-}
-
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
-pub fn wakeup_core(core_to_wakeup: u32) {
-	if core_to_wakeup != core_id() {
-		let destination = (core_to_wakeup as u64) << 32;
+pub fn wakeup_core(core_id_to_wakeup: usize) {
+	if core_id_to_wakeup != core_id() {
+		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+		let local_apic_id = apic_ids[core_id_to_wakeup];
+		let destination = (local_apic_id as u64) << 32;
 		local_apic_write(IA32_X2APIC_ICR, destination | APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED | (WAKEUP_INTERRUPT_NUMBER as u64));
 	}
 }
@@ -613,6 +607,6 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 pub fn print_information() {
 	infoheader!(" MULTIPROCESSOR INFORMATION ");
 	infoentry!("APIC in use", if processor::supports_x2apic() { "x2APIC" } else { "xAPIC" });
-	infoentry!("Initialized CPUs", unsafe { ptr::read_volatile(&cpu_online) });
+	infoentry!("Initialized CPUs", arch::get_processor_count());
 	infofooter!();
 }

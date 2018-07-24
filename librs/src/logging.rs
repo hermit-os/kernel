@@ -59,7 +59,7 @@ pub struct KernelLogger {
 }
 
 /// default logger to handle kernel messages
-pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::Info };
+pub static LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::Debug };
 
 
 macro_rules! printlog {

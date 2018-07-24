@@ -25,8 +25,8 @@ use arch;
 
 /** Returns the number of processors currently online. */
 #[no_mangle]
-pub extern "C" fn sys_get_number_of_processors() -> u32 {
-	arch::get_number_of_processors()
+pub extern "C" fn sys_get_processor_count() -> usize {
+	arch::get_processor_count()
 }
 
 /** Returns the processor frequency in MHz. */
