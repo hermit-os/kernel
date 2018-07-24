@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,16 +21,31 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="aarch64")]
-pub use arch::aarch64::*;
+use core::ptr;
+use environment;
 
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
 
-// Platform-specific implementations
-#[cfg(target_arch="aarch64")]
-pub mod aarch64;
+pub struct SerialPort {
+	port_address: u32
+}
 
-#[cfg(target_arch="x86_64")]
-pub mod x86_64;
+impl SerialPort {
+	pub const fn new(port_address: u32) -> Self {
+		Self { port_address: port_address }
+	}
+
+	pub fn write_byte(&self, byte: u8) {
+		let port = self.port_address as *mut u8;
+
+		// LF newline characters need to be extended to CRLF over a real serial port.
+		if byte == b'\n' {
+			unsafe { ptr::write_volatile(port, b'\r'); }
+		}
+
+		unsafe { ptr::write_volatile(port, byte); }
+	}
+
+	pub fn init(&self, baudrate: u32) {
+		// We don't do anything here (yet).
+	}
+}

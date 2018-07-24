@@ -46,22 +46,6 @@ if(NOT CMAKE_TOOLCHAIN_FILE)
 	set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-${HERMIT_ARCH}${_BOOTSTRAP_ARCH_SUFFIX}.cmake)
 endif()
 
-# NASM is only required on x86_64
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	# NASM detection will change binary format depending on host system, but
-	# we only want to generate elf64 for HermitCore
-	# Note: Has to be set *before* ASM_NASM is enabled
-	set(CMAKE_ASM_NASM_OBJECT_FORMAT elf64)
-
-	enable_language(ASM_NASM)
-
-	# NASM hack, because it requires include paths to have a trailing /, whereas
-	# CMake explicitly will remove it when adding includes the usual way
-	# Note: Has to be set *after* ASM_NASM is enabled
-	set(CMAKE_ASM_NASM_FLAGS
-		"${CMAKE_ASM_NASM_FLAGS} -I ${CMAKE_BINARY_DIR}/include/")
-endif()
-
 if(MTUNE)
 	set(HERMIT_KERNEL_FLAGS ${HERMIT_KERNEL_FLAGS} -mtune=${MTUNE})
 	set(HERMIT_APP_FLAGS    ${HERMIT_APP_FLAGS}    -mtune=${MTUNE})
@@ -70,7 +54,7 @@ endif()
 set(HERMIT_KERNEL_INCLUDES
     ${CMAKE_BINARY_DIR}/include
     ${HERMIT_ROOT}/include
-    ${HERMIT_ROOT}/arch/${HERMIT_ARCH}/include
+    ${HERMIT_ROOT}/include/hermit/${HERMIT_ARCH}
     ${HERMIT_ROOT}/lwip/src/include)
 
 # HACK: when CMake detects compilers it taints CMAKE_INSTALL_PREFIX, so in

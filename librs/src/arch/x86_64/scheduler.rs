@@ -28,6 +28,7 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::rc::Rc;
 use arch::x86_64::apic;
+use arch::x86_64::gdt;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
 use arch::x86_64::percore::*;
@@ -80,6 +81,53 @@ struct State {
 	/// instruction pointer
 	rip: u64
 }
+
+pub struct TaskStacks {
+	/// Whether this is a boot stack
+	is_boot_stack: bool,
+	/// Stack of the task
+	stack: usize,
+	/// Stack for interrupt handling
+	ist: usize,
+}
+
+impl TaskStacks {
+	pub fn new() -> Self {
+		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
+		let stack = mm::allocate(DEFAULT_STACK_SIZE, PageTableEntryFlags::empty());
+		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
+		debug!("Allocating stack {:#X} and IST {:#X}", stack, ist);
+
+		Self {
+			is_boot_stack: false,
+			stack: stack,
+			ist: ist,
+		}
+	}
+
+	pub fn from_boot_stacks() -> Self {
+		let (stack, ist) = gdt::get_boot_stacks();
+		debug!("Using boot stack {:#X} and IST {:#X}", stack, ist);
+
+		Self {
+			is_boot_stack: true,
+			stack: stack,
+			ist: ist,
+		}
+	}
+}
+
+impl Drop for TaskStacks {
+	fn drop(&mut self) {
+		if !self.is_boot_stack {
+			debug!("Deallocating stack {:#X} and IST {:#X}", self.stack, self.ist);
+
+			mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
+			mm::deallocate(self.ist, DEFAULT_STACK_SIZE);
+		}
+	}
+}
+
 
 extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0);

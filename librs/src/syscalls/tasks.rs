@@ -152,7 +152,7 @@ pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: u32) -> i32 {
+pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: usize) -> i32 {
 	let core_scheduler = scheduler::get_scheduler(core_id);
 	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio), None);
 

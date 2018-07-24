@@ -25,47 +25,60 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __STDDEF_H__
-#define __STDDEF_H__
-
 /**
- * @author Stefan Lankes
- * @file include/hermit/stddef.h
- * @brief Definition of basic data types
+ * author Stefan Lankes
+ * @file arch/x86/include/asm/limits.h
+ * @brief Define constants related to numerical value-ranges of variable types
+ *
+ * This file contains define constants for the numerical
+ * ranges of the most typical variable types.
  */
 
-#include <arch_stddef.h>
+#ifndef __ARCH_LIMITS_H__
+#define __ARCH_LIMITS_H__
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// size of the whole application
-extern const size_t image_size;
+/** Number of bits in a char */
+#define	CHAR_BIT	8
 
-#define TIMER_FREQ	1000000 /* in HZ */
-#define CACHE_LINE	64
-#define KMSG_SIZE	0x1000
-#define INT_SYSCALL	0x80
-#define MAILBOX_SIZE	128
+/** Maximum value for a signed char */
+#define	SCHAR_MAX	0x7f
+/** Minimum value for a signed char */
+#define	SCHAR_MIN	(-0x7f - 1)
 
-#define BYTE_ORDER             LITTLE_ENDIAN
+/** Maximum value for an unsigned char */
+#define	UCHAR_MAX	0xff
 
-#define UHYVE_PORT_WRITE	0x499
-#define UHYVE_PORT_OPEN		0x500
-#define UHYVE_PORT_CLOSE	0x501
-#define UHYVE_PORT_READ		0x502
-#define UHYVE_PORT_EXIT		0x503
-#define UHYVE_PORT_LSEEK	0x504
+/** Maximum value for an unsigned short */
+#define	USHRT_MAX	0xffff
+/** Maximum value for a short */
+#define	SHRT_MAX	0x7fff
+/** Minimum value for a short */
+#define	SHRT_MIN	(-0x7fff - 1)
 
-#define BUILTIN_EXPECT(exp, b)		__builtin_expect((exp), (b))
-//#define BUILTIN_EXPECT(exp, b)	(exp)
-#define NORETURN			__attribute__((noreturn))
+/** Maximum value for an unsigned int */
+#define	UINT_MAX	0xffffffffU
+/** Maximum value for an int */
+#define	INT_MAX		0x7fffffff
+/** Minimum value for an int */
+#define	INT_MIN	(-0x7fffffff - 1)
 
-#define NULL 		((void*) 0)
+/** Maximum value for an unsigned long */
+#define	ULONG_MAX	0xffffffffUL
+/** Maximum value for a long */
+#define	LONG_MAX	0x7fffffffL
+/** Minimum value for a long */
+#define	LONG_MIN	(-0x7fffffffL - 1)
 
-/// represents a task identifier
-typedef unsigned int tid_t;
+/** Maximum value for an unsigned long long */
+#define	ULLONG_MAX	0xffffffffffffffffULL
+/** Maximum value for a long long */
+#define	LLONG_MAX	0x7fffffffffffffffLL
+/** Minimum value for a long long */
+#define	LLONG_MIN	(-0x7fffffffffffffffLL - 1)
 
 #ifdef __cplusplus
 }

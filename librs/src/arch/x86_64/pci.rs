@@ -199,7 +199,7 @@ pub fn init() {
 
 	// HermitCore only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
-	// We also limit scanning to the first 8 buses.
+	// We also limit scanning to the first 32 buses.
 	for bus in 0..PCI_MAX_BUS_NUMBER {
 		for device in 0..PCI_MAX_DEVICE_NUMBER {
 			let device_vendor_id = read_config(bus, device, PCI_ID_REGISTER);

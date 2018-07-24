@@ -47,10 +47,10 @@ pub const TASK_TIME_SLICE: u64 = 10_000;
 
 
 static LAST_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
-static NEXT_CPU_NUMBER: AtomicUsize = AtomicUsize::new(1);
+static NEXT_CORE_ID: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Option<BTreeMap<u32, &PerCoreScheduler>> = None;
+static mut SCHEDULERS: Option<BTreeMap<usize, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
 static mut TASKS: Option<SpinlockIrqSave<BTreeMap<TaskId, Rc<RefCell<Task>>>>> = None;
 static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -65,7 +65,7 @@ struct SchedulerState {
 
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
-	core_id: u32,
+	core_id: usize,
 	/// Task which is currently running
 	pub current_task: Rc<RefCell<Task>>,
 	/// Idle Task
@@ -123,19 +123,14 @@ impl PerCoreScheduler {
 		// Get the Core ID of the next CPU.
 		let core_id = {
 			// Increase the CPU number by 1.
-			let cpu_number = NEXT_CPU_NUMBER.fetch_add(1, Ordering::SeqCst);
+			let id = NEXT_CORE_ID.fetch_add(1, Ordering::SeqCst);
 
-			// Translate this CPU number to a Core ID.
-			// Both numbers often match, but don't need to (e.g. when a Core has been disabled).
-			match arch::get_core_id_for_cpu_number(cpu_number) {
-				Some(core_id) => {
-					core_id
-				},
-				None => {
-					// This CPU number does not exist, so start over again with CPU number 0 = Core ID 0.
-					NEXT_CPU_NUMBER.store(0, Ordering::SeqCst);
-					0
-				}
+			// Check for overflow.
+			if id == arch::get_processor_count() {
+				NEXT_CORE_ID.store(0, Ordering::SeqCst);
+				0
+			} else {
+				id
 			}
 		};
 
@@ -366,7 +361,7 @@ pub fn get_last_exit_code() -> i32 {
 	LAST_EXIT_CODE.load(Ordering::SeqCst)
 }
 
-pub fn get_scheduler(core_id: u32) -> &'static PerCoreScheduler {
+pub fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
 	let result = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) };
 	assert!(result.is_some(), "Trying to get the scheduler for core {}, but it isn't available", core_id);

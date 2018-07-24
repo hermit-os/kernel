@@ -28,6 +28,7 @@ use alloc::rc::Rc;
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::processor::msb;
+use arch::scheduler::TaskStacks;
 use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::fmt;
@@ -228,11 +229,9 @@ pub struct Task {
 	/// Last FPU state before a context switch to another task using the FPU
 	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
-	pub core_id: u32,
+	pub core_id: usize,
 	/// Stack of the task
-	pub stack: usize,
-	/// Stack for interrupt handling
-	pub ist: usize,
+	pub stacks: TaskStacks,
 	/// Task heap area
 	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
@@ -248,30 +247,9 @@ pub trait TaskFrame {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize);
 }
 
-impl Drop for Task {
-    fn drop(&mut self) {
-		if self.status != TaskStatus::TaskIdle {
-			debug!("Deallocating stack {:#X} and IST {:#X} for task {}", self.stack as usize, self.ist as usize, self.id);
-
-			// deallocate stacks
-			mm::deallocate(self.stack as usize, DEFAULT_STACK_SIZE);
-			mm::deallocate(self.ist as usize, DEFAULT_STACK_SIZE);
-		}
-	}
-}
-
 impl Task {
-	#[inline]
-	fn allocate_stacks() -> (usize, usize) {
-		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-		let stack = mm::allocate(DEFAULT_STACK_SIZE, PageTableEntryFlags::empty());
-		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
-		(stack, ist)
-	}
-
-	pub fn new(tid: TaskId, core_id: u32, task_status: TaskStatus, task_prio: Priority, heap_start: Option<usize>) -> Task {
-		let (stack, ist) = Task::allocate_stacks();
-		debug!("Allocating stack {:#X} and IST {:#X} for task {}", stack, ist, tid);
+	pub fn new(tid: TaskId, core_id: usize, task_status: TaskStatus, task_prio: Priority, heap_start: Option<usize>) -> Task {
+		debug!("Creating new task {}", tid);
 
 		Task {
 			id: tid,
@@ -280,8 +258,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stack: stack,
-			ist: ist,
+			stacks: TaskStacks::new(),
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -289,9 +266,8 @@ impl Task {
 		}
 	}
 
-	pub fn new_idle(tid: TaskId, core_id: u32) -> Task {
-		let (stack, ist) = arch::get_boot_stacks();
-		debug!("Using boot stack {:#X} and IST {:#X} for idle task {}", stack, ist, tid);
+	pub fn new_idle(tid: TaskId, core_id: usize) -> Task {
+		debug!("Creating idle task {}", tid);
 
 		Task {
 			id: tid,
@@ -300,8 +276,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stack: stack,
-			ist: ist,
+			stacks: TaskStacks::from_boot_stacks(),
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -309,9 +284,8 @@ impl Task {
 		}
 	}
 
-	pub fn clone(tid: TaskId, core_id: u32, task: &Task) -> Task {
-		let (stack, ist) = Task::allocate_stacks();
-		debug!("Allocating stack {:#X} and IST {:#X} for task {} cloned from task {}", stack, ist, tid, task.id);
+	pub fn clone(tid: TaskId, core_id: usize, task: &Task) -> Task {
+		debug!("Cloning task {} from task {}", tid, task.id);
 
 		Task {
 			id: tid,
@@ -320,8 +294,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stack: stack,
-			ist: ist,
+			stacks: TaskStacks::new(),
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,

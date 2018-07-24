@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,16 +21,12 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="aarch64")]
-pub use arch::aarch64::*;
+use environment;
 
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
+extern "C" {
+	static mut boot_gtod: u64;
+}
 
-// Platform-specific implementations
-#[cfg(target_arch="aarch64")]
-pub mod aarch64;
-
-#[cfg(target_arch="x86_64")]
-pub mod x86_64;
+pub fn get_boot_time() -> u64 {
+	unsafe { boot_gtod }
+}

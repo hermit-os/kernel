@@ -1,4 +1,4 @@
-project(librs C ASM_NASM)
+project(librs C)
 
 if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
 	find_package(Git)
@@ -18,50 +18,6 @@ endif()
 
 configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
 
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	# Preprocess the PCI IDs into a Rust array.
-	add_custom_command(
-		OUTPUT
-			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-		DEPENDS
-			pci_ids_parser
-		DEPENDS
-			${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
-		COMMAND
-			${CMAKE_BINARY_DIR}/pci_ids_parser/release/pci_ids_parser
-			${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
-			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
-		VERBATIM)
-	add_custom_target(pcidata
-		DEPENDS
-			${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs)
-
-	# Preprocess the SMP Boot Code into a Rust array.
-	add_custom_command(
-		OUTPUT
-			${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs
-		DEPENDS
-			${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
-		COMMAND
-			nasm -f bin -o boot.bin ${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/boot.asm
-		COMMAND
-			echo -n "static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
-		COMMAND
-			stat -c %s boot.bin >> smp_boot_code.rs
-		COMMAND
-			echo "] = [" >> smp_boot_code.rs
-		COMMAND
-			hexdump -v -e "1/1 \"0x%02X,\"" boot.bin >> smp_boot_code.rs
-		COMMAND
-			echo "];" >> smp_boot_code.rs
-		WORKING_DIRECTORY
-			${CMAKE_BINARY_DIR}/hermit_rs
-		VERBATIM)
-	add_custom_target(smp_boot_code
-		DEPENDS
-			${CMAKE_BINARY_DIR}/hermit_rs/smp_boot_code.rs)
-endif()
-
 # Add the Cargo project to build the Rust library.
 set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
@@ -72,11 +28,6 @@ add_custom_target(hermit_rs
 		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target ${HERMIT_ARCH}-unknown-hermit-kernel
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
-
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_dependencies(hermit_rs pcidata)
-	add_dependencies(hermit_rs smp_boot_code)
-endif()
 
 # Add a documentation target for the Cargo project.
 add_custom_target(doc
@@ -91,64 +42,33 @@ add_custom_target(doc
 # It is important that ASM and C sources are not mixed in a single module and ASM modules are suffixed with "_asm"!
 add_definitions(-D__KERNEL__)
 
-# arch
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm")
-	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/sighandler.asm")
-	add_kernel_module_sources("arch_asm" "${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/switch.asm")
-endif()
-
 # LwIP
 set(LWIP_SRC ${CMAKE_SOURCE_DIR}/lwip/src)
-add_kernel_module_sources("lwip" "${LWIP_SRC}/api/*.c")
-add_kernel_module_sources("lwip" "${LWIP_SRC}/arch/*.c")
-add_kernel_module_sources("lwip" "${LWIP_SRC}/core/*.c")
-add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv4/*.c")
-add_kernel_module_sources("lwip" "${LWIP_SRC}/core/ipv6/*.c")
-add_kernel_module_sources("lwip" "${LWIP_SRC}/netif/*.c")
+file(GLOB LWIP_SOURCES
+	"${LWIP_SRC}/api/*.c"
+	"${LWIP_SRC}/arch/*.c"
+	"${LWIP_SRC}/core/*.c"
+	"${LWIP_SRC}/core/ipv4/*.c"
+	"${LWIP_SRC}/core/ipv6/*.c"
+	"${LWIP_SRC}/netif/*.c")
+add_library(lwip OBJECT ${LWIP_SOURCES})
+target_compile_options(lwip PRIVATE ${HERMIT_KERNEL_FLAGS} -w)
+target_include_directories(lwip PRIVATE ${HERMIT_KERNEL_INCLUDES})
 
-# Support for Go applications that currently cannot be implemented in Rust
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_kernel_module_sources("libgosupport_asm" "${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
+# arch
+if("${HERMIT_ARCH}" STREQUAL "aarch64")
+	add_subdirectory(src/arch/aarch64)
+elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
+	add_subdirectory(src/arch/x86_64)
 endif()
 
-add_kernel_module_sources("libgosupport" "${CMAKE_SOURCE_DIR}/libgosupport/context.c")
-
-
-# Add object libraries and set options for the defined kernel modules.
-get_kernel_modules(KERNEL_MODULES)
-foreach(MODULE ${KERNEL_MODULES})
-	get_kernel_module_sources(SOURCES ${MODULE})
-
-	# Maintain a list of all objects that will end up in the ASM/C library.
-	list(APPEND KERNEL_OBJECTS $<TARGET_OBJECTS:${MODULE}>)
-
-	add_library(${MODULE} OBJECT ${SOURCES})
-	add_dependencies(${MODULE} hermit_rs)
-
-	# Set C compiler options and include directories for non-ASM modules
-	if(NOT "${MODULE}" MATCHES "_asm$")
-		target_compile_options(${MODULE}
-			PRIVATE ${HERMIT_KERNEL_FLAGS})
-
-		target_include_directories(${MODULE}
-			PUBLIC ${HERMIT_KERNEL_INCLUDES})
-	endif()
-
-	# Suppress all LwIP compiler warnings. Not our code, so we cannot fix
-	if("${MODULE}" STREQUAL "lwip")
-		target_compile_options(${MODULE} PRIVATE -w)
-	endif()
-endforeach()
-
-# Set a source-level dependency from the entry point on the Rust library.
-# This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/src/arch/x86_64/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})
-endif()
+set(KERNEL_OBJECTS
+	${ARCH_OBJECTS}
+	$<TARGET_OBJECTS:lwip>)
 
 # Build all kernel modules into a single static library.
 add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
+add_dependencies(hermit-bootstrap hermit_rs)
 set_target_properties(hermit-bootstrap PROPERTIES ARCHIVE_OUTPUT_NAME hermit)
 
 # Post-process the static library.

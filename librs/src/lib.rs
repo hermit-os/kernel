@@ -56,13 +56,18 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
+#[cfg(target_arch = "x86_64")]
 extern crate hermit_multiboot;
 
 #[macro_use]
 extern crate lazy_static;
 
+#[cfg(target_arch = "x86_64")]
 extern crate raw_cpuid;
+
 extern crate spin;
+
+#[cfg(target_arch = "x86_64")]
 extern crate x86;
 
 // MODULES
@@ -89,7 +94,6 @@ pub use arch::*;
 pub use syscalls::*;
 
 use arch::percore::*;
-use processor::get_frequency;
 use core::ptr;
 use mm::allocator;
 
@@ -105,7 +109,6 @@ extern "C" {
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 	fn init_lwip();
-	fn init_rtl8139_netif(freq: u32) -> i32;
 	fn init_uhyve_netif() -> i32;
 }
 
@@ -135,8 +138,7 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running side-by-side to Linux!");
 		//unsafe { init_mmnif_netif(); }
 	} else {
-		// Initialize the RTL8139 interface using DHCP.
-		err = unsafe { init_rtl8139_netif(get_frequency() as u32) };
+		err = arch::network_adapter_init();
 	}
 
 	// Check if a network interface has been initialized.
