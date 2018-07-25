@@ -123,6 +123,12 @@ hcgateway: .byte 10,0,5,1
 hcmask: .byte 255,255,255,0
 .global host_logical_addr
 host_logical_addr: .quad 0
+.global current_stack_address
+current_stack_address: .quad boot_stack_bottom
+.global current_percore_address
+current_percore_address: .quad PERCORE
+.global boot_gtod
+boot_gtod: .quad 0
 
 .global uart_mmio
 uart_mmio: .dword 0x9000000		// Initialize with QEMU's UART address
@@ -570,7 +576,7 @@ END(vector_table)
 .global boot_stack
 .balign 0x10
 boot_stack: .skip KERNEL_STACK_SIZE
-
+boot_stack_bottom:
 
 .global l0_pgtable
 .align 12
