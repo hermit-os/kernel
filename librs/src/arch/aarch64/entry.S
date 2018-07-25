@@ -123,15 +123,16 @@ hcgateway: .byte 10,0,5,1
 hcmask: .byte 255,255,255,0
 .global host_logical_addr
 host_logical_addr: .quad 0
+
+.global uart_mmio
+uart_mmio: .dword 0x9000000		// Initialize with QEMU's UART address
+
 .global current_stack_address
 current_stack_address: .quad boot_stack_bottom
 .global current_percore_address
 current_percore_address: .quad PERCORE
 .global boot_gtod
 boot_gtod: .quad 0
-
-.global uart_mmio
-uart_mmio: .dword 0x9000000		// Initialize with QEMU's UART address
 
 start64:
   //mrs x0, s3_1_c15_c3_0 // Read EL1 Configuration Base Address Register
