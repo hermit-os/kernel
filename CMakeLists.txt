@@ -16,28 +16,30 @@ add_subdirectory(pci_ids_parser)
 add_subdirectory(librs)
 
 
-### External projects
-#
-# Build projects externally and deploy into temporary common prefix, will later
-# be relocated for installation
+if(NOT BOOTSTRAP)
+	### External projects
+	#
+	# Build projects externally and deploy into temporary common prefix, will later
+	# be relocated for installation
 
-## HermitCore's own tools such as Qemu/KVM proxy
-build_external(caves ${HERMIT_ROOT}/caves "")
+	## HermitCore's own tools such as Qemu/KVM proxy
+	build_external(caves ${HERMIT_ROOT}/caves "")
 
-if("${HERMIT_ARCH}" STREQUAL "x86_64")
-	build_external(loader ${HERMIT_ROOT}/loader "")
+	if("${HERMIT_ARCH}" STREQUAL "x86_64")
+		build_external(loader ${HERMIT_ROOT}/loader "")
+	endif()
+
+	if(PROFILING)
+		## XRay profiler
+		build_external(xray ${HERMIT_ROOT}/usr/xray "")
+		add_dependencies(hermit xray)
+	endif()
+
+	## Tests and benchmarks
+	build_external(tests ${HERMIT_ROOT}/usr/tests hermit)
+	build_external(benchmarks ${HERMIT_ROOT}/usr/benchmarks hermit)
+	build_external(openmpbench ${HERMIT_ROOT}/usr/openmpbench hermit)
 endif()
-
-if(PROFILING)
-	## XRay profiler
-	build_external(xray ${HERMIT_ROOT}/usr/xray "")
-	add_dependencies(hermit xray)
-endif()
-
-## Tests and benchmarks
-build_external(tests ${HERMIT_ROOT}/usr/tests hermit)
-build_external(benchmarks ${HERMIT_ROOT}/usr/benchmarks hermit)
-build_external(openmpbench ${HERMIT_ROOT}/usr/openmpbench hermit)
 
 ## relocate the local prefix to our install destination
 install(DIRECTORY ${LOCAL_PREFIX_DIR}/
