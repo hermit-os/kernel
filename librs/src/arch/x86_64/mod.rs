@@ -45,6 +45,7 @@ pub use arch::x86_64::gdt::set_current_kernel_stack;
 pub use arch::x86_64::systemtime::get_boot_time;
 use arch::x86_64::percore::*;
 use arch::x86_64::serial::SerialPort;
+use core::ptr;
 use environment;
 use kernel_message_buffer;
 use synch::spinlock::Spinlock;

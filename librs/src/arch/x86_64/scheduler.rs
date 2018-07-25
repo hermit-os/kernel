@@ -31,6 +31,7 @@ use arch::x86_64::apic;
 use arch::x86_64::gdt;
 use arch::x86_64::idt;
 use arch::x86_64::irq;
+use arch::x86_64::mm::paging::PageTableEntryFlags;
 use arch::x86_64::percore::*;
 use arch::x86_64::processor;
 use core::cell::RefCell;
@@ -86,16 +87,16 @@ pub struct TaskStacks {
 	/// Whether this is a boot stack
 	is_boot_stack: bool,
 	/// Stack of the task
-	stack: usize,
+	pub stack: usize,
 	/// Stack for interrupt handling
-	ist: usize,
+	pub ist: usize,
 }
 
 impl TaskStacks {
 	pub fn new() -> Self {
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-		let stack = mm::allocate(DEFAULT_STACK_SIZE, PageTableEntryFlags::empty());
-		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
+		let stack = ::mm::allocate(DEFAULT_STACK_SIZE, PageTableEntryFlags::empty());
+		let ist = ::mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
 		debug!("Allocating stack {:#X} and IST {:#X}", stack, ist);
 
 		Self {
@@ -122,8 +123,8 @@ impl Drop for TaskStacks {
 		if !self.is_boot_stack {
 			debug!("Deallocating stack {:#X} and IST {:#X}", self.stack, self.ist);
 
-			mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
-			mm::deallocate(self.ist, DEFAULT_STACK_SIZE);
+			::mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
+			::mm::deallocate(self.ist, DEFAULT_STACK_SIZE);
 		}
 	}
 }
@@ -175,10 +176,10 @@ impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		unsafe {
 			// Mark the entire stack with 0xCD.
-			ptr::write_bytes(self.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
+			ptr::write_bytes(self.stacks.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
 
 			// Set a marker for debugging at the very top.
-			let mut stack = (self.stack + DEFAULT_STACK_SIZE - 0x10) as *mut u64;
+			let mut stack = (self.stacks.stack + DEFAULT_STACK_SIZE - 0x10) as *mut u64;
 			*stack = 0xDEADBEEFu64;
 
 			// Put the leave_task function on the stack.
