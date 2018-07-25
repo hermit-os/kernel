@@ -25,6 +25,12 @@ const IRQ_FLAG_F: usize = 1 << 6;
 const IRQ_FLAG_I: usize = 1 << 7;
 const IRQ_FLAG_A: usize = 1 << 8;
 
+pub const INT_PPI_VMAINT: u32 = 25;
+pub const INT_PPI_HYP_TIMER: u32 = 26;
+pub const INT_PPI_VIRT_TIMER: u32 = 27;
+pub const INT_PPI_SPHYS_TIMER: u32 = 29;
+pub const INT_PPI_NSPHYS_TIMER: u32 = 30;
+
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
