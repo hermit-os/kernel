@@ -143,6 +143,6 @@ pub extern "C" fn set_current_kernel_stack() {
 
 	let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-	tss.rsp[0] = (current_task_borrowed.stack + stack_size - 0x10) as u64;
-	tss.ist[0] = (current_task_borrowed.ist + KERNEL_STACK_SIZE - 0x10) as u64;
+	tss.rsp[0] = (current_task_borrowed.stacks.stack + stack_size - 0x10) as u64;
+	tss.ist[0] = (current_task_borrowed.stacks.ist + KERNEL_STACK_SIZE - 0x10) as u64;
 }

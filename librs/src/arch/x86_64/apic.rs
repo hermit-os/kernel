@@ -45,7 +45,6 @@ use x86::shared::msr::*;
 
 
 extern "C" {
-	static cpu_online: u32;
 	static mut current_stack_address: usize;
 	static mut current_percore_address: usize;
 }
