@@ -64,6 +64,7 @@ set(ARCH_ASM_SOURCES
 	"${CMAKE_CURRENT_LIST_DIR}/switch.asm"
 	"${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
 add_library(arch_asm OBJECT ${ARCH_ASM_SOURCES})
+add_dependencies(arch_asm hermit_rs)
 
 # x86_64-specific C sources
 set(ARCH_C_SOURCES
