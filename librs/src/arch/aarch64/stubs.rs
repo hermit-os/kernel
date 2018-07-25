@@ -62,3 +62,7 @@ pub extern "C" fn finish_task_switch() {
 #[no_mangle]
 pub extern "C" fn get_current_stack() {
 }
+
+#[no_mangle]
+pub extern "C" fn switch() {
+}
