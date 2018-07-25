@@ -20,7 +20,7 @@ set(HERMIT_KERNEL_FLAGS
 
 set(HERMIT_APP_FLAGS
 					-m64 -mtls-direct-seg-refs -O3 -ftree-vectorize)
-					
+
 set(CMAKE_SYSTEM_NAME Generic)
 
 # point CMake to our toolchain

@@ -39,11 +39,7 @@ endif()
 
 # use default toolchain if not specified by user
 if(NOT CMAKE_TOOLCHAIN_FILE)
-	if(BOOTSTRAP)
-		# use bootstrap toolchain if requested
-		set(_BOOTSTRAP_ARCH_SUFFIX -bootstrap)
-	endif()
-	set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-${HERMIT_ARCH}${_BOOTSTRAP_ARCH_SUFFIX}.cmake)
+	set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_LIST_DIR}/HermitCore-Toolchain-${HERMIT_ARCH}.cmake)
 endif()
 
 if(MTUNE)
@@ -63,10 +59,13 @@ set(HERMIT_KERNEL_INCLUDES
 #
 # Furthermore this will produce a sensible error message if the toolchain cannot
 # be found.
-if(NOT BOOTSTRAP)
+if(BOOTSTRAP)
+	enable_language(C CXX)
+else()
 	enable_language(C CXX Fortran Go)
-	include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Paths.cmake)
 endif()
+
+include(${CMAKE_CURRENT_LIST_DIR}/HermitCore-Paths.cmake)
 
 # find elfedit, CMake doesn't use this program, so we have to find it ourself
 find_toolchain_program(elfedit)
