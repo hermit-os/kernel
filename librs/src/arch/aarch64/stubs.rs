@@ -60,7 +60,19 @@ pub extern "C" fn finish_task_switch() {
 }
 
 #[no_mangle]
+pub extern "C" fn getcontext() {
+}
+
+#[no_mangle]
 pub extern "C" fn get_current_stack() {
+}
+
+#[no_mangle]
+pub extern "C" fn makecontext() {
+}
+
+#[no_mangle]
+pub extern "C" fn setcontext() {
 }
 
 #[no_mangle]
