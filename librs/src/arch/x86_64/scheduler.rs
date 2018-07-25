@@ -46,41 +46,41 @@ extern "C" {
 #[repr(C, packed)]
 struct State {
 	/// FS register for TLS support
-	fs: u64,
+	fs: usize,
 	/// R15 register
-	r15: u64,
+	r15: usize,
 	/// R14 register
-	r14: u64,
+	r14: usize,
 	/// R13 register
-	r13: u64,
+	r13: usize,
 	/// R12 register
-	r12: u64,
+	r12: usize,
 	/// R11 register
-	r11: u64,
+	r11: usize,
 	/// R10 register
-	r10: u64,
+	r10: usize,
 	/// R9 register
-	r9: u64,
+	r9: usize,
 	/// R8 register
-	r8: u64,
+	r8: usize,
 	/// RDI register
-	rdi: u64,
+	rdi: usize,
 	/// RSI register
-	rsi: u64,
+	rsi: usize,
 	/// RBP register
-	rbp: u64,
+	rbp: usize,
 	/// RBX register
-	rbx: u64,
+	rbx: usize,
 	/// RDX register
-	rdx: u64,
+	rdx: usize,
 	/// RCX register
-	rcx: u64,
+	rcx: usize,
 	/// RAX register
-	rax: u64,
+	rax: usize,
 	/// status flags
-	rflags: u64,
+	rflags: usize,
 	/// instruction pointer
-	rip: u64
+	rip: usize
 }
 
 pub struct TaskStacks {
@@ -179,24 +179,24 @@ impl TaskFrame for Task {
 			ptr::write_bytes(self.stacks.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
 
 			// Set a marker for debugging at the very top.
-			let mut stack = (self.stacks.stack + DEFAULT_STACK_SIZE - 0x10) as *mut u64;
-			*stack = 0xDEADBEEFu64;
+			let mut stack = (self.stacks.stack + DEFAULT_STACK_SIZE - 0x10) as *mut usize;
+			*stack = 0xDEADBEEFusize;
 
 			// Put the leave_task function on the stack.
 			// When the task has finished, it will call this function by returning.
-			stack = (stack as usize - mem::size_of::<u64>()) as *mut u64;
-			*stack = leave_task as u64;
+			stack = (stack as usize - mem::size_of::<usize>()) as *mut usize;
+			*stack = leave_task as usize;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack = (stack as usize - mem::size_of::<State>()) as *mut u64;
+			stack = (stack as usize - mem::size_of::<State>()) as *mut usize;
 
 			let state = stack as *mut State;
 			ptr::write_bytes(state as *mut u8, 0, mem::size_of::<State>());
 
-			(*state).rip = task_entry as u64;
-			(*state).rdi = func as u64;
-			(*state).rsi = arg as u64;
-			(*state).rflags = 0x1202u64;
+			(*state).rip = task_entry as usize;
+			(*state).rdi = func as usize;
+			(*state).rsi = arg as usize;
+			(*state).rflags = 0x1202usize;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
 			self.last_stack_pointer = stack as usize;
