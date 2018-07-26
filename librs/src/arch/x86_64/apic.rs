@@ -214,13 +214,9 @@ fn detect_from_acpi() -> Result<usize, ()> {
 					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
 					debug!("Mapping IOAPIC at {:#X} to virtual address {:#X}", ioapic_record.address, IOAPIC_ADDRESS);
 
-					paging::map::<BasePageSize>(
-						IOAPIC_ADDRESS,
-						ioapic_record.address as usize,
-						1,
-						PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-						false
-					);
+					let mut flags = PageTableEntryFlags::empty();
+					flags.device().writable().execute_disable();
+					paging::map::<BasePageSize>(IOAPIC_ADDRESS, ioapic_record.address as usize, 1, flags);
 				}
 			},
 			_ => {
@@ -267,13 +263,9 @@ pub fn init() {
 			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
 			debug!("Mapping Local APIC at {:#X} to virtual address {:#X}", local_apic_physical_address, LOCAL_APIC_ADDRESS);
 
-			paging::map::<BasePageSize>(
-				LOCAL_APIC_ADDRESS,
-				local_apic_physical_address,
-				1,
-				PageTableEntryFlags::WRITABLE | PageTableEntryFlags::CACHE_DISABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-				false
-			);
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(LOCAL_APIC_ADDRESS, local_apic_physical_address, 1, flags);
 		}
 	}
 
@@ -439,7 +431,7 @@ pub fn init_x2apic() {
 pub fn init_next_processor_variables(core_id: usize) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-	let stack = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::empty());
+	let stack = mm::allocate(KERNEL_STACK_SIZE, false);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
 		ptr::write_volatile(&mut current_stack_address, stack);
@@ -458,7 +450,9 @@ pub fn boot_application_processors() {
 
 	// Identity-map the boot code page and copy over the code.
 	debug!("Mapping SMP boot code to physical and virtual address {:#X}", SMP_BOOT_CODE_ADDRESS);
-	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, PageTableEntryFlags::WRITABLE, false);
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, flags);
 	unsafe { ptr::copy_nonoverlapping(&SMP_BOOT_CODE as *const u8, SMP_BOOT_CODE_ADDRESS as *mut u8, SMP_BOOT_CODE.len()); }
 
 	// Pass the PML4 page table address to the boot code.

@@ -127,6 +127,10 @@ host_logical_addr: .quad 0
 .global uart_mmio
 uart_mmio: .dword 0x9000000		// Initialize with QEMU's UART address
 
+.global cmdline
+cmdline: .quad 0
+.global cmdsize
+cmdsize: .quad 0
 .global current_stack_address
 current_stack_address: .quad boot_stack_bottom
 .global current_percore_address

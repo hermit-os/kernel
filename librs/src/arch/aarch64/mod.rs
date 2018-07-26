@@ -85,6 +85,10 @@ pub fn output_message_byte(byte: u8) {
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
+	::mm::init();
+	::mm::print_information();
+	environment::init();
+
 	/*processor::detect_features();
 	processor::configure();
 

@@ -25,10 +25,8 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::boxed::Box;
-use arch::x86_64::mm::paging::PageTableEntryFlags;
 use arch::x86_64::percore::*;
 use core::mem;
-use mm;
 use scheduler::task::TaskStatus;
 use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
@@ -65,7 +63,7 @@ struct Gdt {
 pub fn init() {
 	unsafe {
 		// Dynamically allocate memory for the GDT.
-		GDT = mm::allocate(mem::size_of::<Gdt>(), PageTableEntryFlags::EXECUTE_DISABLE) as *mut Gdt;
+		GDT = ::mm::allocate(mem::size_of::<Gdt>(), true) as *mut Gdt;
 
 		// The NULL descriptor is always the first entry.
 		(*GDT).entries[0] = SegmentDescriptor::NULL;
@@ -105,7 +103,7 @@ pub fn add_current_core() {
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
-		let ist = mm::allocate(KERNEL_STACK_SIZE, PageTableEntryFlags::EXECUTE_DISABLE);
+		let ist = ::mm::allocate(KERNEL_STACK_SIZE, true);
 		boxed_tss.ist[i] = (ist + KERNEL_STACK_SIZE - 0x10) as u64;
 	}
 

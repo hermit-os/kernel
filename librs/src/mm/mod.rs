@@ -75,19 +75,19 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-pub fn allocate(size: usize, extra_flags: PageTableEntryFlags) -> usize {
+pub fn allocate(size: usize, execute_disable: bool) -> usize {
 	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
 	let virtual_address = arch::mm::virtualmem::allocate(size);
+
 	let count = size / BasePageSize::SIZE;
-	arch::mm::paging::map::<BasePageSize>(
-		virtual_address,
-		physical_address,
-		count,
-		PageTableEntryFlags::WRITABLE | extra_flags,
-		true
-	);
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	if execute_disable {
+		flags.execute_disable();
+	}
+	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
 	virtual_address
 }

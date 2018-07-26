@@ -74,13 +74,9 @@ impl VgaScreen {
 
 	fn init(&mut self) {
 		// Identity map the VGA buffer. We only need the first page.
-		paging::map::<BasePageSize>(
-			VGA_BUFFER_ADDRESS,
-			VGA_BUFFER_ADDRESS,
-			1,
-			PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-			false
-		);
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(VGA_BUFFER_ADDRESS, VGA_BUFFER_ADDRESS, 1, flags);
 
 		// Disable the cursor.
 		unsafe {

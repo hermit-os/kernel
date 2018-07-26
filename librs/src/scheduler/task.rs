@@ -26,7 +26,7 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::rc::Rc;
 use arch;
-use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::msb;
 use arch::scheduler::TaskStacks;
 use collections::{DoublyLinkedList, Node};
@@ -198,7 +198,7 @@ impl TaskTLS {
 		// additional alignment for TLS variables.
 		let memory_size = align_up!(size, BasePageSize::SIZE);
 		Self {
-			address: mm::allocate(memory_size, PageTableEntryFlags::EXECUTE_DISABLE),
+			address: mm::allocate(memory_size, true),
 			size: memory_size
 		}
 	}
