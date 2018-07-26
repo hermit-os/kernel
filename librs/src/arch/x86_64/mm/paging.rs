@@ -51,7 +51,7 @@ const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTab
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
 
-/// Number of bits of the index in each table (PML4, PDPT, PDT, PGT).
+/// Number of bits of the index in each table (PML4, PDPT, PD, PT).
 const PAGE_MAP_BITS: usize = 9;
 
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
@@ -59,7 +59,7 @@ const PAGE_MAP_MASK: usize = 0x1FF;
 
 
 bitflags! {
-	/// Possible flags for an entry in either table (PML4, PDPT, PDT, PGT)
+	/// Possible flags for an entry in either table (PML4, PDPT, PD, PT)
 	///
 	/// See Intel Vol. 3A, Tables 4-14 through 4-19
 	pub struct PageTableEntryFlags: usize {
@@ -101,9 +101,34 @@ impl PageTableEntryFlags {
 	/// An empty set of flags for unused/zeroed table entries.
 	/// Needed as long as empty() is no const function.
 	const BLANK: PageTableEntryFlags = PageTableEntryFlags { bits: 0 };
+
+	pub fn device(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::CACHE_DISABLE);
+		self
+	}
+
+	pub fn normal(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::CACHE_DISABLE);
+		self
+	}
+
+	pub fn read_only(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::WRITABLE);
+		self
+	}
+
+	pub fn writable(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::WRITABLE);
+		self
+	}
+
+	pub fn execute_disable(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::EXECUTE_DISABLE);
+		self
+	}
 }
 
-/// An entry in either table (PML4, PDPT, PDT, PGT)
+/// An entry in either table (PML4, PDPT, PD, PT)
 #[derive(Clone, Copy)]
 pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
@@ -140,7 +165,10 @@ impl PageTableEntry {
 		// Verify that the physical address does not exceed the CPU's physical address width.
 		assert!(physical_address >> processor::get_physical_address_bits() == 0, "Physical address exceeds CPU's physical address width (physical_address = {:#X})", physical_address);
 
-		self.physical_address_and_flags = physical_address | (PageTableEntryFlags::PRESENT | PageTableEntryFlags::ACCESSED | flags).bits();
+		let mut flags_to_set = flags;
+		flags_to_set.insert(PageTableEntryFlags::PRESENT);
+		flags_to_set.insert(PageTableEntryFlags::ACCESSED);
+		self.physical_address_and_flags = physical_address | flags_to_set.bits();
 	}
 }
 
@@ -152,7 +180,7 @@ pub trait PageSize: Copy {
 	/// The page size in bytes.
 	const SIZE: usize;
 
-	/// The page table level at which a page of this size is mapped (from 0 for PGT through 3 for PML4).
+	/// The page table level at which a page of this size is mapped (from 0 for PT through 3 for PML4).
 	/// Implemented as a numeric value to enable numeric comparisons.
 	const MAP_LEVEL: usize;
 
@@ -161,7 +189,7 @@ pub trait PageSize: Copy {
 	const MAP_EXTRA_FLAG: PageTableEntryFlags;
 }
 
-/// A 4 KiB page mapped in the PGT.
+/// A 4 KiB page mapped in the PT.
 #[derive(Clone, Copy)]
 pub enum BasePageSize {}
 impl PageSize for BasePageSize {
@@ -170,7 +198,7 @@ impl PageSize for BasePageSize {
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
 
-/// A 2 MiB page mapped in the PDT.
+/// A 2 MiB page mapped in the PD.
 #[derive(Clone, Copy)]
 pub enum LargePageSize {}
 impl PageSize for LargePageSize {
@@ -278,7 +306,7 @@ trait PageTableLevel {
 	const LEVEL: usize;
 }
 
-/// An interface for page tables with sub page tables (all except PGT).
+/// An interface for page tables with sub page tables (all except PT).
 /// Having both PageTableLevel and PageTableLevelWithSubtables leverages Rust's typing system to provide
 /// a subtable method only for those that have sub page tables.
 ///
@@ -363,8 +391,8 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 
 	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
 	///
-	/// This is the default implementation called only for PGT.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
+	/// This is the default implementation called only for PT.
+	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
 	default fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
 		assert!(L::LEVEL == S::MAP_LEVEL);
 		let index = page.table_index::<L>();
@@ -380,7 +408,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
 	///
 	/// This is the default implementation that just calls the map_page_in_this_table method.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
+	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
 	default fn map_page<S: PageSize>(&mut self, page: Page<S>, physical_address: usize, flags: PageTableEntryFlags) -> bool {
 		self.map_page_in_this_table::<S>(page, physical_address, flags)
 	}
@@ -463,9 +491,7 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 	/// * `physical_address` - First physical address to map these pages to
 	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
 	///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
-	/// * `do_ipi` - Whether to flush the TLB of the other CPUs as well if existing entries were updated.
-	///              Don't set this to true before the APIC has been initialized!
-	fn map_pages<S: PageSize>(&mut self, range: PageIter<S>, physical_address: usize, flags: PageTableEntryFlags, do_ipi: bool) {
+	fn map_pages<S: PageSize>(&mut self, range: PageIter<S>, physical_address: usize, flags: PageTableEntryFlags) {
 		let mut current_physical_address = physical_address;
 		let mut send_ipi = false;
 
@@ -474,8 +500,7 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 			current_physical_address += S::SIZE;
 		}
 
-		// You are responsible for not setting do_ipi to true before the APIC has been initialized.
-		if do_ipi && send_ipi {
+		if send_ipi {
 			apic::ipi_tlb_flush();
 		}
 	}
@@ -610,12 +635,12 @@ pub extern "C" fn virt_to_phys(virtual_address: usize) -> usize {
 	virtual_to_physical(virtual_address)
 }
 
-pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags, do_ipi: bool) {
+pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags) {
 	debug_mem!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
-	root_pagetable.map_pages(range, physical_address, flags, do_ipi);
+	root_pagetable.map_pages(range, physical_address, flags);
 }
 
 pub fn identity_map(start_address: usize, end_address: usize) {
@@ -625,7 +650,9 @@ pub fn identity_map(start_address: usize, end_address: usize) {
 
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
 	let range = Page::<BasePageSize>::range(first_page, last_page);
-	root_pagetable.map_pages(range, first_page.address(), PageTableEntryFlags::EXECUTE_DISABLE, false);
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().read_only().execute_disable();
+	root_pagetable.map_pages(range, first_page.address(), flags);
 }
 
 #[inline]

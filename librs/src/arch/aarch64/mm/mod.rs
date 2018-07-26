@@ -27,7 +27,6 @@ pub mod virtualmem;
 
 
 pub fn init() {
-	paging::init();
 	physicalmem::init();
 	virtualmem::init();
 }

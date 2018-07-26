@@ -121,6 +121,9 @@ pub struct AcpiTable<'a> {
 
 impl<'a> AcpiTable<'a> {
 	fn map(physical_address: usize) -> Self {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().read_only().execute_disable();
+
 		// Allocate two 4 KiB pages for the table and map it.
 		// This guarantees that we can access at least the "length" field of the table header when its physical address
 		// crosses a page boundary.
@@ -130,7 +133,7 @@ impl<'a> AcpiTable<'a> {
 		let physical_map_address = align_down!(physical_address, BasePageSize::SIZE);
 		let offset = physical_address - physical_map_address;
 		let mut virtual_address = virtualmem::allocate(allocated_length);
-		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, PageTableEntryFlags::EXECUTE_DISABLE, false);
+		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 		// Get a pointer to the header and query the table length.
 		let mut header_ptr = (virtual_address + offset) as *const AcpiSdtHeader;
@@ -144,7 +147,7 @@ impl<'a> AcpiTable<'a> {
 			count = allocated_length / BasePageSize::SIZE;
 
 			virtual_address = virtualmem::allocate(allocated_length);
-			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, PageTableEntryFlags::EXECUTE_DISABLE, false);
+			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 			header_ptr = (virtual_address + offset) as *const AcpiSdtHeader;
 		}

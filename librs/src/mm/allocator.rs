@@ -35,7 +35,7 @@
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
-use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use arch::mm::paging::{BasePageSize, PageSize};
 use mm;
 
 /// Size of the preallocated space for the Bootstrap Allocator.
@@ -115,7 +115,7 @@ fn alloc_system(layout: Layout) -> *mut u8 {
 	debug_mem!("Allocating {} bytes using the System Allocator", layout.size());
 
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	mm::allocate(size, PageTableEntryFlags::EXECUTE_DISABLE) as *mut u8
+	mm::allocate(size, true) as *mut u8
 }
 
 /// A deallocation using the initialized System Allocator.
