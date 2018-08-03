@@ -1,0 +1,7 @@
+[package]
+name = "print-dtb"
+version = "0.1.0"
+authors = ["Colin Finck <colin.finck@rwth-aachen.de>"]
+
+[dependencies.hermit-dtb]
+path = ".."
