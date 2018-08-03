@@ -117,6 +117,42 @@ pub fn boot_processor_init() {
 
 	apic::init();
 	scheduler::install_timer_handler();*/
+
+	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
+	// However, this test code showed that it's apparently not supported under uhyve yet.
+	// Finish the boot loader for QEMU first and then run this code under QEMU, where it should be supported.
+	// If that's the case, find out what's wrong with uhyve.
+	unsafe {
+		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
+		// when reading PMCCNTR_EL0 works at all.
+		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
+		asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
+		debug!("pmuserenr_el0");
+
+		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
+		// when reading PMCCNTR_EL0 works at all.
+		let pmcntenset_el0: u32 = 1 << 31;
+		asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
+		debug!("pmcntenset_el0");
+
+		// Enable PMCCNTR_EL0 using PMCR_EL0.
+		let mut pmcr_el0: u32 = 0;
+		asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
+		debug!("PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}", pmcr_el0);
+		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
+		asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
+	}
+
+	// Read out PMCCNTR_EL0 in an infinite loop.
+	// TODO: This currently stays at zero on uhyve. Fix uhyve! :)
+	loop {
+		unsafe {
+			let pmccntr: u64;
+			asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
+			println!("Count: {}", pmccntr);
+		}
+	}
+
 	finish_processor_init();
 }
 
