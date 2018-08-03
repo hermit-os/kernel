@@ -21,23 +21,16 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::paging::{BasePageSize, PageSize};
+// Export our platform-specific modules.
+#[cfg(target_arch = "aarch64")]
+pub use arch::aarch64::*;
 
-static mut CURRENT_ADDRESS: usize = 0;
+#[cfg(target_arch = "x86_64")]
+pub use arch::x86_64::*;
 
+// Platform-specific implementations
+#[cfg(target_arch = "aarch64")]
+pub mod aarch64;
 
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
-}
-
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
-
-	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
-	}
-}
+#[cfg(target_arch = "x86_64")]
+pub mod x86_64;

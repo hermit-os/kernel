@@ -26,6 +26,7 @@
 
 #![allow(private_no_mangle_fns)]
 
+use arch;
 use core::panic::PanicInfo;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
@@ -45,7 +46,7 @@ fn panic(info: &PanicInfo) -> ! {
 	loaderlog!("\n");
 
 	loop {
-		unsafe { asm!("hlt" :::: "volatile"); }
+		arch::processor::halt();
 	}
 }
 
@@ -55,6 +56,6 @@ pub fn _Unwind_Resume()
 {
 	loaderlog!("UNWIND!");
 	loop {
-		unsafe { asm!("hlt" :::: "volatile"); }
+		arch::processor::halt();
 	}
 }
