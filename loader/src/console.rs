@@ -21,6 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+use arch;
 use core::fmt;
 
 pub struct Console;
@@ -30,7 +31,7 @@ pub struct Console;
 impl fmt::Write for Console {
 	/// Print a single character.
 	fn write_char(&mut self, c: char) -> fmt::Result {
-		::output_message_byte(c as u8);
+		arch::output_message_byte(c as u8);
 		Ok(())
 	}
 

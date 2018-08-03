@@ -24,10 +24,7 @@ if(NOT BOOTSTRAP)
 
 	## HermitCore's own tools such as Qemu/KVM proxy
 	build_external(caves ${HERMIT_ROOT}/caves "")
-
-	if("${HERMIT_ARCH}" STREQUAL "x86_64")
-		build_external(loader ${HERMIT_ROOT}/loader "")
-	endif()
+	build_external(loader ${HERMIT_ROOT}/loader "")
 
 	if(PROFILING)
 		## XRay profiler

@@ -21,23 +21,30 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::paging::{BasePageSize, PageSize};
-
-static mut CURRENT_ADDRESS: usize = 0;
+use core::ptr;
 
 
-pub fn init(address: usize) {
-	unsafe { CURRENT_ADDRESS = address; }
+pub struct SerialPort {
+	port_address: u32
 }
 
-pub fn allocate(size: usize) -> usize {
-	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is a multiple of {:#X}", size, BasePageSize::SIZE);
+impl SerialPort {
+	pub const fn new(port_address: u32) -> Self {
+		Self { port_address: port_address }
+	}
 
-	unsafe {
-		assert!(CURRENT_ADDRESS > 0, "Trying to allocate physical memory before the Physical Memory Manager has been initialized");
-		let address = CURRENT_ADDRESS;
-		CURRENT_ADDRESS += size;
-		address
+	pub fn write_byte(&self, byte: u8) {
+		let port = self.port_address as *mut u8;
+
+		// LF newline characters need to be extended to CRLF over a real serial port.
+		if byte == b'\n' {
+			unsafe { ptr::write_volatile(port, b'\r'); }
+		}
+
+		unsafe { ptr::write_volatile(port, byte); }
+	}
+
+	pub fn init(&self, baudrate: u32) {
+		// We don't do anything here (yet).
 	}
 }

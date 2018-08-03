@@ -37,8 +37,13 @@ pub struct ElfIdentification {
 }
 
 
-pub const ELF_ET_EXEC: u16   = 0x0002;    /// Executable
-pub const ELF_EM_X86_64: u16 = 0x003E;    /// x86_64 architecture
+pub const ELF_ET_EXEC: u16    = 0x0002;    /// Executable
+
+#[allow(dead_code)] 
+pub const ELF_EM_X86_64: u16  = 0x003E;    /// x86_64 architecture
+
+#[allow(dead_code)]
+pub const ELF_EM_AARCH64: u16 = 0x00B7;    /// AArch64 architecture
 
 #[repr(C, packed)]
 pub struct ElfHeader {
