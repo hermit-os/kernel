@@ -22,7 +22,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use core::ptr;
-use environment;
 
 
 pub struct SerialPort {

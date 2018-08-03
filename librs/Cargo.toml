@@ -30,7 +30,7 @@ features = ["nightly"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.9.0"
-features = []
+default-features = false
 
 # The development profile, used for `cargo build`.
 [profile.dev]
