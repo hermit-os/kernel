@@ -83,9 +83,9 @@ add_custom_command(
 	COMMAND
 		${CMAKE_COMMAND} -E remove *.o
 
-	# Convert the combined library to HermitCore's osabi
+	# Convert the combined library to osabi "Standalone"
 	COMMAND
-		${CMAKE_ELFEDIT} --output-osabi HermitCore $<TARGET_FILE:hermit-bootstrap>
+		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
 
 	# Rename sections in the combined library to separate this kernel data from later user data.
 	COMMAND
