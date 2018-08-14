@@ -49,7 +49,7 @@ toolchain. The packages can be installed as follows:
 ```bash
 $ echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | sudo tee -a /etc/apt/sources.list
 $ sudo apt-get -qq update
-$ sudo apt-get install binutils-hermit newlib-hermit-rs pte-hermit-rs gcc-hermit-rs
+$ sudo apt-get install binutils-hermit newlib-hermit-rs pte-hermit-rs gcc-hermit-rs libomp-hermit-rs
 ```
 
 If you want to build the toolchain yourself, have a look at the `path2rs` branch of the repository
