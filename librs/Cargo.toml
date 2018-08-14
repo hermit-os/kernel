@@ -15,7 +15,7 @@ vga = []
 
 [dependencies]
 bitflags = "1.0.3"
-spin = "0.4.8"
+spin = "0.4.9"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
 path = "../crates/hermit-multiboot"
