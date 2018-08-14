@@ -24,7 +24,7 @@
 pub const ELF_MAGIC: u32     = 0x464C_457F;
 pub const ELF_CLASS_64: u8   = 0x02;      /// 64-bit file
 pub const ELF_DATA_2LSB: u8  = 0x01;      /// Little-Endian encoding
-pub const ELF_PAD_HERMIT: u8 = 0x42;      /// HermitCore OSABI identification
+pub const ELF_PAD_HERMIT: u8 = 0xFF;      /// HermitCore OSABI identification
 
 #[repr(C, packed)]
 pub struct ElfIdentification {
