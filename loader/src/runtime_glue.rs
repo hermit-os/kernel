@@ -49,13 +49,3 @@ fn panic(info: &PanicInfo) -> ! {
 		arch::processor::halt();
 	}
 }
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub fn _Unwind_Resume()
-{
-	loaderlog!("UNWIND!");
-	loop {
-		arch::processor::halt();
-	}
-}
