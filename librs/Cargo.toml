@@ -1,6 +1,6 @@
 [package]
 name = "hermit-rs"
-version = "0.3.2"
+version = "0.3.3"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
