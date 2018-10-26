@@ -117,41 +117,6 @@ pub fn nested_enable(was_enabled: bool) {
 	}
 }
 
-extern {
-	fn irq0();
-	fn irq1();
-	fn irq2();
-	fn irq3();
-	fn irq4();
-	fn irq5();
-	fn irq6();
-	fn irq7();
-	fn irq8();
-	fn irq9();
-	fn irq10();
-	fn irq11();
-	fn irq12();
-	fn irq13();
-	fn irq14();
-	fn irq15();
-	fn irq16();
-	fn irq17();
-	fn irq18();
-	fn irq19();
-	fn irq20();
-	fn irq21();
-	fn irq22();
-	fn irq23();
-	fn irq24();
-	fn irq25();
-	fn irq26();
-	fn irq27();
-	fn irq28();
-	fn irq29();
-	fn irq30();
-	fn irq31();
-}
-
 pub fn install() {
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
 	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
@@ -194,38 +159,38 @@ pub fn install() {
 	idt::set_gate(30, reserved_exception as usize, 1);
 	idt::set_gate(31, reserved_exception as usize, 1);
 
-	idt::set_gate(32, irq0 as usize, 1);
-	idt::set_gate(33, irq1 as usize, 1);
-	idt::set_gate(34, irq2 as usize, 1);
-	idt::set_gate(35, irq3 as usize, 1);
-	idt::set_gate(36, irq4 as usize, 1);
-	idt::set_gate(37, irq5 as usize, 1);
-	idt::set_gate(38, irq6 as usize, 1);
-	idt::set_gate(39, irq7 as usize, 1);
-	idt::set_gate(40, irq8 as usize, 1);
-	idt::set_gate(41, irq9 as usize, 1);
-	idt::set_gate(42, irq10 as usize, 1);
-	idt::set_gate(43, irq11 as usize, 1);
-	idt::set_gate(44, irq12 as usize, 1);
-	idt::set_gate(45, irq13 as usize, 1);
-	idt::set_gate(46, irq14 as usize, 1);
-	idt::set_gate(47, irq15 as usize, 1);
-	idt::set_gate(48, irq16 as usize, 1);
-	idt::set_gate(49, irq17 as usize, 1);
-	idt::set_gate(50, irq18 as usize, 1);
-	idt::set_gate(51, irq19 as usize, 1);
-	idt::set_gate(52, irq20 as usize, 1);
-	idt::set_gate(53, irq21 as usize, 1);
-	idt::set_gate(54, irq22 as usize, 1);
-	idt::set_gate(55, irq23 as usize, 1);
-	idt::set_gate(56, irq24 as usize, 1);
-	idt::set_gate(57, irq25 as usize, 1);
-	idt::set_gate(58, irq26 as usize, 1);
-	idt::set_gate(59, irq27 as usize, 1);
-	idt::set_gate(60, irq28 as usize, 1);
-	idt::set_gate(61, irq29 as usize, 1);
-	idt::set_gate(62, irq30 as usize, 1);
-	idt::set_gate(63, irq31 as usize, 1);
+	idt::set_gate(32, unhandled_interrupt0 as usize, 1);
+	idt::set_gate(33, unhandled_interrupt1 as usize, 1);
+	idt::set_gate(34, unhandled_interrupt2 as usize, 1);
+	idt::set_gate(35, unhandled_interrupt3 as usize, 1);
+	idt::set_gate(36, unhandled_interrupt4 as usize, 1);
+	idt::set_gate(37, unhandled_interrupt5 as usize, 1);
+	idt::set_gate(38, unhandled_interrupt6 as usize, 1);
+	idt::set_gate(39, unhandled_interrupt7 as usize, 1);
+	idt::set_gate(40, unhandled_interrupt8 as usize, 1);
+	idt::set_gate(41, unhandled_interrupt9 as usize, 1);
+	idt::set_gate(42, unhandled_interrupt10 as usize, 1);
+	idt::set_gate(43, unhandled_interrupt11 as usize, 1);
+	idt::set_gate(44, unhandled_interrupt12 as usize, 1);
+	idt::set_gate(45, unhandled_interrupt13 as usize, 1);
+	idt::set_gate(46, unhandled_interrupt14 as usize, 1);
+	idt::set_gate(47, unhandled_interrupt15 as usize, 1);
+	idt::set_gate(48, unhandled_interrupt16 as usize, 1);
+	idt::set_gate(49, unhandled_interrupt7 as usize, 1);
+	idt::set_gate(50, unhandled_interrupt18 as usize, 1);
+	idt::set_gate(51, unhandled_interrupt19 as usize, 1);
+	idt::set_gate(52, unhandled_interrupt20 as usize, 1);
+	idt::set_gate(53, unhandled_interrupt21 as usize, 1);
+	idt::set_gate(54, unhandled_interrupt22 as usize, 1);
+	idt::set_gate(55, unhandled_interrupt23 as usize, 1);
+	idt::set_gate(56, unhandled_interrupt24 as usize, 1);
+	idt::set_gate(57, unhandled_interrupt25 as usize, 1);
+	idt::set_gate(58, unhandled_interrupt26 as usize, 1);
+	idt::set_gate(59, unhandled_interrupt27 as usize, 1);
+	idt::set_gate(60, unhandled_interrupt28 as usize, 1);
+	idt::set_gate(61, unhandled_interrupt29 as usize, 1);
+	idt::set_gate(62, unhandled_interrupt30 as usize, 1);
+	idt::set_gate(63, unhandled_interrupt31 as usize, 1);
 
 	for i in 64..idt::IDT_ENTRIES {
 		idt::set_gate(i as u8, unknown_interrupt as usize, 1);
@@ -239,9 +204,163 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 	idt::set_gate((32+irq_number) as u8, handler, 1);
 }
 
-#[no_mangle]
-pub extern "C" fn unhandled_interrupt(irq_number: u64) {
-	info!("Receive unhandled interrupt {}", irq_number);
+extern "x86-interrupt" fn unhandled_interrupt0(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 0");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt1(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 1");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt2(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 2");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt3(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 3");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt4(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 4");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt5(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 5");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt6(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 6");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt7(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 7");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt8(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 8");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt9(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 9");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt10(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 10");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt11(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 11");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt12(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 12");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt13(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 13");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt14(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 14");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt15(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 15");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt16(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 16");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt17(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 17");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt18(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 18");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt19(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 19");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt20(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 20");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt21(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 21");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt22(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 22");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt23(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 23");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt24(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 24");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt25(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 25");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt26(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 26");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt27(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 27");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt28(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 28");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt29(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 29");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt30(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 30");
+	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt31(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive unhandled interrupt 31");
 	apic::eoi();
 }
 
