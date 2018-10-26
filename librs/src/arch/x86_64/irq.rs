@@ -176,7 +176,7 @@ pub fn install() {
 	idt::set_gate(46, unhandled_interrupt14 as usize, 1);
 	idt::set_gate(47, unhandled_interrupt15 as usize, 1);
 	idt::set_gate(48, unhandled_interrupt16 as usize, 1);
-	idt::set_gate(49, unhandled_interrupt7 as usize, 1);
+	idt::set_gate(49, unhandled_interrupt17 as usize, 1);
 	idt::set_gate(50, unhandled_interrupt18 as usize, 1);
 	idt::set_gate(51, unhandled_interrupt19 as usize, 1);
 	idt::set_gate(52, unhandled_interrupt20 as usize, 1);
