@@ -25,8 +25,6 @@
 //! Minor functions that Rust really expects to be defined by the compiler,
 //! but which we need to provide manually because we're on bare metal.
 
-#![allow(private_no_mangle_fns)]
-
 use alloc::alloc::Layout;
 use arch;
 use core::panic::PanicInfo;
@@ -56,16 +54,6 @@ fn panic(info: &PanicInfo) -> ! {
 #[no_mangle]
 pub fn rust_oom(layout: Layout) -> ! {
 	println!("[{}][!!!OOM!!!] Memory allocation of {} bytes failed", arch::percore::core_id(), layout.size());
-	loop {
-		arch::processor::halt();
-	}
-}
-
-#[no_mangle]
-#[allow(non_snake_case)]
-pub fn _Unwind_Resume()
-{
-	println!("[{}][!!!UNWIND!!!]", arch::percore::core_id());
 	loop {
 		arch::processor::halt();
 	}

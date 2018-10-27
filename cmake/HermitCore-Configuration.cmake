@@ -1,4 +1,4 @@
-set(PACKAGE_VERSION "0.3.2" CACHE STRING
+set(PACKAGE_VERSION "0.3.3" CACHE STRING
 	"HermitCore current version")
 
 set(MAX_ISLE "8" CACHE STRING

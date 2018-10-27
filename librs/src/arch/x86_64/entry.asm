@@ -242,56 +242,6 @@ boot_processor_init_done:
     call r8
     jmp $
 
-; NASM macro for asynchronous interrupts (no exceptions)
-%macro irqstub 1
-global irq%1
-align 8
-irq%1:
-    push rax
-    push rcx
-    push rdx
-    push rbx
-    push QWORD [rsp+9*8]        ; push user-space rsp, which is already on the stack
-    push rbp
-    push rsi
-    push rdi
-    push r8
-    push r9
-    push r10
-    push r11
-    push r12
-    push r13
-    push r14
-    push r15
-    mov rdi, %1
-    extern unhandled_interrupt
-    call unhandled_interrupt
-    pop r15
-    pop r14
-    pop r13
-    pop r12
-    pop r11
-    pop r10
-    pop r9
-    pop r8
-    pop rdi
-    pop rsi
-    pop rbp
-    add rsp, 8
-    pop rbx
-    pop rdx
-    pop rcx
-    pop rax
-    iretq
-%endmacro
-
-; Create entries for the interrupts 0 to 31
-%assign i 0
-%rep    32
-    irqstub i
-%assign i i+1
-%endrep
-
 
 SECTION .data
 
