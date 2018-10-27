@@ -25,7 +25,7 @@ make -j1 package || exit 1
 
 cd ..
 mkdir -p tmp
-dpkg-deb -R build/libhermit-rs-0.3.2-all.deb tmp || exit 1
+dpkg-deb -R build/libhermit-rs-0.3.3-all.deb tmp || exit 1
 rm -rf build/*.deb build/_CPack_Packages
 
 TDIR=/work/build/local_prefix/opt/hermit/x86_64-hermit/extra

@@ -61,19 +61,11 @@ add_dependencies(hermit_rs smp_boot_code)
 set(ARCH_ASM_SOURCES
 	"${CMAKE_CURRENT_LIST_DIR}/entry.asm"
 	"${CMAKE_CURRENT_LIST_DIR}/sighandler.asm"
-	"${CMAKE_CURRENT_LIST_DIR}/switch.asm"
-	"${CMAKE_SOURCE_DIR}/libgosupport/context.asm")
+	"${CMAKE_CURRENT_LIST_DIR}/switch.asm")
 add_library(arch_asm OBJECT ${ARCH_ASM_SOURCES})
 add_dependencies(arch_asm hermit_rs)
 
-# x86_64-specific C sources
-set(ARCH_C_SOURCES
-	"${CMAKE_SOURCE_DIR}/libgosupport/context.c")
-add_library(arch_c OBJECT ${ARCH_C_SOURCES})
-target_compile_options(arch_c PRIVATE ${HERMIT_KERNEL_FLAGS})
-target_include_directories(arch_c PRIVATE ${HERMIT_KERNEL_INCLUDES})
-
-set(ARCH_OBJECTS $<TARGET_OBJECTS:arch_asm> $<TARGET_OBJECTS:arch_c> PARENT_SCOPE)
+set(ARCH_OBJECTS $<TARGET_OBJECTS:arch_asm> PARENT_SCOPE)
 
 # Set a source-level dependency from the entry point on the Rust library.
 # This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.

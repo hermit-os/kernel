@@ -21,6 +21,10 @@ add_executable(thr_hello thr_hello.c)
 target_compile_options(thr_hello PRIVATE -pthread)
 target_link_libraries(thr_hello pthread)
 
+add_executable(nweb23 nweb23.c)
+target_compile_options(nweb23 PRIVATE -pthread)
+target_link_libraries(nweb23 pthread)
+
 add_executable(signals signals.c)
 target_compile_options(signals PRIVATE -pthread)
 target_link_libraries(signals pthread)
