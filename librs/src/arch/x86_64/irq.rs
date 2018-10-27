@@ -204,164 +204,137 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 	idt::set_gate((32+irq_number) as u8, handler, 1);
 }
 
-extern "x86-interrupt" fn unhandled_interrupt0(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 0");
+fn unhandled_interrupt(irq_number: u8) {
+	info!("Receive unhandled interrupt {}", irq_number);
 	apic::eoi();
+}
+
+extern "x86-interrupt" fn unhandled_interrupt0(_stack_frame: &mut ExceptionStackFrame) {
+	unhandled_interrupt(0);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt1(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 1");
-	apic::eoi();
+	unhandled_interrupt(1);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt2(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 2");
-	apic::eoi();
+	unhandled_interrupt(2);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt3(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 3");
-	apic::eoi();
+	unhandled_interrupt(3);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt4(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 4");
-	apic::eoi();
+	unhandled_interrupt(4);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt5(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 5");
-	apic::eoi();
+	unhandled_interrupt(5);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt6(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 6");
-	apic::eoi();
+	unhandled_interrupt(6);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt7(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 7");
-	apic::eoi();
+	unhandled_interrupt(7);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt8(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 8");
-	apic::eoi();
+	unhandled_interrupt(8);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt9(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 9");
-	apic::eoi();
+	unhandled_interrupt(9);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt10(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 10");
-	apic::eoi();
+	unhandled_interrupt(10);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt11(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 11");
-	apic::eoi();
+	unhandled_interrupt(11);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt12(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 12");
-	apic::eoi();
+	unhandled_interrupt(12);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt13(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 13");
-	apic::eoi();
+	unhandled_interrupt(13);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt14(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 14");
-	apic::eoi();
+	unhandled_interrupt(14);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt15(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 15");
-	apic::eoi();
+	unhandled_interrupt(15);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt16(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 16");
-	apic::eoi();
+	unhandled_interrupt(16);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt17(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 17");
-	apic::eoi();
+	unhandled_interrupt(17);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt18(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 18");
-	apic::eoi();
+	unhandled_interrupt(18);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt19(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 19");
-	apic::eoi();
+	unhandled_interrupt(19);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt20(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 20");
-	apic::eoi();
+	unhandled_interrupt(20);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt21(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 21");
-	apic::eoi();
+	unhandled_interrupt(21);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt22(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 22");
-	apic::eoi();
+	unhandled_interrupt(22);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt23(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 23");
-	apic::eoi();
+	unhandled_interrupt(23);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt24(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 24");
-	apic::eoi();
+	unhandled_interrupt(24);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt25(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 25");
-	apic::eoi();
+	unhandled_interrupt(25);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt26(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 26");
-	apic::eoi();
+	unhandled_interrupt(26);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt27(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 27");
-	apic::eoi();
+	unhandled_interrupt(27);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt28(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 28");
-	apic::eoi();
+	unhandled_interrupt(28);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt29(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 29");
-	apic::eoi();
+	unhandled_interrupt(29);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt30(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 30");
-	apic::eoi();
+	unhandled_interrupt(30);
 }
 
 extern "x86-interrupt" fn unhandled_interrupt31(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive unhandled interrupt 31");
-	apic::eoi();
+	unhandled_interrupt(31);
 }
 
 extern "x86-interrupt" fn unknown_interrupt(_stack_frame: &mut ExceptionStackFrame) {
