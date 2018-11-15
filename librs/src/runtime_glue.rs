@@ -30,8 +30,7 @@ use arch;
 use core::panic::PanicInfo;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
-#[panic_implementation]
-#[no_mangle]
+#[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
 	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
 
