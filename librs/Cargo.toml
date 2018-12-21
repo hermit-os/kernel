@@ -32,6 +32,9 @@ features = ["nightly"]
 version = "0.9.0"
 default-features = false
 
+[package.metadata.cargo-xbuild]
+memcpy = true
+
 # The development profile, used for `cargo build`.
 [profile.dev]
 opt-level = 0      # controls the `--opt-level` the compiler builds with
