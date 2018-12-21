@@ -13,7 +13,7 @@
     },
 
     "version": {
-        "name": "0.3.4",
+        "name": "0.3.5",
         "desc": "HermitCore's Rust-based kernel as libOS",
         "gpgSign": false
     },

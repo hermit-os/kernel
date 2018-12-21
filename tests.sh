@@ -16,7 +16,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 cargo --version # dump version of the Rust toolchain
-cargo install xargo
+cargo install cargo-xbuild
 rustup component add rust-src
 mkdir build
 cd build
@@ -25,7 +25,7 @@ make -j1 package || exit 1
 
 cd ..
 mkdir -p tmp
-dpkg-deb -R build/libhermit-rs-0.3.4-all.deb tmp || exit 1
+dpkg-deb -R build/libhermit-rs-0.3.5-all.deb tmp || exit 1
 rm -rf build/*.deb build/_CPack_Packages
 
 TDIR=/work/build/local_prefix/opt/hermit/x86_64-hermit/extra
