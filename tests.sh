@@ -16,7 +16,7 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 cargo --version # dump version of the Rust toolchain
-cargo install xargo
+cargo install cargo-xbuild
 rustup component add rust-src
 mkdir build
 cd build
