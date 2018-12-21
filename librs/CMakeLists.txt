@@ -25,7 +25,7 @@ add_custom_target(hermit_rs
 		objmv
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/target
-		xargo build ${CARGO_BUILDTYPE_PARAMETER} --target ${HERMIT_ARCH}-unknown-hermit-kernel
+		cargo xbuild ${CARGO_BUILDTYPE_PARAMETER} --target ${HERMIT_ARCH}-unknown-hermit-kernel
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 

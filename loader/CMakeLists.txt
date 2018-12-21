@@ -8,7 +8,7 @@ set(LOADER_RS "${CMAKE_BINARY_DIR}/loader/${HERMIT_ARCH}-unknown-hermit-kernel/r
 add_custom_target(loader_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/loader RUST_TARGET_PATH=`pwd`/../target
-		xargo build --release --target ${HERMIT_ARCH}-unknown-hermit-kernel
+		cargo xbuild --release --target ${HERMIT_ARCH}-unknown-hermit-kernel
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
