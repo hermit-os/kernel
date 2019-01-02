@@ -44,9 +44,6 @@ extern crate hermit_multiboot;
 #[macro_use]
 extern crate lazy_static;
 
-#[allow(unused_extern_crates)]
-extern crate rlibc;
-
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
 

@@ -23,10 +23,6 @@ path = "../crates/hermit-multiboot"
 version = "1.0.1"
 features = ["spin_no_std"]
 
-[dependencies.rlibc]
-path = "../crates/rlibc"    # Low-level functions like memcpy.
-features = ["nightly"]
-
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.9.0"
 default-features = false
