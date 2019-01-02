@@ -62,10 +62,10 @@ set(ARCH_ASM_SOURCES
 	"${CMAKE_CURRENT_LIST_DIR}/entry.asm"
 	"${CMAKE_CURRENT_LIST_DIR}/sighandler.asm"
 	"${CMAKE_CURRENT_LIST_DIR}/switch.asm")
-add_library(arch_asm OBJECT ${ARCH_ASM_SOURCES})
-add_dependencies(arch_asm hermit_rs)
+add_library(arch_asm_kernel OBJECT ${ARCH_ASM_SOURCES})
+add_dependencies(arch_asm_kernel hermit_rs)
 
-set(ARCH_OBJECTS $<TARGET_OBJECTS:arch_asm> PARENT_SCOPE)
+set(ARCH_OBJECTS $<TARGET_OBJECTS:arch_asm_kernel> PARENT_SCOPE)
 
 # Set a source-level dependency from the entry point on the Rust library.
 # This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.

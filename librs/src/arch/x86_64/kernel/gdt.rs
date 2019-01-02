@@ -25,7 +25,7 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::boxed::Box;
-use arch::x86_64::percore::*;
+use arch::x86_64::kernel::percore::*;
 use core::mem;
 use scheduler::task::TaskStatus;
 use x86::bits64::segmentation::*;

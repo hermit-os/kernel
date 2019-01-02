@@ -22,7 +22,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::gdt;
+use arch::x86_64::kernel::gdt;
 use spin;
 use x86::bits64::irq::{IdtEntry, Type};
 use x86::shared::dtables::{self, DescriptorTablePointer};

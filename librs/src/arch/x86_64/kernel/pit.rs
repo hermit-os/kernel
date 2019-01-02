@@ -24,7 +24,7 @@
 
 #![allow(dead_code)]
 
-use arch::x86_64::pic;
+use arch::x86_64::kernel::pic;
 use x86::shared::io::*;
 
 
