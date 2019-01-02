@@ -27,12 +27,12 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::rc::Rc;
-use arch::x86_64::apic;
-use arch::x86_64::gdt;
-use arch::x86_64::idt;
-use arch::x86_64::irq;
-use arch::x86_64::percore::*;
-use arch::x86_64::processor;
+use arch::x86_64::kernel::apic;
+use arch::x86_64::kernel::gdt;
+use arch::x86_64::kernel::idt;
+use arch::x86_64::kernel::irq;
+use arch::x86_64::kernel::percore::*;
+use arch::x86_64::kernel::processor;
 use core::cell::RefCell;
 use core::{mem, ptr};
 use scheduler::task::{Task, TaskFrame, TaskTLS};

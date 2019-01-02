@@ -22,11 +22,11 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::acpi;
-use arch::x86_64::idt;
-use arch::x86_64::irq;
-use arch::x86_64::pic;
-use arch::x86_64::pit;
+use arch::x86_64::kernel::acpi;
+use arch::x86_64::kernel::idt;
+use arch::x86_64::kernel::irq;
+use arch::x86_64::kernel::pic;
+use arch::x86_64::kernel::pit;
 use core::{fmt, u32};
 use core::sync::atomic::spin_loop_hint;
 use environment;

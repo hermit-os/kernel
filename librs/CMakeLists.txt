@@ -59,7 +59,7 @@ target_include_directories(lwip PRIVATE ${HERMIT_KERNEL_INCLUDES})
 if("${HERMIT_ARCH}" STREQUAL "aarch64")
 	add_subdirectory(src/arch/aarch64)
 elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_subdirectory(src/arch/x86_64)
+	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
 set(KERNEL_OBJECTS

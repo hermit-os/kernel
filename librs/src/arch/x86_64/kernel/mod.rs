@@ -27,7 +27,6 @@ pub mod apic;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
-pub mod mm;
 pub mod percore;
 pub mod pci;
 pub mod pic;
@@ -39,12 +38,9 @@ pub mod systemtime;
 #[cfg(feature = "vga")]
 pub mod vga;
 
-pub use arch::x86_64::apic::set_oneshot_timer;
-pub use arch::x86_64::apic::wakeup_core;
-pub use arch::x86_64::gdt::set_current_kernel_stack;
-pub use arch::x86_64::systemtime::get_boot_time;
-use arch::x86_64::percore::*;
-use arch::x86_64::serial::SerialPort;
+use arch::x86_64::kernel::percore::*;
+use arch::x86_64::kernel::serial::SerialPort;
+
 use core::ptr;
 use environment;
 use kernel_message_buffer;

@@ -21,8 +21,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::irq;
-use arch::x86_64::processor;
+use arch::x86_64::kernel::irq;
+use arch::x86_64::kernel::processor;
 use core::sync::atomic::spin_loop_hint;
 use environment;
 use x86::shared::io::*;

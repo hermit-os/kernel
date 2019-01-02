@@ -22,10 +22,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::idt;
-use arch::x86_64::apic;
+use arch::x86_64::kernel::idt;
+use arch::x86_64::kernel::apic;
 use arch::x86_64::mm::paging;
-use arch::x86_64::percore::*;
+use arch::x86_64::kernel::percore::*;
 use core::fmt;
 use scheduler;
 use x86::shared::flags::*;

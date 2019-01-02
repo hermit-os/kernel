@@ -21,7 +21,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::processor;
+use arch::x86_64::kernel::processor;
 use core::ptr;
 use scheduler::PerCoreScheduler;
 use x86::bits64::task::TaskStateSegment;
