@@ -21,6 +21,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#![allow(dead_code)]
+
 use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::mm::physicalmem;
@@ -144,6 +146,16 @@ impl PageTableEntry {
 	/// Returns whether this entry is valid (present).
 	fn is_present(&self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
+	}
+
+	/// Returns `true` if the page is a huge page
+	fn is_huge(&self) -> bool {
+		(self.physical_address_and_flags & PageTableEntryFlags::HUGE_PAGE.bits()) != 0
+	}
+
+	/// Returns `true` if the page is accessible from the user space
+	fn is_user(&self) -> bool {
+		(self.physical_address_and_flags & PageTableEntryFlags::USER_ACCESSIBLE.bits()) != 0
 	}
 
 	/// Mark this as a valid (present) entry and set address translation and flags.
@@ -572,6 +584,9 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 				}
 			}
 
+			// clear cr2 to signalize that the pagefault is solved by the pagefault handler
+			//unsafe { control_regs::cr2_write(0); }
+
 			return;
 		}
 	}
@@ -580,6 +595,10 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 	let pferror = PageFaultError { bits: error_code };
 	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
+
+	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
+	//unsafe { control_regs::cr2_write(0); }
+
 	scheduler::abort();
 }
 
