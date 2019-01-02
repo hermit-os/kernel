@@ -512,19 +512,19 @@ bitflags! {
 	/// See Intel Vol. 3A, Figure 4-12
 	struct PageFaultError: u64 {
 		/// Set if the page fault was caused by a protection violation. Otherwise, it was caused by a non-present page.
-		const PROTECTION_VIOLATION = 1 << 1;
+		const PROTECTION_VIOLATION = 1 << 0;
 
 		/// Set if the page fault was caused by a write operation. Otherwise, it was caused by a read operation.
-		const WRITE = 1 << 2;
+		const WRITE = 1 << 1;
 
 		/// Set if the page fault was caused in User Mode (Ring 3). Otherwise, it was caused in supervisor mode.
-		const USER_MODE = 1 << 3;
+		const USER_MODE = 1 << 2;
 
 		/// Set if the page fault was caused by writing 1 to a reserved field.
-		const RESERVED_FIELD = 1 << 4;
+		const RESERVED_FIELD = 1 << 3;
 
 		/// Set if the page fault was caused by an instruction fetch.
-		const INSTRUCTION_FETCH = 1 << 5;
+		const INSTRUCTION_FETCH = 1 << 4;
 	}
 }
 
