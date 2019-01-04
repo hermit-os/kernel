@@ -31,9 +31,9 @@ use core::{fmt, u32};
 use core::sync::atomic::spin_loop_hint;
 use environment;
 use raw_cpuid::*;
-use x86::shared::control_regs::*;
-use x86::shared::msr::*;
-use x86::shared::time::*;
+use x86::controlregs::*;
+use x86::msr::*;
+use x86::time::*;
 
 
 extern "C" {
@@ -530,17 +530,17 @@ pub fn configure() {
 	let mut cr0 = unsafe { cr0() };
 
 	// Enable the FPU.
-	cr0.insert(CR0_MONITOR_COPROCESSOR | CR0_NUMERIC_ERROR);
-	cr0.remove(CR0_EMULATE_COPROCESSOR);
+	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
+	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
 
 	// Call the IRQ7 handler on the first FPU access.
-	cr0.insert(CR0_TASK_SWITCHED);
+	cr0.insert(Cr0::CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
-	cr0.insert(CR0_WRITE_PROTECT);
+	cr0.insert(Cr0::CR0_WRITE_PROTECT);
 
 	// Enable caching.
-	cr0.remove(CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH);
+	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
 
 	unsafe { cr0_write(cr0); }
 
@@ -551,15 +551,15 @@ pub fn configure() {
 
 	// Enable Machine Check Exceptions.
 	// No need to check for support here, all x86-64 CPUs support it.
-	cr4.insert(CR4_ENABLE_MACHINE_CHECK);
+	cr4.insert(Cr4::CR4_ENABLE_MACHINE_CHECK);
 
 	// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
 	// No need to check for support here, all x86-64 CPUs support at least SSE2.
-	cr4.insert(CR4_ENABLE_SSE | CR4_UNMASKED_SSE);
+	cr4.insert(Cr4::CR4_ENABLE_SSE | Cr4::CR4_UNMASKED_SSE);
 
 	if supports_xsave() {
 		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
-		cr4.insert(CR4_ENABLE_OS_XSAVE);
+		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
 	}
 
 	unsafe { cr4_write(cr4); }
@@ -571,10 +571,10 @@ pub fn configure() {
 		// Enable saving the context for all known vector extensions.
 		// Must happen after CR4_ENABLE_OS_XSAVE has been set.
 		let mut xcr0 = unsafe { xcr0() };
-		xcr0.insert(XCR0_FPU_MMX_STATE | XCR0_SSE_STATE);
+		xcr0.insert(Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_SSE_STATE);
 
 		if supports_avx() {
-			xcr0.insert(XCR0_AVX_STATE);
+			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
 		unsafe { xcr0_write(xcr0); }
