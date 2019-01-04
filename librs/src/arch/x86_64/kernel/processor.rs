@@ -30,7 +30,7 @@ use arch::x86_64::kernel::pit;
 use core::{fmt, u32};
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use raw_cpuid::*;
+use x86::cpuid::*;
 use x86::controlregs::*;
 use x86::msr::*;
 use x86::time::*;
