@@ -55,9 +55,6 @@ extern crate hermit_multiboot;
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(target_arch = "x86_64")]
-extern crate raw_cpuid;
-
 extern crate spin;
 
 #[cfg(target_arch = "x86_64")]
