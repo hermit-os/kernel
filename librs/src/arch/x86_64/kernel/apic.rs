@@ -40,8 +40,8 @@ use core::{cmp, fmt, mem, ptr, str, u32};
 use environment;
 use mm;
 use scheduler;
-use x86::shared::control_regs::*;
-use x86::shared::msr::*;
+use x86::controlregs::*;
+use x86::msr::*;
 
 
 extern "C" {

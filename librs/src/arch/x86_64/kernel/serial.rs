@@ -23,7 +23,7 @@
 
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use x86::shared::io::*;
+use x86::io::*;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;

@@ -25,7 +25,7 @@ use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use core::{mem, slice, str};
-use x86::shared::io::*;
+use x86::io::*;
 
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).

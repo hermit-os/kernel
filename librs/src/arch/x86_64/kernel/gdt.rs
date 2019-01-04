@@ -28,21 +28,22 @@ use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
 use core::mem;
 use scheduler::task::TaskStatus;
-use x86::bits64::segmentation::*;
+use x86::dtables::{self, DescriptorTablePointer};
 use x86::bits64::task::*;
-use x86::shared::PrivilegeLevel;
-use x86::shared::dtables::{self, DescriptorTablePointer};
-use x86::shared::task::*;
-
+use x86::bits64::segmentation::*;
+use x86::segmentation::*;
+use x86::task::*;
+use x86::Ring;
 
 extern "C" {
 	static current_stack_address: usize;
 }
 
 
-pub const GDT_KERNEL_CODE: u16 = 1;
-pub const GDT_KERNEL_DATA: u16 = 2;
-pub const GDT_FIRST_TSS:   u16 = 3;
+pub const GDT_NULL:			u16 = 0;
+pub const GDT_KERNEL_CODE:	u16 = 1;
+pub const GDT_KERNEL_DATA:	u16 = 2;
+pub const GDT_FIRST_TSS:	u16 = 3;
 
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
 const GDT_ENTRIES: usize = 8192;
@@ -53,12 +54,11 @@ const GDT_ENTRIES: usize = 8192;
 const IST_ENTRIES: usize = 4;
 
 static mut GDT: *mut Gdt = 0 as *mut Gdt;
-static mut GDTR: DescriptorTablePointer<SegmentDescriptor> = DescriptorTablePointer { base: 0 as *const SegmentDescriptor, limit: 0 };
+static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer { base: 0 as *const Descriptor, limit: 0 };
 
 struct Gdt {
-	entries: [SegmentDescriptor; GDT_ENTRIES]
+	entries: [Descriptor; GDT_ENTRIES]
 }
-
 
 pub fn init() {
 	unsafe {
@@ -66,18 +66,25 @@ pub fn init() {
 		GDT = ::mm::allocate(mem::size_of::<Gdt>(), true) as *mut Gdt;
 
 		// The NULL descriptor is always the first entry.
-		(*GDT).entries[0] = SegmentDescriptor::NULL;
+		(*GDT).entries[GDT_NULL as usize] = Descriptor::NULL;
 
 		// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		(*GDT).entries[GDT_KERNEL_CODE as usize] = SegmentDescriptor::new_memory(0, 0, Type::Code(CODE_READ), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+		(*GDT).entries[GDT_KERNEL_CODE as usize] = DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
+                .present()
+                .dpl(Ring::Ring0)
+				.l()
+                .finish();
 
 		// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		(*GDT).entries[GDT_KERNEL_DATA as usize] = SegmentDescriptor::new_memory(0, 0, Type::Data(DATA_WRITE), false, PrivilegeLevel::Ring0, SegmentBitness::Bits64);
+		(*GDT).entries[GDT_KERNEL_DATA as usize] = DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
+                .present()
+                .dpl(Ring::Ring0)
+                .finish();
 
 		// Let GDTR point to our newly crafted GDT.
-		GDTR = DescriptorTablePointer::new(&((*GDT).entries));
+		GDTR = DescriptorTablePointer::new_from_slice(&((*GDT).entries[0..GDT_ENTRIES]));
 	}
 }
 
@@ -87,10 +94,10 @@ pub fn add_current_core() {
 		dtables::lgdt(&GDTR);
 
 		// Reload the segment descriptors
-		set_cs(SegmentSelector::new(GDT_KERNEL_CODE as u16, PrivilegeLevel::Ring0));
-		load_ds(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
-		load_es(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
-		load_ss(SegmentSelector::new(GDT_KERNEL_DATA as u16, PrivilegeLevel::Ring0));
+		load_cs(SegmentSelector::new(GDT_KERNEL_CODE, Ring::Ring0));
+		load_ds(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
+		load_es(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
+		load_ss(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
 	}
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
@@ -110,14 +117,22 @@ pub fn add_current_core() {
 	unsafe {
 		// Add this TSS to the GDT.
 		let idx = GDT_FIRST_TSS as usize + (core_id() as usize)*2;
-		(*GDT).entries[idx..idx+2].copy_from_slice(&SegmentDescriptor::new_tss(boxed_tss.as_ref(), PrivilegeLevel::Ring0));
+		let tss = Box::into_raw(boxed_tss);
+		{
+			let base = tss as u64;
+			let tss_descriptor: Descriptor64 = <DescriptorBuilder as GateDescriptorBuilder<u64>>::tss_descriptor(base,
+				base + mem::size_of::<TaskStateSegment>() as u64 - 1, true)
+				.present()
+				.dpl(Ring::Ring0)
+				.finish();
+			(*GDT).entries[idx..idx+2].copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(tss_descriptor));
+		}
 
 		// Load it.
-		let sel = SegmentSelector::new(idx as u16, PrivilegeLevel::Ring0);
+		let sel = SegmentSelector::new(idx as u16, Ring::Ring0);
 		load_tr(sel);
 
 		// Store it in the PerCoreVariables structure for further manipulation.
-		let tss = Box::into_raw(boxed_tss);
 		PERCORE.tss.set(tss);
 	}
 }

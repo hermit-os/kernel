@@ -29,13 +29,13 @@ use arch::x86_64::mm::physicalmem;
 use arch::x86_64::mm::virtualmem;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
-use core::{fmt, ptr};
+use core::ptr;
 use core::marker::PhantomData;
 use hermit_multiboot::Multiboot;
 use mm;
 use scheduler;
-use x86::shared::control_regs;
-
+use x86::controlregs;
+use x86::irq::PageFaultError;
 
 extern "C" {
 	#[linkage = "extern_weak"]
@@ -518,43 +518,8 @@ impl<L: PageTableLevelWithSubtables> PageTable<L> where L::SubtableLevel: PageTa
 	}
 }
 
-bitflags! {
-	/// Possible flags for the error code of a Page-Fault Exception.
-	///
-	/// See Intel Vol. 3A, Figure 4-12
-	struct PageFaultError: u64 {
-		/// Set if the page fault was caused by a protection violation. Otherwise, it was caused by a non-present page.
-		const PROTECTION_VIOLATION = 1 << 0;
-
-		/// Set if the page fault was caused by a write operation. Otherwise, it was caused by a read operation.
-		const WRITE = 1 << 1;
-
-		/// Set if the page fault was caused in User Mode (Ring 3). Otherwise, it was caused in supervisor mode.
-		const USER_MODE = 1 << 2;
-
-		/// Set if the page fault was caused by writing 1 to a reserved field.
-		const RESERVED_FIELD = 1 << 3;
-
-		/// Set if the page fault was caused by an instruction fetch.
-		const INSTRUCTION_FETCH = 1 << 4;
-	}
-}
-
-impl fmt::Display for PageFaultError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let mode = if self.contains(PageFaultError::USER_MODE) { "user" } else { "supervisor" };
-		let ty = if self.contains(PageFaultError::INSTRUCTION_FETCH) { "instruction" } else { "data" };
-		let operation = if self.contains(PageFaultError::WRITE) { "write" } else if self.contains(PageFaultError::INSTRUCTION_FETCH) { "fetch" } else { "read" };
-		let cause = if self.contains(PageFaultError::PROTECTION_VIOLATION) { "protection" } else { "not present" };
-		let reserved = if self.contains(PageFaultError::RESERVED_FIELD) { "reserved bit" } else { "\x08" };
-
-		write!(f, "{:#X} [ {} {} {} {} {} ]", self.bits, mode, ty, operation, cause, reserved)
-	}
-}
-
-
 pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::ExceptionStackFrame, error_code: u64) {
-	let virtual_address = unsafe { control_regs::cr2() };
+	let virtual_address = unsafe { controlregs::cr2() };
 
 	// Is a heap associated to the current task?
 	if let Some(ref heap) = core_scheduler().current_task.borrow().heap {
@@ -585,19 +550,19 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 			}
 
 			// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-			//unsafe { control_regs::cr2_write(0); }
+			unsafe { controlregs::cr2_write(0); }
 
 			return;
 		}
 	}
 
 	// Anything else is an error!
-	let pferror = PageFaultError { bits: error_code };
+	let pferror = PageFaultError::from_bits_truncate(error_code as u32);
 	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
 
 	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-	//unsafe { control_regs::cr2_write(0); }
+	unsafe { controlregs::cr2_write(0); }
 
 	scheduler::abort();
 }

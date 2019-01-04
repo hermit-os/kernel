@@ -25,7 +25,7 @@ use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::processor;
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use x86::shared::io::*;
+use x86::io::*;
 
 extern "C" {
 	static mut boot_gtod: u64;

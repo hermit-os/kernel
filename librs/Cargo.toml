@@ -29,7 +29,8 @@ version = "5.0.0"
 features = ["nightly"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-version = "0.9.0"
+git = "https://github.com/hermitcore/rust-x86.git"
+branch = "hermit"
 default-features = false
 
 [package.metadata.cargo-xbuild]
