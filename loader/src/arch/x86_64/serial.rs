@@ -22,7 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use core::sync::atomic::spin_loop_hint;
-use x86::shared::io::*;
+use x86::io::*;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;
