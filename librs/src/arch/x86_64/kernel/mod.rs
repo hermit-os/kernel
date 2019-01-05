@@ -35,6 +35,7 @@ pub mod processor;
 pub mod scheduler;
 pub mod serial;
 pub mod systemtime;
+pub mod switch;
 #[cfg(feature = "vga")]
 pub mod vga;
 

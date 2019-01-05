@@ -29,16 +29,13 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use arch;
 use arch::irq;
+use arch::switch;
 use arch::percore::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use scheduler::task::*;
 use synch::spinlock::*;
 use syscalls::*;
-
-extern "C" {
-	fn switch(old_stack: *mut usize, new_stack: usize);
-}
 
 
 /// Time slice of a task in microseconds.
@@ -279,7 +276,7 @@ impl PerCoreScheduler {
 			irq::enable();
 
 			// Finally save our current context and restore the context of the new task.
-			unsafe { switch(last_stack_pointer, new_stack_pointer); }
+			switch(last_stack_pointer, new_stack_pointer);
 		} else {
 			// There is no new task to switch to.
 

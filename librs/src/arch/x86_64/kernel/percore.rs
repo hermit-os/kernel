@@ -21,11 +21,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::kernel::processor;
 use core::ptr;
 use scheduler::PerCoreScheduler;
 use x86::bits64::task::TaskStateSegment;
-
+use x86::msr::*;
 
 extern "C" {
 	static current_percore_address: usize;
@@ -136,6 +135,6 @@ pub fn init() {
 	unsafe {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
 		let address = ptr::read_volatile(&current_percore_address);
-		processor::writegs(address);
+		wrmsr(IA32_GS_BASE, address as u64);
 	}
 }

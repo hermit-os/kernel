@@ -56,8 +56,8 @@ static mut SUPPORTS_RDRAND: bool = false;
 static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
+static mut SUPPORTS_FSGS: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
-
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
@@ -350,7 +350,7 @@ impl fmt::Display for CpuFrequency {
 
 struct CpuFeaturePrinter {
 	feature_info: FeatureInfo,
-	extended_feature_info: Option<ExtendedFeatures>,
+	extended_feature_info: ExtendedFeatures,
 	extended_function_info: ExtendedFunctionInfo,
 }
 
@@ -358,7 +358,7 @@ impl CpuFeaturePrinter {
 	fn new(cpuid: &CpuId) -> Self {
 		CpuFeaturePrinter {
 			feature_info: cpuid.get_feature_info().expect("CPUID Feature Info not available!"),
-			extended_feature_info: cpuid.get_extended_feature_info(),
+			extended_feature_info: cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!"),
 			extended_function_info: cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!"),
 		}
 	}
@@ -389,14 +389,13 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_dca() { write!(f, "DCA ")?; }
 		if self.feature_info.has_tsc_deadline() { write!(f, "TSC-DEADLINE ")?; }
 
-		if let Some(ref extended_feature_info) = self.extended_feature_info {
-			if extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
-			if extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
-			if extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
-			if extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
-			if extended_feature_info.has_hle() { write!(f, "HLE ")?; }
-			if extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
-		}
+		if self.extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
+		if self.extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
+		if self.extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
+		if self.extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
+		if self.extended_feature_info.has_hle() { write!(f, "HLE ")?; }
+		if self.extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
+		if self.extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
 
 		Ok(())
 	}
@@ -503,6 +502,7 @@ pub fn detect_features() {
 	// Detect CPU features
 	let cpuid = CpuId::new();
 	let feature_info = cpuid.get_feature_info().expect("CPUID Feature Info not available!");
+	let extended_feature_info = cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!");
 	let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
 
 	unsafe {
@@ -514,6 +514,7 @@ pub fn detect_features() {
 		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
+		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
 
 		if extended_function_info.has_rdtscp() {
 			TIMESTAMP_FUNCTION = get_timestamp_rdtscp;
@@ -560,6 +561,12 @@ pub fn configure() {
 	if supports_xsave() {
 		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
 		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
+	}
+
+	if supports_fsgs() {
+		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
+	} else {
+		panic!("libhermit-rs requires the CPU feature FSGSBASE");
 	}
 
 	unsafe { cr4_write(cr4); }
@@ -660,6 +667,11 @@ pub fn supports_xsave() -> bool {
 	unsafe { SUPPORTS_XSAVE }
 }
 
+#[inline]
+pub fn supports_fsgs() -> bool {
+	unsafe { SUPPORTS_FSGS }
+}
+
 /// Search the most significant bit
 #[inline(always)]
 pub fn msb(value: u64) -> Option<u64> {
@@ -699,16 +711,28 @@ pub fn get_frequency() -> u16 {
 	unsafe { CPU_FREQUENCY.get() }
 }
 
+#[inline]
 pub fn readfs() -> usize {
-	unsafe { rdmsr(IA32_FS_BASE) as usize }
+	let val: u64;
+	unsafe { asm!("rdfsbase $0" : "=r"(val) ::: "volatile"); }
+	val as usize
 }
 
+#[inline]
+pub fn readgs() -> usize {
+	let val: u64;
+	unsafe { asm!("rdgsbase $0" : "=r"(val) ::: "volatile"); }
+	val as usize
+}
+
+#[inline]
 pub fn writefs(fs: usize) {
-	unsafe { wrmsr(IA32_FS_BASE, fs as u64); }
+	unsafe { asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile"); }
 }
 
+#[inline]
 pub fn writegs(gs: usize) {
-	unsafe { wrmsr(IA32_GS_BASE, gs as u64); }
+	unsafe { asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile"); }
 }
 
 #[inline]
