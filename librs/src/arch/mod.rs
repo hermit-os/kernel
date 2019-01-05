@@ -54,3 +54,5 @@ pub use arch::x86_64::kernel::scheduler;
 pub use arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::systemtime::get_boot_time;
+#[cfg(target_arch="x86_64")]
+pub use arch::x86_64::kernel::switch::switch;

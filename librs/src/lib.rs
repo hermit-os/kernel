@@ -38,6 +38,7 @@
 #![feature(linkage)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
+#![feature(naked_functions)]
 #![allow(unused_macros)]
 #![no_std]
 

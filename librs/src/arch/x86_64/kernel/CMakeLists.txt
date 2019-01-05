@@ -60,8 +60,7 @@ add_dependencies(hermit_rs smp_boot_code)
 # x86_64-specific ASM sources (assembled with NASM)
 set(ARCH_ASM_SOURCES
 	"${CMAKE_CURRENT_LIST_DIR}/entry.asm"
-	"${CMAKE_CURRENT_LIST_DIR}/sighandler.asm"
-	"${CMAKE_CURRENT_LIST_DIR}/switch.asm")
+	"${CMAKE_CURRENT_LIST_DIR}/sighandler.asm")
 add_library(arch_asm_kernel OBJECT ${ARCH_ASM_SOURCES})
 add_dependencies(arch_asm_kernel hermit_rs)
 
