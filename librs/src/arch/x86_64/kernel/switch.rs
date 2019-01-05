@@ -60,8 +60,8 @@ pub extern "C" fn switch(old_stack: *mut usize, new_stack: usize) {
 			// set stack pointer in TSS \n\t\
 			call set_current_kernel_stack \n\t\
 			// restore context \n\t\
-			pop %r15\n\t\
-			wrfsbaseq %r15\n\t\
+			pop %rax\n\t\
+			wrfsbaseq %rax\n\t\
 			pop %r15\n\t\
 			pop %r14\n\t\
 			pop %r13\n\t\
