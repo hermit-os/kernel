@@ -24,7 +24,7 @@
 
 #[inline(never)]
 #[naked]
-pub extern "C" fn switch(old_stack: *mut usize, new_stack: usize) {
+pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
 	// rdi = old_stack => the address to store the old rsp
 	// rsi = new_stack => stack pointer of the new task
 
@@ -77,7 +77,7 @@ pub extern "C" fn switch(old_stack: *mut usize, new_stack: usize) {
 			pop %rdx\n\t\
 			pop %rcx\n\t\
 			pop %rax\n\t\
-			popfq" :: "r{rdi}"(old_stack as u64), "r{rsi}"(new_stack as u64):: "volatile"
+			popfq" :::: "volatile"
 		);
 	}
 }
