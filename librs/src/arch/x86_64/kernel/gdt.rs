@@ -26,7 +26,8 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
-use core::mem;
+use arch::x86_64::kernel::KERNEL_HEADER;
+use core::{mem, ptr};
 use scheduler::task::TaskStatus;
 use x86::dtables::{self, DescriptorTablePointer};
 use x86::bits64::task::*;
@@ -34,10 +35,6 @@ use x86::bits64::segmentation::*;
 use x86::segmentation::*;
 use x86::task::*;
 use x86::Ring;
-
-extern "C" {
-	static current_stack_address: usize;
-}
 
 
 pub const GDT_NULL:			u16 = 0;
@@ -105,7 +102,7 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = (unsafe { current_stack_address } + KERNEL_STACK_SIZE - 0x10) as u64;
+	boxed_tss.rsp[0] = unsafe { ptr::read_volatile(&KERNEL_HEADER.current_stack_address) } + KERNEL_STACK_SIZE as u64 - 0x10;
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.

@@ -35,6 +35,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
+use arch::x86_64::kernel::KERNEL_HEADER;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, ptr, str, u32};
 use environment;
@@ -42,12 +43,6 @@ use mm;
 use scheduler;
 use x86::controlregs::*;
 use x86::msr::*;
-
-
-extern "C" {
-	static mut current_stack_address: usize;
-	static mut current_percore_address: usize;
-}
 
 const APIC_ICR2: usize = 0x0310;
 
@@ -434,8 +429,8 @@ pub fn init_next_processor_variables(core_id: usize) {
 	let stack = mm::allocate(KERNEL_STACK_SIZE, false);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
-		ptr::write_volatile(&mut current_stack_address, stack);
-		ptr::write_volatile(&mut current_percore_address, Box::into_raw(boxed_percore) as usize);
+		ptr::write_volatile(&mut KERNEL_HEADER.current_stack_address, stack as u64);
+		ptr::write_volatile(&mut KERNEL_HEADER.current_percore_address, Box::into_raw(boxed_percore) as u64);
 	}
 }
 

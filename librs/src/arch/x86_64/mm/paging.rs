@@ -29,21 +29,20 @@ use arch::x86_64::mm::physicalmem;
 use arch::x86_64::mm::virtualmem;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
+use arch::x86_64::kernel::get_mbinfo;
 use core::ptr;
 use core::marker::PhantomData;
+use core::mem;
 use hermit_multiboot::Multiboot;
 use mm;
 use scheduler;
+use environment;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
 extern "C" {
 	#[linkage = "extern_weak"]
 	static runtime_osinit: *const u8;
-
-	static cmdline: *const u8;
-	static cmdsize: usize;
-	static mb_info: usize;
 }
 
 
@@ -645,10 +644,38 @@ pub fn get_application_page_size() -> usize {
 }
 
 pub fn init() {
-	// Identity-map the supplied Multiboot information and command line.
+}
+
+pub fn init_page_tables() {
+	debug_mem!("Create new view to the kernel space");
+
 	unsafe {
+		let pml4 = controlregs::cr3();
+		let pde = pml4 + 2*BasePageSize::SIZE as u64;
+
+		debug_mem!("Found PML4 at 0x{:x}", pml4);
+
+		// make sure that only the required areas are mapped
+		let start = pde + ((mm::kernel_end_address() >> (PAGE_MAP_BITS+PAGE_BITS)) * mem::size_of::<u64>()) as u64;
+		let size = (512 - (mm::kernel_end_address() >> (PAGE_MAP_BITS+PAGE_BITS))) * mem::size_of::<u64>();
+		ptr::write_bytes(start as *mut u8,
+			0,
+			size
+		);
+
+		let size = (mm::kernel_start_address() >> (PAGE_MAP_BITS+PAGE_BITS))*mem::size_of::<u64>();
+		ptr::write_bytes(pde as *mut u8,
+			0,
+			size
+		);
+
+		// flush tlb
+		controlregs::cr3_write(pml4);
+
+		// Identity-map the supplied Multiboot information and command line.
+		let mb_info = get_mbinfo();
 		if mb_info > 0 {
-			identity_map(mb_info as usize, mb_info as usize);
+			identity_map(mb_info, mb_info);
 
 			// Map the "Memory Map" information too.
 			let mb = Multiboot::new(mb_info);
@@ -656,8 +683,10 @@ pub fn init() {
 			identity_map(memory_map_address, memory_map_address);
 		}
 
+		let cmdsize = environment::get_cmdsize();
 		if cmdsize > 0 {
-			identity_map(cmdline as usize, cmdline as usize + cmdsize - 1);
+			let cmdline = environment::get_cmdline();
+			identity_map(cmdline, cmdline + cmdsize - 1);
 		}
 	}
 }

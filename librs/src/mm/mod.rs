@@ -28,12 +28,12 @@ mod nodepool;
 
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use environment;
 use mm::mmlock::MmLock;
 use mm::nodepool::NodePool;
 
 
 extern "C" {
-	static image_size: usize;
 	static kernel_start: u8;
 }
 
@@ -62,12 +62,15 @@ pub fn kernel_end_address() -> usize {
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
-		KERNEL_START_ADDRESS = align_down!(&kernel_start as *const u8 as usize, arch::mm::paging::LargePageSize::SIZE);
-		KERNEL_END_ADDRESS = align_up!(&kernel_start as *const u8 as usize + image_size, arch::mm::paging::LargePageSize::SIZE);
+		KERNEL_START_ADDRESS = align_down!(&kernel_start as *const u8 as usize,
+			arch::mm::paging::LargePageSize::SIZE);
+		KERNEL_END_ADDRESS = align_up!(&kernel_start as *const u8 as usize + environment::get_image_size(),
+			arch::mm::paging::LargePageSize::SIZE);
 	}
 
 	arch::mm::init();
 	self::allocator::init();
+	arch::mm::init_page_tables();
 }
 
 pub fn print_information() {
