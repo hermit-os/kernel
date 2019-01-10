@@ -25,26 +25,23 @@
 //! vs. multi-kernel, hypervisor, etc.) as well as central parsing of the
 //! command-line parameters.
 
+#[cfg(target_arch="x86_64")]
+pub use arch::x86_64::kernel::{is_uhyve,is_single_kernel,get_cmdsize,get_cmdline,get_image_size};
+
 use core::{slice, str};
-
-
-extern "C" {
-	static cmdline: *const u8;
-	static cmdsize: usize;
-	static single_kernel: u32;
-	static uhyve: u32;
-}
 
 static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;
 static mut IS_PROXY: bool = false;
 
 
 unsafe fn parse_command_line() {
+	let cmdsize = get_cmdsize();
 	if cmdsize == 0 {
 		return;
 	}
 
 	// Convert the command-line into a Rust string slice.
+	let cmdline = get_cmdline() as *const u8;
 	let slice = slice::from_raw_parts(cmdline, cmdsize);
 	let cmdline_str = str::from_utf8_unchecked(slice);
 
@@ -63,10 +60,10 @@ pub fn init() {
 	unsafe {
 		parse_command_line();
 
-		if uhyve > 0 {
+		if is_uhyve() {
 			// We are running under uhyve, which implies unikernel mode and no communication with "proxy".
 			IS_PROXY = false;
-		} else if single_kernel == 0 {
+		} else {
 			// We are running side-by-side to Linux, which implies communication with "proxy".
 			IS_PROXY = true;
 		}
@@ -82,14 +79,4 @@ pub fn get_command_line_cpu_frequency() -> u16 {
 /// Only valid after calling init()!
 pub fn is_proxy() -> bool {
 	unsafe { IS_PROXY }
-}
-
-/// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
-pub fn is_single_kernel() -> bool {
-	unsafe { single_kernel > 0 }
-}
-
-/// Whether HermitCore is running under the "uhyve" hypervisor.
-pub fn is_uhyve() -> bool {
-	unsafe { uhyve > 0 }
 }

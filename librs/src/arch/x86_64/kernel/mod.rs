@@ -22,6 +22,8 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
+
 pub mod acpi;
 pub mod apic;
 pub mod gdt;
@@ -36,8 +38,9 @@ pub mod scheduler;
 pub mod serial;
 pub mod systemtime;
 pub mod switch;
+mod start;
 #[cfg(feature = "vga")]
-pub mod vga;
+mod vga;
 
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
@@ -49,26 +52,109 @@ use synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
+#[repr(C)]
+struct KernelHeader {
+	magic_number: u32,
+	version: u32,
+	base: u64,
+	limit: u64,
+	image_size: u64,
+	current_stack_address: u64,
+	current_percore_address: u64,
+	host_logical_addr: u64,
+	boot_gtod: u64,
+	mb_info: u64,
+	cmdline: u64,
+	cmdsize: u64,
+	cpu_freq: u32,
+	boot_processor: u32,
+	cpu_online: u32,
+	possible_cpus: u32,
+	current_boot_id: u32,
+	uartport: u16,
+	single_kernel: u8,
+	uhyve: u8,
+	hcip: [u8; 4],
+	hcgateway: [u8; 4],
+	hcmask: [u8; 4],
+	boot_stack: [u8; KERNEL_STACK_SIZE]
+}
+
+/// Kernel header to announce machine features
+#[link_section = ".mboot"]
+static mut KERNEL_HEADER: KernelHeader = KernelHeader {
+	magic_number: 0xC0DECAFEu32,
+	version: 0,
+	base: 0,
+	limit: 0,
+	image_size: 0,
+	current_stack_address: 0,
+	current_percore_address: 0,
+	host_logical_addr: 0,
+	boot_gtod: 0,
+	mb_info: 0,
+	cmdline: 0,
+	cmdsize: 0,
+	cpu_freq: 0,
+	boot_processor: !0,
+	cpu_online: 0,
+	possible_cpus: 0,
+	current_boot_id: 0,
+	uartport: 0,
+	single_kernel: 1,
+	uhyve: 0,
+	hcip: [10,0,5,2],
+	hcgateway: [10,0,5,1],
+	hcmask: [255,255,255,0],
+	boot_stack: [0xCD; KERNEL_STACK_SIZE]
+};
 
 extern "C" {
-	static mut cpu_online: u32;
-	static uartport: u64;
-
 	fn init_rtl8139_netif(freq: u32) -> i32;
 }
 
 lazy_static! {
 	static ref COM1: SerialPort =
-		SerialPort::new(unsafe { uartport } as u16);
+		SerialPort::new(unsafe { ptr::read_volatile(&KERNEL_HEADER.uartport) } );
 	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
-		Spinlock::new(unsafe { &mut cpu_online });
+		Spinlock::new(unsafe { &mut KERNEL_HEADER.cpu_online });
 }
 
 
 // FUNCTIONS
 
+pub fn get_image_size() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.image_size) as usize }
+}
+
+pub fn get_limit() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.limit) as usize }
+}
+
+pub fn get_mbinfo() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.mb_info) as usize }
+}
+
 pub fn get_processor_count() -> usize {
-	unsafe { ptr::read_volatile(&cpu_online) as usize }
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cpu_online) as usize }
+}
+
+/// Whether HermitCore is running under the "uhyve" hypervisor.
+pub fn is_uhyve() -> bool {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.uhyve) != 0 }
+}
+
+/// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
+pub fn is_single_kernel() -> bool {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.single_kernel) != 0 }
+}
+
+pub fn get_cmdsize() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdsize) as usize }
+}
+
+pub fn get_cmdline() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdline) as usize }
 }
 
 /// Earliest initialization function called by the Boot Processor.

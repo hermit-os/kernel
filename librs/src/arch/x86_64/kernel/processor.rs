@@ -22,12 +22,15 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#![allow(dead_code)]
+
 use arch::x86_64::kernel::acpi;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::pic;
 use arch::x86_64::kernel::pit;
-use core::{fmt, u32};
+use arch::x86_64::kernel::KERNEL_HEADER;
+use core::{fmt, u32, ptr};
 use core::sync::atomic::spin_loop_hint;
 use environment;
 use x86::cpuid::*;
@@ -36,14 +39,19 @@ use x86::msr::*;
 use x86::time::*;
 
 
-extern "C" {
-	static mut cpu_freq: u32;
-}
-
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
 
+// MSR EFER bits
+const EFER_SCE: u64 = (1 << 0);
+const EFER_LME: u64 = (1 << 8);
+const EFER_LMA: u64 = (1 << 10);
+const EFER_NXE: u64 = (1 << 11);
+const EFER_SVME: u64 = (1 << 12);
+const EFER_LMSLE: u64 = (1 << 13);
+const EFER_FFXSR: u64 = (1 << 14);
+const EFER_TCE: u64 = (1 << 15);
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
@@ -257,6 +265,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		let cpu_freq = ptr::read_volatile(&KERNEL_HEADER.cpu_freq);
 		if cpu_freq > 0 {
 			self.mhz = cpu_freq as u16;
 			self.source = CpuFrequencySources::Hypervisor;
@@ -525,6 +534,11 @@ pub fn detect_features() {
 }
 
 pub fn configure() {
+	// setup MSR EFER
+	unsafe {
+		wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_LMA | EFER_SCE | EFER_NXE);
+	}
+
 	//
 	// CR0 CONFIGURATION
 	//

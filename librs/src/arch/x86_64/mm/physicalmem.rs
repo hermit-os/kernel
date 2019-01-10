@@ -22,6 +22,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use arch::x86_64::kernel::{get_limit,get_mbinfo};
 use collections::Node;
 use hermit_multiboot::Multiboot;
 use mm;
@@ -29,16 +30,12 @@ use mm::freelist::{FreeList, FreeListEntry};
 use mm::{MM_LOCK, POOL};
 
 
-extern "C" {
-	static limit: usize;
-	static mb_info: usize;
-}
-
 static mut PHYSICAL_FREE_LIST: FreeList = FreeList::new();
 
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
-	if unsafe { mb_info } == 0 {
+	let mb_info = get_mbinfo();
+	if mb_info == 0 {
 		return Err(());
 	}
 
@@ -73,14 +70,15 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 }
 
 fn detect_from_limits() -> Result<(), ()> {
-	if unsafe { limit } == 0 {
+	let limit = get_limit();
+	if limit == 0 {
 		return Err(());
 	}
 
 	let entry = Node::new(
 		FreeListEntry {
 			start: mm::kernel_end_address(),
-			end: unsafe { limit }
+			end: limit
 		}
 	);
 	unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
