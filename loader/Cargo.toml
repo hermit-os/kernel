@@ -1,11 +1,7 @@
 [package]
 name = "hermit-loader"
-version = "0.2.1"
-authors = ["Colin Finck <colin.finck@rwth-aachen.de>",
-	   "Stefan Lankes <slankes@eonerc.rwth-aachen.de>"]
-
-[lib]
-crate-type = ["staticlib"]
+version = "0.2.2"
+authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
 
 [dependencies]
 bitflags = "1.0.3"
@@ -28,6 +24,9 @@ features = ["spin_no_std"]
 git = "https://github.com/hermitcore/rust-x86.git"
 branch = "hermit"
 default-features = false
+
+[package.metadata.cargo-xbuild]
+memcpy = true
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
