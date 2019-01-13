@@ -30,6 +30,7 @@ use arch::x86_64::serial::SerialPort;
 use elf::*;
 use hermit_multiboot::Multiboot;
 use physicalmem;
+use core::{mem,ptr};
 
 extern "C" {
 	static mb_info: usize;
@@ -38,14 +39,35 @@ extern "C" {
 // CONSTANTS
 pub const ELF_ARCH: u16 = ELF_EM_X86_64;
 
-const HERMIT_KERNEL_OFFSET_BASE:       usize = 0x08;
-const HERMIT_KERNEL_OFFSET_IMAGE_SIZE: usize = 0x38;
-const HERMIT_KERNEL_OFFSET_UARTPORT:   usize = 0x98;
-const HERMIT_KERNEL_OFFSET_CMDLINE:    usize = 0xA0;
-const HERMIT_KERNEL_OFFSET_CMDSIZE:    usize = 0xA8;
-
 const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
+
+#[repr(C)]
+struct KernelHeader {
+	magic_number: u32,
+	version: u32,
+	base: u64,
+	limit: u64,
+	image_size: u64,
+	current_stack_address: u64,
+	current_percore_address: u64,
+	host_logical_addr: u64,
+	boot_gtod: u64,
+	mb_info: u64,
+	cmdline: u64,
+	cmdsize: u64,
+	cpu_freq: u32,
+	boot_processor: u32,
+	cpu_online: u32,
+	possible_cpus: u32,
+	current_boot_id: u32,
+	uartport: u16,
+	single_kernel: u8,
+	uhyve: u8,
+	hcip: [u8; 4],
+	hcgateway: [u8; 4],
+	hcmask: [u8; 4]
+}
 
 // VARIABLES
 static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
@@ -94,6 +116,8 @@ pub unsafe fn find_kernel() -> usize {
 		}
 	}
 
+	loaderlog!("Found module: [0x{:x} - 0x{:x}]", start_address, end_address);
+
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	// However, we want to move the HermitCore Application to the next 2 MB boundary.
 	// So add this boundary and align up the address to be on the safe side.
@@ -111,30 +135,33 @@ pub unsafe fn find_kernel() -> usize {
 }
 
 pub unsafe fn move_kernel(physical_address: usize, virtual_address: usize, file_size: usize) -> usize {
-	// We want to move the application to the next 2 MB boundary to let the HermitCore kernel map it as a large page.
-	// First calculate the displacement and map a range large enough to span the original code and its new location.
-	let new_physical_address = align_up!(physical_address, LargePageSize::SIZE);
-	let displacement = new_physical_address - physical_address;
-	let page_count = (file_size + displacement) / BasePageSize::SIZE;
-	paging::map::<BasePageSize>(virtual_address, physical_address, page_count, PageTableEntryFlags::WRITABLE);
+	// We want to move the application to realize a identify mapping
+	let page_count = (file_size / LargePageSize::SIZE) + 1;
+	paging::map::<LargePageSize>(virtual_address, virtual_address, page_count, PageTableEntryFlags::WRITABLE);
 
-	// Now copy the code byte-wise to the new region, starting from the upper bytes.
-	for i in (0..file_size).rev() {
-		*((virtual_address + displacement + i) as *mut u8) = *((virtual_address + i) as *const u8);
+	for i in (0..align_up!(file_size, BasePageSize::SIZE)/BasePageSize::SIZE).rev() {
+		let tmp = 0x2000;
+		paging::map::<BasePageSize>(tmp, align_down!(physical_address, BasePageSize::SIZE)+i*BasePageSize::SIZE,
+			1, PageTableEntryFlags::WRITABLE);
+
+		for j in 0..BasePageSize::SIZE {
+			*((virtual_address + i*BasePageSize::SIZE + j) as *mut u8) = *((tmp + j) as *const u8);
+		}
 	}
 
-	// Remap the virtual address to the new physical address.
-	let page_count = file_size / BasePageSize::SIZE;
-	paging::map::<BasePageSize>(virtual_address, new_physical_address, page_count, PageTableEntryFlags::WRITABLE);
-
-	new_physical_address
+	virtual_address
 }
 
 pub unsafe fn boot_kernel(new_physical_address: usize, virtual_address: usize, mem_size: usize, entry_point: usize) {
+	let kernel_header = &mut *(virtual_address as *mut KernelHeader);
+	loaderlog!("Found magic number 0x{:x}", kernel_header.magic_number);
+
 	// Supply the parameters to the HermitCore application.
-	*((virtual_address + HERMIT_KERNEL_OFFSET_BASE) as *mut usize) = new_physical_address;
-	*((virtual_address + HERMIT_KERNEL_OFFSET_IMAGE_SIZE) as *mut usize) = mem_size;
-	*((virtual_address + HERMIT_KERNEL_OFFSET_UARTPORT) as *mut usize) = SERIAL_PORT_ADDRESS as usize;
+	ptr::write_volatile(&mut kernel_header.base, new_physical_address as u64);
+	ptr::write_volatile(&mut kernel_header.image_size, mem_size as u64);
+	ptr::write_volatile(&mut kernel_header.mb_info, mb_info as u64);
+	ptr::write_volatile(&mut kernel_header.current_stack_address, (virtual_address+mem::size_of::<KernelHeader>()) as u64);
+	ptr::write_volatile(&mut kernel_header.uartport, SERIAL_PORT_ADDRESS);
 
 	if let Some(address) = MULTIBOOT.command_line_address() {
 		// Identity-map the command line.
@@ -142,8 +169,8 @@ pub unsafe fn boot_kernel(new_physical_address: usize, virtual_address: usize, m
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 		let cmdline = MULTIBOOT.command_line().unwrap();
-		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDLINE) as *mut usize) = address;
-		*((virtual_address + HERMIT_KERNEL_OFFSET_CMDSIZE) as *mut usize) = cmdline.len();
+		ptr::write_volatile(&mut kernel_header.cmdline, address as u64);
+		ptr::write_volatile(&mut kernel_header.cmdsize, cmdline.len() as u64);
 	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.

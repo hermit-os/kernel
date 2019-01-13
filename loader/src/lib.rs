@@ -26,6 +26,8 @@
 #![feature(lang_items)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
+#![feature(naked_functions)]
+#![feature(const_raw_ptr_deref)]
 #![no_std]
 
 // EXTERNAL CRATES
@@ -49,10 +51,10 @@ extern crate x86;
 
 // MODULES
 #[macro_use]
-mod macros;
+pub mod macros;
 
-mod arch;
-mod console;
+pub mod arch;
+pub mod console;
 mod elf;
 mod physicalmem;
 mod runtime_glue;
@@ -68,7 +70,7 @@ extern "C" {
 }
 
 // FUNCTIONS
-unsafe fn sections_init() {
+pub unsafe fn sections_init() {
 	// Initialize .bss section
 	ptr::write_bytes(
 		&mut bss_start as *mut u8,
@@ -77,7 +79,7 @@ unsafe fn sections_init() {
 	);
 }
 
-unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usize, usize, usize) {
+pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usize, usize, usize) {
 	// Verify that this module is a HermitCore ELF executable.
 	let header = & *(start_address as *const ElfHeader);
 	assert!(header.ident.magic == ELF_MAGIC);
@@ -119,19 +121,4 @@ unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usize, u
 	loaderlog!("Mem Size:  {} Bytes", mem_size);
 
 	(physical_address, virtual_address, file_size, mem_size, header.entry)
-}
-
-/// Entry Point of the HermitCore Loader
-/// (called from entry.asm or entry.S)
-#[no_mangle]
-pub unsafe extern "C" fn loader_main() {
-	sections_init();
-	arch::message_output_init();
-
-	loaderlog!("Started");
-
-	let start_address = arch::find_kernel();
-	let (physical_address, virtual_address, file_size, mem_size, entry_point) = check_kernel_elf_file(start_address);
-	let new_physical_address = arch::move_kernel(physical_address, virtual_address, file_size);
-	arch::boot_kernel(new_physical_address, virtual_address, mem_size, entry_point);
 }

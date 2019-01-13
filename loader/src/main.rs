@@ -1,5 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // MIT License
 //
@@ -22,37 +21,26 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#![no_std] // don't link the Rust standard library
+#![cfg_attr(not(test), no_main)] // disable all Rust-level entry points
+#![cfg_attr(test, allow(dead_code, unused_macros, unused_imports))]
 
-macro_rules! align_down {
-	($value:expr, $alignment:expr) => ($value & !($alignment - 1))
-}
+extern crate hermit_loader;
 
-macro_rules! align_up {
-	($value:expr, $alignment:expr) => (align_down!($value + ($alignment - 1), $alignment))
-}
+use hermit_loader::arch;
+use hermit_loader::*;
 
-/// Print formatted text to our console.
-///
-/// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
-/// for HermitCore.
-#[macro_export]
-macro_rules! print {
-	($($arg:tt)+) => ({
-		use core::fmt::Write;
+/// Entry Point of the HermitCore Loader
+/// (called from entry.asm or entry.S)
+#[no_mangle]
+pub unsafe extern "C" fn loader_main() {
+	sections_init();
+	arch::message_output_init();
 
-		#[allow(unused_unsafe)]
-		unsafe { $crate::console::CONSOLE.write_fmt(format_args!($($arg)+)).unwrap(); }
-	});
-}
+	loaderlog!("Started");
 
-/// Print formatted text to our console, followed by a newline.
-#[macro_export]
-macro_rules! println {
-	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
-}
-
-/// Print formatted loader log messages to our console, followed by a newline.
-#[macro_export]
-macro_rules! loaderlog {
-	($($arg:tt)+) => (println!("[LOADER] {}", format_args!($($arg)+)));
+	let start_address = arch::find_kernel();
+	let (physical_address, virtual_address, file_size, mem_size, entry_point) = check_kernel_elf_file(start_address);
+	let new_physical_address = arch::move_kernel(physical_address, virtual_address, file_size);
+	arch::boot_kernel(new_physical_address, virtual_address, mem_size, entry_point);
 }
