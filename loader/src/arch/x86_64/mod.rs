@@ -134,9 +134,11 @@ pub unsafe fn find_kernel() -> usize {
 	start_address
 }
 
-pub unsafe fn move_kernel(physical_address: usize, virtual_address: usize, file_size: usize) -> usize {
+pub unsafe fn move_kernel(physical_address: usize, virtual_address: usize, mem_size: usize, file_size: usize) -> usize {
 	// We want to move the application to realize a identify mapping
-	let page_count = (file_size / LargePageSize::SIZE) + 1;
+	let page_count = align_up!(mem_size, LargePageSize::SIZE) / LargePageSize::SIZE;
+	loaderlog!("Use {} large pages for the application.", page_count);
+
 	paging::map::<LargePageSize>(virtual_address, virtual_address, page_count, PageTableEntryFlags::WRITABLE);
 
 	for i in (0..align_up!(file_size, BasePageSize::SIZE)/BasePageSize::SIZE).rev() {
