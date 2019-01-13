@@ -41,6 +41,6 @@ pub unsafe extern "C" fn loader_main() {
 
 	let start_address = arch::find_kernel();
 	let (physical_address, virtual_address, file_size, mem_size, entry_point) = check_kernel_elf_file(start_address);
-	let new_physical_address = arch::move_kernel(physical_address, virtual_address, file_size);
+	let new_physical_address = arch::move_kernel(physical_address, virtual_address, mem_size, file_size);
 	arch::boot_kernel(new_physical_address, virtual_address, mem_size, entry_point);
 }
