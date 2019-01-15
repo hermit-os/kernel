@@ -33,7 +33,6 @@
 ; (like the actual Rust entry point).
 
 
-kernel_start equ 0x800000
 CR0_PG       equ (1 << 31)
 CR4_PAE      equ (1 << 5)
 MSR_EFER     equ 0xC0000080
@@ -48,7 +47,8 @@ _start:
 	jmp _rmstart
 
 ; PARAMETERS
-align 4
+align 8
+	entry_point dq 0xDEADC0DE
 	pml4 dd 0xDEADBEEF
 
 _rmstart:
@@ -138,7 +138,7 @@ stublet:
     mov cr4, eax
 
     ; Set the address to PML4 in CR3.
-    mov eax, [pml4]
+    mov eax, dword [pml4]
     mov cr3, eax
 
     ; Enable x86-64 Compatibility Mode by setting EFER_LME.
@@ -167,4 +167,4 @@ stublet:
 ALIGN 8
 start64:
     ; Jump to entry.asm
-    jmp kernel_start
+    jmp qword [entry_point]

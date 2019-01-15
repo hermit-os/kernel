@@ -79,7 +79,8 @@ const SPURIOUS_INTERRUPT_NUMBER: u8  = 127;
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
 const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
 
-const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x04;
+const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x10;
+const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -450,8 +451,13 @@ pub fn boot_application_processors() {
 	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, flags);
 	unsafe { ptr::copy_nonoverlapping(&SMP_BOOT_CODE as *const u8, SMP_BOOT_CODE_ADDRESS as *mut u8, SMP_BOOT_CODE.len()); }
 
-	// Pass the PML4 page table address to the boot code.
-	unsafe { *((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32; }
+	unsafe {
+		// Pass the PML4 page table address to the boot code.
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32;
+		// Set entry point
+		debug!("Set entry point for application processor to 0x{:x}", arch::x86_64::kernel::start::_start as u64);
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut u64) = arch::x86_64::kernel::start::_start as u64;
+	}
 
 	// Now wake up each application processor.
 	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
