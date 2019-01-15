@@ -57,16 +57,6 @@ add_custom_target(smp_boot_code
 add_dependencies(hermit_rs pcidata)
 add_dependencies(hermit_rs smp_boot_code)
 
-# x86_64-specific ASM sources (assembled with NASM)
-set(ARCH_ASM_SOURCES
-	"${CMAKE_CURRENT_LIST_DIR}/entry.asm"
-	"${CMAKE_CURRENT_LIST_DIR}/sighandler.asm"
-	"${CMAKE_CURRENT_LIST_DIR}/switch.asm")
-add_library(arch_asm OBJECT ${ARCH_ASM_SOURCES})
-add_dependencies(arch_asm hermit_rs)
-
-set(ARCH_OBJECTS $<TARGET_OBJECTS:arch_asm> PARENT_SCOPE)
-
 # Set a source-level dependency from the entry point on the Rust library.
 # This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.
 set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})

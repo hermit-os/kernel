@@ -26,7 +26,7 @@ include!(concat!(env!("CARGO_TARGET_DIR"), "/pcidata.rs"));
 use alloc::vec::Vec;
 use core::{fmt, u8, u32};
 use synch::spinlock::Spinlock;
-use x86::shared::io::*;
+use x86::io::*;
 
 
 const PCI_MAX_BUS_NUMBER: u8 = 32;

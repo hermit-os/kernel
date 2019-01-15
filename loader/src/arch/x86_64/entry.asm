@@ -39,10 +39,6 @@ extern kernel_end
 ; We use a special name to map this section at the begin of our kernel
 ; =>  Multiboot expects its magic number at the beginning of the kernel.
 SECTION .mboot
-global start
-start:
-    cli ; avoid any interrupt
-    jmp stublet
 
 ; This part MUST be 4 byte aligned, so we solve that issue using 'ALIGN 4'.
 ALIGN 4
@@ -90,7 +86,10 @@ GDT64:                           ; Global Descriptor Table (64-bit).
 
 SECTION .text
 ALIGN 4
-stublet:
+global _start
+_start:
+    cli ; avoid any interrupt
+
     ; Initialize stack pointer
     mov esp, boot_stack
     add esp, KERNEL_STACK_SIZE - 16
@@ -104,8 +103,7 @@ stublet:
 ; extensions (huge pages) enabled.
 cpu_init:
 
-; initialize page tables
-
+    ; initialize page tables
     ; map kernel 1:1
     push edi
     push ebx
@@ -162,12 +160,12 @@ L1:
     ;or eax, (1 << 0)        ; set present bit
     mov cr3, eax
 
-	; we need to enable PAE modus
+    ; we need to enable PAE modus
     mov eax, cr4
     or eax, 1 << 5
     mov cr4, eax
 
-	; switch to the compatibility mode (which is part of long mode)
+    ; switch to the compatibility mode (which is part of long mode)
     mov ecx, 0xC0000080
     rdmsr
     or eax, 1 << 8
@@ -189,7 +187,6 @@ L1:
     or eax, (1 << 31)       ; enable paging
     mov cr0, eax
 
-	;pop ebx ; restore pointer to multiboot structure
     lgdt [GDT64.Pointer] ; Load the 64-bit global descriptor table.
     jmp GDT64.Code:start64 ; Set the code segment and enter 64-bit long mode.
 
@@ -232,17 +229,15 @@ boot_stack:
 ; Bootstrap page tables are used during the initialization.
 ALIGN 4096
 boot_pml4:
-    DQ boot_pdpt + 0x7  ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
+    DQ boot_pdpt + 0x3  ; PG_PRESENT | PG_RW
     times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
+    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_RW
 boot_pdpt:
-    DQ boot_pgd + 0x7   ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
-    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
+    DQ boot_pgd + 0x3   ; PG_PRESENT | PG_RW
+    times 511 DQ 0      ; PAGE_MAP_ENTRIES - 1
 boot_pgd:
-    DQ boot_pgt + 0x7   ; PG_PRESENT | PG_GLOBAL | PG_RW | PG_USER
-    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 2
-    DQ boot_pml4 + 0x3  ; PG_PRESENT | PG_GLOBAL | PG_RW
+    DQ boot_pgt + 0x3   ; PG_PRESENT | PG_RW
+    times 511 DQ 0      ; PAGE_MAP_ENTRIES - 1
 boot_pgt:
     times 512 DQ 0
 

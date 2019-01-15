@@ -1,6 +1,6 @@
 OUTPUT_FORMAT("elf64-x86-64")
 OUTPUT_ARCH("i386:x86-64")
-ENTRY(start)
+ENTRY(_start)
 phys = 0x000000100000;
 
 SECTIONS
@@ -11,6 +11,7 @@ SECTIONS
   }
   .text ALIGN(4096) : AT(ADDR(.text)) {
     *(.text)
+    *(.text.*)
   }
   .rodata ALIGN(4096) : AT(ADDR(.rodata)) {
     *(.rodata)
@@ -18,10 +19,12 @@ SECTIONS
   }
   .data ALIGN(4096) : AT(ADDR(.data)) {
     *(.data)
+    *(.data.*)
   }
   .bss ALIGN(4096) : AT(ADDR(.bss)) {
     bss_start = .;
     *(.bss)
+    *(.bss.*)
   }
   bss_end = .;
   kernel_end = .;

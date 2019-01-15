@@ -24,8 +24,8 @@
 
 #![allow(dead_code)]
 
-use arch::x86_64::pic;
-use x86::shared::io::*;
+use arch::x86_64::kernel::pic;
+use x86::io::*;
 
 
 const PIT_CLOCK: u64 = 1193182;

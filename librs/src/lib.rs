@@ -38,6 +38,7 @@
 #![feature(linkage)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
+#![feature(naked_functions)]
 #![allow(unused_macros)]
 #![no_std]
 
@@ -54,9 +55,6 @@ extern crate hermit_multiboot;
 
 #[macro_use]
 extern crate lazy_static;
-
-#[cfg(target_arch = "x86_64")]
-extern crate raw_cpuid;
 
 extern crate spin;
 
@@ -98,7 +96,6 @@ extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
 	static kernel_start: u8;
-	static image_size: u64;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 	fn init_lwip();
@@ -137,11 +134,12 @@ extern "C" fn initd(_arg: usize) {
 	// Check if a network interface has been initialized.
 	if err == 0 {
 		info!("Successfully initialized a network interface!");
-		syscalls::enable_networking();
 	} else {
 		warn!("Could not initialize a network interface (error code {})", err);
 		warn!("Starting HermitCore without network support");
 	}
+
+	syscalls::init();
 
 	// Get the application arguments and environment variables.
 	let (argc, argv, environ) = syscalls::get_application_parameters();
@@ -151,7 +149,7 @@ extern "C" fn initd(_arg: usize) {
 		ptr::write_bytes(
 			&mut __bss_start as *mut u8,
 			0,
-			&kernel_start as *const u8 as usize + image_size as usize - &__bss_start as *const u8 as usize
+			&kernel_start as *const u8 as usize + environment::get_image_size() - &__bss_start as *const u8 as usize
 		);
 
 		// And finally start the application.
@@ -161,10 +159,9 @@ extern "C" fn initd(_arg: usize) {
 
 /// Entry Point of HermitCore for the Boot Processor
 /// (called from entry.asm)
-#[no_mangle]
-pub unsafe extern "C" fn boot_processor_main() {
+pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
-	sections_init();
+	unsafe { sections_init(); }
 	arch::message_output_init();
 
 	info!("Welcome to HermitCore-rs {} ({})", env!("CARGO_PKG_VERSION"), COMMIT_HASH);
@@ -193,8 +190,7 @@ pub unsafe extern "C" fn boot_processor_main() {
 
 /// Entry Point of HermitCore for an Application Processor
 /// (called from entry.asm)
-#[no_mangle]
-pub unsafe extern "C" fn application_processor_main() {
+pub fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
 	let core_scheduler = core_scheduler();
