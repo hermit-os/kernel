@@ -22,28 +22,36 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::acpi;
-use arch::x86_64::idt;
-use arch::x86_64::irq;
-use arch::x86_64::pic;
-use arch::x86_64::pit;
-use core::{fmt, u32};
+#![allow(dead_code)]
+
+use arch::x86_64::kernel::acpi;
+use arch::x86_64::kernel::idt;
+use arch::x86_64::kernel::irq;
+use arch::x86_64::kernel::pic;
+use arch::x86_64::kernel::pit;
+use arch::x86_64::kernel::KERNEL_HEADER;
+use core::{fmt, u32, ptr};
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use raw_cpuid::*;
-use x86::shared::control_regs::*;
-use x86::shared::msr::*;
-use x86::shared::time::*;
+use x86::cpuid::*;
+use x86::controlregs::*;
+use x86::msr::*;
+use x86::time::*;
 
-
-extern "C" {
-	static mut cpu_freq: u32;
-}
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
 
+// MSR EFER bits
+const EFER_SCE: u64 = (1 << 0);
+const EFER_LME: u64 = (1 << 8);
+const EFER_LMA: u64 = (1 << 10);
+const EFER_NXE: u64 = (1 << 11);
+const EFER_SVME: u64 = (1 << 12);
+const EFER_LMSLE: u64 = (1 << 13);
+const EFER_FFXSR: u64 = (1 << 14);
+const EFER_TCE: u64 = (1 << 15);
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
@@ -56,8 +64,8 @@ static mut SUPPORTS_RDRAND: bool = false;
 static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
+static mut SUPPORTS_FSGS: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
-
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
@@ -257,6 +265,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		let cpu_freq = ptr::read_volatile(&KERNEL_HEADER.cpu_freq);
 		if cpu_freq > 0 {
 			self.mhz = cpu_freq as u16;
 			self.source = CpuFrequencySources::Hypervisor;
@@ -350,7 +359,7 @@ impl fmt::Display for CpuFrequency {
 
 struct CpuFeaturePrinter {
 	feature_info: FeatureInfo,
-	extended_feature_info: Option<ExtendedFeatures>,
+	extended_feature_info: ExtendedFeatures,
 	extended_function_info: ExtendedFunctionInfo,
 }
 
@@ -358,7 +367,7 @@ impl CpuFeaturePrinter {
 	fn new(cpuid: &CpuId) -> Self {
 		CpuFeaturePrinter {
 			feature_info: cpuid.get_feature_info().expect("CPUID Feature Info not available!"),
-			extended_feature_info: cpuid.get_extended_feature_info(),
+			extended_feature_info: cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!"),
 			extended_function_info: cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!"),
 		}
 	}
@@ -389,14 +398,13 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_dca() { write!(f, "DCA ")?; }
 		if self.feature_info.has_tsc_deadline() { write!(f, "TSC-DEADLINE ")?; }
 
-		if let Some(ref extended_feature_info) = self.extended_feature_info {
-			if extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
-			if extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
-			if extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
-			if extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
-			if extended_feature_info.has_hle() { write!(f, "HLE ")?; }
-			if extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
-		}
+		if self.extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
+		if self.extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
+		if self.extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
+		if self.extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
+		if self.extended_feature_info.has_hle() { write!(f, "HLE ")?; }
+		if self.extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
+		if self.extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
 
 		Ok(())
 	}
@@ -503,6 +511,7 @@ pub fn detect_features() {
 	// Detect CPU features
 	let cpuid = CpuId::new();
 	let feature_info = cpuid.get_feature_info().expect("CPUID Feature Info not available!");
+	let extended_feature_info = cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!");
 	let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
 
 	unsafe {
@@ -514,6 +523,7 @@ pub fn detect_features() {
 		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
+		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
 
 		if extended_function_info.has_rdtscp() {
 			TIMESTAMP_FUNCTION = get_timestamp_rdtscp;
@@ -524,23 +534,28 @@ pub fn detect_features() {
 }
 
 pub fn configure() {
+	// setup MSR EFER
+	unsafe {
+		wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_LMA | EFER_SCE | EFER_NXE);
+	}
+
 	//
 	// CR0 CONFIGURATION
 	//
 	let mut cr0 = unsafe { cr0() };
 
 	// Enable the FPU.
-	cr0.insert(CR0_MONITOR_COPROCESSOR | CR0_NUMERIC_ERROR);
-	cr0.remove(CR0_EMULATE_COPROCESSOR);
+	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
+	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
 
 	// Call the IRQ7 handler on the first FPU access.
-	cr0.insert(CR0_TASK_SWITCHED);
+	cr0.insert(Cr0::CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
-	cr0.insert(CR0_WRITE_PROTECT);
+	cr0.insert(Cr0::CR0_WRITE_PROTECT);
 
 	// Enable caching.
-	cr0.remove(CR0_CACHE_DISABLE | CR0_NOT_WRITE_THROUGH);
+	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
 
 	unsafe { cr0_write(cr0); }
 
@@ -551,15 +566,21 @@ pub fn configure() {
 
 	// Enable Machine Check Exceptions.
 	// No need to check for support here, all x86-64 CPUs support it.
-	cr4.insert(CR4_ENABLE_MACHINE_CHECK);
+	cr4.insert(Cr4::CR4_ENABLE_MACHINE_CHECK);
 
 	// Enable full SSE support and indicates that the OS saves SSE context using FXSR.
 	// No need to check for support here, all x86-64 CPUs support at least SSE2.
-	cr4.insert(CR4_ENABLE_SSE | CR4_UNMASKED_SSE);
+	cr4.insert(Cr4::CR4_ENABLE_SSE | Cr4::CR4_UNMASKED_SSE);
 
 	if supports_xsave() {
 		// Indicate that the OS saves extended context (AVX, AVX2, MPX, etc.) using XSAVE.
-		cr4.insert(CR4_ENABLE_OS_XSAVE);
+		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
+	}
+
+	if supports_fsgs() {
+		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
+	} else {
+		panic!("libhermit-rs requires the CPU feature FSGSBASE");
 	}
 
 	unsafe { cr4_write(cr4); }
@@ -571,10 +592,10 @@ pub fn configure() {
 		// Enable saving the context for all known vector extensions.
 		// Must happen after CR4_ENABLE_OS_XSAVE has been set.
 		let mut xcr0 = unsafe { xcr0() };
-		xcr0.insert(XCR0_FPU_MMX_STATE | XCR0_SSE_STATE);
+		xcr0.insert(Xcr0::XCR0_FPU_MMX_STATE | Xcr0::XCR0_SSE_STATE);
 
 		if supports_avx() {
-			xcr0.insert(XCR0_AVX_STATE);
+			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
 		unsafe { xcr0_write(xcr0); }
@@ -660,6 +681,11 @@ pub fn supports_xsave() -> bool {
 	unsafe { SUPPORTS_XSAVE }
 }
 
+#[inline]
+pub fn supports_fsgs() -> bool {
+	unsafe { SUPPORTS_FSGS }
+}
+
 /// Search the most significant bit
 #[inline(always)]
 pub fn msb(value: u64) -> Option<u64> {
@@ -699,16 +725,28 @@ pub fn get_frequency() -> u16 {
 	unsafe { CPU_FREQUENCY.get() }
 }
 
+#[inline]
 pub fn readfs() -> usize {
-	unsafe { rdmsr(IA32_FS_BASE) as usize }
+	let val: u64;
+	unsafe { asm!("rdfsbase $0" : "=r"(val) ::: "volatile"); }
+	val as usize
 }
 
+#[inline]
+pub fn readgs() -> usize {
+	let val: u64;
+	unsafe { asm!("rdgsbase $0" : "=r"(val) ::: "volatile"); }
+	val as usize
+}
+
+#[inline]
 pub fn writefs(fs: usize) {
-	unsafe { wrmsr(IA32_FS_BASE, fs as u64); }
+	unsafe { asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile"); }
 }
 
+#[inline]
 pub fn writegs(gs: usize) {
-	unsafe { wrmsr(IA32_GS_BASE, gs as u64); }
+	unsafe { asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile"); }
 }
 
 #[inline]

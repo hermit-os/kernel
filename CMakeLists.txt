@@ -11,7 +11,6 @@ project (HermitCore)
 add_subdirectory(include/hermit)
 
 # Build the HermitCore Rust Kernel and its dependencies.
-add_subdirectory(objmv)
 add_subdirectory(pci_ids_parser)
 add_subdirectory(librs)
 
@@ -82,7 +81,7 @@ set(CPACK_SYSTEM_NAME all)
 
 set(CPACK_PACKAGE_VERSION_MAJOR 0)
 set(CPACK_PACKAGE_VERSION_MINOR 3)
-set(CPACK_PACKAGE_VERSION_PATCH 5)
+set(CPACK_PACKAGE_VERSION_PATCH 6)
 
 set(CPACK_PACKAGE_CONTACT "Stefan Lankes <slankes@eonerc.rwth-aachen.de>")
 

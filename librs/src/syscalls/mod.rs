@@ -51,7 +51,7 @@ const LWIP_FD_BIT: i32	= (1 << 30);
 pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 static mut SYS: &'static SyscallInterface = &interfaces::Generic;
 
-pub fn enable_networking() {
+pub fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.

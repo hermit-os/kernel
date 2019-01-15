@@ -21,15 +21,13 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch::x86_64::irq;
-use arch::x86_64::processor;
+use arch::x86_64::kernel::irq;
+use arch::x86_64::kernel::processor;
+use arch::x86_64::kernel::KERNEL_HEADER;
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use x86::shared::io::*;
-
-extern "C" {
-	static mut boot_gtod: u64;
-}
+use core::ptr;
+use x86::io::*;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16    = 0x71;
@@ -241,19 +239,20 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 }
 
 pub fn get_boot_time() -> u64 {
-	unsafe { boot_gtod }
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.boot_gtod) }
 }
 
 pub fn init() {
-	let microseconds_offset = unsafe { &mut boot_gtod };
+	let mut microseconds_offset = get_boot_time();
 
-	if *microseconds_offset == 0 && !environment::is_uhyve() {
+	if microseconds_offset == 0 && !environment::is_uhyve() {
 		// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
-		*microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
+		microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
+		unsafe { ptr::write_volatile(&mut KERNEL_HEADER.boot_gtod, microseconds_offset) }
 	}
 
-	let (year, month, day, hour, minute, second) = date_from_microseconds(*microseconds_offset);
+	let (year, month, day, hour, minute, second) = date_from_microseconds(microseconds_offset);
 	info!("HermitCore-rs booted on {:04}-{:02}-{:02} at {:02}:{:02}:{:02}", year, month, day, hour, minute, second);
 }

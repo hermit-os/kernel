@@ -21,8 +21,6 @@ configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
 # Add the Cargo project to build the Rust library.
 set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
-	DEPENDS
-		objmv
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/target
 		cargo xbuild ${CARGO_BUILDTYPE_PARAMETER} --target ${HERMIT_ARCH}-unknown-hermit-kernel
@@ -59,7 +57,7 @@ target_include_directories(lwip PRIVATE ${HERMIT_KERNEL_INCLUDES})
 if("${HERMIT_ARCH}" STREQUAL "aarch64")
 	add_subdirectory(src/arch/aarch64)
 elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_subdirectory(src/arch/x86_64)
+	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
 set(KERNEL_OBJECTS
@@ -89,7 +87,7 @@ add_custom_command(
 
 	# Rename sections in the combined library to separate this kernel data from later user data.
 	COMMAND
-		${CMAKE_BINARY_DIR}/objmv/release/objmv $<TARGET_FILE:hermit-bootstrap>
+		objmv $<TARGET_FILE:hermit-bootstrap>
 
 	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
 	# Note that some of them only appear in Debug builds of HermitCore!
