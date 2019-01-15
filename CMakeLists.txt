@@ -11,7 +11,6 @@ project (HermitCore)
 add_subdirectory(include/hermit)
 
 # Build the HermitCore Rust Kernel and its dependencies.
-add_subdirectory(objmv)
 add_subdirectory(pci_ids_parser)
 add_subdirectory(librs)
 

@@ -1,9 +1,0 @@
-[package]
-name = "objmv"
-version = "0.1.0"
-authors = [
-        "Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
-]
-
-[dependencies]
-regex = "1.0.1"
