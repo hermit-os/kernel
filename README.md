@@ -39,6 +39,7 @@ the HermitCore-rs kernel and applications you need:
  * HermitCore cross-toolchain, i.e. Binutils, GCC, newlib, pthreads
  * [Rust compiler (nightly release)](https://www.rust-lang.org/en-US/install.html)
  * [objmv](https://github.com/hermitcore/objmv), which can be installed with `cargo install --git https://github.com/hermitcore/objmv.git`
+ * [pci_ids_parser](https://github.com/hermitcore/pci_ids_parser), which can be install with `cargo install --git https://github.com/hermitcore/pci_ids_parser.git`
  * [cargo-xbuild](https://github.com/rust-osdev/cargo-xbuild), which can be installed with `cargo install cargo-xbuild`
  * Rust source code for Xargo, which can be installed with `rustup component add rust-src`.
 
