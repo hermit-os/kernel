@@ -17,12 +17,10 @@ add_custom_command(
 	OUTPUT
 		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
 	DEPENDS
-		pci_ids_parser
-	DEPENDS
-		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+		${CMAKE_SOURCE_DIR}/target/pci.ids
 	COMMAND
-		${CMAKE_BINARY_DIR}/pci_ids_parser/release/pci_ids_parser
-		${CMAKE_SOURCE_DIR}/pci_ids_parser/pci.ids
+		pci_ids_parser
+		${CMAKE_SOURCE_DIR}/target/pci.ids
 		${CMAKE_BINARY_DIR}/hermit_rs/pcidata.rs
 	VERBATIM)
 add_custom_target(pcidata
