@@ -11,10 +11,10 @@ version = "1.2.4"
 default-features = false
 
 [target.'cfg(target_arch = "aarch64")'.dependencies.hermit-dtb]
-path = "../crates/hermit-dtb"
+git = "https://github.com/hermitcore/dtb.git"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
-path = "../crates/hermit-multiboot"
+git = "https://github.com/hermitcore/multiboot.git"
 
 [dependencies.lazy_static]
 version = "1.0.1"
