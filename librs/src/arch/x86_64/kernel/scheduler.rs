@@ -86,33 +86,28 @@ pub struct TaskStacks {
 	/// Whether this is a boot stack
 	is_boot_stack: bool,
 	/// Stack of the task
-	pub stack: usize,
-	/// Stack for interrupt handling
-	pub ist: usize,
+	pub stack: usize
 }
 
 impl TaskStacks {
 	pub fn new() -> Self {
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 		let stack = ::mm::allocate(DEFAULT_STACK_SIZE, false);
-		let ist = ::mm::allocate(KERNEL_STACK_SIZE, true);
-		debug!("Allocating stack {:#X} and IST {:#X}", stack, ist);
+		debug!("Allocating stack {:#X}", stack);
 
 		Self {
 			is_boot_stack: false,
-			stack: stack,
-			ist: ist,
+			stack: stack
 		}
 	}
 
 	pub fn from_boot_stacks() -> Self {
-		let (stack, ist) = gdt::get_boot_stacks();
-		debug!("Using boot stack {:#X} and IST {:#X}", stack, ist);
+		let stack = gdt::get_boot_stacks();
+		debug!("Using boot stack {:#X}", stack);
 
 		Self {
 			is_boot_stack: true,
-			stack: stack,
-			ist: ist,
+			stack: stack
 		}
 	}
 }
@@ -120,10 +115,9 @@ impl TaskStacks {
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
 		if !self.is_boot_stack {
-			debug!("Deallocating stack {:#X} and IST {:#X}", self.stack, self.ist);
+			debug!("Deallocating stack {:#X}", self.stack);
 
 			::mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
-			::mm::deallocate(self.ist, DEFAULT_STACK_SIZE);
 		}
 	}
 }
@@ -209,5 +203,5 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFr
 }
 
 pub fn install_timer_handler() {
-	idt::set_gate(apic::TIMER_INTERRUPT_NUMBER, timer_handler as usize, 1);
+	idt::set_gate(apic::TIMER_INTERRUPT_NUMBER, timer_handler as usize, 0);
 }

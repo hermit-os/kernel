@@ -126,74 +126,74 @@ pub fn install() {
 	//   - Machine Check Exception (IST4)
 	//
 	// Refer to Intel Vol. 3A, 6.14.5 Interrupt Stack Table.
-	idt::set_gate(0, divide_error_exception as usize, 1);
-	idt::set_gate(1, debug_exception as usize, 1);
-	idt::set_gate(2, nmi_exception as usize, 2);
-	idt::set_gate(3, breakpoint_exception as usize, 1);
-	idt::set_gate(4, overflow_exception as usize, 1);
-	idt::set_gate(5, bound_range_exceeded_exception as usize, 1);
-	idt::set_gate(6, invalid_opcode_exception as usize, 1);
-	idt::set_gate(7, device_not_available_exception as usize, 1);
-	idt::set_gate(8, double_fault_exception as usize, 3);
-	idt::set_gate(9, coprocessor_segment_overrun_exception as usize, 1);
-	idt::set_gate(10, invalid_tss_exception as usize, 1);
-	idt::set_gate(11, segment_not_present_exception as usize, 1);
-	idt::set_gate(12, stack_segment_fault_exception as usize, 1);
-	idt::set_gate(13, general_protection_exception as usize, 1);
-	idt::set_gate(14, paging::page_fault_handler as usize, 1);
-	idt::set_gate(15, reserved_exception as usize, 1);
-	idt::set_gate(16, floating_point_exception as usize, 1);
-	idt::set_gate(17, alignment_check_exception as usize, 1);
-	idt::set_gate(18, machine_check_exception as usize, 4);
-	idt::set_gate(19, simd_floating_point_exception as usize, 1);
-	idt::set_gate(20, virtualization_exception as usize, 1);
-	idt::set_gate(21, reserved_exception as usize, 1);
-	idt::set_gate(22, reserved_exception as usize, 1);
-	idt::set_gate(23, reserved_exception as usize, 1);
-	idt::set_gate(24, reserved_exception as usize, 1);
-	idt::set_gate(25, reserved_exception as usize, 1);
-	idt::set_gate(26, reserved_exception as usize, 1);
-	idt::set_gate(27, reserved_exception as usize, 1);
-	idt::set_gate(28, reserved_exception as usize, 1);
-	idt::set_gate(29, reserved_exception as usize, 1);
-	idt::set_gate(30, reserved_exception as usize, 1);
-	idt::set_gate(31, reserved_exception as usize, 1);
+	idt::set_gate(0, divide_error_exception as usize, 0);
+	idt::set_gate(1, debug_exception as usize, 0);
+	idt::set_gate(2, nmi_exception as usize, 1);
+	idt::set_gate(3, breakpoint_exception as usize, 0);
+	idt::set_gate(4, overflow_exception as usize, 0);
+	idt::set_gate(5, bound_range_exceeded_exception as usize, 0);
+	idt::set_gate(6, invalid_opcode_exception as usize, 0);
+	idt::set_gate(7, device_not_available_exception as usize, 0);
+	idt::set_gate(8, double_fault_exception as usize, 2);
+	idt::set_gate(9, coprocessor_segment_overrun_exception as usize, 0);
+	idt::set_gate(10, invalid_tss_exception as usize, 0);
+	idt::set_gate(11, segment_not_present_exception as usize, 0);
+	idt::set_gate(12, stack_segment_fault_exception as usize, 0);
+	idt::set_gate(13, general_protection_exception as usize, 0);
+	idt::set_gate(14, paging::page_fault_handler as usize, 0);
+	idt::set_gate(15, reserved_exception as usize, 0);
+	idt::set_gate(16, floating_point_exception as usize, 0);
+	idt::set_gate(17, alignment_check_exception as usize, 0);
+	idt::set_gate(18, machine_check_exception as usize, 3);
+	idt::set_gate(19, simd_floating_point_exception as usize, 0);
+	idt::set_gate(20, virtualization_exception as usize, 0);
+	idt::set_gate(21, reserved_exception as usize, 0);
+	idt::set_gate(22, reserved_exception as usize, 0);
+	idt::set_gate(23, reserved_exception as usize, 0);
+	idt::set_gate(24, reserved_exception as usize, 0);
+	idt::set_gate(25, reserved_exception as usize, 0);
+	idt::set_gate(26, reserved_exception as usize, 0);
+	idt::set_gate(27, reserved_exception as usize, 0);
+	idt::set_gate(28, reserved_exception as usize, 0);
+	idt::set_gate(29, reserved_exception as usize, 0);
+	idt::set_gate(30, reserved_exception as usize, 0);
+	idt::set_gate(31, reserved_exception as usize, 0);
 
-	idt::set_gate(32, unhandled_interrupt0 as usize, 1);
-	idt::set_gate(33, unhandled_interrupt1 as usize, 1);
-	idt::set_gate(34, unhandled_interrupt2 as usize, 1);
-	idt::set_gate(35, unhandled_interrupt3 as usize, 1);
-	idt::set_gate(36, unhandled_interrupt4 as usize, 1);
-	idt::set_gate(37, unhandled_interrupt5 as usize, 1);
-	idt::set_gate(38, unhandled_interrupt6 as usize, 1);
-	idt::set_gate(39, unhandled_interrupt7 as usize, 1);
-	idt::set_gate(40, unhandled_interrupt8 as usize, 1);
-	idt::set_gate(41, unhandled_interrupt9 as usize, 1);
-	idt::set_gate(42, unhandled_interrupt10 as usize, 1);
-	idt::set_gate(43, unhandled_interrupt11 as usize, 1);
-	idt::set_gate(44, unhandled_interrupt12 as usize, 1);
-	idt::set_gate(45, unhandled_interrupt13 as usize, 1);
-	idt::set_gate(46, unhandled_interrupt14 as usize, 1);
-	idt::set_gate(47, unhandled_interrupt15 as usize, 1);
-	idt::set_gate(48, unhandled_interrupt16 as usize, 1);
-	idt::set_gate(49, unhandled_interrupt17 as usize, 1);
-	idt::set_gate(50, unhandled_interrupt18 as usize, 1);
-	idt::set_gate(51, unhandled_interrupt19 as usize, 1);
-	idt::set_gate(52, unhandled_interrupt20 as usize, 1);
-	idt::set_gate(53, unhandled_interrupt21 as usize, 1);
-	idt::set_gate(54, unhandled_interrupt22 as usize, 1);
-	idt::set_gate(55, unhandled_interrupt23 as usize, 1);
-	idt::set_gate(56, unhandled_interrupt24 as usize, 1);
-	idt::set_gate(57, unhandled_interrupt25 as usize, 1);
-	idt::set_gate(58, unhandled_interrupt26 as usize, 1);
-	idt::set_gate(59, unhandled_interrupt27 as usize, 1);
-	idt::set_gate(60, unhandled_interrupt28 as usize, 1);
-	idt::set_gate(61, unhandled_interrupt29 as usize, 1);
-	idt::set_gate(62, unhandled_interrupt30 as usize, 1);
-	idt::set_gate(63, unhandled_interrupt31 as usize, 1);
+	idt::set_gate(32, unhandled_interrupt0 as usize, 0);
+	idt::set_gate(33, unhandled_interrupt1 as usize, 0);
+	idt::set_gate(34, unhandled_interrupt2 as usize, 0);
+	idt::set_gate(35, unhandled_interrupt3 as usize, 0);
+	idt::set_gate(36, unhandled_interrupt4 as usize, 0);
+	idt::set_gate(37, unhandled_interrupt5 as usize, 0);
+	idt::set_gate(38, unhandled_interrupt6 as usize, 0);
+	idt::set_gate(39, unhandled_interrupt7 as usize, 0);
+	idt::set_gate(40, unhandled_interrupt8 as usize, 0);
+	idt::set_gate(41, unhandled_interrupt9 as usize, 0);
+	idt::set_gate(42, unhandled_interrupt10 as usize, 0);
+	idt::set_gate(43, unhandled_interrupt11 as usize, 0);
+	idt::set_gate(44, unhandled_interrupt12 as usize, 0);
+	idt::set_gate(45, unhandled_interrupt13 as usize, 0);
+	idt::set_gate(46, unhandled_interrupt14 as usize, 0);
+	idt::set_gate(47, unhandled_interrupt15 as usize, 0);
+	idt::set_gate(48, unhandled_interrupt16 as usize, 0);
+	idt::set_gate(49, unhandled_interrupt17 as usize, 0);
+	idt::set_gate(50, unhandled_interrupt18 as usize, 0);
+	idt::set_gate(51, unhandled_interrupt19 as usize, 0);
+	idt::set_gate(52, unhandled_interrupt20 as usize, 0);
+	idt::set_gate(53, unhandled_interrupt21 as usize, 0);
+	idt::set_gate(54, unhandled_interrupt22 as usize, 0);
+	idt::set_gate(55, unhandled_interrupt23 as usize, 0);
+	idt::set_gate(56, unhandled_interrupt24 as usize, 0);
+	idt::set_gate(57, unhandled_interrupt25 as usize, 0);
+	idt::set_gate(58, unhandled_interrupt26 as usize, 0);
+	idt::set_gate(59, unhandled_interrupt27 as usize, 0);
+	idt::set_gate(60, unhandled_interrupt28 as usize, 0);
+	idt::set_gate(61, unhandled_interrupt29 as usize, 0);
+	idt::set_gate(62, unhandled_interrupt30 as usize, 0);
+	idt::set_gate(63, unhandled_interrupt31 as usize, 0);
 
 	for i in 64..idt::IDT_ENTRIES {
-		idt::set_gate(i as u8, unknown_interrupt as usize, 1);
+		idt::set_gate(i as u8, unknown_interrupt as usize, 0);
 	}
 }
 
@@ -201,7 +201,7 @@ pub fn install() {
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 {
 	info!("Install handler for interrupt {}", irq_number);
-	idt::set_gate((32+irq_number) as u8, handler, 1);
+	idt::set_gate((32+irq_number) as u8, handler, 0);
 }
 
 fn unhandled_interrupt(irq_number: u8) {

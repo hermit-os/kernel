@@ -53,8 +53,8 @@ pub fn eoi(int_no: u8) {
 pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
-	idt::set_gate(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_master as usize, 1);
-	idt::set_gate(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_slave as usize, 1);
+	idt::set_gate(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_master as usize, 0);
+	idt::set_gate(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_slave as usize, 0);
 
 	unsafe {
 		// Reinitialize PIC1 and PIC2.
