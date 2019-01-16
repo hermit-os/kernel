@@ -292,7 +292,7 @@ impl CpuFrequency {
 
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
-		idt::set_gate(pit::PIT_INTERRUPT_NUMBER, Self::measure_frequency_timer_handler as usize, 1);
+		idt::set_gate(pit::PIT_INTERRUPT_NUMBER, Self::measure_frequency_timer_handler as usize, 0);
 		pit::init(measurement_frequency);
 
 		// Determine the current timer tick.

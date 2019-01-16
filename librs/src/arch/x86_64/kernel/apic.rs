@@ -266,10 +266,10 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
-	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 1);
-	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 1);
-	idt::set_gate(SPURIOUS_INTERRUPT_NUMBER, spurious_interrupt_handler as usize, 1);
-	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 1);
+	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
+	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
+	idt::set_gate(SPURIOUS_INTERRUPT_NUMBER, spurious_interrupt_handler as usize, 0);
+	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 0);
 
 	// Initialize interrupt handling over APIC.
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.
