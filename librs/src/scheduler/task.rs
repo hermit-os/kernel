@@ -105,9 +105,29 @@ pub const IDLE_PRIO: Priority = Priority::from(0);
 /// Maximum number of priorities
 pub const NO_PRIORITIES: usize = 31;
 
+struct QueueHead {
+	head: Option<Rc<RefCell<Task>>>,
+	tail: Option<Rc<RefCell<Task>>>,
+}
+
+impl QueueHead {
+	pub const fn new() -> Self {
+		QueueHead {
+			head: None,
+			tail: None
+		}
+	}
+}
+
+impl Default for QueueHead {
+	fn default() -> Self {
+		Self { head: None, tail: None }
+	}
+}
+
 /// Realize a priority queue for tasks
 pub struct PriorityTaskQueue {
-	queues: [DoublyLinkedList<Rc<RefCell<Task>>>; NO_PRIORITIES],
+	queues: [QueueHead; NO_PRIORITIES],
 	prio_bitmap: u64
 }
 
@@ -123,23 +143,60 @@ impl PriorityTaskQueue {
 	/// Add a task by its priority to the queue
 	pub fn push(&mut self, task: Rc<RefCell<Task>>) {
 		let i = task.borrow().prio.into() as usize;
-		assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
+		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
 		self.prio_bitmap |= 1 << i;
-		self.queues[i].push(Node::new(task));
+		match self.queues[i].tail {
+			None => {
+				// first element in the queue
+				self.queues[i].head = Some(task.clone());
+
+				let mut borrow = task.borrow_mut();
+					borrow.next = None;
+				borrow.prev = None;
+			},
+			Some(ref mut tail) => {
+				// add task at the end of the node
+				tail.borrow_mut().next = Some(task.clone());
+
+				let mut borrow = task.borrow_mut();
+				borrow.next = None;
+				borrow.prev = Some(tail.clone());
+			}
+		}
+
+		self.queues[i].tail = Some(task.clone());
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let first_task = self.queues[queue_index].head();
-		first_task.map(|task| {
-			self.queues[queue_index].remove(task.clone());
+		let new_head;
+		let task;
 
-			if self.queues[queue_index].head().is_none() {
-				self.prio_bitmap &= !(1 << queue_index as u64);
+		match self.queues[queue_index].head {
+			None => { return None; },
+			Some(ref mut head) => {
+				let mut borrow = head.borrow_mut();
+
+				match borrow.next {
+					Some(ref mut nhead) => { nhead.borrow_mut().prev = None; },
+					None => {}
+				}
+
+				new_head = borrow.next.clone();
+				borrow.next = None;
+				borrow.prev = None;
+
+				task = head.clone();
 			}
+		}
 
-			task.borrow().value.clone()
-		})
+		self.queues[queue_index].head = new_head;
+		if self.queues[queue_index].head.is_none() {
+			self.queues[queue_index].tail = None;
+			self.prio_bitmap &= !(1 << queue_index as u64);
+		}
+
+		Some(task)
 	}
 
 	/// Pop the task with the highest priority from the queue
@@ -165,18 +222,58 @@ impl PriorityTaskQueue {
 	/// Remove a specific task from the priority queue.
 	pub fn remove(&mut self, task: Rc<RefCell<Task>>) {
 		let i = task.borrow().prio.into() as usize;
-		assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
+		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		for node in self.queues[i].iter() {
-			if Rc::ptr_eq(&node.borrow().value, &task) {
-				self.queues[i].remove(node.clone());
+		let mut curr = self.queues[i].head.clone();
+		let mut next_curr;
 
-				if self.queues[i].head().is_none() {
+		loop {
+			match curr {
+				None => { break; },
+				Some(ref curr_task) => {
+					if Rc::ptr_eq(&curr_task, &task) {
+						let (mut prev, mut next) = {
+							let mut borrowed = curr_task.borrow_mut();
+							(borrowed.prev.clone(), borrowed.next.clone())
+						};
+
+						match prev {
+							Some(ref mut t) => { t.borrow_mut().next = next.clone(); },
+							None => {}
+						};
+
+						match next {
+							Some(ref mut t) => { t.borrow_mut().prev = prev.clone(); },
+							None => {}
+						};
+
+						break;
+					}
+
+					next_curr = curr_task.borrow().next.clone();
+				}
+			}
+
+			curr = next_curr.clone();
+		}
+
+		let new_head = match self.queues[i].head {
+			Some(ref curr_task) => {
+				if Rc::ptr_eq(&curr_task, &task) {
+					true
+				} else {
+					false
+				}
+			},
+			None => { false }
+		};
+
+		if new_head == true {
+				self.queues[i].head = task.borrow().next.clone();
+
+				if self.queues[i].head.is_none() {
 					self.prio_bitmap &= !(1 << i as u64);
 				}
-
-				break;
-			}
 		}
 	}
 }
@@ -232,6 +329,10 @@ pub struct Task {
 	pub core_id: usize,
 	/// Stack of the task
 	pub stacks: TaskStacks,
+	// next task in queue
+	pub next: Option<Rc<RefCell<Task>>>,
+	// previous task in queue
+	pub prev: Option<Rc<RefCell<Task>>>,
 	/// Task heap area
 	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
@@ -259,6 +360,8 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
 			stacks: TaskStacks::new(),
+			next: None,
+			prev: None,
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -277,6 +380,8 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
 			stacks: TaskStacks::from_boot_stacks(),
+			next: None,
+			prev: None,
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -295,6 +400,8 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
 			stacks: TaskStacks::new(),
+			next: None,
+			prev: None,
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
