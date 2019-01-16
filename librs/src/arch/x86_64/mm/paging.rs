@@ -30,6 +30,7 @@ use arch::x86_64::mm::virtualmem;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::kernel::get_mbinfo;
+use arch::x86_64::kernel::is_uhyve;
 use core::ptr;
 use core::marker::PhantomData;
 use core::mem;
@@ -45,6 +46,8 @@ extern "C" {
 	static runtime_osinit: *const u8;
 }
 
+/// Uhyve's address of the initial GDT
+const BOOT_GDT: usize = 0x1000;
 
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>;
@@ -671,6 +674,11 @@ pub fn init_page_tables() {
 
 		// flush tlb
 		controlregs::cr3_write(pml4);
+
+		if is_uhyve() {
+			// we need to map GDT from hypervisor
+			identity_map(BOOT_GDT, BOOT_GDT);
+		}
 
 		// Identity-map the supplied Multiboot information and command line.
 		let mb_info = get_mbinfo();
