@@ -1,0 +1,282 @@
+// Copyright (c) 2018 Stefan Lankes, RWTH Aachen University
+//                    Colin Finck, RWTH Aachen University
+//
+// MIT License
+//
+// Permission is hereby granted, free of charge, to any person obtaining
+// a copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to
+// permit persons to whom the Software is furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be
+// included in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
+
+pub mod irq;
+pub mod percore;
+pub mod processor;
+pub mod scheduler;
+pub mod serial;
+pub mod systemtime;
+pub mod stubs;
+
+pub use arch::aarch64::kernel::stubs::*;
+pub use arch::aarch64::kernel::systemtime::get_boot_time;
+use arch::aarch64::kernel::percore::*;
+use arch::aarch64::kernel::serial::SerialPort;
+use core::ptr;
+use environment;
+use kernel_message_buffer;
+use synch::spinlock::Spinlock;
+
+const SERIAL_PORT_BAUDRATE: u32 = 115200;
+
+lazy_static! {
+	static ref COM1: SerialPort =
+		SerialPort::new(unsafe { KERNEL_HEADER.uartport });
+	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
+		Spinlock::new(unsafe { &mut KERNEL_HEADER.cpu_online });
+}
+
+#[repr(C)]
+struct KernelHeader {
+	magic_number: u32,
+	version: u32,
+	base: u64,
+	limit: u64,
+	image_size: u64,
+	current_stack_address: u64,
+	current_percore_address: u64,
+	host_logical_addr: u64,
+	boot_gtod: u64,
+	mb_info: u64,
+	cmdline: u64,
+	cmdsize: u64,
+	cpu_freq: u32,
+	boot_processor: u32,
+	cpu_online: u32,
+	possible_cpus: u32,
+	current_boot_id: u32,
+	uartport: u32,
+	single_kernel: u8,
+	uhyve: u8,
+	hcip: [u8; 4],
+	hcgateway: [u8; 4],
+	hcmask: [u8; 4],
+	boot_stack: [u8; KERNEL_STACK_SIZE]
+}
+
+/// Kernel header to announce machine features
+#[link_section = ".mboot"]
+static mut KERNEL_HEADER: KernelHeader = KernelHeader {
+	magic_number: 0xC0DECAFEu32,
+	version: 0,
+	base: 0,
+	limit: 0,
+	image_size: 0,
+	current_stack_address: 0,
+	current_percore_address: 0,
+	host_logical_addr: 0,
+	boot_gtod: 0,
+	mb_info: 0,
+	cmdline: 0,
+	cmdsize: 0,
+	cpu_freq: 0,
+	boot_processor: !0,
+	cpu_online: 0,
+	possible_cpus: 0,
+	current_boot_id: 0,
+	uartport: 0x9000000,	// Initialize with QEMU's UART address
+	single_kernel: 1,
+	uhyve: 0,
+	hcip: [10,0,5,2],
+	hcgateway: [10,0,5,1],
+	hcmask: [255,255,255,0],
+	boot_stack: [0xCD; KERNEL_STACK_SIZE]
+};
+
+// FUNCTIONS
+
+pub fn get_image_size() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.image_size) as usize }
+}
+
+pub fn get_limit() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.limit) as usize }
+}
+
+pub fn get_mbinfo() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.mb_info) as usize }
+}
+
+pub fn get_processor_count() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cpu_online) as usize }
+}
+
+/// Whether HermitCore is running under the "uhyve" hypervisor.
+pub fn is_uhyve() -> bool {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.uhyve) != 0 }
+}
+
+/// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
+pub fn is_single_kernel() -> bool {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.single_kernel) != 0 }
+}
+
+pub fn get_cmdsize() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdsize) as usize }
+}
+
+pub fn get_cmdline() -> usize {
+	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdline) as usize }
+}
+
+
+/// Earliest initialization function called by the Boot Processor.
+pub fn message_output_init() {
+	percore::init();
+
+	if environment::is_single_kernel() {
+		// We can only initialize the serial port here, because VGA requires processor
+		// configuration first.
+		COM1.init(SERIAL_PORT_BAUDRATE);
+	}
+}
+
+pub fn output_message_byte(byte: u8) {
+	if environment::is_single_kernel() {
+		// Output messages to the serial port and VGA screen in unikernel mode.
+		COM1.write_byte(byte);
+	} else {
+		// Output messages to the kernel message buffer in multi-kernel mode.
+		kernel_message_buffer::write_byte(byte);
+	}
+}
+
+/// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
+pub fn boot_processor_init() {
+	::mm::init();
+	::mm::print_information();
+	environment::init();
+
+	/*processor::detect_features();
+	processor::configure();
+
+	::mm::init();
+	::mm::print_information();
+	environment::init();
+	gdt::init();
+	gdt::add_current_core();
+	idt::install();
+
+	if !environment::is_uhyve() {
+		pic::init();
+	}
+
+	irq::install();
+	irq::enable();
+	processor::detect_frequency();
+	processor::print_information();
+	systemtime::init();
+
+	if environment::is_single_kernel() && !environment::is_uhyve() {
+		pci::init();
+		pci::print_information();
+		acpi::init();
+	}
+
+	apic::init();
+	scheduler::install_timer_handler();*/
+
+	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
+	// However, this test code showed that it's apparently not supported under uhyve yet.
+	// Finish the boot loader for QEMU first and then run this code under QEMU, where it should be supported.
+	// If that's the case, find out what's wrong with uhyve.
+	unsafe {
+		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
+		// when reading PMCCNTR_EL0 works at all.
+		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
+		asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
+		debug!("pmuserenr_el0");
+
+		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
+		// when reading PMCCNTR_EL0 works at all.
+		let pmcntenset_el0: u32 = 1 << 31;
+		asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
+		debug!("pmcntenset_el0");
+
+		// Enable PMCCNTR_EL0 using PMCR_EL0.
+		let mut pmcr_el0: u32 = 0;
+		asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
+		debug!("PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}", pmcr_el0);
+		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
+		asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
+	}
+
+	// Read out PMCCNTR_EL0 in an infinite loop.
+	// TODO: This currently stays at zero on uhyve. Fix uhyve! :)
+	loop {
+		unsafe {
+			let pmccntr: u64;
+			asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
+			println!("Count: {}", pmccntr);
+		}
+	}
+
+	finish_processor_init();
+}
+
+/// Boots all available Application Processors on bare-metal or QEMU.
+/// Called after the Boot Processor has been fully initialized along with its scheduler.
+pub fn boot_application_processors() {
+	// Nothing to do here yet.
+}
+
+/// Application Processor initialization
+pub fn application_processor_init() {
+	percore::init();
+	/*processor::configure();
+	gdt::add_current_core();
+	idt::install();
+	apic::init_x2apic();
+	apic::init_local_apic();
+	irq::enable();*/
+	finish_processor_init();
+}
+
+fn finish_processor_init() {
+	debug!("Initialized Processor");
+
+	/*if environment::is_uhyve() {
+		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
+		// their APIC IDs in advance.
+		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
+		// Fortunately, the Core IDs are guaranteed to be sequential and match the Local APIC IDs.
+		apic::add_local_apic_id(core_id() as u8);
+
+		// uhyve also boots each processor into entry.asm itself and does not use apic::boot_application_processors.
+		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
+		apic::init_next_processor_variables(core_id() + 1);
+	}*/
+
+	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
+	// to initialize the next processor.
+	**CPU_ONLINE.lock() += 1;
+}
+
+pub fn network_adapter_init() -> i32 {
+	// AArch64 supports no network adapters on bare-metal/QEMU, so return a failure code.
+	-1
+}

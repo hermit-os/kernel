@@ -56,6 +56,9 @@ pub fn init() {
 		.unwrap();
 }
 
+pub fn init_page_tables() {
+}
+
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);

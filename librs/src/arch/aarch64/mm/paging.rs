@@ -23,8 +23,8 @@
 
 use arch::aarch64::mm::physicalmem;
 use arch::aarch64::mm::virtualmem;
-use arch::aarch64::percore::*;
-use arch::aarch64::processor;
+use arch::aarch64::kernel::percore::*;
+use arch::aarch64::kernel::processor;
 use core::{fmt, ptr, usize};
 use core::marker::PhantomData;
 use mm;
