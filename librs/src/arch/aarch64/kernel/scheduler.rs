@@ -27,8 +27,8 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 use alloc::rc::Rc;
-use arch::aarch64::percore::*;
-use arch::aarch64::processor;
+use arch::aarch64::kernel::percore::*;
+use arch::aarch64::kernel::processor;
 use core::cell::RefCell;
 use core::{mem, ptr};
 use scheduler::task::{Task, TaskFrame, TaskTLS};

@@ -28,6 +28,9 @@
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::{is_uhyve,is_single_kernel,get_cmdsize,get_cmdline,get_image_size};
 
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::{is_uhyve,is_single_kernel,get_cmdsize,get_cmdline,get_image_size};
+
 use core::{slice, str};
 
 static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;

@@ -76,5 +76,5 @@ pub extern "C" fn setcontext() {
 }
 
 #[no_mangle]
-pub extern "C" fn switch() {
+pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
 }

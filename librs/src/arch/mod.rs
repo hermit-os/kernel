@@ -22,19 +22,45 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Export our platform-specific modules.
-#[cfg(target_arch="aarch64")]
-pub use arch::aarch64::*;
-
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::*;
-
 // Platform-specific implementations
 #[cfg(target_arch="aarch64")]
 pub mod aarch64;
 
 #[cfg(target_arch="x86_64")]
 pub mod x86_64;
+
+// Export our platform-specific modules.
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::*;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::stubs::{switch,set_oneshot_timer,wakeup_core};
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::{application_processor_init,boot_application_processors,
+    network_adapter_init,output_message_byte,message_output_init,boot_processor_init,
+    get_processor_count};
+
+#[cfg(target_arch="aarch64")]
+use arch::aarch64::kernel::percore::core_scheduler;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::percore;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::scheduler;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::processor;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::irq;
+
+#[cfg(target_arch="aarch64")]
+pub use arch::aarch64::kernel::systemtime::get_boot_time;
+
+#[cfg(target_arch="x86_64")]
+pub use arch::x86_64::*;
 
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::{get_processor_count,application_processor_init,
