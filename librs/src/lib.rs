@@ -33,7 +33,6 @@
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(const_fn)]
-#![feature(integer_atomics)]
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(panic_info_message)]
