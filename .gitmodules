@@ -1,8 +1,0 @@
-[submodule "lwip"]
-	path = lwip
-	url = https://github.com/hermitcore/LwIP.git
-	branch = path2rs
-[submodule "caves"]
-	path = caves
-	url = https://github.com/hermitcore/hermit-caves.git
-	branch = path2rs

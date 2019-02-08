@@ -1,8 +1,0 @@
-#[allow(dead_code)]
-const COMMIT_HASH: &'static str = "@COMMIT_HASH@";
-
-#[allow(dead_code)]
-const KERNEL_STACK_SIZE: usize = @KERNEL_STACK_SIZE@;
-
-#[allow(dead_code)]
-const DEFAULT_STACK_SIZE: usize = @DEFAULT_STACK_SIZE@;
