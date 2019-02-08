@@ -9,7 +9,10 @@
 *.xray
 *.o
 *.ko
+*.bin
 **/build/*
 qemu-vlan0.pcap
 target
 Cargo.lock
+pci_ids.rs
+smp_boot_code.rs
