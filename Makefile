@@ -32,4 +32,4 @@ docs:
 
 cargo:
 	@echo CARGO
-	@cargo xbuild $(opt) --target $(target).json --release
+	@cargo xbuild $(opt) --target $(target).json
