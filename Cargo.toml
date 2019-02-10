@@ -1,6 +1,6 @@
 [package]
 name = "hermit-rs"
-version = "0.3.7"
+version = "0.0.2"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
@@ -17,6 +17,11 @@ vga = []
 [dependencies]
 bitflags = "1.0.3"
 spin = "0.4.9"
+
+[dependencies.smoltcp]
+git = "https://github.com/hermitcore/smoltcp.git"
+default-features = false
+features = ["log", "socket-tcp", "socket-raw", "socket-udp", "proto-ipv6", "proto-ipv4"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
 git = "https://github.com/hermitcore/multiboot.git"

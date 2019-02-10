@@ -259,8 +259,8 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
-			// If this is the Boot Processor and only the lwIP TCP/IP task is left, it's time to shut down the OS.
-			if core_id() == 0 && new_id.into() == get_lwip_tcpip_task_id() && NO_TASKS.load(Ordering::SeqCst) == 1 {
+			// If this is the Boot Processor and no task is availble, it's time to shut down the OS.
+			if core_id() == 0 && NO_TASKS.load(Ordering::SeqCst) == 0 {
 				debug!("Only lwIP TCP/IP task is left");
 				sys_shutdown();
 			}

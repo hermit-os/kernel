@@ -54,6 +54,7 @@ extern crate hermit_multiboot;
 extern crate lazy_static;
 
 extern crate spin;
+extern crate smoltcp;
 
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
@@ -97,8 +98,6 @@ extern "C" {
 	static kernel_start: u8;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
-	fn init_lwip();
-	fn init_uhyve_netif() -> i32;
 }
 
 // FUNCTIONS
@@ -112,16 +111,13 @@ unsafe fn sections_init() {
 }
 
 extern "C" fn initd(_arg: usize) {
-	// initialize LwIP library
-	unsafe { init_lwip(); }
-
 	// Initialize the specific network interface.
 	let mut err = 0;
 
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		unsafe { init_uhyve_netif(); }
+		//unsafe { init_uhyve_netif(); }
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");

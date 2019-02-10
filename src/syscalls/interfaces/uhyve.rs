@@ -24,9 +24,7 @@
 use arch;
 use arch::mm::paging;
 use scheduler;
-use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::interfaces::SyscallInterface;
-use syscalls::lwip::sys_lwip_get_errno;
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -37,11 +35,6 @@ const UHYVE_PORT_CLOSE:	u16 = 0x480;
 const UHYVE_PORT_READ:	u16 = 0x500;
 const UHYVE_PORT_EXIT:	u16 = 0x540;
 const UHYVE_PORT_LSEEK:	u16 = 0x580;
-
-extern "C" {
-	fn lwip_write(fd: i32, buf: *const u8, len: usize) -> i32;
-	fn lwip_read(fd: i32, buf: *mut u8, len: usize) -> i32;
-}
 
 
 /// forward a request to the hypervisor uhyve
@@ -184,7 +177,7 @@ impl SyscallInterface for Uhyve {
 
 	fn read(&self, fd: i32, buf: *mut u8, len: usize) -> isize {
 		// do we have an LwIP file descriptor?
-		if (fd & LWIP_FD_BIT) != 0 {
+		/*if (fd & LWIP_FD_BIT) != 0 {
 			// take lock to protect LwIP
 			let _guard = LWIP_LOCK.lock();
 			let ret;
@@ -195,7 +188,7 @@ impl SyscallInterface for Uhyve {
 			}
 
 			return ret as isize;
-		}
+		}*/
 
 		let mut sysread = SysRead::new(fd, buf, len);
 		uhyve_send(UHYVE_PORT_READ, &mut sysread);
@@ -205,7 +198,7 @@ impl SyscallInterface for Uhyve {
 
 	fn write(&self, fd: i32, buf: *const u8, len: usize) -> isize {
 		// do we have an LwIP file descriptor?
-		if (fd & LWIP_FD_BIT) != 0 {
+		/*if (fd & LWIP_FD_BIT) != 0 {
 			// take lock to protect LwIP
 			let _guard = LWIP_LOCK.lock();
 			let ret;
@@ -216,7 +209,7 @@ impl SyscallInterface for Uhyve {
 			}
 
 			return ret as isize;
-		}
+		}*/
 
 		let mut syswrite = SysWrite::new(fd, buf, len);
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);

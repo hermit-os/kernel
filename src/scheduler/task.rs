@@ -335,9 +335,7 @@ pub struct Task {
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
-	pub last_wakeup_reason: WakeupReason,
-	/// lwIP error code for this task
-	pub lwip_errno: i32,
+	pub last_wakeup_reason: WakeupReason
 }
 
 pub trait TaskFrame {
@@ -361,8 +359,7 @@ impl Task {
 			prev: None,
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
-			last_wakeup_reason: WakeupReason::Custom,
-			lwip_errno: 0,
+			last_wakeup_reason: WakeupReason::Custom
 		}
 	}
 
@@ -381,8 +378,7 @@ impl Task {
 			prev: None,
 			heap: None,
 			tls: None,
-			last_wakeup_reason: WakeupReason::Custom,
-			lwip_errno: 0,
+			last_wakeup_reason: WakeupReason::Custom
 		}
 	}
 
@@ -401,8 +397,7 @@ impl Task {
 			prev: None,
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
-			last_wakeup_reason: task.last_wakeup_reason,
-			lwip_errno: 0,
+			last_wakeup_reason: task.last_wakeup_reason
 		}
 	}
 }

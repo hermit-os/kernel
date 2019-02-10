@@ -23,7 +23,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 mod interfaces;
-mod lwip;
 mod processor;
 mod random;
 mod recmutex;
@@ -33,7 +32,6 @@ mod system;
 mod tasks;
 mod timer;
 
-pub use self::lwip::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
@@ -46,18 +44,15 @@ use environment;
 use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
 
-const LWIP_FD_BIT: i32	= (1 << 30);
-
-pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 static mut SYS: &'static SyscallInterface = &interfaces::Generic;
 
 pub fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		if environment::is_proxy() {
+		/*if environment::is_proxy() {
 			SYS = &interfaces::Proxy;
-		} else if environment::is_uhyve() {
+		} else*/ if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
 
