@@ -54,7 +54,7 @@ extern crate hermit_multiboot;
 extern crate lazy_static;
 
 extern crate spin;
-extern crate smoltcp;
+//extern crate smoltcp;
 
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
