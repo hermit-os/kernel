@@ -6,6 +6,12 @@ authors = [
 	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
 build = "build.rs"
+license = "MIT"
+readme = "README.md"
+categories = ["no-std"]
+description = """
+A Rust-based, lightweight unikernel
+"""
 
 [lib]
 crate-type = ["staticlib"]
