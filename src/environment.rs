@@ -64,6 +64,7 @@ pub fn get_command_line_cpu_frequency() -> u16 {
 
 /// Whether HermitCore shall communicate with the "proxy" application over a network interface.
 /// Only valid after calling init()!
+#[allow(dead_code)]
 pub fn is_proxy() -> bool {
 	unsafe { IS_PROXY }
 }

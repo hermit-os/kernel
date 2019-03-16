@@ -53,18 +53,21 @@ mod logging;
 mod config;
 mod arch;
 mod collections;
-mod console;
+pub mod console;
 mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 mod syscalls;
 
 // IMPORTS
 pub use arch::*;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 pub use syscalls::*;
 
 use arch::percore::*;
@@ -79,9 +82,9 @@ static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAlloca
 extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
-	static kernel_start: u8;
+	//static kernel_start: u8;
 
-	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
+	//fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 }
 
 // FUNCTIONS
@@ -118,21 +121,23 @@ extern "C" fn initd(_arg: usize) {
 		warn!("Starting HermitCore without network support");
 	}
 
-	syscalls::init();
+	if cfg!(not(feature = "rustc-dep-of-std")) {
+		/*syscalls::init();
 
-	// Get the application arguments and environment variables.
-	let (argc, argv, environ) = syscalls::get_application_parameters();
+		// Get the application arguments and environment variables.
+		let (argc, argv, environ) = syscalls::get_application_parameters();
 
-	unsafe {
-		// Initialize .bss sections for the application.
-		ptr::write_bytes(
-			&mut __bss_start as *mut u8,
-			0,
-			&kernel_start as *const u8 as usize + environment::get_image_size() - &__bss_start as *const u8 as usize
-		);
+		unsafe {
+			// Initialize .bss sections for the application.
+			ptr::write_bytes(
+				&mut __bss_start as *mut u8,
+				0,
+				&kernel_start as *const u8 as usize + environment::get_image_size() - &__bss_start as *const u8 as usize
+			);
 
-		// And finally start the application.
-		libc_start(argc, argv, environ);
+			// And finally start the application.
+			libc_start(argc, argv, environ);
+		}*/
 	}
 }
 

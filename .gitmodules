@@ -1,0 +1,18 @@
+[submodule "crates/bitflags"]
+	path = crates/bitflags
+	url = https://github.com/hermitcore/bitflags.git
+[submodule "crates/lazy-static"]
+	path = crates/lazy-static
+	url = https://github.com/hermitcore/lazy-static.rs.git
+[submodule "crates/multiboot"]
+	path = crates/multiboot
+	url = https://github.com/hermitcore/multiboot.git
+[submodule "crates/spin-rs"]
+	path = crates/spin-rs
+	url = https://github.com/hermitcore/spin-rs.git
+[submodule "crates/rust-cpuid"]
+	path = crates/rust-cpuid
+	url = https://github.com/hermitcore/rust-cpuid.git
+[submodule "crates/rust-x86"]
+	path = crates/rust-x86
+	url = https://github.com/hermitcore/rust-x86.git

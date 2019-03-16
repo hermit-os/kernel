@@ -6,7 +6,7 @@ authors = [
 	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
 build = "build.rs"
-license = "MIT"
+license = "MIT/Apache-2.0"
 readme = "README.md"
 categories = ["no-std"]
 description = """
@@ -14,52 +14,29 @@ A Rust-based, lightweight unikernel
 """
 
 [lib]
-crate-type = ["staticlib"]
+name = "hermit"
+#crate-type = ["staticlib"]
 
 [features]
 #default = ["vga"]
+default = []
 vga = []
+#rustc-dep-of-std = []
+rustc-dep-of-std = ['core', 'alloc', 'compiler_builtins/rustc-dep-of-std']
 
 [dependencies]
-bitflags = "1.0.3"
-spin = "0.4.9"
+bitflags = { path = "./crates/bitflags", features = ['rustc-dep-of-std'] }
+core = { path = "../libcore", optional = true }
+alloc = { path = "../liballoc", optional = true }
+compiler_builtins = { version = "0.1.0", optional = true, features = ['rustc-dep-of-std'] }
+spin = { path = './crates/spin-rs', features = ['rustc-dep-of-std'] }
+lazy_static = { path = './crates/lazy-static', features = ['spin_no_std', 'rustc-dep-of-std'] }
 
 #[dependencies.smoltcp]
 #git = "https://github.com/hermitcore/smoltcp.git"
 #default-features = false
 #features = ["log", "socket-tcp", "socket-raw", "socket-udp", "proto-dhcpv4", "proto-ipv6", "proto-ipv4"]
 
-[target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
-git = "https://github.com/hermitcore/multiboot.git"
-
-[dependencies.lazy_static]
-version = "1.0.1"
-features = ["spin_no_std"]
-
-[target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-git = "https://github.com/hermitcore/rust-x86.git"
-branch = "hermit"
-default-features = false
-
-[package.metadata.cargo-xbuild]
-memcpy = true
-
-# The development profile, used for `cargo build`.
-[profile.dev]
-opt-level = 1      # controls the `--opt-level` the compiler builds with
-debug = true       # controls whether the compiler passes `-C debuginfo`
-                   # a value of `true` is equivalent to `2`
-rpath = false      # controls whether the compiler passes `-C rpath`
-lto = false        # controls `-C lto` for binaries and staticlibs
-debug-assertions = true # controls whether debug assertions are enabled
-codegen-units = 1  # controls whether the compiler passes `-C codegen-units`
-                   # `codegen-units` is ignored when `lto = true`
-
-# The release profile, used for `cargo build --release`.
-[profile.release]
-opt-level = 3
-debug = false
-rpath = false
-lto = true
-debug-assertions = false
-codegen-units = 1
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+hermit-multiboot = { path = './crates/multiboot', features = ['rustc-dep-of-std'] }
+x86 = { path = './crates/rust-x86', default-features = false, features = ['rustc-dep-of-std'] }

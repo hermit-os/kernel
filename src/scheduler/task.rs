@@ -92,6 +92,7 @@ struct QueueHead {
 }
 
 impl QueueHead {
+	#[allow(dead_code)]
 	pub const fn new() -> Self {
 		QueueHead {
 			head: None,
@@ -201,6 +202,7 @@ impl PriorityTaskQueue {
 	}
 
 	/// Remove a specific task from the priority queue.
+	#[allow(dead_code)]
 	pub fn remove(&mut self, task: Rc<RefCell<Task>>) {
 		let i = task.borrow().prio.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
