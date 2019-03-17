@@ -48,7 +48,7 @@ pub use arch::x86_64::*;
 
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::{get_processor_count,application_processor_init,
-	boot_application_processors,message_output_init,network_adapter_init,
+	boot_application_processors,message_output_init,
 	output_message_byte,boot_processor_init};
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::apic::{set_oneshot_timer,wakeup_core};

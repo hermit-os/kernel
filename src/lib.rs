@@ -25,23 +25,17 @@
 #![allow(unused_macros)]
 #![no_std]
 
-// EXTERNAL CRATES
 extern crate alloc;
-
 #[macro_use]
 extern crate bitflags;
-
-#[cfg(target_arch = "x86_64")]
-extern crate hermit_multiboot;
-
 #[macro_use]
 extern crate lazy_static;
-
 extern crate spin;
 //extern crate smoltcp;
-
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
+#[cfg(target_arch = "x86_64")]
+extern crate hermit_multiboot;
 
 // MODULES
 #[macro_use]
@@ -65,7 +59,6 @@ mod synch;
 #[cfg(not(feature = "rustc-dep-of-std"))]
 mod syscalls;
 
-// IMPORTS
 pub use arch::*;
 #[cfg(not(feature = "rustc-dep-of-std"))]
 pub use syscalls::*;
@@ -78,16 +71,17 @@ use config::*;
 #[global_allocator]
 static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAllocator;
 
-
 extern "C" {
-	static mut __bss_start: u8;
 	static mut hbss_start: u8;
-	//static kernel_start: u8;
+	static kernel_start: u8;
 
-	//fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
+	#[cfg(not(feature = "rustc-dep-of-std"))]
+	static mut __bss_start: u8;
+	#[cfg(not(feature = "rustc-dep-of-std"))]
+	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
 }
 
-// FUNCTIONS
+#[cfg(not(feature = "rustc-dep-of-std"))]
 unsafe fn sections_init() {
 	// Initialize .kbss sections for the kernel.
 	ptr::write_bytes(
@@ -97,9 +91,19 @@ unsafe fn sections_init() {
 	);
 }
 
+#[cfg(feature = "rustc-dep-of-std")]
+unsafe fn sections_init() {
+	// Initialize .bss sections for the application.
+	ptr::write_bytes(
+		&mut hbss_start as *mut u8,
+		0,
+		&kernel_start as *const u8 as usize + environment::get_image_size() - &hbss_start as *const u8 as usize
+	);
+}
+
 extern "C" fn initd(_arg: usize) {
 	// Initialize the specific network interface.
-	let mut err = 0;
+	let err = 0;
 
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
@@ -110,7 +114,8 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running side-by-side to Linux!");
 		//unsafe { init_mmnif_netif(); }
 	} else {
-		err = arch::network_adapter_init();
+		info!("HermitCore is running on a common hypervisor!");
+		//err = arch::network_adapter_init();
 	}
 
 	// Check if a network interface has been initialized.
@@ -121,8 +126,9 @@ extern "C" fn initd(_arg: usize) {
 		warn!("Starting HermitCore without network support");
 	}
 
-	if cfg!(not(feature = "rustc-dep-of-std")) {
-		/*syscalls::init();
+	#[cfg(not(feature = "rustc-dep-of-std"))]
+	{
+		syscalls::init();
 
 		// Get the application arguments and environment variables.
 		let (argc, argv, environ) = syscalls::get_application_parameters();
@@ -137,7 +143,7 @@ extern "C" fn initd(_arg: usize) {
 
 			// And finally start the application.
 			libc_start(argc, argv, environ);
-		}*/
+		}
 	}
 }
 
