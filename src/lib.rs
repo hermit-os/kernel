@@ -148,7 +148,7 @@ extern "C" fn initd(_arg: usize) {
 }
 
 /// Entry Point of HermitCore for the Boot Processor
-/// (called from entry.asm)
+/// (called from start.rs)
 pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	unsafe { sections_init(); }
@@ -179,7 +179,7 @@ pub fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of HermitCore for an Application Processor
-/// (called from entry.asm)
+/// (called from start.rs)
 pub fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
