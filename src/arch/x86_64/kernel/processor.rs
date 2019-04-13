@@ -37,18 +37,31 @@ const EFER_LMSLE: u64 = (1 << 13);
 const EFER_FFXSR: u64 = (1 << 14);
 const EFER_TCE: u64 = (1 << 15);
 
+#[link_section = ".data"]
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
+#[link_section = ".data"]
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
+#[link_section = ".data"]
 static mut PHYSICAL_ADDRESS_BITS: u8 = 0;
+#[link_section = ".data"]
 static mut LINEAR_ADDRESS_BITS: u8 = 0;
+#[link_section = ".data"]
 static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
+#[link_section = ".data"]
 static mut SUPPORTS_1GIB_PAGES: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_AVX: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_RDRAND: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_TSC_DEADLINE: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_X2APIC: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_XSAVE: bool = false;
+#[link_section = ".data"]
 static mut SUPPORTS_FSGS: bool = false;
+#[link_section = ".data"]
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
 
 #[repr(C, align(16))]
@@ -180,6 +193,10 @@ impl FPUState {
 		} else {
 			unsafe { asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile"); }
 		}
+	}
+
+	pub fn restore_common(&self) {
+		unsafe { asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile"); }
 	}
 }
 
@@ -490,7 +507,6 @@ impl fmt::Display for CpuSpeedStep {
 	}
 }
 
-
 pub fn detect_features() {
 	// Detect CPU features
 	let cpuid = CpuId::new();
@@ -584,9 +600,6 @@ pub fn configure() {
 
 		unsafe { xcr0_write(xcr0); }
 	}
-
-	// Initialize the FS register, which is later used for Thread-Local Storage.
-	writefs(0);
 
 	//
 	// ENHANCED INTEL SPEEDSTEP CONFIGURATION

@@ -11,9 +11,7 @@ use arch::x86_64::kernel::KERNEL_HEADER;
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
 
-
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
-
 
 pub struct PerCoreVariables {
 	/// Sequential ID of this CPU Core.
@@ -65,13 +63,13 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movq %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	default unsafe fn set(&self, value: T) {
-		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movq $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -85,13 +83,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movl %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	unsafe fn set(&self, value: T) {
-		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movl $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -115,6 +113,10 @@ pub fn init() {
 	unsafe {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
 		let address = ptr::read_volatile(&KERNEL_HEADER.current_percore_address);
-		wrmsr(IA32_GS_BASE, address as u64);
+		if address == 0 {
+			wrmsr(IA32_KERNEL_GS_BASE, &PERCORE as *const _ as u64);
+		} else {
+			wrmsr(IA32_KERNEL_GS_BASE, address as u64);
+		}
 	}
 }

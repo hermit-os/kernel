@@ -29,11 +29,10 @@ mod vga;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 
-use core::ptr;
+use core::{intrinsics,mem,ptr};
 use config::*;
 use environment;
 use kernel_message_buffer;
-use synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
@@ -91,16 +90,10 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	hcip: [10,0,5,2],
 	hcgateway: [10,0,5,1],
 	hcmask: [255,255,255,0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE]
+	boot_stack: [0x00; KERNEL_STACK_SIZE]
 };
 
-lazy_static! {
-	static ref COM1: SerialPort =
-		SerialPort::new(unsafe { ptr::read_volatile(&KERNEL_HEADER.uartport) } );
-	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
-		Spinlock::new(unsafe { &mut KERNEL_HEADER.cpu_online });
-}
-
+static COM1: SerialPort = SerialPort::new(0x3f8);
 
 // FUNCTIONS
 
@@ -142,96 +135,16 @@ pub fn get_cmdline() -> usize {
 pub fn message_output_init() {
 	percore::init();
 
-	if environment::is_single_kernel() {
+	unsafe {
+		let port: *mut u16 = mem::transmute(&COM1.port_address);
+		*port = ptr::read_volatile(&KERNEL_HEADER.uartport);
+	}
+
+	if environment::is_single_kernel() == true {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
 		COM1.init(SERIAL_PORT_BAUDRATE);
 	}
-}
-
-#[cfg(feature = "rustc-dep-of-std")]
-#[no_mangle]
-pub unsafe extern fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut u8 {
-	let mut _i: usize;
-	let mut _j: usize;
-	let mut _k: usize;
-
-	asm!(
-		"cld; rep movsq; movq $4, %rcx; andq $$7, %rcx; rep movsb"
-		: "={rcx}"(_i), "={rdx}"(_j), "={rsi}"(_k)
-		: "0"(n/8), "r"(n), "1"(dest), "2"(src) : "memory","cc");
-
-	return dest;
-}
-
-#[cfg(feature = "rustc-dep-of-std")]
-#[no_mangle]
-pub unsafe extern fn memset(s: *mut u8, c: i32, n: usize) -> *mut u8 {
-	let mut _i: usize;
-	let mut _j: usize;
-
-	if c != 0 {
-		asm!("cld; rep stosb"
-			: "={rcx}"(_i), "={rdi}"(_j)
-			: "rax"(c), "1"(s), "0"(n) : "memory","cc" : "volatile");
-	} else {
-		asm!(
-			"cld; rep stosq; movq $5, %rcx; andq $$7, %rcx; rep stosb"
-			: "={rcx}"(_i), "={rdi}"(_j)
-			: "rax"(0x00), "1"(s), "0"(n/8), "r"(n): "memory","cc" : "volatile");
-	}
-
-	return s;
-}
-
-#[cfg(feature = "rustc-dep-of-std")]
-#[no_mangle]
-pub unsafe extern fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
-	let mut i = 0;
-
-	while i < n {
-		let a = *s1.offset(i as isize);
-		let b = *s2.offset(i as isize);
-		if a != b {
-			return a as i32 - b as i32
-		}
-
-		i += 1;
-	}
-
-	return 0;
-}
-
-#[cfg(feature = "rustc-dep-of-std")]
-#[no_mangle]
-pub unsafe extern fn memmove(dest: *mut u8, src: *const u8,
-                             n: usize) -> *mut u8 {
-	let mut _i: usize;
-	let mut _j: usize;
-	let mut _k: usize;
-
-	if src < dest as *const u8 { // copy from end
-		if n >= 8 {
-			asm!(
-				"std; rep movsq; movq $4, %rcx; andq $$7, %rcx; rep movsb; cld"
-				: "={rcx}"(_i), "={rdx}"(_j), "={rsi}"(_k)
-				: "0"(n/8), "r"(n), "1"(dest.offset((n-8) as isize)), "2"(src.offset((n-8) as isize))
-				: "memory","cc");
-		} else if n > 0 {
-			asm!(
-				"std; rep movsb; cld"
-				: "={rcx}"(_i), "={rdx}"(_j), "={rsi}"(_k)
-				: "0"(n), "1"(dest.offset((n-1) as isize)), "2"(src.offset((n-1) as isize))
-				: "memory","cc");
-		}
-	} else if n > 0 { // copy from beginning
-		asm!(
-			"cld; rep movsq; movq $4, %rcx; andq $$7, %rcx; rep movsb"
-			: "={rcx}"(_i), "={rdx}"(_j), "={rsi}"(_k)
-			: "0"(n/8), "r"(n), "1"(dest), "2"(src) : "memory","cc");
-	}
-
-	return dest;
 }
 
 pub fn output_message_byte(byte: u8) {
@@ -323,5 +236,7 @@ fn finish_processor_init() {
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	**CPU_ONLINE.lock() += 1;
+	unsafe {
+		let _ = intrinsics::atomic_xadd(&mut KERNEL_HEADER.cpu_online as *mut u32, 1);
+	}
 }

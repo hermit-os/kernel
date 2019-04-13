@@ -29,7 +29,7 @@ const UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER: u8 = 0x20;
 
 
 pub struct SerialPort {
-	port_address: u16
+	pub port_address: u16
 }
 
 impl SerialPort {
@@ -73,25 +73,24 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if environment::is_uhyve() || self.port_address == 0 {
-			return;
+		if environment::is_uhyve() == false && self.port_address != 0 {
+			// Disable port interrupt.
+			self.write_to_register(UART_IER, 0);
+
+			// Set 8N1 mode (8 bits, 1 stop bit, no parity).
+			self.write_to_register(UART_LCR, UART_LCR_WORD_LENGTH_8BITS);
+
+			// Set the baudrate.
+			let divisor = (115200 / baudrate) as u16;
+			let lcr = self.read_from_register(UART_LCR);
+			self.write_to_register(UART_LCR, lcr | UART_LCR_DIVISOR_LATCH_ACCESS);
+			self.write_to_register(UART_DLL, divisor as u8);
+			self.write_to_register(UART_DLM, (divisor >> 8) as u8);
+			self.write_to_register(UART_LCR, lcr);
+
+			// Enable and clear FIFOs.
+			self.write_to_register(UART_FCR,
+				UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RECEIVER_FIFO | UART_FCR_CLEAR_TRANSMITTER_FIFO);
 		}
-
-		// Disable port interrupt.
-		self.write_to_register(UART_IER, 0);
-
-		// Set 8N1 mode (8 bits, 1 stop bit, no parity).
-		self.write_to_register(UART_LCR, UART_LCR_WORD_LENGTH_8BITS);
-
-		// Set the baudrate.
-		let divisor = (115200 / baudrate) as u16;
-		let lcr = self.read_from_register(UART_LCR);
-		self.write_to_register(UART_LCR, lcr | UART_LCR_DIVISOR_LATCH_ACCESS);
-		self.write_to_register(UART_DLL, divisor as u8);
-		self.write_to_register(UART_DLM, (divisor >> 8) as u8);
-		self.write_to_register(UART_LCR, lcr);
-
-		// Enable and clear FIFOs.
-		self.write_to_register(UART_FCR, UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RECEIVER_FIFO | UART_FCR_CLEAR_TRANSMITTER_FIFO);
 	}
 }

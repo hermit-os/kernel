@@ -30,11 +30,7 @@ pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
 pub const PCI_BASE_ADDRESS_64BIT:    u32 = 1 << 2;
 pub const PCI_BASE_ADDRESS_MASK:     u32 = 0xFFFF_FFF0;
 
-
-lazy_static! {
-	static ref PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
-}
-
+static PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
 
 #[derive(Clone, Copy)]
 pub struct PciAdapter {

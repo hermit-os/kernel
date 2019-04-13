@@ -17,19 +17,20 @@
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(const_fn)]
+#![feature(const_vec_new)]
+#![feature(core_intrinsics)]
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]
+#![feature(compiler_builtins_lib)]
 #![allow(unused_macros)]
 #![no_std]
 
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
-#[macro_use]
-extern crate lazy_static;
 extern crate spin;
 //extern crate smoltcp;
 #[cfg(target_arch = "x86_64")]
@@ -143,6 +144,17 @@ extern "C" fn initd(_arg: usize) {
 
 			// And finally start the application.
 			libc_start(argc, argv, environ);
+		}
+	}
+
+	#[cfg(feature = "rustc-dep-of-std")]
+	{
+		extern "C" {
+			fn main();
+		}
+
+		unsafe {
+			main();
 		}
 	}
 }
