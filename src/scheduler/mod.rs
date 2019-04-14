@@ -19,7 +19,6 @@ use core::cell::RefCell;
 use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use scheduler::task::*;
 use synch::spinlock::*;
-#[cfg(not(feature = "rustc-dep-of-std"))]
 use syscalls::*;
 
 
@@ -244,11 +243,10 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
-			// If this is the Boot Processor and no task is availble, it's time to shut down the OS.
+			// If this is the Boot Processor and no task is available, it's time to shut down the OS.
 			if core_id() == 0 && NO_TASKS.load(Ordering::SeqCst) == 0 {
-				debug!("Only lwIP TCP/IP task is left");
-				//sys_shutdown();
-				loop {}
+				debug!("No task is available => Shutdown system");
+				sys_shutdown();
 			}
 
 			// Tell the scheduler about the new task.

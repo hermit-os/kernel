@@ -8,6 +8,7 @@
 
 mod interfaces;
 mod processor;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 mod random;
 mod recmutex;
 mod semaphore;
@@ -17,6 +18,7 @@ mod tasks;
 mod timer;
 
 pub use self::processor::*;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 pub use self::random::*;
 pub use self::recmutex::*;
 pub use self::semaphore::*;
@@ -25,10 +27,9 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use environment;
-use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
 
-static mut SYS: &'static SyscallInterface = &interfaces::Generic;
+static mut SYS: &dyn SyscallInterface = &interfaces::Generic;
 
 pub fn init() {
 	unsafe {

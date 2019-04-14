@@ -57,11 +57,9 @@ mod mm;
 mod runtime_glue;
 mod scheduler;
 mod synch;
-#[cfg(not(feature = "rustc-dep-of-std"))]
 mod syscalls;
 
 pub use arch::*;
-#[cfg(not(feature = "rustc-dep-of-std"))]
 pub use syscalls::*;
 
 use arch::percore::*;
@@ -127,10 +125,10 @@ extern "C" fn initd(_arg: usize) {
 		warn!("Starting HermitCore without network support");
 	}
 
+	syscalls::init();
+
 	#[cfg(not(feature = "rustc-dep-of-std"))]
 	{
-		syscalls::init();
-
 		// Get the application arguments and environment variables.
 		let (argc, argv, environ) = syscalls::get_application_parameters();
 
@@ -150,11 +148,11 @@ extern "C" fn initd(_arg: usize) {
 	#[cfg(feature = "rustc-dep-of-std")]
 	{
 		extern "C" {
-			fn main();
+			fn hermit_start();
 		}
 
 		unsafe {
-			main();
+			hermit_start();
 		}
 	}
 }
