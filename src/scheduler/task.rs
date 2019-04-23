@@ -92,7 +92,6 @@ struct QueueHead {
 }
 
 impl QueueHead {
-	#[allow(dead_code)]
 	pub const fn new() -> Self {
 		QueueHead {
 			head: None,
@@ -115,9 +114,15 @@ pub struct PriorityTaskQueue {
 
 impl PriorityTaskQueue {
 	/// Creates an empty priority queue for tasks
-	pub fn new() -> PriorityTaskQueue {
+	pub const fn new() -> PriorityTaskQueue {
 		PriorityTaskQueue {
-			queues: Default::default(),
+			queues: [QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
+				 QueueHead::new()],
 			prio_bitmap: 0
 		}
 	}

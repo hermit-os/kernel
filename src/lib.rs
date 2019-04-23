@@ -55,9 +55,9 @@ mod kernel_message_buffer;
 mod mm;
 #[cfg(not(feature = "rustc-dep-of-std"))]
 mod runtime_glue;
-mod scheduler;
-mod synch;
-mod syscalls;
+pub mod scheduler;
+pub mod synch;
+pub mod syscalls;
 
 pub use arch::*;
 pub use syscalls::*;

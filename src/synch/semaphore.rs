@@ -59,7 +59,7 @@ impl Semaphore {
 	/// The count specified can be thought of as a number of resources, and a
 	/// call to `acquire` or `access` will block until at least one resource is
 	/// available. It is valid to initialize a semaphore with a negative count.
-	pub fn new(count: isize) -> Self {
+	pub const fn new(count: isize) -> Self {
 		Self {
 			state: SpinlockIrqSave::new(SemaphoreState {
 				count: count,
