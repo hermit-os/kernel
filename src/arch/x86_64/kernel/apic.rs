@@ -102,7 +102,7 @@ struct ProcessorLocalApicRecord {
 }
 
 impl fmt::Display for ProcessorLocalApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ acpi_processor_id: {}, ", {self.acpi_processor_id})?;
 		write!(f, "apic_id: {}, ", {self.apic_id})?;
 		write!(f, "flags: {} }}", {self.flags})?;
@@ -121,7 +121,7 @@ struct IoApicRecord {
 }
 
 impl fmt::Display for IoApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ id: {}, ", {self.id})?;
 		write!(f, "reserved: {}, ", {self.reserved})?;
 		write!(f, "address: {:#X}, ", {self.address})?;

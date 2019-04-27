@@ -210,7 +210,7 @@ enum CpuFrequencySources {
 }
 
 impl fmt::Display for CpuFrequencySources {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			&CpuFrequencySources::CommandLine => write!(f, "Command Line"),
 			&CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
@@ -352,7 +352,7 @@ impl CpuFrequency {
 }
 
 impl fmt::Display for CpuFrequency {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{} MHz (from {})", self.mhz, self.source)
 	}
 }
@@ -375,7 +375,7 @@ impl CpuFeaturePrinter {
 }
 
 impl fmt::Display for CpuFeaturePrinter {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		if self.feature_info.has_mmx() { write!(f, "MMX ")?; }
 		if self.feature_info.has_sse() { write!(f, "SSE ")?; }
 		if self.feature_info.has_sse2() { write!(f, "SSE2 ")?; }
@@ -481,7 +481,7 @@ impl CpuSpeedStep {
 }
 
 impl fmt::Display for CpuSpeedStep {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		if self.eist_available {
 			write!(f, "Available, ")?;
 

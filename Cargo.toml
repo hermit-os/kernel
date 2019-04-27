@@ -28,8 +28,8 @@ rustc-dep-of-std = ['core', 'alloc', 'compiler_builtins/rustc-dep-of-std', 'comp
 bitflags = { path = "./crates/bitflags", features = ['rustc-dep-of-std'] }
 core = { path = "../libcore", optional = true }
 alloc = { path = "../liballoc", optional = true }
-spin = { path = './crates/spin-rs', features = ['rustc-dep-of-std'] }
 compiler_builtins = { version = "0.1", optional = true, features = ['rustc-dep-of-std', 'mem'] }
+spin = { path = './crates/spin-rs', features = ['rustc-dep-of-std'] }
 #lazy_static = { path = './crates/lazy-static', features = ['spin_no_std', 'rustc-dep-of-std'] }
 
 #[dependencies.smoltcp]

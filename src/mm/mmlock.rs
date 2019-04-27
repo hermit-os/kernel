@@ -43,7 +43,7 @@ impl MmLock {
 		}
 	}
 
-	pub fn lock(&self) -> MmLockGuard {
+	pub fn lock(&self) -> MmLockGuard<'_> {
 		let core_id = core_id() as isize;
 
 		// Check if this CPU core is currently using the Memory Manager?

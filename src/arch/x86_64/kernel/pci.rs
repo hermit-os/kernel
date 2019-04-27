@@ -87,7 +87,7 @@ impl PciAdapter {
 }
 
 impl fmt::Display for PciAdapter {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		// Look for the best matching class name in the PCI Database.
 		let mut class_name = "Unknown Class";
 		for ref c in CLASSES {

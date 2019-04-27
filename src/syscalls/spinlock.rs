@@ -37,7 +37,7 @@ pub struct SpinlockIrqSaveContainer<'a> {
 
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer) -> i32 {
+pub extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -53,7 +53,7 @@ pub extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer) -> i32 {
+pub extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -64,7 +64,7 @@ pub extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer) -> i32 {
+pub extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -76,7 +76,7 @@ pub extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer) -> i32 {
+pub extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -89,7 +89,7 @@ pub extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer) -> i32 {
 
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContainer) -> i32 {
+pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -105,7 +105,7 @@ pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveConta
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer) -> i32 {
+pub extern "C" fn sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -116,7 +116,7 @@ pub extern "C" fn sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContain
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer) -> i32 {
+pub extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
@@ -128,7 +128,7 @@ pub extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer)
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContainer) -> i32 {
+pub extern "C" fn sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContainer<'_>) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}

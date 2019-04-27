@@ -51,7 +51,7 @@ impl TaskId {
 }
 
 impl fmt::Display for TaskId {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
 }
@@ -71,7 +71,7 @@ impl Priority {
 }
 
 impl fmt::Display for Priority {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.0)
 	}
 }
@@ -221,7 +221,7 @@ impl PriorityTaskQueue {
 				Some(ref curr_task) => {
 					if Rc::ptr_eq(&curr_task, &task) {
 						let (mut prev, mut next) = {
-							let mut borrowed = curr_task.borrow_mut();
+							let borrowed = curr_task.borrow_mut();
 							(borrowed.prev.clone(), borrowed.next.clone())
 						};
 
