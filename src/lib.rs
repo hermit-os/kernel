@@ -44,7 +44,7 @@ mod macros;
 #[macro_use]
 mod logging;
 
-mod config;
+pub mod config;
 mod arch;
 mod collections;
 pub mod console;
@@ -64,7 +64,7 @@ pub use syscalls::*;
 use arch::percore::*;
 use core::ptr;
 use mm::allocator;
-use config::*;
+pub use config::*;
 
 #[global_allocator]
 static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAllocator;
