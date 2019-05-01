@@ -6,6 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use core::sync::atomic::spin_loop_hint;
+use core::ptr;
 use environment;
 use x86::io::*;
 
@@ -38,7 +39,10 @@ impl SerialPort {
 	}
 
 	fn read_from_register(&self, register: u16) -> u8 {
-		unsafe { inb(self.port_address + register) }
+		unsafe {
+			let port = ptr::read_volatile(&self.port_address);
+			inb(port + register)
+		}
 	}
 
 	fn is_transmitting(&self) -> bool {
@@ -55,11 +59,14 @@ impl SerialPort {
 			spin_loop_hint();
 		}
 
-		unsafe { outb(self.port_address + register, byte); }
+		unsafe {
+			let port = ptr::read_volatile(&self.port_address);
+			outb(port + register, byte);
+		}
 	}
 
 	pub fn write_byte(&self, byte: u8) {
-		if self.port_address == 0 {
+		if unsafe { ptr::read_volatile(&self.port_address) == 0 } {
 			return;
 		}
 
