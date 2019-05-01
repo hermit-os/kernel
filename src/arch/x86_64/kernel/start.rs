@@ -46,7 +46,7 @@ pub unsafe extern "C" fn _start() -> ! {
 	}
 
 	// reset registers to kill any stale realmode selectors
-	asm!("mov $$0x10, %rax\n\t\
+	asm!("mov $$0x10, %rax
 		mov %eax, %ds
 		mov %eax, %ss
 		mov %eax, %es
@@ -59,6 +59,19 @@ pub unsafe extern "C" fn _start() -> ! {
 	asm!("mov $0, %rsp; mov %rsp, %rbp"
 		:: "r"(ptr::read_volatile(&KERNEL_HEADER.current_stack_address) + KERNEL_STACK_SIZE as u64 - 0x10)
 		:: "volatile");
+
+	// enable FPU & Cache
+	asm!("mov %cr0, %rax
+          or  $$0x22, %rax
+	      mov $$0x6000000C, %rdx
+	      not %rdx
+	      and %rdx, %rax
+          mov %rax, %cr0" :::: "volatile");
+
+	// enable SSE (available on all x86_64 processors)
+	asm!("mov %cr4, %rax
+	      or  $$0x620, %rax
+	      mov %rax, %cr4" :::: "volatile");
 
 	let stack_start = ptr::read_volatile(&KERNEL_HEADER.current_stack_address) as usize;
 

@@ -184,6 +184,7 @@ pub fn boot_processor_init() {
 	}
 
 	irq::install();
+	processor::enable_fpu_exceptions();
 	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();

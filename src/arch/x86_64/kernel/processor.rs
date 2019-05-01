@@ -533,6 +533,15 @@ pub fn detect_features() {
 	}
 }
 
+pub fn enable_fpu_exceptions() {
+	let mut cr0 = unsafe { cr0() };
+
+	// Call the IRQ7 handler on the first FPU access.
+    cr0.insert(Cr0::CR0_TASK_SWITCHED);
+
+	unsafe { cr0_write(cr0); }
+}
+
 pub fn configure() {
 	// setup MSR EFER
 	unsafe {
@@ -547,9 +556,6 @@ pub fn configure() {
 	// Enable the FPU.
 	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
 	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
-
-	// Call the IRQ7 handler on the first FPU access.
-	cr0.insert(Cr0::CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
 	cr0.insert(Cr0::CR0_WRITE_PROTECT);
