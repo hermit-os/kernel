@@ -23,11 +23,6 @@ Currently, it does not support all features of the [C-based version](https://git
 However, it is a starting point and runs within a hypervisor.
 The multi-kernel approach has not yet been tested in it.__
 
-## Contributing
-
-HermitCore-rs is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
-Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com).
-
 ## Requirements
 
 The build process works currently only on **x86-based Linux** systems. To build
@@ -268,3 +263,19 @@ The connection to the system monitor is automatically set to `HERMIT_PORT+1`, i.
 ## Credits
 
 HermitCore's Emoji is provided for free by [EmojiOne](https://www.gfxmag.com/crab-emoji-vector-icon/).
+
+## License
+
+Licensed under either of
+
+ * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+HermitCore-rs is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
+Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com)
