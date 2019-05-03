@@ -29,7 +29,6 @@
  */
 
 #![feature(abi_x86_interrupt)]
-#![feature(alloc)]
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(const_fn)]
@@ -38,6 +37,7 @@
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]
+#![feature(core_intrinsics)]
 #![allow(unused_macros)]
 #![no_std]
 
