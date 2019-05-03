@@ -5,6 +5,12 @@ authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+categories = ["no-std"]
+description = """
+A Rust-based, lightweight unikernel
+"""
 
 [lib]
 crate-type = ["staticlib"]
@@ -14,7 +20,7 @@ crate-type = ["staticlib"]
 vga = []
 
 [dependencies]
-bitflags = "1.0.3"
+bitflags = "1.0.5"
 spin = "0.4.9"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
