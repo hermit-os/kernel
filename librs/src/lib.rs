@@ -1,26 +1,10 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
 //                    Colin Finck, RWTH Aachen University
 //
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 /*
  * First version is derived and adapted for HermitCore from
@@ -38,6 +22,7 @@
 #![feature(specialization)]
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
+#![feature(const_vec_new)]
 #![allow(unused_macros)]
 #![no_std]
 
@@ -51,9 +36,6 @@ extern crate bitflags;
 
 #[cfg(target_arch = "x86_64")]
 extern crate hermit_multiboot;
-
-#[macro_use]
-extern crate lazy_static;
 
 extern crate spin;
 
@@ -96,7 +78,7 @@ extern "C" {
 	static mut hbss_start: u8;
 	static kernel_start: u8;
 
-	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8);
+	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
 	fn init_lwip();
 	fn init_uhyve_netif() -> i32;
 }

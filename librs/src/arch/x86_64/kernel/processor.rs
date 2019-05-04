@@ -1,26 +1,10 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
 //                    Colin Finck, RWTH Aachen University
 //
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 #![allow(dead_code)]
 
@@ -197,6 +181,10 @@ impl FPUState {
 			unsafe { asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile"); }
 		}
 	}
+
+	pub fn restore_common(&self) {
+		unsafe { asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile"); }
+	}
 }
 
 
@@ -209,7 +197,7 @@ enum CpuFrequencySources {
 }
 
 impl fmt::Display for CpuFrequencySources {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			&CpuFrequencySources::CommandLine => write!(f, "Command Line"),
 			&CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
@@ -351,7 +339,7 @@ impl CpuFrequency {
 }
 
 impl fmt::Display for CpuFrequency {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{} MHz (from {})", self.mhz, self.source)
 	}
 }
@@ -374,7 +362,7 @@ impl CpuFeaturePrinter {
 }
 
 impl fmt::Display for CpuFeaturePrinter {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		if self.feature_info.has_mmx() { write!(f, "MMX ")?; }
 		if self.feature_info.has_sse() { write!(f, "SSE ")?; }
 		if self.feature_info.has_sse2() { write!(f, "SSE2 ")?; }
@@ -480,7 +468,7 @@ impl CpuSpeedStep {
 }
 
 impl fmt::Display for CpuSpeedStep {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		if self.eist_available {
 			write!(f, "Available, ")?;
 
@@ -505,7 +493,6 @@ impl fmt::Display for CpuSpeedStep {
 		Ok(())
 	}
 }
-
 
 pub fn detect_features() {
 	// Detect CPU features

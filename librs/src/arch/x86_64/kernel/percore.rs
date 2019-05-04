@@ -1,25 +1,9 @@
 // Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use core::ptr;
 use scheduler::PerCoreScheduler;
@@ -27,9 +11,7 @@ use arch::x86_64::kernel::KERNEL_HEADER;
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
 
-
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
-
 
 pub struct PerCoreVariables {
 	/// Sequential ID of this CPU Core.
@@ -81,13 +63,13 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movq %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	default unsafe fn set(&self, value: T) {
-		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movq $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -101,13 +83,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movl %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	unsafe fn set(&self, value: T) {
-		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("swapgs; movl $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -131,6 +113,10 @@ pub fn init() {
 	unsafe {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
 		let address = ptr::read_volatile(&KERNEL_HEADER.current_percore_address);
-		wrmsr(IA32_GS_BASE, address as u64);
+		if address == 0 {
+			wrmsr(IA32_KERNEL_GS_BASE, &PERCORE as *const _ as u64);
+		} else {
+			wrmsr(IA32_KERNEL_GS_BASE, address as u64);
+		}
 	}
 }

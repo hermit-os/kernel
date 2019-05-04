@@ -1,25 +1,9 @@
 // Copyright (c) 2017 Colin Finck, RWTH Aachen University
 //
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 include!(concat!(env!("CARGO_TARGET_DIR"), "/smp_boot_code.rs"));
@@ -37,7 +21,7 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::kernel::KERNEL_HEADER;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, mem, ptr, str, u32};
+use core::{cmp, fmt, mem, ptr, u32};
 use environment;
 use mm;
 use scheduler;
@@ -119,7 +103,7 @@ struct ProcessorLocalApicRecord {
 }
 
 impl fmt::Display for ProcessorLocalApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ acpi_processor_id: {}, ", {self.acpi_processor_id})?;
 		write!(f, "apic_id: {}, ", {self.apic_id})?;
 		write!(f, "flags: {} }}", {self.flags})?;
@@ -138,7 +122,7 @@ struct IoApicRecord {
 }
 
 impl fmt::Display for IoApicRecord {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{{ id: {}, ", {self.id})?;
 		write!(f, "reserved: {}, ", {self.reserved})?;
 		write!(f, "address: {:#X}, ", {self.address})?;
