@@ -21,14 +21,14 @@ vga = []
 
 [dependencies]
 bitflags = "1.0.5"
-spin = "0.4.9"
+spin = "0.5"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
 git = "https://github.com/hermitcore/multiboot.git"
 
-[dependencies.lazy_static]
-version = "1.0.1"
-features = ["spin_no_std"]
+#[dependencies.lazy_static]
+#version = "1.0.1"
+#features = ["spin_no_std"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 git = "https://github.com/hermitcore/rust-x86.git"

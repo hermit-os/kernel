@@ -1,26 +1,10 @@
 // Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
 //                    Colin Finck, RWTH Aachen University
 //
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining
-// a copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to
-// permit persons to whom the Software is furnished to do so, subject to
-// the following conditions:
-//
-// The above copyright notice and this permission notice shall be
-// included in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-// NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-// LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-// OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-// WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
@@ -45,10 +29,9 @@ mod vga;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 
-use core::ptr;
+use core::{intrinsics,mem,ptr};
 use environment;
 use kernel_message_buffer;
-use synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
@@ -113,13 +96,7 @@ extern "C" {
 	fn init_rtl8139_netif(freq: u32) -> i32;
 }
 
-lazy_static! {
-	static ref COM1: SerialPort =
-		SerialPort::new(unsafe { ptr::read_volatile(&KERNEL_HEADER.uartport) } );
-	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
-		Spinlock::new(unsafe { &mut KERNEL_HEADER.cpu_online });
-}
-
+static COM1: SerialPort = SerialPort::new(0x3f8);
 
 // FUNCTIONS
 
@@ -161,7 +138,12 @@ pub fn get_cmdline() -> usize {
 pub fn message_output_init() {
 	percore::init();
 
-	if environment::is_single_kernel() {
+	unsafe {
+		let port: *mut u16 = mem::transmute(&COM1.port_address);
+		*port = ptr::read_volatile(&KERNEL_HEADER.uartport);
+	}
+
+	if environment::is_single_kernel() == true {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
 		COM1.init(SERIAL_PORT_BAUDRATE);
@@ -257,7 +239,9 @@ fn finish_processor_init() {
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	**CPU_ONLINE.lock() += 1;
+	unsafe {
+		let _ = intrinsics::atomic_xadd(&mut KERNEL_HEADER.cpu_online as *mut u32, 1);
+	}
 }
 
 pub fn network_adapter_init() -> i32 {
