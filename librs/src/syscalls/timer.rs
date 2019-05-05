@@ -9,30 +9,32 @@ use arch;
 use errno::*;
 use syscalls::sys_usleep;
 
-
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct itimerval {
 	pub it_interval: timeval,
 	pub it_value: timeval,
 }
 
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct timespec {
 	pub tv_sec: i64,
 	pub tv_nsec: i64,
 }
 
+#[derive(Copy, Clone, Debug)]
 #[repr(C)]
 pub struct timeval {
 	pub tv_sec: i64,
 	pub tv_usec: i64,
 }
 
-const CLOCK_REALTIME: u64 = 1;
-const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
-const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
-const CLOCK_MONOTONIC: u64 = 4;
-const TIMER_ABSTIME: i32 = 4;
+pub const CLOCK_REALTIME: u64 = 1;
+pub const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
+pub const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
+pub const CLOCK_MONOTONIC: u64 = 4;
+pub const TIMER_ABSTIME: i32 = 4;
 
 
 fn microseconds_to_timespec(microseconds: u64, result: &mut timespec) {
