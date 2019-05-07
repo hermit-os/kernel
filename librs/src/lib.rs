@@ -77,24 +77,36 @@ static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAlloca
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
+    let ptr;
 
     unsafe {
-        ALLOCATOR.alloc(layout)
+        ptr = ALLOCATOR.alloc(layout);
     }
+
+    debug_mem!("sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})", ptr as usize, size, align);
+
+    ptr
 }
 
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
+    let new_ptr;
 
     unsafe {
-        ALLOCATOR.realloc(ptr, layout, new_size)
+        new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
     }
+
+    debug_mem!("sys_realloc: resize memory at 0x{:x}, new address 0x{:x}", ptr as usize, new_ptr as usize);
+
+    new_ptr
 }
 
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
+
+    debug_mem!("sys_free: deallocate memory at 0x{:x} (size 0x{:x})", ptr as usize, size);
 
     unsafe {
         ALLOCATOR.dealloc(ptr, layout);
