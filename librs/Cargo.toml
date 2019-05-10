@@ -20,7 +20,7 @@ crate-type = ["staticlib"]
 vga = []
 
 [dependencies]
-bitflags = "1.0.5"
+bitflags = "1.0.*"
 spin = "0.5"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
