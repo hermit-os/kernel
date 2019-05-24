@@ -32,7 +32,6 @@ build:
   tags:
     - docker
   artifacts:
-    untracked: true
     expire_in: 1 week
     paths:
       - ./build
