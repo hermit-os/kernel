@@ -41,6 +41,7 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn sys_exit(arg: i32) -> ! {
+    info!("HHHHHAHHHHHHA");
 	core_scheduler().exit(arg);
 }
 
