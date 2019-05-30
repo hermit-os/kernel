@@ -45,6 +45,11 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 }
 
 #[no_mangle]
+pub extern "C" fn sys_abort() -> ! {
+    sys_exit(-1);
+}
+
+#[no_mangle]
 pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
 	let task_heap_start = arch::mm::virtualmem::task_heap_start();
