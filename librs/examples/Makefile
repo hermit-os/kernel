@@ -6,8 +6,11 @@ TARGET = --target x86_64-unknown-hermit
 default:
 	cargo build $(TARGET)
 
-tests:
-	cargo tests --no-run $(TARGET)
+test:
+	cargo test --no-run $(TARGET)
+
+bench:
+	cargo bench --no-run $(TARGET)
 
 clean:
 	$(RM) target
