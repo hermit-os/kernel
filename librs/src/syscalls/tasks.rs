@@ -10,7 +10,7 @@ use arch::percore::*;
 use core::isize;
 use errno::*;
 use scheduler;
-use scheduler::task::Priority;
+use scheduler::task::{TaskId, Priority};
 use syscalls::timer::timespec;
 
 pub type SignalHandler = extern "C" fn(i32);
@@ -150,4 +150,12 @@ pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 	}
 
 	0
+}
+
+#[no_mangle]
+pub extern "C" fn sys_join(id: Tid) -> i32 {
+	match scheduler::join(TaskId::from(id)) {
+		Ok(()) => 0,
+		_ => -EINVAL
+	}
 }

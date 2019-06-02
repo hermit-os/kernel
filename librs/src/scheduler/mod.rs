@@ -77,6 +77,7 @@ impl PerCoreScheduler {
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 		info!("Creating task {}", tid);
+
 		tid
 	}
 
@@ -92,6 +93,9 @@ impl PerCoreScheduler {
 			info!("Finishing task {} with exit code {}", current_task_borrowed.id, exit_code);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+
+			// wakeup waiting tasks
+			current_task_borrowed.wakeup.lock().wakeup_all();
 		}
 
 		self.scheduler();
@@ -347,4 +351,22 @@ pub fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
 	let result = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) };
 	assert!(result.is_some(), "Trying to get the scheduler for core {}, but it isn't available", core_id);
 	result.unwrap()
+}
+
+pub fn join(id: TaskId) -> Result<(), ()> {
+	debug!("Waiting for task {}", id);
+
+	unsafe {
+		match TASKS.as_ref().unwrap().lock().get_mut(&id) {
+			Some(task) => {
+				task.borrow_mut().wakeup.lock().add(core_scheduler().current_task.clone(), None);
+			},
+			_ => return Err(())
+		}
+	}
+
+	// Switch to the next task.
+	core_scheduler().scheduler();
+
+	Ok(())
 }

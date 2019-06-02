@@ -19,6 +19,7 @@ use core::fmt;
 use mm;
 use scheduler;
 use spin::RwLock;
+use synch::spinlock::SpinlockIrqSave;
 
 
 /// The status of the task - used for scheduling
@@ -37,6 +38,7 @@ pub enum TaskStatus {
 pub enum WakeupReason {
 	Custom,
 	Timer,
+    All
 }
 
 /// Unique identifier for a task (i.e. `pid`).
@@ -319,10 +321,12 @@ pub struct Task {
 	pub core_id: usize,
 	/// Stack of the task
 	pub stacks: TaskStacks,
-	// next task in queue
+	/// next task in queue
 	pub next: Option<Rc<RefCell<Task>>>,
-	// previous task in queue
+	/// previous task in queue
 	pub prev: Option<Rc<RefCell<Task>>>,
+	/// list of waiting tasks
+	pub wakeup: SpinlockIrqSave<BlockedTaskQueue>,
 	/// Task heap area
 	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
@@ -352,6 +356,7 @@ impl Task {
 			stacks: TaskStacks::new(),
 			next: None,
 			prev: None,
+			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -372,6 +377,7 @@ impl Task {
 			stacks: TaskStacks::from_boot_stacks(),
 			next: None,
 			prev: None,
+			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
@@ -392,6 +398,7 @@ impl Task {
 			stacks: TaskStacks::new(),
 			next: None,
 			prev: None,
+			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
@@ -483,6 +490,18 @@ impl BlockedTaskQueue {
 		} else {
 			// No, then just insert it at the end of the list.
 			self.list.push(new_node);
+		}
+	}
+
+	/// Wakeup all blocked tasks
+	pub fn wakeup_all(&mut self) {
+		let mut iter = self.list.iter();
+
+		// Loop through all blocked tasks to find it.
+		while let Some(node) = iter.next() {
+			// Remove it from the list of blocked tasks and wake it up.
+			self.list.remove(node.clone());
+			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::All);
 		}
 	}
 
