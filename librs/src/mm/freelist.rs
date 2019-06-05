@@ -26,7 +26,7 @@ impl FreeList {
 	}
 
 	pub fn allocate(&mut self, size: usize) -> Result<usize, ()> {
-		debug_mem!("Allocating {} bytes from Free List {:#X}", size, self as *const Self as usize);
+		trace!("Allocating {} bytes from Free List {:#X}", size, self as *const Self as usize);
 
 		// Find a region in the Free List that has at least the requested size.
 		for node in self.list.iter() {
@@ -98,7 +98,7 @@ impl FreeList {
 	}
 
 	pub fn allocate_aligned(&mut self, size: usize, alignment: usize) -> Result<usize, ()> {
-		debug_mem!("Allocating {} bytes from Free List {:#X} aligned to {} bytes", size, self as *const Self as usize, alignment);
+		trace!("Allocating {} bytes from Free List {:#X} aligned to {} bytes", size, self as *const Self as usize, alignment);
 
 		for node in self.list.iter() {
 			// Align up the start address of the current node in the list to the desired alignment.
@@ -114,7 +114,7 @@ impl FreeList {
 	}
 
 	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), ()> {
-		debug_mem!("Reserving {} bytes at address {:#X} in Free List {:#X}", size, address, self as *const Self as usize);
+		trace!("Reserving {} bytes at address {:#X} in Free List {:#X}", size, address, self as *const Self as usize);
 		let end = address + size;
 
 		for node in self.list.iter() {
@@ -130,7 +130,7 @@ impl FreeList {
 	}
 
 	pub fn deallocate(&mut self, address: usize, size: usize) {
-		debug_mem!("Deallocating {} bytes at {:#X} from Free List {:#X}", size, address, self as *const Self as usize);
+		trace!("Deallocating {} bytes at {:#X} from Free List {:#X}", size, address, self as *const Self as usize);
 
 		let end = address + size;
 		let mut iter = self.list.iter();

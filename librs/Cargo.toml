@@ -23,12 +23,19 @@ vga = []
 bitflags = "1.0.*"
 spin = "0.5"
 
+[dependencies.log]
+version = "0.4"
+default-features = false
+features = ["max_level_trace"]
+
+[dependencies.smoltcp]
+git = "https://github.com/hermitcore/smoltcp.git"
+branch = "hermit"
+default-features = false
+features = ["log", "alloc", "socket-raw", "socket-udp", "socket-tcp", "proto-ipv4", "proto-dhcpv4"]
+
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
 git = "https://github.com/hermitcore/multiboot.git"
-
-#[dependencies.lazy_static]
-#version = "1.0.1"
-#features = ["spin_no_std"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 git = "https://github.com/hermitcore/rust-x86.git"

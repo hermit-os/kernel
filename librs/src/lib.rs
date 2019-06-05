@@ -42,6 +42,9 @@ extern crate spin;
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
 
+#[macro_use]
+extern crate log;
+
 // MODULES
 #[macro_use]
 mod macros;
@@ -83,7 +86,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
         ptr = ALLOCATOR.alloc(layout);
     }
 
-    debug_mem!("sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})", ptr as usize, size, align);
+    trace!("sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})", ptr as usize, size, align);
 
     ptr
 }
@@ -97,7 +100,7 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
         new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
     }
 
-    debug_mem!("sys_realloc: resize memory at 0x{:x}, new address 0x{:x}", ptr as usize, new_ptr as usize);
+    trace!("sys_realloc: resize memory at 0x{:x}, new address 0x{:x}", ptr as usize, new_ptr as usize);
 
     new_ptr
 }
@@ -106,7 +109,7 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
 
-    debug_mem!("sys_free: deallocate memory at 0x{:x} (size 0x{:x})", ptr as usize, size);
+    trace!("sys_free: deallocate memory at 0x{:x} (size 0x{:x})", ptr as usize, size);
 
     unsafe {
         ALLOCATOR.dealloc(ptr, layout);
@@ -184,6 +187,7 @@ pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	unsafe { sections_init(); }
 	arch::message_output_init();
+	logging::init();
 
 	info!("Welcome to HermitCore-rs {} ({})", env!("CARGO_PKG_VERSION"), COMMIT_HASH);
 	arch::boot_processor_init();

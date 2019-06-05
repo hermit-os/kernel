@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2017-2019 Stefan Lankes, RWTH Aachen University
 //               2017 Colin Finck, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
@@ -6,58 +6,31 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-/// An enum representing the available verbosity levels of the logger.
-#[allow(dead_code)]
-#[derive(Copy, Clone)]
-pub enum LogLevel {
-	/// Disable all our put messages
-	///
-	/// Designates without information
-	Disabled = 0,
-	/// The "error" level.
-	///
-	/// Designates very serious errors.
-	Error,
-	/// The "warn" level.
-	///
-	/// Designates hazardous situations.
-	Warning,
-	/// The "info" level.
-	///
-	/// Designates useful information.
-	Info,
-	// The "debug" level.
-	///
-	/// Designates lower priority information.
-	Debug,
-	// The "debug_mem" level.
-	///
-	/// Designates lower priority information of the memory management (high frequency!).
-	DebugMem,
-}
+use log::{Record, Level, Metadata, LevelFilter};
 
 /// Data structures to filter kernel messages
-pub struct KernelLogger {
-	pub log_level: LogLevel,
-}
+struct KernelLogger;
 
 /// default logger to handle kernel messages
-pub const LOGGER: KernelLogger = KernelLogger { log_level: LogLevel::Info };
+static LOGGER: KernelLogger = KernelLogger;
 
+impl log::Log for KernelLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= Level::Info
+    }
 
-macro_rules! printlog {
-	($type:expr, $cmp_level:expr, $($arg:tt)+) => ({
-		let current_level = $crate::logging::LOGGER.log_level as u8;
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            println!("[{}][{}] {}", crate::arch::percore::core_id(), record.level(), record.args());
+        }
+    }
 
-		if current_level >= ($cmp_level as u8) {
-			println!("[{}][{}] {}", $crate::arch::percore::core_id(), $type, format_args!($($arg)+));
-		}
-	});
+    fn flush(&self) {}
 }
 
-/// Print formatted info text to our console, followed by a newline.
-macro_rules! info {
-	($($arg:tt)+) => (printlog!("INFO", $crate::logging::LogLevel::Info, $($arg)+));
+pub fn init() {
+    log::set_logger(&LOGGER)
+        .map(|()| log::set_max_level(LevelFilter::Info)).unwrap();
 }
 
 macro_rules! infoheader {
@@ -83,24 +56,4 @@ macro_rules! infofooter {
 		info!("{:=^70}", '=');
 		info!("");
 	});
-}
-
-/// Print formatted warnings to our console, followed by a newline.
-macro_rules! warn {
-	($($arg:tt)+) => (printlog!("WARNING", $crate::logging::LogLevel::Warning, $($arg)+));
-}
-
-/// Print formatted warnings to our console, followed by a newline.
-macro_rules! error {
-	($($arg:tt)+) => (printlog!("ERROR", $crate::logging::LogLevel::Error, $($arg)+));
-}
-
-/// Print formatted debug messages to our console, followed by a newline.
-macro_rules! debug {
-	($($arg:tt)+) => (printlog!("DEBUG", $crate::logging::LogLevel::Debug, $($arg)+));
-}
-
-/// Print formatted debug messages to our console, followed by a newline.
-macro_rules! debug_mem {
-	($($arg:tt)+) => (printlog!("DEBUG_MEM", $crate::logging::LogLevel::DebugMem, $($arg)+));
 }
