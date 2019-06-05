@@ -476,7 +476,7 @@ fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
-	debug_mem!("Looking up Page Table Entry for {:#X}", virtual_address);
+	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
@@ -484,7 +484,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageT
 }
 
 pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
-	debug_mem!("Getting physical address for {:#X}", virtual_address);
+	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
@@ -521,7 +521,7 @@ pub extern "C" fn virt_to_phys(virtual_address: usize) -> usize {
 }
 
 pub fn map<S: PageSize>(virtual_address: usize, physical_address: usize, count: usize, flags: PageTableEntryFlags) {
-	debug_mem!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
+	trace!("Mapping virtual address {:#X} to physical address {:#X} ({} pages)", virtual_address, physical_address, count);
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
