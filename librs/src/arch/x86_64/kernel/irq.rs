@@ -184,12 +184,12 @@ pub fn install() {
 #[no_mangle]
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 {
-	info!("Install handler for interrupt {}", irq_number);
+	warn!("Install handler for interrupt {}", irq_number);
 	idt::set_gate((32+irq_number) as u8, handler, 0);
 }
 
 fn unhandled_interrupt(irq_number: u8) {
-	info!("Receive unhandled interrupt {}", irq_number);
+	warn!("Receive unhandled interrupt {}", irq_number);
 	apic::eoi();
 }
 
