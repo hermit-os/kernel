@@ -26,7 +26,7 @@ spin = "0.5"
 [dependencies.log]
 version = "0.4"
 default-features = false
-features = ["max_level_trace"]
+features = ["max_level_trace", "release_max_level_info"]
 
 [dependencies.smoltcp]
 git = "https://github.com/hermitcore/smoltcp.git"
