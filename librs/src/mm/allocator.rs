@@ -96,10 +96,12 @@ unsafe fn alloc_bootstrap(layout: Layout) -> *mut u8 {
 
 /// An allocation using the initialized System Allocator.
 fn alloc_system(layout: Layout) -> *mut u8 {
+	trace!("Allocating {} bytes using the System Allocator", layout.size());
+
 	let size = align_up!(layout.size(), BasePageSize::SIZE);
 	let virtual_address = mm::allocate(size, true);
 
-	trace!("Allocated {} bytes at {:#X} using the System Allocator", layout.size(), virtual_address);
+	trace!("Allocated at {:#X}", virtual_address);
 
 	virtual_address as *mut u8
 }
