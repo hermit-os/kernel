@@ -39,9 +39,9 @@ pub fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		if environment::is_proxy() {
+		/*if environment::is_proxy() {
 			SYS = &interfaces::Proxy;
-		} else if environment::is_uhyve() {
+		} else*/ if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
 
