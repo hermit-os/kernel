@@ -29,21 +29,18 @@
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 // EXTERNAL CRATES
+#[macro_use]
 extern crate alloc;
-
 #[macro_use]
 extern crate bitflags;
-
 #[cfg(target_arch = "x86_64")]
 extern crate hermit_multiboot;
-
 extern crate spin;
-
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
-
 #[macro_use]
 extern crate log;
+extern crate smoltcp;
 
 // MODULES
 #[macro_use]
@@ -63,6 +60,7 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
+mod drivers;
 
 // IMPORTS
 pub use arch::*;
@@ -122,8 +120,6 @@ extern "C" {
 	static kernel_start: u8;
 
 	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
-	fn init_lwip();
-	fn init_uhyve_netif() -> i32;
 }
 
 // FUNCTIONS
@@ -137,36 +133,24 @@ unsafe fn sections_init() {
 }
 
 extern "C" fn initd(_arg: usize) {
-	// initialize LwIP library
-	unsafe { init_lwip(); }
-
-	// Initialize the specific network interface.
-	let mut err = 0;
-
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		unsafe { init_uhyve_netif(); }
+		drivers::net::uhyve::init();
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
-		//unsafe { init_mmnif_netif(); }
-	} else {
+	} /*else {
 		err = arch::network_adapter_init();
-	}
-
-	// Check if a network interface has been initialized.
-	if err == 0 {
-		info!("Successfully initialized a network interface!");
-	} else {
-		warn!("Could not initialize a network interface (error code {})", err);
-		warn!("Starting HermitCore without network support");
-	}
+	}*/
 
 	syscalls::init();
 
 	// Get the application arguments and environment variables.
 	let (argc, argv, environ) = syscalls::get_application_parameters();
+
+	// give the IP thread time to initialize the network interface
+	core_scheduler().scheduler();
 
 	unsafe {
 		// Initialize .bss sections for the application.
@@ -203,7 +187,7 @@ pub fn boot_processor_main() -> ! {
 	core_scheduler.spawn(
 		initd,
 		0,
-		scheduler::task::HIGH_PRIO,
+		scheduler::task::NORMAL_PRIO,
 		Some(arch::mm::virtualmem::task_heap_start())
 	);
 

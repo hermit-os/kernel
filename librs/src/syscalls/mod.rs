@@ -7,7 +7,6 @@
 // copied, modified, or distributed except according to those terms.
 
 mod interfaces;
-mod lwip;
 mod processor;
 mod random;
 mod recmutex;
@@ -17,7 +16,6 @@ mod system;
 mod tasks;
 mod timer;
 
-pub use self::lwip::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
@@ -30,9 +28,8 @@ use environment;
 use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
 
-const LWIP_FD_BIT: i32	= (1 << 30);
+//const LWIP_FD_BIT: i32	= (1 << 30);
 
-pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 static mut SYS: &'static SyscallInterface = &interfaces::Generic;
 
 pub fn init() {

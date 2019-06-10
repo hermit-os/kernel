@@ -8,9 +8,7 @@
 use arch;
 use arch::mm::paging;
 use scheduler;
-use syscalls::{LWIP_FD_BIT,LWIP_LOCK};
 use syscalls::interfaces::SyscallInterface;
-use syscalls::lwip::sys_lwip_get_errno;
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
