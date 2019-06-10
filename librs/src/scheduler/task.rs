@@ -333,8 +333,6 @@ pub struct Task {
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
-	/// lwIP error code for this task
-	pub lwip_errno: i32,
 }
 
 pub trait TaskFrame {
@@ -360,7 +358,6 @@ impl Task {
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
-			lwip_errno: 0,
 		}
 	}
 
@@ -381,7 +378,6 @@ impl Task {
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
-			lwip_errno: 0,
 		}
 	}
 
@@ -402,7 +398,6 @@ impl Task {
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
-			lwip_errno: 0,
 		}
 	}
 }

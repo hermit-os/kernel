@@ -20,7 +20,7 @@ use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
 use scheduler::task::*;
 use synch::spinlock::*;
 use syscalls::*;
-
+use drivers::net::get_network_task_id;
 
 /// Time slice of a task in microseconds.
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.
@@ -247,14 +247,14 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
-			// If this is the Boot Processor and only the lwIP TCP/IP task is left, it's time to shut down the OS.
-			if core_id() == 0 && new_id.into() == get_lwip_tcpip_task_id() && NO_TASKS.load(Ordering::SeqCst) == 1 {
-				debug!("Only lwIP TCP/IP task is left");
+			// If this is the Boot Processor and only the network task is left, it's time to shut down the OS.
+			if core_id() == 0 && new_id == get_network_task_id() && NO_TASKS.load(Ordering::SeqCst) == 1 {
+				debug!("Only network task is left");
 				sys_shutdown();
 			}
 
 			// Tell the scheduler about the new task.
-			debug!("Switching task from {} to {} (stack {:#X} => {:#X})", id, new_id,
+			trace!("Switching task from {} to {} (stack {:#X} => {:#X})", id, new_id,
 				unsafe { *last_stack_pointer }, new_stack_pointer);
 			self.current_task = task;
 			self.last_task_switch_tick = arch::processor::get_timer_ticks();

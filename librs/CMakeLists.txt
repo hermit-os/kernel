@@ -36,34 +36,17 @@ add_custom_target(doc
 		${CMAKE_CURRENT_LIST_DIR})
 
 
-# Now define "kernel modules", which are built into object libraries.
-# It is important that ASM and C sources are not mixed in a single module and ASM modules are suffixed with "_asm"!
-add_definitions(-D__KERNEL__)
-
-# LwIP
-set(LWIP_SRC ${CMAKE_SOURCE_DIR}/lwip/src)
-file(GLOB LWIP_SOURCES
-	"${LWIP_SRC}/api/*.c"
-	"${LWIP_SRC}/arch/*.c"
-	"${LWIP_SRC}/core/*.c"
-	"${LWIP_SRC}/core/ipv4/*.c"
-	"${LWIP_SRC}/core/ipv6/*.c"
-	"${LWIP_SRC}/netif/*.c")
-add_library(lwip OBJECT ${LWIP_SOURCES})
-target_compile_options(lwip PRIVATE ${HERMIT_KERNEL_FLAGS} -w)
-target_include_directories(lwip PRIVATE ${HERMIT_KERNEL_INCLUDES})
-
 # arch
 if("${HERMIT_ARCH}" STREQUAL "x86_64")
 	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
 set(KERNEL_OBJECTS
-	${ARCH_OBJECTS}
-	$<TARGET_OBJECTS:lwip>)
+	${ARCH_OBJECTS})
 
 # Build all kernel modules into a single static library.
 add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
+set_target_properties(hermit-bootstrap PROPERTIES LINKER_LANGUAGE C)
 add_dependencies(hermit-bootstrap hermit_rs)
 set_target_properties(hermit-bootstrap PROPERTIES ARCHIVE_OUTPUT_NAME hermit)
 

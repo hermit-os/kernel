@@ -92,13 +92,29 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	boot_stack: [0xCD; KERNEL_STACK_SIZE]
 };
 
-extern "C" {
-	fn init_rtl8139_netif(freq: u32) -> i32;
-}
-
 static COM1: SerialPort = SerialPort::new(0x3f8);
 
 // FUNCTIONS
+
+pub fn get_ip() -> [u8; 4] {
+	let mut ip: [u8; 4] = [0,0,0,0];
+
+	for i in 0..4 {
+		ip[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcip[i]) as u8 };
+	}
+
+	ip
+}
+
+pub fn get_gateway() -> [u8; 4] {
+	let mut gw: [u8; 4] = [0,0,0,0];
+
+	for i in 0..4 {
+		gw[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcgateway[i]) as u8 };
+	}
+
+	gw
+}
 
 pub fn get_image_size() -> usize {
 	unsafe { ptr::read_volatile(&KERNEL_HEADER.image_size) as usize }
@@ -242,9 +258,4 @@ fn finish_processor_init() {
 	unsafe {
 		let _ = intrinsics::atomic_xadd(&mut KERNEL_HEADER.cpu_online as *mut u32, 1);
 	}
-}
-
-pub fn network_adapter_init() -> i32 {
-	// Try initializing the RTL8139 interface using DHCP.
-	unsafe { init_rtl8139_netif(processor::get_frequency() as u32) }
 }

@@ -38,8 +38,7 @@ pub use arch::aarch64::kernel::stubs::{switch,set_oneshot_timer,wakeup_core};
 
 #[cfg(target_arch="aarch64")]
 pub use arch::aarch64::kernel::{application_processor_init,boot_application_processors,
-    network_adapter_init,output_message_byte,message_output_init,boot_processor_init,
-    get_processor_count};
+    output_message_byte,message_output_init,boot_processor_init,get_processor_count};
 
 #[cfg(target_arch="aarch64")]
 use arch::aarch64::kernel::percore::core_scheduler;
@@ -64,7 +63,7 @@ pub use arch::x86_64::*;
 
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::{get_processor_count,application_processor_init,
-	boot_application_processors,message_output_init,network_adapter_init,
+	boot_application_processors,message_output_init,
 	output_message_byte,boot_processor_init};
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::apic::{set_oneshot_timer,wakeup_core};

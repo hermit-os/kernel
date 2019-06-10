@@ -184,6 +184,7 @@ impl TaskFrame for Task {
 extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	core_scheduler().blocked_tasks.lock().handle_waiting_tasks();
 	apic::eoi();
+	core_scheduler().scheduler();
 }
 
 pub fn install_timer_handler() {

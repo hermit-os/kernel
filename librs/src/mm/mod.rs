@@ -25,7 +25,6 @@ extern "C" {
 pub static MM_LOCK: MmLock = MmLock::new();
 pub static mut POOL: NodePool = NodePool::new();
 
-
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
 static mut KERNEL_START_ADDRESS: usize = 0;
