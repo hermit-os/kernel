@@ -6,31 +6,30 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use log::{Record, Level, Metadata, LevelFilter};
+use log::{set_logger_raw, LogLevelFilter, LogMetadata, LogRecord};
 
-/// Data structures to filter kernel messages
+/// Data structure to filter kernel messages
 struct KernelLogger;
 
-/// default logger to handle kernel messages
-static LOGGER: KernelLogger = KernelLogger;
-
 impl log::Log for KernelLogger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= Level::Info
+    fn enabled(&self, _: &LogMetadata) -> bool {
+        true
     }
 
-    fn log(&self, record: &Record) {
+    fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
             println!("[{}][{}] {}", crate::arch::percore::core_id(), record.level(), record.args());
         }
     }
-
-    fn flush(&self) {}
 }
 
 pub fn init() {
-    log::set_logger(&LOGGER)
-        .map(|()| log::set_max_level(LevelFilter::Info)).unwrap();
+	unsafe {
+        set_logger_raw(|max_log_level| {
+            max_log_level.set(LogLevelFilter::Info);
+            &KernelLogger
+        }).expect("Can't initialize logger");
+    }
 }
 
 macro_rules! infoheader {
