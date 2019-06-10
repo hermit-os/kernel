@@ -30,13 +30,13 @@ mkdir -p tmp
 dpkg-deb -R build/libhermit-rs-0.3.7-all.deb tmp || exit 1
 rm -rf build/*.deb build/_CPack_Packages
 
-TDIR=/work/build/local_prefix/opt/hermit/x86_64-hermit/extra
-FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/benchmarks/stream $TDIR/tests/test-malloc"
-PROXY=/work/build/local_prefix/opt/hermit/bin/proxy
+#TDIR=/work/build/local_prefix/opt/hermit/x86_64-hermit/extra
+#FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/benchmarks/stream $TDIR/tests/test-malloc"
+#PROXY=/work/build/local_prefix/opt/hermit/bin/proxy
 
-for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_KVM=0 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
+#for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_KVM=0 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
 
-for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=2 HERMIT_KVM=0 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
+#for f in $FILES; do echo "check $f..."; HERMIT_ISLE=qemu HERMIT_CPUS=2 HERMIT_KVM=0 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
 
 # test echo server at port 8000
 #HERMIT_ISLE=qemu HERMIT_CPUS=1 HERMIT_KVM=0 HERMIT_VERBOSE=1 HERMIT_APP_PORT=8000 $PROXY $TDIR/tests/server &
