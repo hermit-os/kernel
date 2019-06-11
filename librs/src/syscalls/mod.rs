@@ -30,7 +30,7 @@ use syscalls::interfaces::SyscallInterface;
 
 //const LWIP_FD_BIT: i32	= (1 << 30);
 
-static mut SYS: &'static SyscallInterface = &interfaces::Generic;
+static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
 pub fn init() {
 	unsafe {
