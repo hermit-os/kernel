@@ -39,7 +39,7 @@ const UHYVE_PORT_NETINFO: u16   = 0x600;
 const UHYVE_PORT_NETWRITE: u16  = 0x640;
 const UHYVE_PORT_NETREAD: u16   = 0x680;
 //const UHYVE_PORT_NETSTAT: u16   = 0x700;
-const UHYVE_MSG_SIZE: usize = 1792;
+const UHYVE_MAX_MSG_SIZE: usize = 1792;
 
 /// Data type to determine the mac address
 #[derive(Debug, Default)]
@@ -111,7 +111,7 @@ impl UhyveWrite {
 }
 
 extern "C" fn uhyve_thread(_arg: usize) {
-    info!("Hello form network thread!");
+    debug!("Hello from network thread!");
 
     let info: UhyveNetinfo = UhyveNetinfo::default();
 
@@ -227,7 +227,7 @@ impl<'a> Device<'a> for UhyveNet {
 
     fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
 		let mut rx = RxToken::new();
-        let data = UhyveRead::new(virt_to_phys(rx.buffer.as_mut_ptr() as usize), UHYVE_MSG_SIZE);
+        let data = UhyveRead::new(virt_to_phys(rx.buffer.as_mut_ptr() as usize), UHYVE_MAX_MSG_SIZE);
         unsafe {
             outl(UHYVE_PORT_NETREAD, virt_to_phys(&data as *const _ as usize) as u32);
         }
@@ -235,6 +235,7 @@ impl<'a> Device<'a> for UhyveNet {
         if data.ret() == 0 {
             let tx = TxToken { };
 			rx.resize(data.len());
+			trace!("resize message to {} bytes", rx.len());
 
             Some((rx, tx))
         } else {
@@ -243,27 +244,27 @@ impl<'a> Device<'a> for UhyveNet {
     }
 
     fn transmit(&'a mut self) -> Option<Self::TxToken> {
-		info!("transmit");
+		trace!("create TxToken to transfer data");
         Some(TxToken {})
     }
 }
 
 #[doc(hidden)]
 pub struct RxToken {
-	buffer: [u8; UHYVE_MSG_SIZE],
+	buffer: [u8; UHYVE_MAX_MSG_SIZE],
 	len: usize
 }
 
 impl RxToken {
 	pub fn new() -> RxToken {
 		RxToken {
-			buffer: [0; UHYVE_MSG_SIZE],
-			len: UHYVE_MSG_SIZE
+			buffer: [0; UHYVE_MAX_MSG_SIZE],
+			len: UHYVE_MAX_MSG_SIZE
 		}
 	}
 
 	pub fn resize(&mut self, len: usize) {
-		if len <= UHYVE_MSG_SIZE {
+		if len <= UHYVE_MAX_MSG_SIZE {
 			self.len = len;
 		} else {
 			warn!("Invalid message size {}", len);
