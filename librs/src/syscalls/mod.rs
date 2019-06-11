@@ -25,7 +25,6 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use environment;
-use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
 
 //const LWIP_FD_BIT: i32	= (1 << 30);
@@ -36,9 +35,10 @@ pub fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		/*if environment::is_proxy() {
-			SYS = &interfaces::Proxy;
-		} else*/ if environment::is_uhyve() {
+		if environment::is_proxy() {
+			panic!("Currently, we don't support the proxy mode!");
+			//SYS = &interfaces::Proxy;
+		} else if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
 
