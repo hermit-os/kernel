@@ -184,7 +184,7 @@ pub fn install() {
 #[no_mangle]
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
 {
-	warn!("Install handler for interrupt {}", irq_number);
+	debug!("Install handler for interrupt {}", irq_number);
 	idt::set_gate((32+irq_number) as u8, handler, 0);
 }
 
