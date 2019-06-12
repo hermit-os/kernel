@@ -9,6 +9,7 @@ pub mod allocator;
 pub mod freelist;
 mod mmlock;
 mod nodepool;
+mod hole;
 
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -52,8 +53,12 @@ pub fn init() {
 	}
 
 	arch::mm::init();
-	self::allocator::init();
 	arch::mm::init_page_tables();
+
+	let size: usize = 2*1024*1024;
+	unsafe {
+		::ALLOCATOR.lock().init(allocate(size, true), size);
+	}
 }
 
 pub fn print_information() {
@@ -61,7 +66,8 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-pub fn allocate(size: usize, execute_disable: bool) -> usize {
+pub fn allocate(sz: usize, execute_disable: bool) -> usize {
+	let size = align_up!(sz, BasePageSize::SIZE);
 	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
@@ -78,7 +84,8 @@ pub fn allocate(size: usize, execute_disable: bool) -> usize {
 	virtual_address
 }
 
-pub fn deallocate(virtual_address: usize, size: usize) {
+pub fn deallocate(virtual_address: usize, sz: usize) {
+	let size = align_up!(sz, BasePageSize::SIZE);
 	let _lock = MM_LOCK.lock();
 
 	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {

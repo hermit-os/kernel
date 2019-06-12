@@ -1,119 +1,216 @@
-// Copyright (c) 2017 Colin Finck, RWTH Aachen University
-//
-// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
-// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
-// http://opensource.org/licenses/MIT>, at your option. This file may not be
-// copied, modified, or distributed except according to those terms.
-
 //! Implementation of the HermitCore Allocator for dynamically allocating heap memory
 //! in the kernel.
-//!
-//! The data structures used to manage heap memory require dynamic memory allocations
-//! themselves. To solve this chicken-egg problem, HermitCore first uses a
-//! "Bootstrap Allocator". This is a simple single-threaded implementation using some
-//! preallocated space within KERNEL_START_ADDRESS and KERNEL_END_ADDRESS, along with an
-//! index variable. Freed memory is never reused, but this can be neglected for bootstrapping.
-//!
-//! As soon as all required data structures have been set up, the "System Allocator" is used.
-//! It manages all memory >= KERNEL_END_ADDRESS.
 
-use alloc::alloc::Layout;
-use core::alloc::GlobalAlloc;
-use arch::mm::paging::{BasePageSize, PageSize};
-use mm;
+// This memory allocator is derived from the crate `linked-list-allocator`
+// (https://github.com/phil-opp/linked-list-allocator).
+// This crate is dual-licensed under MIT or the Apache License (Version 2.0).
+
+#![allow(dead_code)]
+
+use alloc::alloc::{Alloc, AllocErr, Layout};
+use core::alloc::{GlobalAlloc};
+use core::mem;
+use core::ops::Deref;
+use core::ptr::NonNull;
+use mm::hole::{Hole, HoleList};
+use mm::kernel_end_address;
+use synch::spinlock::*;
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
 
-/// Alignment of pointers returned by the Bootstrap Allocator.
-/// Note that you also have to align the HermitAllocatorInfo structure!
-const BOOTSTRAP_HEAP_ALIGNMENT: usize = 8;
+/// Alignment of the allocation size.
+const ALIGN_ALLOCATION_SIZE: usize = 64;
 
-
-/// The HermitAllocator structure is immutable, so we need this helper structure
-/// for our allocator information.
-#[repr(align(8))]
-pub struct HermitAllocatorInfo {
-	heap: [u8; BOOTSTRAP_HEAP_SIZE],
+/// A fixed size heap backed by a linked list of free memory blocks.
+pub struct Heap {
+	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
 	index: usize,
-	is_bootstrapping: bool,
+	bottom: usize,
+	size: usize,
+	holes: HoleList,
 }
 
-impl HermitAllocatorInfo {
-	const fn new() -> Self {
-		Self {
-			heap: [0xCC; BOOTSTRAP_HEAP_SIZE],
+impl Heap {
+	/// Creates an empty heap. All allocate calls will return `None`.
+	pub const fn empty() -> Heap {
+		Heap {
+			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
 			index: 0,
-			is_bootstrapping: true,
+			bottom: 0,
+			size: 0,
+			holes: HoleList::empty(),
 		}
 	}
 
-	pub fn switch_to_system_allocator(&mut self) {
-		trace!("Switching to the System Allocator");
-		self.is_bootstrapping = false;
+	/// Initializes an empty heap
+	///
+	/// # Unsafety
+	///
+	/// This function must be called at most once and must only be used on an
+	/// empty heap.
+	pub unsafe fn init(&mut self,	heap_bottom: usize, heap_size: usize) {
+		self.bottom = heap_bottom;
+		self.size = heap_size;
+		self.holes = HoleList::new(heap_bottom, heap_size);
 	}
-}
 
-static mut ALLOCATOR_INFO: HermitAllocatorInfo = HermitAllocatorInfo::new();
+	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
+	/// and the memory in the `[heap_bottom, heap_bottom + heap_size)` range must not be used for
+	/// anything else. This function is unsafe because it can cause undefined behavior if the
+	/// given address is invalid.
+	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> Heap {
+		Heap {
+			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
+			index: 0,
+			bottom: heap_bottom,
+			size: heap_size,
+			holes: HoleList::new(heap_bottom, heap_size),
+		}
+	}
 
-pub struct HermitAllocator;
+	/// An allocation using the always available Bootstrap Allocator.
+	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+		let ptr = &mut self.first_block[self.index] as *mut u8;
+		let size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
 
-unsafe impl<'a> GlobalAlloc for &'a HermitAllocator {
-	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-		if ALLOCATOR_INFO.is_bootstrapping {
-			alloc_bootstrap(layout)
+		// Bump the heap index and align it up to the next boundary.
+		self.index = align_up!(self.index + size, mem::size_of::<usize>	());
+		if self.index >= BOOTSTRAP_HEAP_SIZE {
+			Err(AllocErr)
 		} else {
-			alloc_system(layout)
+			Ok(NonNull::new(ptr).unwrap())
 		}
 	}
 
-	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-		let address = ptr as usize;
+	/// Allocates a chunk of the given size with the given alignment. Returns a pointer to the
+	/// beginning of that chunk if it was successful. Else it returns `None`.
+	/// This function scans the list of free memory blocks and uses the first block that is big
+	/// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
+	/// reasonably fast for small allocations.
+	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+		if self.bottom == 0 {
+			unsafe { self.alloc_bootstrap(layout) }
+		} else {
+			let mut size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
+			if size < HoleList::min_size() {
+				size = HoleList::min_size();
+			}
+			let size = align_up!(size, mem::align_of::<Hole>());
+			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+
+			self.holes.allocate_first_fit(layout)
+		}
+	}
+
+	/// Frees the given allocation. `ptr` must be a pointer returned
+	/// by a call to the `allocate_first_fit` function with identical size and alignment. Undefined
+	/// behavior may occur for invalid arguments, thus this function is unsafe.
+	///
+	/// This function walks the list of free memory blocks and inserts the freed block at the
+	/// correct place. If the freed block is adjacent to another free block, the blocks are merged
+	/// again. This operation is in `O(n)` since the list needs to be sorted by address.
+	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+		let address = ptr.as_ptr() as usize;
 
 		// We never deallocate memory of the Bootstrap Allocator.
 		// It would only increase the management burden and we wouldn't save
 		// any significant amounts of memory.
 		// So check if this is a pointer allocated by the System Allocator.
-		if address >= mm::kernel_end_address() {
-			dealloc_system(address, layout);
+		if address >= kernel_end_address() {
+			let mut size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
+			if size < HoleList::min_size() {
+				size = HoleList::min_size();
+			}
+			let size = align_up!(size, mem::align_of::<Hole>());
+			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+
+			self.holes.deallocate(ptr, layout);
 		}
 	}
-}
 
-/// An allocation using the always available Bootstrap Allocator.
-unsafe fn alloc_bootstrap(layout: Layout) -> *mut u8 {
-	let ptr = &mut ALLOCATOR_INFO.heap[ALLOCATOR_INFO.index] as *mut u8;
-	trace!("Allocating {} bytes at {:#X} using the Bootstrap Allocator", layout.size(), ptr as usize);
-
-	// Bump the heap index and align it up to the next BOOTSTRAP_HEAP_ALIGNMENT boundary.
-	ALLOCATOR_INFO.index = align_up!(ALLOCATOR_INFO.index + layout.size(), BOOTSTRAP_HEAP_ALIGNMENT);
-	if ALLOCATOR_INFO.index >= BOOTSTRAP_HEAP_SIZE {
-		panic!("Bootstrap Allocator Overflow! Increase BOOTSTRAP_HEAP_SIZE.");
+	/// Returns the bottom address of the heap.
+	pub fn bottom(&self) -> usize {
+		self.bottom
 	}
 
-	ptr
+	/// Returns the size of the heap.
+	pub fn size(&self) -> usize {
+		self.size
+	}
+
+	/// Return the top address of the heap
+	pub fn top(&self) -> usize {
+		self.bottom + self.size
+	}
+
+	/// Extends the size of the heap by creating a new hole at the end
+	///
+	/// # Unsafety
+	///
+	/// The new extended area must be valid
+	pub unsafe fn extend(&mut self, by: usize) {
+		let top = self.top();
+		let layout = Layout::from_size_align(by, 1).unwrap();
+		self.holes
+			.deallocate(NonNull::new_unchecked(top as *mut u8), layout);
+		self.size += by;
+	}
 }
 
-/// An allocation using the initialized System Allocator.
-fn alloc_system(layout: Layout) -> *mut u8 {
-	trace!("Allocating {} bytes using the System Allocator", layout.size());
+unsafe impl Alloc for Heap {
+	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+		self.allocate_first_fit(layout)
+	}
 
-	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	let virtual_address = mm::allocate(size, true);
-
-	trace!("Allocated at {:#X}", virtual_address);
-
-	virtual_address as *mut u8
+	unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+		self.deallocate(ptr, layout);
+	}
 }
 
-/// A deallocation using the initialized System Allocator.
-fn dealloc_system(virtual_address: usize, layout: Layout) {
-	trace!("Deallocating {} bytes at {:#X} using the System Allocator", layout.size(), virtual_address);
+pub struct LockedHeap(SpinlockIrqSave<Heap>);
 
-	let size = align_up!(layout.size(), BasePageSize::SIZE);
-	mm::deallocate(virtual_address, size);
+impl LockedHeap {
+	/// Creates an empty heap. All allocate calls will return `None`.
+	pub const fn empty() -> LockedHeap {
+		LockedHeap(SpinlockIrqSave::new(Heap::empty()))
+	}
+
+	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
+	/// and the memory in the `[heap_bottom, heap_bottom + heap_size)` range must not be used for
+	/// anything else. This function is unsafe because it can cause undefined behavior if the
+	/// given address is invalid.
+	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedHeap {
+		LockedHeap(SpinlockIrqSave::new(Heap {
+			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
+			index: 0,
+			bottom: heap_bottom,
+			size: heap_size,
+			holes: HoleList::new(heap_bottom, heap_size),
+		}))
+	}
 }
 
-pub fn init() {
-	unsafe { ALLOCATOR_INFO.switch_to_system_allocator(); }
+impl Deref for LockedHeap {
+	type Target = SpinlockIrqSave<Heap>;
+
+	fn deref(&self) -> &SpinlockIrqSave<Heap> {
+		&self.0
+	}
+}
+
+unsafe impl GlobalAlloc for LockedHeap {
+	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+		self.0
+			.lock()
+			.allocate_first_fit(layout)
+			.ok()
+			.map_or(0 as *mut u8, |allocation| allocation.as_ptr())
+	}
+
+	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+		self.0
+			.lock()
+			.deallocate(NonNull::new_unchecked(ptr), layout)
+	}
 }
