@@ -22,7 +22,7 @@ pub struct RecursiveMutex {
 }
 
 impl RecursiveMutex {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		Self {
 			state: Spinlock::new(RecursiveMutexState {
 				current_tid: None,
