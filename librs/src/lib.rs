@@ -67,13 +67,13 @@ pub use arch::*;
 pub use syscalls::*;
 
 use arch::percore::*;
-use mm::allocator;
+use mm::allocator::LockedHeap;
 use core::ptr;
 use core::alloc::GlobalAlloc;
 use alloc::alloc::Layout;
 
 #[global_allocator]
-static ALLOCATOR: &'static allocator::HermitAllocator = &allocator::HermitAllocator;
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
