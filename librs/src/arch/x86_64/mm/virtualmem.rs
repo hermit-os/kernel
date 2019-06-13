@@ -9,10 +9,9 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
-use mm::{MM_LOCK, POOL};
+use synch::spinlock::*;
 
-
-static mut KERNEL_FREE_LIST: FreeList = FreeList::new();
+static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
 /// End of the virtual memory address space reserved for kernel memory (4 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.
@@ -31,15 +30,14 @@ pub fn init() {
 			end: KERNEL_VIRTUAL_MEMORY_END
 		}
 	);
-	unsafe { KERNEL_FREE_LIST.list.push(entry); }
+	KERNEL_FREE_LIST.lock().list.push(entry);
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	let _lock = MM_LOCK.lock();
-	let result = unsafe { KERNEL_FREE_LIST.allocate(size) };
+	let result = KERNEL_FREE_LIST.lock().allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
 	result.unwrap()
 }
@@ -51,11 +49,7 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	let _lock = MM_LOCK.lock();
-	unsafe {
-		POOL.maintain();
-		KERNEL_FREE_LIST.deallocate(virtual_address, size);
-	}
+	KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
 }
 
 pub fn reserve(virtual_address: usize, size: usize) {
@@ -65,16 +59,12 @@ pub fn reserve(virtual_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	let _lock = MM_LOCK.lock();
-	let result = unsafe {
-		POOL.maintain();
-		KERNEL_FREE_LIST.reserve(virtual_address, size)
-	};
+	let result = KERNEL_FREE_LIST.lock().reserve(virtual_address, size);
 	assert!(result.is_ok(), "Could not reserve {:#X} bytes of virtual memory at {:#X}", size, virtual_address);
 }
 
 pub fn print_information() {
-	unsafe { KERNEL_FREE_LIST.print_information(" KERNEL VIRTUAL MEMORY FREE LIST "); }
+	KERNEL_FREE_LIST.lock().print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
 }
 
 #[inline]

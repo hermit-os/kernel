@@ -11,10 +11,9 @@ use collections::Node;
 use hermit_multiboot::Multiboot;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
-use mm::{MM_LOCK, POOL};
+use synch::spinlock::*;
 
-
-static mut PHYSICAL_FREE_LIST: FreeList = FreeList::new();
+static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
@@ -46,7 +45,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 				end: m.base_address() + m.length()
 			}
 		);
-		unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
+		PHYSICAL_FREE_LIST.lock().list.push(entry);
 	}
 
 	assert!(found_ram, "Could not find any available RAM in the Multiboot Memory Map");
@@ -65,7 +64,7 @@ fn detect_from_limits() -> Result<(), ()> {
 			end: limit
 		}
 	);
-	unsafe { PHYSICAL_FREE_LIST.list.push(entry); }
+	PHYSICAL_FREE_LIST.lock().list.push(entry);
 
 	Ok(())
 }
@@ -80,8 +79,7 @@ pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	let _lock = MM_LOCK.lock();
-	let result = unsafe { PHYSICAL_FREE_LIST.allocate(size) };
+	let result = PHYSICAL_FREE_LIST.lock().allocate(size);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory", size);
 	result.unwrap()
 }
@@ -92,11 +90,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 	assert!(size % alignment == 0, "Size {:#X} is not a multiple of the given alignment {:#X}", size, alignment);
 	assert!(alignment % BasePageSize::SIZE == 0, "Alignment {:#X} is not a multiple of {:#X}", alignment, BasePageSize::SIZE);
 
-	let _lock = MM_LOCK.lock();
-	let result = unsafe {
-		POOL.maintain();
-		PHYSICAL_FREE_LIST.allocate_aligned(size, alignment)
-	};
+	let result = PHYSICAL_FREE_LIST.lock().allocate_aligned(size, alignment);
 	assert!(result.is_ok(), "Could not allocate {:#X} bytes of physical memory aligned to {} bytes", size, alignment);
 	result.unwrap()
 }
@@ -108,9 +102,9 @@ pub fn deallocate(physical_address: usize, size: usize) {
 	assert!(size > 0);
 	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
 
-	unsafe { PHYSICAL_FREE_LIST.deallocate(physical_address, size); }
+	PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
 }
 
 pub fn print_information() {
-	unsafe { PHYSICAL_FREE_LIST.print_information(" PHYSICAL MEMORY FREE LIST "); }
+	PHYSICAL_FREE_LIST.lock().print_information(" PHYSICAL MEMORY FREE LIST ");
 }
