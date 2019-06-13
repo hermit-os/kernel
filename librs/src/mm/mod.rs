@@ -7,24 +7,15 @@
 
 pub mod allocator;
 pub mod freelist;
-mod mmlock;
-mod nodepool;
 mod hole;
 
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use environment;
-use mm::mmlock::MmLock;
-use mm::nodepool::NodePool;
-
 
 extern "C" {
 	static kernel_start: u8;
 }
-
-
-pub static MM_LOCK: MmLock = MmLock::new();
-pub static mut POOL: NodePool = NodePool::new();
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
@@ -68,7 +59,6 @@ pub fn print_information() {
 
 pub fn allocate(sz: usize, execute_disable: bool) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
-	let _lock = MM_LOCK.lock();
 
 	let physical_address = arch::mm::physicalmem::allocate(size);
 	let virtual_address = arch::mm::virtualmem::allocate(size);
@@ -86,7 +76,6 @@ pub fn allocate(sz: usize, execute_disable: bool) -> usize {
 
 pub fn deallocate(virtual_address: usize, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE);
-	let _lock = MM_LOCK.lock();
 
 	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
 		arch::mm::virtualmem::deallocate(virtual_address, size);

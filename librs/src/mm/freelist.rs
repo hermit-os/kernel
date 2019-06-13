@@ -8,12 +8,20 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use collections::{DoublyLinkedList, Node};
-use mm;
 
 
 pub struct FreeListEntry {
 	pub start: usize,
 	pub end: usize,
+}
+
+impl FreeListEntry {
+	pub const fn new(start: usize, end: usize) -> Self {
+		FreeListEntry {
+			start: start,
+			end: end
+		}
+	}
 }
 
 pub struct FreeList {
@@ -44,7 +52,6 @@ impl FreeList {
 				// We have found a region that has exactly the requested size.
 				// Return the address to the beginning of that region and move the node into the pool for deletion or reuse.
 				self.list.remove(node.clone());
-				unsafe { mm::POOL.list.push(node); }
 				return Ok(region_start);
 			}
 		}
@@ -64,7 +71,6 @@ impl FreeList {
 			// We found free space that has exactly the address and size of the block we want to allocate.
 			// Remove it.
 			self.list.remove(node.clone());
-			unsafe { mm::POOL.list.push(node); }
 			return true;
 		} else if region_start < address && region_end == end {
 			// We found free space in which the block we want to allocate lies right-aligned.
@@ -81,14 +87,7 @@ impl FreeList {
 			// Resize the free space to end at our block and add another free space entry that begins where our block ends.
 			node.borrow_mut().value.end = address;
 
-			let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when reserving memory") };
-			unsafe { mm::POOL.list.remove(new_node.clone()); }
-
-			{
-				let mut new_node_borrowed = new_node.borrow_mut();
-				new_node_borrowed.value.start = end;
-				new_node_borrowed.value.end = region_end;
-			}
+			let new_node = Node::new(FreeListEntry::new(end, region_end));
 
 			self.list.insert_after(new_node, node);
 			return true;
@@ -159,7 +158,6 @@ impl FreeList {
 						// into the pool for deletion or reuse.
 						node.borrow_mut().value.end = next_region_end;
 						self.list.remove(next_node.clone());
-						unsafe { mm::POOL.list.push(next_node); }
 						return;
 					}
 				}
@@ -172,15 +170,7 @@ impl FreeList {
 				// Get that entry from the node pool.
 				// We search the list from low to high addresses and insert us before the first entry that has a
 				// higher address than us.
-				let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when attempting insert_before") };
-				unsafe { mm::POOL.list.remove(new_node.clone()); }
-
-				{
-					let mut new_node_borrowed = new_node.borrow_mut();
-					new_node_borrowed.value.start = address;
-					new_node_borrowed.value.end = end;
-				}
-
+				let new_node = Node::new(FreeListEntry::new(address, end));
 				self.list.insert_before(new_node, node);
 				return;
 			}
@@ -188,15 +178,7 @@ impl FreeList {
 
 		// We could not find an entry with a higher address than us.
 		// So we become the new last entry in the list. Get that entry from the node pool.
-		let new_node = unsafe { mm::POOL.list.head().expect("Pool is empty when attempting insert_after") };
-		unsafe { mm::POOL.list.remove(new_node.clone()); }
-
-		{
-			let mut new_node_borrowed = new_node.borrow_mut();
-			new_node_borrowed.value.start = address;
-			new_node_borrowed.value.end = end;
-		}
-
+		let new_node = Node::new(FreeListEntry::new(address, end));
 		if let Some(tail) = self.list.tail() {
 			self.list.insert_after(new_node, tail);
 		} else {
