@@ -12,13 +12,11 @@ use core::str;
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
 use smoltcp::iface::{NeighborCache, EthernetInterfaceBuilder, Routes};
-use smoltcp::socket::SocketSet;
-//use smoltcp::socket::{TcpSocket, TcpSocketBuffer};
 use smoltcp::Result;
 use smoltcp::phy::{self, Device, DeviceCapabilities};
 
 use scheduler;
-use drivers::net::{NETWORK_TASK_ID,NET_SEM};
+use drivers::net::{NETWORK_TASK_ID,networkd};
 
 #[cfg(target_arch="x86_64")]
 use crate::arch::x86_64::kernel::percore::core_scheduler;
@@ -157,40 +155,12 @@ extern "C" fn uhyve_thread(_arg: usize) {
 		.routes(routes)
 		.finalize();
 
-	let mut sockets = SocketSet::new(vec![]);
-	let boot_time = crate::arch::get_boot_time();
-	let mut counter: usize = 0;
-
 	// Install interrupzt handler
 	irq_install_handler(UHYVE_IRQ_NET, uhyve_irqhandler as usize);
 
 	::arch::irq::enable();
 
-	loop {
-		let microseconds = ::arch::processor::get_timer_ticks() - boot_time;
-		let timestamp = Instant::from_millis(microseconds as i64 / 1000i64);
-
-		match iface.poll(&mut sockets, timestamp) {
-			Ok(ready) => {
-				if ready == true {
-					trace!("receive message {}", counter);
-				} else {
-					match iface.poll_delay(&sockets, timestamp) {
-						Some(duration) => {
-							trace!("duration {}", duration);
-							NET_SEM.acquire(Some(duration.millis()))
-						},
-						None => NET_SEM.acquire(None),
-					};
-				}
-			},
-			Err(e) => {
-				debug!("poll error: {}", e);
-			}
-		}
-
-		counter = counter+1;
-	}
+	networkd(&mut iface);
 }
 
 pub fn init() {
