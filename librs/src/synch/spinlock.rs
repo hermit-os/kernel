@@ -62,8 +62,8 @@ pub struct SpinlockGuard<'a, T: ?Sized + 'a>
 }
 
 // Same unsafe impls as `Spinlock`
-unsafe impl<T: ?Sized + Send> Sync for Spinlock<T> {}
-unsafe impl<T: ?Sized + Send> Send for Spinlock<T> {}
+unsafe impl<T: ?Sized> Sync for Spinlock<T> {}
+unsafe impl<T: ?Sized> Send for Spinlock<T> {}
 
 impl<T> Spinlock<T>
 {
@@ -197,8 +197,8 @@ pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a>
 }
 
 // Same unsafe impls as `SoinlockIrqSave`
-unsafe impl<T: ?Sized + Send> Sync for SpinlockIrqSave<T> {}
-unsafe impl<T: ?Sized + Send> Send for SpinlockIrqSave<T> {}
+unsafe impl<T: ?Sized> Sync for SpinlockIrqSave<T> {}
+unsafe impl<T: ?Sized> Send for SpinlockIrqSave<T> {}
 
 impl<T> SpinlockIrqSave<T>
 {
