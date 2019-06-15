@@ -140,9 +140,9 @@ extern "C" fn initd(_arg: usize) {
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
-	} /*else {
-		err = arch::network_adapter_init();
-	}*/
+	} else {
+		let _ = drivers::net::rtl8139::init();
+	}
 
 	syscalls::init();
 
