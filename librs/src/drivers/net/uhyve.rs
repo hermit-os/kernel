@@ -19,15 +19,15 @@ use scheduler;
 use drivers::net::{NETWORK_TASK_ID,networkd};
 
 #[cfg(target_arch="x86_64")]
-use crate::arch::x86_64::kernel::percore::core_scheduler;
+use arch::x86_64::kernel::percore::core_scheduler;
 #[cfg(target_arch="x86_64")]
-use crate::arch::x86_64::kernel::{get_ip,get_gateway};
+use arch::x86_64::kernel::{get_ip,get_gateway};
 #[cfg(target_arch="x86_64")]
-use crate::arch::x86_64::kernel::irq::*;
+use arch::x86_64::kernel::irq::*;
 #[cfg(target_arch="x86_64")]
-use crate::arch::x86_64::kernel::apic;
+use arch::x86_64::kernel::apic;
 #[cfg(target_arch="x86_64")]
-use crate::arch::x86_64::mm::paging::virt_to_phys;
+use 	arch::x86_64::mm::paging::virt_to_phys;
 #[cfg(target_arch="x86_64")]
 use x86::io::*;
 
@@ -155,7 +155,7 @@ extern "C" fn uhyve_thread(_arg: usize) {
 		.routes(routes)
 		.finalize();
 
-	// Install interrupzt handler
+	// Install interrupt handler
 	irq_install_handler(UHYVE_IRQ_NET, uhyve_irqhandler as usize);
 
 	::arch::irq::enable();
@@ -253,7 +253,7 @@ impl RxToken {
 		if len <= UHYVE_MAX_MSG_SIZE {
 			self.len = len;
 		} else {
-			warn!("Invalid message size {}", len);
+			error!("Invalid message size {}", len);
 		}
 	}
 
@@ -263,10 +263,10 @@ impl RxToken {
 }
 
 impl phy::RxToken for RxToken {
-	fn consume<R, F>(self, _timestamp: Instant, f: F) -> Result<R>
-		where F: FnOnce(&[u8]) -> Result<R>
+	fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
+		where F: FnOnce(&mut [u8]) -> Result<R>
 	{
-		let (first, _) = self.buffer.split_at(self.len);
+		let (first, _) = self.buffer.split_at_mut(self.len);
 		f(first)
 	}
 }
@@ -287,7 +287,7 @@ impl TxToken {
 
 		let  ret = uhyve_write.ret();
 		if ret != 0 {
-			debug!("Unable to send message: {}", ret);
+			error!("Unable to send message: {}", ret);
 		}
 
 		uhyve_write.len()
