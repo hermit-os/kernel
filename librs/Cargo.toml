@@ -30,10 +30,10 @@ default-features = false
 #features = ["release_max_level_info"]
 
 [dependencies.smoltcp]
-#version = "0.5"
-git = "https://github.com/hermitcore/smoltcp.git"
+version = "0.5"
+#git = "https://github.com/hermitcore/smoltcp.git"
 default-features = false
-features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4", "proto-dhcpv4"]
+features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4"]
 # for debugging: "log", "verbose"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]

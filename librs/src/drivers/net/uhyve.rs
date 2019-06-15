@@ -8,6 +8,7 @@
 use alloc::collections::BTreeMap;
 use core::ptr::read_volatile;
 use core::str;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
@@ -30,6 +31,12 @@ use arch::x86_64::kernel::apic;
 use 	arch::x86_64::mm::paging::virt_to_phys;
 #[cfg(target_arch="x86_64")]
 use x86::io::*;
+
+static POOLING: AtomicBool = AtomicBool::new(false);
+
+fn is_pooling() -> bool {
+	POOLING.load(Ordering::SeqCst)
+}
 
 const UHYVE_IRQ_NET: u32 = 11;
 const UHYVE_PORT_NETINFO: u16	= 0x600;
@@ -160,7 +167,7 @@ extern "C" fn uhyve_thread(_arg: usize) {
 
 	::arch::irq::enable();
 
-	networkd(&mut iface);
+	networkd(&mut iface, is_pooling);
 }
 
 pub fn init() {
@@ -177,7 +184,8 @@ pub fn init() {
 
 #[cfg(target_arch="x86_64")]
 extern "x86-interrupt" fn uhyve_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	trace!("Receive network interrupt from uhyve");
+	debug!("Receive network interrupt from uhyve");
+	POOLING.store(true, Ordering::SeqCst);
 	crate::drivers::net::NET_SEM.release();
 	apic::eoi();
 	core_scheduler().scheduler();
@@ -225,6 +233,7 @@ impl<'a> Device<'a> for UhyveNet {
 
 			Some((rx, tx))
 		} else {
+			POOLING.store(false, Ordering::SeqCst);
 			None
 		}
 	}
@@ -263,10 +272,10 @@ impl RxToken {
 }
 
 impl phy::RxToken for RxToken {
-	fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> Result<R>
-		where F: FnOnce(&mut [u8]) -> Result<R>
+	fn consume<R, F>(self, _timestamp: Instant, f: F) -> Result<R>
+		where F: FnOnce(&[u8]) -> Result<R>
 	{
-		let (first, _) = self.buffer.split_at_mut(self.len);
+		let (first, _) = self.buffer.split_at(self.len);
 		f(first)
 	}
 }
