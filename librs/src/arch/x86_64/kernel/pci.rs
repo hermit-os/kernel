@@ -55,7 +55,7 @@ impl PciAdapter {
 		let mut base_sizes: [u32; 6] = [0; 6];
 		for i in 0..6 {
 			let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
-			base_addresses[i] = read_config(bus, device, register);
+			base_addresses[i] = read_config(bus, device, register) & 0xFFFF_FFFC;
 
 			if base_addresses[i] > 0 {
 				write_config(bus, device, register, u32::MAX);
@@ -138,6 +138,13 @@ impl fmt::Display for PciAdapter {
 		// If the devices uses an IRQ, output this one as well.
 		if self.irq != 0 && self.irq != u8::MAX {
 			write!(f, ", IRQ {}", self.irq)?;
+		}
+
+		write!(f, ", iobase ")?;
+		for i in 0..self.base_addresses.len() {
+			if self.base_addresses[i] > 0 {
+				write!(f, "0x{:x} (size 0x{:x}) ", self.base_addresses[i], self.base_sizes[i])?;
+			}
 		}
 
 		Ok(())
