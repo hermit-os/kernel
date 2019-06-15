@@ -30,7 +30,8 @@ default-features = false
 #features = ["release_max_level_info"]
 
 [dependencies.smoltcp]
-version = "0.5"
+#version = "0.5"
+git = "https://github.com/hermitcore/smoltcp.git"
 default-features = false
 features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4", "proto-dhcpv4"]
 # for debugging: "log", "verbose"
