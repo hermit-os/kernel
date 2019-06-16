@@ -8,7 +8,7 @@ RUN apt-get -qq update
 
 # Install required packets from ubuntu repository
 RUN apt-get install -y apt-transport-https curl wget vim nano git binutils autoconf automake make cmake qemu-kvm qemu-system-x86 nasm gcc g++ build-essential libtool bsdmainutils
-RUN apt-get install libssl-dev pkg-config zlib1g-dev
+RUN apt-get install -y libssl-dev pkg-config zlib1g-dev
 
 # add path to hermitcore packets
 RUN echo "deb [trusted=yes] https://dl.bintray.com/hermitcore/ubuntu bionic main" | tee -a /etc/apt/sources.list
