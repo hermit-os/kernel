@@ -6,8 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
+use config::*;
 use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::KERNEL_HEADER;

@@ -26,8 +26,6 @@
 #![allow(unused_macros)]
 #![no_std]
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
@@ -61,10 +59,12 @@ mod scheduler;
 mod synch;
 mod syscalls;
 mod drivers;
+mod config;
 
 // IMPORTS
 pub use arch::*;
 pub use syscalls::*;
+pub use config::*;
 
 use arch::percore::*;
 use mm::allocator::LockedHeap;

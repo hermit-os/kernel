@@ -16,8 +16,6 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
 	endif()
 endif()
 
-configure_file(config.rs.in ${CMAKE_BINARY_DIR}/hermit_rs/config.rs)
-
 # Add the Cargo project to build the Rust library.
 set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
 add_custom_target(hermit_rs
@@ -38,8 +36,8 @@ add_custom_target(doc
 # arch
 if("${HERMIT_ARCH}" STREQUAL "aarch64")
 	add_subdirectory(src/arch/aarch64)
-elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
-	add_subdirectory(src/arch/x86_64/kernel)
+#elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
+#	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
 # Build all kernel modules into a single static library.

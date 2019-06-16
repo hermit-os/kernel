@@ -5,12 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
 use arch::x86_64::kernel::KERNEL_HEADER;
 use boot_processor_main;
 use application_processor_main;
 use core::ptr;
+use config::KERNEL_STACK_SIZE;
 
 #[cfg(not(test))]
 #[inline(never)]

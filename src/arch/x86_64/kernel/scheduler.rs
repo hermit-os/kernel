@@ -8,8 +8,6 @@
 
 //! Architecture dependent interface to initialize a task
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
 use alloc::rc::Rc;
 use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::gdt;
@@ -20,6 +18,7 @@ use arch::x86_64::kernel::processor;
 use core::cell::RefCell;
 use core::{mem, ptr};
 use scheduler::task::{Task, TaskFrame, TaskTLS};
+use config::*;
 
 extern "C" {
 	static tls_start: u8;
