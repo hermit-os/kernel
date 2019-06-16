@@ -8,6 +8,8 @@
 pub mod allocator;
 pub mod freelist;
 mod hole;
+#[cfg(test)]
+mod test;
 
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -34,6 +36,7 @@ pub fn kernel_end_address() -> usize {
 	unsafe { KERNEL_END_ADDRESS }
 }
 
+#[cfg(not(test))]
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {

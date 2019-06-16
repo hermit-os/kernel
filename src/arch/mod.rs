@@ -61,10 +61,13 @@ pub use arch::aarch64::kernel::systemtime::get_boot_time;
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::*;
 
+#[cfg(not(test))]
 #[cfg(target_arch="x86_64")]
-pub use arch::x86_64::kernel::{get_processor_count,application_processor_init,
-	boot_application_processors,message_output_init,
-	output_message_byte,boot_processor_init};
+pub use arch::x86_64::kernel::{boot_application_processors,
+	application_processor_init,boot_processor_init};
+#[cfg(target_arch="x86_64")]
+pub use arch::x86_64::kernel::{get_processor_count,
+	message_output_init, output_message_byte};
 #[cfg(target_arch="x86_64")]
 pub use arch::x86_64::kernel::apic::{set_oneshot_timer,wakeup_core};
 #[cfg(target_arch="x86_64")]

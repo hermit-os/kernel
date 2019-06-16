@@ -28,7 +28,10 @@ pub struct Heap {
 	index: usize,
 	bottom: usize,
 	size: usize,
+	#[cfg(not(test))]
 	holes: HoleList,
+	#[cfg(test)]
+	pub holes: HoleList,
 }
 
 impl Heap {

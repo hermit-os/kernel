@@ -22,6 +22,7 @@ pub mod systemtime;
 pub mod switch;
 mod pci_ids;
 mod smp_boot_code;
+#[cfg(not(test))]
 mod start;
 #[cfg(feature = "vga")]
 mod vga;
@@ -183,6 +184,7 @@ pub fn output_message_byte(byte: u8) {
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
+#[cfg(not(test))]
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
@@ -222,12 +224,14 @@ pub fn boot_processor_init() {
 
 /// Boots all available Application Processors on bare-metal or QEMU.
 /// Called after the Boot Processor has been fully initialized along with its scheduler.
+#[cfg(not(test))]
 pub fn boot_application_processors() {
 	apic::boot_application_processors();
 	apic::print_information();
 }
 
 /// Application Processor initialization
+#[cfg(not(test))]
 pub fn application_processor_init() {
 	percore::init();
 	processor::configure();

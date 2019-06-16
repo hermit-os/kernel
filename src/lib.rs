@@ -26,6 +26,10 @@
 #![allow(unused_macros)]
 #![no_std]
 
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
@@ -72,9 +76,11 @@ use core::ptr;
 use core::alloc::GlobalAlloc;
 use alloc::alloc::Layout;
 
+#[cfg(not(test))]
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -89,6 +95,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
     ptr
 }
 
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -103,6 +110,7 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
     new_ptr
 }
 
+#[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
     let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -167,6 +175,7 @@ extern "C" fn initd(_arg: usize) {
 
 /// Entry Point of HermitCore for the Boot Processor
 /// (called from entry.asm)
+#[cfg(not(test))]
 pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	unsafe { sections_init(); }
@@ -199,6 +208,7 @@ pub fn boot_processor_main() -> ! {
 
 /// Entry Point of HermitCore for an Application Processor
 /// (called from entry.asm)
+#[cfg(not(test))]
 pub fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
