@@ -4,8 +4,7 @@ variables:
 
 stages:
   - prepare
-  - build
-  #- test
+  - test
 
 # Stage: prepare
 ##############################################################################
@@ -18,38 +17,13 @@ docker:
     - shell
     - linux
 
-# Stage: build
-##############################################################################
-
-build:
-  stage: build
-  script:
-    - mkdir -p build
-    - cd build
-    - cmake -DTOOLCHAIN_BIN_DIR=/opt/hermit/bin -DCMAKE_INSTALL_PREFIX=/opt/hermit ..
-    - make
-  image: ${IMAGE}
-  tags:
-    - docker
-  artifacts:
-    expire_in: 1 week
-    paths:
-      - ./build
-
 # Stage: test
 ##############################################################################
+
 test:
   stage: test
   script:
-    - lscpu
-    - cd build
-    - export TDIR=./local_prefix/opt/hermit/x86_64-hermit/extra
-    - export FILES="$TDIR/tests/hello $TDIR/tests/hellof $TDIR/tests/hello++ $TDIR/tests/thr_hello $TDIR/benchmarks/stream $TDIR/tests/test-malloc"
-    - export PROXY=./local_prefix/opt/hermit/bin/proxy
-    - for f in $FILES; do echo "check $f..."; HERMIT_ISLE=uhyve HERMIT_MEM=128M HERMIT_CPUS=1 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
-    - for f in $FILES; do echo "check $f..."; HERMIT_ISLE=uhyve HERMIT_MEM=128M HERMIT_CPUS=2 HERMIT_VERBOSE=1 timeout --kill-after=5m 5m $PROXY $f || exit 1; done
+    - cargo test
   image: ${IMAGE}
   tags:
     - docker
-  dependencies:
-    - build
