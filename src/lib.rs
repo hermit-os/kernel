@@ -122,6 +122,7 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
     }
 }
 
+#[cfg(not(test))]
 extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
@@ -133,6 +134,7 @@ extern "C" {
 // FUNCTIONS
 unsafe fn sections_init() {
 	// Initialize .kbss sections for the kernel.
+	#[cfg(not(test))]
 	ptr::write_bytes(
 		&mut hbss_start as *mut u8,
 		0,
@@ -140,6 +142,7 @@ unsafe fn sections_init() {
 	);
 }
 
+#[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.

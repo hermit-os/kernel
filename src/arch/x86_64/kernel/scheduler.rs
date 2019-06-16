@@ -20,6 +20,7 @@ use core::{mem, ptr};
 use scheduler::task::{Task, TaskFrame, TaskTLS};
 use config::*;
 
+#[cfg(not(test))]
 extern "C" {
 	static tls_start: u8;
 	static tls_end: u8;
@@ -110,6 +111,11 @@ extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0);
 }
 
+#[cfg(test)]
+extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
+}
+
+#[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	// Check if the task (process or thread) uses Thread-Local-Storage.
 	let tls_size = unsafe { &tls_end as *const u8 as usize - &tls_start as *const u8 as usize };

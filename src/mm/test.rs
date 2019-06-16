@@ -1,3 +1,10 @@
+// The memory allocator and its tests are derived from the crate `linked-list-allocator`
+// (https://github.com/phil-opp/linked-list-allocator).
+// This crate is dual-licensed under MIT or the Apache License (Version 2.0).
+
+// To avoid false sharing, our version allocate as smallest block 64 byte (= cache line).
+// In addition, for pre
+
 use super::*;
 use core::alloc::Layout;
 use std::mem::{align_of, size_of};
