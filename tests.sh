@@ -7,6 +7,7 @@ export DEBIAN_FRONTEND="noninteractive"
 
 apt-get -qq update || exit 1
 apt-get install -y --no-install-recommends binutils bsdmainutils ca-certificates cmake curl gcc git libc-dev make nasm qemu-system-x86 rpm || exit 1
+apt-get install libssl-dev pkg-config cmake zlib1g-dev
 
 echo "deb [trusted=yes] http://dl.bintray.com/hermitcore/ubuntu bionic main" >> /etc/apt/sources.list
 apt-get -qq update || exit 1
@@ -17,8 +18,9 @@ export PATH="$HOME/.cargo/bin:$PATH"
 curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 cargo --version # dump version of the Rust toolchain
 cargo install cargo-xbuild
+cargo install cargo-tarpaulin
 rustup component add rust-src
-cargo test
+cargo tarpaulin
 #cargo install --git https://github.com/hermitcore/objmv.git
 #cargo install --git https://github.com/hermitcore/pci_ids_parser.git
 #mkdir build

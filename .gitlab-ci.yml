@@ -23,7 +23,7 @@ docker:
 test:
   stage: test
   script:
-    - cargo test
+    - cargo tarpaulin
   image: ${IMAGE}
   tags:
     - docker
