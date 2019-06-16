@@ -1,0 +1,29 @@
+variables:
+  IMAGE: ubuntu:with-hermitcore
+  GIT_SUBMODULE_STRATEGY: normal
+
+stages:
+  - prepare
+  - test
+
+# Stage: prepare
+##############################################################################
+
+docker:
+  stage: prepare
+  script:
+    - docker build -t ${IMAGE} .
+  tags:
+    - shell
+    - linux
+
+# Stage: test
+##############################################################################
+
+test:
+  stage: test
+  script:
+    - cargo tarpaulin
+  image: ${IMAGE}
+  tags:
+    - docker
