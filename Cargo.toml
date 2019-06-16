@@ -5,6 +5,7 @@ authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
+build = "build.rs"
 license = "MIT/Apache-2.0"
 readme = "README.md"
 categories = ["no-std"]

@@ -6,8 +6,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
 pub mod acpi;
 pub mod apic;
 pub mod gdt;
@@ -22,10 +20,13 @@ pub mod scheduler;
 pub mod serial;
 pub mod systemtime;
 pub mod switch;
+mod pci_ids;
+mod smp_boot_code;
 mod start;
 #[cfg(feature = "vga")]
 mod vga;
 
+use config::KERNEL_STACK_SIZE;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 

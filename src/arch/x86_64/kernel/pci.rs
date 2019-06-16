@@ -5,12 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/pcidata.rs"));
-
 use alloc::vec::Vec;
 use core::{fmt, u8, u32};
 use synch::spinlock::Spinlock;
 use x86::io::*;
+use arch::x86_64::kernel::pci_ids::{CLASSES,VENDORS};
 
 const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
