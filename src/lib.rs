@@ -56,6 +56,7 @@ mod collections;
 mod console;
 mod environment;
 mod errno;
+#[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;
@@ -132,9 +133,9 @@ extern "C" {
 }
 
 // FUNCTIONS
+#[cfg(not(test))]
 unsafe fn sections_init() {
 	// Initialize .kbss sections for the kernel.
-	#[cfg(not(test))]
 	ptr::write_bytes(
 		&mut hbss_start as *mut u8,
 		0,
