@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND="noninteractive"
 
 apt-get -qq update || exit 1
 apt-get install -y --no-install-recommends binutils bsdmainutils ca-certificates cmake curl gcc git libc-dev make nasm qemu-system-x86 rpm || exit 1
-apt-get install libssl-dev pkg-config cmake zlib1g-dev
+apt-get install -y --no-install-recommends libssl-dev pkg-config cmake zlib1g-dev
 
 echo "deb [trusted=yes] http://dl.bintray.com/hermitcore/ubuntu bionic main" >> /etc/apt/sources.list
 apt-get -qq update || exit 1
