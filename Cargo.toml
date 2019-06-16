@@ -1,0 +1,68 @@
+[package]
+name = "hermit-rs"
+version = "0.3.7"
+authors = [
+	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
+	"Colin Finck <colin.finck@rwth-aachen.de>"
+]
+build = "build.rs"
+license = "MIT/Apache-2.0"
+readme = "README.md"
+categories = ["no-std"]
+description = """
+A Rust-based, lightweight unikernel
+"""
+
+[lib]
+crate-type = ["staticlib"]
+
+[features]
+#default = ["vga"]
+vga = []
+
+[dependencies]
+bitflags = "1.0.*"
+spin = "0.5"
+#byteorder = { version = "1.0", default-features = false }
+
+[dependencies.log]
+version = "0.3"
+default-features = false
+#features = ["release_max_level_info"]
+
+[dependencies.smoltcp]
+version = "0.5"
+#git = "https://github.com/hermitcore/smoltcp.git"
+default-features = false
+features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4"]
+# for debugging: "log", "verbose"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
+git = "https://github.com/hermitcore/multiboot.git"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies.x86]
+git = "https://github.com/hermitcore/rust-x86.git"
+branch = "hermit"
+default-features = false
+
+[package.metadata.cargo-xbuild]
+memcpy = true
+
+# The development profile, used for `cargo build`.
+[profile.dev]
+opt-level = 1      # controls the `--opt-level` the compiler builds with
+debug = true       # controls whether the compiler passes `-C debuginfo`
+                   # a value of `true` is equivalent to `2`
+rpath = false      # controls whether the compiler passes `-C rpath`
+lto = false         # controls `-C lto` for binaries and staticlibs
+debug-assertions = true # controls whether debug assertions are enabled
+codegen-units = 1 # controls whether the compiler passes `-C codegen-units`
+                   # `codegen-units` is ignored when `lto = true`
+
+# The release profile, used for `cargo build --release`.
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
