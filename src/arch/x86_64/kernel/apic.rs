@@ -422,6 +422,7 @@ pub fn init_next_processor_variables(core_id: usize) {
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
+#[cfg(not(test))]
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(SMP_BOOT_CODE.len() < BasePageSize::SIZE, "SMP Boot Code is larger than a page");

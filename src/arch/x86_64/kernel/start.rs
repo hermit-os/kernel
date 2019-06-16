@@ -11,7 +11,6 @@ use application_processor_main;
 use core::ptr;
 use config::KERNEL_STACK_SIZE;
 
-#[cfg(not(test))]
 #[inline(never)]
 #[no_mangle]
 #[naked]
