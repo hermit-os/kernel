@@ -226,7 +226,10 @@ impl<T> SpinlockIrqSave<T>
 impl<T: ?Sized> SpinlockIrqSave<T>
 {
 	fn obtain_lock(&self) {
+		#[cfg(not(test))]
 		let irq = irq::nested_disable();
+		#[cfg(test)]
+		let irq = false;
 
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
@@ -283,6 +286,7 @@ impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T>
 	{
 		let irq =  self.irq.swap(false, Ordering::SeqCst);
 		self.dequeue.fetch_add(1, Ordering::SeqCst);
+		#[cfg(not(test))]
 		irq::nested_enable(irq);
 	}
 }

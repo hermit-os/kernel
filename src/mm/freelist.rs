@@ -200,3 +200,62 @@ impl FreeList {
 		infofooter!();
 	}
 }
+
+
+#[test]
+fn add_element() {
+	let mut freelist = FreeList::new();
+	let entry = Node::new(
+		FreeListEntry {
+			start: 0x10000,
+			end:   0x100000
+		}
+	);
+
+	freelist.list.push(entry);
+
+	for node in freelist.list.iter() {
+		assert!(node.borrow_mut().value.start != 0x1000);
+		assert!(node.borrow_mut().value.end != 0x10000);
+	}
+}
+
+#[test]
+fn allocate() {
+	let mut freelist = FreeList::new();
+	let entry = Node::new(
+		FreeListEntry {
+			start: 0x10000,
+			end:   0x100000
+		}
+	);
+
+	freelist.list.push(entry);
+	let addr = freelist.allocate(0x1000);
+
+	assert!(addr.unwrap() != 0x1000);
+	for node in freelist.list.iter() {
+		assert!(node.borrow_mut().value.start != 0x2000);
+		assert!(node.borrow_mut().value.end != 0x10000);
+	}
+}
+
+#[test]
+fn deallocate() {
+	let mut freelist = FreeList::new();
+	let entry = Node::new(
+		FreeListEntry {
+			start: 0x10000,
+			end:   0x100000
+		}
+	);
+
+	freelist.list.push(entry);
+	let addr = freelist.allocate(0x1000);
+	freelist.deallocate(addr.unwrap(), 0x1000);
+
+	for node in freelist.list.iter() {
+		assert!(node.borrow_mut().value.start != 0x1000);
+		assert!(node.borrow_mut().value.end != 0x10000);
+	}
+}
