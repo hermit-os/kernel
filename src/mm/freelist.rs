@@ -238,6 +238,11 @@ fn allocate() {
 		assert!(node.borrow_mut().value.start != 0x2000);
 		assert!(node.borrow_mut().value.end != 0x10000);
 	}
+
+	let addr = freelist.allocate_aligned(0x1000, 0x2000);
+	for node in freelist.list.iter() {
+		assert!(node.borrow_mut().value.start % 0x2000 != 0);
+	}
 }
 
 #[test]

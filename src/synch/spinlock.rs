@@ -290,3 +290,74 @@ impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T>
 		irq::nested_enable(irq);
 	}
 }
+
+// tests are derived from https://github.com/mvdnes/spin-rs/blob/master/src/mutex.rs
+#[cfg(test)]
+mod tests {
+	use std::prelude::v1::*;
+
+    use std::sync::mpsc::channel;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::thread;
+
+    use super::*;
+
+	#[test]
+	fn lock_test1() {
+        static S: Spinlock<u32>  = Spinlock::new(0);
+        const J: u32 = 1000;
+        const K: u32 = 2	;
+
+        fn inc() {
+            for _ in 0..J {
+                unsafe {
+                    *S.lock() += 1;
+                }
+            }
+        }
+
+        let (tx, rx) = channel();
+        for _ in 0..K {
+            let tx2 = tx.clone();
+            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+            let tx2 = tx.clone();
+            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+        }
+
+        drop(tx);
+        for _ in 0..2 * K {
+            rx.recv().unwrap();
+        }
+        assert_eq!(*S.lock(), J * K * 2);
+    }
+
+	#[test]
+	fn lock_test2() {
+        static S: SpinlockIrqSave<u32>  = SpinlockIrqSave::new(0);
+        const J: u32 = 500;
+        const K: u32 = 3;
+
+        fn inc() {
+            for _ in 0..J {
+                unsafe {
+                    *S.lock() += 1;
+                }
+            }
+        }
+
+        let (tx, rx) = channel();
+        for _ in 0..K {
+            let tx2 = tx.clone();
+            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+            let tx2 = tx.clone();
+            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
+        }
+
+        drop(tx);
+        for _ in 0..2 * K {
+            rx.recv().unwrap();
+        }
+        assert_eq!(*S.lock(), J * K * 2);
+    }
+}
