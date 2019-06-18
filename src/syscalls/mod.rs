@@ -54,6 +54,12 @@ pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
 }
 
 #[no_mangle]
+pub extern "C" fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
+	error!("fcntl is currently not supported!");
+	-1
+}
+
+#[no_mangle]
 pub extern "C" fn sys_shutdown() -> ! {
 	unsafe { SYS.shutdown() }
 }
