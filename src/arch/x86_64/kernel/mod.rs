@@ -21,6 +21,7 @@ pub mod serial;
 pub mod systemtime;
 pub mod switch;
 mod pci_ids;
+#[cfg(not(test))]
 mod smp_boot_code;
 #[cfg(not(test))]
 mod start;
@@ -33,6 +34,7 @@ use arch::x86_64::kernel::serial::SerialPort;
 
 use core::{intrinsics,mem,ptr};
 use environment;
+#[cfg(not(test))]
 use kernel_message_buffer;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -88,8 +90,8 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	uartport: 0,
 	single_kernel: 1,
 	uhyve: 0,
-	hcip: [10,0,5,2],
-	hcgateway: [10,0,5,1],
+	hcip: [255,255,255,255],
+	hcgateway: [255,255,255,255],
 	hcmask: [255,255,255,0],
 	boot_stack: [0xCD; KERNEL_STACK_SIZE]
 };
@@ -168,6 +170,27 @@ pub fn message_output_init() {
 	}
 }
 
+#[cfg(test)]
+pub fn output_message_byte(byte: u8) {
+	extern {
+		fn write(fd: i32, buf: *const u8, count: usize) -> isize;
+	}
+
+	unsafe {
+		let _ = write(2, &byte as *const _, 1);
+	}
+}
+
+#[test]
+fn test_output() {
+	output_message_byte('t' as u8);
+	output_message_byte('e' as u8);
+	output_message_byte('s' as u8);
+	output_message_byte('t' as u8);
+	output_message_byte('\n' as u8);
+}
+
+#[cfg(not(test))]
 pub fn output_message_byte(byte: u8) {
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.

@@ -18,6 +18,7 @@ use arch::x86_64::mm::virtualmem;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::kernel::KERNEL_HEADER;
+#[cfg(not(test))]
 use arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, ptr, u32};

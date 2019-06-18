@@ -13,7 +13,6 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
 use smoltcp::iface::{NeighborCache, EthernetInterfaceBuilder, Routes};
-use smoltcp::Result;
 use smoltcp::phy::{self, Device, DeviceCapabilities};
 
 use scheduler;
@@ -170,7 +169,14 @@ extern "C" fn uhyve_thread(_arg: usize) {
 	networkd(&mut iface, is_pooling);
 }
 
-pub fn init() {
+pub fn init() -> Result<(), ()> {
+	// does uhyve configure the network interface?
+	let ip = get_ip();
+	if ip[0] == 0xff && ip[1] == 0xff &&
+	   ip[2] == 0xff && ip[3] == 0xff {
+		return Err(());
+	}
+
 	let core_scheduler = core_scheduler();
 	unsafe {
 		NETWORK_TASK_ID = core_scheduler.spawn(
@@ -180,6 +186,8 @@ pub fn init() {
 			Some(crate::arch::mm::virtualmem::task_heap_start())
 		);
 	}
+
+	Ok(())
 }
 
 #[cfg(target_arch="x86_64")]
@@ -272,8 +280,8 @@ impl RxToken {
 }
 
 impl phy::RxToken for RxToken {
-	fn consume<R, F>(self, _timestamp: Instant, f: F) -> Result<R>
-		where F: FnOnce(&[u8]) -> Result<R>
+	fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
+		where F: FnOnce(&[u8]) -> smoltcp::Result<R>
 	{
 		let (first, _) = self.buffer.split_at(self.len);
 		f(first)
@@ -304,8 +312,8 @@ impl TxToken {
 }
 
 impl phy::TxToken for TxToken {
-	fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> Result<R>
-		where F: FnOnce(&mut [u8]) -> Result<R>
+	fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
+		where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
 	{
 		let mut buffer = vec![0; len];
 		let result = f(&mut buffer);
