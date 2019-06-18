@@ -56,6 +56,7 @@ mod collections;
 mod console;
 mod environment;
 mod errno;
+#[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;
@@ -132,9 +133,9 @@ extern "C" {
 }
 
 // FUNCTIONS
+#[cfg(not(test))]
 unsafe fn sections_init() {
 	// Initialize .kbss sections for the kernel.
-	#[cfg(not(test))]
 	ptr::write_bytes(
 		&mut hbss_start as *mut u8,
 		0,
@@ -147,7 +148,7 @@ extern "C" fn initd(_arg: usize) {
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		drivers::net::uhyve::init();
+		let _ = drivers::net::uhyve::init();
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");

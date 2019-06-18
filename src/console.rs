@@ -31,3 +31,8 @@ impl fmt::Write for Console {
 }
 
 pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console);
+
+#[test]
+fn test_console() {
+	println!("HelloWorld");
+}
