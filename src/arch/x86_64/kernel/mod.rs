@@ -90,8 +90,8 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	uartport: 0,
 	single_kernel: 1,
 	uhyve: 0,
-	hcip: [10,0,5,2],
-	hcgateway: [10,0,5,1],
+	hcip: [255,255,255,255],
+	hcgateway: [255,255,255,255],
 	hcmask: [255,255,255,0],
 	boot_stack: [0xCD; KERNEL_STACK_SIZE]
 };
