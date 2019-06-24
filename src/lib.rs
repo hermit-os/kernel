@@ -44,7 +44,6 @@ extern crate x86;
 extern crate log;
 extern crate smoltcp;
 
-// MODULES
 #[macro_use]
 mod macros;
 
@@ -66,7 +65,6 @@ mod syscalls;
 mod drivers;
 mod config;
 
-// IMPORTS
 pub use arch::*;
 pub use syscalls::*;
 pub use config::*;
@@ -128,11 +126,8 @@ extern "C" {
 	static mut __bss_start: u8;
 	static mut hbss_start: u8;
 	static kernel_start: u8;
-
-	fn libc_start(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
 }
 
-// FUNCTIONS
 #[cfg(not(test))]
 unsafe fn sections_init() {
 	// Initialize .kbss sections for the kernel.
@@ -145,6 +140,10 @@ unsafe fn sections_init() {
 
 #[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
+	extern "C" {
+		fn runtime_entry(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
+	}
+
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
@@ -173,7 +172,7 @@ extern "C" fn initd(_arg: usize) {
 		);
 
 		// And finally start the application.
-		libc_start(argc, argv, environ);
+		runtime_entry(argc, argv, environ);
 	}
 }
 
