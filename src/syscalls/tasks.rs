@@ -159,3 +159,9 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 		_ => -EINVAL
 	}
 }
+
+#[no_mangle]
+pub extern "C" fn __thread_atexit(dtor: unsafe extern fn(*mut u8), arg: *mut u8) -> i32 {
+	info!("thread_atexit: dtor 0x{:x}, arg 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
+	0
+}
