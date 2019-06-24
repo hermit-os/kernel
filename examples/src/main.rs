@@ -1,7 +1,12 @@
 use std::f64::consts::PI;
 use std::thread;
+use std::fs::File;
+use std::io::Read;
+use std::io::Write;
 
-fn pi_sequential(num_steps: u64) -> bool {
+type Result<T> = std::result::Result<T, ()>;
+
+fn pi_sequential(num_steps: u64) -> Result<()> {
 	let step = 1.0 / num_steps as f64;
 	let mut sum = 0 as f64;
 
@@ -13,10 +18,14 @@ fn pi_sequential(num_steps: u64) -> bool {
 	let mypi = sum * (1.0 / num_steps as f64);
 	println!("Pi: {} (sequential)", mypi);
 
-	(mypi - PI).abs() < 0.00001
+	if (mypi - PI).abs() < 0.00001 {
+		Ok(())
+	} else {
+		Err(())
+	}
 }
 
-fn pi_parallel(nthreads: u64, num_steps: u64) -> bool {
+fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<()> {
 	let step = 1.0 / num_steps as f64;
 	let mut sum = 0.0 as f64;
 
@@ -43,16 +52,47 @@ fn pi_parallel(nthreads: u64, num_steps: u64) -> bool {
 	let mypi = sum * (1.0 / num_steps as f64);
 	println!("Pi: {} (with {} threads)", mypi, nthreads);
 
-	(mypi - PI).abs() < 0.00001
+	if (mypi - PI).abs() < 0.00001 {
+		Ok(())
+	} else {
+		Err(())
+	}
 }
 
-fn hello() -> bool {
+fn read_file() -> Result<()> {
+	let mut file = File::open("/etc/hostname").unwrap();
+	let mut contents = String::new();
+	file.read_to_string(&mut contents).unwrap();
+
+	println!("Hostname: {}", contents);
+
+	Ok(())
+}
+
+fn create_file() -> Result<()> {
+	{
+		let mut file = File::create("/tmp/foo.txt").unwrap();
+		file.write_all(b"Hello, world!").unwrap();
+	}
+
+	let mut file = File::open("/tmp/foo.txt").unwrap();
+	let mut contents = String::new();
+	file.read_to_string(&mut contents).unwrap();
+
+	if contents == "Hello, world!" {
+		Ok(())
+	} else {
+		Err(())
+	}
+}
+
+fn hello() -> Result<()> {
 	println!("Hello, world!");
 
-	true
+	Ok(())
 }
 
-fn threading() -> bool {
+fn threading() -> Result<()> {
 	// Make a vector to hold the children which are spawned.
 	let mut children = vec![];
 
@@ -68,19 +108,20 @@ fn threading() -> bool {
 		let _ = child.join();
 	}
 
-	true
+	Ok(())
 }
 
-fn test_result(b: bool) -> &'static str {
-	if b == true {
-		"ok"
-	} else {
-		"failed!"
+fn test_result(result: Result<()>) -> &'static str {
+	match result {
+		Ok(_) => "ok",
+		Err(_) => "failed!"
 	}
 }
 
 fn main() {
 	println!("Test {} ... {}", stringify!(hello), test_result(hello()));
+	println!("Test {} ... {}", stringify!(read_file), test_result(read_file()));
+	println!("Test {} ... {}", stringify!(create_file), test_result(create_file()));
 	println!("Test {} ... {}", stringify!(threading), test_result(threading()));
 	println!("Test {} ... {}", stringify!(pi_sequential), test_result(pi_sequential(50000000)));
 	println!("Test {} ... {}", stringify!(pi_parallel), test_result(pi_parallel(2, 50000000)));
