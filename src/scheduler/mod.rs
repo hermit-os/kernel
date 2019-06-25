@@ -92,10 +92,14 @@ impl PerCoreScheduler {
 			LAST_EXIT_CODE.store(exit_code, Ordering::SeqCst);
 			info!("Finishing task {} with exit code {}", current_task_borrowed.id, exit_code);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
-			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+			while let Some((arg, dtor)) = current_task_borrowed.dtor.pop() {
+				//info!("call dtor 0x{:x} with argument 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
 
-			// wakeup waiting tasks
-			current_task_borrowed.wakeup.lock().wakeup_all();
+				unsafe {
+					dtor(arg);
+				}
+			}
+			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
 		}
 
 		self.scheduler();
@@ -163,7 +167,13 @@ impl PerCoreScheduler {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		if let Some(id) = self.finished_tasks.pop_front() {
 			info!("Cleaning up task {}", id);
-			unsafe { TASKS.as_ref().unwrap().lock().remove(&id); }
+
+			let task = unsafe { TASKS.as_ref().unwrap().lock().remove(&id) };
+			// wakeup tasks, which are waiting for task with the identifier id
+			match task {
+				Some(t) => t.borrow().wakeup.lock().wakeup_all(),
+				None => {},
+			}
 		}
 	}
 
@@ -248,7 +258,10 @@ impl PerCoreScheduler {
 			};
 
 			// If this is the Boot Processor and only the network task is left, it's time to shut down the OS.
-			if core_id() == 0 && new_id == get_network_task_id() && NO_TASKS.load(Ordering::SeqCst) == 1 {
+			let network_id = get_network_task_id();
+			if network_id != TaskId::from(0) &&
+			   new_id == network_id &&
+			   NO_TASKS.load(Ordering::SeqCst) == 1 {
 				debug!("Only network task is left");
 				sys_shutdown();
 			}
