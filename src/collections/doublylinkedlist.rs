@@ -10,6 +10,8 @@
 //! In contrast to collections provided by Rust, this implementation can insert
 //! and remove entries at a specific position in O(1) given an iterator.
 
+#![allow(dead_code)]
+
 use alloc::rc::Rc;
 use core::cell::RefCell;
 
