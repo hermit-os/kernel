@@ -7,6 +7,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::msb;
@@ -331,6 +332,8 @@ pub struct Task {
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
+	/// List of destructors
+	pub dtor: Vec<(*mut u8, unsafe extern fn(*mut u8))>
 }
 
 pub trait TaskFrame {
@@ -356,6 +359,7 @@ impl Task {
 			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			dtor: Vec::new()
 		}
 	}
 
@@ -376,6 +380,7 @@ impl Task {
 			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			dtor: Vec::new()
 		}
 	}
 
@@ -396,6 +401,7 @@ impl Task {
 			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
+			dtor: Vec::new()
 		}
 	}
 }

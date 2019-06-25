@@ -92,6 +92,13 @@ impl PerCoreScheduler {
 			LAST_EXIT_CODE.store(exit_code, Ordering::SeqCst);
 			info!("Finishing task {} with exit code {}", current_task_borrowed.id, exit_code);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
+			while let Some((arg, dtor)) = current_task_borrowed.dtor.pop() {
+				//info!("call dtor 0x{:x} with argument 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
+
+				unsafe {
+					dtor(arg);
+				}
+			}
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
 		}
 
