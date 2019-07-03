@@ -25,7 +25,6 @@ RUN /root/.cargo/bin/cargo install cargo-xbuild
 RUN /root/.cargo/bin/rustup component add rust-src
 RUN /root/.cargo/bin/cargo install --git https://github.com/hermitcore/objmv.git
 RUN /root/.cargo/bin/cargo install --git https://github.com/hermitcore/pci_ids_parser.git
-RUN /root/.cargo/bin/cargo install cargo-tarpaulin
 
 ENV PATH="/opt/hermit/bin:/root/.cargo/bin:${PATH}"
 ENV EDITOR=vim
