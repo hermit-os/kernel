@@ -17,29 +17,33 @@ use core::panic::PanicInfo;
 #[cfg(not(test))]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
+    print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
 
-	if let Some(location) = info.location() {
-		print!("{}:{}: ", location.file(), location.line());
-	}
+    if let Some(location) = info.location() {
+        print!("{}:{}: ", location.file(), location.line());
+    }
 
-	if let Some(message) = info.message() {
-		print!("{}", message);
-	}
+    if let Some(message) = info.message() {
+        print!("{}", message);
+    }
 
-	print!("\n");
+    print!("\n");
 
-	loop {
-		arch::processor::halt();
-	}
+    loop {
+        arch::processor::halt();
+    }
 }
 
 #[cfg(not(test))]
 #[lang = "oom"]
 #[no_mangle]
 pub fn rust_oom(layout: Layout) -> ! {
-	println!("[{}][!!!OOM!!!] Memory allocation of {} bytes failed", arch::percore::core_id(), layout.size());
-	loop {
-		arch::processor::halt();
-	}
+    println!(
+        "[{}][!!!OOM!!!] Memory allocation of {} bytes failed",
+        arch::percore::core_id(),
+        layout.size()
+    );
+    loop {
+        arch::processor::halt();
+    }
 }

@@ -12,6 +12,6 @@ pub mod virtualmem;
 pub use self::physicalmem::init_page_tables;
 
 pub fn init() {
-	physicalmem::init();
-	virtualmem::init();
+    physicalmem::init();
+    virtualmem::init();
 }

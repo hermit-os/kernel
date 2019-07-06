@@ -8,82 +8,82 @@
 use core::sync::atomic::spin_loop_hint;
 
 extern "C" {
-	static mut cpu_freq: u32;
+    static mut cpu_freq: u32;
 }
 
-
 pub struct FPUState {
-	// TODO
+    // TODO
 }
 
 impl FPUState {
-	pub fn new() -> Self {
-		Self {}
-	}
+    pub fn new() -> Self {
+        Self {}
+    }
 
-	pub fn restore(&self) {
-		// TODO
-	}
+    pub fn restore(&self) {
+        // TODO
+    }
 
-	pub fn save(&self) {
-		// TODO
-	}
+    pub fn save(&self) {
+        // TODO
+    }
 }
 
-
 pub fn generate_random_number() -> Option<u32> {
-	None
+    None
 }
 
 /// Search the most significant bit
 #[inline(always)]
 pub fn msb(value: u64) -> Option<u64> {
-	if value > 0 {
-		let ret: u64;
-		let u64_bits = 64;
-		unsafe { asm!("clz $0, $1; sub $0, $2, $0" : "=r"(ret) : "r"(value), "r"(u64_bits - 1) : "cc" : "volatile"); }
-		Some(ret)
-	} else {
-		None
-	}
+    if value > 0 {
+        let ret: u64;
+        let u64_bits = 64;
+        unsafe {
+            asm!("clz $0, $1; sub $0, $2, $0" : "=r"(ret) : "r"(value), "r"(u64_bits - 1) : "cc" : "volatile");
+        }
+        Some(ret)
+    } else {
+        None
+    }
 }
 
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
-	unsafe {
-		asm!("wfi" :::: "volatile");
-	}
+    unsafe {
+        asm!("wfi" :::: "volatile");
+    }
 }
 
 /// Shutdown the system
 pub fn shutdown() -> ! {
-	info!("Shutting down system");
+    info!("Shutting down system");
 
-	loop {
-		halt();
-	}
+    loop {
+        halt();
+    }
 }
 
 pub fn get_timer_ticks() -> u64 {
-	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
-	// and dividing it by the CPU frequency in MHz.
-	0
+    // We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
+    // and dividing it by the CPU frequency in MHz.
+    0
 }
 
 pub fn get_frequency() -> u16 {
-	0
+    0
 }
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	0
+    0
 }
 
 /// Delay execution by the given number of microseconds using busy-waiting.
 #[inline]
 pub fn udelay(usecs: u64) {
-	let end = get_timestamp() + get_frequency() as u64 * usecs;
-	while get_timestamp() < end {
-		spin_loop_hint();
-	}
+    let end = get_timestamp() + get_frequency() as u64 * usecs;
+    while get_timestamp() < end {
+        spin_loop_hint();
+    }
 }

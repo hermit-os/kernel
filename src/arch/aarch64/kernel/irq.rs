@@ -12,7 +12,9 @@ const IRQ_FLAG_A: usize = 1 << 8;
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe { asm!("msr daifclr, 0b111" ::: "memory" : "volatile"); }
+    unsafe {
+        asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
+    }
 }
 
 /// Enable Interrupts and wait for the next interrupt (HLT instruction)
@@ -21,14 +23,16 @@ pub fn enable() {
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
 pub fn enable_and_wait() {
-	// TODO
-	unsafe { asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
+    // TODO
+    unsafe { asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { asm!("msr daifset, 0b111" ::: "memory" : "volatile"); }
+    unsafe {
+        asm!("msr daifset, 0b111" ::: "memory" : "volatile");
+    }
 }
 
 /// Disable IRQs (nested)
@@ -39,16 +43,18 @@ pub fn disable() {
 /// were not activated before calling this function.
 #[inline]
 pub fn nested_disable() -> bool {
-	let flags: usize;
-	unsafe { asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile"); }
+    let flags: usize;
+    unsafe {
+        asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
+    }
 
-	let mut was_enabled = true;
-	if flags & (IRQ_FLAG_A | IRQ_FLAG_I | IRQ_FLAG_F) > 0 {
-		was_enabled = false;
-	}
+    let mut was_enabled = true;
+    if flags & (IRQ_FLAG_A | IRQ_FLAG_I | IRQ_FLAG_F) > 0 {
+        was_enabled = false;
+    }
 
-	disable();
-	was_enabled
+    disable();
+    was_enabled
 }
 
 /// Enable IRQs (nested)
@@ -57,14 +63,13 @@ pub fn nested_disable() -> bool {
 /// interrupts again if they were enabled before.
 #[inline]
 pub fn nested_enable(was_enabled: bool) {
-	if was_enabled {
-		enable();
-	}
+    if was_enabled {
+        enable();
+    }
 }
 
 #[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
-{
-	info!("Install handler for interrupt {}", irq_number);
-	// TODO
+pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
+    info!("Install handler for interrupt {}", irq_number);
+    // TODO
 }

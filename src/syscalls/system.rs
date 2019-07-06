@@ -25,5 +25,5 @@ use arch;
 
 #[no_mangle]
 pub extern "C" fn sys_getpagesize() -> i32 {
-	arch::mm::paging::get_application_page_size() as i32
+    arch::mm::paging::get_application_page_size() as i32
 }

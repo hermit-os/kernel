@@ -12,7 +12,7 @@ pub mod virtualmem;
 pub use self::paging::init_page_tables;
 
 pub fn init() {
-	paging::init();
-	physicalmem::init();
-	virtualmem::init();
+    paging::init();
+    physicalmem::init();
+    virtualmem::init();
 }

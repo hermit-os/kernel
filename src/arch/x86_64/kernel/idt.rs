@@ -10,10 +10,10 @@
 
 use arch::x86_64::kernel::gdt;
 use spin;
-use x86::Ring;
 use x86::bits64::paging::VAddr;
 use x86::dtables::{self, DescriptorTablePointer};
-use x86::segmentation::{SegmentSelector,SystemDescriptorTypes64};
+use x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
+use x86::Ring;
 
 /// An interrupt gate descriptor.
 ///
@@ -38,14 +38,14 @@ struct IdtEntry {
 
 enum Type {
     InterruptGate,
-    TrapGate
+    TrapGate,
 }
 
 impl Type {
     pub fn pack(self) -> u8 {
         match self {
             Type::InterruptGate => SystemDescriptorTypes64::InterruptGate as u8,
-			Type::TrapGate => SystemDescriptorTypes64::TrapGate as u8
+            Type::TrapGate => SystemDescriptorTypes64::TrapGate as u8,
         }
     }
 }
@@ -72,17 +72,20 @@ impl IdtEntry {
     ///
     /// The "Present" flag set, which is the most common case.  If you need
     /// something else, you can construct it manually.
-    pub fn new(handler: VAddr, gdt_code_selector: SegmentSelector,
-               dpl: Ring, ty: Type, ist_index: u8) -> IdtEntry {
+    pub fn new(
+        handler: VAddr,
+        gdt_code_selector: SegmentSelector,
+        dpl: Ring,
+        ty: Type,
+        ist_index: u8,
+    ) -> IdtEntry {
         assert!(ist_index < 0b1000);
         IdtEntry {
             base_lo: ((handler.as_usize() as u64) & 0xFFFF) as u16,
             base_hi: handler.as_usize() as u64 >> 16,
             selector: gdt_code_selector,
             ist_index: ist_index,
-            flags: dpl as u8
-                |  ty.pack()
-                |  (1 << 7),
+            flags: dpl as u8 | ty.pack() | (1 << 7),
             reserved1: 0,
         }
     }
@@ -95,19 +98,22 @@ impl IdtEntry {
 pub const IDT_ENTRIES: usize = 256;
 
 static mut IDT: [IdtEntry; IDT_ENTRIES] = [IdtEntry::MISSING; IDT_ENTRIES];
-static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer { base: 0 as *const IdtEntry, limit: 0 };
+static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer {
+    base: 0 as *const IdtEntry,
+    limit: 0,
+};
 static IDT_INIT: spin::Once<()> = spin::Once::new();
 
 pub fn install() {
-	unsafe {
-		IDT_INIT.call_once(|| {
-			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
-			// implement "new" as "const fn" and do this call already in the initialization of IDTP.
-			IDTP = DescriptorTablePointer::new_from_slice(&IDT);
-		});
+    unsafe {
+        IDT_INIT.call_once(|| {
+            // TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
+            // implement "new" as "const fn" and do this call already in the initialization of IDTP.
+            IDTP = DescriptorTablePointer::new_from_slice(&IDT);
+        });
 
-		dtables::lidt(&IDTP);
-	}
+        dtables::lidt(&IDTP);
+    }
 }
 
 /// Set an entry in the IDT.
@@ -118,10 +124,17 @@ pub fn install() {
 /// * `handler`   - Handler function to call for this interrupt/exception.
 /// * `ist_index` - Index of the Interrupt Stack Table (IST) to switch to.
 ///                 A zero value means that the stack won't be switched, a value of 1 refers to the first IST entry, etc.
-pub fn set_gate(index: u8, handler: usize, ist_index: u8)
-{
-	let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, Ring::Ring0);
-	let entry = IdtEntry::new(VAddr::from_usize(handler), sel, Ring::Ring0, Type::InterruptGate, ist_index);
+pub fn set_gate(index: u8, handler: usize, ist_index: u8) {
+    let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, Ring::Ring0);
+    let entry = IdtEntry::new(
+        VAddr::from_usize(handler),
+        sel,
+        Ring::Ring0,
+        Type::InterruptGate,
+        ist_index,
+    );
 
-	unsafe { IDT[index as usize] = entry; }
+    unsafe {
+        IDT[index as usize] = entry;
+    }
 }

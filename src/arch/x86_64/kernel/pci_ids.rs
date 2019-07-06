@@ -1,179 +1,583 @@
-
 pub struct Class {
-	pub id: u8,
-	pub name: &'static str,
-	pub subclasses: &'static [Subclass],
+    pub id: u8,
+    pub name: &'static str,
+    pub subclasses: &'static [Subclass],
 }
 
 pub struct Subclass {
-	pub id: u8,
-	pub name: &'static str,
+    pub id: u8,
+    pub name: &'static str,
 }
 
 pub struct Vendor {
-	pub id: u16,
-	pub name: &'static str,
-	pub devices: &'static [Device],
+    pub id: u16,
+    pub name: &'static str,
+    pub devices: &'static [Device],
 }
 
 pub struct Device {
-	pub id: u16,
-	pub name: &'static str,
+    pub id: u16,
+    pub name: &'static str,
 }
 
 pub static CLASSES: &[Class] = &[
-	Class { id: 0x00, name: "Unclassified device", subclasses: &[
-		Subclass { id: 0x00, name: "Non-VGA unclassified device" },
-		Subclass { id: 0x01, name: "VGA compatible unclassified device" },
-	] },
-	Class { id: 0x01, name: "Mass storage controller", subclasses: &[
-		Subclass { id: 0x00, name: "SCSI storage controller" },
-		Subclass { id: 0x01, name: "IDE interface" },
-		Subclass { id: 0x02, name: "Floppy disk controller" },
-		Subclass { id: 0x03, name: "IPI bus controller" },
-		Subclass { id: 0x04, name: "RAID bus controller" },
-		Subclass { id: 0x05, name: "ATA controller" },
-		Subclass { id: 0x06, name: "SATA controller" },
-		Subclass { id: 0x07, name: "Serial Attached SCSI controller" },
-		Subclass { id: 0x08, name: "Non-Volatile memory controller" },
-		Subclass { id: 0x80, name: "Mass storage controller" },
-	] },
-	Class { id: 0x02, name: "Network controller", subclasses: &[
-		Subclass { id: 0x00, name: "Ethernet controller" },
-		Subclass { id: 0x01, name: "Token ring network controller" },
-		Subclass { id: 0x02, name: "FDDI network controller" },
-		Subclass { id: 0x03, name: "ATM network controller" },
-		Subclass { id: 0x04, name: "ISDN controller" },
-		Subclass { id: 0x05, name: "WorldFip controller" },
-		Subclass { id: 0x06, name: "PICMG controller" },
-		Subclass { id: 0x07, name: "Infiniband controller" },
-		Subclass { id: 0x08, name: "Fabric controller" },
-		Subclass { id: 0x80, name: "Network controller" },
-	] },
-	Class { id: 0x03, name: "Display controller", subclasses: &[
-		Subclass { id: 0x00, name: "VGA compatible controller" },
-		Subclass { id: 0x01, name: "XGA compatible controller" },
-		Subclass { id: 0x02, name: "3D controller" },
-		Subclass { id: 0x80, name: "Display controller" },
-	] },
-	Class { id: 0x04, name: "Multimedia controller", subclasses: &[
-		Subclass { id: 0x00, name: "Multimedia video controller" },
-		Subclass { id: 0x01, name: "Multimedia audio controller" },
-		Subclass { id: 0x02, name: "Computer telephony device" },
-		Subclass { id: 0x03, name: "Audio device" },
-		Subclass { id: 0x80, name: "Multimedia controller" },
-	] },
-	Class { id: 0x05, name: "Memory controller", subclasses: &[
-		Subclass { id: 0x00, name: "RAM memory" },
-		Subclass { id: 0x01, name: "FLASH memory" },
-		Subclass { id: 0x80, name: "Memory controller" },
-	] },
-	Class { id: 0x06, name: "Bridge", subclasses: &[
-		Subclass { id: 0x00, name: "Host bridge" },
-		Subclass { id: 0x01, name: "ISA bridge" },
-		Subclass { id: 0x02, name: "EISA bridge" },
-		Subclass { id: 0x03, name: "MicroChannel bridge" },
-		Subclass { id: 0x04, name: "PCI bridge" },
-		Subclass { id: 0x05, name: "PCMCIA bridge" },
-		Subclass { id: 0x06, name: "NuBus bridge" },
-		Subclass { id: 0x07, name: "CardBus bridge" },
-		Subclass { id: 0x08, name: "RACEway bridge" },
-		Subclass { id: 0x09, name: "Semi-transparent PCI-to-PCI bridge" },
-		Subclass { id: 0x0A, name: "InfiniBand to PCI host bridge" },
-		Subclass { id: 0x80, name: "Bridge" },
-	] },
-	Class { id: 0x07, name: "Communication controller", subclasses: &[
-		Subclass { id: 0x00, name: "Serial controller" },
-		Subclass { id: 0x01, name: "Parallel controller" },
-		Subclass { id: 0x02, name: "Multiport serial controller" },
-		Subclass { id: 0x03, name: "Modem" },
-		Subclass { id: 0x04, name: "GPIB controller" },
-		Subclass { id: 0x05, name: "Smard Card controller" },
-		Subclass { id: 0x80, name: "Communication controller" },
-	] },
-	Class { id: 0x08, name: "Generic system peripheral", subclasses: &[
-		Subclass { id: 0x00, name: "PIC" },
-		Subclass { id: 0x01, name: "DMA controller" },
-		Subclass { id: 0x02, name: "Timer" },
-		Subclass { id: 0x03, name: "RTC" },
-		Subclass { id: 0x04, name: "PCI Hot-plug controller" },
-		Subclass { id: 0x05, name: "SD Host controller" },
-		Subclass { id: 0x06, name: "IOMMU" },
-		Subclass { id: 0x80, name: "System peripheral" },
-	] },
-	Class { id: 0x09, name: "Input device controller", subclasses: &[
-		Subclass { id: 0x00, name: "Keyboard controller" },
-		Subclass { id: 0x01, name: "Digitizer Pen" },
-		Subclass { id: 0x02, name: "Mouse controller" },
-		Subclass { id: 0x03, name: "Scanner controller" },
-		Subclass { id: 0x04, name: "Gameport controller" },
-		Subclass { id: 0x80, name: "Input device controller" },
-	] },
-	Class { id: 0x0A, name: "Docking station", subclasses: &[
-		Subclass { id: 0x00, name: "Generic Docking Station" },
-		Subclass { id: 0x80, name: "Docking Station" },
-	] },
-	Class { id: 0x0B, name: "Processor", subclasses: &[
-		Subclass { id: 0x00, name: "386" },
-		Subclass { id: 0x01, name: "486" },
-		Subclass { id: 0x02, name: "Pentium" },
-		Subclass { id: 0x10, name: "Alpha" },
-		Subclass { id: 0x20, name: "Power PC" },
-		Subclass { id: 0x30, name: "MIPS" },
-		Subclass { id: 0x40, name: "Co-processor" },
-	] },
-	Class { id: 0x0C, name: "Serial bus controller", subclasses: &[
-		Subclass { id: 0x00, name: "FireWire (IEEE 1394)" },
-		Subclass { id: 0x01, name: "ACCESS Bus" },
-		Subclass { id: 0x02, name: "SSA" },
-		Subclass { id: 0x03, name: "USB controller" },
-		Subclass { id: 0x04, name: "Fibre Channel" },
-		Subclass { id: 0x05, name: "SMBus" },
-		Subclass { id: 0x06, name: "InfiniBand" },
-		Subclass { id: 0x07, name: "IPMI SMIC interface" },
-		Subclass { id: 0x08, name: "SERCOS interface" },
-		Subclass { id: 0x09, name: "CANBUS" },
-	] },
-	Class { id: 0x0D, name: "Wireless controller", subclasses: &[
-		Subclass { id: 0x00, name: "IRDA controller" },
-		Subclass { id: 0x01, name: "Consumer IR controller" },
-		Subclass { id: 0x10, name: "RF controller" },
-		Subclass { id: 0x11, name: "Bluetooth" },
-		Subclass { id: 0x12, name: "Broadband" },
-		Subclass { id: 0x20, name: "802.1a controller" },
-		Subclass { id: 0x21, name: "802.1b controller" },
-		Subclass { id: 0x80, name: "Wireless controller" },
-	] },
-	Class { id: 0x0E, name: "Intelligent controller", subclasses: &[
-		Subclass { id: 0x00, name: "I2O" },
-	] },
-	Class { id: 0x0F, name: "Satellite communications controller", subclasses: &[
-		Subclass { id: 0x01, name: "Satellite TV controller" },
-		Subclass { id: 0x02, name: "Satellite audio communication controller" },
-		Subclass { id: 0x03, name: "Satellite voice communication controller" },
-		Subclass { id: 0x04, name: "Satellite data communication controller" },
-	] },
-	Class { id: 0x10, name: "Encryption controller", subclasses: &[
-		Subclass { id: 0x00, name: "Network and computing encryption device" },
-		Subclass { id: 0x10, name: "Entertainment encryption device" },
-		Subclass { id: 0x80, name: "Encryption controller" },
-	] },
-	Class { id: 0x11, name: "Signal processing controller", subclasses: &[
-		Subclass { id: 0x00, name: "DPIO module" },
-		Subclass { id: 0x01, name: "Performance counters" },
-		Subclass { id: 0x10, name: "Communication synchronizer" },
-		Subclass { id: 0x20, name: "Signal processing management" },
-		Subclass { id: 0x80, name: "Signal processing controller" },
-	] },
-	Class { id: 0x12, name: "Processing accelerators", subclasses: &[
-		Subclass { id: 0x00, name: "Processing accelerators" },
-	] },
-	Class { id: 0x13, name: "Non-Essential Instrumentation", subclasses: &[
-	] },
-	Class { id: 0x40, name: "Coprocessor", subclasses: &[
-	] },
-	Class { id: 0xFF, name: "Unassigned class", subclasses: &[
-	] },
+    Class {
+        id: 0x00,
+        name: "Unclassified device",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Non-VGA unclassified device",
+            },
+            Subclass {
+                id: 0x01,
+                name: "VGA compatible unclassified device",
+            },
+        ],
+    },
+    Class {
+        id: 0x01,
+        name: "Mass storage controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "SCSI storage controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "IDE interface",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Floppy disk controller",
+            },
+            Subclass {
+                id: 0x03,
+                name: "IPI bus controller",
+            },
+            Subclass {
+                id: 0x04,
+                name: "RAID bus controller",
+            },
+            Subclass {
+                id: 0x05,
+                name: "ATA controller",
+            },
+            Subclass {
+                id: 0x06,
+                name: "SATA controller",
+            },
+            Subclass {
+                id: 0x07,
+                name: "Serial Attached SCSI controller",
+            },
+            Subclass {
+                id: 0x08,
+                name: "Non-Volatile memory controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Mass storage controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x02,
+        name: "Network controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Ethernet controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Token ring network controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "FDDI network controller",
+            },
+            Subclass {
+                id: 0x03,
+                name: "ATM network controller",
+            },
+            Subclass {
+                id: 0x04,
+                name: "ISDN controller",
+            },
+            Subclass {
+                id: 0x05,
+                name: "WorldFip controller",
+            },
+            Subclass {
+                id: 0x06,
+                name: "PICMG controller",
+            },
+            Subclass {
+                id: 0x07,
+                name: "Infiniband controller",
+            },
+            Subclass {
+                id: 0x08,
+                name: "Fabric controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Network controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x03,
+        name: "Display controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "VGA compatible controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "XGA compatible controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "3D controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Display controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x04,
+        name: "Multimedia controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Multimedia video controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Multimedia audio controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Computer telephony device",
+            },
+            Subclass {
+                id: 0x03,
+                name: "Audio device",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Multimedia controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x05,
+        name: "Memory controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "RAM memory",
+            },
+            Subclass {
+                id: 0x01,
+                name: "FLASH memory",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Memory controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x06,
+        name: "Bridge",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Host bridge",
+            },
+            Subclass {
+                id: 0x01,
+                name: "ISA bridge",
+            },
+            Subclass {
+                id: 0x02,
+                name: "EISA bridge",
+            },
+            Subclass {
+                id: 0x03,
+                name: "MicroChannel bridge",
+            },
+            Subclass {
+                id: 0x04,
+                name: "PCI bridge",
+            },
+            Subclass {
+                id: 0x05,
+                name: "PCMCIA bridge",
+            },
+            Subclass {
+                id: 0x06,
+                name: "NuBus bridge",
+            },
+            Subclass {
+                id: 0x07,
+                name: "CardBus bridge",
+            },
+            Subclass {
+                id: 0x08,
+                name: "RACEway bridge",
+            },
+            Subclass {
+                id: 0x09,
+                name: "Semi-transparent PCI-to-PCI bridge",
+            },
+            Subclass {
+                id: 0x0A,
+                name: "InfiniBand to PCI host bridge",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Bridge",
+            },
+        ],
+    },
+    Class {
+        id: 0x07,
+        name: "Communication controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Serial controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Parallel controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Multiport serial controller",
+            },
+            Subclass {
+                id: 0x03,
+                name: "Modem",
+            },
+            Subclass {
+                id: 0x04,
+                name: "GPIB controller",
+            },
+            Subclass {
+                id: 0x05,
+                name: "Smard Card controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Communication controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x08,
+        name: "Generic system peripheral",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "PIC",
+            },
+            Subclass {
+                id: 0x01,
+                name: "DMA controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Timer",
+            },
+            Subclass {
+                id: 0x03,
+                name: "RTC",
+            },
+            Subclass {
+                id: 0x04,
+                name: "PCI Hot-plug controller",
+            },
+            Subclass {
+                id: 0x05,
+                name: "SD Host controller",
+            },
+            Subclass {
+                id: 0x06,
+                name: "IOMMU",
+            },
+            Subclass {
+                id: 0x80,
+                name: "System peripheral",
+            },
+        ],
+    },
+    Class {
+        id: 0x09,
+        name: "Input device controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Keyboard controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Digitizer Pen",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Mouse controller",
+            },
+            Subclass {
+                id: 0x03,
+                name: "Scanner controller",
+            },
+            Subclass {
+                id: 0x04,
+                name: "Gameport controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Input device controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x0A,
+        name: "Docking station",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Generic Docking Station",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Docking Station",
+            },
+        ],
+    },
+    Class {
+        id: 0x0B,
+        name: "Processor",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "386",
+            },
+            Subclass {
+                id: 0x01,
+                name: "486",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Pentium",
+            },
+            Subclass {
+                id: 0x10,
+                name: "Alpha",
+            },
+            Subclass {
+                id: 0x20,
+                name: "Power PC",
+            },
+            Subclass {
+                id: 0x30,
+                name: "MIPS",
+            },
+            Subclass {
+                id: 0x40,
+                name: "Co-processor",
+            },
+        ],
+    },
+    Class {
+        id: 0x0C,
+        name: "Serial bus controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "FireWire (IEEE 1394)",
+            },
+            Subclass {
+                id: 0x01,
+                name: "ACCESS Bus",
+            },
+            Subclass {
+                id: 0x02,
+                name: "SSA",
+            },
+            Subclass {
+                id: 0x03,
+                name: "USB controller",
+            },
+            Subclass {
+                id: 0x04,
+                name: "Fibre Channel",
+            },
+            Subclass {
+                id: 0x05,
+                name: "SMBus",
+            },
+            Subclass {
+                id: 0x06,
+                name: "InfiniBand",
+            },
+            Subclass {
+                id: 0x07,
+                name: "IPMI SMIC interface",
+            },
+            Subclass {
+                id: 0x08,
+                name: "SERCOS interface",
+            },
+            Subclass {
+                id: 0x09,
+                name: "CANBUS",
+            },
+        ],
+    },
+    Class {
+        id: 0x0D,
+        name: "Wireless controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "IRDA controller",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Consumer IR controller",
+            },
+            Subclass {
+                id: 0x10,
+                name: "RF controller",
+            },
+            Subclass {
+                id: 0x11,
+                name: "Bluetooth",
+            },
+            Subclass {
+                id: 0x12,
+                name: "Broadband",
+            },
+            Subclass {
+                id: 0x20,
+                name: "802.1a controller",
+            },
+            Subclass {
+                id: 0x21,
+                name: "802.1b controller",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Wireless controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x0E,
+        name: "Intelligent controller",
+        subclasses: &[Subclass {
+            id: 0x00,
+            name: "I2O",
+        }],
+    },
+    Class {
+        id: 0x0F,
+        name: "Satellite communications controller",
+        subclasses: &[
+            Subclass {
+                id: 0x01,
+                name: "Satellite TV controller",
+            },
+            Subclass {
+                id: 0x02,
+                name: "Satellite audio communication controller",
+            },
+            Subclass {
+                id: 0x03,
+                name: "Satellite voice communication controller",
+            },
+            Subclass {
+                id: 0x04,
+                name: "Satellite data communication controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x10,
+        name: "Encryption controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "Network and computing encryption device",
+            },
+            Subclass {
+                id: 0x10,
+                name: "Entertainment encryption device",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Encryption controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x11,
+        name: "Signal processing controller",
+        subclasses: &[
+            Subclass {
+                id: 0x00,
+                name: "DPIO module",
+            },
+            Subclass {
+                id: 0x01,
+                name: "Performance counters",
+            },
+            Subclass {
+                id: 0x10,
+                name: "Communication synchronizer",
+            },
+            Subclass {
+                id: 0x20,
+                name: "Signal processing management",
+            },
+            Subclass {
+                id: 0x80,
+                name: "Signal processing controller",
+            },
+        ],
+    },
+    Class {
+        id: 0x12,
+        name: "Processing accelerators",
+        subclasses: &[Subclass {
+            id: 0x00,
+            name: "Processing accelerators",
+        }],
+    },
+    Class {
+        id: 0x13,
+        name: "Non-Essential Instrumentation",
+        subclasses: &[],
+    },
+    Class {
+        id: 0x40,
+        name: "Coprocessor",
+        subclasses: &[],
+    },
+    Class {
+        id: 0xFF,
+        name: "Unassigned class",
+        subclasses: &[],
+    },
 ];
 
 pub static VENDORS: &[Vendor] = &[
