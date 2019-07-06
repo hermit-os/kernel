@@ -131,6 +131,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
 		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
 		processor::writefs(tls_pointer);
+		debug!("Set FS to 0x{:x}", tls_pointer);
 
 		unsafe {
 			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
