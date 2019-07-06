@@ -9,6 +9,7 @@
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::apic;
 use arch::x86_64::mm::paging;
+use arch::x86_64::kernel::processor;
 use arch::x86_64::kernel::percore::*;
 use core::fmt;
 use scheduler;
@@ -399,6 +400,7 @@ extern "x86-interrupt" fn stack_segment_fault_exception(stack_frame: &mut Except
 
 extern "x86-interrupt" fn general_protection_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
 	error!("General Protection (#GP) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+	error!("fs = {:#X}, gs = {:#X}", processor::readfs(), processor::readgs());
 	scheduler::abort();
 }
 

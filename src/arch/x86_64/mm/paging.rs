@@ -546,6 +546,7 @@ pub extern "x86-interrupt" fn page_fault_handler(stack_frame: &mut irq::Exceptio
 	let pferror = PageFaultError::from_bits_truncate(error_code as u32);
 	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!("virtual_address = {:#X}, page fault error = {}", virtual_address, pferror);
+	error!("fs = {:#X}, gs = {:#X}", processor::readfs(), processor::readgs());
 
 	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
 	unsafe { controlregs::cr2_write(0); }
