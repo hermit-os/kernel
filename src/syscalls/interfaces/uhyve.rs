@@ -14,27 +14,27 @@ use syscalls::interfaces::SyscallInterface;
 use x86::io::*;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
-const UHYVE_PORT_OPEN:	u16 = 0x440;
-const UHYVE_PORT_CLOSE:	u16 = 0x480;
-const UHYVE_PORT_READ:	u16 = 0x500;
-const UHYVE_PORT_EXIT:	u16 = 0x540;
-const UHYVE_PORT_LSEEK:	u16 = 0x580;
+const UHYVE_PORT_OPEN: u16 = 0x440;
+const UHYVE_PORT_CLOSE: u16 = 0x480;
+const UHYVE_PORT_READ: u16 = 0x500;
+const UHYVE_PORT_EXIT: u16 = 0x540;
+const UHYVE_PORT_LSEEK: u16 = 0x580;
 
 /*extern "C" {
 	fn lwip_write(fd: i32, buf: *const u8, len: usize) -> i32;
 	fn lwip_read(fd: i32, buf: *mut u8, len: usize) -> i32;
 }*/
 
-
 /// forward a request to the hypervisor uhyve
 #[inline]
-fn uhyve_send<T>(port: u16, data: &mut T)
-{
+fn uhyve_send<T>(port: u16, data: &mut T) {
 	let ptr = data as *mut T;
 	let physical_address = paging::virtual_to_physical(ptr as usize);
 
 	#[cfg(target_arch = "x86_64")]
-	unsafe { outl(port, physical_address as u32); }
+	unsafe {
+		outl(port, physical_address as u32);
+	}
 }
 
 #[repr(C, packed)]
@@ -44,9 +44,7 @@ struct SysExit {
 
 impl SysExit {
 	fn new(arg: i32) -> SysExit {
-		SysExit {
-			arg: arg
-		}
+		SysExit { arg: arg }
 	}
 }
 
@@ -55,7 +53,7 @@ struct SysOpen {
 	name: *const u8,
 	flags: i32,
 	mode: i32,
-	ret: i32
+	ret: i32,
 }
 
 impl SysOpen {
@@ -64,7 +62,7 @@ impl SysOpen {
 			name: paging::virtual_to_physical(name as usize) as *const u8,
 			flags: flags,
 			mode: mode,
-			ret: -1
+			ret: -1,
 		}
 	}
 }
@@ -72,15 +70,12 @@ impl SysOpen {
 #[repr(C, packed)]
 struct SysClose {
 	fd: i32,
-	ret: i32
+	ret: i32,
 }
 
 impl SysClose {
 	fn new(fd: i32) -> SysClose {
-		SysClose {
-			fd: fd,
-			ret: -1
-		}
+		SysClose { fd: fd, ret: -1 }
 	}
 }
 
@@ -89,7 +84,7 @@ struct SysRead {
 	fd: i32,
 	buf: *const u8,
 	len: usize,
-	ret: isize
+	ret: isize,
 }
 
 impl SysRead {
@@ -98,7 +93,7 @@ impl SysRead {
 			fd: fd,
 			buf: buf,
 			len: len,
-			ret: -1
+			ret: -1,
 		}
 	}
 }
@@ -107,7 +102,7 @@ impl SysRead {
 struct SysWrite {
 	fd: i32,
 	buf: *const u8,
-	len: usize
+	len: usize,
 }
 
 impl SysWrite {
@@ -115,7 +110,7 @@ impl SysWrite {
 		SysWrite {
 			fd: fd,
 			buf: buf,
-			len: len
+			len: len,
 		}
 	}
 }
@@ -124,7 +119,7 @@ impl SysWrite {
 struct SysLseek {
 	fd: i32,
 	offset: isize,
-	whence: i32
+	whence: i32,
 }
 
 impl SysLseek {
@@ -132,11 +127,10 @@ impl SysLseek {
 		SysLseek {
 			fd: fd,
 			offset: offset,
-			whence: whence
+			whence: whence,
 		}
 	}
 }
-
 
 pub struct Uhyve;
 

@@ -10,12 +10,11 @@ use arch::percore::*;
 use core::isize;
 use errno::*;
 use scheduler;
-use scheduler::task::{TaskId, Priority};
+use scheduler::task::{Priority, TaskId};
 use syscalls::timer::timespec;
 
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
-
 
 #[no_mangle]
 pub extern "C" fn sys_getpid() -> Tid {
@@ -27,7 +26,7 @@ pub extern "C" fn sys_getpid() -> Tid {
 pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
 
-	if id.is_null() || unsafe {*id} == current_task_borrowed.id.into() as u32 {
+	if id.is_null() || unsafe { *id } == current_task_borrowed.id.into() as u32 {
 		current_task_borrowed.prio.into() as i32
 	} else {
 		-EINVAL
@@ -46,7 +45,7 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 
 #[no_mangle]
 pub extern "C" fn sys_abort() -> ! {
-    sys_exit(-1);
+	sys_exit(-1);
 }
 
 #[no_mangle]
@@ -58,17 +57,33 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 
 	// Get the heap of the current task on the current core.
 	let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	let heap = current_task_borrowed.heap.as_mut().expect("Calling sys_sbrk on a task without an associated heap");
+	let heap = current_task_borrowed
+		.heap
+		.as_mut()
+		.expect("Calling sys_sbrk on a task without an associated heap");
 
 	// Adjust the heap of the current task.
 	let heap_borrowed = heap.borrow();
 	let mut heap_locked = heap_borrowed.write();
-	assert!(heap_locked.start >= task_heap_start, "heap start {:#X} is not >= task_heap_start {:#X}", heap_locked.start, task_heap_start);
+	assert!(
+		heap_locked.start >= task_heap_start,
+		"heap start {:#X} is not >= task_heap_start {:#X}",
+		heap_locked.start,
+		task_heap_start
+	);
 	let old_end = heap_locked.end;
 	heap_locked.end = (old_end as isize + incr) as usize;
-	assert!(heap_locked.end <= task_heap_end, "New heap end {:#X} is not <= task_heap_end {:#X}", heap_locked.end, task_heap_end);
+	assert!(
+		heap_locked.end <= task_heap_end,
+		"New heap end {:#X} is not <= task_heap_end {:#X}",
+		heap_locked.end,
+		task_heap_end
+	);
 
-	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap_locked.end);
+	debug!(
+		"Adjusted task heap from {:#X} to {:#X}",
+		old_end, heap_locked.end
+	);
 
 	// We're done! The page fault handler will map the new virtual memory area to physical memory
 	// as soon as the task accesses it for the first time.
@@ -83,7 +98,10 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		let current_task = core_scheduler.current_task.clone();
-		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
+		core_scheduler
+			.blocked_tasks
+			.lock()
+			.add(current_task, Some(wakeup_time));
 
 		// Switch to the next task.
 		core_scheduler.scheduler();
@@ -100,14 +118,21 @@ pub extern "C" fn sys_msleep(ms: u32) {
 
 #[no_mangle]
 pub extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
-	assert!(!rqtp.is_null(), "sys_nanosleep called with a zero rqtp parameter");
-	let requested_time = unsafe { & *rqtp };
-	if requested_time.tv_sec < 0 || requested_time.tv_nsec < 0 || requested_time.tv_nsec > 999_999_999 {
+	assert!(
+		!rqtp.is_null(),
+		"sys_nanosleep called with a zero rqtp parameter"
+	);
+	let requested_time = unsafe { &*rqtp };
+	if requested_time.tv_sec < 0
+		|| requested_time.tv_nsec < 0
+		|| requested_time.tv_nsec > 999_999_999
+	{
 		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
 		return -EINVAL;
 	}
 
-	let microseconds = (requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
+	let microseconds =
+		(requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
 	sys_usleep(microseconds);
 	0
 }
@@ -117,7 +142,9 @@ pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
-		unsafe { *id = task_id.into() as u32; }
+		unsafe {
+			*id = task_id.into() as u32;
+		}
 	}
 
 	0
@@ -130,7 +157,10 @@ pub extern "C" fn sys_yield() {
 
 #[no_mangle]
 pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
-	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}", dest, signum);
+	debug!(
+		"sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}",
+		dest, signum
+	);
 	-ENOSYS
 }
 
@@ -141,12 +171,20 @@ pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: usize) -> i32 {
+pub extern "C" fn sys_spawn(
+	id: *mut Tid,
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: u8,
+	core_id: usize,
+) -> i32 {
 	let core_scheduler = scheduler::get_scheduler(core_id);
 	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio), None);
 
 	if !id.is_null() {
-		unsafe { *id = task_id.into() as u32; }
+		unsafe {
+			*id = task_id.into() as u32;
+		}
 	}
 
 	0
@@ -156,13 +194,17 @@ pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 pub extern "C" fn sys_join(id: Tid) -> i32 {
 	match scheduler::join(TaskId::from(id)) {
 		Ok(()) => 0,
-		_ => -EINVAL
+		_ => -EINVAL,
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn __thread_atexit(dtor: unsafe extern fn(*mut u8), arg: *mut u8) -> i32 {
+pub extern "C" fn __thread_atexit(dtor: unsafe extern "C" fn(*mut u8), arg: *mut u8) -> i32 {
 	//info!("thread_atexit: register dtor 0x{:x} with argument 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
-	core_scheduler().current_task.borrow_mut().dtor.push((arg, dtor));
+	core_scheduler()
+		.current_task
+		.borrow_mut()
+		.dtor
+		.push((arg, dtor));
 	0
 }

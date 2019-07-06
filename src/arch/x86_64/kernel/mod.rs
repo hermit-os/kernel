@@ -11,28 +11,28 @@ pub mod apic;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
-pub mod percore;
 pub mod pci;
+mod pci_ids;
+pub mod percore;
 pub mod pic;
 pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-pub mod systemtime;
-pub mod switch;
-mod pci_ids;
 #[cfg(not(test))]
 mod smp_boot_code;
 #[cfg(not(test))]
 mod start;
+pub mod switch;
+pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-use config::KERNEL_STACK_SIZE;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
+use config::KERNEL_STACK_SIZE;
 
-use core::{intrinsics,mem,ptr};
+use core::{intrinsics, mem, ptr};
 use environment;
 #[cfg(not(test))]
 use kernel_message_buffer;
@@ -64,7 +64,7 @@ struct KernelHeader {
 	hcip: [u8; 4],
 	hcgateway: [u8; 4],
 	hcmask: [u8; 4],
-	boot_stack: [u8; KERNEL_STACK_SIZE]
+	boot_stack: [u8; KERNEL_STACK_SIZE],
 }
 
 /// Kernel header to announce machine features
@@ -90,10 +90,10 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	uartport: 0,
 	single_kernel: 1,
 	uhyve: 0,
-	hcip: [255,255,255,255],
-	hcgateway: [255,255,255,255],
-	hcmask: [255,255,255,0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE]
+	hcip: [255, 255, 255, 255],
+	hcgateway: [255, 255, 255, 255],
+	hcmask: [255, 255, 255, 0],
+	boot_stack: [0xCD; KERNEL_STACK_SIZE],
 };
 
 static COM1: SerialPort = SerialPort::new(0x3f8);
@@ -101,7 +101,7 @@ static COM1: SerialPort = SerialPort::new(0x3f8);
 // FUNCTIONS
 
 pub fn get_ip() -> [u8; 4] {
-	let mut ip: [u8; 4] = [0,0,0,0];
+	let mut ip: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
 		ip[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcip[i]) as u8 };
@@ -111,7 +111,7 @@ pub fn get_ip() -> [u8; 4] {
 }
 
 pub fn get_gateway() -> [u8; 4] {
-	let mut gw: [u8; 4] = [0,0,0,0];
+	let mut gw: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
 		gw[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcgateway[i]) as u8 };
@@ -172,7 +172,7 @@ pub fn message_output_init() {
 
 #[cfg(test)]
 pub fn output_message_byte(byte: u8) {
-	extern {
+	extern "C" {
 		fn write(fd: i32, buf: *const u8, count: usize) -> isize;
 	}
 

@@ -19,8 +19,7 @@ use core::fmt::Write;
 use core::{isize, slice, str};
 use errno::*;
 
-
-pub trait SyscallInterface : Send + Sync {
+pub trait SyscallInterface: Send + Sync {
 	fn init(&self) {
 		// Interface-specific initialization steps.
 	}
@@ -67,7 +66,10 @@ pub trait SyscallInterface : Send + Sync {
 
 		unsafe {
 			let slice = slice::from_raw_parts(buf, len);
-			console::CONSOLE.lock().write_str(str::from_utf8_unchecked(slice)).unwrap();
+			console::CONSOLE
+				.lock()
+				.write_str(str::from_utf8_unchecked(slice))
+				.unwrap();
 		}
 
 		len as isize

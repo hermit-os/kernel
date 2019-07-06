@@ -6,11 +6,11 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch::irq;
-use core::sync::atomic::{AtomicUsize, AtomicBool, Ordering, spin_loop_hint};
 use core::cell::UnsafeCell;
-use core::marker::Sync;
 use core::fmt;
-use core::ops::{Drop, Deref, DerefMut};
+use core::marker::Sync;
+use core::ops::{Deref, DerefMut, Drop};
+use core::sync::atomic::{spin_loop_hint, AtomicBool, AtomicUsize, Ordering};
 
 /// This type provides a lock based on busy waiting to realize mutual exclusion of tasks.
 ///
@@ -44,18 +44,16 @@ use core::ops::{Drop, Deref, DerefMut};
 ///
 /// assert_eq!(answer, 2);
 /// ```
-pub struct Spinlock<T: ?Sized>
-{
+pub struct Spinlock<T: ?Sized> {
 	queue: AtomicUsize,
 	dequeue: AtomicUsize,
-	data: UnsafeCell<T>
+	data: UnsafeCell<T>,
 }
 
 /// A guard to which the protected data can be accessed
 ///
 /// When the guard falls out of scope it will release the lock.
-pub struct SpinlockGuard<'a, T: ?Sized + 'a>
-{
+pub struct SpinlockGuard<'a, T: ?Sized + 'a> {
 	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	data: &'a mut T,
@@ -65,15 +63,12 @@ pub struct SpinlockGuard<'a, T: ?Sized + 'a>
 unsafe impl<T: ?Sized> Sync for Spinlock<T> {}
 unsafe impl<T: ?Sized> Send for Spinlock<T> {}
 
-impl<T> Spinlock<T>
-{
-	pub const fn new(user_data: T) -> Spinlock<T>
-	{
-		Spinlock
-		{
+impl<T> Spinlock<T> {
+	pub const fn new(user_data: T) -> Spinlock<T> {
+		Spinlock {
 			queue: AtomicUsize::new(0),
 			dequeue: AtomicUsize::new(1),
-			data: UnsafeCell::new(user_data)
+			data: UnsafeCell::new(user_data),
 		}
 	}
 
@@ -87,8 +82,7 @@ impl<T> Spinlock<T>
 	}
 }
 
-impl<T: ?Sized> Spinlock<T>
-{
+impl<T: ?Sized> Spinlock<T> {
 	fn obtain_lock(&self) {
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
@@ -96,11 +90,9 @@ impl<T: ?Sized> Spinlock<T>
 		}
 	}
 
-	pub fn lock(&self) -> SpinlockGuard<T>
-	{
+	pub fn lock(&self) -> SpinlockGuard<T> {
 		self.obtain_lock();
-		SpinlockGuard
-		{
+		SpinlockGuard {
 			//queue: &self.queue,
 			dequeue: &self.dequeue,
 			data: unsafe { &mut *self.data.get() },
@@ -108,10 +100,8 @@ impl<T: ?Sized> Spinlock<T>
 	}
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for Spinlock<T>
-{
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-	{
+impl<T: ?Sized + fmt::Debug> fmt::Debug for Spinlock<T> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "queue: {} ", self.queue.load(Ordering::SeqCst))?;
 		write!(f, "dequeue: {}", self.dequeue.load(Ordering::SeqCst))
 	}
@@ -123,26 +113,25 @@ impl<T: ?Sized + Default> Default for Spinlock<T> {
 	}
 }
 
-impl<'a, T: ?Sized> Deref for SpinlockGuard<'a, T>
-{
+impl<'a, T: ?Sized> Deref for SpinlockGuard<'a, T> {
 	type Target = T;
-	fn deref<'b>(&'b self) -> &'b T { &*self.data }
-}
-
-impl<'a, T: ?Sized> DerefMut for SpinlockGuard<'a, T>
-{
-	fn deref_mut<'b>(&'b mut self) -> &'b mut T { &mut *self.data }
-}
-
-impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T>
-{
-	/// The dropping of the SpinlockGuard will release the lock it was created from.
-	fn drop(&mut self)
-	{
-		self.dequeue.fetch_add(1, Ordering::SeqCst);
+	fn deref<'b>(&'b self) -> &'b T {
+		&*self.data
 	}
 }
 
+impl<'a, T: ?Sized> DerefMut for SpinlockGuard<'a, T> {
+	fn deref_mut<'b>(&'b mut self) -> &'b mut T {
+		&mut *self.data
+	}
+}
+
+impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T> {
+	/// The dropping of the SpinlockGuard will release the lock it was created from.
+	fn drop(&mut self) {
+		self.dequeue.fetch_add(1, Ordering::SeqCst);
+	}
+}
 
 /// This type provides a lock based on busy waiting to realize mutual exclusion of tasks.
 ///
@@ -177,8 +166,7 @@ impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T>
 ///
 /// assert_eq!(answer, 2);
 /// ```
-pub struct SpinlockIrqSave<T: ?Sized>
-{
+pub struct SpinlockIrqSave<T: ?Sized> {
 	queue: AtomicUsize,
 	dequeue: AtomicUsize,
 	irq: AtomicBool,
@@ -188,8 +176,7 @@ pub struct SpinlockIrqSave<T: ?Sized>
 /// A guard to which the protected data can be accessed
 ///
 /// When the guard falls out of scope it will release the lock.
-pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a>
-{
+pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a> {
 	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	irq: &'a AtomicBool,
@@ -200,12 +187,9 @@ pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a>
 unsafe impl<T: ?Sized> Sync for SpinlockIrqSave<T> {}
 unsafe impl<T: ?Sized> Send for SpinlockIrqSave<T> {}
 
-impl<T> SpinlockIrqSave<T>
-{
-	pub const fn new(user_data: T) -> SpinlockIrqSave<T>
-	{
-		SpinlockIrqSave
-		{
+impl<T> SpinlockIrqSave<T> {
+	pub const fn new(user_data: T) -> SpinlockIrqSave<T> {
+		SpinlockIrqSave {
 			queue: AtomicUsize::new(0),
 			dequeue: AtomicUsize::new(1),
 			irq: AtomicBool::new(false),
@@ -223,8 +207,7 @@ impl<T> SpinlockIrqSave<T>
 	}
 }
 
-impl<T: ?Sized> SpinlockIrqSave<T>
-{
+impl<T: ?Sized> SpinlockIrqSave<T> {
 	fn obtain_lock(&self) {
 		#[cfg(not(test))]
 		let irq = irq::nested_disable();
@@ -239,11 +222,9 @@ impl<T: ?Sized> SpinlockIrqSave<T>
 		self.irq.store(irq, Ordering::SeqCst);
 	}
 
-	pub fn lock(&self) -> SpinlockIrqSaveGuard<T>
-	{
+	pub fn lock(&self) -> SpinlockIrqSaveGuard<T> {
 		self.obtain_lock();
-		SpinlockIrqSaveGuard
-		{
+		SpinlockIrqSaveGuard {
 			//queue: &self.queue,
 			dequeue: &self.dequeue,
 			irq: &self.irq,
@@ -252,10 +233,8 @@ impl<T: ?Sized> SpinlockIrqSave<T>
 	}
 }
 
-impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinlockIrqSave<T>
-{
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result
-	{
+impl<T: ?Sized + fmt::Debug> fmt::Debug for SpinlockIrqSave<T> {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "irq: {:?} ", self.irq)?;
 		write!(f, "queue: {} ", self.queue.load(Ordering::SeqCst))?;
 		write!(f, "dequeue: {}", self.dequeue.load(Ordering::SeqCst))
@@ -268,23 +247,23 @@ impl<T: ?Sized + Default> Default for SpinlockIrqSave<T> {
 	}
 }
 
-impl<'a, T: ?Sized> Deref for SpinlockIrqSaveGuard<'a, T>
-{
+impl<'a, T: ?Sized> Deref for SpinlockIrqSaveGuard<'a, T> {
 	type Target = T;
-	fn deref<'b>(&'b self) -> &'b T { &*self.data }
+	fn deref<'b>(&'b self) -> &'b T {
+		&*self.data
+	}
 }
 
-impl<'a, T: ?Sized> DerefMut for SpinlockIrqSaveGuard<'a, T>
-{
-	fn deref_mut<'b>(&'b mut self) -> &'b mut T { &mut *self.data }
+impl<'a, T: ?Sized> DerefMut for SpinlockIrqSaveGuard<'a, T> {
+	fn deref_mut<'b>(&'b mut self) -> &'b mut T {
+		&mut *self.data
+	}
 }
 
-impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T>
-{
+impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T> {
 	/// The dropping of the SpinlockGuard will release the lock it was created from.
-	fn drop(&mut self)
-	{
-		let irq =  self.irq.swap(false, Ordering::SeqCst);
+	fn drop(&mut self) {
+		let irq = self.irq.swap(false, Ordering::SeqCst);
 		self.dequeue.fetch_add(1, Ordering::SeqCst);
 		#[cfg(not(test))]
 		irq::nested_enable(irq);
@@ -296,68 +275,80 @@ impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T>
 mod tests {
 	use std::prelude::v1::*;
 
-    use std::sync::mpsc::channel;
-    use std::sync::Arc;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::thread;
+	use std::sync::atomic::{AtomicUsize, Ordering};
+	use std::sync::mpsc::channel;
+	use std::sync::Arc;
+	use std::thread;
 
-    use super::*;
+	use super::*;
 
 	#[test]
 	fn lock_test1() {
-        static S: Spinlock<u32>  = Spinlock::new(0);
-        const J: u32 = 1000;
-        const K: u32 = 2	;
+		static S: Spinlock<u32> = Spinlock::new(0);
+		const J: u32 = 1000;
+		const K: u32 = 2;
 
-        fn inc() {
-            for _ in 0..J {
-                unsafe {
-                    *S.lock() += 1;
-                }
-            }
-        }
+		fn inc() {
+			for _ in 0..J {
+				unsafe {
+					*S.lock() += 1;
+				}
+			}
+		}
 
-        let (tx, rx) = channel();
-        for _ in 0..K {
-            let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
-            let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
-        }
+		let (tx, rx) = channel();
+		for _ in 0..K {
+			let tx2 = tx.clone();
+			thread::spawn(move || {
+				inc();
+				tx2.send(()).unwrap();
+			});
+			let tx2 = tx.clone();
+			thread::spawn(move || {
+				inc();
+				tx2.send(()).unwrap();
+			});
+		}
 
-        drop(tx);
-        for _ in 0..2 * K {
-            rx.recv().unwrap();
-        }
-        assert_eq!(*S.lock(), J * K * 2);
-    }
+		drop(tx);
+		for _ in 0..2 * K {
+			rx.recv().unwrap();
+		}
+		assert_eq!(*S.lock(), J * K * 2);
+	}
 
 	#[test]
 	fn lock_test2() {
-        static S: SpinlockIrqSave<u32>  = SpinlockIrqSave::new(0);
-        const J: u32 = 500;
-        const K: u32 = 3;
+		static S: SpinlockIrqSave<u32> = SpinlockIrqSave::new(0);
+		const J: u32 = 500;
+		const K: u32 = 3;
 
-        fn inc() {
-            for _ in 0..J {
-                unsafe {
-                    *S.lock() += 1;
-                }
-            }
-        }
+		fn inc() {
+			for _ in 0..J {
+				unsafe {
+					*S.lock() += 1;
+				}
+			}
+		}
 
-        let (tx, rx) = channel();
-        for _ in 0..K {
-            let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
-            let tx2 = tx.clone();
-            thread::spawn(move|| { inc(); tx2.send(()).unwrap(); });
-        }
+		let (tx, rx) = channel();
+		for _ in 0..K {
+			let tx2 = tx.clone();
+			thread::spawn(move || {
+				inc();
+				tx2.send(()).unwrap();
+			});
+			let tx2 = tx.clone();
+			thread::spawn(move || {
+				inc();
+				tx2.send(()).unwrap();
+			});
+		}
 
-        drop(tx);
-        for _ in 0..2 * K {
-            rx.recv().unwrap();
-        }
-        assert_eq!(*S.lock(), J * K * 2);
-    }
+		drop(tx);
+		for _ in 0..2 * K {
+			rx.recv().unwrap();
+		}
+		assert_eq!(*S.lock(), J * K * 2);
+	}
 }

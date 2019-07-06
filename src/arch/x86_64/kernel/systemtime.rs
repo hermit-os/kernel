@@ -8,30 +8,29 @@
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::kernel::KERNEL_HEADER;
+use core::ptr;
 use core::sync::atomic::spin_loop_hint;
 use environment;
-use core::ptr;
 use x86::io::*;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
-const CMOS_DATA_PORT: u16    = 0x71;
+const CMOS_DATA_PORT: u16 = 0x71;
 
 const CMOS_DISABLE_NMI: u8 = 1 << 7;
 
-const CMOS_SECOND_REGISTER: u8   = 0x00;
-const CMOS_MINUTE_REGISTER: u8   = 0x02;
-const CMOS_HOUR_REGISTER: u8     = 0x04;
-const CMOS_DAY_REGISTER: u8      = 0x07;
-const CMOS_MONTH_REGISTER: u8    = 0x08;
-const CMOS_YEAR_REGISTER: u8     = 0x09;
+const CMOS_SECOND_REGISTER: u8 = 0x00;
+const CMOS_MINUTE_REGISTER: u8 = 0x02;
+const CMOS_HOUR_REGISTER: u8 = 0x04;
+const CMOS_DAY_REGISTER: u8 = 0x07;
+const CMOS_MONTH_REGISTER: u8 = 0x08;
+const CMOS_YEAR_REGISTER: u8 = 0x09;
 const CMOS_STATUS_REGISTER_A: u8 = 0x0A;
 const CMOS_STATUS_REGISTER_B: u8 = 0x0B;
 
 const CMOS_UPDATE_IN_PROGRESS_FLAG: u8 = 1 << 7;
-const CMOS_24_HOUR_FORMAT_FLAG:     u8 = 1 << 1;
-const CMOS_BINARY_FORMAT_FLAG:      u8 = 1 << 2;
-const CMOS_12_HOUR_PM_FLAG:         u8 = 0x80;
-
+const CMOS_24_HOUR_FORMAT_FLAG: u8 = 1 << 1;
+const CMOS_BINARY_FORMAT_FLAG: u8 = 1 << 2;
+const CMOS_12_HOUR_PM_FLAG: u8 = 0x80;
 
 struct Rtc {
 	cmos_format: u8,
@@ -66,10 +65,17 @@ impl Rtc {
 	}
 
 	/**
-	* Returns the number of microseconds since the epoch from a given date.
-	* Inspired by Linux Kernel's mktime64(), see kernel/time/time.c.
-	*/
-	fn microseconds_from_date(year: u16, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> u64 {
+		* Returns the number of microseconds since the epoch from a given date.
+		* Inspired by Linux Kernel's mktime64(), see kernel/time/time.c.
+		*/
+	fn microseconds_from_date(
+		year: u16,
+		month: u8,
+		day: u8,
+		hour: u8,
+		minute: u8,
+		second: u8,
+	) -> u64 {
 		let m;
 		let y;
 
@@ -81,7 +87,8 @@ impl Rtc {
 			y = (year - 1) as u64;
 		}
 
-		let days_since_epoch = (y/4 - y/100 + y/400 + 367*m/12 + day as u64) + y*365 - 719499;
+		let days_since_epoch =
+			(y / 4 - y / 100 + y / 400 + 367 * m / 12 + day as u64) + y * 365 - 719499;
 		let hours_since_epoch = days_since_epoch * 24 + hour as u64;
 		let minutes_since_epoch = hours_since_epoch * 60 + minute as u64;
 		let seconds_since_epoch = minutes_since_epoch * 60 + second as u64;
@@ -156,7 +163,9 @@ impl Rtc {
 	pub fn get_microseconds_since_epoch(&self) -> u64 {
 		loop {
 			// If a clock update is currently in progress, wait until it is finished.
-			while Self::read_cmos_register(CMOS_STATUS_REGISTER_A) & CMOS_UPDATE_IN_PROGRESS_FLAG > 0 {
+			while Self::read_cmos_register(CMOS_STATUS_REGISTER_A) & CMOS_UPDATE_IN_PROGRESS_FLAG
+				> 0
+			{
 				spin_loop_hint();
 			}
 
@@ -185,7 +194,6 @@ impl Drop for Rtc {
 	}
 }
 
-
 /**
  * Returns a (year, month, day, hour, minute, second) tuple from the given time in microseconds since the epoch.
  * Inspired from https://howardhinnant.github.io/date_algorithms.html#civil_from_days
@@ -202,11 +210,12 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 	let days = days_since_epoch + 719468;
 	let era = days / 146097;
 	let day_of_era = days % 146097;
-	let year_of_era = (day_of_era - day_of_era/1460 + day_of_era/36524 - day_of_era/146096) / 365;
+	let year_of_era =
+		(day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
 	let mut year = (year_of_era + era * 400) as u16;
-	let day_of_year = day_of_era - (365*year_of_era + year_of_era/4 - year_of_era/100);
-	let internal_month = (5*day_of_year + 2)/153;
-	let day = (day_of_year - (153*internal_month+2)/5 + 1) as u8;
+	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+	let internal_month = (5 * day_of_year + 2) / 153;
+	let day = (day_of_year - (153 * internal_month + 2) / 5 + 1) as u8;
 
 	let mut month = internal_month as u8;
 	if internal_month < 10 {
@@ -238,5 +247,8 @@ pub fn init() {
 	}
 
 	let (year, month, day, hour, minute, second) = date_from_microseconds(microseconds_offset);
-	info!("HermitCore-rs booted on {:04}-{:02}-{:02} at {:02}:{:02}:{:02}", year, month, day, hour, minute, second);
+	info!(
+		"HermitCore-rs booted on {:04}-{:02}-{:02} at {:02}:{:02}:{:02}",
+		year, month, day, hour, minute, second
+	);
 }

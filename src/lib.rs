@@ -52,7 +52,9 @@ mod logging;
 
 mod arch;
 mod collections;
+mod config;
 mod console;
+mod drivers;
 mod environment;
 mod errno;
 #[cfg(not(test))]
@@ -62,18 +64,16 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
-mod drivers;
-mod config;
 
 pub use arch::*;
-pub use syscalls::*;
 pub use config::*;
+pub use syscalls::*;
 
-use arch::percore::*;
-use mm::allocator::LockedHeap;
-use core::ptr;
-use core::alloc::GlobalAlloc;
 use alloc::alloc::Layout;
+use arch::percore::*;
+use core::alloc::GlobalAlloc;
+use core::ptr;
+use mm::allocator::LockedHeap;
 
 #[cfg(not(test))]
 #[global_allocator]
@@ -82,43 +82,56 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
-    let layout: Layout = Layout::from_size_align(size, align).unwrap();
-    let ptr;
+	let layout: Layout = Layout::from_size_align(size, align).unwrap();
+	let ptr;
 
-    unsafe {
-        ptr = ALLOCATOR.alloc(layout);
-    }
+	unsafe {
+		ptr = ALLOCATOR.alloc(layout);
+	}
 
-    trace!("sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})", ptr as usize, size, align);
+	trace!(
+		"sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})",
+		ptr as usize,
+		size,
+		align
+	);
 
-    ptr
+	ptr
 }
 
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-    let layout: Layout = Layout::from_size_align(size, align).unwrap();
-    let new_ptr;
+	let layout: Layout = Layout::from_size_align(size, align).unwrap();
+	let new_ptr;
 
-    unsafe {
-        new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
-    }
+	unsafe {
+		new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
+	}
 
-    trace!("sys_realloc: resize memory at 0x{:x}, new address 0x{:x}", ptr as usize, new_ptr as usize);
+	trace!(
+		"sys_realloc: resize memory at 0x{:x}, new address 0x{:x}",
+		ptr as usize,
+		new_ptr as usize
+	);
 
-    new_ptr
+	new_ptr
 }
 
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-    let layout: Layout = Layout::from_size_align(size, align).unwrap();
+	let layout: Layout = Layout::from_size_align(size, align).unwrap();
 
-    trace!("sys_free: deallocate memory at 0x{:x} (size 0x{:x})", ptr as usize, size);
+	trace!(
+		"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
+		ptr as usize,
+		size
+	);
 
-    unsafe {
-        ALLOCATOR.dealloc(ptr, layout);
-    }
+	unsafe {
+		ALLOCATOR.dealloc(ptr, layout);
+	}
 }
 
 #[cfg(not(test))]
@@ -134,7 +147,7 @@ unsafe fn sections_init() {
 	ptr::write_bytes(
 		&mut hbss_start as *mut u8,
 		0,
-		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize
+		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize,
 	);
 }
 
@@ -168,7 +181,8 @@ extern "C" fn initd(_arg: usize) {
 		ptr::write_bytes(
 			&mut __bss_start as *mut u8,
 			0,
-			&kernel_start as *const u8 as usize + environment::get_image_size() - &__bss_start as *const u8 as usize
+			&kernel_start as *const u8 as usize + environment::get_image_size()
+				- &__bss_start as *const u8 as usize,
 		);
 
 		// And finally start the application.
@@ -181,11 +195,17 @@ extern "C" fn initd(_arg: usize) {
 #[cfg(not(test))]
 pub fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
-	unsafe { sections_init(); }
+	unsafe {
+		sections_init();
+	}
 	arch::message_output_init();
 	logging::init();
 
-	info!("Welcome to HermitCore-rs {} ({})", env!("CARGO_PKG_VERSION"), COMMIT_HASH);
+	info!(
+		"Welcome to HermitCore-rs {} ({})",
+		env!("CARGO_PKG_VERSION"),
+		COMMIT_HASH
+	);
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();
@@ -200,7 +220,7 @@ pub fn boot_processor_main() -> ! {
 		initd,
 		0,
 		scheduler::task::NORMAL_PRIO,
-		Some(arch::mm::virtualmem::task_heap_start())
+		Some(arch::mm::virtualmem::task_heap_start()),
 	);
 
 	// Run the scheduler loop.

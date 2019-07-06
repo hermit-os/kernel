@@ -6,56 +6,54 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::apic;
-use arch::x86_64::mm::paging;
-use arch::x86_64::kernel::processor;
+use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::percore::*;
+use arch::x86_64::kernel::processor;
+use arch::x86_64::mm::paging;
 use core::fmt;
 use scheduler;
 use x86::bits64::rflags;
-
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
 /// Represents the exception stack frame pushed by the CPU on exception entry.
 #[repr(C)]
 pub struct ExceptionStackFrame {
-    /// This value points to the instruction that should be executed when the interrupt
-    /// handler returns. For most interrupts, this value points to the instruction immediately
-    /// following the last executed instruction. However, for some exceptions (e.g., page faults),
-    /// this value points to the faulting instruction, so that the instruction is restarted on
-    /// return. See the documentation of the `Idt` fields for more details.
-    pub instruction_pointer: u64,
-    /// The code segment selector, padded with zeros.
-    pub code_segment: u64,
-    /// The flags register before the interrupt handler was invoked.
-    pub cpu_flags: u64,
-    /// The stack pointer at the time of the interrupt.
-    pub stack_pointer: u64,
-    /// The stack segment descriptor at the time of the interrupt (often zero in 64-bit mode).
-    pub stack_segment: u64,
+	/// This value points to the instruction that should be executed when the interrupt
+	/// handler returns. For most interrupts, this value points to the instruction immediately
+	/// following the last executed instruction. However, for some exceptions (e.g., page faults),
+	/// this value points to the faulting instruction, so that the instruction is restarted on
+	/// return. See the documentation of the `Idt` fields for more details.
+	pub instruction_pointer: u64,
+	/// The code segment selector, padded with zeros.
+	pub code_segment: u64,
+	/// The flags register before the interrupt handler was invoked.
+	pub cpu_flags: u64,
+	/// The stack pointer at the time of the interrupt.
+	pub stack_pointer: u64,
+	/// The stack segment descriptor at the time of the interrupt (often zero in 64-bit mode).
+	pub stack_segment: u64,
 }
 
 impl fmt::Debug for ExceptionStackFrame {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        struct Hex(u64);
-        impl fmt::Debug for Hex {
-            fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-                write!(f, "{:#x}", self.0)
-            }
-        }
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		struct Hex(u64);
+		impl fmt::Debug for Hex {
+			fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+				write!(f, "{:#x}", self.0)
+			}
+		}
 
-        let mut s = f.debug_struct("ExceptionStackFrame");
-        s.field("instruction_pointer", &Hex(self.instruction_pointer));
-        s.field("code_segment", &Hex(self.code_segment));
-        s.field("cpu_flags", &Hex(self.cpu_flags));
-        s.field("stack_pointer", &Hex(self.stack_pointer));
-        s.field("stack_segment", &Hex(self.stack_segment));
-        s.finish()
-    }
+		let mut s = f.debug_struct("ExceptionStackFrame");
+		s.field("instruction_pointer", &Hex(self.instruction_pointer));
+		s.field("code_segment", &Hex(self.code_segment));
+		s.field("cpu_flags", &Hex(self.cpu_flags));
+		s.field("stack_pointer", &Hex(self.stack_pointer));
+		s.field("stack_segment", &Hex(self.stack_segment));
+		s.finish()
+	}
 }
-
 
 /// Enable Interrupts
 #[inline]
@@ -183,10 +181,9 @@ pub fn install() {
 }
 
 #[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
-{
+pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	debug!("Install handler for interrupt {}", irq_number);
-	idt::set_gate((32+irq_number) as u8, handler, 0);
+	idt::set_gate((32 + irq_number) as u8, handler, 0);
 }
 
 fn unhandled_interrupt(irq_number: u8) {
@@ -367,19 +364,32 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut Exce
 	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
 
 	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
-	unsafe { asm!("clts" :::: "volatile"); }
+	unsafe {
+		asm!("clts" :::: "volatile");
+	}
 
 	// Let the scheduler set up the FPU for the current task.
 	core_scheduler().fpu_switch();
 }
 
-extern "x86-interrupt" fn double_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
-	error!("Double Fault (#DF) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+extern "x86-interrupt" fn double_fault_exception(
+	stack_frame: &mut ExceptionStackFrame,
+	error_code: u64,
+) {
+	error!(
+		"Double Fault (#DF) Exception: {:#?}, error {:#X}",
+		stack_frame, error_code
+	);
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: &mut ExceptionStackFrame) {
-	error!("CoProcessor Segment Overrun (#MF) Exception: {:#?}", stack_frame);
+extern "x86-interrupt" fn coprocessor_segment_overrun_exception(
+	stack_frame: &mut ExceptionStackFrame,
+) {
+	error!(
+		"CoProcessor Segment Overrun (#MF) Exception: {:#?}",
+		stack_frame
+	);
 	scheduler::abort();
 }
 
@@ -393,14 +403,30 @@ extern "x86-interrupt" fn segment_not_present_exception(stack_frame: &mut Except
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn stack_segment_fault_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
-	error!("Stack Segment Fault (#SS) Exception: {:#?}, error {:#X}", stack_frame, error_code);
+extern "x86-interrupt" fn stack_segment_fault_exception(
+	stack_frame: &mut ExceptionStackFrame,
+	error_code: u64,
+) {
+	error!(
+		"Stack Segment Fault (#SS) Exception: {:#?}, error {:#X}",
+		stack_frame, error_code
+	);
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn general_protection_exception(stack_frame: &mut ExceptionStackFrame, error_code: u64) {
-	error!("General Protection (#GP) Exception: {:#?}, error {:#X}", stack_frame, error_code);
-	error!("fs = {:#X}, gs = {:#X}", processor::readfs(), processor::readgs());
+extern "x86-interrupt" fn general_protection_exception(
+	stack_frame: &mut ExceptionStackFrame,
+	error_code: u64,
+) {
+	error!(
+		"General Protection (#GP) Exception: {:#?}, error {:#X}",
+		stack_frame, error_code
+	);
+	error!(
+		"fs = {:#X}, gs = {:#X}",
+		processor::readfs(),
+		processor::readgs()
+	);
 	scheduler::abort();
 }
 

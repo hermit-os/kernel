@@ -15,10 +15,10 @@ use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
+use config::*;
 use core::cell::RefCell;
 use core::{mem, ptr};
 use scheduler::task::{Task, TaskFrame, TaskTLS};
-use config::*;
 
 #[cfg(not(test))]
 extern "C" {
@@ -63,14 +63,14 @@ struct State {
 	/// status flags
 	rflags: usize,
 	/// instruction pointer
-	rip: usize
+	rip: usize,
 }
 
 pub struct TaskStacks {
 	/// Whether this is a boot stack
 	is_boot_stack: bool,
 	/// Stack of the task
-	pub stack: usize
+	pub stack: usize,
 }
 
 impl TaskStacks {
@@ -81,7 +81,7 @@ impl TaskStacks {
 
 		Self {
 			is_boot_stack: false,
-			stack: stack
+			stack: stack,
 		}
 	}
 
@@ -91,7 +91,7 @@ impl TaskStacks {
 
 		Self {
 			is_boot_stack: true,
-			stack: stack
+			stack: stack,
 		}
 	}
 }
@@ -106,14 +106,12 @@ impl Drop for TaskStacks {
 	}
 }
 
-
 extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0);
 }
 
 #[cfg(test)]
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
-}
+extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 
 #[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
@@ -147,7 +145,11 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 
 		// Associate the TLS memory to the current task.
 		let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!("Set up TLS for task {} at address {:#X}", current_task_borrowed.id, tls.address());
+		debug!(
+			"Set up TLS for task {} at address {:#X}",
+			current_task_borrowed.id,
+			tls.address()
+		);
 		current_task_borrowed.tls = Some(Rc::new(RefCell::new(tls)));
 	}
 

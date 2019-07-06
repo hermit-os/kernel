@@ -6,10 +6,10 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::vec::Vec;
-use core::{fmt, u8, u32};
+use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
+use core::{fmt, u32, u8};
 use synch::spinlock::Spinlock;
 use x86::io::*;
-use arch::x86_64::kernel::pci_ids::{CLASSES,VENDORS};
 
 const PCI_MAX_BUS_NUMBER: u8 = 32;
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -20,15 +20,15 @@ const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
 const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
 const PCI_COMMAND_BUSMASTER: u32 = 1 << 2;
 
-const PCI_ID_REGISTER:        u32 = 0x00;
-const PCI_COMMAND_REGISTER:   u32 = 0x04;
-const PCI_CLASS_REGISTER:     u32 = 0x08;
-const PCI_BAR0_REGISTER:      u32 = 0x10;
+const PCI_ID_REGISTER: u32 = 0x00;
+const PCI_COMMAND_REGISTER: u32 = 0x04;
+const PCI_CLASS_REGISTER: u32 = 0x08;
+const PCI_BAR0_REGISTER: u32 = 0x10;
 const PCI_INTERRUPT_REGISTER: u32 = 0x3C;
 
 pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
-pub const PCI_BASE_ADDRESS_64BIT:    u32 = 1 << 2;
-pub const PCI_BASE_ADDRESS_MASK:     u32 = 0xFFFF_FFF0;
+pub const PCI_BASE_ADDRESS_64BIT: u32 = 1 << 2;
+pub const PCI_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFF0;
 
 static PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
 
@@ -122,7 +122,9 @@ impl fmt::Display for PciAdapter {
 		}
 
 		// Output detailed readable information about this device.
-		write!(f, "{:02X}:{:02X} {} [{:02X}{:02X}]: {} {} [{:04X}:{:04X}]",
+		write!(
+			f,
+			"{:02X}:{:02X} {} [{:02X}{:02X}]: {} {} [{:04X}:{:04X}]",
 			self.bus,
 			self.device,
 			class_name,
@@ -142,14 +144,17 @@ impl fmt::Display for PciAdapter {
 		write!(f, ", iobase ")?;
 		for i in 0..self.base_addresses.len() {
 			if self.base_addresses[i] > 0 {
-				write!(f, "0x{:x} (size 0x{:x}) ", self.base_addresses[i], self.base_sizes[i])?;
+				write!(
+					f,
+					"0x{:x} (size 0x{:x}) ",
+					self.base_addresses[i], self.base_sizes[i]
+				)?;
 			}
 		}
 
 		Ok(())
 	}
 }
-
 
 fn read_config(bus: u8, device: u8, register: u32) -> u32 {
 	let address = PCI_CONFIG_ADDRESS_ENABLE | (bus as u32) << 16 | (device as u32) << 11 | register;
@@ -179,7 +184,7 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 }
 
 pub fn init() {
-	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER-1);
+	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 	let mut adapters = PCI_ADAPTERS.lock();
 
 	// HermitCore only uses PCI for network devices.

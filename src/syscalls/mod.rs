@@ -37,7 +37,7 @@ pub fn init() {
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
 		if environment::is_proxy() {
 			panic!("Currently, we don't support the proxy mode!");
-			//SYS = &interfaces::Proxy;
+		//SYS = &interfaces::Proxy;
 		} else if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}

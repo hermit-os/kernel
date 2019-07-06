@@ -69,7 +69,6 @@ impl Drop for TaskStacks {
 	}
 }
 
-
 extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0);
 }
@@ -90,7 +89,11 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 
 		// Associate the TLS memory to the current task.
 		let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!("Set up TLS for task {} at address {:#X}", current_task_borrowed.id, tls.address());
+		debug!(
+			"Set up TLS for task {} at address {:#X}",
+			current_task_borrowed.id,
+			tls.address()
+		);
 		current_task_borrowed.tls = Some(Rc::new(RefCell::new(tls)));
 	}
 

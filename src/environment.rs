@@ -9,17 +9,20 @@
 //! vs. multi-kernel, hypervisor, etc.) as well as central parsing of the
 //! command-line parameters.
 
-#[cfg(target_arch="x86_64")]
-pub use arch::x86_64::kernel::{is_uhyve,is_single_kernel,get_cmdsize,get_cmdline,get_image_size};
+#[cfg(target_arch = "x86_64")]
+pub use arch::x86_64::kernel::{
+	get_cmdline, get_cmdsize, get_image_size, is_single_kernel, is_uhyve,
+};
 
-#[cfg(target_arch="aarch64")]
-pub use arch::aarch64::kernel::{is_uhyve,is_single_kernel,get_cmdsize,get_cmdline,get_image_size};
+#[cfg(target_arch = "aarch64")]
+pub use arch::aarch64::kernel::{
+	get_cmdline, get_cmdsize, get_image_size, is_single_kernel, is_uhyve,
+};
 
 use core::{slice, str};
 
 static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;
 static mut IS_PROXY: bool = false;
-
 
 unsafe fn parse_command_line() {
 	let cmdsize = get_cmdsize();
@@ -35,8 +38,13 @@ unsafe fn parse_command_line() {
 	// Check for the -freq option.
 	if let Some(freq_index) = cmdline_str.find("-freq") {
 		let cmdline_freq_str = cmdline_str.split_at(freq_index + "-freq".len()).1;
-		let mhz_str = cmdline_freq_str.split(' ').next().expect("Invalid -freq command line");
-		COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().expect("Could not parse -freq command line as number");
+		let mhz_str = cmdline_freq_str
+			.split(' ')
+			.next()
+			.expect("Invalid -freq command line");
+		COMMAND_LINE_CPU_FREQUENCY = mhz_str
+			.parse()
+			.expect("Could not parse -freq command line as number");
 	}
 
 	// Check for the -proxy option.

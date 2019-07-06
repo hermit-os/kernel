@@ -34,6 +34,6 @@ pub fn random_init() {
 fn random() {
 	random_init();
 
-	let  r = generate_park_miller_lehmer_random_number();
+	let r = generate_park_miller_lehmer_random_number();
 	assert!(r != sys_rand());
 }
