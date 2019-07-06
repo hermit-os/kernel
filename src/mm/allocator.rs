@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 use alloc::alloc::{Alloc, AllocErr, Layout};
-use core::alloc::{GlobalAlloc};
+use core::alloc::GlobalAlloc;
 use core::mem;
 use core::ops::Deref;
 use core::ptr::NonNull;
@@ -52,7 +52,7 @@ impl Heap {
 	///
 	/// This function must be called at most once and must only be used on an
 	/// empty heap.
-	pub unsafe fn init(&mut self,	heap_bottom: usize, heap_size: usize) {
+	pub unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
 		self.bottom = heap_bottom;
 		self.size = heap_size;
 		self.holes = HoleList::new(heap_bottom, heap_size);
@@ -78,7 +78,7 @@ impl Heap {
 		let size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + size, mem::size_of::<usize>	());
+		self.index = align_up!(self.index + size, mem::size_of::<usize>());
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocErr)
 		} else {

@@ -11,7 +11,6 @@ extern "C" {
 	static mut cpu_freq: u32;
 }
 
-
 pub struct FPUState {
 	// TODO
 }
@@ -30,7 +29,6 @@ impl FPUState {
 	}
 }
 
-
 pub fn generate_random_number() -> Option<u32> {
 	None
 }
@@ -41,7 +39,9 @@ pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
 		let ret: u64;
 		let u64_bits = 64;
-		unsafe { asm!("clz $0, $1; sub $0, $2, $0" : "=r"(ret) : "r"(value), "r"(u64_bits - 1) : "cc" : "volatile"); }
+		unsafe {
+			asm!("clz $0, $1; sub $0, $2, $0" : "=r"(ret) : "r"(value), "r"(u64_bits - 1) : "cc" : "volatile");
+		}
 		Some(ret)
 	} else {
 		None

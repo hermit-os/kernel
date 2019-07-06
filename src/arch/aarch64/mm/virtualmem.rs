@@ -11,7 +11,6 @@ use mm;
 use mm::freelist::{FreeList, FreeListEntry};
 use mm::{MM_LOCK, POOL};
 
-
 static mut KERNEL_FREE_LIST: FreeList = FreeList::new();
 
 /// End of the virtual memory address space reserved for kernel memory (4 GiB).
@@ -23,33 +22,59 @@ const KERNEL_VIRTUAL_MEMORY_END: usize = 0x1_0000_0000;
 /// linear addressing (in two 47-bit areas).
 const TASK_VIRTUAL_MEMORY_END: usize = 0x8000_0000_0000;
 
-
 pub fn init() {
-	let entry = Node::new(
-		FreeListEntry {
-			start: mm::kernel_end_address(),
-			end: KERNEL_VIRTUAL_MEMORY_END
-		}
-	);
-	unsafe { KERNEL_FREE_LIST.list.push(entry); }
+	let entry = Node::new(FreeListEntry {
+		start: mm::kernel_end_address(),
+		end: KERNEL_VIRTUAL_MEMORY_END,
+	});
+	unsafe {
+		KERNEL_FREE_LIST.list.push(entry);
+	}
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	let _lock = MM_LOCK.lock();
 	let result = unsafe { KERNEL_FREE_LIST.allocate(size) };
-	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
+	assert!(
+		result.is_ok(),
+		"Could not allocate {:#X} bytes of virtual memory",
+		size
+	);
 	result.unwrap()
 }
 
 pub fn deallocate(virtual_address: usize, size: usize) {
-	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
-	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(
+		virtual_address >= mm::kernel_end_address(),
+		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
+		virtual_address
+	);
+	assert!(
+		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
+		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address
+	);
+	assert!(
+		virtual_address % BasePageSize::SIZE == 0,
+		"Virtual address {:#X} is not a multiple of {:#X}",
+		virtual_address,
+		BasePageSize::SIZE
+	);
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	let _lock = MM_LOCK.lock();
 	unsafe {
@@ -59,22 +84,47 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 }
 
 pub fn reserve(virtual_address: usize, size: usize) {
-	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
-	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(
+		virtual_address >= mm::kernel_end_address(),
+		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
+		virtual_address
+	);
+	assert!(
+		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
+		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address
+	);
+	assert!(
+		virtual_address % BasePageSize::SIZE == 0,
+		"Virtual address {:#X} is not a multiple of {:#X}",
+		virtual_address,
+		BasePageSize::SIZE
+	);
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	let _lock = MM_LOCK.lock();
 	let result = unsafe {
 		POOL.maintain();
 		KERNEL_FREE_LIST.reserve(virtual_address, size)
 	};
-	assert!(result.is_ok(), "Could not reserve {:#X} bytes of virtual memory at {:#X}", size, virtual_address);
+	assert!(
+		result.is_ok(),
+		"Could not reserve {:#X} bytes of virtual memory at {:#X}",
+		size,
+		virtual_address
+	);
 }
 
 pub fn print_information() {
-	unsafe { KERNEL_FREE_LIST.print_information(" KERNEL VIRTUAL MEMORY FREE LIST "); }
+	unsafe {
+		KERNEL_FREE_LIST.print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
+	}
 }
 
 #[inline]

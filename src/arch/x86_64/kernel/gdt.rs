@@ -6,24 +6,23 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use config::*;
 use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::KERNEL_HEADER;
+use config::*;
 use core::{mem, ptr};
 use scheduler::task::TaskStatus;
-use x86::dtables::{self, DescriptorTablePointer};
-use x86::bits64::task::*;
 use x86::bits64::segmentation::*;
+use x86::bits64::task::*;
+use x86::dtables::{self, DescriptorTablePointer};
 use x86::segmentation::*;
 use x86::task::*;
 use x86::Ring;
 
-
-pub const GDT_NULL:			u16 = 0;
-pub const GDT_KERNEL_CODE:	u16 = 1;
-pub const GDT_KERNEL_DATA:	u16 = 2;
-pub const GDT_FIRST_TSS:	u16 = 3;
+pub const GDT_NULL: u16 = 0;
+pub const GDT_KERNEL_CODE: u16 = 1;
+pub const GDT_KERNEL_DATA: u16 = 2;
+pub const GDT_FIRST_TSS: u16 = 3;
 
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
 const GDT_ENTRIES: usize = 8192;
@@ -34,10 +33,13 @@ const GDT_ENTRIES: usize = 8192;
 const IST_ENTRIES: usize = 4;
 
 static mut GDT: *mut Gdt = 0 as *mut Gdt;
-static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer { base: 0 as *const Descriptor, limit: 0 };
+static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer {
+	base: 0 as *const Descriptor,
+	limit: 0,
+};
 
 struct Gdt {
-	entries: [Descriptor; GDT_ENTRIES]
+	entries: [Descriptor; GDT_ENTRIES],
 }
 
 pub fn init() {
@@ -50,18 +52,20 @@ pub fn init() {
 
 		// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		(*GDT).entries[GDT_KERNEL_CODE as usize] = DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
-                .present()
-                .dpl(Ring::Ring0)
+		(*GDT).entries[GDT_KERNEL_CODE as usize] =
+			DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
+				.present()
+				.dpl(Ring::Ring0)
 				.l()
-                .finish();
+				.finish();
 
 		// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		(*GDT).entries[GDT_KERNEL_DATA as usize] = DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
-                .present()
-                .dpl(Ring::Ring0)
-                .finish();
+		(*GDT).entries[GDT_KERNEL_DATA as usize] =
+			DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
+				.present()
+				.dpl(Ring::Ring0)
+				.finish();
 
 		// Let GDTR point to our newly crafted GDT.
 		GDTR = DescriptorTablePointer::new_from_slice(&((*GDT).entries[0..GDT_ENTRIES]));
@@ -85,7 +89,9 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = unsafe { ptr::read_volatile(&KERNEL_HEADER.current_stack_address) } + KERNEL_STACK_SIZE as u64 - 0x10;
+	boxed_tss.rsp[0] = unsafe { ptr::read_volatile(&KERNEL_HEADER.current_stack_address) }
+		+ KERNEL_STACK_SIZE as u64
+		- 0x10;
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
@@ -96,16 +102,23 @@ pub fn add_current_core() {
 
 	unsafe {
 		// Add this TSS to the GDT.
-		let idx = GDT_FIRST_TSS as usize + (core_id() as usize)*2;
+		let idx = GDT_FIRST_TSS as usize + (core_id() as usize) * 2;
 		let tss = Box::into_raw(boxed_tss);
 		{
 			let base = tss as u64;
-			let tss_descriptor: Descriptor64 = <DescriptorBuilder as GateDescriptorBuilder<u64>>::tss_descriptor(base,
-				base + mem::size_of::<TaskStateSegment>() as u64 - 1, true)
+			let tss_descriptor: Descriptor64 =
+				<DescriptorBuilder as GateDescriptorBuilder<u64>>::tss_descriptor(
+					base,
+					base + mem::size_of::<TaskStateSegment>() as u64 - 1,
+					true,
+				)
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
-			(*GDT).entries[idx..idx+2].copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(tss_descriptor));
+			(*GDT).entries[idx..idx + 2]
+				.copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(
+					tss_descriptor,
+				));
 		}
 
 		// Load it.

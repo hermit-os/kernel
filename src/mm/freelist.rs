@@ -6,9 +6,8 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::rc::Rc;
-use core::cell::RefCell;
 use collections::{DoublyLinkedList, Node};
-
+use core::cell::RefCell;
 
 pub struct FreeListEntry {
 	pub start: usize,
@@ -19,7 +18,7 @@ impl FreeListEntry {
 	pub const fn new(start: usize, end: usize) -> Self {
 		FreeListEntry {
 			start: start,
-			end: end
+			end: end,
 		}
 	}
 }
@@ -30,17 +29,26 @@ pub struct FreeList {
 
 impl FreeList {
 	pub const fn new() -> Self {
-		Self { list: DoublyLinkedList::new() }
+		Self {
+			list: DoublyLinkedList::new(),
+		}
 	}
 
 	pub fn allocate(&mut self, size: usize) -> Result<usize, ()> {
-		trace!("Allocating {} bytes from Free List {:#X}", size, self as *const Self as usize);
+		trace!(
+			"Allocating {} bytes from Free List {:#X}",
+			size,
+			self as *const Self as usize
+		);
 
 		// Find a region in the Free List that has at least the requested size.
 		for node in self.list.iter() {
 			let (region_start, region_size) = {
 				let borrowed = node.borrow();
-				(borrowed.value.start, borrowed.value.end - borrowed.value.start)
+				(
+					borrowed.value.start,
+					borrowed.value.end - borrowed.value.start,
+				)
 			};
 
 			if region_size > size {
@@ -60,7 +68,12 @@ impl FreeList {
 	}
 
 	#[inline]
-	fn allocate_address_for_node(&mut self, address: usize, end: usize, node: Rc<RefCell<Node<FreeListEntry>>>) -> bool {
+	fn allocate_address_for_node(
+		&mut self,
+		address: usize,
+		end: usize,
+		node: Rc<RefCell<Node<FreeListEntry>>>,
+	) -> bool {
 		let (region_start, region_end) = {
 			let borrowed = node.borrow();
 			(borrowed.value.start, borrowed.value.end)
@@ -97,7 +110,12 @@ impl FreeList {
 	}
 
 	pub fn allocate_aligned(&mut self, size: usize, alignment: usize) -> Result<usize, ()> {
-		trace!("Allocating {} bytes from Free List {:#X} aligned to {} bytes", size, self as *const Self as usize, alignment);
+		trace!(
+			"Allocating {} bytes from Free List {:#X} aligned to {} bytes",
+			size,
+			self as *const Self as usize,
+			alignment
+		);
 
 		for node in self.list.iter() {
 			// Align up the start address of the current node in the list to the desired alignment.
@@ -113,7 +131,12 @@ impl FreeList {
 	}
 
 	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), ()> {
-		trace!("Reserving {} bytes at address {:#X} in Free List {:#X}", size, address, self as *const Self as usize);
+		trace!(
+			"Reserving {} bytes at address {:#X} in Free List {:#X}",
+			size,
+			address,
+			self as *const Self as usize
+		);
 		let end = address + size;
 
 		for node in self.list.iter() {
@@ -129,7 +152,12 @@ impl FreeList {
 	}
 
 	pub fn deallocate(&mut self, address: usize, size: usize) {
-		trace!("Deallocating {} bytes at {:#X} from Free List {:#X}", size, address, self as *const Self as usize);
+		trace!(
+			"Deallocating {} bytes at {:#X} from Free List {:#X}",
+			size,
+			address,
+			self as *const Self as usize
+		);
 
 		let end = address + size;
 		let mut iter = self.list.iter();
@@ -201,16 +229,13 @@ impl FreeList {
 	}
 }
 
-
 #[test]
 fn add_element() {
 	let mut freelist = FreeList::new();
-	let entry = Node::new(
-		FreeListEntry {
-			start: 0x10000,
-			end:   0x100000
-		}
-	);
+	let entry = Node::new(FreeListEntry {
+		start: 0x10000,
+		end: 0x100000,
+	});
 
 	freelist.list.push(entry);
 
@@ -223,12 +248,10 @@ fn add_element() {
 #[test]
 fn allocate() {
 	let mut freelist = FreeList::new();
-	let entry = Node::new(
-		FreeListEntry {
-			start: 0x10000,
-			end:   0x100000
-		}
-	);
+	let entry = Node::new(FreeListEntry {
+		start: 0x10000,
+		end: 0x100000,
+	});
 
 	freelist.list.push(entry);
 	let addr = freelist.allocate(0x1000);
@@ -248,12 +271,10 @@ fn allocate() {
 #[test]
 fn deallocate() {
 	let mut freelist = FreeList::new();
-	let entry = Node::new(
-		FreeListEntry {
-			start: 0x10000,
-			end:   0x100000
-		}
-	);
+	let entry = Node::new(FreeListEntry {
+		start: 0x10000,
+		end: 0x100000,
+	});
 
 	freelist.list.push(entry);
 	let addr = freelist.allocate(0x1000);

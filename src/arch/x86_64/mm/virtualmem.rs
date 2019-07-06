@@ -22,49 +22,98 @@ const KERNEL_VIRTUAL_MEMORY_END: usize = 0x1_0000_0000;
 /// linear addressing (in two 47-bit areas).
 const TASK_VIRTUAL_MEMORY_END: usize = 0x8000_0000_0000;
 
-
 pub fn init() {
-	let entry = Node::new(
-		FreeListEntry {
-			start: mm::kernel_end_address(),
-			end: KERNEL_VIRTUAL_MEMORY_END
-		}
-	);
+	let entry = Node::new(FreeListEntry {
+		start: mm::kernel_end_address(),
+		end: KERNEL_VIRTUAL_MEMORY_END,
+	});
 	KERNEL_FREE_LIST.lock().list.push(entry);
 }
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	let result = KERNEL_FREE_LIST.lock().allocate(size);
-	assert!(result.is_ok(), "Could not allocate {:#X} bytes of virtual memory", size);
+	assert!(
+		result.is_ok(),
+		"Could not allocate {:#X} bytes of virtual memory",
+		size
+	);
 	result.unwrap()
 }
 
 pub fn deallocate(virtual_address: usize, size: usize) {
-	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
-	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(
+		virtual_address >= mm::kernel_end_address(),
+		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
+		virtual_address
+	);
+	assert!(
+		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
+		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address
+	);
+	assert!(
+		virtual_address % BasePageSize::SIZE == 0,
+		"Virtual address {:#X} is not a multiple of {:#X}",
+		virtual_address,
+		BasePageSize::SIZE
+	);
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
 }
 
 pub fn reserve(virtual_address: usize, size: usize) {
-	assert!(virtual_address >= mm::kernel_end_address(), "Virtual address {:#X} is not >= KERNEL_END_ADDRESS", virtual_address);
-	assert!(virtual_address < KERNEL_VIRTUAL_MEMORY_END, "Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END", virtual_address);
-	assert!(virtual_address % BasePageSize::SIZE == 0, "Virtual address {:#X} is not a multiple of {:#X}", virtual_address, BasePageSize::SIZE);
+	assert!(
+		virtual_address >= mm::kernel_end_address(),
+		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
+		virtual_address
+	);
+	assert!(
+		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
+		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address
+	);
+	assert!(
+		virtual_address % BasePageSize::SIZE == 0,
+		"Virtual address {:#X} is not a multiple of {:#X}",
+		virtual_address,
+		BasePageSize::SIZE
+	);
 	assert!(size > 0);
-	assert!(size % BasePageSize::SIZE == 0, "Size {:#X} is not a multiple of {:#X}", size, BasePageSize::SIZE);
+	assert!(
+		size % BasePageSize::SIZE == 0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
 
 	let result = KERNEL_FREE_LIST.lock().reserve(virtual_address, size);
-	assert!(result.is_ok(), "Could not reserve {:#X} bytes of virtual memory at {:#X}", size, virtual_address);
+	assert!(
+		result.is_ok(),
+		"Could not reserve {:#X} bytes of virtual memory at {:#X}",
+		size,
+		virtual_address
+	);
 }
 
 pub fn print_information() {
-	KERNEL_FREE_LIST.lock().print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
+	KERNEL_FREE_LIST
+		.lock()
+		.print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
 }
 
 #[inline]

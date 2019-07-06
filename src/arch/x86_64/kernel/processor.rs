@@ -14,14 +14,13 @@ use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::pic;
 use arch::x86_64::kernel::pit;
 use arch::x86_64::kernel::KERNEL_HEADER;
-use core::{fmt, u32, ptr};
 use core::sync::atomic::spin_loop_hint;
+use core::{fmt, ptr, u32};
 use environment;
-use x86::cpuid::*;
 use x86::controlregs::*;
+use x86::cpuid::*;
 use x86::msr::*;
 use x86::time::*;
-
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -63,8 +62,8 @@ pub struct XSaveLegacyRegion {
 	pub fpu_data_pointer_high_or_ds: u32,
 	pub mxcsr: u32,
 	pub mxcsr_mask: u32,
-	pub st_space: [u8; 8*16],
-	pub xmm_space: [u8; 16*16],
+	pub st_space: [u8; 8 * 16],
+	pub xmm_space: [u8; 16 * 16],
 	pub padding: [u8; 96],
 }
 
@@ -77,7 +76,7 @@ pub struct XSaveHeader {
 
 #[repr(C)]
 pub struct XSaveAVXState {
-	pub ymmh_space: [u8; 16*16],
+	pub ymmh_space: [u8; 16 * 16],
 }
 
 /// XSave Area for AMD Lightweight Profiling.
@@ -96,7 +95,7 @@ pub struct XSaveLWPState {
 
 #[repr(C)]
 pub struct XSaveBndregs {
-	pub bound_registers: [u8; 4*16],
+	pub bound_registers: [u8; 4 * 16],
 }
 
 #[repr(C)]
@@ -131,8 +130,8 @@ impl FPUState {
 				fpu_data_pointer_high_or_ds: 0,
 				mxcsr: 0x1F80,
 				mxcsr_mask: 0,
-				st_space: [0; 8*16],
-				xmm_space: [0; 16*16],
+				st_space: [0; 8 * 16],
+				xmm_space: [0; 16 * 16],
 				padding: [0; 96],
 			},
 
@@ -142,7 +141,7 @@ impl FPUState {
 				reserved: [0; 6],
 			},
 			avx_state: XSaveAVXState {
-				ymmh_space: [0; 16*16],
+				ymmh_space: [0; 16 * 16],
 			},
 			lwp_state: XSaveLWPState {
 				lwpcb_address: 0,
@@ -155,38 +154,47 @@ impl FPUState {
 				event_counter: [0; 16],
 			},
 			bndregs: XSaveBndregs {
-				bound_registers: [0; 4*16],
+				bound_registers: [0; 4 * 16],
 			},
 			bndcsr: XSaveBndcsr {
 				bndcfgu_register: 0,
 				bndstatus_register: 0,
-			}
+			},
 		}
 	}
 
 	pub fn restore(&self) {
 		if supports_xsave() {
 			let bitmask = u32::MAX;
-			unsafe { asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile"); }
+			unsafe {
+				asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
+			}
 		} else {
-			unsafe { asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile"); }
+			unsafe {
+				asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+			}
 		}
 	}
 
 	pub fn save(&mut self) {
 		if supports_xsave() {
 			let bitmask: u32 = u32::MAX;
-			unsafe { asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile"); }
+			unsafe {
+				asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
+			}
 		} else {
-			unsafe { asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile"); }
+			unsafe {
+				asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+			}
 		}
 	}
 
 	pub fn restore_common(&self) {
-		unsafe { asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile"); }
+		unsafe {
+			asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+		}
 	}
 }
-
 
 enum CpuFrequencySources {
 	Invalid,
@@ -208,7 +216,6 @@ impl fmt::Display for CpuFrequencySources {
 	}
 }
 
-
 struct CpuFrequency {
 	mhz: u16,
 	source: CpuFrequencySources,
@@ -216,7 +223,10 @@ struct CpuFrequency {
 
 impl CpuFrequency {
 	const fn new() -> Self {
-		CpuFrequency { mhz: 0, source: CpuFrequencySources::Invalid }
+		CpuFrequency {
+			mhz: 0,
+			source: CpuFrequencySources::Invalid,
+		}
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
@@ -231,8 +241,12 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
-		let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
+		let extended_function_info = cpuid
+			.get_extended_function_info()
+			.expect("CPUID Extended Function Info not available!");
+		let brand_string = extended_function_info
+			.processor_brand_string()
+			.expect("CPUID Brand String not available!");
 
 		let ghz_find = brand_string.find("GHz");
 		if ghz_find.is_some() {
@@ -242,7 +256,12 @@ impl CpuFrequency {
 			let hundred_char = brand_string.chars().nth(index + 2).unwrap();
 			let ten_char = brand_string.chars().nth(index + 3).unwrap();
 
-			if let (Some(thousand), '.', Some(hundred), Some(ten)) = (thousand_char.to_digit(10), decimal_char, hundred_char.to_digit(10), ten_char.to_digit(10)) {
+			if let (Some(thousand), '.', Some(hundred), Some(ten)) = (
+				thousand_char.to_digit(10),
+				decimal_char,
+				hundred_char.to_digit(10),
+				ten_char.to_digit(10),
+			) {
 				self.mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
 				self.source = CpuFrequencySources::CpuIdBrandString;
 				return Ok(());
@@ -263,8 +282,12 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	extern "x86-interrupt" fn measure_frequency_timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
-		unsafe { MEASUREMENT_TIMER_TICKS += 1; }
+	extern "x86-interrupt" fn measure_frequency_timer_handler(
+		_stack_frame: &mut irq::ExceptionStackFrame,
+	) {
+		unsafe {
+			MEASUREMENT_TIMER_TICKS += 1;
+		}
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
@@ -280,7 +303,11 @@ impl CpuFrequency {
 
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
-		idt::set_gate(pit::PIT_INTERRUPT_NUMBER, Self::measure_frequency_timer_handler as usize, 0);
+		idt::set_gate(
+			pit::PIT_INTERRUPT_NUMBER,
+			Self::measure_frequency_timer_handler as usize,
+			0,
+		);
 		pit::init(measurement_frequency);
 
 		// Determine the current timer tick.
@@ -344,7 +371,6 @@ impl fmt::Display for CpuFrequency {
 	}
 }
 
-
 struct CpuFeaturePrinter {
 	feature_info: FeatureInfo,
 	extended_feature_info: ExtendedFeatures,
@@ -354,50 +380,113 @@ struct CpuFeaturePrinter {
 impl CpuFeaturePrinter {
 	fn new(cpuid: &CpuId) -> Self {
 		CpuFeaturePrinter {
-			feature_info: cpuid.get_feature_info().expect("CPUID Feature Info not available!"),
-			extended_feature_info: cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!"),
-			extended_function_info: cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!"),
+			feature_info: cpuid
+				.get_feature_info()
+				.expect("CPUID Feature Info not available!"),
+			extended_feature_info: cpuid
+				.get_extended_feature_info()
+				.expect("CPUID Extended Feature Info not available!"),
+			extended_function_info: cpuid
+				.get_extended_function_info()
+				.expect("CPUID Extended Function Info not available!"),
 		}
 	}
 }
 
 impl fmt::Display for CpuFeaturePrinter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		if self.feature_info.has_mmx() { write!(f, "MMX ")?; }
-		if self.feature_info.has_sse() { write!(f, "SSE ")?; }
-		if self.feature_info.has_sse2() { write!(f, "SSE2 ")?; }
-		if self.feature_info.has_sse3() { write!(f, "SSE3 ")?; }
-		if self.feature_info.has_ssse3() { write!(f, "SSSE3 ")?; }
-		if self.feature_info.has_sse41() { write!(f, "SSE4.1 ")?; }
-		if self.feature_info.has_sse42() { write!(f, "SSE4.2 ")?; }
-		if self.feature_info.has_avx() { write!(f, "AVX ")?; }
-		if self.feature_info.has_eist() { write!(f, "EIST ")?; }
-		if self.feature_info.has_aesni() { write!(f, "AESNI ")?; }
-		if self.feature_info.has_rdrand() { write!(f, "RDRAND ")?; }
-		if self.feature_info.has_fma() { write!(f, "FMA ")?; }
-		if self.feature_info.has_movbe() { write!(f, "MOVBE ")?; }
-		if self.feature_info.has_mce() { write!(f, "MCE ")?; }
-		if self.feature_info.has_fxsave_fxstor() { write!(f, "FXSR ")?; }
-		if self.feature_info.has_xsave() { write!(f, "XSAVE ")?; }
-		if self.feature_info.has_vmx() { write!(f, "VMX ")?; }
-		if self.extended_function_info.has_rdtscp() { write!(f, "RDTSCP ")?; }
-		if self.feature_info.has_monitor_mwait() { write!(f, "MWAIT ")?; }
-		if self.feature_info.has_clflush() { write!(f, "CLFLUSH ")?; }
-		if self.feature_info.has_dca() { write!(f, "DCA ")?; }
-		if self.feature_info.has_tsc_deadline() { write!(f, "TSC-DEADLINE ")?; }
+		if self.feature_info.has_mmx() {
+			write!(f, "MMX ")?;
+		}
+		if self.feature_info.has_sse() {
+			write!(f, "SSE ")?;
+		}
+		if self.feature_info.has_sse2() {
+			write!(f, "SSE2 ")?;
+		}
+		if self.feature_info.has_sse3() {
+			write!(f, "SSE3 ")?;
+		}
+		if self.feature_info.has_ssse3() {
+			write!(f, "SSSE3 ")?;
+		}
+		if self.feature_info.has_sse41() {
+			write!(f, "SSE4.1 ")?;
+		}
+		if self.feature_info.has_sse42() {
+			write!(f, "SSE4.2 ")?;
+		}
+		if self.feature_info.has_avx() {
+			write!(f, "AVX ")?;
+		}
+		if self.feature_info.has_eist() {
+			write!(f, "EIST ")?;
+		}
+		if self.feature_info.has_aesni() {
+			write!(f, "AESNI ")?;
+		}
+		if self.feature_info.has_rdrand() {
+			write!(f, "RDRAND ")?;
+		}
+		if self.feature_info.has_fma() {
+			write!(f, "FMA ")?;
+		}
+		if self.feature_info.has_movbe() {
+			write!(f, "MOVBE ")?;
+		}
+		if self.feature_info.has_mce() {
+			write!(f, "MCE ")?;
+		}
+		if self.feature_info.has_fxsave_fxstor() {
+			write!(f, "FXSR ")?;
+		}
+		if self.feature_info.has_xsave() {
+			write!(f, "XSAVE ")?;
+		}
+		if self.feature_info.has_vmx() {
+			write!(f, "VMX ")?;
+		}
+		if self.extended_function_info.has_rdtscp() {
+			write!(f, "RDTSCP ")?;
+		}
+		if self.feature_info.has_monitor_mwait() {
+			write!(f, "MWAIT ")?;
+		}
+		if self.feature_info.has_clflush() {
+			write!(f, "CLFLUSH ")?;
+		}
+		if self.feature_info.has_dca() {
+			write!(f, "DCA ")?;
+		}
+		if self.feature_info.has_tsc_deadline() {
+			write!(f, "TSC-DEADLINE ")?;
+		}
 
-		if self.extended_feature_info.has_avx2() { write!(f, "AVX2 ")?; }
-		if self.extended_feature_info.has_bmi1() { write!(f, "BMI1 ")?; }
-		if self.extended_feature_info.has_bmi2() { write!(f, "BMI2 ")?; }
-		if self.extended_feature_info.has_rtm() { write!(f, "RTM ")?; }
-		if self.extended_feature_info.has_hle() { write!(f, "HLE ")?; }
-		if self.extended_feature_info.has_mpx() { write!(f, "MPX ")?; }
-		if self.extended_feature_info.has_fsgsbase() { write!(f, "FSGSBASE ")?; }
+		if self.extended_feature_info.has_avx2() {
+			write!(f, "AVX2 ")?;
+		}
+		if self.extended_feature_info.has_bmi1() {
+			write!(f, "BMI1 ")?;
+		}
+		if self.extended_feature_info.has_bmi2() {
+			write!(f, "BMI2 ")?;
+		}
+		if self.extended_feature_info.has_rtm() {
+			write!(f, "RTM ")?;
+		}
+		if self.extended_feature_info.has_hle() {
+			write!(f, "HLE ")?;
+		}
+		if self.extended_feature_info.has_mpx() {
+			write!(f, "MPX ")?;
+		}
+		if self.extended_feature_info.has_fsgsbase() {
+			write!(f, "FSGSBASE ")?;
+		}
 
 		Ok(())
 	}
 }
-
 
 struct CpuSpeedStep {
 	eist_available: bool,
@@ -421,7 +510,9 @@ impl CpuSpeedStep {
 	}
 
 	fn detect_features(&mut self, cpuid: &CpuId) {
-		let feature_info = cpuid.get_feature_info().expect("CPUID Feature Info not available!");
+		let feature_info = cpuid
+			.get_feature_info()
+			.expect("CPUID Feature Info not available!");
 
 		self.eist_available = feature_info.has_eist();
 		if !self.eist_available {
@@ -455,7 +546,9 @@ impl CpuSpeedStep {
 		}
 
 		if self.energy_bias_preference {
-			unsafe { wrmsr(IA32_ENERGY_PERF_BIAS, 0); }
+			unsafe {
+				wrmsr(IA32_ENERGY_PERF_BIAS, 0);
+			}
 		}
 
 		let mut perf_ctl_mask = (self.max_pstate as u64) << 8;
@@ -463,7 +556,9 @@ impl CpuSpeedStep {
 			perf_ctl_mask |= 1 << 32;
 		}
 
-		unsafe { wrmsr(IA32_PERF_CTL, perf_ctl_mask); }
+		unsafe {
+			wrmsr(IA32_PERF_CTL, perf_ctl_mask);
+		}
 	}
 }
 
@@ -497,13 +592,23 @@ impl fmt::Display for CpuSpeedStep {
 pub fn detect_features() {
 	// Detect CPU features
 	let cpuid = CpuId::new();
-	let feature_info = cpuid.get_feature_info().expect("CPUID Feature Info not available!");
-	let extended_feature_info = cpuid.get_extended_feature_info().expect("CPUID Extended Feature Info not available!");
-	let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
+	let feature_info = cpuid
+		.get_feature_info()
+		.expect("CPUID Feature Info not available!");
+	let extended_feature_info = cpuid
+		.get_extended_feature_info()
+		.expect("CPUID Extended Feature Info not available!");
+	let extended_function_info = cpuid
+		.get_extended_function_info()
+		.expect("CPUID Extended Function Info not available!");
 
 	unsafe {
-		PHYSICAL_ADDRESS_BITS = extended_function_info.physical_address_bits().expect("CPUID Physical Address Bits not available!");
-		LINEAR_ADDRESS_BITS = extended_function_info.linear_address_bits().expect("CPUID Linear Address Bits not available!");
+		PHYSICAL_ADDRESS_BITS = extended_function_info
+			.physical_address_bits()
+			.expect("CPUID Physical Address Bits not available!");
+		LINEAR_ADDRESS_BITS = extended_function_info
+			.linear_address_bits()
+			.expect("CPUID Linear Address Bits not available!");
 		SUPPORTS_1GIB_PAGES = extended_function_info.has_1gib_pages();
 		SUPPORTS_AVX = feature_info.has_avx();
 		SUPPORTS_RDRAND = feature_info.has_rdrand();
@@ -544,7 +649,9 @@ pub fn configure() {
 	// Enable caching.
 	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
 
-	unsafe { cr0_write(cr0); }
+	unsafe {
+		cr0_write(cr0);
+	}
 
 	//
 	// CR4 CONFIGURATION
@@ -570,7 +677,9 @@ pub fn configure() {
 		panic!("libhermit-rs requires the CPU feature FSGSBASE");
 	}
 
-	unsafe { cr4_write(cr4); }
+	unsafe {
+		cr4_write(cr4);
+	}
 
 	//
 	// XCR0 CONFIGURATION
@@ -585,7 +694,9 @@ pub fn configure() {
 			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
-		unsafe { xcr0_write(xcr0); }
+		unsafe {
+			xcr0_write(xcr0);
+		}
 	}
 
 	// Initialize the FS register, which is later used for Thread-Local Storage.
@@ -594,18 +705,25 @@ pub fn configure() {
 	//
 	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
 	//
-	unsafe { CPU_SPEEDSTEP.configure(); }
+	unsafe {
+		CPU_SPEEDSTEP.configure();
+	}
 }
 
-
 pub fn detect_frequency() {
-	unsafe { CPU_FREQUENCY.detect(); }
+	unsafe {
+		CPU_FREQUENCY.detect();
+	}
 }
 
 pub fn print_information() {
 	let cpuid = CpuId::new();
-	let extended_function_info = cpuid.get_extended_function_info().expect("CPUID Extended Function Info not available!");
-	let brand_string = extended_function_info.processor_brand_string().expect("CPUID Brand String not available!");
+	let extended_function_info = cpuid
+		.get_extended_function_info()
+		.expect("CPUID Extended Function Info not available!");
+	let brand_string = extended_function_info
+		.processor_brand_string()
+		.expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
 	infoheader!(" CPU INFORMATION ");
@@ -617,16 +735,25 @@ pub fn print_information() {
 	}
 
 	infoentry!("Features", feature_printer);
-	infoentry!("Physical Address Width", "{} bits", get_physical_address_bits());
+	infoentry!(
+		"Physical Address Width",
+		"{} bits",
+		get_physical_address_bits()
+	);
 	infoentry!("Linear Address Width", "{} bits", get_linear_address_bits());
-	infoentry!("Supports 1GiB Pages", if supports_1gib_pages() { "Yes" } else { "No" });
+	infoentry!(
+		"Supports 1GiB Pages",
+		if supports_1gib_pages() { "Yes" } else { "No" }
+	);
 	infofooter!();
 }
 
 pub fn generate_random_number() -> Option<u32> {
 	if unsafe { SUPPORTS_RDRAND } {
 		let value: u32;
-		unsafe { asm!("rdrand $0" : "=r"(value) ::: "volatile"); }
+		unsafe {
+			asm!("rdrand $0" : "=r"(value) ::: "volatile");
+		}
 		Some(value)
 	} else {
 		None
@@ -678,7 +805,9 @@ pub fn supports_fsgs() -> bool {
 pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
 		let ret: u64;
-		unsafe { asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile"); }
+		unsafe {
+			asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile");
+		}
 		Some(ret)
 	} else {
 		None
@@ -715,25 +844,33 @@ pub fn get_frequency() -> u16 {
 #[inline]
 pub fn readfs() -> usize {
 	let val: u64;
-	unsafe { asm!("rdfsbase $0" : "=r"(val) ::: "volatile"); }
+	unsafe {
+		asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
+	}
 	val as usize
 }
 
 #[inline]
 pub fn readgs() -> usize {
 	let val: u64;
-	unsafe { asm!("rdgsbase $0" : "=r"(val) ::: "volatile"); }
+	unsafe {
+		asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
+	}
 	val as usize
 }
 
 #[inline]
 pub fn writefs(fs: usize) {
-	unsafe { asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile"); }
+	unsafe {
+		asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
+	}
 }
 
 #[inline]
 pub fn writegs(gs: usize) {
-	unsafe { asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile"); }
+	unsafe {
+		asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile");
+	}
 }
 
 #[inline]

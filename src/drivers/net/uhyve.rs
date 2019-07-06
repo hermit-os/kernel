@@ -10,25 +10,25 @@ use core::ptr::read_volatile;
 use core::str;
 use core::sync::atomic::{AtomicBool, Ordering};
 
+use smoltcp::iface::{EthernetInterfaceBuilder, NeighborCache, Routes};
+use smoltcp::phy::{self, Device, DeviceCapabilities};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
-use smoltcp::iface::{NeighborCache, EthernetInterfaceBuilder, Routes};
-use smoltcp::phy::{self, Device, DeviceCapabilities};
 
+use drivers::net::{networkd, NETWORK_TASK_ID};
 use scheduler;
-use drivers::net::{NETWORK_TASK_ID,networkd};
 
-#[cfg(target_arch="x86_64")]
-use arch::x86_64::kernel::percore::core_scheduler;
-#[cfg(target_arch="x86_64")]
-use arch::x86_64::kernel::{get_ip,get_gateway};
-#[cfg(target_arch="x86_64")]
-use arch::x86_64::kernel::irq::*;
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::apic;
-#[cfg(target_arch="x86_64")]
-use 	arch::x86_64::mm::paging::virt_to_phys;
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::irq::*;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::percore::core_scheduler;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::{get_gateway, get_ip};
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::mm::paging::virt_to_phys;
+#[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
 static POOLING: AtomicBool = AtomicBool::new(false);
@@ -38,9 +38,9 @@ fn is_pooling() -> bool {
 }
 
 const UHYVE_IRQ_NET: u32 = 11;
-const UHYVE_PORT_NETINFO: u16	= 0x600;
-const UHYVE_PORT_NETWRITE: u16	= 0x640;
-const UHYVE_PORT_NETREAD: u16	= 0x680;
+const UHYVE_PORT_NETINFO: u16 = 0x600;
+const UHYVE_PORT_NETWRITE: u16 = 0x640;
+const UHYVE_PORT_NETREAD: u16 = 0x680;
 //const UHYVE_PORT_NETSTAT: u16   = 0x700;
 const UHYVE_MAX_MSG_SIZE: usize = 1792;
 
@@ -49,7 +49,7 @@ const UHYVE_MAX_MSG_SIZE: usize = 1792;
 #[repr(C)]
 struct UhyveNetinfo {
 	/// mac address
-	pub mac: [u8; 18]
+	pub mac: [u8; 18],
 }
 
 /// Datatype to receive packets from uhyve
@@ -61,7 +61,7 @@ struct UhyveRead {
 	/// length of the buffer
 	pub len: usize,
 	/// amount of received data (in bytes)
-	pub ret: i32 
+	pub ret: i32,
 }
 
 impl UhyveRead {
@@ -69,20 +69,16 @@ impl UhyveRead {
 		UhyveRead {
 			data: data,
 			len: len,
-			ret: 0
+			ret: 0,
 		}
 	}
 
 	pub fn len(&self) -> usize {
-		unsafe {
-			read_volatile(&self.len)
-		}
+		unsafe { read_volatile(&self.len) }
 	}
 
 	pub fn ret(&self) -> i32 {
-		unsafe {
-			read_volatile(&self.ret)
-		}
+		unsafe { read_volatile(&self.ret) }
 	}
 }
 
@@ -95,7 +91,7 @@ struct UhyveWrite {
 	/// length of the data
 	pub len: usize,
 	/// return value, transfered bytes
-	pub ret: i32
+	pub ret: i32,
 }
 
 impl UhyveWrite {
@@ -103,20 +99,16 @@ impl UhyveWrite {
 		UhyveWrite {
 			data: data,
 			len: len,
-			ret: 0
+			ret: 0,
 		}
 	}
 
 	pub fn ret(&self) -> i32 {
-		unsafe {
-			read_volatile(&self.ret)
-		}
+		unsafe { read_volatile(&self.ret) }
 	}
 
 	pub fn len(&self) -> usize {
-		unsafe {
-			read_volatile(&self.len)
-		}
+		unsafe { read_volatile(&self.len) }
 	}
 }
 
@@ -128,7 +120,10 @@ extern "C" fn uhyve_thread(_arg: usize) {
 	let info: UhyveNetinfo = UhyveNetinfo::default();
 
 	unsafe {
-		outl(UHYVE_PORT_NETINFO, virt_to_phys(&info as *const _ as usize) as u32);
+		outl(
+			UHYVE_PORT_NETINFO,
+			virt_to_phys(&info as *const _ as usize) as u32,
+		);
 	}
 	let mac_str = str::from_utf8(&info.mac).unwrap();
 
@@ -139,10 +134,13 @@ extern "C" fn uhyve_thread(_arg: usize) {
 		u8::from_str_radix(&mac_str[6..8], 16).unwrap(),
 		u8::from_str_radix(&mac_str[9..11], 16).unwrap(),
 		u8::from_str_radix(&mac_str[12..14], 16).unwrap(),
-		u8::from_str_radix(&mac_str[15..17], 16).unwrap()
+		u8::from_str_radix(&mac_str[15..17], 16).unwrap(),
 	]);
 	let hcip = get_ip();
-	let ip_addrs = [IpCidr::new(IpAddress::v4(hcip[0], hcip[1], hcip[2], hcip[3]), 24)]; 
+	let ip_addrs = [IpCidr::new(
+		IpAddress::v4(hcip[0], hcip[1], hcip[2], hcip[3]),
+		24,
+	)];
 	let hcgw = get_gateway();
 	let default_gw = Ipv4Address::new(hcgw[0], hcgw[1], hcgw[2], hcgw[3]);
 	let mut routes_storage = [None; 1];
@@ -172,8 +170,7 @@ extern "C" fn uhyve_thread(_arg: usize) {
 pub fn init() -> Result<(), ()> {
 	// does uhyve configure the network interface?
 	let ip = get_ip();
-	if ip[0] == 0xff && ip[1] == 0xff &&
-	   ip[2] == 0xff && ip[3] == 0xff {
+	if ip[0] == 0xff && ip[1] == 0xff && ip[2] == 0xff && ip[3] == 0xff {
 		return Err(());
 	}
 
@@ -183,14 +180,14 @@ pub fn init() -> Result<(), ()> {
 			uhyve_thread,
 			0,
 			scheduler::task::HIGH_PRIO,
-			Some(crate::arch::mm::virtualmem::task_heap_start())
+			Some(crate::arch::mm::virtualmem::task_heap_start()),
 		);
 	}
 
 	Ok(())
 }
 
-#[cfg(target_arch="x86_64")]
+#[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn uhyve_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive network interrupt from uhyve");
 	POOLING.store(true, Ordering::SeqCst);
@@ -202,7 +199,7 @@ extern "x86-interrupt" fn uhyve_irqhandler(_stack_frame: &mut ExceptionStackFram
 /// A network device for uhyve.
 #[derive(Debug)]
 pub struct UhyveNet {
-	mtu:	usize
+	mtu: usize,
 }
 
 impl UhyveNet {
@@ -211,9 +208,7 @@ impl UhyveNet {
 	/// Every packet transmitted through this device will be received through it
 	/// in FIFO order.
 	pub fn new() -> UhyveNet {
-		UhyveNet {
-			mtu: 1500
-		}
+		UhyveNet { mtu: 1500 }
 	}
 }
 
@@ -229,9 +224,15 @@ impl<'a> Device<'a> for UhyveNet {
 
 	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
 		let mut rx = RxToken::new();
-		let data = UhyveRead::new(virt_to_phys(rx.buffer.as_mut_ptr() as usize), UHYVE_MAX_MSG_SIZE);
+		let data = UhyveRead::new(
+			virt_to_phys(rx.buffer.as_mut_ptr() as usize),
+			UHYVE_MAX_MSG_SIZE,
+		);
 		unsafe {
-			outl(UHYVE_PORT_NETREAD, virt_to_phys(&data as *const _ as usize) as u32);
+			outl(
+				UHYVE_PORT_NETREAD,
+				virt_to_phys(&data as *const _ as usize) as u32,
+			);
 		}
 
 		if data.ret() == 0 {
@@ -255,14 +256,14 @@ impl<'a> Device<'a> for UhyveNet {
 #[doc(hidden)]
 pub struct RxToken {
 	buffer: [u8; UHYVE_MAX_MSG_SIZE],
-	len: usize
+	len: usize,
 }
 
 impl RxToken {
 	pub fn new() -> RxToken {
 		RxToken {
 			buffer: [0; UHYVE_MAX_MSG_SIZE],
-			len: UHYVE_MAX_MSG_SIZE
+			len: UHYVE_MAX_MSG_SIZE,
 		}
 	}
 
@@ -281,7 +282,8 @@ impl RxToken {
 
 impl phy::RxToken for RxToken {
 	fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-		where F: FnOnce(&[u8]) -> smoltcp::Result<R>
+	where
+		F: FnOnce(&[u8]) -> smoltcp::Result<R>,
 	{
 		let (first, _) = self.buffer.split_at(self.len);
 		f(first)
@@ -299,10 +301,13 @@ impl TxToken {
 	fn write(&self, data: usize, len: usize) -> usize {
 		let uhyve_write = UhyveWrite::new(virt_to_phys(data), len);
 		unsafe {
-			outl(UHYVE_PORT_NETWRITE, virt_to_phys(&uhyve_write as *const _ as usize) as u32);
+			outl(
+				UHYVE_PORT_NETWRITE,
+				virt_to_phys(&uhyve_write as *const _ as usize) as u32,
+			);
 		}
 
-		let  ret = uhyve_write.ret();
+		let ret = uhyve_write.ret();
 		if ret != 0 {
 			error!("Unable to send message: {}", ret);
 		}
@@ -313,7 +318,8 @@ impl TxToken {
 
 impl phy::TxToken for TxToken {
 	fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
-		where F: FnOnce(&mut [u8]) -> smoltcp::Result<R>
+	where
+		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
 	{
 		let mut buffer = vec![0; len];
 		let result = f(&mut buffer);

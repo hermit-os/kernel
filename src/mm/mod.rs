@@ -27,7 +27,6 @@ static mut KERNEL_START_ADDRESS: usize = 0;
 /// Can be easily accessed through kernel_end_address()
 static mut KERNEL_END_ADDRESS: usize = 0;
 
-
 pub fn kernel_start_address() -> usize {
 	unsafe { KERNEL_START_ADDRESS }
 }
@@ -40,16 +39,20 @@ pub fn kernel_end_address() -> usize {
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
-		KERNEL_START_ADDRESS = align_down!(&kernel_start as *const u8 as usize,
-			arch::mm::paging::LargePageSize::SIZE);
-		KERNEL_END_ADDRESS = align_up!(&kernel_start as *const u8 as usize + environment::get_image_size(),
-			arch::mm::paging::LargePageSize::SIZE);
+		KERNEL_START_ADDRESS = align_down!(
+			&kernel_start as *const u8 as usize,
+			arch::mm::paging::LargePageSize::SIZE
+		);
+		KERNEL_END_ADDRESS = align_up!(
+			&kernel_start as *const u8 as usize + environment::get_image_size(),
+			arch::mm::paging::LargePageSize::SIZE
+		);
 	}
 
 	arch::mm::init();
 	arch::mm::init_page_tables();
 
-	let size: usize = 2*1024*1024;
+	let size: usize = 2 * 1024 * 1024;
 	unsafe {
 		::ALLOCATOR.lock().init(allocate(size, true), size);
 	}
@@ -98,6 +101,9 @@ pub fn deallocate(virtual_address: usize, sz: usize) {
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 		arch::mm::physicalmem::deallocate(entry.address(), size);
 	} else {
-		panic!("No page table entry for virtual address {:#X}", virtual_address);
+		panic!(
+			"No page table entry for virtual address {:#X}",
+			virtual_address
+		);
 	}
 }

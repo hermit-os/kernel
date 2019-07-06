@@ -19,20 +19,19 @@ pub struct SpinlockIrqSaveContainer<'a> {
 	guard: Option<SpinlockIrqSaveGuard<'a, ()>>,
 }
 
-
 #[no_mangle]
 pub extern "C" fn sys_spinlock_init(lock: *mut *mut SpinlockContainer) -> i32 {
 	if lock.is_null() {
 		return -EINVAL;
 	}
 
-	let boxed_container = Box::new(
-		SpinlockContainer {
-			lock: Spinlock::new(()),
-			guard: None,
-		}
-	);
-	unsafe { *lock = Box::into_raw(boxed_container); }
+	let boxed_container = Box::new(SpinlockContainer {
+		lock: Spinlock::new(()),
+		guard: None,
+	});
+	unsafe {
+		*lock = Box::into_raw(boxed_container);
+	}
 	0
 }
 
@@ -43,7 +42,9 @@ pub extern "C" fn sys_spinlock_destroy(lock: *mut SpinlockContainer) -> i32 {
 	}
 
 	// Consume the lock into a box, which is then dropped.
-	unsafe { Box::from_raw(lock); }
+	unsafe {
+		Box::from_raw(lock);
+	}
 	0
 }
 
@@ -54,7 +55,10 @@ pub extern "C" fn sys_spinlock_lock(lock: *mut SpinlockContainer) -> i32 {
 	}
 
 	let container = unsafe { &mut *lock };
-	assert!(container.guard.is_none(), "Called sys_spinlock_lock when a lock is already held!");
+	assert!(
+		container.guard.is_none(),
+		"Called sys_spinlock_lock when a lock is already held!"
+	);
 	container.guard = Some(container.lock.lock());
 	0
 }
@@ -66,11 +70,13 @@ pub extern "C" fn sys_spinlock_unlock(lock: *mut SpinlockContainer) -> i32 {
 	}
 
 	let container = unsafe { &mut *lock };
-	assert!(container.guard.is_some(), "Called sys_spinlock_unlock when no lock is currently held!");
+	assert!(
+		container.guard.is_some(),
+		"Called sys_spinlock_unlock when no lock is currently held!"
+	);
 	container.guard = None;
 	0
 }
-
 
 #[no_mangle]
 pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContainer) -> i32 {
@@ -78,13 +84,13 @@ pub extern "C" fn sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveConta
 		return -EINVAL;
 	}
 
-	let boxed_container = Box::new(
-		SpinlockIrqSaveContainer {
-			lock: SpinlockIrqSave::new(()),
-			guard: None,
-		}
-	);
-	unsafe { *lock = Box::into_raw(boxed_container); }
+	let boxed_container = Box::new(SpinlockIrqSaveContainer {
+		lock: SpinlockIrqSave::new(()),
+		guard: None,
+	});
+	unsafe {
+		*lock = Box::into_raw(boxed_container);
+	}
 	0
 }
 
@@ -95,7 +101,9 @@ pub extern "C" fn sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContain
 	}
 
 	// Consume the lock into a box, which is then dropped.
-	unsafe { Box::from_raw(lock); }
+	unsafe {
+		Box::from_raw(lock);
+	}
 	0
 }
 
@@ -106,7 +114,10 @@ pub extern "C" fn sys_spinlock_irqsave_lock(lock: *mut SpinlockIrqSaveContainer)
 	}
 
 	let container = unsafe { &mut *lock };
-	assert!(container.guard.is_none(), "Called sys_spinlock_irqsave_lock when a lock is already held!");
+	assert!(
+		container.guard.is_none(),
+		"Called sys_spinlock_irqsave_lock when a lock is already held!"
+	);
 	container.guard = Some(container.lock.lock());
 	0
 }
@@ -118,7 +129,10 @@ pub extern "C" fn sys_spinlock_irqsave_unlock(lock: *mut SpinlockIrqSaveContaine
 	}
 
 	let container = unsafe { &mut *lock };
-	assert!(container.guard.is_some(), "Called sys_spinlock_irqsave_unlock when no lock is currently held!");
+	assert!(
+		container.guard.is_some(),
+		"Called sys_spinlock_irqsave_unlock when no lock is currently held!"
+	);
 	container.guard = None;
 	0
 }

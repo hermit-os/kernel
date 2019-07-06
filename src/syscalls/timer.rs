@@ -36,7 +36,6 @@ pub const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
 pub const CLOCK_MONOTONIC: u64 = 4;
 pub const TIMER_ABSTIME: i32 = 4;
 
-
 fn microseconds_to_timespec(microseconds: u64, result: &mut timespec) {
 	result.tv_sec = (microseconds / 1_000_000) as i64;
 	result.tv_nsec = ((microseconds % 1_000_000) * 1000) as i64;
@@ -49,7 +48,10 @@ fn microseconds_to_timeval(microseconds: u64, result: &mut timeval) {
 
 #[no_mangle]
 pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
-	assert!(!res.is_null(), "sys_clock_getres called with a zero res parameter");
+	assert!(
+		!res.is_null(),
+		"sys_clock_getres called with a zero res parameter"
+	);
 	let result = unsafe { &mut *res };
 
 	match clock_id {
@@ -57,7 +59,7 @@ pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 			// All clocks in HermitCore have 1 microsecond resolution.
 			microseconds_to_timespec(1, result);
 			0
-		},
+		}
 		_ => {
 			debug!("Called sys_clock_getres for unsupported clock {}", clock_id);
 			-EINVAL
@@ -67,7 +69,10 @@ pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
-	assert!(!tp.is_null(), "sys_clock_gettime called with a zero tp parameter");
+	assert!(
+		!tp.is_null(),
+		"sys_clock_gettime called with a zero tp parameter"
+	);
 	let result = unsafe { &mut *tp };
 
 	match clock_id {
@@ -80,26 +85,41 @@ pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 
 			microseconds_to_timespec(microseconds, result);
 			0
-		},
+		}
 		_ => {
-			debug!("Called sys_clock_gettime for unsupported clock {}", clock_id);
+			debug!(
+				"Called sys_clock_gettime for unsupported clock {}",
+				clock_id
+			);
 			-EINVAL
 		}
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clock_nanosleep(clock_id: u64, flags: i32, rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
-	assert!(!rqtp.is_null(), "sys_clock_nanosleep called with a zero rqtp parameter");
-	let requested_time = unsafe { & *rqtp };
-	if requested_time.tv_sec < 0 || requested_time.tv_nsec < 0 || requested_time.tv_nsec > 999_999_999 {
+pub extern "C" fn sys_clock_nanosleep(
+	clock_id: u64,
+	flags: i32,
+	rqtp: *const timespec,
+	_rmtp: *mut timespec,
+) -> i32 {
+	assert!(
+		!rqtp.is_null(),
+		"sys_clock_nanosleep called with a zero rqtp parameter"
+	);
+	let requested_time = unsafe { &*rqtp };
+	if requested_time.tv_sec < 0
+		|| requested_time.tv_nsec < 0
+		|| requested_time.tv_nsec > 999_999_999
+	{
 		debug!("sys_clock_nanosleep called with an invalid requested time, returning -EINVAL");
 		return -EINVAL;
 	}
 
 	match clock_id {
 		CLOCK_REALTIME | CLOCK_MONOTONIC => {
-			let mut microseconds = (requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
+			let mut microseconds = (requested_time.tv_sec as u64) * 1_000_000
+				+ (requested_time.tv_nsec as u64) / 1_000;
 
 			if flags & TIMER_ABSTIME > 0 {
 				microseconds -= arch::processor::get_timer_ticks();
@@ -111,10 +131,8 @@ pub extern "C" fn sys_clock_nanosleep(clock_id: u64, flags: i32, rqtp: *const ti
 
 			sys_usleep(microseconds);
 			0
-		},
-		_ => {
-			-EINVAL
 		}
+		_ => -EINVAL,
 	}
 }
 
@@ -143,7 +161,11 @@ pub extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_setitimer(_which: i32, _value: *const itimerval, _ovalue: *mut itimerval) -> i32 {
+pub extern "C" fn sys_setitimer(
+	_which: i32,
+	_value: *const itimerval,
+	_ovalue: *mut itimerval,
+) -> i32 {
 	debug!("Called sys_setitimer, which is unimplemented and always returns 0");
 	0
 }
