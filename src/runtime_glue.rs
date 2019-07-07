@@ -35,6 +35,11 @@ fn panic(info: &PanicInfo) -> ! {
 }
 
 #[cfg(not(test))]
+#[lang = "eh_personality"]
+#[no_mangle]
+pub extern fn eh_personality() {}
+
+#[cfg(not(test))]
 #[lang = "oom"]
 #[no_mangle]
 pub fn rust_oom(layout: Layout) -> ! {
