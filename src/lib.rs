@@ -136,18 +136,21 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 
 #[cfg(not(test))]
 extern "C" {
-	static mut __bss_start: u8;
-	static mut hbss_start: u8;
-	static kernel_start: u8;
+	static mut __bss_start: usize;
+	static mut hbss_start: usize;
+	static kernel_start: usize;
+	static tls_start: usize;
+	static tls_end: usize;
 }
 
 #[cfg(not(test))]
 unsafe fn sections_init() {
-	// Initialize .kbss sections for the kernel.
+	// Initialize bss sections for the kernel.
 	ptr::write_bytes(
-		&mut hbss_start as *mut u8,
+		&mut hbss_start as *mut usize,
 		0,
-		&__bss_start as *const u8 as usize - &hbss_start as *const u8 as usize,
+		&kernel_start as *const usize as usize + environment::get_image_size()
+			- &hbss_start as *const usize as usize,
 	);
 }
 
@@ -177,14 +180,6 @@ extern "C" fn initd(_arg: usize) {
 	core_scheduler().scheduler();
 
 	unsafe {
-		// Initialize .bss sections for the application.
-		ptr::write_bytes(
-			&mut __bss_start as *mut u8,
-			0,
-			&kernel_start as *const u8 as usize + environment::get_image_size()
-				- &__bss_start as *const u8 as usize,
-		);
-
 		// And finally start the application.
 		runtime_entry(argc, argv, environ);
 	}
@@ -206,6 +201,21 @@ pub fn boot_processor_main() -> ! {
 		env!("CARGO_PKG_VERSION"),
 		COMMIT_HASH
 	);
+	unsafe {
+		debug!(
+			"tls: 0x{:x} - 0x{:x}",
+			&tls_start as *const usize as usize, &tls_end as *const usize as usize
+		);
+		debug!(
+			"bss start: 0x{:x}, hbss start: 0x{:x}",
+			&__bss_start as *const usize as usize, &hbss_start as *const usize as usize
+		);
+		debug!(
+			"kernel start: 0x{:x}",
+			&kernel_start as *const usize as usize
+		);
+	}
+
 	arch::boot_processor_init();
 	scheduler::init();
 	scheduler::add_current_core();

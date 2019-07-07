@@ -22,8 +22,8 @@ use scheduler::task::{Task, TaskFrame, TaskTLS};
 
 #[cfg(not(test))]
 extern "C" {
-	static tls_start: u8;
-	static tls_end: u8;
+	static tls_start: usize;
+	static tls_end: usize;
 }
 
 #[repr(C, packed)]
@@ -116,7 +116,8 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 #[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	// Check if the task (process or thread) uses Thread-Local-Storage.
-	let tls_size = unsafe { &tls_end as *const u8 as usize - &tls_start as *const u8 as usize };
+	let tls_size =
+		unsafe { &tls_end as *const usize as usize - &tls_start as *const usize as usize };
 	if tls_size > 0 {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
@@ -129,7 +130,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
 		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
 		processor::writefs(tls_pointer);
-		debug!("Set FS to 0x{:x}", tls_pointer);
+		debug!("Set FS to 0x{:x}, TLS size 0x{:x}", tls_pointer, tls_size);
 
 		unsafe {
 			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
@@ -140,7 +141,11 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 			*(tls_pointer as *mut usize) = tls_pointer;
 
 			// Copy over TLS variables with their initial values.
-			ptr::copy_nonoverlapping(&tls_start as *const u8, tls.address() as *mut u8, tls_size);
+			ptr::copy_nonoverlapping(
+				&tls_start as *const usize as *const u8,
+				tls.address() as *mut u8,
+				tls_size,
+			);
 		}
 
 		// Associate the TLS memory to the current task.
