@@ -16,7 +16,7 @@ use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use environment;
 
 extern "C" {
-	static kernel_start: u8;
+	static kernel_start: usize;
 }
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
@@ -40,11 +40,11 @@ pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
 		KERNEL_START_ADDRESS = align_down!(
-			&kernel_start as *const u8 as usize,
+			&kernel_start as *const usize as usize,
 			arch::mm::paging::LargePageSize::SIZE
 		);
 		KERNEL_END_ADDRESS = align_up!(
-			&kernel_start as *const u8 as usize + environment::get_image_size(),
+			&kernel_start as *const usize as usize + environment::get_image_size(),
 			arch::mm::paging::LargePageSize::SIZE
 		);
 	}

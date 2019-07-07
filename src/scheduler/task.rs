@@ -335,6 +335,10 @@ impl TaskTLS {
 
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
+		debug!(
+			"Deallocate TLS at 0x{:x} (size 0x{:x})",
+			self.address, self.size
+		);
 		mm::deallocate(self.address, self.size);
 	}
 }
