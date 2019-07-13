@@ -127,11 +127,11 @@ where
 			.poll(&mut sockets, timestamp)
 			.map(|_| {
 				trace!("receive message {}", counter);
-				counter = counter + 1;
+				counter += 1;
 			})
 			.unwrap_or_else(|e| debug!("Poll: {:?}", e));
 
-		if is_polling() == false {
+		if !is_polling() {
 			let wakeup_time = match iface.poll_delay(&sockets, timestamp) {
 				Some(duration) => {
 					// Calculate the absolute wakeup time in processor timer ticks out of the relative timeout in milliseconds.

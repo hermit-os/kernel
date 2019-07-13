@@ -206,11 +206,11 @@ enum CpuFrequencySources {
 
 impl fmt::Display for CpuFrequencySources {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		match self {
-			&CpuFrequencySources::CommandLine => write!(f, "Command Line"),
-			&CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
-			&CpuFrequencySources::Measurement => write!(f, "Measurement"),
-			&CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
+		match &self {
+			CpuFrequencySources::CommandLine => write!(f, "Command Line"),
+			CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
+			CpuFrequencySources::Measurement => write!(f, "Measurement"),
+			CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -551,7 +551,7 @@ impl CpuSpeedStep {
 			}
 		}
 
-		let mut perf_ctl_mask = (self.max_pstate as u64) << 8;
+		let mut perf_ctl_mask = u64::from(self.max_pstate) << 8;
 		if self.is_turbo_pstate {
 			perf_ctl_mask |= 1 << 32;
 		}
@@ -834,7 +834,7 @@ pub fn shutdown() -> ! {
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
-	get_timestamp() / (get_frequency() as u64)
+	get_timestamp() / u64::from(get_frequency())
 }
 
 pub fn get_frequency() -> u16 {
@@ -896,7 +896,7 @@ unsafe fn get_timestamp_rdtscp() -> u64 {
 /// Delay execution by the given number of microseconds using busy-waiting.
 #[inline]
 pub fn udelay(usecs: u64) {
-	let end = get_timestamp() + get_frequency() as u64 * usecs;
+	let end = get_timestamp() + u64::from(get_frequency()) * usecs;
 	while get_timestamp() < end {
 		spin_loop_hint();
 	}

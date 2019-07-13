@@ -12,6 +12,14 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
+#![warn(clippy::all)]
+#![allow(clippy::redundant_field_names)]
+#![allow(clippy::identity_op)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::toplevel_ref_arg)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+#![allow(clippy::println_empty_string)]
+
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
 #![feature(asm)]

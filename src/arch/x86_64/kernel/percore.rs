@@ -26,8 +26,8 @@ impl PerCoreVariables {
 	pub const fn new(core_id: usize) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
-			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
-			tss: PerCoreVariable::new(0 as *mut TaskStateSegment),
+			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
+			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
 		}
 	}
 }

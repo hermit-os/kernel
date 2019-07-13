@@ -27,7 +27,7 @@ fn panic(info: &PanicInfo) -> ! {
 		print!("{}", message);
 	}
 
-	print!("\n");
+	println!("");
 
 	loop {
 		arch::processor::halt();

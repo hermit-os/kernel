@@ -229,7 +229,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 
 fn detect_from_uhyve() -> Result<usize, ()> {
 	if environment::is_uhyve() {
-		return Ok(0xFEE00000 as usize);
+		return Ok(0xFEE0_0000 as usize);
 	}
 
 	Err(())
@@ -317,9 +317,9 @@ fn ioapic_inton(irq: u8, apicid: u8) -> Result<(), ()> {
 		return Err(());
 	}
 
-	let off = (irq * 2) as u32;
-	let ioredirect_upper: u32 = (apicid as u32) << 24;
-	let ioredirect_lower: u32 = (0x20 + irq) as u32;
+	let off = u32::from(irq * 2);
+	let ioredirect_upper: u32 = u32::from(apicid) << 24;
+	let ioredirect_lower: u32 = u32::from(0x20 + irq);
 
 	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
 	ioapic_write(IOAPIC_REG_TABLE + 1 + off, ioredirect_upper);
@@ -352,7 +352,7 @@ pub fn init_local_apic() {
 	local_apic_write(IA32_X2APIC_LVT_LINT1, APIC_LVT_MASK);
 
 	// Set the interrupt number of the Error interrupt.
-	local_apic_write(IA32_X2APIC_LVT_ERROR, ERROR_INTERRUPT_NUMBER as u64);
+	local_apic_write(IA32_X2APIC_LVT_ERROR, u64::from(ERROR_INTERRUPT_NUMBER));
 
 	// allow all interrupts
 	local_apic_write(IA32_X2APIC_TPR, 0x00);
@@ -361,7 +361,7 @@ pub fn init_local_apic() {
 	// and providing the enable bit.
 	local_apic_write(
 		IA32_X2APIC_SIVR,
-		APIC_SIVR_ENABLED | (SPURIOUS_INTERRUPT_NUMBER as u64),
+		APIC_SIVR_ENABLED | (u64::from(SPURIOUS_INTERRUPT_NUMBER)),
 	);
 }
 
@@ -379,7 +379,7 @@ fn calibrate_timer() {
 	// 125, which allows for timeouts of approximately 34 seconds (u32::MAX / 125).
 	irq::disable();
 	local_apic_write(IA32_X2APIC_DIV_CONF, APIC_DIV_CONF_DIVIDE_BY_8);
-	local_apic_write(IA32_X2APIC_INIT_COUNT, u32::MAX as u64);
+	local_apic_write(IA32_X2APIC_INIT_COUNT, u64::from(u32::MAX));
 
 	// Wait until the calibration time has elapsed.
 	processor::udelay(microseconds);
@@ -388,7 +388,7 @@ fn calibrate_timer() {
 	// and reenable interrupts.
 	unsafe {
 		CALIBRATED_COUNTER_VALUE =
-			((u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT)) as u64) / microseconds;
+			(u64::from(u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT))) / microseconds;
 		debug!(
 			"Calibrated APIC Timer with a counter value of {} for 1 microsecond",
 			CALIBRATED_COUNTER_VALUE
@@ -403,12 +403,12 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
 			// (see processor::get_timer_ticks).
-			let tsc_deadline = wt * (processor::get_frequency() as u64);
+			let tsc_deadline = wt * (u64::from(processor::get_frequency()));
 
 			// Enable the APIC Timer in TSC-Deadline Mode and let it start by writing to the respective MSR.
 			local_apic_write(
 				IA32_X2APIC_LVT_TIMER,
-				APIC_LVT_TIMER_TSC_DEADLINE | TIMER_INTERRUPT_NUMBER as u64,
+				APIC_LVT_TIMER_TSC_DEADLINE | u64::from(TIMER_INTERRUPT_NUMBER),
 			);
 			unsafe {
 				wrmsr(IA32_TSC_DEADLINE, tsc_deadline);
@@ -423,10 +423,10 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 			} else {
 				1
 			};
-			let init_count = cmp::min(unsafe { CALIBRATED_COUNTER_VALUE } * ticks, u32::MAX as u64);
+			let init_count = cmp::min(unsafe { CALIBRATED_COUNTER_VALUE } * ticks, u64::from(u32::MAX));
 
 			// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
-			local_apic_write(IA32_X2APIC_LVT_TIMER, TIMER_INTERRUPT_NUMBER as u64);
+			local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
 			local_apic_write(IA32_X2APIC_INIT_COUNT, init_count);
 		}
 	} else {
@@ -497,10 +497,10 @@ pub fn boot_application_processors() {
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to 0x{:x}",
-			arch::x86_64::kernel::start::_start as u64
+			arch::x86_64::kernel::start::_start as usize
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut u64) =
-			arch::x86_64::kernel::start::_start as u64;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut usize) =
+			arch::x86_64::kernel::start::_start as usize;
 	}
 
 	// Now wake up each application processor.
@@ -510,7 +510,7 @@ pub fn boot_application_processors() {
 	for core_id_to_boot in 0..apic_ids.len() {
 		if core_id_to_boot != core_id {
 			let apic_id = apic_ids[core_id_to_boot];
-			let destination = (apic_id as u64) << 32;
+			let destination = u64::from(apic_id) << 32;
 
 			debug!(
 				"Waking up CPU {} with Local APIC ID {}",
@@ -569,12 +569,12 @@ pub fn ipi_tlb_flush() {
 		for core_id_to_interrupt in 0..apic_ids.len() {
 			if core_id_to_interrupt != core_id {
 				let local_apic_id = apic_ids[core_id_to_interrupt];
-				let destination = (local_apic_id as u64) << 32;
+				let destination = u64::from(local_apic_id) << 32;
 				local_apic_write(
 					IA32_X2APIC_ICR,
 					destination
 						| APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED
-						| (TLB_FLUSH_INTERRUPT_NUMBER as u64),
+						| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
 				);
 			}
 		}
@@ -586,13 +586,13 @@ pub fn wakeup_core(core_id_to_wakeup: usize) {
 	if core_id_to_wakeup != core_id() {
 		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
 		let local_apic_id = apic_ids[core_id_to_wakeup];
-		let destination = (local_apic_id as u64) << 32;
+		let destination = u64::from(local_apic_id) << 32;
 		local_apic_write(
 			IA32_X2APIC_ICR,
 			destination
 				| APIC_ICR_LEVEL_ASSERT
 				| APIC_ICR_DELIVERY_MODE_FIXED
-				| (WAKEUP_INTERRUPT_NUMBER as u64),
+				| u64::from(WAKEUP_INTERRUPT_NUMBER),
 		);
 	}
 }

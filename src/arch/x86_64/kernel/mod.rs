@@ -32,12 +32,12 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 use config::KERNEL_STACK_SIZE;
 
-use core::{intrinsics, mem, ptr};
+use core::{intrinsics, ptr};
 use environment;
 #[cfg(not(test))]
 use kernel_message_buffer;
 
-const SERIAL_PORT_BAUDRATE: u32 = 115200;
+const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
 #[repr(C)]
 struct KernelHeader {
@@ -70,7 +70,7 @@ struct KernelHeader {
 /// Kernel header to announce machine features
 #[link_section = ".mboot"]
 static mut KERNEL_HEADER: KernelHeader = KernelHeader {
-	magic_number: 0xC0DECAFEu32,
+	magic_number: 0xC0DE_CAFEu32,
 	version: 0,
 	base: 0,
 	limit: 0,
@@ -159,11 +159,11 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		let port: *mut u16 = mem::transmute(&COM1.port_address);
+		let port: *mut u16 = &COM1.port_address as *const u16 as *mut u16;
 		*port = ptr::read_volatile(&KERNEL_HEADER.uartport);
 	}
 
-	if environment::is_single_kernel() == true {
+	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
 		COM1.init(SERIAL_PORT_BAUDRATE);

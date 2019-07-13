@@ -16,7 +16,7 @@ pub use self::uhyve::*;
 use arch;
 use console;
 use core::fmt::Write;
-use core::{isize, slice, str};
+use core::{isize, slice, str, ptr};
 use errno::*;
 
 pub trait SyscallInterface: Send + Sync {
@@ -26,8 +26,8 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn get_application_parameters(&self) -> (i32, *mut *mut u8, *mut *mut u8) {
 		let argc = 0;
-		let argv = 0 as *mut *mut u8;
-		let environ = 0 as *mut *mut u8;
+		let argv = ptr::null_mut() as *mut *mut u8;
+		let environ = ptr::null_mut() as *mut *mut u8;
 
 		(argc, argv, environ)
 	}

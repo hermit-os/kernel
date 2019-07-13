@@ -81,7 +81,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if environment::is_uhyve() == false && self.port_address != 0 {
+		if !environment::is_uhyve() && self.port_address != 0 {
 			// Disable port interrupt.
 			self.write_to_register(UART_IER, 0);
 
@@ -89,7 +89,7 @@ impl SerialPort {
 			self.write_to_register(UART_LCR, UART_LCR_WORD_LENGTH_8BITS);
 
 			// Set the baudrate.
-			let divisor = (115200 / baudrate) as u16;
+			let divisor = (115_200 / baudrate) as u16;
 			let lcr = self.read_from_register(UART_LCR);
 			self.write_to_register(UART_LCR, lcr | UART_LCR_DIVISOR_LATCH_ACCESS);
 			self.write_to_register(UART_DLL, divisor as u8);

@@ -234,7 +234,7 @@ impl PriorityTaskQueue {
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= prio.into() as u64 {
+			if i >= u64::from(prio.into()) {
 				return self.pop_from_queue(i as usize);
 			}
 		}
@@ -287,17 +287,11 @@ impl PriorityTaskQueue {
 		}
 
 		let new_head = match self.queues[i].head {
-			Some(ref curr_task) => {
-				if Rc::ptr_eq(&curr_task, &task) {
-					true
-				} else {
-					false
-				}
-			}
+			Some(ref curr_task) => Rc::ptr_eq(&curr_task, &task),
 			None => false,
 		};
 
-		if new_head == true {
+		if new_head {
 			self.queues[i].head = task.borrow().next.clone();
 
 			if self.queues[i].head.is_none() {

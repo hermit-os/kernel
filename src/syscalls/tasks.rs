@@ -27,7 +27,7 @@ pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
 
 	if id.is_null() || unsafe { *id } == current_task_borrowed.id.into() as u32 {
-		current_task_borrowed.prio.into() as i32
+		i32::from(current_task_borrowed.prio.into())
 	} else {
 		-EINVAL
 	}
@@ -113,7 +113,7 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 
 #[no_mangle]
 pub extern "C" fn sys_msleep(ms: u32) {
-	sys_usleep((ms as u64) * 1000);
+	sys_usleep(u64::from(ms) * 1000);
 }
 
 #[no_mangle]

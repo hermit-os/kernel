@@ -116,10 +116,10 @@ const MSR_LINKB: u8 = 0x4; // Link Bad ?
 const MSR_TXPF: u8 = 0x2; // Transmit Pause flag
 const MSR_RXPF: u8 = 0x1; // Recieve Pause flag
 
-const RCR_ERTH3: u32 = 0x8000000; // early Rx Threshold 0
-const RCR_ERTH2: u32 = 0x4000000; // early Rx Threshold 1
-const RCR_ERTH1: u32 = 0x2000000; // early Rx Threshold 2
-const RCR_ERTH0: u32 = 0x1000000; // early Rx Threshold 3
+const RCR_ERTH3: u32 = 0x0800_0000; // early Rx Threshold 0
+const RCR_ERTH2: u32 = 0x0400_0000; // early Rx Threshold 1
+const RCR_ERTH1: u32 = 0x0200_0000; // early Rx Threshold 2
+const RCR_ERTH0: u32 = 0x0100_0000; // early Rx Threshold 3
 const RCR_MRINT: u32 = 0x20000; // Multiple Early interrupt, (enable to make interrupts happen early, yuk)
 const RCR_RER8: u32 = 0x10000; // Receive Error Packets larger than 8 bytes
 const RCR_RXFTH2: u32 = 0x8000; // Rx Fifo threshold 0
@@ -139,9 +139,9 @@ const RCR_AM: u32 = 0x04; // Accept multicast ?
 const RCR_APM: u32 = 0x02; // Accept Physical matches (accept packets sent to our mac ?)
 const RCR_AAP: u32 = 0x01; // Accept packets with a physical address ?
 
-const TCR_HWVERID: u32 = 0x7CC00000; // mask for hw version ID's
+const TCR_HWVERID: u32 = 0x7CC0_0000; // mask for hw version ID's
 const TCR_HWOFFSET: u32 = 22;
-const TCR_IFG: u32 = 0x3000000; // interframe gap time
+const TCR_IFG: u32 = 0x0300_0000; // interframe gap time
 const TCR_LBK1: u32 = 0x40000; // loopback test
 const TCR_LBK0: u32 = 0x20000; // loopback test
 const TCR_CRC: u32 = 0x10000; // append CRC (card adds CRC if 1)
@@ -180,8 +180,8 @@ const TSD_CRS: u32 = (1 << 31); // carrier sense lost (during packet transmissio
 const TSD_TABT: u32 = (1 << 30); // transmission abort
 const TSD_OWC: u32 = (1 << 29); // out of window collision
 const TSD_CDH: u32 = (1 << 28); // CD Heart beat (Cleared in 100Mb mode)
-const TSD_NCC: u32 = 0xF000000; // Number of collisions counted (during transmission)
-const TSD_EARTH: u32 = 0x3F0000; // threshold to begin transmission (0 = 8bytes, 1->2^6 = * 32bytes)
+const TSD_NCC: u32 = 0x0F00_0000; // Number of collisions counted (during transmission)
+const TSD_EARTH: u32 = 0x003F_0000; // threshold to begin transmission (0 = 8bytes, 1->2^6 = * 32bytes)
 const TSD_TOK: u32 = (1 << 15); // Transmission OK, successful
 const TSD_TUN: u32 = (1 << 14); // Transmission FIFO underrun
 const TSD_OWN: u32 = (1 << 13); // Tx DMA operation finished (driver must set to 0 when TBC is written)
@@ -246,7 +246,7 @@ extern "C" fn rtl8139_thread(arg: usize) {
 	info!("MAC address {}", ethernet_addr);
 
 	unsafe {
-		if inl(IOBASE + TCR) == 0xFFFFFFu32 {
+		if inl(IOBASE + TCR) == 0x00FF_FFFFu32 {
 			info!("Unable to initialize RTL 8192");
 			return;
 		}
@@ -259,7 +259,7 @@ extern "C" fn rtl8139_thread(arg: usize) {
 		::arch::kernel::processor::udelay(10000);
 		let mut tmp: u16 = 10000;
 		while (inb(IOBASE + CR) & CR_RST) == CR_RST && tmp > 0 {
-			tmp = tmp - 1;
+			tmp -= 1;
 		}
 
 		if tmp == 0 {
@@ -370,7 +370,7 @@ extern "C" fn rtl8139_thread(arg: usize) {
 
 unsafe fn tx_handler() {
 	for i in 0..TX_IN_USE.len() {
-		if TX_IN_USE[i] == true {
+		if TX_IN_USE[i] {
 			let txstatus = inl(IOBASE + TSD0 + i as u16 * 4);
 
 			if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
@@ -395,7 +395,7 @@ extern "x86-interrupt" fn rtl8139_irqhandler(_stack_frame: &mut ExceptionStackFr
 	unsafe {
 		let mut isr_contents = inw(IOBASE + ISR);
 		while isr_contents != 0 {
-			if (isr_contents & ISR_ROK) == ISR_ROK && is_pooling() == false {
+			if (isr_contents & ISR_ROK) == ISR_ROK && !is_pooling() {
 				info!("Wakeup network thread!");
 				// disable interrupts from the NIC
 				outw(IOBASE + IMR, INT_MASK_NO_ROK);
@@ -443,8 +443,8 @@ pub struct RTL8139 {
 impl RTL8139 {
 	pub fn new(rxbuffer: usize, txbuffer: usize) -> Self {
 		RTL8139 {
-			rxbuffer: rxbuffer,
-			txbuffer: txbuffer,
+			rxbuffer,
+			txbuffer,
 			rxpos: 0,
 		}
 	}
@@ -549,7 +549,7 @@ impl phy::TxToken for TxToken {
 		let id = TX_ID.fetch_add(1, Ordering::SeqCst) % NO_TX_BUFFERS;
 
 		unsafe {
-			if TX_IN_USE[id] == true {
+			if TX_IN_USE[id] {
 				Err(smoltcp::Error::Dropped)
 			} else if len > TX_BUF_LEN {
 				Err(smoltcp::Error::Exhausted)

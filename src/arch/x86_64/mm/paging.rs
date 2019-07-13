@@ -124,24 +124,24 @@ pub struct PageTableEntry {
 
 impl PageTableEntry {
 	/// Return the stored physical address.
-	pub fn address(&self) -> usize {
+	pub fn address(self) -> usize {
 		self.physical_address_and_flags
 			& !(BasePageSize::SIZE - 1)
 			& !(PageTableEntryFlags::EXECUTE_DISABLE).bits()
 	}
 
 	/// Returns whether this entry is valid (present).
-	fn is_present(&self) -> bool {
+	fn is_present(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 
 	/// Returns `true` if the page is a huge page
-	fn is_huge(&self) -> bool {
+	fn is_huge(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::HUGE_PAGE.bits()) != 0
 	}
 
 	/// Returns `true` if the page is accessible from the user space
-	fn is_user(&self) -> bool {
+	fn is_user(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::USER_ACCESSIBLE.bits()) != 0
 	}
 
@@ -240,12 +240,12 @@ struct Page<S: PageSize> {
 
 impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
-	fn address(&self) -> usize {
+	fn address(self) -> usize {
 		self.virtual_address
 	}
 
 	/// Flushes this page from the TLB of this CPU.
-	fn flush_from_tlb(&self) {
+	fn flush_from_tlb(self) {
 		unsafe {
 			asm!("invlpg ($0)" :: "r"(self.virtual_address) : "memory" : "volatile");
 		}
@@ -293,9 +293,9 @@ impl<S: PageSize> Page<S> {
 	}
 
 	/// Returns the index of this page in the table given by L.
-	fn table_index<L: PageTableLevel>(&self) -> usize {
+	fn table_index<L: PageTableLevel>(self) -> usize {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
-		self.virtual_address >> PAGE_BITS >> L::LEVEL * PAGE_MAP_BITS & PAGE_MAP_MASK
+		self.virtual_address >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
 	}
 }
 

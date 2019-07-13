@@ -323,7 +323,7 @@ impl phy::TxToken for TxToken {
 	{
 		let mut buffer = vec![0; len];
 		let result = f(&mut buffer);
-		if result.is_ok() == true {
+		if result.is_ok() {
 			self.write(buffer.as_ptr() as usize, len);
 		}
 		result

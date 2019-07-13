@@ -76,25 +76,19 @@ impl Rtc {
 		minute: u8,
 		second: u8,
 	) -> u64 {
-		let m;
-		let y;
-
-		if month > 2 {
-			m = (month - 2) as u64;
-			y = year as u64;
+		let (m, y) = if month > 2 {
+			(u64::from(month - 2), u64::from(year))
 		} else {
-			m = (month + 12 - 2) as u64;
-			y = (year - 1) as u64;
-		}
+			(u64::from(month + 12 - 2), u64::from(year - 1))
+		};
 
 		let days_since_epoch =
-			(y / 4 - y / 100 + y / 400 + 367 * m / 12 + day as u64) + y * 365 - 719499;
-		let hours_since_epoch = days_since_epoch * 24 + hour as u64;
-		let minutes_since_epoch = hours_since_epoch * 60 + minute as u64;
-		let seconds_since_epoch = minutes_since_epoch * 60 + second as u64;
-		let microseconds_since_epoch = seconds_since_epoch * 1_000_000;
-
-		microseconds_since_epoch
+			(y / 4 - y / 100 + y / 400 + 367 * m / 12 + u64::from(day)) + y * 365 - 719_499;
+		let hours_since_epoch = days_since_epoch * 24 + u64::from(hour);
+		let minutes_since_epoch = hours_since_epoch * 60 + u64::from(minute);
+		let seconds_since_epoch = minutes_since_epoch * 60 + u64::from(second);
+		
+		seconds_since_epoch * 1_000_000u64
 	}
 
 	fn read_cmos_register(register: u8) -> u8 {
@@ -118,7 +112,7 @@ impl Rtc {
 
 	fn read_all_values(&self) -> u64 {
 		// Reading year, month, and day is straightforward.
-		let year = self.read_datetime_register(CMOS_YEAR_REGISTER) as u16 + 2000;
+		let year = u16::from(self.read_datetime_register(CMOS_YEAR_REGISTER)) + 2000;
 		let month = self.read_datetime_register(CMOS_MONTH_REGISTER);
 		let day = self.read_datetime_register(CMOS_DAY_REGISTER);
 
@@ -207,11 +201,11 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 	let hour = (hours_since_epoch % 24) as u8;
 	let days_since_epoch = hours_since_epoch / 24;
 
-	let days = days_since_epoch + 719468;
-	let era = days / 146097;
-	let day_of_era = days % 146097;
+	let days = days_since_epoch + 719_468;
+	let era = days / 146_097;
+	let day_of_era = days % 146_097;
 	let year_of_era =
-		(day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146096) / 365;
+		(day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146_096) / 365;
 	let mut year = (year_of_era + era * 400) as u16;
 	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
 	let internal_month = (5 * day_of_year + 2) / 153;
