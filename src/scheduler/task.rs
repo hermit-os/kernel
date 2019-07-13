@@ -555,10 +555,8 @@ impl BlockedTaskQueue {
 
 	/// Wakeup all blocked tasks
 	pub fn wakeup_all(&mut self) {
-		let mut iter = self.list.iter();
-
 		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
+		for node in self.list.iter() {
 			// Remove it from the list of blocked tasks and wake it up.
 			self.list.remove(node.clone());
 			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::All);

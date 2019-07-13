@@ -19,6 +19,9 @@
 #![allow(clippy::toplevel_ref_arg)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::println_empty_string)]
+#![allow(clippy::single_match)]
+#![allow(clippy::cognitive_complexity)]
+#![allow(clippy::forget_copy)]
 
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]

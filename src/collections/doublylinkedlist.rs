@@ -45,11 +45,11 @@ impl<T> DoublyLinkedList<T> {
 	}
 
 	pub fn head(&self) -> Option<Rc<RefCell<Node<T>>>> {
-		self.head.as_ref().map(|node| node.clone())
+		self.head.as_ref().cloned()
 	}
 
 	pub fn tail(&self) -> Option<Rc<RefCell<Node<T>>>> {
-		self.tail.as_ref().map(|node| node.clone())
+		self.tail.as_ref().cloned()
 	}
 
 	pub fn push(&mut self, new_node: Rc<RefCell<Node<T>>>) {
@@ -166,7 +166,7 @@ impl<T> DoublyLinkedList<T> {
 
 	pub fn iter(&self) -> Iter<T> {
 		Iter::<T> {
-			current: self.head.as_ref().map(|node| node.clone()),
+			current: self.head.as_ref().cloned(),
 		}
 	}
 }
