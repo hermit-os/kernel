@@ -66,6 +66,7 @@ struct State {
 	rip: usize,
 }
 
+#[derive(Default)]
 pub struct TaskStacks {
 	/// Whether this is a boot stack
 	is_boot_stack: bool,
@@ -170,7 +171,7 @@ impl TaskFrame for Task {
 
 			// Set a marker for debugging at the very top.
 			let mut stack = (self.stacks.stack + DEFAULT_STACK_SIZE - 0x10) as *mut usize;
-			*stack = 0xDEADBEEFusize;
+			*stack = 0xDEAD_BEEFusize;
 
 			// Put the leave_task function on the stack.
 			// When the task has finished, it will call this function by returning.

@@ -18,6 +18,7 @@ impl HoleList {
 			first: Hole {
 				size: 0,
 				next: None,
+				padding: [0; 6],
 			},
 		}
 	}
@@ -29,16 +30,10 @@ impl HoleList {
 		assert!(size_of::<Hole>() == Self::min_size());
 
 		let ptr = hole_addr as *mut Hole;
-		ptr.write(Hole {
-			size: hole_size,
-			next: None,
-		});
+		ptr.write(Hole::new(hole_size, None));
 
 		HoleList {
-			first: Hole {
-				size: 0,
-				next: Some(&mut *ptr),
-			},
+			first: Hole::new(0, Some(&mut *ptr)),
 		}
 	}
 
@@ -74,7 +69,7 @@ impl HoleList {
 
 	/// Returns the minimal allocation size. Smaller allocations or deallocations are not allowed.
 	pub fn min_size() -> usize {
-		size_of::<usize>() * 2
+		64
 	}
 
 	/// Returns information about the first hole for test purposes.
@@ -92,15 +87,27 @@ impl HoleList {
 pub struct Hole {
 	size: usize,
 	next: Option<&'static mut Hole>,
+	#[allow(dead_code)]
+	padding: [usize; 6],
 }
 
 #[cfg(test)]
 pub struct Hole {
 	pub size: usize,
 	pub next: Option<&'static mut Hole>,
+	#[allow(dead_code)]
+	padding: [usize; 6],
 }
 
 impl Hole {
+	/// Create a new Hole
+	pub const fn new(size: usize, next: Option<&'static mut Hole>) -> Self {
+		Hole {
+			size,
+			next,
+			padding: [0; 6],
+		}
+	}
 	/// Returns basic information about the hole.
 	fn info(&self) -> HoleInfo {
 		HoleInfo {
@@ -179,8 +186,8 @@ fn split_hole(hole: HoleInfo, required_layout: Layout) -> Option<Allocation> {
 			addr: aligned_hole.addr,
 			size: required_size,
 		},
-		front_padding: front_padding,
-		back_padding: back_padding,
+		front_padding,
+		back_padding,
 	})
 }
 
@@ -196,7 +203,7 @@ fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocat
 		let allocation: Option<Allocation> = previous
 			.next
 			.as_mut()
-			.and_then(|current| split_hole(current.info(), layout.clone()));
+			.and_then(|current| split_hole(current.info(), layout));
 		match allocation {
 			Some(allocation) => {
 				// hole is big enough, so remove it from the list by updating the previous pointer
@@ -287,10 +294,10 @@ fn deallocate(mut hole: &mut Hole, addr: usize, mut size: usize) {
 				// before:	___XXX_________    where X is this hole
 				// after:	___XXX__FFFF___    where F is the freed block
 
-				let new_hole = Hole {
-					size: size,
-					next: hole.next.take(), // the reference to the Y block (if it exists)
-				};
+				let new_hole = Hole::new(
+					size,
+					hole.next.take() // the reference to the Y block (if it exists)
+				);
 				// write the new hole to the freed memory
 				let ptr = addr as *mut Hole;
 				unsafe { ptr.write(new_hole) };

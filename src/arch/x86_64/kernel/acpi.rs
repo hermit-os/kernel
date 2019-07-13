@@ -136,7 +136,7 @@ impl<'a> AcpiTable<'a> {
 		Self {
 			header: unsafe { &*header_ptr },
 			allocated_virtual_address: virtual_address,
-			allocated_length: allocated_length,
+			allocated_length,
 		}
 	}
 
@@ -356,7 +356,7 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 
 			// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
 			// This mustn't be the case for the "_S5_" object.
-			if pkg_length & 0b11000000 == 0 && num_elements > 0 {
+			if pkg_length & 0b1100_0000 == 0 && num_elements > 0 {
 				// The next byte is an opcode describing the data.
 				// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
 				// However, if the data is a zero or one byte, this may also be indicated by the opcode.
@@ -452,7 +452,7 @@ pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 pub fn poweroff() {
 	unsafe {
 		if let (Some(pm1a_cnt_blk), Some(slp_typa)) = (PM1A_CNT_BLK, SLP_TYPA) {
-			let bits = (slp_typa as u16) << 10 | SLP_EN;
+			let bits = (u16::from(slp_typa) << 10) | SLP_EN;
 			debug!(
 				"Powering Off through ACPI (port {:#X}, bitmask {:#X})",
 				pm1a_cnt_blk, bits
