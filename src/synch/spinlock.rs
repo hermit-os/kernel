@@ -115,13 +115,13 @@ impl<T: ?Sized + Default> Default for Spinlock<T> {
 
 impl<'a, T: ?Sized> Deref for SpinlockGuard<'a, T> {
 	type Target = T;
-	fn deref<'b>(&'b self) -> &'b T {
+	fn deref(&self) -> &T {
 		&*self.data
 	}
 }
 
 impl<'a, T: ?Sized> DerefMut for SpinlockGuard<'a, T> {
-	fn deref_mut<'b>(&'b mut self) -> &'b mut T {
+	fn deref_mut(&mut self) -> &mut T {
 		&mut *self.data
 	}
 }
@@ -249,13 +249,13 @@ impl<T: ?Sized + Default> Default for SpinlockIrqSave<T> {
 
 impl<'a, T: ?Sized> Deref for SpinlockIrqSaveGuard<'a, T> {
 	type Target = T;
-	fn deref<'b>(&'b self) -> &'b T {
+	fn deref(&self) -> &T {
 		&*self.data
 	}
 }
 
 impl<'a, T: ?Sized> DerefMut for SpinlockIrqSaveGuard<'a, T> {
-	fn deref_mut<'b>(&'b mut self) -> &'b mut T {
+	fn deref_mut(&mut self) -> &mut T {
 		&mut *self.data
 	}
 }
