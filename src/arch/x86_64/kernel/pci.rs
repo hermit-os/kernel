@@ -157,7 +157,8 @@ impl fmt::Display for PciAdapter {
 }
 
 fn read_config(bus: u8, device: u8, register: u32) -> u32 {
-	let address = PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
+	let address =
+		PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
 	unsafe {
 		outl(PCI_CONFIG_ADDRESS_PORT, address);
 		inl(PCI_CONFIG_DATA_PORT)
@@ -165,7 +166,8 @@ fn read_config(bus: u8, device: u8, register: u32) -> u32 {
 }
 
 fn write_config(bus: u8, device: u8, register: u32, data: u32) {
-	let address = PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
+	let address =
+		PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
 	unsafe {
 		outl(PCI_CONFIG_ADDRESS_PORT, address);
 		outl(PCI_CONFIG_DATA_PORT, data);

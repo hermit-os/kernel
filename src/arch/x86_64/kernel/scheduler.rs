@@ -118,7 +118,8 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 #[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	// determine the size of tdata (tls without tbss)
-	let tdata_size: usize = unsafe { &tdata_end as *const usize as usize - &tls_start as *const usize as usize };
+	let tdata_size: usize =
+		unsafe { &tdata_end as *const usize as usize - &tls_start as *const usize as usize };
 
 	// Check if the task (process or thread) uses Thread-Local-Storage.
 	let tls_size =
@@ -135,8 +136,10 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
 		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
 		processor::writefs(tls_pointer);
-		debug!("Set FS to 0x{:x}, TLS size 0x{:x}, TLS data size 0x{:x}",
-			tls_pointer, tls_size, tdata_size);
+		debug!(
+			"Set FS to 0x{:x}, TLS size 0x{:x}, TLS data size 0x{:x}",
+			tls_pointer, tls_size, tdata_size
+		);
 
 		unsafe {
 			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
@@ -150,13 +153,13 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 			ptr::copy_nonoverlapping(
 				&tls_start as *const usize as *const u8,
 				tls.address() as *mut u8,
-				tdata_size
+				tdata_size,
 			);
 
 			ptr::write_bytes(
 				(tls.address() as *const u8 as usize + tdata_size) as *mut u8,
 				0,
-				tls_size - tdata_size
+				tls_size - tdata_size,
 			);
 		}
 

@@ -296,7 +296,7 @@ fn deallocate(mut hole: &mut Hole, addr: usize, mut size: usize) {
 
 				let new_hole = Hole::new(
 					size,
-					hole.next.take() // the reference to the Y block (if it exists)
+					hole.next.take(), // the reference to the Y block (if it exists)
 				);
 				// write the new hole to the freed memory
 				let ptr = addr as *mut Hole;

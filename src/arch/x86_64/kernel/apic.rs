@@ -423,7 +423,10 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 			} else {
 				1
 			};
-			let init_count = cmp::min(unsafe { CALIBRATED_COUNTER_VALUE } * ticks, u64::from(u32::MAX));
+			let init_count = cmp::min(
+				unsafe { CALIBRATED_COUNTER_VALUE } * ticks,
+				u64::from(u32::MAX),
+			);
 
 			// Enable the APIC Timer in One-Shot Mode and let it start by setting the initial counter value.
 			local_apic_write(IA32_X2APIC_LVT_TIMER, u64::from(TIMER_INTERRUPT_NUMBER));
