@@ -152,16 +152,17 @@ extern "C" {
 	static kernel_start: usize;
 	static tls_start: usize;
 	static tls_end: usize;
+	static tdata_end: usize;
 }
 
 #[cfg(not(test))]
 unsafe fn sections_init() {
 	// Initialize bss sections for the kernel.
 	ptr::write_bytes(
-		&mut hbss_start as *mut usize,
+		&mut hbss_start as *mut usize as *mut u8,
 		0,
 		&kernel_start as *const usize as usize + environment::get_image_size()
-			- &hbss_start as *const usize as usize,
+			- &hbss_start as *const usize as usize
 	);
 }
 
@@ -218,8 +219,10 @@ pub fn boot_processor_main() -> ! {
 			&tls_start as *const usize as usize, &tls_end as *const usize as usize
 		);
 		debug!(
-			"bss start: 0x{:x}, hbss start: 0x{:x}",
-			&__bss_start as *const usize as usize, &hbss_start as *const usize as usize
+			"bss start: 0x{:x}, hbss start: 0x{:x}, tdata end: 0x{:x}",
+			&__bss_start as *const usize as usize,
+			&hbss_start as *const usize as usize,
+			&tdata_end as *const usize as usize
 		);
 		debug!(
 			"kernel start: 0x{:x}",
