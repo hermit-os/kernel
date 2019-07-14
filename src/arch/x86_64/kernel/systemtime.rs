@@ -87,7 +87,7 @@ impl Rtc {
 		let hours_since_epoch = days_since_epoch * 24 + u64::from(hour);
 		let minutes_since_epoch = hours_since_epoch * 60 + u64::from(minute);
 		let seconds_since_epoch = minutes_since_epoch * 60 + u64::from(second);
-		
+
 		seconds_since_epoch * 1_000_000u64
 	}
 

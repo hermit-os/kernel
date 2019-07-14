@@ -22,7 +22,6 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::forget_copy)]
-
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
 #![feature(asm)]
@@ -162,7 +161,7 @@ unsafe fn sections_init() {
 		&mut hbss_start as *mut usize as *mut u8,
 		0,
 		&kernel_start as *const usize as usize + environment::get_image_size()
-			- &hbss_start as *const usize as usize
+			- &hbss_start as *const usize as usize,
 	);
 }
 

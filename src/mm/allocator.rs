@@ -9,9 +9,9 @@
 
 use alloc::alloc::{Alloc, AllocErr, Layout};
 use core::alloc::GlobalAlloc;
-use core::{ptr,mem};
 use core::ops::Deref;
 use core::ptr::NonNull;
+use core::{mem, ptr};
 use mm::hole::{Hole, HoleList};
 use mm::kernel_end_address;
 use synch::spinlock::*;

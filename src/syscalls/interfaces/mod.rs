@@ -16,7 +16,7 @@ pub use self::uhyve::*;
 use arch;
 use console;
 use core::fmt::Write;
-use core::{isize, slice, str, ptr};
+use core::{isize, ptr, slice, str};
 use errno::*;
 
 pub trait SyscallInterface: Send + Sync {
@@ -34,6 +34,11 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn shutdown(&self) -> ! {
 		arch::processor::shutdown();
+	}
+
+	fn unlink(&self, _name: *const u8) -> i32 {
+		debug!("unlink is unimplemented, returning -ENOSYS");
+		-ENOSYS
 	}
 
 	fn open(&self, _name: *const u8, _flags: i32, _mode: i32) -> i32 {

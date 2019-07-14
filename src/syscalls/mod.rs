@@ -65,6 +65,11 @@ pub extern "C" fn sys_shutdown() -> ! {
 }
 
 #[no_mangle]
+pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
+	unsafe { SYS.unlink(name) }
+}
+
+#[no_mangle]
 pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
 	unsafe { SYS.open(name, flags, mode) }
 }
