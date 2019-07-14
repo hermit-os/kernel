@@ -62,10 +62,6 @@ add_custom_command(
 	COMMAND
 		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
 
-	# Rename sections in the combined library to separate this kernel data from later user data.
-	COMMAND
-		objmv $<TARGET_FILE:hermit-bootstrap>
-
 	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
 	# Note that some of them only appear in Debug builds of HermitCore!
 	COMMAND
