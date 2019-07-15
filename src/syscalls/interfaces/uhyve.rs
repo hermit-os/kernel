@@ -19,6 +19,7 @@ const UHYVE_PORT_CLOSE: u16 = 0x480;
 const UHYVE_PORT_READ: u16 = 0x500;
 const UHYVE_PORT_EXIT: u16 = 0x540;
 const UHYVE_PORT_LSEEK: u16 = 0x580;
+const UHYVE_PORT_UNLINK: u16 = 0x840;
 
 /*extern "C" {
 	fn lwip_write(fd: i32, buf: *const u8, len: usize) -> i32;
@@ -45,6 +46,21 @@ struct SysExit {
 impl SysExit {
 	fn new(arg: i32) -> SysExit {
 		SysExit { arg: arg }
+	}
+}
+
+#[repr(C, packed)]
+struct SysUnlink {
+	name: *const u8,
+	ret: i32,
+}
+
+impl SysUnlink {
+	fn new(name: *const u8) -> SysUnlink {
+		SysUnlink {
+			name: paging::virtual_to_physical(name as usize) as *const u8,
+			ret: -1,
+		}
 	}
 }
 
@@ -142,6 +158,12 @@ impl SyscallInterface for Uhyve {
 		sysopen.ret
 	}
 
+	fn unlink(&self, name: *const u8) -> i32 {
+		let mut sysunlink = SysUnlink::new(name);
+		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
+
+		sysunlink.ret
+	}
 	fn close(&self, fd: i32) -> i32 {
 		let mut sysclose = SysClose::new(fd);
 		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
