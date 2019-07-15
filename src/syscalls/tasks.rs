@@ -197,14 +197,3 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 		_ => -EINVAL,
 	}
 }
-
-#[no_mangle]
-pub extern "C" fn __thread_atexit(dtor: unsafe extern "C" fn(*mut u8), arg: *mut u8) -> i32 {
-	//info!("thread_atexit: register dtor 0x{:x} with argument 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
-	core_scheduler()
-		.current_task
-		.borrow_mut()
-		.dtor
-		.push((arg, dtor));
-	0
-}
