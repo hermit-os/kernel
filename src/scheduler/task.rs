@@ -7,7 +7,6 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::rc::Rc;
-use alloc::vec::Vec;
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::msb;
