@@ -1,8 +1,8 @@
 use std::f64::consts::PI;
+use std::thread;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
-use std::thread;
 
 type Result<T> = std::result::Result<T, ()>;
 
@@ -30,21 +30,20 @@ fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<()> {
 	let mut sum = 0.0 as f64;
 
 	let threads: Vec<_> = (0..nthreads)
-		.map(|tid| {
-			thread::spawn(move || {
-				let mut partial_sum = 0 as f64;
-				let start = (num_steps / nthreads) * tid;
-				let end = (num_steps / nthreads) * (tid + 1);
+	.map(|tid| {
+		thread::spawn(move || {
+			let mut partial_sum = 0 as f64;
+			let start = (num_steps / nthreads) * tid;
+			let end = (num_steps / nthreads) * (tid+1);
 
-				for i in start..end {
-					let x = (i as f64 + 0.5) * step;
-					partial_sum += 4.0 / (1.0 + x * x);
-				}
+			for i  in start..end {
+				let x = (i as f64 + 0.5) * step;
+				partial_sum += 4.0 / (1.0 + x * x);
+			}
 
-				partial_sum
-			})
+			partial_sum
 		})
-		.collect();
+	}).collect();
 
 	for t in threads {
 		sum += t.join().unwrap();
@@ -76,9 +75,15 @@ fn create_file() -> Result<()> {
 		file.write_all(b"Hello, world!").unwrap();
 	}
 
-	let mut file = File::open("/tmp/foo.txt").unwrap();
-	let mut contents = String::new();
-	file.read_to_string(&mut contents).unwrap();
+	let contents = {
+		let mut file = File::open("/tmp/foo.txt").unwrap();
+		let mut contents = String::new();
+		file.read_to_string(&mut contents).unwrap();
+		contents
+	};
+
+	// delete temporary file
+	std::fs::remove_file("/tmp/foo.txt").unwrap();
 
 	if contents == "Hello, world!" {
 		Ok(())
@@ -115,35 +120,15 @@ fn threading() -> Result<()> {
 fn test_result(result: Result<()>) -> &'static str {
 	match result {
 		Ok(_) => "ok",
-		Err(_) => "failed!",
+		Err(_) => "failed!"
 	}
 }
 
 fn main() {
 	println!("Test {} ... {}", stringify!(hello), test_result(hello()));
-	println!(
-		"Test {} ... {}",
-		stringify!(read_file),
-		test_result(read_file())
-	);
-	println!(
-		"Test {} ... {}",
-		stringify!(create_file),
-		test_result(create_file())
-	);
-	println!(
-		"Test {} ... {}",
-		stringify!(threading),
-		test_result(threading())
-	);
-	println!(
-		"Test {} ... {}",
-		stringify!(pi_sequential),
-		test_result(pi_sequential(50000000))
-	);
-	println!(
-		"Test {} ... {}",
-		stringify!(pi_parallel),
-		test_result(pi_parallel(2, 50000000))
-	);
+	println!("Test {} ... {}", stringify!(read_file), test_result(read_file()));
+	println!("Test {} ... {}", stringify!(create_file), test_result(create_file()));
+	println!("Test {} ... {}", stringify!(threading), test_result(threading()));
+	println!("Test {} ... {}", stringify!(pi_sequential), test_result(pi_sequential(50000000)));
+	println!("Test {} ... {}", stringify!(pi_parallel), test_result(pi_parallel(2, 50000000)));
 }
