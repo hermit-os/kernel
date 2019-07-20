@@ -52,6 +52,7 @@ extern crate spin;
 extern crate x86;
 #[macro_use]
 extern crate log;
+#[cfg(feature = "network")]
 extern crate smoltcp;
 
 #[macro_use]
@@ -70,6 +71,7 @@ mod errno;
 #[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
+#[cfg(not(feature = "rustc-dep-of-std"))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
@@ -174,11 +176,13 @@ extern "C" fn initd(_arg: usize) {
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
+		#[cfg(feature = "network")]
 		let _ = drivers::net::uhyve::init();
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
 	} else {
+		#[cfg(feature = "network")]
 		let _ = drivers::net::rtl8139::init();
 	}
 
