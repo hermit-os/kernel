@@ -17,6 +17,7 @@ use arch::percore::*;
 use arch::switch;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
+#[cfg(feature = "network")]
 use drivers::net::get_network_task_id;
 use scheduler::task::*;
 use synch::spinlock::*;
@@ -288,13 +289,17 @@ impl PerCoreScheduler {
 			};
 
 			// If this is the Boot Processor and only the network task is left, it's time to shut down the OS.
-			let network_id = get_network_task_id();
-			if network_id != TaskId::from(0)
-				&& new_id == network_id
-				&& NO_TASKS.load(Ordering::SeqCst) == 1
+			#[cfg(feature = "network")]
 			{
-				debug!("Only network task is left");
-				sys_shutdown();
+				let network_id = get_network_task_id();
+
+				if network_id != TaskId::from(0)
+					&& new_id == network_id
+					&& NO_TASKS.load(Ordering::SeqCst) == 1
+				{
+					debug!("Only network task is left");
+					sys_shutdown();
+				}
 			}
 
 			// Tell the scheduler about the new task.

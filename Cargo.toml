@@ -1,5 +1,5 @@
 [package]
-name = "hermit"
+name = "libhermit"
 version = "0.3.9"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
@@ -8,22 +8,24 @@ authors = [
 build = "build.rs"
 license = "MIT/Apache-2.0"
 readme = "README.md"
-categories = ["no-std"]
+keywords = ["unikernel", "libos"]
+categories = ["os"]
 description = """
 A Rust-based, lightweight unikernel
 """
 
-[lib]
-crate-type = ["staticlib"]
+#[lib]
+#crate-type = ["staticlib"]
 
 [features]
-#default = ["vga"]
+#default = ["network"]
 vga = []
-rustc-dep-of-std = [] #"core", "compiler_builtins/rustc-dep-of-std"]
+network = ["smoltcp"]
+rustc-dep-of-std = ["core", "compiler_builtins/rustc-dep-of-std"]
 
 [dependencies]
-#core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
-#compiler_builtins = { version = "0.1.0", optional = true }
+core = { version = "1.0.0", optional = true, package = "rustc-std-workspace-core" }
+compiler_builtins = { version = "0.1", optional = true }
 bitflags = "1.0.*"
 spin = "0.5"
 #byteorder = { version = "1.0", default-features = false }
@@ -35,6 +37,7 @@ default-features = false
 
 [dependencies.smoltcp]
 version = "0.5"
+optional = true
 #git = "https://github.com/hermitcore/smoltcp.git"
 default-features = false
 features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4"]
