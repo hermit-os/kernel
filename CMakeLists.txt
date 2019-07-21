@@ -34,6 +34,14 @@ set_target_properties(hermit-bootstrap PROPERTIES ARCHIVE_OUTPUT_NAME hermit)
 add_custom_command(
 	TARGET hermit-bootstrap POST_BUILD
 
+	# Merge the Rust library into this static library.
+	COMMAND
+		${CMAKE_AR} x ${HERMIT_RS}
+	COMMAND
+		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
+	COMMAND
+		${CMAKE_COMMAND} -E remove *.o
+
 	# Convert the combined library to osabi "Standalone"
 	COMMAND
 		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
