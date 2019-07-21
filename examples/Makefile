@@ -1,10 +1,26 @@
-RM = rm -rf
-#TARGET =
-TARGET = --target x86_64-unknown-hermit
-#TARGET = --target x86_64-unknown-linux-gnu
+arch ?= x86_64
+target ?= $(arch)-unknown-hermit
+release ?= 0
+
+opt :=
+rdir := debug
+
+ifeq ($(release), 1)
+opt := --release
+rdir := release
+endif
+
+RN :=
+ifdef COMSPEC
+RM := del
+else
+RM := rm -rf
+endif
+
+.PHONY: default clean
 
 default:
-	cargo build $(TARGET)
+	@RUSTFLAGS="-L ../target/$(target)-kernel/$(rdir)" cargo build $(opt) --target $(target)
 
 clean:
-	$(RM) target
+	@$(RM) target
