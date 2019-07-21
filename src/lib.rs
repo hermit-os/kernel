@@ -71,7 +71,6 @@ mod errno;
 #[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
-#[cfg(not(feature = "rustc-dep-of-std"))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
