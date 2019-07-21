@@ -21,6 +21,8 @@ endif
 
 default:
 	@RUSTFLAGS="-L ../target/$(target)-kernel/$(rdir)" cargo build $(opt) --target $(target)
+	@$(arch)-hermit-objcopy --only-keep-debug target/$(arch)-unknown-hermit/$(rdir)/hctests target/$(arch)-unknown-hermit/$(rdir)/hctests.sym
+	@$(arch)-hermit-objcopy --strip-debug target/$(arch)-unknown-hermit/$(rdir)/hctests
 
 clean:
 	@$(RM) target
