@@ -211,9 +211,8 @@ pub fn boot_processor_main() -> ! {
 	logging::init();
 
 	info!(
-		"Welcome to HermitCore-rs {} ({})",
-		env!("CARGO_PKG_VERSION"),
-		COMMIT_HASH
+		"Welcome to HermitCore-rs {}",
+		env!("CARGO_PKG_VERSION")
 	);
 	unsafe {
 		debug!(
