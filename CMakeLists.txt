@@ -1,23 +1,7 @@
 project(librs C)
 
-if(EXISTS "${CMAKE_SOURCE_DIR}/.git")
-	find_package(Git)
-	if(GIT_FOUND)
-		execute_process(
-			COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
-			WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-			OUTPUT_VARIABLE GIT_COMMIT_HASH
-			RESULT_VARIABLE GIT_CALL_RESULT
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-		if(GIT_CALL_RESULT EQUAL 0)
-			set(COMMIT_HASH "${GIT_COMMIT_HASH}")
-		endif()
-	endif()
-endif()
-
 # Add the Cargo project to build the Rust library.
-set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit_rs.a")
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit.a")
 add_custom_target(hermit_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/librs
@@ -50,29 +34,9 @@ set_target_properties(hermit-bootstrap PROPERTIES ARCHIVE_OUTPUT_NAME hermit)
 add_custom_command(
 	TARGET hermit-bootstrap POST_BUILD
 
-	# Merge the Rust library into this static library.
-	COMMAND
-		${CMAKE_AR} x ${HERMIT_RS}
-	COMMAND
-		${CMAKE_AR} rcs $<TARGET_FILE:hermit-bootstrap> *.o
-	COMMAND
-		${CMAKE_COMMAND} -E remove *.o
-
 	# Convert the combined library to osabi "Standalone"
 	COMMAND
 		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
-
-	# Redefine some reserved Rust symbols to avoid collisions with similarly named symbols from Rust application code.
-	# Note that some of them only appear in Debug builds of HermitCore!
-	COMMAND
-		${CMAKE_OBJCOPY}
-		--redefine-sym rust_begin_unwind=HermitCore_Kernel_rust_begin_unwind
-		--redefine-sym rust_oom=HermitCore_Kernel_rust_oom
-		--redefine-sym __rust_alloc=HermitCore_Kernel___rust_alloc
-		--redefine-sym __rust_alloc_zeroed=HermitCore_Kernel___rust_alloc_zeroed
-		--redefine-sym __rust_dealloc=HermitCore_Kernel___rust_dealloc
-		--redefine-sym __rust_realloc=HermitCore_Kernel___rust_realloc
-		$<TARGET_FILE:hermit-bootstrap>
 
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
