@@ -373,6 +373,7 @@ impl PageTableLevel for PT {
 
 /// Representation of any page table (PML4, PDPT, PD, PT) in memory.
 /// Parameter L supplies information for Rust's typing system to distinguish between the different tables.
+#[repr(C)]
 struct PageTable<L> {
 	/// Each page table has 512 entries (can be calculated using PAGE_MAP_BITS).
 	entries: [PageTableEntry; 1 << PAGE_MAP_BITS],
@@ -737,13 +738,13 @@ pub fn get_application_page_size() -> usize {
 pub fn init() {}
 
 pub fn init_page_tables() {
-	trace!("Create new view to the kernel space");
+	debug!("Create new view to the kernel space");
 
 	unsafe {
 		let pml4 = controlregs::cr3();
 		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
 
-		trace!("Found PML4 at 0x{:x}", pml4);
+		debug!("Found PML4 at 0x{:x}", pml4);
 
 		// make sure that only the required areas are mapped
 		let start = pde
