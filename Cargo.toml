@@ -60,8 +60,6 @@ debug = true       # controls whether the compiler passes `-C debuginfo`
 rpath = false      # controls whether the compiler passes `-C rpath`
 lto = false         # controls `-C lto` for binaries and staticlibs
 debug-assertions = true # controls whether debug assertions are enabled
-codegen-units = 1 # controls whether the compiler passes `-C codegen-units`
-                   # `codegen-units` is ignored when `lto = true`
 panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/32900
 
 # The release profile, used for `cargo build --release`.
