@@ -127,11 +127,11 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 	if tls_size > 0 {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = tls_size + mem::size_of::<usize>();
+		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
 		let tls = TaskTLS::new(tls_allocation_size);
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = tls.address() + tls_size;
+		let tls_pointer = tls.address() + align_up!(tls_size, 32);
 
 		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
 		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
@@ -168,7 +168,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		debug!(
 			"Set up TLS for task {} at address {:#X}",
 			current_task_borrowed.id,
-			tls.address()
+			align_up!(tls.address(), 32)
 		);
 		current_task_borrowed.tls = Some(Rc::new(RefCell::new(tls)));
 	}
