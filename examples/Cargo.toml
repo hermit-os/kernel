@@ -6,3 +6,4 @@ edition = "2018"
 publish = false
 
 [dependencies]
+rayon = { git = "https://github.com/hermitcore/rayon.git" }

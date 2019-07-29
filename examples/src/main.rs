@@ -1,8 +1,14 @@
+extern crate rayon;
+
+mod laplace;
+
 use std::f64::consts::PI;
-use std::thread;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::thread;
+use std::time::Instant;
+use std::vec;
 
 type Result<T> = std::result::Result<T, ()>;
 
@@ -30,20 +36,21 @@ fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<()> {
 	let mut sum = 0.0 as f64;
 
 	let threads: Vec<_> = (0..nthreads)
-	.map(|tid| {
-		thread::spawn(move || {
-			let mut partial_sum = 0 as f64;
-			let start = (num_steps / nthreads) * tid;
-			let end = (num_steps / nthreads) * (tid+1);
+		.map(|tid| {
+			thread::spawn(move || {
+				let mut partial_sum = 0 as f64;
+				let start = (num_steps / nthreads) * tid;
+				let end = (num_steps / nthreads) * (tid + 1);
 
-			for i  in start..end {
-				let x = (i as f64 + 0.5) * step;
-				partial_sum += 4.0 / (1.0 + x * x);
-			}
+				for i in start..end {
+					let x = (i as f64 + 0.5) * step;
+					partial_sum += 4.0 / (1.0 + x * x);
+				}
 
-			partial_sum
+				partial_sum
+			})
 		})
-	}).collect();
+		.collect();
 
 	for t in threads {
 		sum += t.join().unwrap();
@@ -120,15 +127,89 @@ fn threading() -> Result<()> {
 fn test_result(result: Result<()>) -> &'static str {
 	match result {
 		Ok(_) => "ok",
-		Err(_) => "failed!"
+		Err(_) => "failed!",
 	}
+}
+
+fn laplace(size_x: usize, size_y: usize) -> Result<()> {
+	let matrix = matrix_setup(size_x, size_y);
+
+	let now = Instant::now();
+	let (iterations, res) = laplace::compute(matrix, size_x, size_y);
+	println!(
+		"Time to solve {} s, iterations {}, residuum {}",
+		now.elapsed().as_secs(),
+		iterations,
+		res
+	);
+
+	if res < 0.01 {
+		Ok(())
+	} else {
+		Err(())
+	}
+}
+
+fn matrix_setup(size_x: usize, size_y: usize) -> (vec::Vec<vec::Vec<f64>>) {
+	let mut matrix = vec![vec![0.0; size_x * size_y]; 2];
+
+	// top row
+	for x in 0..size_x {
+		matrix[0][x] = 1.0;
+		matrix[1][x] = 1.0;
+	}
+
+	// bottom row
+	for x in 0..size_x {
+		matrix[0][(size_y - 1) * size_x + x] = 1.0;
+		matrix[1][(size_y - 1) * size_x + x] = 1.0;
+	}
+
+	// left row
+	for y in 0..size_y {
+		matrix[0][y * size_x] = 1.0;
+		matrix[1][y * size_x] = 1.0;
+	}
+
+	// right row
+	for y in 0..size_y {
+		matrix[0][y * size_x + size_x - 1] = 1.0;
+		matrix[1][y * size_x + size_x - 1] = 1.0;
+	}
+
+	matrix
 }
 
 fn main() {
 	println!("Test {} ... {}", stringify!(hello), test_result(hello()));
-	println!("Test {} ... {}", stringify!(read_file), test_result(read_file()));
-	println!("Test {} ... {}", stringify!(create_file), test_result(create_file()));
-	println!("Test {} ... {}", stringify!(threading), test_result(threading()));
-	println!("Test {} ... {}", stringify!(pi_sequential), test_result(pi_sequential(50000000)));
-	println!("Test {} ... {}", stringify!(pi_parallel), test_result(pi_parallel(2, 50000000)));
+	println!(
+		"Test {} ... {}",
+		stringify!(read_file),
+		test_result(read_file())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(create_file),
+		test_result(create_file())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(threading),
+		test_result(threading())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(pi_sequential),
+		test_result(pi_sequential(50000000))
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(pi_parallel),
+		test_result(pi_parallel(2, 50000000))
+	);
+	/*println!(
+		"Test {} ... {}",
+		stringify!(laplace),
+		test_result(laplace(124, 124))
+	);*/
 }
