@@ -207,9 +207,9 @@ fn main() {
 		stringify!(pi_parallel),
 		test_result(pi_parallel(2, 50000000))
 	);
-	/*println!(
+	println!(
 		"Test {} ... {}",
 		stringify!(laplace),
 		test_result(laplace(124, 124))
-	);*/
+	);
 }
