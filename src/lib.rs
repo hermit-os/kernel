@@ -210,10 +210,7 @@ pub fn boot_processor_main() -> ! {
 	arch::message_output_init();
 	logging::init();
 
-	info!(
-		"Welcome to HermitCore-rs {}",
-		env!("CARGO_PKG_VERSION")
-	);
+	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
 	unsafe {
 		debug!(
 			"tls: 0x{:x} - 0x{:x}",
