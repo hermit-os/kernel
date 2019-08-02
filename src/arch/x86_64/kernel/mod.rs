@@ -68,7 +68,7 @@ struct KernelHeader {
 }
 
 /// Kernel header to announce machine features
-#[link_section = ".mboot"]
+#[cfg_attr(not(test), link_section = ".mboot")]
 static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	magic_number: 0xC0DE_CAFEu32,
 	version: 0,
