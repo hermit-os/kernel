@@ -19,7 +19,7 @@ curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
 cargo --version # dump version of the Rust toolchain
 cargo install cargo-xbuild
 rustup component add rust-src
-cargo test
+cargo test --lib
 #cargo install --git https://github.com/hermitcore/pci_ids_parser.git
 #mkdir build
 #cd build
