@@ -6,6 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+mod condvar;
 mod interfaces;
 mod processor;
 mod random;
@@ -16,6 +17,7 @@ mod system;
 mod tasks;
 mod timer;
 
+pub use self::condvar::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
