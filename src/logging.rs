@@ -31,7 +31,7 @@ impl log::Log for KernelLogger {
 pub fn init() {
 	unsafe {
 		set_logger_raw(|max_log_level| {
-			max_log_level.set(LogLevelFilter::Debug);
+			max_log_level.set(LogLevelFilter::Info);
 			&KernelLogger
 		})
 		.expect("Can't initialize logger");
