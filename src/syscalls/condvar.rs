@@ -7,7 +7,7 @@
 
 use alloc::boxed::Box;
 use arch::percore::*;
-use core::{mem, ptr};
+use core::mem;
 use scheduler;
 use scheduler::task::PriorityTaskQueue;
 
@@ -34,7 +34,7 @@ impl Drop for CondQueue {
 #[no_mangle]
 pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
 	let id = ptr as *mut usize;
-	if id == ptr::null_mut() {
+	if id.is_null() {
 		debug!("sys_wait: ivalid address to condition variable");
 		return -1;
 	}
@@ -53,7 +53,7 @@ pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
 #[no_mangle]
 pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 	let id = ptr as *const usize;
-	if id == ptr::null() || *id == 0 {
+	if id.is_null() || *id == 0 {
 		// invalid argument
 		debug!("sys_notify: invalid address to condition variable");
 		return -1;
@@ -85,7 +85,7 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 #[no_mangle]
 pub unsafe fn sys_wait(ptr: usize, timeout_ns: i64) -> i32 {
 	let id = ptr as *mut usize;
-	if id == ptr::null_mut() {
+	if id.is_null() {
 		debug!("sys_wait: ivalid address to condition variable");
 		return -1;
 	}
