@@ -312,12 +312,12 @@ impl CpuFrequency {
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
-		let first_tick = unsafe { MEASUREMENT_TIMER_TICKS };
+		let first_tick = unsafe { ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 
 		// Wait until the tick count changes.
 		// As soon as it has done, we are at the start of a new time slice.
 		let start_tick = loop {
-			let tick = unsafe { MEASUREMENT_TIMER_TICKS };
+			let tick = unsafe { ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick != first_tick {
 				break tick;
 			}
@@ -329,7 +329,7 @@ impl CpuFrequency {
 		let start = get_timestamp();
 
 		loop {
-			let tick = unsafe { MEASUREMENT_TIMER_TICKS };
+			let tick = unsafe { ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick - start_tick >= tick_count {
 				break;
 			}
@@ -674,7 +674,10 @@ pub fn configure() {
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
 	} else {
-		panic!("libhermit-rs requires the CPU feature FSGSBASE");
+		info!("libhermit-rs requires the CPU feature FSGSBASE");
+		loop {
+			spin_loop_hint();
+		}
 	}
 
 	unsafe {
