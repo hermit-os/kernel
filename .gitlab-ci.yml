@@ -23,7 +23,7 @@ docker:
 test:
   stage: test
   script:
-    - cargo test
+    - cargo test --lib
     - make
     - make release=1
     - git clone --depth 1 -b path2rs https://github.com/hermitcore/hermit-caves.git caves
