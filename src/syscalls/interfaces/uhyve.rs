@@ -7,7 +7,6 @@
 
 use arch;
 use arch::mm::paging;
-use scheduler;
 use syscalls::interfaces::SyscallInterface;
 
 #[cfg(target_arch = "x86_64")]

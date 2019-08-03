@@ -78,11 +78,13 @@ impl fmt::Display for Priority {
 	}
 }
 
+#[allow(dead_code)]
 pub const HIGH_PRIO: Priority = Priority::from(3);
 #[allow(dead_code)]
 pub const NORMAL_PRIO: Priority = Priority::from(2);
 #[allow(dead_code)]
 pub const LOW_PRIO: Priority = Priority::from(1);
+#[allow(dead_code)]
 pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
