@@ -1,3 +1,5 @@
+#![feature(duration_float)]
+
 extern crate rayon;
 
 mod laplace;
@@ -138,7 +140,7 @@ fn laplace(size_x: usize, size_y: usize) -> Result<()> {
 	let (iterations, res) = laplace::compute(matrix, size_x, size_y);
 	println!(
 		"Time to solve {} s, iterations {}, residuum {}",
-		now.elapsed().as_secs(),
+		now.elapsed().as_secs_f64(),
 		iterations,
 		res
 	);
