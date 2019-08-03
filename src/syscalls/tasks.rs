@@ -12,6 +12,7 @@ use errno::*;
 use scheduler;
 use scheduler::task::{Priority, TaskId};
 use syscalls::timer::timespec;
+use syscalls;
 
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
@@ -40,7 +41,8 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn sys_exit(arg: i32) -> ! {
-	core_scheduler().exit(arg);
+	debug!("Exit program with error code {}!", arg);
+	syscalls::sys_shutdown(arg);
 }
 
 #[no_mangle]
