@@ -171,8 +171,8 @@ impl SyscallInterface for Uhyve {
 		sysclose.ret
 	}
 
-	fn shutdown(&self) -> ! {
-		let mut sysexit = SysExit::new(scheduler::get_last_exit_code());
+	fn shutdown(&self, arg: i32) -> ! {
+		let mut sysexit = SysExit::new(arg);
 		uhyve_send(UHYVE_PORT_EXIT, &mut sysexit);
 
 		loop {

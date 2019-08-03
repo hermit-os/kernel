@@ -32,7 +32,7 @@ pub trait SyscallInterface: Send + Sync {
 		(argc, argv, environ)
 	}
 
-	fn shutdown(&self) -> ! {
+	fn shutdown(&self, _arg: i32) -> ! {
 		arch::processor::shutdown();
 	}
 

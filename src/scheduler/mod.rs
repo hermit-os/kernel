@@ -27,7 +27,6 @@ use syscalls::*;
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.
 pub const TASK_TIME_SLICE: u64 = 10_000;
 
-static LAST_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
 static NEXT_CORE_ID: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
@@ -105,7 +104,6 @@ impl PerCoreScheduler {
 			);
 
 			// Finish the task and reschedule.
-			LAST_EXIT_CODE.store(exit_code, Ordering::SeqCst);
 			info!(
 				"Finishing task {} with exit code {}",
 				current_task_borrowed.id, exit_code
@@ -288,20 +286,6 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
-			// If this is the Boot Processor and only the network task is left, it's time to shut down the OS.
-			#[cfg(feature = "network")]
-			{
-				let network_id = get_network_task_id();
-
-				if network_id != TaskId::from(0)
-					&& new_id == network_id
-					&& NO_TASKS.load(Ordering::SeqCst) == 1
-				{
-					debug!("Only network task is left");
-					sys_shutdown();
-				}
-			}
-
 			// Tell the scheduler about the new task.
 			trace!(
 				"Switching task from {} to {} (stack {:#X} => {:#X})",
@@ -321,11 +305,6 @@ impl PerCoreScheduler {
 			switch(last_stack_pointer, new_stack_pointer);
 		} else {
 			// There is no new task to switch to.
-
-			// If this is the Boot Processor and all tasks have finished, it's time to shut down the OS.
-			if core_id() == 0 && NO_TASKS.load(Ordering::SeqCst) == 0 {
-				sys_shutdown();
-			}
 
 			if status == TaskStatus::TaskIdle {
 				// We are now running the Idle task and will halt the CPU.
@@ -405,10 +384,6 @@ pub fn add_current_core() {
 	unsafe {
 		SCHEDULERS.as_mut().unwrap().insert(core_id, &(*scheduler));
 	}
-}
-
-pub fn get_last_exit_code() -> i32 {
-	LAST_EXIT_CODE.load(Ordering::SeqCst)
 }
 
 pub fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {

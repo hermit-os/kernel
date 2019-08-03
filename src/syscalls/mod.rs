@@ -62,8 +62,8 @@ pub extern "C" fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_shutdown() -> ! {
-	unsafe { SYS.shutdown() }
+pub extern "C" fn sys_shutdown(arg: i32) -> ! {
+	unsafe { SYS.shutdown(arg) }
 }
 
 #[no_mangle]
