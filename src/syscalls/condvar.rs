@@ -42,6 +42,9 @@ pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
 	if *id != 0 {
 		let cond = Box::from_raw((*id) as *mut CondQueue);
 		mem::drop(cond);
+
+		// reset id
+		*id = 0;
 	}
 
 	0
