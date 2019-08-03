@@ -33,7 +33,7 @@ impl Drop for CondQueue {
 
 #[no_mangle]
 pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
-	let id = ptr as *const usize;
+	let id = ptr as *mut usize;
 	if id == ptr::null_mut() {
 		debug!("sys_wait: ivalid address to condition variable");
 		return -1;
