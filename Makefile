@@ -17,7 +17,7 @@ else
 RM := rm -rf
 endif
 
-.PHONY: all clean lib docs
+.PHONY: all clippy clean lib docs
 
 all: lib
 	make arch=$(arch) release=$(release) -C examples
@@ -29,6 +29,9 @@ clean:
 docs:
 	@echo DOC
 	@cargo doc
+clippy:
+	@echo Run clippy...
+	@RUST_TARGET_PATH=$(CURDIR) cargo clippy --target $(target)
 
 lib:
 	@echo Build libhermit
