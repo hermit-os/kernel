@@ -55,8 +55,8 @@ pub fn init() {
 	unsafe {
 		parse_command_line();
 
-		if is_uhyve() {
-			// We are running under uhyve, which implies unikernel mode and no communication with "proxy".
+		if is_uhyve() || is_single_kernel() {
+			// We are running under uhyve or baremetal, which implies unikernel mode and no communication with "proxy".
 			IS_PROXY = false;
 		} else {
 			// We are running side-by-side to Linux, which implies communication with "proxy".
