@@ -24,6 +24,16 @@ test:
   stage: test
   script:
     - cargo test
+    - make
+    - make release=1
+    - git clone --depth 1 -b path2rs https://github.com/hermitcore/hermit-caves.git caves
+    - cd caves
+    - mkdir build
+    - cd build
+    - cmake ..
+    - make
+    - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/debug/hctests
+    - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/release/hctests
   image: ${IMAGE}
   tags:
     - docker
