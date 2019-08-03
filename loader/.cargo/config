@@ -1,0 +1,4 @@
+[build]
+rustflags = [
+  "-C", "link-arg=-Tsrc/arch/x86_64/link.ld"
+]

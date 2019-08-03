@@ -17,18 +17,29 @@ else
 RM := rm -rf
 endif
 
-.PHONY: all clippy clean lib docs
+.PHONY: all loader clippy clean lib docs
 
-all: lib
+default: lib
+	make arch=$(arch) release=$(release) -C examples
+
+all: loader lib
 	make arch=$(arch) release=$(release) -C examples
 
 clean:
 	$(RM) target
 	make -C examples clean
+	make -C loader clean
+
+loader:
+	make -C loader release=$(release)
+
+qemu:
+	qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd examples/target/$(target)/$(rdir)/hctests -cpu Haswell-noTSX,vendor=GenuineIntel
 
 docs:
 	@echo DOC
 	@cargo doc
+
 clippy:
 	@echo Run clippy...
 	@RUST_TARGET_PATH=$(CURDIR) cargo clippy --target $(target)
