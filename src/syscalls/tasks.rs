@@ -11,8 +11,8 @@ use core::isize;
 use errno::*;
 use scheduler;
 use scheduler::task::{Priority, TaskId};
-use syscalls::timer::timespec;
 use syscalls;
+use syscalls::timer::timespec;
 
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
