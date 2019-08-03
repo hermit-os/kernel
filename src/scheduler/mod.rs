@@ -16,12 +16,11 @@ use arch::irq;
 use arch::percore::*;
 use arch::switch;
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicI32, AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 #[cfg(feature = "network")]
 use drivers::net::get_network_task_id;
 use scheduler::task::*;
 use synch::spinlock::*;
-use syscalls::*;
 
 /// Time slice of a task in microseconds.
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.
