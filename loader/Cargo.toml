@@ -2,6 +2,8 @@
 name = "hermit-loader"
 version = "0.2.3"
 authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
+license = "MIT/Apache-2.0"
+publish = false
 
 [dependencies]
 bitflags = "1.0.3"
@@ -22,6 +24,14 @@ default-features = false
 memcpy = true
 
 # The release profile, used for `cargo build --release`.
+[profile.dev]
+opt-level = 1      # controls the `--opt-level` the compiler builds with
+debug = true       # controls whether the compiler passes `-C debuginfo`
+                   # a value of `true` is equivalent to `2`
+rpath = false      # controls whether the compiler passes `-C rpath`
+lto = false         # controls `-C lto` for binaries and staticlibs
+debug-assertions = true # controls whether debug assertions are enabled
+
 [profile.release]
 opt-level = 3
 debug = false
