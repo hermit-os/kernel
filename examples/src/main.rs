@@ -12,9 +12,7 @@ use std::thread;
 use std::time::Instant;
 use std::vec;
 
-type Result<T> = std::result::Result<T, ()>;
-
-fn pi_sequential(num_steps: u64) -> Result<()> {
+fn pi_sequential(num_steps: u64) -> Result<(), ()> {
 	let step = 1.0 / num_steps as f64;
 	let mut sum = 0 as f64;
 
@@ -33,7 +31,7 @@ fn pi_sequential(num_steps: u64) -> Result<()> {
 	}
 }
 
-fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<()> {
+fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<(), ()> {
 	let step = 1.0 / num_steps as f64;
 	let mut sum = 0.0 as f64;
 
@@ -68,46 +66,47 @@ fn pi_parallel(nthreads: u64, num_steps: u64) -> Result<()> {
 	}
 }
 
-fn read_file() -> Result<()> {
-	let mut file = File::open("/etc/hostname").unwrap();
+fn read_file() -> Result<(), std::io::Error> {
+	let mut file = File::open("/etc/hostname")?;
 	let mut contents = String::new();
-	file.read_to_string(&mut contents).unwrap();
+	file.read_to_string(&mut contents)?;
 
 	println!("Hostname: {}", contents);
 
 	Ok(())
 }
 
-fn create_file() -> Result<()> {
+fn create_file() -> Result<(), std::io::Error> {
 	{
-		let mut file = File::create("/tmp/foo.txt").unwrap();
-		file.write_all(b"Hello, world!").unwrap();
+		let mut file = File::create("/tmp/foo.txt")?;
+		file.write_all(b"Hello, world!")?;
 	}
 
 	let contents = {
-		let mut file = File::open("/tmp/foo.txt").unwrap();
+		let mut file = File::open("/tmp/foo.txt")?;
 		let mut contents = String::new();
-		file.read_to_string(&mut contents).unwrap();
+		file.read_to_string(&mut contents)?;
 		contents
 	};
 
 	// delete temporary file
-	std::fs::remove_file("/tmp/foo.txt").unwrap();
+	std::fs::remove_file("/tmp/foo.txt")?;
 
 	if contents == "Hello, world!" {
 		Ok(())
 	} else {
-		Err(())
+		let kind = std::io::ErrorKind::Other;
+		Err(std::io::Error::from(kind))
 	}
 }
 
-fn hello() -> Result<()> {
+fn hello() -> Result<(), ()> {
 	println!("Hello, world!");
 
 	Ok(())
 }
 
-fn threading() -> Result<()> {
+fn threading() -> Result<(), ()> {
 	// Make a vector to hold the children which are spawned.
 	let mut children = vec![];
 
@@ -126,14 +125,14 @@ fn threading() -> Result<()> {
 	Ok(())
 }
 
-fn test_result(result: Result<()>) -> &'static str {
+fn test_result<T>(result: Result<(), T>) -> &'static str {
 	match result {
 		Ok(_) => "ok",
 		Err(_) => "failed!",
 	}
 }
 
-fn laplace(size_x: usize, size_y: usize) -> Result<()> {
+fn laplace(size_x: usize, size_y: usize) -> Result<(), ()> {
 	let matrix = matrix_setup(size_x, size_y);
 
 	let now = Instant::now();
