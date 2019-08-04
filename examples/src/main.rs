@@ -12,6 +12,67 @@ use std::thread;
 use std::time::Instant;
 use std::vec;
 
+fn bench_sched_one_thread() -> Result<(), ()> {
+	let n = 1000000;
+
+	// cache warmup
+	thread::yield_now();
+	thread::yield_now();
+	let _now = Instant::now();
+
+	let now = Instant::now();
+	for _ in 0..n {
+		thread::yield_now();
+	}
+	let time = now.elapsed().as_secs_f64();
+
+	println!(
+		"Scheduling time {} usec (1 thread)",
+		(time * 1000000.0) / n as f64
+	);
+
+	Ok(())
+}
+
+fn bench_sched_two_threads() -> Result<(), ()> {
+	let n = 1000000;
+	let nthreads = 2;
+
+	// cache warmup
+	thread::yield_now();
+	thread::yield_now();
+	let _now = Instant::now();
+
+	let now = Instant::now();
+
+	let threads: Vec<_> = (0..nthreads - 1)
+		.map(|_| {
+			thread::spawn(move || {
+				for _ in 0..n {
+					thread::yield_now();
+				}
+			})
+		})
+		.collect();
+
+	for _ in 0..n {
+		thread::yield_now();
+	}
+
+	let time = now.elapsed().as_secs_f64();
+
+	for t in threads {
+		t.join().unwrap();
+	}
+
+	println!(
+		"Scheduling time {} usec (2 threads)",
+		(time * 1000000.0) / (nthreads * n) as f64
+	);
+
+	Ok(())
+}
+
 fn pi_sequential(num_steps: u64) -> Result<(), ()> {
 	let step = 1.0 / num_steps as f64;
 	let mut sum = 0 as f64;
@@ -212,5 +273,15 @@ fn main() {
 		"Test {} ... {}",
 		stringify!(laplace),
 		test_result(laplace(124, 124))
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(bench_sched_one_thread),
+		test_result(bench_sched_one_thread())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(bench_sched_two_threads),
+		test_result(bench_sched_two_threads())
 	);
 }
