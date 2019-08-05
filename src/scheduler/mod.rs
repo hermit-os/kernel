@@ -87,7 +87,7 @@ impl PerCoreScheduler {
 		}
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
-		info!("Creating task {}", tid);
+		debug!("Creating task {}", tid);
 
 		tid
 	}
@@ -103,7 +103,7 @@ impl PerCoreScheduler {
 			);
 
 			// Finish the task and reschedule.
-			info!(
+			debug!(
 				"Finishing task {} with exit code {}",
 				current_task_borrowed.id, exit_code
 			);
@@ -188,7 +188,7 @@ impl PerCoreScheduler {
 	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		if let Some(id) = self.finished_tasks.pop_front() {
-			info!("Cleaning up task {}", id);
+			debug!("Cleaning up task {}", id);
 
 			let task = unsafe { TASKS.as_ref().unwrap().lock().remove(&id) };
 			// wakeup tasks, which are waiting for task with the identifier id
