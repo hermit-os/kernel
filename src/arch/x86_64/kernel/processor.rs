@@ -674,7 +674,7 @@ pub fn configure() {
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
 	} else {
-		info!("libhermit-rs requires the CPU feature FSGSBASE");
+		error!("libhermit-rs requires the CPU feature FSGSBASE");
 		loop {
 			spin_loop_hint();
 		}
