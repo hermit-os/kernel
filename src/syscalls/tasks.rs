@@ -46,6 +46,12 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 }
 
 #[no_mangle]
+pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
+    debug!("Exit thread with error code {}!", arg);
+    core_scheduler().exit(arg);
+}
+
+#[no_mangle]
 pub extern "C" fn sys_abort() -> ! {
 	sys_exit(-1);
 }
