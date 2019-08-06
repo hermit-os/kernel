@@ -155,7 +155,7 @@ impl PerCoreScheduler {
 		}
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
-		info!(
+		debug!(
 			"Creating task {} on core {} by cloning task {}",
 			tid, core_id, current_task_borrowed.id
 		);
