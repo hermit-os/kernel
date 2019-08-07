@@ -48,6 +48,32 @@ pub fn allocate(size: usize) -> usize {
 	result.unwrap()
 }
 
+pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
+	assert!(size > 0);
+	assert!(alignment > 0);
+	assert!(
+		size % alignment == 0,
+		"Size {:#X} is not a multiple of the given alignment {:#X}",
+		size,
+		alignment
+	);
+	assert!(
+		alignment % BasePageSize::SIZE == 0,
+		"Alignment {:#X} is not a multiple of {:#X}",
+		alignment,
+		BasePageSize::SIZE
+	);
+
+	let result = KERNEL_FREE_LIST.lock().allocate_aligned(size, alignment);
+	assert!(
+		result.is_ok(),
+		"Could not allocate {:#X} bytes of virtual memory aligned to {} bytes",
+		size,
+		alignment
+	);
+	result.unwrap()
+}
+
 pub fn deallocate(virtual_address: usize, size: usize) {
 	assert!(
 		virtual_address >= mm::kernel_end_address(),
