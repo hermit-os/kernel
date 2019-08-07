@@ -5,6 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use core::sync::atomic::{AtomicUsize, Ordering};
 use arch::x86_64::kernel::{get_limit, get_mbinfo};
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
@@ -14,6 +15,7 @@ use mm::freelist::{FreeList, FreeListEntry};
 use synch::spinlock::*;
 
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
 	let mb_info = get_mbinfo();
@@ -42,6 +44,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			start: start_address,
 			end: m.base_address() + m.length(),
 		});
+		let _ = TOTAL_MEMORY.fetch_add(m.base_address() + m.length(), Ordering::SeqCst);
 		PHYSICAL_FREE_LIST.lock().list.push(entry);
 	}
 
@@ -62,6 +65,7 @@ fn detect_from_limits() -> Result<(), ()> {
 		start: mm::kernel_end_address(),
 		end: limit,
 	});
+	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
 	PHYSICAL_FREE_LIST.lock().list.push(entry);
 
 	Ok(())
@@ -71,6 +75,10 @@ pub fn init() {
 	detect_from_multiboot_info()
 		.or_else(|_e| detect_from_limits())
 		.unwrap();
+}
+
+pub fn total_memory_size() -> usize {
+	TOTAL_MEMORY.load(Ordering::SeqCst)
 }
 
 pub fn allocate(size: usize) -> usize {
