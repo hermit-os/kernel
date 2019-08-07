@@ -566,50 +566,58 @@ where
 	}
 }
 
+fn map_page_on_demand<S: PageSize>(virtual_address: usize) {
+	let physical_address = physicalmem::allocate_aligned(S::SIZE, S::SIZE);
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let page = Page::<S>::including_address(virtual_address);
+
+	trace!(
+		"Mapping {} KiB page for task heap ({:#X} => {:#X})",
+		S::SIZE >> 10,
+		page.address(),
+		physical_address
+	);
+
+	root_pagetable.map_page(
+		page,
+		physical_address,
+		PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
+	);
+
+	// If our application is a Go application (detected by the presence of the
+	// weak symbol "runtime_osinit"), we have to return a zeroed page.
+	unsafe {
+		if !runtime_osinit.is_null() {
+			trace!("Go application detected, returning a zeroed page");
+			ptr::write_bytes(page.address() as *mut u8, 0, S::SIZE);
+		}
+	}
+
+	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
+	unsafe {
+		controlregs::cr2_write(0);
+	}
+}
+
 pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: &mut irq::ExceptionStackFrame,
 	error_code: u64,
 ) {
 	let virtual_address = unsafe { controlregs::cr2() };
+	let (kernel_heap_start, kernel_heap_end) = ::mm::heap_range();
 
-	// Is a heap associated to the current task?
-	if let Some(ref heap) = core_scheduler().current_task.borrow().heap {
+	if virtual_address >= kernel_heap_start && virtual_address < kernel_heap_end {
+		// belongs to the current kernel heap
+		map_page_on_demand::<LargePageSize>(virtual_address);
+		return;
+	} else if let Some(ref heap) = core_scheduler().current_task.borrow().heap {
+		// belong to the user space heap
 		let heap_borrowed = heap.borrow();
 		let heap_locked = heap_borrowed.read();
 
 		// Is the requested virtual address within the boundary of that heap?
 		if virtual_address >= heap_locked.start && virtual_address < heap_locked.end {
-			// Then allocate physical memory for a 2 MiB page and map it to this virtual address.
-			let physical_address =
-				physicalmem::allocate_aligned(LargePageSize::SIZE, LargePageSize::SIZE);
-			let root_pagetable = unsafe { &mut *PML4_ADDRESS };
-			let page = Page::<LargePageSize>::including_address(virtual_address);
-
-			trace!(
-				"Mapping 2 MiB page for task heap ({:#X} => {:#X})",
-				page.address(),
-				physical_address
-			);
-			root_pagetable.map_page(
-				page,
-				physical_address,
-				PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-			);
-
-			// If our application is a Go application (detected by the presence of the
-			// weak symbol "runtime_osinit"), we have to return a zeroed page.
-			unsafe {
-				if !runtime_osinit.is_null() {
-					trace!("Go application detected, returning a zeroed page");
-					ptr::write_bytes(page.address() as *mut u8, 0, LargePageSize::SIZE);
-				}
-			}
-
-			// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-			unsafe {
-				controlregs::cr2_write(0);
-			}
-
+			map_page_on_demand::<LargePageSize>(virtual_address);
 			return;
 		}
 	}

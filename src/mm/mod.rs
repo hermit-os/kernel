@@ -12,7 +12,8 @@ mod hole;
 mod test;
 
 use arch;
-use arch::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
+use arch::mm::physicalmem::total_memory_size;
 use environment;
 
 extern "C" {
@@ -27,12 +28,23 @@ static mut KERNEL_START_ADDRESS: usize = 0;
 /// Can be easily accessed through kernel_end_address()
 static mut KERNEL_END_ADDRESS: usize = 0;
 
+static mut HEAP_RANGE: (usize, usize) = (0, 0);
+
+pub fn heap_range() -> (usize, usize) {
+	unsafe { HEAP_RANGE }
+}
+
 pub fn kernel_start_address() -> usize {
 	unsafe { KERNEL_START_ADDRESS }
 }
 
 pub fn kernel_end_address() -> usize {
 	unsafe { KERNEL_END_ADDRESS }
+}
+
+extern "C" {
+	#[linkage = "extern_weak"]
+	static __malloc_unlock: *const u8;
 }
 
 #[cfg(not(test))]
@@ -52,9 +64,36 @@ pub fn init() {
 	arch::mm::init();
 	arch::mm::init_page_tables();
 
-	let size: usize = 2 * 1024 * 1024;
-	unsafe {
-		::ALLOCATOR.lock().init(allocate(size, true), size);
+	info!("Total memory size: {} MB", total_memory_size() >> 20);
+
+	if unsafe { !__malloc_unlock.is_null() } {
+		let size: usize = 4 * 1024 * 1024;
+
+		unsafe {
+			let addr = allocate(size, true);
+			HEAP_RANGE = (addr, addr+size);
+			::ALLOCATOR.lock().init(addr, size);
+		}
+	} else {
+		info!("A pure Rust application is running on top of HermitCore!");
+
+		// Map the first 4 MB of the heap into our address space
+		// The reset will be mapped on demand
+		let phys_size: usize = 4 * 1024 * 1024;
+		let virt_size: usize = align_down!(total_memory_size() - kernel_end_address(), LargePageSize::SIZE);
+		let physical_address = arch::mm::physicalmem::allocate_aligned(phys_size, LargePageSize::SIZE);
+		let virtual_address = arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE);
+
+		let count = phys_size / LargePageSize::SIZE;
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		arch::mm::paging::map::<LargePageSize>(virtual_address, physical_address, count, flags);
+
+		info!("Heap size: {} MB", virt_size >> 20);
+		unsafe {
+			HEAP_RANGE = (virtual_address, virtual_address+virt_size);
+			::ALLOCATOR.lock().init(virtual_address, virt_size);
+		}
 	}
 }
 
