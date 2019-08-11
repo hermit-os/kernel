@@ -11,7 +11,6 @@ use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::get_mbinfo;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::is_uhyve;
-use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::mm::physicalmem;
 use arch::x86_64::mm::virtualmem;
