@@ -99,10 +99,14 @@ pub fn init() {
 		}
 	}
 
-	let (mut map_addr, mut map_size) = if !environment::is_pure_rust() {
+	let mut map_addr: usize;
+	let mut map_size: usize;
+
+	#[cfg(feature = "newlib")]
+	{
 		info!("An application with a C-based runtime is running on top of HermitCore!");
 
-		let size: usize = 2 * LargePageSize::SIZE;
+		let size = 2 * LargePageSize::SIZE;
 		unsafe {
 			let addr = allocate(size, true);
 			::ALLOCATOR.lock().init(addr, size);
@@ -115,8 +119,12 @@ pub fn init() {
 		);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
 
-		(arch::mm::virtualmem::task_heap_start(), user_heap_size)
-	} else {
+		map_addr = arch::mm::virtualmem::task_heap_start();
+		map_size = user_heap_size;
+	}
+
+	#[cfg(not(feature = "newlib"))]
+	{
 		info!("A pure Rust application is running on top of HermitCore!");
 
 		// At first, we map only a small part into the heap.
@@ -156,8 +164,9 @@ pub fn init() {
 			::ALLOCATOR.lock().init(virt_addr, virt_size);
 		}
 
-		(virt_addr + counter, virt_size - counter)
-	};
+		map_addr = virt_addr + counter;
+		map_size = virt_size - counter;
+	}
 
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE

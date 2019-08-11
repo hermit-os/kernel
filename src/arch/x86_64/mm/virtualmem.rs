@@ -7,7 +7,6 @@
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
-use environment;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
 use synch::spinlock::*;
@@ -124,17 +123,20 @@ pub fn print_information() {
 /// End of the virtual memory address space reserved for kernel memory.
 /// This also marks the start of the virtual memory address space reserved for the task heap.
 /// In case of pure rust applications, we don't have a task heap.
+#[cfg(not(feature = "newlib"))]
 #[inline]
-pub fn kernel_heap_end() -> usize {
-	if !environment::is_pure_rust() {
-		0x1_0000_0000
-	} else {
-		0x8000_0000_0000
-	}
+pub const fn kernel_heap_end() -> usize {
+	0x8000_0000_0000
+}
+
+#[cfg(feature = "newlib")]
+#[inline]
+pub const fn kernel_heap_end() -> usize {
+	0x1_0000_0000
 }
 
 #[inline]
-pub fn task_heap_start() -> usize {
+pub const fn task_heap_start() -> usize {
 	kernel_heap_end()
 }
 
