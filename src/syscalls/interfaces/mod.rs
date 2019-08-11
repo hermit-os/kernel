@@ -7,11 +7,9 @@
 // copied, modified, or distributed except according to those terms.
 
 mod generic;
-//mod proxy;
 mod uhyve;
 
 pub use self::generic::*;
-//pub use self::proxy::*;
 pub use self::uhyve::*;
 use arch;
 use console;
