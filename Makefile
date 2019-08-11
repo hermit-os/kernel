@@ -26,7 +26,7 @@ all: loader lib
 	make arch=$(arch) release=$(release) -C examples
 
 clean:
-	$(RM) target
+	$(RM) target/x86_64-unknown-hermit-kernel
 	make -C examples clean
 	make -C loader clean
 
