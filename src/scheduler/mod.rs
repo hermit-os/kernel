@@ -87,6 +87,8 @@ impl PerCoreScheduler {
 		}
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
+		arch::wakeup_core(self.core_id);
+
 		debug!("Creating task {}", tid);
 
 		tid
@@ -361,8 +363,8 @@ pub fn add_current_core() {
 
 	// Initialize a scheduler for this core.
 	debug!(
-		"Initializing scheduler for this core with idle task {}",
-		tid
+		"Initializing scheduler for core {} with idle task {}",
+		core_id, tid
 	);
 	let boxed_scheduler = Box::new(PerCoreScheduler {
 		core_id: core_id,
