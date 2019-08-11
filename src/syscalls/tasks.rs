@@ -6,8 +6,10 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch;
+use arch::kernel::get_processor_count;
 use arch::percore::*;
 use core::isize;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use errno::*;
 use scheduler;
 use scheduler::task::{Priority, TaskId};
@@ -47,8 +49,8 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 
 #[no_mangle]
 pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
-    debug!("Exit thread with error code {}!", arg);
-    core_scheduler().exit(arg);
+	debug!("Exit thread with error code {}!", arg);
+	core_scheduler().exit(arg);
 }
 
 #[no_mangle]
@@ -178,14 +180,23 @@ pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	0
 }
 
+static CORE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 #[no_mangle]
 pub extern "C" fn sys_spawn(
 	id: *mut Tid,
 	func: extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
-	core_id: usize,
+	selector: isize,
 ) -> i32 {
+	let core_id = if selector < 0 {
+		// use Round Robin to schedule the cores
+		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as usize
+	};
+
 	let core_scheduler = scheduler::get_scheduler(core_id);
 	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio), None);
 
