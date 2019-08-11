@@ -1,35 +1,73 @@
 #![feature(duration_float)]
 
+extern crate http;
 extern crate rayon;
 
 mod laplace;
+mod matmul;
 
+use core::arch::x86_64 as arch;
+use http::{Request, Response};
 use std::f64::consts::PI;
 use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use std::net::TcpStream;
 use std::thread;
 use std::time::Instant;
 use std::vec;
 
+#[inline]
+fn get_timestamp_rdtscp() -> u64 {
+	let mut _aux = 0;
+	let value = unsafe { arch::__rdtscp(&mut _aux) };
+	unsafe {
+		arch::_mm_lfence();
+	}
+	value
+}
+
+fn thread_creation() -> Result<(), ()> {
+	let n = 1000;
+
+	// cache warmup
+	let _ = get_timestamp_rdtscp();
+
+	let mut sum: u64 = 0;
+	for _ in 0..n {
+		let builder = thread::Builder::new();
+		let start = get_timestamp_rdtscp();
+		let child = builder.spawn(|| get_timestamp_rdtscp()).unwrap();
+		thread::yield_now();
+		match child.join() {
+			Ok(end) => {
+				sum += end - start;
+			}
+			Err(_) => {
+				println!("Unable to join thread!");
+			}
+		}
+	}
+
+	println!("Time to create a thread {} ticks", sum / n);
+
+	Ok(())
+}
 fn bench_sched_one_thread() -> Result<(), ()> {
 	let n = 1000000;
 
 	// cache warmup
 	thread::yield_now();
 	thread::yield_now();
-	let _now = Instant::now();
+	let _ = get_timestamp_rdtscp();
 
-	let now = Instant::now();
+	let start = get_timestamp_rdtscp();
 	for _ in 0..n {
 		thread::yield_now();
 	}
-	let time = now.elapsed().as_secs_f64();
+	let ticks = get_timestamp_rdtscp() - start;
 
-	println!(
-		"Scheduling time {} usec (1 thread)",
-		(time * 1000000.0) / n as f64
-	);
+	println!("Scheduling time {} ticks (1 thread)", ticks / n);
 
 	Ok(())
 }
@@ -41,10 +79,9 @@ fn bench_sched_two_threads() -> Result<(), ()> {
 	// cache warmup
 	thread::yield_now();
 	thread::yield_now();
-	let _now = Instant::now();
+	let _ = get_timestamp_rdtscp();
 
-	let now = Instant::now();
-
+	let start = get_timestamp_rdtscp();
 	let threads: Vec<_> = (0..nthreads - 1)
 		.map(|_| {
 			thread::spawn(move || {
@@ -59,15 +96,15 @@ fn bench_sched_two_threads() -> Result<(), ()> {
 		thread::yield_now();
 	}
 
-	let time = now.elapsed().as_secs_f64();
+	let ticks = get_timestamp_rdtscp() - start;
 
 	for t in threads {
 		t.join().unwrap();
 	}
 
 	println!(
-		"Scheduling time {} usec (2 threads)",
-		(time * 1000000.0) / (nthreads * n) as f64
+		"Scheduling time {} ticks (2 threads)",
+		ticks / (nthreads * n)
 	);
 
 	Ok(())
@@ -242,6 +279,16 @@ fn matrix_setup(size_x: usize, size_y: usize) -> (vec::Vec<vec::Vec<f64>>) {
 	matrix
 }
 
+fn test_http_request() -> Result<(), std::io::Error> {
+	let mut stream = TcpStream::connect("185.199.108.153:80")?;
+	stream.write_all(b"GET / HTTP/1.1\r\nHost: 185.199.108.158\r\nConnection: close\r\n\r\n")?;
+
+	let mut buf = Vec::new();
+	stream.read_to_end(&mut buf)?;
+
+	Ok(())
+}
+
 fn main() {
 	println!("Test {} ... {}", stringify!(hello), test_result(hello()));
 	println!(
@@ -262,17 +309,27 @@ fn main() {
 	println!(
 		"Test {} ... {}",
 		stringify!(pi_sequential),
-		test_result(pi_sequential(50000000))
+		test_result(pi_sequential(5000000))
 	);
 	println!(
 		"Test {} ... {}",
 		stringify!(pi_parallel),
-		test_result(pi_parallel(2, 50000000))
+		test_result(pi_parallel(2, 5000000))
 	);
 	println!(
 		"Test {} ... {}",
 		stringify!(laplace),
-		test_result(laplace(124, 124))
+		test_result(laplace(128, 128))
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(test_matmul_strassen),
+		test_result(matmul::test_matmul_strassen())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(thread_creation),
+		test_result(thread_creation())
 	);
 	println!(
 		"Test {} ... {}",
@@ -283,5 +340,10 @@ fn main() {
 		"Test {} ... {}",
 		stringify!(bench_sched_two_threads),
 		test_result(bench_sched_two_threads())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(test_http_request),
+		test_result(test_http_request())
 	);
 }
