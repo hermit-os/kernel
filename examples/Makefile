@@ -25,4 +25,4 @@ default:
 	@$(arch)-hermit-objcopy --strip-debug target/$(arch)-unknown-hermit/$(rdir)/hctests
 
 clean:
-	@$(RM) target
+	@$(RM) target/x86_64-unknown-hermit
