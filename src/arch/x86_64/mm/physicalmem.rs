@@ -5,10 +5,10 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::sync::atomic::{AtomicUsize, Ordering};
 use arch::x86_64::kernel::{get_limit, get_mbinfo};
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use hermit_multiboot::Multiboot;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
@@ -81,7 +81,7 @@ pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::SeqCst)
 }
 
-pub fn allocate(size: usize) -> usize {
+pub fn allocate(size: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(
 		size % BasePageSize::SIZE == 0,
@@ -90,16 +90,10 @@ pub fn allocate(size: usize) -> usize {
 		BasePageSize::SIZE
 	);
 
-	let result = PHYSICAL_FREE_LIST.lock().allocate(size);
-	assert!(
-		result.is_ok(),
-		"Could not allocate {:#X} bytes of physical memory",
-		size
-	);
-	result.unwrap()
+	PHYSICAL_FREE_LIST.lock().allocate(size)
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
 	assert!(
@@ -115,14 +109,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 		BasePageSize::SIZE
 	);
 
-	let result = PHYSICAL_FREE_LIST.lock().allocate_aligned(size, alignment);
-	assert!(
-		result.is_ok(),
-		"Could not allocate {:#X} bytes of physical memory aligned to {} bytes",
-		size,
-		alignment
-	);
-	result.unwrap()
+	PHYSICAL_FREE_LIST.lock().allocate_aligned(size, alignment)
 }
 
 /// This function must only be called from mm::deallocate!
