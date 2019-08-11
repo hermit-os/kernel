@@ -22,10 +22,12 @@ crate-type = ["staticlib"]
 #default = ["network"]
 vga = []
 network = ["smoltcp"]
+newlib = []
 
 [dependencies]
 bitflags = "1.0.*"
 spin = "0.5"
+#cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
 
 [dependencies.log]
