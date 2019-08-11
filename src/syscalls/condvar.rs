@@ -83,7 +83,7 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_wait(ptr: usize, timeout_ns: i64) -> i32 {
+pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
 		debug!("sys_wait: ivalid address to condition variable");
@@ -96,7 +96,6 @@ pub unsafe fn sys_wait(ptr: usize, timeout_ns: i64) -> i32 {
 		*id = Box::into_raw(queue) as usize;
 	}
 
-	let core_scheduler = core_scheduler();
 	let wakeup_time = if timeout_ns <= 0 {
 		None
 	} else {
@@ -104,6 +103,7 @@ pub unsafe fn sys_wait(ptr: usize, timeout_ns: i64) -> i32 {
 	};
 
 	// Block the current task and add it to the wakeup queue.
+	let core_scheduler = core_scheduler();
 	core_scheduler
 		.blocked_tasks
 		.lock()
@@ -114,8 +114,13 @@ pub unsafe fn sys_wait(ptr: usize, timeout_ns: i64) -> i32 {
 		cond.queue.push(core_scheduler.current_task.clone());
 	}
 
+	0
+}
+
+#[no_mangle]
+pub fn sys_wait(_ptr: usize) -> i32 {
 	// Switch to the next task.
-	core_scheduler.scheduler();
+	core_scheduler().scheduler();
 
 	0
 }
