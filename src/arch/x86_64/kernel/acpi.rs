@@ -112,7 +112,7 @@ impl<'a> AcpiTable<'a> {
 
 		let physical_map_address = align_down!(physical_address, BasePageSize::SIZE);
 		let offset = physical_address - physical_map_address;
-		let mut virtual_address = virtualmem::allocate(allocated_length);
+		let mut virtual_address = virtualmem::allocate(allocated_length).unwrap();
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 		// Get a pointer to the header and query the table length.
@@ -126,7 +126,7 @@ impl<'a> AcpiTable<'a> {
 			allocated_length = align_up!(table_length + offset, BasePageSize::SIZE);
 			count = allocated_length / BasePageSize::SIZE;
 
-			virtual_address = virtualmem::allocate(allocated_length);
+			virtual_address = virtualmem::allocate(allocated_length).unwrap();
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 			header_ptr = (virtual_address + offset) as *const AcpiSdtHeader;

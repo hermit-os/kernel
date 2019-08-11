@@ -7,30 +7,22 @@
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
+use environment;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
 use synch::spinlock::*;
 
 static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
-/// End of the virtual memory address space reserved for kernel memory (4 GiB).
-/// This also marks the start of the virtual memory address space reserved for the task heap.
-const KERNEL_VIRTUAL_MEMORY_END: usize = 0x1_0000_0000;
-
-/// End of the virtual memory address space reserved for task memory (128 TiB).
-/// This is the maximum contiguous virtual memory area possible with current x86-64 CPUs, which only support 48-bit
-/// linear addressing (in two 47-bit areas).
-const TASK_VIRTUAL_MEMORY_END: usize = 0x8000_0000_0000;
-
 pub fn init() {
 	let entry = Node::new(FreeListEntry {
 		start: mm::kernel_end_address(),
-		end: KERNEL_VIRTUAL_MEMORY_END,
+		end: kernel_heap_end(),
 	});
 	KERNEL_FREE_LIST.lock().list.push(entry);
 }
 
-pub fn allocate(size: usize) -> usize {
+pub fn allocate(size: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(
 		size % BasePageSize::SIZE == 0,
@@ -39,16 +31,10 @@ pub fn allocate(size: usize) -> usize {
 		BasePageSize::SIZE
 	);
 
-	let result = KERNEL_FREE_LIST.lock().allocate(size);
-	assert!(
-		result.is_ok(),
-		"Could not allocate {:#X} bytes of virtual memory",
-		size
-	);
-	result.unwrap()
+	KERNEL_FREE_LIST.lock().allocate(size)
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
 	assert!(
@@ -64,14 +50,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 		BasePageSize::SIZE
 	);
 
-	let result = KERNEL_FREE_LIST.lock().allocate_aligned(size, alignment);
-	assert!(
-		result.is_ok(),
-		"Could not allocate {:#X} bytes of virtual memory aligned to {} bytes",
-		size,
-		alignment
-	);
-	result.unwrap()
+	KERNEL_FREE_LIST.lock().allocate_aligned(size, alignment)
 }
 
 pub fn deallocate(virtual_address: usize, size: usize) {
@@ -81,8 +60,8 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 		virtual_address
 	);
 	assert!(
-		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
-		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address < kernel_heap_end(),
+		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
 	assert!(
@@ -109,8 +88,8 @@ pub fn reserve(virtual_address: usize, size: usize) {
 		virtual_address
 	);
 	assert!(
-		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
-		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
+		virtual_address < kernel_heap_end(),
+		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
 	assert!(
@@ -142,12 +121,27 @@ pub fn print_information() {
 		.print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
 }
 
+/// End of the virtual memory address space reserved for kernel memory.
+/// This also marks the start of the virtual memory address space reserved for the task heap.
+/// In case of pure rust applications, we don't have a task heap.
 #[inline]
-pub fn task_heap_start() -> usize {
-	KERNEL_VIRTUAL_MEMORY_END
+pub fn kernel_heap_end() -> usize {
+	if !environment::is_pure_rust() {
+		0x1_0000_0000
+	} else {
+		0x8000_0000_0000
+	}
 }
 
 #[inline]
-pub fn task_heap_end() -> usize {
-	TASK_VIRTUAL_MEMORY_END
+pub fn task_heap_start() -> usize {
+	kernel_heap_end()
+}
+
+/// End of the virtual memory address space reserved for task memory (128 TiB).
+/// This is the maximum contiguous virtual memory area possible with current x86-64 CPUs, which only support 48-bit
+/// linear addressing (in two 47-bit areas).
+#[inline]
+pub const fn task_heap_end() -> usize {
+	0x8000_0000_0000
 }

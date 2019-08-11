@@ -25,11 +25,6 @@ use scheduler;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
-extern "C" {
-	#[linkage = "extern_weak"]
-	static runtime_osinit: *const u8;
-}
-
 /// Uhyve's address of the initial GDT
 const BOOT_GDT: usize = 0x1000;
 
@@ -501,7 +496,7 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE);
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE).unwrap();
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
@@ -566,61 +561,11 @@ where
 	}
 }
 
-fn map_page_on_demand<S: PageSize>(virtual_address: usize) {
-	let physical_address = physicalmem::allocate_aligned(S::SIZE, S::SIZE);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
-	let page = Page::<S>::including_address(virtual_address);
-
-	trace!(
-		"Mapping {} KiB page for task heap ({:#X} => {:#X})",
-		S::SIZE >> 10,
-		page.address(),
-		physical_address
-	);
-
-	root_pagetable.map_page(
-		page,
-		physical_address,
-		PageTableEntryFlags::WRITABLE | PageTableEntryFlags::EXECUTE_DISABLE,
-	);
-
-	// If our application is a Go application (detected by the presence of the
-	// weak symbol "runtime_osinit"), we have to return a zeroed page.
-	unsafe {
-		if !runtime_osinit.is_null() {
-			trace!("Go application detected, returning a zeroed page");
-			ptr::write_bytes(page.address() as *mut u8, 0, S::SIZE);
-		}
-	}
-
-	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-	unsafe {
-		controlregs::cr2_write(0);
-	}
-}
-
 pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: &mut irq::ExceptionStackFrame,
 	error_code: u64,
 ) {
 	let virtual_address = unsafe { controlregs::cr2() };
-	let (kernel_heap_start, kernel_heap_end) = ::mm::heap_range();
-
-	if virtual_address >= kernel_heap_start && virtual_address < kernel_heap_end {
-		// belongs to the current kernel heap
-		map_page_on_demand::<LargePageSize>(virtual_address);
-		return;
-	} else if let Some(ref heap) = core_scheduler().current_task.borrow().heap {
-		// belong to the user space heap
-		let heap_borrowed = heap.borrow();
-		let heap_locked = heap_borrowed.read();
-
-		// Is the requested virtual address within the boundary of that heap?
-		if virtual_address >= heap_locked.start && virtual_address < heap_locked.end {
-			map_page_on_demand::<LargePageSize>(virtual_address);
-			return;
-		}
-	}
 
 	// Anything else is an error!
 	let pferror = PageFaultError::from_bits_truncate(error_code as u32);

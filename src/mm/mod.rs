@@ -12,8 +12,10 @@ mod hole;
 mod test;
 
 use arch;
-use arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
+use arch::mm::paging::{BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use arch::mm::physicalmem::total_memory_size;
+use core::mem;
+use core::sync::atomic::spin_loop_hint;
 use environment;
 
 extern "C" {
@@ -28,12 +30,6 @@ static mut KERNEL_START_ADDRESS: usize = 0;
 /// Can be easily accessed through kernel_end_address()
 static mut KERNEL_END_ADDRESS: usize = 0;
 
-static mut HEAP_RANGE: (usize, usize) = (0, 0);
-
-pub fn heap_range() -> (usize, usize) {
-	unsafe { HEAP_RANGE }
-}
-
 pub fn kernel_start_address() -> usize {
 	unsafe { KERNEL_START_ADDRESS }
 }
@@ -42,9 +38,26 @@ pub fn kernel_end_address() -> usize {
 	unsafe { KERNEL_END_ADDRESS }
 }
 
-extern "C" {
-	#[linkage = "extern_weak"]
-	static __malloc_unlock: *const u8;
+fn map_heap<S: PageSize>(virt_addr: usize, size: usize) -> usize {
+	let mut i: usize = 0;
+	let mut flags = PageTableEntryFlags::empty();
+
+	flags.normal().writable().execute_disable();
+
+	while i < align_down!(size, S::SIZE) {
+		match arch::mm::physicalmem::allocate_aligned(S::SIZE, S::SIZE) {
+			Ok(phys_addr) => {
+				arch::mm::paging::map::<S>(virt_addr + i, phys_addr, 1, flags);
+				i += S::SIZE;
+			}
+			Err(_) => {
+				error!("Unable to allocate page frame of size 0x{:x}", S::SIZE);
+				return i;
+			}
+		}
+	}
+
+	i
 }
 
 #[cfg(not(test))]
@@ -66,35 +79,105 @@ pub fn init() {
 
 	info!("Total memory size: {} MB", total_memory_size() >> 20);
 
-	if unsafe { !__malloc_unlock.is_null() } {
-		let size: usize = 4 * 1024 * 1024;
+	// we reserve physical memory for the required page tables
+	// In worst case, we use page size of BasePageSize::SIZE
+	let npages = total_memory_size() / BasePageSize::SIZE;
+	let npage_3tables = npages / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
+	let npage_2tables = npage_3tables / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
+	let npage_1tables = npage_2tables / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
+	let reserved_space =
+		(npage_3tables + npage_2tables + npage_1tables) * BasePageSize::SIZE + LargePageSize::SIZE;
+	let has_1gib_pages = arch::processor::supports_1gib_pages();
 
+	//info!("reserved space {} KB", reserved_space >> 10);
+
+	if total_memory_size() < kernel_end_address() + reserved_space + LargePageSize::SIZE {
+		error!("No enough memory available!");
+
+		loop {
+			spin_loop_hint();
+		}
+	}
+
+	let (mut map_addr, mut map_size) = if !environment::is_pure_rust() {
+		info!("An application with a C-based runtime is running on top of HermitCore!");
+
+		let size: usize = 2 * LargePageSize::SIZE;
 		unsafe {
 			let addr = allocate(size, true);
-			HEAP_RANGE = (addr, addr+size);
 			::ALLOCATOR.lock().init(addr, size);
 		}
+
+		info!("Kernel heap size: {} MB", size >> 20);
+		let user_heap_size = align_down!(
+			total_memory_size() - kernel_end_address() - reserved_space - 3 * LargePageSize::SIZE,
+			LargePageSize::SIZE
+		);
+		info!("User-space heap size: {} MB", user_heap_size >> 20);
+
+		(arch::mm::virtualmem::task_heap_start(), user_heap_size)
 	} else {
 		info!("A pure Rust application is running on top of HermitCore!");
 
-		// Map the first 4 MB of the heap into our address space
-		// The reset will be mapped on demand
-		let phys_size: usize = 4 * 1024 * 1024;
-		let virt_size: usize = align_down!(total_memory_size() - kernel_end_address(), LargePageSize::SIZE);
-		let physical_address = arch::mm::physicalmem::allocate_aligned(phys_size, LargePageSize::SIZE);
-		let virtual_address = arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE);
+		// At first, we map only a small part into the heap.
+		// Afterwards, we already use the heap and map the rest into
+		// the virtual address space.
 
-		let count = phys_size / LargePageSize::SIZE;
-		let mut flags = PageTableEntryFlags::empty();
-		flags.normal().writable().execute_disable();
-		arch::mm::paging::map::<LargePageSize>(virtual_address, physical_address, count, flags);
+		let virt_size: usize = align_down!(
+			total_memory_size() - kernel_end_address() - reserved_space,
+			LargePageSize::SIZE
+		);
+
+		let virt_addr = if has_1gib_pages && virt_size > HugePageSize::SIZE {
+			arch::mm::virtualmem::allocate_aligned(
+				align_up!(virt_size, HugePageSize::SIZE),
+				HugePageSize::SIZE,
+			)
+			.unwrap()
+		} else {
+			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE).unwrap()
+		};
 
 		info!("Heap size: {} MB", virt_size >> 20);
-		unsafe {
-			HEAP_RANGE = (virtual_address, virtual_address+virt_size);
-			::ALLOCATOR.lock().init(virtual_address, virt_size);
+
+		// try to map a huge page
+		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE {
+			map_heap::<HugePageSize>(virt_addr, HugePageSize::SIZE)
+		} else {
+			0
+		};
+
+		if counter == 0 {
+			// fall back to large pages
+			counter = map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE);
 		}
+
+		unsafe {
+			::ALLOCATOR.lock().init(virt_addr, virt_size);
+		}
+
+		(virt_addr + counter, virt_size - counter)
+	};
+
+	if has_1gib_pages
+		&& map_size > HugePageSize::SIZE
+		&& (map_addr & !(HugePageSize::SIZE - 1)) == 0
+	{
+		let counter = map_heap::<HugePageSize>(map_addr, map_size);
+		map_size -= counter;
+		map_addr += counter;
 	}
+
+	if map_size > LargePageSize::SIZE {
+		let counter = map_heap::<LargePageSize>(map_addr, map_size);
+		map_size -= counter;
+		map_addr += counter;
+	}
+
+	info!(
+		"Heap ends at 0x{:x} ({} Bytes unmapped)",
+		map_addr, map_size
+	);
 }
 
 pub fn print_information() {
@@ -105,8 +188,8 @@ pub fn print_information() {
 pub fn allocate_iomem(sz: usize) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
-	let physical_address = arch::mm::physicalmem::allocate(size);
-	let virtual_address = arch::mm::virtualmem::allocate(size);
+	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
 	let count = size / BasePageSize::SIZE;
 	let mut flags = PageTableEntryFlags::empty();
@@ -119,8 +202,8 @@ pub fn allocate_iomem(sz: usize) -> usize {
 pub fn allocate(sz: usize, execute_disable: bool) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
-	let physical_address = arch::mm::physicalmem::allocate(size);
-	let virtual_address = arch::mm::virtualmem::allocate(size);
+	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
 	let count = size / BasePageSize::SIZE;
 	let mut flags = PageTableEntryFlags::empty();

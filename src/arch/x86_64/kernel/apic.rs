@@ -198,7 +198,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
-					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
+					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 					debug!(
 						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
 						ioapic_record.address, IOAPIC_ADDRESS
@@ -257,7 +257,7 @@ pub fn init() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
 		unsafe {
-			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE);
+			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 			debug!(
 				"Mapping Local APIC at {:#X} to virtual address {:#X}",
 				local_apic_physical_address, LOCAL_APIC_ADDRESS
