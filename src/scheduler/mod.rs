@@ -62,13 +62,7 @@ pub struct PerCoreScheduler {
 
 impl PerCoreScheduler {
 	/// Spawn a new task.
-	pub fn spawn(
-		&self,
-		func: extern "C" fn(usize),
-		arg: usize,
-		prio: Priority,
-		heap_start: Option<usize>,
-	) -> TaskId {
+	pub fn spawn(&self, func: extern "C" fn(usize), arg: usize, prio: Priority) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
 		let task = Rc::new(RefCell::new(Task::new(
@@ -76,7 +70,6 @@ impl PerCoreScheduler {
 			self.core_id,
 			TaskStatus::TaskReady,
 			prio,
-			heap_start,
 		)));
 		task.borrow_mut().create_stack_frame(func, arg);
 

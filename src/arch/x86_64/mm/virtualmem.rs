@@ -134,16 +134,3 @@ pub const fn kernel_heap_end() -> usize {
 pub const fn kernel_heap_end() -> usize {
 	0x1_0000_0000
 }
-
-#[inline]
-pub const fn task_heap_start() -> usize {
-	kernel_heap_end()
-}
-
-/// End of the virtual memory address space reserved for task memory (128 TiB).
-/// This is the maximum contiguous virtual memory area possible with current x86-64 CPUs, which only support 48-bit
-/// linear addressing (in two 47-bit areas).
-#[inline]
-pub const fn task_heap_end() -> usize {
-	0x8000_0000_0000
-}

@@ -16,7 +16,6 @@ use core::cell::RefCell;
 use core::fmt;
 use mm;
 use scheduler;
-use spin::RwLock;
 use synch::spinlock::SpinlockIrqSave;
 
 /// The status of the task - used for scheduling
@@ -302,11 +301,6 @@ impl PriorityTaskQueue {
 	}
 }
 
-pub struct TaskHeap {
-	pub start: usize,
-	pub end: usize,
-}
-
 pub struct TaskTLS {
 	address: usize,
 	size: usize,
@@ -361,8 +355,6 @@ pub struct Task {
 	pub prev: Option<Rc<RefCell<Task>>>,
 	/// list of waiting tasks
 	pub wakeup: SpinlockIrqSave<BlockedTaskQueue>,
-	/// Task heap area
-	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
@@ -375,13 +367,7 @@ pub trait TaskFrame {
 }
 
 impl Task {
-	pub fn new(
-		tid: TaskId,
-		core_id: usize,
-		task_status: TaskStatus,
-		task_prio: Priority,
-		heap_start: Option<usize>,
-	) -> Task {
+	pub fn new(tid: TaskId, core_id: usize, task_status: TaskStatus, task_prio: Priority) -> Task {
 		debug!("Creating new task {}", tid);
 
 		Task {
@@ -395,12 +381,6 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: heap_start.map(|start| {
-				Rc::new(RefCell::new(RwLock::new(TaskHeap {
-					start: start,
-					end: start,
-				})))
-			}),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
 		}
@@ -420,7 +400,6 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
 		}
@@ -440,7 +419,6 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
 		}
