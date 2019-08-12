@@ -13,7 +13,6 @@ use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::is_uhyve;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::mm::physicalmem;
-use arch::x86_64::mm::virtualmem;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
@@ -616,31 +615,37 @@ pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
 }
 
 /// Translate a virtual memory address to a physical one.
-/// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: usize) -> usize {
-	if virtual_address < mm::kernel_start_address() {
-		// Parts of the memory below the kernel image are identity-mapped.
-		// However, this range should never be used in a virtual_to_physical call.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too low",
-			virtual_address
-		);
-	} else if virtual_address < mm::kernel_end_address() {
-		// The kernel image is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_start() {
-		// The kernel memory is mapped in 4 KiB pages.
-		get_physical_address::<BasePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_end() {
-		// The application memory is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else {
-		// This range is currently unused by HermitCore.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too high",
-			virtual_address
-		);
+	let mut page_bits: usize = 39;
+
+	// A self-reference enables direct access to all page tables
+	static SELF: [usize; 4] = {
+		[
+			0xFFFFFF8000000000usize,
+			0xFFFFFFFFC0000000usize,
+			0xFFFFFFFFFFE00000usize,
+			0xFFFFFFFFFFFFF000usize,
+		]
+	};
+
+	for i in (0..3).rev() {
+		page_bits = page_bits - PAGE_MAP_BITS;
+
+		let vpn = (virtual_address >> page_bits) as isize;
+		let ptr = SELF[i] as *const usize;
+		let entry = unsafe { *ptr.offset(vpn) };
+
+		if entry & PageTableEntryFlags::HUGE_PAGE.bits() != 0 || i == 0 {
+			let off = virtual_address
+				& !(((!0usize) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+			let phys =
+				entry & (((!0usize) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+
+			return off | phys;
+		}
 	}
+
+	panic!("virtual_to_physical should never reach this point");
 }
 
 #[no_mangle]
