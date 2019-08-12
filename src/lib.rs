@@ -47,7 +47,6 @@ extern crate alloc;
 extern crate bitflags;
 #[cfg(target_arch = "x86_64")]
 extern crate hermit_multiboot;
-extern crate spin;
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
 #[macro_use]
@@ -238,12 +237,7 @@ pub fn boot_processor_main() -> ! {
 
 	// Start the initd task.
 	let core_scheduler = core_scheduler();
-	core_scheduler.spawn(
-		initd,
-		0,
-		scheduler::task::NORMAL_PRIO,
-		Some(arch::mm::virtualmem::task_heap_start()),
-	);
+	core_scheduler.spawn(initd, 0, scheduler::task::NORMAL_PRIO);
 
 	// Run the scheduler loop.
 	loop {
