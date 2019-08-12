@@ -14,6 +14,8 @@ mod test;
 use arch;
 use arch::mm::paging::{BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use arch::mm::physicalmem::total_memory_size;
+#[cfg(feature = "newlib")]
+use arch::mm::virtualmem::kernel_heap_end;
 use core::mem;
 use core::sync::atomic::spin_loop_hint;
 use environment;
@@ -30,12 +32,28 @@ static mut KERNEL_START_ADDRESS: usize = 0;
 /// Can be easily accessed through kernel_end_address()
 static mut KERNEL_END_ADDRESS: usize = 0;
 
+/// Start address of the user heap
+static mut HEAP_START_ADDRESS: usize = 0;
+
+/// End address of the user heap
+static mut HEAP_END_ADDRESS: usize = 0;
+
 pub fn kernel_start_address() -> usize {
 	unsafe { KERNEL_START_ADDRESS }
 }
 
 pub fn kernel_end_address() -> usize {
 	unsafe { KERNEL_END_ADDRESS }
+}
+
+#[cfg(feature = "newlib")]
+pub fn task_heap_start() -> usize {
+	unsafe { HEAP_START_ADDRESS }
+}
+
+#[cfg(feature = "newlib")]
+pub fn task_heap_end() -> usize {
+	unsafe { HEAP_END_ADDRESS }
 }
 
 fn map_heap<S: PageSize>(virt_addr: usize, size: usize) -> usize {
@@ -108,8 +126,8 @@ pub fn init() {
 
 		let size = 2 * LargePageSize::SIZE;
 		unsafe {
-			let addr = allocate(size, true);
-			::ALLOCATOR.lock().init(addr, size);
+			let start = allocate(size, true);
+			::ALLOCATOR.lock().init(start, size);
 		}
 
 		info!("Kernel heap size: {} MB", size >> 20);
@@ -119,8 +137,11 @@ pub fn init() {
 		);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
 
-		map_addr = arch::mm::virtualmem::task_heap_start();
+		map_addr = kernel_heap_end();
 		map_size = user_heap_size;
+		unsafe {
+			HEAP_START_ADDRESS = map_addr;
+		}
 	}
 
 	#[cfg(not(feature = "newlib"))]
@@ -161,6 +182,7 @@ pub fn init() {
 		}
 
 		unsafe {
+			HEAP_START_ADDRESS = virt_addr;
 			::ALLOCATOR.lock().init(virt_addr, virt_size);
 		}
 
@@ -183,10 +205,14 @@ pub fn init() {
 		map_addr += counter;
 	}
 
-	info!(
-		"Heap ends at 0x{:x} ({} Bytes unmapped)",
-		map_addr, map_size
-	);
+	unsafe {
+		HEAP_END_ADDRESS = map_addr;
+
+		info!(
+			"Heap is located at 0x{:x} -- 0x{:x} ({} Bytes unmapped)",
+			HEAP_START_ADDRESS, HEAP_END_ADDRESS, map_size
+		);
+	}
 }
 
 pub fn print_information() {

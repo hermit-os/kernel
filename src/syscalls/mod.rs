@@ -37,7 +37,6 @@ pub fn init() {
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
 		if environment::is_proxy() {
 			panic!("Currently, we don't support the proxy mode!");
-		//SYS = &interfaces::Proxy;
 		} else if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
@@ -47,6 +46,8 @@ pub fn init() {
 	}
 
 	random_init();
+	#[cfg(feature = "newlib")]
+	sbrk_init();
 }
 
 pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
