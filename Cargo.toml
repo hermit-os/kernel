@@ -14,6 +14,7 @@ categories = ["os"]
 description = """
 A Rust-based, lightweight unikernel
 """
+exclude = ["/loader/*", "/examples/*", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
 
 [lib]
 crate-type = ["staticlib"]
