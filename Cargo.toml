@@ -1,6 +1,5 @@
 [package]
 name = "hermit"
-publish = ["libhermit"]
 version = "0.3.9"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
@@ -12,9 +11,13 @@ readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
 description = """
-A Rust-based, lightweight unikernel
+RustyHermit - A Rust-based, lightweight unikernel
 """
 exclude = ["/loader/*", "/examples/*", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
+
+[badges]
+travis-ci = { repository = "hermitcore/libhermit-rs" }
+gitlab = { repository = "https://git.rwth-aachen.de/acs/public/hermitcore/libhermit-rs" }
 
 [lib]
 crate-type = ["staticlib"]
