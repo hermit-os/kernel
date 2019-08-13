@@ -17,13 +17,19 @@ docker:
     - shell
     - linux
 
+# Stage: test:cargotest
+##############################################################################
+test:cargo:
+  stage: test
+  script: 
+    - cargo test --lib
+
 # Stage: test
 ##############################################################################
 
-test:
+test:uhyve:
   stage: test
   script:
-    - cargo test --lib
     - make
     - make release=1
     - git clone --depth 1 -b path2rs https://github.com/hermitcore/hermit-caves.git caves
