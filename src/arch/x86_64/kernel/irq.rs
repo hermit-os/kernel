@@ -82,11 +82,17 @@ pub fn disable() {
 /// This function together with nested_enable can be used
 /// in situations when interrupts shouldn't be activated if they
 /// were not activated before calling this function.
+#[cfg(not(test))]
 #[inline]
 pub fn nested_disable() -> bool {
 	let was_enabled = unsafe { rflags::read().contains(rflags::RFlags::FLAGS_IF) };
 	disable();
 	was_enabled
+}
+
+#[cfg(test)]
+pub fn nested_disable() -> bool {
+	false
 }
 
 /// Enable IRQs (nested)
