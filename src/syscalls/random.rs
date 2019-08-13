@@ -29,11 +29,3 @@ pub extern "C" fn sys_rand() -> u32 {
 pub fn random_init() {
 	*PARK_MILLER_LEHMER_SEED.lock() = arch::processor::get_timestamp() as u32;
 }
-
-#[test]
-fn random() {
-	random_init();
-
-	let r = generate_park_miller_lehmer_random_number();
-	assert!(r != sys_rand());
-}
