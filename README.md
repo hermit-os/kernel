@@ -14,16 +14,16 @@ Rust guarantees memory/thread-safety by its ownership model and enables to elimi
 Consequently, the usage of Rust for kernel development promises less vulnerabilities in comparsion to common programming languages.
 
 The kernel still supports the development of C/C++/Go/Fortran applications.
-A tutorial to use these programming languages on top of **RustyHermit** is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
+A tutorial to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
 
-This repository shows, how to build pure Rust applications on top of **RustyHermit**.
+This repository shows, how to build pure Rust applications on top of RustyHermit.
 The kernel and the integration into Rust's runtime is completly written in Rust and does not use C/C++.
-We extend Rust toolchain so that the build process is similar to Rust's common workflow.
+We extend the Rust toolchain so that the build process is similar to Rust's common workflow.
 Rust applications, which do not bypass the Rust runtime and directly use OS services are able to run on RustyHermit without modification.
 
 Currently, the easiest way to compile a Rust application into a unikernel is the usage of the Docker container *hermitcore-rs*.
 Please pull the container and use *cargo* to cross compile the application.
-For instance, the following commands create the test application *Hello World* for HermitCore-rs.
+For instance, the following commands create the test application *Hello World* for RustyHermit.
 
 ```sh
 $ docker pull rwthos/hermitcore-rs
