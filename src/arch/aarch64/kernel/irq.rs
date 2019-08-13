@@ -12,7 +12,9 @@ const IRQ_FLAG_A: usize = 1 << 8;
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe { asm!("msr daifclr, 0b111" ::: "memory" : "volatile"); }
+	unsafe {
+		asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
+	}
 }
 
 /// Enable Interrupts and wait for the next interrupt (HLT instruction)
@@ -28,7 +30,9 @@ pub fn enable_and_wait() {
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { asm!("msr daifset, 0b111" ::: "memory" : "volatile"); }
+	unsafe {
+		asm!("msr daifset, 0b111" ::: "memory" : "volatile");
+	}
 }
 
 /// Disable IRQs (nested)
@@ -40,7 +44,9 @@ pub fn disable() {
 #[inline]
 pub fn nested_disable() -> bool {
 	let flags: usize;
-	unsafe { asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile"); }
+	unsafe {
+		asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
+	}
 
 	let mut was_enabled = true;
 	if flags & (IRQ_FLAG_A | IRQ_FLAG_I | IRQ_FLAG_F) > 0 {
@@ -63,8 +69,7 @@ pub fn nested_enable(was_enabled: bool) {
 }
 
 #[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize)
-{
+pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	info!("Install handler for interrupt {}", irq_number);
 	// TODO
 }

@@ -7,34 +7,36 @@
 // copied, modified, or distributed except according to those terms.
 
 mod generic;
-//mod proxy;
 mod uhyve;
 
 pub use self::generic::*;
-//pub use self::proxy::*;
 pub use self::uhyve::*;
 use arch;
 use console;
 use core::fmt::Write;
-use core::{isize, slice, str};
+use core::{isize, ptr, slice, str};
 use errno::*;
 
-
-pub trait SyscallInterface : Send + Sync {
+pub trait SyscallInterface: Send + Sync {
 	fn init(&self) {
 		// Interface-specific initialization steps.
 	}
 
 	fn get_application_parameters(&self) -> (i32, *mut *mut u8, *mut *mut u8) {
 		let argc = 0;
-		let argv = 0 as *mut *mut u8;
-		let environ = 0 as *mut *mut u8;
+		let argv = ptr::null_mut() as *mut *mut u8;
+		let environ = ptr::null_mut() as *mut *mut u8;
 
 		(argc, argv, environ)
 	}
 
-	fn shutdown(&self) -> ! {
+	fn shutdown(&self, _arg: i32) -> ! {
 		arch::processor::shutdown();
+	}
+
+	fn unlink(&self, _name: *const u8) -> i32 {
+		debug!("unlink is unimplemented, returning -ENOSYS");
+		-ENOSYS
 	}
 
 	fn open(&self, _name: *const u8, _flags: i32, _mode: i32) -> i32 {
@@ -67,7 +69,10 @@ pub trait SyscallInterface : Send + Sync {
 
 		unsafe {
 			let slice = slice::from_raw_parts(buf, len);
-			console::CONSOLE.lock().write_str(str::from_utf8_unchecked(slice)).unwrap();
+			console::CONSOLE
+				.lock()
+				.write_str(str::from_utf8_unchecked(slice))
+				.unwrap();
 		}
 
 		len as isize

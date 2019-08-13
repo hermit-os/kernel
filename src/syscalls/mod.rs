@@ -6,6 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+mod condvar;
 mod interfaces;
 mod processor;
 mod random;
@@ -16,6 +17,7 @@ mod system;
 mod tasks;
 mod timer;
 
+pub use self::condvar::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
@@ -27,8 +29,6 @@ pub use self::timer::*;
 use environment;
 use syscalls::interfaces::SyscallInterface;
 
-//const LWIP_FD_BIT: i32	= (1 << 30);
-
 static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
 pub fn init() {
@@ -37,7 +37,6 @@ pub fn init() {
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
 		if environment::is_proxy() {
 			panic!("Currently, we don't support the proxy mode!");
-			//SYS = &interfaces::Proxy;
 		} else if environment::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
@@ -47,6 +46,8 @@ pub fn init() {
 	}
 
 	random_init();
+	#[cfg(feature = "newlib")]
+	sbrk_init();
 }
 
 pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
@@ -60,8 +61,13 @@ pub extern "C" fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_shutdown() -> ! {
-	unsafe { SYS.shutdown() }
+pub extern "C" fn sys_shutdown(arg: i32) -> ! {
+	unsafe { SYS.shutdown(arg) }
+}
+
+#[no_mangle]
+pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
+	unsafe { SYS.unlink(name) }
 }
 
 #[no_mangle]

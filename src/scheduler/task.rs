@@ -7,7 +7,6 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::rc::Rc;
-use alloc::vec::Vec;
 use arch;
 use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::msb;
@@ -17,9 +16,7 @@ use core::cell::RefCell;
 use core::fmt;
 use mm;
 use scheduler;
-use spin::RwLock;
 use synch::spinlock::SpinlockIrqSave;
-
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -29,7 +26,7 @@ pub enum TaskStatus {
 	TaskRunning,
 	TaskBlocked,
 	TaskFinished,
-	TaskIdle
+	TaskIdle,
 }
 
 /// Reason why wakeup() has been called on a task.
@@ -37,7 +34,7 @@ pub enum TaskStatus {
 pub enum WakeupReason {
 	Custom,
 	Timer,
-    All
+	All,
 }
 
 /// Unique identifier for a task (i.e. `pid`).
@@ -80,11 +77,13 @@ impl fmt::Display for Priority {
 	}
 }
 
+#[allow(dead_code)]
 pub const HIGH_PRIO: Priority = Priority::from(3);
 #[allow(dead_code)]
 pub const NORMAL_PRIO: Priority = Priority::from(2);
 #[allow(dead_code)]
 pub const LOW_PRIO: Priority = Priority::from(1);
+#[allow(dead_code)]
 pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
@@ -99,35 +98,64 @@ impl QueueHead {
 	pub const fn new() -> Self {
 		QueueHead {
 			head: None,
-			tail: None
+			tail: None,
 		}
 	}
 }
 
 impl Default for QueueHead {
 	fn default() -> Self {
-		Self { head: None, tail: None }
+		Self {
+			head: None,
+			tail: None,
+		}
 	}
 }
 
 /// Realize a priority queue for tasks
 pub struct PriorityTaskQueue {
 	queues: [QueueHead; NO_PRIORITIES],
-	prio_bitmap: u64
+	prio_bitmap: u64,
 }
 
 impl PriorityTaskQueue {
 	/// Creates an empty priority queue for tasks
 	pub const fn new() -> PriorityTaskQueue {
 		PriorityTaskQueue {
-			queues: [QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),QueueHead::new(),
-				 QueueHead::new()],
-			prio_bitmap: 0
+			queues: [
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+				QueueHead::new(),
+			],
+			prio_bitmap: 0,
 		}
 	}
 
@@ -143,9 +171,9 @@ impl PriorityTaskQueue {
 				self.queues[i].head = Some(task.clone());
 
 				let mut borrow = task.borrow_mut();
-					borrow.next = None;
+				borrow.next = None;
 				borrow.prev = None;
-			},
+			}
 			Some(ref mut tail) => {
 				// add task at the end of the node
 				tail.borrow_mut().next = Some(task.clone());
@@ -164,12 +192,16 @@ impl PriorityTaskQueue {
 		let task;
 
 		match self.queues[queue_index].head {
-			None => { return None; },
+			None => {
+				return None;
+			}
 			Some(ref mut head) => {
 				let mut borrow = head.borrow_mut();
 
 				match borrow.next {
-					Some(ref mut nhead) => { nhead.borrow_mut().prev = None; },
+					Some(ref mut nhead) => {
+						nhead.borrow_mut().prev = None;
+					}
 					None => {}
 				}
 
@@ -202,7 +234,7 @@ impl PriorityTaskQueue {
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= prio.into() as u64 {
+			if i >= u64::from(prio.into()) {
 				return self.pop_from_queue(i as usize);
 			}
 		}
@@ -220,7 +252,9 @@ impl PriorityTaskQueue {
 
 		loop {
 			match curr {
-				None => { break; },
+				None => {
+					break;
+				}
 				Some(ref curr_task) => {
 					if Rc::ptr_eq(&curr_task, &task) {
 						let (mut prev, mut next) = {
@@ -229,12 +263,16 @@ impl PriorityTaskQueue {
 						};
 
 						match prev {
-							Some(ref mut t) => { t.borrow_mut().next = next.clone(); },
+							Some(ref mut t) => {
+								t.borrow_mut().next = next.clone();
+							}
 							None => {}
 						};
 
 						match next {
-							Some(ref mut t) => { t.borrow_mut().prev = prev.clone(); },
+							Some(ref mut t) => {
+								t.borrow_mut().prev = prev.clone();
+							}
 							None => {}
 						};
 
@@ -249,30 +287,18 @@ impl PriorityTaskQueue {
 		}
 
 		let new_head = match self.queues[i].head {
-			Some(ref curr_task) => {
-				if Rc::ptr_eq(&curr_task, &task) {
-					true
-				} else {
-					false
-				}
-			},
-			None => { false }
+			Some(ref curr_task) => Rc::ptr_eq(&curr_task, &task),
+			None => false,
 		};
 
-		if new_head == true {
-				self.queues[i].head = task.borrow().next.clone();
+		if new_head {
+			self.queues[i].head = task.borrow().next.clone();
 
-				if self.queues[i].head.is_none() {
-					self.prio_bitmap &= !(1 << i as u64);
-				}
+			if self.queues[i].head.is_none() {
+				self.prio_bitmap &= !(1 << i as u64);
+			}
 		}
 	}
-}
-
-
-pub struct TaskHeap {
-	pub start: usize,
-	pub end: usize,
 }
 
 pub struct TaskTLS {
@@ -287,7 +313,7 @@ impl TaskTLS {
 		let memory_size = align_up!(size, BasePageSize::SIZE);
 		Self {
 			address: mm::allocate(memory_size, true),
-			size: memory_size
+			size: memory_size,
 		}
 	}
 
@@ -298,10 +324,13 @@ impl TaskTLS {
 
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
+		debug!(
+			"Deallocate TLS at 0x{:x} (size 0x{:x})",
+			self.address, self.size
+		);
 		mm::deallocate(self.address, self.size);
 	}
 }
-
 
 /// A task control block, which identifies either a process or a thread
 #[repr(align(64))]
@@ -326,14 +355,10 @@ pub struct Task {
 	pub prev: Option<Rc<RefCell<Task>>>,
 	/// list of waiting tasks
 	pub wakeup: SpinlockIrqSave<BlockedTaskQueue>,
-	/// Task heap area
-	pub heap: Option<Rc<RefCell<RwLock<TaskHeap>>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
-	/// List of destructors
-	pub dtor: Vec<(*mut u8, unsafe extern fn(*mut u8))>
 }
 
 pub trait TaskFrame {
@@ -342,7 +367,7 @@ pub trait TaskFrame {
 }
 
 impl Task {
-	pub fn new(tid: TaskId, core_id: usize, task_status: TaskStatus, task_prio: Priority, heap_start: Option<usize>) -> Task {
+	pub fn new(tid: TaskId, core_id: usize, task_status: TaskStatus, task_prio: Priority) -> Task {
 		debug!("Creating new task {}", tid);
 
 		Task {
@@ -356,10 +381,8 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: heap_start.map(|start| Rc::new(RefCell::new(RwLock::new(TaskHeap { start: start, end: start })))),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
-			dtor: Vec::new()
 		}
 	}
 
@@ -377,10 +400,8 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: None,
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
-			dtor: Vec::new()
 		}
 	}
 
@@ -398,10 +419,8 @@ impl Task {
 			next: None,
 			prev: None,
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
-			heap: task.heap.clone(),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
-			dtor: Vec::new()
 		}
 	}
 }
@@ -412,21 +431,30 @@ struct BlockedTask {
 }
 
 pub struct BlockedTaskQueue {
-	list: DoublyLinkedList<BlockedTask>
+	list: DoublyLinkedList<BlockedTask>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
-		Self { list: DoublyLinkedList::new() }
+		Self {
+			list: DoublyLinkedList::new(),
+		}
 	}
 
 	fn wakeup_task(task: Rc<RefCell<Task>>, reason: WakeupReason) {
 		// Get the Core ID of the task to wake up.
 		let core_id = {
 			let mut borrowed = task.borrow_mut();
-			debug!("Waking up task {} on core {}", borrowed.id, borrowed.core_id);
+			debug!(
+				"Waking up task {} on core {}",
+				borrowed.id, borrowed.core_id
+			);
 
-			assert!(borrowed.status == TaskStatus::TaskBlocked, "Trying to wake up task {} which is not blocked", borrowed.id);
+			assert!(
+				borrowed.status == TaskStatus::TaskBlocked,
+				"Trying to wake up task {} which is not blocked",
+				borrowed.id
+			);
 			borrowed.status = TaskStatus::TaskReady;
 			borrowed.last_wakeup_reason = reason;
 
@@ -453,11 +481,18 @@ impl BlockedTaskQueue {
 			let mut borrowed = task.borrow_mut();
 			debug!("Blocking task {}", borrowed.id);
 
-			assert!(borrowed.status == TaskStatus::TaskRunning, "Trying to block task {} which is not running", borrowed.id);
+			assert!(
+				borrowed.status == TaskStatus::TaskRunning,
+				"Trying to block task {} which is not running",
+				borrowed.id
+			);
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = Node::new(BlockedTask { task: task, wakeup_time: wakeup_time });
+		let new_node = Node::new(BlockedTask {
+			task: task,
+			wakeup_time: wakeup_time,
+		});
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
@@ -494,10 +529,8 @@ impl BlockedTaskQueue {
 
 	/// Wakeup all blocked tasks
 	pub fn wakeup_all(&mut self) {
-		let mut iter = self.list.iter();
-
 		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
+		for node in self.list.iter() {
 			// Remove it from the list of blocked tasks and wake it up.
 			self.list.remove(node.clone());
 			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::All);

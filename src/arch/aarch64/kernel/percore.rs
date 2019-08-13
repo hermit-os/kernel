@@ -11,7 +11,6 @@ use scheduler::PerCoreScheduler;
 #[no_mangle]
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
-
 pub struct PerCoreVariables {
 	/// APIC ID of this CPU Core.
 	core_id: PerCoreVariable<usize>,
@@ -27,7 +26,6 @@ impl PerCoreVariables {
 		}
 	}
 }
-
 
 #[repr(C)]
 pub struct PerCoreVariable<T> {
@@ -48,7 +46,10 @@ impl<T> PerCoreVariable<T> {
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
 // Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
 // The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
-impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> where T: Clone {
+impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T>
+where
+	T: Clone,
+{
 	#[inline]
 	default unsafe fn get(&self) -> T {
 		self.data.clone()
@@ -59,7 +60,6 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> where T: Clone {
 		self.data = value;
 	}
 }
-
 
 #[inline]
 pub fn core_id() -> usize {
@@ -73,7 +73,9 @@ pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	unsafe { PERCORE.scheduler.set(scheduler); }
+	unsafe {
+		PERCORE.scheduler.set(scheduler);
+	}
 }
 
 pub fn init() {

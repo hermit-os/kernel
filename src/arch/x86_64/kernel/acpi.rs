@@ -11,7 +11,6 @@ use arch::x86_64::mm::virtualmem;
 use core::{mem, slice, str};
 use x86::io::*;
 
-
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: usize = 0x0000_040E;
 /// Minimum physical address where a valid EBDA must be located.
@@ -48,7 +47,6 @@ static mut PM1A_CNT_BLK: Option<u16> = None;
 /// The Sleeping State Type code for powering off the computer through ACPI.
 static mut SLP_TYPA: Option<u8> = None;
 
-
 /// The "Root System Description Pointer" structure providing pointers to all other ACPI tables.
 #[repr(C, packed)]
 struct AcpiRsdp {
@@ -73,7 +71,6 @@ impl AcpiRsdp {
 	}
 }
 
-
 /// The header of (almost) every ACPI table.
 #[repr(C, packed)]
 struct AcpiSdtHeader {
@@ -93,7 +90,6 @@ impl AcpiSdtHeader {
 		unsafe { str::from_utf8_unchecked(&self.signature) }
 	}
 }
-
 
 /// A convenience structure to work with an ACPI table.
 /// Maps a single table to memory and frees the memory when a variable of this structure goes out of scope.
@@ -116,7 +112,7 @@ impl<'a> AcpiTable<'a> {
 
 		let physical_map_address = align_down!(physical_address, BasePageSize::SIZE);
 		let offset = physical_address - physical_map_address;
-		let mut virtual_address = virtualmem::allocate(allocated_length);
+		let mut virtual_address = virtualmem::allocate(allocated_length).unwrap();
 		paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 		// Get a pointer to the header and query the table length.
@@ -130,7 +126,7 @@ impl<'a> AcpiTable<'a> {
 			allocated_length = align_up!(table_length + offset, BasePageSize::SIZE);
 			count = allocated_length / BasePageSize::SIZE;
 
-			virtual_address = virtualmem::allocate(allocated_length);
+			virtual_address = virtualmem::allocate(allocated_length).unwrap();
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
 
 			header_ptr = (virtual_address + offset) as *const AcpiSdtHeader;
@@ -138,9 +134,9 @@ impl<'a> AcpiTable<'a> {
 
 		// Return the table.
 		Self {
-			header: unsafe { & *header_ptr },
+			header: unsafe { &*header_ptr },
 			allocated_virtual_address: virtual_address,
-			allocated_length: allocated_length,
+			allocated_length,
 		}
 	}
 
@@ -175,7 +171,6 @@ struct AcpiGenericAddress {
 }
 
 const GENERIC_ADDRESS_IO_SPACE: u8 = 1;
-
 
 /// The "Fixed ACPI Description Table" (FADT), also called "Fixed ACPI Control Pointer" (FACP).
 /// Described in ACPI Specification 6.2 A, 5.2.9 Fixed ACPI Description Table (FADT).
@@ -238,7 +233,6 @@ struct AcpiFadt {
 	hypervisor_vendor_id: u64,
 }
 
-
 /// Verifies the checksum of an ACPI table.
 /// Tables supporting this feature contain a "checksum" field. The value of this field is chosen, so that a
 /// (wrapping) sum over all table fields equals zero.
@@ -247,8 +241,7 @@ fn verify_checksum(start_address: usize, length: usize) -> Result<(), ()> {
 	let slice = unsafe { slice::from_raw_parts(start_address as *const u8, length) };
 
 	// Perform a wrapping sum over these bytes.
-	let checksum = slice.iter()
-		.fold(0, |acc: u8, x| acc.wrapping_add(*x));
+	let checksum = slice.iter().fold(0, |acc: u8, x| acc.wrapping_add(*x));
 
 	// This sum must equal to zero to be valid.
 	if checksum == 0 {
@@ -274,25 +267,36 @@ fn detect_rsdp(start_address: usize, end_address: usize) -> Result<&'static Acpi
 		}
 
 		// Verify the signature to find out if this is really an ACPI RSDP.
-		let rsdp = unsafe { & *(current_address as *const AcpiRsdp) };
+		let rsdp = unsafe { &*(current_address as *const AcpiRsdp) };
 		if rsdp.signature() != "RSD PTR " {
 			continue;
 		}
 
 		// Verify the basic checksum.
 		if verify_checksum(current_address, RSDP_CHECKSUM_LENGTH).is_err() {
-			debug!("Found an ACPI table at {:#X}, but its RSDP checksum is invalid", current_address);
+			debug!(
+				"Found an ACPI table at {:#X}, but its RSDP checksum is invalid",
+				current_address
+			);
 			continue;
 		}
 
 		// Verify the extended checksum if this is an ACPI 2.0-compliant table.
 		if rsdp.revision >= 2 && verify_checksum(current_address, RSDP_XCHECKSUM_LENGTH).is_err() {
-			debug!("Found an ACPI table at {:#X}, but its RSDP extended checksum is invalid", current_address);
+			debug!(
+				"Found an ACPI table at {:#X}, but its RSDP extended checksum is invalid",
+				current_address
+			);
 			continue;
 		}
 
 		// We were successful! Return a pointer to the RSDT (whose 64-bit address is called XSDT in this structure).
-		info!("Found an ACPI revision {} table at {:#X} with OEM ID \"{}\"", rsdp.revision, current_address, rsdp.oem_id());
+		info!(
+			"Found an ACPI revision {} table at {:#X} with OEM ID \"{}\"",
+			rsdp.revision,
+			current_address,
+			rsdp.oem_id()
+		);
 		return Ok(rsdp);
 	}
 
@@ -305,7 +309,7 @@ fn detect_rsdp(start_address: usize, end_address: usize) -> Result<&'static Acpi
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	// Get the address of the EBDA.
 	paging::identity_map(EBDA_PTR_LOCATION, EBDA_PTR_LOCATION);
-	let ebda_ptr_location = unsafe { & *(EBDA_PTR_LOCATION as *const u16) };
+	let ebda_ptr_location = unsafe { &*(EBDA_PTR_LOCATION as *const u16) };
 	let ebda_address = (*ebda_ptr_location as usize) << 4;
 
 	// Check if the pointed address is valid. This check is also done in ACPICA.
@@ -328,10 +332,12 @@ fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 fn search_s5_in_table(table: AcpiTable<'_>) {
 	// Get the AML code.
 	// As we do not implement an AML interpreter, we search through the bytecode.
-	let aml = unsafe { slice::from_raw_parts(
-		table.table_start_address() as *const u8,
-		table.table_end_address() - table.table_start_address()
-	) };
+	let aml = unsafe {
+		slice::from_raw_parts(
+			table.table_start_address() as *const u8,
+			table.table_end_address() - table.table_start_address(),
+		)
+	};
 
 	// Find the "_S5_" object in the bytecode.
 	let s5 = [b'_', b'S', b'5', b'_', AML_PACKAGEOP];
@@ -339,7 +345,8 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 	if let Some(i) = s5_position {
 		// We have found an "_S5_" object that looks valid.
 		// To be sure, verify that it begins with an AML_NAMEOP or an AML_NAMEOP and a backslash.
-		if i > 2 && (aml[i-1] == AML_NAMEOP || (aml[i-2] == AML_NAMEOP && aml[i-1] == b'\\')) {
+		if i > 2 && (aml[i - 1] == AML_NAMEOP || (aml[i - 2] == AML_NAMEOP && aml[i - 1] == b'\\'))
+		{
 			// This is a valid "_S5_" object.
 			// It should be followed by this structure:
 			//    - single byte for PkgLength (index 5)
@@ -349,7 +356,7 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 
 			// Bits 6-7 of PkgLength are non-zero for larger packages, resulting in a different structure.
 			// This mustn't be the case for the "_S5_" object.
-			if pkg_length & 0b11000000 == 0 && num_elements > 0 {
+			if pkg_length & 0b1100_0000 == 0 && num_elements > 0 {
 				// The next byte is an opcode describing the data.
 				// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
 				// However, if the data is a zero or one byte, this may also be indicated by the opcode.
@@ -357,10 +364,10 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 				let slp_typa;
 
 				match op {
-					AML_ZEROOP     => slp_typa = 0,
-					AML_ONEOP      => slp_typa = 1,
+					AML_ZEROOP => slp_typa = 0,
+					AML_ONEOP => slp_typa = 1,
 					AML_BYTEPREFIX => slp_typa = aml[i + 8],
-					_              => return,
+					_ => return,
 				}
 
 				// All assumptions are correct, so slp_typa is supposed to contain valid information.
@@ -369,7 +376,9 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 				// Note that Power Off may also be controlled through PM1B_CNT_BLK / SLP_TYPB
 				// according to the ACPI Specification. However, this has not yet been observed on real computers
 				// and therefore not implemented.
-				unsafe { SLP_TYPA = Some(slp_typa); }
+				unsafe {
+					SLP_TYPA = Some(slp_typa);
+				}
 			}
 		}
 	}
@@ -379,30 +388,28 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	// Get us a reference to the actual fields of the FADT table.
 	// Note that not all fields may be accessible depending on the ACPI revision of the computer.
 	// Always check fadt.table_end_address() when accessing an optional field!
-	let fadt_table = unsafe { & *(fadt.table_start_address() as *const AcpiFadt) };
+	let fadt_table = unsafe { &*(fadt.table_start_address() as *const AcpiFadt) };
 
 	// Check if the FADT is large enough to hold an x_pm1a_cnt_blk field and if this field is non-zero.
 	// In that case, it shall be preferred over the I/O port specified in pm1a_cnt_blk.
 	// As all PM1 control registers are supposed to be in I/O space, we can simply check the address_space field
 	// of x_pm1a_cnt_blk to determine the validity of x_pm1a_cnt_blk.
 	let x_pm1a_cnt_blk_field_address = &fadt_table.x_pm1a_cnt_blk as *const _ as usize;
-	let pm1a_cnt_blk = if
-		x_pm1a_cnt_blk_field_address < fadt.table_end_address() &&
-		fadt_table.x_pm1a_cnt_blk.address_space == GENERIC_ADDRESS_IO_SPACE
+	let pm1a_cnt_blk = if x_pm1a_cnt_blk_field_address < fadt.table_end_address()
+		&& fadt_table.x_pm1a_cnt_blk.address_space == GENERIC_ADDRESS_IO_SPACE
 	{
 		fadt_table.x_pm1a_cnt_blk.address as u16
 	} else {
 		fadt_table.pm1a_cnt_blk as u16
 	};
-	unsafe { PM1A_CNT_BLK = Some(pm1a_cnt_blk); }
+	unsafe {
+		PM1A_CNT_BLK = Some(pm1a_cnt_blk);
+	}
 
 	// Map the "Differentiated System Description Table" (DSDT).
 	// TODO: This must not require "unsafe", see https://github.com/rust-lang/rust/issues/46043#issuecomment-393072398
 	let x_dsdt_field_address = unsafe { &fadt_table.x_dsdt as *const _ as usize };
-	let dsdt_address = if
-		x_dsdt_field_address < fadt.table_end_address() &&
-		fadt_table.x_dsdt > 0
-	{
+	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
 		fadt_table.x_dsdt as usize
 	} else {
 		fadt_table.dsdt as usize
@@ -412,11 +419,14 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	// Check it.
 	assert!(
 		dsdt.header.signature() == "DSDT",
-		"DSDT at {:#X} has invalid signature \"{}\"", dsdt_address, dsdt.header.signature()
+		"DSDT at {:#X} has invalid signature \"{}\"",
+		dsdt_address,
+		dsdt.header.signature()
 	);
 	assert!(
 		verify_checksum(dsdt.header_start_address(), dsdt.header.length as usize).is_ok(),
-		"DSDT at {:#X} has invalid checksum", dsdt_address
+		"DSDT at {:#X} has invalid checksum",
+		dsdt_address
 	);
 
 	// Try to find the "_S5_" object for SLP_TYPA in the DSDT AML bytecode.
@@ -427,14 +437,13 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 fn parse_ssdt(ssdt: AcpiTable<'_>) {
 	// We don't need to parse the SSDT if we already have information about the "_S5_" object
 	// (e.g. from the DSDT or a previous SSDT).
-	if unsafe {SLP_TYPA}.is_some() {
+	if unsafe { SLP_TYPA }.is_some() {
 		return;
 	}
 
 	// Otherwise, just try to find "_S5_" information in the AML bytecode of this SSDT.
 	search_s5_in_table(ssdt);
 }
-
 
 pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 	unsafe { MADT.as_ref() }
@@ -443,8 +452,11 @@ pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 pub fn poweroff() {
 	unsafe {
 		if let (Some(pm1a_cnt_blk), Some(slp_typa)) = (PM1A_CNT_BLK, SLP_TYPA) {
-			let bits = (slp_typa as u16) << 10 | SLP_EN;
-			debug!("Powering Off through ACPI (port {:#X}, bitmask {:#X})", pm1a_cnt_blk, bits);
+			let bits = (u16::from(slp_typa) << 10) | SLP_EN;
+			debug!(
+				"Powering Off through ACPI (port {:#X}, bitmask {:#X})",
+				pm1a_cnt_blk, bits
+			);
 			outw(pm1a_cnt_blk, bits);
 		} else {
 			debug!("ACPI Power Off is not available");
@@ -489,21 +501,26 @@ pub fn init() {
 			// Check and save the entire APIC table for the get_apic_table() call.
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"MADT at {:#X} has invalid checksum", table_physical_address
+				"MADT at {:#X} has invalid checksum",
+				table_physical_address
 			);
-			unsafe { MADT = Some(table); }
+			unsafe {
+				MADT = Some(table);
+			}
 		} else if table.header.signature() == "FACP" {
 			// The "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
 			// Check and parse this table for the poweroff() call.
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"FADT at {:#X} has invalid checksum", table_physical_address
+				"FADT at {:#X} has invalid checksum",
+				table_physical_address
 			);
 			parse_fadt(table);
 		} else if table.header.signature() == "SSDT" {
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"SSDT at {:#X} has invalid checksum", table_physical_address
+				"SSDT at {:#X} has invalid checksum",
+				table_physical_address
 			);
 			parse_ssdt(table);
 		}

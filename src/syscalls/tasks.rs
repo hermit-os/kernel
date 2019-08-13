@@ -6,16 +6,21 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch;
+use arch::kernel::get_processor_count;
 use arch::percore::*;
 use core::isize;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use errno::*;
+#[cfg(feature = "newlib")]
+use mm::{task_heap_end, task_heap_start};
 use scheduler;
-use scheduler::task::{TaskId, Priority};
+use scheduler::task::{Priority, TaskId};
+use syscalls;
 use syscalls::timer::timespec;
 
+#[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
-
 
 #[no_mangle]
 pub extern "C" fn sys_getpid() -> Tid {
@@ -27,8 +32,8 @@ pub extern "C" fn sys_getpid() -> Tid {
 pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
 
-	if id.is_null() || unsafe {*id} == current_task_borrowed.id.into() as u32 {
-		current_task_borrowed.prio.into() as i32
+	if id.is_null() || unsafe { *id } == current_task_borrowed.id.into() as u32 {
+		i32::from(current_task_borrowed.prio.into())
 	} else {
 		-EINVAL
 	}
@@ -41,37 +46,45 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn sys_exit(arg: i32) -> ! {
+	debug!("Exit program with error code {}!", arg);
+	syscalls::sys_shutdown(arg);
+}
+
+#[no_mangle]
+pub extern "C" fn sys_thread_exit(arg: i32) -> ! {
+	debug!("Exit thread with error code {}!", arg);
 	core_scheduler().exit(arg);
 }
 
 #[no_mangle]
 pub extern "C" fn sys_abort() -> ! {
-    sys_exit(-1);
+	sys_exit(-1);
 }
 
+#[cfg(feature = "newlib")]
+static SBRK_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(feature = "newlib")]
+pub fn sbrk_init() {
+	SBRK_COUNTER.store(task_heap_start(), Ordering::SeqCst);
+}
+
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
-	let task_heap_start = arch::mm::virtualmem::task_heap_start();
-	let task_heap_end = arch::mm::virtualmem::task_heap_end();
-	assert!(task_heap_end <= isize::MAX as usize);
+	let task_heap_start = task_heap_start();
+	let task_heap_end = task_heap_end();
+	let old_end;
 
-	// Get the heap of the current task on the current core.
-	let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-	let heap = current_task_borrowed.heap.as_mut().expect("Calling sys_sbrk on a task without an associated heap");
+	if incr >= 0 {
+		old_end = SBRK_COUNTER.fetch_add(incr as usize, Ordering::SeqCst);
+		assert!(task_heap_end >= old_end + incr as usize);
+	} else {
+		old_end = SBRK_COUNTER.fetch_sub(incr.abs() as usize, Ordering::SeqCst);
+		assert!(task_heap_start < old_end - incr.abs() as usize);
+	}
 
-	// Adjust the heap of the current task.
-	let heap_borrowed = heap.borrow();
-	let mut heap_locked = heap_borrowed.write();
-	assert!(heap_locked.start >= task_heap_start, "heap start {:#X} is not >= task_heap_start {:#X}", heap_locked.start, task_heap_start);
-	let old_end = heap_locked.end;
-	heap_locked.end = (old_end as isize + incr) as usize;
-	assert!(heap_locked.end <= task_heap_end, "New heap end {:#X} is not <= task_heap_end {:#X}", heap_locked.end, task_heap_end);
-
-	debug!("Adjusted task heap from {:#X} to {:#X}", old_end, heap_locked.end);
-
-	// We're done! The page fault handler will map the new virtual memory area to physical memory
-	// as soon as the task accesses it for the first time.
 	old_end
 }
 
@@ -83,7 +96,10 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
 		let current_task = core_scheduler.current_task.clone();
-		core_scheduler.blocked_tasks.lock().add(current_task, Some(wakeup_time));
+		core_scheduler
+			.blocked_tasks
+			.lock()
+			.add(current_task, Some(wakeup_time));
 
 		// Switch to the next task.
 		core_scheduler.scheduler();
@@ -95,29 +111,40 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 
 #[no_mangle]
 pub extern "C" fn sys_msleep(ms: u32) {
-	sys_usleep((ms as u64) * 1000);
+	sys_usleep(u64::from(ms) * 1000);
 }
 
 #[no_mangle]
 pub extern "C" fn sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
-	assert!(!rqtp.is_null(), "sys_nanosleep called with a zero rqtp parameter");
-	let requested_time = unsafe { & *rqtp };
-	if requested_time.tv_sec < 0 || requested_time.tv_nsec < 0 || requested_time.tv_nsec > 999_999_999 {
+	assert!(
+		!rqtp.is_null(),
+		"sys_nanosleep called with a zero rqtp parameter"
+	);
+	let requested_time = unsafe { &*rqtp };
+	if requested_time.tv_sec < 0
+		|| requested_time.tv_nsec < 0
+		|| requested_time.tv_nsec > 999_999_999
+	{
 		debug!("sys_nanosleep called with an invalid requested time, returning -EINVAL");
 		return -EINVAL;
 	}
 
-	let microseconds = (requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
+	let microseconds =
+		(requested_time.tv_sec as u64) * 1_000_000 + (requested_time.tv_nsec as u64) / 1_000;
 	sys_usleep(microseconds);
+
 	0
 }
 
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
-		unsafe { *id = task_id.into() as u32; }
+		unsafe {
+			*id = task_id.into() as u32;
+		}
 	}
 
 	0
@@ -128,25 +155,47 @@ pub extern "C" fn sys_yield() {
 	core_scheduler().scheduler();
 }
 
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
-	debug!("sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}", dest, signum);
+	debug!(
+		"sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}",
+		dest, signum
+	);
 	-ENOSYS
 }
 
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
 	0
 }
 
+static CORE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 #[no_mangle]
-pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize, prio: u8, core_id: usize) -> i32 {
+pub extern "C" fn sys_spawn(
+	id: *mut Tid,
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: u8,
+	selector: isize,
+) -> i32 {
+	let core_id = if selector < 0 {
+		// use Round Robin to schedule the cores
+		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
+	} else {
+		selector as usize
+	};
+
 	let core_scheduler = scheduler::get_scheduler(core_id);
-	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio), None);
+	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio));
 
 	if !id.is_null() {
-		unsafe { *id = task_id.into() as u32; }
+		unsafe {
+			*id = task_id.into() as u32;
+		}
 	}
 
 	0
@@ -156,13 +205,6 @@ pub extern "C" fn sys_spawn(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 pub extern "C" fn sys_join(id: Tid) -> i32 {
 	match scheduler::join(TaskId::from(id)) {
 		Ok(()) => 0,
-		_ => -EINVAL
+		_ => -EINVAL,
 	}
-}
-
-#[no_mangle]
-pub extern "C" fn __thread_atexit(dtor: unsafe extern fn(*mut u8), arg: *mut u8) -> i32 {
-	//info!("thread_atexit: register dtor 0x{:x} with argument 0x{:x}", dtor as *const u8 as usize, arg as *const u8 as usize);
-	core_scheduler().current_task.borrow_mut().dtor.push((arg, dtor));
-	0
 }

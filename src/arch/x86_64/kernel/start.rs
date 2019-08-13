@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use application_processor_main;
 use arch::x86_64::kernel::KERNEL_HEADER;
 use boot_processor_main;
-use application_processor_main;
-use core::ptr;
 use config::KERNEL_STACK_SIZE;
+use core::intrinsics;
 
 #[inline(never)]
 #[no_mangle]
@@ -27,10 +27,10 @@ pub unsafe extern "C" fn _start() -> ! {
 
 	// initialize stack pointer
 	asm!("mov $0, %rsp; mov %rsp, %rbp"
-		:: "r"(ptr::read_volatile(&KERNEL_HEADER.current_stack_address) + KERNEL_STACK_SIZE as u64 - 0x10)
+		:: "r"(intrinsics::volatile_load(&KERNEL_HEADER.current_stack_address) + KERNEL_STACK_SIZE as u64 - 0x10)
 		:: "volatile");
 
-	if ptr::read_volatile(&KERNEL_HEADER.cpu_online) == 0 {
+	if intrinsics::volatile_load(&KERNEL_HEADER.cpu_online) == 0 {
 		boot_processor_main();
 	} else {
 		application_processor_main();

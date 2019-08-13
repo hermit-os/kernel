@@ -12,24 +12,30 @@ use log::{set_logger_raw, LogLevelFilter, LogMetadata, LogRecord};
 struct KernelLogger;
 
 impl log::Log for KernelLogger {
-    fn enabled(&self, _: &LogMetadata) -> bool {
-        true
-    }
+	fn enabled(&self, _: &LogMetadata) -> bool {
+		true
+	}
 
-    fn log(&self, record: &LogRecord) {
-        if self.enabled(record.metadata()) {
-            println!("[{}][{}] {}", crate::arch::percore::core_id(), record.level(), record.args());
-        }
-    }
+	fn log(&self, record: &LogRecord) {
+		if self.enabled(record.metadata()) {
+			println!(
+				"[{}][{}] {}",
+				crate::arch::percore::core_id(),
+				record.level(),
+				record.args()
+			);
+		}
+	}
 }
 
 pub fn init() {
 	unsafe {
-        set_logger_raw(|max_log_level| {
-            max_log_level.set(LogLevelFilter::Info);
-            &KernelLogger
-        }).expect("Can't initialize logger");
-    }
+		set_logger_raw(|max_log_level| {
+			max_log_level.set(LogLevelFilter::Info);
+			&KernelLogger
+		})
+		.expect("Can't initialize logger");
+	}
 }
 
 macro_rules! infoheader {
@@ -39,10 +45,10 @@ macro_rules! infoheader {
 		info!("");
 		info!("{:=^70}", format_args!($($arg)+));
 	});*/
-	($str:expr) => ({
+	($str:expr) => {{
 		info!("");
 		info!("{:=^70}", $str);
-	});
+		}};
 }
 
 macro_rules! infoentry {
@@ -51,8 +57,8 @@ macro_rules! infoentry {
 }
 
 macro_rules! infofooter {
-	() => ({
+	() => {{
 		info!("{:=^70}", '=');
 		info!("");
-	});
+		}};
 }

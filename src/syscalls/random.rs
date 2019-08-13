@@ -12,7 +12,7 @@ static PARK_MILLER_LEHMER_SEED: Spinlock<u32> = Spinlock::new(0);
 
 fn generate_park_miller_lehmer_random_number() -> u32 {
 	let mut seed = PARK_MILLER_LEHMER_SEED.lock();
-	let random = (((*seed) as u64 * 48271) % 2147483647) as u32;
+	let random = ((u64::from(*seed) * 48271) % 2_147_483_647) as u32;
 	*seed = random;
 	random
 }
@@ -28,12 +28,4 @@ pub extern "C" fn sys_rand() -> u32 {
 
 pub fn random_init() {
 	*PARK_MILLER_LEHMER_SEED.lock() = arch::processor::get_timestamp() as u32;
-}
-
-#[test]
-fn random() {
-	random_init();
-
-	let  r = generate_park_miller_lehmer_random_number();
-	assert!(r != sys_rand());
 }

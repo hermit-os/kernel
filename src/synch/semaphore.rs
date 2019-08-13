@@ -11,7 +11,6 @@ use scheduler;
 use scheduler::task::{PriorityTaskQueue, WakeupReason};
 use synch::spinlock::SpinlockIrqSave;
 
-
 struct SemaphoreState {
 	/// Resource available count
 	count: isize,
@@ -48,7 +47,7 @@ struct SemaphoreState {
 /// Interface is derived from https://doc.rust-lang.org/1.7.0/src/std/sync/semaphore.rs.html
 /// ```
 pub struct Semaphore {
-	state: SpinlockIrqSave<SemaphoreState>
+	state: SpinlockIrqSave<SemaphoreState>,
 }
 
 // Same unsafe impls as `Semaphore`
@@ -89,16 +88,23 @@ impl Semaphore {
 					// Successfully acquired the semaphore.
 					locked_state.count -= 1;
 					return true;
-				} else if core_scheduler.current_task.borrow().last_wakeup_reason == WakeupReason::Timer {
+				} else if core_scheduler.current_task.borrow().last_wakeup_reason
+					== WakeupReason::Timer
+				{
 					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
 					// Don't try again and return the failure status.
-					locked_state.queue.remove(core_scheduler.current_task.clone());
+					locked_state
+						.queue
+						.remove(core_scheduler.current_task.clone());
 					return false;
 				}
 
 				// We couldn't acquire the semaphore.
 				// Block the current task and add it to the wakeup queue.
-				core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), wakeup_time);
+				core_scheduler
+					.blocked_tasks
+					.lock()
+					.add(core_scheduler.current_task.clone(), wakeup_time);
 				locked_state.queue.push(core_scheduler.current_task.clone());
 			}
 

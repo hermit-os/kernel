@@ -10,7 +10,6 @@ use scheduler;
 use scheduler::task::{PriorityTaskQueue, TaskId};
 use synch::spinlock::Spinlock;
 
-
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,
 	count: usize,
@@ -58,7 +57,10 @@ impl RecursiveMutex {
 
 				// The mutex is currently acquired by another task.
 				// Block the current task and add it to the wakeup queue.
-				core_scheduler.blocked_tasks.lock().add(core_scheduler.current_task.clone(), None);
+				core_scheduler
+					.blocked_tasks
+					.lock()
+					.add(core_scheduler.current_task.clone(), None);
 				locked_state.queue.push(core_scheduler.current_task.clone());
 			}
 
