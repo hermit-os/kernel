@@ -4,6 +4,7 @@ variables:
 
 stages:
   - prepare
+  - build
   - test
 
 # Stage: prepare
@@ -16,6 +17,16 @@ docker:
   tags:
     - shell
     - linux
+
+# Stage build
+build:
+  stage: build
+  script:
+    - make
+    - make release=1
+  image: ${IMAGE}
+  tags:
+    - docker
 
 # Stage: test:cargotest
 ##############################################################################
@@ -44,5 +55,7 @@ test:uhyve:
     - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/debug/hctests
     - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/release/hctests
   image: ${IMAGE}
+  dependencies:
+    - build
   tags:
     - docker
