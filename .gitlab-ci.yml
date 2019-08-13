@@ -77,11 +77,11 @@ test:uhyve:
   tags:
     - docker
 
-  test:qemu:
+test:qemu:
   stage: test
   script:
     - make qemu
-    - make release=1 qemz
+    - make release=1 qemu
   image: ${IMAGE}
   dependencies:
     - build
