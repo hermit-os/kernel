@@ -19,6 +19,7 @@ docker:
     - linux
 
 # Stage build
+##############################################################################
 build:
   stage: build
   script:
@@ -41,7 +42,7 @@ build:
 
 # Stage: test:tarpaulin
 ##############################################################################
-test:tarpaulin
+test:tarpaulin:
   stage: test
   script:
     - rm -rf examples loader
