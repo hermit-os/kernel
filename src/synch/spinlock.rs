@@ -210,7 +210,6 @@ impl<T> SpinlockIrqSave<T> {
 impl<T: ?Sized> SpinlockIrqSave<T> {
 	fn obtain_lock(&self) {
 		let irq = irq::nested_disable();
-		let irq = false;
 
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
