@@ -209,9 +209,7 @@ impl<T> SpinlockIrqSave<T> {
 
 impl<T: ?Sized> SpinlockIrqSave<T> {
 	fn obtain_lock(&self) {
-		#[cfg(not(test))]
 		let irq = irq::nested_disable();
-		#[cfg(test)]
 		let irq = false;
 
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
@@ -265,7 +263,6 @@ impl<'a, T: ?Sized> Drop for SpinlockIrqSaveGuard<'a, T> {
 	fn drop(&mut self) {
 		let irq = self.irq.swap(false, Ordering::SeqCst);
 		self.dequeue.fetch_add(1, Ordering::SeqCst);
-		#[cfg(not(test))]
 		irq::nested_enable(irq);
 	}
 }
@@ -287,41 +284,6 @@ mod tests {
 		static S: Spinlock<u32> = Spinlock::new(0);
 		const J: u32 = 1000;
 		const K: u32 = 2;
-
-		fn inc() {
-			for _ in 0..J {
-				unsafe {
-					*S.lock() += 1;
-				}
-			}
-		}
-
-		let (tx, rx) = channel();
-		for _ in 0..K {
-			let tx2 = tx.clone();
-			thread::spawn(move || {
-				inc();
-				tx2.send(()).unwrap();
-			});
-			let tx2 = tx.clone();
-			thread::spawn(move || {
-				inc();
-				tx2.send(()).unwrap();
-			});
-		}
-
-		drop(tx);
-		for _ in 0..2 * K {
-			rx.recv().unwrap();
-		}
-		assert_eq!(*S.lock(), J * K * 2);
-	}
-
-	#[test]
-	fn lock_test2() {
-		static S: SpinlockIrqSave<u32> = SpinlockIrqSave::new(0);
-		const J: u32 = 500;
-		const K: u32 = 3;
 
 		fn inc() {
 			for _ in 0..J {
