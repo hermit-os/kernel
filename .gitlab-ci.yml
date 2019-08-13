@@ -99,6 +99,7 @@ deploy:docker:
     - echo "COPY . /src" >> Dockerfile
     - echo "RUN cp /src/target/x86_64-unknown-hermit-kernel/release/libhermit.a /opt/hermit/x86_64-hermit/lib/" >> Dockerfile
     - echo "RUN rm -rf /src" >> Dockerfile
+    - echo "WORKDIR /volume" >> Dockerfile
     - docker build -t ${FINAL} .
     - docker tag ${FINAL} ${FINAL}:latest
     - docker push ${FINAL}:latest
