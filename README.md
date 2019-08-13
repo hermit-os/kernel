@@ -88,7 +88,7 @@ In addition, running the applications baremetal on the hardware or within common
 
 ## Credits
 
-**RustyHermit** is derived from following tutorials and software distributions:
+RustyHermit is derived from following tutorials and software distributions:
 
 1. Philipp Oppermann's [excellent series of blog posts][opp].
 2. Erik Kidd's [toyos-rs][kidd], which is an extension of Philipp Opermann's kernel.
@@ -113,5 +113,5 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-**RustyHermit** is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
+RustyHermit is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
 Create your own fork, send us a pull request, and chat with us on [Slack](https://radiant-ridge-95061.herokuapp.com)
