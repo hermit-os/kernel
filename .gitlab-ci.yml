@@ -40,7 +40,8 @@ build:
   tags:
     - docker
 
-# Stage: test:tarpaulin
+# Stage: test
+
 ##############################################################################
 test:tarpaulin:
   stage: test
@@ -51,8 +52,6 @@ test:tarpaulin:
   tags:
     - docker
 
-# Stage: test:cargo
-##############################################################################
 test:cargo:
   stage: test
   script: 
@@ -60,9 +59,6 @@ test:cargo:
   image: ${IMAGE}
   tags:
     - docker
-
-# Stage: test
-##############################################################################
 
 test:uhyve:
   stage: test
@@ -75,6 +71,17 @@ test:uhyve:
     - make
     - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/debug/hctests
     - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/release/hctests
+  image: ${IMAGE}
+  dependencies:
+    - build
+  tags:
+    - docker
+
+  test:qemu:
+  stage: test
+  script:
+    - make qemu
+    - make release=1 qemz
   image: ${IMAGE}
   dependencies:
     - build
