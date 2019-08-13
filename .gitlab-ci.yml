@@ -102,9 +102,12 @@ deploy:docker:
     - echo "WORKDIR /volume" >> Dockerfile
     - docker build -t ${FINAL} .
     - docker tag ${FINAL} ${FINAL}:latest
+    - docker tag ${FINAL} ${FINAL}:${CI_COMMIT_TAG}
     - docker push ${FINAL}:latest
   dependencies:
     - build
   tags:
     - shell
     - linux
+  only:
+    - tags
