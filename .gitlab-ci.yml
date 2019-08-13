@@ -47,7 +47,7 @@ test:tarpaulin:
   stage: test
   script:
     - rm -rf examples loader
-    - cargo tarpaulin -v
+    - cargo tarpaulin -v --exclude-files src/arch/aarch64
   image: ${IMAGE}
   tags:
     - docker
