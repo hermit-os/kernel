@@ -23,6 +23,9 @@ test:cargo:
   stage: test
   script: 
     - cargo test --lib
+  image: ${IMAGE}
+  tags:
+    - docker
 
 # Stage: test
 ##############################################################################
