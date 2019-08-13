@@ -22,9 +22,20 @@ docker:
 build:
   stage: build
   script:
-    - make
-    - make release=1
+    - make all
+    - make release=1 all
   image: ${IMAGE}
+  cache:
+    paths:
+      - target/x86_64-unknown-hermit-kernel
+      - examples/target/x86_64-unknown-hermit
+      - loader/target/x86_64-unknown-hermit-loader
+    key: build
+  artifacts:
+    paths:
+      - target/x86_64-unknown-hermit-kernel
+      - examples/target/x86_64-unknown-hermit
+      - loader/target/x86_64-unknown-hermit-loader
   tags:
     - docker
 
