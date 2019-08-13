@@ -39,7 +39,18 @@ build:
   tags:
     - docker
 
-# Stage: test:cargotest
+# Stage: test:tarpaulin
+##############################################################################
+test:tarpaulin
+  stage: test
+  script:
+    - rm -rf examples loader
+    - cargo tarpaulin -v
+  image: ${IMAGE}
+  tags:
+    - docker
+
+# Stage: test:cargo
 ##############################################################################
 test:cargo:
   stage: test
