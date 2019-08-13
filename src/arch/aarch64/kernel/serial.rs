@@ -7,14 +7,15 @@
 
 use core::ptr;
 
-
 pub struct SerialPort {
-	port_address: u32
+	port_address: u32,
 }
 
 impl SerialPort {
 	pub const fn new(port_address: u32) -> Self {
-		Self { port_address: port_address }
+		Self {
+			port_address: port_address,
+		}
 	}
 
 	pub fn write_byte(&self, byte: u8) {
@@ -22,10 +23,14 @@ impl SerialPort {
 
 		// LF newline characters need to be extended to CRLF over a real serial port.
 		if byte == b'\n' {
-			unsafe { ptr::write_volatile(port, b'\r'); }
+			unsafe {
+				ptr::write_volatile(port, b'\r');
+			}
 		}
 
-		unsafe { ptr::write_volatile(port, byte); }
+		unsafe {
+			ptr::write_volatile(port, byte);
+		}
 	}
 
 	pub fn init(&self, baudrate: u32) {

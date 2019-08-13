@@ -13,13 +13,13 @@ pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-pub mod systemtime;
 pub mod stubs;
+pub mod systemtime;
 
-pub use arch::aarch64::kernel::stubs::*;
-pub use arch::aarch64::kernel::systemtime::get_boot_time;
 use arch::aarch64::kernel::percore::*;
 use arch::aarch64::kernel::serial::SerialPort;
+pub use arch::aarch64::kernel::stubs::*;
+pub use arch::aarch64::kernel::systemtime::get_boot_time;
 use core::ptr;
 use environment;
 use kernel_message_buffer;
@@ -28,8 +28,7 @@ use synch::spinlock::Spinlock;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 lazy_static! {
-	static ref COM1: SerialPort =
-		SerialPort::new(unsafe { KERNEL_HEADER.uartport });
+	static ref COM1: SerialPort = SerialPort::new(unsafe { KERNEL_HEADER.uartport });
 	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
 		Spinlock::new(unsafe { &mut KERNEL_HEADER.cpu_online });
 }
@@ -59,7 +58,7 @@ struct KernelHeader {
 	hcip: [u8; 4],
 	hcgateway: [u8; 4],
 	hcmask: [u8; 4],
-	boot_stack: [u8; KERNEL_STACK_SIZE]
+	boot_stack: [u8; KERNEL_STACK_SIZE],
 }
 
 /// Kernel header to announce machine features
@@ -82,13 +81,13 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	cpu_online: 0,
 	possible_cpus: 0,
 	current_boot_id: 0,
-	uartport: 0x9000000,	// Initialize with QEMU's UART address
+	uartport: 0x9000000, // Initialize with QEMU's UART address
 	single_kernel: 1,
 	uhyve: 0,
-	hcip: [10,0,5,2],
-	hcgateway: [10,0,5,1],
-	hcmask: [255,255,255,0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE]
+	hcip: [10, 0, 5, 2],
+	hcgateway: [10, 0, 5, 1],
+	hcmask: [255, 255, 255, 0],
+	boot_stack: [0xCD; KERNEL_STACK_SIZE],
 };
 
 // FUNCTIONS
@@ -126,7 +125,6 @@ pub fn get_cmdsize() -> usize {
 pub fn get_cmdline() -> usize {
 	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdline) as usize }
 }
-
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
@@ -204,7 +202,10 @@ pub fn boot_processor_init() {
 		// Enable PMCCNTR_EL0 using PMCR_EL0.
 		let mut pmcr_el0: u32 = 0;
 		asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
-		debug!("PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}", pmcr_el0);
+		debug!(
+			"PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}",
+			pmcr_el0
+		);
 		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
 		asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
 	}

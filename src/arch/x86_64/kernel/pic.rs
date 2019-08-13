@@ -10,17 +10,16 @@ use arch::x86_64::kernel::irq::ExceptionStackFrame;
 use x86::io::*;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;
-const PIC1_DATA_PORT:    u16 = 0x21;
+const PIC1_DATA_PORT: u16 = 0x21;
 const PIC2_COMMAND_PORT: u16 = 0xA0;
-const PIC2_DATA_PORT:    u16 = 0xA1;
+const PIC2_DATA_PORT: u16 = 0xA1;
 
 pub const PIC1_INTERRUPT_OFFSET: u8 = 32;
 const PIC2_INTERRUPT_OFFSET: u8 = 40;
-const SPURIOUS_IRQ_NUMBER:   u8 = 7;
+const SPURIOUS_IRQ_NUMBER: u8 = 7;
 
 /// End-Of-Interrupt Command for an Intel 8259 Programmable Interrupt Controller (PIC).
-const PIC_EOI_COMMAND:   u8  = 0x20;
-
+const PIC_EOI_COMMAND: u8 = 0x20;
 
 pub fn eoi(int_no: u8) {
 	unsafe {
@@ -37,8 +36,16 @@ pub fn eoi(int_no: u8) {
 pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
-	idt::set_gate(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_master as usize, 0);
-	idt::set_gate(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER, spurious_interrupt_on_slave as usize, 0);
+	idt::set_gate(
+		PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER,
+		spurious_interrupt_on_master as usize,
+		0,
+	);
+	idt::set_gate(
+		PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER,
+		spurious_interrupt_on_slave as usize,
+		0,
+	);
 
 	unsafe {
 		// Reinitialize PIC1 and PIC2.
@@ -72,11 +79,17 @@ extern "x86-interrupt" fn spurious_interrupt_on_slave(_stack_frame: &mut Excepti
 
 	// As this is an interrupt forwarded by the master, we have to acknowledge it on the master
 	// (but not on the slave as with all spurious interrupts).
-	unsafe { outb(PIC1_COMMAND_PORT, PIC_EOI_COMMAND); }
+	unsafe {
+		outb(PIC1_COMMAND_PORT, PIC_EOI_COMMAND);
+	}
 }
 
 fn edit_mask(int_no: u8, insert: bool) {
-	let port = if int_no >= 40 { PIC2_DATA_PORT } else { PIC1_DATA_PORT };
+	let port = if int_no >= 40 {
+		PIC2_DATA_PORT
+	} else {
+		PIC1_DATA_PORT
+	};
 	let offset = if int_no >= 40 { 40 } else { 32 };
 
 	unsafe {

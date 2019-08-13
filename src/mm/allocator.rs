@@ -8,19 +8,16 @@
 #![allow(dead_code)]
 
 use alloc::alloc::{Alloc, AllocErr, Layout};
-use core::alloc::{GlobalAlloc};
-use core::mem;
+use core::alloc::GlobalAlloc;
 use core::ops::Deref;
 use core::ptr::NonNull;
+use core::{mem, ptr};
 use mm::hole::{Hole, HoleList};
 use mm::kernel_end_address;
 use synch::spinlock::*;
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
-
-/// Alignment of the allocation size.
-const ALIGN_ALLOCATION_SIZE: usize = 64;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
 pub struct Heap {
@@ -52,7 +49,7 @@ impl Heap {
 	///
 	/// This function must be called at most once and must only be used on an
 	/// empty heap.
-	pub unsafe fn init(&mut self,	heap_bottom: usize, heap_size: usize) {
+	pub unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
 		self.bottom = heap_bottom;
 		self.size = heap_size;
 		self.holes = HoleList::new(heap_bottom, heap_size);
@@ -75,10 +72,10 @@ impl Heap {
 	/// An allocation using the always available Bootstrap Allocator.
 	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
-		let size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
+		let size = align_up!(layout.size(), HoleList::min_size());
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + size, mem::size_of::<usize>	());
+		self.index = align_up!(self.index + size, HoleList::min_size());
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocErr)
 		} else {
@@ -95,7 +92,7 @@ impl Heap {
 		if self.bottom == 0 {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
-			let mut size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
+			let mut size = layout.size();
 			if size < HoleList::min_size() {
 				size = HoleList::min_size();
 			}
@@ -121,7 +118,7 @@ impl Heap {
 		// any significant amounts of memory.
 		// So check if this is a pointer allocated by the System Allocator.
 		if address >= kernel_end_address() {
-			let mut size = align_up!(layout.size(), ALIGN_ALLOCATION_SIZE);
+			let mut size = layout.size();
 			if size < HoleList::min_size() {
 				size = HoleList::min_size();
 			}
@@ -208,7 +205,7 @@ unsafe impl GlobalAlloc for LockedHeap {
 			.lock()
 			.allocate_first_fit(layout)
 			.ok()
-			.map_or(0 as *mut u8, |allocation| allocation.as_ptr())
+			.map_or(ptr::null_mut() as *mut u8, |allocation| allocation.as_ptr())
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {

@@ -5,8 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::sync::atomic::spin_loop_hint;
 use core::ptr;
+use core::sync::atomic::spin_loop_hint;
 use environment;
 use x86::io::*;
 
@@ -17,25 +17,26 @@ const UART_DLL: u16 = 0;
 const UART_DLM: u16 = 1;
 
 const UART_FCR: u16 = 2;
-const UART_FCR_ENABLE_FIFO:            u8 = 0x01;
-const UART_FCR_CLEAR_RECEIVER_FIFO:    u8 = 0x02;
+const UART_FCR_ENABLE_FIFO: u8 = 0x01;
+const UART_FCR_CLEAR_RECEIVER_FIFO: u8 = 0x02;
 const UART_FCR_CLEAR_TRANSMITTER_FIFO: u8 = 0x04;
 
 const UART_LCR: u16 = 3;
-const UART_LCR_WORD_LENGTH_8BITS:    u8 = 0x03;
+const UART_LCR_WORD_LENGTH_8BITS: u8 = 0x03;
 const UART_LCR_DIVISOR_LATCH_ACCESS: u8 = 0x80;
 
 const UART_LSR: u16 = 5;
 const UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER: u8 = 0x20;
 
-
 pub struct SerialPort {
-	pub port_address: u16
+	pub port_address: u16,
 }
 
 impl SerialPort {
 	pub const fn new(port_address: u16) -> Self {
-		Self { port_address: port_address }
+		Self {
+			port_address: port_address,
+		}
 	}
 
 	fn read_from_register(&self, register: u16) -> u8 {
@@ -80,7 +81,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if environment::is_uhyve() == false && self.port_address != 0 {
+		if !environment::is_uhyve() && self.port_address != 0 {
 			// Disable port interrupt.
 			self.write_to_register(UART_IER, 0);
 
@@ -88,7 +89,7 @@ impl SerialPort {
 			self.write_to_register(UART_LCR, UART_LCR_WORD_LENGTH_8BITS);
 
 			// Set the baudrate.
-			let divisor = (115200 / baudrate) as u16;
+			let divisor = (115_200 / baudrate) as u16;
 			let lcr = self.read_from_register(UART_LCR);
 			self.write_to_register(UART_LCR, lcr | UART_LCR_DIVISOR_LATCH_ACCESS);
 			self.write_to_register(UART_DLL, divisor as u8);
@@ -96,8 +97,12 @@ impl SerialPort {
 			self.write_to_register(UART_LCR, lcr);
 
 			// Enable and clear FIFOs.
-			self.write_to_register(UART_FCR,
-				UART_FCR_ENABLE_FIFO | UART_FCR_CLEAR_RECEIVER_FIFO | UART_FCR_CLEAR_TRANSMITTER_FIFO);
+			self.write_to_register(
+				UART_FCR,
+				UART_FCR_ENABLE_FIFO
+					| UART_FCR_CLEAR_RECEIVER_FIFO
+					| UART_FCR_CLEAR_TRANSMITTER_FIFO,
+			);
 		}
 	}
 }

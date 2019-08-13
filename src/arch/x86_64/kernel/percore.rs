@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use arch::x86_64::kernel::KERNEL_HEADER;
 use core::ptr;
 use scheduler::PerCoreScheduler;
-use arch::x86_64::kernel::KERNEL_HEADER;
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
 
@@ -26,12 +26,11 @@ impl PerCoreVariables {
 	pub const fn new(core_id: usize) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
-			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
-			tss: PerCoreVariable::new(0 as *mut TaskStateSegment),
+			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
+			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
 		}
 	}
 }
-
 
 #[repr(C)]
 pub struct PerCoreVariable<T> {
@@ -93,7 +92,6 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 }
 
-
 #[inline]
 pub fn core_id() -> usize {
 	unsafe { PERCORE.core_id.get() }
@@ -106,7 +104,9 @@ pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	unsafe { PERCORE.scheduler.set(scheduler); }
+	unsafe {
+		PERCORE.scheduler.set(scheduler);
+	}
 }
 
 pub fn init() {

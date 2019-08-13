@@ -27,7 +27,7 @@ fn panic(info: &PanicInfo) -> ! {
 		print!("{}", message);
 	}
 
-	print!("\n");
+	println!("");
 
 	loop {
 		arch::processor::halt();
@@ -38,7 +38,11 @@ fn panic(info: &PanicInfo) -> ! {
 #[lang = "oom"]
 #[no_mangle]
 pub fn rust_oom(layout: Layout) -> ! {
-	println!("[{}][!!!OOM!!!] Memory allocation of {} bytes failed", arch::percore::core_id(), layout.size());
+	println!(
+		"[{}][!!!OOM!!!] Memory allocation of {} bytes failed",
+		arch::percore::core_id(),
+		layout.size()
+	);
 	loop {
 		arch::processor::halt();
 	}

@@ -3,7 +3,15 @@ name = "hctests"
 version = "0.1.0"
 authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>"]
 edition = "2018"
+publish = false
 
 [dependencies]
+rayon = { git = "https://github.com/hermitcore/rayon.git" }
+http = "0.1.18"
 
-[workspace]
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false

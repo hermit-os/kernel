@@ -12,7 +12,10 @@ fn main() {
 	let _ =	Command::new("pci_ids_parser").args(&["src/arch/x86_64/kernel/pci.ids", "src/arch/x86_64/kernel/pci_ids.rs"]).output().unwrap();*/
 
 	// determine git revision
-	let output = Command::new("git").args(&["rev-parse", "HEAD"]).output().unwrap();
+	let output = Command::new("git")
+		.args(&["rev-parse", "HEAD"])
+		.output()
+		.unwrap();
 	let git_hash = String::from_utf8(output.stdout).unwrap();
 	println!("cargo:rustc-env=GIT_HASH={}", git_hash);
 }

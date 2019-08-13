@@ -1,5 +1,6 @@
 [package]
-name = "hermit-rs"
+name = "hermit"
+publish = ["libhermit"]
 version = "0.3.9"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
@@ -8,21 +9,25 @@ authors = [
 build = "build.rs"
 license = "MIT/Apache-2.0"
 readme = "README.md"
-categories = ["no-std"]
+keywords = ["unikernel", "libos"]
+categories = ["os"]
 description = """
 A Rust-based, lightweight unikernel
 """
+exclude = ["/loader/*", "/examples/*", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
 
 [lib]
 crate-type = ["staticlib"]
 
 [features]
-#default = ["vga"]
+#default = ["network"]
 vga = []
+network = ["smoltcp"]
+newlib = []
 
 [dependencies]
 bitflags = "1.0.*"
-spin = "0.5"
+#cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
 
 [dependencies.log]
@@ -32,6 +37,7 @@ default-features = false
 
 [dependencies.smoltcp]
 version = "0.5"
+optional = true
 #git = "https://github.com/hermitcore/smoltcp.git"
 default-features = false
 features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4"]
@@ -56,8 +62,7 @@ debug = true       # controls whether the compiler passes `-C debuginfo`
 rpath = false      # controls whether the compiler passes `-C rpath`
 lto = false         # controls `-C lto` for binaries and staticlibs
 debug-assertions = true # controls whether debug assertions are enabled
-codegen-units = 1 # controls whether the compiler passes `-C codegen-units`
-                   # `codegen-units` is ignored when `lto = true`
+panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/32900
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
@@ -66,3 +71,4 @@ debug = false
 rpath = false
 lto = true
 debug-assertions = false
+panic = "abort"

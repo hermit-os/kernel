@@ -9,14 +9,12 @@ use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags};
 use x86::shared::io::*;
 
-
 const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
-const CRT_CONTROLLER_DATA_PORT:    u16 = 0x3D5;
-const CURSOR_START_REGISTER:       u8 = 0x0A;
-const CURSOR_DISABLE:              u8 = 0x20;
+const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
+const CURSOR_START_REGISTER: u8 = 0x0A;
+const CURSOR_DISABLE: u8 = 0x20;
 
-
-const ATTRIBUTE_BLACK:     u8 = 0x00;
+const ATTRIBUTE_BLACK: u8 = 0x00;
 const ATTRIBUTE_LIGHTGREY: u8 = 0x07;
 const COLS: usize = 80;
 const ROWS: usize = 25;
@@ -24,20 +22,21 @@ const VGA_BUFFER_ADDRESS: usize = 0xB8000;
 
 static mut VGA_SCREEN: VgaScreen = VgaScreen::new();
 
-
 #[derive(Clone, Copy)]
 #[repr(C, packed)]
 struct VgaCharacter {
 	character: u8,
-	attribute: u8
+	attribute: u8,
 }
 
 impl VgaCharacter {
 	const fn new(character: u8, attribute: u8) -> Self {
-		Self { character: character, attribute: attribute }
+		Self {
+			character: character,
+			attribute: attribute,
+		}
 	}
 }
-
 
 struct VgaScreen {
 	buffer: *mut [[VgaCharacter; COLS]; ROWS],
@@ -52,7 +51,7 @@ impl VgaScreen {
 			buffer: VGA_BUFFER_ADDRESS as *mut _,
 			current_col: 0,
 			current_row: 0,
-			is_initialized: false
+			is_initialized: false,
 		}
 	}
 
@@ -81,7 +80,9 @@ impl VgaScreen {
 	fn clear_row(&mut self, row: usize) {
 		// Overwrite this row by a bogus character in black.
 		for c in 0..COLS {
-			unsafe { (*self.buffer)[row][c] = VgaCharacter::new(0, ATTRIBUTE_BLACK); }
+			unsafe {
+				(*self.buffer)[row][c] = VgaCharacter::new(0, ATTRIBUTE_BLACK);
+			}
 		}
 	}
 
@@ -101,7 +102,9 @@ impl VgaScreen {
 			// Shift all rows up by one line, removing the oldest visible screen row.
 			for r in 1..ROWS {
 				for c in 0..COLS {
-					unsafe { (*self.buffer)[r-1][c] = (*self.buffer)[r][c]; }
+					unsafe {
+						(*self.buffer)[r - 1][c] = (*self.buffer)[r][c];
+					}
 				}
 			}
 
@@ -112,17 +115,21 @@ impl VgaScreen {
 
 		if byte != b'\n' {
 			// Put our character into the VGA screen buffer and advance the column counter.
-			unsafe { (*self.buffer)[self.current_row][self.current_col] = VgaCharacter::new(byte, ATTRIBUTE_LIGHTGREY); }
+			unsafe {
+				(*self.buffer)[self.current_row][self.current_col] =
+					VgaCharacter::new(byte, ATTRIBUTE_LIGHTGREY);
+			}
 			self.current_col += 1;
 		}
 	}
 }
-
 
 pub fn init() {
 	unsafe { VGA_SCREEN.init() };
 }
 
 pub fn write_byte(byte: u8) {
-	unsafe { VGA_SCREEN.write_byte(byte); }
+	unsafe {
+		VGA_SCREEN.write_byte(byte);
+	}
 }
