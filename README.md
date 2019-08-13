@@ -68,7 +68,7 @@ The environment variable `HERMIT_CPUS` specifies the number of
 CPUs.
 Furthermore, the variable `HERMIT_MEM` defines the memory size of the virtual machine. The suffixes *M* and *G* can be used to specify a value in megabytes or gigabytes respectively.
 By default, the loader initializes a system with one core and 512 MiB RAM.
-For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GB memory:
+For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GiB memory:
 
 ```bash
 $ HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
@@ -83,7 +83,7 @@ $ HERMIT_VERBOSE=1 ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/
 
 ## Missing features
 
-In contrast to the C version of HermitCore, **RustyHermit** is currently not able to run as multikernel.
+In contrast to the C version of HermitCore, RustyHermit is currently not able to run as multikernel.
 In addition, running the applications baremetal on the hardware or within common hyperisors is currently limited and added at a later date.
 
 ## Credits
