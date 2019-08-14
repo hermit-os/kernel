@@ -57,7 +57,7 @@ test:tarpaulin:
 test:cargo:
   stage: test
   script: 
-    - cargo test --lib
+    - cargo test --lib -- --test-threads=1
   image: ${IMAGE}
   tags:
     - docker
