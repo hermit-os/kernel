@@ -229,6 +229,12 @@ impl CpuFrequency {
 		}
 	}
 
+	#[cfg(test)]
+	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
+		Err(())
+	}
+
+	#[cfg(not(test))]
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = environment::get_command_line_cpu_frequency();
 		if mhz > 0 {
@@ -241,16 +247,13 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-	info!("000");
 		let extended_function_info = cpuid
 			.get_extended_function_info()
 			.expect("CPUID Extended Function Info not available!");
-	info!("111");
 		let brand_string = extended_function_info
 			.processor_brand_string()
 			.expect("CPUID Brand String not available!");
 
-	info!("BBBB {}", brand_string);
 		let ghz_find = brand_string.find("GHz");
 		if ghz_find.is_some() {
 			let index = ghz_find.unwrap() - 4;
