@@ -248,6 +248,7 @@ impl CpuFrequency {
 			.processor_brand_string()
 			.expect("CPUID Brand String not available!");
 
+	info!("BBBB {}", brand_string);
 		let ghz_find = brand_string.find("GHz");
 		if ghz_find.is_some() {
 			let index = ghz_find.unwrap() - 4;
