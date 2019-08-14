@@ -294,6 +294,7 @@ impl CpuFrequency {
 	#[cfg(test)]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// return just Ok because the real implementation must run in ring 0
+		self.source = CpuFrequencySources::Measurement;
 		Ok(())
 	}
 
@@ -739,7 +740,6 @@ pub fn print_information() {
 	infoheader!(" CPU INFORMATION ");
 	infoentry!("Model", brand_string);
 
-	#[cfg(not(test))]
 	unsafe {
 		infoentry!("Frequency", CPU_FREQUENCY);
 		infoentry!("SpeedStep Technology", CPU_SPEEDSTEP);
@@ -763,6 +763,7 @@ pub fn print_information() {
 fn print_cpu_information() {
 	::logging::init();
 	detect_features();
+	detect_frequency();
 	print_information();
 }
 
