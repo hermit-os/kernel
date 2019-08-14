@@ -67,7 +67,6 @@ mod console;
 mod drivers;
 mod environment;
 mod errno;
-#[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;

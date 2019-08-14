@@ -92,9 +92,15 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 }
 
+#[cfg(not(test))]
 #[inline]
 pub fn core_id() -> usize {
 	unsafe { PERCORE.core_id.get() }
+}
+
+#[cfg(test)]
+pub fn core_id() -> usize {
+	0
 }
 
 #[inline]
