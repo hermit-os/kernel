@@ -229,12 +229,6 @@ impl CpuFrequency {
 		}
 	}
 
-	#[cfg(test)]
-	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		Err(())
-	}
-
-	#[cfg(not(test))]
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = environment::get_command_line_cpu_frequency();
 		if mhz > 0 {
@@ -277,12 +271,6 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	#[cfg(test)]
-	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		Err(())
-	}
-
-	#[cfg(not(test))]
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		let cpu_freq = ptr::read_volatile(&KERNEL_HEADER.cpu_freq);
 		if cpu_freq > 0 {
@@ -740,6 +728,8 @@ pub fn detect_frequency() {
 }
 
 pub fn print_information() {
+	infoheader!(" CPU INFORMATION ");
+	
 	let cpuid = CpuId::new();
 	let extended_function_info = cpuid
 		.get_extended_function_info()
@@ -749,7 +739,6 @@ pub fn print_information() {
 		.expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
-	infoheader!(" CPU INFORMATION ");
 	infoentry!("Model", brand_string);
 
 	unsafe {
