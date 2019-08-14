@@ -25,6 +25,7 @@ docker:
 build:
   stage: build
   script:
+    - cargo clean
     - make all
     - make release=1 all
   image: ${IMAGE}
