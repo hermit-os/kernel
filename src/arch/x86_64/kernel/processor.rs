@@ -760,13 +760,13 @@ pub fn print_information() {
 	infofooter!();
 }
 
-#[test]
+/*#[test]
 fn print_cpu_information() {
 	::logging::init();
 	detect_features();
 	detect_frequency();
 	print_information();
-}
+}*/
 
 pub fn generate_random_number() -> Option<u32> {
 	if unsafe { SUPPORTS_RDRAND } {
