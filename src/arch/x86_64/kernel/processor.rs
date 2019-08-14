@@ -274,6 +274,12 @@ impl CpuFrequency {
 		Err(())
 	}
 
+	#[cfg(test)]
+	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		Err(())
+	}
+
+	#[cfg(not(test))]
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		let cpu_freq = ptr::read_volatile(&KERNEL_HEADER.cpu_freq);
 		if cpu_freq > 0 {
