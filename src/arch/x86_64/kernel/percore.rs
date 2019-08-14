@@ -120,9 +120,9 @@ pub fn init() {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
 		let address = ptr::read_volatile(&KERNEL_HEADER.current_percore_address);
 		if address == 0 {
-			wrmsr(IA32_KERNEL_GS_BASE, &PERCORE as *const _ as u64);
+			wrmsr(IA32_KERNEL_GSBASE, &PERCORE as *const _ as u64);
 		} else {
-			wrmsr(IA32_KERNEL_GS_BASE, address as u64);
+			wrmsr(IA32_KERNEL_GSBASE, address as u64);
 		}
 	}
 }

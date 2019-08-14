@@ -19,10 +19,7 @@
 extern crate bitflags;
 
 #[cfg(target_arch = "x86_64")]
-extern crate hermit_multiboot;
-
-#[macro_use]
-extern crate lazy_static;
+extern crate multiboot;
 
 #[cfg(target_arch = "x86_64")]
 extern crate x86;

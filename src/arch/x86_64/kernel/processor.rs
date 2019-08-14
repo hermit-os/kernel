@@ -729,7 +729,7 @@ pub fn detect_frequency() {
 
 pub fn print_information() {
 	infoheader!(" CPU INFORMATION ");
-	
+
 	let cpuid = CpuId::new();
 	let extended_function_info = cpuid
 		.get_extended_function_info()
