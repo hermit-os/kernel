@@ -26,6 +26,7 @@ build:
   stage: build
   script:
     - cargo clean
+    - make clean
     - make all
     - make release=1 all
   image: ${IMAGE}
