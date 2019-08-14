@@ -9,8 +9,8 @@ use std::thread;
 use std::time::Instant;
 use std::vec;
 
-mod matmul;
 mod laplace;
+mod matmul;
 
 pub use matmul::test_matmul_strassen;
 

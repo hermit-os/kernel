@@ -92,7 +92,7 @@ RustyHermit is derived from following tutorials and software distributions:
 
 1. Philipp Oppermann's [excellent series of blog posts][opp].
 2. Erik Kidd's [toyos-rs][kidd], which is an extension of Philipp Opermann's kernel.
-3. The original version of [eduOS-rs][eduos], which is teaching kernel written in Rust.
+3. The Rust-based teaching operating system [eduOS-rs][eduos].
 
 [opp]: http://blog.phil-opp.com/
 [kidd]: http://www.randomhacks.net/bare-metal-rust/
