@@ -11,9 +11,9 @@ pub mod serial;
 
 use arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::serial::SerialPort;
-use core::{mem, ptr};
+use core::{mem, ptr, slice};
 use elf::*;
-use hermit_multiboot::Multiboot;
+use multiboot::Multiboot;
 use physicalmem;
 
 extern "C" {
@@ -56,9 +56,14 @@ struct KernelHeader {
 // VARIABLES
 static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
-lazy_static! {
-	static ref MULTIBOOT: Multiboot = unsafe { Multiboot::new(mb_info) };
+fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
+    unsafe {
+        let ptr = mem::transmute(p);
+        Some(slice::from_raw_parts(ptr, sz))
+    }
 }
+
+//static mut MULTIBOOT: Multiboot<'static> = unsafe { Multiboot::new(mb_info, paddr_to_slice) };
 
 // FUNCTIONS
 pub fn message_output_init() {
@@ -77,15 +82,19 @@ pub unsafe fn find_kernel() -> usize {
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 	// Load the Multiboot information and identity-map the modules information.
-	let modules_address = MULTIBOOT
-		.modules_address()
-		.expect("Could not find module information in the Multiboot information");
+	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
+	let modules_address = multiboot
+		.modules()
+		.expect("Could not find a memory map in the Multiboot information")
+		.next()
+		.expect("Could not first map address")
+		.start as usize;
 	let page_address = align_down!(modules_address, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
-	let modules = MULTIBOOT.modules().unwrap();
+	let modules = multiboot.modules().unwrap();
 	let mut found_module = false;
 	let mut start_address = 0;
 	let mut end_address = 0;
@@ -94,11 +103,11 @@ pub unsafe fn find_kernel() -> usize {
 		found_module = true;
 
 		if start_address == 0 {
-			start_address = m.start_address();
+			start_address = m.start as usize;
 		}
 
-		if m.end_address() > end_address {
-			end_address = m.end_address();
+		if m.end as usize > end_address {
+			end_address = m.end as usize;
 		}
 	}
 
@@ -182,12 +191,15 @@ pub unsafe fn boot_kernel(
 	ptr::write_volatile(&mut kernel_header.uartport, SERIAL_PORT_ADDRESS);
 	ptr::write_volatile(&mut kernel_header.uhyve, 0);
 
-	if let Some(address) = MULTIBOOT.command_line_address() {
+	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
+	if let Some(cmdline) = multiboot.command_line() {
+		let address = cmdline.as_ptr();
+
 		// Identity-map the command line.
-		let page_address = align_down!(address, BasePageSize::SIZE);
+		let page_address = align_down!(address as usize, BasePageSize::SIZE);
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
-		let cmdline = MULTIBOOT.command_line().unwrap();
+		//let cmdline = multiboot.command_line().unwrap();
 		ptr::write_volatile(&mut kernel_header.cmdline, address as u64);
 		ptr::write_volatile(&mut kernel_header.cmdsize, cmdline.len() as u64);
 	}

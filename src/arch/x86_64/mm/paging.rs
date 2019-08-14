@@ -12,13 +12,14 @@ use arch::x86_64::kernel::get_mbinfo;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::is_uhyve;
 use arch::x86_64::kernel::processor;
+use arch::x86_64::mm::paddr_to_slice;
 use arch::x86_64::mm::physicalmem;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
 use environment;
-use hermit_multiboot::Multiboot;
 use mm;
+use multiboot::Multiboot;
 use scheduler;
 use x86::controlregs;
 use x86::irq::PageFaultError;
@@ -729,10 +730,13 @@ pub fn init_page_tables() {
 			identity_map(mb_info, mb_info);
 
 			// Map the "Memory Map" information too.
-			let mb = Multiboot::new(mb_info);
+			let mb = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
 			let memory_map_address = mb
-				.memory_map_address()
-				.expect("Could not find a memory map in the Multiboot information");
+				.memory_regions()
+				.expect("Could not find a memory map in the Multiboot information")
+				.next()
+				.expect("Could not first map address")
+				.base_address() as usize;
 			identity_map(memory_map_address, memory_map_address);
 		}
 
