@@ -34,7 +34,6 @@ use config::KERNEL_STACK_SIZE;
 
 use core::{intrinsics, ptr};
 use environment;
-#[cfg(not(test))]
 use kernel_message_buffer;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;

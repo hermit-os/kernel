@@ -291,6 +291,13 @@ impl CpuFrequency {
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
+	#[cfg(test)]
+	fn measure_frequency(&mut self) -> Result<(), ()> {
+		// return just Ok because the real implementation must run in ring 0
+		Ok(())
+	}
+
+	#[cfg(not(test))]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if environment::is_uhyve() {
@@ -732,6 +739,7 @@ pub fn print_information() {
 	infoheader!(" CPU INFORMATION ");
 	infoentry!("Model", brand_string);
 
+	#[cfg(not(test))]
 	unsafe {
 		infoentry!("Frequency", CPU_FREQUENCY);
 		infoentry!("SpeedStep Technology", CPU_SPEEDSTEP);
@@ -749,6 +757,13 @@ pub fn print_information() {
 		if supports_1gib_pages() { "Yes" } else { "No" }
 	);
 	infofooter!();
+}
+
+#[test]
+fn print_cpu_information() {
+	::logging::init();
+	detect_features();
+	print_information();
 }
 
 pub fn generate_random_number() -> Option<u32> {

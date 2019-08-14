@@ -13,12 +13,12 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 const KMSG_SIZE: usize = 0x1000;
 
+#[repr(align(64))]
 #[repr(C)]
 struct KmsgSection {
 	buffer: [u8; KMSG_SIZE + 1],
 }
 
-#[link_section = ".kmsg"]
 static mut KMSG: KmsgSection = KmsgSection {
 	buffer: [0; KMSG_SIZE + 1],
 };
