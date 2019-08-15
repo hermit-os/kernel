@@ -495,7 +495,7 @@ impl fmt::Display for CpuFeaturePrinter {
 			write!(f, "AVX512BW ")?;
 		}
 		if self.extended_feature_info.has_avx512vl() {
-			write!(f, "AVX512vl ")?;
+			write!(f, "AVX512VL ")?;
 		}
 		if self.extended_feature_info.has_bmi1() {
 			write!(f, "BMI1 ")?;
