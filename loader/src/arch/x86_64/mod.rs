@@ -57,13 +57,11 @@ struct KernelHeader {
 static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-    unsafe {
-        let ptr = mem::transmute(p);
-        Some(slice::from_raw_parts(ptr, sz))
-    }
+	unsafe {
+		let ptr = mem::transmute(p);
+		Some(slice::from_raw_parts(ptr, sz))
+	}
 }
-
-//static mut MULTIBOOT: Multiboot<'static> = unsafe { Multiboot::new(mb_info, paddr_to_slice) };
 
 // FUNCTIONS
 pub fn message_output_init() {
