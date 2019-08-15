@@ -473,6 +473,30 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
 		}
+		if self.extended_feature_info.has_avx512f() {
+			write!(f, "AVX512F ")?;
+		}
+		if self.extended_feature_info.has_avx512dq() {
+			write!(f, "AVX512DQ ")?;
+		}
+		if self.extended_feature_info.has_avx512_ifma() {
+			write!(f, "AVX512IFMA ")?;
+		}
+		if self.extended_feature_info.has_avx512pf() {
+			write!(f, "AVX512PF ")?;
+		}
+		if self.extended_feature_info.has_avx512er() {
+			write!(f, "AVX512ER ")?;
+		}
+		if self.extended_feature_info.has_avx512cd() {
+			write!(f, "AVX512CD ")?;
+		}
+		if self.extended_feature_info.has_avx512bw() {
+			write!(f, "AVX512BW ")?;
+		}
+		if self.extended_feature_info.has_avx512vl() {
+			write!(f, "AVX512vl ")?;
+		}
 		if self.extended_feature_info.has_bmi1() {
 			write!(f, "BMI1 ")?;
 		}
@@ -488,8 +512,17 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_feature_info.has_mpx() {
 			write!(f, "MPX ")?;
 		}
+		if self.extended_feature_info.has_pku() {
+			write!(f, "PKU ")?;
+		}
+		if self.extended_feature_info.has_ospke() {
+			write!(f, "OSPKE ")?;
+		}
 		if self.extended_feature_info.has_fsgsbase() {
 			write!(f, "FSGSBASE ")?;
+		}
+		if self.extended_feature_info.has_sgx() {
+			write!(f, "SGX ")?;
 		}
 
 		Ok(())
