@@ -6,17 +6,21 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use log::{set_logger_raw, LogLevelFilter, LogMetadata, LogRecord};
+use log::{set_logger, set_max_level, LevelFilter, Metadata, Record};
 
 /// Data structure to filter kernel messages
 struct KernelLogger;
 
 impl log::Log for KernelLogger {
-	fn enabled(&self, _: &LogMetadata) -> bool {
+	fn enabled(&self, _: &Metadata) -> bool {
 		true
 	}
 
-	fn log(&self, record: &LogRecord) {
+	fn flush(&self) {
+		// nothing to do
+	}
+
+	fn log(&self, record: &Record) {
 		if self.enabled(record.metadata()) {
 			println!(
 				"[{}][{}] {}",
@@ -29,13 +33,8 @@ impl log::Log for KernelLogger {
 }
 
 pub fn init() {
-	unsafe {
-		set_logger_raw(|max_log_level| {
-			max_log_level.set(LogLevelFilter::Info);
-			&KernelLogger
-		})
-		.expect("Can't initialize logger");
-	}
+	set_logger(&KernelLogger).expect("Can't initialize logger");
+	set_max_level(LevelFilter::Info);
 }
 
 macro_rules! infoheader {
