@@ -22,7 +22,6 @@ travis-ci = { repository = "hermitcore/libhermit-rs" }
 crate-type = ["staticlib"]
 
 [features]
-#default = ["network"]
 vga = []
 network = ["smoltcp"]
 newlib = []
