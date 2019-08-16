@@ -9,75 +9,52 @@
 [HermitCore]( http://www.hermitcore.org ) is a
 [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
 
-We decided to develop a new version of HermitCore in [Rust](https://www.rust-lang.org) and name it **HermitCore-rs** or **RustyHermit**.
-The ownership  model of Rust guarantees memory/thread-safety and enables us to eliminate many classes of bugs at compile-time.
-Consequently, the use of Rust for kernel development promises less vulnerabilities in comparsion to common programming languages.
+We decided to develop a new version of HermitCore in [Rust](https://www.rust-lang.org) and call it **RustyHermit**.
+Rust guarantees memory/thread-safety and prevents various common bugs at compile-time.
+Consequently, the use of Rust for kernel development promises less vulnerabilities in comparsion to other common programming languages.
 
-The kernel still supports the development of C/C++/Go/Fortran applications.
-A tutorial to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
-
-This repository only shows how to build pure Rust applications on top of RustyHermit.
 The kernel and the integration into the Rust runtime is entirely written in Rust and does not use any C/C++.
 We extend the Rust toolchain so that the build process is similar to Rust's usual workflow.
 Rust applications that do not bypass the Rust runtime and directly use OS services are able to run on RustyHermit without modifications.
+
+## How to use RustyHermit for pure Rust applications
+
+### Compilation
 
 We provide a Docker container *hermitcore-rs* for easy compilation of Rust applications into a unikernel.
 Please pull the container and use *cargo* to cross compile the application.
 As an example, the following commands create the test application *Hello World* for RustyHermit.
 
 ```sh
-$ docker pull rwthos/hermitcore-rs
-$ docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo new hello_world --bin
-$ cd hello_world
-$ docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo build --target x86_64-unknown-hermit
-$ cd -
+docker pull rwthos/hermitcore-rs
+docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo new hello_world --bin
+cd hello_world
+docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo build --target x86_64-unknown-hermit
+cd -
 ```
 
-Currently, the unikernel can only run within our own hypervisor *uhyve*, which requires [KVM](https://www.linux-kvm.org/) to create a virtual machine.
-To build *uhyve* you need following tools:
+### Run
 
-* x86-based Linux systems
-* Recent host compiler such as GCC
-* CMake	
-* git
-
-As a first step to build the hypervisor, clone the following repository:
+RustyHermit must be run within our own hypervisor *uhyve*, which uses [KVM](https://www.linux-kvm.org/) to create a virtual machine.
+Please follow the README of the [hermitcave repository](https://github.com/hermitcore/hermit-caves/tree/path2rs).
+Following the README will create the *proxy*, that can be used to start RustyHermit applications:
 
 ```sh
-$ git clone -b path2rs https://github.com/hermitcore/hermit-caves.git
+./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
 ```
 
-To build the hypervisor, go to the directory with the source code and use the following commands:
+The maximum amount of memory can be configured via environment variables like in the following example
 
 ```sh
-$ cd hermit-caves
-$ mkdir build
-$ cd build
-$ cmake ..
-$ make
-```
-This will create an application *proxy* in the working directory.
-Use this application to start the unikernel.
-
-```sh
-$ ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
+HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
 ```
 
-There are two environment variables to modify the virtual machine:
-The variable `HERMIT_CPUS` specifies the number of cores the virtual machine may use.
-The variable `HERMIT_MEM` defines the memory size of the virtual machine. The suffixes *M* and *G* can be used to specify a value in megabytes or gigabytes, respectively.
-By default, the loader initializes a system with one core and 512 MiB RAM.
-For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GiB memory:
+More details can be found in the uhyve README.
 
-```bash
-$ HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
-```
+## Use RustyHermit for C/C++, Go, and Fortran applications
 
-Setting the environment variable `HERMIT_VERBOSE` to `1` makes the hypervisor print kernel log messages to the terminal.
-
-```bash
-$ HERMIT_VERBOSE=1 ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
-```
+This kernel can still be used with C/C++, Go, and Fortran applications.
+A tutorial on how to do this is available at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
 
 ## Missing features
 
@@ -102,12 +79,12 @@ HermitCore's Emoji is provided for free by [EmojiOne](https://www.gfxmag.com/cra
 
 Licensed under either of
 
- * Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+* Apache License, Version 2.0, ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
+* MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
 
 at your option.
 
-### Contribution
+## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
