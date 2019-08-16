@@ -359,6 +359,9 @@ pub struct Task {
 	pub tls: Option<Rc<RefCell<TaskTLS>>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
+	/// lwIP error code for this task
+	#[cfg(feature = "newlib")]
+	pub lwip_errno: i32,
 }
 
 pub trait TaskFrame {
@@ -383,6 +386,8 @@ impl Task {
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			#[cfg(feature = "newlib")]
+			lwip_errno: 0,
 		}
 	}
 
@@ -402,6 +407,8 @@ impl Task {
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
+			#[cfg(feature = "newlib")]
+			lwip_errno: 0,
 		}
 	}
 
@@ -421,6 +428,8 @@ impl Task {
 			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
+			#[cfg(feature = "newlib")]
+			lwip_errno: 0,
 		}
 	}
 }
