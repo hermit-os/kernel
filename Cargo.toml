@@ -27,7 +27,7 @@ network = ["smoltcp"]
 newlib = []
 
 [dependencies]
-bitflags = "1.0.*"
+bitflags = "1.1.0"
 #cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
 
