@@ -172,8 +172,6 @@ pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 	0
 }
 
-static CORE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
 #[no_mangle]
 pub extern "C" fn sys_spawn(
 	id: *mut Tid,
@@ -182,6 +180,8 @@ pub extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
+	static CORE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
 		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
