@@ -7,6 +7,7 @@
 
 use arch;
 use arch::mm::paging;
+use core::{mem, ptr, slice};
 use syscalls::interfaces::SyscallInterface;
 #[cfg(feature = "newlib")]
 use syscalls::lwip::sys_lwip_get_errno;
@@ -22,6 +23,8 @@ const UHYVE_PORT_CLOSE: u16 = 0x480;
 const UHYVE_PORT_READ: u16 = 0x500;
 const UHYVE_PORT_EXIT: u16 = 0x540;
 const UHYVE_PORT_LSEEK: u16 = 0x580;
+const UHYVE_PORT_CMDSIZE: u16 = 0x740;
+const UHYVE_PORT_CMDVAL: u16 = 0x780;
 const UHYVE_PORT_UNLINK: u16 = 0x840;
 
 #[cfg(feature = "newlib")]
@@ -39,6 +42,42 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 	#[cfg(target_arch = "x86_64")]
 	unsafe {
 		outl(port, physical_address as u32);
+	}
+}
+
+const MAX_ARGC_ENVC: usize = 128;
+
+#[repr(C, packed)]
+struct SysCmdsize {
+	argc: i32,
+	argsz: [i32; MAX_ARGC_ENVC],
+	envc: i32,
+	envsz: [i32; MAX_ARGC_ENVC],
+}
+
+impl SysCmdsize {
+	fn new() -> SysCmdsize {
+		SysCmdsize {
+			argc: 0,
+			argsz: [0; MAX_ARGC_ENVC],
+			envc: 0,
+			envsz: [0; MAX_ARGC_ENVC],
+		}
+	}
+}
+
+#[repr(C, packed)]
+struct SysCmdval {
+	argv: *const u8,
+	envp: *const u8,
+}
+
+impl SysCmdval {
+	fn new(argv: *const u8, envp: *const u8) -> SysCmdval {
+		SysCmdval {
+			argv: paging::virtual_to_physical(argv as usize) as *const u8,
+			envp: paging::virtual_to_physical(envp as usize) as *const u8,
+		}
 	}
 }
 
@@ -173,6 +212,75 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
 
 		sysclose.ret
+	}
+
+	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
+		// determine the number of arguments and environment variables
+		let mut syscmdsize = SysCmdsize::new();
+		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
+
+		// create array to receive all arguments
+		let argv_raw = ::sys_malloc(
+			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		) as *mut *const u8;
+		let argv_phy_raw = ::sys_malloc(
+			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		) as *mut *const u8;
+		let argv = unsafe { slice::from_raw_parts_mut(argv_raw, syscmdsize.argc as usize) };
+		let argv_phy = unsafe { slice::from_raw_parts_mut(argv_phy_raw, syscmdsize.argc as usize) };
+		for i in 0..syscmdsize.argc as usize {
+			argv[i] = ::sys_malloc(
+				syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
+				1,
+			);
+			argv_phy[i] = paging::virtual_to_physical(argv[i] as usize) as *const u8;
+		}
+
+		// create array to receive the environment
+		let env_raw = ::sys_malloc(
+			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		) as *mut *const u8;
+		let env_phy_raw = ::sys_malloc(
+			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		) as *mut *const u8;
+		let env = unsafe { slice::from_raw_parts_mut(env_raw, (syscmdsize.envc + 1) as usize) };
+		let env_phy =
+			unsafe { slice::from_raw_parts_mut(env_phy_raw, (syscmdsize.envc + 1) as usize) };
+		for i in 0..syscmdsize.envc as usize {
+			env[i] = ::sys_malloc(
+				syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
+				1,
+			);
+			env_phy[i] = paging::virtual_to_physical(env[i] as usize) as *const u8;
+		}
+		env[syscmdsize.envc as usize] = ptr::null_mut();
+		env_phy[syscmdsize.envc as usize] = ptr::null_mut();
+
+		// ask uhyve for the environment
+		let mut syscmdval = SysCmdval::new(argv_phy_raw as *const u8, env_phy_raw as *const u8);
+		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
+
+		// free temporary array
+		::sys_free(
+			argv_phy_raw as *mut u8,
+			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		);
+		::sys_free(
+			env_phy_raw as *mut u8,
+			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
+			mem::size_of::<*const u8>(),
+		);
+
+		(
+			syscmdsize.argc,
+			argv_raw as *const *const u8,
+			env_raw as *const *const u8,
+		)
 	}
 
 	fn shutdown(&self, arg: i32) -> ! {
