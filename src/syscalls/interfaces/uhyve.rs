@@ -214,6 +214,7 @@ impl SyscallInterface for Uhyve {
 		sysclose.ret
 	}
 
+	#[cfg(not(test))]
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		// determine the number of arguments and environment variables
 		let mut syscmdsize = SysCmdsize::new();
