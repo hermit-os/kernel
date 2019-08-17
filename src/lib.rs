@@ -167,7 +167,7 @@ unsafe fn sections_init() {
 #[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
-		fn runtime_entry(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
+		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		fn init_lwip();
 		fn init_uhyve_netif() -> i32;
 	}
