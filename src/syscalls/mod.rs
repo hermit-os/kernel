@@ -60,7 +60,7 @@ pub fn init() {
 	sbrk_init();
 }
 
-pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
+pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	unsafe { SYS.get_application_parameters() }
 }
 
