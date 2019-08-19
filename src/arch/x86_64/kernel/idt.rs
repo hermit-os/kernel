@@ -9,7 +9,7 @@
 #![allow(dead_code)]
 
 use arch::x86_64::kernel::gdt;
-use synch::spinlock::Spinlock;
+use core::sync::atomic::{AtomicBool, Ordering};
 use x86::bits64::paging::VAddr;
 use x86::dtables::{self, DescriptorTablePointer};
 use x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
@@ -104,16 +104,15 @@ static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer {
 };
 
 pub fn install() {
-	static IDT_INIT: Spinlock<bool> = Spinlock::new(false);
+	static IDT_INIT: AtomicBool = AtomicBool::new(false);
 
 	unsafe {
-		let mut guard = IDT_INIT.lock();
+		let is_init = IDT_INIT.swap(true, Ordering::SeqCst);
 
-		if *guard == false {
+		if !is_init {
 			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
 			// implement "new" as "const fn" and do this call already in the initialization of IDTP.
 			IDTP = DescriptorTablePointer::new_from_slice(&IDT);
-			*guard = true;
 		};
 
 		dtables::lidt(&IDTP);

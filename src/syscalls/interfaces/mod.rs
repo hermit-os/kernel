@@ -11,6 +11,7 @@ mod uhyve;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
+use alloc::boxed::Box;
 use arch;
 use console;
 use core::fmt::Write;
@@ -22,10 +23,11 @@ pub trait SyscallInterface: Send + Sync {
 		// Interface-specific initialization steps.
 	}
 
-	fn get_application_parameters(&self) -> (i32, *mut *mut u8, *mut *mut u8) {
-		let argc = 0;
-		let argv = ptr::null_mut() as *mut *mut u8;
-		let environ = ptr::null_mut() as *mut *mut u8;
+	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
+		let argc = 1;
+		let dummy = Box::new("name\0".as_ptr());
+		let argv = Box::leak(dummy) as *const *const u8;
+		let environ = ptr::null() as *const *const u8;
 
 		(argc, argv, environ)
 	}

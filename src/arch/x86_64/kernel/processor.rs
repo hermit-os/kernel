@@ -291,6 +291,14 @@ impl CpuFrequency {
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
+	#[cfg(test)]
+	fn measure_frequency(&mut self) -> Result<(), ()> {
+		// return just Ok because the real implementation must run in ring 0
+		self.source = CpuFrequencySources::Measurement;
+		Ok(())
+	}
+
+	#[cfg(not(test))]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if environment::is_uhyve() {
@@ -465,6 +473,30 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
 		}
+		if self.extended_feature_info.has_avx512f() {
+			write!(f, "AVX512F ")?;
+		}
+		if self.extended_feature_info.has_avx512dq() {
+			write!(f, "AVX512DQ ")?;
+		}
+		if self.extended_feature_info.has_avx512_ifma() {
+			write!(f, "AVX512IFMA ")?;
+		}
+		if self.extended_feature_info.has_avx512pf() {
+			write!(f, "AVX512PF ")?;
+		}
+		if self.extended_feature_info.has_avx512er() {
+			write!(f, "AVX512ER ")?;
+		}
+		if self.extended_feature_info.has_avx512cd() {
+			write!(f, "AVX512CD ")?;
+		}
+		if self.extended_feature_info.has_avx512bw() {
+			write!(f, "AVX512BW ")?;
+		}
+		if self.extended_feature_info.has_avx512vl() {
+			write!(f, "AVX512VL ")?;
+		}
 		if self.extended_feature_info.has_bmi1() {
 			write!(f, "BMI1 ")?;
 		}
@@ -480,8 +512,17 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_feature_info.has_mpx() {
 			write!(f, "MPX ")?;
 		}
+		if self.extended_feature_info.has_pku() {
+			write!(f, "PKU ")?;
+		}
+		if self.extended_feature_info.has_ospke() {
+			write!(f, "OSPKE ")?;
+		}
 		if self.extended_feature_info.has_fsgsbase() {
 			write!(f, "FSGSBASE ")?;
+		}
+		if self.extended_feature_info.has_sgx() {
+			write!(f, "SGX ")?;
 		}
 
 		Ok(())
@@ -720,6 +761,8 @@ pub fn detect_frequency() {
 }
 
 pub fn print_information() {
+	infoheader!(" CPU INFORMATION ");
+
 	let cpuid = CpuId::new();
 	let extended_function_info = cpuid
 		.get_extended_function_info()
@@ -729,7 +772,6 @@ pub fn print_information() {
 		.expect("CPUID Brand String not available!");
 	let feature_printer = CpuFeaturePrinter::new(&cpuid);
 
-	infoheader!(" CPU INFORMATION ");
 	infoentry!("Model", brand_string);
 
 	unsafe {
@@ -750,6 +792,14 @@ pub fn print_information() {
 	);
 	infofooter!();
 }
+
+/*#[test]
+fn print_cpu_information() {
+	::logging::init();
+	detect_features();
+	detect_frequency();
+	print_information();
+}*/
 
 pub fn generate_random_number() -> Option<u32> {
 	if unsafe { SUPPORTS_RDRAND } {

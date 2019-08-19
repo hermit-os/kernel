@@ -46,7 +46,7 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 #[cfg(target_arch = "x86_64")]
-extern crate hermit_multiboot;
+extern crate multiboot;
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
 #[macro_use]
@@ -67,7 +67,6 @@ mod console;
 mod drivers;
 mod environment;
 mod errno;
-#[cfg(not(test))]
 mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;
@@ -168,20 +167,27 @@ unsafe fn sections_init() {
 #[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
-		fn runtime_entry(argc: i32, argv: *mut *mut u8, env: *mut *mut u8) -> !;
+		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
+		fn init_lwip();
+		fn init_uhyve_netif() -> i32;
+	}
+
+	// initialize LwIP library
+	#[cfg(feature = "newlib")]
+	unsafe {
+		init_lwip();
 	}
 
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		#[cfg(feature = "network")]
-		let _ = drivers::net::uhyve::init();
+		#[cfg(feature = "newlib")]
+		unsafe {
+			init_uhyve_netif();
+		}
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
-	} else {
-		#[cfg(feature = "network")]
-		let _ = drivers::net::rtl8139::init();
 	}
 
 	syscalls::init();
