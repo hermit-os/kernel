@@ -35,18 +35,23 @@ cd -
 
 ### Run
 
-RustyHermit must be run within our own hypervisor *uhyve*, which uses [KVM](https://www.linux-kvm.org/) to create a virtual machine.
-Please follow the README of the [hermitcave repository](https://github.com/hermitcore/hermit-caves/tree/path2rs).
-Following the README will create the *proxy*, that can be used to start RustyHermit applications:
+RustyHermit must be run within our own hypervisor [uhyve](https://github.com/hermitcore/uhyve), which uses [KVM](https://www.linux-kvm.org/) to create a virtual machine.
+Please install the hypervisor as follows:
 
 ```sh
-./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
+cargo install --git https://github.com/hermitcore/uhyve.git
+```
+Please follow the README of the [uhyve](https://github.com/hermitcore/uhyve).
+Afterwards, your are able to start RustyHermit applications within our hypervisor:
+
+```sh
+uhyve target/x86_64-unknown-hermit/debug/hello_world
 ```
 
 The maximum amount of memory can be configured via environment variables like in the following example
 
 ```sh
-HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
+HERMIT_CPUS=4 HERMIT_MEM=8G uhyve target/x86_64-unknown-hermit/debug/hello_world
 ```
 
 More details can be found in the uhyve README.
