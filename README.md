@@ -6,20 +6,25 @@
 [![Build Status](https://git.rwth-aachen.de/acs/public/hermitcore/libhermit-rs/badges/master/pipeline.svg)](https://git.rwth-aachen.de/acs/public/hermitcore/libhermit-rs/pipelines)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
-[HermitCore]( http://www.hermitcore.org ) is a
-[unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
+[HermitCore]( http://www.hermitcore.org ) is a [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
+Unikernel means, you bundle your application directly with the kernel library, so that it can run without any installed operating system.
+This reduces overhead, therfore, interesting applications include virtual machines and high-performance computing.
 
+The RustyHermit can run Rust applications, as well as C/C++/Go/Fortran applications.
+A tutorial on how to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
+
+## History/Background
+
+HermitCore is a research project at [RWTH-Aachen](https://www.rwth-aachen.de) and was originally written in C ([libhermit](https://github.com/hermitcore/libhermit)).
 We decided to develop a new version of HermitCore in [Rust](https://www.rust-lang.org) and name it **HermitCore-rs** or **RustyHermit**.
 The ownership  model of Rust guarantees memory/thread-safety and enables us to eliminate many classes of bugs at compile-time.
 Consequently, the use of Rust for kernel development promises less vulnerabilities in comparsion to common programming languages.
 
-The kernel still supports the development of C/C++/Go/Fortran applications.
-A tutorial to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
-
-This repository only shows how to build pure Rust applications on top of RustyHermit.
-The kernel and the integration into the Rust runtime is entirely written in Rust and does not use any C/C++.
+The kernel and the integration into the Rust runtime is entirely written in Rust and does not use any C/C++ Code.
 We extend the Rust toolchain so that the build process is similar to Rust's usual workflow.
 Rust applications that do not bypass the Rust runtime and directly use OS services are able to run on RustyHermit without modifications.
+
+## Installation
 
 We provide a Docker container *hermitcore-rs* for easy compilation of Rust applications into a unikernel.
 Please pull the container and use *cargo* to cross compile the application.
@@ -33,23 +38,20 @@ $ docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo bu
 $ cd -
 ```
 
-Currently, the unikernel can only run within our own hypervisor *uhyve*, which requires [KVM](https://www.linux-kvm.org/) to create a virtual machine.
+## Running RustyHermit
+
+Currently, the RustyHermit can only run within our own hypervisor [*uhyve*](https://github.com/hermitcore/hermit-caves) , which requires [KVM](https://www.linux-kvm.org/) to create a virtual machine.
 To build *uhyve* you need following tools:
 
 * x86-based Linux systems
 * Recent host compiler such as GCC
-* CMake	
+* CMake
 * git
 
-As a first step to build the hypervisor, clone the following repository:
+To build the hypervisor, clone the uhyve/hermit-caves repository (`path2rs` branch!) and use cmake to build the program:
 
 ```sh
 $ git clone -b path2rs https://github.com/hermitcore/hermit-caves.git
-```
-
-To build the hypervisor, go to the directory with the source code and use the following commands:
-
-```sh
 $ cd hermit-caves
 $ mkdir build
 $ cd build
@@ -63,26 +65,24 @@ Use this application to start the unikernel.
 $ ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
 ```
 
-There are two environment variables to modify the virtual machine:
-The variable `HERMIT_CPUS` specifies the number of cores the virtual machine may use.
-The variable `HERMIT_MEM` defines the memory size of the virtual machine. The suffixes *M* and *G* can be used to specify a value in megabytes or gigabytes, respectively.
-By default, the loader initializes a system with one core and 512 MiB RAM.
+The virtual machine is configured using the following environment variables
+
+Variable         | Default     | Description
+-----------------|-------------|--------------
+`HERMIT_CPUS`    | 1           | Number of cores the virtual machine may use
+`HERMIT_MEM`     | 512M        | Memory size of the virtual machine. The suffixes *M* and *G* can be used to specify a value in megabytes or gigabytes
+`HERMIT_VERBOSE` | 0           | Hypervisor prints kernel log messages stdout. ("1" enables log)
+
 For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GiB memory:
 
 ```bash
 $ HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
 ```
 
-Setting the environment variable `HERMIT_VERBOSE` to `1` makes the hypervisor print kernel log messages to the terminal.
-
-```bash
-$ HERMIT_VERBOSE=1 ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
-```
-
 ## Missing features
-
-In contrast to the C version of HermitCore, RustyHermit is currently not able to run as multikernel.
-In addition, running the applications baremetal, i.e., directly on the hardware or within other hypervisors is currently not fully supported, but will be added at a later date.
+(might be comming)
+* Multikernel support
+* Running baremetal/without hypervisor
 
 ## Credits
 
