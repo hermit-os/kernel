@@ -67,14 +67,9 @@ test:cargo:
 test:uhyve:
   stage: test
   script:
-    - git clone --depth 1 -b path2rs https://github.com/hermitcore/hermit-caves.git caves
-    - cd caves
-    - mkdir build
-    - cd build
-    - cmake ..
-    - make
-    - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/debug/hctests
-    - HERMIT_VERBOSE=1 ./proxy ../../examples/target/x86_64-unknown-hermit/release/hctests
+    - cargo install --git https://github.com/hermitcore/uhyve.git
+    - HERMIT_VERBOSE=1 uhyve examples/target/x86_64-unknown-hermit/debug/hctests
+    - HERMIT_VERBOSE=1 uhyve examples/target/x86_64-unknown-hermit/release/hctests
   image: ${IMAGE}
   dependencies:
     - build
