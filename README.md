@@ -1,6 +1,5 @@
 <img width="100" align="right" src="img/hermitcore_logo.png" />
 
-
 # RustyHermit - A Rust-based, lightweight unikernel
 
 [![Build Status](https://git.rwth-aachen.de/acs/public/hermitcore/libhermit-rs/badges/master/pipeline.svg)](https://git.rwth-aachen.de/acs/public/hermitcore/libhermit-rs/pipelines)
