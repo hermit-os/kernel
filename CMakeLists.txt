@@ -24,6 +24,44 @@ if("${HERMIT_ARCH}" STREQUAL "aarch64")
 #	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
+set(LWIP_SRC ../lwip/src)
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/api/*.c")
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/arch/*.c")
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/core/*.c")
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/core/ipv4/*.c")
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/core/ipv6/*.c")
+add_kernel_module_sources("lwip"	"${LWIP_SRC}/netif/*.c")
+
+get_kernel_modules(KERNEL_MODULES)
+foreach(MODULE ${KERNEL_MODULES})
+	get_kernel_module_sources(SOURCES ${MODULE})
+
+	# maintain list of all objects that will end up in libhermit.a
+	list(APPEND KERNEL_OBJECTS $<TARGET_OBJECTS:${MODULE}>)
+
+	add_library(${MODULE} OBJECT ${SOURCES})
+
+	# this is kernel code
+	target_compile_definitions(${MODULE}
+		PRIVATE -D__KERNEL__)
+
+	target_compile_definitions(${MODULE}
+		PRIVATE -DMAX_ARGC_ENVC=${MAX_ARGC_ENVC})
+
+	target_compile_options(${MODULE}
+		PRIVATE ${HERMIT_KERNEL_FLAGS})
+
+	target_include_directories(${MODULE}
+		PUBLIC ${HERMIT_KERNEL_INCLUDES})
+
+	# suppress all LwIP compiler warnings. Not our code, so we cannot fix
+	if("${MODULE}" STREQUAL "lwip")
+		target_compile_options(${MODULE}
+			PRIVATE -w)
+	endif()
+
+endforeach()
+
 # Build all kernel modules into a single static library.
 add_library(hermit-bootstrap STATIC ${KERNEL_OBJECTS})
 set_target_properties(hermit-bootstrap PROPERTIES LINKER_LANGUAGE C)

@@ -8,6 +8,8 @@
 
 mod condvar;
 mod interfaces;
+#[cfg(feature = "newlib")]
+mod lwip;
 mod processor;
 mod random;
 mod recmutex;
@@ -27,7 +29,15 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use environment;
+#[cfg(feature = "newlib")]
+use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
+
+#[cfg(feature = "newlib")]
+const LWIP_FD_BIT: i32 = (1 << 30);
+
+#[cfg(feature = "newlib")]
+pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
 static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
@@ -50,14 +60,8 @@ pub fn init() {
 	sbrk_init();
 }
 
-pub fn get_application_parameters() -> (i32, *mut *mut u8, *mut *mut u8) {
+pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	unsafe { SYS.get_application_parameters() }
-}
-
-#[no_mangle]
-pub extern "C" fn fcntl(_fd: i32, _cmd: i32, _arg: i32) -> i32 {
-	error!("fcntl is currently not supported!");
-	-1
 }
 
 #[no_mangle]

@@ -1,23 +1,18 @@
 [package]
 name = "hermit-loader"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
 license = "MIT/Apache-2.0"
 publish = false
 
 [dependencies]
-bitflags = "1.0.3"
+bitflags = "1.0.*"
 
-[target.'cfg(target_arch = "x86_64")'.dependencies.hermit-multiboot]
-git = "https://github.com/hermitcore/multiboot.git"
-
-[dependencies.lazy_static]
-version = "1.0.1"
-features = ["spin_no_std"]
+[target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
+version = "0.*"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-git = "https://github.com/hermitcore/rust-x86.git"
-branch = "hermit"
+version = "0.*"
 default-features = false
 
 [package.metadata.cargo-xbuild]

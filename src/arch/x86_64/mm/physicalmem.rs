@@ -6,12 +6,13 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch::x86_64::kernel::{get_limit, get_mbinfo};
+use arch::x86_64::mm::paddr_to_slice;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use collections::Node;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use hermit_multiboot::Multiboot;
 use mm;
 use mm::freelist::{FreeList, FreeListEntry};
+use multiboot::{MemoryType, Multiboot};
 use synch::spinlock::*;
 
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
@@ -23,28 +24,30 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let mb = unsafe { Multiboot::new(mb_info) };
+	let mb = unsafe { Multiboot::new(mb_info as u64, paddr_to_slice).unwrap() };
 	let all_regions = mb
-		.memory_map()
+		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
-	let ram_regions = all_regions
-		.filter(|m| m.is_available() && m.base_address() + m.length() > mm::kernel_end_address());
+	let ram_regions = all_regions.filter(|m| {
+		m.memory_type() == MemoryType::Available
+			&& m.base_address() + m.length() > mm::kernel_end_address() as u64
+	});
 	let mut found_ram = false;
 
 	for m in ram_regions {
 		found_ram = true;
 
-		let start_address = if m.base_address() <= mm::kernel_start_address() {
+		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
 			mm::kernel_end_address()
 		} else {
-			m.base_address()
+			m.base_address() as usize
 		};
 
 		let entry = Node::new(FreeListEntry {
 			start: start_address,
-			end: m.base_address() + m.length(),
+			end: (m.base_address() + m.length()) as usize,
 		});
-		let _ = TOTAL_MEMORY.fetch_add(m.base_address() + m.length(), Ordering::SeqCst);
+		let _ = TOTAL_MEMORY.fetch_add((m.base_address() + m.length()) as usize, Ordering::SeqCst);
 		PHYSICAL_FREE_LIST.lock().list.push(entry);
 	}
 

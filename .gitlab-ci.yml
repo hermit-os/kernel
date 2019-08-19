@@ -25,6 +25,8 @@ docker:
 build:
   stage: build
   script:
+    - cargo clean
+    - make clean
     - make all
     - make release=1 all
   image: ${IMAGE}
@@ -57,7 +59,7 @@ test:tarpaulin:
 test:cargo:
   stage: test
   script: 
-    - cargo test --lib
+    - cargo test --lib -- --test-threads=1
   image: ${IMAGE}
   tags:
     - docker
