@@ -259,6 +259,8 @@ pub fn application_processor_main() -> ! {
 	scheduler::add_current_core();
 	let core_scheduler = core_scheduler();
 
+	info!("Entering idle loop for application processor");
+
 	// Run the scheduler loop.
 	loop {
 		core_scheduler.scheduler();
