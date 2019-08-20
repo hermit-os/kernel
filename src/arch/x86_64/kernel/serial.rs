@@ -81,7 +81,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if !environment::is_uhyve() && self.port_address != 0 {
+		if !environment::is_uhyve() && unsafe { intrinsics::volatile_load(&self.port_address) } != 0 {
 			// Disable port interrupt.
 			self.write_to_register(UART_IER, 0);
 
