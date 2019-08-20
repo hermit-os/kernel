@@ -32,7 +32,7 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 use config::KERNEL_STACK_SIZE;
 
-use core::{intrinsics, ptr};
+use core::intrinsics;
 use environment;
 use kernel_message_buffer;
 
@@ -103,7 +103,7 @@ pub fn get_ip() -> [u8; 4] {
 	let mut ip: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
-		ip[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcip[i]) as u8 };
+		ip[i] = unsafe { intrinsics::volatile_load(&KERNEL_HEADER.hcip[i]) as u8 };
 	}
 
 	ip
@@ -113,44 +113,44 @@ pub fn get_gateway() -> [u8; 4] {
 	let mut gw: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
-		gw[i] = unsafe { ptr::read_volatile(&KERNEL_HEADER.hcgateway[i]) as u8 };
+		gw[i] = unsafe { intrinsics::volatile_load(&KERNEL_HEADER.hcgateway[i]) as u8 };
 	}
 
 	gw
 }
 
 pub fn get_image_size() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.image_size) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.limit) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.limit) as usize }
 }
 
 pub fn get_mbinfo() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.mb_info) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.mb_info) as usize }
 }
 
 pub fn get_processor_count() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cpu_online) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cpu_online) as usize }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.uhyve) != 0 }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.uhyve) != 0 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.single_kernel) != 0 }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdsize) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cmdsize) as usize }
 }
 
 pub fn get_cmdline() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdline) as usize }
+	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cmdline) as usize }
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -159,7 +159,7 @@ pub fn message_output_init() {
 
 	unsafe {
 		let port: *mut u16 = &COM1.port_address as *const u16 as *mut u16;
-		*port = ptr::read_volatile(&KERNEL_HEADER.uartport);
+		*port = intrinsics::volatile_load(&KERNEL_HEADER.uartport);
 	}
 
 	if environment::is_single_kernel() {

@@ -21,7 +21,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use config::*;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, mem, ptr, u32};
+use core::{cmp, fmt, mem, ptr, u32, intrinsics};
 use environment;
 use mm;
 use scheduler;
@@ -457,8 +457,8 @@ pub fn init_next_processor_variables(core_id: usize) {
 	let stack = mm::allocate(KERNEL_STACK_SIZE, false);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
-		ptr::write_volatile(&mut KERNEL_HEADER.current_stack_address, stack as u64);
-		ptr::write_volatile(
+		intrinsics::volatile_store(&mut KERNEL_HEADER.current_stack_address, stack as u64);
+		intrinsics::volatile_store(
 			&mut KERNEL_HEADER.current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
 		);
@@ -617,8 +617,8 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
-		ptr::write_volatile(
+		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
+		intrinsics::volatile_store(
 			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *mut u32,
 			value,
 		);
@@ -629,8 +629,8 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
-		value = ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
+		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
+		value = intrinsics::volatile_load((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
 	}
 
 	value
@@ -670,7 +670,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0
+			while (unsafe { intrinsics::volatile_load(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0
 			{
 				spin_loop_hint();
 			}

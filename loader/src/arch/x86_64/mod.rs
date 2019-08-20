@@ -11,7 +11,7 @@ pub mod serial;
 
 use arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::serial::SerialPort;
-use core::{mem, ptr, slice};
+use core::{mem, slice, intrinsics};
 use elf::*;
 use multiboot::Multiboot;
 use physicalmem;
@@ -179,15 +179,15 @@ pub unsafe fn boot_kernel(
 	loaderlog!("Found magic number 0x{:x}", kernel_header.magic_number);
 
 	// Supply the parameters to the HermitCore application.
-	ptr::write_volatile(&mut kernel_header.base, new_physical_address as u64);
-	ptr::write_volatile(&mut kernel_header.image_size, mem_size as u64);
-	ptr::write_volatile(&mut kernel_header.mb_info, mb_info as u64);
-	ptr::write_volatile(
+	intrinsics::volatile_store(&mut kernel_header.base, new_physical_address as u64);
+	intrinsics::volatile_store(&mut kernel_header.image_size, mem_size as u64);
+	intrinsics::volatile_store(&mut kernel_header.mb_info, mb_info as u64);
+	intrinsics::volatile_store(
 		&mut kernel_header.current_stack_address,
 		(virtual_address + mem::size_of::<KernelHeader>()) as u64,
 	);
-	ptr::write_volatile(&mut kernel_header.uartport, SERIAL_PORT_ADDRESS);
-	ptr::write_volatile(&mut kernel_header.uhyve, 0);
+	intrinsics::volatile_store(&mut kernel_header.uartport, SERIAL_PORT_ADDRESS);
+	intrinsics::volatile_store(&mut kernel_header.uhyve, 0);
 
 	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
 	if let Some(cmdline) = multiboot.command_line() {
@@ -198,8 +198,8 @@ pub unsafe fn boot_kernel(
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 		//let cmdline = multiboot.command_line().unwrap();
-		ptr::write_volatile(&mut kernel_header.cmdline, address as u64);
-		ptr::write_volatile(&mut kernel_header.cmdsize, cmdline.len() as u64);
+		intrinsics::volatile_store(&mut kernel_header.cmdline, address as u64);
+		intrinsics::volatile_store(&mut kernel_header.cmdsize, cmdline.len() as u64);
 	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.

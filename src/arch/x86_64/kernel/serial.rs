@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::ptr;
+use core::intrinsics;
 use core::sync::atomic::spin_loop_hint;
 use environment;
 use x86::io::*;
@@ -41,7 +41,7 @@ impl SerialPort {
 
 	fn read_from_register(&self, register: u16) -> u8 {
 		unsafe {
-			let port = ptr::read_volatile(&self.port_address);
+			let port = intrinsics::volatile_load(&self.port_address);
 			inb(port + register)
 		}
 	}
@@ -61,13 +61,13 @@ impl SerialPort {
 		}
 
 		unsafe {
-			let port = ptr::read_volatile(&self.port_address);
+			let port = intrinsics::volatile_load(&self.port_address);
 			outb(port + register, byte);
 		}
 	}
 
 	pub fn write_byte(&self, byte: u8) {
-		if unsafe { ptr::read_volatile(&self.port_address) == 0 } {
+		if unsafe { intrinsics::volatile_load(&self.port_address) == 0 } {
 			return;
 		}
 
