@@ -21,7 +21,7 @@ use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use config::*;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, mem, ptr, u32, intrinsics};
+use core::{cmp, fmt, intrinsics, mem, ptr, u32};
 use environment;
 use mm;
 use scheduler;
@@ -630,7 +630,8 @@ fn ioapic_read(reg: u32) -> u32 {
 
 	unsafe {
 		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
-		value = intrinsics::volatile_load((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
+		value =
+			intrinsics::volatile_load((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
 	}
 
 	value
@@ -670,7 +671,9 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { intrinsics::volatile_load(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING) > 0
+			while (unsafe { intrinsics::volatile_load(value_ref) }
+				& APIC_ICR_DELIVERY_STATUS_PENDING)
+				> 0
 			{
 				spin_loop_hint();
 			}

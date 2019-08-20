@@ -164,7 +164,9 @@ pub fn message_output_init() {
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
-		unsafe { COM1.init(SERIAL_PORT_BAUDRATE); }
+		unsafe {
+			COM1.init(SERIAL_PORT_BAUDRATE);
+		}
 	}
 }
 
@@ -192,7 +194,9 @@ fn test_output() {
 pub fn output_message_byte(byte: u8) {
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
-		unsafe { COM1.write_byte(byte); }
+		unsafe {
+			COM1.write_byte(byte);
+		}
 
 		// vga::write_byte() checks if VGA support has been initialized,
 		// so we don't need any additional if clause around it.

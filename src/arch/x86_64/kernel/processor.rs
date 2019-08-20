@@ -15,7 +15,7 @@ use arch::x86_64::kernel::pic;
 use arch::x86_64::kernel::pit;
 use arch::x86_64::kernel::KERNEL_HEADER;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, u32, intrinsics};
+use core::{fmt, intrinsics, u32};
 use environment;
 use x86::controlregs::*;
 use x86::cpuid::*;

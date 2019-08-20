@@ -6,9 +6,9 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::collections::BTreeMap;
-use core::volatile_load;
 use core::str;
 use core::sync::atomic::{AtomicBool, Ordering};
+use core::volatile_load;
 
 use smoltcp::iface::{EthernetInterfaceBuilder, NeighborCache, Routes};
 use smoltcp::phy::{self, Device, DeviceCapabilities};
