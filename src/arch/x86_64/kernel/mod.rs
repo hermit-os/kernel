@@ -95,7 +95,7 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 	boot_stack: [0xCD; KERNEL_STACK_SIZE],
 };
 
-static COM1: SerialPort = SerialPort::new(0x3f8);
+static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 // FUNCTIONS
 
@@ -158,14 +158,13 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		let port: *mut u16 = &COM1.port_address as *const u16 as *mut u16;
-		*port = intrinsics::volatile_load(&KERNEL_HEADER.uartport);
+		COM1.port_address = intrinsics::volatile_load(&KERNEL_HEADER.uartport);
 	}
 
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
-		COM1.init(SERIAL_PORT_BAUDRATE);
+		unsafe { COM1.init(SERIAL_PORT_BAUDRATE); }
 	}
 }
 
@@ -193,7 +192,7 @@ fn test_output() {
 pub fn output_message_byte(byte: u8) {
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
-		COM1.write_byte(byte);
+		unsafe { COM1.write_byte(byte); }
 
 		// vga::write_byte() checks if VGA support has been initialized,
 		// so we don't need any additional if clause around it.
