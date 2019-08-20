@@ -93,37 +93,37 @@ static mut KERNEL_HEADER: KernelHeader = KernelHeader {
 // FUNCTIONS
 
 pub fn get_image_size() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.image_size) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.limit) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.limit) as usize }
 }
 
 pub fn get_mbinfo() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.mb_info) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.mb_info) as usize }
 }
 
 pub fn get_processor_count() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cpu_online) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.cpu_online) as usize }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.uhyve) != 0 }
+	unsafe { volatile_load(&KERNEL_HEADER.uhyve) != 0 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.single_kernel) != 0 }
+	unsafe { volatile_load(&KERNEL_HEADER.single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdsize) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.cmdsize) as usize }
 }
 
 pub fn get_cmdline() -> usize {
-	unsafe { ptr::read_volatile(&KERNEL_HEADER.cmdline) as usize }
+	unsafe { volatile_load(&KERNEL_HEADER.cmdline) as usize }
 }
 
 /// Earliest initialization function called by the Boot Processor.

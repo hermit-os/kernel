@@ -6,7 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::collections::BTreeMap;
-use core::ptr::read_volatile;
+use core::volatile_load;
 use core::str;
 use core::sync::atomic::{AtomicBool, Ordering};
 
