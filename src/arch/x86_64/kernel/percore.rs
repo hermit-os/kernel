@@ -6,7 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch::x86_64::kernel::KERNEL_HEADER;
-use core::{intrinsics,ptr};
+use core::{intrinsics, ptr};
 use scheduler::PerCoreScheduler;
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;

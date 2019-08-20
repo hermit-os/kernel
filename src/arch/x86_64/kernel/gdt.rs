@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::KERNEL_HEADER;
 use config::*;
-use core::{mem, intrinsics};
+use core::{intrinsics, mem};
 use scheduler::task::TaskStatus;
 use x86::bits64::segmentation::*;
 use x86::bits64::task::*;

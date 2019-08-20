@@ -39,9 +39,7 @@ impl SerialPort {
 	}
 
 	fn read_from_register(&self, register: u16) -> u8 {
-		unsafe {
-			inb(self.port_address + register)
-		}
+		unsafe { inb(self.port_address + register) }
 	}
 
 	fn is_transmitting(&self) -> bool {

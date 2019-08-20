@@ -164,6 +164,17 @@ unsafe fn sections_init() {
 	);
 }
 
+#[cfg(feature = "newlib")]
+fn has_lwip() -> bool {
+	let ip = arch::x86_64::kernel::get_ip();
+
+	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
+		false
+	} else {
+		true
+	}
+}
+
 #[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
@@ -175,7 +186,9 @@ extern "C" fn initd(_arg: usize) {
 	// initialize LwIP library
 	#[cfg(feature = "newlib")]
 	unsafe {
-		init_lwip();
+		if has_lwip() {
+			init_lwip();
+		}
 	}
 
 	if environment::is_uhyve() {
@@ -183,7 +196,9 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running on uhyve!");
 		#[cfg(feature = "newlib")]
 		unsafe {
-			init_uhyve_netif();
+			if has_lwip() {
+				init_uhyve_netif();
+			}
 		}
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
