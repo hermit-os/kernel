@@ -5,7 +5,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::intrinsics;
 use core::sync::atomic::spin_loop_hint;
 use environment;
 use x86::io::*;
@@ -41,8 +40,7 @@ impl SerialPort {
 
 	fn read_from_register(&self, register: u16) -> u8 {
 		unsafe {
-			let port = intrinsics::volatile_load(&self.port_address);
-			inb(port + register)
+			inb(self.port_address + register)
 		}
 	}
 
@@ -61,13 +59,12 @@ impl SerialPort {
 		}
 
 		unsafe {
-			let port = intrinsics::volatile_load(&self.port_address);
-			outb(port + register, byte);
+			outb(self.port_address + register, byte);
 		}
 	}
 
 	pub fn write_byte(&self, byte: u8) {
-		if unsafe { intrinsics::volatile_load(&self.port_address) == 0 } {
+		if self.port_address == 0 {
 			return;
 		}
 
@@ -81,7 +78,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if !environment::is_uhyve() && unsafe { intrinsics::volatile_load(&self.port_address) } != 0 {
+		if !environment::is_uhyve() && self.port_address != 0 {
 			// Disable port interrupt.
 			self.write_to_register(UART_IER, 0);
 
