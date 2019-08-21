@@ -17,24 +17,24 @@ else
 RM := rm -rf
 endif
 
-.PHONY: all loader clippy clean lib docs
+.PHONY: all loader tests clippy clean lib docs
 
 default: lib
-	make arch=$(arch) release=$(release) -C examples
+	make arch=$(arch) release=$(release) -C tests
 
 all: loader lib
-	make arch=$(arch) release=$(release) -C examples
+	make arch=$(arch) release=$(release) -C tests
 
 clean:
 	$(RM) target/x86_64-unknown-hermit-kernel
-	make -C examples clean
+	make -C tests clean
 	make -C loader clean
 
 loader:
 	make -C loader release=$(release)
 
 qemu:
-	qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd examples/target/$(target)/$(rdir)/hctests -cpu Haswell-noTSX,vendor=GenuineIntel
+	qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd tests/target/$(target)/$(rdir)/hctests -cpu Haswell-noTSX,vendor=GenuineIntel
 
 docs:
 	@echo DOC

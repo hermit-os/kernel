@@ -33,13 +33,13 @@ build:
   cache:
     paths:
       - target/x86_64-unknown-hermit-kernel
-      - examples/target/x86_64-unknown-hermit
+      - tests/target/x86_64-unknown-hermit
       - loader/target/x86_64-unknown-hermit-loader
     key: build
   artifacts:
     paths:
       - target/x86_64-unknown-hermit-kernel
-      - examples/target/x86_64-unknown-hermit
+      - tests/target/x86_64-unknown-hermit
       - loader/target/x86_64-unknown-hermit-loader
   tags:
     - docker
@@ -50,7 +50,7 @@ build:
 test:tarpaulin:
   stage: test
   script:
-    - rm -rf examples loader
+    - rm -rf tests loader
     - cargo tarpaulin -v --exclude-files src/arch/aarch64
   image: ${IMAGE}
   tags:
@@ -68,8 +68,8 @@ test:uhyve:
   stage: test
   script:
     - cargo install --git https://github.com/hermitcore/uhyve.git
-    - HERMIT_VERBOSE=1 uhyve examples/target/x86_64-unknown-hermit/debug/hctests
-    - HERMIT_VERBOSE=1 uhyve examples/target/x86_64-unknown-hermit/release/hctests
+    - HERMIT_VERBOSE=1 uhyve tests/target/x86_64-unknown-hermit/debug/hctests
+    - HERMIT_VERBOSE=1 uhyve tests/target/x86_64-unknown-hermit/release/hctests
   image: ${IMAGE}
   dependencies:
     - build
