@@ -43,7 +43,7 @@ Currently, the RustyHermit can only run within our own hypervisor [*uhyve*](http
 Please install the hypervisor as follows:
 
 ```sh
-cargo install --git https://github.com/hermitcore/uhyve.git
+cargo install uhyve
 ```
 
 Afterwards, your are able to start RustyHermit applications within our hypervisor:
