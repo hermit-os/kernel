@@ -18,6 +18,16 @@ fn main() {
 	println!("Test {} ... {}", stringify!(hello), test_result(hello()));
 	println!(
 		"Test {} ... {}",
+		stringify!(print_argv),
+		test_result(print_argv())
+	);
+	println!(
+		"Test {} ... {}",
+		stringify!(print_env),
+		test_result(print_env())
+	);
+	println!(
+		"Test {} ... {}",
 		stringify!(read_file),
 		test_result(read_file())
 	);

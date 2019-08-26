@@ -1,5 +1,6 @@
 use core::arch::x86_64 as arch;
 use http::{Request, Response};
+use std::env;
 use std::f64::consts::PI;
 use std::fs::File;
 use std::io::Read;
@@ -194,6 +195,29 @@ pub fn create_file() -> Result<(), std::io::Error> {
 		let kind = std::io::ErrorKind::Other;
 		Err(std::io::Error::from(kind))
 	}
+}
+
+pub fn print_argv() -> Result<(), ()> {
+	let args = env::args();
+
+	// Prints each argument on a separate line
+	for (i, argument) in args.enumerate() {
+		println!("argument[{}] = {}", i, argument);
+	}
+
+	Ok(())
+}
+
+pub fn print_env() -> Result<(), ()> {
+	let envs = env::vars();
+
+	// We will iterate through the references to the element returned by
+	// env::vars();
+	for (key, value) in envs {
+		println!("{}: {}", key, value);
+	}
+
+	Ok(())
 }
 
 pub fn hello() -> Result<(), ()> {
