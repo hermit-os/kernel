@@ -1,6 +1,6 @@
 [package]
 name = "hermit"
-version = "0.3.9"
+version = "0.3.10"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
@@ -23,7 +23,6 @@ crate-type = ["staticlib"]
 
 [features]
 vga = []
-network = ["smoltcp"]
 newlib = []
 
 [dependencies]
@@ -35,13 +34,6 @@ bitflags = "1.1.0"
 version = "0.4"
 default-features = false
 #features = ["release_max_level_info"]
-
-[dependencies.smoltcp]
-version = "0.5"
-optional = true
-default-features = false
-features = ["log", "verbose", "alloc", "socket-udp", "socket-tcp", "proto-ipv4"]
-# for debugging: "log", "verbose"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
 version = "0.*"
