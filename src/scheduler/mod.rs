@@ -17,8 +17,6 @@ use arch::percore::*;
 use arch::switch;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
-#[cfg(feature = "network")]
-use drivers::net::get_network_task_id;
 use scheduler::task::*;
 use synch::spinlock::*;
 
