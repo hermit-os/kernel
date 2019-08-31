@@ -51,8 +51,6 @@ extern crate multiboot;
 extern crate x86;
 #[macro_use]
 extern crate log;
-#[cfg(feature = "network")]
-extern crate smoltcp;
 
 #[macro_use]
 mod macros;
@@ -200,6 +198,8 @@ extern "C" fn initd(_arg: usize) {
 				init_uhyve_netif();
 			}
 		}
+		#[cfg(not(feature = "newlib"))]
+		let _ = drivers::net::init();
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");

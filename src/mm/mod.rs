@@ -167,7 +167,11 @@ pub fn init() {
 			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE).unwrap()
 		};
 
-		info!("Heap: size {} MB, start address 0x{:x}", virt_size >> 20, virt_addr);
+		info!(
+			"Heap: size {} MB, start address 0x{:x}",
+			virt_size >> 20,
+			virt_addr
+		);
 
 		// try to map a huge page
 		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE {
