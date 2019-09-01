@@ -86,7 +86,9 @@ use mm::allocator::LockedHeap;
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
+/// Interface to allocate memory from system heap
 #[cfg(not(test))]
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -106,7 +108,9 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	ptr
 }
 
+/// Interface to increase the size of a memory region
 #[cfg(not(test))]
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -125,7 +129,9 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 	new_ptr
 }
 
+/// Interface to deallocate a memory region from the system heap
 #[cfg(not(test))]
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -151,9 +157,9 @@ extern "C" {
 	static tdata_end: usize;
 }
 
+/// Initialize bss sections for the kernel.
 #[cfg(not(test))]
 unsafe fn sections_init() {
-	// Initialize bss sections for the kernel.
 	ptr::write_bytes(
 		&mut hbss_start as *mut usize as *mut u8,
 		0,
@@ -162,8 +168,8 @@ unsafe fn sections_init() {
 	);
 }
 
-#[cfg(feature = "newlib")]
-fn has_lwip() -> bool {
+/// Helper function to check if uhyve provide an IP device
+fn has_ipdevice() -> bool {
 	let ip = arch::x86_64::kernel::get_ip();
 
 	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
@@ -173,6 +179,7 @@ fn has_lwip() -> bool {
 	}
 }
 
+/// Entry point of a kernel thread, which initialize the libos
 #[cfg(not(test))]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
@@ -181,10 +188,10 @@ extern "C" fn initd(_arg: usize) {
 		fn init_uhyve_netif() -> i32;
 	}
 
-	// initialize LwIP library
+	// initialize LwIP library for newlib-based applications
 	#[cfg(feature = "newlib")]
 	unsafe {
-		if has_lwip() {
+		if has_ipdevice() {
 			init_lwip();
 		}
 	}
@@ -192,14 +199,15 @@ extern "C" fn initd(_arg: usize) {
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		#[cfg(feature = "newlib")]
-		unsafe {
-			if has_lwip() {
+		if has_ipdevice() {
+			#[cfg(feature = "newlib")]
+			unsafe {
 				init_uhyve_netif();
 			}
+
+			#[cfg(not(feature = "newlib"))]
+			let _ = drivers::net::init();
 		}
-		#[cfg(not(feature = "newlib"))]
-		let _ = drivers::net::init();
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
@@ -220,9 +228,8 @@ extern "C" fn initd(_arg: usize) {
 }
 
 /// Entry Point of HermitCore for the Boot Processor
-/// (called from entry.asm)
 #[cfg(not(test))]
-pub fn boot_processor_main() -> ! {
+fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	unsafe {
 		sections_init();
@@ -267,9 +274,8 @@ pub fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of HermitCore for an Application Processor
-/// (called from entry.asm)
 #[cfg(not(test))]
-pub fn application_processor_main() -> ! {
+fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
 	let core_scheduler = core_scheduler();
