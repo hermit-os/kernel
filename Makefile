@@ -38,7 +38,7 @@ qemu:
 
 docs:
 	@echo DOC
-	@cargo doc
+	@cargo doc --no-deps
 
 clippy:
 	@echo Run clippy...
