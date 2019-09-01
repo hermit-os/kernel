@@ -198,8 +198,6 @@ pub extern "C" fn sys_spawn(
 		}
 	}
 
-	sys_yield();
-
 	0
 }
 
