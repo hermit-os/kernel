@@ -34,7 +34,7 @@ pub trait NetworkInterface {
 		sem: *const c_void,
 		ip: &mut [u8; 4],
 		gateway: &mut [u8; 4],
-		mac: &mut [u8; 6],
+		mac: &mut [u8; 18],
 	) -> i32;
 	/// read packet from network interface
 	fn read(&mut self, buf: usize, len: usize) -> usize;
@@ -47,7 +47,7 @@ pub extern "C" fn sys_network_init(
 	sem: *const c_void,
 	ip: &mut [u8; 4],
 	gateway: &mut [u8; 4],
-	mac: &mut [u8; 6],
+	mac: &mut [u8; 18],
 ) -> i32 {
 	match &mut *NIC.lock() {
 		Some(nic) => nic.init(sem, ip, gateway, mac),

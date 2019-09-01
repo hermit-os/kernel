@@ -77,9 +77,11 @@ impl NetworkInterface for UhyveNetwork {
 		sem: *const c_void,
 		ip: &mut [u8; 4],
 		gateway: &mut [u8; 4],
-		mac: &mut [u8; 6],
+		mac: &mut [u8; 18],
 	) -> i32 {
 		let mac_str = str::from_utf8(&self.mac).unwrap();
+		info!("MAC address: {}", mac_str);
+
 		let myip = get_ip();
 		let mygw = get_gateway();
 
