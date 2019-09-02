@@ -111,7 +111,7 @@ impl NetworkInterface for UhyveNetwork {
 	}
 
 	fn read(&mut self, buf: usize, len: usize) -> usize {
-		let data = UhyveRead::new(virt_to_phys(buf as usize), len);
+		let data = UhyveRead::new(virt_to_phys(buf), len);
 		unsafe {
 			outl(
 				UHYVE_PORT_NETREAD,
