@@ -29,6 +29,8 @@ extern "C" {
 
 #[repr(C, packed)]
 struct State {
+	/// GS register
+	gs: usize,
 	/// FS register for TLS support
 	fs: usize,
 	/// R15 register
