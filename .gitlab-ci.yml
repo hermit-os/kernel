@@ -68,8 +68,9 @@ test:uhyve:
   stage: test
   script:
     - cargo install --git https://github.com/hermitcore/uhyve.git
-    - HERMIT_VERBOSE=1 uhyve tests/target/x86_64-unknown-hermit/debug/hctests
-    - HERMIT_VERBOSE=1 uhyve tests/target/x86_64-unknown-hermit/release/hctests
+    - ls -la tests/
+    - uhyve -v tests/target/x86_64-unknown-hermit/debug/hctests
+    - uhyve -v tests/target/x86_64-unknown-hermit/release/hctests
   image: ${IMAGE}
   dependencies:
     - build
