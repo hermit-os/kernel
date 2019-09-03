@@ -5,6 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use arch::irq;
 use alloc::boxed::Box;
 use core::ffi::c_void;
 use core::ptr::read_volatile;
@@ -95,12 +96,15 @@ impl NetworkInterface for UhyveNetwork {
 
 	fn write(&self, buf: usize, len: usize) -> usize {
 		let uhyve_write = UhyveWrite::new(virt_to_phys(buf), len);
+
+		let irq = irq::nested_disable();
 		unsafe {
 			outl(
 				UHYVE_PORT_NETWRITE,
 				virt_to_phys(&uhyve_write as *const _ as usize) as u32,
 			);
 		}
+		irq::nested_enable(irq);
 
 		let ret = uhyve_write.ret();
 		if ret != 0 {
@@ -112,6 +116,7 @@ impl NetworkInterface for UhyveNetwork {
 
 	fn read(&mut self, buf: usize, len: usize) -> usize {
 		let data = UhyveRead::new(virt_to_phys(buf), len);
+		let irq = irq::nested_disable();
 		unsafe {
 			outl(
 				UHYVE_PORT_NETREAD,
@@ -122,9 +127,11 @@ impl NetworkInterface for UhyveNetwork {
 		if data.ret() == 0 {
 			trace!("resize message to {} bytes", data.len());
 
+			irq::nested_enable(irq);
 			data.len()
 		} else {
 			self.set_polling(false);
+			irq::nested_enable(irq);
 			0
 		}
 	}
@@ -199,7 +206,7 @@ pub fn init() -> Result<Box<dyn NetworkInterface>, ()> {
 
 	debug!("Initialize uhyve network interface!");
 
-	::arch::irq::disable();
+	irq::disable();
 
 	let nic = {
 		let info: UhyveNetinfo = UhyveNetinfo::default();
@@ -217,7 +224,7 @@ pub fn init() -> Result<Box<dyn NetworkInterface>, ()> {
 	// Install interrupt handler
 	irq_install_handler(UHYVE_IRQ_NET, uhyve_irqhandler as usize);
 
-	::arch::irq::enable();
+	irq::enable();
 
 	Ok(nic)
 }
