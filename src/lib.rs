@@ -32,7 +32,6 @@
 #![feature(specialization)]
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
-#![feature(const_vec_new)]
 #![allow(unused_macros)]
 #![no_std]
 
