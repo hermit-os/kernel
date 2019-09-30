@@ -8,7 +8,7 @@
 
 use alloc::boxed::Box;
 use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::BOOT_INFO;
 use config::*;
 use core::{intrinsics, mem};
 use scheduler::task::TaskStatus;
@@ -89,7 +89,7 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = unsafe { intrinsics::volatile_load(&KERNEL_HEADER.current_stack_address) }
+	boxed_tss.rsp[0] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).current_stack_address) }
 		+ KERNEL_STACK_SIZE as u64
 		- 0x10;
 

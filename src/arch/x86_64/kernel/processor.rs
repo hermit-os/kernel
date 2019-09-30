@@ -13,7 +13,7 @@ use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::pic;
 use arch::x86_64::kernel::pit;
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::BOOT_INFO;
 use core::sync::atomic::spin_loop_hint;
 use core::{fmt, intrinsics, u32};
 use environment;
@@ -272,7 +272,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		let cpu_freq = intrinsics::volatile_load(&KERNEL_HEADER.cpu_freq);
+		let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
 		if cpu_freq > 0 {
 			self.mhz = cpu_freq as u16;
 			self.source = CpuFrequencySources::Hypervisor;

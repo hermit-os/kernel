@@ -30,21 +30,23 @@ mod vga;
 
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
-use config::KERNEL_STACK_SIZE;
 
-use core::intrinsics;
+use core::{intrinsics, ptr};
 use environment;
 use kernel_message_buffer;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
 #[repr(C)]
-struct KernelHeader {
+pub struct BootInfo {
 	magic_number: u32,
 	version: u32,
 	base: u64,
 	limit: u64,
 	image_size: u64,
+	tls_start: u64,
+	tls_filesz: u64,
+	tls_memsz: u64,
 	current_stack_address: u64,
 	current_percore_address: u64,
 	host_logical_addr: u64,
@@ -63,47 +65,25 @@ struct KernelHeader {
 	hcip: [u8; 4],
 	hcgateway: [u8; 4],
 	hcmask: [u8; 4],
-	boot_stack: [u8; KERNEL_STACK_SIZE],
 }
 
 /// Kernel header to announce machine features
-#[cfg_attr(not(test), link_section = ".mboot")]
-static mut KERNEL_HEADER: KernelHeader = KernelHeader {
-	magic_number: 0xC0DE_CAFEu32,
-	version: 0,
-	base: 0,
-	limit: 0,
-	image_size: 0,
-	current_stack_address: 0,
-	current_percore_address: 0,
-	host_logical_addr: 0,
-	boot_gtod: 0,
-	mb_info: 0,
-	cmdline: 0,
-	cmdsize: 0,
-	cpu_freq: 0,
-	boot_processor: !0,
-	cpu_online: 0,
-	possible_cpus: 0,
-	current_boot_id: 0,
-	uartport: 0,
-	single_kernel: 1,
-	uhyve: 0,
-	hcip: [255, 255, 255, 255],
-	hcgateway: [255, 255, 255, 255],
-	hcmask: [255, 255, 255, 0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE],
-};
+#[cfg(not(feature = "newlib"))]
+#[link_section = ".data"]
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
+#[cfg(feature = "newlib")]
+#[link_section = ".mboot"]
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+
+/// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
-
-// FUNCTIONS
 
 pub fn get_ip() -> [u8; 4] {
 	let mut ip: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
-		ip[i] = unsafe { intrinsics::volatile_load(&KERNEL_HEADER.hcip[i]) as u8 };
+		ip[i] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip[i]) as u8 };
 	}
 
 	ip
@@ -113,44 +93,60 @@ pub fn get_gateway() -> [u8; 4] {
 	let mut gw: [u8; 4] = [0, 0, 0, 0];
 
 	for i in 0..4 {
-		gw[i] = unsafe { intrinsics::volatile_load(&KERNEL_HEADER.hcgateway[i]) as u8 };
+		gw[i] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway[i]) as u8 };
 	}
 
 	gw
 }
 
+pub fn get_base_address() -> usize {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).base) as usize }
+}
+
 pub fn get_image_size() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.image_size) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.limit) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).limit) as usize }
+}
+
+pub fn get_tls_start() -> usize {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_start) as usize }
+}
+
+pub fn get_tls_filesz() -> usize {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_filesz) as usize }
+}
+
+pub fn get_tls_memsz() -> usize {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_memsz) as usize }
 }
 
 pub fn get_mbinfo() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.mb_info) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).mb_info) as usize }
 }
 
 pub fn get_processor_count() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cpu_online) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cpu_online) as usize }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.uhyve) != 0 }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) != 0 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.single_kernel) != 0 }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cmdsize) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cmdsize) as usize }
 }
 
 pub fn get_cmdline() -> usize {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.cmdline) as usize }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cmdline) as usize }
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -158,7 +154,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = intrinsics::volatile_load(&KERNEL_HEADER.uartport);
+		COM1.port_address = intrinsics::volatile_load(&(*BOOT_INFO).uartport);
 	}
 
 	if environment::is_single_kernel() {
@@ -286,6 +282,6 @@ fn finish_processor_init() {
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
 	unsafe {
-		let _ = intrinsics::atomic_xadd(&mut KERNEL_HEADER.cpu_online as *mut u32, 1);
+		let _ = intrinsics::atomic_xadd(&mut (*BOOT_INFO).cpu_online as *mut u32, 1);
 	}
 }

@@ -7,7 +7,7 @@
 
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::processor;
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::BOOT_INFO;
 use core::intrinsics;
 use core::sync::atomic::spin_loop_hint;
 use environment;
@@ -226,7 +226,7 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 }
 
 pub fn get_boot_time() -> u64 {
-	unsafe { intrinsics::volatile_load(&KERNEL_HEADER.boot_gtod) }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).boot_gtod) }
 }
 
 pub fn init() {
@@ -237,7 +237,7 @@ pub fn init() {
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
 		microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
-		unsafe { intrinsics::volatile_store(&mut KERNEL_HEADER.boot_gtod, microseconds_offset) }
+		unsafe { intrinsics::volatile_store(&mut (*BOOT_INFO).boot_gtod, microseconds_offset) }
 	}
 
 	let (year, month, day, hour, minute, second) = date_from_microseconds(microseconds_offset);

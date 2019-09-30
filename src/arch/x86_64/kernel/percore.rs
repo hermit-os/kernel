@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::BOOT_INFO;
 use core::{intrinsics, ptr};
 use scheduler::PerCoreScheduler;
 use x86::bits64::task::TaskStateSegment;
@@ -118,7 +118,7 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 pub fn init() {
 	unsafe {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
-		let address = intrinsics::volatile_load(&KERNEL_HEADER.current_percore_address);
+		let address = intrinsics::volatile_load(&(*BOOT_INFO).current_percore_address);
 		if address == 0 {
 			wrmsr(IA32_KERNEL_GSBASE, &PERCORE as *const _ as u64);
 		} else {
