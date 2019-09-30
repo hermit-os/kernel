@@ -78,7 +78,6 @@ pub use syscalls::*;
 use alloc::alloc::Layout;
 use arch::percore::*;
 use core::alloc::GlobalAlloc;
-use core::ptr;
 use mm::allocator::LockedHeap;
 
 #[cfg(not(test))]
@@ -87,7 +86,6 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 /// Interface to allocate memory from system heap
 #[cfg(not(test))]
-#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -109,7 +107,6 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 
 /// Interface to increase the size of a memory region
 #[cfg(not(test))]
-#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -130,7 +127,6 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 
 /// Interface to deallocate a memory region from the system heap
 #[cfg(not(test))]
-#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
@@ -149,22 +145,6 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 #[cfg(not(test))]
 extern "C" {
 	static mut __bss_start: usize;
-	static mut hbss_start: usize;
-	static kernel_start: usize;
-	static tls_start: usize;
-	static tls_end: usize;
-	static tdata_end: usize;
-}
-
-/// Initialize bss sections for the kernel.
-#[cfg(not(test))]
-unsafe fn sections_init() {
-	ptr::write_bytes(
-		&mut hbss_start as *mut usize as *mut u8,
-		0,
-		&kernel_start as *const usize as usize + environment::get_image_size()
-			- &hbss_start as *const usize as usize,
-	);
 }
 
 /// Helper function to check if uhyve provide an IP device
@@ -183,7 +163,9 @@ fn has_ipdevice() -> bool {
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
+		#[cfg(feature = "newlib")]
 		fn init_lwip();
+		#[cfg(feature = "newlib")]
 		fn init_uhyve_netif() -> i32;
 	}
 
@@ -230,29 +212,19 @@ extern "C" fn initd(_arg: usize) {
 #[cfg(not(test))]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
-	unsafe {
-		sections_init();
-	}
 	arch::message_output_init();
 	logging::init();
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	unsafe {
-		debug!(
-			"tls: 0x{:x} - 0x{:x}",
-			&tls_start as *const usize as usize, &tls_end as *const usize as usize
-		);
-		debug!(
-			"bss start: 0x{:x}, hbss start: 0x{:x}, tdata end: 0x{:x}",
-			&__bss_start as *const usize as usize,
-			&hbss_start as *const usize as usize,
-			&tdata_end as *const usize as usize
-		);
-		debug!(
-			"kernel start: 0x{:x}",
-			&kernel_start as *const usize as usize
-		);
-	}
+	debug!("Kernel starts at 0x{:x}", environment::get_base_address());
+	debug!("BSS starts at 0x{:x}", unsafe {
+		&__bss_start as *const usize as usize
+	});
+	debug!(
+		"TLS starts at 0x{:x} (size {} Bytes)",
+		environment::get_tls_start(),
+		environment::get_tls_memsz()
+	);
 
 	arch::boot_processor_init();
 	scheduler::init();

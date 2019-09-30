@@ -27,7 +27,7 @@ const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 #[repr(C)]
-struct KernelHeader {
+struct BootInfo {
 	magic_number: u32,
 	version: u32,
 	base: u64,
@@ -175,19 +175,19 @@ pub unsafe fn boot_kernel(
 	mem_size: usize,
 	entry_point: usize,
 ) {
-	let kernel_header = &mut *(virtual_address as *mut KernelHeader);
-	loaderlog!("Found magic number 0x{:x}", kernel_header.magic_number);
+	let BOOT_INFO = &mut *(virtual_address as *mut BootInfo);
+	loaderlog!("Found magic number 0x{:x}", BOOT_INFO.magic_number);
 
 	// Supply the parameters to the HermitCore application.
-	intrinsics::volatile_store(&mut kernel_header.base, new_physical_address as u64);
-	intrinsics::volatile_store(&mut kernel_header.image_size, mem_size as u64);
-	intrinsics::volatile_store(&mut kernel_header.mb_info, mb_info as u64);
+	intrinsics::volatile_store(&mut BOOT_INFO.base, new_physical_address as u64);
+	intrinsics::volatile_store(&mut BOOT_INFO.image_size, mem_size as u64);
+	intrinsics::volatile_store(&mut BOOT_INFO.mb_info, mb_info as u64);
 	intrinsics::volatile_store(
-		&mut kernel_header.current_stack_address,
-		(virtual_address + mem::size_of::<KernelHeader>()) as u64,
+		&mut BOOT_INFO.current_stack_address,
+		(virtual_address + mem::size_of::<BootInfo>()) as u64,
 	);
-	intrinsics::volatile_store(&mut kernel_header.uartport, SERIAL_PORT_ADDRESS);
-	intrinsics::volatile_store(&mut kernel_header.uhyve, 0);
+	intrinsics::volatile_store(&mut BOOT_INFO.uartport, SERIAL_PORT_ADDRESS);
+	intrinsics::volatile_store(&mut BOOT_INFO.uhyve, 0);
 
 	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
 	if let Some(cmdline) = multiboot.command_line() {
@@ -198,8 +198,8 @@ pub unsafe fn boot_kernel(
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 		//let cmdline = multiboot.command_line().unwrap();
-		intrinsics::volatile_store(&mut kernel_header.cmdline, address as u64);
-		intrinsics::volatile_store(&mut kernel_header.cmdsize, cmdline.len() as u64);
+		intrinsics::volatile_store(&mut BOOT_INFO.cmdline, address as u64);
+		intrinsics::volatile_store(&mut BOOT_INFO.cmdsize, cmdline.len() as u64);
 	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.

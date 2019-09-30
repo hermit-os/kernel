@@ -6,31 +6,22 @@
 // copied, modified, or distributed except according to those terms.
 
 use application_processor_main;
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::{BootInfo, BOOT_INFO};
 use boot_processor_main;
 use config::KERNEL_STACK_SIZE;
-use core::intrinsics;
 
 #[inline(never)]
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start() -> ! {
-	// reset registers to kill any stale realmode selectors
-	asm!("mov $$0x10, %rax
-		mov %eax, %ds
-		mov %eax, %ss
-		mov %eax, %es
-		xor %eax, %eax
-		mov %eax, %fs
-		mov %eax, %gs
-		cld" :::: "volatile");
-
+pub unsafe extern "C" fn _start(boot_info: &'static mut BootInfo) -> ! {
 	// initialize stack pointer
 	asm!("mov $0, %rsp; mov %rsp, %rbp"
-		:: "r"(intrinsics::volatile_load(&KERNEL_HEADER.current_stack_address) + KERNEL_STACK_SIZE as u64 - 0x10)
+		:: "r"(boot_info.current_stack_address + KERNEL_STACK_SIZE as u64 - 0x10)
 		:: "volatile");
 
-	if intrinsics::volatile_load(&KERNEL_HEADER.cpu_online) == 0 {
+	BOOT_INFO = boot_info as *mut BootInfo;
+
+	if boot_info.cpu_online == 0 {
 		boot_processor_main();
 	} else {
 		application_processor_main();

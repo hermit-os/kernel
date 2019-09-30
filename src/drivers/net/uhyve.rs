@@ -5,8 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::irq;
 use alloc::boxed::Box;
+use arch::irq;
 use core::ffi::c_void;
 use core::ptr::read_volatile;
 use core::sync::atomic::{AtomicBool, Ordering};

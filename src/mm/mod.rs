@@ -20,10 +20,6 @@ use core::mem;
 use core::sync::atomic::spin_loop_hint;
 use environment;
 
-extern "C" {
-	static kernel_start: usize;
-}
-
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
 static mut KERNEL_START_ADDRESS: usize = 0;
@@ -83,11 +79,11 @@ pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
 		KERNEL_START_ADDRESS = align_down!(
-			&kernel_start as *const usize as usize,
+			environment::get_base_address(),
 			arch::mm::paging::LargePageSize::SIZE
 		);
 		KERNEL_END_ADDRESS = align_up!(
-			&kernel_start as *const usize as usize + environment::get_image_size(),
+			environment::get_base_address() + environment::get_image_size(),
 			arch::mm::paging::LargePageSize::SIZE
 		);
 	}

@@ -15,7 +15,7 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 #[cfg(not(test))]
 use arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
-use arch::x86_64::kernel::KERNEL_HEADER;
+use arch::x86_64::kernel::BOOT_INFO;
 use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
@@ -457,9 +457,9 @@ pub fn init_next_processor_variables(core_id: usize) {
 	let stack = mm::allocate(KERNEL_STACK_SIZE, false);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
-		intrinsics::volatile_store(&mut KERNEL_HEADER.current_stack_address, stack as u64);
+		intrinsics::volatile_store(&mut (*BOOT_INFO).current_stack_address, stack as u64);
 		intrinsics::volatile_store(
-			&mut KERNEL_HEADER.current_percore_address,
+			&mut (*BOOT_INFO).current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
 		);
 	}
