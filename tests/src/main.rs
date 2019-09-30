@@ -1,5 +1,3 @@
-#![feature(duration_float)]
-
 extern crate http;
 extern crate rayon;
 
