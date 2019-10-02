@@ -40,4 +40,3 @@ clippy:
 lib:
 	@echo Build libhermit
 	@RUST_TARGET_PATH=$(CURDIR) cargo xbuild $(opt) --target $(target)-kernel
-	@$(arch)-hermit-elfedit --output-osabi Standalone target/$(target)-kernel/$(rdir)/libhermit.a
