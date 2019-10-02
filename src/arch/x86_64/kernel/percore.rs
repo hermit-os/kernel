@@ -62,13 +62,13 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("swapgs; movq %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	default unsafe fn set(&self, value: T) {
-		asm!("swapgs; movq $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -82,13 +82,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("swapgs; movl %gs:($1), $0; swapgs" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	unsafe fn set(&self, value: T) {
-		asm!("swapgs; movl $0, %gs:($1); swapgs" :: "r"(value), "r"(self.offset()) :: "volatile");
+		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -120,9 +120,9 @@ pub fn init() {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
 		let address = intrinsics::volatile_load(&(*BOOT_INFO).current_percore_address);
 		if address == 0 {
-			wrmsr(IA32_KERNEL_GSBASE, &PERCORE as *const _ as u64);
+			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
 		} else {
-			wrmsr(IA32_KERNEL_GSBASE, address as u64);
+			wrmsr(IA32_GS_BASE, address as u64);
 		}
 	}
 }
