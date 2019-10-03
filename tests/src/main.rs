@@ -58,12 +58,12 @@ fn main() {
 		"Test {} ... {}",
 		stringify!(test_matmul_strassen),
 		test_result(test_matmul_strassen())
-	);*/
+	);
 	println!(
 		"Test {} ... {}",
 		stringify!(thread_creation),
 		test_result(thread_creation())
-	);
+	);*/
 	println!(
 		"Test {} ... {}",
 		stringify!(bench_sched_one_thread),
