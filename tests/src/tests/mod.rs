@@ -17,12 +17,12 @@ pub use matmul::test_matmul_strassen;
 
 #[inline]
 fn get_timestamp_rdtscp() -> u64 {
-	let mut _aux = 0;
-	let value = unsafe { arch::__rdtscp(&mut _aux) };
 	unsafe {
+		let mut _aux = 0;
+		let value = arch::__rdtscp(&mut _aux);
 		arch::_mm_lfence();
+		value
 	}
-	value
 }
 
 pub fn thread_creation() -> Result<(), ()> {
