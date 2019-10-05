@@ -76,16 +76,16 @@ test:uhyve:
   tags:
     - docker
 
-#test:qemu:
-#  stage: test
-#  script:
-#    - make qemu
-#    - make release=1 qemu
-#  image: ${IMAGE}
-#  dependencies:
-#    - build
-#  tags:
-#    - docker
+test:qemu:
+  stage: test
+  script:
+    - make qemu
+    - make release=1 qemu
+  image: ${IMAGE}
+  dependencies:
+    - build
+  tags:
+    - docker
 
 # Stage: deploy
 ##############################################################################

@@ -17,17 +17,24 @@ else
 RM := rm -rf
 endif
 
-.PHONY: all tests clippy clean lib docs
+.PHONY: all loader qemu tests clippy clean lib docs
 
 default: lib
 	make arch=$(arch) release=$(release) -C tests
 
-all: lib
+all: loader lib
 	make arch=$(arch) release=$(release) -C tests
 
 clean:
 	$(RM) target/x86_64-unknown-hermit-kernel
 	make -C tests clean
+	make -C loader clean
+
+loader:
+	make -C loader release=$(release)
+
+qemu:
+	qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd tests/target/$(target)/$(rdir)/hctests -cpu qemu64,apic,fsgsbase,pku,rdtscp,xsave,fxsr
 
 docs:
 	@echo DOC
