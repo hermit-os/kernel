@@ -34,7 +34,7 @@ loader:
 	make -C loader release=$(release)
 
 qemu:
-	qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd tests/target/$(target)/$(rdir)/hctests -cpu qemu64,apic,fsgsbase,pku,rdtscp,xsave,fxsr
+	qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel loader/target/$(target)-loader/$(rdir)/hermit-loader -initrd tests/target/$(target)/$(rdir)/rusty_tests -cpu qemu64,apic,fsgsbase,pku,rdtscp,xsave,fxsr
 
 docs:
 	@echo DOC
