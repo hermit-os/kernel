@@ -27,5 +27,3 @@ impl fmt::Write for Console {
 		Ok(())
 	}
 }
-
-pub static mut CONSOLE: Console = Console;
