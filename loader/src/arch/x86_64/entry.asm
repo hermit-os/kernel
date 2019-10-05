@@ -15,7 +15,7 @@
 
 [BITS 32]
 
-%define KERNEL_STACK_SIZE 4096
+%define BOOT_STACK_SIZE 4096
 
 extern kernel_start		; defined in linker script
 extern kernel_end
@@ -76,7 +76,7 @@ _start:
 
     ; Initialize stack pointer
     mov esp, boot_stack
-    add esp, KERNEL_STACK_SIZE - 16
+    add esp, BOOT_STACK_SIZE - 16
 
     ; Interpret multiboot information
     mov DWORD [mb_info], ebx
@@ -158,7 +158,7 @@ L1:
     ; Set CR4
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
-    or eax, (1 << 7)        ; enable PGE
+    ;or eax, (1 << 7)        ; enable PGE
     mov cr4, eax
 
     ; Set CR0 (PM-bit is already set)
@@ -186,12 +186,13 @@ start64:
     mov ds, ax
     mov es, ax
     mov ss, ax
-    mov ax, 0x00
+    xor ax, ax
     mov fs, ax
     mov gs, ax
+    cld
     ; set default stack pointer
     mov rsp, boot_stack
-    add rsp, KERNEL_STACK_SIZE-16
+    add rsp, BOOT_STACK_SIZE-16
 
     ; jump to the boot processors's C code
     extern loader_main
@@ -208,7 +209,7 @@ mb_info:
 ALIGN 4096
 global boot_stack
 boot_stack:
-    TIMES (KERNEL_STACK_SIZE) DB 0xcd
+    TIMES (BOOT_STACK_SIZE) DB 0xcd
 
 ; Bootstrap page tables are used during the initialization.
 ALIGN 4096
