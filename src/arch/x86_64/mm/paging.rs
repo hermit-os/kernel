@@ -8,18 +8,18 @@
 #![allow(dead_code)]
 
 use arch::x86_64::kernel::apic;
-//use arch::x86_64::kernel::get_mbinfo;
+use arch::x86_64::kernel::get_mbinfo;
 use arch::x86_64::kernel::irq;
 //use arch::x86_64::kernel::is_uhyve;
 use arch::x86_64::kernel::processor;
-//use arch::x86_64::mm::paddr_to_slice;
+use arch::x86_64::mm::paddr_to_slice;
 use arch::x86_64::mm::physicalmem;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
-//use environment;
+use environment;
 use mm;
-//use multiboot::Multiboot;
+use multiboot::Multiboot;
 use scheduler;
 use x86::controlregs;
 use x86::irq::PageFaultError;
@@ -724,25 +724,27 @@ pub fn init_page_tables() {
 		}*/
 
 		// Identity-map the supplied Multiboot information and command line.
-		/*let mb_info = get_mbinfo();
+		let mb_info = get_mbinfo();
 		if mb_info > 0 {
+			info!("Found Multiboot info at 0x{:x}", mb_info);
 			identity_map(mb_info, mb_info);
 
 			// Map the "Memory Map" information too.
 			let mb = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
 			let memory_map_address = mb
-									.memory_regions()
-									.expect("Could not find a memory map in the Multiboot information")
-									.next()
-									.expect("Could not first map address")
-									.base_address() as usize;
+				.memory_regions()
+				.expect("Could not find a memory map in the Multiboot information")
+				.next()
+				.expect("Could not first map address")
+				.base_address() as usize;
 			identity_map(memory_map_address, memory_map_address);
-		}*/
+		}
 
-		/*let cmdsize = environment::get_cmdsize();
+		let cmdsize = environment::get_cmdsize();
 		if cmdsize > 0 {
 			let cmdline = environment::get_cmdline();
+			info!("Found cmdline at 0x{:x} (size {})", cmdline, cmdsize);
 			identity_map(cmdline, cmdline + cmdsize - 1);
-		}*/
+		}
 	}
 }
