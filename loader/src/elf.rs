@@ -6,12 +6,12 @@
 // copied, modified, or distributed except according to those terms.
 
 pub const ELF_MAGIC: u32 = 0x464C_457F;
-pub const ELF_CLASS_64: u8 = 0x02;
 /// 64-bit file
-pub const ELF_DATA_2LSB: u8 = 0x01;
+pub const ELF_CLASS_64: u8 = 0x02;
 /// Little-Endian encoding
-pub const ELF_PAD_HERMIT: u8 = 0xFF;
+pub const ELF_DATA_2LSB: u8 = 0x01;
 /// HermitCore OSABI identification
+pub const ELF_PAD_HERMIT: u8 = 0xFF;
 
 #[repr(C, packed)]
 pub struct ElfIdentification {
@@ -23,16 +23,16 @@ pub struct ElfIdentification {
 	pub nident: u8,
 }
 
-pub const ELF_ET_EXEC: u16 = 0x0002;
 /// Executable
+pub const ELF_ET_EXEC: u16 = 0x0002;
 
+/// x86_64 architecture
 #[allow(dead_code)]
 pub const ELF_EM_X86_64: u16 = 0x003E;
-/// x86_64 architecture
 
+/// AArch64 architecture
 #[allow(dead_code)]
 pub const ELF_EM_AARCH64: u16 = 0x00B7;
-/// AArch64 architecture
 
 #[repr(C, packed)]
 pub struct ElfHeader {
@@ -52,8 +52,10 @@ pub struct ElfHeader {
 	pub sh_str_table_index: u16,
 }
 
-pub const ELF_PT_LOAD: u32 = 1;
 /// Loadable program segment
+pub const ELF_PT_LOAD: u32 = 1;
+/// TLS	 segment
+pub const ELF_PT_TLS: u32 = 7;
 
 #[repr(C, packed)]
 pub struct ElfProgramHeader {
