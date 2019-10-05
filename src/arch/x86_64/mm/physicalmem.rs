@@ -55,6 +55,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		found_ram,
 		"Could not find any available RAM in the Multiboot Memory Map"
 	);
+
 	Ok(())
 }
 
