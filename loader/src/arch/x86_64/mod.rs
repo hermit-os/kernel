@@ -5,13 +5,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+pub mod bootinfo;
 pub mod paging;
 pub mod processor;
 pub mod serial;
 
 use arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::serial::SerialPort;
-use core::{mem, slice, intrinsics};
+pub use self::bootinfo::*;
+use core::{mem, slice};
 use elf::*;
 use multiboot::Multiboot;
 use physicalmem;
@@ -23,38 +25,13 @@ extern "C" {
 // CONSTANTS
 pub const ELF_ARCH: u16 = ELF_EM_X86_64;
 
+const KERNEL_STACK_SIZE: usize = 32_768;
 const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
-#[repr(C)]
-struct BootInfo {
-	magic_number: u32,
-	version: u32,
-	base: u64,
-	limit: u64,
-	image_size: u64,
-	current_stack_address: u64,
-	current_percore_address: u64,
-	host_logical_addr: u64,
-	boot_gtod: u64,
-	mb_info: u64,
-	cmdline: u64,
-	cmdsize: u64,
-	cpu_freq: u32,
-	boot_processor: u32,
-	cpu_online: u32,
-	possible_cpus: u32,
-	current_boot_id: u32,
-	uartport: u16,
-	single_kernel: u8,
-	uhyve: u8,
-	hcip: [u8; 4],
-	hcgateway: [u8; 4],
-	hcmask: [u8; 4],
-}
-
 // VARIABLES
 static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
+pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 
 fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
 	unsafe {
@@ -166,6 +143,14 @@ pub unsafe fn move_kernel(
 		}
 	}
 
+	// clear rest of the kernel
+	let start = file_size;
+	let end = mem_size;
+	loaderlog!("Clear BSS from 0x{:x} to 0x{:x}", virtual_address+start, virtual_address+end);
+	for i in start..end {
+		*((virtual_address + i) as *mut u8) = 0;
+	}
+
 	virtual_address
 }
 
@@ -175,19 +160,22 @@ pub unsafe fn boot_kernel(
 	mem_size: usize,
 	entry_point: usize,
 ) {
-	let BOOT_INFO = &mut *(virtual_address as *mut BootInfo);
-	loaderlog!("Found magic number 0x{:x}", BOOT_INFO.magic_number);
-
 	// Supply the parameters to the HermitCore application.
-	intrinsics::volatile_store(&mut BOOT_INFO.base, new_physical_address as u64);
-	intrinsics::volatile_store(&mut BOOT_INFO.image_size, mem_size as u64);
-	intrinsics::volatile_store(&mut BOOT_INFO.mb_info, mb_info as u64);
-	intrinsics::volatile_store(
-		&mut BOOT_INFO.current_stack_address,
-		(virtual_address + mem::size_of::<BootInfo>()) as u64,
+	BOOT_INFO.base = new_physical_address as u64;
+	BOOT_INFO.image_size = mem_size as u64;
+	BOOT_INFO.mb_info = mb_info as u64;
+	BOOT_INFO.current_stack_address = (virtual_address - KERNEL_STACK_SIZE) as u64;
+
+	// map stack in the address space
+	paging::map::<BasePageSize>(
+		virtual_address - KERNEL_STACK_SIZE,
+		virtual_address - KERNEL_STACK_SIZE,
+		KERNEL_STACK_SIZE / BasePageSize::SIZE,
+		PageTableEntryFlags::WRITABLE,
 	);
-	intrinsics::volatile_store(&mut BOOT_INFO.uartport, SERIAL_PORT_ADDRESS);
-	intrinsics::volatile_store(&mut BOOT_INFO.uhyve, 0);
+
+	loaderlog!("BootInfo located at 0x{:x}", &BOOT_INFO as *const _ as u64);
+	loaderlog!("Use stack address 0x{:x}", BOOT_INFO.current_stack_address);
 
 	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
 	if let Some(cmdline) = multiboot.command_line() {
@@ -198,8 +186,8 @@ pub unsafe fn boot_kernel(
 		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
 		//let cmdline = multiboot.command_line().unwrap();
-		intrinsics::volatile_store(&mut BOOT_INFO.cmdline, address as u64);
-		intrinsics::volatile_store(&mut BOOT_INFO.cmdsize, cmdline.len() as u64);
+		BOOT_INFO.cmdline = address as u64;
+		BOOT_INFO.cmdsize = cmdline.len() as u64;
 	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
@@ -207,5 +195,5 @@ pub unsafe fn boot_kernel(
 		"Jumping to HermitCore Application Entry Point at {:#X}",
 		entry_point
 	);
-	asm!("jmp *$0" :: "r"(entry_point), "{rdx}"(mb_info) : "memory" : "volatile");
+	asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as usize) : "memory" : "volatile");
 }

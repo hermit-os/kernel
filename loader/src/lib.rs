@@ -37,6 +37,7 @@ mod runtime_glue;
 
 // IMPORTS
 use arch::paging::{BasePageSize, LargePageSize, PageSize};
+use arch::BOOT_INFO;
 use core::ptr;
 use elf::*;
 
@@ -85,10 +86,14 @@ pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usiz
 				virtual_address = program_header.virt_addr;
 			}
 
-			file_size = program_header.virt_addr
-				+ align_up!(program_header.file_size, BasePageSize::SIZE)
-				- virtual_address;
-			mem_size = program_header.virt_addr - virtual_address + program_header.mem_size;
+			file_size = program_header.virt_addr + program_header.file_size - virtual_address;
+			mem_size = program_header.virt_addr + program_header.mem_size - virtual_address;
+		} else if program_header.ty == ELF_PT_TLS {
+			BOOT_INFO.tls_start = program_header.virt_addr as u64;
+			BOOT_INFO.tls_filesz = program_header.file_size as u64;
+			BOOT_INFO.tls_memsz = program_header.mem_size as u64;
+
+			loaderlog!("Found TLS starts at 0x{:x} (size {} Bytes)", BOOT_INFO.tls_start, BOOT_INFO.tls_memsz);
 		}
 	}
 
