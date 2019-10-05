@@ -27,8 +27,8 @@ macro_rules! print {
 	($($arg:tt)+) => ({
 		use core::fmt::Write;
 
-		#[allow(unused_unsafe)]
-		unsafe { $crate::console::CONSOLE.write_fmt(format_args!($($arg)+)).unwrap(); }
+		let mut console = crate::console::Console {};
+		console.write_fmt(format_args!($($arg)+)).unwrap();
 	});
 }
 
