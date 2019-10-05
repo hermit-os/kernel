@@ -202,15 +202,19 @@ enum CpuFrequencySources {
 	CpuIdBrandString,
 	Measurement,
 	Hypervisor,
+	CpuId,
+	CpuIdTscInfo,
 }
 
 impl fmt::Display for CpuFrequencySources {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match &self {
 			CpuFrequencySources::CommandLine => write!(f, "Command Line"),
-			CpuFrequencySources::CpuIdBrandString => write!(f, "CPUID Brand String"),
+			CpuFrequencySources::CpuIdBrandString => write!(f, "CpuId Brand String"),
 			CpuFrequencySources::Measurement => write!(f, "Measurement"),
 			CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
+			CpuFrequencySources::CpuId => write!(f, "CpuId"),
+			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -234,6 +238,32 @@ impl CpuFrequency {
 		if mhz > 0 {
 			self.mhz = mhz;
 			self.source = CpuFrequencySources::CommandLine;
+			Ok(())
+		} else {
+			Err(())
+		}
+	}
+
+	unsafe fn detect_from_cpuid(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+		let processor_frequency_info = cpuid.get_processor_frequency_info();
+
+		if processor_frequency_info.is_some() {
+			self.mhz = processor_frequency_info.unwrap().processor_base_frequency();
+			self.source = CpuFrequencySources::CpuId;
+
+			Ok(())
+		} else {
+			Err(())
+		}
+	}
+
+	unsafe fn detect_from_cpid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+		let tsc_info = cpuid.get_tsc_info();
+
+		if tsc_info.is_some() {
+			self.mhz = (tsc_info.unwrap().tsc_frequency() / 1000000u64) as u16;
+			self.source = CpuFrequencySources::CpuIdTscInfo;
+
 			Ok(())
 		} else {
 			Err(())
@@ -361,8 +391,10 @@ impl CpuFrequency {
 
 	unsafe fn detect(&mut self) {
 		let cpuid = CpuId::new();
-		self.detect_from_hypervisor()
-			.or_else(|_e| self.detect_from_cmdline())
+		self.detect_from_cpuid(&cpuid)
+			.or_else(|_e| self.detect_from_cpid_tsc_info(&cpuid))
+			.or_else(|_e| self.detect_from_hypervisor())
+			//.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 			.or_else(|_e| self.measure_frequency())
 			.expect("Could not determine the processor frequency");
@@ -690,6 +722,7 @@ pub fn configure() {
 	// Enable caching.
 	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
 
+	debug!("Set CR0 to 0x{:x}", cr0);
 	unsafe {
 		cr0_write(cr0);
 	}
@@ -721,6 +754,7 @@ pub fn configure() {
 		}
 	}
 
+	debug!("Set CR4 to 0x{:x}", cr4);
 	unsafe {
 		cr4_write(cr4);
 	}
