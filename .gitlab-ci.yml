@@ -47,14 +47,14 @@ build:
 # Stage: test
 
 ##############################################################################
-test:tarpaulin:
-  stage: test
-  script:
-    - rm -rf tests loader
-    - cargo tarpaulin -v --exclude-files src/arch/aarch64
-  image: ${IMAGE}
-  tags:
-    - docker
+#test:tarpaulin:
+#  stage: test
+#  script:
+#    - rm -rf tests loader
+#    - cargo tarpaulin -v --exclude-files src/arch/aarch64
+#  image: ${IMAGE}
+#  tags:
+#    - docker
 
 test:cargo:
   stage: test
