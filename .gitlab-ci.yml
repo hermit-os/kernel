@@ -64,17 +64,17 @@ test:cargo:
   tags:
     - docker
 
-test:uhyve:
-  stage: test
-  script:
-    - cargo install --git https://github.com/hermitcore/uhyve.git
-    - uhyve -v tests/target/x86_64-unknown-hermit/debug/rusty_tests
-    - uhyve -v tests/target/x86_64-unknown-hermit/release/rusty_tests
-  image: ${IMAGE}
-  dependencies:
-    - build
-  tags:
-    - docker
+#test:uhyve:
+#  stage: test
+#  script:
+#    - cargo install --git https://github.com/hermitcore/uhyve.git
+#    - uhyve -v tests/target/x86_64-unknown-hermit/debug/rusty_tests
+#    - uhyve -v tests/target/x86_64-unknown-hermit/release/rusty_tests
+#  image: ${IMAGE}
+#  dependencies:
+#    - build
+#  tags:
+#    - docker
 
 test:qemu:
   stage: test
