@@ -13,7 +13,7 @@ categories = ["os"]
 description = """
 RustyHermit - A Rust-based, lightweight unikernel
 """
-exclude = ["/loader/*", "/tests/*", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
+exclude = ["/loader/*", "/tests/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
 
 [badges]
 travis-ci = { repository = "hermitcore/libhermit-rs" }
