@@ -2,9 +2,6 @@ sudo: required
 git:
   depth: 3
   submodules: true
-env:
-  matrix:
-  - OS_TYPE=ubuntu OS_VERSION=18.04 OS_NAME=bionic
 services:
 - docker
 addons:
@@ -12,6 +9,6 @@ addons:
     update: true
 before_install:
 - sudo apt-get -qq update
-- sudo docker pull ${OS_TYPE}:${OS_VERSION}
+- sudo docker pull rwthos/hermit-cargo:latest
 script:
-- docker run -ti -v ${TRAVIS_BUILD_DIR}:/work:rw ${OS_TYPE}:${OS_VERSION} /bin/bash -c "cd /work; ./tests.sh ${OS_TYPE} ${OS_NAME}"
+- docker run -ti -v ${TRAVIS_BUILD_DIR}:/work:rw rwthos/hermit-cargo:latest /bin/bash -c "cd /work; ./tests.sh"
