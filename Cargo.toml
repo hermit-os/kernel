@@ -19,7 +19,7 @@ exclude = ["/loader/*", "/tests/*", "/.travis.yml", "/.gitlab-ci.yml", ".gitigno
 travis-ci = { repository = "hermitcore/libhermit-rs" }
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "rlib"]
 
 [features]
 vga = []
