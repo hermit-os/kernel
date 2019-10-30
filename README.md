@@ -32,10 +32,10 @@ Please pull the container and use *cargo* to cross compile the application.
 As an example, the following commands create the test application *Hello World* for RustyHermit.
 
 ```sh
-docker pull rwthos/hermitcore-rs
-docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo new hello_world --bin
+docker pull hermitcore/rustyhermit:latest
+docker run -v $PWD:/volume -e USER=$USER --rm -t hermitcore/rustyhermit cargo new hello_world --bin
 cd hello_world
-docker run -v $PWD:/volume -e USER=$USER --rm -t rwthos/hermitcore-rs cargo build --target x86_64-unknown-hermit
+docker run -v $PWD:/volume -e USER=$USER --rm -t hermitcore/rustyhermit cargo build --target x86_64-unknown-hermit
 cd -
 ```
 
