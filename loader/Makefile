@@ -27,6 +27,7 @@ clean:
 docs:
 	@echo DOC
 	@cargo doc
+
 clippy:
 	@echo Run clippy...
 	@RUST_TARGET_PATH=$(CURDIR) cargo clippy --target $(target)
@@ -34,4 +35,4 @@ clippy:
 loader:
 	@echo Build loader
 	@RUST_TARGET_PATH=$(CURDIR) cargo xbuild $(opt) --target $(target)-loader
-	@objcopy -O elf32-i386 target/$(target)-loader/$(rdir)/hermit-loader
+	@objcopy --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/hermit-loader
