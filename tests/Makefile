@@ -25,4 +25,4 @@ default:
 	@objcopy --strip-debug target/$(arch)-unknown-hermit/$(rdir)/rusty_tests
 
 clean:
-	@$(RM) target/x86_64-unknown-hermit
+	@$(RM) target
