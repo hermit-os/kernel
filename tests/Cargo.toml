@@ -8,18 +8,6 @@ publish = false
 [dependencies]
 rayon = "1.2.0"
 http = "0.1.18"
-bootloader = "0.6.4"
-
-[package.metadata.bootimage]
-# This target is used if no `--target` is passed
-default-target = ""
-# The command invoked with the created bootimage (the "{}" will be replaced
-# with the path to the bootable disk image)
-# Applies to `bootimage run` and `bootimage runner`
-run-command = ["qemu-system-x86_64", "-drive", "format=raw,file={}"]
-# Additional arguments passed to the run command for non-test executables
-# Applies to `bootimage run` and `bootimage runner`
-run-args = []
 
 [profile.release]
 opt-level = 3
