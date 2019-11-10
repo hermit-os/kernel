@@ -16,6 +16,8 @@ use synch;
 use syscalls::sys_sem_post;
 
 #[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::pci;
+#[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::apic;
 #[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::irq::*;
@@ -195,6 +197,17 @@ impl UhyveWrite {
 	pub fn len(&self) -> usize {
 		unsafe { read_volatile(&self.len) }
 	}
+}
+
+fn detect_virtio_device() -> Option<pci::PciAdapter> {
+	for i in 0x100..0x103F {
+		let adapter = pci::get_adapter(0x1AF4, i);
+		match adapter {
+			Some(value) => return adapter,
+			None => {},
+		}
+	}
+	None
 }
 
 pub fn init() -> Result<Box<dyn NetworkInterface>, ()> {
