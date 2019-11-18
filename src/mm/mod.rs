@@ -220,6 +220,7 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
+#[allow(dead_code)]
 pub fn allocate_iomem(sz: usize) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
 

@@ -13,7 +13,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use core::{ptr, str};
 use drivers::net::NetworkInterface;
 use synch;
-use syscalls::sys_sem_post;
+//use syscalls::sys_sem_post;
 
 #[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::apic;
@@ -68,9 +68,9 @@ impl NetworkInterface for UhyveNetwork {
 
 	fn set_polling(&mut self, mode: bool) {
 		self.polling.store(mode, Ordering::SeqCst);
-		if mode && !self.sem.is_null() {
+		/*if mode && !self.sem.is_null() {
 			sys_sem_post(self.sem as *const synch::semaphore::Semaphore);
-		}
+		}*/
 	}
 
 	fn init(

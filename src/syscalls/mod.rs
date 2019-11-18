@@ -12,8 +12,11 @@ mod interfaces;
 mod lwip;
 mod processor;
 mod random;
+#[cfg(feature = "newlib")]
 mod recmutex;
+#[cfg(feature = "newlib")]
 mod semaphore;
+#[cfg(feature = "newlib")]
 mod spinlock;
 mod system;
 mod tasks;
@@ -22,8 +25,11 @@ mod timer;
 pub use self::condvar::*;
 pub use self::processor::*;
 pub use self::random::*;
+#[cfg(feature = "newlib")]
 pub use self::recmutex::*;
+#[cfg(feature = "newlib")]
 pub use self::semaphore::*;
+#[cfg(feature = "newlib")]
 pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;

@@ -12,7 +12,7 @@ use log::{set_logger, set_max_level, LevelFilter, Metadata, Record};
 struct KernelLogger;
 
 impl log::Log for KernelLogger {
-	fn enabled(&self, _: &Metadata) -> bool {
+	fn enabled(&self, _: &Metadata<'_>) -> bool {
 		true
 	}
 
@@ -20,7 +20,7 @@ impl log::Log for KernelLogger {
 		// nothing to do
 	}
 
-	fn log(&self, record: &Record) {
+	fn log(&self, record: &Record<'_>) {
 		if self.enabled(record.metadata()) {
 			println!(
 				"[{}][{}] {}",

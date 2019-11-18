@@ -25,25 +25,32 @@ name = "hermit"
 [features]
 vga = []
 newlib = []
-rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
+rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std', 'compiler_builtins/mem', 'x86/rustc-dep-of-std', 'log/rustc-dep-of-std', 'bitflags/rustc-dep-of-std', 'multiboot/rustc-dep-of-std']
+
+[target.'cfg(target_arch = "x86_64")']
+rustflags = ["-C", "target-features", "-mmx,-sse,-sse2,-sse3,-ssse3,-sse4.1,-sse4.2,-3dnow,-3dnowa,-avx,-avx2,+soft-float"]
 
 [dependencies]
 core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
+alloc = { version = '1.0.0', package = 'rustc-std-workspace-alloc' }
 compiler_builtins = { version = '0.1.10', optional = true }
-bitflags = "1.2"
-#cfg-if = "0.1"
-#byteorder = { version = "1.0", default-features = false }
+bitflags = { git = "https://github.com/hermitcore/bitflags.git", branch = "hermit" }
 
 [dependencies.log]
-version = "0.4"
+git = "https://github.com/hermitcore/log.git"
+branch = "hermit"
+#version = "0.4"
 default-features = false
 #features = ["release_max_level_info"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
-version = "0.*"
+git = "https://github.com/hermitcore/rust-multiboot.git"
+branch = "hermit"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-version = "0.*"
+#version = "0.*"
+git = "https://github.com/hermitcore/rust-x86.git"
+branch = "hermit"
 default-features = false
 
 [package.metadata.cargo-xbuild]

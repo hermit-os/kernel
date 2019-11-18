@@ -23,6 +23,7 @@
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::forget_copy)]
 #![feature(abi_x86_interrupt)]
+#![feature(alloc_error_handler)]
 #![feature(allocator_api)]
 #![feature(asm)]
 #![feature(const_fn)]
@@ -40,7 +41,6 @@
 extern crate std;
 
 // EXTERNAL CRATES
-#[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
@@ -68,7 +68,7 @@ mod kernel_message_buffer;
 mod mm;
 mod runtime_glue;
 mod scheduler;
-mod synch;
+pub mod synch;
 mod syscalls;
 
 pub use arch::*;

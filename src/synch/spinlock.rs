@@ -53,7 +53,7 @@ pub struct Spinlock<T: ?Sized> {
 /// A guard to which the protected data can be accessed
 ///
 /// When the guard falls out of scope it will release the lock.
-pub struct SpinlockGuard<'a, T: ?Sized + 'a> {
+pub struct SpinlockGuard<'a, T: ?Sized> {
 	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	data: &'a mut T,
@@ -90,7 +90,7 @@ impl<T: ?Sized> Spinlock<T> {
 		}
 	}
 
-	pub fn lock(&self) -> SpinlockGuard<T> {
+	pub fn lock(&self) -> SpinlockGuard<'_, T> {
 		self.obtain_lock();
 		SpinlockGuard {
 			//queue: &self.queue,
@@ -176,7 +176,7 @@ pub struct SpinlockIrqSave<T: ?Sized> {
 /// A guard to which the protected data can be accessed
 ///
 /// When the guard falls out of scope it will release the lock.
-pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a> {
+pub struct SpinlockIrqSaveGuard<'a, T: ?Sized> {
 	//queue: &'a AtomicUsize,
 	dequeue: &'a AtomicUsize,
 	irq: &'a AtomicBool,
@@ -219,7 +219,7 @@ impl<T: ?Sized> SpinlockIrqSave<T> {
 		self.irq.store(irq, Ordering::SeqCst);
 	}
 
-	pub fn lock(&self) -> SpinlockIrqSaveGuard<T> {
+	pub fn lock(&self) -> SpinlockIrqSaveGuard<'_, T> {
 		self.obtain_lock();
 		SpinlockIrqSaveGuard {
 			//queue: &self.queue,
