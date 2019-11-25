@@ -232,10 +232,12 @@ pub fn boot_processor_init() {
 	processor::print_information();
 	systemtime::init();
 
-	if environment::is_single_kernel() && !environment::is_uhyve() {
+	if environment::is_single_kernel() {
 		pci::init();
 		pci::print_information();
-		acpi::init();
+		if !environment::is_uhyve() {
+			acpi::init();
+		}
 	}
 
 	apic::init();
