@@ -265,8 +265,6 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	debug!("Initialized Processor");
-
 	if environment::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
