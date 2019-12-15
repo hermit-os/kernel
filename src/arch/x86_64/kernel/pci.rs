@@ -198,6 +198,9 @@ pub fn init() {
 			if device_vendor_id != u32::MAX {
 				let device_id = (device_vendor_id >> 16) as u16;
 				let vendor_id = device_vendor_id as u16;
+				if (vendor_id == 0x1AF4) {
+					info!("Found virtio device with device id {}", device_id);
+				}
 
 				adapters.push(PciAdapter::new(bus, device, vendor_id, device_id));
 			}
