@@ -194,6 +194,12 @@ impl FPUState {
 			asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
 		}
 	}
+
+	pub fn save_common(&mut self) {
+		unsafe {
+			asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+		}
+	}
 }
 
 enum CpuFrequencySources {
@@ -718,9 +724,6 @@ pub fn configure() {
 
 	// Prevent writes to read-only pages in Ring 0.
 	cr0.insert(Cr0::CR0_WRITE_PROTECT);
-
-	// Enable caching.
-	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
 
 	debug!("Set CR0 to 0x{:x}", cr0);
 	unsafe {

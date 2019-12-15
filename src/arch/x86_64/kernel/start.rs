@@ -9,6 +9,7 @@ use application_processor_main;
 use arch::x86_64::kernel::{BootInfo, BOOT_INFO};
 use boot_processor_main;
 use config::KERNEL_STACK_SIZE;
+use x86::controlregs::*;
 
 #[inline(never)]
 #[no_mangle]
@@ -20,6 +21,16 @@ pub unsafe extern "C" fn _start(boot_info: &'static mut BootInfo) -> ! {
 		:: "volatile");
 
 	BOOT_INFO = boot_info as *mut BootInfo;
+
+	//
+	// CR0 CONFIGURATION
+	//
+	let mut cr0 = cr0();
+
+	// Enable caching.
+	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
+
+	cr0_write(cr0);
 
 	if boot_info.cpu_online == 0 {
 		boot_processor_main();
