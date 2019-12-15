@@ -13,23 +13,20 @@ categories = ["os"]
 description = """
 RustyHermit - A Rust-based, lightweight unikernel
 """
-exclude = ["/img/*", "/loader/*", "/tests/*", "./Makefile", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
+exclude = ["/img/*", "/loader/*", "./Makefile", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.devcontainer/*", "/.vscode/*"]
 
 [badges]
 travis-ci = { repository = "hermitcore/libhermit-rs" }
 
 [lib]
-crate-type = ["staticlib", "rlib"]
+crate-type = ["staticlib"]
 name = "hermit"
 
 [features]
 vga = []
 newlib = []
-rustc-dep-of-std = ['core', 'compiler_builtins/rustc-dep-of-std']
 
 [dependencies]
-core = { version = '1.0.0', optional = true, package = 'rustc-std-workspace-core' }
-compiler_builtins = { version = '0.1.10', optional = true }
 bitflags = "1.2"
 #cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
@@ -45,9 +42,6 @@ version = "0.*"
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.*"
 default-features = false
-
-[package.metadata.cargo-xbuild]
-memcpy = true
 
 # The development profile, used for `cargo build`.
 [profile.dev]
