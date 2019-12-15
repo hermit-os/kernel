@@ -82,7 +82,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> Self {
-		let stack = gdt::get_boot_stacks();
+		let stack = gdt::get_boot_stacks() + 0x10 - KERNEL_STACK_SIZE;
 		debug!("Using boot stack {:#X}", stack);
 
 		Self {

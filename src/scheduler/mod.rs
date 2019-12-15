@@ -29,7 +29,8 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Option<BTreeMap<usize, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
-static mut TASKS: Option<SpinlockIrqSave<BTreeMap<TaskId, Rc<RefCell<Task>>>>> = None;
+static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, Rc<RefCell<Task>>>>> =
+	SpinlockIrqSave::new(None);
 static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 struct SchedulerState {
@@ -73,9 +74,7 @@ impl PerCoreScheduler {
 
 		// Add it to the task lists.
 		self.state.lock().ready_queue.push(task.clone());
-		unsafe {
-			TASKS.as_ref().unwrap().lock().insert(tid, task);
-		}
+		TASKS.lock().as_mut().unwrap().insert(tid, task);
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 		arch::wakeup_core(self.core_id);
@@ -143,9 +142,7 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let mut state_locked = next_scheduler.state.lock();
 		state_locked.ready_queue.push(clone_task.clone());
-		unsafe {
-			TASKS.as_ref().unwrap().lock().insert(tid, clone_task);
-		}
+		TASKS.lock().as_mut().unwrap().insert(tid, clone_task);
 		NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 		debug!(
@@ -183,7 +180,7 @@ impl PerCoreScheduler {
 		if let Some(id) = self.finished_tasks.pop_front() {
 			debug!("Cleaning up task {}", id);
 
-			let task = unsafe { TASKS.as_ref().unwrap().lock().remove(&id) };
+			let task = TASKS.lock().as_mut().unwrap().remove(&id);
 			// wakeup tasks, which are waiting for task with the identifier id
 			match task {
 				Some(t) => t.borrow().wakeup.lock().wakeup_all(),
@@ -318,7 +315,7 @@ impl PerCoreScheduler {
 fn get_tid() -> TaskId {
 	loop {
 		let id = TaskId::from(TID_COUNTER.fetch_add(1, Ordering::SeqCst));
-		if unsafe { !TASKS.as_ref().unwrap().lock().contains_key(&id) } {
+		if !TASKS.lock().as_mut().unwrap().contains_key(&id) {
 			return id;
 		}
 	}
@@ -327,8 +324,8 @@ fn get_tid() -> TaskId {
 pub fn init() {
 	unsafe {
 		SCHEDULERS = Some(BTreeMap::new());
-		TASKS = Some(SpinlockIrqSave::new(BTreeMap::new()));
 	}
+	*TASKS.lock() = Some(BTreeMap::new());
 }
 
 #[inline]
@@ -344,14 +341,11 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	unsafe {
-		TASKS
-			.as_ref()
-			.unwrap()
-			.lock()
-			.insert(tid, idle_task.clone());
-	}
-
+	TASKS
+		.lock()
+		.as_mut()
+		.unwrap()
+		.insert(tid, idle_task.clone());
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
@@ -392,16 +386,14 @@ pub fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
 pub fn join(id: TaskId) -> Result<(), ()> {
 	debug!("Waiting for task {}", id);
 
-	unsafe {
-		match TASKS.as_ref().unwrap().lock().get_mut(&id) {
-			Some(task) => {
-				task.borrow_mut()
-					.wakeup
-					.lock()
-					.add(core_scheduler().current_task.clone(), None);
-			}
-			_ => return Err(()),
+	match TASKS.lock().as_mut().unwrap().get_mut(&id) {
+		Some(task) => {
+			task.borrow_mut()
+				.wakeup
+				.lock()
+				.add(core_scheduler().current_task.clone(), None);
 		}
+		_ => return Err(()),
 	}
 
 	// Switch to the next task.
