@@ -32,6 +32,7 @@
 #![feature(specialization)]
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
+#![feature(alloc_error_handler)]
 #![allow(unused_macros)]
 #![no_std]
 
@@ -66,6 +67,9 @@ mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
+#[cfg(not(feature = "newlib"))]
+mod rlib;
+#[cfg(all(not(test)))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
@@ -216,11 +220,11 @@ fn boot_processor_main() -> ! {
 	logging::init();
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	debug!("Kernel starts at 0x{:x}", environment::get_base_address());
-	debug!("BSS starts at 0x{:x}", unsafe {
+	info!("Kernel starts at 0x{:x}", environment::get_base_address());
+	info!("BSS starts at 0x{:x}", unsafe {
 		&__bss_start as *const usize as usize
 	});
-	debug!(
+	info!(
 		"TLS starts at 0x{:x} (size {} Bytes)",
 		environment::get_tls_start(),
 		environment::get_tls_memsz()
