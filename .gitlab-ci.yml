@@ -25,22 +25,16 @@ docker:
 build:
   stage: build
   script:
-    - cargo clean
-    - make clean
-    - make all
-    - make release=1 all
+    - cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel
+    - cargi build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
   image: ${IMAGE}
   cache:
     paths:
       - target/x86_64-unknown-hermit-kernel
-      - tests/target/x86_64-unknown-hermit
-      - loader/target/x86_64-unknown-hermit-loader
     key: build
   artifacts:
     paths:
       - target/x86_64-unknown-hermit-kernel
-      - tests/target/x86_64-unknown-hermit
-      - loader/target/x86_64-unknown-hermit-loader
   tags:
     - docker
 
@@ -59,52 +53,7 @@ build:
 test:cargo:
   stage: test
   script: 
-    - cargo test --lib -- --test-threads=1
+    - cargo test --target x86_64-unknown-linux-gnu
   image: ${IMAGE}
   tags:
     - docker
-
-test:uhyve:
-  stage: test
-  script:
-    - cargo install --git https://github.com/hermitcore/uhyve.git
-    - uhyve -v tests/target/x86_64-unknown-hermit/debug/rusty_tests
-    - uhyve -v tests/target/x86_64-unknown-hermit/release/rusty_tests
-  image: ${IMAGE}
-  dependencies:
-    - build
-  tags:
-    - docker
-
-test:qemu:
-  stage: test
-  script:
-    - make qemu
-    - make release=1 qemu
-  image: ${IMAGE}
-  dependencies:
-    - build
-  tags:
-    - docker
-
-# Stage: deploy
-##############################################################################
-
-deploy:docker:
-  stage: deploy
-  script:
-    - echo "COPY . /src" >> Dockerfile
-    - echo "RUN cp /src/target/x86_64-unknown-hermit-kernel/debug/libhermit.a /root/.cargo/lib/rustlib/x86_64-unknown-hermit/lib" >> Dockerfile
-    - echo "RUN rm -rf /src" >> Dockerfile
-    - echo "WORKDIR /volume" >> Dockerfile
-    - docker build -t ${FINAL} .
-    - docker tag ${FINAL} ${FINAL}:latest
-    - docker tag ${FINAL} ${FINAL}:${CI_COMMIT_TAG}
-    - docker push ${FINAL}:latest
-  dependencies:
-    - build
-  tags:
-    - shell
-    - linux
-  only:
-    - tags
