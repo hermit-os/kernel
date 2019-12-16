@@ -26,7 +26,7 @@ build:
   stage: build
   script:
     - cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel
-    - cargi build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
+    - cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
   image: ${IMAGE}
   cache:
     paths:
