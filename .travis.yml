@@ -9,6 +9,6 @@ addons:
     update: true
 before_install:
 - sudo apt-get -qq update
-- sudo docker pull rwthos/hermit-cargo:latest
+- sudo docker pull ubuntu:latest
 script:
 - docker run -ti -v ${TRAVIS_BUILD_DIR}:/work:rw rwthos/hermit-cargo:latest /bin/bash -c "cd /work; ./tests.sh"
