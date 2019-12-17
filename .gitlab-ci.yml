@@ -1,13 +1,11 @@
 variables:
-  IMAGE: ubuntu:with-hermitcore
-  FINAL: rwthos/hermitcore-rs
+  IMAGE: ubuntu:with-rust
   GIT_SUBMODULE_STRATEGY: normal
 
 stages:
   - prepare
   - build
   - test
-  - deploy
 
 # Stage: prepare
 ##############################################################################
