@@ -144,20 +144,22 @@ More details can be found in the uhyve README.
 
 ### Using Qemu as hypervisor
 
-It is also possible to run RustHermit within [Qemu](https://www.qemu.org).
-In this case, a loader is required to boot the application.
-This loader is part of the repository and can be build with [xbuid](https://github.com/rust-osdev/cargo-xbuild) as follows.
+It is also possible to run RustyHermit within [Qemu](https://www.qemu.org).
+In this case, the loader [rusty-loder](https://github.com/hermitcore/rusty-loader) is required to boot the application.
+To build the loader, the cargo subcommand [xbuild](https://github.com/rust-osdev/cargo-xbuild) is required.
+After the installation of [xbuild](https://github.com/rust-osdev/cargo-xbuild), the loader can be build as follows.
 
 ```bash
-$ cd loader
+$ git clone https://github.com/hermitcore/rusty-loader.git
+$ cd rusty-loader
 $ cargo xbuild --target x86_64-unknown-hermit-loader.json
 ```
 
-Afterwards, the loader is stored in `target/x86_64-unknown-hermit-loader/debug/` as `hermit-loader`.
-Afterwards, the unikernel application `app` can be booted with following command:
+Afterwards, the loader is stored in `target/x86_64-unknown-hermit-loader/debug/` as `rusty-loader`.
+As final step, the unikernel application `app` can be booted with following command:
 
 ```bash
-$ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_loader/hermit-loader -initrd path_to_app/app -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
+$ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_loader/rusty-loader -initrd path_to_app/app -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
 ```
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
