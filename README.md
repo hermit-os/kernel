@@ -169,6 +169,21 @@ $ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
 
+## Extending RustyHermit
+
+The best way to extend the kernel is to work with the branch *devel* of the repository [rusty-hermit](https://github.com/hermitcore/rusty-hermit).
+It includes this repository as submodule and link the unikernel directly to the test application.
+
+According to the following instructions, the test application can be found under *target/x86_64-unknown-hermit/debug/rusty_demo*.
+
+```sh
+git clone https://github.com/hermitcore/rusty-hermit.git
+cd rusty-hermit
+git submodule init
+git submodule update
+cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+```
+
 ## Use RustyHermit for C/C++, Go, and Fortran applications
 
 This kernel can still be used with C/C++, Go, and Fortran applications.
