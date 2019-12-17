@@ -9,7 +9,7 @@ $ cargo install cargo-xbuild
 
 Afterwards, the loader can be build as follows:
 
-````bash
+```bash
 $ cargo xbuild --target x86_64-unknown-hermit-loader.json
 ```
 
