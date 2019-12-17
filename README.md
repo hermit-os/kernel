@@ -25,18 +25,82 @@ The kernel and the integration into the Rust runtime is entirely written in Rust
 We extend the Rust toolchain so that the build process is similar to Rust's usual workflow.
 Rust applications that do not bypass the Rust runtime and directly use OS services are able to run on RustyHermit without modifications.
 
-## Installation
+## Building RusytHermit
 
-We provide a Docker container *hermitcore-rs* for easy compilation of Rust applications into a unikernel.
-Please pull the container and use *cargo* to cross compile the application.
-As an example, the following commands create the test application *Hello World* for RustyHermit.
+It is required to install the Rust toolchain.
+Please visit the [Rust website](https://www.rust-lang.org/) and follow the installation instructions for your operating system.
+It is important that the *nightly channel* is used to install the toolchain.
+This is queried during installation and should be answered as appropriate.
+
+After the installation of the toolchain, the source code of the Rust runtime, the cargo subcommand [cargo-download](https://crates.io/crates/cargo-download), and llvm-tools have to be installed as follow:
 
 ```sh
-docker pull hermitcore/rustyhermit:latest
-docker run -v $PWD:/volume -e USER=$USER --rm -t hermitcore/rustyhermit cargo new hello_world --bin
+cargo install cargo-download
+rustup component add rust-src
+rustup component add llvm-tools-preview
+```
+
+As an example, the following commands create a template for the test application *Hello World*.
+
+```sh
+cargo new hello_world --bin
 cd hello_world
-docker run -v $PWD:/volume -e USER=$USER --rm -t hermitcore/rustyhermit cargo build --target x86_64-unknown-hermit
-cd -
+```
+
+To bind the library operating system to the application, add in the file *Cargo.toml* the crate [hermit-sys](https://crates.io/crates/hermit-sys) to the list of dependency.
+In addition, it is important to use at least the optimization level 1.
+Consequently, it is required to extend *Cargo.toml* with following lines.
+
+```toml
+[target.'cfg(target_os = "hermit")'.dependencies]
+hermit-sys = "0.1.*"
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+
+[profile.dev]
+opt-level = 1
+debug = true
+rpath = false
+lto = false
+debug-assertions = true
+```
+
+Finally, import the crate in the main file of your application.
+
+```rust,no_run
+#![allow(unused_imports)]
+
+#[cfg(target_os = "hermit")]
+extern crate hermit_sys;
+
+fn main() {
+        println!("Hello World!");
+}
+```
+
+The final step is building the application as follows:
+
+```sh
+cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+```
+
+If the command failed with the error message
+
+```sh
+linker `rust-lld` not found
+```
+
+the path to the *llvm-tools* is not set.
+On Linux, it is typically installed at *$(HOME)/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
+Otherwise, the linker can be replaced by *lld* as follows:
+
+```sh
+RUSTFLAGS="-C linker=lld" cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
 ```
 
 ## Running RustyHermit
