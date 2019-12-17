@@ -29,8 +29,10 @@ Rust applications that do not bypass the Rust runtime and directly use OS servic
 
 It is required to install the Rust toolchain.
 Please visit the [Rust website](https://www.rust-lang.org/) and follow the installation instructions for your operating system.
-It is important that the *nightly channel* is used to install the toolchain.
-This is queried during installation and should be answered as appropriate.
+It is important that the **nightly channel** is used to install the toolchain.
+```sh
+rustup default nightly
+```
 
 After the installation of the toolchain, the source code of the Rust runtime, the cargo subcommand [cargo-download](https://crates.io/crates/cargo-download), and llvm-tools have to be installed as follow:
 
@@ -49,7 +51,7 @@ cd hello_world
 
 To bind the library operating system to the application, add in the file *Cargo.toml* the crate [hermit-sys](https://crates.io/crates/hermit-sys) to the list of dependency.
 In addition, it is important to use at least the optimization level 1.
-Consequently, it is required to extend *Cargo.toml* with following lines.
+Consequently, it is required to **extend** *Cargo.toml* with following lines.
 
 ```toml
 [target.'cfg(target_os = "hermit")'.dependencies]
@@ -96,7 +98,10 @@ linker `rust-lld` not found
 ```
 
 the path to the *llvm-tools* is not set.
-On Linux, it is typically installed at *$(HOME)/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
+On Linux, it is typically installed at *${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
+```sh
+PATH=${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:$PATH cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+```
 Otherwise, the linker can be replaced by *lld* as follows:
 
 ```sh
@@ -137,7 +142,7 @@ Variable         | Default     | Description
 For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GiB memory:
 
 ```bash
-$ HERMIT_CPUS=4 HERMIT_MEM=8G ./proxy ../../hello_world/target/x86_64-unknown-hermit/debug/hello_world
+$ HERMIT_CPUS=4 HERMIT_MEM=8G uhyve target/x86_64-unknown-hermit/debug/hello_world
 ```
 
 More details can be found in the uhyve README.
