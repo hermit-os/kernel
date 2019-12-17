@@ -1,0 +1,36 @@
+[package]
+name = "rusty-loader"
+version = "0.2.5"
+authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+
+[dependencies]
+bitflags = "1.0.*"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
+version = "0.*"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies.x86]
+version = "0.*"
+default-features = false
+
+[package.metadata.cargo-xbuild]
+memcpy = true
+
+# The release profile, used for `cargo build --release`.
+[profile.dev]
+opt-level = 1      # controls the `--opt-level` the compiler builds with
+debug = true       # controls whether the compiler passes `-C debuginfo`
+                   # a value of `true` is equivalent to `2`
+rpath = false      # controls whether the compiler passes `-C rpath`
+lto = false         # controls `-C lto` for binaries and staticlibs
+debug-assertions = true # controls whether debug assertions are enabled
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
