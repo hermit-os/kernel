@@ -88,7 +88,7 @@ fn main() {
 The final step is building the application as follows:
 
 ```sh
-cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 
 If the command failed with the error message
@@ -100,12 +100,12 @@ linker `rust-lld` not found
 the path to the *llvm-tools* is not set.
 On Linux, it is typically installed at *${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
 ```sh
-PATH=${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:$PATH cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+PATH=${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:$PATH cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 Otherwise, the linker can be replaced by *lld* as follows:
 
 ```sh
-RUSTFLAGS="-C linker=lld" cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+RUSTFLAGS="-C linker=lld" cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 
 ## Running RustyHermit
@@ -181,7 +181,7 @@ git clone https://github.com/hermitcore/rusty-hermit.git
 cd rusty-hermit
 git submodule init
 git submodule update
-cargo build -Z build-std=std,core,alloc --target x86_64-unknown-hermit
+cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 
 ## Use RustyHermit for C/C++, Go, and Fortran applications
