@@ -69,7 +69,7 @@ mod kernel_message_buffer;
 mod mm;
 #[cfg(not(feature = "newlib"))]
 mod rlib;
-#[cfg(all(not(test)))]
+#[cfg(not(test))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
