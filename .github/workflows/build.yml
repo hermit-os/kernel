@@ -45,7 +45,8 @@ jobs:
          submodules: true
     - name: Check Cargo availability
       run: cargo --version
-    - name: Build
+    - name: Building dev version
       run:
          cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel
+    - name: Building release version
          cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
