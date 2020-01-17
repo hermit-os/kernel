@@ -193,7 +193,7 @@ A tutorial on how to do this is available at [https://github.com/hermitcore/herm
 
 * Multikernel support (might be comming)
 * Virtio support (comming soon)
-* Network suppot (comming soon)
+* Network support (comming soon)
 
 ## Credits
 
