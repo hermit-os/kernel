@@ -79,24 +79,19 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 /// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
-pub fn get_ip() -> [u8; 4] {
-	let mut ip: [u8; 4] = [0, 0, 0, 0];
-
-	for i in 0..4 {
-		ip[i] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip[i]) as u8 };
-	}
-
-	ip
+#[no_mangle]
+pub extern "C" fn get_ip() -> [u8; 4] {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) }
 }
 
-pub fn get_gateway() -> [u8; 4] {
-	let mut gw: [u8; 4] = [0, 0, 0, 0];
+#[no_mangle]
+pub extern "C" fn get_gateway() -> [u8; 4] {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway) }
+}
 
-	for i in 0..4 {
-		gw[i] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway[i]) as u8 };
-	}
-
-	gw
+#[no_mangle]
+pub extern "C" fn get_mask() -> [u8; 4] {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
 }
 
 pub fn get_base_address() -> usize {
