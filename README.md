@@ -151,7 +151,7 @@ More details can be found in the uhyve README.
 
 It is also possible to run RustyHermit within [Qemu](https://www.qemu.org).
 In this case, the loader [rusty-loader](https://github.com/hermitcore/rusty-loader) is required to boot the application.
-To build the loader, the cargo subcommand [xbuild](https://github.com/rust-osdev/cargo-xbuild) is required.
+To build the loader, the cargo subcommand [xbuild](https://github.com/rust-osdev/cargo-xbuild) and the assembler [nasm](https://www.nasm.us) are required.
 After the installation of [xbuild](https://github.com/rust-osdev/cargo-xbuild), the loader can be build as follows.
 
 ```bash
