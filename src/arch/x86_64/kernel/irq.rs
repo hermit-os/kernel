@@ -131,7 +131,9 @@ unsafe fn irq_remap() {
 }
 
 pub fn install() {
-	unsafe { irq_remap(); }
+	unsafe {
+		irq_remap();
+	}
 
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
 	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
