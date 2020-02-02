@@ -10,7 +10,6 @@
 
 use alloc::rc::Rc;
 use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::gdt;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::percore::*;
@@ -67,6 +66,7 @@ pub struct TaskStacks {
 	is_boot_stack: bool,
 	/// Stack of the task
 	pub stack: usize,
+	pub ist0: usize,
 }
 
 impl TaskStacks {
@@ -74,20 +74,27 @@ impl TaskStacks {
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 		let stack = ::mm::allocate(DEFAULT_STACK_SIZE, false);
 		debug!("Allocating stack {:#X}", stack);
+		let ist0 = ::mm::allocate(KERNEL_STACK_SIZE, false);
+		debug!("Allocating ist0 {:#X}", ist0);
 
 		Self {
 			is_boot_stack: false,
 			stack: stack,
+			ist0: ist0,
 		}
 	}
 
 	pub fn from_boot_stacks() -> Self {
-		let stack = gdt::get_boot_stacks() + 0x10 - KERNEL_STACK_SIZE;
+		let tss = unsafe { &(*PERCORE.tss.get()) };
+		let stack = tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE;
 		debug!("Using boot stack {:#X}", stack);
+		let ist0 = tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE;
+		debug!("IST0 is located at {:#X}", ist0);
 
 		Self {
 			is_boot_stack: true,
 			stack: stack,
+			ist0: ist0,
 		}
 	}
 }
@@ -95,9 +102,12 @@ impl TaskStacks {
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
 		if !self.is_boot_stack {
-			debug!("Deallocating stack {:#X}", self.stack);
-
+			debug!(
+				"Deallocating stack {:#X} and ist0 {:#X}",
+				self.stack, self.ist0
+			);
 			::mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
+			::mm::deallocate(self.ist0, KERNEL_STACK_SIZE);
 		}
 	}
 }

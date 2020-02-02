@@ -79,7 +79,7 @@ impl PerCoreScheduler {
 
 		arch::wakeup_core(self.core_id);
 
-		debug!("Creating task {}", tid);
+		debug!("Creating task {} with priority {}", tid, prio);
 
 		tid
 	}
@@ -189,10 +189,29 @@ impl PerCoreScheduler {
 		}
 	}
 
-	/// Triggers the scheduler to reschedule the tasks
-	pub fn scheduler(&mut self) {
-		irq::disable();
+	/// Triggers the scheduler to reschedule the tasks.
+	/// Interrupt flag will be cleared during the reschedule
+	pub fn reschedule(&mut self) {
+		let irq = irq::nested_disable();
+		self.scheduler();
+		irq::nested_enable(irq);
+	}
 
+	/// Only the idle task should call this function to
+	/// reschdule the system. Set the idle task in halt
+	/// state by leaving this function.
+	pub fn reschedule_and_wait(&mut self) {
+		irq::disable();
+		self.scheduler();
+
+		// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
+		// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
+		irq::enable_and_wait();
+	}
+
+	/// Triggers the scheduler to reschedule the tasks.
+	/// Interrupt flag must be cleared before calling this function.
+	pub fn scheduler(&mut self) {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
 		self.cleanup_tasks();
@@ -275,23 +294,24 @@ impl PerCoreScheduler {
 				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
-			// Tell the scheduler about the new task.
-			trace!(
-				"Switching task from {} to {} (stack {:#X} => {:#X})",
-				id,
-				new_id,
-				unsafe { *last_stack_pointer },
-				new_stack_pointer
-			);
-			self.current_task = task;
-			self.last_task_switch_tick = arch::processor::get_timer_ticks();
+			if id != new_id {
+				// Tell the scheduler about the new task.
+				debug!(
+					"Switching task from {} to {} (stack {:#X} => {:#X})",
+					id,
+					new_id,
+					unsafe { *last_stack_pointer },
+					new_stack_pointer
+				);
+				self.current_task = task;
+				self.last_task_switch_tick = arch::processor::get_timer_ticks();
 
-			// Unlock the state and reenable interrupts.
-			drop(state_locked);
-			irq::enable();
+				// Unlock the state and reenable interrupts.
+				drop(state_locked);
 
-			// Finally save our current context and restore the context of the new task.
-			switch(last_stack_pointer, new_stack_pointer);
+				// Finally save our current context and restore the context of the new task.
+				switch(last_stack_pointer, new_stack_pointer);
+			}
 		} else {
 			// There is no new task to switch to.
 
@@ -299,14 +319,6 @@ impl PerCoreScheduler {
 				// We are now running the Idle task and will halt the CPU.
 				// Indicate that and unlock the state.
 				state_locked.is_halted = true;
-				drop(state_locked);
-
-				// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
-				// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
-				irq::enable_and_wait();
-			} else {
-				// We now run a real task. Just reenable interrupts.
-				irq::enable();
 			}
 		}
 	}

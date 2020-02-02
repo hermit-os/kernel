@@ -41,7 +41,6 @@
 extern crate std;
 
 // EXTERNAL CRATES
-#[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
@@ -153,7 +152,7 @@ extern "C" {
 
 /// Helper function to check if uhyve provide an IP device
 fn has_ipdevice() -> bool {
-	let ip = arch::x86_64::kernel::get_ip();
+	let ip = arch::x86_64::kernel::uhyve_get_ip();
 
 	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
 		false
@@ -204,7 +203,7 @@ extern "C" fn initd(_arg: usize) {
 	let (argc, argv, environ) = syscalls::get_application_parameters();
 
 	// give the IP thread time to initialize the network interface
-	core_scheduler().scheduler();
+	core_scheduler().reschedule();
 
 	unsafe {
 		// And finally start the application.
@@ -244,7 +243,7 @@ fn boot_processor_main() -> ! {
 
 	// Run the scheduler loop.
 	loop {
-		core_scheduler.scheduler();
+		core_scheduler.reschedule_and_wait();
 	}
 }
 
@@ -259,6 +258,6 @@ fn application_processor_main() -> ! {
 
 	// Run the scheduler loop.
 	loop {
-		core_scheduler.scheduler();
+		core_scheduler.reschedule_and_wait();
 	}
 }

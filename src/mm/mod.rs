@@ -220,7 +220,7 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
-pub fn allocate_iomem(sz: usize) -> usize {
+/*pub fn allocate_iomem(sz: usize) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
@@ -232,7 +232,7 @@ pub fn allocate_iomem(sz: usize) -> usize {
 	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
 	virtual_address
-}
+}*/
 
 pub fn allocate(sz: usize, execute_disable: bool) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);

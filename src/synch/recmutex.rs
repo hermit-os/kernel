@@ -65,27 +65,31 @@ impl RecursiveMutex {
 			}
 
 			// Switch to the next task.
-			core_scheduler.scheduler();
+			core_scheduler.reschedule();
 		}
 	}
 
 	pub fn release(&self) {
-		let mut locked_state = self.state.lock();
+		if let Some(task) = {
+			let mut locked_state = self.state.lock();
 
-		// We could do a sanity check here whether the RecursiveMutex is actually held by the current task.
-		// But let's just trust our code using this function for the sake of simplicity and performance.
+			// We could do a sanity check here whether the RecursiveMutex is actually held by the current task.
+			// But let's just trust our code using this function for the sake of simplicity and performance.
 
-		// Decrement the counter (recursive mutex behavior).
-		locked_state.count -= 1;
-		if locked_state.count == 0 {
-			// Release the entire recursive mutex.
-			locked_state.current_tid = None;
+			// Decrement the counter (recursive mutex behavior).
+			locked_state.count -= 1;
+			if locked_state.count == 0 {
+				// Release the entire recursive mutex.
+				locked_state.current_tid = None;
 
-			// Wake up any task that has been waiting for this mutex.
-			if let Some(task) = locked_state.queue.pop() {
-				let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-				core_scheduler.blocked_tasks.lock().custom_wakeup(task);
+				locked_state.queue.pop()
+			} else {
+				None
 			}
+		} {
+			// Wake up any task that has been waiting for this mutex.
+			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
+			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
 		}
 	}
 }

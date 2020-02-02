@@ -130,12 +130,6 @@ pub fn add_current_core() {
 	}
 }
 
-pub fn get_boot_stacks() -> usize {
-	let tss = unsafe { &(*PERCORE.tss.get()) };
-
-	tss.rsp[0] as usize
-}
-
 #[no_mangle]
 pub extern "C" fn set_current_kernel_stack() {
 	let current_task_borrowed = core_scheduler().current_task.borrow();
@@ -148,4 +142,5 @@ pub extern "C" fn set_current_kernel_stack() {
 	let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
 	tss.rsp[0] = (current_task_borrowed.stacks.stack + stack_size - 0x10) as u64;
+	tss.ist[0] = (current_task_borrowed.stacks.ist0 + KERNEL_STACK_SIZE - 0x10) as u64;
 }
