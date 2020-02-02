@@ -80,17 +80,17 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 #[no_mangle]
-pub extern "C" fn get_ip() -> [u8; 4] {
+pub fn uhyve_get_ip() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) }
 }
 
 #[no_mangle]
-pub extern "C" fn get_gateway() -> [u8; 4] {
+pub fn uhyve_get_gateway() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway) }
 }
 
 #[no_mangle]
-pub extern "C" fn get_mask() -> [u8; 4] {
+pub fn uhyve_get_mask() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
 }
 
