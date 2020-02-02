@@ -46,15 +46,15 @@ impl Rtc {
 	}
 
 	const fn is_24_hour_format(&self) -> bool {
-		(self.cmos_format & CMOS_24_HOUR_FORMAT_FLAG > 0)
+		self.cmos_format & CMOS_24_HOUR_FORMAT_FLAG > 0
 	}
 
 	const fn is_binary_format(&self) -> bool {
-		(self.cmos_format & CMOS_BINARY_FORMAT_FLAG > 0)
+		self.cmos_format & CMOS_BINARY_FORMAT_FLAG > 0
 	}
 
 	const fn time_is_pm(hour: u8) -> bool {
-		(hour & CMOS_12_HOUR_PM_FLAG > 0)
+		hour & CMOS_12_HOUR_PM_FLAG > 0
 	}
 
 	/**
