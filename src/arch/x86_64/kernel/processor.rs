@@ -507,6 +507,9 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_tsc_deadline() {
 			write!(f, "TSC-DEADLINE ")?;
 		}
+		if self.feature_info.has_x2apic() {
+			write!(f, "X2APIC ")?;
+		}
 
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
