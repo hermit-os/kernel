@@ -133,7 +133,7 @@ pub fn set_gate(index: u8, handler: usize, ist_index: u8) {
 		VAddr::from_usize(handler),
 		sel,
 		Ring::Ring0,
-		Type::TrapGate,
+		Type::InterruptGate,
 		ist_index,
 	);
 
