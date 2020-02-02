@@ -9,14 +9,16 @@
 pub mod uhyve;
 
 use alloc::boxed::Box;
-use core::ffi::c_void;
-use synch::spinlock::SpinlockIrqSave;
+use synch::semaphore::*;
 
-static NIC: SpinlockIrqSave<Option<Box<dyn NetworkInterface>>> = SpinlockIrqSave::new(None);
+static mut NIC: Option<Box<dyn NetworkInterface>> = None;
+static NET_SEM: Semaphore = Semaphore::new(0);
 
 pub fn init() -> Result<(), ()> {
 	let nic = uhyve::init()?;
-	*NIC.lock() = Some(nic);
+	unsafe {
+		NIC = Some(nic);
+	}
 
 	info!("Network initialized!");
 
@@ -28,61 +30,47 @@ pub trait NetworkInterface {
 	fn is_polling(&self) -> bool;
 	/// set driver in polling/non-polling mode
 	fn set_polling(&mut self, mode: bool);
-	/// initialize network and returns basic network configuration
-	fn init(
-		&mut self,
-		sem: *const c_void,
-		ip: &mut [u8; 4],
-		gateway: &mut [u8; 4],
-		mac: &mut [u8; 18],
-	) -> i32;
-	/// read packet from network interface
-	fn read(&mut self, buf: usize, len: usize) -> usize;
-	/// writr packet to the network interface
-	fn write(&self, buf: usize, len: usize) -> usize;
+	/// get mac address
+	fn get_mac_address(&self) -> [u8; 6];
 }
 
 #[no_mangle]
-pub extern "C" fn sys_network_init(
-	sem: *const c_void,
-	ip: &mut [u8; 4],
-	gateway: &mut [u8; 4],
-	mac: &mut [u8; 18],
-) -> i32 {
-	match &mut *NIC.lock() {
-		Some(nic) => nic.init(sem, ip, gateway, mac),
-		None => -1,
+pub fn uhyve_is_polling() -> bool {
+	unsafe {
+		match &NIC {
+			Some(nic) => nic.is_polling(),
+			None => false,
+		}
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn sys_is_polling() -> bool {
-	match &*NIC.lock() {
-		Some(nic) => nic.is_polling(),
-		None => false,
+pub fn uhyve_set_polling(mode: bool) {
+	unsafe {
+		match &mut NIC {
+			Some(nic) => nic.set_polling(mode),
+			None => {}
+		}
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn sys_set_polling(mode: bool) {
-	match &mut *NIC.lock() {
-		Some(nic) => nic.set_polling(mode),
-		None => {}
+pub fn uhyve_netwait(millis: Option<u64>) {
+	if uhyve_is_polling() == false {
+		let wakeup_time = match millis {
+			Some(ms) => Some(::arch::processor::get_timer_ticks() + ms * 1000),
+			None => None,
+		};
+		NET_SEM.acquire(wakeup_time);
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn sys_netread(buf: usize, len: usize) -> usize {
-	match &mut *NIC.lock() {
-		Some(nic) => nic.read(buf, len),
-		None => 0,
-	}
-}
-
-#[no_mangle]
-pub extern "C" fn sys_netwrite(buf: usize, len: usize) -> usize {
-	match &*NIC.lock() {
-		Some(nic) => nic.write(buf, len),
-		None => 0,
+pub fn uhyve_get_mac_address() -> [u8; 6] {
+	unsafe {
+		match &NIC {
+			Some(nic) => nic.get_mac_address(),
+			None => [0; 6],
+		}
 	}
 }
