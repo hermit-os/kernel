@@ -109,7 +109,7 @@ impl Semaphore {
 			}
 
 			// Switch to the next task.
-			core_scheduler.scheduler();
+			core_scheduler.reschedule();
 		}
 	}
 
@@ -129,13 +129,14 @@ impl Semaphore {
 	/// This will increment the number of resources in this semaphore by 1 and
 	/// will notify any pending waiters in `acquire` or `access` if necessary.
 	pub fn release(&self) {
-		let mut locked_state = self.state.lock();
-		locked_state.count += 1;
-
-		// Wake up any task that has been waiting for this semaphore.
-		if let Some(task) = locked_state.queue.pop() {
+		if let Some(task) = {
+			let mut locked_state = self.state.lock();
+			locked_state.count += 1;
+			locked_state.queue.pop()
+		} {
+			// Wake up any task that has been waiting for this semaphore.
 			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
 			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
-		}
+		};
 	}
 }

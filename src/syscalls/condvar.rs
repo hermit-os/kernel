@@ -120,7 +120,7 @@ pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 #[no_mangle]
 pub fn sys_wait(_ptr: usize) -> i32 {
 	// Switch to the next task.
-	core_scheduler().scheduler();
+	core_scheduler().reschedule();
 
 	0
 }
