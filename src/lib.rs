@@ -41,6 +41,7 @@
 extern crate std;
 
 // EXTERNAL CRATES
+#[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
