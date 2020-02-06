@@ -2,8 +2,14 @@ use self::consts::*;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::apic;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::irq::*;
 use arch::x86_64::kernel::pci;
 use arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::percore::core_scheduler;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use arch::x86_64::mm::{paging, virtualmem};
 use core::cell::RefCell;
@@ -738,10 +744,20 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 		return;
 	}
 
+	// Install interrupt handler
+	irq_install_handler(11, virtio_irqhandler as usize);
+
 	// TODO: proper error handling on driver creation fail
 	let mut drv = create_virtio_driver(adapter).unwrap();
 
 	drv.send_hello();
 
 	pci::register_driver(PciDriver::VirtioFs(drv));
+}
+
+#[cfg(target_arch = "x86_64")]
+extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
+	info!("Receive virtio interrupt");
+	apic::eoi();
+	core_scheduler().scheduler();
 }
