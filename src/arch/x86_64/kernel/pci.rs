@@ -230,7 +230,10 @@ pub fn init() {
 			}
 		}
 	}
+}
 
+pub fn init_drivers() {
+	let adapters = PCI_ADAPTERS.lock();
 	// virtio: 4.1.2 PCI Device Discovery
 	for adapter in adapters.iter() {
 		if adapter.vendor_id == 0x1AF4 && adapter.device_id >= 0x1000 && adapter.device_id <= 0x107F
