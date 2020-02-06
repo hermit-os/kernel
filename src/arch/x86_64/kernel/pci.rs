@@ -5,9 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use arch::x86_64::kernel::virtio;
+use arch::x86_64::kernel::virtio::VirtiofsDriver;
 use core::{fmt, u32, u8};
 use synch::spinlock::Spinlock;
 use x86::io::*;
@@ -38,6 +40,7 @@ pub const PCI_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFF0;
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
 static PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
+static PCI_DRIVERS: Spinlock<Vec<PciDriver>> = Spinlock::new(Vec::new());
 
 #[derive(Clone, Copy)]
 pub struct PciAdapter {
@@ -51,6 +54,15 @@ pub struct PciAdapter {
 	pub base_addresses: [u32; 6],
 	pub base_sizes: [u32; 6],
 	pub irq: u8,
+}
+
+pub enum PciDriver<'a> {
+	VirtioFs(Box<VirtiofsDriver<'a>>),
+}
+
+pub fn register_driver(drv: PciDriver<'static>) {
+	let mut drivers = PCI_DRIVERS.lock();
+	drivers.push(drv);
 }
 
 impl PciAdapter {
@@ -214,15 +226,20 @@ pub fn init() {
 				let device_id = (device_vendor_id >> 16) as u16;
 				let vendor_id = device_vendor_id as u16;
 				let adapter = PciAdapter::new(bus, device, vendor_id, device_id);
-
-				// virtio: 4.1.2 PCI Device Discovery
-				if vendor_id == 0x1AF4 && device_id >= 0x1000 && device_id <= 0x107F {
-					info!("Found virtio device with device id 0x{:x}", device_id);
-					virtio::init_virtio_device(adapter);
-				}
-
 				adapters.push(adapter);
 			}
+		}
+	}
+
+	// virtio: 4.1.2 PCI Device Discovery
+	for adapter in adapters.iter() {
+		if adapter.vendor_id == 0x1AF4 && adapter.device_id >= 0x1000 && adapter.device_id <= 0x107F
+		{
+			info!(
+				"Found virtio device with device id 0x{:x}",
+				adapter.device_id
+			);
+			virtio::init_virtio_device(*adapter);
 		}
 	}
 }
