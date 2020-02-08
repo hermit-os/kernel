@@ -79,17 +79,30 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 /// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
+pub fn has_ipdevice() -> bool {
+	let ip = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) };
+
+	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
+		false
+	} else {
+		true
+	}
+}
+
 #[no_mangle]
+#[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_ip() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) }
 }
 
 #[no_mangle]
+#[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_gateway() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway) }
 }
 
 #[no_mangle]
+#[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_mask() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
 }
