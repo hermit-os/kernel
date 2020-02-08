@@ -152,13 +152,7 @@ extern "C" {
 
 /// Helper function to check if uhyve provide an IP device
 fn has_ipdevice() -> bool {
-	let ip = arch::x86_64::kernel::uhyve_get_ip();
-
-	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
-		false
-	} else {
-		true
-	}
+	arch::x86_64::kernel::has_ipdevice()
 }
 
 /// Entry point of a kernel thread, which initialize the libos
