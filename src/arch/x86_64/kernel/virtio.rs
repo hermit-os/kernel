@@ -103,7 +103,7 @@ impl VirtiofsDriver<'_> {
 			//   In practice, d.next is usually used to chain free descriptors,
 			//   and a separate count kept to check there are enough free descriptors before beginning the mappings.
 			let desc_table = vec![
-				virtq_desc {
+				virtq_desc_raw {
 					addr: 0,
 					len: 0,
 					flags: 0,
@@ -111,15 +111,28 @@ impl VirtiofsDriver<'_> {
 				};
 				vqsize
 			]; // has to be 16 byte aligned
-   // We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
-   // init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
-			let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice();
-			let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice();
+			let desc_table = desc_table.into_boxed_slice();
+			// We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
+			// init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
+			let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
+			let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
 
 			// Leak memory so it wont get deallocated
-			// TODO: create appropriate mem-owner-model
+			// TODO: create appropriate mem-owner-model. Pin these?
+			let desc_table = alloc::boxed::Box::leak(desc_table);
 			let avail_mem = alloc::boxed::Box::leak(avail_mem_box);
 			let used_mem = alloc::boxed::Box::leak(used_mem_box);
+
+			// try to use rust compilers ownership guarantees on virtq desc, by splitting array and putting owned values
+			// which do not have destructors
+			let mut desc_raw_wrappers: Vec<Box<virtq_desc_raw>> = Vec::new();
+			for i in 0..vqsize {
+				// "Recast" desc table entry into box, so we can freely move it around without worrying about the buffer
+				// Since we have overwritten drop on virtq_desc_raw, this is safe, even if we never have allocated virtq_desc_raw with the global allocator!
+				// TODO: is this actually true?
+				let drw = unsafe { Box::from_raw(&mut desc_table[i] as *mut _) };
+				desc_raw_wrappers.push(drw);
+			}
 
 			// 5.Optionally, if MSI-X capability is present and enabled on the device, select a vector to use to
 			//   request interrupts triggered by virtqueue events. Write the MSI-X Table entry number corresponding to this
@@ -149,27 +162,26 @@ impl VirtiofsDriver<'_> {
 				common_cfg.queue_desc, common_cfg.queue_avail, common_cfg.queue_used
 			);
 
-			let avail = virtq_avail {
+			let avail = VirtqAvail {
 				flags: avail_flags,
 				idx: avail_idx,
 				ring: avail_mem,
 				//rawmem: avail_mem_box,
-			}; // has to be 2 byte aligned
-			let used = virtq_used {
+			};
+			let used = VirtqUsed {
 				flags: used_flags,
 				idx: used_idx,
 				ring: unsafe { core::slice::from_raw_parts(used_mem.as_ptr() as *const _, vqsize) },
 				//rawmem: used_mem_box,
-			}; // has to be 4 byte aligned
-			let vq = Virtq {
-				index: i,
-				num: vqsize as u16,
-				virtq_desc: desc_table,
-				avail: Rc::new(RefCell::new(avail)),
-				used: Rc::new(RefCell::new(used)),
-				queue_notify_address: notify_cfg
-					.get_notify_addr(common_cfg.queue_notify_off as u32),
 			};
+			let vq = Virtq::new(
+				i,
+				vqsize as u16,
+				desc_raw_wrappers,
+				avail,
+				used,
+				notify_cfg.get_notify_addr(common_cfg.queue_notify_off as u32),
+			);
 
 			vqueues.push(vq);
 		}
@@ -266,6 +278,7 @@ impl VirtiofsDriver<'_> {
 		// example, see https://elixir.bootlin.com/linux/latest/source/fs/fuse/inode.c#L973 (fuse_send_init)
 		// https://github.com/torvalds/linux/blob/76f6777c9cc04efe8036b1d2aa76e618c1631cc6/fs/fuse/dev.c#L1190 <<- max_write
 		if let Some(ref mut vqueues) = self.vqueues {
+			// TODO: this is a stack based buffer.. maybe not the best idea for DMA, but PoC works with this
 			let outbuf = [0; 128];
 			vqueues[1].insert_into_queue(
 				&[
@@ -300,19 +313,38 @@ impl VirtiofsDriver<'_> {
 }
 
 struct Virtq<'a> {
-	index: u16, // Index of vq in common config
-	num: u16,   // Elements in ring/descrs
+	index: u16,  // Index of vq in common config
+	vqsize: u16, // Elements in ring/descrs
 	// The actial descriptors (16 bytes each)
-	virtq_desc: Vec<virtq_desc>,
+	virtq_desc: VirtqDescriptors,
 	// A ring of available descriptor heads with free-running index
-	avail: Rc<RefCell<virtq_avail<'a>>>,
+	avail: Rc<RefCell<VirtqAvail<'a>>>,
 	// A ring of used descriptor heads with free-running index
-	used: Rc<RefCell<virtq_used<'a>>>,
+	used: Rc<RefCell<VirtqUsed<'a>>>,
 	// Address where queue index is written to on notify
 	queue_notify_address: &'a mut u16,
 }
 
-impl Virtq<'_> {
+impl<'a> Virtq<'a> {
+	// TODO: are the lifetimes correct?
+	fn new(
+		index: u16,
+		vqsize: u16,
+		virtq_desc: Vec<Box<virtq_desc_raw>>,
+		avail: VirtqAvail<'a>,
+		used: VirtqUsed<'a>,
+		queue_notify_address: &'a mut u16,
+	) -> Self {
+		Virtq {
+			index,
+			vqsize,
+			virtq_desc: VirtqDescriptors::new(virtq_desc),
+			avail: Rc::new(RefCell::new(avail)),
+			used: Rc::new(RefCell::new(used)),
+			queue_notify_address,
+		}
+	}
+
 	fn notify_device(&mut self) {
 		// 4.1.4.4.1 Device Requirements: Notification capability
 		// virtio-fs does NOT offer VIRTIO_F_NOTIFICATION_DATA
@@ -335,8 +367,9 @@ impl Virtq<'_> {
 
 		// 1. Get the next free descriptor table entry, d
 		// Choose head=0, since we only do one req. TODO: get actual next free descr table entry
-		let head: u16 = 0 % self.num;
-		let req = &mut self.virtq_desc[head as usize];
+		let chain = self.virtq_desc.get_new_chain();
+		let mut chain = chain.borrow_mut();
+		let req = &mut chain.0.first_mut().unwrap().raw;
 
 		// 2. Set d.addr to the physical address of the start of b
 		req.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
@@ -347,20 +380,17 @@ impl Virtq<'_> {
 
 		// 4. If b is device-writable, set d.flags to VIRTQ_DESC_F_WRITE, otherwise 0.
 		req.flags = 0;
+		info!("written descriptor: {:?} @ {:p}", req, req);
 
 		// 5. If there is a buffer element after this:
 		//    a) Set d.next to the index of the next free descriptor element.
 		//    b) Set the VIRTQ_DESC_F_NEXT bit in d.flags.
 		// if we want to receive a reply, we have to chain to another descriptor, which declares VIRTQ_DESC_F_WRITE
 		if let Some(rsp_buf) = rsp_buf {
-			let next = head + 1;
-
-			req.next = next;
-			req.flags = VIRTQ_DESC_F_NEXT;
-			info!("written descriptor: {:?} @ {:p}", req, req);
-			drop(req);
-
-			let rsp = &mut self.virtq_desc[next as usize];
+			//let next = head + 1;
+			//drop(req);
+			self.virtq_desc.extend(&mut chain);
+			let rsp = &mut chain.0.last_mut().unwrap().raw;
 			rsp.addr = paging::virt_to_phys(rsp_buf.as_ptr() as usize) as u64;
 			rsp.len = rsp_buf.len() as u32; // TODO: better cast?
 			rsp.flags = VIRTQ_DESC_F_WRITE;
@@ -370,10 +400,12 @@ impl Virtq<'_> {
 			info!("written descriptor: {:?} @ {:p}", req, req);
 		}
 
+		info!("Sending Descriptor chain {:?}", chain);
+
 		// 2. The driver places the index of the head of the descriptor chain into the next ring entry of the available ring.
 		let mut avail = self.avail.borrow_mut();
-		let aind = (*avail.idx % self.num) as usize;
-		avail.ring[aind] = head;
+		let aind = (*avail.idx % self.vqsize) as usize;
+		avail.ring[aind] = chain.0.first().unwrap().index;
 		// TODO: add multiple descriptor chains at once?
 
 		// 3. Steps 1 and 2 MAY be performed repeatedly if batching is possible.
@@ -400,16 +432,36 @@ impl Virtq<'_> {
 		drop(avail);
 		drop(used);
 		if should_notify {
+			// We can drop reference to chain, since we store it in RefCell Array in VirtqDescriptors
+			drop(chain);
 			self.notify_device();
 		}
 	}
 }
+/*
+struct VirtqDescRawWrapper {
+	raw: &'static mut virtq_desc_raw,
+}
+
+impl Deref for VirtqDescRawWrapper {
+	type Target = virtq_desc_raw;
+
+	fn deref(&self) -> &Self::Target {
+		self.raw
+	}
+}
+
+impl DerefMut for VirtqDescRawWrapper {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		self.raw
+	}
+}*/
 
 // Virtqueue descriptors: 16 bytes.
 // These can chain together via "next".
 #[repr(C)]
 #[derive(Clone, Debug)]
-struct virtq_desc {
+struct virtq_desc_raw {
 	// Address (guest-physical)
 	// possibly optimize: https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation
 	// https://github.com/rust-lang/rust/pull/62514/files box will call destructor when removed.
@@ -427,8 +479,77 @@ struct virtq_desc {
 	next: u16,
 }
 
-#[repr(C)]
-struct virtq_avail<'a> {
+impl Drop for virtq_desc_raw {
+	fn drop(&mut self) {
+		// TODO: what happens on shutdown etc?
+		warn!("Dropping virtq_desc_raw, this is likely an error as of now! No memory will be deallocated!");
+	}
+}
+
+// Single virtq descriptor. Pointer to raw descr, together with index
+#[derive(Debug)]
+struct VirtqDescriptor {
+	index: u16,
+	raw: Box<virtq_desc_raw>,
+}
+
+#[derive(Debug)]
+struct VirtqDescriptorChain(Vec<VirtqDescriptor>);
+
+struct VirtqDescriptors {
+	//descr_raw: Box<[virtq_desc_raw]>,
+	free: RefCell<VirtqDescriptorChain>,
+	// a) We want to be able to use nonmutable reference to create new used chain
+	// b) we want to return reference to descriptor chain, eg when creating new!
+	// TODO: improve this type. there should be a better way to accomplish something similar.
+	used_chains: RefCell<Vec<Rc<RefCell<VirtqDescriptorChain>>>>,
+}
+
+impl VirtqDescriptors {
+	fn new(descr_raw: Vec<Box<virtq_desc_raw>>) -> Self {
+		VirtqDescriptors {
+			//descr_raw,
+			free: RefCell::new(VirtqDescriptorChain(
+				descr_raw
+					.into_iter()
+					.enumerate()
+					.map(|(i, braw)| VirtqDescriptor {
+						index: i as u16,
+						raw: braw,
+					})
+					.rev()
+					.collect(),
+			)),
+			used_chains: RefCell::new(Vec::new()),
+		}
+	}
+
+	// Can't guarantee that the caller will pass back the chain to us, so never hand out complete ownership!
+	fn get_new_chain(&self) -> Rc<RefCell<VirtqDescriptorChain>> {
+		// TODO: handle no-free case!
+		let mut free = self.free.borrow_mut();
+		let mut used = self.used_chains.borrow_mut();
+		let newchain = VirtqDescriptorChain(vec![free.0.pop().unwrap()]);
+		let cell = Rc::new(RefCell::new(newchain));
+		used.push(cell);
+		//Ref::map(, |mi| &mi.vec)
+		//Ref::map(used.last().unwrap().borrow_mut(), |x| x)
+		used.last().unwrap().clone()
+	}
+
+	fn extend<'a>(&self, chain: &'a mut VirtqDescriptorChain) {
+		// TODO: handle no-free case!
+		let mut free = self.free.borrow_mut();
+		let next = free.0.pop().unwrap();
+		let last = chain.0.last_mut().unwrap();
+		last.raw.next = next.index;
+		last.raw.flags = VIRTQ_DESC_F_NEXT;
+		chain.0.push(next);
+	}
+}
+
+#[allow(dead_code)]
+struct VirtqAvail<'a> {
 	flags: &'a mut u16, // If VIRTIO_F_EVENT_IDX, set to 1 to maybe suppress interrupts
 	idx: &'a mut u16,
 	ring: &'a mut [u16],
@@ -436,8 +557,8 @@ struct virtq_avail<'a> {
 	// Only if VIRTIO_F_EVENT_IDX used_event: u16,
 }
 
-#[repr(C)]
-struct virtq_used<'a> {
+#[allow(dead_code)]
+struct VirtqUsed<'a> {
 	flags: &'a u16,
 	idx: &'a u16,
 	ring: &'a [virtq_used_elem],
@@ -654,7 +775,7 @@ fn map_virtiocap(
 	}
 }
 
-pub fn create_virtio_driver(adapter: pci::PciAdapter) -> Option<Box<VirtiofsDriver<'static>>> {
+pub fn create_virtiofs_driver(adapter: pci::PciAdapter) -> Option<Box<VirtiofsDriver<'static>>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -748,8 +869,10 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 	irq_install_handler(11, virtio_irqhandler as usize);
 
 	// TODO: proper error handling on driver creation fail
-	let mut drv = create_virtio_driver(adapter).unwrap();
+	let mut drv = create_virtiofs_driver(adapter).unwrap();
 
+	drv.send_hello();
+	drv.send_hello();
 	drv.send_hello();
 
 	pci::register_driver(PciDriver::VirtioFs(drv));
