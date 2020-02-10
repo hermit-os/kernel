@@ -5,11 +5,12 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use arch::x86_64::kernel::virtio;
 use arch::x86_64::kernel::virtio::VirtiofsDriver;
+use core::cell::RefCell;
 use core::{fmt, u32, u8};
 use synch::spinlock::Spinlock;
 use x86::io::*;
@@ -57,7 +58,7 @@ pub struct PciAdapter {
 }
 
 pub enum PciDriver<'a> {
-	VirtioFs(Box<VirtiofsDriver<'a>>),
+	VirtioFs(Rc<RefCell<VirtiofsDriver<'a>>>),
 }
 
 pub fn register_driver(drv: PciDriver<'static>) {

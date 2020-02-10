@@ -9,6 +9,7 @@
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
+pub mod fuse;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
