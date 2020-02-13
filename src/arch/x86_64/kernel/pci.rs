@@ -9,7 +9,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use arch::x86_64::kernel::virtio;
-use arch::x86_64::kernel::virtio::VirtiofsDriver;
+use arch::x86_64::kernel::virtio_fs::VirtiofsDriver;
 use core::cell::RefCell;
 use core::{fmt, u32, u8};
 use synch::spinlock::Spinlock;
