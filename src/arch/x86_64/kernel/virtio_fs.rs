@@ -167,11 +167,7 @@ impl FuseInterface for VirtiofsDriver<'_> {
 		//
 		if let Some(ref mut vqueues) = self.vqueues {
 			if let Some(mut rsp) = rsp {
-				vqueues[1].insert_into_queue(cmd.to_u8buf(), Some(rsp.to_u8buf_mut()));
-				// TODO: Answer is already here. This is not guaranteed by any spec, we should wait until it appears in used ring!
-				// Maybe use async?
-				// TODO: only works if we print here, else compiler thinks rsp has not changed..
-				info!("In Sndcmd {:?}", rsp);
+				vqueues[1].send_blocking(cmd.to_u8buf(), Some(rsp.to_u8buf_mut()));
 				return Some(rsp);
 			}
 		}
@@ -197,7 +193,7 @@ impl FuseInterface for VirtiofsDriver<'_> {
 		/*if let Some(ref mut vqueues) = self.vqueues {
 			// TODO: this is a stack based buffer.. maybe not the best idea for DMA, but PoC works with this
 			let outbuf = [0;128];
-			vqueues[1].insert_into_queue(&[
+			vqueues[1].send_blocking(&[
 				// fuse_in_header
 				96,0,0,0, // pub len: u32, // 96 for all bytes!. Yet still returns: "elem 0 too short for out_header" "elem 0 no reply sent"
 				26,0,0,0, // pub opcode: u32,

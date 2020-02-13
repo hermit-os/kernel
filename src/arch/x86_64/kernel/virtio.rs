@@ -169,6 +169,7 @@ impl<'a> Virtq<'a> {
 			idx: used_idx,
 			ring: unsafe { core::slice::from_raw_parts(used_mem.as_ptr() as *const _, vqsize) },
 			//rawmem: used_mem_box,
+			last_idx: 0,
 		};
 		let vq = Virtq::new(
 			index,
@@ -193,7 +194,8 @@ impl<'a> Virtq<'a> {
 		*self.queue_notify_address = self.index;
 	}
 
-	pub fn insert_into_queue(&mut self, dat: &[u8], rsp_buf: Option<&mut [u8]>) {
+	// Places dat in virtq, waits until buffer is used and response is in rsp_buf.
+	pub fn send_blocking(&mut self, dat: &[u8], rsp_buf: Option<&mut [u8]>) {
 		// 2.6.13 Supplying Buffers to The Device
 		// The driver offers buffers to one of the device’s virtqueues as follows:
 
@@ -204,8 +206,8 @@ impl<'a> Virtq<'a> {
 
 		// 1. Get the next free descriptor table entry, d
 		// Choose head=0, since we only do one req. TODO: get actual next free descr table entry
-		let chain = self.virtq_desc.get_new_chain();
-		let mut chain = chain.borrow_mut();
+		let chainrc = self.virtq_desc.get_new_chain();
+		let mut chain = chainrc.borrow_mut();
 		let req = &mut chain.0.first_mut().unwrap().raw;
 
 		// 2. Set d.addr to the physical address of the start of b
@@ -268,11 +270,18 @@ impl<'a> Virtq<'a> {
 		let should_notify = *used.flags == 0;
 		drop(avail);
 		drop(used);
+
 		if should_notify {
-			// We can drop reference to chain, since we store it in RefCell Array in VirtqDescriptors
-			drop(chain);
 			self.notify_device();
 		}
+
+		// wait until done (placed in used buffer)
+		let mut used = self.used.borrow_mut();
+		used.wait_until_done(&chain);
+
+		// give chain back, so we can reuse the descriptors!
+		drop(chain);
+		self.virtq_desc.recycle_chain(chainrc)
 	}
 }
 
@@ -315,7 +324,18 @@ struct VirtqDescriptor {
 #[derive(Debug)]
 struct VirtqDescriptorChain(Vec<VirtqDescriptor>);
 
+// Two descriptor chains are equal, if memory address of vec is equal.
+impl PartialEq for VirtqDescriptorChain {
+	fn eq(&self, other: &Self) -> bool {
+		&self.0 as *const _ == &other.0 as *const _
+	}
+}
+
 struct VirtqDescriptors {
+	// We need to guard against mem::forget. --> always store chains here?
+	//    Do we? descriptors are in this file only, not external! -> We can ensure they are not mem::forgotten?
+	//    still need to have them stored in this file somewhere though, cannot be owned by moved-out transfer object.
+	//    So this is best solution?
 	//descr_raw: Box<[virtq_desc_raw]>,
 	free: RefCell<VirtqDescriptorChain>,
 	// a) We want to be able to use nonmutable reference to create new used chain
@@ -356,6 +376,28 @@ impl VirtqDescriptors {
 		used.last().unwrap().clone()
 	}
 
+	fn recycle_chain(&self, chain: Rc<RefCell<VirtqDescriptorChain>>) {
+		let mut free = self.free.borrow_mut();
+		let mut used = self.used_chains.borrow_mut();
+		//info!("Free chain: {:?}", &free.0[free.0.len()-4..free.0.len()]);
+		//info!("used chain: {:?}", &used);
+
+		// Remove chain from used list
+		// Two Rcs are equal if their inner values are equal, even if they are stored in different allocation.
+		let index = used.iter().position(|c| *c == chain);
+		if let Some(index) = index {
+			used.remove(index);
+		} else {
+			warn!("Trying to remove chain from virtq which does not exist!");
+			return;
+		}
+		free.0.append(&mut chain.borrow_mut().0);
+		// chain is now empty! if anyone else still has a reference, he can't do harm
+		// TODO: make test
+		//info!("Free chain: {:?}", &free.0[free.0.len()-4..free.0.len()]);
+		//info!("Used chain: {:?}", &used);
+	}
+
 	fn extend<'a>(&self, chain: &'a mut VirtqDescriptorChain) {
 		// TODO: handle no-free case!
 		let mut free = self.free.borrow_mut();
@@ -382,6 +424,25 @@ struct VirtqUsed<'a> {
 	idx: &'a u16,
 	ring: &'a [virtq_used_elem],
 	//rawmem: Box<[u16]>,
+	last_idx: u16,
+}
+
+impl<'a> VirtqUsed<'a> {
+	fn wait_until_done(&mut self, chain: &VirtqDescriptorChain) -> bool {
+		// TODO: this only works for exactly one running transfer at a time
+		while unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {}
+
+		if *self.idx > self.last_idx {
+			self.last_idx = *self.idx;
+			let usedelem = self.ring[(self.last_idx as usize - 1) % self.ring.len()];
+
+			info!("Used Element: {:?}", usedelem);
+			assert!(usedelem.id == chain.0.first().unwrap().index as u32);
+			return true;
+		}
+
+		false
+	}
 }
 
 // u32 is used here for ids for padding reasons.
