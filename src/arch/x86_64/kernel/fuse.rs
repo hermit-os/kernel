@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
-use arch::x86_64::kernel::virtio::VirtiofsDriver;
+use arch::x86_64::kernel::virtio_fs::VirtiofsDriver;
 use core::cell::RefCell;
 use core::{fmt, u32, u8};
 use synch::spinlock::Spinlock;

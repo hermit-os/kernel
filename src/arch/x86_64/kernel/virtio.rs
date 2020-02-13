@@ -1,8 +1,8 @@
 use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::fuse::{self, FuseInterface};
 use arch::x86_64::kernel::irq::*;
 use arch::x86_64::kernel::pci::{self, PciAdapter, PciDriver};
 use arch::x86_64::kernel::percore::core_scheduler;
+use arch::x86_64::kernel::virtio_fs;
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use arch::x86_64::mm::{paging, virtualmem};
@@ -11,7 +11,6 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::{fmt, u32, u8};
 
 use self::consts::*;
 
@@ -43,302 +42,7 @@ pub mod consts {
 	pub const VIRTQ_DESC_F_INDIRECT: u16 = 4; // Buffer contains list of virtq_desc
 }
 
-pub struct VirtiofsDriver<'a> {
-	common_cfg: &'a mut virtio_pci_common_cfg,
-	device_cfg: &'a virtio_fs_config,
-	notify_cfg: VirtioNotification,
-	vqueues: Option<Vec<Virtq<'a>>>,
-}
-
-impl<'a> fmt::Debug for VirtiofsDriver<'a> {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "VirtiofsDriver {{ ")?;
-		write!(f, "common_cfg: {:?}, ", self.common_cfg)?;
-		write!(f, "device_cfg: {:?}, ", self.device_cfg)?;
-		write!(f, "nofity_cfg: {:?}, ", self.device_cfg)?;
-		match &self.vqueues {
-			None => write!(f, "Uninitialized VQs")?,
-			Some(vqs) => write!(f, "Initialized {} VQs", vqs.len())?,
-		}
-		write!(f, "}}")
-	}
-}
-
-impl VirtiofsDriver<'_> {
-	pub fn init_vqs(&mut self) {
-		let common_cfg = &mut self.common_cfg;
-		let device_cfg = &self.device_cfg;
-		let notify_cfg = &mut self.notify_cfg;
-
-		// 4.1.5.1.3 Virtqueueu configuration
-		// see https://elixir.bootlin.com/linux/latest/ident/virtio_fs_setup_vqs for example
-		info!("Setting up virtqueues...");
-
-		if device_cfg.num_request_queues == 0 {
-			error!("0 request queues requested from device. Aborting!");
-			return;
-		}
-		// 1 highprio queue, and n normal request queues
-		let vqnum = device_cfg.num_request_queues + 1;
-		let mut vqueues = Vec::<Virtq>::new();
-
-		// create the queues and tell device about them
-		for i in 0..vqnum as u16 {
-			// 1.Write the virtqueue index to queue_select.
-			common_cfg.queue_select = i;
-
-			// 2.Read the virtqueue size from queue_size. This controls how big the virtqueue is (see 2.4 Virtqueues).
-			//   If this field is 0, the virtqueue does not exist.
-			let vqsize = common_cfg.queue_size as usize;
-			if vqsize == 0 || vqsize > 32768 {
-				return;
-			}
-			info!("Initializing virtqueue {}, of size {}", i, vqsize);
-
-			// 3.Optionally, select a smaller virtqueue size and write it to queue_size.
-
-			// 4.Allocate and zero Descriptor Table, Available and Used rings for the virtqueue in contiguous physical memory.
-			// TODO: is this contiguous memory?
-			// TODO: (from 2.6.13.1 Placing Buffers Into The Descriptor Table):
-			//   In practice, d.next is usually used to chain free descriptors,
-			//   and a separate count kept to check there are enough free descriptors before beginning the mappings.
-			let desc_table = vec![
-				virtq_desc_raw {
-					addr: 0,
-					len: 0,
-					flags: 0,
-					next: 0
-				};
-				vqsize
-			]; // has to be 16 byte aligned
-			let desc_table = desc_table.into_boxed_slice();
-			// We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
-			// init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
-			let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
-			let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
-
-			// Leak memory so it wont get deallocated
-			// TODO: create appropriate mem-owner-model. Pin these?
-			let desc_table = alloc::boxed::Box::leak(desc_table);
-			let avail_mem = alloc::boxed::Box::leak(avail_mem_box);
-			let used_mem = alloc::boxed::Box::leak(used_mem_box);
-
-			// try to use rust compilers ownership guarantees on virtq desc, by splitting array and putting owned values
-			// which do not have destructors
-			let mut desc_raw_wrappers: Vec<Box<virtq_desc_raw>> = Vec::new();
-			for i in 0..vqsize {
-				// "Recast" desc table entry into box, so we can freely move it around without worrying about the buffer
-				// Since we have overwritten drop on virtq_desc_raw, this is safe, even if we never have allocated virtq_desc_raw with the global allocator!
-				// TODO: is this actually true?
-				let drw = unsafe { Box::from_raw(&mut desc_table[i] as *mut _) };
-				desc_raw_wrappers.push(drw);
-			}
-
-			// 5.Optionally, if MSI-X capability is present and enabled on the device, select a vector to use to
-			//   request interrupts triggered by virtqueue events. Write the MSI-X Table entry number corresponding to this
-			//   vector into queue_msix_vector. Read queue_msix_vector:
-			//   on success, previously written value is returned; on failure, NO_VECTOR value is returned.
-
-			// WHERE IS THIS SPEC FROM? IGNORE FOR NOW
-			// The driver notifies the device by writing the 16-bit virtqueue index of this virtqueue to the Queue Notify address.
-			// See 4.1.4.4 for how to calculate this address
-
-			// Split buffers into usable structs:
-			let (avail_flags, avail_mem) = avail_mem.split_first_mut().unwrap();
-			let (avail_idx, avail_mem) = avail_mem.split_first_mut().unwrap();
-			let (used_flags, used_mem) = used_mem.split_first_mut().unwrap();
-			let (used_idx, used_mem) = used_mem.split_first_mut().unwrap();
-
-			// Tell device about the guest-physical addresses of our queue structs:
-			// TODO: cleanup pointer conversions (use &mut vq....?)
-			common_cfg.queue_select = i;
-			common_cfg.queue_desc = paging::virt_to_phys(desc_table.as_ptr() as usize) as u64;
-			common_cfg.queue_avail = paging::virt_to_phys(avail_flags as *mut _ as usize) as u64;
-			common_cfg.queue_used = paging::virt_to_phys(used_flags as *const _ as usize) as u64;
-			common_cfg.queue_enable = 1;
-
-			info!(
-				"desc 0x{:x}, avail 0x{:x}, used 0x{:x}",
-				common_cfg.queue_desc, common_cfg.queue_avail, common_cfg.queue_used
-			);
-
-			let avail = VirtqAvail {
-				flags: avail_flags,
-				idx: avail_idx,
-				ring: avail_mem,
-				//rawmem: avail_mem_box,
-			};
-			let used = VirtqUsed {
-				flags: used_flags,
-				idx: used_idx,
-				ring: unsafe { core::slice::from_raw_parts(used_mem.as_ptr() as *const _, vqsize) },
-				//rawmem: used_mem_box,
-			};
-			let vq = Virtq::new(
-				i,
-				vqsize as u16,
-				desc_raw_wrappers,
-				avail,
-				used,
-				notify_cfg.get_notify_addr(common_cfg.queue_notify_off as u32),
-			);
-
-			vqueues.push(vq);
-		}
-
-		self.vqueues = Some(vqueues);
-	}
-
-	pub fn negotiate_features(&mut self) {
-		let common_cfg = &mut self.common_cfg;
-		// Linux kernel reads 2x32 featurebits: https://elixir.bootlin.com/linux/latest/ident/vp_get_features
-		common_cfg.device_feature_select = 0;
-		let mut device_features: u64 = common_cfg.device_feature as u64;
-		common_cfg.device_feature_select = 1;
-		device_features |= (common_cfg.device_feature as u64) << 32;
-
-		if device_features & VIRTIO_F_RING_INDIRECT_DESC != 0 {
-			info!("Device offers feature VIRTIO_F_RING_INDIRECT_DESC, ignoring");
-		}
-		if device_features & VIRTIO_F_RING_EVENT_IDX != 0 {
-			info!("Device offers feature VIRTIO_F_RING_EVENT_IDX, ignoring");
-		}
-		if device_features & VIRTIO_F_VERSION_1 != 0 {
-			info!("Device offers feature VIRTIO_F_VERSION_1, accepting.");
-			common_cfg.driver_feature_select = 1;
-			common_cfg.driver_feature = (VIRTIO_F_VERSION_1 >> 32) as u32;
-		}
-		if device_features
-			& !(VIRTIO_F_RING_INDIRECT_DESC | VIRTIO_F_RING_EVENT_IDX | VIRTIO_F_VERSION_1)
-			!= 0
-		{
-			info!(
-				"Device offers unknown feature bits: {:064b}.",
-				device_features
-			);
-		}
-		// There are no virtio-fs specific featurebits yet.
-		// TODO: actually check features
-		// currently provided features of virtio-fs:
-		// 0000000000000000000000000000000100110000000000000000000000000000
-		// only accept VIRTIO_F_VERSION_1 for now.
-
-		/*
-		// on failure:
-		common_cfg.device_status |= 128;
-		return ERROR;
-		*/
-	}
-
-	/// 3.1 VirtIO Device Initialization
-	pub fn init(&mut self) {
-		// 1.Reset the device.
-		self.common_cfg.device_status = 0;
-
-		// 2.Set the ACKNOWLEDGE status bit: the guest OS has notice the device.
-		self.common_cfg.device_status |= 1;
-
-		// 3.Set the DRIVER status bit: the guest OS knows how to drive the device.
-		self.common_cfg.device_status |= 2;
-
-		// 4.Read device feature bits, and write the subset of feature bits understood by the OS and driver to the device.
-		//   During this step the driver MAY read (but MUST NOT write) the device-specific configuration fields to check
-		//   that it can support the device before accepting it.
-		self.negotiate_features();
-
-		// 5.Set the FEATURES_OK status bit. The driver MUST NOT accept new feature bits after this step.
-		self.common_cfg.device_status |= 8;
-
-		// 6.Re-read device status to ensure the FEATURES_OK bit is still set:
-		//   otherwise, the device does not support our subset of features and the device is unusable.
-		if self.common_cfg.device_status & 8 == 0 {
-			error!("Device unset FEATURES_OK, aborting!");
-			return;
-		}
-
-		// 7.Perform device-specific setup, including discovery of virtqueues for the device, optional per-bus setup,
-		//   reading and possibly writing the device’s virtio configuration space, and population of virtqueues.
-		self.init_vqs();
-
-		// 8.Set the DRIVER_OK status bit. At this point the device is “live”.
-		self.common_cfg.device_status |= 4;
-	}
-}
-
-impl FuseInterface for VirtiofsDriver<'_> {
-	fn send_command<S, T>(
-		&mut self,
-		cmd: fuse::Cmd<S>,
-		rsp: Option<fuse::Rsp<T>>,
-	) -> Option<fuse::Rsp<T>>
-	where
-		S: fuse::FuseIn + core::fmt::Debug,
-		T: fuse::FuseOut + core::fmt::Debug,
-	{
-		// TODO: cmd/rsp gets deallocated when leaving scope.. maybe not the best idea for DMA, but PoC works with this
-		//
-		if let Some(ref mut vqueues) = self.vqueues {
-			if let Some(mut rsp) = rsp {
-				vqueues[1].insert_into_queue(cmd.to_u8buf(), Some(rsp.to_u8buf_mut()));
-				// TODO: Answer is already here. This is not guaranteed by any spec, we should wait until it appears in used ring!
-				// Maybe use async?
-				// TODO: only works if we print here, else compiler thinks rsp has not changed..
-				info!("In Sndcmd {:?}", rsp);
-				return Some(rsp);
-			}
-		}
-		None
-	}
-	/*
-	pub fn send_hello(&mut self) {
-		// Setup virtio-fs (5.11 in virtio spec @ https://stefanha.github.io/virtio/virtio-fs.html#x1-41500011)
-		// 5.11.5 Device Initialization
-		// On initialization the driver first discovers the device’s virtqueues.
-		// The FUSE session is started by sending a FUSE_INIT request as defined by the FUSE protocol on one request virtqueue.
-		// All virtqueues provide access to the same FUSE session and therefore only one FUSE_INIT request is required
-		// regardless of the number of available virtqueues.
-
-		// 5.11.6 Device Operation
-		// TODO: send a simple getdents as test
-		// Send FUSE_INIT
-		// example, see https://elixir.bootlin.com/linux/latest/source/fs/fuse/inode.c#L973 (fuse_send_init)
-		// https://github.com/torvalds/linux/blob/76f6777c9cc04efe8036b1d2aa76e618c1631cc6/fs/fuse/dev.c#L1190 <<- max_write
-
-
-		/* TODO: make TEST out of this! */
-		/*if let Some(ref mut vqueues) = self.vqueues {
-			// TODO: this is a stack based buffer.. maybe not the best idea for DMA, but PoC works with this
-			let outbuf = [0;128];
-			vqueues[1].insert_into_queue(&[
-				// fuse_in_header
-				96,0,0,0, // pub len: u32, // 96 for all bytes!. Yet still returns: "elem 0 too short for out_header" "elem 0 no reply sent"
-				26,0,0,0, // pub opcode: u32,
-				1,0,0,0,0,0,0,0, // pub unique: u64,
-				1,0,0,0,0,0,0,0, // pub nodeid: u64,
-				0,0,0,0, // pub uid: u32,
-				0,0,0,0, // pub gid: u32,
-				1,0,0,0, // pub pid: u32,
-				0,0,0,0, // pub padding: u32,
-				// fuse_init_in
-				7,0,0,0, // major
-				31,0,0,0, // minor
-				0,0,0,0, // max_readahead
-				0,0,0,0, // flags
-				/*// fuse_out_header
-				0,0,0,0, // pub len: u32,
-				0,0,0,0, // pub error: i32,
-				0,0,0,0,0,0,0,0, // pub unique: u64,
-				// fuse_init_out
-				0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,*/
-			], Some(&outbuf));
-			// TODO: Answer is already here. This is not guaranteed by any spec, we should wait until it appears in used ring!
-			info!("{:?}", &outbuf[..]);
-		}*/
-	}
-	*/
-}
-
-struct Virtq<'a> {
+pub struct Virtq<'a> {
 	index: u16,  // Index of vq in common config
 	vqsize: u16, // Elements in ring/descrs
 	// The actial descriptors (16 bytes each)
@@ -371,6 +75,113 @@ impl<'a> Virtq<'a> {
 		}
 	}
 
+	pub fn new_from_common(
+		index: u16,
+		common_cfg: &mut virtio_pci_common_cfg,
+		notify_cfg: &mut VirtioNotification,
+	) -> Option<Self> {
+		// 1.Write the virtqueue index to queue_select.
+		common_cfg.queue_select = index;
+
+		// 2.Read the virtqueue size from queue_size. This controls how big the virtqueue is (see 2.4 Virtqueues).
+		//   If this field is 0, the virtqueue does not exist.
+		let vqsize = common_cfg.queue_size as usize;
+		if vqsize == 0 || vqsize > 32768 {
+			return None;
+		}
+		info!("Initializing virtqueue {}, of size {}", index, vqsize);
+
+		// 3.Optionally, select a smaller virtqueue size and write it to queue_size.
+
+		// 4.Allocate and zero Descriptor Table, Available and Used rings for the virtqueue in contiguous physical memory.
+		// TODO: is this contiguous memory?
+		// TODO: (from 2.6.13.1 Placing Buffers Into The Descriptor Table):
+		//   In practice, d.next is usually used to chain free descriptors,
+		//   and a separate count kept to check there are enough free descriptors before beginning the mappings.
+		let desc_table = vec![
+			virtq_desc_raw {
+				addr: 0,
+				len: 0,
+				flags: 0,
+				next: 0
+			};
+			vqsize
+		]; // has to be 16 byte aligned
+		let desc_table = desc_table.into_boxed_slice();
+		// We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
+		// init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
+		let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
+		let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
+
+		// Leak memory so it wont get deallocated
+		// TODO: create appropriate mem-owner-model. Pin these?
+		let desc_table = alloc::boxed::Box::leak(desc_table);
+		let avail_mem = alloc::boxed::Box::leak(avail_mem_box);
+		let used_mem = alloc::boxed::Box::leak(used_mem_box);
+
+		// try to use rust compilers ownership guarantees on virtq desc, by splitting array and putting owned values
+		// which do not have destructors
+		let mut desc_raw_wrappers: Vec<Box<virtq_desc_raw>> = Vec::new();
+		for i in 0..vqsize {
+			// "Recast" desc table entry into box, so we can freely move it around without worrying about the buffer
+			// Since we have overwritten drop on virtq_desc_raw, this is safe, even if we never have allocated virtq_desc_raw with the global allocator!
+			// TODO: is this actually true?
+			let drw = unsafe { Box::from_raw(&mut desc_table[i] as *mut _) };
+			desc_raw_wrappers.push(drw);
+		}
+
+		// 5.Optionally, if MSI-X capability is present and enabled on the device, select a vector to use to
+		//   request interrupts triggered by virtqueue events. Write the MSI-X Table entry number corresponding to this
+		//   vector into queue_msix_vector. Read queue_msix_vector:
+		//   on success, previously written value is returned; on failure, NO_VECTOR value is returned.
+
+		// WHERE IS THIS SPEC FROM? IGNORE FOR NOW
+		// The driver notifies the device by writing the 16-bit virtqueue index of this virtqueue to the Queue Notify address.
+		// See 4.1.4.4 for how to calculate this address
+
+		// Split buffers into usable structs:
+		let (avail_flags, avail_mem) = avail_mem.split_first_mut().unwrap();
+		let (avail_idx, avail_mem) = avail_mem.split_first_mut().unwrap();
+		let (used_flags, used_mem) = used_mem.split_first_mut().unwrap();
+		let (used_idx, used_mem) = used_mem.split_first_mut().unwrap();
+
+		// Tell device about the guest-physical addresses of our queue structs:
+		// TODO: cleanup pointer conversions (use &mut vq....?)
+		common_cfg.queue_select = index;
+		common_cfg.queue_desc = paging::virt_to_phys(desc_table.as_ptr() as usize) as u64;
+		common_cfg.queue_avail = paging::virt_to_phys(avail_flags as *mut _ as usize) as u64;
+		common_cfg.queue_used = paging::virt_to_phys(used_flags as *const _ as usize) as u64;
+		common_cfg.queue_enable = 1;
+
+		info!(
+			"desc 0x{:x}, avail 0x{:x}, used 0x{:x}",
+			common_cfg.queue_desc, common_cfg.queue_avail, common_cfg.queue_used
+		);
+
+		let avail = VirtqAvail {
+			flags: avail_flags,
+			idx: avail_idx,
+			ring: avail_mem,
+			//rawmem: avail_mem_box,
+		};
+		let used = VirtqUsed {
+			flags: used_flags,
+			idx: used_idx,
+			ring: unsafe { core::slice::from_raw_parts(used_mem.as_ptr() as *const _, vqsize) },
+			//rawmem: used_mem_box,
+		};
+		let vq = Virtq::new(
+			index,
+			vqsize as u16,
+			desc_raw_wrappers,
+			avail,
+			used,
+			notify_cfg.get_notify_addr(common_cfg.queue_notify_off as u32),
+		);
+
+		return Some(vq);
+	}
+
 	fn notify_device(&mut self) {
 		// 4.1.4.4.1 Device Requirements: Notification capability
 		// virtio-fs does NOT offer VIRTIO_F_NOTIFICATION_DATA
@@ -382,7 +193,7 @@ impl<'a> Virtq<'a> {
 		*self.queue_notify_address = self.index;
 	}
 
-	fn insert_into_queue(&mut self, dat: &[u8], rsp_buf: Option<&mut [u8]>) {
+	pub fn insert_into_queue(&mut self, dat: &[u8], rsp_buf: Option<&mut [u8]>) {
 		// 2.6.13 Supplying Buffers to The Device
 		// The driver offers buffers to one of the device’s virtqueues as follows:
 
@@ -469,7 +280,7 @@ impl<'a> Virtq<'a> {
 // These can chain together via "next".
 #[repr(C)]
 #[derive(Clone, Debug)]
-struct virtq_desc_raw {
+pub struct virtq_desc_raw {
 	// Address (guest-physical)
 	// possibly optimize: https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation
 	// https://github.com/rust-lang/rust/pull/62514/files box will call destructor when removed.
@@ -477,14 +288,14 @@ struct virtq_desc_raw {
 	// nice, we have docs on this: https://doc.rust-lang.org/nightly/std/boxed/index.html#memory-layout
 	// https://github.com/rust-lang/rust/issues/52976
 	// Vec<T> is sized! but not just an array in memory.. --> impossible
-	addr: u64,
+	pub addr: u64,
 	// Length
-	len: u32,
+	pub len: u32,
 	// The flags as indicated above (VIRTQ_DESC_F_*)
-	flags: u16,
+	pub flags: u16,
 	// next field, if flags & NEXT
 	// We chain unused descriptors via this, too
-	next: u16,
+	pub next: u16,
 }
 
 impl Drop for virtq_desc_raw {
@@ -601,7 +412,7 @@ struct virtio_pci_cap {
 /// This capability is immediately followed by an additional field, notify_off_multiplier
 #[repr(C)]
 #[derive(Debug)]
-struct virtio_pci_notify_cap {
+pub struct virtio_pci_notify_cap {
 	/* About the whole device. */
 	cap: virtio_pci_cap,
 	notify_off_multiplier: u32, /* Multiplier for queue_notify_off. */
@@ -609,32 +420,32 @@ struct virtio_pci_notify_cap {
 
 #[repr(C)]
 #[derive(Debug)]
-struct virtio_pci_common_cfg {
+pub struct virtio_pci_common_cfg {
 	/* About the whole device. */
-	device_feature_select: u32, /* read-write */
-	device_feature: u32,        /* read-only for driver */
-	driver_feature_select: u32, /* read-write */
-	driver_feature: u32,        /* read-write */
-	msix_config: u16,           /* read-write */
-	num_queues: u16,            /* read-only for driver */
-	device_status: u8,          /* read-write */
-	config_generation: u8,      /* read-only for driver */
+	pub device_feature_select: u32, /* read-write */
+	pub device_feature: u32,        /* read-only for driver */
+	pub driver_feature_select: u32, /* read-write */
+	pub driver_feature: u32,        /* read-write */
+	pub msix_config: u16,           /* read-write */
+	pub num_queues: u16,            /* read-only for driver */
+	pub device_status: u8,          /* read-write */
+	pub config_generation: u8,      /* read-only for driver */
 
 	/* About a specific virtqueue. */
-	queue_select: u16,      /* read-write */
-	queue_size: u16,        /* read-write, power of 2, or 0. */
-	queue_msix_vector: u16, /* read-write */
-	queue_enable: u16,      /* read-write */
-	queue_notify_off: u16,  /* read-only for driver */
-	queue_desc: u64,        /* read-write */
-	queue_avail: u64,       /* read-write */
-	queue_used: u64,        /* read-write */
+	pub queue_select: u16,      /* read-write */
+	pub queue_size: u16,        /* read-write, power of 2, or 0. */
+	pub queue_msix_vector: u16, /* read-write */
+	pub queue_enable: u16,      /* read-write */
+	pub queue_notify_off: u16,  /* read-only for driver */
+	pub queue_desc: u64,        /* read-write */
+	pub queue_avail: u64,       /* read-write */
+	pub queue_used: u64,        /* read-write */
 }
 
 #[derive(Debug)]
-struct VirtioNotification {
-	notification_ptr: *mut u16,
-	notify_off_multiplier: u32,
+pub struct VirtioNotification {
+	pub notification_ptr: *mut u16,
+	pub notify_off_multiplier: u32,
 }
 
 impl VirtioNotification {
@@ -653,28 +464,9 @@ impl VirtioNotification {
 	}
 }
 
-#[repr(C)]
-struct virtio_fs_config {
-	/* Filesystem name (UTF-8, not NUL-terminated, padded with NULs) */
-	tag: [u8; 36],
-	/* Number of request queues */
-	num_request_queues: u32,
-}
-
-impl fmt::Debug for virtio_fs_config {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(
-			f,
-			"virtio_fs_config {{ tag: '{}', num_request_queues: {} }}",
-			core::str::from_utf8(&self.tag).unwrap(),
-			self.num_request_queues
-		)
-	}
-}
-
 /// Scans pci-capabilities for a virtio-capability of type virtiocaptype.
 /// When found, maps it into memory and returns virtual address, else None
-fn map_virtiocap(
+pub fn map_virtiocap(
 	bus: u8,
 	device: u8,
 	adapter: &PciAdapter,
@@ -783,81 +575,6 @@ fn map_virtiocap(
 	}
 }
 
-pub fn create_virtiofs_driver(
-	adapter: pci::PciAdapter,
-) -> Option<Rc<RefCell<VirtiofsDriver<'static>>>> {
-	// Scan capabilities to get common config, which we need to reset the device and get basic info.
-	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
-	// Read status register
-	let bus = adapter.bus;
-	let device = adapter.device;
-	let status = pci::read_config(bus, device, pci::PCI_COMMAND_REGISTER) >> 16;
-
-	// non-legacy virtio device always specifies capability list, so it can tell us in which bar we find the virtio-config-space
-	if status & pci::PCI_STATUS_CAPABILITIES_LIST == 0 {
-		error!("Found virtio device without capability list. Likely legacy-device! Aborting.");
-		return None;
-	}
-
-	// Get pointer to capability list
-	let caplist = pci::read_config(bus, device, pci::PCI_CAPABILITY_LIST_REGISTER) & 0xFF;
-
-	// get common config mapped, cast to virtio_pci_common_cfg
-	let common_cfg = match map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG)
-	{
-		Some((cap_common_raw, _)) => unsafe {
-			&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
-		},
-		None => {
-			error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
-			return None;
-		}
-	};
-	// get device config mapped, cast to virtio_fs_config
-	let device_cfg = match map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG)
-	{
-		Some((cap_device_raw, _)) => unsafe { &mut *(cap_device_raw as *mut virtio_fs_config) },
-		None => {
-			error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
-			return None;
-		}
-	};
-	// get device notifications mapped
-	let (notification_ptr, notify_off_multiplier) =
-		match map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
-			Some((cap_notification_raw, notify_off_multiplier)) => {
-				((
-					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
-					notify_off_multiplier,
-				))
-			}
-			None => {
-				error!("Could not find VIRTIO_PCI_CAP_NOTIFY_CFG. Aborting!");
-				return None;
-			}
-		};
-	let notify_cfg = VirtioNotification {
-		notification_ptr,
-		notify_off_multiplier,
-	};
-
-	// TODO: also load the other 2 cap types (?).
-
-	// Instanciate driver on heap, so it outlives this function
-	let drv = Rc::new(RefCell::new(VirtiofsDriver {
-		common_cfg,
-		device_cfg,
-		notify_cfg,
-		vqueues: None,
-	}));
-
-	info!("Driver before init: {:?}", drv);
-	drv.borrow_mut().init();
-	info!("Driver after init: {:?}", drv);
-
-	Some(drv)
-}
-
 pub fn init_virtio_device(adapter: pci::PciAdapter) {
 	// TODO: 2.3.1: Loop until get_config_generation static, since it might change mid-read
 
@@ -871,31 +588,7 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 		0x1a => {
 			info!("Found Virtio-FS device!");
 			// TODO: proper error handling on driver creation fail
-			let drv = create_virtiofs_driver(adapter).unwrap();
-
-			// Instanciate global fuse object
-			//fuse::Fuse::<VirtiofsDriver>::create(drv.clone());
-			fuse::create_from_virtio(drv.clone());
-
-			let fuse = fuse::FILESYSTEM.lock();
-			let fuse = fuse.as_ref().unwrap();
-			// 1.FUSE_INIT to create session
-			fuse.send_hello();
-			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-			/*let nid = fuse.lookup("testvm");
-			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-			let fh = fuse.open(nid);
-			// 4.FUSE_READ(fh, offset, &buf, sizeof(buf)) -> nbytes
-			let dat = fuse.read(fh);
-
-			let filecontents = core::str::from_utf8(&dat);
-			if let Ok(s) = filecontents {
-				info!("READ: '{}'", s);
-			} else {
-				info!("Could not read file (not valid utf8?)");
-			}*/
-
-			drv
+			virtio_fs::create_virtiofs_driver(adapter).unwrap()
 		}
 		_ => {
 			info!("Virtio device is NOT virtio-fs device, skipping!");
