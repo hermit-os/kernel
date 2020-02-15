@@ -165,7 +165,11 @@ pub fn get_processor_count() -> usize {
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) != 0 }
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) & 0x1 == 0x1 }
+}
+
+pub fn is_uhyve_with_pci() -> bool {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) & 0x3 == 0x3 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
@@ -265,10 +269,12 @@ pub fn boot_processor_init() {
 	systemtime::init();
 
 	if environment::is_single_kernel() {
-		#[cfg(feature = "pci")]
-		pci::init();
-		#[cfg(feature = "pci")]
-		pci::print_information();
+		if is_uhyve_with_pci() || !is_uhyve() {
+			#[cfg(feature = "pci")]
+			pci::init();
+			#[cfg(feature = "pci")]
+			pci::print_information();
+		}
 		if !environment::is_uhyve() {
 			#[cfg(feature = "acpi")]
 			acpi::init();
