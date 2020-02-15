@@ -24,8 +24,11 @@ crate-type = ["staticlib"]
 name = "hermit"
 
 [features]
+default = ["pci", "acpi"]
 vga = []
 newlib = []
+pci = []
+acpi = []
 
 [dependencies]
 bitflags = "1.2"

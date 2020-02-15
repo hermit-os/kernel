@@ -8,6 +8,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch;
+#[cfg(feature = "acpi")]
 use arch::x86_64::kernel::acpi;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
@@ -82,12 +83,14 @@ static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
 /// after 1 microsecond.
 static mut CALIBRATED_COUNTER_VALUE: u64 = 0;
 
+#[cfg(feature = "acpi")]
 #[repr(C, packed)]
 struct AcpiMadtHeader {
 	local_apic_address: u32,
 	flags: u32,
 }
 
+#[cfg(feature = "acpi")]
 #[repr(C, packed)]
 struct AcpiMadtRecordHeader {
 	entry_type: u8,
@@ -110,6 +113,7 @@ impl fmt::Display for ProcessorLocalApicRecord {
 	}
 }
 
+#[cfg(feature = "acpi")]
 const CPU_FLAG_ENABLED: u32 = 1 << 0;
 
 #[repr(C, packed)]
@@ -165,6 +169,13 @@ pub fn add_local_apic_id(id: u8) {
 	}
 }
 
+#[cfg(not(feature = "acpi"))]
+fn detect_from_acpi() -> Result<usize, ()> {
+	// dummy implementation if acpi support is disabled
+	Err(())
+}
+
+#[cfg(feature = "acpi")]
 fn detect_from_acpi() -> Result<usize, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");

@@ -6,12 +6,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
+#[cfg(feature = "pci")]
 pub mod pci;
+#[cfg(feature = "pci")]
 mod pci_ids;
 pub mod percore;
 pub mod pic;
@@ -31,7 +34,7 @@ mod vga;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 
-use core::{intrinsics, ptr};
+use core::{intrinsics, ptr, slice};
 use environment;
 use kernel_message_buffer;
 
@@ -105,6 +108,27 @@ pub fn uhyve_get_gateway() -> [u8; 4] {
 #[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_mask() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
+}
+
+#[no_mangle]
+#[cfg(feature = "newlib")]
+pub unsafe extern "C" fn uhyve_get_ip(ip: *mut u8) {
+	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcip);
+	slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
+}
+
+#[no_mangle]
+#[cfg(feature = "newlib")]
+pub unsafe extern "C" fn uhyve_get_gateway(gw: *mut u8) {
+	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcgateway);
+	slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
+}
+
+#[no_mangle]
+#[cfg(feature = "newlib")]
+pub unsafe extern "C" fn uhyve_get_mask(mask: *mut u8) {
+	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcmask);
+	slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);
 }
 
 pub fn get_base_address() -> usize {
@@ -241,9 +265,12 @@ pub fn boot_processor_init() {
 	systemtime::init();
 
 	if environment::is_single_kernel() {
+		#[cfg(feature = "pci")]
 		pci::init();
+		#[cfg(feature = "pci")]
 		pci::print_information();
 		if !environment::is_uhyve() {
+			#[cfg(feature = "acpi")]
 			acpi::init();
 		}
 	}

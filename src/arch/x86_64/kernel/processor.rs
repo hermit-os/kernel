@@ -8,6 +8,7 @@
 
 #![allow(dead_code)]
 
+#[cfg(feature = "acpi")]
 use arch::x86_64::kernel::acpi;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
@@ -917,6 +918,7 @@ pub fn halt() {
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
+	#[cfg(feature = "acpi")]
 	acpi::poweroff();
 
 	loop {
