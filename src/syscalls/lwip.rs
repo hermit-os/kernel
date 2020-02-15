@@ -8,28 +8,11 @@
 use arch;
 use arch::percore::*;
 use console;
-use core::u32;
 use synch::spinlock::SpinlockIrqSaveGuard;
-use syscalls::tasks::Tid;
 
 /// Enables lwIP's printf to print a whole string without being interrupted by
 /// a message from the kernel.
 static mut CONSOLE_GUARD: Option<SpinlockIrqSaveGuard<console::Console>> = None;
-
-/// Task ID of the single TCP/IP Task spawned by lwIP.
-/// Initialized to u32::MAX by default, which is a very unlikely task ID.
-static mut LWIP_TCPIP_TASK_ID: Tid = u32::MAX;
-
-pub fn get_lwip_tcpip_task_id() -> Tid {
-	unsafe { LWIP_TCPIP_TASK_ID }
-}
-
-#[no_mangle]
-pub extern "C" fn sys_lwip_register_tcpip_task(id: Tid) {
-	unsafe {
-		LWIP_TCPIP_TASK_ID = id;
-	}
-}
 
 #[no_mangle]
 pub extern "C" fn sys_lwip_get_errno() -> i32 {
