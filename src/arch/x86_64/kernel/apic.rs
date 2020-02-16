@@ -517,7 +517,8 @@ pub fn boot_application_processors() {
 		);
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut usize) =
 			arch::x86_64::kernel::start::_start as usize;
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO) as *mut usize) = BOOT_INFO as usize;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO) as *mut usize) =
+			BOOT_INFO as usize;
 	}
 
 	// Now wake up each application processor.
