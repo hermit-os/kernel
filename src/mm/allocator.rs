@@ -7,8 +7,7 @@
 
 #![allow(dead_code)]
 
-use alloc::alloc::{Alloc, AllocErr, Layout};
-use core::alloc::GlobalAlloc;
+use core::alloc::{GlobalAlloc, AllocRef, AllocErr, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -158,7 +157,7 @@ impl Heap {
 	}
 }
 
-unsafe impl Alloc for Heap {
+unsafe impl AllocRef for Heap {
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
 		self.allocate_first_fit(layout)
 	}
