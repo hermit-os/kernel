@@ -64,8 +64,9 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
 const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
 
-const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x10;
+const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
+const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -516,6 +517,7 @@ pub fn boot_application_processors() {
 		);
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut usize) =
 			arch::x86_64::kernel::start::_start as usize;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO) as *mut usize) = BOOT_INFO as usize;
 	}
 
 	// Now wake up each application processor.
