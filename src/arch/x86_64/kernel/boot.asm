@@ -32,7 +32,9 @@ _start:
 ; PARAMETERS
 align 8
 	entry_point dq 0xDEADC0DE
+	boot_info dq 0xBEEFBEEF
 	pml4 dd 0xDEADBEEF
+	pad dd 0;
 
 _rmstart:
 	cli
@@ -149,5 +151,7 @@ stublet:
 [BITS 64]
 ALIGN 8
 start64:
+    ; forward address to boot info
+    mov rdi, qword [boot_info]
     ; Jump to entry.asm
     jmp qword [entry_point]
