@@ -42,7 +42,7 @@ impl SerialPort {
 	}
 
 	fn is_transmitting(&self) -> bool {
-		(self.read_from_register(UART_LSR) & UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER == 0)
+		self.read_from_register(UART_LSR) & UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER == 0
 	}
 
 	fn write_to_register(&self, register: u16, byte: u8) {

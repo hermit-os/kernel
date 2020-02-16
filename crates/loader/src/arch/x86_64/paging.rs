@@ -171,7 +171,7 @@ impl<S: PageSize> Page<S> {
 	/// Although we could make this check depend on the actual linear address width from the CPU,
 	/// any extension above 48-bit would require a new page table level, which we don't implement.
 	fn is_valid_address(virtual_address: usize) -> bool {
-		(virtual_address < 0x8000_0000_0000 || virtual_address >= 0xFFFF_8000_0000_0000)
+		virtual_address < 0x8000_0000_0000 || virtual_address >= 0xFFFF_8000_0000_0000
 	}
 
 	/// Returns a Page including the given virtual address.
