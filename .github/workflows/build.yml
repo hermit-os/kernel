@@ -31,7 +31,7 @@ jobs:
           - os: ubuntu-latest
             rust: 'nightly'
             components: 'rustfmt, clippy, rust-src'
-            targets: 'x86_64-unknown-linux-musl'
+            targets: 'x86_64-unknown-linux-gnu'
 
 
     steps:
