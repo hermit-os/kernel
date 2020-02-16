@@ -204,6 +204,9 @@ impl PerCoreScheduler {
 		irq::disable();
 		self.scheduler();
 
+		// do housekeeping
+		self.cleanup_tasks();
+
 		// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 		// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
 		irq::enable_and_wait();
