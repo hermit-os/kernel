@@ -62,7 +62,7 @@ pub unsafe fn find_kernel() -> usize {
 		.modules()
 		.expect("Could not find a memory map in the Multiboot information")
 		.next()
-		.expect("Could not first map address")
+		.expect("Could not find first map address")
 		.start as usize;
 	let page_address = align_down!(modules_address, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
