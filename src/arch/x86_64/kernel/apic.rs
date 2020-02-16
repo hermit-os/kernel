@@ -452,7 +452,7 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 
 pub fn init_x2apic() {
 	if processor::supports_x2apic() {
-		info!("Enable x2APIC support");
+		debug!("Enable x2APIC support");
 		// The CPU supports the modern x2APIC mode, which uses MSRs for communication.
 		// Enable it.
 		let mut apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
