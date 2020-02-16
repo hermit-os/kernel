@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-use core::alloc::{GlobalAlloc, AllocRef, AllocErr, Layout};
+use core::alloc::{AllocErr, AllocRef, GlobalAlloc, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
