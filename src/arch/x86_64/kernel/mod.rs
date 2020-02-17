@@ -34,7 +34,9 @@ mod vga;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
 
-use core::{intrinsics, ptr, slice};
+#[cfg(feature = "newlib")]
+use core::slice;
+use core::{intrinsics, ptr};
 use environment;
 use kernel_message_buffer;
 

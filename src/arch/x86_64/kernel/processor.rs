@@ -28,14 +28,14 @@ const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
 const IA32_MISC_ENABLE_TURBO_DISABLE: u64 = 1 << 38;
 
 // MSR EFER bits
-const EFER_SCE: u64 = (1 << 0);
-const EFER_LME: u64 = (1 << 8);
-const EFER_LMA: u64 = (1 << 10);
-const EFER_NXE: u64 = (1 << 11);
-const EFER_SVME: u64 = (1 << 12);
-const EFER_LMSLE: u64 = (1 << 13);
-const EFER_FFXSR: u64 = (1 << 14);
-const EFER_TCE: u64 = (1 << 15);
+const EFER_SCE: u64 = 1 << 0;
+const EFER_LME: u64 = 1 << 8;
+const EFER_LMA: u64 = 1 << 10;
+const EFER_NXE: u64 = 1 << 11;
+const EFER_SVME: u64 = 1 << 12;
+const EFER_LMSLE: u64 = 1 << 13;
+const EFER_FFXSR: u64 = 1 << 14;
+const EFER_TCE: u64 = 1 << 15;
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
