@@ -355,6 +355,9 @@ impl CpuFrequency {
 		);
 		pit::init(measurement_frequency);
 
+		// we need a timer interrupt to meature the frequency
+		irq::enable();
+
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
 		let first_tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
@@ -384,6 +387,9 @@ impl CpuFrequency {
 
 		let end = get_timestamp();
 
+		// we don't longer need a timer interrupt
+		irq::disable();
+
 		// Deinitialize the PIT again.
 		// Now we can calculate our CPU frequency and implement a constant frequency tick counter
 		// using RDTSC timestamps.
@@ -393,6 +399,7 @@ impl CpuFrequency {
 		let cycle_count = end - start;
 		self.mhz = (measurement_frequency * cycle_count / (1_000_000 * tick_count)) as u16;
 		self.source = CpuFrequencySources::Measurement;
+
 		Ok(())
 	}
 

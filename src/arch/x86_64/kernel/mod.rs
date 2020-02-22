@@ -265,7 +265,6 @@ pub fn boot_processor_init() {
 	}
 
 	irq::install();
-	irq::enable();
 	processor::detect_frequency();
 	processor::print_information();
 	systemtime::init();
@@ -286,6 +285,7 @@ pub fn boot_processor_init() {
 	apic::init();
 	scheduler::install_timer_handler();
 	finish_processor_init();
+	irq::enable();
 }
 
 /// Boots all available Application Processors on bare-metal or QEMU.
