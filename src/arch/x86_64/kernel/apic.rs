@@ -304,6 +304,10 @@ pub fn init() {
 	// init ioapic
 	if !environment::is_uhyve() {
 		init_ioapic();
+	} else {
+		// now, we don't longer need the IOAPIC timer and turn it off
+		info!("Disable IOAPIC timer");
+		ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
 	}
 }
 
