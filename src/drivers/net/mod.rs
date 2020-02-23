@@ -11,6 +11,13 @@ pub mod uhyve;
 use alloc::boxed::Box;
 use synch::semaphore::*;
 
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::apic;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::irq::*;
+#[cfg(target_arch = "x86_64")]
+use arch::x86_64::kernel::percore::core_scheduler;
+
 static mut NIC: Option<Box<dyn NetworkInterface>> = None;
 static NET_SEM: Semaphore = Semaphore::new(0);
 
@@ -26,43 +33,30 @@ pub fn init() -> Result<(), ()> {
 }
 
 pub trait NetworkInterface {
-	/// check if the driver in polling mode
-	fn is_polling(&self) -> bool;
-	/// set driver in polling/non-polling mode
-	fn set_polling(&mut self, mode: bool);
 	/// get mac address
 	fn get_mac_address(&self) -> [u8; 6];
 }
 
 #[no_mangle]
-pub fn uhyve_is_polling() -> bool {
-	unsafe {
-		match &NIC {
-			Some(nic) => nic.is_polling(),
-			None => false,
-		}
-	}
-}
-
-#[no_mangle]
-pub fn uhyve_set_polling(mode: bool) {
-	unsafe {
-		match &mut NIC {
-			Some(nic) => nic.set_polling(mode),
-			None => {}
-		}
-	}
+pub fn uhyve_netwakeup() {
+	NET_SEM.release();
 }
 
 #[no_mangle]
 pub fn uhyve_netwait(millis: Option<u64>) {
-	if uhyve_is_polling() == false {
-		let wakeup_time = match millis {
-			Some(ms) => Some(::arch::processor::get_timer_ticks() + ms * 1000),
-			None => None,
-		};
-		NET_SEM.acquire(wakeup_time);
-	}
+	match millis {
+		Some(ms) => {
+			if ms > 0 {
+				let delay = Some(::arch::processor::get_timer_ticks() + ms * 1000);
+				NET_SEM.acquire(delay);
+			} else {
+				NET_SEM.try_acquire();
+			}
+		}
+		_ => {
+			NET_SEM.acquire(None);
+		}
+	};
 }
 
 #[no_mangle]
@@ -73,4 +67,12 @@ pub fn uhyve_get_mac_address() -> [u8; 6] {
 			None => [0; 6],
 		}
 	}
+}
+
+#[cfg(target_arch = "x86_64")]
+extern "x86-interrupt" fn network_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
+	debug!("Receive network interrupt");
+	apic::eoi();
+	uhyve_netwakeup();
+	core_scheduler().scheduler();
 }
