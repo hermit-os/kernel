@@ -44,6 +44,10 @@ impl<T> DoublyLinkedList<T> {
 		}
 	}
 
+	pub fn is_empty(&self) -> bool {
+		self.head.is_none()
+	}
+
 	pub fn head(&self) -> Option<Rc<RefCell<Node<T>>>> {
 		self.head.as_ref().cloned()
 	}
