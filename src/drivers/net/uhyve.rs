@@ -7,15 +7,10 @@
 
 use alloc::boxed::Box;
 use arch::irq;
-use core::sync::atomic::{AtomicBool, Ordering};
-use drivers::net::{NetworkInterface, NET_SEM};
+use drivers::net::NetworkInterface;
 
 #[cfg(target_arch = "x86_64")]
-use arch::x86_64::kernel::apic;
-#[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::irq::*;
-#[cfg(target_arch = "x86_64")]
-use arch::x86_64::kernel::percore::core_scheduler;
 #[cfg(target_arch = "x86_64")]
 use arch::x86_64::kernel::uhyve_get_ip;
 #[cfg(target_arch = "x86_64")]
@@ -37,31 +32,15 @@ struct UhyveNetinfo {
 pub struct UhyveNetwork {
 	/// mac address
 	mac: [u8; 6],
-	/// is NIC in polling mode?
-	polling: AtomicBool,
 }
 
 impl UhyveNetwork {
 	pub const fn new(mac: &[u8; 6]) -> Self {
-		UhyveNetwork {
-			mac: *mac,
-			polling: AtomicBool::new(true),
-		}
+		UhyveNetwork { mac: *mac }
 	}
 }
 
 impl NetworkInterface for UhyveNetwork {
-	fn is_polling(&self) -> bool {
-		self.polling.load(Ordering::SeqCst)
-	}
-
-	fn set_polling(&mut self, mode: bool) {
-		self.polling.store(mode, Ordering::SeqCst);
-		if mode {
-			NET_SEM.release();
-		}
-	}
-
 	fn get_mac_address(&self) -> [u8; 6] {
 		self.mac
 	}
@@ -92,17 +71,12 @@ pub fn init() -> Result<Box<dyn NetworkInterface>, ()> {
 	};
 
 	// Install interrupt handler
-	irq_install_handler(UHYVE_IRQ_NET, uhyve_irqhandler as usize);
+	irq_install_handler(
+		UHYVE_IRQ_NET,
+		crate::drivers::net::network_irqhandler as usize,
+	);
 
 	irq::enable();
 
 	Ok(nic)
-}
-
-#[cfg(target_arch = "x86_64")]
-extern "x86-interrupt" fn uhyve_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	debug!("Receive network interrupt from uhyve");
-	crate::drivers::net::uhyve_set_polling(true);
-	apic::eoi();
-	core_scheduler().scheduler();
 }
