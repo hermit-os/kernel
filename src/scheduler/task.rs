@@ -540,13 +540,19 @@ impl BlockedTaskQueue {
 	}
 
 	/// Wakeup all blocked tasks
-	pub fn wakeup_all(&mut self) {
+	pub fn wakeup_all(&mut self) -> bool {
+		if self.list.is_empty() {
+			return false;
+		}
+
 		// Loop through all blocked tasks to find it.
 		for node in self.list.iter() {
 			// Remove it from the list of blocked tasks and wake it up.
 			self.list.remove(node.clone());
 			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::All);
 		}
+
+		true
 	}
 
 	/// Manually wake up a blocked task.
