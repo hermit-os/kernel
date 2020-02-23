@@ -175,18 +175,25 @@ impl PerCoreScheduler {
 	}
 
 	/// Check if a finished task could be deleted.
-	fn cleanup_tasks(&mut self) {
+	/// Return true if a task is waked up
+	fn cleanup_tasks(&mut self) -> bool {
+		let mut result = false;
+
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
-		if let Some(id) = self.finished_tasks.pop_front() {
+		while let Some(id) = self.finished_tasks.pop_front() {
 			debug!("Cleaning up task {}", id);
 
 			let task = TASKS.lock().as_mut().unwrap().remove(&id);
 			// wakeup tasks, which are waiting for task with the identifier id
 			match task {
-				Some(t) => t.borrow().wakeup.lock().wakeup_all(),
+				Some(t) => {
+					result |= t.borrow().wakeup.lock().wakeup_all();
+				}
 				None => {}
 			}
 		}
+
+		result
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
@@ -205,11 +212,15 @@ impl PerCoreScheduler {
 		self.scheduler();
 
 		// do housekeeping
-		self.cleanup_tasks();
+		let wakeup_tasks = self.cleanup_tasks();
 
 		// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 		// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
-		irq::enable_and_wait();
+		if !wakeup_tasks {
+			irq::enable_and_wait();
+		} else {
+			irq::enable();
+		}
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
@@ -217,7 +228,7 @@ impl PerCoreScheduler {
 	pub fn scheduler(&mut self) {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
-		self.cleanup_tasks();
+		let _ = self.cleanup_tasks();
 
 		// Get information about the current task.
 		let (id, last_stack_pointer, prio, status) = {
