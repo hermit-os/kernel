@@ -3,7 +3,10 @@ use arch::x86_64::kernel::pci;
 use arch::x86_64::kernel::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
+use syscalls::fs;
+use util;
 
+use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -165,9 +168,11 @@ impl FuseInterface for VirtiofsDriver<'_> {
 	{
 		// TODO: cmd/rsp gets deallocated when leaving scope.. maybe not the best idea for DMA, but PoC works with this
 		//
+		debug!("Sending Fuse Command: {:?}", cmd);
 		if let Some(ref mut vqueues) = self.vqueues {
 			if let Some(mut rsp) = rsp {
 				vqueues[1].send_blocking(cmd.to_u8buf(), Some(rsp.to_u8buf_mut()));
+				debug!("Got Fuse Reply: {:?}", rsp);
 				return Some(rsp);
 			}
 		}
@@ -296,12 +301,13 @@ pub fn create_virtiofs_driver(
 
 	// Instanciate global fuse object
 	//fuse::Fuse::<VirtiofsDriver>::create(drv.clone());
-	fuse::create_from_virtio(drv.clone());
+	//fuse::create_from_virtio(drv.clone());
+	let fuse = fuse::Fuse::new(drv.clone());
 
-	let fuse = fuse::FILESYSTEM.lock();
-	let fuse = fuse.as_ref().unwrap();
+	//let fuse = fuse::FILESYSTEM.lock();
+	//let fuse = fuse.as_ref().unwrap();
 	// 1.FUSE_INIT to create session
-	fuse.send_hello();
+	fuse.send_init();
 	// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
 	/*let nid = fuse.lookup("testvm");
 	// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
@@ -315,6 +321,12 @@ pub fn create_virtiofs_driver(
 	} else {
 		info!("Could not read file (not valid utf8?)");
 	}*/
+
+	let mut fs = fs::FILESYSTEM.lock();
+	let tag = util::c_buf_to_str(&device_cfg.tag);
+	info!("Found virtio-fs tag as {}", tag);
+	fs.mount(tag, Box::new(fuse))
+		.expect("Mount failed. Duplicate tag?");
 
 	Some(drv)
 }

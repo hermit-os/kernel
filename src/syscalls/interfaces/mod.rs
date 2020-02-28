@@ -17,12 +17,75 @@ use console;
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
 use errno::*;
+use util;
 
-#[cfg(target_arch = "x86_64")]
-use arch::x86_64::kernel::fuse;
+use syscalls::fs::{self, FilePerms, PosixFile};
 
-// TODO: remove
-static mut already_read: bool = false;
+//const O_RDONLY: i32 = 0o0000;
+const O_WRONLY: i32 = 0o0001;
+const O_RDWR: i32 = 0o0002;
+const O_CREAT: i32 = 0o0100;
+const O_EXCL: i32 = 0o0200;
+const O_TRUNC: i32 = 0o1000;
+const O_APPEND: i32 = 0o2000;
+
+//const O_DEC_RDONLY: i32 = 00000000;
+const O_DEC_WRONLY: i32 = 00000001;
+const O_DEC_RDWR: i32 = 00000002;
+const O_DEC_CREAT: i32 = 00000100;
+const O_DEC_EXCL: i32 = 00000200;
+const O_DEC_TRUNC: i32 = 00001000;
+const O_DEC_APPEND: i32 = 00002000;
+
+const O_MAP: [(i32, i32); 6] = [
+	//(O_DEC_RDONLY, O_RDONLY), is 0 anyways
+	(O_DEC_WRONLY, O_WRONLY),
+	(O_DEC_RDWR, O_RDWR),
+	(O_DEC_CREAT, O_CREAT),
+	(O_DEC_EXCL, O_EXCL),
+	(O_DEC_TRUNC, O_TRUNC),
+	(O_DEC_APPEND, O_APPEND),
+];
+
+fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
+	// flags is broken in hermit stdlib! uses decimal instead of octal. convert!
+	// loop through all flag possiblities, check if one matches in decimal, choose the corrosponding octal one!
+	// TODO: fix this in stdlib
+	let mut oflags = 0;
+	let mut dflags;
+	for i in 0..2usize.pow(O_MAP.len() as u32) {
+		oflags = 0;
+		dflags = 0;
+		for t in 0..O_MAP.len() {
+			if i >> t % 2 == 1 {
+				dflags |= O_MAP[t].0;
+				oflags |= O_MAP[t].1;
+			}
+		}
+		if dflags == flags {
+			break;
+		}
+	}
+	let flags = oflags;
+
+	// mode is passed in as hex as well (0x777). Linux/Fuse expects octal (0o777).
+	// just passing mode as is to FUSE create, leads to very weird permissions: 0b0111_0111_0111 -> 'r-x rwS rwt'
+	// TODO: change in stdlib
+	let mode = match mode {
+		0x777 => 0o777,
+		0 => 0,
+		_ => panic!("Mode neither 777 nor 0, should never happen with current hermit stdlib!"),
+	};
+	let mut perms = FilePerms {
+		raw: flags as u32,
+		mode,
+		..Default::default()
+	};
+	perms.write = flags & (O_WRONLY | O_RDWR) != 0;
+	perms.creat = flags & (O_CREAT) != 0;
+	// TODO: rest of flags
+	perms
+}
 
 pub trait SyscallInterface: Send + Sync {
 	fn init(&self) {
@@ -42,9 +105,22 @@ pub trait SyscallInterface: Send + Sync {
 		arch::processor::shutdown();
 	}
 
+	#[cfg(not(target_arch = "x86_64"))]
 	fn unlink(&self, _name: *const u8) -> i32 {
 		debug!("unlink is unimplemented, returning -ENOSYS");
 		-ENOSYS
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	fn unlink(&self, name: *const u8) -> i32 {
+		let name = unsafe { util::c_str_to_str(name) };
+		info!("Unlink {}", name);
+
+		fs::FILESYSTEM
+			.lock()
+			.unlink(&name)
+			.expect("Unlinking failed!"); // TODO: error handling
+		0
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]
@@ -54,28 +130,23 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	#[cfg(target_arch = "x86_64")]
-	fn open(&self, name: *const u8, _flags: i32, _mode: i32) -> i32 {
+	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
+		//! mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
+		//! flags is bitmask of O_DEC_* defined above.
+		//! (taken from rust stdlib/sys hermit target )
+
 		info!("Open!");
-		let fuse = fuse::FILESYSTEM.lock();
-		let fuse = fuse.as_ref().unwrap();
-		// 1.FUSE_INIT to create session
-		// Already done
-		// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-		// ugly strlen
-		let namelen = unsafe {
-			let mut off = name;
-			while *off != 0 {
-				off = off.offset(1);
-			}
-			off as usize - name as usize
-		};
-		//let namelen = 7;
-		let nid = fuse.lookup(
-			core::str::from_utf8(unsafe { core::slice::from_raw_parts(name, namelen) }).unwrap(),
-		);
-		// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-		let fh = fuse.open(nid);
-		fh as i32 // TODO: this is really bad. Works only because fh's from virtiofsd are so small!
+		let name = unsafe { util::c_str_to_str(name) };
+		info!("  Open {}, {}, {}", name, flags, mode);
+
+		let mut fs = fs::FILESYSTEM.lock();
+		let fd = fs.open(&name, open_flags_to_perm(flags, mode as u32));
+
+		if let Ok(fd) = fd {
+			fd as i32
+		} else {
+			-1
+		}
 	}
 
 	fn close(&self, fd: i32) -> i32 {
@@ -84,8 +155,9 @@ pub trait SyscallInterface: Send + Sync {
 			return 0;
 		}
 
-		debug!("close is only implemented for stdout & stderr, returning -EINVAL");
-		-EINVAL
+		let mut fs = fs::FILESYSTEM.lock();
+		fs.close(fd as u64);
+		return 0;
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]
@@ -96,54 +168,48 @@ pub trait SyscallInterface: Send + Sync {
 
 	#[cfg(target_arch = "x86_64")]
 	fn read(&self, fd: i32, buf: *mut u8, len: usize) -> isize {
-		info!("Read!");
-		// Hacky read state
-		unsafe {
-			if already_read {
-				return 0;
-			} else {
-				already_read = true;
+		info!("Read! {}, {}", fd, len);
+
+		let mut fs = fs::FILESYSTEM.lock();
+		let mut read_bytes = 0;
+		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+			let dat = file.read(len as u32).unwrap(); // TODO: might fail
+
+			read_bytes = dat.len();
+			unsafe {
+				core::slice::from_raw_parts_mut(buf, read_bytes).copy_from_slice(&dat);
 			}
-		}
-		let fuse = fuse::FILESYSTEM.lock();
-		let fuse = fuse.as_ref().unwrap();
-		// 1.FUSE_INIT to create session
-		//fuse.send_hello();
-		// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-		//let nid = fuse.lookup("testvm");
-		// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-		//let fh = fuse.open(nid);
-		// 4.FUSE_READ(fh, offset, &buf, sizeof(buf)) -> nbytes
-		let dat = fuse.read(fd as u64);
-		let len = if len < dat.len() {
-			info!("read buffer too small! {}, {}", len, dat.len());
-			len
-		} else {
-			dat.len()
-		};
-		unsafe {
-			core::slice::from_raw_parts_mut(buf, len).copy_from_slice(&dat[..len]);
-		}
-		len as isize
+		});
+
+		read_bytes as isize
 	}
 
 	fn write(&self, fd: i32, buf: *const u8, len: usize) -> isize {
-		if fd > 2 {
-			debug!("write is only implemented for stdout & stderr");
-			return -EINVAL as isize;
-		}
-
 		assert!(len <= isize::MAX as usize);
 
-		unsafe {
-			let slice = slice::from_raw_parts(buf, len);
-			console::CONSOLE
-				.lock()
-				.write_str(str::from_utf8_unchecked(slice))
-				.unwrap();
-		}
+		if fd > 2 {
+			// Normal file
+			let buf = unsafe { slice::from_raw_parts(buf, len) };
 
-		len as isize
+			let mut written_bytes = 0;
+			let mut fs = fs::FILESYSTEM.lock();
+			fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+				written_bytes = file.write(buf).unwrap(); // TODO: might fail
+			});
+			info!("Write done! {}", written_bytes);
+			written_bytes as isize
+		} else {
+			// stdin/err/out all go to console
+			unsafe {
+				let slice = slice::from_raw_parts(buf, len);
+				console::CONSOLE
+					.lock()
+					.write_str(str::from_utf8_unchecked(slice))
+					.unwrap();
+			}
+
+			len as isize
+		}
 	}
 
 	fn lseek(&self, _fd: i32, _offset: isize, _whence: i32) -> isize {

@@ -51,6 +51,8 @@ extern crate multiboot;
 extern crate x86;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 mod macros;
@@ -74,6 +76,7 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
+mod util;
 
 pub use arch::*;
 pub use config::*;
