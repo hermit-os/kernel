@@ -7,6 +7,7 @@
 // copied, modified, or distributed except according to those terms.
 
 mod condvar;
+pub mod fs;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;

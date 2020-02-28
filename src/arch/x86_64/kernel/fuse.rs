@@ -1,14 +1,18 @@
 use alloc::boxed::Box;
 use alloc::rc::Rc;
-use arch::x86_64::kernel::virtio_fs::VirtiofsDriver;
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::{fmt, u32, u8};
-use synch::spinlock::Spinlock;
+use syscalls::fs::{FileError, FilePerms, PosixFile, PosixFileSystem};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
+// op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
+// possible reponses for command: qemu/tools/virtiofsd/fuse_lowlevel.h
 
-// TODO: remove this explicit dependency on virtiofs driver. (And make option for multiple fuse-fs?)
-pub static FILESYSTEM: Spinlock<Option<Fuse<VirtiofsDriver>>> = Spinlock::new(None);
+const FUSE_ROOT_ID: u64 = 1;
+const MAX_READ_LEN: usize = 1024;
+const MAX_WRITE_LEN: usize = 8; // TODO: fix ugly hack that allows us to write "hello, world!!!!", since bufsize == writesize is asserted by virtiofsd
+/// currently only 8-byte aligned writes are possible!
 
 pub trait FuseInterface {
 	fn send_command<S, T>(&mut self, cmd: Cmd<S>, rsp: Option<Rsp<T>>) -> Option<Rsp<T>>
@@ -17,59 +21,143 @@ pub trait FuseInterface {
 		T: FuseOut + core::fmt::Debug;
 }
 
-/*
-pub struct FuseDriver {
-
-}
-
-impl FuseDriver {
-	pub fn getDriver() -> Box<dyn FuseInterface> {
-
-	}
-}*/
-
 pub struct Fuse<T: FuseInterface> {
 	driver: Rc<RefCell<T>>,
 }
 
-/// Create global fuse object, store in FILESYSTEM
-pub fn create_from_virtio(driver: Rc<RefCell<VirtiofsDriver<'static>>>) {
-	let mut fs = FILESYSTEM.lock();
-	if fs.is_some() {
-		warn!("Replacing global FUSE object!");
+impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
+	fn open(&self, path: &str, perms: FilePerms) -> Result<Box<dyn PosixFile>, FileError> {
+		let mut file = FuseFile {
+			driver: self.driver.clone(),
+			fuse_nid: None,
+			fuse_fh: None,
+			offset: 0,
+		};
+		// 1.FUSE_INIT to create session
+		// Already done
+
+		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
+		if !perms.creat {
+			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
+			file.fuse_nid = self.lookup(path);
+
+			if file.fuse_nid == None {
+				warn!("Lookup seems to have failed!");
+				return Err(FileError::ENOENT());
+			}
+
+			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
+			let (cmd, rsp) = create_open(file.fuse_nid.unwrap(), perms.raw);
+			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			debug!("Open answer {:?}", rsp);
+			file.fuse_fh = Some(rsp.unwrap().rsp.fh);
+		} else {
+			// Create file (opens implicitly, returns results from both lookup and open calls)
+			let (cmd, rsp) = create_create(path, perms.raw, perms.mode);
+			let rsp = self
+				.driver
+				.borrow_mut()
+				.send_command(cmd, Some(rsp))
+				.unwrap();
+			debug!("Create answer {:?}", rsp);
+
+			file.fuse_nid = Some(rsp.rsp.entry.nodeid);
+			file.fuse_fh = Some(rsp.rsp.open.fh);
+		}
+
+		Ok(Box::new(file))
 	}
-	let fuse = Fuse { driver };
-	fs.replace(fuse);
+
+	fn unlink(&self, path: &str) -> core::result::Result<(), FileError> {
+		let (cmd, rsp) = create_unlink(path);
+		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+		debug!("unlink answer {:?}", rsp);
+
+		Ok(())
+	}
 }
 
-impl<T: FuseInterface> Fuse<T> {
-	pub fn send_hello(&self) {
-		// TODO: this is a stack based buffer.. maybe not the best idea for DMA, but PoC works with this
+impl<T: FuseInterface + 'static> Fuse<T> {
+	pub fn new(driver: Rc<RefCell<T>>) -> Self {
+		Self { driver }
+	}
+
+	pub fn send_init(&self) {
 		let (cmd, rsp) = create_init();
 		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		info!("outside sdncmd {:?}", rsp);
+		debug!("fuse init answer: {:?}", rsp);
 	}
 
-	pub fn lookup(&self, name: &str) -> u64 {
+	pub fn lookup(&self, name: &str) -> Option<u64> {
 		let (cmd, rsp) = create_lookup(name);
 		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		info!("outside sdncmd {:?}", rsp);
-		rsp.unwrap().rsp.nodeid
+		Some(rsp.unwrap().rsp.nodeid)
+	}
+}
+
+struct FuseFile<T: FuseInterface> {
+	driver: Rc<RefCell<T>>,
+	fuse_nid: Option<u64>,
+	fuse_fh: Option<u64>,
+	offset: usize,
+}
+
+impl<T: FuseInterface> PosixFile for FuseFile<T> {
+	fn close(&mut self) -> Result<(), FileError> {
+		let (cmd, rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
+		self.driver.borrow_mut().send_command(cmd, Some(rsp));
+
+		Ok(())
 	}
 
-	pub fn open(&self, nid: u64) -> u64 {
-		let (cmd, rsp) = create_open(nid);
-		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		info!("outside sdncmd {:?}", rsp);
-		rsp.unwrap().rsp.fh
+	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError> {
+		let mut len = len;
+		if len as usize > MAX_READ_LEN {
+			info!("Reading longer than max_read_len: {}", len);
+			len = MAX_READ_LEN as u32;
+		}
+		if let Some(fh) = self.fuse_fh {
+			let (cmd, rsp) = create_read(fh, len, self.offset as u64);
+			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			info!("outside sdncmd {:?}", rsp);
+			let rsp = rsp.unwrap();
+			let len = rsp.header.len as usize - ::core::mem::size_of::<fuse_out_header>();
+			self.offset += len;
+			// TODO: do this zerocopy
+			let vec = rsp.rsp.dat[..len].to_vec();
+			info!("LEN: {}, VEC: {:?}", len, vec);
+			Ok(vec)
+		} else {
+			warn!("File not open, cannot read!");
+			Err(FileError::ENOENT())
+		}
 	}
 
-	pub fn read(&self, fh: u64) -> Box<[u8]> {
-		let (cmd, rsp) = create_read(fh);
-		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		info!("outside sdncmd {:?}", rsp);
-		// TODO: do this zerocopy
-		Box::new(rsp.unwrap().rsp.dat)
+	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError> {
+		info!("fuse write!");
+		let mut len = buf.len();
+		if len as usize > MAX_WRITE_LEN {
+			debug!(
+				"Writing longer than max_write_len: {} > {}",
+				buf.len(),
+				MAX_WRITE_LEN
+			);
+			len = MAX_WRITE_LEN;
+		}
+		if let Some(fh) = self.fuse_fh {
+			let (cmd, rsp) = create_write(fh, &buf[..len], self.offset as u64);
+			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			info!("write response: {:?}", rsp);
+			let rsp = rsp.unwrap();
+
+			let len = rsp.rsp.size as usize;
+			self.offset += len;
+			info!("Written {} bytes", len);
+			Ok(len as u64)
+		} else {
+			warn!("File not open, cannot read!");
+			Err(FileError::ENOENT())
+		}
 	}
 }
 
@@ -214,7 +302,7 @@ pub fn create_init() -> (Cmd<fuse_init_in>, Rsp<fuse_init_out>) {
 pub fn create_lookup(name: &str) -> (Cmd<fuse_lookup_in>, Rsp<fuse_entry_out>) {
 	let cmd = name.into();
 	let mut cmdhdr = create_in_header::<fuse_lookup_in>(Opcode::FUSE_LOOKUP);
-	cmdhdr.nodeid = 1; // FUSE ROOT ID
+	cmdhdr.nodeid = FUSE_ROOT_ID;
 	let rsp: fuse_entry_out = Default::default();
 	let rsphdr: fuse_out_header = Default::default();
 	(
@@ -290,27 +378,103 @@ unsafe impl FuseIn for fuse_read_in {}
 
 #[repr(C)]
 pub struct fuse_read_out {
-	pub dat: [u8; 1024], // TODO: max read length?
+	pub dat: [u8; MAX_READ_LEN],
 }
 unsafe impl FuseOut for fuse_read_out {}
 
 impl fmt::Debug for fuse_read_out {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "fuse_read_out {{ {:?} }}", &self.dat[..])
+		write!(f, "fuse_read_out {{ {:?} ... }}", &self.dat[..10])
 	}
 }
 
 impl Default for fuse_read_out {
 	fn default() -> Self {
 		Self {
-			dat: [0 as u8; 1024],
+			dat: [0 as u8; MAX_READ_LEN],
 		}
 	}
 }
 
-pub fn create_read(nid: u64) -> (Cmd<fuse_read_in>, Rsp<fuse_read_out>) {
-	let cmd = Default::default();
+pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<fuse_read_out>) {
+	let cmd = fuse_read_in {
+		offset,
+		size,
+		..Default::default()
+	};
 	let mut cmdhdr = create_in_header::<fuse_open_in>(Opcode::FUSE_READ);
+	cmdhdr.nodeid = nid;
+	let rsp = Default::default();
+	let rsphdr = Default::default();
+	(
+		Cmd {
+			cmd,
+			header: cmdhdr,
+		},
+		Rsp {
+			rsp,
+			header: rsphdr,
+		},
+	)
+}
+
+#[repr(C)]
+pub struct fuse_write_in {
+	pub fh: u64,
+	pub offset: u64,
+	pub size: u32,
+	pub write_flags: u32,
+	pub lock_owner: u64,
+	pub flags: u32,
+	pub padding: u32,
+	pub dat: [u8; MAX_WRITE_LEN], // TODO: this gets padded to 32bit boundary --> size does not match and virtiofsd complains!
+}
+unsafe impl FuseIn for fuse_write_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_write_out {
+	pub size: u32,
+	pub padding: u32,
+}
+unsafe impl FuseOut for fuse_write_out {}
+
+impl fmt::Debug for fuse_write_in {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(
+			f,
+			"fuse_write_in {{ {:?}, size: {} ... TODO: MISSING FIELDS}}",
+			&self.dat[..],
+			self.size
+		)
+	}
+}
+
+impl fuse_write_in {
+	fn new(offset: u64, buf: &[u8]) -> Self {
+		let mut write = Self {
+			fh: 0,
+			offset,
+			size: buf.len() as u32,
+			write_flags: 0,
+			lock_owner: 0,
+			flags: 0,
+			padding: 0,
+			dat: [0 as u8; MAX_WRITE_LEN],
+		};
+		write.dat[..buf.len()].copy_from_slice(buf);
+
+		write
+	}
+}
+
+pub fn create_write(
+	nid: u64,
+	buf: &[u8],
+	offset: u64,
+) -> (Cmd<fuse_write_in>, Rsp<fuse_write_out>) {
+	let cmd = fuse_write_in::new(offset, buf);
+	let mut cmdhdr = create_in_header::<fuse_open_in>(Opcode::FUSE_WRITE);
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
 	let rsphdr = Default::default();
@@ -343,8 +507,11 @@ pub struct fuse_open_out {
 }
 unsafe impl FuseOut for fuse_open_out {}
 
-pub fn create_open(nid: u64) -> (Cmd<fuse_open_in>, Rsp<fuse_open_out>) {
-	let cmd = Default::default();
+pub fn create_open(nid: u64, flags: u32) -> (Cmd<fuse_open_in>, Rsp<fuse_open_out>) {
+	let cmd = fuse_open_in {
+		flags,
+		..Default::default()
+	};
 	let mut cmdhdr = create_in_header::<fuse_open_in>(Opcode::FUSE_OPEN);
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
@@ -362,25 +529,69 @@ pub fn create_open(nid: u64) -> (Cmd<fuse_open_in>, Rsp<fuse_open_out>) {
 }
 
 #[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_release_in {
+	pub fh: u64,
+	pub flags: u32,
+	pub release_flags: u32,
+	pub lock_owner: u64,
+}
+unsafe impl FuseIn for fuse_release_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_release_out {}
+unsafe impl FuseOut for fuse_release_out {}
+
+pub fn create_release(nid: u64, fh: u64) -> (Cmd<fuse_release_in>, Rsp<fuse_release_out>) {
+	let mut cmd: fuse_release_in = Default::default();
+	let mut cmdhdr = create_in_header::<fuse_release_in>(Opcode::FUSE_RELEASE);
+	cmdhdr.nodeid = nid;
+	cmd.fh = fh;
+	let rsp = Default::default();
+	let rsphdr = Default::default();
+	(
+		Cmd {
+			cmd,
+			header: cmdhdr,
+		},
+		Rsp {
+			rsp,
+			header: rsphdr,
+		},
+	)
+}
+
+fn str_into_u8buf(s: &str, u8buf: &mut [u8]) {
+	// TODO: fix this hacky conversion..
+	for (i, c) in s.chars().enumerate() {
+		u8buf[i] = c as u8;
+		if i > u8buf.len() {
+			warn!("FUSE: Name too long!");
+			break;
+		}
+	}
+}
+
+// TODO: max path length?
+const MAX_PATH_LEN: usize = 256;
+fn str_to_path(s: &str) -> [u8; MAX_PATH_LEN] {
+	let mut buf = [0 as u8; MAX_PATH_LEN];
+	str_into_u8buf(s, &mut buf);
+	buf
+}
+
+#[repr(C)]
 pub struct fuse_lookup_in {
-	pub name: [u8; 256], // TODO: max path length?
+	pub name: [u8; MAX_PATH_LEN],
 }
 unsafe impl FuseIn for fuse_lookup_in {}
 
 impl From<&str> for fuse_lookup_in {
 	fn from(name: &str) -> Self {
-		let mut lookup = Self {
-			name: [0 as u8; 256],
-		};
-		// TODO: fix this hacky conversion..
-		for (i, c) in name.chars().enumerate() {
-			lookup.name[i] = c as u8;
-			if i > lookup.name.len() {
-				warn!("FUSE: Name too long!");
-				break;
-			}
+		Self {
+			name: str_to_path(name),
 		}
-		lookup
 	}
 }
 
@@ -422,4 +633,112 @@ pub struct fuse_attr {
 	pub rdev: u32,
 	pub blksize: u32,
 	pub padding: u32,
+}
+
+#[repr(C)]
+pub struct fuse_unlink_in {
+	pub name: [u8; MAX_PATH_LEN],
+}
+unsafe impl FuseIn for fuse_unlink_in {}
+
+impl From<&str> for fuse_unlink_in {
+	fn from(name: &str) -> Self {
+		Self {
+			name: str_to_path(name),
+		}
+	}
+}
+
+impl fmt::Debug for fuse_unlink_in {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "fuse_unlink_in {{ {:?} }}", &self.name[..])
+	}
+}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_unlink_out {}
+unsafe impl FuseOut for fuse_unlink_out {}
+
+pub fn create_unlink(name: &str) -> (Cmd<fuse_unlink_in>, Rsp<fuse_unlink_out>) {
+	let cmd = name.into();
+	let mut cmdhdr = create_in_header::<fuse_unlink_in>(Opcode::FUSE_UNLINK);
+	cmdhdr.nodeid = FUSE_ROOT_ID;
+	let rsp: fuse_unlink_out = Default::default();
+	let rsphdr: fuse_out_header = Default::default();
+	(
+		Cmd {
+			cmd,
+			header: cmdhdr,
+		},
+		Rsp {
+			rsp,
+			header: rsphdr,
+		},
+	)
+}
+
+#[repr(C)]
+pub struct fuse_create_in {
+	pub flags: u32,
+	pub mode: u32,
+	pub umask: u32,
+	pub padding: u32,
+	pub name: [u8; MAX_PATH_LEN],
+}
+unsafe impl FuseIn for fuse_create_in {}
+
+#[repr(C)]
+#[derive(Debug, Default)]
+pub struct fuse_create_out {
+	pub entry: fuse_entry_out,
+	pub open: fuse_open_out,
+}
+unsafe impl FuseOut for fuse_create_out {}
+
+impl fuse_create_in {
+	fn new(name: &str, flags: u32, mode: u32) -> Self {
+		Self {
+			flags,
+			mode,
+			umask: 0,
+			padding: 0,
+			name: str_to_path(name),
+		}
+	}
+}
+
+impl fmt::Debug for fuse_create_in {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(
+			f,
+			"fuse_create_in {{ flags: {}, mode: {}, umask: {}, name: {:?} ...}}",
+			self.flags,
+			self.mode,
+			self.umask,
+			&self.name[..10]
+		)
+	}
+}
+
+pub fn create_create(
+	path: &str,
+	flags: u32,
+	mode: u32,
+) -> (Cmd<fuse_create_in>, Rsp<fuse_create_out>) {
+	let cmd = fuse_create_in::new(path, flags, mode);
+	let mut cmdhdr = create_in_header::<fuse_create_in>(Opcode::FUSE_CREATE);
+	cmdhdr.nodeid = FUSE_ROOT_ID;
+	let rsp = Default::default();
+	let rsphdr = Default::default();
+	(
+		Cmd {
+			cmd,
+			header: cmdhdr,
+		},
+		Rsp {
+			rsp,
+			header: rsphdr,
+		},
+	)
 }
