@@ -118,12 +118,12 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_read(fh, len, self.offset as u64);
 			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-			info!("outside sdncmd {:?}", rsp);
 			let rsp = rsp.unwrap();
 			let len = rsp.header.len as usize - ::core::mem::size_of::<fuse_out_header>();
 			self.offset += len;
 			// TODO: do this zerocopy
-			let vec = rsp.rsp.dat[..len].to_vec();
+			let mut vec = rsp.extra_buffer.unwrap();
+			vec.truncate(len);
 			info!("LEN: {}, VEC: {:?}", len, vec);
 			Ok(vec)
 		} else {
@@ -408,24 +408,9 @@ pub struct fuse_read_in {
 unsafe impl FuseIn for fuse_read_in {}
 
 #[repr(C)]
-pub struct fuse_read_out {
-	pub dat: [u8; MAX_READ_LEN],
-}
+#[derive(Default, Debug)]
+pub struct fuse_read_out {}
 unsafe impl FuseOut for fuse_read_out {}
-
-impl fmt::Debug for fuse_read_out {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "fuse_read_out {{ {:?} ... }}", &self.dat[..10])
-	}
-}
-
-impl Default for fuse_read_out {
-	fn default() -> Self {
-		Self {
-			dat: [0 as u8; MAX_READ_LEN],
-		}
-	}
-}
 
 pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<fuse_read_out>) {
 	let cmd = fuse_read_in {
@@ -446,7 +431,7 @@ pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<
 		Rsp {
 			rsp,
 			header: rsphdr,
-			extra_buffer: None,
+			extra_buffer: Some(vec![0; size as usize]),
 		},
 	)
 }

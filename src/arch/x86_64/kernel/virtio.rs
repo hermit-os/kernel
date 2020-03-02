@@ -407,7 +407,7 @@ impl VirtqDescriptors {
 		if !chain.0.is_empty() {
 			let last = chain.0.last_mut().unwrap();
 			last.raw.next = next.index;
-			last.raw.flags = VIRTQ_DESC_F_NEXT;
+			last.raw.flags |= VIRTQ_DESC_F_NEXT;
 		}
 		// Always make sure the chain is terminated properly
 		next.raw.next = 0;
