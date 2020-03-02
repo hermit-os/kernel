@@ -171,7 +171,7 @@ impl FuseInterface for VirtiofsDriver<'_> {
 		debug!("Sending Fuse Command: {:?}", cmd);
 		if let Some(ref mut vqueues) = self.vqueues {
 			if let Some(mut rsp) = rsp {
-				vqueues[1].send_blocking(cmd.to_u8buf(), Some(rsp.to_u8buf_mut()));
+				vqueues[1].send_blocking(&cmd.to_u8buf(), Some(&rsp.to_u8buf_mut()));
 				debug!("Got Fuse Reply: {:?}", rsp);
 				return Some(rsp);
 			}
