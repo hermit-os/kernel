@@ -11,8 +11,7 @@ use syscalls::fs::{FileError, FilePerms, PosixFile, PosixFileSystem};
 
 const FUSE_ROOT_ID: u64 = 1;
 const MAX_READ_LEN: usize = 1024;
-const MAX_WRITE_LEN: usize = 8; // TODO: fix ugly hack that allows us to write "hello, world!!!!", since bufsize == writesize is asserted by virtiofsd
-/// currently only 8-byte aligned writes are possible!
+const MAX_WRITE_LEN: usize = 1024;
 
 pub trait FuseInterface {
 	fn send_command<S, T>(&mut self, cmd: Cmd<S>, rsp: Option<Rsp<T>>) -> Option<Rsp<T>>
@@ -215,12 +214,18 @@ pub enum Opcode {
 }
 
 // From https://stackoverflow.com/questions/28127165/how-to-convert-struct-to-u8
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-	::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
+/*unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+	::core::slice::from_raw_parts(
+		(p as *const T) as *const u8,
+		::core::mem::size_of::<T>(),
+	)
 }
 unsafe fn any_as_u8_slice_mut<T: Sized>(p: &mut T) -> &mut [u8] {
-	::core::slice::from_raw_parts_mut((p as *mut T) as *mut u8, ::core::mem::size_of::<T>())
-}
+	::core::slice::from_raw_parts_mut(
+		(p as *mut T) as *mut u8,
+		::core::mem::size_of::<T>(),
+	)
+}*/
 
 /// Marker trait, which signals that a struct is a valid Fuse command.
 /// Struct has to be repr(C)!
@@ -234,6 +239,7 @@ pub unsafe trait FuseOut {}
 pub struct Cmd<T: FuseIn + core::fmt::Debug> {
 	header: fuse_in_header,
 	cmd: T,
+	extra_buffer: Option<Vec<u8>>, // eg for writes. allows zero-copy and avoids rust size_of operations (which always add alignment padding)
 }
 
 #[repr(C)]
@@ -241,6 +247,7 @@ pub struct Cmd<T: FuseIn + core::fmt::Debug> {
 pub struct Rsp<T: FuseOut + core::fmt::Debug> {
 	header: fuse_out_header,
 	rsp: T,
+	extra_buffer: Option<Vec<u8>>, // eg for reads. allows zero-copy and avoids rust size_of operations (which always add alignment padding)
 }
 
 // TODO: use from/into? But these require consuming the command, so we need some better memory model to avoid deallocation
@@ -248,16 +255,36 @@ impl<T> Cmd<T>
 where
 	T: FuseIn + core::fmt::Debug,
 {
-	pub fn to_u8buf(&self) -> &[u8] {
-		unsafe { any_as_u8_slice(self) }
+	pub fn to_u8buf(&self) -> Vec<&[u8]> {
+		let rawcmd = unsafe {
+			::core::slice::from_raw_parts(
+				(&self.header as *const fuse_in_header) as *const u8,
+				::core::mem::size_of::<T>() + ::core::mem::size_of::<fuse_in_header>(),
+			)
+		};
+		if let Some(extra) = &self.extra_buffer {
+			vec![rawcmd, &extra.as_ref()]
+		} else {
+			vec![rawcmd]
+		}
 	}
 }
 impl<T> Rsp<T>
 where
 	T: FuseOut + core::fmt::Debug,
 {
-	pub fn to_u8buf_mut(&mut self) -> &mut [u8] {
-		unsafe { &mut *any_as_u8_slice_mut(self) }
+	pub fn to_u8buf_mut(&mut self) -> Vec<&mut [u8]> {
+		let rawrsp = unsafe {
+			::core::slice::from_raw_parts_mut(
+				(&mut self.header as *mut fuse_out_header) as *mut u8,
+				::core::mem::size_of::<T>() + ::core::mem::size_of::<fuse_out_header>(),
+			)
+		};
+		if let Some(extra) = self.extra_buffer.as_mut() {
+			vec![rawrsp, extra]
+		} else {
+			vec![rawrsp]
+		}
 	}
 }
 
@@ -291,10 +318,12 @@ pub fn create_init() -> (Cmd<fuse_init_in>, Rsp<fuse_init_out>) {
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -309,10 +338,12 @@ pub fn create_lookup(name: &str) -> (Cmd<fuse_lookup_in>, Rsp<fuse_entry_out>) {
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -402,7 +433,7 @@ pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<
 		size,
 		..Default::default()
 	};
-	let mut cmdhdr = create_in_header::<fuse_open_in>(Opcode::FUSE_READ);
+	let mut cmdhdr = create_in_header::<fuse_read_in>(Opcode::FUSE_READ);
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
 	let rsphdr = Default::default();
@@ -410,15 +441,18 @@ pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
 
 #[repr(C)]
+#[derive(Default, Debug)]
 pub struct fuse_write_in {
 	pub fh: u64,
 	pub offset: u64,
@@ -427,7 +461,6 @@ pub struct fuse_write_in {
 	pub lock_owner: u64,
 	pub flags: u32,
 	pub padding: u32,
-	pub dat: [u8; MAX_WRITE_LEN], // TODO: this gets padded to 32bit boundary --> size does not match and virtiofsd complains!
 }
 unsafe impl FuseIn for fuse_write_in {}
 
@@ -439,42 +472,18 @@ pub struct fuse_write_out {
 }
 unsafe impl FuseOut for fuse_write_out {}
 
-impl fmt::Debug for fuse_write_in {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(
-			f,
-			"fuse_write_in {{ {:?}, size: {} ... TODO: MISSING FIELDS}}",
-			&self.dat[..],
-			self.size
-		)
-	}
-}
-
-impl fuse_write_in {
-	fn new(offset: u64, buf: &[u8]) -> Self {
-		let mut write = Self {
-			fh: 0,
-			offset,
-			size: buf.len() as u32,
-			write_flags: 0,
-			lock_owner: 0,
-			flags: 0,
-			padding: 0,
-			dat: [0 as u8; MAX_WRITE_LEN],
-		};
-		write.dat[..buf.len()].copy_from_slice(buf);
-
-		write
-	}
-}
-
+// TODO: do write zerocopy? currently does buf.to_vec()
 pub fn create_write(
 	nid: u64,
 	buf: &[u8],
 	offset: u64,
 ) -> (Cmd<fuse_write_in>, Rsp<fuse_write_out>) {
-	let cmd = fuse_write_in::new(offset, buf);
-	let mut cmdhdr = create_in_header::<fuse_open_in>(Opcode::FUSE_WRITE);
+	let cmd = fuse_write_in {
+		offset,
+		size: buf.len() as u32,
+		..Default::default()
+	};
+	let mut cmdhdr = create_in_header::<fuse_write_in>(Opcode::FUSE_WRITE);
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
 	let rsphdr = Default::default();
@@ -482,10 +491,12 @@ pub fn create_write(
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: Some(buf.to_vec()),
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -520,10 +531,12 @@ pub fn create_open(nid: u64, flags: u32) -> (Cmd<fuse_open_in>, Rsp<fuse_open_ou
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -554,10 +567,12 @@ pub fn create_release(nid: u64, fh: u64) -> (Cmd<fuse_release_in>, Rsp<fuse_rele
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -670,10 +685,12 @@ pub fn create_unlink(name: &str) -> (Cmd<fuse_unlink_in>, Rsp<fuse_unlink_out>) 
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
@@ -735,10 +752,12 @@ pub fn create_create(
 		Cmd {
 			cmd,
 			header: cmdhdr,
+			extra_buffer: None,
 		},
 		Rsp {
 			rsp,
 			header: rsphdr,
+			extra_buffer: None,
 		},
 	)
 }
