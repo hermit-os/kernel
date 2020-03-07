@@ -86,9 +86,14 @@ pub fn disable() {
 #[cfg(not(test))]
 #[inline]
 pub fn nested_disable() -> bool {
-	let was_enabled = unsafe { rflags::read().contains(rflags::RFlags::FLAGS_IF) };
-	disable();
-	was_enabled
+	let result = unsafe {
+		let flags: u64;
+
+		asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
+		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
+	};
+
+	result
 }
 
 #[cfg(test)]
