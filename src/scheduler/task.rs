@@ -295,6 +295,7 @@ impl PriorityTaskQueue {
 			self.queues[i].head = task.borrow().next.clone();
 
 			if self.queues[i].head.is_none() {
+				self.queues[i].tail = None;
 				self.prio_bitmap &= !(1 << i as u64);
 			}
 		}
