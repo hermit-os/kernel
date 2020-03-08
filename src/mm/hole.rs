@@ -46,15 +46,20 @@ impl HoleList {
 	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
 		assert!(layout.size() >= Self::min_size());
 
-		allocate_first_fit(&mut self.first, layout).map(|allocation| ({
-			if let Some(padding) = allocation.front_padding {
-				deallocate(&mut self.first, padding.addr, padding.size);
-			}
-			if let Some(padding) = allocation.back_padding {
-				deallocate(&mut self.first, padding.addr, padding.size);
-			}
-			NonNull::new(allocation.info.addr as *mut u8).unwrap()
-		}, layout.size()))
+		allocate_first_fit(&mut self.first, layout).map(|allocation| {
+			(
+				{
+					if let Some(padding) = allocation.front_padding {
+						deallocate(&mut self.first, padding.addr, padding.size);
+					}
+					if let Some(padding) = allocation.back_padding {
+						deallocate(&mut self.first, padding.addr, padding.size);
+					}
+					NonNull::new(allocation.info.addr as *mut u8).unwrap()
+				},
+				layout.size(),
+			)
+		})
 	}
 
 	/// Frees the allocation given by `ptr` and `layout`. `ptr` must be a pointer returned by a call
