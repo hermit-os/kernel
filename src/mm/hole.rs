@@ -43,10 +43,10 @@ impl HoleList {
 	/// block is returned.
 	/// This function uses the “first fit” strategy, so it uses the first hole that is big
 	/// enough. Thus the runtime is in O(n) but it should be reasonably fast for small allocations.
-	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
 		assert!(layout.size() >= Self::min_size());
 
-		allocate_first_fit(&mut self.first, layout).map(|allocation| {
+		allocate_first_fit(&mut self.first, layout).map(|allocation| ({
 			if let Some(padding) = allocation.front_padding {
 				deallocate(&mut self.first, padding.addr, padding.size);
 			}
@@ -54,7 +54,7 @@ impl HoleList {
 				deallocate(&mut self.first, padding.addr, padding.size);
 			}
 			NonNull::new(allocation.info.addr as *mut u8).unwrap()
-		})
+		}, layout.size()))
 	}
 
 	/// Frees the allocation given by `ptr` and `layout`. `ptr` must be a pointer returned by a call
