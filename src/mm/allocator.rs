@@ -69,7 +69,7 @@ impl Heap {
 	}
 
 	/// An allocation using the always available Bootstrap Allocator.
-	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
 		let size = align_up!(layout.size(), HoleList::min_size());
 
@@ -78,7 +78,7 @@ impl Heap {
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocErr)
 		} else {
-			Ok(NonNull::new(ptr).unwrap())
+			Ok((NonNull::new(ptr).unwrap(), layout.size()))
 		}
 	}
 
@@ -87,7 +87,7 @@ impl Heap {
 	/// This function scans the list of free memory blocks and uses the first block that is big
 	/// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
 	/// reasonably fast for small allocations.
-	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
 		if self.bottom == 0 {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
@@ -158,7 +158,7 @@ impl Heap {
 }
 
 unsafe impl AllocRef for Heap {
-	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
+	unsafe fn alloc(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
 		self.allocate_first_fit(layout)
 	}
 
@@ -204,7 +204,7 @@ unsafe impl GlobalAlloc for LockedHeap {
 			.lock()
 			.allocate_first_fit(layout)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |allocation| allocation.as_ptr())
+			.map_or(ptr::null_mut() as *mut u8, |(allocation, _)| allocation.as_ptr())
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
