@@ -73,11 +73,14 @@ pub struct BootInfo {
 }
 
 /// Kernel header to announce machine features
-#[cfg(not(feature = "newlib"))]
+#[cfg(test)]
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+
+#[cfg(all(not(test), not(feature = "newlib")))]
 #[link_section = ".data"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
-#[cfg(feature = "newlib")]
+#[cfg(all(not(test), feature = "newlib"))]
 #[link_section = ".mboot"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
