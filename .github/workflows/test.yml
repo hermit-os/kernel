@@ -15,7 +15,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
         rust: [nightly]
         include:
           - os: macOS-latest
@@ -45,4 +45,4 @@ jobs:
       run: cargo --version
     - name: Build
       run:
-         cargo test --target x86_64-unknown-linux-gnu
+         cargo test
