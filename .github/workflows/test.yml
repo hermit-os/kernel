@@ -45,4 +45,5 @@ jobs:
       run: cargo --version
     - name: Build
       run:
-         cargo test --target ${targets}
+         cargo test
+
