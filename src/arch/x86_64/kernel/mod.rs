@@ -204,7 +204,7 @@ pub fn message_output_init() {
 	}
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows"))]
 pub fn output_message_byte(byte: u8) {
 	extern "C" {
 		fn write(fd: i32, buf: *const u8, count: usize) -> isize;
@@ -212,6 +212,17 @@ pub fn output_message_byte(byte: u8) {
 
 	unsafe {
 		let _ = write(2, &byte as *const _, 1);
+	}
+}
+
+#[cfg(all(test, target_os = "windows")]
+pub fn output_message_byte(byte: u8) {
+	extern "C" {
+		fn _write(fd: i32, buf: *const u8, count: u32) -> isize;
+	}
+
+	unsafe {
+		let _ = _write(2, &byte as *const _, 1);
 	}
 }
 
