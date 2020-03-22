@@ -27,6 +27,7 @@ use environment;
 use mm;
 use scheduler;
 use x86::controlregs::*;
+use x86::io::*;
 use x86::msr::*;
 
 const APIC_ICR2: usize = 0x0310;
@@ -241,7 +242,26 @@ fn detect_from_acpi() -> Result<usize, ()> {
 
 fn detect_from_uhyve() -> Result<usize, ()> {
 	if environment::is_uhyve() {
-		return Ok(0xFEE0_0000 as usize);
+		let defaullt_address = 0xFEC0_0000usize;
+
+		unsafe {
+			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+			debug!(
+				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
+				defaullt_address, IOAPIC_ADDRESS
+			);
+
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(
+				IOAPIC_ADDRESS,
+				defaullt_address,
+				1,
+				flags,
+			);
+		}
+
+		return Ok(0xFEE0_0000usize);
 	}
 
 	Err(())
@@ -302,13 +322,7 @@ pub fn init() {
 	}
 
 	// init ioapic
-	if !environment::is_uhyve() {
-		init_ioapic();
-	} else {
-		// now, we don't longer need the IOAPIC timer and turn it off
-		info!("Disable IOAPIC timer");
-		ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
-	}
+	init_ioapic();
 }
 
 fn init_ioapic() {
@@ -323,6 +337,10 @@ fn init_ioapic() {
 			// now, we don't longer need the IOAPIC timer and turn it off
 			info!("Disable IOAPIC timer");
 			ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
+			unsafe {
+				outb(0xa1, 0xff);
+				outb(0x21, 0xff);
+			}
 		}
 	}
 }
