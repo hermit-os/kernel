@@ -52,12 +52,12 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	// loop through all flag possiblities, check if one matches in decimal, choose the corrosponding octal one!
 	// TODO: fix this in stdlib
 	let mut oflags = 0;
-	let mut dflags;
+	let mut dflags = 0;
 	for i in 0..2usize.pow(O_MAP.len() as u32) {
 		oflags = 0;
 		dflags = 0;
 		for t in 0..O_MAP.len() {
-			if i >> t % 2 == 1 {
+			if (i >> t) & 1 == 1 {
 				dflags |= O_MAP[t].0;
 				oflags |= O_MAP[t].1;
 			}
@@ -66,16 +66,23 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 			break;
 		}
 	}
+	if dflags != flags {
+		warn!("NO PERMISSION FLAG MATCHING FOUND! {} {}", flags, mode);
+	}
 	let flags = oflags;
 
 	// mode is passed in as hex as well (0x777). Linux/Fuse expects octal (0o777).
 	// just passing mode as is to FUSE create, leads to very weird permissions: 0b0111_0111_0111 -> 'r-x rwS rwt'
 	// TODO: change in stdlib
-	let mode = match mode {
-		0x777 => 0o777,
-		0 => 0,
-		_ => panic!("Mode neither 777 nor 0, should never happen with current hermit stdlib!"),
-	};
+	let mode =
+		match mode {
+			0x777 => 0o777,
+			0 => 0,
+			_ => {
+				info!("Mode neither 777 nor 0, should never happen with current hermit stdlib! Using 777");
+				0o777
+			}
+		};
 	let mut perms = FilePerms {
 		raw: flags as u32,
 		mode,
