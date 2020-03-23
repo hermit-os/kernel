@@ -188,6 +188,9 @@ pub trait PosixFile {
 pub struct FilePerms {
 	pub write: bool,
 	pub creat: bool,
+	pub excl: bool,
+	pub trunc: bool,
+	pub append: bool,
 	pub raw: u32,
 	pub mode: u32,
 }
