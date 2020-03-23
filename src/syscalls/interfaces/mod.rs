@@ -14,12 +14,30 @@ pub use self::uhyve::*;
 use alloc::boxed::Box;
 use arch;
 use console;
+use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
 use errno::*;
 use util;
 
-use syscalls::fs::{self, FilePerms, PosixFile};
+use syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+
+const SEEK_SET: i32 = 0;
+const SEEK_CUR: i32 = 1;
+const SEEK_END: i32 = 2;
+
+impl TryFrom<i32> for SeekWhence {
+	type Error = &'static str;
+
+	fn try_from(value: i32) -> Result<Self, Self::Error> {
+		match value {
+			SEEK_CUR => Ok(SeekWhence::Cur),
+			SEEK_SET => Ok(SeekWhence::Set),
+			SEEK_END => Ok(SeekWhence::End),
+			_ => Err("Got invalid seek whence parameter!"),
+		}
+	}
+}
 
 //const O_RDONLY: i32 = 0o0000;
 const O_WRONLY: i32 = 0o0001;
@@ -238,13 +256,20 @@ pub trait SyscallInterface: Send + Sync {
 		}
 	}
 
-	fn lseek(&self, _fd: i32, _offset: isize, _whence: i32) -> isize {
-		debug!("lseek is unimplemented");
-		-ENOSYS as isize
+	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
+		info!("lseek! {}, {}, {}", fd, offset, whence);
+
+		let mut fs = fs::FILESYSTEM.lock();
+		let mut ret = 0;
+		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+			ret = file.lseek(offset, whence.try_into().unwrap()).unwrap(); // TODO: might fail
+		});
+
+		ret as isize
 	}
 
 	fn stat(&self, _file: *const u8, _st: usize) -> i32 {
-		debug!("stat is unimplemented");
+		info!("stat is unimplemented");
 		-ENOSYS
 	}
 }

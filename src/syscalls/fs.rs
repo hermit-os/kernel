@@ -170,6 +170,7 @@ impl Filesystem {
 #[derive(Debug)]
 pub enum FileError {
 	ENOENT(),
+	ENOSYS(),
 }
 
 pub trait PosixFileSystem {
@@ -181,6 +182,7 @@ pub trait PosixFile {
 	fn close(&mut self) -> Result<(), FileError>;
 	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError>;
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
+	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 }
 
 // TODO: raw is partially redundant, create nicer interface
@@ -193,4 +195,10 @@ pub struct FilePerms {
 	pub append: bool,
 	pub raw: u32,
 	pub mode: u32,
+}
+
+pub enum SeekWhence {
+	Set,
+	Cur,
+	End,
 }
