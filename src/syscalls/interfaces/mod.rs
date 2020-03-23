@@ -29,14 +29,22 @@ const O_EXCL: i32 = 0o0200;
 const O_TRUNC: i32 = 0o1000;
 const O_APPEND: i32 = 0o2000;
 
+//#[cfg(not(feature = "newlib"))]
 //const O_DEC_RDONLY: i32 = 00000000;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_WRONLY: i32 = 00000001;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_RDWR: i32 = 00000002;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_CREAT: i32 = 00000100;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_EXCL: i32 = 00000200;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_TRUNC: i32 = 00001000;
+#[cfg(not(feature = "newlib"))]
 const O_DEC_APPEND: i32 = 00002000;
 
+#[cfg(not(feature = "newlib"))]
 const O_MAP: [(i32, i32); 6] = [
 	//(O_DEC_RDONLY, O_RDONLY), is 0 anyways
 	(O_DEC_WRONLY, O_WRONLY),
@@ -51,25 +59,31 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	// flags is broken in hermit stdlib! uses decimal instead of octal. convert!
 	// loop through all flag possiblities, check if one matches in decimal, choose the corrosponding octal one!
 	// TODO: fix this in stdlib
-	let mut oflags = 0;
-	let mut dflags = 0;
-	for i in 0..2usize.pow(O_MAP.len() as u32) {
-		oflags = 0;
-		dflags = 0;
-		for t in 0..O_MAP.len() {
-			if (i >> t) & 1 == 1 {
-				dflags |= O_MAP[t].0;
-				oflags |= O_MAP[t].1;
+	#[cfg(not(feature = "newlib"))]
+	let flags = {
+		let mut oflags = 0;
+		let mut dflags = 0;
+		for i in 0..2usize.pow(O_MAP.len() as u32) {
+			oflags = 0;
+			dflags = 0;
+			for t in 0..O_MAP.len() {
+				if (i >> t) & 1 == 1 {
+					dflags |= O_MAP[t].0;
+					oflags |= O_MAP[t].1;
+				}
+			}
+			if dflags == flags {
+				break;
 			}
 		}
-		if dflags == flags {
-			break;
+		if dflags != flags {
+			warn!(
+				"Syscall-flag-conversion: No matching flag mapping found! {} {}",
+				flags, mode
+			);
 		}
-	}
-	if dflags != flags {
-		warn!("NO PERMISSION FLAG MATCHING FOUND! {} {}", flags, mode);
-	}
-	let flags = oflags;
+		oflags
+	};
 
 	// mode is passed in as hex as well (0x777). Linux/Fuse expects octal (0o777).
 	// just passing mode as is to FUSE create, leads to very weird permissions: 0b0111_0111_0111 -> 'r-x rwS rwt'
@@ -90,7 +104,12 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	};
 	perms.write = flags & (O_WRONLY | O_RDWR) != 0;
 	perms.creat = flags & (O_CREAT) != 0;
-	// TODO: rest of flags
+	perms.excl = flags & (O_EXCL) != 0;
+	perms.trunc = flags & (O_TRUNC) != 0;
+	perms.append = flags & (O_APPEND) != 0;
+	if flags & !(O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND) != 0 {
+		warn!("Unknown flags used in syscall! {}", flags);
+	}
 	perms
 }
 
