@@ -273,10 +273,7 @@ pub fn boot_processor_init() {
 	gdt::init();
 	gdt::add_current_core();
 	idt::install();
-
-	if !environment::is_uhyve() {
-		pic::init();
-	}
+	pic::init();
 
 	irq::install();
 	processor::detect_frequency();

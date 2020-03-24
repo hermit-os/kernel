@@ -14,7 +14,6 @@ use arch::x86_64::mm::paging;
 use core::fmt;
 use scheduler;
 use x86::bits64::rflags;
-use x86::io::*;
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
@@ -112,34 +111,7 @@ pub fn nested_enable(was_enabled: bool) {
 	}
 }
 
-/// Remapping IRQs with a couple of IO output operations
-///
-/// Normally, IRQs 0 to 7 are mapped to entries 8 to 15. This
-/// is a problem in protected mode, because IDT entry 8 is a
-/// Double Fault! Without remapping, every time IRQ0 fires,
-/// you get a Double Fault Exception, which is NOT what's
-/// actually happening. We send commands to the Programmable
-/// Interrupt Controller (PICs - also called the 8259's) in
-/// order to make IRQ0 to 15 be remapped to IDT entries 32 to
-/// 47
-unsafe fn irq_remap() {
-	outb(0x20, 0x11);
-	outb(0xA0, 0x11);
-	outb(0x21, 0x20);
-	outb(0xA1, 0x28);
-	outb(0x21, 0x04);
-	outb(0xA1, 0x02);
-	outb(0x21, 0x01);
-	outb(0xA1, 0x01);
-	outb(0x21, 0x0);
-	outb(0xA1, 0x0);
-}
-
 pub fn install() {
-	unsafe {
-		irq_remap();
-	}
-
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
 	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
 	// Some critical exceptions also get their own stacks to always execute on a known good stack:

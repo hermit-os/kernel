@@ -27,7 +27,6 @@ use environment;
 use mm;
 use scheduler;
 use x86::controlregs::*;
-use x86::io::*;
 use x86::msr::*;
 
 const APIC_ICR2: usize = 0x0310;
@@ -332,10 +331,6 @@ fn init_ioapic() {
 			// now, we don't longer need the IOAPIC timer and turn it off
 			info!("Disable IOAPIC timer");
 			ioapic_intoff(2, 0 /*apic_processors[boot_processor]->id*/).unwrap();
-			unsafe {
-				outb(0xa1, 0xff);
-				outb(0x21, 0xff);
-			}
 		}
 	}
 }
@@ -401,12 +396,12 @@ fn calibrate_timer() {
 	// used throughout all of HermitCore. Wait 30ms for accuracy.
 	let microseconds = 30_000;
 
-	// Disable interrupts for calibration accuracy and initialize the counter.
+	// Be sure that all interrupts for calibration accuracy and initialize the counter are disabled.
 	// Dividing the counter value by 8 still provides enough accuracy for 1 microsecond resolution,
 	// but allows for longer timeouts than a smaller divisor.
 	// For example, on an Intel Xeon E5-2650 v3 @ 2.30GHz, the counter is usually calibrated to
 	// 125, which allows for timeouts of approximately 34 seconds (u32::MAX / 125).
-	irq::disable();
+
 	local_apic_write(IA32_X2APIC_DIV_CONF, APIC_DIV_CONF_DIVIDE_BY_8);
 	local_apic_write(IA32_X2APIC_INIT_COUNT, u64::from(u32::MAX));
 
@@ -423,7 +418,6 @@ fn calibrate_timer() {
 			CALIBRATED_COUNTER_VALUE
 		);
 	}
-	irq::enable();
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
