@@ -193,6 +193,7 @@ pub struct FilePerms {
 	pub excl: bool,
 	pub trunc: bool,
 	pub append: bool,
+	pub directio: bool,
 	pub raw: u32,
 	pub mode: u32,
 }

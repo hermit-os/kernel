@@ -434,6 +434,21 @@ pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
 	let rsphdr = Default::default();
+	// direct-io requires aligned memory.
+	// ugly hack from https://stackoverflow.com/questions/60180121/how-do-i-allocate-a-vecu8-that-is-aligned-to-the-size-of-the-cache-line
+	let mut aligned: Vec<AlignToPage> =
+		Vec::with_capacity(size as usize / ::core::mem::size_of::<AlignToPage>() + 1);
+	let ptr = aligned.as_mut_ptr();
+	let cap_units = aligned.capacity();
+	::core::mem::forget(aligned);
+	let readbuf = unsafe {
+		Vec::from_raw_parts(
+			ptr as *mut u8,
+			size as usize,
+			cap_units * ::core::mem::size_of::<AlignToPage>(),
+		)
+	};
+	// let readbuf = vec![0; size as usize];
 	(
 		Cmd {
 			cmd,
@@ -443,7 +458,7 @@ pub fn create_read(nid: u64, size: u32, offset: u64) -> (Cmd<fuse_read_in>, Rsp<
 		Rsp {
 			rsp,
 			header: rsphdr,
-			extra_buffer: Some(vec![0; size as usize]),
+			extra_buffer: Some(readbuf),
 		},
 	)
 }
@@ -469,7 +484,11 @@ pub struct fuse_write_out {
 }
 unsafe impl FuseOut for fuse_write_out {}
 
+#[repr(C, align(4096))]
+struct AlignToPage([u8; 4096]);
 // TODO: do write zerocopy? currently does buf.to_vec()
+// problem: i cannot create owned type, since this would deallocate memory on drop. But memory belongs to userspace!
+//          Using references, i have to be careful of lifetimes!
 pub fn create_write(
 	nid: u64,
 	buf: &[u8],
@@ -484,11 +503,28 @@ pub fn create_write(
 	cmdhdr.nodeid = nid;
 	let rsp = Default::default();
 	let rsphdr = Default::default();
+
+	//direct-io requires aligned memory.
+	// ugly hack from https://stackoverflow.com/questions/60180121/how-do-i-allocate-a-vecu8-that-is-aligned-to-the-size-of-the-cache-line
+	let mut aligned: Vec<AlignToPage> =
+		Vec::with_capacity(buf.len() / ::core::mem::size_of::<AlignToPage>() + 1);
+	let ptr = aligned.as_mut_ptr();
+	let cap_units = aligned.capacity();
+	::core::mem::forget(aligned);
+	let mut writebuf = unsafe {
+		Vec::from_raw_parts(
+			ptr as *mut u8,
+			buf.len(),
+			cap_units * ::core::mem::size_of::<AlignToPage>(),
+		)
+	};
+	writebuf.clone_from_slice(buf);
+	// let writebuf = buf.to_vec();
 	(
 		Cmd {
 			cmd,
 			header: cmdhdr,
-			extra_buffer: Some(buf.to_vec()),
+			extra_buffer: Some(writebuf),
 		},
 		Rsp {
 			rsp,

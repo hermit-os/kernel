@@ -46,6 +46,7 @@ const O_CREAT: i32 = 0o0100;
 const O_EXCL: i32 = 0o0200;
 const O_TRUNC: i32 = 0o1000;
 const O_APPEND: i32 = 0o2000;
+const O_DIRECT: i32 = 0o40000;
 
 //#[cfg(not(feature = "newlib"))]
 //const O_DEC_RDONLY: i32 = 00000000;
@@ -125,7 +126,8 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms.excl = flags & (O_EXCL) != 0;
 	perms.trunc = flags & (O_TRUNC) != 0;
 	perms.append = flags & (O_APPEND) != 0;
-	if flags & !(O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND) != 0 {
+	perms.directio = flags & (O_DIRECT) != 0;
+	if flags & !(O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND | O_DIRECT) != 0 {
 		warn!("Unknown flags used in syscall! {}", flags);
 	}
 	perms
