@@ -48,6 +48,17 @@ pub fn init() {
 	);
 
 	unsafe {
+		// Remapping IRQs with a couple of IO output operations
+		//
+		// Normally, IRQs 0 to 7 are mapped to entries 8 to 15. This
+		// is a problem in protected mode, because IDT entry 8 is a
+		// Double Fault! Without remapping, every time IRQ0 fires,
+		// you get a Double Fault Exception, which is NOT what's
+		// actually happening. We send commands to the Programmable
+		// Interrupt Controller (PICs - also called the 8259's) in
+		// order to make IRQ0 to 15 be remapped to IDT entries 32 to
+		// 47
+
 		// Reinitialize PIC1 and PIC2.
 		outb(PIC1_COMMAND_PORT, 0x11);
 		outb(PIC2_COMMAND_PORT, 0x11);
