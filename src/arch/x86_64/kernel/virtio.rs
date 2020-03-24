@@ -255,7 +255,12 @@ impl<'a> Virtq<'a> {
 
 		// 5. The available idx is increased by the number of descriptor chain heads added to the available ring.
 		// idx always increments, and wraps naturally at 65536:
-		*vqavail.idx += 1;
+
+		*vqavail.idx = vqavail.idx.wrapping_add(1);
+
+		if *vqavail.idx == 0 {
+			debug!("VirtQ index wrapped!");
+		}
 
 		// 6. The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
 		// ????? TODO!
@@ -438,19 +443,18 @@ struct VirtqUsed<'a> {
 
 impl<'a> VirtqUsed<'a> {
 	fn wait_until_done(&mut self, chain: &VirtqDescriptorChain) -> bool {
-		// TODO: this only works for exactly one running transfer at a time
+		// TODO: this might break if we have multiple running transfers at a time?
 		while unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {}
+		self.last_idx = *self.idx;
 
-		if *self.idx > self.last_idx {
-			self.last_idx = *self.idx;
-			let usedelem = self.ring[(self.last_idx as usize - 1) % self.ring.len()];
+		let usedelem = self.ring[(self.last_idx.wrapping_sub(1) as usize) % self.ring.len()];
 
-			info!("Used Element: {:?}", usedelem);
-			assert!(usedelem.id == chain.0.first().unwrap().index as u32);
-			return true;
-		}
+		info!("Used Element: {:?}", usedelem);
+		assert!(usedelem.id == chain.0.first().unwrap().index as u32);
+		return true;
 
-		false
+		// current version cannot fail.
+		//false
 	}
 }
 
