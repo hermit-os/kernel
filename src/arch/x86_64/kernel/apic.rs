@@ -253,12 +253,7 @@ fn detect_from_uhyve() -> Result<usize, ()> {
 
 			let mut flags = PageTableEntryFlags::empty();
 			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(
-				IOAPIC_ADDRESS,
-				defaullt_address,
-				1,
-				flags,
-			);
+			paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
 		}
 
 		return Ok(0xFEE0_0000usize);
