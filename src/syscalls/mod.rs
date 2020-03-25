@@ -34,7 +34,7 @@ use synch::spinlock::SpinlockIrqSave;
 use syscalls::interfaces::SyscallInterface;
 
 #[cfg(feature = "newlib")]
-const LWIP_FD_BIT: i32 = (1 << 30);
+const LWIP_FD_BIT: i32 = 1 << 30;
 
 #[cfg(feature = "newlib")]
 pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
