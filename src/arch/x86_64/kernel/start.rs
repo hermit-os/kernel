@@ -11,6 +11,15 @@ use boot_processor_main;
 use config::KERNEL_STACK_SIZE;
 use x86::controlregs::*;
 
+pub unsafe fn cr0_enable_caching() {
+	let mut cr0 = cr0();
+
+	// Enable caching.
+	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
+
+	cr0_write(cr0);
+}
+
 #[inline(never)]
 #[no_mangle]
 #[naked]
@@ -25,12 +34,7 @@ pub unsafe extern "C" fn _start(boot_info: &'static mut BootInfo) -> ! {
 	//
 	// CR0 CONFIGURATION
 	//
-	let mut cr0 = cr0();
-
-	// Enable caching.
-	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
-
-	cr0_write(cr0);
+	cr0_enable_caching();
 
 	if boot_info.cpu_online == 0 {
 		boot_processor_main();
