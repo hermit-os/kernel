@@ -26,13 +26,7 @@ build:
     - cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel
     - cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
   image: ${IMAGE}
-  cache:
-    paths:
-      - target/x86_64-unknown-hermit-kernel
-    key: build
-  artifacts:
-    paths:
-      - target/x86_64-unknown-hermit-kernel
+  cache: {}
   tags:
     - docker
 
@@ -45,6 +39,7 @@ build:
 #    - rm -rf tests loader
 #    - cargo tarpaulin -v --exclude-files src/arch/aarch64
 #  image: ${IMAGE}
+#  dependencies: []
 #  tags:
 #    - docker
 
@@ -53,5 +48,6 @@ test:cargo:
   script: 
     - cargo test --target x86_64-unknown-linux-gnu
   image: ${IMAGE}
+  dependencies: []
   tags:
     - docker
