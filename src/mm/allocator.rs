@@ -212,11 +212,9 @@ unsafe impl GlobalAlloc for LockedHeap {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
 			.lock()
-			.allocate_first_fit(layout)
+			.alloc(layout, AllocInit::Uninitialized)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |(allocation, _)| {
-				allocation.as_ptr()
-			})
+			.map_or(ptr::null_mut() as *mut u8, |mem| mem.ptr.as_ptr())
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
