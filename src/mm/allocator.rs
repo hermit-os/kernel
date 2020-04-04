@@ -7,7 +7,7 @@
 
 #![allow(dead_code)]
 
-use core::alloc::{AllocErr, AllocRef, GlobalAlloc, Layout};
+use core::alloc::{AllocErr, AllocInit, AllocRef, GlobalAlloc, Layout, MemoryBlock};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -158,8 +158,18 @@ impl Heap {
 }
 
 unsafe impl AllocRef for Heap {
-	fn alloc(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
-		self.allocate_first_fit(layout)
+	fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+		let (ptr, size) = self.allocate_first_fit(layout)?;
+		let memory = MemoryBlock { ptr, size };
+
+		match init {
+			AllocInit::Uninitialized => {},
+			AllocInit::Zeroed => unsafe {
+				memory.ptr.as_ptr().write_bytes(0, memory.size);
+			}
+		}
+
+		Ok(memory)
 	}
 
 	unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
