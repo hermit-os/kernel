@@ -163,10 +163,10 @@ unsafe impl AllocRef for Heap {
 		let memory = MemoryBlock { ptr, size };
 
 		match init {
-			AllocInit::Uninitialized => {},
+			AllocInit::Uninitialized => {}
 			AllocInit::Zeroed => unsafe {
 				memory.ptr.as_ptr().write_bytes(0, memory.size);
-			}
+			},
 		}
 
 		Ok(memory)
