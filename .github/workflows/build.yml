@@ -22,15 +22,15 @@ jobs:
         include:
           - os: macOS-latest
             rust: 'nightly'
-            components: 'rustfmt, clippy, rust-src'
+            components: 'rust-src'
             targets: 'x86_64-apple-darwin'
           - os: windows-latest
             rust: 'nightly'
-            components: 'rustfmt, clippy, rust-src'
+            components: 'rust-src'
             targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
-            components: 'rustfmt, clippy, rust-src'
+            components: 'rust-src'
             targets: 'x86_64-unknown-linux-gnu'
 
 
