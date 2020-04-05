@@ -217,6 +217,14 @@ unsafe impl GlobalAlloc for LockedHeap {
 			.map_or(ptr::null_mut() as *mut u8, |mem| mem.ptr.as_ptr())
 	}
 
+	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+		self.0
+			.lock()
+			.alloc(layout, AllocInit::Zeroed)
+			.ok()
+			.map_or(ptr::null_mut() as *mut u8, |mem| mem.ptr.as_ptr())
+	}
+
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
 		self.0
 			.lock()
