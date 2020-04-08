@@ -475,14 +475,10 @@ impl BlockedTaskQueue {
 		let core_scheduler = scheduler::get_scheduler(core_id);
 
 		// Add the task to the ready queue.
-		let is_halted = {
-			let mut state_locked = core_scheduler.state.lock();
-			state_locked.ready_queue.push(task);
-			state_locked.is_halted
-		};
-
-		// Wake up the CPU if needed.
-		if is_halted {
+		let mut state_locked = core_scheduler.state.lock();
+		state_locked.ready_queue.push(task);
+		if state_locked.is_halted {
+			// Wake up the CPU if needed.
 			arch::wakeup_core(core_id);
 		}
 	}
