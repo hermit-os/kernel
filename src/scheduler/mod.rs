@@ -303,6 +303,11 @@ impl PerCoreScheduler {
 				if borrowed.status != TaskStatus::TaskIdle {
 					// Mark the new task as running.
 					borrowed.status = TaskStatus::TaskRunning;
+				} else {
+					debug!("Go to halt state");
+					// We are now running the Idle task and will halt the CPU.
+					// Indicate that and unlock the state.
+					state_locked.is_halted = true;
 				}
 
 				(borrowed.id, borrowed.last_stack_pointer)
@@ -330,6 +335,7 @@ impl PerCoreScheduler {
 			// There is no new task to switch to.
 
 			if status == TaskStatus::TaskIdle {
+				debug!("Go to halt state");
 				// We are now running the Idle task and will halt the CPU.
 				// Indicate that and unlock the state.
 				state_locked.is_halted = true;
