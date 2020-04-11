@@ -8,13 +8,11 @@
 
 use alloc::rc::Rc;
 use arch;
-use arch::mm::paging::{BasePageSize, PageSize};
 use arch::processor::msb;
-use arch::scheduler::TaskStacks;
+use arch::scheduler::{TaskStacks, TaskTLS};
 use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::fmt;
-use mm;
 use scheduler;
 use synch::spinlock::SpinlockIrqSave;
 
@@ -302,37 +300,6 @@ impl PriorityTaskQueue {
 	}
 }
 
-pub struct TaskTLS {
-	address: usize,
-	size: usize,
-}
-
-impl TaskTLS {
-	pub fn new(size: usize) -> Self {
-		// We allocate in BasePageSize granularity, so we don't have to manually impose an
-		// additional alignment for TLS variables.
-		let memory_size = align_up!(size, BasePageSize::SIZE);
-		Self {
-			address: mm::allocate(memory_size, true),
-			size: memory_size,
-		}
-	}
-
-	pub fn address(&self) -> usize {
-		self.address
-	}
-}
-
-impl Drop for TaskTLS {
-	fn drop(&mut self) {
-		debug!(
-			"Deallocate TLS at 0x{:x} (size 0x{:x})",
-			self.address, self.size
-		);
-		mm::deallocate(self.address, self.size);
-	}
-}
-
 /// A task control block, which identifies either a process or a thread
 #[repr(align(64))]
 pub struct Task {
@@ -357,7 +324,7 @@ pub struct Task {
 	/// list of waiting tasks
 	pub wakeup: SpinlockIrqSave<BlockedTaskQueue>,
 	/// Task Thread-Local-Storage (TLS)
-	pub tls: Option<Rc<RefCell<TaskTLS>>>,
+	pub tls: Option<RefCell<TaskTLS>>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
 	/// lwIP error code for this task

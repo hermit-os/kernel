@@ -8,17 +8,18 @@
 
 //! Architecture dependent interface to initialize a task
 
-use alloc::rc::Rc;
 use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
+use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use config::*;
 use core::cell::RefCell;
 use core::{mem, ptr};
 use environment;
-use scheduler::task::{Task, TaskFrame, TaskTLS};
+use mm;
+use scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
 struct State {
@@ -112,7 +113,94 @@ impl Drop for TaskStacks {
 	}
 }
 
+pub struct TaskTLS {
+	address: usize,
+	size: usize,
+	fs: usize,
+}
+
+impl TaskTLS {
+	pub fn new(tls_size: usize) -> Self {
+		// determine the size of tdata (tls without tbss)
+		let tdata_size: usize = environment::get_tls_filesz();
+		// Yes, it does, so we have to allocate TLS memory.
+		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
+		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
+		// We allocate in BasePageSize granularity, so we don't have to manually impose an
+		// additional alignment for TLS variables.
+		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
+		let ptr = mm::allocate(memory_size, true);
+
+		// The tls_pointer is the address to the end of the TLS area requested by the task.
+		let tls_pointer = ptr + align_up!(tls_size, 32);
+
+		unsafe {
+			// Copy over TLS variables with their initial values.
+			ptr::copy_nonoverlapping(
+				environment::get_tls_start() as *const u8,
+				ptr as *mut u8,
+				tdata_size,
+			);
+
+			ptr::write_bytes(
+				(ptr + tdata_size) as *mut u8,
+				0,
+				align_up!(tls_size, 32) - tdata_size,
+			);
+
+			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
+			// This allows TLS variable values to be accessed by "mov rax, fs:0" and a later "lea rdx, [rax+VARIABLE_OFFSET]".
+			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
+			//
+			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
+			*(tls_pointer as *mut usize) = tls_pointer;
+		}
+
+		debug!(
+			"Set up TLS at 0x{:x}, tdata_size 0x{:x}, tls_size 0x{:x}",
+			tls_pointer, tdata_size, tls_size
+		);
+
+		Self {
+			address: ptr,
+			size: memory_size,
+			fs: tls_pointer,
+		}
+	}
+
+	#[inline]
+	pub fn address(&self) -> usize {
+		self.address
+	}
+
+	#[inline]
+	pub fn get_fs(&self) -> usize {
+		self.fs
+	}
+}
+
+impl Drop for TaskTLS {
+	fn drop(&mut self) {
+		debug!(
+			"Deallocate TLS at 0x{:x} (size 0x{:x})",
+			self.address, self.size
+		);
+		mm::deallocate(self.address, self.size);
+	}
+}
+
+impl Clone for TaskTLS {
+	fn clone(&self) -> Self {
+		TaskTLS::new(environment::get_tls_memsz())
+	}
+}
+
 extern "C" fn leave_task() -> ! {
+	if log::max_level() >= log::Level::Debug {
+		let current_task_borrowed = core_scheduler().current_task.borrow_mut();
+		debug!("Leave task {}", current_task_borrowed.id,);
+	}
+
 	core_scheduler().exit(0);
 }
 
@@ -121,58 +209,13 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 
 #[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
-	// determine the size of tdata (tls without tbss)
-	let tdata_size: usize = environment::get_tls_filesz();
-
-	// Check if the task (process or thread) uses Thread-Local-Storage.
-	let tls_size = environment::get_tls_memsz();
-	if tls_size > 0 {
-		// Yes, it does, so we have to allocate TLS memory.
-		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
-		let tls = TaskTLS::new(tls_allocation_size);
-
-		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = tls.address() + align_up!(tls_size, 32);
-
-		// As per the x86-64 TLS specification, the FS register holds the tls_pointer.
-		// This allows TLS variable values to be accessed by "mov rax, fs:VARIABLE_OFFSET".
-		processor::writefs(tls_pointer);
+	if log::max_level() >= log::Level::Debug {
+		let current_task_borrowed = core_scheduler().current_task.borrow_mut();
 		debug!(
-			"Set FS to 0x{:x}, TLS size 0x{:x}, TLS data size 0x{:x}",
-			tls_pointer, tls_size, tdata_size
-		);
-
-		unsafe {
-			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
-			// This allows TLS variable values to be accessed by "mov rax, fs:0" and a later "lea rdx, [rax+VARIABLE_OFFSET]".
-			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
-			//
-			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
-			*(tls_pointer as *mut usize) = tls_pointer;
-
-			// Copy over TLS variables with their initial values.
-			ptr::copy_nonoverlapping(
-				environment::get_tls_start() as *const u8,
-				tls.address() as *mut u8,
-				tdata_size,
-			);
-
-			ptr::write_bytes(
-				(tls.address() as *const u8 as usize + tdata_size) as *mut u8,
-				0,
-				tls_size - tdata_size,
-			);
-		}
-
-		// Associate the TLS memory to the current task.
-		let mut current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!(
-			"Set up TLS for task {} at address {:#X}",
+			"Enter task {} with fs 0x{:x}",
 			current_task_borrowed.id,
-			align_up!(tls.address(), 32)
+			processor::readfs()
 		);
-		current_task_borrowed.tls = Some(Rc::new(RefCell::new(tls)));
 	}
 
 	// Call the actual entry point of the task.
@@ -181,6 +224,14 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
+		// Check if the task (process or thread) uses Thread-Local-Storage.
+		let tls_size = environment::get_tls_memsz();
+		self.tls = if tls_size > 0 {
+			Some(RefCell::new(TaskTLS::new(tls_size)))
+		} else {
+			None
+		};
+
 		unsafe {
 			// Mark the entire stack with 0xCD.
 			ptr::write_bytes(self.stacks.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
@@ -200,9 +251,14 @@ impl TaskFrame for Task {
 			let state = stack as *mut State;
 			ptr::write_bytes(state as *mut u8, 0, mem::size_of::<State>());
 
+			if let Some(tls) = &self.tls {
+				(*state).fs = tls.borrow().get_fs();
+			}
 			(*state).rip = task_entry as usize;
 			(*state).rdi = func as usize;
 			(*state).rsi = arg as usize;
+
+			// per default we disable interrupts
 			(*state).rflags = 0x1202usize;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
