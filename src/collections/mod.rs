@@ -6,7 +6,5 @@
 // copied, modified, or distributed except according to those terms.
 
 mod doublylinkedlist;
-mod refcell;
 
 pub use self::doublylinkedlist::*;
-pub use self::refcell::*;
