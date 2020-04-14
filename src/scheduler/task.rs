@@ -15,6 +15,7 @@ use arch::scheduler::{TaskStacks, TaskTLS};
 use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::fmt;
+use scheduler::CoreId;
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -90,11 +91,11 @@ pub const NO_PRIORITIES: usize = 31;
 pub struct TaskHandle {
 	id: TaskId,
 	priority: Priority,
-	core_id: usize,
+	core_id: CoreId,
 }
 
 impl TaskHandle {
-	pub fn new(id: TaskId, priority: Priority, core_id: usize) -> Self {
+	pub fn new(id: TaskId, priority: Priority, core_id: CoreId) -> Self {
 		Self {
 			id: id,
 			priority: priority,
@@ -102,7 +103,7 @@ impl TaskHandle {
 		}
 	}
 
-	pub fn get_core_id(&self) -> usize {
+	pub fn get_core_id(&self) -> CoreId {
 		self.core_id
 	}
 
@@ -362,7 +363,7 @@ pub struct Task {
 	/// Last FPU state before a context switch to another task using the FPU
 	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
-	pub core_id: usize,
+	pub core_id: CoreId,
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// next task in queue
@@ -384,7 +385,7 @@ pub trait TaskFrame {
 }
 
 impl Task {
-	pub fn new(tid: TaskId, core_id: usize, task_status: TaskStatus, task_prio: Priority) -> Task {
+	pub fn new(tid: TaskId, core_id: CoreId, task_status: TaskStatus, task_prio: Priority) -> Task {
 		debug!("Creating new task {}", tid);
 
 		Task {
@@ -404,7 +405,7 @@ impl Task {
 		}
 	}
 
-	pub fn new_idle(tid: TaskId, core_id: usize) -> Task {
+	pub fn new_idle(tid: TaskId, core_id: CoreId) -> Task {
 		debug!("Creating idle task {}", tid);
 
 		Task {
@@ -424,7 +425,7 @@ impl Task {
 		}
 	}
 
-	pub fn clone(tid: TaskId, core_id: usize, task: &Task) -> Task {
+	pub fn clone(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
 		debug!("Cloning task {} from task {}", tid, task.id);
 
 		Task {

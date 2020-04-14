@@ -14,10 +14,10 @@ pub use self::doublylinkedlist::*;
 pub struct AvoidInterrupts(bool);
 
 impl AvoidInterrupts {
-    #[inline]
-    pub fn new() -> Self {
-        Self(irq::nested_disable())
-    }
+	#[inline]
+	pub fn new() -> Self {
+		Self(irq::nested_disable())
+	}
 }
 
 impl Drop for AvoidInterrupts {

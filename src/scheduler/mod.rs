@@ -18,7 +18,7 @@ use arch::switch;
 use collections::AvoidInterrupts;
 use config::*;
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use scheduler::task::*;
 use synch::spinlock::*;
 
@@ -26,14 +26,15 @@ use synch::spinlock::*;
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.
 pub const TASK_TIME_SLICE: u64 = 10_000;
 
-static NEXT_CORE_ID: AtomicUsize = AtomicUsize::new(1);
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Option<BTreeMap<usize, &PerCoreScheduler>> = None;
+static mut SCHEDULERS: Option<BTreeMap<CoreId, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
 static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, VecDeque<TaskHandle>>>> =
 	SpinlockIrqSave::new(None);
-static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+/// Unique identifier for a core.
+pub type CoreId = u32;
 
 struct SchedulerInput {
 	/// Queue of new tasks
@@ -52,7 +53,7 @@ impl SchedulerInput {
 }
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
-	core_id: usize,
+	core_id: CoreId,
 	/// Task which is currently running
 	current_task: Rc<RefCell<Task>>,
 	/// Idle Task
@@ -73,7 +74,12 @@ pub struct PerCoreScheduler {
 
 impl PerCoreScheduler {
 	/// Spawn a new task.
-	pub fn spawn(func: extern "C" fn(usize), arg: usize, prio: Priority, core_id: usize) -> TaskId {
+	pub fn spawn(
+		func: extern "C" fn(usize),
+		arg: usize,
+		prio: Priority,
+		core_id: CoreId,
+	) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
 		let task = Rc::new(RefCell::new(Task::new(
@@ -139,10 +145,11 @@ impl PerCoreScheduler {
 	}
 
 	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
 		let _ = AvoidInterrupts::new();
 
 		// Get the Core ID of the next CPU.
-		let core_id = {
+		let core_id: CoreId = {
 			// Increase the CPU number by 1.
 			let id = NEXT_CORE_ID.fetch_add(1, Ordering::SeqCst);
 
@@ -447,6 +454,7 @@ impl PerCoreScheduler {
 }
 
 fn get_tid() -> TaskId {
+	static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
 	let mut guard = TASKS.lock();
 
 	loop {
@@ -503,7 +511,7 @@ pub fn add_current_core() {
 }
 
 #[inline]
-fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
+fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
 	if let Some(result) = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) } {
 		result
