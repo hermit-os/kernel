@@ -6,15 +6,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use arch;
+use arch::percore::*;
 use arch::processor::msb;
 use arch::scheduler::{TaskStacks, TaskTLS};
 use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::fmt;
-use scheduler;
-use synch::spinlock::SpinlockIrqSave;
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -32,7 +32,6 @@ pub enum TaskStatus {
 pub enum WakeupReason {
 	Custom,
 	Timer,
-	All,
 }
 
 /// Unique identifier for a task (i.e. `pid`).
@@ -87,6 +86,114 @@ pub const IDLE_PRIO: Priority = Priority::from(0);
 /// Maximum number of priorities
 pub const NO_PRIORITIES: usize = 31;
 
+#[derive(Copy, Clone, Debug)]
+pub struct TaskHandle {
+	id: TaskId,
+	priority: Priority,
+	core_id: usize,
+}
+
+impl TaskHandle {
+	pub fn new(id: TaskId, priority: Priority, core_id: usize) -> Self {
+		Self {
+			id: id,
+			priority: priority,
+			core_id: core_id,
+		}
+	}
+
+	pub fn get_core_id(&self) -> usize {
+		self.core_id
+	}
+
+	pub fn get_id(&self) -> TaskId {
+		self.id
+	}
+
+	pub fn get_priority(&self) -> Priority {
+		self.priority
+	}
+}
+
+/// Realize a priority queue for task handles
+pub struct TaskHandlePriorityQueue {
+	queues: [Option<VecDeque<TaskHandle>>; NO_PRIORITIES],
+	prio_bitmap: u64,
+}
+
+impl TaskHandlePriorityQueue {
+	/// Creates an empty priority queue for tasks
+	pub const fn new() -> Self {
+		Self {
+			queues: [
+				None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+				None, None, None, None, None, None, None, None, None, None, None, None, None, None,
+				None, None, None,
+			],
+			prio_bitmap: 0,
+		}
+	}
+
+	/// Add a task handle by its priority to the queue
+	pub fn push(&mut self, task: TaskHandle) {
+		let i = task.priority.into() as usize;
+		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
+
+		self.prio_bitmap |= 1 << i;
+		if let Some(queue) = &mut self.queues[i] {
+			queue.push_back(task);
+		} else {
+			let mut queue = VecDeque::new();
+			queue.push_back(task);
+			self.queues[i] = Some(queue);
+		}
+	}
+
+	fn pop_from_queue(&mut self, queue_index: usize) -> Option<TaskHandle> {
+		if let Some(queue) = &mut self.queues[queue_index] {
+			let task = queue.pop_front();
+
+			if queue.is_empty() {
+				self.prio_bitmap &= !(1 << queue_index as u64);
+			}
+
+			task
+		} else {
+			None
+		}
+	}
+
+	/// Pop the task handle with the highest priority from the queue
+	pub fn pop(&mut self) -> Option<TaskHandle> {
+		if let Some(i) = msb(self.prio_bitmap) {
+			return self.pop_from_queue(i as usize);
+		}
+
+		None
+	}
+
+	/// Remove a specific task handle from the priority queue.
+	pub fn remove(&mut self, task: TaskHandle) {
+		let queue_index = task.priority.into() as usize;
+		//assert!(queue_index < NO_PRIORITIES, "Priority {} is too high", queue_index);
+
+		if let Some(queue) = &mut self.queues[queue_index] {
+			let mut i = 0;
+			while i != queue.len() {
+				if queue[i].id == task.id {
+					queue.remove(i);
+				} else {
+					i += 1;
+				}
+			}
+
+			if queue.is_empty() {
+				self.prio_bitmap &= !(1 << queue_index as u64);
+			}
+		}
+	}
+}
+
 struct QueueHead {
 	head: Option<Rc<RefCell<Task>>>,
 	tail: Option<Rc<RefCell<Task>>>,
@@ -94,7 +201,7 @@ struct QueueHead {
 
 impl QueueHead {
 	pub const fn new() -> Self {
-		QueueHead {
+		Self {
 			head: None,
 			tail: None,
 		}
@@ -239,65 +346,6 @@ impl PriorityTaskQueue {
 
 		None
 	}
-
-	/// Remove a specific task from the priority queue.
-	pub fn remove(&mut self, task: Rc<RefCell<Task>>) {
-		let i = task.borrow().prio.into() as usize;
-		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
-
-		let mut curr = self.queues[i].head.clone();
-		let mut next_curr;
-
-		loop {
-			match curr {
-				None => {
-					break;
-				}
-				Some(ref curr_task) => {
-					if Rc::ptr_eq(&curr_task, &task) {
-						let (mut prev, mut next) = {
-							let borrowed = curr_task.borrow_mut();
-							(borrowed.prev.clone(), borrowed.next.clone())
-						};
-
-						match prev {
-							Some(ref mut t) => {
-								t.borrow_mut().next = next.clone();
-							}
-							None => {}
-						};
-
-						match next {
-							Some(ref mut t) => {
-								t.borrow_mut().prev = prev.clone();
-							}
-							None => {}
-						};
-
-						break;
-					}
-
-					next_curr = curr_task.borrow().next.clone();
-				}
-			}
-
-			curr = next_curr.clone();
-		}
-
-		let new_head = match self.queues[i].head {
-			Some(ref curr_task) => Rc::ptr_eq(&curr_task, &task),
-			None => false,
-		};
-
-		if new_head {
-			self.queues[i].head = task.borrow().next.clone();
-
-			if self.queues[i].head.is_none() {
-				self.queues[i].tail = None;
-				self.prio_bitmap &= !(1 << i as u64);
-			}
-		}
-	}
 }
 
 /// A task control block, which identifies either a process or a thread
@@ -321,10 +369,8 @@ pub struct Task {
 	pub next: Option<Rc<RefCell<Task>>>,
 	/// previous task in queue
 	pub prev: Option<Rc<RefCell<Task>>>,
-	/// list of waiting tasks
-	pub wakeup: SpinlockIrqSave<BlockedTaskQueue>,
 	/// Task Thread-Local-Storage (TLS)
-	pub tls: Option<RefCell<TaskTLS>>,
+	pub tls: Option<TaskTLS>,
 	/// Reason why wakeup() has been called the last time
 	pub last_wakeup_reason: WakeupReason,
 	/// lwIP error code for this task
@@ -351,7 +397,6 @@ impl Task {
 			stacks: TaskStacks::new(),
 			next: None,
 			prev: None,
-			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
 			#[cfg(feature = "newlib")]
@@ -372,7 +417,6 @@ impl Task {
 			stacks: TaskStacks::from_boot_stacks(),
 			next: None,
 			prev: None,
-			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: None,
 			last_wakeup_reason: WakeupReason::Custom,
 			#[cfg(feature = "newlib")]
@@ -393,7 +437,6 @@ impl Task {
 			stacks: TaskStacks::new(),
 			next: None,
 			prev: None,
-			wakeup: SpinlockIrqSave::new(BlockedTaskQueue::new()),
 			tls: task.tls.clone(),
 			last_wakeup_reason: task.last_wakeup_reason,
 			#[cfg(feature = "newlib")]
@@ -419,12 +462,19 @@ impl BlockedTaskQueue {
 	}
 
 	fn wakeup_task(task: Rc<RefCell<Task>>, reason: WakeupReason) {
-		// Get the Core ID of the task to wake up.
-		let core_id = {
+		{
 			let mut borrowed = task.borrow_mut();
 			debug!(
 				"Waking up task {} on core {}",
 				borrowed.id, borrowed.core_id
+			);
+
+			assert!(
+				borrowed.core_id == core_id(),
+				"Try to wake up task {} on the wrong core {} != {}",
+				borrowed.id,
+				borrowed.core_id,
+				core_id()
 			);
 
 			assert!(
@@ -434,20 +484,10 @@ impl BlockedTaskQueue {
 			);
 			borrowed.status = TaskStatus::TaskReady;
 			borrowed.last_wakeup_reason = reason;
-
-			borrowed.core_id
-		};
-
-		// Get the scheduler of that core.
-		let core_scheduler = scheduler::get_scheduler(core_id);
+		}
 
 		// Add the task to the ready queue.
-		let mut state_locked = core_scheduler.state.lock();
-		state_locked.ready_queue.push(task);
-		if state_locked.is_halted {
-			// Wake up the CPU if needed.
-			arch::wakeup_core(core_id);
-		}
+		core_scheduler().ready_queue.push(task);
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
@@ -503,33 +543,17 @@ impl BlockedTaskQueue {
 		}
 	}
 
-	/// Wakeup all blocked tasks
-	pub fn wakeup_all(&mut self) -> bool {
-		if self.list.is_empty() {
-			return false;
-		}
-
-		// Loop through all blocked tasks to find it.
-		for node in self.list.iter() {
-			// Remove it from the list of blocked tasks and wake it up.
-			self.list.remove(node.clone());
-			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::All);
-		}
-
-		true
-	}
-
 	/// Manually wake up a blocked task.
-	pub fn custom_wakeup(&mut self, task: Rc<RefCell<Task>>) {
+	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		let mut first_task = true;
 		let mut iter = self.list.iter();
 
 		// Loop through all blocked tasks to find it.
 		while let Some(node) = iter.next() {
-			if Rc::ptr_eq(&node.borrow().value.task, &task) {
+			if node.borrow().value.task.borrow().id == task.get_id() {
 				// Remove it from the list of blocked tasks and wake it up.
 				self.list.remove(node.clone());
-				Self::wakeup_task(task, WakeupReason::Custom);
+				Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Custom);
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).

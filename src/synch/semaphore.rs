@@ -7,15 +7,14 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch::percore::*;
-use scheduler;
-use scheduler::task::{PriorityTaskQueue, WakeupReason};
+use scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
 use synch::spinlock::SpinlockIrqSave;
 
 struct SemaphoreState {
 	/// Resource available count
 	count: isize,
 	/// Priority queue of waiting tasks
-	queue: PriorityTaskQueue,
+	queue: TaskHandlePriorityQueue,
 }
 
 /// A counting, blocking, semaphore.
@@ -64,7 +63,7 @@ impl Semaphore {
 		Self {
 			state: SpinlockIrqSave::new(SemaphoreState {
 				count: count,
-				queue: PriorityTaskQueue::new(),
+				queue: TaskHandlePriorityQueue::new(),
 			}),
 		}
 	}
@@ -77,7 +76,7 @@ impl Semaphore {
 	pub fn acquire(&self, wakeup_time: Option<u64>) -> bool {
 		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
-		core_scheduler.current_task.borrow_mut().last_wakeup_reason = WakeupReason::Custom;
+		core_scheduler.set_current_task_wakeup_reason(WakeupReason::Custom);
 
 		// Loop until we have acquired the semaphore.
 		loop {
@@ -88,24 +87,21 @@ impl Semaphore {
 					// Successfully acquired the semaphore.
 					locked_state.count -= 1;
 					return true;
-				} else if core_scheduler.current_task.borrow().last_wakeup_reason
-					== WakeupReason::Timer
-				{
+				} else if core_scheduler.get_current_task_wakeup_reason() == WakeupReason::Timer {
 					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
 					// Don't try again and return the failure status.
 					locked_state
 						.queue
-						.remove(core_scheduler.current_task.clone());
+						.remove(core_scheduler.get_current_task_handle());
 					return false;
 				}
 
 				// We couldn't acquire the semaphore.
 				// Block the current task and add it to the wakeup queue.
-				core_scheduler
-					.blocked_tasks
-					.lock()
-					.add(core_scheduler.current_task.clone(), wakeup_time);
-				locked_state.queue.push(core_scheduler.current_task.clone());
+				core_scheduler.block_current_task(wakeup_time);
+				locked_state
+					.queue
+					.push(core_scheduler.get_current_task_handle());
 			}
 
 			// Switch to the next task.
@@ -135,8 +131,7 @@ impl Semaphore {
 			locked_state.queue.pop()
 		} {
 			// Wake up any task that has been waiting for this semaphore.
-			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
+			core_scheduler().custom_wakeup(task);
 		};
 	}
 }

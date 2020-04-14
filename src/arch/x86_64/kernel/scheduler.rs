@@ -15,7 +15,6 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use config::*;
-use core::cell::RefCell;
 use core::{mem, ptr};
 use environment;
 use mm;
@@ -196,11 +195,7 @@ impl Clone for TaskTLS {
 }
 
 extern "C" fn leave_task() -> ! {
-	if log::max_level() >= log::Level::Debug {
-		let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!("Leave task {}", current_task_borrowed.id,);
-	}
-
+	debug!("Leave task {}", core_scheduler().get_current_task_id());
 	core_scheduler().exit(0);
 }
 
@@ -209,14 +204,11 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 
 #[cfg(not(test))]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
-	if log::max_level() >= log::Level::Debug {
-		let current_task_borrowed = core_scheduler().current_task.borrow_mut();
-		debug!(
-			"Enter task {} with fs 0x{:x}",
-			current_task_borrowed.id,
-			processor::readfs()
-		);
-	}
+	debug!(
+		"Enter task {} with fs 0x{:x}",
+		core_scheduler().get_current_task_id(),
+		processor::readfs()
+	);
 
 	// Call the actual entry point of the task.
 	func(arg);
@@ -227,7 +219,7 @@ impl TaskFrame for Task {
 		// Check if the task (process or thread) uses Thread-Local-Storage.
 		let tls_size = environment::get_tls_memsz();
 		self.tls = if tls_size > 0 {
-			Some(RefCell::new(TaskTLS::new(tls_size)))
+			Some(TaskTLS::new(tls_size))
 		} else {
 			None
 		};
@@ -252,7 +244,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(state as *mut u8, 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = tls.borrow().get_fs();
+				(*state).fs = tls.get_fs();
 			}
 			(*state).rip = task_entry as usize;
 			(*state).rdi = func as usize;
@@ -268,7 +260,7 @@ impl TaskFrame for Task {
 }
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
-	core_scheduler().blocked_tasks.lock().handle_waiting_tasks();
+	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().scheduler();
 }

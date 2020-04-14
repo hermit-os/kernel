@@ -15,6 +15,7 @@ use arch;
 use arch::irq;
 use arch::percore::*;
 use arch::switch;
+use config::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use scheduler::task::*;
@@ -29,57 +30,82 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Option<BTreeMap<usize, &PerCoreScheduler>> = None;
 /// Map between Task ID and Task Control Block
-static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, Rc<RefCell<Task>>>>> =
+static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, VecDeque<TaskHandle>>>> =
 	SpinlockIrqSave::new(None);
 static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
-struct SchedulerState {
-	/// Queue of tasks, which are ready
-	ready_queue: PriorityTaskQueue,
-	/// Whether the scheduler CPU has been halted
-	is_halted: bool,
+struct SchedulerInput {
+	/// Queue of new tasks
+	new_tasks: VecDeque<Rc<RefCell<Task>>>,
+	/// Queue of task, which are wakeup by another core
+	wakeup_tasks: VecDeque<TaskHandle>,
 }
 
+impl SchedulerInput {
+	pub fn new() -> Self {
+		Self {
+			new_tasks: VecDeque::new(),
+			wakeup_tasks: VecDeque::new(),
+		}
+	}
+}
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	core_id: usize,
 	/// Task which is currently running
-	pub current_task: Rc<RefCell<Task>>,
+	current_task: Rc<RefCell<Task>>,
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
 	/// Task that currently owns the FPU
 	fpu_owner: Rc<RefCell<Task>>,
-	/// State variables of the scheduler that must be locked together
-	state: SpinlockIrqSave<SchedulerState>,
+	/// Queue of tasks, which are ready
+	ready_queue: PriorityTaskQueue,
+	/// Queues to handle incoming requests from the other cores
+	input: SpinlockIrqSave<SchedulerInput>,
 	/// Queue of tasks, which are finished and can be released
 	finished_tasks: VecDeque<TaskId>,
 	/// Queue of blocked tasks, sorted by wakeup time.
-	pub blocked_tasks: SpinlockIrqSave<BlockedTaskQueue>,
+	blocked_tasks: BlockedTaskQueue,
 	/// Processor Timer Tick when we last switched the current task.
 	last_task_switch_tick: u64,
 }
 
 impl PerCoreScheduler {
 	/// Spawn a new task.
-	pub fn spawn(&self, func: extern "C" fn(usize), arg: usize, prio: Priority) -> TaskId {
+	pub fn spawn(func: extern "C" fn(usize), arg: usize, prio: Priority, core_id: usize) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
 		let task = Rc::new(RefCell::new(Task::new(
 			tid,
-			self.core_id,
+			core_id,
 			TaskStatus::TaskReady,
 			prio,
 		)));
 		task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
-		self.state.lock().ready_queue.push(task.clone());
-		TASKS.lock().as_mut().unwrap().insert(tid, task);
-		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+		let wakeup = {
+			let mut input_locked = get_scheduler(core_id).input.lock();
+			TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::new());
+			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
-		arch::wakeup_core(self.core_id);
+			if core_id != core_scheduler().core_id {
+				input_locked.new_tasks.push_back(task.clone());
+				true
+			} else {
+				core_scheduler().ready_queue.push(task.clone());
+				false
+			}
+		};
 
-		debug!("Creating task {} with priority {}", tid, prio);
+		debug!(
+			"Creating task {} with priority {} on core {}",
+			tid, prio, core_id
+		);
+
+		if wakeup {
+			arch::wakeup_core(core_id);
+		}
 
 		tid
 	}
@@ -124,9 +150,6 @@ impl PerCoreScheduler {
 			}
 		};
 
-		// Get the scheduler of that core.
-		let next_scheduler = get_scheduler(core_id);
-
 		// Get the current task.
 		let current_task_borrowed = self.current_task.borrow();
 
@@ -140,22 +163,101 @@ impl PerCoreScheduler {
 		clone_task.borrow_mut().create_stack_frame(func, arg);
 
 		// Add it to the task lists.
-		let mut state_locked = next_scheduler.state.lock();
-		state_locked.ready_queue.push(clone_task.clone());
-		TASKS.lock().as_mut().unwrap().insert(tid, clone_task);
-		NO_TASKS.fetch_add(1, Ordering::SeqCst);
+		let wakeup = {
+			let mut input_locked = get_scheduler(core_id).input.lock();
+			TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::new());
+			NO_TASKS.fetch_add(1, Ordering::SeqCst);
+			if core_id != core_scheduler().core_id {
+				input_locked.new_tasks.push_back(clone_task.clone());
+				true
+			} else {
+				core_scheduler().ready_queue.push(clone_task.clone());
+				false
+			}
+		};
 
 		debug!(
 			"Creating task {} on core {} by cloning task {}",
 			tid, core_id, current_task_borrowed.id
 		);
 
-		// Wake up the CPU if needed.
-		if state_locked.is_halted {
+		// Wake up the CPU
+		if wakeup {
 			arch::wakeup_core(core_id);
 		}
 
 		tid
+	}
+
+	#[inline]
+	pub fn handle_waiting_tasks(&mut self) {
+		self.blocked_tasks.handle_waiting_tasks();
+	}
+
+	pub fn custom_wakeup(&mut self, task: TaskHandle) {
+		if task.get_core_id() == self.core_id {
+			self.blocked_tasks.custom_wakeup(task);
+		} else {
+			get_scheduler(task.get_core_id())
+				.input
+				.lock()
+				.wakeup_tasks
+				.push_back(task);
+			// Wake up the CPU
+			arch::wakeup_core(task.get_core_id());
+		}
+	}
+
+	#[inline]
+	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
+		self.blocked_tasks
+			.add(self.current_task.clone(), wakeup_time);
+	}
+
+	#[inline]
+	pub fn get_current_task_handle(&self) -> TaskHandle {
+		let current_task_borrowed = self.current_task.borrow();
+
+		TaskHandle::new(
+			current_task_borrowed.id,
+			current_task_borrowed.prio,
+			current_task_borrowed.core_id,
+		)
+	}
+
+	#[inline]
+	pub fn get_current_task_id(&self) -> TaskId {
+		self.current_task.borrow().id
+	}
+
+	#[inline]
+	pub fn get_current_task_status(&self) -> TaskStatus {
+		self.current_task.borrow().status
+	}
+
+	#[inline]
+	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
+		self.current_task.borrow_mut().last_wakeup_reason
+	}
+
+	#[inline]
+	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
+		self.current_task.borrow_mut().last_wakeup_reason = reason;
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	pub fn set_current_kernel_stack(&self) {
+		let current_task_borrowed = self.current_task.borrow();
+		let stack_size = if current_task_borrowed.status == TaskStatus::TaskIdle {
+			KERNEL_STACK_SIZE
+		} else {
+			DEFAULT_STACK_SIZE
+		};
+
+		let tss = unsafe { &mut (*PERCORE.tss.get()) };
+
+		tss.rsp[0] = (current_task_borrowed.stacks.stack + stack_size - 0x10) as u64;
+		tss.ist[0] = (current_task_borrowed.stacks.ist0 + KERNEL_STACK_SIZE - 0x10) as u64;
 	}
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
@@ -183,17 +285,31 @@ impl PerCoreScheduler {
 		while let Some(id) = self.finished_tasks.pop_front() {
 			debug!("Cleaning up task {}", id);
 
-			let task = TASKS.lock().as_mut().unwrap().remove(&id);
 			// wakeup tasks, which are waiting for task with the identifier id
-			match task {
-				Some(t) => {
-					result |= t.borrow().wakeup.lock().wakeup_all();
+			match TASKS.lock().as_mut().unwrap().remove(&id) {
+				Some(mut queue) => {
+					while let Some(task) = queue.pop_front() {
+						result = true;
+						self.custom_wakeup(task);
+					}
 				}
 				None => {}
 			}
 		}
 
 		result
+	}
+
+	pub fn check_input(&mut self) {
+		let mut input_locked = self.input.lock();
+
+		while let Some(task) = input_locked.wakeup_tasks.pop_front() {
+			self.blocked_tasks.custom_wakeup(task);
+		}
+
+		while let Some(task) = input_locked.new_tasks.pop_front() {
+			self.ready_queue.push(task.clone());
+		}
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
@@ -241,17 +357,13 @@ impl PerCoreScheduler {
 			)
 		};
 
-		// Lock the scheduler state while we change it.
-		let mut state_locked = self.state.lock();
-		state_locked.is_halted = false;
-
 		let mut new_task = None;
 
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
 			// Check if a task with a higher priority is available.
 			let higher_prio = Priority::from(prio.into() + 1);
-			if let Some(task) = state_locked.ready_queue.pop_with_prio(higher_prio) {
+			if let Some(task) = self.ready_queue.pop_with_prio(higher_prio) {
 				// This higher priority task becomes the new task.
 				debug!("Task with a higher priority is available.");
 				new_task = Some(task);
@@ -262,7 +374,7 @@ impl PerCoreScheduler {
 				if arch::processor::get_timer_ticks() > self.last_task_switch_tick + TASK_TIME_SLICE
 				{
 					// Check if a task with our own priority is available.
-					if let Some(task) = state_locked.ready_queue.pop_with_prio(prio) {
+					if let Some(task) = self.ready_queue.pop_with_prio(prio) {
 						// This task becomes the new task.
 						debug!("Time slice expired for current task.");
 						new_task = Some(task);
@@ -272,7 +384,7 @@ impl PerCoreScheduler {
 		} else {
 			// No task is currently running.
 			// Check if there is any available task and get the one with the highest priority.
-			if let Some(task) = state_locked.ready_queue.pop() {
+			if let Some(task) = self.ready_queue.pop() {
 				// This available task becomes the new task.
 				debug!("Task is available.");
 				new_task = Some(task);
@@ -290,7 +402,7 @@ impl PerCoreScheduler {
 			if status == TaskStatus::TaskRunning {
 				// Mark the running task as ready again and add it back to the queue.
 				self.current_task.borrow_mut().status = TaskStatus::TaskReady;
-				state_locked.ready_queue.push(self.current_task.clone());
+				self.ready_queue.push(self.current_task.clone());
 			} else if status == TaskStatus::TaskFinished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
 				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
@@ -303,11 +415,6 @@ impl PerCoreScheduler {
 				if borrowed.status != TaskStatus::TaskIdle {
 					// Mark the new task as running.
 					borrowed.status = TaskStatus::TaskRunning;
-				} else {
-					debug!("Go to halt state");
-					// We are now running the Idle task and will halt the CPU.
-					// Indicate that and unlock the state.
-					state_locked.is_halted = true;
 				}
 
 				(borrowed.id, borrowed.last_stack_pointer)
@@ -325,29 +432,19 @@ impl PerCoreScheduler {
 				self.current_task = task;
 				self.last_task_switch_tick = arch::processor::get_timer_ticks();
 
-				// Unlock the state and reenable interrupts.
-				drop(state_locked);
-
 				// Finally save our current context and restore the context of the new task.
 				switch(last_stack_pointer, new_stack_pointer);
-			}
-		} else {
-			// There is no new task to switch to.
-
-			if status == TaskStatus::TaskIdle {
-				debug!("Go to halt state");
-				// We are now running the Idle task and will halt the CPU.
-				// Indicate that and unlock the state.
-				state_locked.is_halted = true;
 			}
 		}
 	}
 }
 
 fn get_tid() -> TaskId {
+	let mut guard = TASKS.lock();
+
 	loop {
 		let id = TaskId::from(TID_COUNTER.fetch_add(1, Ordering::SeqCst));
-		if !TASKS.lock().as_mut().unwrap().contains_key(&id) {
+		if !guard.as_mut().unwrap().contains_key(&id) {
 			return id;
 		}
 	}
@@ -373,11 +470,7 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS
-		.lock()
-		.as_mut()
-		.unwrap()
-		.insert(tid, idle_task.clone());
+	TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::new());
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
@@ -388,12 +481,10 @@ pub fn add_current_core() {
 		current_task: idle_task.clone(),
 		idle_task: idle_task.clone(),
 		fpu_owner: idle_task,
-		state: SpinlockIrqSave::new(SchedulerState {
-			ready_queue: PriorityTaskQueue::new(),
-			is_halted: false,
-		}),
+		ready_queue: PriorityTaskQueue::new(),
+		input: SpinlockIrqSave::new(SchedulerInput::new()),
 		finished_tasks: VecDeque::new(),
-		blocked_tasks: SpinlockIrqSave::new(BlockedTaskQueue::new()),
+		blocked_tasks: BlockedTaskQueue::new(),
 		last_task_switch_tick: 0,
 	});
 
@@ -404,32 +495,37 @@ pub fn add_current_core() {
 	}
 }
 
-pub fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
+#[inline]
+fn get_scheduler(core_id: usize) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	let result = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) };
-	assert!(
-		result.is_some(),
-		"Trying to get the scheduler for core {}, but it isn't available",
-		core_id
-	);
-	result.unwrap()
+	if let Some(result) = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) } {
+		result
+	} else {
+		panic!(
+			"Trying to get the scheduler for core {}, but it isn't available",
+			core_id
+		);
+	}
 }
 
 pub fn join(id: TaskId) -> Result<(), ()> {
 	debug!("Waiting for task {}", id);
 
-	match TASKS.lock().as_mut().unwrap().get_mut(&id) {
-		Some(task) => {
-			task.borrow_mut()
-				.wakeup
-				.lock()
-				.add(core_scheduler().current_task.clone(), None);
+	let core_scheduler = core_scheduler();
+
+	{
+		let mut guard = TASKS.lock();
+		match guard.as_mut().unwrap().get_mut(&id) {
+			Some(queue) => {
+				queue.push_back(core_scheduler.get_current_task_handle());
+				core_scheduler.block_current_task(None);
+			}
+			_ => return Err(()),
 		}
-		_ => return Err(()),
 	}
 
 	// Switch to the next task.
-	core_scheduler().scheduler();
+	core_scheduler.scheduler();
 
 	Ok(())
 }

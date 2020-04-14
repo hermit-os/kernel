@@ -8,18 +8,17 @@
 use alloc::boxed::Box;
 use arch::percore::*;
 use core::mem;
-use scheduler;
-use scheduler::task::PriorityTaskQueue;
+use scheduler::task::TaskHandlePriorityQueue;
 
 struct CondQueue {
-	queue: PriorityTaskQueue,
+	queue: TaskHandlePriorityQueue,
 	id: usize,
 }
 
 impl CondQueue {
 	pub fn new(id: usize) -> Self {
 		CondQueue {
-			queue: PriorityTaskQueue::new(),
+			queue: TaskHandlePriorityQueue::new(),
 			id: id,
 		}
 	}
@@ -64,15 +63,13 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 	if count < 0 {
 		// Wake up all task that has been waiting for this condition variable
 		while let Some(task) = cond.queue.pop() {
-			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
+			core_scheduler().custom_wakeup(task);
 		}
 	} else {
 		for _ in 0..count {
 			// Wake up any task that has been waiting for this condition variable
 			if let Some(task) = cond.queue.pop() {
-				let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-				core_scheduler.blocked_tasks.lock().custom_wakeup(task);
+				core_scheduler().custom_wakeup(task);
 			} else {
 				debug!("Unable to wakeup task");
 			}
@@ -104,15 +101,9 @@ pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 
 	// Block the current task and add it to the wakeup queue.
 	let core_scheduler = core_scheduler();
-	core_scheduler
-		.blocked_tasks
-		.lock()
-		.add(core_scheduler.current_task.clone(), wakeup_time);
-
-	{
-		let cond = &mut *((*id) as *mut CondQueue);
-		cond.queue.push(core_scheduler.current_task.clone());
-	}
+	core_scheduler.block_current_task(wakeup_time);
+	let cond = &mut *((*id) as *mut CondQueue);
+	cond.queue.push(core_scheduler.get_current_task_handle());
 
 	0
 }

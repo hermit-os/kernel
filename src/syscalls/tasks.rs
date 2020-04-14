@@ -24,16 +24,15 @@ pub type Tid = u32;
 
 #[no_mangle]
 pub extern "C" fn sys_getpid() -> Tid {
-	let current_task_borrowed = core_scheduler().current_task.borrow();
-	current_task_borrowed.id.into() as Tid
+	core_scheduler().get_current_task_id().into()
 }
 
 #[no_mangle]
 pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
-	let current_task_borrowed = core_scheduler().current_task.borrow();
+	let task = core_scheduler().get_current_task_handle();
 
-	if id.is_null() || unsafe { *id } == current_task_borrowed.id.into() as u32 {
-		i32::from(current_task_borrowed.prio.into())
+	if id.is_null() || unsafe { *id } == task.get_id().into() {
+		i32::from(task.get_priority().into())
 	} else {
 		-EINVAL
 	}
@@ -95,11 +94,7 @@ pub extern "C" fn sys_usleep(usecs: u64) {
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
 		let core_scheduler = core_scheduler();
-		let current_task = core_scheduler.current_task.clone();
-		core_scheduler
-			.blocked_tasks
-			.lock()
-			.add(current_task, Some(wakeup_time));
+		core_scheduler.block_current_task(Some(wakeup_time));
 
 		// Switch to the next task.
 		core_scheduler.reschedule();
@@ -180,7 +175,7 @@ pub extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	static CORE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+	static CORE_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
@@ -189,9 +184,7 @@ pub extern "C" fn sys_spawn(
 		selector as usize
 	};
 
-	let core_scheduler = scheduler::get_scheduler(core_id);
-	let task_id = core_scheduler.spawn(func, arg, Priority::from(prio));
-
+	let task_id = scheduler::PerCoreScheduler::spawn(func, arg, Priority::from(prio), core_id);
 	if !id.is_null() {
 		unsafe {
 			*id = task_id.into() as u32;
