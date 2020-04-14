@@ -15,6 +15,7 @@ use arch;
 use arch::irq;
 use arch::percore::*;
 use arch::switch;
+use collections::AvoidInterrupts;
 use config::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -113,6 +114,8 @@ impl PerCoreScheduler {
 	/// Terminate the current task on the current core.
 	pub fn exit(&mut self, exit_code: i32) -> ! {
 		{
+			let _ = AvoidInterrupts::new();
+
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
 			assert!(
@@ -136,6 +139,8 @@ impl PerCoreScheduler {
 	}
 
 	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+		let _ = AvoidInterrupts::new();
+
 		// Get the Core ID of the next CPU.
 		let core_id = {
 			// Increase the CPU number by 1.
@@ -191,11 +196,13 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
+		let _ = AvoidInterrupts::new();
 		self.blocked_tasks.handle_waiting_tasks();
 	}
 
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
+			let _ = AvoidInterrupts::new();
 			self.blocked_tasks.custom_wakeup(task);
 		} else {
 			get_scheduler(task.get_core_id())
@@ -210,12 +217,14 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
+		let _ = AvoidInterrupts::new();
 		self.blocked_tasks
 			.add(self.current_task.clone(), wakeup_time);
 	}
 
 	#[inline]
 	pub fn get_current_task_handle(&self) -> TaskHandle {
+		let _ = AvoidInterrupts::new();
 		let current_task_borrowed = self.current_task.borrow();
 
 		TaskHandle::new(
@@ -227,21 +236,19 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
+		let _ = AvoidInterrupts::new();
 		self.current_task.borrow().id
 	}
 
 	#[inline]
-	pub fn get_current_task_status(&self) -> TaskStatus {
-		self.current_task.borrow().status
-	}
-
-	#[inline]
 	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
+		let _ = AvoidInterrupts::new();
 		self.current_task.borrow_mut().last_wakeup_reason
 	}
 
 	#[inline]
 	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
+		let _ = AvoidInterrupts::new();
 		self.current_task.borrow_mut().last_wakeup_reason = reason;
 	}
 
