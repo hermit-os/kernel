@@ -16,13 +16,12 @@ static mut CONSOLE_GUARD: Option<SpinlockIrqSaveGuard<console::Console>> = None;
 
 #[no_mangle]
 pub extern "C" fn sys_lwip_get_errno() -> i32 {
-	let lwip_errno = core_scheduler().current_task.borrow().lwip_errno;
-	lwip_errno
+	core_scheduler().get_lwip_errno()
 }
 
 #[no_mangle]
 pub extern "C" fn sys_lwip_set_errno(errno: i32) {
-	core_scheduler().current_task.borrow_mut().lwip_errno = errno;
+	core_scheduler().set_lwip_errno(errno);
 }
 
 #[no_mangle]
