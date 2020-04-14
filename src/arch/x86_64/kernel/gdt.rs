@@ -11,7 +11,6 @@ use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::BOOT_INFO;
 use config::*;
 use core::{intrinsics, mem};
-use scheduler::task::TaskStatus;
 use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
 use x86::dtables::{self, DescriptorTablePointer};
@@ -132,15 +131,5 @@ pub fn add_current_core() {
 
 #[no_mangle]
 pub extern "C" fn set_current_kernel_stack() {
-	let current_task_borrowed = core_scheduler().current_task.borrow();
-	let stack_size = if current_task_borrowed.status == TaskStatus::TaskIdle {
-		KERNEL_STACK_SIZE
-	} else {
-		DEFAULT_STACK_SIZE
-	};
-
-	let tss = unsafe { &mut (*PERCORE.tss.get()) };
-
-	tss.rsp[0] = (current_task_borrowed.stacks.stack + stack_size - 0x10) as u64;
-	tss.ist[0] = (current_task_borrowed.stacks.ist0 + KERNEL_STACK_SIZE - 0x10) as u64;
+	core_scheduler().set_current_kernel_stack();
 }

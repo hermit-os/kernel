@@ -160,6 +160,7 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
+	core_scheduler().check_input();
 	eoi();
 }
 

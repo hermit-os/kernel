@@ -232,9 +232,9 @@ fn boot_processor_main() -> ! {
 	}
 
 	// Start the initd task.
-	let core_scheduler = core_scheduler();
-	core_scheduler.spawn(initd, 0, scheduler::task::NORMAL_PRIO);
+	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0);
 
+	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
 	loop {
 		core_scheduler.reschedule_and_wait();
@@ -246,10 +246,10 @@ fn boot_processor_main() -> ! {
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
-	let core_scheduler = core_scheduler();
 
 	info!("Entering idle loop for application processor");
 
+	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
 	loop {
 		core_scheduler.reschedule_and_wait();

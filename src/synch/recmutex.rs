@@ -6,14 +6,13 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch::percore::*;
-use scheduler;
-use scheduler::task::{PriorityTaskQueue, TaskId};
+use scheduler::task::{TaskHandlePriorityQueue, TaskId};
 use synch::spinlock::Spinlock;
 
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,
 	count: usize,
-	queue: PriorityTaskQueue,
+	queue: TaskHandlePriorityQueue,
 }
 
 pub struct RecursiveMutex {
@@ -26,7 +25,7 @@ impl RecursiveMutex {
 			state: Spinlock::new(RecursiveMutexState {
 				current_tid: None,
 				count: 0,
-				queue: PriorityTaskQueue::new(),
+				queue: TaskHandlePriorityQueue::new(),
 			}),
 		}
 	}
@@ -34,7 +33,7 @@ impl RecursiveMutex {
 	pub fn acquire(&self) {
 		// Get information about the current task.
 		let core_scheduler = core_scheduler();
-		let tid = core_scheduler.current_task.borrow().id;
+		let tid = core_scheduler.get_current_task_id();
 
 		loop {
 			{
@@ -57,11 +56,10 @@ impl RecursiveMutex {
 
 				// The mutex is currently acquired by another task.
 				// Block the current task and add it to the wakeup queue.
-				core_scheduler
-					.blocked_tasks
-					.lock()
-					.add(core_scheduler.current_task.clone(), None);
-				locked_state.queue.push(core_scheduler.current_task.clone());
+				core_scheduler.block_current_task(None);
+				locked_state
+					.queue
+					.push(core_scheduler.get_current_task_handle());
 			}
 
 			// Switch to the next task.
@@ -88,8 +86,7 @@ impl RecursiveMutex {
 			}
 		} {
 			// Wake up any task that has been waiting for this mutex.
-			let core_scheduler = scheduler::get_scheduler(task.borrow().core_id);
-			core_scheduler.blocked_tasks.lock().custom_wakeup(task);
+			core_scheduler().custom_wakeup(task);
 		}
 	}
 }
