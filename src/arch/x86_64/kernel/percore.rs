@@ -7,7 +7,7 @@
 
 use arch::x86_64::kernel::BOOT_INFO;
 use core::{intrinsics, ptr};
-use scheduler::PerCoreScheduler;
+use scheduler::{CoreId, PerCoreScheduler};
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
 
@@ -15,7 +15,7 @@ pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
 pub struct PerCoreVariables {
 	/// Sequential ID of this CPU Core.
-	core_id: PerCoreVariable<usize>,
+	core_id: PerCoreVariable<CoreId>,
 	/// Scheduler for this CPU Core.
 	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
@@ -23,7 +23,7 @@ pub struct PerCoreVariables {
 }
 
 impl PerCoreVariables {
-	pub const fn new(core_id: usize) -> Self {
+	pub const fn new(core_id: CoreId) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
@@ -94,12 +94,12 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 
 #[cfg(not(test))]
 #[inline]
-pub fn core_id() -> usize {
+pub fn core_id() -> CoreId {
 	unsafe { PERCORE.core_id.get() }
 }
 
 #[cfg(test)]
-pub fn core_id() -> usize {
+pub fn core_id() -> CoreId {
 	0
 }
 

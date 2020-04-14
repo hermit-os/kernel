@@ -6,11 +6,12 @@
 // copied, modified, or distributed except according to those terms.
 
 use arch;
+use core::convert::TryInto;
 
 /** Returns the number of processors currently online. */
 #[no_mangle]
 pub extern "C" fn sys_get_processor_count() -> usize {
-	arch::get_processor_count()
+	arch::get_processor_count().try_into().unwrap()
 }
 
 /** Returns the processor frequency in MHz. */

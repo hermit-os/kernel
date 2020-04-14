@@ -164,8 +164,8 @@ pub fn get_mbinfo() -> usize {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).mb_info) as usize }
 }
 
-pub fn get_processor_count() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cpu_online) as usize }
+pub fn get_processor_count() -> u32 {
+	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cpu_online) as u32 }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.

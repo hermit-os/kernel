@@ -21,11 +21,13 @@ use arch::x86_64::mm::paging;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use arch::x86_64::mm::virtualmem;
 use config::*;
+use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, intrinsics, mem, ptr, u32};
 use environment;
 use mm;
 use scheduler;
+use scheduler::CoreId;
 use x86::controlregs::*;
 use x86::msr::*;
 
@@ -476,7 +478,7 @@ pub fn init_x2apic() {
 }
 
 /// Initialize the required entry.asm variables for the next CPU to be booted.
-pub fn init_next_processor_variables(core_id: usize) {
+pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, false);
@@ -538,7 +540,7 @@ pub fn boot_application_processors() {
 	let core_id = core_id();
 
 	for core_id_to_boot in 0..apic_ids.len() {
-		if core_id_to_boot != core_id {
+		if core_id_to_boot != core_id.try_into().unwrap() {
 			let apic_id = apic_ids[core_id_to_boot];
 			let destination = u64::from(apic_id) << 32;
 
@@ -546,7 +548,7 @@ pub fn boot_application_processors() {
 				"Waking up CPU {} with Local APIC ID {}",
 				core_id_to_boot, apic_id
 			);
-			init_next_processor_variables(core_id_to_boot);
+			init_next_processor_variables(core_id_to_boot.try_into().unwrap());
 
 			// Save the current number of initialized CPUs.
 			let current_processor_count = arch::get_processor_count();
@@ -597,7 +599,7 @@ pub fn ipi_tlb_flush() {
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
 		for core_id_to_interrupt in 0..apic_ids.len() {
-			if core_id_to_interrupt != core_id {
+			if core_id_to_interrupt != core_id.try_into().unwrap() {
 				let local_apic_id = apic_ids[core_id_to_interrupt];
 				let destination = u64::from(local_apic_id) << 32;
 				local_apic_write(
@@ -612,10 +614,10 @@ pub fn ipi_tlb_flush() {
 }
 
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
-pub fn wakeup_core(core_id_to_wakeup: usize) {
+pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	if core_id_to_wakeup != core_id() {
 		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
-		let local_apic_id = apic_ids[core_id_to_wakeup];
+		let local_apic_id = apic_ids[core_id_to_wakeup as usize];
 		let destination = u64::from(local_apic_id) << 32;
 		local_apic_write(
 			IA32_X2APIC_ICR,

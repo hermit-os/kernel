@@ -8,8 +8,9 @@
 use arch;
 use arch::kernel::get_processor_count;
 use arch::percore::*;
+use core::convert::TryInto;
 use core::isize;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
 use errno::*;
 #[cfg(feature = "newlib")]
 use mm::{task_heap_end, task_heap_start};
@@ -175,16 +176,21 @@ pub extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	static CORE_COUNTER: AtomicUsize = AtomicUsize::new(1);
+	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 	let core_id = if selector < 0 {
 		// use Round Robin to schedule the cores
 		CORE_COUNTER.fetch_add(1, Ordering::SeqCst) % get_processor_count()
 	} else {
-		selector as usize
+		selector as u32
 	};
 
-	let task_id = scheduler::PerCoreScheduler::spawn(func, arg, Priority::from(prio), core_id);
+	let task_id = scheduler::PerCoreScheduler::spawn(
+		func,
+		arg,
+		Priority::from(prio),
+		core_id.try_into().unwrap(),
+	);
 	if !id.is_null() {
 		unsafe {
 			*id = task_id.into() as u32;
