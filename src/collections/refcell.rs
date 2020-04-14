@@ -8,7 +8,7 @@
 //! A shareable mutable interrupt-safe memory location with
 //! dynamically checked borrow rules
 //!
-//! In principle it embeds `RefCell<T>` from the core library in a new object.
+//! In principle it embeds `RefCell<T>` from the core library into a new object.
 //! By borrowing the reference, interrupts are automatically disabled to support
 //! the usage within an interrupt handler.
 
@@ -40,6 +40,7 @@ impl<T> Deref for Ref<'_, T> {
 }
 
 impl<T> Drop for Ref<'_, T> {
+	#[inline]
 	fn drop(&mut self) {
 		irq::nested_enable(self.irq);
 	}
@@ -76,6 +77,7 @@ impl<T> DerefMut for RefMut<'_, T> {
 }
 
 impl<T> Drop for RefMut<'_, T> {
+	#[inline]
 	fn drop(&mut self) {
 		irq::nested_enable(self.irq);
 	}
