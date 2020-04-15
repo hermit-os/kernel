@@ -10,9 +10,9 @@ use arch::kernel::get_processor_count;
 use arch::percore::*;
 use core::convert::TryInto;
 use core::isize;
-use core::sync::atomic::{AtomicU32, Ordering};
 #[cfg(feature = "newlib")]
 use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU32, Ordering};
 use errno::*;
 #[cfg(feature = "newlib")]
 use mm::{task_heap_end, task_heap_start};

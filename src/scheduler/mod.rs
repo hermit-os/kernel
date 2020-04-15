@@ -93,7 +93,11 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::with_capacity(1));
+			TASKS
+				.lock()
+				.as_mut()
+				.unwrap()
+				.insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			if core_id != core_scheduler().core_id {
@@ -177,7 +181,11 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::with_capacity(1));
+			TASKS
+				.lock()
+				.as_mut()
+				.unwrap()
+				.insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			if core_id != core_scheduler().core_id {
 				input_locked.new_tasks.push_back(clone_task.clone());
@@ -247,19 +255,19 @@ impl PerCoreScheduler {
 		)
 	}
 
-    #[cfg(feature = "newlib")]
-    #[inline]
-    pub fn set_lwip_errno(&self, errno: i32) {
-        let _ = AvoidInterrupts::new();
-        self.current_task.borrow_mut().lwip_errno = errno;
-    }
+	#[cfg(feature = "newlib")]
+	#[inline]
+	pub fn set_lwip_errno(&self, errno: i32) {
+		let _ = AvoidInterrupts::new();
+		self.current_task.borrow_mut().lwip_errno = errno;
+	}
 
-    #[cfg(feature = "newlib")]
-    #[inline]
-    pub fn get_lwip_errno(&self) -> i32 {
-        let _ = AvoidInterrupts::new();
-        self.current_task.borrow().lwip_errno
-    }
+	#[cfg(feature = "newlib")]
+	#[inline]
+	pub fn get_lwip_errno(&self) -> i32 {
+		let _ = AvoidInterrupts::new();
+		self.current_task.borrow().lwip_errno
+	}
 
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
@@ -505,7 +513,11 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS.lock().as_mut().unwrap().insert(tid, VecDeque::with_capacity(1));
+	TASKS
+		.lock()
+		.as_mut()
+		.unwrap()
+		.insert(tid, VecDeque::with_capacity(1));
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
