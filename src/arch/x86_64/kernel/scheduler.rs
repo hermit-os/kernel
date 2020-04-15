@@ -64,21 +64,29 @@ struct State {
 pub struct TaskStacks {
 	/// Whether this is a boot stack
 	is_boot_stack: bool,
+	stack_size: usize,
 	/// Stack of the task
-	pub stack: usize,
-	pub ist0: usize,
+	stack: usize,
+	ist0: usize,
 }
 
 impl TaskStacks {
-	pub fn new() -> Self {
+	pub fn new(size: usize) -> Self {
+		let stack_size = if size < KERNEL_STACK_SIZE {
+			KERNEL_STACK_SIZE
+		} else {
+			align_up!(size, BasePageSize::SIZE)
+		};
+
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-		let stack = ::mm::allocate(DEFAULT_STACK_SIZE, false);
+		let stack = ::mm::allocate(stack_size, false);
 		debug!("Allocating stack {:#X}", stack);
 		let ist0 = ::mm::allocate(KERNEL_STACK_SIZE, false);
 		debug!("Allocating ist0 {:#X}", ist0);
 
 		Self {
 			is_boot_stack: false,
+			stack_size: stack_size,
 			stack: stack,
 			ist0: ist0,
 		}
@@ -93,9 +101,25 @@ impl TaskStacks {
 
 		Self {
 			is_boot_stack: true,
+			stack_size: KERNEL_STACK_SIZE,
 			stack: stack,
 			ist0: ist0,
 		}
+	}
+
+	#[inline]
+	pub fn get_stack_size(&self) -> usize {
+		self.stack_size
+	}
+
+	#[inline]
+	pub fn get_stack_address(&self) -> usize {
+		self.stack
+	}
+
+	#[inline]
+	pub fn get_ist0(&self) -> usize {
+		self.ist0
 	}
 }
 
@@ -106,7 +130,7 @@ impl Drop for TaskStacks {
 				"Deallocating stack {:#X} and ist0 {:#X}",
 				self.stack, self.ist0
 			);
-			::mm::deallocate(self.stack, DEFAULT_STACK_SIZE);
+			::mm::deallocate(self.stack, self.stack_size);
 			::mm::deallocate(self.ist0, KERNEL_STACK_SIZE);
 		}
 	}

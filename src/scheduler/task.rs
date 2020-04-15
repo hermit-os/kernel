@@ -395,7 +395,13 @@ pub trait TaskFrame {
 }
 
 impl Task {
-	pub fn new(tid: TaskId, core_id: CoreId, task_status: TaskStatus, task_prio: Priority) -> Task {
+	pub fn new(
+		tid: TaskId,
+		core_id: CoreId,
+		task_status: TaskStatus,
+		task_prio: Priority,
+		stack_size: usize,
+	) -> Task {
 		debug!("Creating new task {}", tid);
 
 		Task {
@@ -405,7 +411,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stacks: TaskStacks::new(),
+			stacks: TaskStacks::new(stack_size),
 			next: None,
 			prev: None,
 			tls: None,
@@ -445,7 +451,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stacks: TaskStacks::new(),
+			stacks: TaskStacks::new(task.stacks.get_stack_size()),
 			next: None,
 			prev: None,
 			tls: task.tls.clone(),
