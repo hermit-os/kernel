@@ -8,6 +8,7 @@
 use arch;
 use arch::kernel::get_processor_count;
 use arch::percore::*;
+use config::DEFAULT_STACK_SIZE;
 use core::convert::TryInto;
 use core::isize;
 #[cfg(feature = "newlib")]
@@ -171,11 +172,12 @@ pub extern "C" fn sys_signal(_handler: SignalHandler) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(
+pub extern "C" fn sys_spawn2(
 	id: *mut Tid,
 	func: extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
+	stack_size: usize,
 	selector: isize,
 ) -> i32 {
 	static CORE_COUNTER: AtomicU32 = AtomicU32::new(1);
@@ -192,6 +194,7 @@ pub extern "C" fn sys_spawn(
 		arg,
 		Priority::from(prio),
 		core_id.try_into().unwrap(),
+		stack_size,
 	);
 	if !id.is_null() {
 		unsafe {
@@ -200,6 +203,17 @@ pub extern "C" fn sys_spawn(
 	}
 
 	0
+}
+
+#[no_mangle]
+pub extern "C" fn sys_spawn(
+	id: *mut Tid,
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: u8,
+	selector: isize,
+) -> i32 {
+	sys_spawn2(id, func, arg, prio, DEFAULT_STACK_SIZE, selector)
 }
 
 #[no_mangle]

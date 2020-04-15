@@ -79,6 +79,7 @@ impl PerCoreScheduler {
 		arg: usize,
 		prio: Priority,
 		core_id: CoreId,
+		stack_size: usize,
 	) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
@@ -87,6 +88,7 @@ impl PerCoreScheduler {
 			core_id,
 			TaskStatus::TaskReady,
 			prio,
+			stack_size,
 		)));
 		task.borrow_mut().create_stack_frame(func, arg);
 
@@ -290,16 +292,11 @@ impl PerCoreScheduler {
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
 		let current_task_borrowed = self.current_task.borrow();
-		let stack_size = if current_task_borrowed.status == TaskStatus::TaskIdle {
-			KERNEL_STACK_SIZE
-		} else {
-			DEFAULT_STACK_SIZE
-		};
-
+		let stack_size = current_task_borrowed.stacks.get_stack_size();
 		let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-		tss.rsp[0] = (current_task_borrowed.stacks.stack + stack_size - 0x10) as u64;
-		tss.ist[0] = (current_task_borrowed.stacks.ist0 + KERNEL_STACK_SIZE - 0x10) as u64;
+		tss.rsp[0] = (current_task_borrowed.stacks.get_stack_address() + stack_size - 0x10) as u64;
+		tss.ist[0] = (current_task_borrowed.stacks.get_ist0() + KERNEL_STACK_SIZE - 0x10) as u64;
 	}
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
