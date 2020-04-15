@@ -78,6 +78,8 @@ impl TaskStacks {
 			align_up!(size, BasePageSize::SIZE)
 		};
 
+		debug!("Create stack with a size of {} KB", stack_size >> 10);
+
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 		let stack = ::mm::allocate(stack_size, false);
 		debug!("Allocating stack {:#X}", stack);
