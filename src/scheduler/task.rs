@@ -14,6 +14,7 @@ use arch::processor::msb;
 use arch::scheduler::{TaskStacks, TaskTLS};
 use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
+use core::convert::TryInto;
 use core::fmt;
 use scheduler::CoreId;
 
@@ -346,6 +347,15 @@ impl PriorityTaskQueue {
 		}
 
 		None
+	}
+
+	/// Returns the highest priority of all available task
+	pub fn get_highest_priority(&self) -> Priority {
+		if let Some(i) = msb(self.prio_bitmap) {
+			Priority::from(i.try_into().unwrap())
+		} else {
+			IDLE_PRIO
+		}
 	}
 }
 

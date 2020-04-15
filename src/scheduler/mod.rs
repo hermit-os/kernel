@@ -201,6 +201,12 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	/// Returns `true` if a reschedule is required
+	#[inline]
+	pub fn is_scheduling(&self) -> bool {
+		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
+	}
+
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
 		let _ = AvoidInterrupts::new();
