@@ -485,7 +485,7 @@ pub fn init_x2apic() {
 pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-	let stack = mm::allocate(KERNEL_STACK_SIZE, mm::AllocationType::NORMAL);
+	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
 		intrinsics::volatile_store(&mut (*BOOT_INFO).current_stack_address, stack as u64);
