@@ -236,66 +236,30 @@ pub fn print_information() {
 	virtual_address
 }*/
 
-bitflags! {
-	pub struct AllocationType: usize {
-		/// code execution shall be disabled for memory referenced
-		const EXECUTE_DISABLE = 1 << 0;
-		/// create a page guard before and after the memory reference
-		const PAGE_GUARD = 1 << 1;
-	}
-}
-
-impl AllocationType {
-	/// An empty set of flags for memory allocation.
-	pub const NORMAL: AllocationType = AllocationType { bits: 0 };
-}
-
-pub fn allocate(sz: usize, alloc: AllocationType) -> usize {
+pub fn allocate(sz: usize, no_execution: bool) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
-
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
-	let virtual_address = if alloc.contains(AllocationType::PAGE_GUARD) {
-		arch::mm::virtualmem::allocate(size + 2 * BasePageSize::SIZE).unwrap()
-	} else {
-		arch::mm::virtualmem::allocate(size).unwrap()
-	};
-
 	let count = size / BasePageSize::SIZE;
+
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	if alloc.contains(AllocationType::EXECUTE_DISABLE) {
+	if no_execution {
 		flags.execute_disable();
 	}
 
-	if alloc.contains(AllocationType::PAGE_GUARD) {
-		arch::mm::paging::map::<BasePageSize>(
-			virtual_address + BasePageSize::SIZE,
-			physical_address,
-			count,
-			flags,
-		);
+	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
-		virtual_address + BasePageSize::SIZE
-	} else {
-		arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
 
-		virtual_address
-	}
+	virtual_address
 }
 
-pub fn deallocate(virtual_address: usize, sz: usize, alloc: AllocationType) {
+pub fn deallocate(virtual_address: usize, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
 	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE);
-		if alloc.contains(AllocationType::PAGE_GUARD) {
-			arch::mm::virtualmem::deallocate(
-				virtual_address - BasePageSize::SIZE,
-				size + 2 * BasePageSize::SIZE,
-			);
-		} else {
-			arch::mm::virtualmem::deallocate(virtual_address, size);
-		}
+		arch::mm::virtualmem::deallocate(virtual_address, size);
 		arch::mm::physicalmem::deallocate(entry.address(), size);
 	} else {
 		panic!(

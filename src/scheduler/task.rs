@@ -451,7 +451,7 @@ impl Task {
 			last_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id: core_id,
-			stacks: TaskStacks::new(task.stacks.get_stack_size()),
+			stacks: task.stacks.clone(),
 			next: None,
 			prev: None,
 			tls: task.tls.clone(),

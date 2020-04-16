@@ -13,7 +13,7 @@ use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::processor;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use config::*;
 use core::{mem, ptr};
 use environment;
@@ -60,94 +60,150 @@ struct State {
 	rip: usize,
 }
 
-#[derive(Default)]
-pub struct TaskStacks {
-	/// Whether this is a boot stack
-	is_boot_stack: bool,
-	stack_size: usize,
-	/// Stack of the task
+pub struct BootStack {
+	/// stack for kernel tasks
 	stack: usize,
+	/// stack to handle interrupts
 	ist0: usize,
 }
 
+pub struct CommonStack {
+	/// start address of allocated virtual memory region
+	virt_addr: usize,
+	/// start address of allocated virtual memory region
+	phys_addr: usize,
+	/// total size of all stacks
+	total_size: usize,
+}
+pub enum TaskStacks {
+	Boot(BootStack),
+	Common(CommonStack),
+}
+
 impl TaskStacks {
-	pub fn new(size: usize) -> Self {
-		let stack_size = if size < KERNEL_STACK_SIZE {
+	pub fn new(size: usize) -> TaskStacks {
+		let user_stack_size = if size < KERNEL_STACK_SIZE {
 			KERNEL_STACK_SIZE
 		} else {
 			align_up!(size, BasePageSize::SIZE)
 		};
+		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
+		let virt_addr =
+			::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE).unwrap();
+		let phys_addr = ::arch::mm::physicalmem::allocate(total_size).unwrap();
 
-		debug!("Create stack with a size of {} KB", stack_size >> 10);
-
-		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-		let stack = ::mm::allocate(
-			stack_size,
-			::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
+		debug!(
+			"Create stacks at {:#X} with a size of {} KB",
+			virt_addr,
+			total_size >> 10
 		);
-		debug!("Allocating stack {:#X}", stack);
-		let ist0 = ::mm::allocate(
-			KERNEL_STACK_SIZE,
-			::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
-		);
-		debug!("Allocating ist0 {:#X}", ist0);
 
-		Self {
-			is_boot_stack: false,
-			stack_size: stack_size,
-			stack: stack,
-			ist0: ist0,
-		}
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+
+		// map IST0 into the address space
+		::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + BasePageSize::SIZE,
+			phys_addr,
+			KERNEL_STACK_SIZE / BasePageSize::SIZE,
+			flags,
+		);
+
+		// map kernel stack into the address space
+		::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
+			phys_addr + KERNEL_STACK_SIZE,
+			DEFAULT_STACK_SIZE / BasePageSize::SIZE,
+			flags,
+		);
+
+		// map user stack into the address space
+		::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
+			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
+			user_stack_size / BasePageSize::SIZE,
+			flags,
+		);
+
+		TaskStacks::Common(CommonStack {
+			virt_addr: virt_addr,
+			phys_addr: phys_addr,
+			total_size: total_size,
+		})
 	}
 
-	pub fn from_boot_stacks() -> Self {
+	pub fn from_boot_stacks() -> TaskStacks {
 		let tss = unsafe { &(*PERCORE.tss.get()) };
 		let stack = tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE;
 		debug!("Using boot stack {:#X}", stack);
 		let ist0 = tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE;
 		debug!("IST0 is located at {:#X}", ist0);
 
-		Self {
-			is_boot_stack: true,
-			stack_size: KERNEL_STACK_SIZE,
+		TaskStacks::Boot(BootStack {
 			stack: stack,
 			ist0: ist0,
+		})
+	}
+
+	pub fn get_user_stack_size(&self) -> usize {
+		match self {
+			TaskStacks::Boot(_) => 0,
+			TaskStacks::Common(stacks) => {
+				stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE
+			}
 		}
 	}
 
-	#[inline]
-	pub fn get_stack_size(&self) -> usize {
-		self.stack_size
-	}
-
-	#[inline]
 	pub fn get_stack_address(&self) -> usize {
-		self.stack
+		match self {
+			TaskStacks::Boot(stacks) => stacks.stack,
+			TaskStacks::Common(stacks) => {
+				stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE
+			}
+		}
 	}
 
-	#[inline]
 	pub fn get_ist0(&self) -> usize {
-		self.ist0
+		match self {
+			TaskStacks::Boot(stacks) => stacks.ist0,
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
+		}
 	}
 }
 
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
-		if !self.is_boot_stack {
-			debug!(
-				"Deallocating stack {:#X} and ist0 {:#X}",
-				self.stack, self.ist0
-			);
-			::mm::deallocate(
-				self.stack,
-				self.stack_size,
-				::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
-			);
-			::mm::deallocate(
-				self.ist0,
-				KERNEL_STACK_SIZE,
-				::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
-			);
+		// we should never deallocate a boot stack
+		match self {
+			TaskStacks::Boot(_) => {}
+			TaskStacks::Common(stacks) => {
+				debug!(
+					"Deallocating stacks at {:#X} with a size of {} KB",
+					stacks.virt_addr,
+					stacks.total_size >> 10,
+				);
+
+				::arch::mm::paging::unmap::<BasePageSize>(
+					stacks.virt_addr,
+					stacks.total_size / BasePageSize::SIZE + 4,
+				);
+				::arch::mm::virtualmem::deallocate(
+					stacks.virt_addr,
+					stacks.total_size + 4 * BasePageSize::SIZE,
+				);
+				::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
+			}
+		}
+	}
+}
+
+impl Clone for TaskStacks {
+	fn clone(&self) -> TaskStacks {
+		match self {
+			TaskStacks::Boot(_) => TaskStacks::new(0),
+			TaskStacks::Common(stacks) => {
+				TaskStacks::new(stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE)
+			}
 		}
 	}
 }
@@ -168,7 +224,7 @@ impl TaskTLS {
 		// We allocate in BasePageSize granularity, so we don't have to manually impose an
 		// additional alignment for TLS variables.
 		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
-		let ptr = ::mm::allocate(memory_size, ::mm::AllocationType::EXECUTE_DISABLE);
+		let ptr = ::mm::allocate(memory_size, true);
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr + align_up!(tls_size, 32);
@@ -224,11 +280,7 @@ impl Drop for TaskTLS {
 			"Deallocate TLS at 0x{:x} (size 0x{:x})",
 			self.address, self.size
 		);
-		mm::deallocate(
-			self.address,
-			self.size,
-			::mm::AllocationType::EXECUTE_DISABLE,
-		);
+		mm::deallocate(self.address, self.size);
 	}
 }
 
@@ -270,10 +322,11 @@ impl TaskFrame for Task {
 
 		unsafe {
 			// Mark the entire stack with 0xCD.
-			ptr::write_bytes(self.stacks.stack as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
+			//ptr::write_bytes(self.stacks.get_stack_address() as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
 
 			// Set a marker for debugging at the very top.
-			let mut stack = (self.stacks.stack + DEFAULT_STACK_SIZE - 0x10) as *mut usize;
+			let mut stack =
+				(self.stacks.get_stack_address() + DEFAULT_STACK_SIZE - 0x10) as *mut usize;
 			*stack = 0xDEAD_BEEFusize;
 
 			// Put the leave_task function on the stack.

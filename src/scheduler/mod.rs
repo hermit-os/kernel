@@ -292,10 +292,10 @@ impl PerCoreScheduler {
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
 		let current_task_borrowed = self.current_task.borrow();
-		let stack_size = current_task_borrowed.stacks.get_stack_size();
 		let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-		tss.rsp[0] = (current_task_borrowed.stacks.get_stack_address() + stack_size - 0x10) as u64;
+		tss.rsp[0] =
+			(current_task_borrowed.stacks.get_stack_address() + DEFAULT_STACK_SIZE - 0x10) as u64;
 		tss.ist[0] = (current_task_borrowed.stacks.get_ist0() + KERNEL_STACK_SIZE - 0x10) as u64;
 	}
 
