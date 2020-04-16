@@ -232,13 +232,7 @@ fn boot_processor_main() -> ! {
 	}
 
 	// Start the initd task.
-	scheduler::PerCoreScheduler::spawn(
-		initd,
-		0,
-		scheduler::task::NORMAL_PRIO,
-		0,
-		DEFAULT_STACK_SIZE,
-	);
+	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
