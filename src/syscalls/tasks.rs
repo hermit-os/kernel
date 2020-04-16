@@ -8,7 +8,7 @@
 use arch;
 use arch::kernel::get_processor_count;
 use arch::percore::*;
-use config::DEFAULT_STACK_SIZE;
+use config::USER_STACK_SIZE;
 use core::convert::TryInto;
 use core::isize;
 #[cfg(feature = "newlib")]
@@ -213,7 +213,7 @@ pub extern "C" fn sys_spawn(
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	sys_spawn2(id, func, arg, prio, DEFAULT_STACK_SIZE, selector)
+	sys_spawn2(id, func, arg, prio, USER_STACK_SIZE, selector)
 }
 
 #[no_mangle]
