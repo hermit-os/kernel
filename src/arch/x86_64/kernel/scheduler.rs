@@ -81,9 +81,15 @@ impl TaskStacks {
 		debug!("Create stack with a size of {} KB", stack_size >> 10);
 
 		// Allocate an executable stack to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
-		let stack = ::mm::allocate(stack_size, false);
+		let stack = ::mm::allocate(
+			stack_size,
+			::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
+		);
 		debug!("Allocating stack {:#X}", stack);
-		let ist0 = ::mm::allocate(KERNEL_STACK_SIZE, false);
+		let ist0 = ::mm::allocate(
+			KERNEL_STACK_SIZE,
+			::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
+		);
 		debug!("Allocating ist0 {:#X}", ist0);
 
 		Self {
@@ -132,8 +138,16 @@ impl Drop for TaskStacks {
 				"Deallocating stack {:#X} and ist0 {:#X}",
 				self.stack, self.ist0
 			);
-			::mm::deallocate(self.stack, self.stack_size);
-			::mm::deallocate(self.ist0, KERNEL_STACK_SIZE);
+			::mm::deallocate(
+				self.stack,
+				self.stack_size,
+				::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
+			);
+			::mm::deallocate(
+				self.ist0,
+				KERNEL_STACK_SIZE,
+				::mm::AllocationType::EXECUTE_DISABLE | ::mm::AllocationType::PAGE_GUARD,
+			);
 		}
 	}
 }
@@ -154,7 +168,7 @@ impl TaskTLS {
 		// We allocate in BasePageSize granularity, so we don't have to manually impose an
 		// additional alignment for TLS variables.
 		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
-		let ptr = mm::allocate(memory_size, true);
+		let ptr = ::mm::allocate(memory_size, ::mm::AllocationType::EXECUTE_DISABLE);
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr + align_up!(tls_size, 32);
@@ -210,7 +224,11 @@ impl Drop for TaskTLS {
 			"Deallocate TLS at 0x{:x} (size 0x{:x})",
 			self.address, self.size
 		);
-		mm::deallocate(self.address, self.size);
+		mm::deallocate(
+			self.address,
+			self.size,
+			::mm::AllocationType::EXECUTE_DISABLE,
+		);
 	}
 }
 

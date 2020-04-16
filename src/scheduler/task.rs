@@ -462,6 +462,12 @@ impl Task {
 	}
 }
 
+/*impl Drop for Task {
+	fn drop(&mut self) {
+		debug!("Drop task {}", self.id);
+	}
+}*/
+
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,
 	wakeup_time: Option<u64>,

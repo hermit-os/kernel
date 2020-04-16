@@ -556,7 +556,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 			}
 			_ => {
 				return Ok(());
-			},
+			}
 		}
 	}
 
