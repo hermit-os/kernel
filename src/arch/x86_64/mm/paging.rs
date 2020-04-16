@@ -410,10 +410,15 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		self.entries[index].set(
-			physical_address,
-			PageTableEntryFlags::DIRTY | S::MAP_EXTRA_FLAG | flags,
-		);
+		if flags == PageTableEntryFlags::BLANK {
+			// in this case we unmap the pages
+			self.entries[index].set(physical_address, flags);
+		} else {
+			self.entries[index].set(
+				physical_address,
+				PageTableEntryFlags::DIRTY | S::MAP_EXTRA_FLAG | flags,
+			);
+		}
 
 		if flush {
 			page.flush_from_tlb();
@@ -670,6 +675,18 @@ pub fn map<S: PageSize>(
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
 	root_pagetable.map_pages(range, physical_address, flags);
+}
+
+pub fn unmap<S: PageSize>(virtual_address: usize, count: usize) {
+	trace!(
+		"Unmapping virtual address {:#X} ({} pages)",
+		virtual_address,
+		count
+	);
+
+	let range = get_page_range::<S>(virtual_address, count);
+	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	root_pagetable.map_pages(range, 0, PageTableEntryFlags::BLANK);
 }
 
 pub fn identity_map(start_address: usize, end_address: usize) {
