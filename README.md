@@ -157,7 +157,7 @@ After the installation of [xbuild](https://github.com/rust-osdev/cargo-xbuild), 
 ```bash
 $ git clone https://github.com/hermitcore/rusty-loader.git
 $ cd rusty-loader
-$ cargo xbuild --target x86_64-unknown-hermit-loader.json
+$ make
 ```
 
 Afterwards, the loader is stored in `target/x86_64-unknown-hermit-loader/debug/` as `rusty-loader`.
