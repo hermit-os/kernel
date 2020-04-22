@@ -239,28 +239,36 @@ impl CpuFrequency {
 			source: CpuFrequencySources::Invalid,
 		}
 	}
-
-	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = environment::get_command_line_cpu_frequency();
+	fn set_detected_cpu_frequency(
+		&mut self,
+		mhz: u16,
+		source: CpuFrequencySources,
+	) -> Result<(), ()> {
+		//The clock frequency must never be set to zero, otherwise a division by zero will
+		//occur during runtime
 		if mhz > 0 {
 			self.mhz = mhz;
-			self.source = CpuFrequencySources::CommandLine;
+			self.source = source;
 			Ok(())
 		} else {
 			Err(())
 		}
 	}
 
+	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
+		let mhz = environment::get_command_line_cpu_frequency();
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
+	}
+
 	unsafe fn detect_from_cpuid(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		let processor_frequency_info = cpuid.get_processor_frequency_info();
 
-		if processor_frequency_info.is_some() {
-			self.mhz = processor_frequency_info.unwrap().processor_base_frequency();
-			self.source = CpuFrequencySources::CpuId;
-
-			Ok(())
-		} else {
-			Err(())
+		match processor_frequency_info {
+			Some(freq_info) => {
+				let mhz = freq_info.processor_base_frequency();
+				self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuId)
+			}
+			None => Err(()),
 		}
 	}
 
@@ -268,10 +276,8 @@ impl CpuFrequency {
 		let tsc_info = cpuid.get_tsc_info();
 
 		if tsc_info.is_some() {
-			self.mhz = (tsc_info.unwrap().tsc_frequency() / 1000000u64) as u16;
-			self.source = CpuFrequencySources::CpuIdTscInfo;
-
-			Ok(())
+			let mhz = (tsc_info.unwrap().tsc_frequency() / 1000000u64) as u16;
+			self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 		} else {
 			Err(())
 		}
@@ -299,9 +305,8 @@ impl CpuFrequency {
 				hundred_char.to_digit(10),
 				ten_char.to_digit(10),
 			) {
-				self.mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
-				self.source = CpuFrequencySources::CpuIdBrandString;
-				return Ok(());
+				let mhz = (thousand * 1000 + hundred * 100 + ten * 10) as u16;
+				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo);
 			}
 		}
 
@@ -310,13 +315,7 @@ impl CpuFrequency {
 
 	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
-		if cpu_freq > 0 {
-			self.mhz = cpu_freq as u16;
-			self.source = CpuFrequencySources::Hypervisor;
-			return Ok(());
-		}
-
-		Err(())
+		self.set_detected_cpu_frequency(cpu_freq as u16, CpuFrequencySources::Hypervisor)
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
@@ -397,10 +396,8 @@ impl CpuFrequency {
 
 		// Calculate the CPU frequency out of this measurement.
 		let cycle_count = end - start;
-		self.mhz = (measurement_frequency * cycle_count / (1_000_000 * tick_count)) as u16;
-		self.source = CpuFrequencySources::Measurement;
-
-		Ok(())
+		let mhz = (measurement_frequency * cycle_count / (1_000_000 * tick_count)) as u16;
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::Measurement)
 	}
 
 	unsafe fn detect(&mut self) {
