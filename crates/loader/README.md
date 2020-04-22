@@ -10,7 +10,7 @@ $ cargo install cargo-xbuild
 Afterwards, the loader can be build as follows:
 
 ```bash
-$ cargo xbuild --target x86_64-unknown-hermit-loader.json
+$ make
 ```
 
 Afterwards, the loader is stored in `target/x86_64-unknown-hermit-loader/debug/` as `rusty-loader`.
