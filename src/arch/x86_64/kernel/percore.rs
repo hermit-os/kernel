@@ -65,13 +65,13 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		llvm_asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	default unsafe fn set(&self, value: T) {
-		asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		llvm_asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 

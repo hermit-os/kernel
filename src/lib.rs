@@ -24,7 +24,6 @@
 #![allow(clippy::forget_copy)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
-#![feature(asm)]
 #![feature(const_fn)]
 #![feature(lang_items)]
 #![feature(linkage)]

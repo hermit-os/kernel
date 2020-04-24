@@ -598,7 +598,7 @@ pub fn ipi_tlb_flush() {
 
 		// Ensure that all memory operations have completed before issuing a TLB flush.
 		unsafe {
-			asm!("mfence" ::: "memory" : "volatile");
+			llvm_asm!("mfence" ::: "memory" : "volatile");
 		}
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.

@@ -168,11 +168,11 @@ impl FPUState {
 		if supports_xsave() {
 			let bitmask = u32::MAX;
 			unsafe {
-				asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
+				llvm_asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
 			}
 		} else {
 			unsafe {
-				asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+				llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
 			}
 		}
 	}
@@ -181,24 +181,24 @@ impl FPUState {
 		if supports_xsave() {
 			let bitmask: u32 = u32::MAX;
 			unsafe {
-				asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
+				llvm_asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
 			}
 		} else {
 			unsafe {
-				asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+				llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
 			}
 		}
 	}
 
 	pub fn restore_common(&self) {
 		unsafe {
-			asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+			llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+			llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
 		}
 	}
 }
@@ -853,7 +853,7 @@ pub fn generate_random_number() -> Option<u32> {
 	if unsafe { SUPPORTS_RDRAND } {
 		let value: u32;
 		unsafe {
-			asm!("rdrand $0" : "=r"(value) ::: "volatile");
+			llvm_asm!("rdrand $0" : "=r"(value) ::: "volatile");
 		}
 		Some(value)
 	} else {
@@ -907,7 +907,7 @@ pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
 		let ret: u64;
 		unsafe {
-			asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile");
+			llvm_asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile");
 		}
 		Some(ret)
 	} else {
@@ -918,7 +918,7 @@ pub fn msb(value: u64) -> Option<u64> {
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
-		asm!("hlt" :::: "volatile");
+		llvm_asm!("hlt" :::: "volatile");
 	}
 }
 
@@ -947,7 +947,7 @@ pub fn get_frequency() -> u16 {
 pub fn readfs() -> usize {
 	let val: u64;
 	unsafe {
-		asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
+		llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
 	}
 	val as usize
 }
@@ -956,7 +956,7 @@ pub fn readfs() -> usize {
 pub fn readgs() -> usize {
 	let val: u64;
 	unsafe {
-		asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
+		llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
 	}
 	val as usize
 }
@@ -964,14 +964,14 @@ pub fn readgs() -> usize {
 #[inline]
 pub fn writefs(fs: usize) {
 	unsafe {
-		asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
+		llvm_asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
 	}
 }
 
 #[inline]
 pub fn writegs(gs: usize) {
 	unsafe {
-		asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile");
+		llvm_asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile");
 	}
 }
 
@@ -982,16 +982,16 @@ pub fn get_timestamp() -> u64 {
 
 #[inline]
 unsafe fn get_timestamp_rdtsc() -> u64 {
-	asm!("lfence" ::: "memory" : "volatile");
+	llvm_asm!("lfence" ::: "memory" : "volatile");
 	let value = rdtsc();
-	asm!("lfence" ::: "memory" : "volatile");
+	llvm_asm!("lfence" ::: "memory" : "volatile");
 	value
 }
 
 #[inline]
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	let value = rdtscp();
-	asm!("lfence" ::: "memory" : "volatile");
+	llvm_asm!("lfence" ::: "memory" : "volatile");
 	value
 }
 

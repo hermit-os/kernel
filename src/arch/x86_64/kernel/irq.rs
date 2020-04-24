@@ -58,7 +58,7 @@ impl fmt::Debug for ExceptionStackFrame {
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe { asm!("sti" :::: "volatile") };
+	unsafe { llvm_asm!("sti" :::: "volatile") };
 }
 
 /// Enable Interrupts and wait for the next interrupt (HLT instruction)
@@ -67,13 +67,13 @@ pub fn enable() {
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
 pub fn enable_and_wait() {
-	unsafe { asm!("sti; hlt" :::: "volatile") };
+	unsafe { llvm_asm!("sti; hlt" :::: "volatile") };
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { asm!("cli" :::: "volatile") };
+	unsafe { llvm_asm!("cli" :::: "volatile") };
 }
 
 /// Disable IRQs (nested)
@@ -88,7 +88,7 @@ pub fn nested_disable() -> bool {
 	let result = unsafe {
 		let flags: u64;
 
-		asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
+		llvm_asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
 		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
 	};
 
@@ -376,7 +376,7 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut Exce
 
 	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
 	unsafe {
-		asm!("clts" :::: "volatile");
+		llvm_asm!("clts" :::: "volatile");
 	}
 
 	// Let the scheduler set up the FPU for the current task.
