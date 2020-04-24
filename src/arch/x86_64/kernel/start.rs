@@ -16,7 +16,7 @@ use x86::controlregs::*;
 #[naked]
 pub unsafe extern "C" fn _start(boot_info: &'static mut BootInfo) -> ! {
 	// initialize stack pointer
-	asm!("mov $0, %rsp; mov %rsp, %rbp"
+	llvm_asm!("mov $0, %rsp; mov %rsp, %rbp"
 		:: "r"(boot_info.current_stack_address + KERNEL_STACK_SIZE as u64 - 0x10)
 		:: "volatile");
 

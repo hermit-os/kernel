@@ -12,7 +12,7 @@ pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
 	// rsi = new_stack => stack pointer of the new task
 
 	unsafe {
-		asm!(
+		llvm_asm!(
 			// store context
 			"pushfq\n\t\
 			push %rax\n\t\
