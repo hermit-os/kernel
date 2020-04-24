@@ -7,7 +7,7 @@
 
 use arch;
 use errno::*;
-use syscalls::sys_usleep;
+use syscalls::__sys_usleep;
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]
@@ -46,8 +46,7 @@ fn microseconds_to_timeval(microseconds: u64, result: &mut timeval) {
 	result.tv_usec = (microseconds % 1_000_000) as i64;
 }
 
-#[no_mangle]
-pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
+fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),
 		"sys_clock_getres called with a zero res parameter"
@@ -68,7 +67,11 @@ pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
+pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
+	kernel_function!(__sys_clock_getres(clock_id, res))
+}
+
+fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	assert!(
 		!tp.is_null(),
 		"sys_clock_gettime called with a zero tp parameter"
@@ -97,7 +100,11 @@ pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clock_nanosleep(
+pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
+	kernel_function!(__sys_clock_gettime(clock_id, tp))
+}
+
+fn __sys_clock_nanosleep(
 	clock_id: u64,
 	flags: i32,
 	rqtp: *const timespec,
@@ -129,7 +136,7 @@ pub extern "C" fn sys_clock_nanosleep(
 				}
 			}
 
-			sys_usleep(microseconds);
+			__sys_usleep(microseconds);
 			0
 		}
 		_ => -EINVAL,
@@ -137,14 +144,27 @@ pub extern "C" fn sys_clock_nanosleep(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32 {
+pub extern "C" fn sys_clock_nanosleep(
+	clock_id: u64,
+	flags: i32,
+	rqtp: *const timespec,
+	rmtp: *mut timespec,
+) -> i32 {
+	kernel_function!(__sys_clock_nanosleep(clock_id, flags, rqtp, rmtp))
+}
+
+fn __sys_clock_settime(_clock_id: u64, _tp: *const timespec) -> i32 {
 	// We don't support setting any clocks yet.
 	debug!("sys_clock_settime is unimplemented, returning -EINVAL");
 	-EINVAL
 }
 
 #[no_mangle]
-pub extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
+pub extern "C" fn sys_clock_settime(clock_id: u64, tp: *const timespec) -> i32 {
+	kernel_function!(__sys_clock_settime(clock_id, tp))
+}
+
+fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
@@ -161,11 +181,21 @@ pub extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_setitimer(
-	_which: i32,
-	_value: *const itimerval,
-	_ovalue: *mut itimerval,
-) -> i32 {
+pub extern "C" fn sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
+	kernel_function!(__sys_gettimeofday(tp, tz))
+}
+
+#[no_mangle]
+fn __sys_setitimer(_which: i32, _value: *const itimerval, _ovalue: *mut itimerval) -> i32 {
 	debug!("Called sys_setitimer, which is unimplemented and always returns 0");
 	0
+}
+
+#[no_mangle]
+pub extern "C" fn sys_setitimer(
+	which: i32,
+	value: *const itimerval,
+	ovalue: *mut itimerval,
+) -> i32 {
+	kernel_function!(__sys_setitimer(which, value, ovalue))
 }

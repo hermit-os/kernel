@@ -30,8 +30,7 @@ impl Drop for CondQueue {
 	}
 }
 
-#[no_mangle]
-pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
+unsafe fn __sys_destroy_queue(ptr: usize) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
 		debug!("sys_wait: ivalid address to condition variable");
@@ -50,7 +49,11 @@ pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
+pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
+	kernel_function!(__sys_destroy_queue(ptr))
+}
+
+unsafe fn __sys_notify(ptr: usize, count: i32) -> i32 {
 	let id = ptr as *const usize;
 	if id.is_null() || *id == 0 {
 		// invalid argument
@@ -80,7 +83,11 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
+	kernel_function!(__sys_notify(ptr, count))
+}
+
+unsafe fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
 		debug!("sys_wait: ivalid address to condition variable");
@@ -109,9 +116,18 @@ pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 }
 
 #[no_mangle]
-pub fn sys_wait(_ptr: usize) -> i32 {
+pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+	kernel_function!(__sys_add_queue(ptr, timeout_ns))
+}
+
+fn __sys_wait(_ptr: usize) -> i32 {
 	// Switch to the next task.
 	core_scheduler().reschedule();
 
 	0
+}
+
+#[no_mangle]
+pub fn sys_wait(ptr: usize) -> i32 {
+	kernel_function!(__sys_wait(ptr))
 }

@@ -12,7 +12,6 @@ use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::idt;
 use arch::x86_64::kernel::irq;
 use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::processor;
 use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use config::*;
 use core::{mem, ptr};
@@ -154,7 +153,16 @@ impl TaskStacks {
 		}
 	}
 
-	pub fn get_stack_address(&self) -> usize {
+	pub fn get_user_stack(&self) -> usize {
+		match self {
+			TaskStacks::Boot(_) => 0,
+			TaskStacks::Common(stacks) => {
+				stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
+			}
+		}
+	}
+
+	pub fn get_kernel_stack(&self) -> usize {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
 			TaskStacks::Common(stacks) => {
@@ -163,11 +171,22 @@ impl TaskStacks {
 		}
 	}
 
-	pub fn get_ist0(&self) -> usize {
+	pub fn get_kernel_stack_size(&self) -> usize {
+		match self {
+			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
+			TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
+		}
+	}
+
+	pub fn get_interupt_stack(&self) -> usize {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.ist0,
 			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
 		}
+	}
+
+	pub fn get_interupt_stack_size(&self) -> usize {
+		KERNEL_STACK_SIZE
 	}
 }
 
@@ -290,24 +309,20 @@ impl Clone for TaskTLS {
 	}
 }
 
-extern "C" fn leave_task() -> ! {
-	debug!("Leave task {}", core_scheduler().get_current_task_id());
-	core_scheduler().exit(0);
-}
-
 #[cfg(test)]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
 
 #[cfg(not(test))]
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
-	debug!(
-		"Enter task {} with fs 0x{:x}",
-		core_scheduler().get_current_task_id(),
-		processor::readfs()
-	);
-
+#[inline(never)]
+#[naked]
+extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Call the actual entry point of the task.
+	switch_to_user!();
 	func(arg);
+	switch_to_kernel!();
+
+	// Exit task
+	core_scheduler().exit(0);
 }
 
 impl TaskFrame for Task {
@@ -321,18 +336,10 @@ impl TaskFrame for Task {
 		};
 
 		unsafe {
-			// Mark the entire stack with 0xCD.
-			//ptr::write_bytes(self.stacks.get_stack_address() as *mut u8, 0xCD, DEFAULT_STACK_SIZE);
-
 			// Set a marker for debugging at the very top.
-			let mut stack =
-				(self.stacks.get_stack_address() + DEFAULT_STACK_SIZE - 0x10) as *mut usize;
+			let mut stack = (self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
+				- 0x10) as *mut usize;
 			*stack = 0xDEAD_BEEFusize;
-
-			// Put the leave_task function on the stack.
-			// When the task has finished, it will call this function by returning.
-			stack = (stack as usize - mem::size_of::<usize>()) as *mut usize;
-			*stack = leave_task as usize;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
 			stack = (stack as usize - mem::size_of::<State>()) as *mut usize;
@@ -352,6 +359,8 @@ impl TaskFrame for Task {
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
 			self.last_stack_pointer = stack as usize;
+			self.user_stack_pointer =
+				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10;
 		}
 	}
 }

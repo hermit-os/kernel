@@ -20,6 +20,8 @@ pub struct PerCoreVariables {
 	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: PerCoreVariable<*mut TaskStateSegment>,
+	/// start address of the kernel stack
+	pub kernel_stack: PerCoreVariable<u64>,
 }
 
 impl PerCoreVariables {
@@ -28,6 +30,7 @@ impl PerCoreVariables {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
 			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
+			kernel_stack: PerCoreVariable::new(0),
 		}
 	}
 }
@@ -82,13 +85,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	unsafe fn get(&self) -> T {
 		let value: T;
-		asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
+		llvm_asm!("movl %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
 	unsafe fn set(&self, value: T) {
-		asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+		llvm_asm!("movl $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 }
 
@@ -101,6 +104,16 @@ pub fn core_id() -> CoreId {
 #[cfg(test)]
 pub fn core_id() -> CoreId {
 	0
+}
+
+#[inline(always)]
+pub fn get_kernel_stack() -> u64 {
+	unsafe { PERCORE.kernel_stack.get() }
+}
+
+#[inline]
+pub fn set_kernel_stack(addr: u64) {
+	unsafe { PERCORE.kernel_stack.set(addr) }
 }
 
 #[inline]

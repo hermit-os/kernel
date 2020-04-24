@@ -28,6 +28,7 @@
 #![feature(const_fn)]
 #![feature(lang_items)]
 #![feature(linkage)]
+#![feature(llvm_asm)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]
@@ -66,8 +67,6 @@ mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
-#[cfg(not(feature = "newlib"))]
-mod rlib;
 #[cfg(not(test))]
 mod runtime_glue;
 mod scheduler;
@@ -89,8 +88,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 /// Interface to allocate memory from system heap
 #[cfg(not(test))]
-#[no_mangle]
-pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
+pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
 	let ptr;
 
@@ -99,7 +97,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	}
 
 	trace!(
-		"sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})",
+		"__sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})",
 		ptr as usize,
 		size,
 		align
@@ -110,8 +108,7 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 
 /// Interface to increase the size of a memory region
 #[cfg(not(test))]
-#[no_mangle]
-pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
+pub fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
 	let new_ptr;
 
@@ -120,7 +117,7 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 	}
 
 	trace!(
-		"sys_realloc: resize memory at 0x{:x}, new address 0x{:x}",
+		"__sys_realloc: resize memory at 0x{:x}, new address 0x{:x}",
 		ptr as usize,
 		new_ptr as usize
 	);
@@ -130,8 +127,7 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 
 /// Interface to deallocate a memory region from the system heap
 #[cfg(not(test))]
-#[no_mangle]
-pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
+pub fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	let layout: Layout = Layout::from_size_align(size, align).unwrap();
 
 	trace!(
