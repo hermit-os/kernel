@@ -91,6 +91,7 @@ pub fn add_current_core() {
 	boxed_tss.rsp[0] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).current_stack_address) }
 		+ KERNEL_STACK_SIZE as u64
 		- 0x10;
+	set_kernel_stack(boxed_tss.rsp[0] as u64);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.

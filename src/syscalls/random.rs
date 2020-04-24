@@ -17,13 +17,17 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-#[no_mangle]
-pub extern "C" fn sys_rand() -> u32 {
+fn __sys_rand() -> u32 {
 	if let Some(value) = arch::processor::generate_random_number() {
 		value
 	} else {
 		generate_park_miller_lehmer_random_number()
 	}
+}
+
+#[no_mangle]
+pub extern "C" fn sys_rand() -> u32 {
+	kernel_function!(__sys_rand())
 }
 
 pub fn random_init() {

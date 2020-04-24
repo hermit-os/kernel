@@ -8,7 +8,7 @@
 
 macro_rules! align_down {
 	($value:expr, $alignment:expr) => {
-		$value & !($alignment - 1)
+		($value) & !($alignment - 1)
 	};
 }
 
@@ -32,4 +32,61 @@ macro_rules! print {
 /// Print formatted text to our console, followed by a newline.
 macro_rules! println {
 	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
+}
+
+macro_rules! switch_to_kernel {
+	() => {
+		#[allow(unused)]
+		unsafe {
+			let user_stack_pointer;
+			// Store the user stack pointer and switch to the kernel stack
+			llvm_asm!(
+				"mov %rsp, $0; mov $1, %rsp"
+				: "=r"(user_stack_pointer) : "r"(get_kernel_stack()) :: "volatile"
+			);
+			core_scheduler().set_current_user_stack(user_stack_pointer);
+		}
+	}
+}
+
+macro_rules! switch_to_user {
+	() => {
+		use arch::kernel::percore::*;
+
+		let user_stack_pointer = core_scheduler().get_current_user_stack();
+		#[allow(unused)]
+		unsafe {
+			// Switch to the user stack
+			llvm_asm!("mov $0, %rsp" :: "r"(user_stack_pointer) :: "volatile");
+		}
+	}
+}
+
+macro_rules! kernel_function {
+	($f:ident($($x:tt)*)) => {{
+		use arch::kernel::percore::*;
+
+		#[allow(unused)]
+		unsafe {
+			let user_stack_pointer;
+			// Store the user stack pointer and switch to the kernel stack
+			llvm_asm!(
+				"mov %rsp, $0; mov $1, %rsp"
+				: "=r"(user_stack_pointer)
+				: "r"(get_kernel_stack())
+				:: "volatile"
+			);
+			core_scheduler().set_current_user_stack(user_stack_pointer);
+
+			let ret = $f($($x)*);
+
+			// Switch to the user stack
+			llvm_asm!("mov $0, %rsp"
+				:: "r"(core_scheduler().get_current_user_stack())
+				:: "volatile"
+			);
+
+			ret
+		}
+	}};
 }

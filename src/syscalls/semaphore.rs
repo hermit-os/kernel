@@ -10,8 +10,7 @@ use arch;
 use errno::*;
 use synch::semaphore::Semaphore;
 
-#[no_mangle]
-pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
+fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -25,7 +24,11 @@ pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+pub extern "C" fn sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
+	kernel_function!(__sys_sem_init(sem, value))
+}
+
+fn __sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -39,7 +42,11 @@ pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
+pub extern "C" fn sys_sem_destroy(sem: *mut Semaphore) -> i32 {
+	kernel_function!(__sys_sem_destroy(sem))
+}
+
+fn __sys_sem_post(sem: *const Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -51,7 +58,11 @@ pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
+pub extern "C" fn sys_sem_post(sem: *const Semaphore) -> i32 {
+	kernel_function!(__sys_sem_post(sem))
+}
+
+fn __sys_sem_trywait(sem: *const Semaphore) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -66,7 +77,11 @@ pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+pub extern "C" fn sys_sem_trywait(sem: *const Semaphore) -> i32 {
+	kernel_function!(__sys_sem_trywait(sem))
+}
+
+fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 	if sem.is_null() {
 		return -EINVAL;
 	}
@@ -88,6 +103,15 @@ pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+pub extern "C" fn sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
+	kernel_function!(__sys_sem_timedwait(sem, ms))
+}
+
+fn __sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
 	sys_sem_timedwait(sem, ms)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_sem_cancelablewait(sem: *const Semaphore, ms: u32) -> i32 {
+	kernel_function!(__sys_sem_cancelablewait(sem, ms))
 }

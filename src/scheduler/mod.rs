@@ -289,14 +289,34 @@ impl PerCoreScheduler {
 		self.current_task.borrow_mut().last_wakeup_reason = reason;
 	}
 
+	#[inline]
+	pub fn get_current_user_stack(&self) -> usize {
+		self.current_task.borrow().user_stack_pointer
+	}
+
+	#[inline]
+	pub fn set_current_user_stack(&mut self, addr: usize) {
+		self.current_task.borrow_mut().user_stack_pointer = addr;
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	#[inline]
+	pub fn get_current_kernel_stack(&self) -> usize {
+		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10
+	}
+
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
 		let current_task_borrowed = self.current_task.borrow();
 		let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-		tss.rsp[0] =
-			(current_task_borrowed.stacks.get_stack_address() + DEFAULT_STACK_SIZE - 0x10) as u64;
-		tss.ist[0] = (current_task_borrowed.stacks.get_ist0() + KERNEL_STACK_SIZE - 0x10) as u64;
+		tss.rsp[0] = (current_task_borrowed.stacks.get_kernel_stack()
+			+ current_task_borrowed.stacks.get_kernel_stack_size()
+			- 0x10) as u64;
+		set_kernel_stack(tss.rsp[0]);
+		tss.ist[0] = (current_task_borrowed.stacks.get_interupt_stack()
+			+ current_task_borrowed.stacks.get_interupt_stack_size()
+			- 0x10) as u64;
 	}
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,

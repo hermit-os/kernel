@@ -221,18 +221,18 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
 
 		// create array to receive all arguments
-		let argv_raw = ::sys_malloc(
+		let argv_raw = ::__sys_malloc(
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
-		let argv_phy_raw = ::sys_malloc(
+		let argv_phy_raw = ::__sys_malloc(
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
 		let argv = unsafe { slice::from_raw_parts_mut(argv_raw, syscmdsize.argc as usize) };
 		let argv_phy = unsafe { slice::from_raw_parts_mut(argv_phy_raw, syscmdsize.argc as usize) };
 		for i in 0..syscmdsize.argc as usize {
-			argv[i] = ::sys_malloc(
+			argv[i] = ::__sys_malloc(
 				syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
 				1,
 			);
@@ -240,11 +240,11 @@ impl SyscallInterface for Uhyve {
 		}
 
 		// create array to receive the environment
-		let env_raw = ::sys_malloc(
+		let env_raw = ::__sys_malloc(
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
-		let env_phy_raw = ::sys_malloc(
+		let env_phy_raw = ::__sys_malloc(
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
@@ -252,7 +252,7 @@ impl SyscallInterface for Uhyve {
 		let env_phy =
 			unsafe { slice::from_raw_parts_mut(env_phy_raw, (syscmdsize.envc + 1) as usize) };
 		for i in 0..syscmdsize.envc as usize {
-			env[i] = ::sys_malloc(
+			env[i] = ::__sys_malloc(
 				syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
 				1,
 			);
@@ -266,12 +266,12 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
 
 		// free temporary array
-		::sys_free(
+		::__sys_free(
 			argv_phy_raw as *mut u8,
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		);
-		::sys_free(
+		::__sys_free(
 			env_phy_raw as *mut u8,
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
