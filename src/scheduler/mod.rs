@@ -337,7 +337,9 @@ impl PerCoreScheduler {
 
 	/// Check if a finished task could be deleted.
 	/// Return true if a task is waked up
-	fn cleanup_tasks(&mut self) {
+	fn cleanup_tasks(&mut self) -> bool {
+		let mut result = false;
+
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(id) = self.finished_tasks.pop_front() {
 			debug!("Cleaning up task {}", id);
@@ -346,12 +348,15 @@ impl PerCoreScheduler {
 			match TASKS.lock().as_mut().unwrap().remove(&id) {
 				Some(mut queue) => {
 					while let Some(task) = queue.pop_front() {
+						result = true;
 						self.custom_wakeup(task);
 					}
 				}
 				None => {}
 			}
 		}
+
+		result
 	}
 
 	pub fn check_input(&mut self) {
@@ -381,14 +386,25 @@ impl PerCoreScheduler {
 		irq::disable();
 		self.scheduler();
 
+		// do housekeeping
+		let wakeup_tasks = self.cleanup_tasks();
+
 		// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 		// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
-		irq::enable_and_wait();
+		if !wakeup_tasks {
+			irq::enable_and_wait();
+		} else {
+			irq::enable();
+		}
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
 	pub fn scheduler(&mut self) {
+		// Someone wants to give up the CPU
+		// => we have time to cleanup the system
+		let _ = self.cleanup_tasks();
+
 		// Get information about the current task.
 		let (id, last_stack_pointer, prio, status) = {
 			let mut borrowed = self.current_task.borrow_mut();
@@ -399,16 +415,6 @@ impl PerCoreScheduler {
 				borrowed.status,
 			)
 		};
-
-		if status == TaskStatus::TaskFinished {
-			// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
-			self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
-			self.finished_tasks.push_back(id);
-		}
-
-		// Someone wants to give up the CPU
-		// => we have time to cleanup the system
-		self.cleanup_tasks();
 
 		let mut new_task = None;
 
@@ -435,6 +441,12 @@ impl PerCoreScheduler {
 				}
 			}
 		} else {
+			if status == TaskStatus::TaskFinished {
+				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
+				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
+				self.finished_tasks.push_back(id);
+			}
+
 			// No task is currently running.
 			// Check if there is any available task and get the one with the highest priority.
 			if let Some(task) = self.ready_queue.pop() {
@@ -563,9 +575,13 @@ fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 }
 
 pub fn join(id: TaskId) -> Result<(), ()> {
-	debug!("Waiting for task {}", id);
-
 	let core_scheduler = core_scheduler();
+
+	debug!(
+		"Task {} is waiting for task {}",
+		core_scheduler.get_current_task_id(),
+		id
+	);
 
 	{
 		let mut guard = TASKS.lock();
