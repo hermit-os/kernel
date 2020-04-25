@@ -28,6 +28,7 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+#[cfg(not(test))]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 use environment;
 #[cfg(feature = "newlib")]
