@@ -8,6 +8,6 @@
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
-		asm!("hlt" :::: "volatile");
+		llvm_asm!("hlt" :::: "volatile");
 	}
 }

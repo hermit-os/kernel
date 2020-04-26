@@ -199,5 +199,5 @@ pub unsafe fn boot_kernel(
 		"Jumping to HermitCore Application Entry Point at {:#X}",
 		entry_point
 	);
-	asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as usize) : "memory" : "volatile");
+	llvm_asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as usize) : "memory" : "volatile");
 }

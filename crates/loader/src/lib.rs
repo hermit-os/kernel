@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![feature(asm)]
 #![feature(const_fn)]
 #![feature(lang_items)]
+#![feature(llvm_asm)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]
