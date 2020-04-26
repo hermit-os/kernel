@@ -125,12 +125,14 @@ impl TaskStacks {
 		);
 
 		// clear user stack
-		ptr::write_bytes(
-			(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
-				as *mut u8,
-			0,
-			user_stack_size,
-		);
+		unsafe {
+			ptr::write_bytes(
+				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
+					as *mut u8,
+				0,
+				user_stack_size,
+			);
+		}
 
 		TaskStacks::Common(CommonStack {
 			virt_addr: virt_addr,
