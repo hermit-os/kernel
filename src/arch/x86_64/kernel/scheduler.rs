@@ -129,7 +129,7 @@ impl TaskStacks {
 			ptr::write_bytes(
 				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
 					as *mut u8,
-				0,
+				0xAC,
 				user_stack_size,
 			);
 		}
