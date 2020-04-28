@@ -39,6 +39,7 @@ impl TryFrom<i32> for SeekWhence {
 	}
 }
 
+// TODO: these are defined in hermit-abi. Should we use a constants crate imported in both?
 //const O_RDONLY: i32 = 0o0000;
 const O_WRONLY: i32 = 0o0001;
 const O_RDWR: i32 = 0o0002;
@@ -48,63 +49,8 @@ const O_TRUNC: i32 = 0o1000;
 const O_APPEND: i32 = 0o2000;
 const O_DIRECT: i32 = 0o40000;
 
-//#[cfg(not(feature = "newlib"))]
-//const O_DEC_RDONLY: i32 = 00000000;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_WRONLY: i32 = 00000001;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_RDWR: i32 = 00000002;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_CREAT: i32 = 00000100;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_EXCL: i32 = 00000200;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_TRUNC: i32 = 00001000;
-#[cfg(not(feature = "newlib"))]
-const O_DEC_APPEND: i32 = 00002000;
-
-#[cfg(not(feature = "newlib"))]
-const O_MAP: [(i32, i32); 6] = [
-	//(O_DEC_RDONLY, O_RDONLY), is 0 anyways
-	(O_DEC_WRONLY, O_WRONLY),
-	(O_DEC_RDWR, O_RDWR),
-	(O_DEC_CREAT, O_CREAT),
-	(O_DEC_EXCL, O_EXCL),
-	(O_DEC_TRUNC, O_TRUNC),
-	(O_DEC_APPEND, O_APPEND),
-];
-
 fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
-	// flags is broken in hermit stdlib! uses decimal instead of octal. convert!
-	// loop through all flag possiblities, check if one matches in decimal, choose the corrosponding octal one!
-	// TODO: fix this in stdlib
-	#[cfg(not(feature = "newlib"))]
-	let flags = {
-		let mut oflags = 0;
-		let mut dflags = 0;
-		for i in 0..2usize.pow(O_MAP.len() as u32) {
-			oflags = 0;
-			dflags = 0;
-			for t in 0..O_MAP.len() {
-				if (i >> t) & 1 == 1 {
-					dflags |= O_MAP[t].0;
-					oflags |= O_MAP[t].1;
-				}
-			}
-			if dflags == flags {
-				break;
-			}
-		}
-		if dflags != flags {
-			warn!(
-				"Syscall-flag-conversion: No matching flag mapping found! {} {}",
-				flags, mode
-			);
-		}
-		oflags
-	};
-
-	// mode is passed in as hex as well (0x777). Linux/Fuse expects octal (0o777).
+	// mode is passed in as hex (0x777). Linux/Fuse expects octal (0o777).
 	// just passing mode as is to FUSE create, leads to very weird permissions: 0b0111_0111_0111 -> 'r-x rwS rwt'
 	// TODO: change in stdlib
 	let mode =
@@ -116,6 +62,7 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 				0o777
 			}
 		};
+
 	let mut perms = FilePerms {
 		raw: flags as u32,
 		mode,
