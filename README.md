@@ -9,7 +9,7 @@
 
 [HermitCore]( http://www.hermitcore.org ) is a [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
 Unikernel means, you bundle your application directly with the kernel library, so that it can run without any installed operating system.
-This reduces overhead, therfore, interesting applications include virtual machines and high-performance computing.
+This reduces overhead, therefore, interesting applications include virtual machines and high-performance computing.
 
 The RustyHermit can run Rust applications, as well as C/C++/Go/Fortran applications.
 A tutorial on how to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
