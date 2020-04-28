@@ -94,7 +94,7 @@ impl Filesystem {
 	) -> Result<(&'a Box<dyn PosixFileSystem>, &'b str), FileError> {
 		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
 		if !path.starts_with("/") {
-			info!("Relative paths not allowed!");
+			warn!("Relative paths not allowed!");
 			return Err(FileError::ENOENT());
 		}
 		let mut pathsplit = path.splitn(3, "/");
@@ -117,14 +117,14 @@ impl Filesystem {
 	/// Looks up MOUNTPOINT in mounted dirs, passes internal-path to filesystem backend
 	/// Returns the file descriptor of the newly opened file, or an error on failure
 	pub fn open(&mut self, path: &str, perms: FilePerms) -> Result<u64, FileError> {
-		info!("Opening file {} {:?}", path, perms);
+		debug!("Opening file {} {:?}", path, perms);
 		let (fs, internal_path) = self.parse_path(path)?;
 		let file = fs.open(internal_path, perms)?;
 		Ok(self.add_file(file))
 	}
 
 	pub fn close(&mut self, fd: u64) {
-		info!("Closing fd {}", fd);
+		debug!("Closing fd {}", fd);
 		if let Some(file) = self.files.get_mut(&fd) {
 			file.close().unwrap(); // TODO: handle error
 		}

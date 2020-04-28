@@ -79,7 +79,7 @@ impl PciAdapter {
 			let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
 			let barword = read_config(bus, device, register);
 			if barword & 1 == 0 {
-				error!("Bar {} @{:x}:{:x} is memory mapped, but treated as IO mapped! this will cause errors later..", i, device_id, vendor_id);
+				debug!("Bar {} @{:x}:{:x} is memory mapped, but treated as IO mapped! this will cause errors later..", i, device_id, vendor_id);
 			}
 			base_addresses[i] = barword & 0xFFFF_FFFC;
 
@@ -183,7 +183,6 @@ impl fmt::Display for PciAdapter {
 	}
 }
 
-// TODO: use u8 for register (?)
 pub fn read_config(bus: u8, device: u8, register: u32) -> u32 {
 	let address =
 		PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;

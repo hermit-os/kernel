@@ -60,7 +60,7 @@ impl VirtiofsDriver<'_> {
 
 		// 4.1.5.1.3 Virtqueueu configuration
 		// see https://elixir.bootlin.com/linux/latest/ident/virtio_fs_setup_vqs for example
-		info!("Setting up virtqueues...");
+		debug!("Setting up virtqueues...");
 
 		if device_cfg.num_request_queues == 0 {
 			error!("0 request queues requested from device. Aborting!");
@@ -89,13 +89,13 @@ impl VirtiofsDriver<'_> {
 		device_features |= (common_cfg.device_feature as u64) << 32;
 
 		if device_features & VIRTIO_F_RING_INDIRECT_DESC != 0 {
-			info!("Device offers feature VIRTIO_F_RING_INDIRECT_DESC, ignoring");
+			debug!("Device offers feature VIRTIO_F_RING_INDIRECT_DESC, ignoring");
 		}
 		if device_features & VIRTIO_F_RING_EVENT_IDX != 0 {
-			info!("Device offers feature VIRTIO_F_RING_EVENT_IDX, ignoring");
+			debug!("Device offers feature VIRTIO_F_RING_EVENT_IDX, ignoring");
 		}
 		if device_features & VIRTIO_F_VERSION_1 != 0 {
-			info!("Device offers feature VIRTIO_F_VERSION_1, accepting.");
+			debug!("Device offers feature VIRTIO_F_VERSION_1, accepting.");
 			common_cfg.driver_feature_select = 1;
 			common_cfg.driver_feature = (VIRTIO_F_VERSION_1 >> 32) as u32;
 		}
@@ -103,7 +103,7 @@ impl VirtiofsDriver<'_> {
 			& !(VIRTIO_F_RING_INDIRECT_DESC | VIRTIO_F_RING_EVENT_IDX | VIRTIO_F_VERSION_1)
 			!= 0
 		{
-			info!(
+			debug!(
 				"Device offers unknown feature bits: {:064b}.",
 				device_features
 			);
@@ -167,18 +167,20 @@ impl FuseInterface for VirtiofsDriver<'_> {
 		T: fuse::FuseOut + core::fmt::Debug,
 	{
 		// TODO: cmd/rsp gets deallocated when leaving scope.. maybe not the best idea for DMA, but PoC works with this
-		//
-		debug!("Sending Fuse Command: {:?}", cmd);
+		//       since we are blocking until done anyways.
+		trace!("Sending Fuse Command: {:?}", cmd);
 		if let Some(ref mut vqueues) = self.vqueues {
 			if let Some(mut rsp) = rsp {
 				vqueues[1].send_blocking(&cmd.to_u8buf(), Some(&rsp.to_u8buf_mut()));
-				debug!("Got Fuse Reply: {:?}", rsp);
+				trace!("Got Fuse Reply: {:?}", rsp);
 				return Some(rsp);
 			}
 		}
 		None
 	}
-	/*
+
+	/* TODO: make TEST out of this!
+
 	pub fn send_hello(&mut self) {
 		// Setup virtio-fs (5.11 in virtio spec @ https://stefanha.github.io/virtio/virtio-fs.html#x1-41500011)
 		// 5.11.5 Device Initialization
@@ -194,7 +196,7 @@ impl FuseInterface for VirtiofsDriver<'_> {
 		// https://github.com/torvalds/linux/blob/76f6777c9cc04efe8036b1d2aa76e618c1631cc6/fs/fuse/dev.c#L1190 <<- max_write
 
 
-		/* TODO: make TEST out of this! */
+
 		/*if let Some(ref mut vqueues) = self.vqueues {
 			// TODO: this is a stack based buffer.. maybe not the best idea for DMA, but PoC works with this
 			let outbuf = [0;128];
@@ -295,36 +297,19 @@ pub fn create_virtiofs_driver(
 		vqueues: None,
 	}));
 
-	info!("Driver before init: {:?}", drv);
+	trace!("Driver before init: {:?}", drv);
 	drv.borrow_mut().init();
-	info!("Driver after init: {:?}", drv);
+	trace!("Driver after init: {:?}", drv);
 
 	// Instanciate global fuse object
-	//fuse::Fuse::<VirtiofsDriver>::create(drv.clone());
-	//fuse::create_from_virtio(drv.clone());
 	let fuse = fuse::Fuse::new(drv.clone());
 
-	//let fuse = fuse::FILESYSTEM.lock();
-	//let fuse = fuse.as_ref().unwrap();
-	// 1.FUSE_INIT to create session
+	// send FUSE_INIT to create session
 	fuse.send_init();
-	// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
-	/*let nid = fuse.lookup("testvm");
-	// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-	let fh = fuse.open(nid);
-	// 4.FUSE_READ(fh, offset, &buf, sizeof(buf)) -> nbytes
-	let dat = fuse.read(fh);
-
-	let filecontents = core::str::from_utf8(&dat);
-	if let Ok(s) = filecontents {
-		info!("READ: '{}'", s);
-	} else {
-		info!("Could not read file (not valid utf8?)");
-	}*/
 
 	let mut fs = fs::FILESYSTEM.lock();
 	let tag = util::c_buf_to_str(&device_cfg.tag);
-	info!("Found virtio-fs tag as {}", tag);
+	info!("Mounting virtio-fs at /{}", tag);
 	fs.mount(tag, Box::new(fuse))
 		.expect("Mount failed. Duplicate tag?");
 

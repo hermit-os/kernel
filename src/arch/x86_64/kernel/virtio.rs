@@ -89,7 +89,7 @@ impl<'a> Virtq<'a> {
 		if vqsize == 0 || vqsize > 32768 {
 			return None;
 		}
-		info!("Initializing virtqueue {}, of size {}", index, vqsize);
+		debug!("Initializing virtqueue {}, of size {}", index, vqsize);
 
 		// 3.Optionally, select a smaller virtqueue size and write it to queue_size.
 
@@ -135,10 +135,6 @@ impl<'a> Virtq<'a> {
 		//   vector into queue_msix_vector. Read queue_msix_vector:
 		//   on success, previously written value is returned; on failure, NO_VECTOR value is returned.
 
-		// WHERE IS THIS SPEC FROM? IGNORE FOR NOW
-		// The driver notifies the device by writing the 16-bit virtqueue index of this virtqueue to the Queue Notify address.
-		// See 4.1.4.4 for how to calculate this address
-
 		// Split buffers into usable structs:
 		let (avail_flags, avail_mem) = avail_mem.split_first_mut().unwrap();
 		let (avail_idx, avail_mem) = avail_mem.split_first_mut().unwrap();
@@ -153,7 +149,7 @@ impl<'a> Virtq<'a> {
 		common_cfg.queue_used = paging::virt_to_phys(used_flags as *const _ as usize) as u64;
 		common_cfg.queue_enable = 1;
 
-		info!(
+		debug!(
 			"desc 0x{:x}, avail 0x{:x}, used 0x{:x}",
 			common_cfg.queue_desc, common_cfg.queue_avail, common_cfg.queue_used
 		);
@@ -190,7 +186,7 @@ impl<'a> Virtq<'a> {
 		// 4.1.5.2 Available Buffer Notifications
 		// When VIRTIO_F_NOTIFICATION_DATA has not been negotiated, the driver sends an available buffer notification
 		// to the device by writing the 16-bit virtqueue index of this virtqueue to the Queue Notify address.
-		info!("Notifying device of updated virtqueue ({})...!", self.index);
+		trace!("Notifying device of updated virtqueue ({})...!", self.index);
 		*self.queue_notify_address = self.index;
 	}
 
@@ -220,7 +216,7 @@ impl<'a> Virtq<'a> {
 
 			// 4. If b is device-writable, set d.flags to VIRTQ_DESC_F_WRITE, otherwise 0.
 			req.flags = 0;
-			debug!("written out descriptor: {:?} @ {:p}", req, req);
+			trace!("written out descriptor: {:?} @ {:p}", req, req);
 
 			// 5. If there is a buffer element after this:
 			//    a) Set d.next to the index of the next free descriptor element.
@@ -236,11 +232,11 @@ impl<'a> Virtq<'a> {
 				rsp.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
 				rsp.len = dat.len() as u32; // TODO: better cast?
 				rsp.flags = VIRTQ_DESC_F_WRITE;
-				debug!("written in  descriptor: {:?} @ {:p}", rsp, rsp);
+				trace!("written in descriptor: {:?} @ {:p}", rsp, rsp);
 			}
 		}
 
-		debug!("Sending Descriptor chain {:?}", chain);
+		trace!("Sending Descriptor chain {:?}", chain);
 
 		// 2. The driver places the index of the head of the descriptor chain into the next ring entry of the available ring.
 		let mut vqavail = self.avail.borrow_mut();
@@ -259,7 +255,7 @@ impl<'a> Virtq<'a> {
 		*vqavail.idx = vqavail.idx.wrapping_add(1);
 
 		if *vqavail.idx == 0 {
-			debug!("VirtQ index wrapped!");
+			trace!("VirtQ index wrapped!");
 		}
 
 		// 6. The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
@@ -449,7 +445,7 @@ impl<'a> VirtqUsed<'a> {
 
 		let usedelem = self.ring[(self.last_idx.wrapping_sub(1) as usize) % self.ring.len()];
 
-		info!("Used Element: {:?}", usedelem);
+		trace!("Used Element: {:?}", usedelem);
 		assert!(usedelem.id == chain.0.first().unwrap().index as u32);
 		return true;
 
@@ -530,7 +526,7 @@ impl VirtioNotification {
 				.notification_ptr
 				.offset((queue_notify_off * self.notify_off_multiplier) as isize / 2)
 		};
-		info!(
+		debug!(
 			"Queue notify address parts: {:p} {} {} {:p}",
 			self.notification_ptr, queue_notify_off, self.notify_off_multiplier, addr
 		);
@@ -558,7 +554,7 @@ pub fn map_virtiocap(
 
 	// Debug dump all
 	/*for x in (0..255).step_by(4) {
-			info!("{:02x}: {:08x}", x, pci::read_config(bus, device, x));
+			debug!("{:02x}: {:08x}", x, pci::read_config(bus, device, x));
 	}*/
 
 	// Loop through capabilities until vendor (virtio) defined one is found
@@ -568,14 +564,14 @@ pub fn map_virtiocap(
 			return None;
 		}
 		let captypeword = pci::read_config(bus, device, nextcaplist);
-		info!(
+		debug!(
 			"Read cap at offset 0x{:x}: captype 0x{:x}",
 			nextcaplist, captypeword
 		);
 		let captype = captypeword & 0xFF; // pci cap type
 		if captype == pci::PCI_CAP_ID_VNDR {
 			// we are vendor defined, with virtio vendor --> we can check for virtio cap type
-			info!("found vendor, virtio type: {}", (captypeword >> 24) & 0xFF);
+			debug!("found vendor, virtio type: {}", (captypeword >> 24) & 0xFF);
 			if (captypeword >> 24) & 0xFF == virtiocaptype {
 				break nextcaplist;
 			}
@@ -587,7 +583,7 @@ pub fn map_virtiocap(
 	let bar: usize = (pci::read_config(bus, device, virtiocapoffset + 4) & 0xFF) as usize; // get offset_of!(virtio_pci_cap, bar)
 	let offset: usize = pci::read_config(bus, device, virtiocapoffset + 8) as usize; // get offset_of!(virtio_pci_cap, offset)
 	let length: usize = pci::read_config(bus, device, virtiocapoffset + 12) as usize; // get offset_of!(virtio_pci_cap, length)
-	info!(
+	debug!(
 		"Found virtio config bar as 0x{:x}, offset 0x{:x}, length 0x{:x}",
 		bar, offset, length
 	);
@@ -602,9 +598,9 @@ pub fn map_virtiocap(
 	}
 
 	// base_addresses from bar are IOBASE?
-	// TODO: fix this hack. bar is assumed to be mem-mapped
+	// TODO: do proper memmapped bars in pci.rs
 	let barword = pci::read_config(bus, device, pci::PCI_BAR0_REGISTER + ((bar as u32) << 2));
-	info!("Found bar{} as 0x{:x}", bar, barword);
+	debug!("Found bar{} as 0x{:x}", bar, barword);
 	assert!(barword & 1 == 0, "Not an memory mapped bar!");
 
 	let bartype = (barword >> 1) & 0b11;
@@ -621,7 +617,7 @@ pub fn map_virtiocap(
 	//let barbase = barwordhigh << 33; // creates general protection fault... only when shifting by >=32 though..
 	let barbase: usize = ((barwordhigh as usize) << 32) + (barword & 0xFFFF_FFF0) as usize;
 
-	info!(
+	debug!(
 		"Mapping bar {} at 0x{:x} with length 0x{:x}",
 		bar, barbase, length
 	);
@@ -654,6 +650,7 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 
 	if adapter.device_id <= 0x103F {
 		// Legacy device, skip
+		info!("Legacy Virtio device, skipping!");
 		return;
 	}
 	let virtio_device_id = adapter.device_id - 0x1040;
@@ -679,7 +676,7 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive virtio interrupt");
+	debug!("Receive virtio interrupt");
 	apic::eoi();
 	core_scheduler().scheduler();
 }

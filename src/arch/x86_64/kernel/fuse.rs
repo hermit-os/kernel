@@ -41,14 +41,14 @@ impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
 			file.fuse_nid = self.lookup(path);
 
 			if file.fuse_nid == None {
-				warn!("Lookup seems to have failed!");
+				warn!("Fuse lookup seems to have failed!");
 				return Err(FileError::ENOENT());
 			}
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp) = create_open(file.fuse_nid.unwrap(), perms.raw);
 			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-			debug!("Open answer {:?}", rsp);
+			trace!("Open answer {:?}", rsp);
 			file.fuse_fh = Some(rsp.unwrap().rsp.fh);
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
@@ -58,7 +58,7 @@ impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
 				.borrow_mut()
 				.send_command(cmd, Some(rsp))
 				.unwrap();
-			debug!("Create answer {:?}", rsp);
+			trace!("Create answer {:?}", rsp);
 
 			file.fuse_nid = Some(rsp.rsp.entry.nodeid);
 			file.fuse_fh = Some(rsp.rsp.open.fh);
@@ -70,7 +70,7 @@ impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
 	fn unlink(&self, path: &str) -> core::result::Result<(), FileError> {
 		let (cmd, rsp) = create_unlink(path);
 		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		debug!("unlink answer {:?}", rsp);
+		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
 	}
@@ -84,7 +84,7 @@ impl<T: FuseInterface + 'static> Fuse<T> {
 	pub fn send_init(&self) {
 		let (cmd, rsp) = create_init();
 		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-		debug!("fuse init answer: {:?}", rsp);
+		trace!("fuse init answer: {:?}", rsp);
 	}
 
 	pub fn lookup(&self, name: &str) -> Option<u64> {
@@ -112,7 +112,7 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError> {
 		let mut len = len;
 		if len as usize > MAX_READ_LEN {
-			info!("Reading longer than max_read_len: {}", len);
+			debug!("Reading longer than max_read_len: {}", len);
 			len = MAX_READ_LEN as u32;
 		}
 		if let Some(fh) = self.fuse_fh {
@@ -124,7 +124,7 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 			// TODO: do this zerocopy
 			let mut vec = rsp.extra_buffer.unwrap();
 			vec.truncate(len);
-			info!("LEN: {}, VEC: {:?}", len, vec);
+			trace!("LEN: {}, VEC: {:?}", len, vec);
 			Ok(vec)
 		} else {
 			warn!("File not open, cannot read!");
@@ -133,7 +133,7 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 	}
 
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError> {
-		info!("fuse write!");
+		debug!("fuse write!");
 		let mut len = buf.len();
 		if len as usize > MAX_WRITE_LEN {
 			debug!(
@@ -146,12 +146,12 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_write(fh, &buf[..len], self.offset as u64);
 			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
-			info!("write response: {:?}", rsp);
+			trace!("write response: {:?}", rsp);
 			let rsp = rsp.unwrap();
 
 			let len = rsp.rsp.size as usize;
 			self.offset += len;
-			info!("Written {} bytes", len);
+			debug!("Written {} bytes", len);
 			Ok(len as u64)
 		} else {
 			warn!("File not open, cannot read!");
@@ -160,7 +160,7 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 	}
 
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError> {
-		info!("fuse lseek");
+		debug!("fuse lseek");
 
 		match whence {
 			SeekWhence::Set => self.offset = offset as usize,

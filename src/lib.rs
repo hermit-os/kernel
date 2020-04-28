@@ -192,7 +192,8 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running side-by-side to Linux!");
 	}
 
-	// Initialize PCI Drivers TODO: arch dependendency
+	// Initialize PCI Drivers if on x86_64
+	#[cfg(target_arch = "x86_64")]
 	x86_64::kernel::pci::init_drivers();
 
 	syscalls::init();
