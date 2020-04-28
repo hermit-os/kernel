@@ -75,7 +75,7 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms.append = flags & (O_APPEND) != 0;
 	perms.directio = flags & (O_DIRECT) != 0;
 	if flags & !(O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND | O_DIRECT) != 0 {
-		warn!("Unknown flags used in syscall! {}", flags);
+		warn!("Unknown file flags used! {}", flags);
 	}
 	perms
 }
@@ -107,7 +107,7 @@ pub trait SyscallInterface: Send + Sync {
 	#[cfg(target_arch = "x86_64")]
 	fn unlink(&self, name: *const u8) -> i32 {
 		let name = unsafe { util::c_str_to_str(name) };
-		info!("Unlink {}", name);
+		debug!("unlink {}", name);
 
 		fs::FILESYSTEM
 			.lock()
@@ -128,9 +128,8 @@ pub trait SyscallInterface: Send + Sync {
 		//! flags is bitmask of O_DEC_* defined above.
 		//! (taken from rust stdlib/sys hermit target )
 
-		info!("Open!");
 		let name = unsafe { util::c_str_to_str(name) };
-		info!("  Open {}, {}, {}", name, flags, mode);
+		debug!("Open {}, {}, {}", name, flags, mode);
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let fd = fs.open(&name, open_flags_to_perm(flags, mode as u32));
@@ -161,7 +160,7 @@ pub trait SyscallInterface: Send + Sync {
 
 	#[cfg(target_arch = "x86_64")]
 	fn read(&self, fd: i32, buf: *mut u8, len: usize) -> isize {
-		info!("Read! {}, {}", fd, len);
+		debug!("Read! {}, {}", fd, len);
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mut read_bytes = 0;
@@ -189,7 +188,7 @@ pub trait SyscallInterface: Send + Sync {
 			fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
 				written_bytes = file.write(buf).unwrap(); // TODO: might fail
 			});
-			info!("Write done! {}", written_bytes);
+			debug!("Write done! {}", written_bytes);
 			written_bytes as isize
 		} else {
 			// stdin/err/out all go to console
@@ -206,7 +205,7 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
-		info!("lseek! {}, {}, {}", fd, offset, whence);
+		debug!("lseek! {}, {}, {}", fd, offset, whence);
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mut ret = 0;
