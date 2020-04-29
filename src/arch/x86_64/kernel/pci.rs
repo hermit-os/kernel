@@ -212,6 +212,20 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 	None
 }
 
+pub fn find_adapter(vendor_id: u16, class_id: u8, subclass_id: u8) -> Option<([u32; 6], u8)> {
+	let adapters = PCI_ADAPTERS.lock();
+	for adapter in adapters.iter() {
+		if adapter.vendor_id == vendor_id
+			&& adapter.class_id == class_id
+			&& adapter.subclass_id == subclass_id
+		{
+			return Some((adapter.base_addresses, adapter.irq));
+		}
+	}
+
+	None
+}
+
 pub fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 	let mut adapters = PCI_ADAPTERS.lock();
