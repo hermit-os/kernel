@@ -97,7 +97,6 @@ pub fn has_ipdevice() -> bool {
 	}
 }
 
-#[no_mangle]
 #[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_ip() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) }
@@ -105,35 +104,57 @@ pub fn uhyve_get_ip() -> [u8; 4] {
 
 #[no_mangle]
 #[cfg(not(feature = "newlib"))]
+pub fn sys_uhyve_get_ip() -> [u8; 4] {
+	kernel_function!(uhyve_get_ip())
+}
+
+#[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_gateway() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway) }
 }
 
 #[no_mangle]
 #[cfg(not(feature = "newlib"))]
+pub fn sys_uhyve_get_gateway() -> [u8; 4] {
+	kernel_function!(uhyve_get_gateway())
+}
+
+#[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_mask() -> [u8; 4] {
 	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
 }
 
 #[no_mangle]
+#[cfg(not(feature = "newlib"))]
+pub fn sys_uhyve_get_mask() -> [u8; 4] {
+	kernel_function!(uhyve_get_mask())
+}
+
+#[no_mangle]
 #[cfg(feature = "newlib")]
-pub unsafe extern "C" fn uhyve_get_ip(ip: *mut u8) {
+pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
+	switch_to_kernel!();
 	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcip);
 	slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
+	switch_to_user!();
 }
 
 #[no_mangle]
 #[cfg(feature = "newlib")]
-pub unsafe extern "C" fn uhyve_get_gateway(gw: *mut u8) {
+pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
+	switch_to_kernel!();
 	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcgateway);
 	slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
+	switch_to_user!();
 }
 
 #[no_mangle]
 #[cfg(feature = "newlib")]
-pub unsafe extern "C" fn uhyve_get_mask(mask: *mut u8) {
+pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
+	switch_to_kernel!();
 	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcmask);
 	slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);
+	switch_to_user!();
 }
 
 pub fn get_base_address() -> usize {
