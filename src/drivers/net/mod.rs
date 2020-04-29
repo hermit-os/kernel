@@ -37,13 +37,16 @@ pub trait NetworkInterface {
 	fn get_mac_address(&self) -> [u8; 6];
 }
 
-#[no_mangle]
-pub fn uhyve_netwakeup() {
+fn netwakeup() {
 	NET_SEM.release();
 }
 
 #[no_mangle]
-pub fn uhyve_netwait(millis: Option<u64>) {
+pub fn sys_netwakeup() {
+	kernel_function!(netwakeup());
+}
+
+fn netwait(millis: Option<u64>) {
 	match millis {
 		Some(ms) => {
 			if ms > 0 {
@@ -60,7 +63,11 @@ pub fn uhyve_netwait(millis: Option<u64>) {
 }
 
 #[no_mangle]
-pub fn uhyve_get_mac_address() -> [u8; 6] {
+pub fn sys_netwait(millis: Option<u64>) {
+	kernel_function!(netwait(millis));
+}
+
+fn uhyve_get_mac_address() -> [u8; 6] {
 	unsafe {
 		match &NIC {
 			Some(nic) => nic.get_mac_address(),
@@ -69,10 +76,15 @@ pub fn uhyve_get_mac_address() -> [u8; 6] {
 	}
 }
 
+#[no_mangle]
+pub fn sys_uhyve_get_mac_address() -> [u8; 6] {
+	kernel_function!(uhyve_get_mac_address())
+}
+
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn network_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive network interrupt");
 	apic::eoi();
-	uhyve_netwakeup();
+	netwakeup();
 	core_scheduler().scheduler();
 }
