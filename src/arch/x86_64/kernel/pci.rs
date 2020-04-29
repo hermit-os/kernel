@@ -185,6 +185,20 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 	None
 }
 
+pub fn find_adapter(vendor_id: u16, class_id: u8, subclass_id: u8) -> Option<([u32; 6], u8)> {
+	let adapters = PCI_ADAPTERS.lock();
+	for adapter in adapters.iter() {
+		if adapter.vendor_id == vendor_id
+			&& adapter.class_id == class_id
+			&& adapter.subclass_id == subclass_id
+		{
+			return Some((adapter.base_addresses, adapter.irq));
+		}
+	}
+
+	None
+}
+
 pub fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 	let mut adapters = PCI_ADAPTERS.lock();
@@ -198,9 +212,6 @@ pub fn init() {
 			if device_vendor_id != u32::MAX {
 				let device_id = (device_vendor_id >> 16) as u16;
 				let vendor_id = device_vendor_id as u16;
-				if vendor_id == 0x1AF4 {
-					info!("Found virtio device with device id {}", device_id);
-				}
 
 				adapters.push(PciAdapter::new(bus, device, vendor_id, device_id));
 			}
