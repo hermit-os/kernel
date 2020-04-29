@@ -273,13 +273,17 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		let tsc_info = cpuid.get_tsc_info();
-
-		if tsc_info.is_some() {
-			let mhz = (tsc_info.unwrap().tsc_frequency() / 1000000u64) as u16;
-			self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
-		} else {
-			Err(())
+		match cpuid.get_tsc_info() {
+			Some(tsc_info) => {
+				// check if tsc_info provides a correct value
+				if tsc_info.denominator() != 0 {
+					let mhz = (tsc_info.tsc_frequency() / 1000000u64) as u16;
+					self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
+				} else {
+					Err(())
+				}
+			},
+			None => Err(()),
 		}
 	}
 
