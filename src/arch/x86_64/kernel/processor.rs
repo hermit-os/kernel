@@ -282,7 +282,7 @@ impl CpuFrequency {
 				} else {
 					Err(())
 				}
-			},
+			}
 			None => Err(()),
 		}
 	}
