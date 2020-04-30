@@ -281,7 +281,7 @@ impl CpuFrequency {
 						let mhz = (freq / 1000000u64) as u16;
 						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 					}
-					None => Err(())
+					None => Err(()),
 				}
 			}
 			None => Err(()),
