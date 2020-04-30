@@ -276,11 +276,12 @@ impl CpuFrequency {
 		match cpuid.get_tsc_info() {
 			Some(tsc_info) => {
 				// check if tsc_info provides a correct value
-				if tsc_info.denominator() != 0 {
-					let mhz = (tsc_info.tsc_frequency() / 1000000u64) as u16;
-					self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
-				} else {
-					Err(())
+				match tsc_info.tsc_frequency() {
+					Some(freq) => {
+						let mhz = (freq / 1000000u64) as u16;
+						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
+					}
+					None => Err(())
 				}
 			}
 			None => Err(()),
