@@ -41,6 +41,7 @@
 extern crate std;
 
 // EXTERNAL CRATES
+#[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
@@ -50,6 +51,8 @@ extern crate multiboot;
 extern crate x86;
 #[macro_use]
 extern crate log;
+#[macro_use]
+extern crate lazy_static;
 
 #[macro_use]
 mod macros;
@@ -73,6 +76,7 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
+mod util;
 
 pub use arch::*;
 pub use config::*;
@@ -192,6 +196,10 @@ extern "C" fn initd(_arg: usize) {
 		#[cfg(not(feature = "newlib"))]
 		let _ = drivers::net::init();
 	}
+
+	// Initialize PCI Drivers if on x86_64
+	#[cfg(target_arch = "x86_64")]
+	x86_64::kernel::pci::init_drivers();
 
 	syscalls::init();
 
