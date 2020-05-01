@@ -675,8 +675,7 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 	};
 
 	// Install interrupt handler
-	// TODO: get irqnumber from pci, don't hardcode 11.
-	irq_install_handler(11, virtio_irqhandler as usize);
+	irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
 
 	pci::register_driver(PciDriver::VirtioFs(drv));
 }
