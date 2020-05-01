@@ -169,6 +169,28 @@ $ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
 
+### Using virtio-fs
+
+The Kernel has rudimentary support for the virtio-fs shared file system. Currently only files, no folders are supported. To use it, you have to run a virtio-fs daemon and start qemu as described in [Standalone virtio-fs usage](https://virtio-fs.gitlab.io/howto-qemu.html):
+
+```bash
+# start virtiofsd in the background
+$ sudo virtiofsd --thread-pool-size=1 --socket-path=/tmp/vhostqemu -o source=$(pwd)/SHARED_DIRECTORY
+# give non-root-users access to the socket
+$ sudo chmod 777 /tmp/vhostqemu
+# start qemu with virtio-fs device.
+# you might want to change the socket (/tmp/vhostqemu) and virtiofs tag (currently myfs)
+$ qemu-system-x86_64 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr -enable-kvm -display none -smp 1 -m 1G -serial stdio \
+        -kernel path_to_loader/rusty-loader \
+        -initrd path_to_app/app \
+        -chardev socket,id=char0,path=/tmp/vhostqemu \
+        -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=myfs \
+        -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on \
+        -numa node,memdev=mem
+```
+
+You can now access the files in SHARED_DIRECTORY under the virtiofs tag like `/myfs/testfile`.
+
 ## Extending RustyHermit
 
 The best way to extend the kernel is to work with the branch *devel* of the repository [rusty-hermit](https://github.com/hermitcore/rusty-hermit).
