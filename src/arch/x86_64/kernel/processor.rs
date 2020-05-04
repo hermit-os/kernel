@@ -318,9 +318,23 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
-		self.set_detected_cpu_frequency(cpu_freq as u16, CpuFrequencySources::Hypervisor)
+	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		fn detect_from_uhyve() -> Result<u16, ()> {
+			if environment::is_uhyve() {
+				unsafe {
+					let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
+					if cpu_freq > (u16::MAX as u32) {
+						return Err(());
+					}
+					Ok(cpu_freq as u16)
+				}
+			} else {
+				Err(())
+			}
+		}
+		// future implementations could add support for different hypervisors
+		// by adding or_else here
+		self.set_detected_cpu_frequency(detect_from_uhyve()?, CpuFrequencySources::Hypervisor)
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
