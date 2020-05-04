@@ -33,17 +33,17 @@ jobs:
 
 
     steps:
-    - uses: hecrj/setup-rust-action@v1.3.1
-      with: 
-         rust-version: ${{ matrix.rust }}
-         components: ${{ matrix.components || '' }}
-         targets: ${{ matrix.targets || '' }}
-    - uses: actions/checkout@v1
-      with:
-         submodules: true
-    - name: Check Cargo availability
-      run: cargo --version
-    - name: Build
-      run:
-         cargo test
+      - uses: hecrj/setup-rust-action@v1.3.1
+        with:
+          rust-version: ${{ matrix.rust }}
+          components: ${{ matrix.components || '' }}
+          targets: ${{ matrix.targets || '' }}
+      - uses: actions/checkout@v1
+        with:
+          submodules: true
+      - name: Check Cargo availability
+        run: cargo --version
+      - name: Build
+        run:
+          cargo test
 
