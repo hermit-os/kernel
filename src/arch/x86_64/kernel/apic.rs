@@ -23,7 +23,7 @@ use arch::x86_64::mm::virtualmem;
 use config::*;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, intrinsics, mem, ptr, u32};
+use core::{cmp, fmt, mem, ptr, u32};
 use environment;
 use mm;
 use scheduler;
@@ -488,8 +488,8 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
 	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
 	unsafe {
-		intrinsics::volatile_store(&mut (*BOOT_INFO).current_stack_address, stack as u64);
-		intrinsics::volatile_store(
+		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack as u64);
+		core::ptr::write_volatile(
 			&mut (*BOOT_INFO).current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
 		);
@@ -650,8 +650,8 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
-		intrinsics::volatile_store(
+		core::ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
+		core::ptr::write_volatile(
 			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *mut u32,
 			value,
 		);
@@ -662,7 +662,7 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
+		core::ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
 		value =
 			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
 	}
