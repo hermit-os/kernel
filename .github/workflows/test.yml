@@ -28,7 +28,7 @@ jobs:
             targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
-            components: 'rust-src'
+            components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-unknown-linux-gnu'
 
 
@@ -38,12 +38,60 @@ jobs:
           rust-version: ${{ matrix.rust }}
           components: ${{ matrix.components || '' }}
           targets: ${{ matrix.targets || '' }}
-      - uses: actions/checkout@v1
+      - name: Checkout rusty-hermit devel
+        uses: actions/checkout@v2
         with:
-          submodules: true
+          repository: 'hermitcore/rusty-hermit'
+          ref: 'devel'
+          submodules: 'true'
+      - name: Remove submodule libhermit-rs
+        run: rm -r libhermit-rs
+        if: ${{ ( matrix.os == 'macOS-latest' ) || ( matrix.os == 'ubuntu-latest' ) }}
+      - name: Remove submodule libhermit-rs (windows)
+        run: git rm -r libhermit-rs
+        if: ${{ matrix.os == 'windows-latest' }}
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: 'libhermit-rs'
       - name: Check Cargo availability
         run: cargo --version
-      - name: Build
+      - name: Cargo Test libhermit-rs
+        run: cargo test
+        working-directory: libhermit-rs
+      - name: Install cargo-download
+        run: cargo install cargo-download
+      - name: Install xbuild
+        run: cargo install cargo-xbuild
+      - name: Install qemu/nasm
+        run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Building dev version
         run:
-          cargo test
+          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+      - name: Building release version
+        run:
+          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release
+      - name: Build loader
+        run:
+          cd loader && make
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Test dev version
+        run:
+          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Test dev version (smp)
+        run:
+          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Test release version
+        run:
+          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Test release version (smp)
+        run:
+          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+
+
 
