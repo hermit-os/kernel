@@ -226,7 +226,7 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 }
 
 pub fn get_boot_time() -> u64 {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).boot_gtod) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).boot_gtod) }
 }
 
 pub fn init() {
