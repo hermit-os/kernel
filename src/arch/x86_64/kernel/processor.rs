@@ -16,7 +16,7 @@ use arch::x86_64::kernel::pic;
 use arch::x86_64::kernel::pit;
 use arch::x86_64::kernel::BOOT_INFO;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, intrinsics, u32};
+use core::{fmt, u32};
 use environment;
 use x86::controlregs::*;
 use x86::cpuid::*;
@@ -322,7 +322,7 @@ impl CpuFrequency {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			if environment::is_uhyve() {
 				unsafe {
-					let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
+					let cpu_freq = core::ptr::read_volatile(&(*BOOT_INFO).cpu_freq);
 					if cpu_freq > (u16::MAX as u32) {
 						return Err(());
 					}
@@ -378,12 +378,12 @@ impl CpuFrequency {
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
-		let first_tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+		let first_tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 
 		// Wait until the tick count changes.
 		// As soon as it has done, we are at the start of a new time slice.
 		let start_tick = loop {
-			let tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick != first_tick {
 				break tick;
 			}
@@ -395,7 +395,7 @@ impl CpuFrequency {
 		let start = get_timestamp();
 
 		loop {
-			let tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick - start_tick >= tick_count {
 				break;
 			}
