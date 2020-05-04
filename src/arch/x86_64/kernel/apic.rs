@@ -664,7 +664,7 @@ fn ioapic_read(reg: u32) -> u32 {
 	unsafe {
 		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
 		value =
-			intrinsics::volatile_load((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
+			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
 	}
 
 	value
@@ -704,7 +704,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { intrinsics::volatile_load(value_ref) }
+			while (unsafe { core::ptr::read_volatile(value_ref) }
 				& APIC_ICR_DELIVERY_STATUS_PENDING)
 				> 0
 			{

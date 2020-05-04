@@ -92,7 +92,7 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 pub fn has_ipdevice() -> bool {
-	let ip = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) };
+	let ip = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) };
 
 	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
 		false
@@ -103,7 +103,7 @@ pub fn has_ipdevice() -> bool {
 
 #[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_ip() -> [u8; 4] {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcip) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) }
 }
 
 #[no_mangle]
@@ -114,7 +114,7 @@ pub fn sys_uhyve_get_ip() -> [u8; 4] {
 
 #[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_gateway() -> [u8; 4] {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcgateway) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcgateway) }
 }
 
 #[no_mangle]
@@ -125,7 +125,7 @@ pub fn sys_uhyve_get_gateway() -> [u8; 4] {
 
 #[cfg(not(feature = "newlib"))]
 pub fn uhyve_get_mask() -> [u8; 4] {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).hcmask) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcmask) }
 }
 
 #[no_mangle]
@@ -138,7 +138,7 @@ pub fn sys_uhyve_get_mask() -> [u8; 4] {
 #[cfg(feature = "newlib")]
 pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
 	switch_to_kernel!();
-	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcip);
+	let data = core::ptr::read_volatile(&(*BOOT_INFO).hcip);
 	slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
 	switch_to_user!();
 }
@@ -147,7 +147,7 @@ pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
 #[cfg(feature = "newlib")]
 pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
 	switch_to_kernel!();
-	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcgateway);
+	let data = core::ptr::read_volatile(&(*BOOT_INFO).hcgateway);
 	slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
 	switch_to_user!();
 }
@@ -156,63 +156,63 @@ pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
 #[cfg(feature = "newlib")]
 pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
 	switch_to_kernel!();
-	let data = intrinsics::volatile_load(&(*BOOT_INFO).hcmask);
+	let data = core::ptr::read_volatile(&(*BOOT_INFO).hcmask);
 	slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);
 	switch_to_user!();
 }
 
 pub fn get_base_address() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).base) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).base) as usize }
 }
 
 pub fn get_image_size() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).image_size) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).limit) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).limit) as usize }
 }
 
 pub fn get_tls_start() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_start) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_start) as usize }
 }
 
 pub fn get_tls_filesz() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_filesz) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_filesz) as usize }
 }
 
 pub fn get_tls_memsz() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).tls_memsz) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
 }
 
 pub fn get_mbinfo() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).mb_info) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).mb_info) as usize }
 }
 
 pub fn get_processor_count() -> u32 {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cpu_online) as u32 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cpu_online) as u32 }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) & 0x1 == 0x1 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) & 0x1 == 0x1 }
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).uhyve) & 0x3 == 0x3 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) & 0x3 == 0x3 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).single_kernel) != 0 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cmdsize) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdsize) as usize }
 }
 
 pub fn get_cmdline() -> usize {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).cmdline) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdline) as usize }
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -220,7 +220,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = intrinsics::volatile_load(&(*BOOT_INFO).uartport);
+		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
 	}
 
 	if environment::is_single_kernel() {
