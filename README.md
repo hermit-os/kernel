@@ -7,34 +7,36 @@
 [![License](https://img.shields.io/crates/l/rusty-hermit.svg)](https://img.shields.io/crates/l/rusty-hermit.svg)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
-[HermitCore]( http://www.hermitcore.org ) is a [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
+[RustyHermit](http://www.hermitcore.org) is a [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
 Unikernel means, you bundle your application directly with the kernel library, so that it can run without any installed operating system.
 This reduces overhead, therefore, interesting applications include virtual machines and high-performance computing.
 
 The RustyHermit can run Rust applications, as well as C/C++/Go/Fortran applications.
 A tutorial on how to use these programming languages on top of RustyHermit is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
 
-## History/Background
+## Background
 
-HermitCore is a research project at [RWTH-Aachen](https://www.rwth-aachen.de) and was originally written in C ([libhermit](https://github.com/hermitcore/libhermit)).
-We decided to develop a new version of HermitCore in [Rust](https://www.rust-lang.org) and name it **RustyHermit**.
+HermitCore was a research unikernel developed at [RWTH-Aachen](https://www.rwth-aachen.de) written in C ([libhermit](https://github.com/hermitcore/libhermit)).
+**RustyHermit** is a rewrite of HermitCore written in [Rust](https://www.rust-lang.org).
+
 The ownership  model of Rust guarantees memory/thread-safety and enables us to eliminate many classes of bugs at compile-time.
-Consequently, the use of Rust for kernel development promises less vulnerabilities in comparsion to common programming languages.
+Consequently, the use of Rust for kernel development promises less vulnerabilities in comparison to common programming languages.
 
 The kernel and the integration into the Rust runtime is entirely written in Rust and does not use any C/C++ Code.
 We extend the Rust toolchain so that the build process is similar to Rust's usual workflow.
 Rust applications that do not bypass the Rust runtime and directly use OS services are able to run on RustyHermit without modifications.
 
-## Building RusytHermit
+## Running an Application in RustyHermit
 
-It is required to install the Rust toolchain.
-Please visit the [Rust website](https://www.rust-lang.org/) and follow the installation instructions for your operating system.
-It is important that the **nightly channel** is used to install the toolchain.
+### Prerequisites
+
+The Rust toolchain can be installed from the [official webpage](https://www.rust-lang.org/).
+RusyHermit currently requires the **nightly versions** of the toolchain.
 ```sh
 rustup default nightly
 ```
 
-After the installation of the toolchain, the source code of the Rust runtime, the cargo subcommand [cargo-download](https://crates.io/crates/cargo-download), and llvm-tools have to be installed as follow:
+Further requirements are the source code of the Rust runtime,  [cargo-download](https://crates.io/crates/cargo-download), and llvm-tools:
 
 ```sh
 cargo install cargo-download
@@ -42,40 +44,37 @@ rustup component add rust-src
 rustup component add llvm-tools-preview
 ```
 
-As an example, the following commands create a template for the test application *Hello World*.
+### Sample Application
+
+First, create a new cargo project:
 
 ```sh
-cargo new hello_world --bin
+cargo new hello_world
 cd hello_world
 ```
 
-To bind the library operating system to the application, add in the file *Cargo.toml* the crate [hermit-sys](https://crates.io/crates/hermit-sys) to the list of dependency.
-In addition, it is important to use at least the optimization level 1.
-Consequently, it is required to **extend** *Cargo.toml* with following lines.
+To bind the library operating system to the application, add the crate [hermit-sys](https://crates,io/crates/hermit-sys) to the dependencies in the file *Cargo.toml*.
+It is important to use at least the optimization level 1.
+Consequently, it is required to **extend** *Cargo.toml* with following lines:
 
 ```toml
+# Cargo.toml
+
 [target.'cfg(target_os = "hermit")'.dependencies]
 hermit-sys = "0.1.*"
 
 [profile.release]
 opt-level = 3
-debug = false
-rpath = false
 lto = true
-debug-assertions = false
 
 [profile.dev]
 opt-level = 1
-debug = true
-rpath = false
-lto = false
-debug-assertions = true
 ```
 
-Finally, import the crate in the main file of your application.
+To link the application with RustyHermit, declare `hermit_sys` an `external crate` in the main file of your application.
 
-```rust,no_run
-#![allow(unused_imports)]
+```rust
+// src/main.rs
 
 #[cfg(target_os = "hermit")]
 extern crate hermit_sys;
@@ -91,26 +90,11 @@ The final step is building the application as follows:
 cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 
-If the command failed with the error message
-
-```sh
-linker `rust-lld` not found
-```
-
-the path to the *llvm-tools* is not set.
-On Linux, it is typically installed at *${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
-```sh
-PATH=${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:$PATH cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
-```
-Otherwise, the linker can be replaced by *lld* as follows:
-
-```sh
-RUSTFLAGS="-C linker=lld" cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
-```
+The resulting "hypervisor-ready" binary then can be found in `target/x86_64-unknown-hermit/debug/hermit-new`
 
 ## Running RustyHermit
 
-### Using uhyve as hypervisor
+### Using uhyve as Hypervisor
 
 RustyHermit can run within our own hypervisor [*uhyve*](https://github.com/hermitcore/uhyve) , which requires [KVM](https://www.linux-kvm.org/) to create a virtual machine.
 Please install the hypervisor as follows:
@@ -125,29 +109,9 @@ Afterwards, your are able to start RustyHermit applications within our hyperviso
 uhyve target/x86_64-unknown-hermit/debug/hello_world
 ```
 
-The maximum amount of memory can be configured via environment variables like in the following example
+More details can be found in the [uhyve README](https://github.com/hermitcore/uhyve).
 
-```sh
-HERMIT_CPUS=4 HERMIT_MEM=8G uhyve target/x86_64-unknown-hermit/debug/hello_world
-```
-
-The virtual machine is configured using the following environment variables
-
-Variable         | Default     | Description
------------------|-------------|--------------
-`HERMIT_CPUS`    | 1           | Number of cores the virtual machine may use
-`HERMIT_MEM`     | 512M        | Memory size of the virtual machine. The suffixes *M* and *G* can be used to specify a value in megabytes or gigabytes
-`HERMIT_VERBOSE` | 0           | Hypervisor prints kernel log messages stdout. ("1" enables log)
-
-For instance, the following command starts the demo application in a virtual machine, which has 4 cores and 8GiB memory:
-
-```bash
-$ HERMIT_CPUS=4 HERMIT_MEM=8G uhyve target/x86_64-unknown-hermit/debug/hello_world
-```
-
-More details can be found in the uhyve README.
-
-### Using Qemu as hypervisor
+### Using Qemu as Hypervisor
 
 It is also possible to run RustyHermit within [Qemu](https://www.qemu.org).
 In this case, the loader [rusty-loader](https://github.com/hermitcore/rusty-loader) is required to boot the application.
@@ -169,7 +133,7 @@ $ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
 
-### Using virtio-fs
+#### Using virtio-fs
 
 The Kernel has rudimentary support for the virtio-fs shared file system. Currently only files, no folders are supported. To use it, you have to run a virtio-fs daemon and start qemu as described in [Standalone virtio-fs usage](https://virtio-fs.gitlab.io/howto-qemu.html):
 
@@ -191,6 +155,13 @@ $ qemu-system-x86_64 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr -enable-kvm -di
 
 You can now access the files in SHARED_DIRECTORY under the virtiofs tag like `/myfs/testfile`.
 
+
+## Use RustyHermit for C/C++, Go, and Fortran applications
+
+This kernel can be used with C/C++, Go, and Fortran applications.
+A tutorial on how to do this is available at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
+
+
 ## Extending RustyHermit
 
 The best way to extend the kernel is to work with the branch *devel* of the repository [rusty-hermit](https://github.com/hermitcore/rusty-hermit).
@@ -206,16 +177,28 @@ git submodule update
 cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
 ```
 
-## Use RustyHermit for C/C++, Go, and Fortran applications
-
-This kernel can still be used with C/C++, Go, and Fortran applications.
-A tutorial on how to do this is available at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
-
 ## Missing features
 
 * Multikernel support (might be comming)
 * Virtio support (comming soon)
 * Network support (comming soon)
+* Hardware Boot
+
+## Troubleshooting
+
+### command failed with the error message `linker `rust-lld` not found`
+
+The path to the *llvm-tools* is not set.
+On Linux, it is typically installed at *${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin*.
+```sh
+PATH=${HOME}/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin:$PATH cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+```
+Otherwise, the linker can be replaced by *lld* as follows:
+
+```sh
+RUSTFLAGS="-C linker=lld" cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+```
+
 
 ## Credits
 
