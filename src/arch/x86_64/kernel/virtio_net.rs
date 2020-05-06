@@ -196,7 +196,6 @@ impl Drop for RxBuffer {
 struct TxBuffer {
 	pub addr: usize,
 	pub len: usize,
-	pub idx: u32,
 	pub in_use: bool,
 }
 
@@ -208,7 +207,6 @@ impl TxBuffer {
 		Self {
 			addr: addr,
 			len: sz,
-			idx: 0,
 			in_use: false,
 		}
 	}
@@ -264,14 +262,27 @@ impl<'a> VirtioNetDriver<'a> {
 			vqueues.push(vq);
 		}
 
-		let buffer_size: usize = 65562;
 		let vqsize = common_cfg.queue_size as usize;
-		let mut vec_buffer = self.rx_buffers.lock();
-		for i in 0..vqsize {
-			let buffer = RxBuffer::new(buffer_size);
-			let addr = buffer.addr;
-			let idx = vqueues[0].add_receiver_buffer(addr.try_into().unwrap(), buffer_size);
-			vec_buffer.insert(idx, buffer);
+		{
+			let buffer_size: usize = 65562;
+			let mut vec_buffer = self.rx_buffers.lock();
+			for i in 0..vqsize {
+				let buffer = RxBuffer::new(buffer_size);
+				let addr = buffer.addr;
+				vqueues[0].add_buffer(i, addr.try_into().unwrap(), buffer_size, VIRTQ_DESC_F_WRITE);
+				vec_buffer.push(buffer);
+			}
+		}
+
+		{
+			let buffer_size: usize = self.get_mtu() as usize;
+			let mut vec_buffer = self.tx_buffers.lock();
+			for i in 0..vqsize {
+				let buffer = TxBuffer::new(buffer_size);
+				let addr = buffer.addr;
+				vqueues[1].add_buffer(i, addr.try_into().unwrap(), buffer_size, 0);
+				vec_buffer.push(buffer);
+			}
 		}
 
 		self.vqueues = Some(vqueues);
@@ -331,11 +342,6 @@ impl<'a> VirtioNetDriver<'a> {
 
 		// 8. Set the DRIVER_OK status bit. At this point the device is “live”.
 		self.common_cfg.device_status |= 4;
-
-		// create a buffer to send packets
-		self.tx_buffers
-			.lock()
-			.push(TxBuffer::new(self.device_cfg.mtu as usize));
 	}
 
 	pub fn handle_interrupt(&mut self) {
@@ -343,14 +349,7 @@ impl<'a> VirtioNetDriver<'a> {
 		if (isr_status & 0x1) == 0x1 {
 			let mut buffers = self.tx_buffers.lock();
 			while let Some(idx) = (self.vqueues.as_deref_mut().unwrap())[1].check_used_elements() {
-				if let Some(index) = buffers
-					.iter()
-					.position(|tx| tx.idx == idx && tx.in_use == true)
-				{
-					buffers[index].in_use = false;
-				} else {
-					error!("Don't find TX buffer with index {}", idx);
-				}
+				buffers[idx as usize].in_use = false;
 			}
 
 			// handle changes to the queue
@@ -367,43 +366,34 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn get_tx_buffer(&self, len: usize) -> Result<(*mut u8, usize), ()> {
+		static mut TX_COUNTER: usize = 0;
+
+		let index = unsafe {
+			let old = TX_COUNTER;
+			TX_COUNTER = (TX_COUNTER + 1) % self.common_cfg.queue_size as usize;
+			old
+		};
+
 		let mut buffers = self.tx_buffers.lock();
-		let index = buffers
-			.iter()
-			.position(|x| x.in_use == false && x.len >= len)
-			.unwrap_or_else(|| {
-				buffers.push(TxBuffer::new(self.get_mtu().into()));
-				buffers.len() - 1
-			});
-
-		buffers[index].in_use = true;
-		Ok((
-			(buffers[index].addr + mem::size_of::<virtio_net_hdr>()) as *mut u8,
-			index,
-		))
-	}
-
-	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
-		let msg = {
-			let mut buffers = self.tx_buffers.lock();
+		if buffers[index].in_use == false {
+			buffers[index].in_use = true;
 			let header = buffers[index].addr as *mut virtio_net_hdr;
-
 			unsafe {
 				(*header).init(len);
 			}
 
-			unsafe {
-				slice::from_raw_parts(
-					buffers[index].addr as *const u8,
-					len + mem::size_of::<virtio_net_hdr>(),
-				)
-			}
-		};
+			Ok((
+				(buffers[index].addr + mem::size_of::<virtio_net_hdr>()) as *mut u8,
+				index,
+			))
+		} else {
+			Err(())
+		}
+	}
 
-		self.tx_buffers.lock()[index].idx =
-			(self.vqueues.as_deref_mut().unwrap())[1].send_non_blocking(&msg)?;
-
-		Ok(())
+	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
+		(self.vqueues.as_deref_mut().unwrap())[1]
+			.send_non_blocking(index, len + mem::size_of::<virtio_net_hdr>())
 	}
 
 	pub fn has_packet(&self) -> bool {
@@ -425,7 +415,7 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn rx_buffer_consumed(&mut self) {
-		(self.vqueues.as_deref_mut().unwrap())[0].rx_buffer_consumed();
+		(self.vqueues.as_deref_mut().unwrap())[0].buffer_consumed();
 	}
 }
 
