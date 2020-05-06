@@ -9,10 +9,12 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use arch::x86_64::kernel::virtio;
-use arch::x86_64::kernel::virtio_fs::VirtiofsDriver;
+use arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
+use arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use core::cell::RefCell;
+use core::convert::TryInto;
 use core::{fmt, u32, u8};
-use synch::spinlock::Spinlock;
+use synch::spinlock::SpinlockIrqSave;
 use x86::io::*;
 
 // TODO: should these be pub? currently needed since used in virtio.rs maybe use getter methods to be more flexible.
@@ -40,8 +42,48 @@ pub const PCI_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFF0;
 
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
-static PCI_ADAPTERS: Spinlock<Vec<PciAdapter>> = Spinlock::new(Vec::new());
-static PCI_DRIVERS: Spinlock<Vec<PciDriver>> = Spinlock::new(Vec::new());
+static PCI_ADAPTERS: SpinlockIrqSave<Vec<PciAdapter>> = SpinlockIrqSave::new(Vec::new());
+static PCI_DRIVERS: SpinlockIrqSave<Vec<PciDriver>> = SpinlockIrqSave::new(Vec::new());
+
+/// Classes of PCI nodes.
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq)]
+pub enum PciClassCode {
+	TooOld = 0x00,
+	MassStorage = 0x01,
+	NetworkController = 0x02,
+	DisplayController = 0x03,
+	MultimediaController = 0x04,
+	MemoryController = 0x05,
+	BridgeDevice = 0x06,
+	SimpleCommunicationController = 0x07,
+	BaseSystemPeripheral = 0x08,
+	InputDevice = 0x09,
+	DockingStation = 0x0A,
+	Processor = 0x0B,
+	SerialBusController = 0x0C,
+	WirelessController = 0x0D,
+	IntelligentIoController = 0x0E,
+	EncryptionController = 0x0F,
+	DataAcquisitionSignalProcessing = 0x11,
+	Other = 0xFF,
+}
+
+/// Network Controller Sub Classes
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq)]
+pub enum PciNetworkControllerSubclass {
+	EthernetController = 0x00,
+	TokenRingController = 0x01,
+	FDDIController = 0x02,
+	ATMController = 0x03,
+	ISDNController = 0x04,
+	WorldFipController = 0x05,
+	PICMGController = 0x06,
+	InfinibandController = 0x07,
+	FabricController = 0x08,
+	NetworkController = 0x80,
+}
 
 #[derive(Clone, Copy)]
 pub struct PciAdapter {
@@ -54,16 +96,32 @@ pub struct PciAdapter {
 	pub programming_interface_id: u8,
 	pub base_addresses: [u32; 6],
 	pub base_sizes: [u32; 6],
+	pub base_type: [u8; 6],
 	pub irq: u8,
 }
 
 pub enum PciDriver<'a> {
-	VirtioFs(Rc<RefCell<VirtiofsDriver<'a>>>),
+	VirtioFs(Rc<RefCell<VirtioFsDriver<'a>>>),
+	VirtioNet(Rc<RefCell<VirtioNetDriver<'a>>>),
 }
 
 pub fn register_driver(drv: PciDriver<'static>) {
 	let mut drivers = PCI_DRIVERS.lock();
 	drivers.push(drv);
+}
+
+pub fn get_network_driver() -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
+	let drivers = PCI_DRIVERS.lock();
+	for i in drivers.iter() {
+		match &*i {
+			PciDriver::VirtioNet(nic_driver) => {
+				return Some(nic_driver.clone());
+			}
+			_ => {}
+		}
+	}
+
+	None
 }
 
 impl PciAdapter {
@@ -74,6 +132,7 @@ impl PciAdapter {
 
 		let mut base_addresses: [u32; 6] = [0; 6];
 		let mut base_sizes: [u32; 6] = [0; 6];
+		let mut base_type: [u8; 6] = [0; 6];
 		// TODO: this only works for I/O Space BARs! Verify that bit 0 is 1!
 		for i in 0..6 {
 			let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
@@ -82,6 +141,7 @@ impl PciAdapter {
 				debug!("Bar {} @{:x}:{:x} is memory mapped, but treated as IO mapped! this will cause errors later..", i, device_id, vendor_id);
 			}
 			base_addresses[i] = barword & 0xFFFF_FFFC;
+			base_type[i] = (barword & 0x3).try_into().unwrap();
 
 			if base_addresses[i] > 0 {
 				write_config(bus, device, register, u32::MAX);
@@ -102,6 +162,7 @@ impl PciAdapter {
 			programming_interface_id: (class_ids >> 8) as u8,
 			base_addresses: base_addresses,
 			base_sizes: base_sizes,
+			base_type: base_type,
 			irq: interrupt_info as u8,
 		}
 	}
