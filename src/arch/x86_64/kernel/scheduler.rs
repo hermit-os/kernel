@@ -74,6 +74,7 @@ pub struct CommonStack {
 	/// total size of all stacks
 	total_size: usize,
 }
+
 pub enum TaskStacks {
 	Boot(BootStack),
 	Common(CommonStack),
