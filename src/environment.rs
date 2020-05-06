@@ -20,10 +20,14 @@ pub use arch::aarch64::kernel::{
 	get_base_address, get_cmdline, get_cmdsize, get_image_size, is_single_kernel, is_uhyve,
 };
 
+use alloc::string::String;
 use core::{slice, str};
+use util;
 
 static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;
 static mut IS_PROXY: bool = false;
+static mut COMMAND_LINE_APPLICATION: Option<String> = None;
+static mut COMMAND_LINE_PATH: Option<String> = None;
 
 unsafe fn parse_command_line() {
 	let cmdsize = get_cmdsize();
@@ -36,20 +40,50 @@ unsafe fn parse_command_line() {
 	let slice = slice::from_raw_parts(cmdline, cmdsize);
 	let cmdline_str = str::from_utf8_unchecked(slice);
 
-	// Check for the -freq option.
-	if let Some(freq_index) = cmdline_str.find("-freq") {
-		let cmdline_freq_str = cmdline_str.split_at(freq_index + "-freq".len()).1;
-		let mhz_str = cmdline_freq_str
-			.split(' ')
-			.next()
-			.expect("Invalid -freq command line");
-		COMMAND_LINE_CPU_FREQUENCY = mhz_str
-			.parse()
-			.expect("Could not parse -freq command line as number");
-	}
+	// Split at spaces, but not while in quotes
+	let tokens = util::tokenize(cmdline_str, ' ');
+	debug!("Got cmdline tokens as {:?}", tokens);
 
-	// Check for the -proxy option.
-	IS_PROXY = cmdline_str.find("-proxy").is_some();
+	let mut tokeniter = tokens.into_iter();
+	loop {
+		if let Some(token) = tokeniter.next() {
+			match token.as_str() {
+				"-freq" => {
+					let mhz_str = tokeniter.next().expect("Invalid -freq command line");
+					COMMAND_LINE_CPU_FREQUENCY = mhz_str
+						.parse()
+						.expect("Could not parse -freq command line as number");
+				}
+				"-proxy" => {
+					IS_PROXY = true;
+				}
+				"-args" => {
+					let argv = tokeniter.next().expect("Invalid -args command line");
+					COMMAND_LINE_APPLICATION = Some(argv);
+				}
+				_ if COMMAND_LINE_PATH.is_none() => {
+					// Qemu passes in the kernel path (rusty-loader) as first argument
+					COMMAND_LINE_PATH = Some(token)
+				}
+				_ => {
+					warn!("Unknown cmdline option: {} [{}]", token, cmdline_str);
+				}
+			};
+		} else {
+			break;
+		}
+	}
+}
+
+/// Returns the cmdline argument passed in with "-args"
+pub fn get_command_line_argv() -> Option<&'static str> {
+	unsafe { COMMAND_LINE_APPLICATION.as_deref() }
+}
+
+#[allow(dead_code)]
+/// Returns the first cmdline argument, if not otherwise recognized. With qemu this is the host-path to the kernel (rusty-loader)
+pub fn get_command_line_path() -> Option<&'static str> {
+	unsafe { COMMAND_LINE_PATH.as_deref() }
 }
 
 pub fn init() {

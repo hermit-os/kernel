@@ -13,11 +13,13 @@ mod uhyve;
 pub use self::generic::*;
 pub use self::uhyve::*;
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use arch;
 use console;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
+use environment;
 use errno::*;
 use synch::spinlock::SpinlockIrqSave;
 use util;
@@ -90,10 +92,25 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
-		let argc = 1;
-		let dummy = Box::new("name\0".as_ptr());
-		let argv = Box::leak(dummy) as *const *const u8;
+		let mut argv = Vec::new();
+
+		let name = Box::leak(Box::new("{name}\0")).as_ptr();
+		argv.push(name);
+
+		if let Some(args) = environment::get_command_line_argv() {
+			let tokens = util::tokenize(args, ' ');
+			debug!("Parsed argv as: {:?}", tokens);
+			for mut t in tokens {
+				t.push('\0');
+				let ptr = Box::leak(t.into_boxed_str()).as_ptr();
+				argv.push(ptr);
+			}
+		}
+
 		let environ = ptr::null() as *const *const u8;
+
+		let argc = argv.len() as i32;
+		let argv = Box::leak(argv.into_boxed_slice()).as_ptr();
 
 		(argc, argv, environ)
 	}
