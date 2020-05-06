@@ -38,28 +38,28 @@ impl fmt::Debug for virtio_fs_config {
 	}
 }
 
-pub struct VirtiofsDriver<'a> {
+pub struct VirtioFsDriver<'a> {
 	common_cfg: &'a mut virtio_pci_common_cfg,
 	device_cfg: &'a virtio_fs_config,
 	notify_cfg: VirtioNotification,
 	vqueues: Option<Vec<Virtq<'a>>>,
 }
 
-impl<'a> fmt::Debug for VirtiofsDriver<'a> {
+impl<'a> fmt::Debug for VirtioFsDriver<'a> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "VirtiofsDriver {{ ")?;
+		write!(f, "VirtioFsDriver {{ ")?;
 		write!(f, "common_cfg: {:?}, ", self.common_cfg)?;
 		write!(f, "device_cfg: {:?}, ", self.device_cfg)?;
-		write!(f, "nofity_cfg: {:?}, ", self.device_cfg)?;
+		write!(f, "nofity_cfg: {:?}, ", self.notify_cfg)?;
 		match &self.vqueues {
 			None => write!(f, "Uninitialized VQs")?,
 			Some(vqs) => write!(f, "Initialized {} VQs", vqs.len())?,
 		}
-		write!(f, "}}")
+		write!(f, " }}")
 	}
 }
 
-impl VirtiofsDriver<'_> {
+impl VirtioFsDriver<'_> {
 	pub fn init_vqs(&mut self) {
 		let common_cfg = &mut self.common_cfg;
 		let device_cfg = &self.device_cfg;
@@ -163,7 +163,7 @@ impl VirtiofsDriver<'_> {
 	}
 }
 
-impl FuseInterface for VirtiofsDriver<'_> {
+impl FuseInterface for VirtioFsDriver<'_> {
 	fn send_command<S, T>(
 		&mut self,
 		cmd: fuse::Cmd<S>,
@@ -238,7 +238,7 @@ impl FuseInterface for VirtiofsDriver<'_> {
 
 pub fn create_virtiofs_driver(
 	adapter: pci::PciAdapter,
-) -> Option<Rc<RefCell<VirtiofsDriver<'static>>>> {
+) -> Option<Rc<RefCell<VirtioFsDriver<'static>>>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -297,7 +297,7 @@ pub fn create_virtiofs_driver(
 	// TODO: also load the other 2 cap types (?).
 
 	// Instanciate driver on heap, so it outlives this function
-	let drv = Rc::new(RefCell::new(VirtiofsDriver {
+	let drv = Rc::new(RefCell::new(VirtioFsDriver {
 		common_cfg,
 		device_cfg,
 		notify_cfg,

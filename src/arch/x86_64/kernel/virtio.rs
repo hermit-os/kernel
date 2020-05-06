@@ -7,9 +7,12 @@
 
 use arch::x86_64::kernel::apic;
 use arch::x86_64::kernel::irq::*;
-use arch::x86_64::kernel::pci::{self, PciAdapter, PciDriver};
+use arch::x86_64::kernel::pci::{
+	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
+};
 use arch::x86_64::kernel::percore::core_scheduler;
 use arch::x86_64::kernel::virtio_fs;
+use arch::x86_64::kernel::virtio_net;
 
 use arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use arch::x86_64::mm::{paging, virtualmem};
@@ -18,6 +21,9 @@ use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::convert::TryInto;
+use core::sync::atomic::spin_loop_hint;
+use core::sync::atomic::{fence, Ordering};
 
 use self::consts::*;
 
@@ -92,11 +98,14 @@ impl<'a> Virtq<'a> {
 
 		// 2.Read the virtqueue size from queue_size. This controls how big the virtqueue is (see 2.4 Virtqueues).
 		//   If this field is 0, the virtqueue does not exist.
-		let vqsize = common_cfg.queue_size as usize;
-		if vqsize == 0 || vqsize > 32768 {
+		if common_cfg.queue_size == 0 {
 			return None;
+		} else if common_cfg.queue_size > 16 {
+			common_cfg.queue_size = 16;
 		}
-		debug!("Initializing virtqueue {}, of size {}", index, vqsize);
+		let vqsize = common_cfg.queue_size as usize;
+
+		info!("Initializing virtqueue {}, of size {}", index, vqsize);
 
 		// 3.Optionally, select a smaller virtqueue size and write it to queue_size.
 
@@ -198,6 +207,82 @@ impl<'a> Virtq<'a> {
 	}
 
 	// Places dat in virtq, waits until buffer is used and response is in rsp_buf.
+	pub fn send_non_blocking(&mut self, dat: &[u8]) -> Result<u32, ()> {
+		// 2.6.13 Supplying Buffers to The Device
+		// The driver offers buffers to one of the device’s virtqueues as follows:
+
+		// 1. The driver places the buffer into free descriptor(s) in the descriptor table, chaining as necessary (see 2.6.5 The Virtqueue Descriptor Table).
+
+		// A buffer consists of zero or more device-readable physically-contiguous elements followed by zero or more physically-contiguous device-writable
+		// elements (each has at least one element). This algorithm maps it into the descriptor table to form a descriptor chain:
+
+		// 1. Get the next free descriptor table entry, d
+		// Choose head=0, since we only do one req. TODO: get actual next free descr table entry
+		let chainrc = self.virtq_desc.get_empty_chain();
+		let mut chain = chainrc.borrow_mut();
+		self.virtq_desc.extend(&mut chain);
+		let req = &mut chain.0.last_mut().unwrap().raw;
+
+		// 2. Set d.addr to the physical address of the start of b
+		req.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
+
+		// 3. Set d.len to the length of b.
+		req.len = dat.len() as u32; // TODO: better cast?
+
+		// 4. If b is device-writable, set d.flags to VIRTQ_DESC_F_WRITE, otherwise 0.
+		req.flags = 0;
+		trace!("written out descriptor: {:?} @ {:p}", req, req);
+
+		// 5. If there is a buffer element after this:
+		//    a) Set d.next to the index of the next free descriptor element.
+		//    b) Set the VIRTQ_DESC_F_NEXT bit in d.flags.
+		// done by next extend call!
+
+		trace!("Sending Descriptor chain {:?}", chain);
+
+		// 2. The driver places the index of the head of the descriptor chain into the next ring entry of the available ring.
+		let mut vqavail = self.avail.borrow_mut();
+		let aind = (*vqavail.idx % self.vqsize) as usize;
+		vqavail.ring[aind] = chain.0.first().unwrap().index;
+		// TODO: add multiple descriptor chains at once?
+
+		// 3. Steps 1 and 2 MAY be performed repeatedly if batching is possible.
+
+		// 4. The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+		fence(Ordering::SeqCst);
+
+		// 5. The available idx is increased by the number of descriptor chain heads added to the available ring.
+		// idx always increments, and wraps naturally at 65536:
+
+		*vqavail.idx = vqavail.idx.wrapping_add(1);
+
+		if *vqavail.idx == 0 {
+			trace!("VirtQ index wrapped!");
+		}
+
+		// 6. The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
+		fence(Ordering::SeqCst);
+
+		// 7. The driver sends an available buffer notification to the device if such notifications are not suppressed.
+		// 2.6.10.1 Driver Requirements: Available Buffer Notification Suppression
+		// If the VIRTIO_F_EVENT_IDX feature bit is not negotiated:
+		// - The driver MUST ignore the avail_event value.
+		// - After the driver writes a descriptor index into the available ring:
+		//     If flags is 1, the driver SHOULD NOT send a notification.
+		//     If flags is 0, the driver MUST send a notification.
+		let vqused = self.used.borrow();
+		let should_notify = *vqused.flags == 0;
+		drop(vqavail);
+		drop(vqused);
+
+		if should_notify {
+			self.notify_device();
+		}
+
+		Ok(chain.0.last_mut().unwrap().index.into())
+	}
+
+	// Places dat in virtq, waits until buffer is used and response is in rsp_buf.
 	pub fn send_blocking(&mut self, dat: &[&[u8]], rsp_buf: Option<&[&mut [u8]]>) {
 		// 2.6.13 Supplying Buffers to The Device
 		// The driver offers buffers to one of the device’s virtqueues as follows:
@@ -254,7 +339,7 @@ impl<'a> Virtq<'a> {
 		// 3. Steps 1 and 2 MAY be performed repeatedly if batching is possible.
 
 		// 4. The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-		// ????? TODO!
+		fence(Ordering::SeqCst);
 
 		// 5. The available idx is increased by the number of descriptor chain heads added to the available ring.
 		// idx always increments, and wraps naturally at 65536:
@@ -266,7 +351,7 @@ impl<'a> Virtq<'a> {
 		}
 
 		// 6. The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
-		// ????? TODO!
+		fence(Ordering::SeqCst);
 
 		// 7. The driver sends an available buffer notification to the device if such notifications are not suppressed.
 		// 2.6.10.1 Driver Requirements: Available Buffer Notification Suppression
@@ -291,6 +376,89 @@ impl<'a> Virtq<'a> {
 		// give chain back, so we can reuse the descriptors!
 		drop(chain);
 		self.virtq_desc.recycle_chain(chainrc)
+	}
+
+	pub fn check_used_elements(&mut self) -> Option<u32> {
+		let mut vqused = self.used.borrow_mut();
+		if let Some(index) = vqused.check_elements() {
+			self.virtq_desc.recycle_chain_with_index(index);
+			Some(index)
+		} else {
+			None
+		}
+	}
+
+	pub fn add_receiver_buffer(&mut self, addr: u64, len: usize) -> usize {
+		let chainrc = self.virtq_desc.get_empty_chain();
+		let mut chain = chainrc.borrow_mut();
+		self.virtq_desc.extend(&mut chain);
+		let rsp = &mut chain.0.last_mut().unwrap().raw;
+		rsp.addr = paging::virt_to_phys(addr as usize) as u64;
+		rsp.len = len.try_into().unwrap();
+		rsp.flags = VIRTQ_DESC_F_WRITE;
+
+		let mut vqavail = self.avail.borrow_mut();
+		let aind = (*vqavail.idx % self.vqsize) as usize;
+		vqavail.ring[aind] = chain.0.first().unwrap().index;
+
+		fence(Ordering::SeqCst);
+
+		*vqavail.idx = vqavail.idx.wrapping_add(1);
+
+		fence(Ordering::SeqCst);
+
+		if *vqavail.idx == 0 {
+			trace!("VirtQ index wrapped!");
+		}
+
+		aind
+	}
+
+	pub fn has_packet(&self) -> bool {
+		let vqused = self.used.borrow();
+
+		vqused.last_idx != *vqused.idx
+	}
+
+	pub fn get_available_buffer(&self) -> Result<(u32, u32), ()> {
+		let vqused = self.used.borrow();
+
+		if vqused.last_idx != *vqused.idx {
+			let used_index = vqused.last_idx as usize;
+			let usedelem = vqused.ring[used_index % vqused.ring.len()];
+
+			Ok((usedelem.id, usedelem.len))
+		} else {
+			Err(())
+		}
+	}
+
+	pub fn rx_buffer_consumed(&mut self) {
+		let mut vqused = self.used.borrow_mut();
+
+		if vqused.last_idx != *vqused.idx {
+			let usedelem = vqused.ring[vqused.last_idx as usize % vqused.ring.len()];
+
+			vqused.last_idx = vqused.last_idx.wrapping_add(1);
+
+			let mut vqavail = self.avail.borrow_mut();
+			let aind = (*vqavail.idx % self.vqsize) as usize;
+			vqavail.ring[aind] = usedelem.id.try_into().unwrap();
+
+			fence(Ordering::SeqCst);
+
+			*vqavail.idx = vqavail.idx.wrapping_add(1);
+
+			fence(Ordering::SeqCst);
+
+			let should_notify = *vqused.flags == 0;
+			drop(vqavail);
+			drop(vqused);
+
+			if should_notify {
+				self.notify_device();
+			}
+		}
 	}
 }
 
@@ -372,6 +540,18 @@ impl VirtqDescriptors {
 		}
 	}
 
+	fn recycle_chain_with_index(&self, index: u32) {
+		let mut used = self.used_chains.borrow_mut();
+
+		if let Some(idx) = used
+			.iter()
+			.position(|c| c.borrow().0[0].index == index.try_into().unwrap())
+		{
+			let chain = used.remove(index.try_into().unwrap());
+			self.free.borrow_mut().0.append(&mut chain.borrow_mut().0);
+		}
+	}
+
 	// Can't guarantee that the caller will pass back the chain to us, so never hand out complete ownership!
 	fn get_empty_chain(&self) -> Rc<RefCell<VirtqDescriptorChain>> {
 		// TODO: handle no-free case!
@@ -445,14 +625,30 @@ struct VirtqUsed<'a> {
 }
 
 impl<'a> VirtqUsed<'a> {
+	fn check_elements(&mut self) -> Option<u32> {
+		if unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {
+			None
+		} else {
+			let usedelem = self.ring[(self.last_idx as usize) % self.ring.len()];
+			self.last_idx = self.last_idx.wrapping_add(1);
+
+			fence(Ordering::SeqCst);
+
+			Some(usedelem.id)
+		}
+	}
+
 	fn wait_until_done(&mut self, chain: &VirtqDescriptorChain) -> bool {
 		// TODO: this might break if we have multiple running transfers at a time?
-		while unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {}
+		while unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {
+			spin_loop_hint();
+		}
 		self.last_idx = *self.idx;
 
 		let usedelem = self.ring[(self.last_idx.wrapping_sub(1) as usize) % self.ring.len()];
 
-		trace!("Used Element: {:?}", usedelem);
+		fence(Ordering::SeqCst);
+
 		assert!(usedelem.id == chain.0.first().unwrap().index as u32);
 		return true;
 
@@ -655,34 +851,56 @@ pub fn map_virtiocap(
 pub fn init_virtio_device(adapter: pci::PciAdapter) {
 	// TODO: 2.3.1: Loop until get_config_generation static, since it might change mid-read
 
-	if adapter.device_id <= 0x103F {
-		// Legacy device, skip
-		info!("Legacy Virtio device, skipping!");
-		return;
-	}
-	let virtio_device_id = adapter.device_id - 0x1040;
-
-	let drv = match virtio_device_id {
-		0x1a => {
+	match adapter.device_id {
+		0x1000..=0x103F => {
+			// Legacy device, skip
+			warn!("Legacy Virtio devices are not supported, skipping!");
+			return;
+		}
+		0x1041 => {
+			match num::FromPrimitive::from_u8(adapter.class_id).unwrap() {
+				PciClassCode::NetworkController => {
+					match num::FromPrimitive::from_u8(adapter.subclass_id).unwrap() {
+						PciNetworkControllerSubclass::EthernetController => {
+							// TODO: proper error handling on driver creation fail
+							let drv = virtio_net::create_virtionet_driver(adapter).unwrap();
+							pci::register_driver(PciDriver::VirtioNet(drv));
+						}
+						_ => {
+							warn!("Virtio device is NOT supported, skipping!");
+							return;
+						}
+					}
+				}
+				_ => {
+					warn!("Virtio device is NOT supported, skipping!");
+					return;
+				}
+			}
+		}
+		0x105a => {
 			info!("Found Virtio-FS device!");
+			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			virtio_fs::create_virtiofs_driver(adapter).unwrap()
+			virtio_fs::create_virtiofs_driver(adapter).unwrap();
 		}
 		_ => {
-			info!("Virtio device is NOT virtio-fs device, skipping!");
+			warn!("Virtio device is NOT supported, skipping!");
 			return;
 		}
 	};
 
 	// Install interrupt handler
 	irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
-
-	pci::register_driver(PciDriver::VirtioFs(drv));
 }
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive virtio interrupt");
+	match get_network_driver() {
+		Some(driver) => driver.borrow_mut().handle_interrupt(),
+		_ => (),
+	}
 	apic::eoi();
 	core_scheduler().scheduler();
 }

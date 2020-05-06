@@ -53,6 +53,10 @@ extern crate x86;
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
+extern crate num;
+#[macro_use]
+extern crate num_derive;
+extern crate num_traits;
 
 #[macro_use]
 mod macros;
@@ -152,6 +156,7 @@ extern "C" {
 }
 
 /// Helper function to check if uhyve provide an IP device
+#[cfg(feature = "newlib")]
 fn has_ipdevice() -> bool {
 	arch::x86_64::kernel::has_ipdevice()
 }
@@ -163,8 +168,6 @@ extern "C" fn initd(_arg: usize) {
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
-		#[cfg(feature = "newlib")]
-		fn init_uhyve_netif() -> i32;
 	}
 
 	// initialize LwIP library for newlib-based applications
@@ -178,23 +181,11 @@ extern "C" fn initd(_arg: usize) {
 	if environment::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-		if has_ipdevice() {
-			#[cfg(feature = "newlib")]
-			unsafe {
-				init_uhyve_netif();
-			}
-
-			#[cfg(not(feature = "newlib"))]
-			let _ = drivers::net::init();
-		}
 	} else if !environment::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
 	} else {
 		info!("HermitCore is running on common system!");
-
-		#[cfg(not(feature = "newlib"))]
-		let _ = drivers::net::init();
 	}
 
 	// Initialize PCI Drivers if on x86_64
