@@ -207,51 +207,30 @@ impl<'a> Virtq<'a> {
 	}
 
 	// Places dat in virtq, waits until buffer is used and response is in rsp_buf.
-	pub fn send_non_blocking(&mut self, dat: &[u8]) -> Result<u32, ()> {
-		// 2.6.13 Supplying Buffers to The Device
-		// The driver offers buffers to one of the device’s virtqueues as follows:
+	pub fn send_non_blocking(&mut self, index: usize, len: usize) -> Result<(), ()> {
+		// data is already stored in the TxBuffers => we have only to inform the host
+		// that a new buffer is available
 
-		// 1. The driver places the buffer into free descriptor(s) in the descriptor table, chaining as necessary (see 2.6.5 The Virtqueue Descriptor Table).
-
-		// A buffer consists of zero or more device-readable physically-contiguous elements followed by zero or more physically-contiguous device-writable
-		// elements (each has at least one element). This algorithm maps it into the descriptor table to form a descriptor chain:
-
-		// 1. Get the next free descriptor table entry, d
-		// Choose head=0, since we only do one req. TODO: get actual next free descr table entry
-		let chainrc = self.virtq_desc.get_empty_chain();
+		let chainrc = self.virtq_desc.get_chain_by_index(index);
 		let mut chain = chainrc.borrow_mut();
-		self.virtq_desc.extend(&mut chain);
-		let req = &mut chain.0.last_mut().unwrap().raw;
 
-		// 2. Set d.addr to the physical address of the start of b
-		req.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
-
-		// 3. Set d.len to the length of b.
-		req.len = dat.len() as u32; // TODO: better cast?
-
-		// 4. If b is device-writable, set d.flags to VIRTQ_DESC_F_WRITE, otherwise 0.
-		req.flags = 0;
-		trace!("written out descriptor: {:?} @ {:p}", req, req);
-
-		// 5. If there is a buffer element after this:
-		//    a) Set d.next to the index of the next free descriptor element.
-		//    b) Set the VIRTQ_DESC_F_NEXT bit in d.flags.
-		// done by next extend call!
-
-		trace!("Sending Descriptor chain {:?}", chain);
-
-		// 2. The driver places the index of the head of the descriptor chain into the next ring entry of the available ring.
 		let mut vqavail = self.avail.borrow_mut();
 		let aind = (*vqavail.idx % self.vqsize) as usize;
-		vqavail.ring[aind] = chain.0.first().unwrap().index;
-		// TODO: add multiple descriptor chains at once?
+		if aind != index {
+			warn!(
+				"Available index {} is different from buffer index {}",
+				aind, index
+			);
+		}
 
-		// 3. Steps 1 and 2 MAY be performed repeatedly if batching is possible.
+		let req = &mut chain.0.last_mut().unwrap().raw;
+		req.len = len.try_into().unwrap();
+		req.flags = 0;
 
-		// 4. The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		fence(Ordering::SeqCst);
 
-		// 5. The available idx is increased by the number of descriptor chain heads added to the available ring.
+		// The available idx is increased by the number of descriptor chain heads added to the available ring.
 		// idx always increments, and wraps naturally at 65536:
 
 		*vqavail.idx = vqavail.idx.wrapping_add(1);
@@ -260,10 +239,10 @@ impl<'a> Virtq<'a> {
 			trace!("VirtQ index wrapped!");
 		}
 
-		// 6. The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
+		// The driver performs a suitable memory barrier to ensure that it updates the idx field before checking for notification suppression.
 		fence(Ordering::SeqCst);
 
-		// 7. The driver sends an available buffer notification to the device if such notifications are not suppressed.
+		// The driver sends an available buffer notification to the device if such notifications are not suppressed.
 		// 2.6.10.1 Driver Requirements: Available Buffer Notification Suppression
 		// If the VIRTIO_F_EVENT_IDX feature bit is not negotiated:
 		// - The driver MUST ignore the avail_event value.
@@ -279,7 +258,7 @@ impl<'a> Virtq<'a> {
 			self.notify_device();
 		}
 
-		Ok(chain.0.last_mut().unwrap().index.into())
+		Ok(())
 	}
 
 	// Places dat in virtq, waits until buffer is used and response is in rsp_buf.
@@ -380,38 +359,36 @@ impl<'a> Virtq<'a> {
 
 	pub fn check_used_elements(&mut self) -> Option<u32> {
 		let mut vqused = self.used.borrow_mut();
-		if let Some(index) = vqused.check_elements() {
-			self.virtq_desc.recycle_chain_with_index(index);
-			Some(index)
-		} else {
-			None
-		}
+		vqused.check_elements()
 	}
 
-	pub fn add_receiver_buffer(&mut self, addr: u64, len: usize) -> usize {
+	pub fn add_buffer(&mut self, index: usize, addr: u64, len: usize, flags: u16) {
 		let chainrc = self.virtq_desc.get_empty_chain();
 		let mut chain = chainrc.borrow_mut();
 		self.virtq_desc.extend(&mut chain);
 		let rsp = &mut chain.0.last_mut().unwrap().raw;
 		rsp.addr = paging::virt_to_phys(addr as usize) as u64;
 		rsp.len = len.try_into().unwrap();
-		rsp.flags = VIRTQ_DESC_F_WRITE;
+		rsp.flags = flags;
 
 		let mut vqavail = self.avail.borrow_mut();
-		let aind = (*vqavail.idx % self.vqsize) as usize;
-		vqavail.ring[aind] = chain.0.first().unwrap().index;
+		if flags != 0 {
+			let aind = (*vqavail.idx % self.vqsize) as usize;
+			vqavail.ring[aind] = chain.0.first().unwrap().index;
 
-		fence(Ordering::SeqCst);
+			fence(Ordering::SeqCst);
 
-		*vqavail.idx = vqavail.idx.wrapping_add(1);
+			*vqavail.idx = vqavail.idx.wrapping_add(1);
 
-		fence(Ordering::SeqCst);
+			fence(Ordering::SeqCst);
 
-		if *vqavail.idx == 0 {
-			trace!("VirtQ index wrapped!");
+			if *vqavail.idx == 0 {
+				warn!("VirtQ index wrapped!");
+			}
+		} else {
+			let aind = index % self.vqsize as usize;
+			vqavail.ring[aind] = chain.0.first().unwrap().index;
 		}
-
-		aind
 	}
 
 	pub fn has_packet(&self) -> bool {
@@ -433,7 +410,7 @@ impl<'a> Virtq<'a> {
 		}
 	}
 
-	pub fn rx_buffer_consumed(&mut self) {
+	pub fn buffer_consumed(&mut self) {
 		let mut vqused = self.used.borrow_mut();
 
 		if vqused.last_idx != *vqused.idx {
@@ -540,16 +517,8 @@ impl VirtqDescriptors {
 		}
 	}
 
-	fn recycle_chain_with_index(&self, index: u32) {
-		let mut used = self.used_chains.borrow_mut();
-
-		if let Some(idx) = used
-			.iter()
-			.position(|c| c.borrow().0[0].index == index.try_into().unwrap())
-		{
-			let chain = used.remove(index.try_into().unwrap());
-			self.free.borrow_mut().0.append(&mut chain.borrow_mut().0);
-		}
+	fn get_chain_by_index(&self, index: usize) -> Rc<RefCell<VirtqDescriptorChain>> {
+		self.used_chains.borrow()[index].clone()
 	}
 
 	// Can't guarantee that the caller will pass back the chain to us, so never hand out complete ownership!
