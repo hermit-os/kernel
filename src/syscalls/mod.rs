@@ -32,6 +32,8 @@ pub use self::timer::*;
 #[cfg(not(test))]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 use arch::kernel::pci::find_adapter;
+
+use drivers::net::*;
 use environment;
 #[cfg(feature = "newlib")]
 use synch::spinlock::SpinlockIrqSave;
@@ -91,20 +93,80 @@ pub fn sys_pci_find_adapter(
 	kernel_function!(find_adapter(vendor_id, class_id, subclass_id))
 }
 
-fn __sys_page_alloc(sz: usize) -> (u64, u64) {
-	let virt_addr = crate::mm::allocate(sz, true);
-	let phys_addr = crate::arch::mm::paging::virt_to_phys(virt_addr);
+pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
+	unsafe { SYS.get_application_parameters() }
+}
 
-	(virt_addr as u64, phys_addr as u64)
+fn __sys_get_mac_address() -> [u8; 6] {
+	unsafe { SYS.get_mac_address() }
 }
 
 #[no_mangle]
-pub fn sys_page_alloc(sz: usize) -> (u64, u64) {
-	kernel_function!(__sys_page_alloc(sz))
+pub fn sys_get_mac_address() -> [u8; 6] {
+	kernel_function!(__sys_get_mac_address())
 }
 
-pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
-	unsafe { SYS.get_application_parameters() }
+fn __sys_get_mtu() -> u16 {
+	unsafe { SYS.get_mtu() }
+}
+
+#[no_mangle]
+pub fn sys_get_mtu() -> u16 {
+	kernel_function!(__sys_get_mtu())
+}
+
+fn __sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
+	unsafe { SYS.get_tx_buffer(len) }
+}
+
+#[no_mangle]
+pub fn sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
+	kernel_function!(__sys_get_tx_buffer(len))
+}
+
+fn __sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
+	unsafe { SYS.send_tx_buffer(handle, len) }
+}
+
+#[no_mangle]
+pub fn sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
+	kernel_function!(__sys_send_tx_buffer(handle, len))
+}
+
+fn __sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
+	unsafe { SYS.receive_rx_buffer() }
+}
+
+#[no_mangle]
+pub fn sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
+	kernel_function!(__sys_receive_rx_buffer())
+}
+
+fn __sys_rx_buffer_consumed() {
+	unsafe { SYS.rx_buffer_consumed() }
+}
+
+#[no_mangle]
+pub fn sys_rx_buffer_consumed() {
+	kernel_function!(__sys_rx_buffer_consumed())
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+pub fn sys_netwakeup() {
+	kernel_function!(netwakeup());
+}
+
+pub fn __sys_netwait(millis: Option<u64>) {
+	if unsafe { SYS.has_packet() } == false {
+		netwait(millis)
+	}
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+pub fn sys_netwait(millis: Option<u64>) {
+	kernel_function!(__sys_netwait(millis));
 }
 
 pub fn __sys_shutdown(arg: i32) -> ! {
