@@ -19,9 +19,12 @@ use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
 use errno::*;
+use synch::spinlock::SpinlockIrqSave;
 use util;
 
 use syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+
+static DRIVER_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
 const SEEK_SET: i32 = 0;
 const SEEK_CUR: i32 = 1;
@@ -97,6 +100,74 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn shutdown(&self, _arg: i32) -> ! {
 		arch::processor::shutdown();
+	}
+
+	fn get_mac_address(&self) -> [u8; 6] {
+		let mut mac: [u8; 6] = Default::default();
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => {
+				mac = driver.borrow().get_mac_address();
+			}
+			_ => {}
+		}
+
+		mac
+	}
+
+	fn get_mtu(&self) -> u16 {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow().get_mtu(),
+			_ => 1500,
+		}
+	}
+
+	fn has_packet(&self) -> bool {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow().has_packet(),
+			_ => true,
+		}
+	}
+
+	fn get_tx_buffer(&self, len: usize) -> Result<(*mut u8, usize), ()> {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow().get_tx_buffer(len),
+			_ => Err(()),
+		}
+	}
+
+	fn send_tx_buffer(&self, handle: usize, len: usize) -> Result<(), ()> {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow_mut().send_tx_buffer(handle, len),
+			_ => Err(()),
+		}
+	}
+
+	fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow().receive_rx_buffer(),
+			_ => Err(()),
+		}
+	}
+
+	fn rx_buffer_consumed(&self) {
+		let _lock = DRIVER_LOCK.lock();
+
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => driver.borrow_mut().rx_buffer_consumed(),
+			_ => (),
+		}
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]
