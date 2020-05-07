@@ -98,11 +98,9 @@ pub trait SyscallInterface: Send + Sync {
 		argv.push(name);
 
 		if let Some(args) = environment::get_command_line_argv() {
-			let tokens = util::tokenize(args, ' ');
-			debug!("Parsed argv as: {:?}", tokens);
-			for mut t in tokens {
-				t.push('\0');
-				let ptr = Box::leak(t.into_boxed_str()).as_ptr();
+			debug!("Setting argv as: {:?}", args);
+			for a in args {
+				let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
 				argv.push(ptr);
 			}
 		}

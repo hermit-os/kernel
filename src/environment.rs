@@ -21,12 +21,13 @@ pub use arch::aarch64::kernel::{
 };
 
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::{slice, str};
 use util;
 
 static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;
 static mut IS_PROXY: bool = false;
-static mut COMMAND_LINE_APPLICATION: Option<String> = None;
+static mut COMMAND_LINE_APPLICATION: Option<Vec<String>> = None;
 static mut COMMAND_LINE_PATH: Option<String> = None;
 
 unsafe fn parse_command_line() {
@@ -57,9 +58,10 @@ unsafe fn parse_command_line() {
 				"-proxy" => {
 					IS_PROXY = true;
 				}
-				"-args" => {
-					let argv = tokeniter.next().expect("Invalid -args command line");
-					COMMAND_LINE_APPLICATION = Some(argv);
+				"--" => {
+					// Collect remaining arguments as applications argv
+					COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
+					break;
 				}
 				_ if COMMAND_LINE_PATH.is_none() => {
 					// Qemu passes in the kernel path (rusty-loader) as first argument
@@ -75,8 +77,8 @@ unsafe fn parse_command_line() {
 	}
 }
 
-/// Returns the cmdline argument passed in with "-args"
-pub fn get_command_line_argv() -> Option<&'static str> {
+/// Returns the cmdline argument passed in after "--"
+pub fn get_command_line_argv() -> Option<&'static [String]> {
 	unsafe { COMMAND_LINE_APPLICATION.as_deref() }
 }
 
