@@ -134,6 +134,12 @@ $ qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio  -kernel path_to_
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
 
+You can provide arguments to the application via the kernel commandline, which you can set with qemu's `-append` option. Since both the kernel and the application can have parameters, they are separated with `--`:
+
+```bash
+qemu-system-x86_64 ... -append "kernel-arguments -- application-arguments"
+```
+
 #### Using virtio-fs
 
 The Kernel has rudimentary support for the virtio-fs shared file system. Currently only files, no folders are supported. To use it, you have to run a virtio-fs daemon and start qemu as described in [Standalone virtio-fs usage](https://virtio-fs.gitlab.io/howto-qemu.html):
