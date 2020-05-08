@@ -88,9 +88,10 @@ impl TaskStacks {
 			align_up!(size, BasePageSize::SIZE)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
-		let virt_addr =
-			::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE).unwrap();
-		let phys_addr = ::arch::mm::physicalmem::allocate(total_size).unwrap();
+		let virt_addr = ::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
+			.expect("Failed to allocate Virtual Memory for TaskStacks");
+		let phys_addr = ::arch::mm::physicalmem::allocate(total_size)
+			.expect("Failed to allocate Physical Memory for TaskStacks");
 
 		debug!(
 			"Create stacks at {:#X} with a size of {} KB",
