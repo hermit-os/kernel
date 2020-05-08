@@ -12,6 +12,7 @@
 use alloc::alloc::Layout;
 use arch;
 use core::panic::PanicInfo;
+use syscalls::__sys_shutdown;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
 #[cfg(not(test))]
@@ -30,9 +31,7 @@ fn panic(info: &PanicInfo) -> ! {
 
 	println!("");
 
-	loop {
-		arch::processor::halt();
-	}
+	__sys_shutdown(1);
 }
 
 #[linkage = "weak"]
