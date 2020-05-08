@@ -275,26 +275,17 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		if let Some(tsc_info) = cpuid.get_tsc_info() {
-			if let Some(freq) = tsc_info.tsc_frequency() {
-				let mhz = (freq / 1000000u64) as u16;
-				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo);
-			}
-		}
-
-		Err(())
+		let tsc_info = cpuid.get_tsc_info().ok_or(())?;
+		let freq = tsc_info.tsc_frequency().ok_or(())?;
+		let mhz = (freq / 1000000u64) as u16;
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		if let Some(hypervisor_info) = cpuid.get_hypervisor_info() {
-			if let Some(freq) = hypervisor_info.tsc_frequency() {
-				let mhz = (freq / 1000000u32) as u16;
-				return self
-					.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo);
-			}
-		}
-
-		Err(())
+		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
+		let freq = hypervisor_info.tsc_frequency().ok_or(())?;
+		let mhz = (freq / 1000000u32) as u16;
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}
 
 	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
