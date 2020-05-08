@@ -97,21 +97,21 @@ pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8)
 	unsafe { SYS.get_application_parameters() }
 }
 
-fn __sys_get_mac_address() -> [u8; 6] {
+fn __sys_get_mac_address() -> Result<[u8; 6]> {
 	unsafe { SYS.get_mac_address() }
 }
 
 #[no_mangle]
-pub fn sys_get_mac_address() -> [u8; 6] {
+pub fn sys_get_mac_address() -> Result<[u8; 6]> {
 	kernel_function!(__sys_get_mac_address())
 }
 
-fn __sys_get_mtu() -> u16 {
+fn __sys_get_mtu() -> Result<u16, ()> {
 	unsafe { SYS.get_mtu() }
 }
 
 #[no_mangle]
-pub fn sys_get_mtu() -> u16 {
+pub fn sys_get_mtu() -> Result<u16, ()> {
 	kernel_function!(__sys_get_mtu())
 }
 
@@ -142,12 +142,12 @@ pub fn sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
 	kernel_function!(__sys_receive_rx_buffer())
 }
 
-fn __sys_rx_buffer_consumed() {
+fn __sys_rx_buffer_consumed() -> Result<(),()> {
 	unsafe { SYS.rx_buffer_consumed() }
 }
 
 #[no_mangle]
-pub fn sys_rx_buffer_consumed() {
+pub fn sys_rx_buffer_consumed() -> Result<(),()> {
 	kernel_function!(__sys_rx_buffer_consumed())
 }
 
