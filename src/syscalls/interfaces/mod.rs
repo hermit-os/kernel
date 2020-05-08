@@ -117,7 +117,7 @@ pub trait SyscallInterface: Send + Sync {
 		arch::processor::shutdown();
 	}
 
-	fn get_mac_address(&self) -> Result<[u8; 6]> {
+	fn get_mac_address(&self) -> Result<[u8; 6], ()> {
 		let _lock = DRIVER_LOCK.lock();
 
 		match arch::kernel::pci::get_network_driver() {
