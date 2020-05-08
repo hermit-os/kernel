@@ -171,7 +171,7 @@ pub trait SyscallInterface: Send + Sync {
 		}
 	}
 
-	fn rx_buffer_consumed(&self) -> Result<(), ()>{
+	fn rx_buffer_consumed(&self) -> Result<(), ()> {
 		let _lock = DRIVER_LOCK.lock();
 
 		match arch::kernel::pci::get_network_driver() {
