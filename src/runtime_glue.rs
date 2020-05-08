@@ -11,7 +11,9 @@
 
 use alloc::alloc::Layout;
 use arch;
+use arch::kernel::processor::run_on_hypervisor;
 use core::panic::PanicInfo;
+use syscalls::__sys_shutdown;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
 #[cfg(not(test))]
@@ -29,6 +31,10 @@ fn panic(info: &PanicInfo) -> ! {
 	}
 
 	println!("");
+
+	if run_on_hypervisor().is_some() {
+		__sys_shutdown(1);
+	}
 
 	loop {
 		arch::processor::halt();
