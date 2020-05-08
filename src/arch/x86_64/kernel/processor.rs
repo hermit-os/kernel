@@ -281,7 +281,7 @@ impl CpuFrequency {
 				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo);
 			}
 		}
-		
+
 		Err(())
 	}
 
@@ -289,7 +289,8 @@ impl CpuFrequency {
 		if let Some(hypervisor_info) = cpuid.get_hypervisor_info() {
 			if let Some(freq) = hypervisor_info.tsc_frequency() {
 				let mhz = (freq / 1000000u32) as u16;
-				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo);
+				return self
+					.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo);
 			}
 		}
 
