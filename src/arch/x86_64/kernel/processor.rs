@@ -275,35 +275,25 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		match cpuid.get_tsc_info() {
-			Some(tsc_info) => {
-				// check if tsc_info provides a correct value
-				match tsc_info.tsc_frequency() {
-					Some(freq) => {
-						let mhz = (freq / 1000000u64) as u16;
-						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
-					}
-					None => Err(()),
-				}
+		if let Some(tsc_info) = cpuid.get_tsc_info() {
+			if let Some(freq) = tsc_info.tsc_frequency() {
+				let mhz = (freq / 1000000u64) as u16;
+				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo);
 			}
-			None => Err(()),
 		}
+		
+		Err(())
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
-		match cpuid.get_hypervisor_info() {
-			Some(hypervisor_info) => {
-				// check if tsc_info provides a correct value
-				match hypervisor_info.tsc_frequency() {
-					Some(freq) => {
-						let mhz = (freq / 1000000u32) as u16;
-						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
-					}
-					None => Err(()),
-				}
+		if let Some(hypervisor_info) = cpuid.get_hypervisor_info() {
+			if let Some(freq) = hypervisor_info.tsc_frequency() {
+				let mhz = (freq / 1000000u32) as u16;
+				return self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo);
 			}
-			None => Err(()),
 		}
+
+		Err(())
 	}
 
 	unsafe fn detect_from_cpuid_brand_string(&mut self, cpuid: &CpuId) -> Result<(), ()> {
