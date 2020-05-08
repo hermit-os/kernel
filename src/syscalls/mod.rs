@@ -97,12 +97,12 @@ pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8)
 	unsafe { SYS.get_application_parameters() }
 }
 
-fn __sys_get_mac_address() -> Result<[u8; 6]> {
+fn __sys_get_mac_address() -> Result<[u8; 6], ()> {
 	unsafe { SYS.get_mac_address() }
 }
 
 #[no_mangle]
-pub fn sys_get_mac_address() -> Result<[u8; 6]> {
+pub fn sys_get_mac_address() -> Result<[u8; 6], ()> {
 	kernel_function!(__sys_get_mac_address())
 }
 
