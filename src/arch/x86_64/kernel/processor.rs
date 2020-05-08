@@ -211,6 +211,7 @@ enum CpuFrequencySources {
 	Hypervisor,
 	CpuId,
 	CpuIdTscInfo,
+	HypervisorTscInfo,
 }
 
 impl fmt::Display for CpuFrequencySources {
@@ -222,6 +223,7 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::Hypervisor => write!(f, "Hypervisor"),
 			CpuFrequencySources::CpuId => write!(f, "CpuId"),
 			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
+			CpuFrequencySources::HypervisorTscInfo => write!(f, "Tsc Info from Hypervisor"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -272,7 +274,7 @@ impl CpuFrequency {
 		}
 	}
 
-	unsafe fn detect_from_cpid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+	unsafe fn detect_from_cpuid_tsc_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
 		match cpuid.get_tsc_info() {
 			Some(tsc_info) => {
 				// check if tsc_info provides a correct value
@@ -280,6 +282,22 @@ impl CpuFrequency {
 					Some(freq) => {
 						let mhz = (freq / 1000000u64) as u16;
 						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CpuIdTscInfo)
+					}
+					None => Err(()),
+				}
+			}
+			None => Err(()),
+		}
+	}
+
+	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+		match cpuid.get_hypervisor_info() {
+			Some(hypervisor_info) => {
+				// check if tsc_info provides a correct value
+				match hypervisor_info.tsc_frequency() {
+					Some(freq) => {
+						let mhz = (freq / 1000000u32) as u16;
+						self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 					}
 					None => Err(()),
 				}
@@ -406,9 +424,10 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect(&mut self) {
-		let cpuid = CpuId::new();
+		let mut cpuid = CpuId::new();
 		self.detect_from_cpuid(&cpuid)
-			.or_else(|_e| self.detect_from_cpid_tsc_info(&cpuid))
+			.or_else(|_e| self.detect_from_cpuid_tsc_info(&mut cpuid))
+			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&mut cpuid))
 			.or_else(|_e| self.detect_from_hypervisor())
 			//.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
@@ -578,6 +597,11 @@ impl fmt::Display for CpuFeaturePrinter {
 
 		Ok(())
 	}
+}
+
+pub fn run_on_hypervisor() -> Option<HypervisorInfo> {
+	let cpuid = CpuId::new();
+	cpuid.get_hypervisor_info()
 }
 
 struct CpuSpeedStep {

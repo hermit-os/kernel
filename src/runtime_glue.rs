@@ -11,6 +11,7 @@
 
 use alloc::alloc::Layout;
 use arch;
+use arch::kernel::processor::run_on_hypervisor;
 use core::panic::PanicInfo;
 use syscalls::__sys_shutdown;
 
@@ -31,7 +32,13 @@ fn panic(info: &PanicInfo) -> ! {
 
 	println!("");
 
-	__sys_shutdown(1);
+	if run_on_hypervisor().is_some() {
+		__sys_shutdown(1);
+	}
+
+	loop {
+		arch::processor::halt();
+	}
 }
 
 #[linkage = "weak"]
