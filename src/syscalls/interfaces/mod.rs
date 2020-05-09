@@ -148,7 +148,7 @@ pub trait SyscallInterface: Send + Sync {
 		let _lock = DRIVER_LOCK.lock();
 
 		match arch::kernel::pci::get_network_driver() {
-			Some(driver) => driver.borrow().get_tx_buffer(len),
+			Some(driver) => driver.borrow_mut().get_tx_buffer(len),
 			_ => Err(()),
 		}
 	}

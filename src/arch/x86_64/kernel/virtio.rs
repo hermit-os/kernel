@@ -397,7 +397,14 @@ impl<'a> Virtq<'a> {
 		vqused.last_idx != *vqused.idx
 	}
 
-	pub fn get_available_buffer(&self) -> Result<(u32, u32), ()> {
+	pub fn get_available_buffer(&self) -> Result<u32, ()> {
+		let vqavail = self.avail.borrow();
+		let index = *vqavail.idx % self.vqsize;
+
+		Ok(index as u32)
+	}
+
+	pub fn get_used_buffer(&self) -> Result<(u32, u32), ()> {
 		let vqused = self.used.borrow();
 
 		if vqused.last_idx != *vqused.idx {
@@ -518,7 +525,13 @@ impl VirtqDescriptors {
 	}
 
 	fn get_chain_by_index(&self, index: usize) -> Rc<RefCell<VirtqDescriptorChain>> {
-		self.used_chains.borrow()[index].clone()
+		let idx = self
+			.used_chains
+			.borrow()
+			.iter()
+			.position(|c| c.borrow().0.last().unwrap().index == index.try_into().unwrap())
+			.unwrap();
+		self.used_chains.borrow()[idx].clone()
 	}
 
 	// Can't guarantee that the caller will pass back the chain to us, so never hand out complete ownership!
