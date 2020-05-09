@@ -20,6 +20,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::TryInto;
+use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
 use x86::io::*;
 
@@ -220,8 +221,8 @@ impl Drop for TxBuffer {
 }
 
 pub struct VirtioNetDriver<'a> {
-	tx_buffers: SpinlockIrqSave<Vec<TxBuffer>>,
-	rx_buffers: SpinlockIrqSave<Vec<RxBuffer>>,
+	tx_buffers: Vec<TxBuffer>,
+	rx_buffers: Vec<RxBuffer>,
 	common_cfg: &'a mut virtio_pci_common_cfg,
 	device_cfg: &'a virtio_net_config,
 	isr_cfg: &'a mut u32,
@@ -265,7 +266,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let vqsize = common_cfg.queue_size as usize;
 		{
 			let buffer_size: usize = 65562;
-			let mut vec_buffer = self.rx_buffers.lock();
+			let mut vec_buffer = &mut self.rx_buffers;
 			for i in 0..vqsize {
 				let buffer = RxBuffer::new(buffer_size);
 				let addr = buffer.addr;
@@ -276,7 +277,7 @@ impl<'a> VirtioNetDriver<'a> {
 
 		{
 			let buffer_size: usize = self.get_mtu() as usize;
-			let mut vec_buffer = self.tx_buffers.lock();
+			let mut vec_buffer = &mut self.tx_buffers;
 			for i in 0..vqsize {
 				let buffer = TxBuffer::new(buffer_size);
 				let addr = buffer.addr;
@@ -347,10 +348,12 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn handle_interrupt(&mut self) {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			let mut buffers = self.tx_buffers.lock();
+			let mut buffers = &mut self.tx_buffers;
 			while let Some(idx) = (self.vqueues.as_deref_mut().unwrap())[1].check_used_elements() {
 				buffers[idx as usize].in_use = false;
 			}
+
+			fence(Ordering::SeqCst);
 
 			// handle changes to the queue
 			netwakeup();
@@ -365,16 +368,11 @@ impl<'a> VirtioNetDriver<'a> {
 		1500 //self.device_cfg.mtu
 	}
 
-	pub fn get_tx_buffer(&self, len: usize) -> Result<(*mut u8, usize), ()> {
-		static mut TX_COUNTER: usize = 0;
+	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+		let index = (self.vqueues.as_ref().unwrap())[1].get_available_buffer()?;
+		let index = index as usize;
 
-		let index = unsafe {
-			let old = TX_COUNTER;
-			TX_COUNTER = (TX_COUNTER + 1) % self.common_cfg.queue_size as usize;
-			old
-		};
-
-		let mut buffers = self.tx_buffers.lock();
+		let mut buffers = &mut self.tx_buffers;
 		if buffers[index].in_use == false {
 			buffers[index].in_use = true;
 			let header = buffers[index].addr as *mut virtio_net_hdr;
@@ -387,6 +385,7 @@ impl<'a> VirtioNetDriver<'a> {
 				index,
 			))
 		} else {
+			//warn!("Buffer {} is already in use!", index);
 			Err(())
 		}
 	}
@@ -401,8 +400,8 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
-		let (idx, len) = (self.vqueues.as_ref().unwrap())[0].get_available_buffer()?;
-		let addr = self.rx_buffers.lock()[idx as usize].addr;
+		let (idx, len) = (self.vqueues.as_ref().unwrap())[0].get_used_buffer()?;
+		let addr = self.rx_buffers[idx as usize].addr;
 		let virtio_net_hdr = unsafe { &*(addr as *const virtio_net_hdr) };
 		let rx_buffer_slice = unsafe {
 			slice::from_raw_parts(
@@ -491,8 +490,8 @@ pub fn create_virtionet_driver(
 
 	// Instanciate driver on heap, so it outlives this function
 	let drv = Rc::new(RefCell::new(VirtioNetDriver {
-		tx_buffers: SpinlockIrqSave::new(Vec::new()),
-		rx_buffers: SpinlockIrqSave::new(Vec::new()),
+		tx_buffers: Vec::new(),
+		rx_buffers: Vec::new(),
 		common_cfg,
 		device_cfg,
 		isr_cfg,
