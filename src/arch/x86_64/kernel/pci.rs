@@ -140,8 +140,8 @@ impl PciAdapter {
 			if barword & 1 == 0 {
 				debug!("Bar {} @{:x}:{:x} is memory mapped, but treated as IO mapped! this will cause errors later..", i, device_id, vendor_id);
 			}
-			base_addresses[i] = barword & 0xFFFF_FFFC;
-			base_type[i] = (barword & 0x3).try_into().unwrap();
+			base_addresses[i] = barword & 0xFFFF_FFF0;
+			base_type[i] = (barword & 0xF).try_into().unwrap();
 
 			if base_addresses[i] > 0 {
 				write_config(bus, device, register, u32::MAX);
