@@ -20,6 +20,7 @@ use arch::x86_64::mm::{paging, virtualmem};
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use config::VIRTIO_MAX_QUEUE_SIZE;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
@@ -53,6 +54,10 @@ pub mod consts {
 	pub const VIRTQ_DESC_F_NEXT: u16 = 1; // Buffer continues via next field
 	pub const VIRTQ_DESC_F_WRITE: u16 = 2; // Buffer is device write-only (instead of read-only)
 	pub const VIRTQ_DESC_F_INDIRECT: u16 = 4; // Buffer contains list of virtq_desc
+
+	// The Guest uses this in flag to advise the Host: don't interrupt me
+	// when you consume a buffer.
+	pub const VRING_AVAIL_F_NO_INTERRUPT: u16 = 1;
 }
 
 pub struct Virtq<'a> {
@@ -100,8 +105,8 @@ impl<'a> Virtq<'a> {
 		//   If this field is 0, the virtqueue does not exist.
 		if common_cfg.queue_size == 0 {
 			return None;
-		} else if common_cfg.queue_size > 16 {
-			common_cfg.queue_size = 16;
+		} else if common_cfg.queue_size > VIRTIO_MAX_QUEUE_SIZE {
+			common_cfg.queue_size = VIRTIO_MAX_QUEUE_SIZE;
 		}
 		let vqsize = common_cfg.queue_size as usize;
 
@@ -233,6 +238,7 @@ impl<'a> Virtq<'a> {
 		// The available idx is increased by the number of descriptor chain heads added to the available ring.
 		// idx always increments, and wraps naturally at 65536:
 
+		*vqavail.flags = VRING_AVAIL_F_NO_INTERRUPT;
 		*vqavail.idx = vqavail.idx.wrapping_add(1);
 
 		if *vqavail.idx == 0 {

@@ -345,16 +345,19 @@ impl<'a> VirtioNetDriver<'a> {
 		self.common_cfg.device_status |= 4;
 	}
 
+	pub fn check_used_elements(&mut self) {
+		let mut buffers = &mut self.tx_buffers;
+		while let Some(idx) = (self.vqueues.as_deref_mut().unwrap())[1].check_used_elements() {
+			buffers[idx as usize].in_use = false;
+		}
+
+		fence(Ordering::SeqCst);
+	}
+
 	pub fn handle_interrupt(&mut self) {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			let mut buffers = &mut self.tx_buffers;
-			while let Some(idx) = (self.vqueues.as_deref_mut().unwrap())[1].check_used_elements() {
-				buffers[idx as usize].in_use = false;
-			}
-
-			fence(Ordering::SeqCst);
-
+			self.check_used_elements();
 			// handle changes to the queue
 			netwakeup();
 		}
@@ -369,6 +372,14 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+		let mut buffers = &mut self.tx_buffers;
+
+		// do we have free buffers?
+		if buffers.iter().position(|b| b.in_use == false).is_none() {
+			// if not, check if we are able to free used elements
+			self.check_used_elements();
+		}
+
 		let index = (self.vqueues.as_ref().unwrap())[1].get_available_buffer()?;
 		let index = index as usize;
 
