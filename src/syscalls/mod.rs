@@ -31,7 +31,6 @@ pub use self::tasks::*;
 pub use self::timer::*;
 #[cfg(not(test))]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
-use arch::kernel::pci::find_adapter;
 
 use drivers::net::*;
 use environment;
@@ -82,15 +81,6 @@ pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size:
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	__sys_free(ptr, size, align)
-}
-
-#[no_mangle]
-pub fn sys_pci_find_adapter(
-	vendor_id: u16,
-	class_id: u8,
-	subclass_id: u8,
-) -> Option<([u32; 6], u8)> {
-	kernel_function!(find_adapter(vendor_id, class_id, subclass_id))
 }
 
 pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {

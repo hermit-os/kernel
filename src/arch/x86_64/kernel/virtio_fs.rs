@@ -237,7 +237,7 @@ impl FuseInterface for VirtioFsDriver<'_> {
 }
 
 pub fn create_virtiofs_driver(
-	adapter: pci::PciAdapter,
+	adapter: &pci::PciAdapter,
 ) -> Option<Rc<RefCell<VirtioFsDriver<'static>>>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
@@ -257,7 +257,7 @@ pub fn create_virtiofs_driver(
 
 	// get common config mapped, cast to virtio_pci_common_cfg
 	let common_cfg =
-		match virtio::map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
+		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
 			Some((cap_common_raw, _)) => unsafe {
 				&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
 			},
@@ -268,7 +268,7 @@ pub fn create_virtiofs_driver(
 		};
 	// get device config mapped, cast to virtio_fs_config
 	let device_cfg =
-		match virtio::map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
+		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
 			Some((cap_device_raw, _)) => unsafe { &mut *(cap_device_raw as *mut virtio_fs_config) },
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
@@ -277,7 +277,7 @@ pub fn create_virtiofs_driver(
 		};
 	// get device notifications mapped
 	let (notification_ptr, notify_off_multiplier) =
-		match virtio::map_virtiocap(bus, device, &adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
+		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
 			Some((cap_notification_raw, notify_off_multiplier)) => {
 				(
 					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
