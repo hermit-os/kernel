@@ -354,13 +354,20 @@ impl<'a> VirtioNetDriver<'a> {
 		fence(Ordering::SeqCst);
 	}
 
-	pub fn handle_interrupt(&mut self) {
+	pub fn handle_interrupt(&mut self) -> bool {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			self.check_used_elements();
-			// handle changes to the queue
-			netwakeup();
+			//self.check_used_elements();
+
+			if self.has_packet() {
+				// handle incoming packets
+				netwakeup();
+
+				return true;
+			}
 		}
+
+		false
 	}
 
 	pub fn get_mac_address(&self) -> [u8; 6] {

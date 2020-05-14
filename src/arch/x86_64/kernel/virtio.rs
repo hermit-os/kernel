@@ -885,10 +885,14 @@ pub fn init_virtio_device(adapter: pci::PciAdapter) {
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive virtio interrupt");
-	match get_network_driver() {
-		Some(driver) => driver.borrow_mut().handle_interrupt(),
-		_ => (),
-	}
 	apic::eoi();
-	core_scheduler().scheduler();
+
+	let check_scheduler = match get_network_driver() {
+		Some(driver) => driver.borrow_mut().handle_interrupt(),
+		_ => false,
+	};
+
+	if check_scheduler {
+		core_scheduler().scheduler();
+	}
 }
