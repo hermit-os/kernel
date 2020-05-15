@@ -779,7 +779,7 @@ pub fn map_virtiocap(
 	);
 
 	// corrosponding setup in eg Qemu @ https://github.com/qemu/qemu/blob/master/hw/virtio/virtio-pci.c#L1590 (virtio_pci_device_plugged)
-	if let Some((virtualbaraddr, size)) = adapter.memory_map_bar(baridx, false) {
+	if let Some((virtualbaraddr, size)) = adapter.memory_map_bar(baridx, true) {
 		let virtualcapaddr = virtualbaraddr + offset;
 
 		if size < offset + length {
