@@ -582,7 +582,7 @@ impl fmt::Display for CpuFeaturePrinter {
 }
 
 pub fn run_on_hypervisor() -> bool {
-	if  environment::is_uhyve() {
+	if environment::is_uhyve() {
 		true
 	} else {
 		let cpuid = CpuId::new();
