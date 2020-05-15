@@ -16,6 +16,8 @@ RM := del
 else
 RM := rm -rf
 endif
+SYSROOT:=$(shell rustc --print sysroot)
+OBJCOPY:=$(shell find $(SYSROOT) -name llvm-objcopy)
 
 .PHONY: all loader clean docs
 
@@ -31,4 +33,4 @@ docs:
 loader:
 	@echo Build loader
 	cargo build -Z build-std=core,alloc $(opt) --target $(target)-loader.json
-	@llvm-objcopy --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
+	$(OBJCOPY) --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
