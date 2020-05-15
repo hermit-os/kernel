@@ -33,6 +33,7 @@ pub mod arch;
 pub mod console;
 mod elf;
 mod physicalmem;
+mod rlib;
 mod runtime_glue;
 
 // IMPORTS

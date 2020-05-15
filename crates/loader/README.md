@@ -1,10 +1,11 @@
 # rusty-loader
 
 **rusty-loader** is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [Qemu](https://www.qemu.org).
-To build the loader the cargo subcommand [xbuild](https://github.com/rust-osdev/cargo-xbuild) is required and can be installed with following command:
+To build the loader the llvm-tools and the source code of Rust's runtime are required and can be installed with following command:
 
 ```bash
-$ cargo install cargo-xbuild
+$ rustup component add rust-src
+$ rustup component add llvm-tools-preview
 ```
 
 Afterwards, the loader can be build as follows:

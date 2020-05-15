@@ -158,7 +158,7 @@ L1:
     ; Set CR4
     mov eax, cr4
     and eax, 0xfffbf9ff     ; disable SSE
-    ;or eax, (1 << 7)        ; enable PGE
+    ;or eax, (1 << 7)       ; enable PGE
     mov cr4, eax
 
     ; Set CR0 (PM-bit is already set)
