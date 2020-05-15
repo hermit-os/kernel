@@ -32,7 +32,7 @@ fn panic(info: &PanicInfo) -> ! {
 
 	println!("");
 
-	if run_on_hypervisor().is_some() {
+	if run_on_hypervisor() {
 		__sys_shutdown(1);
 	}
 

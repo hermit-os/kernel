@@ -581,9 +581,13 @@ impl fmt::Display for CpuFeaturePrinter {
 	}
 }
 
-pub fn run_on_hypervisor() -> Option<HypervisorInfo> {
-	let cpuid = CpuId::new();
-	cpuid.get_hypervisor_info()
+pub fn run_on_hypervisor() -> bool {
+	if  environment::is_uhyve() {
+		true
+	} else {
+		let cpuid = CpuId::new();
+		cpuid.get_hypervisor_info().is_some()
+	}
 }
 
 struct CpuSpeedStep {
