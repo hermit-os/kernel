@@ -239,19 +239,8 @@ pub fn print_information() {
 pub fn allocate(sz: usize, no_execution: bool) -> usize {
 	let size = align_up!(sz, BasePageSize::SIZE);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
-	let count = size / BasePageSize::SIZE;
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().writable();
-	if no_execution {
-		flags.execute_disable();
-	}
-
-	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
-
-	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
-
-	virtual_address
+	map(physical_address, size, true, no_execution, false)
 }
 
 pub fn deallocate(virtual_address: usize, sz: usize) {
@@ -261,6 +250,51 @@ pub fn deallocate(virtual_address: usize, sz: usize) {
 		arch::mm::paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 		arch::mm::physicalmem::deallocate(entry.address(), size);
+	} else {
+		panic!(
+			"No page table entry for virtual address {:#X}",
+			virtual_address
+		);
+	}
+}
+
+/// Maps a given physical address and size in virtual space and returns address.
+pub fn map(
+	physical_address: usize,
+	sz: usize,
+	writable: bool,
+	no_execution: bool,
+	no_cache: bool,
+) -> usize {
+	let size = align_up!(sz, BasePageSize::SIZE);
+	let count = size / BasePageSize::SIZE;
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal();
+	if writable {
+		flags.writable();
+	}
+	if no_execution {
+		flags.execute_disable();
+	}
+	if no_cache {
+		flags.device();
+	}
+
+	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
+	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+
+	virtual_address
+}
+
+#[allow(dead_code)]
+/// unmaps virtual address, without 'freeing' physical memory it is mapped to!
+pub fn unmap(virtual_address: usize, sz: usize) {
+	let size = align_up!(sz, BasePageSize::SIZE);
+
+	if let Some(_) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
+		arch::mm::paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE);
+		arch::mm::virtualmem::deallocate(virtual_address, size);
 	} else {
 		panic!(
 			"No page table entry for virtual address {:#X}",

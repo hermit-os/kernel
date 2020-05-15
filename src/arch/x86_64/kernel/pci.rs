@@ -1,4 +1,5 @@
 // Copyright (c) 2017 Colin Finck, RWTH Aachen University
+//               2020 Thomas Lambertz, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -30,6 +31,7 @@ pub const PCI_COMMAND_BUSMASTER: u32 = 1 << 2;
 pub const PCI_ID_REGISTER: u32 = 0x00;
 pub const PCI_COMMAND_REGISTER: u32 = 0x04;
 pub const PCI_CLASS_REGISTER: u32 = 0x08;
+pub const PCI_HEADER_REGISTER: u32 = 0x0C;
 pub const PCI_BAR0_REGISTER: u32 = 0x10;
 pub const PCI_CAPABILITY_LIST_REGISTER: u32 = 0x34;
 pub const PCI_INTERRUPT_REGISTER: u32 = 0x3C;
@@ -37,8 +39,13 @@ pub const PCI_INTERRUPT_REGISTER: u32 = 0x3C;
 pub const PCI_STATUS_CAPABILITIES_LIST: u32 = 1 << 4;
 
 pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
-pub const PCI_BASE_ADDRESS_64BIT: u32 = 1 << 2;
-pub const PCI_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFF0;
+pub const PCI_MEM_BASE_ADDRESS_64BIT: u32 = 1 << 2;
+pub const PCI_MEM_PREFETCHABLE: u32 = 1 << 3;
+pub const PCI_MEM_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFF0;
+pub const PCI_IO_BASE_ADDRESS_MASK: u32 = 0xFFFF_FFFC;
+
+pub const PCI_HEADER_TYPE_MASK: u32 = 0x007F_0000;
+pub const PCI_MULTIFUNCTION_MASK: u32 = 0x0080_0000;
 
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
@@ -85,7 +92,7 @@ pub enum PciNetworkControllerSubclass {
 	NetworkController = 0x80,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug)]
 pub struct PciAdapter {
 	pub bus: u8,
 	pub device: u8,
@@ -94,10 +101,27 @@ pub struct PciAdapter {
 	pub class_id: u8,
 	pub subclass_id: u8,
 	pub programming_interface_id: u8,
-	pub base_addresses: [u32; 6],
-	pub base_sizes: [u32; 6],
-	pub base_type: [u8; 6],
+	pub base_addresses: Vec<PciBar>,
 	pub irq: u8,
+}
+#[derive(Clone, Copy, Debug)]
+pub enum PciBar {
+	IO(IOBar),
+	Memory(MemoryBar),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct IOBar {
+	pub index: u8,
+	pub addr: u32,
+	pub size: usize,
+}
+#[derive(Clone, Copy, Debug)]
+pub struct MemoryBar {
+	pub index: u8,
+	pub addr: usize,
+	pub size: usize,
+	pub width: u8, // 32 or 64 bit
+	pub prefetchable: bool,
 }
 
 pub enum PciDriver<'a> {
@@ -124,35 +148,132 @@ pub fn get_network_driver() -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
 	None
 }
 
-impl PciAdapter {
-	fn new(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Self {
-		// TODO: check Header_Type for 0x00 (general purpose device), since irq is not defined otherwise!
-		// TODO: warn if header_type specifies multifunciton, since we dont scan additional functions
-		let class_ids = read_config(bus, device, PCI_CLASS_REGISTER);
+/// Reads all bar registers of specified device and returns vector of PciBar's containing addresses and sizes.
+fn parse_bars(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Vec<PciBar> {
+	let mut bar_idxs = 0..6;
+	let mut bars = Vec::new();
+	while let Some(i) = bar_idxs.next() {
+		let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
+		let barword = read_config(bus, device, register);
+		debug!(
+			"Found bar{} @{:x}:{:x} as 0x{:x}",
+			i, vendor_id, device_id, barword
+		);
 
-		let mut base_addresses: [u32; 6] = [0; 6];
-		let mut base_sizes: [u32; 6] = [0; 6];
-		let mut base_type: [u8; 6] = [0; 6];
-		// TODO: this only works for I/O Space BARs! Verify that bit 0 is 1!
-		for i in 0..6 {
-			let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
-			let barword = read_config(bus, device, register);
-			if barword & 1 == 0 {
-				debug!("Bar {} @{:x}:{:x} is memory mapped, but treated as IO mapped! this will cause errors later..", i, device_id, vendor_id);
-			}
-			base_addresses[i] = barword & 0xFFFF_FFF0;
-			base_type[i] = (barword & 0xF).try_into().unwrap();
+		// We assume BIOS or something similar has initialized the device already and set appropriate values into the bar registers
 
-			if base_addresses[i] > 0 {
-				write_config(bus, device, register, u32::MAX);
-				base_sizes[i] = !(read_config(bus, device, register) & PCI_BASE_ADDRESS_MASK) + 1;
-				write_config(bus, device, register, base_addresses[i]);
-			}
+		// If barword is all 0, the bar is disabled
+		if barword == 0 {
+			continue;
 		}
 
+		// Determine if bar is IO-mapped or memory-mapped
+		if barword & PCI_BASE_ADDRESS_IO_SPACE != 0 {
+			// IO Mapped BAR
+			debug!("Bar {} @{:x}:{:x} IO mapped!", i, vendor_id, device_id);
+
+			let base_addr = barword & PCI_IO_BASE_ADDRESS_MASK;
+
+			// determine size by writing 0xFFFFFFFF
+			write_config(bus, device, register, u32::MAX);
+			let sizebits = read_config(bus, device, register);
+			// Restore original value of register
+			write_config(bus, device, register, barword);
+			let size = (!(sizebits & PCI_IO_BASE_ADDRESS_MASK) + 1) as usize;
+
+			bars.push(PciBar::IO(IOBar {
+				index: i as u8,
+				addr: base_addr,
+				size,
+			}));
+		} else {
+			// Memory Mapped BAR
+			let prefetchable = barword & PCI_MEM_PREFETCHABLE != 0;
+
+			if barword & PCI_MEM_BASE_ADDRESS_64BIT != 0 {
+				// 64-bit, load additional bar-word
+				let register_high = PCI_BAR0_REGISTER + (bar_idxs.next().unwrap() << 2);
+				let barword_high = read_config(bus, device, register_high);
+
+				let base_addr = ((barword_high as usize) << 32) + (barword & 0xFFFF_FFF0) as usize;
+				debug!(
+					"64-bit memory bar, merged next barword. Addr: 0x{:x}",
+					base_addr
+				);
+
+				// determine size by writing 0xFFFFFFFF
+				write_config(bus, device, register, u32::MAX);
+				let sizebits = read_config(bus, device, register);
+
+				// Also read/write to register_high if needed
+				let size = if sizebits == 0 {
+					write_config(bus, device, register_high, u32::MAX);
+					let sizebits = read_config(bus, device, register_high);
+					// Restore original value of register_high
+					write_config(bus, device, register_high, barword);
+
+					((!sizebits + 1) as usize) << 32
+				} else {
+					(!(sizebits & PCI_MEM_BASE_ADDRESS_MASK) + 1) as usize
+				};
+
+				// Restore original value
+				write_config(bus, device, register, barword);
+
+				bars.push(PciBar::Memory(MemoryBar {
+					index: i as u8,
+					addr: base_addr,
+					size,
+					width: 64,
+					prefetchable,
+				}));
+			} else {
+				// 32-bit
+				let base_addr = (barword & 0xFFFF_FFF0) as usize;
+
+				// determine size by writing 0xFFFFFFFF
+				write_config(bus, device, register, u32::MAX);
+				let size = !(read_config(bus, device, register) & PCI_MEM_BASE_ADDRESS_MASK) + 1;
+
+				// Restore original value
+				write_config(bus, device, register, barword);
+
+				bars.push(PciBar::Memory(MemoryBar {
+					index: i as u8,
+					addr: base_addr,
+					size: size.try_into().unwrap(),
+					width: 32,
+					prefetchable,
+				}));
+			}
+		}
+	}
+
+	return bars;
+}
+
+impl PciAdapter {
+	fn new(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Option<Self> {
+		let header = read_config(bus, device, PCI_HEADER_REGISTER);
+		if header & PCI_HEADER_TYPE_MASK != 0 {
+			error!(
+				"PCI Device @{:x}:{:x} does not have header type 0!",
+				vendor_id, device_id
+			);
+			return None;
+		}
+		if header & PCI_MULTIFUNCTION_MASK != 0 {
+			warn!(
+				"PCI Device @{:x}:{:x} has multiple functions! Currently only one is handled.",
+				vendor_id, device_id
+			);
+		}
+
+		let class_ids = read_config(bus, device, PCI_CLASS_REGISTER);
+		let bars = parse_bars(bus, device, vendor_id, device_id);
 		let interrupt_info = read_config(bus, device, PCI_INTERRUPT_REGISTER);
 
-		Self {
+		Some(Self {
 			bus: bus,
 			device: device,
 			vendor_id: vendor_id,
@@ -160,17 +281,84 @@ impl PciAdapter {
 			class_id: (class_ids >> 24) as u8,
 			subclass_id: (class_ids >> 16) as u8,
 			programming_interface_id: (class_ids >> 8) as u8,
-			base_addresses: base_addresses,
-			base_sizes: base_sizes,
-			base_type: base_type,
+			base_addresses: bars,
 			irq: interrupt_info as u8,
-		}
+		})
 	}
 
 	pub fn make_bus_master(&self) {
 		let mut command = read_config(self.bus, self.device, PCI_COMMAND_REGISTER);
 		command |= PCI_COMMAND_BUSMASTER;
 		write_config(self.bus, self.device, PCI_COMMAND_REGISTER, command);
+	}
+
+	/// Returns the bar at bar-register baridx.
+	pub fn get_bar(&self, baridx: u8) -> Option<PciBar> {
+		for bar in &self.base_addresses {
+			match bar {
+				PciBar::IO(bar) => {
+					if bar.index == baridx {
+						return Some(PciBar::IO(*bar));
+					}
+				}
+				PciBar::Memory(bar) => {
+					if bar.index == baridx {
+						return Some(PciBar::Memory(*bar));
+					}
+				}
+			}
+		}
+		return None;
+	}
+
+	/// Memory maps pci bar with specified index to identical location in virtual memory.
+	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
+	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
+	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(usize, usize)> {
+		let bar = match self.get_bar(index) {
+			Some(PciBar::IO(_)) => {
+				warn!("Cannot map IOBar!");
+				return None;
+			}
+			Some(PciBar::Memory(bar)) => bar,
+			None => {
+				warn!("Memory bar not found!");
+				return None;
+			}
+		};
+
+		debug!(
+			"Mapping bar {} at 0x{:x} with length 0x{:x}",
+			index, bar.addr, bar.size
+		);
+
+		if bar.width != 64 {
+			warn!("Currently only mapping of 64 bit bars is supported!");
+			return None;
+		}
+		if !bar.prefetchable {
+			warn!("Currently only mapping of prefetchable bars is supported!")
+		}
+
+		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
+		// We therefore do not need to reserve any additional memory in our kernel.
+		// Map bar into RW^X virtual memory
+		let physical_address = bar.addr;
+		let virtual_address = ::mm::map(physical_address, bar.size, true, false, no_cache);
+
+		Some((virtual_address, bar.size))
+	}
+}
+
+impl fmt::Display for PciBar {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let (typ, addr, size) = match self {
+			PciBar::IO(bar) => ("IOBar", bar.addr as usize, bar.size as usize),
+			PciBar::Memory(bar) => ("MemoryBar", bar.addr, bar.size),
+		};
+		write!(f, "{}: 0x{:x} (size 0x{:x})", typ, addr, size)?;
+
+		Ok(())
 	}
 }
 
@@ -229,15 +417,8 @@ impl fmt::Display for PciAdapter {
 			write!(f, ", IRQ {}", self.irq)?;
 		}
 
-		write!(f, ", iobase ")?;
-		for i in 0..self.base_addresses.len() {
-			if self.base_addresses[i] > 0 {
-				write!(
-					f,
-					"0x{:x} (size 0x{:x}) ",
-					self.base_addresses[i], self.base_sizes[i]
-				)?;
-			}
+		for bar in &self.base_addresses {
+			write!(f, ", {}", bar)?;
 		}
 
 		Ok(())
@@ -266,21 +447,7 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 	let adapters = PCI_ADAPTERS.lock();
 	for adapter in adapters.iter() {
 		if adapter.vendor_id == vendor_id && adapter.device_id == device_id {
-			return Some(*adapter);
-		}
-	}
-
-	None
-}
-
-pub fn find_adapter(vendor_id: u16, class_id: u8, subclass_id: u8) -> Option<([u32; 6], u8)> {
-	let adapters = PCI_ADAPTERS.lock();
-	for adapter in adapters.iter() {
-		if adapter.vendor_id == vendor_id
-			&& adapter.class_id == class_id
-			&& adapter.subclass_id == subclass_id
-		{
-			return Some((adapter.base_addresses, adapter.irq));
+			return Some(adapter.clone());
 		}
 	}
 
@@ -301,7 +468,9 @@ pub fn init() {
 				let device_id = (device_vendor_id >> 16) as u16;
 				let vendor_id = device_vendor_id as u16;
 				let adapter = PciAdapter::new(bus, device, vendor_id, device_id);
-				adapters.push(adapter);
+				if let Some(adapter) = adapter {
+					adapters.push(adapter);
+				}
 			}
 		}
 	}
@@ -317,7 +486,7 @@ pub fn init_drivers() {
 				"Found virtio device with device id 0x{:x}",
 				adapter.device_id
 			);
-			virtio::init_virtio_device(*adapter);
+			virtio::init_virtio_device(adapter);
 		}
 	}
 }
