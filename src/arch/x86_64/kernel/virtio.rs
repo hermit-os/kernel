@@ -14,8 +14,7 @@ use arch::x86_64::kernel::percore::core_scheduler;
 use arch::x86_64::kernel::virtio_fs;
 use arch::x86_64::kernel::virtio_net;
 
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use arch::x86_64::mm::{paging, virtualmem};
+use arch::x86_64::mm::paging;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -771,72 +770,40 @@ pub fn map_virtiocap(
 	};
 	// Since we have verified caplistoffset to be virtio_pci_cap common config, read fields.
 	// TODO: cleanup 'hacky' type conversions
-	let bar: usize = (pci::read_config(bus, device, virtiocapoffset + 4) & 0xFF) as usize; // get offset_of!(virtio_pci_cap, bar)
+	let baridx: u8 = (pci::read_config(bus, device, virtiocapoffset + 4) & 0xFF) as u8; // get offset_of!(virtio_pci_cap, bar)
 	let offset: usize = pci::read_config(bus, device, virtiocapoffset + 8) as usize; // get offset_of!(virtio_pci_cap, offset)
 	let length: usize = pci::read_config(bus, device, virtiocapoffset + 12) as usize; // get offset_of!(virtio_pci_cap, length)
 	debug!(
 		"Found virtio config bar as 0x{:x}, offset 0x{:x}, length 0x{:x}",
-		bar, offset, length
+		baridx, offset, length
 	);
 
-	if (adapter.base_sizes[bar] as usize) < offset + length {
-		error!(
-			"virtio config struct does not fit in bar! Aborting! 0x{:x} < 0x{:x}",
-			adapter.base_sizes[bar],
-			offset + length
-		);
-		return None;
-	}
-
-	// base_addresses from bar are IOBASE?
-	// TODO: do proper memmapped bars in pci.rs
-	let barword = pci::read_config(bus, device, pci::PCI_BAR0_REGISTER + ((bar as u32) << 2));
-	debug!("Found bar{} as 0x{:x}", bar, barword);
-	assert!(barword & 1 == 0, "Not an memory mapped bar!");
-
-	let bartype = (barword >> 1) & 0b11;
-	assert!(bartype == 2, "Not a 64 bit bar!");
-
-	let prefetchable = (barword >> 3) & 1;
-	assert!(prefetchable == 1, "Bar not prefetchable, but 64 bit!");
-
-	let barwordhigh = pci::read_config(
-		bus,
-		device,
-		pci::PCI_BAR0_REGISTER + (((bar + 1) as u32) << 2),
-	);
-	//let barbase = barwordhigh << 33; // creates general protection fault... only when shifting by >=32 though..
-	let barbase: usize = ((barwordhigh as usize) << 32) + (barword & 0xFFFF_FFF0) as usize;
-
-	debug!(
-		"Mapping bar {} at 0x{:x} with length 0x{:x}",
-		bar, barbase, length
-	);
 	// corrosponding setup in eg Qemu @ https://github.com/qemu/qemu/blob/master/hw/virtio/virtio-pci.c#L1590 (virtio_pci_device_plugged)
-	// map 1 page (0x1000?) TODO: map "length"!
-	// for virtio-fs we are "lucky" and each cap is exactly one page (contiguous, but we dont care, map each on its own)
-	let membase = barbase as *mut u8;
-	let capbase = unsafe { membase.offset(offset as isize) as usize };
-	let virtualcapaddr = virtualmem::allocate(BasePageSize::SIZE).unwrap();
-	let mut flags = paging::PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
-	paging::map::<BasePageSize>(virtualcapaddr, capbase, 1, flags);
+	if let Some((virtualbaraddr, size)) = adapter.memory_map_bar(baridx, true) {
+		let virtualcapaddr = virtualbaraddr + offset;
 
-	/*
-		let mut slice = unsafe {
-				core::slice::from_raw_parts_mut(membase.offset(offset as isize), length)
-		};
-		info!("{:?}", slice);
-	*/
-	if virtiocaptype == VIRTIO_PCI_CAP_NOTIFY_CFG {
-		let notify_off_multiplier: u32 = pci::read_config(bus, device, virtiocapoffset + 16); // get offset_of!(virtio_pci_notify_cap, notify_off_multiplier)
-		Some((virtualcapaddr, notify_off_multiplier))
+		if size < offset + length {
+			error!(
+				"virtio config struct does not fit in bar! Aborting! 0x{:x} < 0x{:x}",
+				size,
+				offset + length
+			);
+			return None;
+		}
+
+		if virtiocaptype == VIRTIO_PCI_CAP_NOTIFY_CFG {
+			let notify_off_multiplier: u32 = pci::read_config(bus, device, virtiocapoffset + 16); // get offset_of!(virtio_pci_notify_cap, notify_off_multiplier)
+			Some((virtualcapaddr, notify_off_multiplier))
+		} else {
+			Some((virtualcapaddr, 0))
+		}
 	} else {
-		Some((virtualcapaddr, 0))
+		warn!("Could not map virtio-cap-bar!");
+		None
 	}
 }
 
-pub fn init_virtio_device(adapter: pci::PciAdapter) {
+pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 	// TODO: 2.3.1: Loop until get_config_generation static, since it might change mid-read
 
 	match adapter.device_id {
