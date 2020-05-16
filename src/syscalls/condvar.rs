@@ -12,21 +12,13 @@ use scheduler::task::TaskHandlePriorityQueue;
 
 struct CondQueue {
 	queue: TaskHandlePriorityQueue,
-	id: usize,
 }
 
 impl CondQueue {
-	pub fn new(id: usize) -> Self {
+	pub fn new() -> Self {
 		CondQueue {
 			queue: TaskHandlePriorityQueue::new(),
-			id: id,
 		}
-	}
-}
-
-impl Drop for CondQueue {
-	fn drop(&mut self) {
-		debug!("Drop queue for condition variable with id 0x{:x}", self.id);
 	}
 }
 
@@ -40,9 +32,6 @@ unsafe fn __sys_destroy_queue(ptr: usize) -> i32 {
 	if *id != 0 {
 		let cond = Box::from_raw((*id) as *mut CondQueue);
 		mem::drop(cond);
-
-		// reset id
-		*id = 0;
 	}
 
 	0
@@ -55,9 +44,15 @@ pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
 
 unsafe fn __sys_notify(ptr: usize, count: i32) -> i32 {
 	let id = ptr as *const usize;
-	if id.is_null() || *id == 0 {
+
+	if id.is_null() {
 		// invalid argument
 		debug!("sys_notify: invalid address to condition variable");
+		return -1;
+	}
+
+	if *id == 0 {
+		debug!("sys_notify: invalid reference to condition variable");
 		return -1;
 	}
 
@@ -87,16 +82,37 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 	kernel_function!(__sys_notify(ptr, count))
 }
 
-unsafe fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+unsafe fn __sys_init_queue(ptr: usize) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
-		debug!("sys_wait: ivalid address to condition variable");
+		debug!("sys_init_queue: ivalid address to condition variable");
 		return -1;
 	}
 
 	if *id == 0 {
 		debug!("Create condition variable queue");
-		let queue = Box::new(CondQueue::new(ptr));
+		let queue = Box::new(CondQueue::new());
+		*id = Box::into_raw(queue) as usize;
+	}
+
+	0
+}
+
+#[no_mangle]
+pub unsafe fn sys_init_queue(ptr: usize) -> i32 {
+	kernel_function!(__sys_init_queue(ptr))
+}
+
+unsafe fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+	let id = ptr as *mut usize;
+	if id.is_null() {
+		debug!("sys_add_queue: invalid address to condition variable");
+		return -1;
+	}
+
+	if *id == 0 {
+		debug!("Create condition variable queue");
+		let queue = Box::new(CondQueue::new());
 		*id = Box::into_raw(queue) as usize;
 	}
 
