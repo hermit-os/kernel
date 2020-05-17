@@ -5,19 +5,26 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+// The implementation is inspired by Andrew D. Birrell's paper
+// "Implementing Condition Variables with Semaphores"
+
 use alloc::boxed::Box;
-use arch::percore::*;
 use core::mem;
-use scheduler::task::TaskHandlePriorityQueue;
+use core::sync::atomic::{AtomicIsize, Ordering};
+use synch::semaphore::Semaphore;
 
 struct CondQueue {
-	queue: TaskHandlePriorityQueue,
+	counter: AtomicIsize,
+	sem1: Semaphore,
+	sem2: Semaphore,
 }
 
 impl CondQueue {
 	pub fn new() -> Self {
 		CondQueue {
-			queue: TaskHandlePriorityQueue::new(),
+			counter: AtomicIsize::new(0),
+			sem1: Semaphore::new(0),
+			sem2: Semaphore::new(0),
 		}
 	}
 }
@@ -60,17 +67,16 @@ unsafe fn __sys_notify(ptr: usize, count: i32) -> i32 {
 
 	if count < 0 {
 		// Wake up all task that has been waiting for this condition variable
-		while let Some(task) = cond.queue.pop() {
-			core_scheduler().custom_wakeup(task);
+		while cond.counter.load(Ordering::SeqCst) > 0 {
+			cond.counter.fetch_sub(1, Ordering::SeqCst);
+			cond.sem1.release();
+			cond.sem2.acquire(None);
 		}
 	} else {
 		for _ in 0..count {
-			// Wake up any task that has been waiting for this condition variable
-			if let Some(task) = cond.queue.pop() {
-				core_scheduler().custom_wakeup(task);
-			} else {
-				debug!("Unable to wakeup task");
-			}
+			cond.counter.fetch_sub(1, Ordering::SeqCst);
+			cond.sem1.release();
+			cond.sem2.acquire(None);
 		}
 	}
 
@@ -116,19 +122,16 @@ unsafe fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 		*id = Box::into_raw(queue) as usize;
 	}
 
-	let wakeup_time = if timeout_ns <= 0 {
-		None
+	if timeout_ns <= 0 {
+		let cond = &mut *((*id) as *mut CondQueue);
+		cond.counter.fetch_add(1, Ordering::SeqCst);
+
+		0
 	} else {
-		Some(timeout_ns as u64 / 1000)
-	};
+		error!("Conditional variables with timeout is currently not supported");
 
-	// Block the current task and add it to the wakeup queue.
-	let core_scheduler = core_scheduler();
-	core_scheduler.block_current_task(wakeup_time);
-	let cond = &mut *((*id) as *mut CondQueue);
-	cond.queue.push(core_scheduler.get_current_task_handle());
-
-	0
+		-1
+	}
 }
 
 #[no_mangle]
@@ -136,14 +139,26 @@ pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	kernel_function!(__sys_add_queue(ptr, timeout_ns))
 }
 
-fn __sys_wait(_ptr: usize) -> i32 {
-	// Switch to the next task.
-	core_scheduler().reschedule();
+unsafe fn __sys_wait(ptr: usize) -> i32 {
+	let id = ptr as *mut usize;
+	if id.is_null() {
+		debug!("sys_wait: invalid address to condition variable");
+		return -1;
+	}
+
+	if *id == 0 {
+		error!("sys_wait: Unable to determine condition variable");
+		return -1;
+    }
+
+	let cond = &mut *((*id) as *mut CondQueue);
+	cond.sem1.acquire(None);
+	cond.sem2.release();
 
 	0
 }
 
 #[no_mangle]
-pub fn sys_wait(ptr: usize) -> i32 {
+pub unsafe fn sys_wait(ptr: usize) -> i32 {
 	kernel_function!(__sys_wait(ptr))
 }
