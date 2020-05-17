@@ -149,7 +149,7 @@ unsafe fn __sys_wait(ptr: usize) -> i32 {
 	if *id == 0 {
 		error!("sys_wait: Unable to determine condition variable");
 		return -1;
-    }
+	}
 
 	let cond = &mut *((*id) as *mut CondQueue);
 	cond.sem1.acquire(None);
