@@ -65,7 +65,6 @@ hermit-sys = "0.1.*"
 
 [profile.release]
 opt-level = 3
-lto = true
 
 [profile.dev]
 opt-level = 1
