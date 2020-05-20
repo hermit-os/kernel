@@ -28,10 +28,10 @@ pub const TASK_TIME_SLICE: u64 = 10_000;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Option<BTreeMap<CoreId, &PerCoreScheduler>> = None;
+static mut SCHEDULERS: BTreeMap<CoreId, &PerCoreScheduler> = BTreeMap::new();
 /// Map between Task ID and Task Control Block
-static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, VecDeque<TaskHandle>>>> =
-	SpinlockIrqSave::new(None);
+static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
+	SpinlockIrqSave::new(BTreeMap::new());
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -95,11 +95,7 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS
-				.lock()
-				.as_mut()
-				.unwrap()
-				.insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			if core_id != core_scheduler().core_id {
@@ -183,11 +179,7 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS
-				.lock()
-				.as_mut()
-				.unwrap()
-				.insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			if core_id != core_scheduler().core_id {
 				input_locked.new_tasks.push_back(clone_task.clone());
@@ -345,7 +337,7 @@ impl PerCoreScheduler {
 			debug!("Cleaning up task {}", id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			match TASKS.lock().as_mut().unwrap().remove(&id) {
+			match TASKS.lock().remove(&id) {
 				Some(mut queue) => {
 					while let Some(task) = queue.pop_front() {
 						result = true;
@@ -502,22 +494,17 @@ impl PerCoreScheduler {
 
 fn get_tid() -> TaskId {
 	static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
-	let mut guard = TASKS.lock();
+	let guard = TASKS.lock();
 
 	loop {
 		let id = TaskId::from(TID_COUNTER.fetch_add(1, Ordering::SeqCst));
-		if !guard.as_mut().unwrap().contains_key(&id) {
+		if !guard.contains_key(&id) {
 			return id;
 		}
 	}
 }
 
-pub fn init() {
-	unsafe {
-		SCHEDULERS = Some(BTreeMap::new());
-	}
-	*TASKS.lock() = Some(BTreeMap::new());
-}
+pub fn init() {}
 
 #[inline]
 pub fn abort() {
@@ -532,11 +519,7 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS
-		.lock()
-		.as_mut()
-		.unwrap()
-		.insert(tid, VecDeque::with_capacity(1));
+	TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
@@ -557,14 +540,14 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe {
-		SCHEDULERS.as_mut().unwrap().insert(core_id, &(*scheduler));
+		SCHEDULERS.insert(core_id, &(*scheduler));
 	}
 }
 
 #[inline]
 fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	if let Some(result) = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) } {
+	if let Some(result) = unsafe { SCHEDULERS.get(&core_id) } {
 		result
 	} else {
 		panic!(
@@ -585,7 +568,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 
 	{
 		let mut guard = TASKS.lock();
-		match guard.as_mut().unwrap().get_mut(&id) {
+		match guard.get_mut(&id) {
 			Some(queue) => {
 				queue.push_back(core_scheduler.get_current_task_handle());
 				core_scheduler.block_current_task(None);
