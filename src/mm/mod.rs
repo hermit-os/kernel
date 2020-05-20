@@ -11,14 +11,16 @@ mod hole;
 #[cfg(test)]
 mod test;
 
-use arch;
-use arch::mm::paging::{BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use arch::mm::physicalmem::total_memory_size;
+use crate::arch;
+use crate::arch::mm::paging::{
+	BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags,
+};
+use crate::arch::mm::physicalmem::total_memory_size;
 #[cfg(feature = "newlib")]
-use arch::mm::virtualmem::kernel_heap_end;
+use crate::arch::mm::virtualmem::kernel_heap_end;
+use crate::environment;
 use core::mem;
 use core::sync::atomic::spin_loop_hint;
-use environment;
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
@@ -185,7 +187,7 @@ pub fn init() {
 
 		unsafe {
 			HEAP_START_ADDRESS = virt_addr;
-			::ALLOCATOR.lock().init(virt_addr, virt_size);
+			crate::ALLOCATOR.lock().init(virt_addr, virt_size);
 		}
 
 		map_addr = virt_addr + counter;

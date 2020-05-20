@@ -8,19 +8,19 @@
 
 pub mod task;
 
+use crate::arch;
+use crate::arch::irq;
+use crate::arch::percore::*;
+use crate::arch::switch;
+use crate::collections::AvoidInterrupts;
+use crate::config::*;
+use crate::scheduler::task::*;
+use crate::synch::spinlock::*;
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
-use arch;
-use arch::irq;
-use arch::percore::*;
-use arch::switch;
-use collections::AvoidInterrupts;
-use config::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
-use scheduler::task::*;
-use synch::spinlock::*;
 
 /// Time slice of a task in microseconds.
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.

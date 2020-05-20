@@ -32,11 +32,11 @@ pub use self::timer::*;
 #[cfg(not(test))]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
-use drivers::net::*;
-use environment;
+use crate::drivers::net::*;
+use crate::environment;
 #[cfg(feature = "newlib")]
-use synch::spinlock::SpinlockIrqSave;
-use syscalls::interfaces::SyscallInterface;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::syscalls::interfaces::SyscallInterface;
 
 #[cfg(feature = "newlib")]
 const LWIP_FD_BIT: i32 = 1 << 30;

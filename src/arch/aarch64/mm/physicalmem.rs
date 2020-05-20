@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::aarch64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
-use mm::{MM_LOCK, POOL};
+use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
+use crate::collections::Node;
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::mm::{MM_LOCK, POOL};
 
 extern "C" {
 	static limit: usize;

@@ -5,15 +5,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::{get_limit, get_mbinfo};
-use arch::x86_64::mm::paddr_to_slice;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
+use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
+use crate::arch::x86_64::mm::paddr_to_slice;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::collections::Node;
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::synch::spinlock::*;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
 use multiboot::{MemoryType, Multiboot};
-use synch::spinlock::*;
 
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);

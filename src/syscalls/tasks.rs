@@ -4,23 +4,22 @@
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
-
-use arch;
-use arch::kernel::get_processor_count;
-use arch::percore::*;
-use config::USER_STACK_SIZE;
+use crate::arch;
+use crate::arch::kernel::get_processor_count;
+use crate::arch::percore::*;
+use crate::config::USER_STACK_SIZE;
+use crate::errno::*;
+#[cfg(feature = "newlib")]
+use crate::mm::{task_heap_end, task_heap_start};
+use crate::scheduler;
+use crate::scheduler::task::{Priority, TaskId};
+use crate::syscalls;
+use crate::syscalls::timer::timespec;
 use core::convert::TryInto;
 use core::isize;
 #[cfg(feature = "newlib")]
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicU32, Ordering};
-use errno::*;
-#[cfg(feature = "newlib")]
-use mm::{task_heap_end, task_heap_start};
-use scheduler;
-use scheduler::task::{Priority, TaskId};
-use syscalls;
-use syscalls::timer::timespec;
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
@@ -67,7 +66,7 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 
 fn __sys_thread_exit(arg: i32) -> ! {
 	debug!("Exit thread with error code {}!", arg);
-	core_scheduler().exit(arg);
+	core_scheduler().exit(arg)
 }
 
 #[no_mangle]

@@ -16,14 +16,14 @@ pub mod serial;
 pub mod stubs;
 pub mod systemtime;
 
-use arch::aarch64::kernel::percore::*;
-use arch::aarch64::kernel::serial::SerialPort;
-pub use arch::aarch64::kernel::stubs::*;
-pub use arch::aarch64::kernel::systemtime::get_boot_time;
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::serial::SerialPort;
+pub use crate::arch::aarch64::kernel::stubs::*;
+pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
+use crate::environment;
+use crate::kernel_message_buffer;
+use crate::synch::spinlock::Spinlock;
 use core::ptr;
-use environment;
-use kernel_message_buffer;
-use synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 

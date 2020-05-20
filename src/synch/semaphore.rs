@@ -6,9 +6,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::percore::*;
-use scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
-use synch::spinlock::SpinlockIrqSave;
+use crate::arch::percore::*;
+use crate::scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
+use crate::synch::spinlock::SpinlockIrqSave;
 
 struct SemaphoreState {
 	/// Resource available count

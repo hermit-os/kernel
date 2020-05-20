@@ -35,14 +35,14 @@ pub mod virtio;
 pub mod virtio_fs;
 pub mod virtio_net;
 
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::serial::SerialPort;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::serial::SerialPort;
 
+use crate::environment;
+use crate::kernel_message_buffer;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};
-use environment;
-use kernel_message_buffer;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
@@ -288,8 +288,8 @@ pub fn boot_processor_init() {
 		vga::init();
 	}
 
-	::mm::init();
-	::mm::print_information();
+	crate::mm::init();
+	crate::mm::print_information();
 	environment::init();
 	gdt::init();
 	gdt::add_current_core();

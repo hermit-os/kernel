@@ -5,8 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::collections::{DoublyLinkedList, Node};
 use alloc::rc::Rc;
-use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 
 pub struct FreeListEntry {
@@ -16,10 +16,7 @@ pub struct FreeListEntry {
 
 impl FreeListEntry {
 	pub const fn new(start: usize, end: usize) -> Self {
-		FreeListEntry {
-			start,
-			end,
-		}
+		FreeListEntry { start, end }
 	}
 }
 
@@ -256,15 +253,15 @@ fn allocate() {
 	freelist.list.push(entry);
 	let addr = freelist.allocate(0x1000);
 
-	assert!(addr.unwrap() != 0x1000);
+	assert_ne!(addr.unwrap(), 0x1000);
 	for node in freelist.list.iter() {
-		assert!(node.borrow_mut().value.start != 0x2000);
-		assert!(node.borrow_mut().value.end != 0x10000);
+		assert_ne!(node.borrow_mut().value.start, 0x2000);
+		assert_ne!(node.borrow_mut().value.end, 0x10000);
 	}
 
 	let addr = freelist.allocate_aligned(0x1000, 0x2000);
 	for node in freelist.list.iter() {
-		assert!(node.borrow_mut().value.start % 0x2000 != 0);
+		assert_ne!(node.borrow_mut().value.start % 0x2000, 0);
 	}
 }
 
@@ -281,7 +278,7 @@ fn deallocate() {
 	freelist.deallocate(addr.unwrap(), 0x1000);
 
 	for node in freelist.list.iter() {
-		assert!(node.borrow_mut().value.start != 0x1000);
-		assert!(node.borrow_mut().value.end != 0x10000);
+		assert_ne!(node.borrow_mut().value.start, 0x1000);
+		assert_ne!(node.borrow_mut().value.end, 0x10000);
 	}
 }

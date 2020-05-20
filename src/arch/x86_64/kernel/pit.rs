@@ -8,8 +8,8 @@
 
 #![allow(dead_code)]
 
-use arch::x86_64::kernel::pic;
-use x86::io::*;
+use crate::arch::x86_64::kernel::pic;
+use crate::x86::io::*;
 
 const PIT_CLOCK: u64 = 1_193_182;
 pub const PIT_INTERRUPT_NUMBER: u8 = pic::PIC1_INTERRUPT_OFFSET + 0;

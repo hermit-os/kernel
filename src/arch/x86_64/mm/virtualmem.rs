@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
-use synch::spinlock::*;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::collections::Node;
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::synch::spinlock::*;
 
 static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
@@ -23,8 +23,9 @@ pub fn init() {
 
 pub fn allocate(size: usize) -> Result<usize, ()> {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -36,14 +37,16 @@ pub fn allocate(size: usize) -> Result<usize, ()> {
 pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
-	assert!(
-		size % alignment == 0,
+	assert_eq!(
+		size % alignment,
+		0,
 		"Size {:#X} is not a multiple of the given alignment {:#X}",
 		size,
 		alignment
 	);
-	assert!(
-		alignment % BasePageSize::SIZE == 0,
+	assert_eq!(
+		alignment % BasePageSize::SIZE,
+		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
 		BasePageSize::SIZE
@@ -63,15 +66,17 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -91,15 +96,17 @@ pub fn reserve(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE

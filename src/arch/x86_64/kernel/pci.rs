@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
+use crate::arch::x86_64::kernel::virtio;
+use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
+use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::x86::io::*;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
-use arch::x86_64::kernel::virtio;
-use arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
-use arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
-use synch::spinlock::SpinlockIrqSave;
-use x86::io::*;
 
 // TODO: should these be pub? currently needed since used in virtio.rs maybe use getter methods to be more flexible.
 pub const PCI_MAX_BUS_NUMBER: u8 = 32;
@@ -344,7 +344,7 @@ impl PciAdapter {
 		// We therefore do not need to reserve any additional memory in our kernel.
 		// Map bar into RW^X virtual memory
 		let physical_address = pci_bar.addr;
-		let virtual_address = ::mm::map(physical_address, pci_bar.size, true, false, no_cache);
+		let virtual_address = crate::mm::map(physical_address, pci_bar.size, true, false, no_cache);
 
 		Some((virtual_address, pci_bar.size))
 	}

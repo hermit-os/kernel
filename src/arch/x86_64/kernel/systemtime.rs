@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::processor;
-use arch::x86_64::kernel::BOOT_INFO;
+use crate::arch::x86_64::kernel::irq;
+use crate::arch::x86_64::kernel::processor;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::environment;
 use core::sync::atomic::spin_loop_hint;
-use environment;
 use x86::io::*;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;

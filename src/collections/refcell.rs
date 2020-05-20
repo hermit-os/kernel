@@ -12,7 +12,7 @@
 //! By borrowing the reference, interrupts are automatically disabled to support
 //! the usage within an interrupt handler.
 
-use arch::kernel::irq;
+use crate::arch::kernel::irq;
 use core::cell;
 use core::ops::{Deref, DerefMut};
 

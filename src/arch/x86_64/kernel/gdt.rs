@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::config::*;
+use crate::x86::bits64::segmentation::*;
+use crate::x86::bits64::task::*;
+use crate::x86::dtables::{self, DescriptorTablePointer};
+use crate::x86::segmentation::*;
+use crate::x86::task::*;
+use crate::x86::Ring;
 use alloc::boxed::Box;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::BOOT_INFO;
-use config::*;
 use core::mem;
-use x86::bits64::segmentation::*;
-use x86::bits64::task::*;
-use x86::dtables::{self, DescriptorTablePointer};
-use x86::segmentation::*;
-use x86::task::*;
-use x86::Ring;
 
 pub const GDT_NULL: u16 = 0;
 pub const GDT_KERNEL_CODE: u16 = 1;
@@ -44,7 +44,7 @@ struct Gdt {
 pub fn init() {
 	unsafe {
 		// Dynamically allocate memory for the GDT.
-		GDT = ::mm::allocate(mem::size_of::<Gdt>(), false) as *mut Gdt;
+		GDT = crate::mm::allocate(mem::size_of::<Gdt>(), false) as *mut Gdt;
 
 		// The NULL descriptor is always the first entry.
 		(*GDT).entries[GDT_NULL as usize] = Descriptor::NULL;
@@ -96,7 +96,7 @@ pub fn add_current_core() {
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
-		let ist = ::mm::allocate(KERNEL_STACK_SIZE, true);
+		let ist = crate::mm::allocate(KERNEL_STACK_SIZE, true);
 		boxed_tss.ist[i] = (ist + KERNEL_STACK_SIZE - 0x10) as u64;
 	}
 

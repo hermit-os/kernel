@@ -12,19 +12,19 @@ mod uhyve;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
+use crate::arch;
+use crate::console;
+use crate::environment;
+use crate::errno::*;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::util;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch;
-use console;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
-use environment;
-use errno::*;
-use synch::spinlock::SpinlockIrqSave;
-use util;
 
-use syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
 
 static DRIVER_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 

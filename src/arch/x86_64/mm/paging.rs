@@ -7,20 +7,20 @@
 
 #![allow(dead_code)]
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::get_mbinfo;
-use arch::x86_64::kernel::irq;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::get_mbinfo;
+use crate::arch::x86_64::kernel::irq;
 //use arch::x86_64::kernel::is_uhyve;
-use arch::x86_64::kernel::processor;
-use arch::x86_64::mm::paddr_to_slice;
-use arch::x86_64::mm::physicalmem;
+use crate::arch::x86_64::kernel::processor;
+use crate::arch::x86_64::mm::paddr_to_slice;
+use crate::arch::x86_64::mm::physicalmem;
+use crate::environment;
+use crate::mm;
+use crate::scheduler;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
-use environment;
-use mm;
 use multiboot::Multiboot;
-use scheduler;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
@@ -149,23 +149,26 @@ impl PageTableEntry {
 		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
-			assert!(
-				physical_address % LargePageSize::SIZE == 0,
+			assert_eq!(
+				physical_address % LargePageSize::SIZE,
+				0,
 				"Physical address is not on a 2 MiB page boundary (physical_address = {:#X})",
 				physical_address
 			);
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
-			assert!(
-				physical_address % BasePageSize::SIZE == 0,
+			assert_eq!(
+				physical_address % BasePageSize::SIZE,
+				0,
 				"Physical address is not on a 4 KiB page boundary (physical_address = {:#X})",
 				physical_address
 			);
 		}
 
 		// Verify that the physical address does not exceed the CPU's physical address width.
-		assert!(
-			physical_address >> processor::get_physical_address_bits() == 0,
+		assert_eq!(
+			physical_address >> processor::get_physical_address_bits(),
+			0,
 			"Physical address exceeds CPU's physical address width (physical_address = {:#X})",
 			physical_address
 		);
