@@ -24,6 +24,7 @@
 #![allow(clippy::forget_copy)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
+#![feature(const_btree_new)]
 #![feature(const_fn)]
 #![feature(lang_items)]
 #![feature(linkage)]
@@ -51,8 +52,6 @@ extern crate multiboot;
 extern crate x86;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 extern crate num;
 #[macro_use]
 extern crate num_derive;

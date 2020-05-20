@@ -34,7 +34,6 @@ acpi = []
 bitflags = "1.2"
 #cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
-lazy_static = { version = "1.4.0", default-features = false, features = ["spin_no_std"] }
 num-derive = "0.3"
 
 [dependencies.num]
