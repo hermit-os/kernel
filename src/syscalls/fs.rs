@@ -51,9 +51,7 @@ TODO:
 */
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
-lazy_static! {
-	pub static ref FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
-}
+pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
 
 pub struct Filesystem {
 	// Keep track of mount-points
@@ -64,7 +62,7 @@ pub struct Filesystem {
 }
 
 impl Filesystem {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		Self {
 			mounts: BTreeMap::new(),
 			files: BTreeMap::new(),
