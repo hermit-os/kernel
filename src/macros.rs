@@ -31,6 +31,7 @@ macro_rules! print {
 
 /// Print formatted text to our console, followed by a newline.
 macro_rules! println {
+    () => (print!("\n"));
 	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
 }
 

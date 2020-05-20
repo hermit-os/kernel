@@ -99,10 +99,10 @@ impl PerCoreScheduler {
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(task.clone());
+				input_locked.new_tasks.push_back(task);
 				true
 			} else {
-				core_scheduler().ready_queue.push(task.clone());
+				core_scheduler().ready_queue.push(task);
 				false
 			}
 		};
@@ -126,8 +126,9 @@ impl PerCoreScheduler {
 
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
-			assert!(
-				current_task_borrowed.status != TaskStatus::TaskIdle,
+			assert_ne!(
+				current_task_borrowed.status,
+				TaskStatus::TaskIdle,
 				"Trying to terminate the idle task"
 			);
 
@@ -182,10 +183,10 @@ impl PerCoreScheduler {
 			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(clone_task.clone());
+				input_locked.new_tasks.push_back(clone_task);
 				true
 			} else {
-				core_scheduler().ready_queue.push(clone_task.clone());
+				core_scheduler().ready_queue.push(clone_task);
 				false
 			}
 		};
@@ -526,7 +527,7 @@ pub fn add_current_core() {
 		core_id, tid
 	);
 	let boxed_scheduler = Box::new(PerCoreScheduler {
-		core_id: core_id,
+		core_id,
 		current_task: idle_task.clone(),
 		idle_task: idle_task.clone(),
 		fpu_owner: idle_task,

@@ -34,7 +34,7 @@ pub struct SerialPort {
 impl SerialPort {
 	pub const fn new(port_address: u16) -> Self {
 		Self {
-			port_address: port_address,
+			port_address,
 		}
 	}
 

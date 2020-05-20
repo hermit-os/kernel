@@ -137,9 +137,9 @@ impl TaskStacks {
 		}
 
 		TaskStacks::Common(CommonStack {
-			virt_addr: virt_addr,
-			phys_addr: phys_addr,
-			total_size: total_size,
+			virt_addr,
+			phys_addr,
+			total_size,
 		})
 	}
 
@@ -151,8 +151,8 @@ impl TaskStacks {
 		debug!("IST0 is located at {:#X}", ist0);
 
 		TaskStacks::Boot(BootStack {
-			stack: stack,
-			ist0: ist0,
+			stack,
+			ist0,
 		})
 	}
 

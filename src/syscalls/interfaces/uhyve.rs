@@ -88,7 +88,7 @@ struct SysExit {
 
 impl SysExit {
 	fn new(arg: i32) -> SysExit {
-		SysExit { arg: arg }
+		SysExit { arg }
 	}
 }
 
@@ -119,8 +119,8 @@ impl SysOpen {
 	fn new(name: *const u8, flags: i32, mode: i32) -> SysOpen {
 		SysOpen {
 			name: paging::virtual_to_physical(name as usize) as *const u8,
-			flags: flags,
-			mode: mode,
+			flags,
+			mode,
 			ret: -1,
 		}
 	}
@@ -149,9 +149,9 @@ struct SysRead {
 impl SysRead {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
 		SysRead {
-			fd: fd,
-			buf: buf,
-			len: len,
+			fd,
+			buf,
+			len,
 			ret: -1,
 		}
 	}
@@ -167,9 +167,9 @@ struct SysWrite {
 impl SysWrite {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
 		SysWrite {
-			fd: fd,
-			buf: buf,
-			len: len,
+			fd,
+			buf,
+			len,
 		}
 	}
 }
@@ -184,9 +184,9 @@ struct SysLseek {
 impl SysLseek {
 	fn new(fd: i32, offset: isize, whence: i32) -> SysLseek {
 		SysLseek {
-			fd: fd,
-			offset: offset,
-			whence: whence,
+			fd,
+			offset,
+			whence,
 		}
 	}
 }

@@ -29,7 +29,7 @@ pub struct Node<T> {
 impl<T> Node<T> {
 	pub fn new(value: T) -> Rc<RefCell<Self>> {
 		Rc::new(RefCell::new(Self {
-			value: value,
+			value,
 			prev: None,
 			next: None,
 		}))

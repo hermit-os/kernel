@@ -282,7 +282,7 @@ impl<S: PageSize> Page<S> {
 		assert!(first.virtual_address <= last.virtual_address);
 		PageIter {
 			current: first,
-			last: last,
+			last,
 		}
 	}
 
@@ -635,7 +635,7 @@ pub fn virtual_to_physical(virtual_address: usize) -> usize {
 	};
 
 	for i in (0..3).rev() {
-		page_bits = page_bits - PAGE_MAP_BITS;
+		page_bits -= PAGE_MAP_BITS;
 
 		let vpn = (virtual_address >> page_bits) as isize;
 		let ptr = SELF[i] as *const usize;

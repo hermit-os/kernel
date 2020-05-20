@@ -196,7 +196,7 @@ impl<'a> Virtq<'a> {
 			notify_cfg.get_notify_addr(common_cfg.queue_notify_off as u32),
 		);
 
-		return Some(vq);
+		Some(vq)
 	}
 
 	fn notify_device(&mut self) {
@@ -636,8 +636,8 @@ impl<'a> VirtqUsed<'a> {
 
 		fence(Ordering::SeqCst);
 
-		assert!(usedelem.id == chain.0.first().unwrap().index as u32);
-		return true;
+		assert_eq!(usedelem.id, chain.0.first().unwrap().index as u32);
+		true
 
 		// current version cannot fail.
 		//false

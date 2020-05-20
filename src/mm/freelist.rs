@@ -17,8 +17,8 @@ pub struct FreeListEntry {
 impl FreeListEntry {
 	pub const fn new(start: usize, end: usize) -> Self {
 		FreeListEntry {
-			start: start,
-			end: end,
+			start,
+			end,
 		}
 	}
 }
@@ -59,7 +59,7 @@ impl FreeList {
 			} else if region_size == size {
 				// We have found a region that has exactly the requested size.
 				// Return the address to the beginning of that region and move the node into the pool for deletion or reuse.
-				self.list.remove(node.clone());
+				self.list.remove(node);
 				return Ok(region_start);
 			}
 		}
@@ -83,7 +83,7 @@ impl FreeList {
 		if region_start == address && region_end == end {
 			// We found free space that has exactly the address and size of the block we want to allocate.
 			// Remove it.
-			self.list.remove(node.clone());
+			self.list.remove(node);
 			return true;
 		} else if region_start < address && region_end == end {
 			// We found free space in which the block we want to allocate lies right-aligned.
@@ -185,7 +185,7 @@ impl FreeList {
 						// It can reunite, so let the current region span over the reunited region and move the duplicate node
 						// into the pool for deletion or reuse.
 						node.borrow_mut().value.end = next_region_end;
-						self.list.remove(next_node.clone());
+						self.list.remove(next_node);
 						return;
 					}
 				}

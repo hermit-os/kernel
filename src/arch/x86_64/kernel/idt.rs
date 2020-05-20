@@ -84,7 +84,7 @@ impl IdtEntry {
 			base_lo: ((handler.as_usize() as u64) & 0xFFFF) as u16,
 			base_hi: handler.as_usize() as u64 >> 16,
 			selector: gdt_code_selector,
-			ist_index: ist_index,
+			ist_index,
 			flags: dpl as u8 | ty.pack() | (1 << 7),
 			reserved1: 0,
 		}

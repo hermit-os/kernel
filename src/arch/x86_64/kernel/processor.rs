@@ -420,10 +420,10 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect(&mut self) {
-		let mut cpuid = CpuId::new();
+		let cpuid = CpuId::new();
 		self.detect_from_cpuid(&cpuid)
-			.or_else(|_e| self.detect_from_cpuid_tsc_info(&mut cpuid))
-			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&mut cpuid))
+			.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
+			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
 			.or_else(|_e| self.detect_from_hypervisor())
 			//.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))

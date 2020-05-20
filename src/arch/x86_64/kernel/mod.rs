@@ -94,11 +94,7 @@ static mut COM1: SerialPort = SerialPort::new(0x3f8);
 pub fn has_ipdevice() -> bool {
 	let ip = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) };
 
-	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
-		false
-	} else {
-		true
-	}
+	!(ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
 }
 
 #[cfg(not(feature = "newlib"))]

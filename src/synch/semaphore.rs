@@ -62,7 +62,7 @@ impl Semaphore {
 	pub const fn new(count: isize) -> Self {
 		Self {
 			state: SpinlockIrqSave::new(SemaphoreState {
-				count: count,
+				count,
 				queue: TaskHandlePriorityQueue::new(),
 			}),
 		}

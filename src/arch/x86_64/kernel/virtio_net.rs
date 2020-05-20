@@ -180,7 +180,7 @@ impl RxBuffer {
 		let addr = ::mm::allocate(sz, true);
 
 		Self {
-			addr: addr,
+			addr,
 			len: sz,
 		}
 	}
@@ -206,7 +206,7 @@ impl TxBuffer {
 		let addr = ::mm::allocate(sz, true);
 
 		Self {
-			addr: addr,
+			addr,
 			len: sz,
 			in_use: false,
 		}
@@ -382,7 +382,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let mut buffers = &mut self.tx_buffers;
 
 		// do we have free buffers?
-		if buffers.iter().position(|b| b.in_use == false).is_none() {
+		if buffers.iter().position(|b| !b.in_use ).is_none() {
 			// if not, check if we are able to free used elements
 			self.check_used_elements();
 		}
@@ -391,7 +391,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let index = index as usize;
 
 		let mut buffers = &mut self.tx_buffers;
-		if buffers[index].in_use == false {
+		if !buffers[index].in_use {
 			buffers[index].in_use = true;
 			let header = buffers[index].addr as *mut virtio_net_hdr;
 			unsafe {

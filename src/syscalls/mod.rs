@@ -148,7 +148,7 @@ pub fn sys_netwakeup() {
 }
 
 pub fn __sys_netwait(millis: Option<u64>) {
-	if unsafe { SYS.has_packet() } == false {
+	if !unsafe { SYS.has_packet() } {
 		netwait(millis)
 	}
 }

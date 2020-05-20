@@ -292,7 +292,7 @@ pub fn map(
 pub fn unmap(virtual_address: usize, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
-	if let Some(_) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
+	if arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 	} else {

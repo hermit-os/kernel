@@ -175,7 +175,10 @@ pub trait SyscallInterface: Send + Sync {
 		let _lock = DRIVER_LOCK.lock();
 
 		match arch::kernel::pci::get_network_driver() {
-			Some(driver) => Ok(driver.borrow_mut().rx_buffer_consumed()),
+			Some(driver) => {
+				driver.borrow_mut().rx_buffer_consumed();
+				Ok(())
+			}
 			_ => Err(()),
 		}
 	}
@@ -231,7 +234,7 @@ pub trait SyscallInterface: Send + Sync {
 
 		let mut fs = fs::FILESYSTEM.lock();
 		fs.close(fd as u64);
-		return 0;
+		0
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]

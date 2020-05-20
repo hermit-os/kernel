@@ -46,35 +46,32 @@ unsafe fn parse_command_line() {
 	debug!("Got cmdline tokens as {:?}", tokens);
 
 	let mut tokeniter = tokens.into_iter();
-	loop {
-		if let Some(token) = tokeniter.next() {
-			match token.as_str() {
-				"-freq" => {
-					let mhz_str = tokeniter.next().expect("Invalid -freq command line");
-					COMMAND_LINE_CPU_FREQUENCY = mhz_str
-						.parse()
-						.expect("Could not parse -freq command line as number");
-				}
-				"-proxy" => {
-					IS_PROXY = true;
-				}
-				"--" => {
-					// Collect remaining arguments as applications argv
-					COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
-					break;
-				}
-				_ if COMMAND_LINE_PATH.is_none() => {
-					// Qemu passes in the kernel path (rusty-loader) as first argument
-					COMMAND_LINE_PATH = Some(token)
-				}
-				_ => {
-					warn!("Unknown cmdline option: {} [{}]", token, cmdline_str);
-				}
-			};
-		} else {
-			break;
-		}
+	while let Some(token) = tokeniter.next() {
+		match token.as_str() {
+			"-freq" => {
+				let mhz_str = tokeniter.next().expect("Invalid -freq command line");
+				COMMAND_LINE_CPU_FREQUENCY = mhz_str
+					.parse()
+					.expect("Could not parse -freq command line as number");
+			}
+			"-proxy" => {
+				IS_PROXY = true;
+			}
+			"--" => {
+				// Collect remaining arguments as applications argv
+				COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
+				break;
+			}
+			_ if COMMAND_LINE_PATH.is_none() => {
+				// Qemu passes in the kernel path (rusty-loader) as first argument
+				COMMAND_LINE_PATH = Some(token)
+			}
+			_ => {
+				warn!("Unknown cmdline option: {} [{}]", token, cmdline_str);
+			}
+		};
 	}
+
 }
 
 /// Returns the cmdline argument passed in after "--"

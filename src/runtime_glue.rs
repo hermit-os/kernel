@@ -30,7 +30,7 @@ fn panic(info: &PanicInfo) -> ! {
 		print!("{}", message);
 	}
 
-	println!("");
+	println!();
 
 	if run_on_hypervisor() {
 		__sys_shutdown(1);
