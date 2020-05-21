@@ -5,31 +5,26 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch;
+#[cfg(feature = "acpi")]
+use crate::arch::x86_64::kernel::acpi;
+#[cfg(not(test))]
+use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::config::*;
+use crate::environment;
+use crate::mm;
+use crate::scheduler;
+use crate::scheduler::CoreId;
+use crate::x86::controlregs::*;
+use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch;
-#[cfg(feature = "acpi")]
-use arch::x86_64::kernel::acpi;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::processor;
-#[cfg(not(test))]
-use arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
-use arch::x86_64::kernel::BOOT_INFO;
-use arch::x86_64::mm::paging;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use arch::x86_64::mm::virtualmem;
-use config::*;
+use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, ptr, u32};
-use environment;
-use mm;
-use scheduler;
-use scheduler::CoreId;
-use x86::controlregs::*;
-use x86::msr::*;
 
 const APIC_ICR2: usize = 0x0310;
 

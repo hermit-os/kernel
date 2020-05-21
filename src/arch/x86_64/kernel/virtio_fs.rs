@@ -5,13 +5,13 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::fuse::{self, FuseInterface};
-use arch::x86_64::kernel::pci;
-use arch::x86_64::kernel::virtio::{
+use crate::arch::x86_64::kernel::fuse::{self, FuseInterface};
+use crate::arch::x86_64::kernel::pci;
+use crate::arch::x86_64::kernel::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
-use syscalls::fs;
-use util;
+use crate::syscalls::fs;
+use crate::util;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;

@@ -31,12 +31,13 @@ macro_rules! print {
 
 /// Print formatted text to our console, followed by a newline.
 macro_rules! println {
+    () => (print!("\n"));
 	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
 }
 
 macro_rules! switch_to_kernel {
 	() => {
-		::arch::irq::disable();
+		crate::arch::irq::disable();
 		#[allow(unused)]
 		unsafe {
 			let user_stack_pointer;
@@ -47,32 +48,32 @@ macro_rules! switch_to_kernel {
 			);
 			core_scheduler().set_current_user_stack(user_stack_pointer);
 		}
-		::arch::irq::enable();
+		crate::arch::irq::enable();
 	}
 }
 
 macro_rules! switch_to_user {
 	() => {
-		use arch::kernel::percore::*;
+		use crate::arch::kernel::percore::*;
 
-		::arch::irq::disable();
+		crate::arch::irq::disable();
 		let user_stack_pointer = core_scheduler().get_current_user_stack();
 		#[allow(unused)]
 		unsafe {
 			// Switch to the user stack
 			llvm_asm!("mov $0, %rsp" :: "r"(user_stack_pointer) :: "volatile");
 		}
-		::arch::irq::enable();
+		crate::arch::irq::enable();
 	}
 }
 
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
-		use arch::kernel::percore::*;
+		use crate::arch::kernel::percore::*;
 
 		#[allow(unused)]
 		unsafe {
-			::arch::irq::disable();
+			crate::arch::irq::disable();
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
 			llvm_asm!(
@@ -82,17 +83,17 @@ macro_rules! kernel_function {
 				:: "volatile"
 			);
 			core_scheduler().set_current_user_stack(user_stack_pointer);
-			::arch::irq::enable();
+			crate::arch::irq::enable();
 
 			let ret = $f($($x)*);
 
-			::arch::irq::disable();
+			crate::arch::irq::disable();
 			// Switch to the user stack
 			llvm_asm!("mov $0, %rsp"
 				:: "r"(core_scheduler().get_current_user_stack())
 				:: "volatile"
 			);
-			::arch::irq::enable();
+			crate::arch::irq::enable();
 
 			ret
 		}

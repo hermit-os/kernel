@@ -81,9 +81,9 @@ mod synch;
 mod syscalls;
 mod util;
 
-pub use arch::*;
-pub use config::*;
-pub use syscalls::*;
+pub use crate::arch::*;
+pub use crate::config::*;
+pub use crate::syscalls::*;
 
 use alloc::alloc::Layout;
 use arch::percore::*;

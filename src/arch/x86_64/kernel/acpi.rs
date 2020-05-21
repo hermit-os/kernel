@@ -5,11 +5,10 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::mm::paging;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use arch::x86_64::mm::virtualmem;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::x86::io::*;
 use core::{mem, slice, str};
-use x86::io::*;
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: usize = 0x0000_040E;

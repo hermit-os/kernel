@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
+use crate::arch::x86_64::kernel::virtio;
+use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
+use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::x86::io::*;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
-use arch::x86_64::kernel::virtio;
-use arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
-use arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
-use synch::spinlock::SpinlockIrqSave;
-use x86::io::*;
 
 // TODO: should these be pub? currently needed since used in virtio.rs maybe use getter methods to be more flexible.
 pub const PCI_MAX_BUS_NUMBER: u8 = 32;
@@ -249,7 +249,7 @@ fn parse_bars(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Vec<PciBar
 		}
 	}
 
-	return bars;
+	bars
 }
 
 impl PciAdapter {
@@ -274,10 +274,10 @@ impl PciAdapter {
 		let interrupt_info = read_config(bus, device, PCI_INTERRUPT_REGISTER);
 
 		Some(Self {
-			bus: bus,
-			device: device,
-			vendor_id: vendor_id,
-			device_id: device_id,
+			bus,
+			device,
+			vendor_id,
+			device_id,
 			class_id: (class_ids >> 24) as u8,
 			subclass_id: (class_ids >> 16) as u8,
 			programming_interface_id: (class_ids >> 8) as u8,
@@ -294,33 +294,33 @@ impl PciAdapter {
 
 	/// Returns the bar at bar-register baridx.
 	pub fn get_bar(&self, baridx: u8) -> Option<PciBar> {
-		for bar in &self.base_addresses {
-			match bar {
-				PciBar::IO(bar) => {
-					if bar.index == baridx {
-						return Some(PciBar::IO(*bar));
+		for pci_bar in &self.base_addresses {
+			match pci_bar {
+				PciBar::IO(pci_bar) => {
+					if pci_bar.index == baridx {
+						return Some(PciBar::IO(*pci_bar));
 					}
 				}
-				PciBar::Memory(bar) => {
-					if bar.index == baridx {
-						return Some(PciBar::Memory(*bar));
+				PciBar::Memory(pci_bar) => {
+					if pci_bar.index == baridx {
+						return Some(PciBar::Memory(*pci_bar));
 					}
 				}
 			}
 		}
-		return None;
+		None
 	}
 
 	/// Memory maps pci bar with specified index to identical location in virtual memory.
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
 	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
 	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(usize, usize)> {
-		let bar = match self.get_bar(index) {
+		let pci_bar = match self.get_bar(index) {
 			Some(PciBar::IO(_)) => {
 				warn!("Cannot map IOBar!");
 				return None;
 			}
-			Some(PciBar::Memory(bar)) => bar,
+			Some(PciBar::Memory(mem_bar)) => mem_bar,
 			None => {
 				warn!("Memory bar not found!");
 				return None;
@@ -329,32 +329,32 @@ impl PciAdapter {
 
 		debug!(
 			"Mapping bar {} at 0x{:x} with length 0x{:x}",
-			index, bar.addr, bar.size
+			index, pci_bar.addr, pci_bar.size
 		);
 
-		if bar.width != 64 {
+		if pci_bar.width != 64 {
 			warn!("Currently only mapping of 64 bit bars is supported!");
 			return None;
 		}
-		if !bar.prefetchable {
+		if !pci_bar.prefetchable {
 			warn!("Currently only mapping of prefetchable bars is supported!")
 		}
 
 		// Since the bios/bootloader manages the physical address space, the address got from the bar is unique and not overlapping.
 		// We therefore do not need to reserve any additional memory in our kernel.
 		// Map bar into RW^X virtual memory
-		let physical_address = bar.addr;
-		let virtual_address = ::mm::map(physical_address, bar.size, true, false, no_cache);
+		let physical_address = pci_bar.addr;
+		let virtual_address = crate::mm::map(physical_address, pci_bar.size, true, false, no_cache);
 
-		Some((virtual_address, bar.size))
+		Some((virtual_address, pci_bar.size))
 	}
 }
 
 impl fmt::Display for PciBar {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let (typ, addr, size) = match self {
-			PciBar::IO(bar) => ("IOBar", bar.addr as usize, bar.size as usize),
-			PciBar::Memory(bar) => ("MemoryBar", bar.addr, bar.size),
+			PciBar::IO(io_bar) => ("IOBar", io_bar.addr as usize, io_bar.size as usize),
+			PciBar::Memory(mem_bar) => ("MemoryBar", mem_bar.addr, mem_bar.size),
 		};
 		write!(f, "{}: 0x{:x} (size 0x{:x})", typ, addr, size)?;
 
@@ -417,8 +417,8 @@ impl fmt::Display for PciAdapter {
 			write!(f, ", IRQ {}", self.irq)?;
 		}
 
-		for bar in &self.base_addresses {
-			write!(f, ", {}", bar)?;
+		for pci_bar in &self.base_addresses {
+			write!(f, ", {}", pci_bar)?;
 		}
 
 		Ok(())

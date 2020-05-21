@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::irq;
+use crate::arch::irq;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::marker::Sync;

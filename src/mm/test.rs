@@ -10,16 +10,16 @@ use core::alloc::Layout;
 use std::mem::{align_of, size_of};
 use std::prelude::v1::*;
 
-use mm::allocator::*;
-use mm::hole::*;
+use crate::mm::allocator::*;
+use crate::mm::hole::*;
 
 fn new_heap() -> Heap {
 	const HEAP_SIZE: usize = 1000;
 	let heap_space = Box::into_raw(Box::new([0u8; HEAP_SIZE]));
 
 	let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
-	assert!(heap.bottom() == heap_space as usize);
-	assert!(heap.size() == HEAP_SIZE);
+	assert_eq!(heap.bottom(), heap_space as usize);
+	assert_eq!(heap.size(), HEAP_SIZE);
 	heap
 }
 
@@ -29,8 +29,8 @@ fn new_max_heap() -> Heap {
 	let heap_space = Box::into_raw(Box::new([0u8; HEAP_SIZE_MAX]));
 
 	let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
-	assert!(heap.bottom() == heap_space as usize);
-	assert!(heap.size() == HEAP_SIZE);
+	assert_eq!(heap.bottom(), heap_space as usize);
+	assert_eq!(heap.size(), HEAP_SIZE);
 	heap
 }
 
@@ -62,7 +62,7 @@ fn allocate_double_usize() {
 	let addr = heap.allocate_first_fit(layout.unwrap());
 	assert!(addr.is_ok());
 	let addr = addr.unwrap().0.as_ptr() as usize;
-	assert!(addr == heap.bottom());
+	assert_eq!(addr, heap.bottom());
 	let (hole_addr, hole_size) = heap.holes.first_hole().expect("ERROR: no hole left");
 
 	// note: the smallest allocation granularity is 64 byte

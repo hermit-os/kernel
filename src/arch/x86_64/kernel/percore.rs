@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::BOOT_INFO;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::scheduler::{CoreId, PerCoreScheduler};
+use crate::x86::bits64::task::TaskStateSegment;
+use crate::x86::msr::*;
 use core::ptr;
-use scheduler::{CoreId, PerCoreScheduler};
-use x86::bits64::task::TaskStateSegment;
-use x86::msr::*;
 
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
@@ -60,7 +60,7 @@ impl<T> PerCoreVariable<T> {
 
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
 // Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
-// The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
+// The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
 impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {

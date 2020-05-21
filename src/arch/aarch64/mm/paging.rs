@@ -5,14 +5,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::aarch64::kernel::percore::*;
-use arch::aarch64::kernel::processor;
-use arch::aarch64::mm::physicalmem;
-use arch::aarch64::mm::virtualmem;
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::processor;
+use crate::arch::aarch64::mm::physicalmem;
+use crate::arch::aarch64::mm::virtualmem;
+use crate::mm;
+use crate::scheduler;
 use core::marker::PhantomData;
 use core::{fmt, ptr, usize};
-use mm;
-use scheduler;
 
 extern "C" {
 	#[linkage = "extern_weak"]

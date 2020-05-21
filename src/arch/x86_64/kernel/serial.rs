@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::environment;
+use crate::x86::io::*;
 use core::sync::atomic::spin_loop_hint;
-use environment;
-use x86::io::*;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;
@@ -33,9 +33,7 @@ pub struct SerialPort {
 
 impl SerialPort {
 	pub const fn new(port_address: u16) -> Self {
-		Self {
-			port_address: port_address,
-		}
+		Self { port_address }
 	}
 
 	fn read_from_register(&self, register: u16) -> u8 {

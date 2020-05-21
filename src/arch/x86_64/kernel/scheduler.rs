@@ -8,16 +8,16 @@
 
 //! Architecture dependent interface to initialize a task
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use config::*;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::idt;
+use crate::arch::x86_64::kernel::irq;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::config::*;
+use crate::environment;
+use crate::mm;
+use crate::scheduler::task::{Task, TaskFrame};
 use core::{mem, ptr};
-use environment;
-use mm;
-use scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
 struct State {
@@ -88,9 +88,9 @@ impl TaskStacks {
 			align_up!(size, BasePageSize::SIZE)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
-		let virt_addr = ::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
+		let virt_addr = crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
 			.expect("Failed to allocate Virtual Memory for TaskStacks");
-		let phys_addr = ::arch::mm::physicalmem::allocate(total_size)
+		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
 		debug!(
@@ -103,7 +103,7 @@ impl TaskStacks {
 		flags.normal().writable().execute_disable();
 
 		// map IST0 into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
 			KERNEL_STACK_SIZE / BasePageSize::SIZE,
@@ -111,7 +111,7 @@ impl TaskStacks {
 		);
 
 		// map kernel stack into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE,
@@ -119,7 +119,7 @@ impl TaskStacks {
 		);
 
 		// map user stack into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE,
@@ -137,9 +137,9 @@ impl TaskStacks {
 		}
 
 		TaskStacks::Common(CommonStack {
-			virt_addr: virt_addr,
-			phys_addr: phys_addr,
-			total_size: total_size,
+			virt_addr,
+			phys_addr,
+			total_size,
 		})
 	}
 
@@ -150,10 +150,7 @@ impl TaskStacks {
 		let ist0 = tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE;
 		debug!("IST0 is located at {:#X}", ist0);
 
-		TaskStacks::Boot(BootStack {
-			stack: stack,
-			ist0: ist0,
-		})
+		TaskStacks::Boot(BootStack { stack, ist0 })
 	}
 
 	pub fn get_user_stack_size(&self) -> usize {
@@ -214,15 +211,15 @@ impl Drop for TaskStacks {
 					stacks.total_size >> 10,
 				);
 
-				::arch::mm::paging::unmap::<BasePageSize>(
+				crate::arch::mm::paging::unmap::<BasePageSize>(
 					stacks.virt_addr,
 					stacks.total_size / BasePageSize::SIZE + 4,
 				);
-				::arch::mm::virtualmem::deallocate(
+				crate::arch::mm::virtualmem::deallocate(
 					stacks.virt_addr,
 					stacks.total_size + 4 * BasePageSize::SIZE,
 				);
-				::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
+				crate::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
 			}
 		}
 	}
@@ -255,7 +252,7 @@ impl TaskTLS {
 		// We allocate in BasePageSize granularity, so we don't have to manually impose an
 		// additional alignment for TLS variables.
 		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
-		let ptr = ::mm::allocate(memory_size, true);
+		let ptr = crate::mm::allocate(memory_size, true);
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr + align_up!(tls_size, 32);

@@ -5,10 +5,10 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch;
-use arch::percore::*;
-use console;
-use synch::spinlock::SpinlockIrqSaveGuard;
+use crate::arch;
+use crate::arch::percore::*;
+use crate::console;
+use crate::synch::spinlock::SpinlockIrqSaveGuard;
 
 /// Enables lwIP's printf to print a whole string without being interrupted by
 /// a message from the kernel.

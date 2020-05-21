@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::errno::*;
+use crate::synch::recmutex::RecursiveMutex;
 use alloc::boxed::Box;
-use errno::*;
-use synch::recmutex::RecursiveMutex;
 
 fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {

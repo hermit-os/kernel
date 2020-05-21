@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use application_processor_main;
-use arch::x86_64::kernel::{BootInfo, BOOT_INFO};
-use boot_processor_main;
-use config::KERNEL_STACK_SIZE;
-use x86::controlregs::*;
+use crate::application_processor_main;
+use crate::arch::x86_64::kernel::{BootInfo, BOOT_INFO};
+use crate::boot_processor_main;
+use crate::config::KERNEL_STACK_SIZE;
+use crate::x86::controlregs::*;
 
 pub unsafe fn cr0_enable_caching() {
 	let mut cr0 = cr0();

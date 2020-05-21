@@ -7,13 +7,13 @@
 
 #![allow(dead_code)]
 
+use crate::mm::hole::{Hole, HoleList};
+use crate::mm::kernel_end_address;
+use crate::synch::spinlock::*;
 use core::alloc::{AllocErr, AllocInit, AllocRef, GlobalAlloc, Layout, MemoryBlock};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
-use mm::hole::{Hole, HoleList};
-use mm::kernel_end_address;
-use synch::spinlock::*;
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;

@@ -5,12 +5,12 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::synch::spinlock::Spinlock;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use synch::spinlock::Spinlock;
 
 /*
 Design:
@@ -98,11 +98,11 @@ impl Filesystem {
 		path: &'b str,
 	) -> Result<(&'a Box<dyn PosixFileSystem>, &'b str), FileError> {
 		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
-		if !path.starts_with("/") {
+		if !path.starts_with('/') {
 			warn!("Relative paths not allowed!");
 			return Err(FileError::ENOENT());
 		}
-		let mut pathsplit = path.splitn(3, "/");
+		let mut pathsplit = path.splitn(3, '/');
 		pathsplit.next(); // always empty, since first char is /
 		let mount = pathsplit.next().unwrap();
 		let internal_path = pathsplit.next().unwrap(); //TODO: this can fail from userspace, eg when passing "/test"
@@ -114,7 +114,7 @@ impl Filesystem {
 				"Trying to open file on non-existing mount point '{}'!",
 				mount
 			);
-			return Err(FileError::ENOENT());
+			Err(FileError::ENOENT())
 		}
 	}
 
@@ -147,7 +147,7 @@ impl Filesystem {
 	/// Create new backing-fs at mountpoint mntpath
 	pub fn mount(&mut self, mntpath: &str, mntobj: Box<dyn PosixFileSystem>) -> Result<(), ()> {
 		info!("Mounting {}", mntpath);
-		if mntpath.contains("/") {
+		if mntpath.contains('/') {
 			warn!(
 				"Trying to mount at '{}', but slashes in name are not supported!",
 				mntpath

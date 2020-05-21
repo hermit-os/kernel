@@ -9,19 +9,15 @@
 #![allow(dead_code)]
 
 #[cfg(feature = "acpi")]
-use arch::x86_64::kernel::acpi;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::pic;
-use arch::x86_64::kernel::pit;
-use arch::x86_64::kernel::BOOT_INFO;
+use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::{idt, irq, pic, pit, BOOT_INFO};
+use crate::environment;
+use crate::x86::controlregs::*;
+use crate::x86::cpuid::*;
+use crate::x86::msr::*;
+use crate::x86::time::*;
 use core::sync::atomic::spin_loop_hint;
 use core::{fmt, u32};
-use environment;
-use x86::controlregs::*;
-use x86::cpuid::*;
-use x86::msr::*;
-use x86::time::*;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -420,10 +416,10 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect(&mut self) {
-		let mut cpuid = CpuId::new();
+		let cpuid = CpuId::new();
 		self.detect_from_cpuid(&cpuid)
-			.or_else(|_e| self.detect_from_cpuid_tsc_info(&mut cpuid))
-			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&mut cpuid))
+			.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
+			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
 			.or_else(|_e| self.detect_from_hypervisor())
 			//.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
