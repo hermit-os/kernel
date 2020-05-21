@@ -15,7 +15,6 @@ edition = "2018"
 description = """
 RustyHermit - A Rust-based, lightweight unikernel
 """
-exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.vscode/*"]
 
 [badges]
 travis-ci = { repository = "hermitcore/libhermit-rs" }
