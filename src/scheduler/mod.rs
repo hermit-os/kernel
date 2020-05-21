@@ -504,8 +504,6 @@ fn get_tid() -> TaskId {
 	}
 }
 
-pub fn init() {}
-
 #[inline]
 pub fn abort() {
 	core_scheduler().exit(-1);
