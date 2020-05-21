@@ -4,7 +4,10 @@ use std::env;
 use std::process::Command;
 use walkdir::{DirEntry, WalkDir};
 
-#[cfg(all(not(feature = "rustc-dep-of-std"), not(feature = "with_internal_libos")))]
+#[cfg(all(
+	not(feature = "rustc-dep-of-std"),
+	not(feature = "with_internal_libos")
+))]
 fn build() {
 	#[cfg(windows)]
 	let out_dir = env::temp_dir().to_str().unwrap().to_owned();
