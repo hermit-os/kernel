@@ -4,6 +4,7 @@ name = "rust-tcp-io-perf"
 version = "0.0.0"
 authors = ["Lorenzo Martini <lmartini@student.ethz.ch>"]
 readme = "README.md"
+pubslish = false
 
 description = "A Rust program to measure bandwidth or latency over a Rust TCP connection"
 
