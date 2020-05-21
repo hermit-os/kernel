@@ -5,6 +5,9 @@ on:
   pull_request:
     branches:
       - master
+      - devel
+  schedule:
+    - cron: '0 0 * * 6'
 
 jobs:
   build:
@@ -29,86 +32,61 @@ jobs:
             components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-unknown-linux-gnu'
 
-
     steps:
-      - uses: hecrj/setup-rust-action@v1.3.1
-        with:
-          rust-version: ${{ matrix.rust }}
-          components: ${{ matrix.components || '' }}
-          targets: ${{ matrix.targets || '' }}
-      - name: Checkout rusty-hermit devel
-        uses: actions/checkout@v2
-        with:
-          repository: 'hermitcore/rusty-hermit'
-          ref: 'devel'
-          submodules: 'true'
-      - name: Remove submodule libhermit-rs
-        run: rm -r libhermit-rs
-        if: ${{ ( matrix.os == 'macOS-latest' ) || ( matrix.os == 'ubuntu-latest' ) }}
-      - name: Remove submodule libhermit-rs (windows)
-        run: git rm -r libhermit-rs
-        if: ${{ matrix.os == 'windows-latest' }}
-      - name: Checkout
-        uses: actions/checkout@v2
-        with:
-          path: 'libhermit-rs'
-      - name: Check Cargo availability
-        run: cargo --version
-      - name: Cargo Test libhermit-rs
-        run: cargo test
-        working-directory: libhermit-rs
-      - name: Install cargo-download
-        run: cargo install cargo-download
-      - name: Install qemu/nasm (apt)
-        run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-      # Note: The add-path must be kept in sync with the version of binutils installed by homebrew
-      - name: Install qemu/nasm/binutils (macos)
-        run: |
-          brew update && brew install qemu nasm binutils
-          echo "::add-path::/usr/local/Cellar/binutils/2.34/bin/"
-        if: ${{ matrix.os == 'macOS-latest' }}
-      - name: Install qemu/nasm (windows)
-        run: |
+    - uses: hecrj/setup-rust-action@v1.3.1
+      with: 
+         rust-version: ${{ matrix.rust }}
+         components: ${{ matrix.components || '' }}
+         targets: ${{ matrix.targets || '' }}
+    - uses: actions/checkout@v1
+      with:
+         submodules: true
+    - name: Check Cargo availability
+      run: cargo --version
+    - name: Install qemu/nasm (apt)
+      run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+    - name: Install qemu/nasm (macos)
+      run: |
+          brew update && brew install qemu nasm
+      if: ${{ matrix.os == 'macOS-latest' }}
+    - name: Install qemu/nasm (windows)
+      run: |
           choco install qemu nasm
           echo "::add-path::C:\Program Files\NASM"
           echo "::add-path::C:\Program Files\qemu"
-        if: ${{ matrix.os == 'windows-latest' }}
-      - name: Building dev version
-        run:
-          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
-      - name: Building release version
-        run:
-          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release
-      - name: Build loader (unix)
-        working-directory: loader
-        run: make
-        if: ${{ ( matrix.os == 'macOS-latest' ) || ( matrix.os == 'ubuntu-latest' ) }}
-      # Workaround since makefile doesn't work when using powershell
-      - name: Build loader (windows)
-        working-directory: loader
-        run: |
+      if: ${{ matrix.os == 'windows-latest' }}
+    - name: Building dev version
+      run:
+         cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+    - name: Building release version
+      run:
+         cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release
+    - name: Build loader (unix)
+      working-directory: loader
+      run: make
+    # Workaround since makefile doesn't work when using powershell
+    - name: Build loader (windows)
+      working-directory: loader
+      run: |
           cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-loader.json
           $VAR_RUSTC_SYSROOT = (rustc --print sysroot)
           echo "Sysroot - $VAR_RUSTC_SYSROOT"
           $LLVM_OBJCOPY = ((Get-ChildItem -Path $VAR_RUSTC_SYSROOT -Include llvm-objcopy.exe -File -Recurse -ErrorAction SilentlyContinue)).Fullname
           echo "LLVM Objcopy - $LLVM_OBJCOPY"
           Invoke-Expression "$LLVM_OBJCOPY --strip-debug -O elf32-i386 target/x86_64-unknown-hermit-loader/debug/rusty-loader"
-        if: ${{ matrix.os == 'windows-latest' }}
-      - name: Test dev version
-        run:
-          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
-      - name: Test dev version (smp)
-        run:
-          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
-        timeout-minutes: 20  
-      - name: Test release version
-        run:
-          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
-      - name: Test release version (smp)
-        run:
-          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
-        timeout-minutes: 20  
-
-
-
+      if: ${{ matrix.os == 'windows-latest' }}
+    - name: Test dev version
+      run:
+         qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+    - name: Test dev version (smp)
+      run:
+         qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+      timeout-minutes: 20
+    - name: Test release version
+      run:
+         qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+    - name: Test release version (smp)
+      run:
+         qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+      timeout-minutes: 20

@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - master
+      - devel
   pull_request:
     branches:
       - master
+      - devel
   schedule:
     - cron: '0 0 * * 6'
 
@@ -33,7 +35,6 @@ jobs:
             components: 'rust-src'
             targets: 'x86_64-unknown-linux-gnu'
 
-
     steps:
     - uses: hecrj/setup-rust-action@v1.3.1
       with: 
@@ -45,9 +46,11 @@ jobs:
          submodules: true
     - name: Check Cargo availability
       run: cargo --version
+    - name: Install cargo-download
+      run: cargo install cargo-download
     - name: Building dev version
       run:
-         cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel
+         cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
     - name: Building release version
       run:
-         cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --release
+         cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release

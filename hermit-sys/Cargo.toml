@@ -1,0 +1,45 @@
+[package]
+name = "hermit-sys"
+version = "0.1.13"
+authors = ["Stefan Lankes"]
+license = "MIT/Apache-2.0"
+description = "FFI bindings to HermitCore"
+repository = "https://github.com/hermitcore/rusty-hermit"
+readme = "README.md"
+keywords = ["unikernel", "libos"]
+categories = ["os"]
+links = "hermit"
+build = "build.rs"
+edition = "2018"
+
+[features]
+# controlls whether RustyHermit is build with -Z instrument-mcount
+#instrument = ["rftrace"]
+trace = []
+# only for internal usage, please don't use it
+with_submodule = []
+
+[build-dependencies]
+walkdir = "2"
+
+[dependencies]
+log = { version = "0.4", default-features = false }
+lazy_static = "1.4.0"
+
+[target.'cfg(target_arch = "x86_64")'.dependencies.x86]
+version = "0.*"
+default-features = false
+
+[dependencies.smoltcp]
+version = "0.6.0"
+optional = true
+default-features = false
+features = ["log", "verbose", "std", "ethernet", "socket-udp", "socket-tcp", "proto-ipv4", "proto-ipv6"]
+
+[dependencies.crossbeam-channel]
+version = "0.4"
+
+#[dependencies.rftrace]
+#optional = true
+#features = ["backend", "buildstd", "hermit"]
+#git = "https://github.com/tlambertz/rftrace"

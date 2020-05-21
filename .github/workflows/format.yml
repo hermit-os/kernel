@@ -4,9 +4,11 @@ on:
   push:
     branches:
       - master
+      - devel
   pull_request:
     branches:
       - master
+      - devel
 
 jobs:
   build:
@@ -18,14 +20,6 @@ jobs:
         os: [ubuntu-latest]
         rust: [nightly]
         include:
-          - os: macOS-latest
-            rust: 'nightly'
-            components: 'rustfmt'
-            targets: 'x86_64-apple-darwin'
-          - os: windows-latest
-            rust: 'nightly'
-            components: 'rustfmt'
-            targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
             components: 'rustfmt'
