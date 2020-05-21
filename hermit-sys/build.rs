@@ -4,7 +4,7 @@ use std::env;
 use std::process::Command;
 use walkdir::{DirEntry, WalkDir};
 
-#[cfg(all(not(feature = "rustc-dep-of-std"), not(feature = "with_submodule")))]
+#[cfg(all(not(feature = "rustc-dep-of-std"), not(feature = "with_internal_libos")))]
 fn build() {
 	#[cfg(windows)]
 	let out_dir = env::temp_dir().to_str().unwrap().to_owned();
@@ -61,7 +61,7 @@ fn build() {
 	println!("cargo:rustc-link-lib=static=hermit");
 }
 
-#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_submodule"))]
+#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_internal_libos"))]
 fn build() {
 	let out_dir = env::var("OUT_DIR").unwrap();
 	let target_dir = out_dir.clone() + "/target";
@@ -108,7 +108,7 @@ fn build() {
 	println!("cargo:rustc-link-lib=static=hermit");
 }
 
-#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_submodule"))]
+#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_internal_libos"))]
 fn configure_cargo_rerun_if_changed() {
 	fn is_not_ignored(entry: &DirEntry) -> bool {
 		// Ignore .git .vscode and target directories, but not .cargo or .github
@@ -132,7 +132,7 @@ fn configure_cargo_rerun_if_changed() {
 }
 
 fn main() {
-	#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_submodule"))]
+	#[cfg(all(not(feature = "rustc-dep-of-std"), feature = "with_internal_libos"))]
 	configure_cargo_rerun_if_changed();
 	#[cfg(not(feature = "rustc-dep-of-std"))]
 	build();

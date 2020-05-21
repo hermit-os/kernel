@@ -17,7 +17,7 @@ edition = "2018"
 #instrument = ["rftrace"]
 trace = []
 # only for internal usage, please don't use it
-with_submodule = []
+with_internal_libos = []
 
 [build-dependencies]
 walkdir = "2"
