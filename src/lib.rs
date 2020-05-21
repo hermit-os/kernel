@@ -224,7 +224,6 @@ fn boot_processor_main() -> ! {
 	);
 
 	arch::boot_processor_init();
-	scheduler::init();
 	scheduler::add_current_core();
 
 	if environment::is_single_kernel() && !environment::is_uhyve() {
