@@ -48,9 +48,9 @@ fn build() {
 	let output = cmd.output().expect("Unable to build kernel");
 	let stdout = std::string::String::from_utf8(output.stdout);
 	let stderr = std::string::String::from_utf8(output.stderr);
-	println!("Build libhermit-rs output-status: {}", output.status);
-	println!("Build libhermit-rs output-stdout: {}", stdout.unwrap());
-	println!("Build libhermit-rs output-stderr: {}", stderr.unwrap());
+	println!("Build libos output-status: {}", output.status);
+	println!("Build libos output-stdout: {}", stdout.unwrap());
+	println!("Build libos output-stderr: {}", stderr.unwrap());
 	assert!(output.status.success());
 
 	println!(
@@ -95,9 +95,9 @@ fn build() {
 	let output = cmd.output().expect("Unable to build kernel");
 	let stdout = std::string::String::from_utf8(output.stdout);
 	let stderr = std::string::String::from_utf8(output.stderr);
-	println!("Build libhermit-rs output-status: {}", output.status);
-	println!("Build libhermit-rs output-stdout: {}", stdout.unwrap());
-	println!("Build libhermit-rs output-stderr: {}", stderr.unwrap());
+	println!("Build libos output-status: {}", output.status);
+	println!("Build libos output-stdout: {}", stdout.unwrap());
+	println!("Build libos output-stderr: {}", stderr.unwrap());
 	assert!(output.status.success());
 
 	println!(
