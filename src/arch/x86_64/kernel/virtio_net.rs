@@ -7,22 +7,22 @@
 
 #![allow(unused)]
 
-use arch::x86_64::kernel::pci;
-use arch::x86_64::kernel::virtio::{
+use crate::arch::x86_64::kernel::pci;
+use crate::arch::x86_64::kernel::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use arch::x86_64::mm::{paging, virtualmem};
-use drivers::net::netwakeup;
-use synch::spinlock::SpinlockIrqSave;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::drivers::net::netwakeup;
+use crate::synch::spinlock::SpinlockIrqSave;
 
+use crate::x86::io::*;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
-use x86::io::*;
 
 const VIRTIO_NET_F_CSUM: u32 = 0;
 const VIRTIO_NET_F_GUEST_CSUM: u32 = 1;
@@ -177,19 +177,16 @@ struct RxBuffer {
 impl RxBuffer {
 	pub fn new(len: usize) -> Self {
 		let sz = align_up!(len, BasePageSize::SIZE);
-		let addr = ::mm::allocate(sz, true);
+		let addr = crate::mm::allocate(sz, true);
 
-		Self {
-			addr: addr,
-			len: sz,
-		}
+		Self { addr, len: sz }
 	}
 }
 
 impl Drop for RxBuffer {
 	fn drop(&mut self) {
 		// free buffer
-		::mm::deallocate(self.addr, self.len);
+		crate::mm::deallocate(self.addr, self.len);
 	}
 }
 
@@ -203,10 +200,10 @@ struct TxBuffer {
 impl TxBuffer {
 	pub fn new(len: usize) -> Self {
 		let sz = align_up!(len + mem::size_of::<virtio_net_hdr>(), BasePageSize::SIZE);
-		let addr = ::mm::allocate(sz, true);
+		let addr = crate::mm::allocate(sz, true);
 
 		Self {
-			addr: addr,
+			addr,
 			len: sz,
 			in_use: false,
 		}
@@ -216,7 +213,7 @@ impl TxBuffer {
 impl Drop for TxBuffer {
 	fn drop(&mut self) {
 		// free buffer
-		::mm::deallocate(self.addr, self.len);
+		crate::mm::deallocate(self.addr, self.len);
 	}
 }
 
@@ -382,7 +379,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let mut buffers = &mut self.tx_buffers;
 
 		// do we have free buffers?
-		if buffers.iter().position(|b| b.in_use == false).is_none() {
+		if buffers.iter().position(|b| !b.in_use).is_none() {
 			// if not, check if we are able to free used elements
 			self.check_used_elements();
 		}
@@ -391,7 +388,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let index = index as usize;
 
 		let mut buffers = &mut self.tx_buffers;
-		if buffers[index].in_use == false {
+		if !buffers[index].in_use {
 			buffers[index].in_use = true;
 			let header = buffers[index].addr as *mut virtio_net_hdr;
 			unsafe {

@@ -26,12 +26,12 @@
 
 include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::processor;
+use crate::scheduler::task::{Task, TaskFrame, TaskTLS};
 use alloc::rc::Rc;
-use arch::aarch64::kernel::percore::*;
-use arch::aarch64::kernel::processor;
 use core::cell::RefCell;
 use core::{mem, ptr};
-use scheduler::task::{Task, TaskFrame, TaskTLS};
 
 extern "C" {
 	static tls_start: u8;

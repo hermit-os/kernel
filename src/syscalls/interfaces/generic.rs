@@ -6,7 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use syscalls::interfaces::SyscallInterface;
+use crate::syscalls::interfaces::SyscallInterface;
 
 // The generic interface simply uses all default implementations of the
 // SyscallInterface trait.

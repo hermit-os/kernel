@@ -12,19 +12,19 @@ mod uhyve;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
+use crate::arch;
+use crate::console;
+use crate::environment;
+use crate::errno::*;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::util;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch;
-use console;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
-use environment;
-use errno::*;
-use synch::spinlock::SpinlockIrqSave;
-use util;
 
-use syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
 
 static DRIVER_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
@@ -175,7 +175,10 @@ pub trait SyscallInterface: Send + Sync {
 		let _lock = DRIVER_LOCK.lock();
 
 		match arch::kernel::pci::get_network_driver() {
-			Some(driver) => Ok(driver.borrow_mut().rx_buffer_consumed()),
+			Some(driver) => {
+				driver.borrow_mut().rx_buffer_consumed();
+				Ok(())
+			}
 			_ => Err(()),
 		}
 	}
@@ -231,7 +234,7 @@ pub trait SyscallInterface: Send + Sync {
 
 		let mut fs = fs::FILESYSTEM.lock();
 		fs.close(fd as u64);
-		return 0;
+		0
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]

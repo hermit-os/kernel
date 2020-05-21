@@ -5,14 +5,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch;
-use arch::mm::paging;
+use crate::arch;
+use crate::arch::mm::paging;
+use crate::syscalls::interfaces::SyscallInterface;
+#[cfg(feature = "newlib")]
+use crate::syscalls::lwip::sys_lwip_get_errno;
+#[cfg(feature = "newlib")]
+use crate::syscalls::{LWIP_FD_BIT, LWIP_LOCK};
 use core::{mem, ptr, slice};
-use syscalls::interfaces::SyscallInterface;
-#[cfg(feature = "newlib")]
-use syscalls::lwip::sys_lwip_get_errno;
-#[cfg(feature = "newlib")]
-use syscalls::{LWIP_FD_BIT, LWIP_LOCK};
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -88,7 +88,7 @@ struct SysExit {
 
 impl SysExit {
 	fn new(arg: i32) -> SysExit {
-		SysExit { arg: arg }
+		SysExit { arg }
 	}
 }
 
@@ -119,8 +119,8 @@ impl SysOpen {
 	fn new(name: *const u8, flags: i32, mode: i32) -> SysOpen {
 		SysOpen {
 			name: paging::virtual_to_physical(name as usize) as *const u8,
-			flags: flags,
-			mode: mode,
+			flags,
+			mode,
 			ret: -1,
 		}
 	}
@@ -149,9 +149,9 @@ struct SysRead {
 impl SysRead {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
 		SysRead {
-			fd: fd,
-			buf: buf,
-			len: len,
+			fd,
+			buf,
+			len,
 			ret: -1,
 		}
 	}
@@ -166,11 +166,7 @@ struct SysWrite {
 
 impl SysWrite {
 	fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
-		SysWrite {
-			fd: fd,
-			buf: buf,
-			len: len,
-		}
+		SysWrite { fd, buf, len }
 	}
 }
 
@@ -183,11 +179,7 @@ struct SysLseek {
 
 impl SysLseek {
 	fn new(fd: i32, offset: isize, whence: i32) -> SysLseek {
-		SysLseek {
-			fd: fd,
-			offset: offset,
-			whence: whence,
-		}
+		SysLseek { fd, offset, whence }
 	}
 }
 
@@ -221,18 +213,18 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
 
 		// create array to receive all arguments
-		let argv_raw = ::__sys_malloc(
+		let argv_raw = crate::__sys_malloc(
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
-		let argv_phy_raw = ::__sys_malloc(
+		let argv_phy_raw = crate::__sys_malloc(
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
 		let argv = unsafe { slice::from_raw_parts_mut(argv_raw, syscmdsize.argc as usize) };
 		let argv_phy = unsafe { slice::from_raw_parts_mut(argv_phy_raw, syscmdsize.argc as usize) };
 		for i in 0..syscmdsize.argc as usize {
-			argv[i] = ::__sys_malloc(
+			argv[i] = crate::__sys_malloc(
 				syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
 				1,
 			);
@@ -240,11 +232,11 @@ impl SyscallInterface for Uhyve {
 		}
 
 		// create array to receive the environment
-		let env_raw = ::__sys_malloc(
+		let env_raw = crate::__sys_malloc(
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
-		let env_phy_raw = ::__sys_malloc(
+		let env_phy_raw = crate::__sys_malloc(
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		) as *mut *const u8;
@@ -252,7 +244,7 @@ impl SyscallInterface for Uhyve {
 		let env_phy =
 			unsafe { slice::from_raw_parts_mut(env_phy_raw, (syscmdsize.envc + 1) as usize) };
 		for i in 0..syscmdsize.envc as usize {
-			env[i] = ::__sys_malloc(
+			env[i] = crate::__sys_malloc(
 				syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
 				1,
 			);
@@ -266,12 +258,12 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
 
 		// free temporary array
-		::__sys_free(
+		crate::__sys_free(
 			argv_phy_raw as *mut u8,
 			syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),
 		);
-		::__sys_free(
+		crate::__sys_free(
 			env_phy_raw as *mut u8,
 			(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 			mem::size_of::<*const u8>(),

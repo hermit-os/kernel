@@ -6,14 +6,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::processor;
-use arch::x86_64::mm::paging;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::idt;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::processor;
+use crate::arch::x86_64::mm::paging;
+use crate::scheduler;
+use crate::x86::bits64::rflags;
 use core::fmt;
-use scheduler;
-use x86::bits64::rflags;
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs

@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::errno::*;
+use crate::synch::spinlock::*;
 use alloc::boxed::Box;
-use errno::*;
-use synch::spinlock::*;
 
 pub struct SpinlockContainer<'a> {
 	lock: Spinlock<()>,

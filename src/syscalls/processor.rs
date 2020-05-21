@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch;
+use crate::arch::get_processor_count;
 use core::convert::TryInto;
 
 fn __sys_get_processor_count() -> usize {
-	arch::get_processor_count().try_into().unwrap()
+	get_processor_count().try_into().unwrap()
 }
 
 /** Returns the number of processors currently online. */
@@ -19,7 +19,7 @@ pub extern "C" fn sys_get_processor_count() -> usize {
 }
 
 fn __sys_get_processor_frequency() -> u16 {
-	arch::processor::get_frequency()
+	crate::arch::processor::get_frequency()
 }
 
 /** Returns the processor frequency in MHz. */

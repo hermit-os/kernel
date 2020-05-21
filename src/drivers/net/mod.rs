@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use synch::semaphore::*;
+use crate::synch::semaphore::*;
 
 static NET_SEM: Semaphore = Semaphore::new(0);
 
@@ -17,7 +17,7 @@ pub fn netwait(millis: Option<u64>) {
 	match millis {
 		Some(ms) => {
 			if ms > 0 {
-				let delay = Some(::arch::processor::get_timer_ticks() + ms * 1000);
+				let delay = Some(crate::arch::processor::get_timer_ticks() + ms * 1000);
 				NET_SEM.acquire(delay);
 			} else {
 				NET_SEM.try_acquire();

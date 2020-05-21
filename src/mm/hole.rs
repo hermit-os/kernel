@@ -27,7 +27,7 @@ impl HoleList {
 	/// creates a hole at the given `hole_addr`. This can cause undefined behavior if this address
 	/// is invalid or if memory from the `[hole_addr, hole_addr+size) range is used somewhere else.
 	pub unsafe fn new(hole_addr: usize, hole_size: usize) -> HoleList {
-		assert!(size_of::<Hole>() == Self::min_size());
+		assert_eq!(size_of::<Hole>(), Self::min_size());
 
 		let ptr = hole_addr as *mut Hole;
 		ptr.write(Hole::new(hole_size, None));

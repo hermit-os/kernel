@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch;
+use crate::arch::percore::*;
+use crate::arch::processor::msb;
+use crate::arch::scheduler::{TaskStacks, TaskTLS};
+use crate::collections::{DoublyLinkedList, Node};
+use crate::scheduler::CoreId;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
-use arch;
-use arch::percore::*;
-use arch::processor::msb;
-use arch::scheduler::{TaskStacks, TaskTLS};
-use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::fmt;
-use scheduler::CoreId;
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -98,9 +98,9 @@ pub struct TaskHandle {
 impl TaskHandle {
 	pub fn new(id: TaskId, priority: Priority, core_id: CoreId) -> Self {
 		Self {
-			id: id,
-			priority: priority,
-			core_id: core_id,
+			id,
+			priority,
+			core_id,
 		}
 	}
 
@@ -141,7 +141,7 @@ impl TaskHandlePriorityQueue {
 		let i = task.priority.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		self.prio_bitmap |= 1 << i;
+		self.prio_bitmap |= (1 << i) as u64;
 		if let Some(queue) = &mut self.queues[i] {
 			queue.push_back(task);
 		} else {
@@ -271,7 +271,7 @@ impl PriorityTaskQueue {
 		let i = task.borrow().prio.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		self.prio_bitmap |= 1 << i;
+		self.prio_bitmap |= (1 << i) as u64;
 		match self.queues[i].tail {
 			None => {
 				// first element in the queue
@@ -291,7 +291,7 @@ impl PriorityTaskQueue {
 			}
 		}
 
-		self.queues[i].tail = Some(task.clone());
+		self.queues[i].tail = Some(task);
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
@@ -413,7 +413,7 @@ impl Task {
 			last_stack_pointer: 0,
 			user_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: TaskStacks::new(stack_size),
 			next: None,
 			prev: None,
@@ -434,7 +434,7 @@ impl Task {
 			last_stack_pointer: 0,
 			user_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
 			next: None,
 			prev: None,
@@ -455,7 +455,7 @@ impl Task {
 			last_stack_pointer: 0,
 			user_stack_pointer: 0,
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: task.stacks.clone(),
 			next: None,
 			prev: None,
@@ -525,18 +525,16 @@ impl BlockedTaskQueue {
 			let mut borrowed = task.borrow_mut();
 			debug!("Blocking task {}", borrowed.id);
 
-			assert!(
-				borrowed.status == TaskStatus::TaskRunning,
+			assert_eq!(
+				borrowed.status,
+				TaskStatus::TaskRunning,
 				"Trying to block task {} which is not running",
 				borrowed.id
 			);
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = Node::new(BlockedTask {
-			task: task,
-			wakeup_time: wakeup_time,
-		});
+		let new_node = Node::new(BlockedTask { task, wakeup_time });
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {

@@ -5,8 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch;
-use synch::spinlock::Spinlock;
+use crate::arch;
+use crate::synch::spinlock::Spinlock;
 
 static PARK_MILLER_LEHMER_SEED: Spinlock<u32> = Spinlock::new(0);
 

@@ -35,14 +35,14 @@ pub mod virtio;
 pub mod virtio_fs;
 pub mod virtio_net;
 
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::serial::SerialPort;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::serial::SerialPort;
 
+use crate::environment;
+use crate::kernel_message_buffer;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};
-use environment;
-use kernel_message_buffer;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
@@ -94,11 +94,7 @@ static mut COM1: SerialPort = SerialPort::new(0x3f8);
 pub fn has_ipdevice() -> bool {
 	let ip = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) };
 
-	if ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255 {
-		false
-	} else {
-		true
-	}
+	!(ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
 }
 
 #[cfg(not(feature = "newlib"))]
@@ -292,8 +288,8 @@ pub fn boot_processor_init() {
 		vga::init();
 	}
 
-	::mm::init();
-	::mm::print_information();
+	crate::mm::init();
+	crate::mm::print_information();
 	environment::init();
 	gdt::init();
 	gdt::add_current_core();

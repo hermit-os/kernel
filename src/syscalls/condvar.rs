@@ -8,10 +8,10 @@
 // The implementation is inspired by Andrew D. Birrell's paper
 // "Implementing Condition Variables with Semaphores"
 
+use crate::synch::semaphore::Semaphore;
 use alloc::boxed::Box;
 use core::mem;
 use core::sync::atomic::{AtomicIsize, Ordering};
-use synch::semaphore::Semaphore;
 
 struct CondQueue {
 	counter: AtomicIsize,
