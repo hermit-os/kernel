@@ -52,7 +52,7 @@ pub fn output_message_byte(byte: u8) {
 pub unsafe fn find_kernel() -> usize {
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
-	loaderlog!("Found Multiboot information at {:#X}", mb_info);
+	loaderlog!("Found Multiboot information at 0x{:x}", mb_info);
 	let page_address = align_down!(mb_info, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
@@ -104,7 +104,7 @@ pub unsafe fn find_kernel() -> usize {
 		"Could not find a single module in the Multiboot information"
 	);
 	assert!(start_address > 0);
-	loaderlog!("Found an ELF module at {:#X}", start_address);
+	loaderlog!("Found an ELF module at 0x{:x}", start_address);
 	let page_address = align_down!(start_address, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
 
@@ -196,8 +196,8 @@ pub unsafe fn boot_kernel(
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!(
-		"Jumping to HermitCore Application Entry Point at {:#X}",
+		"Jumping to HermitCore Application Entry Point at 0x{:x}",
 		entry_point
 	);
-	llvm_asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as usize) : "memory" : "volatile");
+	llvm_asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as u64) : "memory" : "volatile");
 }

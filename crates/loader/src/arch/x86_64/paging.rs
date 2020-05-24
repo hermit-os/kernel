@@ -90,14 +90,14 @@ impl PageTableEntry {
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
 			assert!(
 				physical_address % LargePageSize::SIZE == 0,
-				"Physical address is not on a 2 MiB page boundary (physical_address = {:#X})",
+				"Physical address is not on a 2 MiB page boundary (physical_address = 0x{:x})",
 				physical_address
 			);
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
 			assert!(
 				physical_address % BasePageSize::SIZE == 0,
-				"Physical address is not on a 4 KiB page boundary (physical_address = {:#X})",
+				"Physical address is not on a 4 KiB page boundary (physical_address = 0x{:x})",
 				physical_address
 			);
 		}
