@@ -36,11 +36,11 @@ jobs:
           rust-version: ${{ matrix.rust }}
           components: ${{ matrix.components || '' }}
           targets: ${{ matrix.targets || '' }}
-      - name: Checkout rusty-hermit devel
+      - name: Checkout rusty-hermit
         uses: actions/checkout@v2
         with:
           repository: 'hermitcore/rusty-hermit'
-          ref: 'devel'
+          ref: 'master'
           submodules: 'true'
       - name: Remove submodule libhermit-rs
         run: rm -r libhermit-rs
