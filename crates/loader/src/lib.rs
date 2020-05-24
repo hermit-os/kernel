@@ -38,8 +38,9 @@ mod runtime_glue;
 
 // IMPORTS
 use crate::arch::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::arch::{BOOT_INFO, ELF_ARCH};
+use crate::arch::{map_memory, BOOT_INFO, ELF_ARCH};
 use crate::elf::*;
+use core::intrinsics::{copy_nonoverlapping, write_bytes};
 use core::ptr;
 
 extern "C" {
@@ -55,6 +56,46 @@ pub unsafe fn sections_init() {
 		0,
 		&bss_end as *const u8 as usize - &bss_start as *const u8 as usize,
 	);
+}
+
+pub unsafe fn load_kernel(header_start: usize, start_address: usize, mem_size: usize) -> usize {
+	let header = &*(header_start as *const ElfHeader);
+	assert!(header.ident.magic == ELF_MAGIC);
+	assert!(header.ident._class == ELF_CLASS_64);
+	assert!(header.ident.data == ELF_DATA_2LSB);
+	assert!(header.ident.pad[0] == ELF_PAD_HERMIT);
+	assert!(header.ty == ELF_ET_EXEC);
+	assert!(header.machine == ELF_ARCH);
+
+	let address = map_memory(start_address, mem_size);
+	loaderlog!("Load HermitCore Application as 0x{:x}", address);
+
+	let mut virtual_address = 0;
+
+	for i in 0..header.ph_entry_count {
+		let program_header = &*((header_start
+			+ header.ph_offset
+			+ (i * header.ph_entry_size) as usize) as *const ElfProgramHeader);
+		if program_header.ty == ELF_PT_LOAD {
+			if virtual_address == 0 {
+				virtual_address = program_header.virt_addr;
+			}
+
+			let pos = program_header.virt_addr - virtual_address;
+			copy_nonoverlapping(
+				(header_start + program_header.offset) as *const u8,
+				(address + pos) as *mut u8,
+				program_header.file_size,
+			);
+			write_bytes(
+				(address + pos + program_header.file_size) as *mut u8,
+				0,
+				program_header.mem_size - program_header.file_size,
+			);
+		}
+	}
+
+	address
 }
 
 pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usize, usize, usize) {

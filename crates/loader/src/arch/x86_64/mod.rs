@@ -49,12 +49,12 @@ pub fn output_message_byte(byte: u8) {
 	COM1.write_byte(byte);
 }
 
-pub unsafe fn find_kernel() -> usize {
+pub unsafe fn find_kernel() -> (usize, usize) {
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
 	loaderlog!("Found Multiboot information at 0x{:x}", mb_info);
 	let page_address = align_down!(mb_info, BasePageSize::SIZE);
-	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::WRITABLE);
 
 	// Load the Multiboot information and identity-map the modules information.
 	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
@@ -106,66 +106,37 @@ pub unsafe fn find_kernel() -> usize {
 	assert!(start_address > 0);
 	loaderlog!("Found an ELF module at 0x{:x}", start_address);
 	let page_address = align_down!(start_address, BasePageSize::SIZE);
-	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
-
-	start_address
-}
-
-pub unsafe fn move_kernel(
-	physical_address: usize,
-	virtual_address: usize,
-	mem_size: usize,
-	file_size: usize,
-) -> usize {
-	// We want to move the application to realize a identify mapping
-	let page_count = align_up!(mem_size, LargePageSize::SIZE) / LargePageSize::SIZE;
-	loaderlog!("Use {} large pages for the application.", page_count);
-
-	paging::map::<LargePageSize>(
-		virtual_address,
-		virtual_address,
-		page_count,
-		PageTableEntryFlags::WRITABLE,
+	let counter =
+		(align_up!(start_address, LargePageSize::SIZE) - page_address) / BasePageSize::SIZE;
+	paging::map::<BasePageSize>(
+		page_address,
+		page_address,
+		counter,
+		PageTableEntryFlags::empty(),
 	);
 
-	for i in (0..align_up!(file_size, BasePageSize::SIZE) / BasePageSize::SIZE).rev() {
-		let tmp = 0x2000;
-		paging::map::<BasePageSize>(
-			tmp,
-			align_down!(physical_address, BasePageSize::SIZE) + i * BasePageSize::SIZE,
-			1,
-			PageTableEntryFlags::WRITABLE,
-		);
-
-		for j in 0..BasePageSize::SIZE {
-			*((virtual_address + i * BasePageSize::SIZE + j) as *mut u8) =
-				*((tmp + j) as *const u8);
-		}
+	// map also the rest of the module
+	let address = align_up!(start_address, LargePageSize::SIZE);
+	let counter = (align_up!(end_address, LargePageSize::SIZE) - address) / LargePageSize::SIZE;
+	if counter > 0 {
+		paging::map::<LargePageSize>(address, address, counter, PageTableEntryFlags::WRITABLE);
 	}
 
-	// clear rest of the kernel
-	let start = file_size;
-	let end = mem_size;
-	loaderlog!(
-		"Clear BSS from 0x{:x} to 0x{:x}",
-		virtual_address + start,
-		virtual_address + end
-	);
-	for i in start..end {
-		*((virtual_address + i) as *mut u8) = 0;
-	}
-
-	virtual_address
+	(start_address, end_address)
 }
 
-pub unsafe fn boot_kernel(
-	new_physical_address: usize,
-	virtual_address: usize,
-	mem_size: usize,
-	entry_point: usize,
-) {
+pub unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
+	let address = align_up!(address, LargePageSize::SIZE);
+	let page_count = align_up!(memory_size, LargePageSize::SIZE) / LargePageSize::SIZE;
+
+	paging::map::<LargePageSize>(address, address, page_count, PageTableEntryFlags::WRITABLE);
+
+	address
+}
+
+pub unsafe fn boot_kernel(virtual_address: usize, mem_size: usize, entry_point: usize) -> ! {
 	// Supply the parameters to the HermitCore application.
-	BOOT_INFO.base = new_physical_address as u64;
+	BOOT_INFO.base = virtual_address as u64;
 	BOOT_INFO.image_size = mem_size as u64;
 	BOOT_INFO.mb_info = mb_info as u64;
 	BOOT_INFO.current_stack_address = (virtual_address - KERNEL_STACK_SIZE) as u64;
@@ -199,5 +170,10 @@ pub unsafe fn boot_kernel(
 		"Jumping to HermitCore Application Entry Point at 0x{:x}",
 		entry_point
 	);
-	llvm_asm!("jmp *$0" :: "r"(entry_point), "{rdi}"(&BOOT_INFO as *const _ as u64) : "memory" : "volatile");
+	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =
+		core::mem::transmute(entry_point);
+
+	func(&mut BOOT_INFO);
+
+	// we never reach this point
 }
