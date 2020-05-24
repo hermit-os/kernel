@@ -11,7 +11,7 @@ use crate::boot_processor_main;
 use crate::config::KERNEL_STACK_SIZE;
 use crate::x86::controlregs::*;
 
-pub unsafe fn cr0_enable_caching() {
+unsafe fn cr0_enable_caching() {
 	let mut cr0 = cr0();
 
 	// Enable caching.
@@ -29,12 +29,16 @@ pub unsafe extern "C" fn _start(boot_info: &'static mut BootInfo) -> ! {
 		:: "r"(boot_info.current_stack_address + KERNEL_STACK_SIZE as u64 - 0x10)
 		:: "volatile");
 
-	BOOT_INFO = boot_info as *mut BootInfo;
+	pre_init(boot_info);
+}
 
+unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	//
 	// CR0 CONFIGURATION
 	//
 	cr0_enable_caching();
+
+	BOOT_INFO = boot_info as *mut BootInfo;
 
 	if boot_info.cpu_online == 0 {
 		boot_processor_main();
