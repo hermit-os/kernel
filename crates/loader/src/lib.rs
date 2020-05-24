@@ -37,10 +37,10 @@ mod rlib;
 mod runtime_glue;
 
 // IMPORTS
-use arch::paging::{BasePageSize, LargePageSize, PageSize};
-use arch::BOOT_INFO;
+use crate::arch::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::arch::{BOOT_INFO, ELF_ARCH};
+use crate::elf::*;
 use core::ptr;
-use elf::*;
 
 extern "C" {
 	static bss_end: u8;
@@ -65,7 +65,7 @@ pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usiz
 	assert!(header.ident.data == ELF_DATA_2LSB);
 	assert!(header.ident.pad[0] == ELF_PAD_HERMIT);
 	assert!(header.ty == ELF_ET_EXEC);
-	assert!(header.machine == arch::ELF_ARCH);
+	assert!(header.machine == ELF_ARCH);
 	loaderlog!("This is a supported HermitCore Application");
 
 	// Get all necessary information about the ELF executable.

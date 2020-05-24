@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::SERIAL_PORT_ADDRESS;
+use crate::arch::x86_64::SERIAL_PORT_ADDRESS;
 use core::fmt;
 
 #[repr(C)]

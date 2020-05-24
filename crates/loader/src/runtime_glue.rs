@@ -8,7 +8,7 @@
 //! Minor functions that Rust really expects to be defined by the compiler,
 //! but which we need to provide manually because we're on bare metal.
 
-use arch;
+use crate::arch;
 use core::panic::PanicInfo;
 
 #[panic_handler]

@@ -6,7 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::*;
+pub use crate::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 pub mod x86_64;

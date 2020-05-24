@@ -11,12 +11,12 @@ pub mod processor;
 pub mod serial;
 
 pub use self::bootinfo::*;
-use arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use arch::x86_64::serial::SerialPort;
+use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::serial::SerialPort;
+use crate::elf::*;
+use crate::physicalmem;
 use core::{mem, slice};
-use elf::*;
 use multiboot::Multiboot;
-use physicalmem;
 
 extern "C" {
 	static mb_info: usize;
