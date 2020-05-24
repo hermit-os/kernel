@@ -10,6 +10,7 @@
 
 use crate::synch::semaphore::Semaphore;
 use alloc::boxed::Box;
+use core::convert::TryInto;
 use core::mem;
 use core::sync::atomic::{AtomicIsize, Ordering};
 
@@ -65,20 +66,21 @@ unsafe fn __sys_notify(ptr: usize, count: i32) -> i32 {
 
 	let cond = &mut *((*id) as *mut CondQueue);
 
-	if count < 0 {
+	let waiters = if count < 0 {
 		// Wake up all task that has been waiting for this condition variable
-		while cond.counter.load(Ordering::SeqCst) > 0 {
-			cond.counter.fetch_sub(1, Ordering::SeqCst);
-			cond.sem1.release();
-			cond.sem2.acquire(None);
-		}
+		cond.counter.load(Ordering::SeqCst) as usize
 	} else {
-		for _ in 0..count {
-			cond.counter.fetch_sub(1, Ordering::SeqCst);
-			cond.sem1.release();
-			cond.sem2.acquire(None);
-		}
+		count as usize
+	};
+
+	for _ in 0..waiters {
+		cond.sem1.release();
 	}
+	for _ in 0..waiters {
+		cond.sem2.acquire(None);
+	}
+	cond.counter
+		.fetch_sub(waiters.try_into().unwrap(), Ordering::SeqCst);
 
 	0
 }
@@ -117,9 +119,8 @@ unsafe fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	}
 
 	if *id == 0 {
-		debug!("Create condition variable queue");
-		let queue = Box::new(CondQueue::new());
-		*id = Box::into_raw(queue) as usize;
+		error!("Condition variable isn't initialized!");
+		return -1;
 	}
 
 	if timeout_ns <= 0 {
