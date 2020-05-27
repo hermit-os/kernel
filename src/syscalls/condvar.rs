@@ -8,10 +8,11 @@
 // The implementation is inspired by Andrew D. Birrell's paper
 // "Implementing Condition Variables with Semaphores"
 
-use crate::synch::semaphore::Semaphore;
 use alloc::boxed::Box;
 use core::mem;
 use core::sync::atomic::{AtomicIsize, Ordering};
+
+use crate::synch::semaphore::Semaphore;
 
 struct CondQueue {
 	counter: AtomicIsize,
@@ -32,7 +33,7 @@ impl CondQueue {
 unsafe fn __sys_destroy_queue(ptr: usize) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
-		debug!("sys_wait: ivalid address to condition variable");
+		debug!("sys_wait: invalid address to condition variable");
 		return -1;
 	}
 
@@ -91,7 +92,7 @@ pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
 unsafe fn __sys_init_queue(ptr: usize) -> i32 {
 	let id = ptr as *mut usize;
 	if id.is_null() {
-		debug!("sys_init_queue: ivalid address to condition variable");
+		debug!("sys_init_queue: invalid address to condition variable");
 		return -1;
 	}
 

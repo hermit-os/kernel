@@ -6,7 +6,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-pub mod task;
+use alloc::boxed::Box;
+use alloc::collections::{BTreeMap, VecDeque};
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch;
 use crate::arch::irq;
@@ -16,11 +20,8 @@ use crate::collections::AvoidInterrupts;
 use crate::config::*;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
-use alloc::boxed::Box;
-use alloc::collections::{BTreeMap, VecDeque};
-use alloc::rc::Rc;
-use core::cell::RefCell;
-use core::sync::atomic::{AtomicU32, Ordering};
+
+pub mod task;
 
 /// Time slice of a task in microseconds.
 /// When this time has elapsed and the scheduler is called, it may switch to another ready task.
@@ -373,7 +374,7 @@ impl PerCoreScheduler {
 	}
 
 	/// Only the idle task should call this function to
-	/// reschdule the system. Set the idle task in halt
+	/// reschedule the system. Set the idle task in halt
 	/// state by leaving this function.
 	pub fn reschedule_and_wait(&mut self) {
 		irq::disable();

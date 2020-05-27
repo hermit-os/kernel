@@ -41,8 +41,9 @@ pub fn init_page_tables() {}
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -61,14 +62,16 @@ pub fn allocate(size: usize) -> usize {
 pub fn allocate_aligned(size: usize, alignment: usize) -> usize {
 	assert!(size > 0);
 	assert!(alignment > 0);
-	assert!(
-		size % alignment == 0,
+	assert_eq!(
+		size % alignment,
+		0,
 		"Size {:#X} is not a multiple of the given alignment {:#X}",
 		size,
 		alignment
 	);
-	assert!(
-		alignment % BasePageSize::SIZE == 0,
+	assert_eq!(
+		alignment % BasePageSize::SIZE,
+		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
 		BasePageSize::SIZE
@@ -97,8 +100,9 @@ pub fn deallocate(physical_address: usize, size: usize) {
 		physical_address
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
