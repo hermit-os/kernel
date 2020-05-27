@@ -41,8 +41,8 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	BOOT_INFO = boot_info as *mut BootInfo;
 
 	if boot_info.cpu_online == 0 {
-		boot_processor_main();
+		boot_processor_main()
 	} else {
-		application_processor_main();
+		application_processor_main()
 	}
 }

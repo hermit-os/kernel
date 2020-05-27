@@ -1,3 +1,9 @@
+use core::convert::TryInto;
+use core::isize;
+#[cfg(feature = "newlib")]
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU32, Ordering};
+
 // Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
@@ -15,11 +21,6 @@ use crate::scheduler;
 use crate::scheduler::task::{Priority, TaskId};
 use crate::syscalls;
 use crate::syscalls::timer::timespec;
-use core::convert::TryInto;
-use core::isize;
-#[cfg(feature = "newlib")]
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
@@ -56,7 +57,7 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 fn __sys_exit(arg: i32) -> ! {
 	debug!("Exit program with error code {}!", arg);
-	syscalls::__sys_shutdown(arg);
+	syscalls::__sys_shutdown(arg)
 }
 
 #[no_mangle]

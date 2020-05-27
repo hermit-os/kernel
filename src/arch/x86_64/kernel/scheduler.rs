@@ -8,6 +8,8 @@
 
 //! Architecture dependent interface to initialize a task
 
+use core::{mem, ptr};
+
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::irq;
@@ -17,7 +19,6 @@ use crate::config::*;
 use crate::environment;
 use crate::mm;
 use crate::scheduler::task::{Task, TaskFrame};
-use core::{mem, ptr};
 
 #[repr(C, packed)]
 struct State {
@@ -331,7 +332,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	switch_to_kernel!();
 
 	// Exit task
-	core_scheduler().exit(0);
+	core_scheduler().exit(0)
 }
 
 impl TaskFrame for Task {
