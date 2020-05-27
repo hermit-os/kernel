@@ -17,8 +17,9 @@ pub fn init(address: usize) {
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size 0x{:x} is a multiple of 0x{:x}",
 		size,
 		BasePageSize::SIZE
