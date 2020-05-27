@@ -7,6 +7,13 @@
 
 #![allow(dead_code)]
 
+use core::marker::PhantomData;
+use core::mem;
+use core::ptr;
+use multiboot::Multiboot;
+use x86::controlregs;
+use x86::irq::PageFaultError;
+
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
@@ -17,12 +24,6 @@ use crate::arch::x86_64::mm::physicalmem;
 use crate::environment;
 use crate::mm;
 use crate::scheduler;
-use core::marker::PhantomData;
-use core::mem;
-use core::ptr;
-use multiboot::Multiboot;
-use x86::controlregs;
-use x86::irq::PageFaultError;
 
 /// Uhyve's address of the initial GDT
 const BOOT_GDT: usize = 0x1000;
@@ -409,7 +410,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		physical_address: usize,
 		flags: PageTableEntryFlags,
 	) -> bool {
-		assert!(L::LEVEL == S::MAP_LEVEL);
+		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
@@ -435,7 +436,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	/// This is the default implementation called only for PT.
 	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
 	default fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
-		assert!(L::LEVEL == S::MAP_LEVEL);
+		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
 		if self.entries[index].is_present() {

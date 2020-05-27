@@ -7,24 +7,25 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-mod generic;
-mod uhyve;
-
-pub use self::generic::*;
-pub use self::uhyve::*;
-use crate::arch;
-use crate::console;
-use crate::environment;
-use crate::errno::*;
-use crate::synch::spinlock::SpinlockIrqSave;
-use crate::util;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::convert::{TryFrom, TryInto};
 use core::fmt::Write;
 use core::{isize, ptr, slice, str};
 
+use crate::arch;
+use crate::console;
+use crate::environment;
+use crate::errno::*;
+use crate::synch::spinlock::SpinlockIrqSave;
 use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+use crate::util;
+
+pub use self::generic::*;
+pub use self::uhyve::*;
+
+mod generic;
+mod uhyve;
 
 static DRIVER_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
@@ -114,7 +115,7 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn shutdown(&self, _arg: i32) -> ! {
-		arch::processor::shutdown();
+		arch::processor::shutdown()
 	}
 
 	fn get_mac_address(&self) -> Result<[u8; 6], ()> {
