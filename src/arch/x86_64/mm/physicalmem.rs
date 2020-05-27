@@ -5,6 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use core::sync::atomic::{AtomicUsize, Ordering};
+use multiboot::{MemoryType, Multiboot};
+
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paddr_to_slice;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
@@ -12,8 +15,6 @@ use crate::collections::Node;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::*;
-use core::sync::atomic::{AtomicUsize, Ordering};
-use multiboot::{MemoryType, Multiboot};
 
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
@@ -87,8 +88,9 @@ pub fn total_memory_size() -> usize {
 
 pub fn allocate(size: usize) -> Result<usize, ()> {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -100,14 +102,16 @@ pub fn allocate(size: usize) -> Result<usize, ()> {
 pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
-	assert!(
-		size % alignment == 0,
+	assert_eq!(
+		size % alignment,
+		0,
 		"Size {:#X} is not a multiple of the given alignment {:#X}",
 		size,
 		alignment
 	);
-	assert!(
-		alignment % BasePageSize::SIZE == 0,
+	assert_eq!(
+		alignment % BasePageSize::SIZE,
+		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
 		BasePageSize::SIZE
@@ -125,8 +129,9 @@ pub fn deallocate(physical_address: usize, size: usize) {
 		physical_address
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
