@@ -57,8 +57,6 @@ jobs:
       - name: Cargo Test libhermit-rs
         run: cargo test
         working-directory: libhermit-rs
-      - name: Install cargo-download
-        run: cargo install cargo-download
       - name: Install qemu/nasm (apt)
         run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
         if: ${{ matrix.os == 'ubuntu-latest' }}
