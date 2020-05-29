@@ -6,6 +6,24 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::drivers::net::*;
+use crate::environment;
+#[cfg(feature = "newlib")]
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::syscalls::interfaces::SyscallInterface;
+#[cfg(not(test))]
+use crate::{__sys_free, __sys_malloc, __sys_realloc};
+
+pub use self::condvar::*;
+pub use self::processor::*;
+pub use self::random::*;
+pub use self::recmutex::*;
+pub use self::semaphore::*;
+pub use self::spinlock::*;
+pub use self::system::*;
+pub use self::tasks::*;
+pub use self::timer::*;
+
 mod condvar;
 pub mod fs;
 mod interfaces;
@@ -19,24 +37,6 @@ mod spinlock;
 mod system;
 mod tasks;
 mod timer;
-
-pub use self::condvar::*;
-pub use self::processor::*;
-pub use self::random::*;
-pub use self::recmutex::*;
-pub use self::semaphore::*;
-pub use self::spinlock::*;
-pub use self::system::*;
-pub use self::tasks::*;
-pub use self::timer::*;
-#[cfg(not(test))]
-use crate::{__sys_free, __sys_malloc, __sys_realloc};
-
-use crate::drivers::net::*;
-use crate::environment;
-#[cfg(feature = "newlib")]
-use crate::synch::spinlock::SpinlockIrqSave;
-use crate::syscalls::interfaces::SyscallInterface;
 
 #[cfg(feature = "newlib")]
 const LWIP_FD_BIT: i32 = 1 << 30;
@@ -74,13 +74,13 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	__sys_realloc(ptr, size, align, new_size)
+	unsafe { __sys_realloc(ptr, size, align, new_size) }
 }
 
 #[cfg(not(test))]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	__sys_free(ptr, size, align)
+	unsafe { __sys_free(ptr, size, align) }
 }
 
 pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {

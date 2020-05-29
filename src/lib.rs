@@ -37,25 +37,34 @@
 #![allow(unused_macros)]
 #![no_std]
 
-#[cfg(test)]
-#[macro_use]
-extern crate std;
-
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
-#[cfg(target_arch = "x86_64")]
-extern crate multiboot;
-#[cfg(target_arch = "x86_64")]
-extern crate x86;
 #[macro_use]
 extern crate log;
+#[cfg(target_arch = "x86_64")]
+extern crate multiboot;
 extern crate num;
 #[macro_use]
 extern crate num_derive;
 extern crate num_traits;
+#[cfg(test)]
+#[macro_use]
+extern crate std;
+#[cfg(target_arch = "x86_64")]
+extern crate x86;
+
+use alloc::alloc::Layout;
+use core::alloc::GlobalAlloc;
+
+use arch::percore::*;
+use mm::allocator::LockedHeap;
+
+pub use crate::arch::*;
+pub use crate::config::*;
+pub use crate::syscalls::*;
 
 #[macro_use]
 mod macros;
@@ -81,28 +90,28 @@ mod synch;
 mod syscalls;
 mod util;
 
-pub use crate::arch::*;
-pub use crate::config::*;
-pub use crate::syscalls::*;
-
-use alloc::alloc::Layout;
-use arch::percore::*;
-use core::alloc::GlobalAlloc;
-use mm::allocator::LockedHeap;
-
 #[cfg(not(test))]
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
 /// Interface to allocate memory from system heap
+///
+/// # Errors
+/// Returning a null pointer indicates that either memory is exhausted or
+/// `size` and `align` do not meet this allocator's size or alignment constraints.
+///
 #[cfg(not(test))]
 pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
-	let layout: Layout = Layout::from_size_align(size, align).unwrap();
-	let ptr;
-
-	unsafe {
-		ptr = ALLOCATOR.alloc(layout);
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 {
+		warn!(
+			"__sys_malloc called with size 0x{:x}, align 0x{:x} is an invalid layout!",
+			size, align
+		);
+		return core::ptr::null::<*mut u8>() as *mut u8;
 	}
+	let layout = layout_res.unwrap();
+	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
 	trace!(
 		"__sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})",
@@ -114,39 +123,82 @@ pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	ptr
 }
 
-/// Interface to increase the size of a memory region
+/// Shrink or grow a block of memory to the given `new_size`. The block is described by the given
+/// ptr pointer and layout. If this returns a non-null pointer, then ownership of the memory block
+/// referenced by ptr has been transferred to this allocator. The memory may or may not have been
+/// deallocated, and should be considered unusable (unless of course it was transferred back to the
+/// caller again via the return value of this method). The new memory block is allocated with
+/// layout, but with the size updated to new_size.
+/// If this method returns null, then ownership of the memory block has not been transferred to this
+/// allocator, and the contents of the memory block are unaltered.
+///
+/// # Safety
+/// This function is unsafe because undefined behavior can result if the caller does not ensure all
+/// of the following:
+/// - `ptr` must be currently allocated via this allocator,
+/// - `size` and `align` must be the same layout that was used to allocate that block of memory.
+/// ToDO: verify if the same values for size and align always lead to the same layout
+///
+/// # Errors
+/// Returns null if the new layout does not meet the size and alignment constraints of the
+/// allocator, or if reallocation otherwise fails.
 #[cfg(not(test))]
-pub fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	let layout: Layout = Layout::from_size_align(size, align).unwrap();
-	let new_ptr;
-
-	unsafe {
-		new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
+pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 || new_size == 0 {
+		warn!(
+			"__sys_realloc called with ptr 0x{:x}, size 0x{:x}, align 0x{:x}, new_size 0x{:x} is an invalid layout!",
+			ptr as usize, size, align, new_size
+		);
+		return core::ptr::null::<*mut u8>() as *mut u8;
 	}
+	let layout = layout_res.unwrap();
+	let new_ptr = unsafe { ALLOCATOR.realloc(ptr, layout, new_size) };
 
-	trace!(
-		"__sys_realloc: resize memory at 0x{:x}, new address 0x{:x}",
-		ptr as usize,
-		new_ptr as usize
-	);
-
+	if new_ptr.is_null() {
+		debug!(
+			"__sys_realloc failed to resize ptr 0x{:x} with size 0x{:x}, align 0x{:x}, new_size 0x{:x} !",
+			ptr as usize, size, align, new_size
+		);
+	} else {
+		trace!(
+			"__sys_realloc: resized memory at 0x{:x}, new address 0x{:x}",
+			ptr as usize,
+			new_ptr as usize
+		);
+	}
 	new_ptr
 }
 
 /// Interface to deallocate a memory region from the system heap
+///
+/// # Safety
+/// This function is unsafe because undefined behavior can result if the caller does not ensure all of the following:
+/// - ptr must denote a block of memory currently allocated via this allocator,
+/// - `size` and `align` must be the same values that were used to allocate that block of memory
+/// ToDO: verify if the same values for size and align always lead to the same layout
+///
+/// # Errors
+/// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
 #[cfg(not(test))]
-pub fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
-	let layout: Layout = Layout::from_size_align(size, align).unwrap();
-
-	trace!(
-		"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
-		ptr as usize,
-		size
-	);
-
-	unsafe {
-		ALLOCATOR.dealloc(ptr, layout);
+pub unsafe fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
+	let layout_res = Layout::from_size_align(size, align);
+	if layout_res.is_err() || size == 0 {
+		warn!(
+			"__sys_free called with size 0x{:x}, align 0x{:x} is an invalid layout!",
+			size, align
+		);
+		debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
+		debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
+	} else {
+		trace!(
+			"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
+			ptr as usize,
+			size
+		);
 	}
+	let layout = layout_res.unwrap();
+	ALLOCATOR.dealloc(ptr, layout);
 }
 
 #[cfg(not(test))]
