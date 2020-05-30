@@ -15,18 +15,19 @@ pub struct Console;
 /// A collection of methods that are required to format
 /// a message to HermitCore's console.
 impl fmt::Write for Console {
-	/// Print a single character.
-	fn write_char(&mut self, c: char) -> fmt::Result {
-		arch::output_message_byte(c as u8);
+	/// Print a string of characters.
+	fn write_str(&mut self, s: &str) -> fmt::Result {
+		if s.len() > 0 {
+			let buf = s.as_bytes();
+			arch::output_message_buf(buf);
+		}
+
 		Ok(())
 	}
 
-	/// Print a string of characters.
-	fn write_str(&mut self, s: &str) -> fmt::Result {
-		for character in s.chars() {
-			self.write_char(character).unwrap();
-		}
-		Ok(())
+	/// Print a single character.
+	fn write_char(&mut self, c: char) -> fmt::Result {
+		self.write_str(c.encode_utf8(&mut [0; 4]))
 	}
 }
 
