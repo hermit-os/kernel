@@ -11,8 +11,8 @@ use arch::x86_64::kernel::pci::{
 	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
 };
 use arch::x86_64::kernel::percore::core_scheduler;
-use arch::x86_64::kernel::virtio_fs;
-use arch::x86_64::kernel::virtio_net;
+use drivers::virtio::depr::virtio_fs;
+use drivers::virtio::depr::virtio_net;
 
 use arch::x86_64::mm::paging;
 

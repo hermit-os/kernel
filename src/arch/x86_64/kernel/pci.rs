@@ -9,9 +9,10 @@
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
-use arch::x86_64::kernel::virtio;
-use arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
-use arch::x86_64::kernel::virtio_net::VirtioNetDriver;
+use drivers::virtio::depr::virtio_fs::VirtioFsDriver;
+use drivers::virtio::depr::virtio_net::VirtioNetDriver;
+use drivers::virtio::depr::virtio;
+//use drivers::virtio::transport::pci as pci_virtio;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
@@ -486,6 +487,23 @@ pub fn init_drivers() {
 				"Found virtio device with device id 0x{:x}",
 				adapter.device_id
 			);
+
+			/* New initalization function
+			 * 
+			 * Additionally too iterating through adapters, function should iterate over
+			 *  all suitable drivers. In case multiple are available. 
+			 * 
+			 *  match pci_virtio::init_device(adapter) {
+             *     Ok(PciDriver) => {
+             *	       pci::register_driver(PciDriver);
+			 *     },
+			 *     Err() => {
+			 *	       // Handle Error, probably just warn!(...)
+             *         // Try other drive or skip device
+			 *     }
+			 * }
+			 *  
+			 */
 			virtio::init_virtio_device(adapter);
 		}
 	}

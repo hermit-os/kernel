@@ -7,7 +7,7 @@
 
 use arch::x86_64::kernel::fuse::{self, FuseInterface};
 use arch::x86_64::kernel::pci;
-use arch::x86_64::kernel::virtio::{
+use drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
 use syscalls::fs;
