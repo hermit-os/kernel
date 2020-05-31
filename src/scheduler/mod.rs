@@ -63,14 +63,14 @@ pub struct PerCoreScheduler {
 	fpu_owner: Rc<RefCell<Task>>,
 	/// Queue of tasks, which are ready
 	ready_queue: PriorityTaskQueue,
-	/// Queues to handle incoming requests from the other cores
-	input: SpinlockIrqSave<SchedulerInput>,
 	/// Queue of tasks, which are finished and can be released
 	finished_tasks: VecDeque<TaskId>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
 	/// Processor Timer Tick when we last switched the current task.
 	last_task_switch_tick: u64,
+	/// Queues to handle incoming requests from the other cores
+	input: SpinlockIrqSave<SchedulerInput>,
 }
 
 impl PerCoreScheduler {
@@ -531,10 +531,10 @@ pub fn add_current_core() {
 		idle_task: idle_task.clone(),
 		fpu_owner: idle_task,
 		ready_queue: PriorityTaskQueue::new(),
-		input: SpinlockIrqSave::new(SchedulerInput::new()),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
 		last_task_switch_tick: 0,
+		input: SpinlockIrqSave::new(SchedulerInput::new()),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);
