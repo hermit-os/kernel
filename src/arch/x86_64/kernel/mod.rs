@@ -277,6 +277,13 @@ pub fn output_message_byte(byte: u8) {
 	}
 }
 
+//#[cfg(not(test))]
+pub fn output_message_buf(buf: &[u8]) {
+	for byte in buf {
+		output_message_byte(*byte);
+	}
+}
+
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(not(test))]
 pub fn boot_processor_init() {
