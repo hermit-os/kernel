@@ -70,5 +70,5 @@ pub use crate::arch::x86_64::kernel::{
 };
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::{
-	get_processor_count, message_output_init, output_message_byte,
+	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
