@@ -12,6 +12,7 @@ use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::collections::CachePadded;
 use crate::config::*;
 use crate::environment;
 use crate::mm;
@@ -481,12 +482,18 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
+	let boxed_percore = Box::new(CachePadded::new(PerCoreInnerVariables::new(core_id)));
 	unsafe {
 		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack as u64);
 		core::ptr::write_volatile(
 			&mut (*BOOT_INFO).current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
+		);
+
+		trace!(
+			"Initialize per core data at 0x{:x} (size {} bytes)",
+			core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address),
+			mem::size_of::<PerCoreVariables>()
 		);
 	}
 }

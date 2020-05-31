@@ -6,14 +6,17 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::collections::CachePadded;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 use crate::x86::bits64::task::TaskStateSegment;
 use crate::x86::msr::*;
 use core::ptr;
 
-pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
+pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
 
-pub struct PerCoreVariables {
+pub type PerCoreVariables = CachePadded<PerCoreInnerVariables>;
+
+pub struct PerCoreInnerVariables {
 	/// Sequential ID of this CPU Core.
 	core_id: PerCoreVariable<CoreId>,
 	/// Scheduler for this CPU Core.
@@ -24,7 +27,7 @@ pub struct PerCoreVariables {
 	pub kernel_stack: PerCoreVariable<u64>,
 }
 
-impl PerCoreVariables {
+impl PerCoreInnerVariables {
 	pub const fn new(core_id: CoreId) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
