@@ -31,9 +31,6 @@ pub mod switch;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
-pub mod virtio;
-pub mod virtio_fs;
-pub mod virtio_net;
 
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::serial::SerialPort;
