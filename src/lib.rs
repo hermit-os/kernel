@@ -153,7 +153,7 @@ pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: u
 		return core::ptr::null::<*mut u8>() as *mut u8;
 	}
 	let layout = layout_res.unwrap();
-	let new_ptr = unsafe { ALLOCATOR.realloc(ptr, layout, new_size) };
+	let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
 
 	if new_ptr.is_null() {
 		debug!(
