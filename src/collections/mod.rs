@@ -7,8 +7,10 @@
 
 use crate::arch::irq;
 
+mod cachepadded;
 mod doublylinkedlist;
 
+pub use self::cachepadded::*;
 pub use self::doublylinkedlist::*;
 
 pub struct AvoidInterrupts(bool);
