@@ -229,9 +229,8 @@ impl SyscallInterface for Uhyve {
 				syscmdsize.argc as usize * mem::size_of::<*const u8>(),
 				mem::size_of::<*const u8>(),
 			) as *mut *const u8;
-			let argv = unsafe { slice::from_raw_parts_mut(argv_raw, syscmdsize.argc as usize) };
-			let argv_phy =
-				unsafe { slice::from_raw_parts_mut(argv_phy_raw, syscmdsize.argc as usize) };
+			let argv = slice::from_raw_parts_mut(argv_raw, syscmdsize.argc as usize);
+			let argv_phy = slice::from_raw_parts_mut(argv_phy_raw, syscmdsize.argc as usize);
 			for i in 0..syscmdsize.argc as usize {
 				argv[i] = crate::__sys_malloc(
 					syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
@@ -249,9 +248,8 @@ impl SyscallInterface for Uhyve {
 				(syscmdsize.envc + 1) as usize * mem::size_of::<*const u8>(),
 				mem::size_of::<*const u8>(),
 			) as *mut *const u8;
-			let env = unsafe { slice::from_raw_parts_mut(env_raw, (syscmdsize.envc + 1) as usize) };
-			let env_phy =
-				unsafe { slice::from_raw_parts_mut(env_phy_raw, (syscmdsize.envc + 1) as usize) };
+			let env = slice::from_raw_parts_mut(env_raw, (syscmdsize.envc + 1) as usize);
+			let env_phy = slice::from_raw_parts_mut(env_phy_raw, (syscmdsize.envc + 1) as usize);
 			for i in 0..syscmdsize.envc as usize {
 				env[i] = crate::__sys_malloc(
 					syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
