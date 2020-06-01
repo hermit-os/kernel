@@ -115,8 +115,8 @@ More details can be found in the [uhyve README](https://github.com/hermitcore/uh
 It is also possible to run RustyHermit within [Qemu](https://www.qemu.org).
 RustyHermit produces 64-bit binaries, but Qemu's x86 emulation cannot boot them directly.
 Therefore, the loader [rusty-loader](https://github.com/hermitcore/rusty-loader) is required to boot the application.
-To build the loader, the cargo subcommand [xbuild](https://github.com/rust-osdev/cargo-xbuild) and the assembler [nasm](https://www.nasm.us) are required.
-After the installation of [xbuild](https://github.com/rust-osdev/cargo-xbuild), the loader can be build as follows.
+To build the loader, the assembler [nasm](https://www.nasm.us) are required.
+After the installation, the loader can be build as follows.
 
 ```bash
 $ git clone https://github.com/hermitcore/rusty-loader.git
