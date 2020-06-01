@@ -142,7 +142,7 @@ dependencies = [
 
 [[package]]
 name = "rusty-hermit"
-version = "0.3.31"
+version = "0.3.32"
 dependencies = [
  "bitflags 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
