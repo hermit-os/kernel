@@ -113,7 +113,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 }
 
 pub fn __sys_usleep(usecs: u64) {
-	if usecs > (scheduler::TASK_TIME_SLICE as u64) {
+	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
