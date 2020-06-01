@@ -11,8 +11,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 use crate::arch;
-use crate::arch::kernel::get_processor_count;
+use crate::arch::get_processor_count;
 use crate::arch::percore::*;
+use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::*;
 #[cfg(feature = "newlib")]
@@ -113,7 +114,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 }
 
 pub fn __sys_usleep(usecs: u64) {
-	if usecs > (scheduler::TASK_TIME_SLICE as u64) {
+	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
@@ -124,7 +125,10 @@ pub fn __sys_usleep(usecs: u64) {
 		core_scheduler.reschedule();
 	} else if usecs > 0 {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
-		arch::processor::udelay(usecs);
+		let end = arch::processor::get_timestamp() + u64::from(get_frequency()) * usecs;
+		while get_timestamp() < end {
+			__sys_yield();
+		}
 	}
 }
 
