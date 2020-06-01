@@ -43,7 +43,7 @@ use crate::kernel_message_buffer;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};
-use x86::controlregs::{cr0,cr4};
+use x86::controlregs::{cr0, cr4};
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
@@ -307,7 +307,9 @@ pub fn boot_processor_init() {
 	irq::install();
 	processor::detect_frequency();
 	processor::print_information();
-	trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", unsafe { cr0() }, unsafe { cr4() });
+	unsafe {
+		trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", cr0(), cr4());
+	}
 	systemtime::init();
 
 	if environment::is_single_kernel() {
@@ -346,7 +348,9 @@ pub fn application_processor_init() {
 	idt::install();
 	apic::init_x2apic();
 	apic::init_local_apic();
-	trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", unsafe { cr0() }, unsafe { cr4() });
+	unsafe {
+		trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", cr0(), cr4());
+	}
 	irq::enable();
 	finish_processor_init();
 }
