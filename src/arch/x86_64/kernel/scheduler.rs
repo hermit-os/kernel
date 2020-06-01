@@ -8,6 +8,7 @@
 
 //! Architecture dependent interface to initialize a task
 
+use alloc::alloc::{alloc, dealloc, Layout};
 use core::{mem, ptr};
 
 use crate::arch::x86_64::kernel::apic;
@@ -17,7 +18,6 @@ use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::config::*;
 use crate::environment;
-use crate::mm;
 use crate::scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
@@ -239,8 +239,8 @@ impl Clone for TaskStacks {
 
 pub struct TaskTLS {
 	address: usize,
-	size: usize,
 	fs: usize,
+	layout: Layout,
 }
 
 impl TaskTLS {
@@ -250,10 +250,11 @@ impl TaskTLS {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
-		// We allocate in BasePageSize granularity, so we don't have to manually impose an
-		// additional alignment for TLS variables.
-		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
-		let ptr = crate::mm::allocate(memory_size, true);
+		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
+		let memory_size = align_up!(tls_allocation_size, 128);
+		let layout =
+			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
+		let ptr = unsafe { alloc(layout) } as usize;
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr + align_up!(tls_size, 32);
@@ -287,8 +288,8 @@ impl TaskTLS {
 
 		Self {
 			address: ptr,
-			size: memory_size,
 			fs: tls_pointer,
+			layout: layout,
 		}
 	}
 
@@ -306,10 +307,13 @@ impl TaskTLS {
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
 		debug!(
-			"Deallocate TLS at 0x{:x} (size 0x{:x})",
-			self.address, self.size
+			"Deallocate TLS at 0x{:x} (layout {:?})",
+			self.address, self.layout,
 		);
-		mm::deallocate(self.address, self.size);
+
+		unsafe {
+			dealloc(self.address as *mut u8, self.layout);
+		}
 	}
 }
 

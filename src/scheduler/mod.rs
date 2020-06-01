@@ -23,10 +23,6 @@ use crate::synch::spinlock::*;
 
 pub mod task;
 
-/// Time slice of a task in microseconds.
-/// When this time has elapsed and the scheduler is called, it may switch to another ready task.
-pub const TASK_TIME_SLICE: u64 = 10_000;
-
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: BTreeMap<CoreId, &PerCoreScheduler> = BTreeMap::new();
@@ -67,8 +63,6 @@ pub struct PerCoreScheduler {
 	finished_tasks: VecDeque<TaskId>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
-	/// Processor Timer Tick when we last switched the current task.
-	last_task_switch_tick: u64,
 	/// Queues to handle incoming requests from the other cores
 	input: SpinlockIrqSave<SchedulerInput>,
 }
@@ -414,25 +408,10 @@ impl PerCoreScheduler {
 
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
-			// Check if a task with a higher priority is available.
-			let higher_prio = Priority::from(prio.into() + 1);
-			if let Some(task) = self.ready_queue.pop_with_prio(higher_prio) {
-				// This higher priority task becomes the new task.
-				debug!("Task with a higher priority is available.");
+			// Check if a task with a equal or higher priority is available.
+			let prio = Priority::from(prio.into());
+			if let Some(task) = self.ready_queue.pop_with_prio(prio) {
 				new_task = Some(task);
-			} else {
-				// No task with a higher priority is available, but a task with the same priority as ours may be available.
-				// We implement Round-Robin Scheduling for this case.
-				// Check if our current task has been running for at least the task time slice.
-				if arch::processor::get_timer_ticks() > self.last_task_switch_tick + TASK_TIME_SLICE
-				{
-					// Check if a task with our own priority is available.
-					if let Some(task) = self.ready_queue.pop_with_prio(prio) {
-						// This task becomes the new task.
-						debug!("Time slice expired for current task.");
-						new_task = Some(task);
-					}
-				}
 			}
 		} else {
 			if status == TaskStatus::TaskFinished {
@@ -485,7 +464,6 @@ impl PerCoreScheduler {
 					new_stack_pointer
 				);
 				self.current_task = task;
-				self.last_task_switch_tick = arch::processor::get_timer_ticks();
 
 				// Finally save our current context and restore the context of the new task.
 				switch(last_stack_pointer, new_stack_pointer);
@@ -533,7 +511,6 @@ pub fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
-		last_task_switch_tick: 0,
 		input: SpinlockIrqSave::new(SchedulerInput::new()),
 	});
 
