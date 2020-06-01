@@ -17,6 +17,7 @@ use crate::x86::cpuid::*;
 use crate::x86::msr::*;
 use core::arch::x86_64::__rdtscp as rdtscp;
 use core::arch::x86_64::_rdtsc as rdtsc;
+use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{fmt, u32};
 
@@ -279,9 +280,11 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+		const KHZ_TO_HZ: u64 = 1000;
+		const MHZ_TO_HZ: u64 = 1000000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
-		let freq = hypervisor_info.tsc_frequency().ok_or(())?;
-		let mhz = (freq / 1000000u32) as u16;
+		let freq = hypervisor_info.tsc_frequency().ok_or(())? as u64 * KHZ_TO_HZ;
+		let mhz: u16 = (freq / MHZ_TO_HZ).try_into().unwrap();
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}
 
