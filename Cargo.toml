@@ -10,7 +10,7 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
-repository = "https://github.com/hermitcore/libhermit-rs"
+repository = "https://github.com/hermitcore/rusty-hermit"
 edition = "2018"
 description = """
 RustyHermit - A Rust-based, lightweight unikernel
