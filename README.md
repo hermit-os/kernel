@@ -14,6 +14,7 @@ This reduces overhead, therefore, interesting applications include virtual machi
 _libhermit-rs_ is the heart of RustyHermit and is the kernel itself.
 The kernel is able to run Rust applications, as well as C/C++/Go/Fortran applications.
 A tutorial on how to use these programming languages on top of _libhermit-rs_ is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
+In case of Rust, the howto is published at [https://github.com/hermitcore/rusty-hermit](https://github.com/hermitcore/rusty-hermit).
 
 ## Background
 
