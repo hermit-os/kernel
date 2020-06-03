@@ -12,17 +12,7 @@ Unikernel means, you bundle your application directly with the kernel library, s
 This reduces overhead, therefore, interesting applications include virtual machines and high-performance computing.
 
 _libhermit-rs_ is the heart of RustyHermit and is the kernel itself.
-The kernel is able to run Rust applications, as well as C/C++/Go/Fortran applications.
-A tutorial on how to use these programming languages on top of _libhermit-rs_ is published at [https://github.com/hermitcore/hermit-playground](https://github.com/hermitcore/hermit-playground).
-In case of Rust, the howto is published at [https://github.com/hermitcore/rusty-hermit](https://github.com/hermitcore/rusty-hermit).
-
-## Background
-
-HermitCore was a research unikernel developed at [RWTH-Aachen](https://www.rwth-aachen.de) written in C ([libhermit](https://github.com/hermitcore/libhermit)).
-Today, the kernel is completly rewritten in [Rust](https://www.rust-lang.org).
-
-The ownership  model of Rust guarantees memory/thread-safety and enables us to eliminate many classes of bugs at compile-time.
-Consequently, the use of Rust for kernel development promises less vulnerabilities in comparison to common programming languages.
+The kernel is able to run [Rust](https://github.com/hermitcore/hermit-playground) applications, as well as [C/C++/Go/Fortran](https://github.com/hermitcore/rusty-hermit) applications.
 
 ## Prerequisites
 
@@ -51,6 +41,7 @@ cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-k
 ```
 
 The resulting library then can be found in `target/x86_64-unknown-hermit-kernel/debug/`
+
 
 ## Controlling the number of kernel messages
 
