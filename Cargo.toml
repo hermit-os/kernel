@@ -15,7 +15,7 @@ edition = "2018"
 description = """
 A Rust-based library operting system
 """
-exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", "/.vscode/*", "/.github/*"]
+exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
 
 [badges]
 travis-ci = { repository = "hermitcore/libhermit-rs" }
