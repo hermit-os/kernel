@@ -213,7 +213,7 @@ impl SyscallInterface for Uhyve {
 	///
 	/// ToDo: Add Safety section under which circumctances this is safe/unsafe to use
 	/// ToDo: Add an Errors section - What happens when e.g. malloc fails, how is that handled (currently it isn't)
-	#[cfg(not(test))]
+	#[cfg(target_os = "hermit")]
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		//FIXME: Determine how to make this safer, check return values of malloc etc
 		// and then remove the unsafe block and only wrap the parts where it is needed
