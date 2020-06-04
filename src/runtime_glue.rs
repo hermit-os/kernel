@@ -15,7 +15,7 @@ use alloc::alloc::Layout;
 use core::panic::PanicInfo;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[linkage = "weak"]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
