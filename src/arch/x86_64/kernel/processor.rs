@@ -347,14 +347,14 @@ impl CpuFrequency {
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
-	#[cfg(test)]
+	#[cfg(not(target_os = "hermit"))]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// return just Ok because the real implementation must run in ring 0
 		self.source = CpuFrequencySources::Measurement;
 		Ok(())
 	}
 
-	#[cfg(not(test))]
+	#[cfg(target_os = "hermit")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if environment::is_uhyve() {

@@ -53,7 +53,7 @@ extern crate num;
 #[macro_use]
 extern crate num_derive;
 extern crate num_traits;
-#[cfg(test)]
+#[cfg(not(target_os = "hermit"))]
 #[macro_use]
 extern crate std;
 #[cfg(target_arch = "x86_64")]
@@ -87,14 +87,14 @@ mod kernel_message_buffer;
 mod mm;
 #[cfg(not(feature = "newlib"))]
 mod rlib;
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
 mod util;
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
@@ -104,7 +104,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 /// Returning a null pointer indicates that either memory is exhausted or
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
@@ -146,7 +146,7 @@ pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 /// # Errors
 /// Returns null if the new layout does not meet the size and alignment constraints of the
 /// allocator, or if reallocation otherwise fails.
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 || new_size == 0 {
@@ -184,7 +184,7 @@ pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: u
 ///
 /// # Errors
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub unsafe fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
@@ -205,7 +205,7 @@ pub unsafe fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	ALLOCATOR.dealloc(ptr, layout);
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 extern "C" {
 	static mut __bss_start: usize;
 }
@@ -217,7 +217,7 @@ fn has_ipdevice() -> bool {
 }
 
 /// Entry point of a kernel thread, which initialize the libos
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
@@ -272,7 +272,7 @@ fn synch_all_cores() {
 }
 
 /// Entry Point of HermitCore for the Boot Processor
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	arch::message_output_init();
@@ -309,7 +309,7 @@ fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of HermitCore for an Application Processor
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();

@@ -89,7 +89,7 @@ pub fn disable() {
 /// This function together with nested_enable can be used
 /// in situations when interrupts shouldn't be activated if they
 /// were not activated before calling this function.
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[inline]
 pub fn nested_disable() -> bool {
 	unsafe {
@@ -100,7 +100,7 @@ pub fn nested_disable() -> bool {
 	}
 }
 
-#[cfg(test)]
+#[cfg(not(target_os = "hermit"))]
 pub fn nested_disable() -> bool {
 	false
 }

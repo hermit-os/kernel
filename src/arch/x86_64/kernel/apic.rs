@@ -9,7 +9,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -526,7 +526,7 @@ extern "C" {
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
