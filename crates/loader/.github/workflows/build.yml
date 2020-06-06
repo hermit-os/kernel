@@ -56,11 +56,9 @@ jobs:
           echo "::add-path::C:\Program Files\qemu"
       if: ${{ matrix.os == 'windows-latest' }}
     - name: Build loader (unix)
-      working-directory: loader
       run: make
     # Workaround since makefile doesn't work when using powershell
     - name: Build loader (windows)
-      working-directory: loader
       run: |
           cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-loader.json
           $VAR_RUSTC_SYSROOT = (rustc --print sysroot)
