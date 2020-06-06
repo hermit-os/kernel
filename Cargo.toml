@@ -25,6 +25,14 @@ travis-ci = { repository = "hermitcore/libhermit-rs" }
 crate-type = ["staticlib"]
 name = "hermit"
 
+[[test]]
+name = "basic_print"
+harness = false
+
+[[test]]
+name = "basic_math"
+harness = false
+
 [features]
 default = ["pci", "acpi"]
 vga = []
