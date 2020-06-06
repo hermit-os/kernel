@@ -22,14 +22,15 @@ macro_rules! align_up {
 ///
 /// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
 /// for HermitCore.
+#[macro_export]
 macro_rules! print {
 	($($arg:tt)+) => ({
-		use core::fmt::Write;
-		$crate::console::CONSOLE.lock().write_fmt(format_args!($($arg)+)).unwrap();
+        $crate::_print(format_args!($($arg)*));
 	});
 }
 
 /// Print formatted text to our console, followed by a newline.
+#[macro_export]
 macro_rules! println {
     () => (print!("\n"));
 	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
