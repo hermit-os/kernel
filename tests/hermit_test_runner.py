@@ -22,6 +22,7 @@ def run_test(process_args):
     print(os.getcwd())
     abs_bootloader_path = os.path.abspath(BOOTLOADER_PATH)
     print("Abspath: ", abs_bootloader_path)
+    start_time = time.time_ns() # Note: Requires python >= 3.7
     p = Popen(process_args, stdout=PIPE, stderr=STDOUT, text=True)
     output: str = ""
     for line in p.stdout:
@@ -29,8 +30,9 @@ def run_test(process_args):
         output += dec_line
         #print(line, end='')  # stdout will already contain line break
     rc = p.wait()
+    end_time = time.time_ns()
     # ToDo: add some timeout
-    return rc, output
+    return rc, output, end_time - start_time
 
 
 def validate_test(returncode, output, test_exe_path):
@@ -82,15 +84,15 @@ for arg in args.runner_args:
     # ToDo: assert that arg is a path to an executable before calling qemu
     # ToDo: Add addional test based arguments for qemu / uhyve
     curr_qemu_arguments.extend(['-initrd', arg])
-    rc, output = run_test(curr_qemu_arguments)
+    rc, output, rtime = run_test(curr_qemu_arguments)
     test_ok = validate_test(rc, output, arg)
     test_name = os.path.basename(arg)
     test_name = clean_test_name(test_name)
     if test_ok:
-        print("Test Ok: {}".format(test_name))
+        print("Test Ok: {} - runtime: {} seconds".format(test_name, rtime / (10 ** 9)))
         ok_tests += 1
     else:
-        print("Test failed: {}".format(test_name))
+        print("Test failed: {} - runtime: {} seconds".format(test_name, rtime / (10 ** 9)))
         failed_tests += 1
     #Todo: improve information about the test
 
