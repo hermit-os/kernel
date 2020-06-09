@@ -2,6 +2,7 @@
 #![no_main]
 
 extern crate hermit;
+extern crate x86_64;
 use hermit::{print, println};
 
 // Workaround since the "real" runtime_entry function (defined in libstd) is not available,
@@ -11,11 +12,31 @@ extern "C"
 fn runtime_entry(argc: i32, argv: *const *const u8, _env: *const *const u8) -> ! {
     let res = main(argc as isize, argv);
     match res {
-        Ok(_) => hermit::sys_exit(0),
-        Err(_) => hermit::sys_exit(1),  //ToDo: sys_exit exitcode doesn't seem to get passed to qemu
+        Ok(_) => exit_qemu(QemuExitCode::Success),
+        Err(_) => exit_qemu(QemuExitCode::Failed),
         // sys_exit argument doesn't actually get used, gets silently dropped!
         // Maybe this is not possible on QEMU?
         // https://os.phil-opp.com/testing/#exiting-qemu device needed?
+    }
+    println!("Failed to debug exit qemu");
+    hermit::sys_exit(0);  //sys_exit exitcode on qemu gets silently dropped
+
+}
+
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
+pub enum QemuExitCode {
+    Success = 0x10,
+    Failed = 0x11,
+}
+
+pub fn exit_qemu(exit_code: QemuExitCode) {
+    use x86_64::instructions::port::Port;
+
+    unsafe {
+        let mut port = Port::new(0xf4);
+        port.write(exit_code as u32);
     }
 }
 

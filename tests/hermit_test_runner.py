@@ -36,7 +36,7 @@ def run_test(process_args):
 def validate_test(returncode, output, test_exe_path):
     print("returncode ", returncode)
     # ToDo handle expected failures
-    if returncode != 0:
+    if returncode != 33:
         return False
     # ToDo parse output for panic
     return True
@@ -70,7 +70,8 @@ qemu_base_arguments = ['qemu-system-x86_64',
                        '-serial', 'stdio',
                        '-kernel', BOOTLOADER_PATH,
                        # skip initrd - it depends on test executable
-                       '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr'
+                       '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
+                       '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04'
                        ]
 ok_tests: int = 0
 failed_tests: int = 0
