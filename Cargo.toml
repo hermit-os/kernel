@@ -40,6 +40,9 @@ newlib = []
 pci = []
 acpi = []
 
+[dev-dependencies]
+x86_64 = "0.11.0"
+
 [dependencies]
 bitflags = "1.2"
 #cfg-if = "0.1"
