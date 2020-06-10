@@ -28,7 +28,6 @@
 #![feature(allocator_api)]
 #![feature(const_btree_new)]
 #![feature(const_fn)]
-#![feature(custom_test_frameworks)]
 #![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]
@@ -39,10 +38,11 @@
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
 #![allow(unused_macros)]
-#![test_runner(crate::test_runner)]
-#![reexport_test_harness_main = "test_main"]
-#![cfg_attr(test, no_main)]
 #![no_std]
+#![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
+#![cfg_attr(target_os = "hermit", test_runner(crate::test_runner))]
+#![cfg_attr(target_os = "hermit", reexport_test_harness_main = "test_main")]
+#![cfg_attr(target_os = "hermit", cfg_attr(test, no_main))]
 
 // EXTERNAL CRATES
 #[macro_use]
@@ -105,6 +105,8 @@ pub fn _print(args: ::core::fmt::Arguments) {
 	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
 }
 
+//https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
+#[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {
 	println!("Running {} tests", tests.len());
 	for test in tests {
@@ -274,10 +276,14 @@ extern "C" fn initd(_arg: usize) {
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
 
+	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
 		runtime_entry(argc, argv, environ);
 	}
+	#[cfg(test)]
+	test_main();
+	loop {}
 }
 
 fn synch_all_cores() {
