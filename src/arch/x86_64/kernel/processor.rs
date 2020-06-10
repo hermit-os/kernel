@@ -868,7 +868,8 @@ pub fn print_information() {
 	infofooter!();
 }
 
-/*#[test]
+/*#[cfg(not(target_os = "hermit"))]
+#[test]
 fn print_cpu_information() {
 	::logging::init();
 	detect_features();
