@@ -33,6 +33,7 @@ impl fmt::Write for Console {
 
 pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console);
 
+#[cfg(not(target_os = "hermit"))]
 #[test]
 fn test_console() {
 	println!("HelloWorld");
