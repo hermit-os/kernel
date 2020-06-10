@@ -6,19 +6,14 @@
 
 //use core::panic::PanicInfo;
 extern crate hermit;
-use hermit::{print, println};
 
-//ToDo: Define exit code enum in hermit!!!
+mod common;
+use common::*;
 
-// Workaround since the "real" runtime_entry function (defined in libstd) is not available,
-// since the target-os is hermit-kernel and not hermit
+/// Print all Strings the application got passed as arguments
 #[no_mangle]
-extern "C" fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> ! {
-	main(argc as isize, argv);
-	hermit::sys_exit(-1);
-}
-
-//#[test_case]
-pub fn main(argc: isize, argv: *const *const u8) {
-	println!("hey we made it to the test function :O");
+pub fn main(args: Vec<String>) {
+	for s in args {
+		println!("{}", &s);
+	}
 }
