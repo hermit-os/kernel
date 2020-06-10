@@ -262,6 +262,7 @@ pub fn output_message_byte(byte: u8) {
 	}
 }
 
+#[cfg(not(target_os = "hermit"))]
 #[test]
 fn test_output() {
 	output_message_byte('t' as u8);
