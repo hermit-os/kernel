@@ -1,3 +1,4 @@
+#![feature(test)]
 #![no_std]
 #![no_main]
 //#![test_runner(hermit::test_runner)]
@@ -12,8 +13,9 @@ use common::*;
 
 /// Print all Strings the application got passed as arguments
 #[no_mangle]
-pub fn main(args: Vec<String>) {
+pub fn main(args: Vec<String>) -> Result<(), ()> {
 	for s in args {
 		println!("{}", &s);
 	}
+	Ok(()) // real assertion is done by the runner
 }

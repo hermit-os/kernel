@@ -15,29 +15,28 @@ MEMORY_MB = 256  # amount of memory
 BOOTLOADER_PATH = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader'
 USE_UHYVE = True   # ToDo: consider using a class and dynamic methods instead of global options
 GDB = False
+VERBOSE = False   # Enables printing of stdout of test
 
+# ToDo: Integrate all tests that don't depend on std
 
 # ToDo add test dependent section for custom kernel arguments / application arguments
 # Idea: Use TOML format to specify things like should_panic, expected output
 # Parse test executable name and check tests directory for corresponding toml file
 # If it doesn't exist just assure that the return code is not a failure
 
-# ToDo Think about always being verbose, or hiding the output
+# ToDo: Think about how to pass information about how many tests an executable executed back to the runner
+#  Maybe something like `[TEST_INFO]` at the start of a line?
+
+
 def run_test_qemu(process_args):
     print(os.getcwd())
     abs_bootloader_path = os.path.abspath(BOOTLOADER_PATH)
     print("Abspath: ", abs_bootloader_path)
     start_time = time.time_ns()  # Note: Requires python >= 3.7
-    p = Popen(process_args, stdout=PIPE, stderr=STDOUT, text=True)
-    output: str = ""
-    for line in p.stdout:
-        dec_line = line
-        output += dec_line
-        print(line, end='')  # stdout will already contain line break
-    rc = p.wait()
+    p = subprocess.run(process_args, stdout=PIPE, stderr=PIPE, text=True)
     end_time = time.time_ns()
     # ToDo: add some timeout
-    return rc, output, end_time - start_time
+    return p.returncode, p.stdout, p.stderr, end_time - start_time
 
 
 def run_test_uhyve(kernel_path):
@@ -47,18 +46,23 @@ def run_test_uhyve(kernel_path):
     my_env = os.environ.copy()
     if GDB:
         my_env['HERMIT_GDB_PORT'] = '1234'
-    p = subprocess.run(process_args, stdout=PIPE, stderr=STDOUT, text=True, env=my_env)
+    p = subprocess.run(process_args, stdout=PIPE, stderr=PIPE, text=True, env=my_env)
     end_time = time.time_ns()
     print(p.stdout)
-    return p.returncode, p.stdout, end_time - start_time
+    return p.returncode, p.stdout, p.stderr, end_time - start_time
 
 
-def validate_test(returncode, output, test_exe_path):
+def validate_test(returncode, stdout, stderr, test_exe_path):
+    """Validates test success by inspecting returncode and output of the test
+        :return true on success
+                false on test failure"""
     print("returncode ", returncode)
     # ToDo handle expected failures
     if not USE_UHYVE and returncode != 33:
         return False
     if USE_UHYVE and returncode != 0:
+        return False
+    if "!!!PANIC!!!" in stdout: # Todo: support should_panic tests in some way
         return False
     # ToDo parse output for panic
     return True
@@ -112,10 +116,10 @@ if USE_UHYVE:
     if platform.system() == 'Windows':
         print("Error: using uhyve requires kvm. Please use Linux or Mac OS")
         exit(-1)
-    rc, output, rtime = run_test_uhyve(arg)
+    rc, stdout, stderr, rtime = run_test_uhyve(arg)
 else:
-    rc, output, rtime = run_test_qemu(curr_qemu_arguments)
-test_ok = validate_test(rc, output, arg)
+    rc, stdout, stderr, rtime = run_test_qemu(curr_qemu_arguments)
+test_ok = validate_test(rc, stdout, stderr, arg)
 test_name = os.path.basename(arg)
 test_name = clean_test_name(test_name)
 if test_ok:

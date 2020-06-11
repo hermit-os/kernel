@@ -1,66 +1,87 @@
+#![feature(test)]
 #![no_std]
 #![no_main]
+#![test_runner(common::test_case_runner)]
+#![feature(custom_test_frameworks)]
+#![reexport_test_harness_main = "test_main"]
 
-extern crate hermit;
-extern crate x86_64;
+/// Regarding `#[test]` and `#[test_case]` this comment explains the current implementation
+/// https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
+/// This is of course subject to change, since the whole feature is not stable
+///
+//extern crate hermit;
+//extern crate x86_64;
+#[macro_use]
+extern crate float_cmp;
+
+//use common::*;
+use core::hint::black_box;
+
+use common::exit;
+// Either use black_box from core::hint or the value_fence definition
+// core hint is a nop, but possibly only prevents dead code elimination
+// value_fence has higher overhead but should be a bit safer regarding preventing optimizations
+// pub fn black_box<T>(x: T) -> T {
+// 	common::value_fence::<T>(x)
+// }
+use hermit::{print, println};
 
 mod common;
-use common::*;
 
-/*
-/// assert_eq but returns Result<(),&str> instead of panicking
-/// no error message possible
-/// adapted from libcore assert_eq macro
-macro_rules! equals {
-	($left:expr, $right:expr) => ({
-		match (&$left, &$right) {
-			(left_val, right_val) => {
-				if !(*left_val == *right_val) {
-					return Err(r#"assertion failed: `(left == right)`
-  left: `{:?}`,
- right: `{:?}`"# &*left_val, &*right_val);
-				}
-				else { return Ok(()); }
-			}
-		}
-	});
-	($left:expr, $right:expr,) => ({
-		$crate::assert_eq!($left, $right)
-	});
+#[test_case]
+fn add1() {
+	let x = 1 + 2;
+	assert_eq!(x, 3);
 }
 
-macro_rules! n_equals {
-	($left:expr, $right:expr) => ({
-		match (&$left, &$right) {
-			(left_val, right_val) => {
-				if *left_val == *right_val {
-					// The reborrows below are intentional. Without them, the stack slot for the
-					// borrow is initialized even before the values are compared, leading to a
-					// noticeable slow down.
-					return Err(r#"assertion failed: `(left == right)`
-  left: `{:?}`,
- right: `{:?}`"#, &*left_val, &*right_val);
-				}
-				else return Ok(());
-			}
-		}
-	});
-	($left:expr, $right:expr,) => {
-		$crate::assert_ne!($left, $right)
-	};
+#[test_case]
+fn test_f64_arithmetic() {
+	let x = black_box::<f64>(65.2);
+	let y = black_box::<f64>(89.123);
+	let z = x * y;
+	assert!(approx_eq!(f64, z, 5810.8196f64, ulps = 1));
+	let z = z * y;
+	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+	let z = z * y;
+	assert!(approx_eq!(f64, z, 46154812.047812128f64, ulps = 2));
+	let z = z * y;
+	assert!(approx_eq!(f64, z, 4113455314.137160319f64, ulps = 3));
+
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 46154812.047812128f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 46154812.047812128f64, ulps = 1)); // If we haven't lost any precision, the something is fishy
+
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 517877.6752108f64, ulps = 2));
+	assert!(!approx_eq!(f64, z, 517877.6752108f64, ulps = 1));
+
+	// Division
+	let x = black_box::<f64>(4.0);
+	let y = black_box::<f64>(5.0);
+	let z = x / y;
+	assert!(approx_eq!(f64, z, 0.8f64, ulps = 0));
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 0.16f64, ulps = 0));
+	// 0100011110101110000101000111101011100001010001111011 exp 01111111100
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 0.032f64, ulps = 0));
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 0.0064f64, ulps = 0));
+	//1010001101101110001011101011000111000100001100101101 exp 01111110111
+	let z = black_box(z) / y;
+	assert!(approx_eq!(f64, z, 0.00128f64, ulps = 0));
+	//0b0011111101010100111110001011010110001000111000110110100011110001
+
+	let z = black_box(z) * black_box(y) * black_box(y) * black_box(y);
+	assert!(approx_eq!(f64, z, 0.16f64, ulps = 0));
+	let z = black_box(z * y);
+	assert!(approx_eq!(f64, z, 0.8f64, ulps = 0));
 }
-*/
 
 //ToDo - add a testrunner so we can group multiple similar tests
 
-//ToDo - Idea: pass some values into main - compute and print result to stdout
-//ToDo - add some kind of assert like macro that returns a result instead of panicking, Err contains line number etc to pinpoint the issue
 #[no_mangle]
-pub fn main(args: Vec<String>) -> Result<(), ()> {
-	let x = 25;
-	let y = 310;
-	let z = x * y;
-	println!("25 * 310 = {}", z);
-	assert_eq!(z, 7750);
-	Ok(())
+extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
+	test_main();
+	exit(false);
 }

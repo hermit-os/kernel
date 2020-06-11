@@ -59,6 +59,8 @@ unsafe fn parse_command_line() {
 			}
 			"--" => {
 				// Collect remaining arguments as applications argv
+				//ToDo -> we know the length here, so we could (should convert this into a safe
+				// rust type (at least for rust applications)
 				COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
 				break;
 			}
