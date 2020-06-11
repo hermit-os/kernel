@@ -40,8 +40,11 @@
 #![allow(unused_macros)]
 #![no_std]
 #![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
-#![cfg_attr(target_os = "hermit", test_runner(crate::test_runner))]
-#![cfg_attr(target_os = "hermit", reexport_test_harness_main = "test_main")]
+#![cfg_attr(target_os = "hermit", cfg_attr(test, test_runner(crate::test_runner)))]
+#![cfg_attr(
+	target_os = "hermit",
+	cfg_attr(test, reexport_test_harness_main = "test_main")
+)]
 #![cfg_attr(target_os = "hermit", cfg_attr(test, no_main))]
 
 // EXTERNAL CRATES
@@ -113,6 +116,12 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
 		test();
 	}
 	sys_exit(0);
+}
+
+#[test_case]
+fn trivial_test() {
+	println!("Test test test");
+	panic!("Test called");
 }
 
 #[cfg(target_os = "hermit")]
@@ -279,11 +288,10 @@ extern "C" fn initd(_arg: usize) {
 	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
-		runtime_entry(argc, argv, environ);
+		runtime_entry(argc, argv, environ)
 	}
 	#[cfg(test)]
 	test_main();
-	loop {}
 }
 
 fn synch_all_cores() {

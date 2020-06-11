@@ -1,14 +1,201 @@
 /// Common functionality for all integration tests
+/// Note: If you encounter `error[E0463]: can't find crate for 'test'`, rememmber to add
+/// `harness = false` to the [[test]] section of cargo.toml
 pub extern crate alloc;
+
 pub use alloc::string::String;
 pub use alloc::vec::Vec;
+
 pub use hermit::{print, println};
+
+//use std::borrow::Cow;
+//use std::fmt;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum QemuExitCode {
 	Success = 0x10,
 	Failed = 0x11,
+}
+
+//From libtest types.rs-----------------------------------------------------
+/*
+/// Type of the test according to the [rust book](https://doc.rust-lang.org/cargo/guide/tests.html)
+/// conventions.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum TestType {
+	/// Unit-tests are expected to be in the `src` folder of the crate.
+	UnitTest,
+	/// Integration-style tests are expected to be in the `tests` folder of the crate.
+	IntegrationTest,
+	/// Doctests are created by the `librustdoc` manually, so it's a different type of test.
+	DocTest,
+	/// Tests for the sources that don't follow the project layout convention
+	/// (e.g. tests in raw `main.rs` compiled by calling `rustc --test` directly).
+	Unknown,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum NamePadding {
+	PadNone,
+	PadOnRight,
+}
+
+// The name of a test. By convention this follows the rules for rust
+// paths; i.e., it should be a series of identifiers separated by double
+// colons. This way if some test runner wants to arrange the tests
+// hierarchically it may.
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub enum TestName {
+	StaticTestName(&'static str),
+	DynTestName(String),
+	AlignedTestName(Cow<'static, str>, NamePadding),
+}
+
+impl TestName {
+	pub fn as_slice(&self) -> &str {
+		match *self {
+			StaticTestName(s) => s,
+			DynTestName(ref s) => s,
+			AlignedTestName(ref s, _) => &*s,
+		}
+	}
+
+	pub fn padding(&self) -> NamePadding {
+		match self {
+			&AlignedTestName(_, p) => p,
+			_ => PadNone,
+		}
+	}
+
+	pub fn with_padding(&self, padding: NamePadding) -> TestName {
+		let name = match *self {
+			TestName::StaticTestName(name) => Cow::Borrowed(name),
+			TestName::DynTestName(ref name) => Cow::Owned(name.clone()),
+			TestName::AlignedTestName(ref name, _) => name.clone(),
+		};
+
+		TestName::AlignedTestName(name, padding)
+	}
+}
+impl fmt::Display for TestName {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		fmt::Display::fmt(self.as_slice(), f)
+	}
+}
+
+/// Represents a benchmark function.
+pub trait TDynBenchFn: Send {
+	fn run(&self, harness: &mut Bencher);
+}
+
+// A function that runs a test. If the function returns successfully,
+// the test succeeds; if the function panics then the test fails. We
+// may need to come up with a more clever definition of test in order
+// to support isolation of tests into threads.
+pub enum TestFn {
+	StaticTestFn(fn()),
+	StaticBenchFn(fn(&mut Bencher)),
+	DynTestFn(Box<dyn FnOnce() + Send>),
+	DynBenchFn(Box<dyn TDynBenchFn + 'static>),
+}
+
+impl TestFn {
+	pub fn padding(&self) -> NamePadding {
+		match *self {
+			StaticTestFn(..) => PadNone,
+			StaticBenchFn(..) => PadOnRight,
+			DynTestFn(..) => PadNone,
+			DynBenchFn(..) => PadOnRight,
+		}
+	}
+}
+
+impl fmt::Debug for TestFn {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		f.write_str(match *self {
+			StaticTestFn(..) => "StaticTestFn(..)",
+			StaticBenchFn(..) => "StaticBenchFn(..)",
+			DynTestFn(..) => "DynTestFn(..)",
+			DynBenchFn(..) => "DynBenchFn(..)",
+		})
+	}
+}
+
+// The definition of a single test. A test runner will run a list of
+// these.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TestDesc {
+	pub name: TestName,
+	pub ignore: bool,
+	pub should_panic: options::ShouldPanic,
+	pub allow_fail: bool,
+	pub test_type: TestType,
+}
+
+impl TestDesc {
+	pub fn padded_name(&self, column_count: usize, align: NamePadding) -> String {
+		let mut name = String::from(self.name.as_slice());
+		let fill = column_count.saturating_sub(name.len());
+		let pad = " ".repeat(fill);
+		match align {
+			PadNone => name,
+			PadOnRight => {
+				name.push_str(&pad);
+				name
+			}
+		}
+	}
+}
+
+#[derive(Debug)]
+pub struct TestDescAndFn {
+	pub desc: TestDesc,
+	pub testfn: TestFn,
+}
+*/
+// End from libtest ------------------------------------------------------------
+/*
+extern crate test;
+use self::test::TestFn::StaticTestFn;
+use test::TestDescAndFn;
+
+
+pub fn test_runner(tests: &[&TestDescAndFn]) {
+	println!("Running {} tests", tests.len());
+	for test in tests {
+		let TestDescAndFn { desc, testfn } = test;
+		println!("Running {}", desc.name);
+		match testfn {
+			StaticTestFn(f) => f(),
+			_ => panic!("hermit currently only support Static test functions"),
+		}
+	}
+	exit(false);
+}*/
+
+/// For test_case (without `TestDesc`)
+pub trait Testable {
+	fn run(&self) -> ();
+}
+
+impl<T> Testable for T
+where
+	T: Fn(),
+{
+	fn run(&self) {
+		print!("{}...\t", core::any::type_name::<T>());
+		self();
+		println!("[ok]");
+	}
+}
+
+pub fn test_case_runner(tests: &[&dyn Testable]) {
+	println!("Running {} tests", tests.len());
+	for test in tests {
+		test.run();
+	}
+	exit(false);
 }
 
 pub fn exit(failure: bool) -> ! {
@@ -54,9 +241,9 @@ unsafe fn parse_str(s: *const u8) -> Result<String, ()> {
 		Err(_) => Err(()), //Convert error here since we might want to add another error type later
 	}
 }
-
-// Workaround since the "real" runtime_entry function (defined in libstd) is not available,
-// since the target-os is hermit-kernel and not hermit
+/*
+// Workaround if the "real" runtime_entry function (defined in libstd) is not available
+// We only need this if we build without std
 #[no_mangle]
 extern "C" fn runtime_entry(argc: i32, argv: *const *const u8, _env: *const *const u8) -> ! {
 	extern "Rust" {
@@ -86,4 +273,12 @@ extern "C" fn runtime_entry(argc: i32, argv: *const *const u8, _env: *const *con
 		Ok(_) => exit(false),
 		Err(_) => exit(true),
 	}
+}
+*/
+//adapted from: https://rust-lang.github.io/rfcs/2360-bench-black-box.html
+#[inline(always)]
+pub fn value_fence<T>(x: T) -> T {
+	let y = unsafe { (&x as *const T).read_volatile() };
+	//std::hint::forget(x); - doesn't exist (anymore)
+	y
 }
