@@ -11,15 +11,33 @@ pub enum QemuExitCode {
 	Failed = 0x11,
 }
 
+pub fn exit(failure: bool) -> ! {
+	// temporarily make this public. FIXME: we could also pass an argument to main indicating uhyve or qemu
+	if hermit::environment::is_uhyve() {
+		match failure {
+			//ToDo: Add uhyve exit code enum
+			true => hermit::sys_exit(1),
+			false => hermit::sys_exit(0),
+		}
+	} else {
+		match failure {
+			true => exit_qemu(QemuExitCode::Failed),
+			false => exit_qemu(QemuExitCode::Success),
+		}
+	}
+}
+
 /// Debug exit from qemu with a returncode
 /// '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04' must be passed to qemu for this to work
-pub fn exit_qemu(exit_code: QemuExitCode) {
+pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
 	use x86_64::instructions::port::Port;
 
 	unsafe {
 		let mut port = Port::new(0xf4);
 		port.write(exit_code as u32);
 	}
+	println!("Warning - Failed to debug exit qemu - exiting via sys_exit()");
+	hermit::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
 }
 
 // ToDo: Maybe we could add a hard limit on the length of `s` to make this slightly safer?
@@ -65,9 +83,7 @@ extern "C" fn runtime_entry(argc: i32, argv: *const *const u8, _env: *const *con
 
 	let res = unsafe { main(str_vec) };
 	match res {
-		Ok(_) => exit_qemu(QemuExitCode::Success),
-		Err(_) => exit_qemu(QemuExitCode::Failed),
+		Ok(_) => exit(false),
+		Err(_) => exit(true),
 	}
-	println!("Warning - Failed to debug exit qemu - exiting via sys_exit()");
-	hermit::sys_exit(0); //sys_exit exitcode on qemu gets silently dropped
 }
