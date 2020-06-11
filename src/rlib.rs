@@ -69,6 +69,7 @@ pub unsafe extern "C" fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
 	0
 }
 
+#[cfg(not(target_os = "hermit"))]
 #[cfg(test)]
 mod test {
 	use super::{memcmp, memcpy, memmove, memset};
