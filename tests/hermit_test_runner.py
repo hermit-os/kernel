@@ -13,7 +13,8 @@ SMP_CORES = 1  # Number of cores
 MEMORY_MB = 256  # amount of memory
 # Path if libhermit-rs was checked out via rusty-hermit repository
 BOOTLOADER_PATH = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader'
-USE_UHYVE = False   # ToDo: consider using a class and dynamic methods instead of global options
+USE_UHYVE = True   # ToDo: consider using a class and dynamic methods instead of global options
+GDB = False
 
 
 # ToDo add test dependent section for custom kernel arguments / application arguments
@@ -44,7 +45,8 @@ def run_test_uhyve(kernel_path):
     process_args = ['uhyve', '-v', kernel_path]
     start_time = time.time_ns()  # Note: Requires python >= 3.7
     my_env = os.environ.copy()
-    my_env['HERMIT_GDB_PORT'] = '1234'
+    if GDB:
+        my_env['HERMIT_GDB_PORT'] = '1234'
     p = subprocess.run(process_args, stdout=PIPE, stderr=STDOUT, text=True, env=my_env)
     end_time = time.time_ns()
     print(p.stdout)
@@ -96,6 +98,9 @@ qemu_base_arguments = ['qemu-system-x86_64',
                        '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
                        '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
                        ]
+if GDB:
+    qemu_base_arguments.append('-s')
+    qemu_base_arguments.append('-S')
 # The last argument is the executable, all other arguments are ignored for now
 arg = args.runner_args[-1]
 assert isinstance(arg, str)
