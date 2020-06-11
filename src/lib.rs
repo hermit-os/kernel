@@ -86,7 +86,7 @@ mod collections;
 mod config;
 mod console;
 mod drivers;
-mod environment;
+pub mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
