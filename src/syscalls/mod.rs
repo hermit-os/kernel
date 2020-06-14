@@ -160,6 +160,9 @@ pub fn sys_netwait(millis: Option<u64>) {
 }
 
 pub fn __sys_shutdown(arg: i32) -> ! {
+	// print some performance statistics
+	crate::arch::kernel::print_statistics();
+
 	unsafe { SYS.shutdown(arg) }
 }
 

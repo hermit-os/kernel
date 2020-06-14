@@ -10,7 +10,7 @@ use crate::arch::x86_64::kernel::irq::*;
 use crate::arch::x86_64::kernel::pci::{
 	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
 };
-use crate::arch::x86_64::kernel::percore::core_scheduler;
+use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::virtio_fs;
 use crate::arch::x86_64::kernel::virtio_net;
 
@@ -846,13 +846,21 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 	};
 
 	// Install interrupt handler
+	unsafe {
+		VIRTIO_IRQ_NO = adapter.irq;
+	}
 	irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
+	add_irq_name(adapter.irq as u32, "virtio");
 }
+
+/// Specifies the interrupt number of the virtio device
+static mut VIRTIO_IRQ_NO: u8 = 0;
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive virtio interrupt");
 	apic::eoi();
+	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
 	let check_scheduler = match get_network_driver() {
 		Some(driver) => driver.borrow_mut().handle_interrupt(),

@@ -5,6 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::irq::IrqStatistics;
 use crate::arch::x86_64::kernel::BOOT_INFO;
 use crate::collections::CachePadded;
 use crate::scheduler::{CoreId, PerCoreScheduler};
@@ -25,6 +26,8 @@ pub struct PerCoreInnerVariables {
 	pub tss: PerCoreVariable<*mut TaskStateSegment>,
 	/// start address of the kernel stack
 	pub kernel_stack: PerCoreVariable<u64>,
+	/// Interface to the interrupt counters
+	pub irq_statistics: PerCoreVariable<*mut IrqStatistics>,
 }
 
 impl PerCoreInnerVariables {
@@ -34,6 +37,7 @@ impl PerCoreInnerVariables {
 			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
 			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
 			kernel_stack: PerCoreVariable::new(0),
+			irq_statistics: PerCoreVariable::new(ptr::null_mut() as *mut IrqStatistics),
 		}
 	}
 }
@@ -49,7 +53,7 @@ pub trait PerCoreVariableMethods<T> {
 }
 
 impl<T> PerCoreVariable<T> {
-	const fn new(value: T) -> Self {
+	pub const fn new(value: T) -> Self {
 		Self { data: value }
 	}
 
@@ -128,6 +132,14 @@ pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	unsafe {
 		PERCORE.scheduler.set(scheduler);
+	}
+}
+
+#[inline]
+pub fn increment_irq_counter(irq_no: usize) {
+	unsafe {
+		let irq = &mut *PERCORE.irq_statistics.get();
+		irq.inc(irq_no);
 	}
 }
 
