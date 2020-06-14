@@ -35,17 +35,25 @@ pub mod virtio;
 pub mod virtio_fs;
 pub mod virtio_net;
 
+use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
 
 use crate::environment;
 use crate::kernel_message_buffer;
+use crate::scheduler::CoreId;
+
+use alloc::collections::BTreeMap;
+use core::convert::TryInto;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};
 use x86::controlregs::{cr0, cr4};
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
+
+/// Map between Core ID and per-core scheduler
+static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
 
 #[repr(C)]
 pub struct BootInfo {
@@ -372,5 +380,25 @@ fn finish_processor_init() {
 	// to initialize the next processor.
 	unsafe {
 		let _ = intrinsics::atomic_xadd(&mut (*BOOT_INFO).cpu_online as *mut u32, 1);
+	}
+}
+
+pub fn print_statistics() {
+	info!("Number of interrupts");
+	unsafe {
+		for (core_id, irg_statistics) in IRQ_COUNTERS.iter() {
+			for (i, counter) in irg_statistics.counters.iter().enumerate() {
+				if *counter > 0 {
+					match get_irq_name(i.try_into().unwrap()) {
+						Some(name) => {
+							info!("[{}][{}]: {}", core_id, name, *counter);
+						}
+						_ => {
+							info!("[{}][{}]: {}", core_id, i, *counter);
+						}
+					}
+				}
+			}
+		}
 	}
 }

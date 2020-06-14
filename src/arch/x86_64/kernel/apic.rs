@@ -8,8 +8,10 @@
 use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::irq::IrqStatistics;
 #[cfg(not(test))]
 use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
+use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::collections::CachePadded;
@@ -137,6 +139,7 @@ impl fmt::Display for IoApicRecord {
 
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
+	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
 	unsafe {
 		cr3_write(cr3());
 	}
@@ -158,6 +161,7 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
+	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
 	eoi();
@@ -270,6 +274,13 @@ pub extern "C" fn eoi() {
 }
 
 pub fn init() {
+	let boxed_irq = Box::new(IrqStatistics::new());
+	let boxed_irq_raw = Box::into_raw(boxed_irq);
+	unsafe {
+		IRQ_COUNTERS.insert(0, &(*boxed_irq_raw));
+		PERCORE.irq_statistics.set(boxed_irq_raw);
+	}
+
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
 	unsafe {
 		CPU_LOCAL_APIC_IDS = Some(Vec::new());
@@ -300,6 +311,7 @@ pub fn init() {
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
 	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
+	irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
 	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
 	idt::set_gate(
 		SPURIOUS_INTERRUPT_NUMBER,
@@ -307,6 +319,7 @@ pub fn init() {
 		0,
 	);
 	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 0);
+	irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
 
 	// Initialize interrupt handling over APIC.
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.
@@ -482,8 +495,14 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let boxed_percore = Box::new(CachePadded::new(PerCoreInnerVariables::new(core_id)));
+	let mut boxed_percore = Box::new(CachePadded::new(PerCoreInnerVariables::new(core_id)));
+	let boxed_irq = Box::new(IrqStatistics::new());
+	let boxed_irq_raw = Box::into_raw(boxed_irq);
+
 	unsafe {
+		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
+		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
+
 		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack as u64);
 		core::ptr::write_volatile(
 			&mut (*BOOT_INFO).current_percore_address,
