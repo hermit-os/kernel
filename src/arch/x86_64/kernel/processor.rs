@@ -47,6 +47,7 @@ static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut SUPPORTS_FSGS: bool = false;
+static mut RUN_ON_HYPERVISOR: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
 
 #[repr(C, align(16))]
@@ -535,6 +536,9 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_x2apic() {
 			write!(f, "X2APIC ")?;
 		}
+		if self.feature_info.has_hypervisor() {
+			write!(f, "HYPERVISOR ")?;
+		}
 
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
@@ -599,8 +603,7 @@ pub fn run_on_hypervisor() -> bool {
 	if environment::is_uhyve() {
 		true
 	} else {
-		let cpuid = CpuId::new();
-		cpuid.get_hypervisor_info().is_some()
+		unsafe { RUN_ON_HYPERVISOR }
 	}
 }
 
@@ -731,6 +734,7 @@ pub fn detect_features() {
 		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
+		RUN_ON_HYPERVISOR = feature_info.has_hypervisor();
 		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
 
 		if extended_function_info.has_rdtscp() {
