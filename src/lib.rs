@@ -58,6 +58,7 @@ extern crate x86;
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
+use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
 
 use arch::percore::*;
 use mm::allocator::LockedHeap;
@@ -257,6 +258,16 @@ extern "C" fn initd(_arg: usize) {
 	}
 }
 
+fn synch_all_cores() {
+	static CORE_COUNTER: AtomicU32 = AtomicU32::new(0);
+
+	CORE_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+	while CORE_COUNTER.load(Ordering::SeqCst) != get_processor_count() {
+		spin_loop_hint();
+	}
+}
+
 /// Entry Point of HermitCore for the Boot Processor
 #[cfg(not(test))]
 fn boot_processor_main() -> ! {
@@ -282,6 +293,8 @@ fn boot_processor_main() -> ! {
 		arch::boot_application_processors();
 	}
 
+	synch_all_cores();
+
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
 
@@ -299,6 +312,8 @@ fn application_processor_main() -> ! {
 	scheduler::add_current_core();
 
 	info!("Entering idle loop for application processor");
+
+	synch_all_cores();
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
