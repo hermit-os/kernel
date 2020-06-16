@@ -380,6 +380,7 @@ impl TaskFrame for Task {
 }
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER.into());
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().scheduler();
@@ -387,4 +388,5 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFr
 
 pub fn install_timer_handler() {
 	idt::set_gate(apic::TIMER_INTERRUPT_NUMBER, timer_handler as usize, 0);
+	irq::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
 }
