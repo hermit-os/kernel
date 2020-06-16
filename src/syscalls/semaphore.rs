@@ -86,16 +86,15 @@ fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 		return -EINVAL;
 	}
 
-	// Calculate the absolute wakeup time in processor timer ticks out of the relative timeout in milliseconds.
-	let wakeup_time = if ms > 0 {
-		Some(arch::processor::get_timer_ticks() + u64::from(ms) * 1000)
+	let delay = if ms > 0 {
+		Some(u64::from(ms))
 	} else {
 		None
 	};
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
 	let semaphore = unsafe { &*sem };
-	if semaphore.acquire(wakeup_time) {
+	if semaphore.acquire(delay) {
 		0
 	} else {
 		-ETIME

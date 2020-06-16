@@ -17,8 +17,7 @@ pub fn netwait(millis: Option<u64>) {
 	match millis {
 		Some(ms) => {
 			if ms > 0 {
-				let delay = Some(crate::arch::processor::get_timer_ticks() + ms * 1000);
-				NET_SEM.acquire(delay);
+				NET_SEM.acquire(Some(ms));
 			} else {
 				NET_SEM.try_acquire();
 			}
