@@ -437,12 +437,19 @@ fn calibrate_timer() {
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	const MINIMUM_DELAY: u64 = 1000; // in usec
+
 	if let Some(wt) = wakeup_time {
 		if processor::supports_tsc_deadline() {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
 			// We can simply multiply it by the processor frequency to get the absolute Time-Stamp Counter deadline
 			// (see processor::get_timer_ticks).
-			let tsc_deadline = wt * (u64::from(processor::get_frequency()));
+			let current_time = processor::get_timer_ticks();
+			let tsc_deadline = if wt >= current_time + MINIMUM_DELAY {
+				wt * u64::from(processor::get_frequency())
+			} else {
+				(current_time + MINIMUM_DELAY) * u64::from(processor::get_frequency())
+			};
 
 			// Enable the APIC Timer in TSC-Deadline Mode and let it start by writing to the respective MSR.
 			local_apic_write(
