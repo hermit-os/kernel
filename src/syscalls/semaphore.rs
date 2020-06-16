@@ -86,11 +86,7 @@ fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 		return -EINVAL;
 	}
 
-	let delay = if ms > 0 {
-		Some(u64::from(ms))
-	} else {
-		None
-	};
+	let delay = if ms > 0 { Some(u64::from(ms)) } else { None };
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
 	let semaphore = unsafe { &*sem };
