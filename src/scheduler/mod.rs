@@ -409,7 +409,6 @@ impl PerCoreScheduler {
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
 			// Check if a task with a equal or higher priority is available.
-			let prio = Priority::from(prio.into());
 			if let Some(task) = self.ready_queue.pop_with_prio(prio) {
 				new_task = Some(task);
 			}
