@@ -5,6 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
+
 #[inline(never)]
 #[naked]
 pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
@@ -12,8 +14,8 @@ pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
 	// rsi = new_stack => stack pointer of the new task
 
 	unsafe {
+		// store context
 		llvm_asm!(
-			// store context
 			"pushfq\n\t\
 			push %rax\n\t\
 			push %rcx\n\t\
@@ -39,11 +41,13 @@ pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {
 			// Set task switched flag \n\t\
 			mov %cr0, %rax\n\t\
 			or $$8, %rax\n\t\
-			mov %rax, %cr0\n\t\
-			// set stack pointer in TSS \n\t\
-			call set_current_kernel_stack \n\t\
-			// restore context \n\t\
-			pop %rax\n\t\
+			mov %rax, %cr0" :::: "volatile"
+		);
+		// set stack pointer in TSS \n\t\
+		set_current_kernel_stack();
+		// restore context
+		llvm_asm!(
+			"pop %rax\n\t\
 			wrfsbaseq %rax\n\t\
 			pop %r15\n\t\
 			pop %r14\n\t\
