@@ -130,7 +130,7 @@ pub fn add_current_core() {
 	}
 }
 
-#[no_mangle]
-pub extern "C" fn set_current_kernel_stack() {
+#[inline(never)]
+pub fn set_current_kernel_stack() {
 	core_scheduler().set_current_kernel_stack();
 }
