@@ -72,6 +72,6 @@ panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/329
 opt-level = 3
 debug = false
 rpath = false
-lto = true
+lto = "thin"
 debug-assertions = false
 panic = "abort"
