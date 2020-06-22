@@ -10,8 +10,8 @@ pub const ELF_MAGIC: u32 = 0x464C_457F;
 pub const ELF_CLASS_64: u8 = 0x02;
 /// Little-Endian encoding
 pub const ELF_DATA_2LSB: u8 = 0x01;
-/// HermitCore OSABI identification
-pub const ELF_PAD_HERMIT: u8 = 0xFF;
+/// Standalone OSABI identification
+pub const ELF_PAD_STANDALONE: u8 = 0xFF;
 
 #[repr(C, packed)]
 pub struct ElfIdentification {

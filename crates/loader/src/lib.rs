@@ -63,9 +63,13 @@ pub unsafe fn load_kernel(header_start: usize, start_address: usize, mem_size: u
 	assert!(header.ident.magic == ELF_MAGIC);
 	assert!(header.ident._class == ELF_CLASS_64);
 	assert!(header.ident.data == ELF_DATA_2LSB);
-	assert!(header.ident.pad[0] == ELF_PAD_HERMIT);
+	//assert!(header.ident.pad[0] == ELF_PAD_STANDALONE);
 	assert!(header.ty == ELF_ET_EXEC);
 	assert!(header.machine == ELF_ARCH);
+
+	if header.ident.pad[0] != ELF_PAD_STANDALONE {
+		loaderlog!("Unsupported OS ABI 0x{:x}", header.ident.pad[0]);
+	}
 
 	let address = map_memory(start_address, mem_size);
 	loaderlog!("Load HermitCore Application as 0x{:x}", address);
@@ -104,7 +108,7 @@ pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usiz
 	assert!(header.ident.magic == ELF_MAGIC);
 	assert!(header.ident._class == ELF_CLASS_64);
 	assert!(header.ident.data == ELF_DATA_2LSB);
-	assert!(header.ident.pad[0] == ELF_PAD_HERMIT);
+	//assert!(header.ident.pad[0] == ELF_PAD_STANDALONE);
 	assert!(header.ty == ELF_ET_EXEC);
 	assert!(header.machine == ELF_ARCH);
 	loaderlog!("This is a supported HermitCore Application");
