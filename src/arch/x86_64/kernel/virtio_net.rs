@@ -24,28 +24,29 @@ use core::convert::TryInto;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
 
-const VIRTIO_NET_F_CSUM: u32 = 0;
-const VIRTIO_NET_F_GUEST_CSUM: u32 = 1;
-const VIRTIO_NET_F_CTRL_GUEST_OFFLOADS: u32 = 2;
-const VIRTIO_NET_F_MTU: u32 = 3;
-const VIRTIO_NET_F_MAC: u32 = 5;
-const VIRTIO_NET_F_GUEST_TSO4: u32 = 7;
-const VIRTIO_NET_F_GUEST_TSO6: u32 = 8;
-const VIRTIO_NET_F_GUEST_ECN: u32 = 9;
-const VIRTIO_NET_F_GUEST_UFO: u32 = 10;
-const VIRTIO_NET_F_HOST_TSO4: u32 = 11;
-const VIRTIO_NET_F_HOST_TSO6: u32 = 12;
-const VIRTIO_NET_F_HOST_ECN: u32 = 13;
-const VIRTIO_NET_F_HOST_UFO: u32 = 14;
-const VIRTIO_NET_F_MRG_RXBUF: u32 = 15;
-const VIRTIO_NET_F_STATUS: u32 = 16;
-const VIRTIO_NET_F_CTRL_VQ: u32 = 17;
-const VIRTIO_NET_F_CTRL_RX: u32 = 18;
-const VIRTIO_NET_F_CTRL_VLAN: u32 = 19;
-const VIRTIO_NET_F_CTRL_RX_EXTRA: u32 = 20;
-const VIRTIO_NET_F_GUEST_ANNOUNCE: u32 = 21;
-const VIRTIO_NET_F_MQ: u32 = 22;
-const VIRTIO_NET_F_CTRL_MAC_ADDR: u32 = 23;
+const VIRTIO_NET_F_CSUM: u64 = 0;
+const VIRTIO_NET_F_GUEST_CSUM: u64 = 1;
+const VIRTIO_NET_F_CTRL_GUEST_OFFLOADS: u64 = 2;
+const VIRTIO_NET_F_MTU: u64 = 3;
+const VIRTIO_NET_F_MAC: u64 = 5;
+const VIRTIO_NET_F_GUEST_TSO4: u64 = 7;
+const VIRTIO_NET_F_GUEST_TSO6: u64 = 8;
+const VIRTIO_NET_F_GUEST_ECN: u64 = 9;
+const VIRTIO_NET_F_GUEST_UFO: u64 = 10;
+const VIRTIO_NET_F_HOST_TSO4: u64 = 11;
+const VIRTIO_NET_F_HOST_TSO6: u64 = 12;
+const VIRTIO_NET_F_HOST_ECN: u64 = 13;
+const VIRTIO_NET_F_HOST_UFO: u64 = 14;
+const VIRTIO_NET_F_MRG_RXBUF: u64 = 15;
+const VIRTIO_NET_F_STATUS: u64 = 16;
+const VIRTIO_NET_F_CTRL_VQ: u64 = 17;
+const VIRTIO_NET_F_CTRL_RX: u64 = 18;
+const VIRTIO_NET_F_CTRL_VLAN: u64 = 19;
+const VIRTIO_NET_F_CTRL_RX_EXTRA: u64 = 20;
+const VIRTIO_NET_F_GUEST_ANNOUNCE: u64 = 21;
+const VIRTIO_NET_F_MQ: u64 = 22;
+const VIRTIO_NET_F_CTRL_MAC_ADDR: u64 = 23;
+const VIRTIO_NET_F_RSC_EXT: u64 = 61;
 const VIRTIO_NET_F_GSO: u32 = 6;
 const VIRTIO_NET_S_LINK_UP: u16 = 1;
 const VIRTIO_NET_S_ANNOUNCE: u16 = 2;
@@ -79,6 +80,8 @@ const VIRTIO_NET_CTRL_GUEST_OFFLOADS_SET: u32 = 0;*/
 const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
 /// csum is valid
 const VIRTIO_NET_HDR_F_DATA_VALID: u8 = 2;
+// reports number of coalesced TCP segments
+const VIRTIO_NET_HDR_F_RSC_INFO: u8 = 4;
 
 /// not a GSO frame
 const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
@@ -294,18 +297,27 @@ impl<'a> VirtioNetDriver<'a> {
 		common_cfg.device_feature_select = 1;
 		device_features |= (common_cfg.device_feature as u64) << 32;
 
-		let required: u64 = ((1 << VIRTIO_NET_F_MAC)
+		let required: u64 = (1 << VIRTIO_NET_F_MAC)
 			| (1 << VIRTIO_NET_F_STATUS)
 			| (1 << VIRTIO_NET_F_GUEST_UFO)
 			| (1 << VIRTIO_NET_F_GUEST_TSO4)
 			| (1 << VIRTIO_NET_F_GUEST_TSO6)
-			| (1 << VIRTIO_NET_F_GUEST_CSUM)/*| VIRTIO_F_RING_EVENT_IDX*/) as u64;
+			| (1 << VIRTIO_NET_F_GUEST_CSUM)
+			/*| (1 << VIRTIO_NET_F_RSC_EXT) | VIRTIO_F_RING_EVENT_IDX*/;
 
 		if device_features & required == required {
 			common_cfg.driver_feature_select = 1;
 			common_cfg.driver_feature |= required as u32;
+			info!(
+				"Virtio features: device 0x{:x} vs required 0x{:x}",
+				device_features, required
+			);
 		} else {
 			error!("Device doesn't offer required feature to support Virtio-Net");
+			error!(
+				"Virtio features: 0x{:x} vs 0x{:x}",
+				device_features, required
+			);
 		}
 	}
 
