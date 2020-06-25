@@ -8,22 +8,25 @@
 //! A module containing a virtio network driver.
 //! 
 //! The module contains ...
-
 use arch::x86_64::kernel::pci::PciAdapter;
+use arch::x86_64::kernel::pci::error::PciError;
 use core::result::Result;
-use alloc::boxed::Box;
+use alloc::vec::Vec;
 
-use drivers::error::DriverError;
-use drivers::virtio::error::VirtioError;
-use drivers::virtio::transport::pci::{Caplist, DevCfg};
+use drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfg};
 use drivers::virtio::transport::pci;
 use drivers::virtio::driver::VirtioDriver;
 use drivers::virtio::types::{Le16};
+use drivers::virtio::error::VirtioError;
+use drivers::virtio::virtqueue::Virtq;
+use drivers::virtio::virtqueue::packed::PackedVq;
+use drivers::virtio::virtqueue::split::SplitVq;
 
 /// Virtio's network device feature bits
 /// See Virtio specficiation v1.1. - 5.1.3
+#[allow(dead_code, non_camel_case_types)]
 #[repr(u32)]
-pub enum NetFeature {
+pub enum NetFeatures {
     VIRTIO_NET_F_CSUM= 0,
     VIRTIO_NET_F_GUEST_CSUM = 1,
     VIRTIO_NET_F_CTRL_GUEST_OFFLOADS = 2,
@@ -52,14 +55,11 @@ pub enum NetFeature {
 /// See specification v1.1. - 5.1.4
 ///
 #[repr(C)]
-struct NetDevCfg {
+pub struct NetDevCfg {
 	mac: [u8; 6],
 	status: Le16,
 	max_virtqueue_pairs: Le16,
 	mtu: Le16,
-}
-
-impl DevCfg for NetDevCfg {
 }
 
 impl NetDevCfg {
@@ -76,10 +76,20 @@ impl NetDevCfg {
 }
 
 pub struct VirtioNetDriver {
-
+    com_cfg: ComCfg,
+    notif_cfg: NotifCfg,
+    isr_stat: IsrStatus,
+    pci_cfg: PciCfg,
+    sh_mem_cfg: ShMemCfg,
+    dev_caps: NetDevCfg,
 }
 
 impl VirtioDriver for VirtioNetDriver {
+    type Cfg = NetDevCfg;
+
+    fn map_cfg(&self) -> Self::Cfg {
+        unimplemented!();
+    }
 
     fn add_buff(&self) {
         unimplemented!();
@@ -99,27 +109,28 @@ impl VirtioDriver for VirtioNetDriver {
 }
 
 impl VirtioNetDriver {
-    pub fn new() -> Self {
-        VirtioNetDriver {
-
-        }
+    pub fn new(caps_coll: UniCapsColl) -> Self {
+        let queue = if true {
+            Virtq::<PackedVq>::new();
+        } else {
+            Virtq::<SplitVq>::new();
+        };
+        //VirtioNetDriver {
+        unimplemented!();
+       //}
     }
 
     /// Initializes virtio network device by mapping configuration layout to 
     /// respective structs and creating a new driver instance for the device.
-    pub fn init_device(adapter: &PciAdapter) -> Result<VirtioNetDriver, DriverError> {
-        let dev_cfg = Box::new(NetDevCfg::new());
-
-        match pci::map_caplist(adapter, dev_cfg) {
-            Ok(caplist) => {
-                //
-                Ok(VirtioNetDriver::new())
+    pub fn init(adapter: &PciAdapter) -> Result<VirtioNetDriver, VirtioError> {
+        match pci::map_caps(adapter) {
+            Ok(caps) => return Ok(VirtioNetDriver::new(caps)),
+            Err(pci_error) => {
+                match pci_error {
+                    PciError::General(adapter) => return Err(VirtioError::DriverFail),
+                };
             },
-            Err(VirtioError) => {
-                Err(DriverError::InitVirtioDevFail(VirtioError))        
-            } 
-        }
-        
+        };
     }
 }
 
