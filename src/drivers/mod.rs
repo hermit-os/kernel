@@ -10,7 +10,10 @@
 //! 
 //! The module contains ...
 
-#[cfg(not(feature = "newlib"))]
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+// UNCOMMENTED FOR CORRECT USE STATEMENT; IS THIS CORRECT?
+// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+//#[cfg(not(feature = "newlib"))]
 pub mod net;
 
 pub mod virtio;
