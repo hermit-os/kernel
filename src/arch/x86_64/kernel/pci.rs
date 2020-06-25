@@ -11,6 +11,7 @@ use alloc::vec::Vec;
 use arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use drivers::virtio::depr::virtio_fs::VirtioFsDriver;
 use drivers::virtio::depr::virtio_net::VirtioNetDriver;
+use drivers::net::virtio_net::VirtioNetDriver as VnetDrv;
 use drivers::virtio::depr::virtio;
 //use drivers::virtio::transport::pci as pci_virtio;
 use core::cell::RefCell;
@@ -128,6 +129,7 @@ pub struct MemoryBar {
 pub enum PciDriver<'a> {
 	VirtioFs(Rc<RefCell<VirtioFsDriver<'a>>>),
 	VirtioNet(Rc<RefCell<VirtioNetDriver<'a>>>),
+	VirtioNetNew(VnetDrv),
 }
 
 pub fn register_driver(drv: PciDriver<'static>) {
@@ -490,16 +492,12 @@ pub fn init_drivers() {
 
 			/* New initalization function
 			 * 
-			 * Additionally too iterating through adapters, function should iterate over
-			 *  all suitable drivers. In case multiple are available. 
-			 * 
 			 *  match pci_virtio::init_device(adapter) {
              *     Ok(PciDriver) => {
              *	       pci::register_driver(PciDriver);
 			 *     },
 			 *     Err() => {
 			 *	       // Handle Error, probably just warn!(...)
-             *         // Try other drive or skip device
 			 *     }
 			 * }
 			 *  
@@ -518,4 +516,14 @@ pub fn print_information() {
 	}
 
 	infofooter!();
+}
+
+/// A module containg PCI specifc errors
+///
+/// Errors include...
+pub mod error {
+    use arch::x86_64::kernel::pci::PciAdapter;
+    pub enum PciError<'pci_enum> {
+		General(&'pci_enum PciAdapter)
+    }
 }
