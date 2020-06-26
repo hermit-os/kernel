@@ -15,7 +15,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use crate::arch;
 use crate::arch::irq;
 use crate::arch::percore::*;
-use crate::arch::switch;
+use crate::arch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::AvoidInterrupts;
 use crate::config::*;
 use crate::scheduler::task::*;
@@ -443,14 +443,18 @@ impl PerCoreScheduler {
 			}
 
 			// Handle the new task and get information about it.
-			let (new_id, new_stack_pointer) = {
+			let (new_id, new_stack_pointer, is_idle) = {
 				let mut borrowed = task.borrow_mut();
 				if borrowed.status != TaskStatus::TaskIdle {
 					// Mark the new task as running.
 					borrowed.status = TaskStatus::TaskRunning;
 				}
 
-				(borrowed.id, borrowed.last_stack_pointer)
+				(
+					borrowed.id,
+					borrowed.last_stack_pointer,
+					borrowed.status == TaskStatus::TaskIdle,
+				)
 			};
 
 			if id != new_id {
@@ -465,7 +469,11 @@ impl PerCoreScheduler {
 				self.current_task = task;
 
 				// Finally save our current context and restore the context of the new task.
-				switch(last_stack_pointer, new_stack_pointer);
+				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+					switch_to_fpu_owner(last_stack_pointer, new_stack_pointer)
+				} else {
+					switch_to_task(last_stack_pointer, new_stack_pointer);
+				}
 			}
 		}
 	}
