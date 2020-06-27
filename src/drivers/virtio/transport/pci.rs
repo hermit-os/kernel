@@ -11,7 +11,7 @@
 //! The module contains ...
 
 use arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
-use arch::x86_64::kernel::pci;
+use arch::x86_64::kernel::pci as kernel_pci;
 use arch::x86_64::kernel::pci::error::PciError;
 use alloc::vec::Vec;
 use core::result::Result;
@@ -19,17 +19,23 @@ use core::result::Result;
 use drivers::error::DriverError;
 use drivers::virtio::error::VirtioError;
 use drivers::virtio::types::{Le16, Le32, Le64};
-use drivers::virtio::env::MemAddr;
+use drivers::virtio::env::{VirtMemAddr, PhyMemAddr};
 use drivers::virtio::virtqueue::Virtq;
+use drivers::virtio::env;
 use drivers::net::virtio_net::VirtioNetDriver;
 
 /// Virtio device ID's 
 /// See Virtio specification v1.1. - 5 
 ///                      and v1.1. - 4.1.2.1
+///
+// WARN: Upon changes in the set of the enum variants
+// one MUST adjust the associated From<u16> 
+// implementation, in order catch all cases correctly,
+// as this function uses the catch-all "_" case!
 #[allow(dead_code, non_camel_case_types)]
 #[repr(u16)]
 pub enum DevId {
-    INVALID = 0x0000,
+    INVALID = 0x0,
     VIRTIO_TRANS_DEV_ID_NET = 0x0fff,
     VIRTIO_TRANS_DEV_ID_BLK = 0x1001,
     VIRTIO_TRANS_DEV_ID_MEM_BALL = 0x1002,
@@ -41,35 +47,51 @@ pub enum DevId {
     VIRTIO_DEV_ID_FS = 0x105A,
 }
 
-/// Creates a device id enum variant of the u16 value. 
-///
-/// The enum variant is wrapped by an Option, which is neccessary,
-/// as not all u16 values are assigned an DevId variant. Panicking
-/// is not an option, as input is created during runtime and from 
-/// external sources (i.e. PCI devices).
+impl From<DevId> for u16 {
+    fn from(val: DevId) -> u16 {
+        match val {
+            DevId::VIRTIO_TRANS_DEV_ID_NET => 0x0fff,
+            DevId::VIRTIO_TRANS_DEV_ID_BLK => 0x1001,
+            DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL => 0x1002,
+            DevId::VIRTIO_TRANS_DEV_ID_CONS => 0x1003,
+            DevId::VIRTIO_TRANS_DEV_ID_SCSI => 0x1004, 
+            DevId::VIRTIO_TRANS_DEV_ID_ENTROPY => 0x1005, 
+            DevId::VIRTIO_TRANS_DEV_ID_9P => 0x1009, 
+            DevId::VIRTIO_DEV_ID_NET => 0x1041, 
+            DevId::VIRTIO_DEV_ID_FS => 0x105A, 
+            DevId::INVALID => 0x0,
+        }
+    }
+}
+
 impl From<u16> for DevId {
-    fn from(id: u16) -> Self {
-        match id {
-            0x0fff => DevId::VIRTIO_TRANS_DEV_ID_NET,
-            0x1001 => DevId::VIRTIO_TRANS_DEV_ID_BLK,
-            0x1002 => DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL,
-            0x1003 => DevId::VIRTIO_TRANS_DEV_ID_CONS,
-            0x1004 => DevId::VIRTIO_TRANS_DEV_ID_SCSI,
-            0x1005 => DevId::VIRTIO_TRANS_DEV_ID_ENTROPY,
-            0x1009 => DevId::VIRTIO_TRANS_DEV_ID_9P,
-            0x1041 => DevId::VIRTIO_DEV_ID_NET,
-            0x105A => DevId::VIRTIO_DEV_ID_FS,
-            _ => DevId::INVALID,
+    fn from(val: u16) -> Self {
+        match val {
+             0x0fff => DevId::VIRTIO_TRANS_DEV_ID_NET,
+             0x1001 => DevId::VIRTIO_TRANS_DEV_ID_BLK,
+             0x1002 => DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL,
+             0x1003 => DevId::VIRTIO_TRANS_DEV_ID_CONS,
+             0x1004 => DevId::VIRTIO_TRANS_DEV_ID_SCSI,
+             0x1005 => DevId::VIRTIO_TRANS_DEV_ID_ENTROPY,
+             0x1009 => DevId::VIRTIO_TRANS_DEV_ID_9P,
+             0x1041 => DevId::VIRTIO_DEV_ID_NET,
+             0x105A => DevId::VIRTIO_DEV_ID_FS,
+             _ => DevId::INVALID,
         }
     }
 }
 
 /// Virtio's cfg_type constants; indicating type of structure in capabilities list
 /// See Virtio specification v1.1 - 4.1.4
+//
+// WARN: Upon changes in the set of the enum variants
+// one MUST adjust the associated From<u8> 
+// implementation, in order catch all cases correctly,
+// as this function uses the catch-all "_" case! 
 #[allow(dead_code, non_camel_case_types)]
 #[repr(u8)]
 pub enum CfgType {
-    RESERVED = 0,
+    INVALID = 0,
     VIRTIO_PCI_CAP_COMMON_CFG = 1,
     VIRTIO_PCI_CAP_NOTIFY_CFG = 2,
     VIRTIO_PCI_CAP_ISR_CFG = 3, 
@@ -77,6 +99,20 @@ pub enum CfgType {
     VIRTIO_PCI_CAP_PCI_CFG = 5, 
     VIRTIO_PCI_CAP_SHARED_MEMORY_CFG = 8,
 } 
+
+impl From<CfgType> for u8{
+    fn from(val: CfgType) -> u8 {
+        match val {
+            CfgType::INVALID => 0,
+            CfgType::VIRTIO_PCI_CAP_COMMON_CFG => 1,
+            CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => 2,
+            CfgType::VIRTIO_PCI_CAP_ISR_CFG => 3,
+            CfgType::VIRTIO_PCI_CAP_DEVICE_CFG => 4,
+            CfgType::VIRTIO_PCI_CAP_PCI_CFG => 5,
+            CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG => 8,
+        }
+    }
+}
 
 impl From<u8> for CfgType {
     fn from(val: u8) -> Self {
@@ -87,7 +123,7 @@ impl From<u8> for CfgType {
             4 => CfgType::VIRTIO_PCI_CAP_DEVICE_CFG,
             5 => CfgType::VIRTIO_PCI_CAP_PCI_CFG,
             8 => CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG,
-            _ => CfgType::RESERVED,
+            _ => CfgType::INVALID,
         }
     }
 }
@@ -122,6 +158,47 @@ impl PciCap {
 
     fn get_id(&self) -> u8 {
         self.id
+    }
+}
+
+/// Virtio's PCI capabilites structure. 
+/// See Virtio specification v.1.1 - 4.1.4
+///
+/// WARN: endianness of this structure should be seen as little endian.
+/// As this structure is not meant to be used outside of this module and for
+/// ease of conversion from reading data into struct from PCI configuration
+/// space, no conversion is made for struct fields. 
+struct PciCapRaw {
+    cap_vndr: u8, 
+    cap_next: u8, 
+    cap_len: u8, 
+    cfg_type: u8,
+    bar_index: u8,
+    id: u8,
+    padding: [u8; 2],
+    offset: u32,
+    length: u32,
+}
+
+// This only shows compiler, that structs are identical 
+// with themselves.
+impl Eq for PciCapRaw {}
+
+// In order to compare two PciCapRaw structs PartialEq is needed
+impl PartialEq for PciCapRaw {
+    fn eq(&self, other: &Self) -> bool {
+        if self.cap_vndr == other.cap_vndr &&
+            self.cap_next == other.cap_next &&
+            self.cap_len == other.cap_len &&
+            self.cfg_type == other.cfg_type &&
+            self.bar_index == other.bar_index &&
+            self.id == other.id &&
+            self.offset == other.offset &&
+            self.length == other.length {
+                true
+            } else {
+                false
+            }
     }
 }
 
@@ -168,10 +245,7 @@ impl UniCapsColl {
             dev_cfg_list: Vec::new(),
         }
     }
-//
-// TODO !!!!!!!!!!!!!!!!
-//
-// CHANGE ALL ADD FUNCTIONS TO TAKE AN NOT_RAW OBJECT AND WRAP ALL INTERACTION WITH THE RAW OBJECTS INTO NON_RAW OBJECTS TO PROVIDE SAVE INTERACTION
+
     fn add_cfg_common(&mut self, com_raw: ComCfgRaw, rank: u8) {
         self.com_cfg_list.push(ComCfg::new(com_raw, rank));
         // Resort array
@@ -249,15 +323,15 @@ impl ComCfg {
         unimplemented!();
     }
 
-    fn set_vq_desc_area(raw_cfg: &ComCfgRaw, desc_addr: MemAddr, vq_id: Le16,) {
+    fn set_vq_desc_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: Le16,) {
         unimplemented!();
     }
 
-    fn set_vq_dev_area(raw_cfg: &ComCfgRaw, dev_ddr: MemAddr, vq_id: Le16) {
+    fn set_vq_dev_area(raw_cfg: &ComCfgRaw, dev_ddr: PhyMemAddr, vq_id: Le16) {
         unimplemented!();
     }
 
-    fn set_vq_driv_area(raw_cfg: &ComCfgRaw, desc_addr: MemAddr, vq_id: Le16) {
+    fn set_vq_driv_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: Le16) {
         unimplemented!();
     }
 }
@@ -487,26 +561,188 @@ impl ShMemCfgRaw {
     }
 } 
 
+/// PciBar stores the virtual memory address and associated length of memory space
+/// a PCI device's physical memory indicated by the device's BAR has been mapped to.
+//
+// Currently all fields are public as the struct is instanciated in the drivers::virtio::env module
+pub struct PciBar {
+    pub index: u8,
+    pub mem_addr: VirtMemAddr,
+    pub length: usize,
+}
+
+/// Converts a given [u8;4] array into an big enidan
+/// u32.
+/// 
+/// WARN: Panics if array has length < 4!
+// Using as is safe here beacuse the maxium 
+// value is bounded by an u8.
+fn as_u32_be(array: &[u8]) -> u32 {
+    ((array[0] as u32) << 24) |
+    ((array[1] as u32) << 16) |
+    ((array[2] as u32) <<  8) |
+    ((array[3] as u32) <<  0)
+}
+
+/// Converts a given [u8;4] array into an little enidan
+/// u32.
+/// 
+/// WARN: Panics if array has length < 4!
+// Using as is safe here beacuse the maxium 
+// value is bounded by an u8.
+fn as_u32_le(array: &[u8]) -> u32 {
+    ((array[0] as u32) <<  0) |
+    ((array[1] as u32) <<  8) |
+    ((array[2] as u32) << 16) |
+    ((array[3] as u32) << 24)
+}
+
+/// Converts a given [u8;2] array into an big enidan
+/// u16.
+/// 
+/// WARN: Panics if array has length < 2!
+// Using as is safe here beacuse the maxium 
+// value is bounded by an u8.
+fn as_u16_be(array: &[u8]) -> u16 {
+    ((array[0] as u16) << 8) |
+    ((array[1] as u16) << 0) 
+}
+
+/// Converts a given [u8;2] array into an little enidan
+/// u16.
+/// 
+/// WARN: Panics if array has length < 2!
+// Using as is safe here beacuse the maxium 
+// value is bounded by an u8.
+fn as_u16_le(array: &[u8]) -> u16 {
+    ((array[0] as u16) <<  0) |
+    ((array[1] as u16) <<  8)
+}
+
+
+
+/// Reads a raw capability struct [PciCapRaw](structs.PcicapRaw.html) out of a PCI device's configuration space.
+fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
+    let mut quadruple_word: [u8; 16] = [0; 16];
+
+    // Write words sequentialy into array
+    let mut index = 0;
+    for i in 0..4 {
+        let word: [u8; 4] = env::pci::read_config(adapter, register + (4*i) ).to_le_bytes();
+        for j in 0..4 {
+            quadruple_word[index] = word[j];
+            index += 1;
+        }
+    }
+
+    PciCapRaw {
+        cap_vndr: quadruple_word[0],
+        cap_next: quadruple_word[1],
+        cap_len: quadruple_word[2],
+        cfg_type: quadruple_word[3],
+        bar_index: quadruple_word[4],
+        id: quadruple_word[5],
+        padding: [0;2],
+        offset: as_u32_le(&quadruple_word[8..12]),
+        length: as_u32_le(&quadruple_word[12..16]), 
+    }
+}
+
+/// Wrapper function to get a devices current status.
+/// As the device is not static, return value is not static.
+///
+/// WARN: Currently panics on big endian machines.
+fn dev_status(adapter: &PciAdapter) -> u32 {
+    if cfg!(target_endian = "little") {
+        env::pci::read_config(adapter, u32::from(constants::RegisterHeader00H::PCI_COMMAND_REGISTER)) >> 16
+    } else {
+        panic!("Unresolved problems with shifting and memory layout in this fucntion");
+    }
+}
+
+/// Wrapper function to get a devices capabilites list pointer, which represents
+/// an offset starting from the header of the device's configuration space.
+///
+fn dev_caps_ptr(adapter: &PciAdapter) -> u32 {
+    env::pci::read_config(adapter, u32::from(constants::RegisterHeader00H::PCI_CAPABILITY_LIST_REGISTER)) & u32::from(constants::Masks::PCI_MASK_CAPLIST_POINTER)
+}
+
 /// Reads all PCI capabilities, starting at the capabilites list pointer from the 
 /// PCI device. 
 ///
 /// Returns ONLY Virtio specific capabilites, which allow to locate the actual capability 
-/// structures inside the memory areas, indicate by the BaseAddressRegisters (BARS).
-fn read_pci_caps(adapter: &PciAdapter) -> Vec<PciCap> {
-    unimplemented!();
-    // PARSE BARS FIELDS OF PCI CONFIGURATION SPACE, NO MAPPING AS THIS IS NOT NEEDED; JUST THE START ADDRESS AND THE LENGTH OF THE ADDRESS
-    //
-    // LOOP THROUGH CAPABILTY LIST STARTING AT CAPABILITES POINTER AND CREATE A PciCap STRCUTRUE FOR EACH CAPABILITY; CONTAINING THE ACTUAL PHYSISCAL MEMORY
-    // ADDRESS FOR THE MAP FUNCTIONS TO MAP TO!
+/// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
+fn read_caps(adapter: &PciAdapter) -> Result<Vec<PciCap>, PciError> {
+    // Checks if pointer is well formed and does not point into config header space
+    let ptr=  dev_caps_ptr(adapter);
+
+    let next_ptr =  if ptr >= 0x40u32 { 
+        ptr
+    } else {
+       return Err(PciError::BadCapPtr(adapter.device_id))
+    };
+
+    let mut cap_list: Vec<PciCap> = Vec::new();
+    // Loop through capabilties list via next pointer
+    while next_ptr != 0 {
+        // read into raw capabilities structure
+        //
+        // Devices configuration space muste be read twice
+        // and only returns correct values if both reads
+        // return equal values.
+        // For clarity see Virtio specification v1.1. - 2.4.1
+        let mut before = read_cap_raw(adapter, next_ptr);
+        let mut cap_raw = read_cap_raw(adapter, next_ptr);
+    
+        while before != cap_raw {
+            before = read_cap_raw(adapter, next_ptr);
+            cap_raw = read_cap_raw(adapter, next_ptr);
+        }
+
+        // Virtio specification v1.1. - 4.1.4 defines virtio specific capability
+        // with 0x09
+        match cap_raw.cap_vndr {
+            0x09 => cap_list.push(PciCap{
+                cfg_type: CfgType::from(cap_raw.cfg_type),
+                bar: cap_raw.bar_index,
+                id: cap_raw.id,
+                offset: Le32::from(cap_raw.offset),
+                length: Le32::from(cap_raw.length),
+            }),
+            _ => continue,
+        }
+    }
+
+    Ok(cap_list)
+}
+
+/// Maps memory areas indicated by devices BAR's into virtual address space.
+fn map_bars(adapter: &PciAdapter) -> Result<Vec<PciBar>, PciError> {
+    crate::drivers::virtio::env::pci::map_bar_mem(adapter) 
 }
 
 pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
+    // In case no caplist pointer is set, abort as it is essential
+    if  dev_status(adapter) & constants::PCI_STATUS_CAPABILITIES_LIST == 0 {
+		error!("Found virtio device without capability list. Aborting!");
+		return Err(PciError::NoCapPtr(adapter.device_id));
+    }
+
+    // Mapped memory areas are reachable through PciBar structs.
+    let bar_list = match map_bars(adapter) {
+        Ok(list) => list,
+        Err(pci_error) => return Err(pci_error),
+    };
+
     // Get list of PciCaps pointing to capabilities
-    let pci_cap_list = read_pci_caps(adapter);
+    let cap_list =  match read_caps(adapter) {
+        Ok(list) => list, 
+        Err(pci_error) => return Err(pci_error),
+    };
 
     let mut caps = UniCapsColl::new();
     // Map Caps in virtual memory
-    for pci_cap in pci_cap_list {
+    for pci_cap in cap_list {
         match pci_cap.get_type() {
             CfgType::VIRTIO_PCI_CAP_COMMON_CFG =>  caps.add_cfg_common(ComCfgRaw::map(&pci_cap), pci_cap.get_id()),
             CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => caps.add_cfg_notif(NotifCfgRaw::map(&pci_cap), pci_cap.get_id()),
@@ -519,8 +755,10 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
             _ => continue,
         }
     }
-
-    Err(PciError::General(adapter))
+    //
+    // IS A CHECK NEEDED? ARE THE ONLY NECESSARY FIELD COMMON CFG AND DEVICE CFG?
+    // 
+    Ok(caps)
 }
 
 /// Checks existing drivers for support of given device. Upon match, provides
@@ -530,7 +768,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
     match DevId::from(adapter.device_id) {
         DevId::VIRTIO_TRANS_DEV_ID_NET | 
         DevId::VIRTIO_TRANS_DEV_ID_BLK | 
-        DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL |
+        DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL   |
         DevId::VIRTIO_TRANS_DEV_ID_CONS |
         DevId::VIRTIO_TRANS_DEV_ID_SCSI |
         DevId::VIRTIO_TRANS_DEV_ID_ENTROPY |
@@ -562,9 +800,9 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
         },
 		DevId::VIRTIO_DEV_ID_FS => {
 		    // TODO: Proper error handling in driver creation fail
-            //virtio_fs::create_virtiofs_driver(adapter).unwrap()
+            // virtio_fs::create_virtiofs_driver(adapter).unwrap()
 
-            // PLACEHOLDER TO GET RIGHT RETURN
+            // PLACEHOLDER TO GET RIGHT RETURNvi    
             Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(adapter.device_id)))
 	    },
 		_ => {
@@ -579,6 +817,73 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
     }
 }
 
-pub fn read_cfg(bus: u8, device: u8, register: u32) -> MemAddr {
-    MemAddr::from(pci::read_config(bus, device, register))
+/// WILL BE MERGED INTO AN ENUM OR AS CONSTANT
+/// PROBABLY SHOULD ME MERGED INTO kernel_PCI code
+pub mod constants {
+    // 
+    // ALL CONSTANTS MUST BE MADE TO LITTLE ENDIAN!
+    //
+    pub const PCI_MAX_BUS_NUMBER: u8 = 32;
+    pub const PCI_MAX_DEVICE_NUMBER: u8 = 32;
+    pub const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
+    pub const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
+    pub const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
+    pub const PCI_COMMAND_BUSMASTER: u32 = 1 << 2;
+    pub const PCI_STATUS_CAPABILITIES_LIST: u32 = 1 << 4;
+    pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
+    pub const PCI_MEM_BASE_ADDRESS_64BIT: u32 = 1 << 2;
+    pub const PCI_MEM_PREFETCHABLE: u32 = 1 << 3;
+    pub const PCI_CAP_ID_VNDR: u32 = 0x09;  
+
+    /// PCI registers offset inside header,
+    /// if PCI header is of type 00h.
+    #[allow(dead_code, non_camel_case_types)]
+    #[repr(u32)]
+    pub enum RegisterHeader00H {
+        PCI_ID_REGISTER = 0x00u32,
+        PCI_COMMAND_REGISTER  = 0x04u32,
+        PCI_CLASS_REGISTER = 0x08u32,
+        PCI_HEADER_REGISTER  = 0x0Cu32,
+        PCI_BAR0_REGISTER  = 0x10u32,
+        PCI_CAPABILITY_LIST_REGISTER = 0x34u32,
+        PCI_INTERRUPT_REGISTER = 0x3Cu32,
+    }
+
+    impl From<RegisterHeader00H> for u32 {
+        fn from(val: RegisterHeader00H) -> u32 {
+             match val {
+                RegisterHeader00H::PCI_ID_REGISTER => 0x00u32,
+                RegisterHeader00H::PCI_COMMAND_REGISTER => 0x04u32,
+                RegisterHeader00H::PCI_CLASS_REGISTER => 0x08u32,
+                RegisterHeader00H::PCI_HEADER_REGISTER => 0x0Cu32,
+                RegisterHeader00H::PCI_BAR0_REGISTER => 0x10u32,
+                RegisterHeader00H::PCI_CAPABILITY_LIST_REGISTER => 0x34u32,
+                RegisterHeader00H::PCI_INTERRUPT_REGISTER => 0x3Cu32,
+            }
+        }
+    }
+
+    /// PCI masks. For convenience put into an enum and provides
+    /// an Into<u32> method for usage.
+    #[allow(dead_code, non_camel_case_types)]
+    #[repr(u32)]
+    pub enum Masks {
+        PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
+        PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
+        PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
+        PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
+        PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
+    }
+
+    impl From<Masks> for u32 {
+        fn from(val: Masks) -> u32 {
+            match val {
+                Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
+                Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
+                Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
+                Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
+                Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
+            } 
+        }
+    }
 }

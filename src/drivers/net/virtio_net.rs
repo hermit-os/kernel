@@ -108,28 +108,24 @@ impl VirtioDriver for VirtioNetDriver {
     }
 }
 
-impl VirtioNetDriver {
+impl VirtioNetDriver { 
     pub fn new(caps_coll: UniCapsColl) -> Self {
-        let queue = if true {
-            Virtq::<PackedVq>::new();
-        } else {
-            Virtq::<SplitVq>::new();
-        };
-        //VirtioNetDriver {
         unimplemented!();
-       //}
+
     }
 
     /// Initializes virtio network device by mapping configuration layout to 
-    /// respective structs and creating a new driver instance for the device.
+    /// respective structs (configuration structs are:
+    /// [ComCfg](structs.comcfg.html), [NotifCfg](structs.notifcfg.html)
+    /// [IsrStatus](structs.isrstatus.html), [PciCfg](structs.pcicfg.html)
+    /// [ShMemCfg](structs.ShMemCfg)). 
+    ///
+    /// Returns a driver instance of 
+    /// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
     pub fn init(adapter: &PciAdapter) -> Result<VirtioNetDriver, VirtioError> {
         match pci::map_caps(adapter) {
             Ok(caps) => return Ok(VirtioNetDriver::new(caps)),
-            Err(pci_error) => {
-                match pci_error {
-                    PciError::General(adapter) => return Err(VirtioError::DriverFail),
-                };
-            },
+            Err(pci_error) => return Err(VirtioError::FromPci(pci_error)),
         };
     }
 }
