@@ -15,16 +15,23 @@ pub mod env;
 
 pub mod error {
     use core::fmt;
+    use arch::x86_64::kernel::pci::error::PciError;
+
     #[derive(Debug)]
     pub enum VirtioError {
-        DriverFail,
+        FromPci(PciError),
         DevNotSupported(u16),
     }
 
     impl fmt::Display for VirtioError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match *self {
-                VirtioError::DriverFail => write!(f, "Driver failed to init devic."),
+            match self {
+                VirtioError::FromPci(pci_error) => match pci_error {
+                    PciError::General(id) => write!(f, "Driver failed to initalize device with id: 0x{:x} due to unknown reasosn!", id),
+                    PciError::NoBar(id ) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No BAR's found.", id), 
+                    PciError::NoCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Capabilites pointer found.", id),
+                    PciError::BadCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Malformed Capabilites pointer.", id),
+                },
                 VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id)
             }  
         }
@@ -44,7 +51,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u16;
+    /// let number: u16 = 127;
     /// // Creates an big endian u16 integer
     /// let be16 = Be16::from(number);
     ///
@@ -52,13 +59,20 @@ pub mod types {
     /// let os_u16 = Be16(number)
     /// ```
     #[derive(Copy, Clone, Debug)]
-    pub struct Be16(pub u16);
+    pub struct Be16(u16);
 
     impl From<u16> for Be16 {
         fn from(val: u16) -> Self {
             Be16(val.to_be())
         }
     }
+
+    impl From<Be16> for u16 {
+        fn from(val: Be16) -> u16 {
+            val.0
+        }
+    }
+
     /// Big endian unsigned 32-bit integer.
     ///
     /// In order to ensure right endianess MUST
@@ -66,7 +80,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u32;
+    /// let number: u32 = 127;
     /// // Creates an big endian u32 integer
     /// let be32 = Be32::from(number);
     ///
@@ -81,6 +95,13 @@ pub mod types {
             Be32(val.to_be())
         }
     }
+
+    impl From<Be32> for u32 {
+        fn from(val: Be32) -> u32 {
+            val.0
+        }
+    }
+
     /// Big endian unsigned 64-bit integer.
     ///
     /// In order to ensure right endianess MUST
@@ -88,7 +109,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u64;
+    /// let number: u64 = 127;
     /// // Creates an big endian u64 integer
     /// let be64 = Be64::from(number);
     ///
@@ -103,6 +124,13 @@ pub mod types {
             Be64(val.to_be())
         }
     }
+
+    impl From<Be64> for u64 {
+        fn from(val: Be64) -> u64 {
+            val.0
+        }
+    }
+
     /// Little endian unsigned 16-bit integer.
     ///
     /// In order to ensure right endianess MUST
@@ -110,7 +138,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u16;
+    /// let number: u16 = 127;
     /// // Creates an little endian u16 integer
     /// let le16 = Le16::from(number);
     ///
@@ -125,6 +153,13 @@ pub mod types {
             Le16(val.to_le())
         }
     }
+
+    impl From<Le16> for u16 {
+        fn from(val: Le16) -> u16 {
+            val.0
+        }
+    }
+
     /// Little endian unsigned 32-bit integer.
     ///
     /// In order to ensure right endianess MUST
@@ -132,7 +167,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u32;
+    /// let number: u32 = 127;
     /// // Creates an little endian u32 integer
     /// let le32 = Le32::from(number);
     ///
@@ -147,6 +182,13 @@ pub mod types {
             Le32(val.to_le())
         }
     }
+
+    impl From<Le32> for u32 {
+        fn from(val: Le32) -> u32 {
+            val.0
+        }
+    }
+
     /// Little endian unsigned 64-bit integer.
     ///
     /// In order to ensure right endianess MUST
@@ -154,7 +196,7 @@ pub mod types {
     /// # Example
     /// 
     /// ```
-    /// let number = u64;
+    /// let number: u64 = 127;
     /// // Creates an little endian u64 integer
     /// let le64 = Le64::from(number);
     ///
@@ -167,6 +209,12 @@ pub mod types {
     impl From<u64> for Le64 {
         fn from(val: u64) -> Self {
             Le64(val.to_le())
+        }
+    }
+
+    impl From<Le64> for u64 {
+        fn from(val: Le64) -> u64 {
+            val.0
         }
     }
 }
