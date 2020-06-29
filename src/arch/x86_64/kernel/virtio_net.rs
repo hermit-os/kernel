@@ -366,14 +366,10 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn handle_interrupt(&mut self) -> bool {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			//self.check_used_elements();
+			// handle incoming packets
+			netwakeup();
 
-			if self.has_packet() {
-				// handle incoming packets
-				netwakeup();
-
-				return true;
-			}
+			return true;
 		}
 
 		false
