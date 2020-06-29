@@ -141,22 +141,20 @@ pub fn sys_rx_buffer_consumed() -> Result<(), ()> {
 	kernel_function!(__sys_rx_buffer_consumed())
 }
 
-#[cfg(not(feature = "newlib"))]
-#[no_mangle]
-pub fn sys_netwakeup() {
-	kernel_function!(netwakeup());
-}
-
-pub fn __sys_netwait(millis: Option<u64>) {
-	if !unsafe { SYS.has_packet() } {
-		netwait(millis)
-	}
+fn __sys_netwait(handle: usize, millis: Option<u64>) {
+	netwait(handle, millis)
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub fn sys_netwait(millis: Option<u64>) {
-	kernel_function!(__sys_netwait(millis));
+pub fn sys_netwait(handle: usize, millis: Option<u64>) {
+	kernel_function!(__sys_netwait(handle, millis));
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
+	kernel_function!(netwait_and_wakeup(handles, millis));
 }
 
 pub fn __sys_shutdown(arg: i32) -> ! {
