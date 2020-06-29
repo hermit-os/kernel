@@ -266,6 +266,12 @@ impl PerCoreScheduler {
 	}
 
 	#[inline]
+	pub fn get_current_task_prio(&self) -> Priority {
+		let _ = AvoidInterrupts::new();
+		self.current_task.borrow().prio
+	}
+
+	#[inline]
 	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
 		let _ = AvoidInterrupts::new();
 		self.current_task.borrow_mut().last_wakeup_reason
