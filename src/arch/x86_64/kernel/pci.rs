@@ -428,10 +428,8 @@ impl fmt::Display for PciAdapter {
 	}
 }
 
-/// Returns the value indicated by bus, device and register of the pci 
+/// Returns the value (indicated by bus, device and register) of the pci 
 /// configuration space. 
-///
-/// WARN: PCI is inherently little endian, as will this u32, even on big endian machines.
 pub fn read_config(bus: u8, device: u8, register: u32) -> u32 {
 	let address =
 		PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
@@ -526,8 +524,6 @@ pub fn print_information() {
 ///
 /// Errors include...
 pub mod error {
-	use arch::x86_64::kernel::pci::PciAdapter;
-	
 	/// An enum of PciErrors
 	/// typically carrying the device's id as an u16.
 	#[derive(Debug)]
@@ -535,6 +531,8 @@ pub mod error {
 		General(u16),
 		NoBar(u16),
 		NoCapPtr(u16),
-		BadCapPtr(u16)
+		BadCapPtr(u16),
+		NoBarForCap(u16),
+		NoVirtioCaps(u16)	
     }
 }
