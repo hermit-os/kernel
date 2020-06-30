@@ -56,12 +56,20 @@ impl From<usize> for PhyMemAddr {
     }
 }
 
+
+/// This module is used as a single entry point from Virtio code into 
+/// other parts of the kernel. 
+///
+/// INFO: Values passed on to PCI devices are automatically converted into little endian
+/// coding. Values provided from PCI devices are passed as native endian values. 
+/// Meaning they are converted into big endian values on big endian machines and 
+/// are not changed on little endian machines.
 pub mod pci {
-    use drivers::virtio::env::{VirtMemAddr, PhyMemAddr};
+    use drivers::virtio::env::{VirtMemAddr};
     use drivers::virtio::transport::pci::PciBar as VirtioPciBar;
     use drivers::virtio::types::Le32;
     use arch::x86_64::kernel::pci;
-    use arch::x86_64::kernel::pci::{PciAdapter, PciBar, IOBar, MemoryBar};
+    use arch::x86_64::kernel::pci::{PciAdapter, PciBar};
     use arch::x86_64::kernel::pci::error::PciError;
     use alloc::vec::Vec;
     use core::result::Result;
@@ -69,15 +77,15 @@ pub mod pci {
     /// Wrapper function to read the configuration space of a PCI 
     /// device at the given register. Returns the registers value.
     ///
-    pub fn read_config(adapter: &PciAdapter, register: u32) -> u32 {
-        // Takes care of converting to targets endianess.
-        u32::from_le(pci::read_config(adapter.bus, adapter.device, register.to_le()))
+    /// WARN: Return value is little endian coded, if interpreted as multi-byte value.
+    pub fn read_config(adapter: &PciAdapter, register: Le32) -> u32 {
+        pci::read_config(adapter.bus, adapter.device, register.as_u32())
     }
 
     /// Wrapper function to write the configuraiton space of a PCI
     /// device at the given register.
-    pub fn write_config(adapter: &PciAdapter, register: u32, data: u32) {
-        pci::write_config(adapter.bus, adapter.device, register.to_le(), data.to_le());
+    pub fn write_config(adapter: &PciAdapter, register: Le32, data: Le32) {
+        pci::write_config(adapter.bus, adapter.device, register.as_u32(), data.as_u32());
     }
 
 
@@ -86,22 +94,25 @@ pub mod pci {
     ///
     /// As this function uses parts of the kernel pci code it is 
     /// outsourced into the env::pci module.
+    /// 
+    /// WARN: Currently unsafely casts kernel::PciBar.size (usize) to an 
+    /// u64
     pub fn map_bar_mem(adapter: &PciAdapter) -> Result<Vec<VirtioPciBar>, PciError> {
         let mut mapped_bars: Vec<VirtioPciBar> = Vec::new();
 
         for bar in &adapter.base_addresses {
             match bar {
                 PciBar::IO(_) => {
-			    	warn!("Cannot map IOBar!");
+			    	warn!("Cannot map I/O BAR!");
 			    	continue;
 			    },
 			    PciBar::Memory(bar) => {
                     if bar.width != 64 {
-                        warn!("Currently only mapping of 64 bit bars is supported!");
+                        warn!("Currently only mapping of 64 bit BAR's is supported!");
                         continue;
                     }
                     if !bar.prefetchable {
-                        warn!("Currently only mapping of prefetchable bars is supported!");
+                        warn!("Currently only mapping of prefetchable BAR's is supported!");
                         continue;
                     }
                     
@@ -110,13 +121,15 @@ pub mod pci {
                     mapped_bars.push(VirtioPciBar {
                         index: bar.index,
                         mem_addr: virtual_address,
-                        length: bar.size,
+                        // Unsafe cast of usize to u64
+                        length: bar.size as u64,
                     })
                 }
             } 
         }
 
         if mapped_bars.is_empty() {
+            error!("No correct memory BAR for device {:x} found.", adapter.device_id);
             Err(PciError::NoBar(adapter.device_id))
         } else {
             Ok(mapped_bars)
