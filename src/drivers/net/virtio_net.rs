@@ -68,9 +68,9 @@ impl NetDevCfg {
     pub fn new() -> Self {
         NetDevCfg {
             mac: [0; 6],
-            status: Le16(0),
-            max_virtqueue_pairs: Le16(0),
-            mtu: Le16(0),
+            status: Le16::from(0),
+            max_virtqueue_pairs: Le16::from(0),
+            mtu: Le16::from(0),
         }
     }
 }
