@@ -32,6 +32,7 @@ pub mod error {
                     PciError::NoCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Capabilites pointer found.", id),
                     PciError::BadCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Malformed Capabilites pointer.", id),
                     PciError::NoBarForCap(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Bar indicated by capability not found.", id),
+                    PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Virtio capabilites were found.", id),
                 },
                 VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id)
             }  
@@ -459,6 +460,12 @@ pub mod types {
     impl From<u32> for Le32 {
         fn from(val: u32) -> Le32 {
             Le32(val)
+        }
+    }
+
+    impl From<u8> for Le32 {
+        fn from(val: u8) -> Le32 {
+            Le32(u32::from(val))
         }
     }
 

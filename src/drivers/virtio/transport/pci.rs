@@ -14,13 +14,15 @@ use arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
 use arch::x86_64::kernel::pci as kernel_pci;
 use arch::x86_64::kernel::pci::error::PciError;
 use alloc::vec::Vec;
+use alloc::boxed::Box;
 use core::result::Result;
 use core::convert::TryInto;
+use core::mem;
 
 use drivers::error::DriverError;
 use drivers::virtio::error::VirtioError;
 use drivers::virtio::types::{Le16, Le32, Le64};
-use drivers::virtio::env::{VirtMemAddr, PhyMemAddr};
+use drivers::virtio::env::memory::{VirtMemAddr, PhyMemAddr, Offset};
 use drivers::virtio::virtqueue::Virtq;
 use drivers::virtio::env;
 use drivers::net::virtio_net::VirtioNetDriver;
@@ -128,7 +130,15 @@ impl From<u8> for CfgType {
         }
     }
 }
-    
+ 
+/// Public structure to allow drivers to read the configuration space 
+/// savely
+pub struct Origin {
+    cfg_ptr: Le32, // Register to be read to reach configuration structure of type cfg_type
+    dev: u8, // PCI device this configuration comes from
+    bus: u8, // Bus of the PCI device
+    cap_struct: PciCapRaw,
+}
 
 /// Virtio's PCI capabilites structure.
 /// See Virtio specification v.1.1 - 4.1.4
@@ -146,10 +156,12 @@ pub struct PciCap {
     cfg_type: CfgType,
     bar: PciBar,
     id: u8,
-    offset: Le32,
+    offset: Offset,
     length: Le32,
-    // TODO: PROVIDE LOCATION AND SO ON AS A SIMPLE MEMORY ADDRESS A DRIVER CAN SIMPLY MAP
-    //       THE WHOLE MAPPING (PCI_KERNEL::PARSE_BARS UND PCI_KERNEL::MAP_VIRTIOCAP) SHOULD GO ON IN FUNCTION read_pci_caps()!
+    // Following field can be used to retrieve original structure 
+    // from the config space. Needed by some structures and f
+    // device specific configs.
+    origin: Origin,
 }
 
 impl PciCap {
@@ -168,7 +180,8 @@ impl PciCap {
 /// WARN: endianness of this structure should be seen as little endian.
 /// As this structure is not meant to be used outside of this module and for
 /// ease of conversion from reading data into struct from PCI configuration
-/// space, no conversion is made for struct fields. 
+/// space, no conversion is made for struct fields.
+#[repr(C)]
 struct PciCapRaw {
     cap_vndr: u8, 
     cap_next: u8, 
@@ -236,7 +249,7 @@ pub struct UniCapsColl {
 
 impl UniCapsColl {
     /// Returns an Caps with empty lists.
-    pub fn new() -> Self {
+    fn new() -> Self {
         UniCapsColl {
             com_cfg_list: Vec::new(),
             notif_cfg_list: Vec::new(),
@@ -247,8 +260,8 @@ impl UniCapsColl {
         }
     }
 
-    fn add_cfg_common(&mut self, com_raw: ComCfgRaw, rank: u8) {
-        self.com_cfg_list.push(ComCfg::new(com_raw, rank));
+    fn add_cfg_common(&mut self, com: ComCfg) {
+        self.com_cfg_list.push(com);
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
@@ -256,12 +269,12 @@ impl UniCapsColl {
         self.com_cfg_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
-    fn add_cfg_notif(&mut self, notif_raw: NotifCfgRaw, rank: u8) {
-        self.notif_cfg_list.push(NotifCfg::new(notif_raw, rank));
+    fn add_cfg_notif(&mut self, notif: NotifCfg) {
+        self.notif_cfg_list.push(notif);
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
-        // acceptibal amount of configuration structures.
+        // acceptable amount of configuration structures.
         self.notif_cfg_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
@@ -270,7 +283,7 @@ impl UniCapsColl {
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
-        // acceptibal amount of configuration structures.
+        // acceptable amount of configuration structures.
         self.isr_stat_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
@@ -279,7 +292,7 @@ impl UniCapsColl {
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
-        // acceptibal amount of configuration structures.
+        // acceptable amount of configuration structures.
         self.pci_cfg_acc_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
@@ -288,7 +301,7 @@ impl UniCapsColl {
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
-        // acceptibal amount of configuration structures.
+        // acceptable amount of configuration structures.
         self.sh_mem_cfg_list.sort_by(|a, b| a.id.cmp(&b.id));
     }
 
@@ -297,7 +310,7 @@ impl UniCapsColl {
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
-        // acceptibal amount of configuration structures.
+        // acceptable amount of configuration structures.
         self.dev_cfg_list.sort_by(|a, b| a.id.cmp(&b.id));
     }
 }
@@ -308,12 +321,12 @@ impl UniCapsColl {
 /// Provides a safe API for Raw structure and allows interaction with the device via 
 /// the structure. 
 pub struct ComCfg {
-    com_cfg: ComCfgRaw,
+    com_cfg: Box<ComCfgRaw>,
     pub rank: u8,
 }
 
 impl ComCfg {
-    fn new(raw: ComCfgRaw, rank: u8) -> Self {
+    fn new(raw: Box<ComCfgRaw>, rank: u8) -> Self {
         ComCfg{
             com_cfg: raw,
             rank,
@@ -367,25 +380,30 @@ struct ComCfgRaw {
 // Common configuration raw does NOT provide a PUBLIC
 // interface. 
 impl ComCfgRaw {
-    fn map(cap: &PciCap) -> Option<Self> {
-        // Check if capability struct fits inside memory indicated by BAR
-        //if cap.bar.length <  u64::from(cap.offset + cap.length) {
-//
-            unimplemented!();
+    /// Returns a boxed [ComCfgRaw](ComCfgRaw) structure. The box points to the actual structure inside the 
+    /// PCI devices memory space.
+    fn map(cap: &PciCap) -> Option<Box<Self>> {
+        if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
+            error!("Common config of with id {}, does not fit into memeory specified by bar {:x}!", cap.id, cap.bar.index);
+            return None
+        }
+
+        // Using "as u32" is safe here as ComCfgRaw has a defined size smaller 2^31-1
+        // Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
+        if cap.length.as_ne()/8 < mem::size_of::<ComCfgRaw>() as u32 {
+            error!("Common config of with id {}, does not represent actual structure specified by the standard!", cap.id);
+            return None 
+        }
+
+        let virt_addr_raw = cap.bar.mem_addr + cap.offset;
+
+        let com_cfg_raw: Box<ComCfgRaw>= unsafe {
+            let raw = usize::from(virt_addr_raw) as *mut ComCfgRaw;
+            Box::from_raw(raw)
+        };
+
+        Some(com_cfg_raw)
     }
-
-
-    // get common config mapped, cast to virtio_pci_common_cfg
-	//let common_cfg =
-    //match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
-    //    Some((cap_common_raw, _)) => unsafe {
-    //        &mut *(cap_common_raw as *mut virtio_pci_common_cfg)
-    //    },
-    //    None => {
-    //        error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
-    //        return None;
-    //// };
-   // }
 
     fn set_queue_size(&mut self, size: Le16, packed: bool) {
     // TODO:
@@ -410,40 +428,58 @@ impl ComCfgRaw {
     }
 }
 
-/// Wraps a [NotifCfgRaw](structs.notifcfgraw.html) in order to preserve
-/// the original structure and allow interaction with the device via 
-/// the structure.
-///
-/// Provides a safe API for Raw structure and allows interaction with the device via 
-/// the structure. 
+/// Notification Structure to handle virtqueue notification settings.
+/// See Virtio specification v1.1 - 4.1.4.4 
+// 
 pub struct NotifCfg {
-    notif_cfg: NotifCfgRaw,
-    pub rank: u8,
+    base_addr: VirtMemAddr,
+    notify_off_multiplier: Le32,
+    rank: u8,
+    // defines the maximum size the notification space, starting from base_addr.
+    length: Le32,
 }
 
 impl NotifCfg {
-    fn new(raw: NotifCfgRaw, rank: u8) -> Self {
-        NotifCfg {
-            notif_cfg: raw,
-            rank,
+    fn new(cap: &PciCap) -> Option<Self> {
+        if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
+            error!("Notification config of with id {}, does not fit into memeory specified by bar {:x}!", cap.id, cap.bar.index);
+            return None
         }
+
+        // Assumes the cap_len is a multiple of 8
+        let notify_off_multiplier = Le32::from(env::pci::read_cfg_no_adapter(
+            cap.origin.bus, 
+            cap.origin.bus,
+            cap.origin.cfg_ptr + Le32::from(cap.origin.cap_struct.cap_len))
+        );
+
+        // define base memory address from which the actuall Queue Notif address can be derived via
+        // offset + queue_notify_off * notify_off_multiplier.
+        // 
+        // Where queue_notify_off is taken from the respective common configuration struct. 
+        // See Virtio specification v1.1. - 4.1.4.4
+        //
+        // Base address here already includes offset!
+        let base_addr = VirtMemAddr::from(cap.bar.mem_addr + cap.offset);
+
+        Some(NotifCfg{
+            base_addr: base_addr,
+            notify_off_multiplier,
+            rank: cap.id,
+            length: cap.length
+        })
     }
-}
-
-/// Notifcation structure of Virtio PCI devices.
-/// See Virtio specification v1.1 - 4.1.4.4
-///
-// TODO:
-// The notification struct is placed immediately after the 
-// [PciCap](structs.PciCap.html) in memory.
-struct NotifCfgRaw {
-    notify_off_multiplier: Le32,  // Multiplier for queue_notify_off
-}
-
-impl NotifCfgRaw {
-    pub fn map(cap: &PciCap) -> Self {
+    
+    //
+    // THIS IS PLACEHOLDER JUST TO GET THE IDEA RIGHT: THEREFORE IT IS KEPT PRIVATE
+    //
+    fn write(&self, queue_notif_off: u32) {
         unimplemented!();
+        // Write to memory address = self.base_addr + queue_notif_off * self.notifiy_off_multiplier
+        //
+        // WHAT TO WRITE IS THE QUESTION?
     }
+
 }
 
 /// Wraps a [IsrStatusRaw](structs.isrstatusraw.html) in order to preserve
@@ -474,6 +510,7 @@ impl IsrStatus {
 /// The 8-bit field is read as an bitmap and allows to distinguish between
 /// interrupts triggered by changes in the configuration and interrupts
 /// triggered by events of a virtqueue.
+#[repr(C)]
 struct IsrStatusRaw {
     flags: u8,
 }
@@ -521,6 +558,7 @@ impl PciCfg {
 ///
 /// ONLY an alternative access method to the common configuration, notification,
 /// ISR and device-specific configuration regions/structures.
+#[repr(C)]
 struct PciCfgRaw {
     pci_cfg_data: [u8;4], // Data for BAR access
     // TODO:
@@ -565,7 +603,8 @@ impl ShMemCfg {
 ///
 /// Each shared memory region is defined via a single shared
 /// memory structure. Each region is identified by an id indicated
-/// via the capability.id field of 
+/// via the capability.id field of
+#[repr(C)]
 struct ShMemCfgRaw {
     // TODO:
     // The region defined by the combination of the cap.offset, cap.offset_hi, and cap.length, cap.length_hi fields MUST be contained within the declared bar.
@@ -582,10 +621,21 @@ impl ShMemCfgRaw {
 /// a PCI device's physical memory indicated by the device's BAR has been mapped to.
 //
 // Currently all fields are public as the struct is instanciated in the drivers::virtio::env module
+#[derive(Clone, Debug)]
 pub struct PciBar {
-    pub index: u8,
-    pub mem_addr: VirtMemAddr,
-    pub length: u64,
+    index: u8,
+    mem_addr: VirtMemAddr,
+    length: u64,
+}
+
+impl PciBar {
+    pub fn new(index: u8, mem_addr: VirtMemAddr, length: u64) -> Self {
+        PciBar {
+            index, 
+            mem_addr,
+            length,
+        }
+    }
 }
 
 /// Reads a raw capability struct [PciCapRaw](structs.PcicapRaw.html) out of a PCI device's configuration space.
@@ -597,7 +647,7 @@ fn read_cap_raw(adapter: &PciAdapter, register: Le32) -> PciCapRaw {
     // Write words sequentialy into array
     let mut index = 0;
     for i in 0..4 {
-        // Read word need to be converted to little endian bytes as PCI is little endian.const 
+        // Read word need to be converted to little endian bytes as PCI is little endian. 
         // Intepretation of multi byte values needs to be swapped for big endian machines
         let word: [u8; 4] = env::pci::read_config(adapter, Le32::from(register + Le32::from(4*i as u32))).to_le_bytes();
         for j in 0..4 {
@@ -638,7 +688,7 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
     let mut iter = bars.into_iter();
     let mut cap_list: Vec<PciCap> = Vec::new();
     // Loop through capabilties list via next pointer
-    'next_list: while next_ptr != Le32::from(0u32) {
+    'cap_list: while next_ptr != Le32::from(0u32) {
         // read into raw capabilities structure
         //
         // Devices configuration space muste be read twice
@@ -660,32 +710,42 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
                 let cap_bar: PciBar = loop {
                     match iter.next() {
                         Some(bar) => {
-                            if bar.index == cap_raw.bar_index {
-                                break bar;
-                            }
+                            // Drivers MUST ignore BAR values different then specified in Virtio spec v1.1. - 4.1.4
+                            // See Virtio specification v1.1. - 4.1.4.1
+                            if bar.index <= 5 { 
+                                if bar.index == cap_raw.bar_index {
+                                 break bar.clone();
+                                }  
+                            } 
                         },
                         None => {
                             error!("Found virtio capability whose BAR is not mapped or non existing. Capability of type {:x} and id {:x} for device {:x}, can not be used!",
                                 cap_raw.cfg_type, cap_raw.id, adapter.device_id);
                             
                             next_ptr = Le32::from(u32::from(cap_raw.cap_next));
-                            continue 'next_list;
+                            continue 'cap_list;
                         },
                     }
                 };
+                // Need to set next_ptr inside first match as it will be moved inside PciCap
+                next_ptr = Le32::from(u32::from(cap_raw.cap_next));
 
                 cap_list.push(PciCap{
                     cfg_type: CfgType::from(cap_raw.cfg_type),
                     bar: cap_bar,
                     id: cap_raw.id,
-                    offset: Le32::from(cap_raw.offset),
-                    length: Le32::from(cap_raw.length),
+                    offset: Offset::from(cap_raw.offset.as_ne()),
+                    length: cap_raw.length,
+                    origin: Origin {
+                        cfg_ptr: next_ptr,
+                        dev: adapter.device,
+                        bus: adapter.bus,
+                        cap_struct: cap_raw
+                    },
                 })
             }
-            _ => ()
+            _ => next_ptr = Le32::from(u32::from(cap_raw.cap_next)),
         }
-
-        next_ptr = Le32::from(u32::from(cap_raw.cap_next));
     }
 
     if cap_list.is_empty() {
@@ -755,10 +815,13 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
     for pci_cap in cap_list {
         match pci_cap.get_type() {
             CfgType::VIRTIO_PCI_CAP_COMMON_CFG =>  match ComCfgRaw::map(&pci_cap) {
-                Some(cap) => caps.add_cfg_common(cap, pci_cap.get_id()),
-                None => error!("Common config capability with id {:x}, of device {:x}, could not be mapped!", pci_cap.id, adapter.device_id),
-            } 
-            CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => caps.add_cfg_notif(NotifCfgRaw::map(&pci_cap), pci_cap.get_id()),
+                Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.get_id())),
+                None => error!("Common config capability with id {}, of device {:x}, could not be mapped!", pci_cap.id, adapter.device_id),
+            },
+            CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => match NotifCfg::new(&pci_cap) {
+                Some(notif) => caps.add_cfg_notif(notif),
+                None => error!("Notification config capability with id {}, of device {:X} could not be used!", pci_cap.id, adapter.device_id),
+            },
             CfgType::VIRTIO_PCI_CAP_ISR_CFG => caps.add_cfg_isr(IsrStatusRaw::map(&pci_cap), pci_cap.get_id()),
             CfgType::VIRTIO_PCI_CAP_PCI_CFG => caps.add_cfg_pci(PciCfgRaw::map(&pci_cap), pci_cap.get_id()),
             CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG => caps.add_cfg_sh_mem(ShMemCfgRaw::map(&pci_cap), pci_cap.get_id()),
