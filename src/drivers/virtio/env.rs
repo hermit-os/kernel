@@ -11,51 +11,111 @@
 //! a clean boundary between virtio and the rest of the kernel. One additional aspect is to 
 //! ensure only a single location needs changes, in cases where the underlying kernel code is changed
 
-#[derive(Copy, Clone, Debug)]
-pub struct VirtMemAddr(usize);
+pub mod memory {
+    use core::ops::Add;
+    use core::mem;
 
-impl From<u32> for VirtMemAddr {
-    fn from(addr: u32) -> Self {
-        unimplemented!();
-        // TODO: check if current system is 32 bit, then okay. else fail
+    /// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
+    /// to [VirtMemAddr](VirtMemAddr). 
+    #[derive(Copy, Clone, Debug)]
+    pub struct Offset(usize);
+
+    // INFO: In case Offset is change to supporrt other than 64 bit systems one also needs to adjust 
+    // the respective From<Offset> for u32 implementation.
+    impl From<u32> for Offset {
+        fn from(val: u32 ) -> Self {
+            match mem::size_of::<usize>() {
+                4 => Offset(val as usize),
+                _ => panic!("Currently only support for 32 offsets is given!"),
+            }
+        }
+    }
+
+    impl From<Offset> for u32 {
+        fn from(val: Offset) -> u32 {
+            // Check if Offset is not larger than 32 bit
+            match mem::size_of::<Offset>() {
+                4 => val.0 as u32,
+                _ => panic!("Missing support for conversions from others than 32 bit usize."),
+            }
+        }
+    }
+
+    /// A newtype representing a virtual mempory address.
+    #[derive(Copy, Clone, Debug)]
+    pub struct VirtMemAddr(usize);
+
+    impl From<u32> for VirtMemAddr {
+        fn from(addr: u32) -> Self {
+            match mem::size_of::<usize>() {
+                4 => VirtMemAddr(addr as usize),
+                8 => VirtMemAddr(addr as usize),
+                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
+            }
+        }
+    }
+
+    impl From<u64> for VirtMemAddr {
+        fn from(addr: u64) -> Self {
+            match mem::size_of::<usize>() {
+                4 => panic!("Using a 64 bit address inside a 32 bit system!"),
+                8 => VirtMemAddr(addr as usize),
+                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
+            }
+        }
+    }
+
+    impl From<usize> for VirtMemAddr {
+        fn from (addr: usize) -> Self {
+            VirtMemAddr(addr)
+        }
+    }
+
+    impl Add<Offset> for VirtMemAddr {
+        type Output = VirtMemAddr;
+
+        fn add(self, other: Offset) -> Self::Output {
+            VirtMemAddr(self.0 + other.0)
+        } 
+    }
+
+    /// A newtype representing a physical memory address
+    pub struct PhyMemAddr(usize);
+
+    impl From<u32> for PhyMemAddr {
+        fn from(addr: u32) -> Self {
+            match mem::size_of::<usize>() {
+                4 => PhyMemAddr(addr as usize),
+                8 => PhyMemAddr(addr as usize),
+                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
+            }
+        }
+    }
+
+    impl From<u64> for PhyMemAddr {
+        fn from(addr: u64) -> Self {
+            match mem::size_of::<usize>() {
+                4 => panic!("Using a 64 bit address inside a 32 bit system!"),
+                8 => PhyMemAddr(addr as usize),
+                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
+            }
+        }
+    }
+
+    impl From<usize> for PhyMemAddr {
+        fn from(addr: usize) -> Self {
+            PhyMemAddr(addr)
+        }
+    }
+
+    impl Add<Offset> for PhyMemAddr {
+        type Output = PhyMemAddr;
+
+        fn add(self, other: Offset) -> Self::Output {
+            PhyMemAddr(self.0 + other.0)
+        } 
     }
 }
-
-impl From<u64> for VirtMemAddr {
-    fn from(addr: u64) -> Self {
-        unimplemented!();
-        // TODO: check if current system is 64 bit, then okaym ekse fail
-    }
-}
-
-impl From<usize> for VirtMemAddr {
-    fn from (addr: usize) -> Self {
-        VirtMemAddr(addr)
-    }
-}
-
-pub struct PhyMemAddr(usize);
-
-impl From<u32> for PhyMemAddr {
-    fn from(addr: u32) -> Self {
-        unimplemented!();
-        // TODO: check if current system is 32 bit, then okay. else fail
-    }
-}
-
-impl From<u64> for PhyMemAddr {
-    fn from(addr: u64) -> Self {
-        unimplemented!();
-        // TODO: check if current system is 64 bit, then okaym ekse fail
-    }
-}
-
-impl From<usize> for PhyMemAddr {
-    fn from(addr: usize) -> Self {
-        PhyMemAddr(addr)
-    }
-}
-
 
 /// This module is used as a single entry point from Virtio code into 
 /// other parts of the kernel. 
@@ -65,7 +125,7 @@ impl From<usize> for PhyMemAddr {
 /// Meaning they are converted into big endian values on big endian machines and 
 /// are not changed on little endian machines.
 pub mod pci {
-    use drivers::virtio::env::{VirtMemAddr};
+    use drivers::virtio::env::memory::{VirtMemAddr};
     use drivers::virtio::transport::pci::PciBar as VirtioPciBar;
     use drivers::virtio::types::Le32;
     use arch::x86_64::kernel::pci;
@@ -79,13 +139,13 @@ pub mod pci {
     ///
     /// WARN: Return value is little endian coded, if interpreted as multi-byte value.
     pub fn read_config(adapter: &PciAdapter, register: Le32) -> u32 {
-        pci::read_config(adapter.bus, adapter.device, register.as_u32())
+        pci::read_config(adapter.bus, adapter.device, register.as_le_u32())
     }
 
     /// Wrapper function to write the configuraiton space of a PCI
     /// device at the given register.
     pub fn write_config(adapter: &PciAdapter, register: Le32, data: Le32) {
-        pci::write_config(adapter.bus, adapter.device, register.as_u32(), data.as_u32());
+        pci::write_config(adapter.bus, adapter.device, register.as_le_u32(), data.as_le_u32());
     }
 
 
