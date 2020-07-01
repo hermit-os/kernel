@@ -64,12 +64,12 @@ pub mod types {
 
     impl Be16 {
         /// Returns the wrapped u16 as a big endian coded u16.
-        pub fn as_u16(self) -> u16 {
+        pub fn as_be(self) -> u16 {
             self.0.to_be()
         }
 
         /// Returns the wrapped u16, which is native endian coded!
-        pub fn to_ne_u16(self) -> u16 {
+        pub fn as_ne(self) -> u16 {
             self.0
         }
     }
@@ -159,12 +159,12 @@ pub mod types {
 
     impl Be32 {
         /// Returns the wrapped u32 as a little endian coded u32.
-        pub fn as_u32(self) -> u32 {
+        pub fn as_be(self) -> u32 {
             self.0.to_be()
         }
 
         /// Returns the wrapped u32, which is native endian coded!
-        pub fn to_ne_u32(self) -> u32 {
+        pub fn as_ne(self) -> u32 {
             self.0
         }
     }
@@ -254,12 +254,12 @@ pub mod types {
 
     impl Be64 {
         /// Returns the wrapped u64 as a little endian coded u64.
-        pub fn as_u64(self) -> u64 {
+        pub fn as_be(self) -> u64 {
             self.0.to_be()
         }
 
         /// Returns the wrapped u64, which is native endian coded!
-        pub fn to_ne_u64(self) -> u64 {
+        pub fn as_ne(self) -> u64 {
             self.0
         }
     }
@@ -350,12 +350,12 @@ pub mod types {
 
     impl Le16 {
         /// Returns the wrapped u16 as a little endian coded u16.
-        pub fn as_u16(self) -> u16 {
+        pub fn as_le(self) -> u16 {
             self.0.to_le()
         }
 
         /// Returns the wrapped u16, which is native endian coded!
-        pub fn to_ne_u16(self) -> u16 {
+        pub fn as_ne(self) -> u16 {
             self.0
         }
     }
@@ -446,12 +446,12 @@ pub mod types {
 
     impl Le32 {
         /// Returns the wrapped u32 as a little endian coded u32.
-        pub fn as_u32(self) -> u32 {
+        pub fn as_le(self) -> u32 {
             self.0.to_le()
         }
 
         /// Returns the wrapped u32, which is native endian coded!
-        pub fn to_ne_u32(self) -> u32 {
+        pub fn as_ne(self) -> u32 {
             self.0
         }
     }
@@ -541,12 +541,12 @@ pub mod types {
 
     impl Le64 {
         /// Returns the wrapped u32 as a little endian coded u32.
-        pub fn as_u64(self) -> u64 {
+        pub fn as_le(self) -> u64 {
             self.0.to_le()
         }
 
         /// Returns the wrapped u32, which is native endian coded!
-        pub fn to_ne_u64(self) -> u64 {
+        pub fn as_ne(self) -> u64 {
             self.0
         }
     }
