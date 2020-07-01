@@ -71,6 +71,12 @@ pub mod memory {
         }
     }
 
+    impl From<VirtMemAddr> for usize {
+        fn from (addr: VirtMemAddr) -> usize {
+            addr.0
+        }
+    }
+
     impl Add<Offset> for VirtMemAddr {
         type Output = VirtMemAddr;
 
@@ -99,6 +105,12 @@ pub mod memory {
                 8 => PhyMemAddr(addr as usize),
                 _ => panic!("Currently only support for 32 and 64 bit machines given!"),
             }
+        }
+    }
+
+    impl From<PhyMemAddr> for usize {
+        fn from (addr: PhyMemAddr) -> usize {
+            addr.0
         }
     }
 
@@ -139,13 +151,17 @@ pub mod pci {
     ///
     /// WARN: Return value is little endian coded, if interpreted as multi-byte value.
     pub fn read_config(adapter: &PciAdapter, register: Le32) -> u32 {
-        pci::read_config(adapter.bus, adapter.device, register.as_le_u32())
+        pci::read_config(adapter.bus, adapter.device, register.as_le())
+    }
+
+    pub fn read_cfg_no_adapter(bus: u8, device: u8, register: Le32) -> u32 {
+        pci::read_config(bus, device, register.as_le())
     }
 
     /// Wrapper function to write the configuraiton space of a PCI
     /// device at the given register.
     pub fn write_config(adapter: &PciAdapter, register: Le32, data: Le32) {
-        pci::write_config(adapter.bus, adapter.device, register.as_le_u32(), data.as_le_u32());
+        pci::write_config(adapter.bus, adapter.device, register.as_le(), data.as_le());
     }
 
 
@@ -178,12 +194,7 @@ pub mod pci {
                     
                     let virtual_address = VirtMemAddr::from(crate::mm::map(bar.addr, bar.size, true, true, true));
                     
-                    mapped_bars.push(VirtioPciBar {
-                        index: bar.index,
-                        mem_addr: virtual_address,
-                        // Unsafe cast of usize to u64
-                        length: bar.size as u64,
-                    })
+                    mapped_bars.push(VirtioPciBar::new(bar.index, virtual_address, bar.size as u64));
                 }
             } 
         }
