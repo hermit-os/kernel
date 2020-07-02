@@ -17,7 +17,7 @@ pub mod memory {
 
     /// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
     /// to [VirtMemAddr](VirtMemAddr). 
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
     pub struct Offset(usize);
 
     // INFO: In case Offset is change to supporrt other than 64 bit systems one also needs to adjust 
@@ -42,7 +42,7 @@ pub mod memory {
     }
 
     /// A newtype representing a virtual mempory address.
-    #[derive(Copy, Clone, Debug)]
+    #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
     pub struct VirtMemAddr(usize);
 
     impl From<u32> for VirtMemAddr {
