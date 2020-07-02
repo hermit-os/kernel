@@ -279,8 +279,8 @@ impl UniCapsColl {
         self.notif_cfg_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
-    fn add_cfg_isr(&mut self, isr_raw: IsrStatusRaw, rank: u8) {
-        self.isr_stat_list.push(IsrStatus::new(isr_raw, rank));
+    fn add_cfg_isr(&mut self, isr_stat: IsrStatus) {
+        self.isr_stat_list.push(isr_stat);
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
@@ -372,7 +372,7 @@ struct ComCfgRaw {
     queue_size: Le16,  // read-write
     queue_msix_vector: Le16, // read-write 
     queue_enable: Le16, // read-write
-    queue_notify_off: Le16, // read-only for driver 
+    queue_notify_off: Le16, // read-only for driver. Offset of the notification area.
     queue_desc: Le64, // read-write
     queue_driver: Le64, // read-write 
     queue_device: Le64, // read-write
@@ -385,7 +385,11 @@ impl ComCfgRaw {
     /// PCI devices memory space.
     fn map(cap: &PciCap) -> Option<Box<Self>> {
         if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
-            error!("Common config of with id {}, does not fit into memeory specified by bar {:x}!", cap.id, cap.bar.index);
+            error!("Common config of with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+                cap.id,
+                cap.origin.dev_id,
+                 cap.bar.index
+            );
             return None
         }
 
@@ -443,7 +447,11 @@ pub struct NotifCfg {
 impl NotifCfg {
     fn new(cap: &PciCap) -> Option<Self> {
         if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
-            error!("Notification config of device {:x}, does not fit into memeory specified by bar {:x}!", cap.origin.dev_id, cap.bar.index);
+            error!("Notification config with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+                cap.id,
+                cap.origin.dev_id,
+                cap.bar.index
+            );
             return None
         }
 
@@ -491,12 +499,12 @@ impl NotifCfg {
 /// Provides a safe API for Raw structure and allows interaction with the device via 
 /// the structure. 
 pub struct IsrStatus {
-    isr_stat: IsrStatusRaw,
-    pub rank: u8
+    isr_stat: Box<IsrStatusRaw>,
+    rank: u8
 }
 
 impl IsrStatus {
-    fn new(raw: IsrStatusRaw, rank: u8) -> Self {
+    fn new(raw: Box<IsrStatusRaw>, rank: u8) -> Self {
         IsrStatus {
             isr_stat: raw,
             rank,
@@ -512,24 +520,48 @@ impl IsrStatus {
 /// The 8-bit field is read as an bitmap and allows to distinguish between
 /// interrupts triggered by changes in the configuration and interrupts
 /// triggered by events of a virtqueue.
+///
+/// Bitmap layout (from least to most significant bit in the byte):
+///
+/// 0 : Queue interrupt
+///
+/// 1 : Device configuration interrupt
+///
+/// 2 - 31 : Reserved
 #[repr(C)]
 struct IsrStatusRaw {
     flags: u8,
 }
 
 impl IsrStatusRaw {
-    fn map(cap: &PciCap) -> Self {
-        unimplemented!();
+    fn map(cap: &PciCap) -> Option<Box<Self>> {
+        if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
+            error!("ISR status config with id {} of device {:x}, does not fit into memeory specified by bar {:x}!",
+                cap.id,
+                cap.origin.dev_id,
+                cap.bar.index
+            );
+            return None
+        }
+
+        let mut virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
+
+        let isr_stat_raw: Box<IsrStatusRaw> = unsafe {
+            let raw = usize::from(virt_addr_raw) as *mut IsrStatusRaw;
+            Box::from_raw(raw)
+        };
+
+        Some(isr_stat_raw) 
     }
 
     // returns true if second bit, from left is 1.
-    // read MUST reset flag
+    // read DOES reset flag
     fn cfg_event() -> bool {
         unimplemented!();
     }
 
-    // returns trie if first bit, from left is 1.
-    // read MUST reset flag
+    // returns true if first bit, from left is 1.
+    // read DOES reset flag
     fn vqueue_event() -> bool {
         unimplemented!();
     }
@@ -679,9 +711,9 @@ fn read_cap_raw(adapter: &PciAdapter, register: Le32) -> PciCapRaw {
 /// Returns ONLY Virtio specific capabilites, which allow to locate the actual capability 
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
 fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, PciError> {
-    // Checks if pointer is well formed and does not point into config header space
-    let ptr=  dev_caps_ptr(adapter);
+    let ptr: Le32 = dev_caps_ptr(adapter);
 
+    // Checks if pointer is well formed and does not point into config header space
     let mut next_ptr =  if ptr >= Le32::from(0x40u32) { 
         ptr
     } else {
@@ -821,14 +853,22 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
     for pci_cap in cap_list {
         match pci_cap.get_type() {
             CfgType::VIRTIO_PCI_CAP_COMMON_CFG =>  match ComCfgRaw::map(&pci_cap) {
-                Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.get_id())),
+                Some(cap) => caps.add_cfg_common(
+                ComCfg::new(cap, pci_cap.id)
+                ),
                 None => error!("Common config capability with id {}, of device {:x}, could not be mapped!", pci_cap.id, adapter.device_id),
             },
             CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => match NotifCfg::new(&pci_cap) {
                 Some(notif) => caps.add_cfg_notif(notif),
-                None => error!("Notification config capability with id {}, of device {:X} could not be used!", pci_cap.id, adapter.device_id),
+                None => error!("Notification config capability with id {}, of device {:x} could not be used!", pci_cap.id, adapter.device_id),
             },
-            CfgType::VIRTIO_PCI_CAP_ISR_CFG => caps.add_cfg_isr(IsrStatusRaw::map(&pci_cap), pci_cap.get_id()),
+            CfgType::VIRTIO_PCI_CAP_ISR_CFG => match IsrStatusRaw::map(&pci_cap) {
+                 Some(isr_stat) => caps.add_cfg_isr(
+                     IsrStatus::new(isr_stat, pci_cap.id)
+                 ),
+                 None => error!("ISR status config capability with id {}, of device {:x} could not be used!", pci_cap.id, adapter.device_id),
+
+            }
             CfgType::VIRTIO_PCI_CAP_PCI_CFG => caps.add_cfg_pci(PciCfgRaw::map(&pci_cap), pci_cap.get_id()),
             CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG => caps.add_cfg_sh_mem(ShMemCfgRaw::map(&pci_cap), pci_cap.get_id()),
             CfgType::VIRTIO_PCI_CAP_DEVICE_CFG => caps.add_cfg_dev(pci_cap),
