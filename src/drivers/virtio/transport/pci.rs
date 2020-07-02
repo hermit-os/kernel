@@ -137,6 +137,7 @@ pub struct Origin {
     cfg_ptr: Le32, // Register to be read to reach configuration structure of type cfg_type
     dev: u8, // PCI device this configuration comes from
     bus: u8, // Bus of the PCI device
+    dev_id: u16,
     cap_struct: PciCapRaw,
 }
 
@@ -322,7 +323,7 @@ impl UniCapsColl {
 /// the structure. 
 pub struct ComCfg {
     com_cfg: Box<ComCfgRaw>,
-    pub rank: u8,
+    rank: u8,
 }
 
 impl ComCfg {
@@ -435,26 +436,27 @@ pub struct NotifCfg {
     base_addr: VirtMemAddr,
     notify_off_multiplier: Le32,
     rank: u8,
-    // defines the maximum size the notification space, starting from base_addr.
+    // defines the maximum size of the notification space, starting from base_addr.
     length: Le32,
 }
 
 impl NotifCfg {
     fn new(cap: &PciCap) -> Option<Self> {
         if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
-            error!("Notification config of with id {}, does not fit into memeory specified by bar {:x}!", cap.id, cap.bar.index);
+            error!("Notification config of device {:x}, does not fit into memeory specified by bar {:x}!", cap.origin.dev_id, cap.bar.index);
             return None
         }
 
-        // Assumes the cap_len is a multiple of 8
+        // Assumes the cap_len is a multiple of 8 
+        // This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
         let notify_off_multiplier = Le32::from(env::pci::read_cfg_no_adapter(
             cap.origin.bus, 
             cap.origin.bus,
             cap.origin.cfg_ptr + Le32::from(cap.origin.cap_struct.cap_len))
         );
 
-        // define base memory address from which the actuall Queue Notif address can be derived via
-        // offset + queue_notify_off * notify_off_multiplier.
+        // define base memory address from which the actuall Queue Notify address can be derived via
+        // base_addr + queue_notify_off * notify_off_multiplier.
         // 
         // Where queue_notify_off is taken from the respective common configuration struct. 
         // See Virtio specification v1.1. - 4.1.4.4
@@ -471,7 +473,7 @@ impl NotifCfg {
     }
     
     //
-    // THIS IS PLACEHOLDER JUST TO GET THE IDEA RIGHT: THEREFORE IT IS KEPT PRIVATE
+    // THIS IS PLACEHOLDER JUST TO GET THE IDEA RIGHT
     //
     fn write(&self, queue_notif_off: u32) {
         unimplemented!();
@@ -663,8 +665,9 @@ fn read_cap_raw(adapter: &PciAdapter, register: Le32) -> PciCapRaw {
         cfg_type: quadruple_word[3],
         bar_index: quadruple_word[4],
         id: quadruple_word[5],
-        padding: [0;2],
-        // Unwrapping is okay here, as array is always 4 * u8 long and initalized
+        // Unwrapping is okay here, as transformed array slice is always 2 * u8 long and initalized
+        padding: quadruple_word[6..8].try_into().unwrap(),
+        // Unwrapping is okay here, as transformed array slice is always 4 * u8 long and initalized
         offset: Le32::from(u32::from_le_bytes(quadruple_word[8..12].try_into().unwrap())),
         length: Le32::from(u32::from_le_bytes(quadruple_word[12..16].try_into().unwrap())),
     }
@@ -685,7 +688,6 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
        return Err(PciError::BadCapPtr(adapter.device_id))
     };
 
-    let mut iter = bars.into_iter();
     let mut cap_list: Vec<PciCap> = Vec::new();
     // Loop through capabilties list via next pointer
     'cap_list: while next_ptr != Le32::from(0u32) {
@@ -703,6 +705,8 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
             cap_raw = read_cap_raw(adapter, next_ptr);
         }
 
+        let mut iter = bars.iter();
+
         // Virtio specification v1.1. - 4.1.4 defines virtio specific capability
         // with virtio vendor id = 0x09
         match cap_raw.cap_vndr {
@@ -714,7 +718,8 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
                             // See Virtio specification v1.1. - 4.1.4.1
                             if bar.index <= 5 { 
                                 if bar.index == cap_raw.bar_index {
-                                 break bar.clone();
+                                    // Need to clone here as every PciCap carrys it's bar
+                                    break bar.clone();
                                 }  
                             } 
                         },
@@ -740,6 +745,7 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
                         cfg_ptr: next_ptr,
                         dev: adapter.device,
                         bus: adapter.bus,
+                        dev_id: adapter.device_id,
                         cap_struct: cap_raw
                     },
                 })
