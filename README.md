@@ -1,6 +1,6 @@
 <img width="100" align="right" src="img/hermitcore_logo.png" />
 
-# libhermit-rs - A Rust-based library operting system
+# RustyHermit: libhermit-rs
 
 [![Build Status](https://travis-ci.com/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.com/hermitcore/libhermit-rs)
 ![Actions Status](https://github.com/hermitcore/libhermit-rs/workflows/Build/badge.svg)
@@ -8,50 +8,46 @@
 [![License](https://img.shields.io/crates/l/rusty-hermit.svg)](https://img.shields.io/crates/l/rusty-hermit.svg)
 [![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
 
-[RustyHermit](https://github.com/hermitcore/rusty-hermit) is a [unikernel](http://unikernel.org) targeting a scalable and predictable runtime for high-performance and cloud computing.
-Unikernel means, you bundle your application directly with the kernel library, so that it can run without any installed operating system.
-This reduces overhead, therefore, interesting applications include virtual machines and high-performance computing.
+_libhermit-rs_ is the kernel of the [RustyHermit](https://github.com/hermitcore/rusty-hermit) unikernel project.
 
-_libhermit-rs_ is the heart of RustyHermit and is the kernel itself.
-The kernel is able to run [Rust](https://github.com/hermitcore/hermit-playground) applications, as well as [C/C++/Go/Fortran](https://github.com/hermitcore/rusty-hermit) applications.
+## Building the kernel
 
-## Prerequisites
+Usually the kernel will be linked as static library to your applications.
 
-The Rust toolchain can be installed from the [official webpage](https://www.rust-lang.org/).
-RusyHermit currently requires the **nightly versions** of the toolchain.
-Further requirements are the source code of the Rust runtime, and llvm-tools:
+- **Rust applications:** Instructions can be found in the [rusty-hermit](https://github.com/hermitcore/rusty-hermit) repository.
+- **For C/C++ applications:** Instructions can be found in the [hermit-playground](https://github.com/hermitcore/hermit-playground) repository.
+ 
+
+### Standalone static library build
+
+If this does not fit your needs and you want to build the kernel as static library to link afterwards, you need the following:
+
+The Rust **nightly** toolchain ([official webpage](https://www.rust-lang.org/)), the source code of the Rust runtime, and llvm-tools:
 
 ```sh
-rustup component add rust-src
-rustup component add llvm-tools-preview
+rustup toolchain install nightly
+rustup component add rust-src llvm-tools-preview
 ```
 
-## Building the kernel as static library
-
-The kernel will be linked as static library to C/C++ or Rust applications.
-In case of Rust, the crate [hermit-sys](https://github.com/hermitcore/rusty-hermit) automate this process.
-For C/C++ applications a modified [C/C++ compiler](https://github.com/hermitcore/hermit-playground) has to be used.
-To build the kernel as static library and to link afterwards by its own to the applicatiom, please use following build command:
+You can then build `libhermit-rs` with the following command
 
 ```sh
 cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
 ```
 
-The resulting library then can be found in `target/x86_64-unknown-hermit-kernel/debug/`
+The resulting library then can be found in `target/x86_64-unknown-hermit-kernel/debug/libhermit.a`
 
 
-## Controlling the number of kernel messages
+### Control the kernel messages verbosity
 
 _libhermit-rs_ uses the lightweight logging crate [log](https://github.com/rust-lang/log) to print kernel messages.
-If the environment variable `HERMIT_LOG_LEVEL_FILTER` is set at compile time to a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html), then that value is used for the LevelFilter.
-If the environment variable is not set, or the name doesn't match, then LevelFilter::Info is used by default, which is the same as it was before.
-
-For instance, the following command build RustyHermit with debug messages:
+The environment variable `HERMIT_LOG_LEVEL_FILTER` controls the verbosity. 
+You can change it by setting it at compile time to a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html).
+If the variable is not set, or the name doesn't match, then `LevelFilter::Info` is used by default.
 
 ```sh
 $ HERMIT_LOG_LEVEL_FILTER=Debug cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
 ```
-
 
 ## Credits
 
