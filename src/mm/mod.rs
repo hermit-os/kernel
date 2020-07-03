@@ -20,7 +20,6 @@ use crate::arch::mm::physicalmem::total_memory_size;
 use crate::arch::mm::virtualmem::kernel_heap_end;
 use crate::environment;
 use core::mem;
-use core::sync::atomic::spin_loop_hint;
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
@@ -108,11 +107,7 @@ pub fn init() {
 	//info!("reserved space {} KB", reserved_space >> 10);
 
 	if total_memory_size() < kernel_end_address() + reserved_space + LargePageSize::SIZE {
-		error!("No enough memory available!");
-
-		loop {
-			spin_loop_hint();
-		}
+		panic!("No enough memory available!");
 	}
 
 	let mut map_addr: usize;
