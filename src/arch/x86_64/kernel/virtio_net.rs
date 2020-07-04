@@ -13,6 +13,7 @@ use crate::arch::x86_64::kernel::virtio::{
 };
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{paging, virtualmem};
+#[cfg(not(feature = "newlib"))]
 use crate::drivers::net::netwakeup;
 use crate::synch::spinlock::SpinlockIrqSave;
 
@@ -367,6 +368,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
 			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
 			netwakeup();
 
 			return true;
