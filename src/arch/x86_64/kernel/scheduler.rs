@@ -343,11 +343,10 @@ impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		// Check if the task (process or thread) uses Thread-Local-Storage.
 		let tls_size = environment::get_tls_memsz();
-		self.tls = if tls_size > 0 {
-			Some(TaskTLS::new(tls_size))
-		} else {
-			None
-		};
+		// check is TLS is already allocated
+		if self.tls.is_none() && tls_size > 0 {
+			self.tls = Some(TaskTLS::new(tls_size))
+		}
 
 		unsafe {
 			// Set a marker for debugging at the very top.
