@@ -60,7 +60,7 @@ pub struct PerCoreScheduler {
 	/// Queue of tasks, which are ready
 	ready_queue: PriorityTaskQueue,
 	/// Queue of tasks, which are finished and can be released
-	finished_tasks: VecDeque<TaskId>,
+	finished_tasks: VecDeque<Rc<RefCell<Task>>>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
 	/// Queues to handle incoming requests from the other cores
@@ -335,11 +335,12 @@ impl PerCoreScheduler {
 		let mut result = false;
 
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
-		while let Some(id) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", id);
+		while let Some(finished_task) = self.finished_tasks.pop_front() {
+			let borrowed = finished_task.borrow();
+			debug!("Cleaning up task {}", borrowed.id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			match TASKS.lock().remove(&id) {
+			match TASKS.lock().remove(&borrowed.id) {
 				Some(mut queue) => {
 					while let Some(task) = queue.pop_front() {
 						result = true;
@@ -422,7 +423,7 @@ impl PerCoreScheduler {
 			if status == TaskStatus::TaskFinished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
 				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
-				self.finished_tasks.push_back(id);
+				self.finished_tasks.push_back(self.current_task.clone());
 			}
 
 			// No task is currently running.
