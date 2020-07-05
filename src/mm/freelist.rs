@@ -8,6 +8,7 @@
 use crate::collections::{DoublyLinkedList, Node};
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use core::cmp::Ordering;
 
 pub struct FreeListEntry {
 	pub start: usize,
@@ -48,16 +49,20 @@ impl FreeList {
 				)
 			};
 
-			if region_size > size {
-				// We have found a region that is larger than the requested size.
-				// Return the address to the beginning of that region and shrink the region by that size.
-				node.borrow_mut().value.start += size;
-				return Ok(region_start);
-			} else if region_size == size {
-				// We have found a region that has exactly the requested size.
-				// Return the address to the beginning of that region and move the node into the pool for deletion or reuse.
-				self.list.remove(node);
-				return Ok(region_start);
+			match region_size.cmp(&size) {
+				Ordering::Greater => {
+					// We have found a region that is larger than the requested size.
+					// Return the address to the beginning of that region and shrink the region by that size.
+					node.borrow_mut().value.start += size;
+					return Ok(region_start);
+				}
+				Ordering::Equal => {
+					// We have found a region that has exactly the requested size.
+					// Return the address to the beginning of that region and move the node into the pool for deletion or reuse.
+					self.list.remove(node);
+					return Ok(region_start);
+				}
+				Ordering::Less => {}
 			}
 		}
 
