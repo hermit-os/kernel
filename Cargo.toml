@@ -11,6 +11,7 @@ readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
 repository = "https://github.com/hermitcore/rusty-hermit"
+documentation = "https://hermitcore.github.io/libhermit-rs/hermit/"
 edition = "2018"
 description = """
 A Rust-based library operting system
