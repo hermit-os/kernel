@@ -17,7 +17,7 @@ pub struct Console;
 impl fmt::Write for Console {
 	/// Print a string of characters.
 	fn write_str(&mut self, s: &str) -> fmt::Result {
-		if s.len() > 0 {
+		if !s.is_empty() {
 			let buf = s.as_bytes();
 			arch::output_message_buf(buf);
 		}

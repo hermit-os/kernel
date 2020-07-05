@@ -16,6 +16,7 @@
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::identity_op)]
 #![allow(clippy::needless_range_loop)]
+#![allow(clippy::tabs_in_doc_comments)]
 #![allow(clippy::toplevel_ref_arg)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::println_empty_string)]

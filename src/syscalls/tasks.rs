@@ -1,4 +1,3 @@
-use core::convert::TryInto;
 use core::isize;
 #[cfg(feature = "newlib")]
 use core::sync::atomic::AtomicUsize;
@@ -239,14 +238,8 @@ fn __sys_spawn2(
 		selector as u32
 	};
 
-	scheduler::PerCoreScheduler::spawn(
-		func,
-		arg,
-		Priority::from(prio),
-		core_id.try_into().unwrap(),
-		stack_size,
-	)
-	.into() as Tid
+	scheduler::PerCoreScheduler::spawn(func, arg, Priority::from(prio), core_id, stack_size).into()
+		as Tid
 }
 
 #[no_mangle]

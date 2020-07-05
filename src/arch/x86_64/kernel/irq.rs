@@ -92,14 +92,12 @@ pub fn disable() {
 #[cfg(not(test))]
 #[inline]
 pub fn nested_disable() -> bool {
-	let result = unsafe {
+	unsafe {
 		let flags: u64;
 
 		llvm_asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
 		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
-	};
-
-	result
+	}
 }
 
 #[cfg(test)]
@@ -503,6 +501,6 @@ impl IrqStatistics {
 	}
 
 	pub fn inc(&mut self, pos: usize) {
-		self.counters[pos] = self.counters[pos] + 1;
+		self.counters[pos] += 1;
 	}
 }
