@@ -25,12 +25,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --workspace -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
+          args: -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
       - name: Deploy documentation
         if: success()
         uses: crazy-max/ghaction-github-pages@v1
         with:
           target_branch: gh-pages
-          build_dir: target/x86_64-unknown-hermit/doc
+          build_dir: target/x86_64-unknown-hermit-kernel/doc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
