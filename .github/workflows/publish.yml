@@ -25,7 +25,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --workspace -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+          args: --workspace -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
       - name: Deploy documentation
         if: success()
         uses: crazy-max/ghaction-github-pages@v1
