@@ -11,6 +11,7 @@ use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::ops::Deref;
 
 /*
 Design:
@@ -96,7 +97,7 @@ impl Filesystem {
 	fn parse_path<'a, 'b>(
 		&'a self,
 		path: &'b str,
-	) -> Result<(&'a Box<dyn PosixFileSystem>, &'b str), FileError> {
+	) -> Result<(&'a dyn PosixFileSystem, &'b str), FileError> {
 		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
 		if !path.starts_with('/') {
 			warn!("Relative paths not allowed!");
@@ -108,7 +109,7 @@ impl Filesystem {
 		let internal_path = pathsplit.next().unwrap(); //TODO: this can fail from userspace, eg when passing "/test"
 
 		if let Some(fs) = self.mounts.get(mount) {
-			Ok((fs, internal_path))
+			Ok((fs.deref(), internal_path))
 		} else {
 			info!(
 				"Trying to open file on non-existing mount point '{}'!",

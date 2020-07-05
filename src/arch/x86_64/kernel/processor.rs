@@ -298,8 +298,8 @@ impl CpuFrequency {
 			.expect("CPUID Brand String not available!");
 
 		let ghz_find = brand_string.find("GHz");
-		if ghz_find.is_some() {
-			let index = ghz_find.unwrap() - 4;
+		if let Some(ghz_find) = ghz_find {
+			let index = ghz_find - 4;
 			let thousand_char = brand_string.chars().nth(index).unwrap();
 			let decimal_char = brand_string.chars().nth(index + 1).unwrap();
 			let hundred_char = brand_string.chars().nth(index + 2).unwrap();
