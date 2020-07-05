@@ -165,16 +165,6 @@ pub struct PciCap {
     origin: Origin,
 }
 
-impl PciCap {
-    fn get_type(&self) -> &CfgType{
-        &self.cfg_type
-    }
-
-    fn get_id(&self) -> u8 {
-        self.id
-    }
-}
-
 /// Virtio's PCI capabilites structure. 
 /// See Virtio specification v.1.1 - 4.1.4
 ///
@@ -217,17 +207,6 @@ impl PartialEq for PciCapRaw {
     }
 }
 
-/// Virtio's PCI capabilites structure for 64 bit capabilites.
-/// See Virtio specification v.1.1 - 4.1.4
-///
-/// Only used for capabilites that require offsets or lengths 
-/// larger than 4GB.
-#[repr(C)]
-struct PciCap64 {
-    pci_cap: PciCap,
-    offset_high: u32,
-    length_high: u32,
-} 
 
 /// Universal Caplist Collections holds all universal capability structures for 
 /// a given Virtio PCI device.
@@ -297,8 +276,8 @@ impl UniCapsColl {
         self.pci_cfg_acc_list.sort_by(|a, b| a.rank.cmp(&b.rank));
     }
 
-    fn add_cfg_sh_mem(&mut self, sh_mem_raw: ShMemCfgRaw, id: u8) {
-        self.sh_mem_cfg_list.push(ShMemCfg::new(sh_mem_raw, id));
+    fn add_cfg_sh_mem(&mut self, sh_mem: ShMemCfg, id: u8) {
+        self.sh_mem_cfg_list.push(sh_mem);
         // Resort array
         // 
         // This should not be to expensive, as "rational" devices will hold an
@@ -322,12 +301,15 @@ impl UniCapsColl {
 /// Provides a safe API for Raw structure and allows interaction with the device via 
 /// the structure. 
 pub struct ComCfg {
-    com_cfg: Box<ComCfgRaw>,
+    /// References the raw structure in PCI memory space. Is static as
+    /// long as the device is present, which is mandatory in order to let this code work.
+    com_cfg: &'static mut ComCfgRaw,
+    /// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
     rank: u8,
 }
 
 impl ComCfg {
-    fn new(raw: Box<ComCfgRaw>, rank: u8) -> Self {
+    fn new(raw: &'static mut ComCfgRaw, rank: u8) -> Self {
         ComCfg{
             com_cfg: raw,
             rank,
@@ -383,7 +365,7 @@ struct ComCfgRaw {
 impl ComCfgRaw {
     /// Returns a boxed [ComCfgRaw](ComCfgRaw) structure. The box points to the actual structure inside the 
     /// PCI devices memory space.
-    fn map(cap: &PciCap) -> Option<Box<Self>> {
+    fn map(cap: &PciCap) -> Option<&'static mut ComCfgRaw> {
         if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
             error!("Common config of with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
                 cap.id,
@@ -402,9 +384,9 @@ impl ComCfgRaw {
 
         let virt_addr_raw = cap.bar.mem_addr + cap.offset;
 
-        let com_cfg_raw: Box<ComCfgRaw>= unsafe {
-            let raw = usize::from(virt_addr_raw) as *mut ComCfgRaw;
-            Box::from_raw(raw)
+        // Create mutable reference to the PCI structure in PCI memory
+        let com_cfg_raw: &mut ComCfgRaw = unsafe {
+            &mut *(usize::from(virt_addr_raw) as *mut ComCfgRaw)
         };
 
         Some(com_cfg_raw)
@@ -439,8 +421,9 @@ impl ComCfgRaw {
 pub struct NotifCfg {
     base_addr: VirtMemAddr,
     notify_off_multiplier: Le32,
+    /// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
     rank: u8,
-    // defines the maximum size of the notification space, starting from base_addr.
+    /// defines the maximum size of the notification space, starting from base_addr.
     length: Le32,
 }
 
@@ -499,12 +482,15 @@ impl NotifCfg {
 /// Provides a safe API for Raw structure and allows interaction with the device via 
 /// the structure. 
 pub struct IsrStatus {
-    isr_stat: Box<IsrStatusRaw>,
+    /// References the raw structure in PCI memory space. Is static as
+    /// long as the device is present, which is mandatory in order to let this code work.
+    isr_stat: &'static mut IsrStatusRaw,
+    /// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
     rank: u8
 }
 
 impl IsrStatus {
-    fn new(raw: Box<IsrStatusRaw>, rank: u8) -> Self {
+    fn new(raw: &'static mut IsrStatusRaw, rank: u8) -> Self {
         IsrStatus {
             isr_stat: raw,
             rank,
@@ -534,7 +520,10 @@ struct IsrStatusRaw {
 }
 
 impl IsrStatusRaw {
-    fn map(cap: &PciCap) -> Option<Box<Self>> {
+    /// Returns a mutable reference to the ISR status capability structure indicated by the
+    /// [PciCap](PciCap) struct. Reference has a static lifetime as the structure is controlled by the
+    /// device and will not be moved.
+    fn map(cap: &PciCap) -> Option<&'static mut IsrStatusRaw> {
         if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
             error!("ISR status config with id {} of device {:x}, does not fit into memeory specified by bar {:x}!",
                 cap.id,
@@ -546,9 +535,9 @@ impl IsrStatusRaw {
 
         let mut virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
 
-        let isr_stat_raw: Box<IsrStatusRaw> = unsafe {
-            let raw = usize::from(virt_addr_raw) as *mut IsrStatusRaw;
-            Box::from_raw(raw)
+        // Create mutable reference to the PCI structure in the devices memory area
+        let isr_stat_raw: &mut IsrStatusRaw = unsafe {
+            &mut *(usize::from(virt_addr_raw) as *mut IsrStatusRaw)
         };
 
         Some(isr_stat_raw) 
@@ -575,7 +564,8 @@ impl IsrStatusRaw {
 /// the structure. 
 pub struct PciCfg {
     pci_cfg: PciCfgRaw,
-    pub rank: u8,
+    /// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
+    rank: u8,
 }
 
 impl PciCfg {
@@ -611,45 +601,103 @@ impl PciCfgRaw {
     }
 }
 
-/// Wraps a [ShMemCfgRaw](structs.shmemcfgraw.html) in order to preserve
-/// the original structure and allow interaction with the device via 
-/// the structure.
-///
-/// Provides a safe API for Raw structure and allows interaction with the device via 
-/// the structure. 
-pub struct ShMemCfg {
-    sh_mem_raw: ShMemCfgRaw,
-    // Shared memory regions are identified via an ID
-    // See Virtio specification v1.1. - 4.1.4.7
-    pub id: u8,
-}
-
-impl ShMemCfg {
-    fn new(raw: ShMemCfgRaw, id: u8) -> Self {
-        ShMemCfg {
-            sh_mem_raw: raw,
-            id,
-        }
-    }
-}
 /// Shared memory configuration structure of Virtio PCI devices.
 /// See Virtio specification v1.1. - 4.1.4.7
 ///
 /// Each shared memory region is defined via a single shared
 /// memory structure. Each region is identified by an id indicated
-/// via the capability.id field of
-#[repr(C)]
-struct ShMemCfgRaw {
-    // TODO:
-    // The region defined by the combination of the cap.offset, cap.offset_hi, and cap.length, cap.length_hi fields MUST be contained within the declared bar.
-    // The cap.id MUST be unique for any one device instance.
+/// via the capability.id field of PciCapRaw. 
+///
+/// The shared memory region is defined via a PciCap64 structure.
+/// See Virtio specification v.1.1 - 4.1.4 for structure.
+///
+// Only used for capabilites that require offsets or lengths 
+// larger than 4GB.
+// #[repr(C)]
+// struct PciCap64 {
+//    pci_cap: PciCap,
+//    offset_high: u32,
+//    length_high: u32
+pub struct ShMemCfg {
+    mem_addr: VirtMemAddr,
+    length: u32,
+    sh_mem: ShMem,
+    /// Shared memory regions are identified via an ID
+    /// See Virtio specification v1.1. - 4.1.4.7
+    id: u8,
+    
 }
 
-impl ShMemCfgRaw {
-    fn map(cap: &PciCap) -> Self {
-        unimplemented!();
+impl ShMemCfg {
+    fn map(cap: &PciCap, id: u8) -> Option<Self> {
+        if cap.bar.length <  u64::from(u32::from(cap.offset) + cap.length.as_ne()) {
+            error!("Shared memory config of with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+                cap.id,
+                cap.origin.dev_id,
+                 cap.bar.index
+            );
+            return None
+        }
+
+        // Read the PciCap64 to get the right offset and length
+        
+
+        let virt_addr_raw = cap.bar.mem_addr + cap.offset;
+        let raw_ptr = usize::from(virt_addr_raw) as *mut u8;
+        
+        // Zero initalize shared memory area
+        unsafe {
+            for i in 0..cap.length.as_ne() {
+                *(raw_ptr.add(i as usize)) = 0;
+            }
+        };
+
+        Some(ShMemCfg {
+            mem_addr: virt_addr_raw,
+            length: cap.length.as_ne(),
+            sh_mem: ShMem {
+                ptr: raw_ptr,
+                len: cap.bar.length as usize,
+            },
+            id: cap.id,
+        }) 
     }
-} 
+}
+
+/// Defines a shared memory locate at location ptr with a length of len.
+/// The shared memories Drop implementation does not dealloc the memory
+/// behind the pointer but sets it to zero, to prevent leakage of data.
+pub struct ShMem {
+    ptr: *mut u8,
+    len: usize,
+}
+
+impl core::ops::Deref for ShMem {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        unsafe{
+            core::slice::from_raw_parts(self.ptr, self.len)
+        }
+    }
+}
+
+impl core::ops::DerefMut for ShMem {
+    fn deref_mut(&mut self) -> &mut [u8] {
+        unsafe{
+            core::slice::from_raw_parts_mut(self.ptr, self.len)
+        }
+    }
+}
+
+// Upon drop the shared memory region is "deleted" with zeros.
+impl Drop for ShMem {
+    fn drop(&mut self) {
+        for i in 0..self.len {
+            unsafe{*(self.ptr.add(i)) = 0;}
+        }
+    }
+}
 
 /// PciBar stores the virtual memory address and associated length of memory space
 /// a PCI device's physical memory indicated by the device's BAR has been mapped to.
@@ -851,7 +899,7 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
     let mut caps = UniCapsColl::new();
     // Map Caps in virtual memory
     for pci_cap in cap_list {
-        match pci_cap.get_type() {
+        match pci_cap.cfg_type {
             CfgType::VIRTIO_PCI_CAP_COMMON_CFG =>  match ComCfgRaw::map(&pci_cap) {
                 Some(cap) => caps.add_cfg_common(
                 ComCfg::new(cap, pci_cap.id)
@@ -869,9 +917,9 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
                  None => error!("ISR status config capability with id {}, of device {:x} could not be used!", pci_cap.id, adapter.device_id),
 
             }
-            CfgType::VIRTIO_PCI_CAP_PCI_CFG => caps.add_cfg_pci(PciCfgRaw::map(&pci_cap), pci_cap.get_id()),
-            CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG => caps.add_cfg_sh_mem(ShMemCfgRaw::map(&pci_cap), pci_cap.get_id()),
-            CfgType::VIRTIO_PCI_CAP_DEVICE_CFG => caps.add_cfg_dev(pci_cap),
+            //CfgType::VIRTIO_PCI_CAP_PCI_CFG => match caps.add_cfg_pci(PciCfgRaw::map(&pci_cap), pci_cap.get_id()),
+            //CfgType::VIRTIO_PCI_CAP_SHARED_MEMORY_CFG => caps.add_cfg_sh_mem(ShMemCfgRaw::map(&pci_cap), pci_cap.get_id()),
+            //CfgType::VIRTIO_PCI_CAP_DEVICE_CFG => caps.add_cfg_dev(pci_cap),
             // PCI's configuration space is allowed to hold other structures, which are not virtio specific and are therefore ignored
             // in the following
             _ => continue,
