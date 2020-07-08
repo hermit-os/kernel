@@ -5,22 +5,43 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::irq;
 use crate::arch::kernel::percore::*;
 use crate::scheduler::task::TaskHandle;
 use crate::synch::semaphore::*;
 use crate::synch::spinlock::SpinlockIrqSave;
 use alloc::collections::BTreeMap;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 static NET_SEM: Semaphore = Semaphore::new(0);
 static NIC_QUEUE: SpinlockIrqSave<BTreeMap<usize, TaskHandle>> =
 	SpinlockIrqSave::new(BTreeMap::new());
+static POLLING: AtomicBool = AtomicBool::new(false);
+
+/// set driver in polling mode and threads will not be blocked
+fn set_polling_mode(value: bool) {
+	// is the driver already in polling mode?
+	if POLLING.swap(value, Ordering::SeqCst) != value {
+		let irq = irq::nested_disable();
+
+		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+			driver.borrow_mut().set_polling_mode(value);
+		}
+
+		irq::nested_enable(irq);
+
+		// wakeup network thread to sleep for longer time
+		NET_SEM.release();
+	}
+}
 
 pub fn netwakeup() {
 	NET_SEM.release();
 }
 
 pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
-	{
+	// do we have to wakeup a thread?
+	if handles.len() > 0 {
 		let mut guard = NIC_QUEUE.lock();
 
 		for i in handles {
@@ -30,32 +51,64 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 		}
 	}
 
-	NET_SEM.acquire(millis);
+	let mut reset_nic = false;
+
+	// every 20ms we check if the driver should be in the polling mode
+	while POLLING.swap(false, Ordering::SeqCst) == true {
+		reset_nic = true;
+
+		let core_scheduler = core_scheduler();
+		let wakeup_time = Some(crate::arch::processor::get_timer_ticks() + 20_000);
+
+		core_scheduler.block_current_task(wakeup_time);
+
+		// Switch to the next task.
+		core_scheduler.reschedule();
+	}
+
+	if reset_nic {
+		let irq = irq::nested_disable();
+
+		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+			driver.borrow_mut().set_polling_mode(false);
+		}
+
+		irq::nested_enable(irq);
+	} else {
+		NET_SEM.acquire(millis);
+	}
 }
 
 pub fn netwait(handle: usize, millis: Option<u64>) {
-	let wakeup_time = match millis {
-		Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
-		_ => None,
-	};
-	let mut guard = NIC_QUEUE.lock();
-	let core_scheduler = core_scheduler();
+	// smoltcp want to poll the nic
+	let is_polling = if let Some(t) = millis { t == 0 } else { false };
 
-	// Block the current task and add it to the wakeup queue.
-	core_scheduler.block_current_task(wakeup_time);
-	guard.insert(handle, core_scheduler.get_current_task_handle());
-
-	// release lock
-	drop(guard);
-
-	// Switch to the next task.
-	core_scheduler.reschedule();
-
-	// if the timer is expired, we have still the task in the btreemap
-	// => remove it from the btreemap
-	if millis.is_some() {
+	if is_polling {
+		set_polling_mode(true);
+	} else {
+		let wakeup_time = match millis {
+			Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
+			_ => None,
+		};
 		let mut guard = NIC_QUEUE.lock();
+		let core_scheduler = core_scheduler();
 
-		guard.remove(&handle);
+		// Block the current task and add it to the wakeup queue.
+		core_scheduler.block_current_task(wakeup_time);
+		guard.insert(handle, core_scheduler.get_current_task_handle());
+
+		// release lock
+		drop(guard);
+
+		// Switch to the next task.
+		core_scheduler.reschedule();
+
+		// if the timer is expired, we have still the task in the btreemap
+		// => remove it from the btreemap
+		if millis.is_some() {
+			let mut guard = NIC_QUEUE.lock();
+
+			guard.remove(&handle);
+		}
 	}
 }
