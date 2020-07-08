@@ -396,6 +396,15 @@ impl<'a> Virtq<'a> {
 		}
 	}
 
+	pub fn set_polling_mode(&mut self, value: bool) {
+		let mut vqavail = self.avail.borrow_mut();
+		if value == true {
+			*vqavail.flags = VRING_AVAIL_F_NO_INTERRUPT;
+		} else {
+			*vqavail.flags = 0;
+		}
+	}
+
 	pub fn has_packet(&self) -> bool {
 		let vqused = self.used.borrow();
 
