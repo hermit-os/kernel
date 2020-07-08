@@ -377,6 +377,10 @@ impl<'a> VirtioNetDriver<'a> {
 		false
 	}
 
+	pub fn set_polling_mode(&mut self, value: bool) {
+		(self.vqueues.as_deref_mut().unwrap())[0].set_polling_mode(value);
+	}
+
 	pub fn get_mac_address(&self) -> [u8; 6] {
 		self.device_cfg.mac
 	}
