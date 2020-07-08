@@ -13,6 +13,16 @@ mod doublylinkedlist;
 pub use self::cachepadded::*;
 pub use self::doublylinkedlist::*;
 
+/// `irqsave` guarantees that the call of the closure 
+/// will be not disturbed by an interrupt
+#[inline]
+pub fn irqsave<F: FnMut()>(mut f: F) where F: FnOnce() {
+	let irq = irq::nested_disable();
+	f();
+	irq::nested_enable(irq);
+}
+
+/// Help structure to disable interrupts as long as this data structure exists
 pub struct AvoidInterrupts(bool);
 
 impl AvoidInterrupts {

@@ -16,7 +16,7 @@ use crate::arch;
 use crate::arch::irq;
 use crate::arch::percore::*;
 use crate::arch::{switch_to_fpu_owner, switch_to_task};
-use crate::collections::AvoidInterrupts;
+use crate::collections::{irqsave, AvoidInterrupts};
 use crate::config::*;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
@@ -116,9 +116,7 @@ impl PerCoreScheduler {
 
 	/// Terminate the current task on the current core.
 	pub fn exit(&mut self, exit_code: i32) -> ! {
-		{
-			let _ = AvoidInterrupts::new();
-
+		let closure = || {
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
 			assert_ne!(
@@ -134,7 +132,9 @@ impl PerCoreScheduler {
 			);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
-		}
+		};
+
+		irqsave(closure);
 
 		self.scheduler();
 
@@ -207,14 +207,14 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
-		let _ = AvoidInterrupts::new();
-		self.blocked_tasks.handle_waiting_tasks();
+		let closure = || {  self.blocked_tasks.handle_waiting_tasks() };
+		irqsave(closure);
 	}
 
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
-			let _ = AvoidInterrupts::new();
-			self.blocked_tasks.custom_wakeup(task);
+			let closure = || { self.blocked_tasks.custom_wakeup(task) };
+			irqsave(closure);
 		} else {
 			get_scheduler(task.get_core_id())
 				.input
@@ -228,9 +228,8 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
-		let _ = AvoidInterrupts::new();
-		self.blocked_tasks
-			.add(self.current_task.clone(), wakeup_time);
+		let closure = || { self.blocked_tasks.add(self.current_task.clone(), wakeup_time)};
+		irqsave(closure);
 	}
 
 	#[inline]
@@ -248,15 +247,16 @@ impl PerCoreScheduler {
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn set_lwip_errno(&self, errno: i32) {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow_mut().lwip_errno = errno;
+		let closure = || { self.current_task.borrow_mut().lwip_errno = errno };
+
+		irqsave(closure);
 	}
 
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn get_lwip_errno(&self) -> i32 {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow().lwip_errno
+		let closure = || { self.current_task.borrow().lwip_errno };
+		irqsave(closure);
 	}
 
 	#[inline]
@@ -279,8 +279,8 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow_mut().last_wakeup_reason = reason;
+		let closure = || { self.current_task.borrow_mut().last_wakeup_reason = reason };
+		irqsave(closure);
 	}
 
 	#[inline]
