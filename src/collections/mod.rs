@@ -16,28 +16,12 @@ pub use self::doublylinkedlist::*;
 /// `irqsave` guarantees that the call of the closure
 /// will be not disturbed by an interrupt
 #[inline]
-pub fn irqsave<F: FnMut()>(mut f: F)
+pub fn irqsave<F, R>(mut f: F) -> R
 where
-	F: FnOnce(),
+	F: FnOnce() -> R
 {
 	let irq = irq::nested_disable();
-	f();
+	let ret = f();
 	irq::nested_enable(irq);
-}
-
-/// Help structure to disable interrupts as long as this data structure exists
-pub struct AvoidInterrupts(bool);
-
-impl AvoidInterrupts {
-	#[inline]
-	pub fn new() -> Self {
-		Self(irq::nested_disable())
-	}
-}
-
-impl Drop for AvoidInterrupts {
-	#[inline]
-	fn drop(&mut self) {
-		irq::nested_enable(self.0);
-	}
+	ret
 }
