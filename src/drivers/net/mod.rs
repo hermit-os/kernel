@@ -18,6 +18,9 @@ static NIC_QUEUE: SpinlockIrqSave<BTreeMap<usize, TaskHandle>> =
 	SpinlockIrqSave::new(BTreeMap::new());
 static POLLING: AtomicBool = AtomicBool::new(false);
 
+/// period (in usec) to check, if the driver should still use the polling mode
+const POLL_PERIOD: u64 = 20_000;
+
 /// set driver in polling mode and threads will not be blocked
 fn set_polling_mode(value: bool) {
 	// is the driver already in polling mode?
@@ -53,12 +56,12 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 
 	let mut reset_nic = false;
 
-	// every 20ms we check if the driver should be in the polling mode
+	// check if the driver should be in the polling mode
 	while POLLING.swap(false, Ordering::SeqCst) == true {
 		reset_nic = true;
 
 		let core_scheduler = core_scheduler();
-		let wakeup_time = Some(crate::arch::processor::get_timer_ticks() + 20_000);
+		let wakeup_time = Some(crate::arch::processor::get_timer_ticks() + POLL_PERIOD);
 
 		core_scheduler.block_current_task(wakeup_time);
 
