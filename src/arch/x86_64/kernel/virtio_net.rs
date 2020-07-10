@@ -95,6 +95,11 @@ const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
 /// TCP has ECN set
 const VIRTIO_NET_HDR_GSO_ECN: u8 = 0x80;
 
+/// Number of the RX Queue
+const VIRTIO_NET_RX_QUEUE: usize = 0;
+/// Number of the TX Queue
+const VIRTIO_NET_TX_QUEUE: usize = 1;
+
 #[repr(C)]
 struct virtio_net_config {
 	mac: [u8; 6],
@@ -271,7 +276,12 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = RxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[0].add_buffer(i, addr.try_into().unwrap(), buffer_size, VIRTQ_DESC_F_WRITE);
+				vqueues[VIRTIO_NET_RX_QUEUE].add_buffer(
+					i,
+					addr.try_into().unwrap(),
+					buffer_size,
+					VIRTQ_DESC_F_WRITE,
+				);
 				vec_buffer.push(buffer);
 			}
 		}
@@ -282,7 +292,12 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = TxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[1].add_buffer(i, addr.try_into().unwrap(), buffer_size, 0);
+				vqueues[VIRTIO_NET_TX_QUEUE].add_buffer(
+					i,
+					addr.try_into().unwrap(),
+					buffer_size,
+					0,
+				);
 				vec_buffer.push(buffer);
 			}
 		}
@@ -378,7 +393,7 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn set_polling_mode(&mut self, value: bool) {
-		(self.vqueues.as_deref_mut().unwrap())[0].set_polling_mode(value);
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_RX_QUEUE].set_polling_mode(value);
 	}
 
 	pub fn get_mac_address(&self) -> [u8; 6] {
@@ -398,7 +413,7 @@ impl<'a> VirtioNetDriver<'a> {
 			self.check_used_elements();
 		}
 
-		let index = (self.vqueues.as_ref().unwrap())[1].get_available_buffer()?;
+		let index = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_TX_QUEUE].get_available_buffer()?;
 		let index = index as usize;
 
 		let mut buffers = &mut self.tx_buffers;
@@ -420,16 +435,16 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
-		(self.vqueues.as_deref_mut().unwrap())[1]
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_TX_QUEUE]
 			.send_non_blocking(index, len + mem::size_of::<virtio_net_hdr>())
 	}
 
 	pub fn has_packet(&self) -> bool {
-		(self.vqueues.as_ref().unwrap())[0].has_packet()
+		(self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].has_packet()
 	}
 
 	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
-		let (idx, len) = (self.vqueues.as_ref().unwrap())[0].get_used_buffer()?;
+		let (idx, len) = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].get_used_buffer()?;
 		let addr = self.rx_buffers[idx as usize].addr;
 		let virtio_net_hdr = unsafe { &*(addr as *const virtio_net_hdr) };
 		let rx_buffer_slice = unsafe {
@@ -443,7 +458,7 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn rx_buffer_consumed(&mut self) {
-		(self.vqueues.as_deref_mut().unwrap())[0].buffer_consumed();
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_RX_QUEUE].buffer_consumed();
 	}
 }
 
