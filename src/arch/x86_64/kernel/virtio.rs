@@ -54,9 +54,11 @@ pub mod consts {
 	pub const VIRTQ_DESC_F_WRITE: u16 = 2; // Buffer is device write-only (instead of read-only)
 	pub const VIRTQ_DESC_F_INDIRECT: u16 = 4; // Buffer contains list of virtq_desc
 
-	// The Guest uses this in flag to advise the Host: don't interrupt me
+	// The guest uses this in flag to advise the host: don't interrupt me
 	// when you consume a buffer.
 	pub const VRING_AVAIL_F_NO_INTERRUPT: u16 = 1;
+	/// Default behaviour, where the guest expects interrupts from the host
+	pub const VRING_AVAIL_F_DEFAULT: u16 = 0;
 }
 
 pub struct Virtq<'a> {
@@ -401,7 +403,7 @@ impl<'a> Virtq<'a> {
 		if value {
 			*vqavail.flags = VRING_AVAIL_F_NO_INTERRUPT;
 		} else {
-			*vqavail.flags = 0;
+			*vqavail.flags = VRING_AVAIL_F_DEFAULT;
 		}
 	}
 
