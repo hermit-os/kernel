@@ -296,7 +296,7 @@ impl<'a> VirtioNetDriver<'a> {
 					i,
 					addr.try_into().unwrap(),
 					buffer_size,
-					0,
+					VIRTQ_DESC_F_DEFAULT,
 				);
 				vec_buffer.push(buffer);
 			}
