@@ -14,10 +14,10 @@ use core::fmt::Write;
 use core::{isize, ptr, slice, str};
 
 use crate::arch;
+use crate::collections::irqsave;
 use crate::console;
 use crate::environment;
 use crate::errno::*;
-use crate::synch::spinlock::SpinlockIrqSave;
 use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
 use crate::util;
 
@@ -26,8 +26,6 @@ pub use self::uhyve::*;
 
 mod generic;
 mod uhyve;
-
-static DRIVER_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
 const SEEK_SET: i32 = 0;
 const SEEK_CUR: i32 = 1;
@@ -119,69 +117,55 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn get_mac_address(&self) -> Result<[u8; 6], ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => Ok(driver.borrow().get_mac_address()),
 			_ => Err(()),
-		}
+		})
 	}
 
 	fn get_mtu(&self) -> Result<u16, ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => Ok(driver.borrow().get_mtu()),
 			_ => Err(()),
-		}
+		})
 	}
 
 	fn has_packet(&self) -> bool {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => driver.borrow().has_packet(),
 			_ => false,
-		}
+		})
 	}
 
 	fn get_tx_buffer(&self, len: usize) -> Result<(*mut u8, usize), ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => driver.borrow_mut().get_tx_buffer(len),
 			_ => Err(()),
-		}
+		})
 	}
 
 	fn send_tx_buffer(&self, handle: usize, len: usize) -> Result<(), ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => driver.borrow_mut().send_tx_buffer(handle, len),
 			_ => Err(()),
-		}
+		})
 	}
 
 	fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => driver.borrow().receive_rx_buffer(),
 			_ => Err(()),
-		}
+		})
 	}
 
 	fn rx_buffer_consumed(&self) -> Result<(), ()> {
-		let _lock = DRIVER_LOCK.lock();
-
-		match arch::kernel::pci::get_network_driver() {
+		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => {
 				driver.borrow_mut().rx_buffer_consumed();
 				Ok(())
 			}
 			_ => Err(()),
-		}
+		})
 	}
 
 	#[cfg(not(target_arch = "x86_64"))]
