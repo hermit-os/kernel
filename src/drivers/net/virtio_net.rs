@@ -16,7 +16,6 @@ use alloc::vec::Vec;
 use drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfg};
 use drivers::virtio::transport::pci;
 use drivers::virtio::driver::VirtioDriver;
-use drivers::virtio::types::{Le16};
 use drivers::virtio::error::VirtioError;
 use drivers::virtio::virtqueue::Virtq;
 use drivers::virtio::virtqueue::packed::PackedVq;
@@ -57,9 +56,9 @@ pub enum NetFeatures {
 #[repr(C)]
 pub struct NetDevCfg {
 	mac: [u8; 6],
-	status: Le16,
-	max_virtqueue_pairs: Le16,
-	mtu: Le16,
+	status: u16,
+	max_virtqueue_pairs: u16,
+	mtu: u16,
 }
 
 impl NetDevCfg {
@@ -68,9 +67,9 @@ impl NetDevCfg {
     pub fn new() -> Self {
         NetDevCfg {
             mac: [0; 6],
-            status: Le16::from(0),
-            max_virtqueue_pairs: Le16::from(0),
-            mtu: Le16::from(0),
+            status: 0,
+            max_virtqueue_pairs: 0,
+            mtu: 0,
         }
     }
 }

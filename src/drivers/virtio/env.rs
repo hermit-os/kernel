@@ -18,26 +18,106 @@ pub mod memory {
     /// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
     /// to [VirtMemAddr](VirtMemAddr). 
     #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
-    pub struct Offset(usize);
+    pub struct MemOff(usize);
 
     // INFO: In case Offset is change to supporrt other than 64 bit systems one also needs to adjust 
     // the respective From<Offset> for u32 implementation.
-    impl From<u32> for Offset {
+    impl From<u32> for MemOff{
         fn from(val: u32 ) -> Self {
             match mem::size_of::<usize>() {
-                4 => Offset(val as usize),
+                4 => MemOff(val as usize),
                 _ => panic!("Currently only support for 32 offsets is given!"),
             }
         }
     }
 
-    impl From<Offset> for u32 {
-        fn from(val: Offset) -> u32 {
+    impl From<MemOff> for u32 {
+        fn from(val: MemOff) -> u32 {
             // Check if Offset is not larger than 32 bit
-            match mem::size_of::<Offset>() {
+            match mem::size_of::<MemOff>() {
                 4 => val.0 as u32,
                 _ => panic!("Missing support for conversions from others than 32 bit usize."),
             }
+        }
+    }
+
+    /// A newtype representing a memory length wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
+    /// to [VirtMemAddr](VirtMemAddr). 
+    #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+    pub struct MemLen(usize);
+
+    // INFO: In case Offset is change to supporrt other than 64 bit systems one also needs to adjust 
+    // the respective From<Offset> for u32 implementation.
+    impl From<u32> for MemLen {
+        fn from(val: u32 ) -> Self {
+            match mem::size_of::<usize>() {
+                4 => MemLen(val as usize),
+                _ => panic!("Currently only support for 32 offsets is given!"),
+            }
+        }
+    }
+
+    impl From<u64> for MemLen {
+        fn from(val: u64 ) -> Self {
+            match mem::size_of::<usize>() {
+                8 => MemLen(val as usize),
+                _ => panic!("Usize is smaller 64 bit!"),
+            }
+        } 
+    }
+
+    impl From<usize> for MemLen {
+        fn from(val: usize) -> Self {
+            MemLen(val)
+        }
+    }
+
+    impl From<MemLen> for usize {
+        fn from(val: MemLen ) -> usize {
+            val.0
+        } 
+    }
+
+    impl From<MemLen> for u32 {
+        fn from(val: MemLen) -> u32 {
+            // Check if Offset is not larger than 32 bit
+            match mem::size_of::<usize>() {
+                4 => val.0 as u32,
+                _ => panic!("Missing support for conversions from others than 32 bit usize."),
+            }
+        }
+    }
+
+    impl From<MemLen> for u64 {
+        fn from(val: MemLen) -> u64 {
+            // Check if Offset is not larger than 32 bit
+            match mem::size_of::<usize>() {
+                4 => val.0 as u64,
+                8 => val.0 as u64,
+                _ => panic!("Missing support for conversions from others than 32 and 65 bit usize."),
+            }
+        }
+    }
+
+    impl MemLen {
+        pub fn from_rng(start: VirtMemAddr, end: MemOff) -> MemLen {
+            MemLen(start.0 + end.0)
+        }
+    }
+
+    impl Add for MemLen {
+        type Output = MemLen;
+
+        fn add(self, other: Self) -> Self::Output {
+            MemLen(self.0 + other.0)
+        }
+    }
+
+    impl Add<MemOff> for MemLen {
+        type Output = MemLen;
+
+        fn add(self, other: MemOff) -> MemLen {
+            MemLen(self.0 + other.0)
         }
     }
 
@@ -58,7 +138,7 @@ pub mod memory {
     impl From<u64> for VirtMemAddr {
         fn from(addr: u64) -> Self {
             match mem::size_of::<usize>() {
-                4 => panic!("Using a 64 bit address inside a 32 bit system!"),
+                4 => VirtMemAddr(addr as usize),
                 8 => VirtMemAddr(addr as usize),
                 _ => panic!("Currently only support for 32 and 64 bit machines given!"),
             }
@@ -77,10 +157,10 @@ pub mod memory {
         }
     }
 
-    impl Add<Offset> for VirtMemAddr {
+    impl Add<MemOff> for VirtMemAddr {
         type Output = VirtMemAddr;
 
-        fn add(self, other: Offset) -> Self::Output {
+        fn add(self, other: MemOff) -> Self::Output {
             VirtMemAddr(self.0 + other.0)
         } 
     }
@@ -101,7 +181,7 @@ pub mod memory {
     impl From<u64> for PhyMemAddr {
         fn from(addr: u64) -> Self {
             match mem::size_of::<usize>() {
-                4 => panic!("Using a 64 bit address inside a 32 bit system!"),
+                4 => PhyMemAddr(addr as usize), 
                 8 => PhyMemAddr(addr as usize),
                 _ => panic!("Currently only support for 32 and 64 bit machines given!"),
             }
@@ -120,10 +200,10 @@ pub mod memory {
         }
     }
 
-    impl Add<Offset> for PhyMemAddr {
+    impl Add<MemOff> for PhyMemAddr {
         type Output = PhyMemAddr;
 
-        fn add(self, other: Offset) -> Self::Output {
+        fn add(self, other: MemOff) -> Self::Output {
             PhyMemAddr(self.0 + other.0)
         } 
     }
@@ -139,7 +219,6 @@ pub mod memory {
 pub mod pci {
     use drivers::virtio::env::memory::{VirtMemAddr};
     use drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-    use drivers::virtio::types::Le32;
     use arch::x86_64::kernel::pci;
     use arch::x86_64::kernel::pci::{PciAdapter, PciBar};
     use arch::x86_64::kernel::pci::error::PciError;
@@ -148,20 +227,34 @@ pub mod pci {
 
     /// Wrapper function to read the configuration space of a PCI 
     /// device at the given register. Returns the registers value.
-    ///
-    /// WARN: Return value is little endian coded, if interpreted as multi-byte value.
-    pub fn read_config(adapter: &PciAdapter, register: Le32) -> u32 {
-        pci::read_config(adapter.bus, adapter.device, register.as_le())
+    pub fn read_config(adapter: &PciAdapter, register: u32) -> u32 {
+        from_pci_endian(pci::read_config(adapter.bus, adapter.device, register.to_le()))
     }
 
-    pub fn read_cfg_no_adapter(bus: u8, device: u8, register: Le32) -> u32 {
-        pci::read_config(bus, device, register.as_le())
+    /// Wrapper function to read the configuration space of a PCI 
+    /// device at the given register. Returns the registers value.
+    pub fn read_cfg_no_adapter(bus: u8, device: u8, register: u32) -> u32 {
+        from_pci_endian(pci::read_config(bus, device, register.to_le()))
     }
 
-    /// Wrapper function to write the configuraiton space of a PCI
+    /// Wrapper function to write the configuration space of a PCI
     /// device at the given register.
-    pub fn write_config(adapter: &PciAdapter, register: Le32, data: Le32) {
-        pci::write_config(adapter.bus, adapter.device, register.as_le(), data.as_le());
+    pub fn write_config(adapter: &PciAdapter, register: u32, data: u32) {
+        pci::write_config(adapter.bus, adapter.device, register.to_le(), data.to_le());
+    }
+
+    /// Converts a given little endian coded u32 to native endian coded.
+    //
+    // INFO: As the endianness received from the device is little endian coded
+    // the given value must be swapped again on big endian machines. Which is done 
+    // via the u32::to_le() method as the u32::to_be() would be a no-op in big endian 
+    // machines. Resulting in no conversion.
+    fn from_pci_endian(val: u32) -> u32 {
+        if cfg!(target = "big_endian") {
+            val.to_le()
+        } else {
+            val
+        }
     }
 
 
