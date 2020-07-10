@@ -16,13 +16,11 @@ use crate::arch::x86_64::kernel::virtio_net;
 
 use crate::arch::x86_64::mm::paging;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::cell::UnsafeCell;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::sync::atomic::{fence, Ordering};
@@ -830,9 +828,7 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 						PciNetworkControllerSubclass::EthernetController => {
 							// TODO: proper error handling on driver creation fail
 							let drv = virtio_net::create_virtionet_driver(adapter).unwrap();
-							pci::register_driver(PciDriver::VirtioNet(UnsafeCell::new(
-								SpinlockIrqSave::new(drv),
-							)));
+							pci::register_driver(PciDriver::VirtioNet(drv));
 						}
 						_ => {
 							warn!("Virtio device is NOT supported, skipping!");
@@ -876,7 +872,7 @@ extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFra
 	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
 	let check_scheduler = match get_network_driver() {
-		Some(driver) => driver.lock().handle_interrupt(),
+		Some(driver) => driver.borrow_mut().handle_interrupt(),
 		_ => false,
 	};
 

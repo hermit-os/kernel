@@ -12,8 +12,9 @@ use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
 use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
+use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::UnsafeCell;
+use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
 
@@ -124,8 +125,8 @@ pub struct MemoryBar {
 }
 
 pub enum PciDriver<'a> {
-	VirtioFs(UnsafeCell<SpinlockIrqSave<VirtioFsDriver<'a>>>),
-	VirtioNet(UnsafeCell<SpinlockIrqSave<VirtioNetDriver<'a>>>),
+	VirtioFs(Rc<RefCell<VirtioFsDriver<'a>>>),
+	VirtioNet(Rc<RefCell<VirtioNetDriver<'a>>>),
 }
 
 pub fn register_driver(drv: PciDriver<'static>) {
@@ -133,11 +134,12 @@ pub fn register_driver(drv: PciDriver<'static>) {
 	drivers.push(drv);
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
-	for i in PCI_DRIVERS.lock().iter() {
+pub fn get_network_driver() -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
+	let drivers = PCI_DRIVERS.lock();
+	for i in drivers.iter() {
 		match &*i {
 			PciDriver::VirtioNet(nic_driver) => {
-				return Some(unsafe { &*nic_driver.get() });
+				return Some(nic_driver.clone());
 			}
 			_ => {}
 		}

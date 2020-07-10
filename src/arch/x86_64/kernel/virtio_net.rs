@@ -462,7 +462,9 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 }
 
-pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDriver<'static>> {
+pub fn create_virtionet_driver(
+	adapter: &pci::PciAdapter,
+) -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -531,7 +533,7 @@ pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDri
 	// TODO: also load the other cap types (?).
 
 	// Instanciate driver on heap, so it outlives this function
-	let mut drv = VirtioNetDriver {
+	let drv = Rc::new(RefCell::new(VirtioNetDriver {
 		tx_buffers: Vec::new(),
 		rx_buffers: Vec::new(),
 		common_cfg,
@@ -539,10 +541,10 @@ pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDri
 		isr_cfg,
 		notify_cfg,
 		vqueues: None,
-	};
+	}));
 
 	trace!("Driver before init: {:?}", drv);
-	drv.init();
+	drv.borrow_mut().init();
 	trace!("Driver after init: {:?}", drv);
 
 	if device_cfg.status & VIRTIO_NET_S_LINK_UP == VIRTIO_NET_S_LINK_UP {
@@ -550,7 +552,10 @@ pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDri
 	} else {
 		info!("Virtio-Net link is down");
 	}
-	info!("Virtio-Net status: 0x{:x}", drv.common_cfg.device_status);
+	info!(
+		"Virtio-Net status: 0x{:x}",
+		drv.borrow().common_cfg.device_status
+	);
 
 	Some(drv)
 }
