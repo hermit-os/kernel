@@ -26,7 +26,16 @@ pub mod memory {
         fn from(val: u32 ) -> Self {
             match mem::size_of::<usize>() {
                 4 => MemOff(val as usize),
-                _ => panic!("Currently only support for 32 offsets is given!"),
+                _ => panic!("MemOff: Casting to 32 bit usize with non 32 bit value!"),
+            }
+        }
+    }
+
+    impl From<u64> for MemOff{
+        fn from(val: u64 ) -> Self {
+            match mem::size_of::<usize>() {
+                8 => MemOff(val as usize),
+                _ => panic!("MemOff: Casting to 64 bit usize with non 64 bit value!"),
             }
         }
     }
@@ -36,7 +45,7 @@ pub mod memory {
             // Check if Offset is not larger than 32 bit
             match mem::size_of::<MemOff>() {
                 4 => val.0 as u32,
-                _ => panic!("Missing support for conversions from others than 32 bit usize."),
+                _ => panic!("MemOff: Casting to u32 with non 32 bit value!"),
             }
         }
     }
@@ -52,7 +61,7 @@ pub mod memory {
         fn from(val: u32 ) -> Self {
             match mem::size_of::<usize>() {
                 4 => MemLen(val as usize),
-                _ => panic!("Currently only support for 32 offsets is given!"),
+                _ => panic!("MemLen: Casting to u32 with non 32 bit value!"),
             }
         }
     }
@@ -61,7 +70,7 @@ pub mod memory {
         fn from(val: u64 ) -> Self {
             match mem::size_of::<usize>() {
                 8 => MemLen(val as usize),
-                _ => panic!("Usize is smaller 64 bit!"),
+                _ => panic!("MemLen: Casting to 64 bit usize with non 64 bit value!"),
             }
         } 
     }
@@ -83,7 +92,7 @@ pub mod memory {
             // Check if Offset is not larger than 32 bit
             match mem::size_of::<usize>() {
                 4 => val.0 as u32,
-                _ => panic!("Missing support for conversions from others than 32 bit usize."),
+                _ => panic!("MemLen: Casting to u32 with non 32 bit value!"),
             }
         }
     }
@@ -94,7 +103,7 @@ pub mod memory {
             match mem::size_of::<usize>() {
                 4 => val.0 as u64,
                 8 => val.0 as u64,
-                _ => panic!("Missing support for conversions from others than 32 and 65 bit usize."),
+                _ => panic!("MemLen: Missing support for conversions from others than 32 and 64 bit usize."),
             }
         }
     }
