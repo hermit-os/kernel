@@ -210,12 +210,12 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
-		irqsave(|| { self.blocked_tasks.handle_waiting_tasks() });
+		irqsave(|| self.blocked_tasks.handle_waiting_tasks());
 	}
 
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
-			irqsave(|| { self.blocked_tasks.custom_wakeup(task) });
+			irqsave(|| self.blocked_tasks.custom_wakeup(task));
 		} else {
 			get_scheduler(task.get_core_id())
 				.input
@@ -229,7 +229,10 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
-		irqsave(|| { self.blocked_tasks.add(self.current_task.clone(), wakeup_time) });
+		irqsave(|| {
+			self.blocked_tasks
+				.add(self.current_task.clone(), wakeup_time)
+		});
 	}
 
 	#[inline]
@@ -248,13 +251,13 @@ impl PerCoreScheduler {
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn set_lwip_errno(&self, errno: i32) {
-		irqsave(|| { self.current_task.borrow_mut().lwip_errno = errno });
+		irqsave(|| self.current_task.borrow_mut().lwip_errno = errno);
 	}
 
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn get_lwip_errno(&self) -> i32 {
-		irqsave(|| { self.current_task.borrow().lwip_errno });
+		irqsave(|| self.current_task.borrow().lwip_errno);
 	}
 
 	#[inline]
@@ -274,7 +277,7 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
-		irqsave(|| { self.current_task.borrow_mut().last_wakeup_reason = reason });
+		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason = reason);
 	}
 
 	#[inline]

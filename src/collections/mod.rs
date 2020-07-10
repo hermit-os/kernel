@@ -18,7 +18,7 @@ pub use self::doublylinkedlist::*;
 #[inline]
 pub fn irqsave<F, R>(mut f: F) -> R
 where
-	F: FnOnce() -> R
+	F: FnOnce() -> R,
 {
 	let irq = irq::nested_disable();
 	let ret = f();
