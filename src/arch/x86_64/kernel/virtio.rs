@@ -50,6 +50,7 @@ pub mod consts {
 	pub const VIRTIO_F_NOTIFICATION_DATA: u64 = 1 << 38;
 
 	// Descriptor flags
+	pub const VIRTQ_DESC_F_DEFAULT: u16 = 0;
 	pub const VIRTQ_DESC_F_NEXT: u16 = 1; // Buffer continues via next field
 	pub const VIRTQ_DESC_F_WRITE: u16 = 2; // Buffer is device write-only (instead of read-only)
 	pub const VIRTQ_DESC_F_INDIRECT: u16 = 4; // Buffer contains list of virtq_desc
