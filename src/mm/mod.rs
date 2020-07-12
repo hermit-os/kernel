@@ -81,14 +81,19 @@ pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
 		KERNEL_START_ADDRESS = environment::get_base_address().align_up_to_large_page();
-		KERNEL_END_ADDRESS = (environment::get_base_address() + environment::get_image_size()).align_up_to_large_page();
+		KERNEL_END_ADDRESS = (environment::get_base_address() + environment::get_image_size())
+			.align_up_to_large_page();
 	}
 
 	arch::mm::init();
 	arch::mm::init_page_tables();
 
 	info!("Total memory size: {} MB", total_memory_size() >> 20);
-	info!("Kernel region: [0x{:x} - 0x{:x}]", kernel_start_address(), kernel_end_address());
+	info!(
+		"Kernel region: [0x{:x} - 0x{:x}]",
+		kernel_start_address(),
+		kernel_end_address()
+	);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
