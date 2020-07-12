@@ -10,6 +10,7 @@ use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use crate::arch::x86_64::kernel::virtio;
 use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
 use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
 use alloc::rc::Rc;
@@ -314,7 +315,7 @@ impl PciAdapter {
 	/// Memory maps pci bar with specified index to identical location in virtual memory.
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
 	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
-	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(usize, usize)> {
+	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(VirtAddr, usize)> {
 		let pci_bar = match self.get_bar(index) {
 			Some(PciBar::IO(_)) => {
 				warn!("Cannot map IOBar!");
@@ -344,7 +345,13 @@ impl PciAdapter {
 		// We therefore do not need to reserve any additional memory in our kernel.
 		// Map bar into RW^X virtual memory
 		let physical_address = pci_bar.addr;
-		let virtual_address = crate::mm::map(physical_address, pci_bar.size, true, false, no_cache);
+		let virtual_address = crate::mm::map(
+			PhysAddr::from(physical_address),
+			pci_bar.size,
+			true,
+			false,
+			no_cache,
+		);
 
 		Some((virtual_address, pci_bar.size))
 	}

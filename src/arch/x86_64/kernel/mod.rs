@@ -35,6 +35,7 @@ pub mod virtio;
 pub mod virtio_fs;
 pub mod virtio_net;
 
+use crate::arch::mm::VirtAddr;
 use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
@@ -166,8 +167,8 @@ pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
 	switch_to_user!();
 }
 
-pub fn get_base_address() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).base) as usize }
+pub fn get_base_address() -> VirtAddr {
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).base)) }
 }
 
 pub fn get_image_size() -> usize {
@@ -178,8 +179,8 @@ pub fn get_limit() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).limit) as usize }
 }
 
-pub fn get_tls_start() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_start) as usize }
+pub fn get_tls_start() -> VirtAddr {
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).tls_start)) }
 }
 
 pub fn get_tls_filesz() -> usize {
@@ -190,8 +191,8 @@ pub fn get_tls_memsz() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
 }
 
-pub fn get_mbinfo() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).mb_info) as usize }
+pub fn get_mbinfo() -> VirtAddr {
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).mb_info)) }
 }
 
 pub fn get_processor_count() -> u32 {
@@ -216,8 +217,8 @@ pub fn get_cmdsize() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdsize) as usize }
 }
 
-pub fn get_cmdline() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdline) as usize }
+pub fn get_cmdline() -> VirtAddr {
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).cmdline)) }
 }
 
 /// Earliest initialization function called by the Boot Processor.

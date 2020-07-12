@@ -14,6 +14,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crate::arch;
 use crate::arch::irq;
+use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
@@ -281,19 +282,19 @@ impl PerCoreScheduler {
 	}
 
 	#[inline]
-	pub fn get_current_user_stack(&self) -> usize {
+	pub fn get_current_user_stack(&self) -> VirtAddr {
 		self.current_task.borrow().user_stack_pointer
 	}
 
 	#[inline]
-	pub fn set_current_user_stack(&mut self, addr: usize) {
+	pub fn set_current_user_stack(&mut self, addr: VirtAddr) {
 		self.current_task.borrow_mut().user_stack_pointer = addr;
 	}
 
 	#[cfg(target_arch = "x86_64")]
 	#[inline]
-	pub fn get_current_kernel_stack(&self) -> usize {
-		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10
+	pub fn get_current_kernel_stack(&self) -> VirtAddr {
+		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10u64
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -303,11 +304,13 @@ impl PerCoreScheduler {
 
 		tss.rsp[0] = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
-			- 0x10) as u64;
+			- 0x10u64)
+			.as_u64();
 		set_kernel_stack(tss.rsp[0]);
 		tss.ist[0] = (current_task_borrowed.stacks.get_interupt_stack()
 			+ current_task_borrowed.stacks.get_interupt_stack_size()
-			- 0x10) as u64;
+			- 0x10u64)
+			.as_u64();
 	}
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
@@ -402,7 +405,7 @@ impl PerCoreScheduler {
 			let mut borrowed = self.current_task.borrow_mut();
 			(
 				borrowed.id,
-				&mut borrowed.last_stack_pointer as *mut usize,
+				&mut borrowed.last_stack_pointer as *mut _ as *mut usize,
 				borrowed.prio,
 				borrowed.status,
 			)
@@ -474,9 +477,9 @@ impl PerCoreScheduler {
 
 				// Finally save our current context and restore the context of the new task.
 				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
-					switch_to_fpu_owner(last_stack_pointer, new_stack_pointer)
+					switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize())
 				} else {
-					switch_to_task(last_stack_pointer, new_stack_pointer);
+					switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
 				}
 			}
 		}

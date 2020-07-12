@@ -15,6 +15,7 @@ use crate::arch::x86_64::kernel::virtio_fs;
 use crate::arch::x86_64::kernel::virtio_net;
 
 use crate::arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::VirtAddr;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 
 use alloc::boxed::Box;
@@ -167,9 +168,11 @@ impl<'a> Virtq<'a> {
 		// Tell device about the guest-physical addresses of our queue structs:
 		// TODO: cleanup pointer conversions (use &mut vq....?)
 		common_cfg.queue_select = index;
-		common_cfg.queue_desc = paging::virt_to_phys(desc_table.as_ptr() as usize) as u64;
-		common_cfg.queue_avail = paging::virt_to_phys(avail_flags as *mut _ as usize) as u64;
-		common_cfg.queue_used = paging::virt_to_phys(used_flags as *const _ as usize) as u64;
+		common_cfg.queue_desc = paging::virt_to_phys(VirtAddr(desc_table.as_ptr() as u64)).as_u64();
+		common_cfg.queue_avail =
+			paging::virt_to_phys(VirtAddr(avail_flags as *mut _ as u64)).as_u64();
+		common_cfg.queue_used =
+			paging::virt_to_phys(VirtAddr(used_flags as *const _ as u64)).as_u64();
 		common_cfg.queue_enable = 1;
 
 		debug!(
@@ -288,7 +291,7 @@ impl<'a> Virtq<'a> {
 			let req = &mut chain.0.last_mut().unwrap().raw;
 
 			// 2. Set d.addr to the physical address of the start of b
-			req.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
+			req.addr = paging::virt_to_phys(VirtAddr(dat.as_ptr() as u64)).as_u64();
 
 			// 3. Set d.len to the length of b.
 			req.len = dat.len() as u32; // TODO: better cast?
@@ -308,7 +311,7 @@ impl<'a> Virtq<'a> {
 			for dat in rsp_buf {
 				self.virtq_desc.extend(&mut chain);
 				let rsp = &mut chain.0.last_mut().unwrap().raw;
-				rsp.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
+				rsp.addr = paging::virt_to_phys(VirtAddr(dat.as_ptr() as u64)).as_u64();
 				rsp.len = dat.len() as u32; // TODO: better cast?
 				rsp.flags = VIRTQ_DESC_F_WRITE;
 				trace!("written in descriptor: {:?} @ {:p}", rsp, rsp);
@@ -370,12 +373,12 @@ impl<'a> Virtq<'a> {
 		vqused.check_elements()
 	}
 
-	pub fn add_buffer(&mut self, index: usize, addr: u64, len: usize, flags: u16) {
+	pub fn add_buffer(&mut self, index: usize, addr: VirtAddr, len: usize, flags: u16) {
 		let chainrc = self.virtq_desc.get_empty_chain();
 		let mut chain = chainrc.borrow_mut();
 		self.virtq_desc.extend(&mut chain);
 		let rsp = &mut chain.0.last_mut().unwrap().raw;
-		rsp.addr = paging::virt_to_phys(addr as usize) as u64;
+		rsp.addr = paging::virt_to_phys(addr).as_u64();
 		rsp.len = len.try_into().unwrap();
 		rsp.flags = flags;
 
@@ -744,7 +747,7 @@ pub fn map_virtiocap(
 	adapter: &PciAdapter,
 	caplist: u32,
 	virtiocaptype: u32,
-) -> Option<(usize, u32)> {
+) -> Option<(VirtAddr, u32)> {
 	let mut nextcaplist = caplist;
 	if nextcaplist < 0x40 {
 		error!(
@@ -870,7 +873,7 @@ static mut VIRTIO_IRQ_NO: u8 = 0;
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	debug!("Receive virtio interrupt");
+	info!("Receive virtio interrupt");
 	apic::eoi();
 	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 

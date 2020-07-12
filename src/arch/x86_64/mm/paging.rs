@@ -17,16 +17,16 @@ use x86::irq::PageFaultError;
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
-//use arch::x86_64::kernel::is_uhyve;
+use crate::arch::x86_64::kernel::is_uhyve;
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::paddr_to_slice;
 use crate::arch::x86_64::mm::physicalmem;
+use crate::arch::x86_64::mm::{paddr_to_slice, PhysAddr, VirtAddr};
 use crate::environment;
 use crate::mm;
 use crate::scheduler;
 
 /// Uhyve's address of the initial GDT
-const BOOT_GDT: usize = 0x1000;
+const BOOT_GDT: PhysAddr = PhysAddr(0x1000);
 
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>;
@@ -44,7 +44,7 @@ bitflags! {
 	/// Possible flags for an entry in either table (PML4, PDPT, PD, PT)
 	///
 	/// See Intel Vol. 3A, Tables 4-14 through 4-19
-	pub struct PageTableEntryFlags: usize {
+	pub struct PageTableEntryFlags: u64 {
 		/// Set if this entry is valid and points to a page or table.
 		const PRESENT = 1 << 0;
 
@@ -114,15 +114,17 @@ impl PageTableEntryFlags {
 #[derive(Clone, Copy)]
 pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
-	physical_address_and_flags: usize,
+	physical_address_and_flags: PhysAddr,
 }
 
 impl PageTableEntry {
 	/// Return the stored physical address.
-	pub fn address(self) -> usize {
-		self.physical_address_and_flags
-			& !(BasePageSize::SIZE - 1)
-			& !(PageTableEntryFlags::EXECUTE_DISABLE).bits()
+	pub fn address(self) -> PhysAddr {
+		PhysAddr(
+			self.physical_address_and_flags.as_u64()
+				& !(BasePageSize::SIZE as u64 - 1u64)
+				& !(PageTableEntryFlags::EXECUTE_DISABLE).bits(),
+		)
 	}
 
 	/// Returns whether this entry is valid (present).
@@ -146,7 +148,7 @@ impl PageTableEntry {
 	///
 	/// * `physical_address` - The physical memory address this entry shall translate to
 	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT and ACCESSED flags are set automatically)
-	fn set(&mut self, physical_address: usize, flags: PageTableEntryFlags) {
+	fn set(&mut self, physical_address: PhysAddr, flags: PageTableEntryFlags) {
 		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
@@ -168,7 +170,7 @@ impl PageTableEntry {
 
 		// Verify that the physical address does not exceed the CPU's physical address width.
 		assert_eq!(
-			physical_address >> processor::get_physical_address_bits(),
+			physical_address >> processor::get_physical_address_bits().into(),
 			0,
 			"Physical address exceeds CPU's physical address width (physical_address = {:#X})",
 			physical_address
@@ -177,7 +179,7 @@ impl PageTableEntry {
 		let mut flags_to_set = flags;
 		flags_to_set.insert(PageTableEntryFlags::PRESENT);
 		flags_to_set.insert(PageTableEntryFlags::ACCESSED);
-		self.physical_address_and_flags = physical_address | flags_to_set.bits();
+		self.physical_address_and_flags = PhysAddr(physical_address | flags_to_set.bits());
 	}
 }
 
@@ -230,7 +232,7 @@ impl PageSize for HugePageSize {
 struct Page<S: PageSize> {
 	/// Virtual memory address of this page.
 	/// This is rounded to a page size boundary on creation.
-	virtual_address: usize,
+	virtual_address: VirtAddr,
 
 	/// Required by Rust to support the S parameter.
 	size: PhantomData<S>,
@@ -238,7 +240,7 @@ struct Page<S: PageSize> {
 
 impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
-	fn address(self) -> usize {
+	fn address(self) -> VirtAddr {
 		self.virtual_address
 	}
 
@@ -251,20 +253,21 @@ impl<S: PageSize> Page<S> {
 
 	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
 	///
-	/// Current x86-64 supports only 48-bit for virtual memory addresses.
-	/// This is enforced by requiring bits 63 through 48 to replicate bit 47 (cf. Intel Vol. 1, 3.3.7.1).
+	/// Most x86-64 supports only 48-bit for virtual memory addresses.
+	/// Currently, we supports only the lower half of the canoncial address space.
 	/// As a consequence, the address space is divided into the two valid regions 0x8000_0000_0000
-	/// and 0xFFFF_8000_0000_0000.
+	/// and 0x0000_8000_0000_0000.
 	///
 	/// Although we could make this check depend on the actual linear address width from the CPU,
 	/// any extension above 48-bit would require a new page table level, which we don't implement.
-	fn is_valid_address(virtual_address: usize) -> bool {
-		virtual_address < 0x8000_0000_0000 || virtual_address >= 0xFFFF_8000_0000_0000
+	fn is_valid_address(virtual_address: VirtAddr) -> bool {
+		virtual_address < VirtAddr(0x0000_8000_0000_0000u64)
+			|| virtual_address >= VirtAddr(0x0000_8000_0000_0000u64)
 	}
 
 	/// Returns a Page including the given virtual address.
 	/// That means, the address is rounded down to a page size boundary.
-	fn including_address(virtual_address: usize) -> Self {
+	fn including_address(virtual_address: VirtAddr) -> Self {
 		assert!(
 			Self::is_valid_address(virtual_address),
 			"Virtual address {:#X} is invalid",
@@ -293,7 +296,7 @@ impl<S: PageSize> Page<S> {
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(self) -> usize {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
-		self.virtual_address >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
+		self.virtual_address.as_usize() >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
 	}
 }
 
@@ -388,13 +391,13 @@ trait PageTableMethods {
 	fn map_page_in_this_table<S: PageSize>(
 		&mut self,
 		page: Page<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) -> bool;
 	fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) -> bool;
 }
@@ -407,7 +410,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	fn map_page_in_this_table<S: PageSize>(
 		&mut self,
 		page: Page<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) -> bool {
 		assert_eq!(L::LEVEL, S::MAP_LEVEL);
@@ -454,7 +457,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	default fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) -> bool {
 		self.map_page_in_this_table::<S>(page, physical_address, flags)
@@ -493,7 +496,7 @@ where
 	fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) -> bool {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
@@ -510,7 +513,7 @@ where
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
 				for entry in subtable.entries.iter_mut() {
-					entry.physical_address_and_flags = 0;
+					entry.physical_address_and_flags = PhysAddr(0u64);
 				}
 			}
 
@@ -552,7 +555,7 @@ where
 	fn map_pages<S: PageSize>(
 		&mut self,
 		range: PageIter<S>,
-		physical_address: usize,
+		physical_address: PhysAddr,
 		flags: PageTableEntryFlags,
 	) {
 		let mut current_physical_address = physical_address;
@@ -560,7 +563,7 @@ where
 
 		for page in range {
 			send_ipi |= self.map_page::<S>(page, current_physical_address, flags);
-			current_physical_address += S::SIZE;
+			current_physical_address += S::SIZE as u64;
 		}
 
 		if send_ipi {
@@ -597,13 +600,14 @@ pub extern "x86-interrupt" fn page_fault_handler(
 }
 
 #[inline]
-fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter<S> {
+fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE);
+	let last_page =
+		Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE as u64);
 	Page::range(first_page, last_page)
 }
 
-pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageTableEntry> {
+pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
@@ -611,7 +615,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: usize) -> Option<PageT
 	root_pagetable.get_page_table_entry(page)
 }
 
-pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
+pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr {
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
@@ -621,37 +625,37 @@ pub fn get_physical_address<S: PageSize>(virtual_address: usize) -> usize {
 		.expect("Entry not present")
 		.address();
 	let offset = virtual_address & (S::SIZE - 1);
-	address | offset
+	PhysAddr(address.as_u64() | offset.as_u64())
 }
 
 /// Translate a virtual memory address to a physical one.
-pub fn virtual_to_physical(virtual_address: usize) -> usize {
-	let mut page_bits: usize = 39;
+pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
+	let mut page_bits: u64 = 39;
 
 	// A self-reference enables direct access to all page tables
-	static SELF: [usize; 4] = {
+	static SELF: [VirtAddr; 4] = {
 		[
-			0xFFFFFF8000000000usize,
-			0xFFFFFFFFC0000000usize,
-			0xFFFFFFFFFFE00000usize,
-			0xFFFFFFFFFFFFF000usize,
+			VirtAddr(0xFFFFFF8000000000u64),
+			VirtAddr(0xFFFFFFFFC0000000u64),
+			VirtAddr(0xFFFFFFFFFFE00000u64),
+			VirtAddr(0xFFFFFFFFFFFFF000u64),
 		]
 	};
 
 	for i in (0..3).rev() {
-		page_bits -= PAGE_MAP_BITS;
+		page_bits -= PAGE_MAP_BITS as u64;
 
-		let vpn = (virtual_address >> page_bits) as isize;
-		let ptr = SELF[i] as *const usize;
+		let vpn = (virtual_address.as_u64() >> page_bits) as isize;
+		let ptr = SELF[i].as_ptr::<u64>();
 		let entry = unsafe { *ptr.offset(vpn) };
 
 		if entry & PageTableEntryFlags::HUGE_PAGE.bits() != 0 || i == 0 {
-			let off = virtual_address
-				& !(((!0usize) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+			let off = virtual_address.as_u64()
+				& !(((!0u64) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
 			let phys =
-				entry & (((!0usize) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+				entry & (((!064) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
 
-			return off | phys;
+			return PhysAddr(off | phys);
 		}
 	}
 
@@ -659,13 +663,13 @@ pub fn virtual_to_physical(virtual_address: usize) -> usize {
 }
 
 #[no_mangle]
-pub extern "C" fn virt_to_phys(virtual_address: usize) -> usize {
+pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 	virtual_to_physical(virtual_address)
 }
 
 pub fn map<S: PageSize>(
-	virtual_address: usize,
-	physical_address: usize,
+	virtual_address: VirtAddr,
+	physical_address: PhysAddr,
 	count: usize,
 	flags: PageTableEntryFlags,
 ) {
@@ -681,7 +685,7 @@ pub fn map<S: PageSize>(
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
-pub fn unmap<S: PageSize>(virtual_address: usize, count: usize) {
+pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!(
 		"Unmapping virtual address {:#X} ({} pages)",
 		virtual_address,
@@ -690,14 +694,14 @@ pub fn unmap<S: PageSize>(virtual_address: usize, count: usize) {
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
-	root_pagetable.map_pages(range, 0, PageTableEntryFlags::BLANK);
+	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
-pub fn identity_map(start_address: usize, end_address: usize) {
-	let first_page = Page::<BasePageSize>::including_address(start_address);
-	let last_page = Page::<BasePageSize>::including_address(end_address);
+pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
+	let first_page = Page::<BasePageSize>::including_address(VirtAddr(start_address.as_u64()));
+	let last_page = Page::<BasePageSize>::including_address(VirtAddr(end_address.as_u64()));
 	assert!(
-		last_page.address() < mm::kernel_start_address(),
+		last_page.address() < VirtAddr(mm::kernel_start_address().as_u64()),
 		"Address {:#X} to be identity-mapped is not below Kernel start address",
 		last_page.address()
 	);
@@ -706,7 +710,7 @@ pub fn identity_map(start_address: usize, end_address: usize) {
 	let range = Page::<BasePageSize>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().read_only().execute_disable();
-	root_pagetable.map_pages(range, first_page.address(), flags);
+	root_pagetable.map_pages(range, PhysAddr(first_page.address().as_u64()), flags);
 }
 
 #[inline]
@@ -720,52 +724,52 @@ pub fn init_page_tables() {
 	debug!("Create new view to the kernel space");
 
 	unsafe {
-		let pml4 = controlregs::cr3();
-		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
+		if !is_uhyve() {
+			let pml4 = controlregs::cr3();
+			let pde = pml4 + 2 * BasePageSize::SIZE as u64;
 
-		debug!("Found PML4 at 0x{:x}", pml4);
+			debug!("Found PML4 at 0x{:x}", pml4);
 
-		// make sure that only the required areas are mapped
-		let start = pde
-			+ ((mm::kernel_end_address() >> (PAGE_MAP_BITS + PAGE_BITS)) * mem::size_of::<u64>())
+			// make sure that only the required areas are mapped
+			let start = pde
+				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)) * mem::size_of::<u64>())
 				as u64;
-		let size = (512 - (mm::kernel_end_address() >> (PAGE_MAP_BITS + PAGE_BITS)))
-			* mem::size_of::<u64>();
-		ptr::write_bytes(start as *mut u8, 0, size);
+			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
+				* mem::size_of::<u64>();
 
-		//let size = (mm::kernel_start_address() >> (PAGE_MAP_BITS + PAGE_BITS)) * mem::size_of::<u64>();
-		//ptr::write_bytes(pde as *mut u8, 0, size);
+			ptr::write_bytes(start as *mut u8, 0u8, size);
 
-		// flush tlb
-		controlregs::cr3_write(pml4);
+			//TODO: clearing the memory befor kernel_start_address()
 
-		/*if is_uhyve() {
-			// we need to map GDT from hypervisor
-			identity_map(BOOT_GDT, BOOT_GDT);
-		}*/
+			// flush tlb
+			controlregs::cr3_write(pml4);
+		}
 
 		// Identity-map the supplied Multiboot information and command line.
 		let mb_info = get_mbinfo();
-		if mb_info > 0 {
+		if !mb_info.is_zero() {
 			info!("Found Multiboot info at 0x{:x}", mb_info);
-			identity_map(mb_info, mb_info);
+			identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
 
 			// Map the "Memory Map" information too.
-			let mb = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
+			let mb = Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap();
 			let memory_map_address = mb
 				.memory_regions()
 				.expect("Could not find a memory map in the Multiboot information")
 				.next()
 				.expect("Could not first map address")
-				.base_address() as usize;
-			identity_map(memory_map_address, memory_map_address);
+				.base_address();
+			identity_map(PhysAddr(memory_map_address), PhysAddr(memory_map_address));
 		}
 
 		let cmdsize = environment::get_cmdsize();
 		if cmdsize > 0 {
 			let cmdline = environment::get_cmdline();
 			info!("Found cmdline at 0x{:x} (size {})", cmdline, cmdsize);
-			identity_map(cmdline, cmdline + cmdsize - 1);
+			identity_map(
+				PhysAddr(cmdline.as_u64()),
+				PhysAddr(cmdline.as_u64()) + cmdsize - 1u64,
+			);
 		}
 	}
 }
