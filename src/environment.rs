@@ -37,7 +37,7 @@ unsafe fn parse_command_line() {
 	}
 
 	// Convert the command-line into a Rust string slice.
-	let cmdline = get_cmdline() as *const u8;
+	let cmdline = get_cmdline().as_ptr::<u8>();
 	let slice = slice::from_raw_parts(cmdline, cmdsize);
 	let cmdline_str = str::from_utf8_unchecked(slice);
 

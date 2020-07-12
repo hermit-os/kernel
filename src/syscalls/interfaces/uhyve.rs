@@ -12,6 +12,7 @@ use x86::io::*;
 
 use crate::arch;
 use crate::arch::mm::paging;
+use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(feature = "newlib")]
 use crate::syscalls::lwip::sys_lwip_get_errno;
@@ -37,12 +38,12 @@ extern "C" {
 /// forward a request to the hypervisor uhyve
 #[inline]
 fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = data as *mut T;
-	let physical_address = paging::virtual_to_physical(ptr as usize);
+	let ptr = VirtAddr(data as *mut _ as u64);
+	let physical_address = paging::virtual_to_physical(ptr);
 
 	#[cfg(target_arch = "x86_64")]
 	unsafe {
-		outl(port, physical_address as u32);
+		outl(port, physical_address.as_u64() as u32);
 	}
 }
 
@@ -69,15 +70,15 @@ impl SysCmdsize {
 
 #[repr(C, packed)]
 struct SysCmdval {
-	argv: *const u8,
-	envp: *const u8,
+	argv: PhysAddr,
+	envp: PhysAddr,
 }
 
 impl SysCmdval {
-	fn new(argv: *const u8, envp: *const u8) -> SysCmdval {
+	fn new(argv: VirtAddr, envp: VirtAddr) -> SysCmdval {
 		SysCmdval {
-			argv: paging::virtual_to_physical(argv as usize) as *const u8,
-			envp: paging::virtual_to_physical(envp as usize) as *const u8,
+			argv: paging::virtual_to_physical(argv),
+			envp: paging::virtual_to_physical(envp),
 		}
 	}
 }
@@ -95,14 +96,14 @@ impl SysExit {
 
 #[repr(C, packed)]
 struct SysUnlink {
-	name: *const u8,
+	name: PhysAddr,
 	ret: i32,
 }
 
 impl SysUnlink {
-	fn new(name: *const u8) -> SysUnlink {
+	fn new(name: VirtAddr) -> SysUnlink {
 		SysUnlink {
-			name: paging::virtual_to_physical(name as usize) as *const u8,
+			name: paging::virtual_to_physical(name),
 			ret: -1,
 		}
 	}
@@ -110,16 +111,16 @@ impl SysUnlink {
 
 #[repr(C, packed)]
 struct SysOpen {
-	name: *const u8,
+	name: PhysAddr,
 	flags: i32,
 	mode: i32,
 	ret: i32,
 }
 
 impl SysOpen {
-	fn new(name: *const u8, flags: i32, mode: i32) -> SysOpen {
+	fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
 		SysOpen {
-			name: paging::virtual_to_physical(name as usize) as *const u8,
+			name: paging::virtual_to_physical(name),
 			flags,
 			mode,
 			ret: -1,
@@ -188,18 +189,19 @@ pub struct Uhyve;
 
 impl SyscallInterface for Uhyve {
 	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
-		let mut sysopen = SysOpen::new(name, flags, mode);
+		let mut sysopen = SysOpen::new(VirtAddr(name as u64), flags, mode);
 		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
 
 		sysopen.ret
 	}
 
 	fn unlink(&self, name: *const u8) -> i32 {
-		let mut sysunlink = SysUnlink::new(name);
+		let mut sysunlink = SysUnlink::new(VirtAddr(name as u64));
 		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
 
 		sysunlink.ret
 	}
+
 	fn close(&self, fd: i32) -> i32 {
 		let mut sysclose = SysClose::new(fd);
 		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
@@ -236,7 +238,8 @@ impl SyscallInterface for Uhyve {
 					syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
 					1,
 				);
-				argv_phy[i] = paging::virtual_to_physical(argv[i] as usize) as *const u8;
+				argv_phy[i] =
+					paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8;
 			}
 
 			// create array to receive the environment
@@ -255,13 +258,15 @@ impl SyscallInterface for Uhyve {
 					syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
 					1,
 				);
-				env_phy[i] = paging::virtual_to_physical(env[i] as usize) as *const u8;
+				env_phy[i] =
+					paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8;
 			}
 			env[syscmdsize.envc as usize] = ptr::null_mut();
 			env_phy[syscmdsize.envc as usize] = ptr::null_mut();
 
 			// ask uhyve for the environment
-			let mut syscmdval = SysCmdval::new(argv_phy_raw as *const u8, env_phy_raw as *const u8);
+			let mut syscmdval =
+				SysCmdval::new(VirtAddr(argv_phy_raw as u64), VirtAddr(env_phy_raw as u64));
 			uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
 
 			// free temporary array

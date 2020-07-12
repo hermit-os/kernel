@@ -116,7 +116,7 @@ impl Heap {
 		// It would only increase the management burden and we wouldn't save
 		// any significant amounts of memory.
 		// So check if this is a pointer allocated by the System Allocator.
-		if address >= kernel_end_address() {
+		if address >= kernel_end_address().as_usize() {
 			let mut size = layout.size();
 			if size < HoleList::min_size() {
 				size = HoleList::min_size();

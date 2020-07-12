@@ -44,7 +44,7 @@ struct Gdt {
 pub fn init() {
 	unsafe {
 		// Dynamically allocate memory for the GDT.
-		GDT = crate::mm::allocate(mem::size_of::<Gdt>(), false) as *mut Gdt;
+		GDT = crate::mm::allocate(mem::size_of::<Gdt>(), false).as_mut_ptr::<Gdt>();
 
 		// The NULL descriptor is always the first entry.
 		(*GDT).entries[GDT_NULL as usize] = Descriptor::NULL;
@@ -90,14 +90,14 @@ pub fn add_current_core() {
 	// When switching to another task on this core, this entry is replaced.
 	boxed_tss.rsp[0] = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).current_stack_address) }
 		+ KERNEL_STACK_SIZE as u64
-		- 0x10;
+		- 0x10u64;
 	set_kernel_stack(boxed_tss.rsp[0] as u64);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
 		let ist = crate::mm::allocate(KERNEL_STACK_SIZE, true);
-		boxed_tss.ist[i] = (ist + KERNEL_STACK_SIZE - 0x10) as u64;
+		boxed_tss.ist[i] = ist.as_u64() + KERNEL_STACK_SIZE as u64 - 0x10u64;
 	}
 
 	unsafe {
