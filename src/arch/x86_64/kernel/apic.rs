@@ -14,6 +14,7 @@ use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::CachePadded;
 use crate::config::*;
 use crate::environment;
@@ -62,7 +63,7 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// While our boot processor is already in x86-64 mode, application processors boot up in 16-bit real mode
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
-const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
+const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
 
 const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
@@ -70,8 +71,8 @@ const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
-static mut LOCAL_APIC_ADDRESS: usize = 0;
-static mut IOAPIC_ADDRESS: usize = 0;
+static mut LOCAL_APIC_ADDRESS: VirtAddr = VirtAddr(0);
+static mut IOAPIC_ADDRESS: VirtAddr = VirtAddr(0);
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
@@ -184,7 +185,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 }
 
 #[cfg(feature = "acpi")]
-fn detect_from_acpi() -> Result<usize, ()> {
+fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");
 	let madt_header = unsafe { &*(madt.table_start_address() as *const AcpiMadtHeader) };
@@ -227,7 +228,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 					flags.device().writable().execute_disable();
 					paging::map::<BasePageSize>(
 						IOAPIC_ADDRESS,
-						ioapic_record.address as usize,
+						PhysAddr(ioapic_record.address.into()),
 						1,
 						flags,
 					);
@@ -243,12 +244,12 @@ fn detect_from_acpi() -> Result<usize, ()> {
 
 	// Successfully derived all information from the MADT.
 	// Return the physical address of the Local APIC.
-	Ok(madt_header.local_apic_address as usize)
+	Ok(PhysAddr(madt_header.local_apic_address.into()))
 }
 
-fn detect_from_uhyve() -> Result<usize, ()> {
+fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if environment::is_uhyve() {
-		let defaullt_address = 0xFEC0_0000usize;
+		let defaullt_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
 			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
@@ -262,7 +263,7 @@ fn detect_from_uhyve() -> Result<usize, ()> {
 			paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
 		}
 
-		return Ok(0xFEE0_0000usize);
+		return Ok(PhysAddr(0xFEE0_0000));
 	}
 
 	Err(())
@@ -503,7 +504,7 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
 		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
 
-		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack as u64);
+		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack.as_u64());
 		core::ptr::write_volatile(
 			&mut (*BOOT_INFO).current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
@@ -537,27 +538,32 @@ pub fn boot_application_processors() {
 	);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, flags);
+	paging::map::<BasePageSize>(
+		SMP_BOOT_CODE_ADDRESS,
+		PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
+		1,
+		flags,
+	);
 	unsafe {
 		ptr::copy_nonoverlapping(
 			&SMP_BOOT_CODE as *const u8,
-			SMP_BOOT_CODE_ADDRESS as *mut u8,
+			SMP_BOOT_CODE_ADDRESS.as_mut_ptr(),
 			SMP_BOOT_CODE.len(),
 		);
 	}
 
 	unsafe {
 		// Pass the PML4 page table address to the boot code.
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4).as_mut_ptr::<u32>()) =
+			cr3().try_into().unwrap();
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to 0x{:x}",
-			arch::x86_64::kernel::start::_start as usize
+			arch::x86_64::kernel::start::_start as u64
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut usize) =
-			arch::x86_64::kernel::start::_start as usize;
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO) as *mut usize) =
-			BOOT_INFO as usize;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) =
+			arch::x86_64::kernel::start::_start as u64;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) = BOOT_INFO as u64;
 	}
 
 	// Now wake up each application processor.
@@ -599,7 +605,7 @@ pub fn boot_application_processors() {
 				IA32_X2APIC_ICR,
 				destination
 					| APIC_ICR_DELIVERY_MODE_STARTUP
-					| ((SMP_BOOT_CODE_ADDRESS as u64) >> 12),
+					| ((SMP_BOOT_CODE_ADDRESS.as_u64()) >> 12),
 			);
 			debug!("Waiting for it to respond");
 
@@ -656,8 +662,8 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 
 /// Translate the x2APIC MSR into an xAPIC memory address.
 #[inline]
-fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> usize {
-	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as usize & 0xFF) << 4) }
+fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
+	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as u64 & 0xFF) << 4) }
 }
 
 fn local_apic_read(x2apic_msr: u32) -> u32 {
@@ -665,15 +671,15 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 		// x2APIC is simple, we can just read from the given MSR.
 		unsafe { rdmsr(x2apic_msr) as u32 }
 	} else {
-		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *const u32) }
+		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_ptr::<u32>()) }
 	}
 }
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
+		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
 		core::ptr::write_volatile(
-			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *mut u32,
+			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
 			value,
 		);
 	}
@@ -683,9 +689,9 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS as *mut u32, reg);
+		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
 		value =
-			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
+			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_ptr::<u32>());
 	}
 
 	value
@@ -710,15 +716,16 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
 			let destination = ((value >> 8) & 0xFF00_0000) as u32;
-			let icr2 = unsafe { &mut *((LOCAL_APIC_ADDRESS + APIC_ICR2) as *mut u32) };
+			let icr2 = unsafe { &mut *((LOCAL_APIC_ADDRESS + APIC_ICR2).as_mut_ptr::<u32>()) };
 			*icr2 = destination;
 
 			// The remaining data without the destination will now be written into ICR1.
 		}
 
 		// Write the value.
-		let value_ref =
-			unsafe { &mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *mut u32) };
+		let value_ref = unsafe {
+			&mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>())
+		};
 		*value_ref = value as u32;
 
 		if x2apic_msr == IA32_X2APIC_ICR {

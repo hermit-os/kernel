@@ -12,7 +12,7 @@ use crate::arch::x86_64::kernel::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 #[cfg(not(feature = "newlib"))]
 use crate::drivers::net::netwakeup;
 use crate::synch::spinlock::SpinlockIrqSave;
@@ -179,7 +179,7 @@ impl virtio_net_hdr {
 
 #[derive(Debug)]
 struct RxBuffer {
-	pub addr: usize,
+	pub addr: VirtAddr,
 	pub len: usize,
 }
 
@@ -201,7 +201,7 @@ impl Drop for RxBuffer {
 
 #[derive(Debug)]
 struct TxBuffer {
-	pub addr: usize,
+	pub addr: VirtAddr,
 	pub len: usize,
 	pub in_use: bool,
 }
@@ -278,7 +278,7 @@ impl<'a> VirtioNetDriver<'a> {
 				let addr = buffer.addr;
 				vqueues[VIRTIO_NET_RX_QUEUE].add_buffer(
 					i,
-					addr.try_into().unwrap(),
+					addr,
 					buffer_size,
 					VIRTQ_DESC_F_WRITE,
 				);
@@ -294,7 +294,7 @@ impl<'a> VirtioNetDriver<'a> {
 				let addr = buffer.addr;
 				vqueues[VIRTIO_NET_TX_QUEUE].add_buffer(
 					i,
-					addr.try_into().unwrap(),
+					addr,
 					buffer_size,
 					VIRTQ_DESC_F_DEFAULT,
 				);
@@ -419,13 +419,13 @@ impl<'a> VirtioNetDriver<'a> {
 		let mut buffers = &mut self.tx_buffers;
 		if !buffers[index].in_use {
 			buffers[index].in_use = true;
-			let header = buffers[index].addr as *mut virtio_net_hdr;
+			let header = buffers[index].addr.as_mut_ptr::<virtio_net_hdr>();
 			unsafe {
 				(*header).init(len);
 			}
 
 			Ok((
-				(buffers[index].addr + mem::size_of::<virtio_net_hdr>()) as *mut u8,
+				(buffers[index].addr + mem::size_of::<virtio_net_hdr>()).as_mut_ptr::<u8>(),
 				index,
 			))
 		} else {
@@ -446,10 +446,10 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
 		let (idx, len) = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].get_used_buffer()?;
 		let addr = self.rx_buffers[idx as usize].addr;
-		let virtio_net_hdr = unsafe { &*(addr as *const virtio_net_hdr) };
+		let virtio_net_hdr = unsafe { &*(addr.as_ptr::<virtio_net_hdr>()) };
 		let rx_buffer_slice = unsafe {
 			slice::from_raw_parts(
-				(addr + mem::size_of::<virtio_net_hdr>()) as *const u8,
+				(addr + mem::size_of::<virtio_net_hdr>()).as_ptr::<u8>(),
 				len as usize,
 			)
 		};
@@ -485,7 +485,7 @@ pub fn create_virtionet_driver(
 	let common_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
 			Some((cap_common_raw, _)) => unsafe {
-				&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
+				&mut *(cap_common_raw.as_mut_ptr::<virtio_pci_common_cfg>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
@@ -496,7 +496,7 @@ pub fn create_virtionet_driver(
 	let device_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
 			Some((cap_device_raw, _)) => unsafe {
-				&mut *(cap_device_raw as *mut virtio_net_config)
+				&mut *(cap_device_raw.as_mut_ptr::<virtio_net_config>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
@@ -505,7 +505,7 @@ pub fn create_virtionet_driver(
 		};
 	let isr_cfg = match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_ISR_CFG)
 	{
-		Some((cap_isr_raw, _)) => unsafe { &mut *(cap_isr_raw as *mut u32) },
+		Some((cap_isr_raw, _)) => unsafe { &mut *(cap_isr_raw.as_mut_ptr::<u32>()) },
 		None => {
 			error!("Could not find VIRTIO_PCI_CAP_ISR_CFG. Aborting!");
 			return None;
@@ -516,7 +516,7 @@ pub fn create_virtionet_driver(
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
 			Some((cap_notification_raw, notify_off_multiplier)) => {
 				(
-					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
+					cap_notification_raw.as_mut_ptr::<u16>(), // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
 					notify_off_multiplier,
 				)
 			}

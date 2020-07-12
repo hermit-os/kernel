@@ -259,7 +259,7 @@ pub fn create_virtiofs_driver(
 	let common_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
 			Some((cap_common_raw, _)) => unsafe {
-				&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
+				&mut *(cap_common_raw.as_mut_ptr::<virtio_pci_common_cfg>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
@@ -269,7 +269,9 @@ pub fn create_virtiofs_driver(
 	// get device config mapped, cast to virtio_fs_config
 	let device_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
-			Some((cap_device_raw, _)) => unsafe { &mut *(cap_device_raw as *mut virtio_fs_config) },
+			Some((cap_device_raw, _)) => unsafe {
+				&mut *(cap_device_raw.as_mut_ptr::<virtio_fs_config>())
+			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
 				return None;
@@ -280,7 +282,7 @@ pub fn create_virtiofs_driver(
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
 			Some((cap_notification_raw, notify_off_multiplier)) => {
 				(
-					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
+					cap_notification_raw.as_mut_ptr::<u16>(), // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
 					notify_off_multiplier,
 				)
 			}

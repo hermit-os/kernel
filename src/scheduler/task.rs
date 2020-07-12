@@ -7,6 +7,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::arch;
+use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::processor::msb;
 use crate::arch::scheduler::{TaskStacks, TaskTLS};
@@ -370,9 +371,9 @@ pub struct Task {
 	/// Task priority,
 	pub prio: Priority,
 	/// Last stack pointer before a context switch to another task
-	pub last_stack_pointer: usize,
+	pub last_stack_pointer: VirtAddr,
 	/// Last stack pointer on the user stack before jumping to kernel space
-	pub user_stack_pointer: usize,
+	pub user_stack_pointer: VirtAddr,
 	/// Last FPU state before a context switch to another task using the FPU
 	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
@@ -411,8 +412,8 @@ impl Task {
 			id: tid,
 			status: task_status,
 			prio: task_prio,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::new(stack_size),
@@ -432,8 +433,8 @@ impl Task {
 			id: tid,
 			status: TaskStatus::TaskIdle,
 			prio: IDLE_PRIO,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
@@ -453,8 +454,8 @@ impl Task {
 			id: tid,
 			status: TaskStatus::TaskReady,
 			prio: task.prio,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: task.stacks.clone(),
