@@ -732,8 +732,8 @@ pub fn init_page_tables() {
 
 			// make sure that only the required areas are mapped
 			let start = pde
-				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)) * mem::size_of::<u64>())
-				as u64;
+				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
+					* mem::size_of::<u64>()) as u64;
 			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
 				* mem::size_of::<u64>();
 

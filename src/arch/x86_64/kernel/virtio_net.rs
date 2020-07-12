@@ -276,12 +276,7 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = RxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[VIRTIO_NET_RX_QUEUE].add_buffer(
-					i,
-					addr,
-					buffer_size,
-					VIRTQ_DESC_F_WRITE,
-				);
+				vqueues[VIRTIO_NET_RX_QUEUE].add_buffer(i, addr, buffer_size, VIRTQ_DESC_F_WRITE);
 				vec_buffer.push(buffer);
 			}
 		}
@@ -292,12 +287,7 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = TxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[VIRTIO_NET_TX_QUEUE].add_buffer(
-					i,
-					addr,
-					buffer_size,
-					VIRTQ_DESC_F_DEFAULT,
-				);
+				vqueues[VIRTIO_NET_TX_QUEUE].add_buffer(i, addr, buffer_size, VIRTQ_DESC_F_DEFAULT);
 				vec_buffer.push(buffer);
 			}
 		}
