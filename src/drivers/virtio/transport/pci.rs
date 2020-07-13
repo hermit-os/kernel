@@ -167,6 +167,28 @@ pub struct PciCap {
     origin: Origin,
 }
 
+impl PciCap {
+    pub fn offset(&self) -> MemOff {
+        self.offset
+    }
+
+    pub fn len(&self) -> MemLen {
+        self.length
+    }
+
+    pub fn bar_len(&self) -> u64 {
+        self.bar.length
+    }
+
+    pub fn bar_addr(&self) -> VirtMemAddr {
+        self.bar.mem_addr
+    }
+
+    pub fn dev_id(&self) -> u16 {
+        self.origin.dev_id
+    }
+}
+
 /// Virtio's PCI capabilites structure. 
 /// See Virtio specification v.1.1 - 4.1.4
 ///
@@ -249,7 +271,7 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptibal amount of configuration structures.
-        self.com_cfg_list.sort_by(|a, b| a.rank.cmp(&b.rank));
+        self.com_cfg_list.sort_by(|a, b| b.rank.cmp(&a.rank));
     }
 
     fn add_cfg_notif(&mut self, notif: NotifCfg) {
@@ -258,7 +280,7 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptable amount of configuration structures.
-        self.notif_cfg_list.sort_by(|a, b| a.rank.cmp(&b.rank));
+        self.notif_cfg_list.sort_by(|a, b| b.rank.cmp(&a.rank));
     }
 
     fn add_cfg_isr(&mut self, isr_stat: IsrStatus) {
@@ -267,7 +289,7 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptable amount of configuration structures.
-        self.isr_stat_list.sort_by(|a, b| a.rank.cmp(&b.rank));
+        self.isr_stat_list.sort_by(|a, b| b.rank.cmp(&a.rank));
     }
 
     fn add_cfg_alt(&mut self, pci_alt: PciCfgAlt) {
@@ -276,7 +298,7 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptable amount of configuration structures.
-        self.pci_cfg_acc_list.sort_by(|a, b| a.pci_cap.id.cmp(&b.pci_cap.id));
+        self.pci_cfg_acc_list.sort_by(|a, b| b.pci_cap.id.cmp(&a.pci_cap.id));
     }
 
     fn add_cfg_sh_mem(&mut self, sh_mem: ShMemCfg) {
@@ -285,7 +307,7 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptable amount of configuration structures.
-        self.sh_mem_cfg_list.sort_by(|a, b| a.id.cmp(&b.id));
+        self.sh_mem_cfg_list.sort_by(|a, b| b.id.cmp(&a.id));
     }
 
     fn add_cfg_dev(&mut self, pci_cap: PciCap) {
@@ -294,7 +316,17 @@ impl UniCapsColl {
         // 
         // This should not be to expensive, as "rational" devices will hold an
         // acceptable amount of configuration structures.
-        self.dev_cfg_list.sort_by(|a, b| a.id.cmp(&b.id));
+        self.dev_cfg_list.sort_by(|a, b| b.id.cmp(&a.id));
+    }
+}
+
+// Public interface of UniCapsCollection
+impl UniCapsColl {
+
+    /// Returns the highest prioritized PciCap that indiactes a 
+    /// Virito device configuration.
+    pub fn get_dev_cfg(&mut self) -> Option<PciCap> {
+        self.dev_cfg_list.pop()
     }
 }
 
@@ -1012,23 +1044,16 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
     }
 }
 
-/// WILL BE MERGED INTO AN ENUM OR AS CONSTANT
-/// PROBABLY SHOULD ME MERGED INTO kernel_PCI code
+/// The module contains constants specific to PCI.
 pub mod constants {
-    // 
-    // ALL CONSTANTS MUST BE MADE TO LITTLE ENDIAN!
-    //
+    // PCI constants
     pub const PCI_MAX_BUS_NUMBER: u8 = 32;
     pub const PCI_MAX_DEVICE_NUMBER: u8 = 32;
     pub const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
     pub const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
     pub const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
-    pub const PCI_COMMAND_BUSMASTER: u32 = 1 << 2;
-    pub const PCI_BASE_ADDRESS_IO_SPACE: u32 = 1 << 0;
-    pub const PCI_MEM_BASE_ADDRESS_64BIT: u32 = 1 << 2;
-    pub const PCI_MEM_PREFETCHABLE: u32 = 1 << 3;
-    pub const PCI_CAP_ID_VNDR: u32 = 0x09;  
-
+    pub const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;  
+    pub const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
     /// PCI registers offset inside header,
     /// if PCI header is of type 00h.
     #[allow(dead_code, non_camel_case_types)]
@@ -1062,6 +1087,9 @@ pub mod constants {
     #[allow(dead_code, non_camel_case_types)]
     #[repr(u32)]
     pub enum Masks {
+        PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
+        PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
+        PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
         PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
         PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
         PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
@@ -1079,6 +1107,9 @@ pub mod constants {
                 Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
                 Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
                 Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
+                Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
+                Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
+                Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
             } 
         }
     }
