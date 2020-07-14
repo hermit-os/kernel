@@ -479,10 +479,10 @@ impl ComCfg {
 
         // Indicate to device that driver_features field shows high 32 bits.
         // See Virtio specification v1.1. - 4.1.4.3
-        self.com_cfg.device_feature_select = 1;
+        self.com_cfg.driver_feature_select = 1;
 
         // write high 32 bits of device features
-        self.com_cfg.device_feature = high;
+        self.com_cfg.driver_feature = high;
     }
 }
 
