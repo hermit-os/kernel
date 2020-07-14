@@ -25,6 +25,7 @@ use drivers::virtio::env::memory::{VirtMemAddr, PhyMemAddr, MemOff, MemLen};
 use drivers::virtio::virtqueue::Virtq;
 use drivers::virtio::env;
 use drivers::net::virtio_net::VirtioNetDriver;
+use drivers::virtio::device;
 
 /// Virtio device ID's 
 /// See Virtio specification v1.1. - 5 
@@ -325,8 +326,32 @@ impl UniCapsColl {
 
     /// Returns the highest prioritized PciCap that indiactes a 
     /// Virito device configuration.
+    ///
+    /// INFO: This function removes the capability and returns ownership.
     pub fn get_dev_cfg(&mut self) -> Option<PciCap> {
         self.dev_cfg_list.pop()
+    }
+
+    
+    /// Returns the highest prioritized common configuration structure.
+    ///
+    /// INFO: This function removes the capability and returns ownership.
+    pub fn get_com_cfg(&mut self) -> Option<ComCfg> {
+        self.com_cfg_list.pop()
+    }
+
+    /// Returns the highest prioritized ISR status configuraiton structure.
+    ///
+    /// INFO: This function removes the Capability and returns ownership.
+    pub fn get_isr_cfg(&mut self) -> Option<IsrStatus> {
+        self.isr_stat_list.pop()
+    }
+
+    /// Returns the highest prioritized notification structure. 
+    ///
+    /// INFO: This function removes the Capability and returns ownership.
+    pub fn get_notif_cfg(&mut self) -> Option<NotifCfg> {
+        self.notif_cfg_list.pop()
     }
 }
 
@@ -365,6 +390,99 @@ impl ComCfg {
 
     fn set_vq_driv_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: u16) {
         unimplemented!();
+    }
+
+    /// Returns the device status field.
+    pub fn dev_status(&self) -> u8 {
+        self.com_cfg.device_status
+    }
+
+    /// Resets the device status field to zero.
+    pub fn reset_dev(&mut self) {
+        self.com_cfg.device_status = 0;
+    }
+
+    /// Sets the device status field to FAILED.
+    /// A driver MUST NOT initalize and use the device any further after this.
+    /// A driver MAY use the device again after a proper reset of the device.
+    pub fn set_failed(&mut self) {
+        self.com_cfg.device_status = u8::from(device::Status::FAILED);
+    }
+
+    /// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
+    /// OS has notived the device
+    pub fn ack_dev(&mut self) {
+        self.com_cfg.device_status |= u8::from(device::Status::ACKNOWLEDGE);
+    }
+
+    /// Sets the DRIVER bit in the device status field. This indicates, the OS 
+    /// know how to run this device.
+    pub fn set_drv(&mut self) {
+        self.com_cfg.device_status |= u8::from(device::Status::DRIVER);
+    }
+
+
+    /// Sets the FEATURES_OK bit in the device status field. 
+    ///
+    /// Drivers MUST NOT accept new features after this step.
+    pub fn features_ok(&mut self) {
+        self.com_cfg.device_status |= u8::from(device::Status::FEATURES_OK);
+    }
+
+    /// In order to correctly check feature negotiaten, this function
+    /// MUST be called after [self.features_ok()](ComCfg::features_ok()) in order to check
+    /// if features have been accepted by the device after negotiation.
+    ///
+    /// Re-reads device status to ensure the FEATURES_OK bit is still set: 
+    /// otherwise, the device does not support our subset of features and the device is unusable.
+    pub fn check_features(&self) -> bool {
+        self.com_cfg.device_status & u8::from(device::Status::FEATURES_OK) == u8::from(device::Status::FEATURES_OK)
+    }
+
+    /// Sets the DRIVER_OK bit in the device status field. 
+    ///
+    /// After this call, the device is "live"!
+    pub fn drv_ok(&mut self) {
+        self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK)
+    }
+
+    /// Returns the features offered by the device. Coded in a 64bit value.
+    pub fn dev_features(&mut self) -> u64 {
+        // Indicate device to show high 32 bits in device_feature field.
+        // See Virtio specification v1.1. - 4.1.4.3
+        self.com_cfg.device_feature_select = 1;
+
+        // read high 32 bits of device features
+        let mut dev_feat = u64::from(self.com_cfg.device_feature);
+
+        // Indicate device to show low 32 bits in device_feature field.
+        // See Virtio specification v1.1. - 4.1.4.3
+        self.com_cfg.device_feature_select = 0;
+
+        // read low 32 bits of device features
+        dev_feat |= u64::from(self.com_cfg.device_feature);
+
+        dev_feat
+    }
+
+    /// Write selected features into driver_select field.
+    pub fn set_drv_features(&mut self, feats: u64) {
+        let high: u32 = (feats >> 32) as u32;
+        let low: u32  = feats as u32;
+
+        // Indicate to device that driver_features field shows low 32 bits.
+        // See Virtio specification v1.1. - 4.1.4.3
+        self.com_cfg.driver_feature_select = 0;
+
+        // write low 32 bits of device features
+        self.com_cfg.driver_feature = low;
+
+        // Indicate to device that driver_features field shows high 32 bits.
+        // See Virtio specification v1.1. - 4.1.4.3
+        self.com_cfg.device_feature_select = 1;
+
+        // write high 32 bits of device features
+        self.com_cfg.device_feature = high;
     }
 }
 

@@ -16,11 +16,13 @@ pub mod env;
 pub mod error {
     use core::fmt;
     use arch::x86_64::kernel::pci::error::PciError;
+    use drivers::net::virtio_net::error::VirtioNetError;
 
     #[derive(Debug)]
     pub enum VirtioError {
         FromPci(PciError),
         DevNotSupported(u16),
+        NetDriver(VirtioNetError),
     }
 
     impl fmt::Display for VirtioError {
@@ -34,7 +36,15 @@ pub mod error {
                     PciError::NoBarForCap(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Bar indicated by capability not found.", id),
                     PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Virtio capabilites were found.", id),
                 },
-                VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id)
+                VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id),
+                VirtioError::NetDriver(net_error) => match net_error {
+                    VirtioNetError::General => write!(f, "Virtio network driver failed due to unknown reasons!"),
+                    VirtioNetError::NoDevCfg(id) => write!(f, "Network driver failed, for device {:x}, due to a missing or malformed device config!", id),
+                    VirtioNetError::NoComCfg(id) =>  write!(f, "Network driver failed, for device {:x}, due to a missing or malformed common config!", id),
+                    VirtioNetError::NoIsrCfg(id) =>  write!(f, "Network driver failed, for device {:x}, due to a missing or malformed ISR status config!", id),
+                    VirtioNetError::NoNotifCfg(id) =>  write!(f, "Network driver failed, for device {:x}, due to a missing or malformed notification config!", id),
+                    VirtioNetError::FailFeatureNeg(id) => write!(f, "Network driver failed, for device {:x}, device did not acknowledge negotiated feature set!", id),
+                },
             }  
         }
     }
@@ -66,12 +76,45 @@ pub mod features {
 /// 
 /// The module contains ...
 pub mod driver {
+    use super::transport::pci::ComCfg;
+    use super::error::VirtioError;
+    use super::device::DevCfg;
     pub trait VirtioDriver {
-        type Cfg;
-        fn map_cfg(&self) -> Self::Cfg;
         fn add_buff(&self);
         fn get_buff(&self);
         fn process_buff(&self);
         fn set_notif(&self);
     }
+}
+
+/// A module containing virtios device specfific information.
+pub mod device {
+    /// An enum of the device's status field interpretations.
+    #[allow(dead_code, non_camel_case_types)]
+    #[derive(Clone, Copy, Debug)]
+    #[repr(u8)] 
+    pub enum Status {
+       ACKNOWLEDGE = 1,
+       DRIVER = 2,
+       DRIVER_OK = 4,
+       FEATURES_OK = 8,
+       DEVICE_NEEDS_RESET = 64,
+       FAILED = 128, 
+    }
+
+    impl From<Status> for u8 {
+        fn from(stat: Status) -> Self {
+            match stat {
+                Status::ACKNOWLEDGE => 1,
+                Status::DRIVER => 2,
+                Status::DRIVER_OK => 4,
+                Status::FEATURES_OK => 8,
+                Status::DEVICE_NEEDS_RESET => 64,
+                Status::FAILED => 128,
+            }
+        }
+    }
+
+    /// Empty trait to unify all device specific configuration structs.
+    pub trait DevCfg {}
 }
