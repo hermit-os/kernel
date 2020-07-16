@@ -61,15 +61,31 @@ pub mod features {
     #[derive(Clone, Copy, Debug)]
     #[repr(u64)]
     pub enum Features {
-        VIRTIO_F_RING_INDIRECT_DESC = 1 << 28,
-	    VIRTIO_F_RING_EVENT_IDX = 1 << 29,
-	    VIRTIO_F_VERSION_1 = 1 << 32,
-	    VIRTIO_F_ACCESS_PLATFORM = 1 << 33,
-	    VIRTIO_F_RING_PACKED = 1 << 34,
-	    VIRTIO_F_IN_ORDER = 1 << 35,
-	    VIRTIO_F_ORDER_PLATFORM = 1 << 36,
-	    VIRTIO_F_SR_IOV = 1 << 37,
-	    VIRTIO_F_NOTIFICATION_DATA = 1 << 38,
+        VIRTIO_F_RING_INDIRECT_DESC = 1 << 27,
+	    VIRTIO_F_RING_EVENT_IDX = 1 << 28,
+	    VIRTIO_F_VERSION_1 = 1 << 31,
+	    VIRTIO_F_ACCESS_PLATFORM = 1 << 32,
+	    VIRTIO_F_RING_PACKED = 1 << 33,
+	    VIRTIO_F_IN_ORDER = 1 << 34,
+	    VIRTIO_F_ORDER_PLATFORM = 1 << 35,
+	    VIRTIO_F_SR_IOV = 1 << 36,
+	    VIRTIO_F_NOTIFICATION_DATA = 1 << 37,
+    }
+
+    impl From<Features> for u64 {
+        fn from(feature: Features) -> Self {
+            match feature {
+                Features::VIRTIO_F_RING_INDIRECT_DESC => 1 << 27,
+                Features::VIRTIO_F_RING_EVENT_IDX => 1 << 28,
+                Features::VIRTIO_F_VERSION_1 => 1 << 31,
+                Features::VIRTIO_F_ACCESS_PLATFORM => 1 << 32,
+                Features::VIRTIO_F_RING_PACKED => 1 << 33,
+                Features::VIRTIO_F_IN_ORDER => 1 << 34,
+                Features::VIRTIO_F_ORDER_PLATFORM => 1 << 35,
+                Features::VIRTIO_F_SR_IOV => 1 << 36,
+                Features::VIRTIO_F_NOTIFICATION_DATA => 1 << 37,
+            }
+        }
     }
 }
 
