@@ -1,70 +1,143 @@
 #!/usr/bin/env python3
 
 import argparse
+import multiprocessing
 import os
 import os.path
+import platform
+import subprocess
 import sys
 import time
-from subprocess import Popen, PIPE, STDOUT
-import subprocess
-import platform
+from subprocess import PIPE
 
-SMP_CORES = 1  # Number of cores
-MEMORY_MB = 256  # amount of memory
-# Path if libhermit-rs was checked out via rusty-hermit repository
-BOOTLOADER_PATH = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader'
-USE_UHYVE = True   # ToDo: consider using a class and dynamic methods instead of global options
-GDB = False
-VERBOSE = False   # Enables printing of stdout of test
 
-# ToDo: Integrate all tests that don't depend on std
+class TestRunner:
+    """ TestRunner class. Provides methods for running the test and validating test success.
+        Subclassed by QemuTestRunner and UhyveTestRunner that extend this class
+    """
 
-# ToDo add test dependent section for custom kernel arguments / application arguments
-# Idea: Use TOML format to specify things like should_panic, expected output
-# Parse test executable name and check tests directory for corresponding toml file
-# If it doesn't exist just assure that the return code is not a failure
+    def __init__(self, test_command: str, num_cores=1, memory_in_megabyte=512, gdb_enabled=False, verbose=False):
+        online_cpus = multiprocessing.cpu_count()
+        if num_cores > online_cpus:
+            print("WARNING: You specified num_cores={}, however only {} cpu cores are available."
+                  " Setting num_cores to {}", num_cores, online_cpus, online_cpus, file=sys.stderr)
+            num_cores = online_cpus
+        self.num_cores: int = num_cores
+        self.memory_MB: int = memory_in_megabyte
+        self.gdb_enabled: bool = gdb_enabled
+        self.gdb_port = None
+        self.verbose: bool = verbose
+        self.test_command = test_command
+        self.custom_env = None
+
+    def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
+        """
+
+        :param rc: TestRunner ignores rc, but subclasses should evaluate the rc
+        :param stdout:
+        :param stderr: ToDo: Not sure if we actually need this, does hermit use this?
+        :param execution_time:
+        :return: bool - true indicates success
+        """
+        # ToDo: possibly add test failure due to excessive execution time?
+        #       This could be done if a test suddenly regresses compared to usual execution time
+        #       Probably need criterion + stable execution environment for this
+        if not validate_stdout(stdout):
+            print("Test failed due to Panic. Dumping output (stderr):\n{}\n\n"
+                  "Dumping stdout:\n{}\nFinished Dump".format(stderr, stdout), file=sys.stderr)
+            return False
+        else:
+            return True
+
+    def run_test(self):
+        start_time = time.time_ns()  # Note: Requires python >= 3.7
+        if self.custom_env is None:
+            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True)
+        else:
+            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True, env=self.custom_env)
+        end_time = time.time_ns()
+        # ToDo: add some timeout
+        return p.returncode, p.stdout, p.stderr, end_time - start_time
+
+
+class QemuTestRunner(TestRunner):
+    def __init__(self,
+                 test_exe_path: str,
+                 bootloader_path: str = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader',
+                 num_cores=1,
+                 memory_in_megabyte=512,
+                 gdb_enabled=False,
+                 verbose=False):
+        assert os.path.isfile(test_exe_path), "Invalid path to test executable: {}".format(test_exe_path)
+        assert os.path.isfile(bootloader_path), "Invalid bootloader path: {}".format(bootloader_path)
+        self.bootloader_path = os.path.abspath(bootloader_path)
+        test_command = ['qemu-system-x86_64',
+                        '-display', 'none',
+                        '-smp', str(num_cores),
+                        '-m', str(memory_in_megabyte) + 'M',
+                        '-serial', 'stdio',
+                        '-kernel', bootloader_path,
+                        '-initrd', test_exe_path,
+                        '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
+                        '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
+                        ]
+        super().__init__(test_command, num_cores, memory_in_megabyte, gdb_enabled, verbose)
+        if self.gdb_enabled:
+            self.gdb_port = 1234
+            self.test_command.append('-s')
+            self.test_command.append('-S')
+
+    def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
+        assert rc != 0, "Error: rc is zero, something changed regarding the returncodes from qemu"
+        if rc == 1:
+            print("Test failed due to QEMU error. Is QEMU installed?", file=sys.stderr)
+            return False
+        elif rc != 33:
+            # Since we are using asserts, tests should mostly fail due to a panic
+            # However, other kinds of test errors using the debug_exit of qemu are also possible
+            print("Test failed due to error returncode: {}".format(rc), file=sys.stderr)
+            return False
+        return super().validate_test_success(rc, stdout, stderr, execution_time)
+
+
+class UhyveTestRunner(TestRunner):
+    def __init__(self, test_exe_path: str, uhyve_path=None, num_cores=1, memory_in_megabyte=512, gdb_enabled=False,
+                 verbose=False):
+        if platform.system() == 'Windows':
+            print("Error: using uhyve requires kvm. Please use Linux or Mac OS", file=sys.stderr)
+            raise OSError
+        if uhyve_path is None:
+            uhyve_path = 'uhyve'
+        else:
+            assert os.path.isfile(uhyve_path), "Invalid uhyve path"
+            self.uhyve_path = os.path.abspath(uhyve_path)
+        if gdb_enabled:
+            self.gdb_port = 1234  # ToDo: Add parameter to customize this
+            self.custom_env = os.environ.copy()
+            self.custom_env['HERMIT_GDB_PORT'] = str(self.gdb_port)
+        test_command = [uhyve_path, '-v', test_exe_path]
+        super().__init__(test_command=test_command, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
+                         gdb_enabled=gdb_enabled, verbose=verbose)
+
+    def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
+        if rc != 0:
+            print("Test failed due to error returncode: {}".format(rc), file=sys.stderr)
+            return False
+        else:
+            return super().validate_test_success(rc, stdout, stderr, execution_time)
+
 
 # ToDo: Think about how to pass information about how many tests an executable executed back to the runner
 #  Maybe something like `[TEST_INFO]` at the start of a line?
+def validate_stdout(stdout):
+    """
 
-
-def run_test_qemu(process_args):
-    print(os.getcwd())
-    abs_bootloader_path = os.path.abspath(BOOTLOADER_PATH)
-    print("Abspath: ", abs_bootloader_path)
-    start_time = time.time_ns()  # Note: Requires python >= 3.7
-    p = subprocess.run(process_args, stdout=PIPE, stderr=PIPE, text=True)
-    end_time = time.time_ns()
-    # ToDo: add some timeout
-    return p.returncode, p.stdout, p.stderr, end_time - start_time
-
-
-def run_test_uhyve(kernel_path):
-    assert os.path.isfile(kernel_path)
-    process_args = ['uhyve', '-v', kernel_path]
-    start_time = time.time_ns()  # Note: Requires python >= 3.7
-    my_env = os.environ.copy()
-    if GDB:
-        my_env['HERMIT_GDB_PORT'] = '1234'
-    p = subprocess.run(process_args, stdout=PIPE, stderr=PIPE, text=True, env=my_env)
-    end_time = time.time_ns()
-    print(p.stdout)
-    return p.returncode, p.stdout, p.stderr, end_time - start_time
-
-
-def validate_test(returncode, stdout, stderr, test_exe_path):
-    """Validates test success by inspecting returncode and output of the test
-        :return true on success
-                false on test failure"""
-    print("returncode ", returncode)
-    # ToDo handle expected failures
-    if not USE_UHYVE and returncode != 33:
+    :param stdout:
+    :return: true if stdout does not indicate test failure
+    """
+    # Todo: support should_panic tests (Implementation on hermit side with custom panic handler)
+    if "!!!PANIC!!!" in stdout:
         return False
-    if USE_UHYVE and returncode != 0:
-        return False
-    if "!!!PANIC!!!" in stdout: # Todo: support should_panic tests in some way
-        return False
-    # ToDo parse output for panic
     return True
 
 
@@ -80,56 +153,49 @@ def clean_test_name(name: str):
         except ValueError as e:
             print(e)
             clean_name = name  # In this case name doesn't contain a hash, so don't modify it any further
-    return clean_name
+        return clean_name
+    return name
 
+
+# Start "main"
 
 assert sys.version_info[0] == 3, "Python 3 is required to run this script"
 assert sys.version_info[1] >= 7, "Currently at least Python 3.7 is required for this script, If necessary this could " \
                                  "be reduced "
 print("Test runner called")
 parser = argparse.ArgumentParser(description='See documentation of cargo test runner for custom test framework')
+parser.add_argument('--bootloader_path', type=str, help="Provide path to hermit bootloader, implicitly switches to "
+                                                        "QEMU execution")
 parser.add_argument('runner_args', type=str, nargs='*')
 args = parser.parse_args()
 print("Arguments: {}".format(args.runner_args))
 
-qemu_base_arguments = ['qemu-system-x86_64',
-                       '-display', 'none',
-                       '-smp', str(SMP_CORES),
-                       '-m', str(MEMORY_MB) + 'M',
-                       '-serial', 'stdio',
-                       '-kernel', BOOTLOADER_PATH,
-                       # skip initrd - it depends on test executable
-                       '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
-                       '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
-                       ]
-if GDB:
-    qemu_base_arguments.append('-s')
-    qemu_base_arguments.append('-S')
 # The last argument is the executable, all other arguments are ignored for now
-arg = args.runner_args[-1]
-assert isinstance(arg, str)
-curr_qemu_arguments = qemu_base_arguments.copy()
-assert os.path.isfile(arg)      # If this fails likely something about runner args changed
+test_exe = args.runner_args[-1]
+assert isinstance(test_exe, str)
+assert os.path.isfile(test_exe)  # If this fails likely something about runner args changed
 # ToDo: Add addional test based arguments for qemu / uhyve
-curr_qemu_arguments.extend(['-initrd', arg])
-if USE_UHYVE:
-    if platform.system() == 'Windows':
-        print("Error: using uhyve requires kvm. Please use Linux or Mac OS")
-        exit(-1)
-    rc, stdout, stderr, rtime = run_test_uhyve(arg)
+
+if args.bootloader_path is not None:  # ToDo: verify this works, not sure about the syntax
+    test_runner = QemuTestRunner(test_exe, args.bootloader_path)
+elif platform.system() == 'Windows':
+    print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
+    exit(-1)
 else:
-    rc, stdout, stderr, rtime = run_test_qemu(curr_qemu_arguments)
-test_ok = validate_test(rc, stdout, stderr, arg)
-test_name = os.path.basename(arg)
+    test_runner = UhyveTestRunner(test_exe)
+
+rc, stdout, stderr, execution_time = test_runner.run_test()
+test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
+test_name = os.path.basename(test_exe)
 test_name = clean_test_name(test_name)
 if test_ok:
-    print("Test Ok: {} - runtime: {} seconds".format(test_name, rtime / (10 ** 9)))
+    print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
     exit(0)
 else:
-    print("Test failed: {} - runtime: {} seconds".format(test_name, rtime / (10 ** 9)))
+    print("Test failed: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
+    print("Test failed - Dumping Stderr:\n{}\n\nDumping Stdout:\n{}\n".format(stderr, stdout), file=sys.stderr)
     exit(1)
-#Todo: improve information about the test
 
-# todo print something ala x/y tests failed etc.
-#  maybe look at existing standards (TAP?)
-#  - TAP: could use tappy to convert to python style unit test output (benefit??)
+# Todo: improve information about the test:
+#       Maybe we could produce a JUnit XML by iteratively generating it for every call of this script
+#       Sounds complex though
