@@ -18,20 +18,98 @@ extern crate float_cmp;
 use core::hint::black_box;
 
 use common::exit;
+
 // Either use black_box from core::hint or the value_fence definition
 // core hint is a nop, but possibly only prevents dead code elimination
 // value_fence has higher overhead but should be a bit safer regarding preventing optimizations
 // pub fn black_box<T>(x: T) -> T {
 // 	common::value_fence::<T>(x)
 // }
-use hermit::{print, println};
-
 mod common;
 
 #[test_case]
 fn add1() {
-	let x = 1 + 2;
+	let x = black_box(1) + black_box(2);
 	assert_eq!(x, 3);
+}
+
+#[test_case]
+fn subtest() {
+	int_test::<u8>();
+	int_test::<u16>();
+	int_test::<u32>();
+	int_test::<u64>();
+	int_test::<i8>();
+	int_test::<i16>();
+	int_test::<i32>();
+	int_test::<i64>();
+
+	sint_test::<i8>();
+	sint_test::<i16>();
+	sint_test::<i32>();
+	sint_test::<i64>();
+}
+
+fn int_test<T>()
+where
+	T: core::fmt::Debug,
+	T: num_traits::int::PrimInt,
+{
+	let fifteen = T::from(15).unwrap();
+	let ten = T::from(10).unwrap();
+	let r_five: T = black_box(fifteen) - black_box(ten);
+	let r_zero: T = black_box(fifteen) - black_box(fifteen);
+	assert_eq!(r_five, T::from(5).unwrap());
+	assert_eq!(r_zero, T::from(0).unwrap());
+
+	let r_twentyfive: T = black_box(fifteen) + black_box(ten);
+	let r_twentyfive2: T = black_box(r_zero) + black_box(r_twentyfive);
+	assert_eq!(r_twentyfive, T::from(25).unwrap());
+	assert_eq!(r_twentyfive2, r_twentyfive);
+
+	let r_hundred: T = black_box(ten) * black_box(ten);
+	let r_hundred2: T = black_box(ten).pow(2);
+	let r_zero: T = black_box(r_hundred) * black_box(r_zero);
+	assert_eq!(r_hundred, T::from(100).unwrap());
+	assert_eq!(r_hundred, r_hundred2);
+	assert_eq!(r_zero, T::from(0).unwrap());
+
+	let r_ten: T = black_box(r_hundred) / black_box(ten);
+	let r_one: T = black_box(r_ten) / black_box(ten);
+	let r_zero: T = black_box(r_one) / black_box(ten);
+	assert_eq!(r_ten, ten);
+	assert_eq!(r_one, T::from(1).unwrap());
+	assert_eq!(r_zero, T::from(0).unwrap());
+}
+
+fn sint_test<T>()
+where
+	T: core::fmt::Debug,
+	T: num_traits::sign::Signed,
+	T: num_traits::int::PrimInt,
+{
+	let fifteen = T::from(15).unwrap();
+	let ten = T::from(10).unwrap();
+	let r_minusfive: T = black_box(ten) - black_box(fifteen);
+	assert_eq!(r_minusfive, T::from(-5).unwrap());
+	let r_minusfifteen: T = black_box(r_minusfive) - black_box(ten);
+	assert_eq!(r_minusfifteen, T::from(-15).unwrap());
+	let r_fifteen: T = black_box(r_minusfifteen) + black_box(fifteen) + black_box(fifteen);
+	assert_eq!(r_fifteen, fifteen);
+
+	let r_minusseventyfive: T = black_box(r_minusfive) * black_box(fifteen);
+	let r_zero: T = black_box(r_minusseventyfive) * black_box(T::from(0).unwrap());
+	assert_eq!(r_minusseventyfive, T::from(-75).unwrap());
+	assert_eq!(r_zero, T::from(0).unwrap());
+	assert_eq!(r_zero, T::from(-0).unwrap());
+
+	let r_minusseven: T = black_box(r_minusseventyfive) / black_box(ten);
+	assert_eq!(r_minusseven, T::from(-7).unwrap());
+
+	let r_fortynine: T = black_box(r_minusseven).pow(2);
+	let r_fortynine2: T = black_box(r_minusseven) * black_box(r_minusseven);
+	assert_eq!(r_fortynine, T::from(49).unwrap());
+	assert_eq!(r_fortynine, r_fortynine2);
 }
 
 #[test_case]
@@ -77,8 +155,6 @@ fn test_f64_arithmetic() {
 	let z = black_box(z * y);
 	assert!(approx_eq!(f64, z, 0.8f64, ulps = 0));
 }
-
-//ToDo - add a testrunner so we can group multiple similar tests
 
 #[no_mangle]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
