@@ -12,7 +12,7 @@
 
 extern crate rusty_loader;
 
-use core::intrinsics::copy_nonoverlapping;
+use core::intrinsics::copy;
 use rusty_loader::arch;
 use rusty_loader::*;
 
@@ -37,7 +37,8 @@ pub unsafe extern "C" fn loader_main() -> ! {
 		kernel_location,
 		virtual_address
 	);
-	copy_nonoverlapping(
+	arch::map_memory(virtual_address, mem_size);
+	copy(
 		kernel_location as *const u8,
 		virtual_address as *mut u8,
 		mem_size,
