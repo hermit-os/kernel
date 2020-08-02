@@ -513,7 +513,7 @@ where
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
 				for entry in subtable.entries.iter_mut() {
-					entry.physical_address_and_flags = PhysAddr(0u64);
+					entry.physical_address_and_flags = PhysAddr::zero();
 				}
 			}
 
@@ -653,7 +653,7 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
 			let off = virtual_address.as_u64()
 				& !(((!0u64) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
 			let phys =
-				entry & (((!064) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+				entry & (((!0u64) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
 
 			return PhysAddr(off | phys);
 		}
@@ -701,7 +701,7 @@ pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 	let first_page = Page::<BasePageSize>::including_address(VirtAddr(start_address.as_u64()));
 	let last_page = Page::<BasePageSize>::including_address(VirtAddr(end_address.as_u64()));
 	assert!(
-		last_page.address() < VirtAddr(mm::kernel_start_address().as_u64()),
+		last_page.address() < mm::kernel_start_address(),
 		"Address {:#X} to be identity-mapped is not below Kernel start address",
 		last_page.address()
 	);
