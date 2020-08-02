@@ -203,7 +203,7 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 }
 
 pub fn add_irq_name(irq_number: u32, name: &'static str) {
-	debug!("Install handler for interrupt {}", irq_number);
+	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
 	IRQ_NAMES.lock().insert(32 + irq_number, name.to_string());
 }
 
