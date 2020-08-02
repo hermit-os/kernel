@@ -71,8 +71,8 @@ const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
-static mut LOCAL_APIC_ADDRESS: VirtAddr = VirtAddr(0);
-static mut IOAPIC_ADDRESS: VirtAddr = VirtAddr(0);
+static mut LOCAL_APIC_ADDRESS: VirtAddr = VirtAddr::zero();
+static mut IOAPIC_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).

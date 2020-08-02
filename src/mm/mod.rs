@@ -24,17 +24,17 @@ use core::mem;
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
-static mut KERNEL_START_ADDRESS: VirtAddr = VirtAddr(0u64);
+static mut KERNEL_START_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Physical and virtual address of the first page after the kernel.
 /// Can be easily accessed through kernel_end_address()
-static mut KERNEL_END_ADDRESS: VirtAddr = VirtAddr(0u64);
+static mut KERNEL_END_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Start address of the user heap
-static mut HEAP_START_ADDRESS: VirtAddr = VirtAddr(0u64);
+static mut HEAP_START_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// End address of the user heap
-static mut HEAP_END_ADDRESS: VirtAddr = VirtAddr(0u64);
+static mut HEAP_END_ADDRESS: VirtAddr = VirtAddr::zero();
 
 pub fn kernel_start_address() -> VirtAddr {
 	unsafe { KERNEL_START_ADDRESS }
@@ -80,7 +80,7 @@ fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
-		KERNEL_START_ADDRESS = environment::get_base_address().align_up_to_large_page();
+		KERNEL_START_ADDRESS = environment::get_base_address().align_down_to_large_page();
 		KERNEL_END_ADDRESS = (environment::get_base_address() + environment::get_image_size())
 			.align_up_to_large_page();
 	}
