@@ -873,7 +873,7 @@ static mut VIRTIO_IRQ_NO: u8 = 0;
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	info!("Receive virtio interrupt");
+	debug!("Receive virtio interrupt");
 	apic::eoi();
 	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
