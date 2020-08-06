@@ -43,5 +43,5 @@ pub unsafe extern "C" fn loader_main() -> ! {
 		mem_size,
 	);
 
-	arch::boot_kernel(virtual_address, mem_size, entry_point);
+	arch::boot_kernel(virtual_address, mem_size, entry_point)
 }

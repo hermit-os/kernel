@@ -18,12 +18,18 @@
 // EXTERNAL CRATES
 #[macro_use]
 extern crate bitflags;
-
 #[cfg(target_arch = "x86_64")]
 extern crate multiboot;
-
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
+
+use core::intrinsics::{copy_nonoverlapping, write_bytes};
+use core::ptr;
+
+use crate::arch::{map_memory, BOOT_INFO, ELF_ARCH};
+// IMPORTS
+use crate::arch::paging::{BasePageSize, LargePageSize, PageSize};
+use crate::elf::*;
 
 // MODULES
 #[macro_use]
@@ -35,13 +41,6 @@ mod elf;
 mod physicalmem;
 mod rlib;
 mod runtime_glue;
-
-// IMPORTS
-use crate::arch::paging::{BasePageSize, LargePageSize, PageSize};
-use crate::arch::{map_memory, BOOT_INFO, ELF_ARCH};
-use crate::elf::*;
-use core::intrinsics::{copy_nonoverlapping, write_bytes};
-use core::ptr;
 
 extern "C" {
 	static bss_end: u8;
@@ -148,8 +147,8 @@ pub unsafe fn check_kernel_elf_file(start_address: usize) -> (usize, usize, usiz
 	}
 
 	// Verify the information.
-	assert!(physical_address % BasePageSize::SIZE == 0);
-	assert!(virtual_address % LargePageSize::SIZE == 0);
+	assert_eq!(physical_address % BasePageSize::SIZE, 0);
+	assert_eq!(virtual_address % LargePageSize::SIZE, 0);
 	assert!(file_size > 0);
 	assert!(mem_size > 0);
 	loaderlog!("File Size: {} Bytes", file_size);
