@@ -83,3 +83,10 @@ macro_rules! kernel_function {
 		$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
 	};
 }
+
+#[cfg(target_arch = "aarch64")]
+macro_rules! kernel_function {
+	($f:ident($($x:tt)*)) => {{
+		$f($($x)*)
+	}};
+}

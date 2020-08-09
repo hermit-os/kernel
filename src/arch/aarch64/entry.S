@@ -83,7 +83,7 @@
 	ALIGN; \
 	name:
 
-.section .mboot
+.section .text
 
 .global _start
 _start:
@@ -250,8 +250,6 @@ smp:
 halt:
   wfe
   b halt
-
-.section .text
 
 _setup_cpu:
     ic      iallu

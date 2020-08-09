@@ -17,6 +17,7 @@ use core::convert::TryInto;
 use core::sync::atomic::{AtomicU32, Ordering};
 use crossbeam_utils::Backoff;
 
+use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use crate::arch;
 use crate::arch::irq;
 use crate::arch::mm::VirtAddr;

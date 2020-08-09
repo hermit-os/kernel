@@ -18,12 +18,12 @@ pub mod x86_64;
 pub use crate::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, switch, wakeup_core};
+pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, switch_to_task, switch_to_fpu_owner, wakeup_core};
 
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::{
 	application_processor_init, boot_application_processors, boot_processor_init,
-	get_processor_count, message_output_init, output_message_byte,
+	get_processor_count, message_output_init, output_message_byte, output_message_buf,
 };
 
 #[cfg(target_arch = "aarch64")]
