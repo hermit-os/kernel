@@ -34,6 +34,7 @@
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]
+#![feature(nonnull_slice_from_raw_parts)]
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
 #![allow(unused_macros)]

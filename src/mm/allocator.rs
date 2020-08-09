@@ -10,7 +10,7 @@
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
-use core::alloc::{AllocErr, AllocInit, AllocRef, GlobalAlloc, Layout, MemoryBlock};
+use core::alloc::{AllocErr, AllocRef, GlobalAlloc, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -158,18 +158,9 @@ impl Heap {
 }
 
 unsafe impl AllocRef for Heap {
-	fn alloc(&mut self, layout: Layout, init: AllocInit) -> Result<MemoryBlock, AllocErr> {
+	fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
 		let (ptr, size) = self.allocate_first_fit(layout)?;
-		let memory = MemoryBlock { ptr, size };
-
-		match init {
-			AllocInit::Uninitialized => {}
-			AllocInit::Zeroed => unsafe {
-				memory.ptr.as_ptr().write_bytes(0, memory.size);
-			},
-		}
-
-		Ok(memory)
+		Ok(NonNull::slice_from_raw_parts(ptr, size))
 	}
 
 	unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
@@ -212,17 +203,17 @@ unsafe impl GlobalAlloc for LockedHeap {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
 			.lock()
-			.alloc(layout, AllocInit::Uninitialized)
+			.alloc(layout)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |mem| mem.ptr.as_ptr())
+			.map_or(ptr::null_mut() as *mut u8, |mut mem| mem.as_mut().as_mut_ptr())
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-		self.0
-			.lock()
-			.alloc(layout, AllocInit::Zeroed)
-			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |mem| mem.ptr.as_ptr())
+		let ptr = self.alloc(layout.clone());
+		if !ptr.is_null() {
+			ptr::write_bytes(ptr, 0, layout.size());
+		}
+		ptr
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
