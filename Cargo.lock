@@ -11,6 +11,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "aarch64"
+version = "0.0.4"
+dependencies = [
+ "cortex-a",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -41,6 +48,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d82cfc11ce7f2c3faef78d8a684447b40d503d9681acebed6cb728d45940c4db"
 dependencies = [
  "cfg-if",
+]
+
+[[package]]
+name = "cortex-a"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6922a40af4d1a2deac8c963b9f3e57311b8912490740234f1ad182425c547f80"
+dependencies = [
+ "register",
 ]
 
 [[package]]
@@ -243,6 +259,15 @@ dependencies = [
 [[package]]
 name = "tock-registers"
 version = "0.5.0"
+<<<<<<< HEAD
+=======
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70323afdb8082186c0986da0e10f6e4ed103d681c921c00597e98d9806dac20f"
+
+[[package]]
+name = "unicode-xid"
+version = "0.2.1"
+>>>>>>> 5bfb4cc8 (first step to support aarch64)
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70323afdb8082186c0986da0e10f6e4ed103d681c921c00597e98d9806dac20f"
 

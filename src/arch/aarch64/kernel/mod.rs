@@ -12,6 +12,7 @@ pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
+pub mod start;
 pub mod stubs;
 pub mod systemtime;
 
