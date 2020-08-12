@@ -19,10 +19,6 @@ The kernel is able to run [Rust](https://github.com/hermitcore/hermit-playground
 
 The Rust toolchain can be installed from the [official webpage](https://www.rust-lang.org/).
 RusyHermit currently requires the **nightly versions** of the toolchain.
-```sh
-rustup default nightly
-```
-
 Further requirements are the source code of the Rust runtime, and llvm-tools:
 
 ```sh
