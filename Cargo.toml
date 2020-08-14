@@ -42,9 +42,10 @@ acpi = []
 
 [dev-dependencies]
 x86_64 = "0.11.0"
+float-cmp = "0.8.0"
 
 [dev-dependencies.num-traits]
-version = "0.2.12"
+version = "0.2"
 default-features = false
 
 [dependencies]
@@ -54,7 +55,7 @@ bitflags = "1.2"
 num-derive = "0.3"
 
 [dependencies.num]
-version = "0.2"
+version = "0.3"
 default-features = false
 
 [dependencies.num-traits]
