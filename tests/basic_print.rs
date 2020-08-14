@@ -8,8 +8,9 @@
 //use core::panic::PanicInfo;
 extern crate hermit;
 
-mod common;
+#[macro_use]
 use common::*;
+mod common;
 
 /// Print all Strings the application got passed as arguments
 #[no_mangle]
@@ -19,3 +20,5 @@ pub fn main(args: Vec<String>) -> Result<(), ()> {
 	}
 	Ok(()) // real assertion is done by the runner
 }
+
+runtime_entry_with_args!();
