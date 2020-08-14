@@ -228,7 +228,7 @@ pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
 }
 
 // ToDo: Maybe we could add a hard limit on the length of `s` to make this slightly safer?
-unsafe fn parse_str(s: *const u8) -> Result<String, ()> {
+pub unsafe fn parse_str(s: *const u8) -> Result<String, ()> {
 	let mut vec: Vec<u8> = Vec::new();
 	let mut off = s;
 	while *off != 0 {
@@ -241,40 +241,42 @@ unsafe fn parse_str(s: *const u8) -> Result<String, ()> {
 		Err(_) => Err(()), //Convert error here since we might want to add another error type later
 	}
 }
-/*
-// Workaround if the "real" runtime_entry function (defined in libstd) is not available
-// We only need this if we build without std
-#[no_mangle]
-extern "C" fn runtime_entry(argc: i32, argv: *const *const u8, _env: *const *const u8) -> ! {
-	extern "Rust" {
-		/// main functions of integration test get their arguments as a Vec<String> and
-		/// must return a Result<(), ()> indicating success or failure of the tests
-		fn main(args: Vec<String>) -> Result<(), ()>;
-	}
+/// defines runtime_entry and passes arguments as Rust String to main method with signature:
+/// `fn main(args: Vec<String>) -> Result<(), ()>;`
+#[macro_export]
+macro_rules! runtime_entry_with_args {
+	() => {
+		#[no_mangle]
+		extern "C" fn runtime_entry(
+			argc: i32,
+			argv: *const *const u8,
+			_env: *const *const u8,
+		) -> ! {
+			let mut str_vec: Vec<String> = Vec::new();
+			let mut off = argv;
+			for i in 0..argc {
+				let s = unsafe { common::parse_str(*off) };
+				unsafe {
+					off = off.offset(1);
+				}
+				match s {
+					Ok(s) => str_vec.push(s),
+					Err(_) => println!(
+						"Warning: Application argument {} is not valid utf-8 - Dropping it",
+						i
+					),
+				}
+			}
 
-	let mut str_vec: Vec<String> = Vec::new();
-	let mut off = argv;
-	for i in 0..argc {
-		let s = unsafe { parse_str(*off) };
-		unsafe {
-			off = off.offset(1);
+			let res = main(str_vec);
+			match res {
+				Ok(_) => exit(false),
+				Err(_) => exit(true),
+			}
 		}
-		match s {
-			Ok(s) => str_vec.push(s),
-			Err(_) => println!(
-				"Warning: Application argument {} is not valid utf-8 - Dropping it",
-				i
-			),
-		}
-	}
-
-	let res = unsafe { main(str_vec) };
-	match res {
-		Ok(_) => exit(false),
-		Err(_) => exit(true),
-	}
+	};
 }
-*/
+
 //adapted from: https://rust-lang.github.io/rfcs/2360-bench-black-box.html
 #[inline(always)]
 pub fn value_fence<T>(x: T) -> T {
