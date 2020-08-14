@@ -108,6 +108,15 @@ pub fn _print(args: ::core::fmt::Arguments) {
 	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
 }
 
+#[cfg(test)]
+#[cfg(target_os = "hermit")]
+#[no_mangle]
+extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
+	println!("Executing hermit unittests. Any arguments are dropped");
+	test_main();
+	sys_exit(0);
+}
+
 //https://github.com/rust-lang/rust/issues/50297#issuecomment-524180479
 #[cfg(test)]
 pub fn test_runner(tests: &[&dyn Fn()]) {

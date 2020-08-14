@@ -181,7 +181,8 @@ test_name = os.path.basename(test_exe)
 test_name = clean_test_name(test_name)
 if test_name == "hermit":
     print("Executing the Unittests is currently broken... Skipping Test and marking as failed")
-    exit(-1)
+    print("Note: If you want to execute all tests, consider adding the '--no-fail-fast' flag")
+    exit(36)
 
 if args.bootloader_path is not None:
     test_runner = QemuTestRunner(test_exe, args.bootloader_path)

@@ -22,7 +22,7 @@ exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gi
 travis-ci = { repository = "hermitcore/libhermit-rs" }
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
 name = "hermit"
 
 [[test]]
@@ -31,6 +31,10 @@ harness = false
 
 [[test]]
 name = "basic_math"
+harness = true
+
+[[test]]
+name = "measure_startup_time"
 harness = false
 
 [features]
@@ -55,7 +59,7 @@ bitflags = "1.2"
 num-derive = "0.3"
 
 [dependencies.num]
-version = "0.3"
+version = "0.2"
 default-features = false
 
 [dependencies.num-traits]
@@ -78,11 +82,12 @@ default-features = false
 [profile.dev]
 opt-level = 1      # controls the `--opt-level` the compiler builds with
 debug = true       # controls whether the compiler passes `-C debuginfo`
-                   # a value of `true` is equivalent to `2`
+# a value of `true` is equivalent to `2`
 rpath = false      # controls whether the compiler passes `-C rpath`
 lto = false         # controls `-C lto` for binaries and staticlibs
 debug-assertions = true # controls whether debug assertions are enabled
-panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/32900
+# Disabled because of https://github.com/rust-lang/cargo/issues/7359
+#panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/32900
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
@@ -91,4 +96,4 @@ debug = false
 rpath = false
 lto = "thin"
 debug-assertions = false
-panic = "abort"
+#panic = "abort"
