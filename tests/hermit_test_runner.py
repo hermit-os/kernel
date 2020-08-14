@@ -50,6 +50,7 @@ class TestRunner:
             return True
 
     def run_test(self):
+        print("Calling {}".format(type(self).__name__))
         start_time = time.time_ns()  # Note: Requires python >= 3.7
         if self.custom_env is None:
             p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True)
@@ -174,9 +175,15 @@ print("Arguments: {}".format(args.runner_args))
 test_exe = args.runner_args[-1]
 assert isinstance(test_exe, str)
 assert os.path.isfile(test_exe)  # If this fails likely something about runner args changed
-# ToDo: Add addional test based arguments for qemu / uhyve
+# ToDo: Add additional test based arguments for qemu / uhyve
 
-if args.bootloader_path is not None:  # ToDo: verify this works, not sure about the syntax
+test_name = os.path.basename(test_exe)
+test_name = clean_test_name(test_name)
+if test_name == "hermit":
+    print("Executing the Unittests is currently broken... Skipping Test and marking as failed")
+    exit(-1)
+
+if args.bootloader_path is not None:
     test_runner = QemuTestRunner(test_exe, args.bootloader_path)
 elif platform.system() == 'Windows':
     print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
@@ -186,8 +193,6 @@ else:
 
 rc, stdout, stderr, execution_time = test_runner.run_test()
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
-test_name = os.path.basename(test_exe)
-test_name = clean_test_name(test_name)
 if test_ok:
     print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
     exit(0)
