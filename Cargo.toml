@@ -51,6 +51,7 @@ float-cmp = "0.8.0"
 [dev-dependencies.num-traits]
 version = "0.2"
 default-features = false
+# features = ["i128"] // Blocked by: https://github.com/rust-num/num-traits/issues/177
 
 [dependencies]
 bitflags = "1.2"

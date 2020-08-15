@@ -43,6 +43,7 @@ fn subtest() {
 	int_test::<i16>();
 	int_test::<i32>();
 	int_test::<i64>();
+	// int_test::<i128>();  Blocked by https://github.com/rust-num/num-traits/issues/177
 
 	sint_test::<i8>();
 	sint_test::<i16>();
