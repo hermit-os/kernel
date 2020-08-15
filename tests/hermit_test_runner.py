@@ -16,7 +16,7 @@ class TestRunner:
         Subclassed by QemuTestRunner and UhyveTestRunner that extend this class
     """
 
-    def __init__(self, test_command: str, num_cores=1, memory_in_megabyte=512, gdb_enabled=False, verbose=False):
+    def __init__(self, test_command, num_cores=1, memory_in_megabyte=512, gdb_enabled=False, verbose=False):
         online_cpus = multiprocessing.cpu_count()
         if num_cores > online_cpus:
             print("WARNING: You specified num_cores={}, however only {} cpu cores are available."
@@ -51,7 +51,7 @@ class TestRunner:
 
     def run_test(self):
         print("Calling {}".format(type(self).__name__))
-        start_time = time.time_ns()  # Note: Requires python >= 3.7
+        start_time = time.time_ns()  # Note: Requires python >= 3.7 - ToDo: Discuss if this is a problem
         if self.custom_env is None:
             p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True)
         else:
@@ -62,13 +62,17 @@ class TestRunner:
 
 
 class QemuTestRunner(TestRunner):
+    """
+    Test Runner for QEMU. Requires a path to the bootloader and the test_exe. 
+    Verbose is not an option, so the '-vv' flag for `hermit_test_runner.py` behaves the same as `-v`.
+    """
+
     def __init__(self,
                  test_exe_path: str,
                  bootloader_path: str = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader',
                  num_cores=1,
                  memory_in_megabyte=512,
-                 gdb_enabled=False,
-                 verbose=False):
+                 gdb_enabled=False):
         assert os.path.isfile(test_exe_path), "Invalid path to test executable: {}".format(test_exe_path)
         assert os.path.isfile(bootloader_path), "Invalid bootloader path: {}".format(bootloader_path)
         self.bootloader_path = os.path.abspath(bootloader_path)
@@ -82,11 +86,12 @@ class QemuTestRunner(TestRunner):
                         '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
                         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
                         ]
-        super().__init__(test_command, num_cores, memory_in_megabyte, gdb_enabled, verbose)
+        super().__init__(test_command, num_cores, memory_in_megabyte, gdb_enabled, verbose=False)
         if self.gdb_enabled:
             self.gdb_port = 1234
             self.test_command.append('-s')
             self.test_command.append('-S')
+            print('Testing with Gdb enabled at port {}'.format(self.gdb_port))
 
     def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
         assert rc != 0, "Error: rc is zero, something changed regarding the returncodes from qemu"
@@ -112,13 +117,17 @@ class UhyveTestRunner(TestRunner):
         else:
             assert os.path.isfile(uhyve_path), "Invalid uhyve path"
             self.uhyve_path = os.path.abspath(uhyve_path)
+        test_command = [uhyve_path]
+        if verbose:
+            test_command.append('-v')
+        test_command.append(test_exe_path)
+        super().__init__(test_command=test_command, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
+                         gdb_enabled=gdb_enabled, verbose=verbose)
         if gdb_enabled:
             self.gdb_port = 1234  # ToDo: Add parameter to customize this
             self.custom_env = os.environ.copy()
             self.custom_env['HERMIT_GDB_PORT'] = str(self.gdb_port)
-        test_command = [uhyve_path, '-v', test_exe_path]
-        super().__init__(test_command=test_command, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
-                         gdb_enabled=gdb_enabled, verbose=verbose)
+            print('Testing with Gdb enabled at port {}'.format(self.gdb_port))
 
     def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
         if rc != 0:
@@ -163,11 +172,14 @@ def clean_test_name(name: str):
 assert sys.version_info[0] == 3, "Python 3 is required to run this script"
 assert sys.version_info[1] >= 7, "Currently at least Python 3.7 is required for this script, If necessary this could " \
                                  "be reduced "
-print("Test runner called")
 parser = argparse.ArgumentParser(description='See documentation of cargo test runner for custom test framework')
 parser.add_argument('--bootloader_path', type=str, help="Provide path to hermit bootloader, implicitly switches to "
                                                         "QEMU execution")
 parser.add_argument('runner_args', type=str, nargs='*')
+parser.add_argument('-v', '--verbose', action='store_true', help="Always prints stdout/stderr of test")
+parser.add_argument('-vv', '--veryverbose', action='store_true', help='verbose and additionally runs test verbosely')
+parser.add_argument('--gdb', action='store_true', help='Enables gdb on port 1234 and stops at test executable '
+                                                       'entrypoint')
 args = parser.parse_args()
 print("Arguments: {}".format(args.runner_args))
 
@@ -185,17 +197,20 @@ if test_name == "hermit":
     exit(36)
 
 if args.bootloader_path is not None:
-    test_runner = QemuTestRunner(test_exe, args.bootloader_path)
+    test_runner = QemuTestRunner(test_exe, args.bootloader_path, gdb_enabled=args.gdb)
 elif platform.system() == 'Windows':
     print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
     exit(-1)
 else:
-    test_runner = UhyveTestRunner(test_exe)
+    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb)
 
 rc, stdout, stderr, execution_time = test_runner.run_test()
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
 if test_ok:
     print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
+    if args.verbose or args.veryverbose:
+        print("Test {} stdout: {}".format(test_name, stdout))
+        print("Test {} stderr: {}".format(test_name, stderr))
     exit(0)
 else:
     print("Test failed: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
