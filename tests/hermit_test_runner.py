@@ -20,7 +20,7 @@ class TestRunner:
         online_cpus = multiprocessing.cpu_count()
         if num_cores > online_cpus:
             print("WARNING: You specified num_cores={}, however only {} cpu cores are available."
-                  " Setting num_cores to {}", num_cores, online_cpus, online_cpus, file=sys.stderr)
+                  " Setting num_cores to {}".format(num_cores, online_cpus, online_cpus), file=sys.stderr)
             num_cores = online_cpus
         self.num_cores: int = num_cores
         self.memory_MB: int = memory_in_megabyte
@@ -123,11 +123,16 @@ class UhyveTestRunner(TestRunner):
         test_command.append(test_exe_path)
         super().__init__(test_command=test_command, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
                          gdb_enabled=gdb_enabled, verbose=verbose)
+        # ToDo: This could be done a lot nicer if we could use flags to pass these options to uhyve
+        if gdb_enabled or num_cores != 1:
+            self.custom_env = os.environ.copy()
         if gdb_enabled:
             self.gdb_port = 1234  # ToDo: Add parameter to customize this
-            self.custom_env = os.environ.copy()
+
             self.custom_env['HERMIT_GDB_PORT'] = str(self.gdb_port)
             print('Testing with Gdb enabled at port {}'.format(self.gdb_port))
+        if num_cores != 1:
+            self.custom_env['HERMIT_CPUS'] = str(num_cores)
 
     def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
         if rc != 0:
@@ -180,6 +185,7 @@ parser.add_argument('-v', '--verbose', action='store_true', help="Always prints 
 parser.add_argument('-vv', '--veryverbose', action='store_true', help='verbose and additionally runs test verbosely')
 parser.add_argument('--gdb', action='store_true', help='Enables gdb on port 1234 and stops at test executable '
                                                        'entrypoint')
+parser.add_argument('--num_cores', type=int, default=1, help="Number of CPU cores the test should run on")
 args = parser.parse_args()
 print("Arguments: {}".format(args.runner_args))
 
@@ -197,12 +203,12 @@ if test_name == "hermit":
     exit(36)
 
 if args.bootloader_path is not None:
-    test_runner = QemuTestRunner(test_exe, args.bootloader_path, gdb_enabled=args.gdb)
+    test_runner = QemuTestRunner(test_exe, args.bootloader_path, gdb_enabled=args.gdb, num_cores=args.num_cores)
 elif platform.system() == 'Windows':
     print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
     exit(-1)
 else:
-    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb)
+    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb, num_cores=args.num_cores)
 
 rc, stdout, stderr, execution_time = test_runner.run_test()
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
