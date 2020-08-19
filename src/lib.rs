@@ -127,6 +127,7 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
 	sys_exit(0);
 }
 
+#[cfg(target_os = "hermit")]
 #[test_case]
 fn trivial_test() {
 	println!("Test test test");
