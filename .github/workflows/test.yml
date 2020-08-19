@@ -54,8 +54,8 @@ jobs:
           path: 'libhermit-rs'
       - name: Check Cargo availability
         run: cargo --version
-      - name: Cargo Test libhermit-rs
-        run: cargo test
+      - name: Cargo Test libhermit-rs (Unittests on Host)
+        run: cargo test --lib
         working-directory: libhermit-rs
       - name: Install qemu/nasm (apt)
         run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
