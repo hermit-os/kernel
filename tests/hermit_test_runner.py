@@ -51,12 +51,13 @@ class TestRunner:
 
     def run_test(self):
         print("Calling {}".format(type(self).__name__))
-        start_time = time.time_ns()  # Note: Requires python >= 3.7 - ToDo: Discuss if this is a problem
+        start_time = time.perf_counter()  # https://docs.python.org/3/library/time.html#time.perf_counter
         if self.custom_env is None:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True)
+            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
         else:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, text=True, env=self.custom_env)
-        end_time = time.time_ns()
+            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
+                               env=self.custom_env)
+        end_time = time.perf_counter()
         # ToDo: add some timeout
         return p.returncode, p.stdout, p.stderr, end_time - start_time
 
@@ -171,15 +172,17 @@ def clean_test_name(name: str):
         return clean_name
     return name
 
+    # Start "main"
 
-# Start "main"
 
 assert sys.version_info[0] == 3, "Python 3 is required to run this script"
-assert sys.version_info[1] >= 7, "Currently at least Python 3.7 is required for this script, If necessary this could " \
-                                 "be reduced "
+assert sys.version_info[1] >= 6, "Currently at least Python 3.6 is required for this script"
+
 parser = argparse.ArgumentParser(description='See documentation of cargo test runner for custom test framework')
-parser.add_argument('--bootloader_path', type=str, help="Provide path to hermit bootloader, implicitly switches to "
-                                                        "QEMU execution")
+hypervisor_group = parser.add_mutually_exclusive_group()
+hypervisor_group.add_argument('--bootloader_path', type=str, help="Provide path to hermit bootloader, implicitly "
+                                                                  "switches to QEMU execution")
+hypervisor_group.add_argument('--uhyve_path', type=str, default=None, help="Custom Path to uhyve if it is not in PATH")
 parser.add_argument('runner_args', type=str, nargs='*')
 parser.add_argument('-v', '--verbose', action='store_true', help="Always prints stdout/stderr of test")
 parser.add_argument('-vv', '--veryverbose', action='store_true', help='verbose and additionally runs test verbosely')
@@ -189,7 +192,7 @@ parser.add_argument('--num_cores', type=int, default=1, help="Number of CPU core
 args = parser.parse_args()
 print("Arguments: {}".format(args.runner_args))
 
-# The last argument is the executable, all other arguments are ignored for now
+# The last argument is the executable, all other arguments are ignored for now - ToDo: recheck this
 test_exe = args.runner_args[-1]
 assert isinstance(test_exe, str)
 assert os.path.isfile(test_exe)  # If this fails likely something about runner args changed
@@ -208,12 +211,13 @@ elif platform.system() == 'Windows':
     print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
     exit(-1)
 else:
-    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb, num_cores=args.num_cores)
+    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb, num_cores=args.num_cores,
+                                  uhyve_path=args.uhyve_path)
 
 rc, stdout, stderr, execution_time = test_runner.run_test()
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
 if test_ok:
-    print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time / (10 ** 9)))
+    print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time))
     if args.verbose or args.veryverbose:
         print("Test {} stdout: {}".format(test_name, stdout))
         print("Test {} stderr: {}".format(test_name, stderr))
