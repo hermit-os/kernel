@@ -1,6 +1,6 @@
 [package]
 name = "rusty-loader"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
@@ -9,6 +9,11 @@ edition = "2018"
 [dependencies]
 bitflags = "1.2.*"
 
+[dependencies.goblin]
+version = "0.2"
+default-features = false
+features = ["elf64", "elf32", "endian_fd"]
+
 [target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
 version = "0.*"
 
@@ -16,8 +21,8 @@ version = "0.*"
 version = "0.*"
 default-features = false
 
-[package.metadata.cargo-xbuild]
-memcpy = true
+[build-dependencies]
+target_build_utils = "0.3"
 
 # The release profile, used for `cargo build --release`.
 [profile.dev]

@@ -101,7 +101,7 @@ L0: cmp ecx, ebx
     and eax, 0xFFFFF000       ; page align lower half
     mov edi, eax
     shr edi, 9                ; (edi >> 12) * 8 (index for boot_pgt)
-    add edi, boot_pgt
+    add edi, boot_pgt1
     or eax, 0x3               ; set present and writable bits
     mov DWORD [edi], eax
     add ecx, 0x1000
@@ -221,9 +221,12 @@ boot_pdpt:
     DQ boot_pgd + 0x3   ; PG_PRESENT | PG_RW
     times 511 DQ 0      ; PAGE_MAP_ENTRIES - 1
 boot_pgd:
-    DQ boot_pgt + 0x3   ; PG_PRESENT | PG_RW
-    times 511 DQ 0      ; PAGE_MAP_ENTRIES - 1
-boot_pgt:
+    DQ boot_pgt1 + 0x3  ; PG_PRESENT | PG_RW
+    DQ boot_pgt2 + 0x3  ; PG_PRESENT | PG_RW
+    times 510 DQ 0      ; PAGE_MAP_ENTRIES - 1
+boot_pgt1:
+    times 512 DQ 0
+boot_pgt2:
     times 512 DQ 0
 
 ; add some hints to the ELF file

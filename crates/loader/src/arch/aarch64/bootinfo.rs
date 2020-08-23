@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::arch::x86_64::SERIAL_PORT_ADDRESS;
+use crate::arch::aarch64::SERIAL_PORT_ADDRESS;
 use core::fmt;
 
 #[repr(C)]
@@ -23,7 +23,6 @@ pub struct BootInfo {
 	pub current_percore_address: u64,
 	pub host_logical_addr: u64,
 	pub boot_gtod: u64,
-	pub mb_info: u64,
 	pub cmdline: u64,
 	pub cmdsize: u64,
 	pub cpu_freq: u32,
@@ -31,7 +30,7 @@ pub struct BootInfo {
 	pub cpu_online: u32,
 	pub possible_cpus: u32,
 	pub current_boot_id: u32,
-	pub uartport: u16,
+	pub uartport: u32,
 	pub single_kernel: u8,
 	pub uhyve: u8,
 	pub hcip: [u8; 4],
@@ -54,7 +53,6 @@ impl BootInfo {
 			current_percore_address: 0,
 			host_logical_addr: 0,
 			boot_gtod: 0,
-			mb_info: 0,
 			cmdline: 0,
 			cmdsize: 0,
 			cpu_freq: 0,
@@ -94,7 +92,6 @@ impl fmt::Debug for BootInfo {
 		)?;
 		writeln!(f, "host_logical_addr 0x{:x}", self.host_logical_addr)?;
 		writeln!(f, "boot_gtod 0x{:x}", self.boot_gtod)?;
-		writeln!(f, "mb_info 0x{:x}", self.mb_info)?;
 		writeln!(f, "cmdline 0x{:x}", self.cmdline)?;
 		writeln!(f, "cmdsize 0x{:x}", self.cmdsize)?;
 		writeln!(f, "cpu_freq {}", self.cpu_freq)?;

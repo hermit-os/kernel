@@ -7,7 +7,7 @@
 
 use core::marker::PhantomData;
 
-use crate::physicalmem;
+use crate::arch::x86_64::physicalmem;
 
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>;
