@@ -68,7 +68,6 @@ extern crate x86;
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
-use core::panic::PanicInfo;
 use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
 
 use arch::percore::*;
@@ -260,6 +259,7 @@ fn has_ipdevice() -> bool {
 #[cfg(target_os = "hermit")]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
+		#[cfg(not(test))]
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
@@ -290,6 +290,7 @@ extern "C" fn initd(_arg: usize) {
 	syscalls::init();
 
 	// Get the application arguments and environment variables.
+	#[cfg(not(test))]
 	let (argc, argv, environ) = syscalls::get_application_parameters();
 
 	// give the IP thread time to initialize the network interface
