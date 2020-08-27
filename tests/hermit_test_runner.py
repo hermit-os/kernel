@@ -200,10 +200,6 @@ assert os.path.isfile(test_exe)  # If this fails likely something about runner a
 
 test_name = os.path.basename(test_exe)
 test_name = clean_test_name(test_name)
-if test_name == "hermit":
-    print("Executing the Unittests is currently broken... Skipping Test NOT marking as failed")
-    # print("Note: If you want to execute all tests, consider adding the '--no-fail-fast' flag")
-    exit(0)
 
 if args.bootloader_path is not None:
     test_runner = QemuTestRunner(test_exe, args.bootloader_path, gdb_enabled=args.gdb, num_cores=args.num_cores)
@@ -213,6 +209,12 @@ elif platform.system() == 'Windows':
 else:
     test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb, num_cores=args.num_cores,
                                   uhyve_path=args.uhyve_path)
+if test_name == "hermit":
+    print("Executing the Unittests is currently broken... Skipping Test NOT marking as failed")
+    # print("Note: If you want to execute all tests, consider adding the '--no-fail-fast' flag")
+    print("If you wish to manually execute the Unittests, you can simply run:")
+    print("`{}`".format(' '.join(test_runner.test_command)))
+    exit(0)
 
 rc, stdout, stderr, execution_time = test_runner.run_test()
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
