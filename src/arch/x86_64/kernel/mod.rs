@@ -50,6 +50,7 @@ use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));
+#[cfg(not(test))]
 global_asm!(include_str!("switch.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
