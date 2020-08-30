@@ -71,6 +71,12 @@ pub use crate::arch::x86_64::kernel::{
 	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
 
+#[cfg(test)]
+pub fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {}
+#[cfg(test)]
+pub fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {}
+
+#[cfg(not(test))]
 extern "C" {
 	pub fn switch_to_task(old_stack: *mut usize, new_stack: usize);
 	pub fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize);
