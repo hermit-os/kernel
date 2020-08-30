@@ -405,6 +405,7 @@ pub fn print_statistics() {
 	}
 }
 
+#[cfg(not(test))]
 #[inline(never)]
 #[no_mangle]
 unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
