@@ -477,9 +477,13 @@ impl PerCoreScheduler {
 
 				// Finally save our current context and restore the context of the new task.
 				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
-					switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize())
+					unsafe {
+						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
+					}
 				} else {
-					switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					unsafe {
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
 				}
 			}
 		}

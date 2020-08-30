@@ -518,6 +518,10 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	}
 }
 
+extern "C" {
+	fn _start();
+}
+
 /// Boot all Application Processors
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
@@ -559,10 +563,9 @@ pub fn boot_application_processors() {
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to 0x{:x}",
-			arch::x86_64::kernel::start::_start as u64
+			_start as u64
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) =
-			arch::x86_64::kernel::start::_start as u64;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) = _start as u64;
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) = BOOT_INFO as u64;
 	}
 

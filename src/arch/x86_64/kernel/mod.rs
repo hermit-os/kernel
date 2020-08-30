@@ -25,9 +25,6 @@ pub mod scheduler;
 pub mod serial;
 #[cfg(not(test))]
 mod smp_boot_code;
-#[cfg(not(test))]
-mod start;
-pub mod switch;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
@@ -49,7 +46,11 @@ use core::convert::TryInto;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};
-use x86::controlregs::{cr0, cr4};
+use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
+
+#[cfg(not(test))]
+global_asm!(include_str!("start.s"));
+global_asm!(include_str!("switch.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
@@ -401,5 +402,22 @@ pub fn print_statistics() {
 				}
 			}
 		}
+	}
+}
+
+#[inline(never)]
+#[no_mangle]
+unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
+	// Enable caching
+	let mut cr0 = cr0();
+	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
+	cr0_write(cr0);
+
+	BOOT_INFO = boot_info as *mut BootInfo;
+
+	if boot_info.cpu_online == 0 {
+		crate::boot_processor_main()
+	} else {
+		crate::application_processor_main()
 	}
 }
