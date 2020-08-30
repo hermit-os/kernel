@@ -327,14 +327,17 @@ impl Clone for TaskTLS {
 }
 
 #[cfg(test)]
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
+extern "C" fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64) {}
 
 #[cfg(not(test))]
+extern "C" {
+	fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64);
+}
+
 #[inline(never)]
-#[naked]
+#[no_mangle]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Call the actual entry point of the task.
-	switch_to_user!();
 	func(arg);
 	switch_to_kernel!();
 
@@ -366,7 +369,7 @@ impl TaskFrame for Task {
 			if let Some(tls) = &self.tls {
 				(*state).fs = tls.get_fs().as_u64();
 			}
-			(*state).rip = task_entry as u64;
+			(*state).rip = task_start as u64;
 			(*state).rdi = func as u64;
 			(*state).rsi = arg as u64;
 
@@ -377,6 +380,9 @@ impl TaskFrame for Task {
 			self.last_stack_pointer = stack;
 			self.user_stack_pointer =
 				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10u64;
+
+			// rdx is required to intialize the stack
+			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
 		}
 	}
 }

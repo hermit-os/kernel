@@ -60,8 +60,6 @@ pub use crate::arch::x86_64::kernel::processor;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::scheduler;
 #[cfg(target_arch = "x86_64")]
-pub use crate::arch::x86_64::kernel::switch::{switch_to_fpu_owner, switch_to_task};
-#[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
 #[cfg(not(test))]
 #[cfg(target_arch = "x86_64")]
@@ -72,3 +70,8 @@ pub use crate::arch::x86_64::kernel::{
 pub use crate::arch::x86_64::kernel::{
 	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
+
+extern "C" {
+	pub fn switch_to_task(old_stack: *mut usize, new_stack: usize);
+	pub fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize);
+}
