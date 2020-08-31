@@ -129,7 +129,7 @@ pub struct MemoryBar {
 pub enum PciDriver<'a> {
 	VirtioFs(Rc<RefCell<VirtioFsDriver<'a>>>),
 	VirtioNet(Rc<RefCell<VirtioNetDriver<'a>>>),
-	VirtioNetNew(VnetDrv),
+	VirtioNetNew(VnetDrv<'a>),
 }
 
 pub fn register_driver(drv: PciDriver<'static>) {
