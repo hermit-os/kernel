@@ -534,7 +534,7 @@ impl VirtqDescriptors {
 			.used_chains
 			.borrow()
 			.iter()
-			.position(|c| c.borrow().0.last().unwrap().index == index.try_into().unwrap())
+			.position(|c| c.borrow().0.last().unwrap().index == index as u16)
 			.unwrap();
 		self.used_chains.borrow()[idx].clone()
 	}
