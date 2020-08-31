@@ -13,6 +13,7 @@
 use arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
 use arch::x86_64::kernel::pci as kernel_pci;
 use arch::x86_64::kernel::pci::error::PciError;
+use arch::x86_64::mm::paging;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use core::result::Result;
@@ -22,10 +23,10 @@ use core::mem;
 use drivers::error::DriverError;
 use drivers::virtio::error::VirtioError;
 use drivers::virtio::env::memory::{VirtMemAddr, PhyMemAddr, MemOff, MemLen};
-use drivers::virtio::virtqueue::Virtq;
 use drivers::virtio::env;
 use drivers::net::virtio_net::VirtioNetDriver;
 use drivers::virtio::device;
+
 
 /// Virtio device ID's 
 /// See Virtio specification v1.1. - 5 
@@ -368,16 +369,13 @@ pub struct ComCfg {
     rank: u8,
 }
 
+// Private interface of ComCfg
 impl ComCfg {
     fn new(raw: &'static mut ComCfgRaw, rank: u8) -> Self {
         ComCfg{
             com_cfg: raw,
             rank,
         }
-    }
-
-    pub fn write_vq_mem_areas(&self) {
-        unimplemented!();
     }
 
     fn set_vq_desc_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: u16,) {
@@ -390,6 +388,65 @@ impl ComCfg {
 
     fn set_vq_driv_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: u16) {
         unimplemented!();
+    }
+}
+
+pub struct VqCfgHandler<'a> {
+    vq_index: u16,
+    raw: &'a mut ComCfgRaw,
+}
+
+impl <'a> VqCfgHandler<'a> {
+    /// Sets the size of a given virtqueue. In case the provided size exceeds the maximum allowed 
+    /// size, the size is set to this maximum instead. Else size is set to the provided value. 
+    ///
+    /// Returns the set size in form of a `u16`.
+    pub fn set_vq_size(&mut self, size: u16) -> u16 {
+        if self.raw.queue_size < size {
+            self.raw.queue_size
+        } else {
+            self.raw.queue_size = size;
+            self.raw.queue_size
+        }
+    }
+
+    pub fn set_ring_addr(&mut self, vq_index: u16, addr: usize) {
+        self.raw.queue_select = vq_index;
+        self.raw.queue_desc = paging::virt_to_phys(addr) as u64;
+    }
+
+    pub fn set_drv_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
+        self.raw.queue_select = vq_index;
+        self.raw.queue_driver = paging::virt_to_phys(addr) as u64;
+    }
+
+    pub fn set_dev_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
+        self.raw.queue_select = vq_index;
+        self.raw.queue_device = paging::virt_to_phys(addr) as u64;
+    }
+}
+
+// Public Interface of ComCfg
+impl ComCfg { 
+    /// Select a queue via an index. If queue does NOT exist returns `None`, else
+    /// returns `Some(VqCfgHandler)`.
+    ///
+    /// INFO: The queue size is automatically bounded by constant `src::config:VIRTIO_MAX_QUEUE_SIZE`.
+    pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler> {
+        self.com_cfg.queue_select = index;
+
+        if self.com_cfg.queue_size == 0 {
+            None
+        } else {
+            if self.com_cfg.queue_size > ::config::VIRTIO_MAX_QUEUE_SIZE {
+                self.com_cfg.queue_size = ::config::VIRTIO_MAX_QUEUE_SIZE;
+            }
+
+            Some(VqCfgHandler{
+                vq_index: index,
+                raw: self.com_cfg
+            })
+        }
     }
 
     /// Returns the device status field.
