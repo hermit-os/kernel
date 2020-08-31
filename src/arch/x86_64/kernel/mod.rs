@@ -6,6 +6,22 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use alloc::collections::BTreeMap;
+use core::convert::TryInto;
+#[cfg(feature = "newlib")]
+use core::slice;
+use core::{intrinsics, ptr};
+
+use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
+
+use crate::arch::mm::VirtAddr;
+use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::serial::SerialPort;
+use crate::environment;
+use crate::kernel_message_buffer;
+use crate::scheduler::CoreId;
+
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
@@ -32,22 +48,6 @@ pub mod virtio;
 pub mod virtio_fs;
 pub mod virtio_net;
 
-use crate::arch::mm::VirtAddr;
-use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
-use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::kernel::serial::SerialPort;
-
-use crate::environment;
-use crate::kernel_message_buffer;
-use crate::scheduler::CoreId;
-
-use alloc::collections::BTreeMap;
-use core::convert::TryInto;
-#[cfg(feature = "newlib")]
-use core::slice;
-use core::{intrinsics, ptr};
-use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
-
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));
 #[cfg(not(test))]
@@ -57,6 +57,7 @@ const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
 /// Map between Core ID and per-core scheduler
 static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
+const BOOTINFO_MAGIC_NUMBER: u32 = 0xC0DE_CAFEu32;
 
 #[repr(C)]
 pub struct BootInfo {
@@ -411,6 +412,7 @@ pub fn print_statistics() {
 #[inline(never)]
 #[no_mangle]
 unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
+	assert_eq!(boot_info.magic_number, BOOTINFO_MAGIC_NUMBER);
 	// Enable caching
 	let mut cr0 = cr0();
 	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
