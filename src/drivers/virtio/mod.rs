@@ -44,8 +44,8 @@ pub mod error {
                     VirtioNetError::NoIsrCfg(id) =>  write!(f, "Network driver failed, for device {:x}, due to a missing or malformed ISR status config!", id),
                     VirtioNetError::NoNotifCfg(id) =>  write!(f, "Network driver failed, for device {:x}, due to a missing or malformed notification config!", id),
                     VirtioNetError::FailFeatureNeg(id) => write!(f, "Network driver failed, for device {:x}, device did not acknowledge negotiated feature set!", id),
-                    VirtioNetError::FeatReqNotMet(feats) => write!(f, "Network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", feats),
-                    VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", drv_feats, dev_feats),
+                    VirtioNetError::FeatReqNotMet(feats) => write!(f, "Network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
+                    VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
                 },
             }  
         }
@@ -61,31 +61,15 @@ pub mod features {
     #[derive(Clone, Copy, Debug)]
     #[repr(u64)]
     pub enum Features {
-        VIRTIO_F_RING_INDIRECT_DESC = 1 << 27,
-	    VIRTIO_F_RING_EVENT_IDX = 1 << 28,
-	    VIRTIO_F_VERSION_1 = 1 << 31,
-	    VIRTIO_F_ACCESS_PLATFORM = 1 << 32,
-	    VIRTIO_F_RING_PACKED = 1 << 33,
-	    VIRTIO_F_IN_ORDER = 1 << 34,
-	    VIRTIO_F_ORDER_PLATFORM = 1 << 35,
-	    VIRTIO_F_SR_IOV = 1 << 36,
-	    VIRTIO_F_NOTIFICATION_DATA = 1 << 37,
-    }
-
-    impl From<Features> for u64 {
-        fn from(feature: Features) -> Self {
-            match feature {
-                Features::VIRTIO_F_RING_INDIRECT_DESC => 1 << 27,
-                Features::VIRTIO_F_RING_EVENT_IDX => 1 << 28,
-                Features::VIRTIO_F_VERSION_1 => 1 << 31,
-                Features::VIRTIO_F_ACCESS_PLATFORM => 1 << 32,
-                Features::VIRTIO_F_RING_PACKED => 1 << 33,
-                Features::VIRTIO_F_IN_ORDER => 1 << 34,
-                Features::VIRTIO_F_ORDER_PLATFORM => 1 << 35,
-                Features::VIRTIO_F_SR_IOV => 1 << 36,
-                Features::VIRTIO_F_NOTIFICATION_DATA => 1 << 37,
-            }
-        }
+        VIRTIO_F_RING_INDIRECT_DESC = 1 << 28,
+	    VIRTIO_F_RING_EVENT_IDX = 1 << 29,
+	    VIRTIO_F_VERSION_1 = 1 << 32,
+	    VIRTIO_F_ACCESS_PLATFORM = 1 << 33,
+	    VIRTIO_F_RING_PACKED = 1 << 34,
+	    VIRTIO_F_IN_ORDER = 1 << 35,
+	    VIRTIO_F_ORDER_PLATFORM = 1 << 36,
+	    VIRTIO_F_SR_IOV = 1 << 37,
+	    VIRTIO_F_NOTIFICATION_DATA = 1 << 38,
     }
 }
 
