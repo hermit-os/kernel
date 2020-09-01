@@ -62,6 +62,8 @@ pub struct Filesystem {
 	files: BTreeMap<u64, Box<dyn PosixFile>>,
 }
 
+unsafe impl Send for Filesystem {}
+
 impl Filesystem {
 	pub const fn new() -> Self {
 		Self {
