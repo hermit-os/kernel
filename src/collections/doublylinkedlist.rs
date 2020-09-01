@@ -20,6 +20,8 @@ pub struct DoublyLinkedList<T> {
 	tail: Option<Rc<RefCell<Node<T>>>>,
 }
 
+unsafe impl<T: Send> Send for DoublyLinkedList<T> {}
+
 pub struct Node<T> {
 	pub value: T,
 	prev: Option<Rc<RefCell<Node<T>>>>,
