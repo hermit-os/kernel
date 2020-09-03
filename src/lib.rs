@@ -34,6 +34,7 @@
 #![feature(naked_functions)]
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
+#![feature(vec_into_raw_parts)]
 #![allow(unused_macros)]
 #![no_std]
 

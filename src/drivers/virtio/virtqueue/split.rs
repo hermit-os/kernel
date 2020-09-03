@@ -8,16 +8,7 @@
 //! This module contains Virtio's split virtqueue. 
 //! See Virito specification v1.1. - 2.6 
 
-use drivers::virtio::virtqueue::VqInterface;
-
-#[derive(Copy, Clone, Debug)]
-pub struct VqSize(u32);
-
-impl From<u32> for VqSize {
-    fn from(val: u32) -> Self {
-        VqSize(val)
-    }
-}
+use super::VqSize;
 
 struct SplitVqRaw {
 
@@ -33,12 +24,8 @@ impl SplitVq {
     pub fn new(size: VqSize) -> Self {
         unimplemented!();
     }
-}
 
-impl VqInterface for SplitVq {
-    type VqSize = VqSize;
-
-    fn get_size(&self) -> Self::VqSize {
-        self.size
+    pub fn size(&self) -> VqSize {
+        todo!("implement size() for split queue")
     }
 }
