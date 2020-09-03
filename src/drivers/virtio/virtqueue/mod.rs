@@ -916,10 +916,23 @@ impl <'a> MemPool {
     ///   * First MemPool.pull -> MemDesc with id = 3
     ///   * Second MemPool.pull -> MemDesc with id = 100
     ///   * Third MemPool.pull -> MemDesc with id = 2,
-    fn pull (&self, bytes: Bytes) -> Result<MemDescr<'a>, VirtqError> {
-        // ensure bytes is smaller than u32 max
-        // update doc to indicate this
-        unimplemented!();
+    fn pull (&'a self, bytes: Bytes) -> Result<MemDescr<'a>, VirtqError> {
+        let id = match self.pool.pop() {
+            Some(id) => id,
+            None => return Err(VirtqError::NoDescrAvail),
+        };
+
+        // Allocate heap memory via a vec, leak and cast
+        let ptr = Box::into_raw(vec![0u8; bytes.0].into_boxed_slice()) as *mut u8;
+
+        Ok(MemDescr {
+            ptr,
+            len: bytes.0,
+            id: Some(id),
+            dealloc: true,
+            pool: &self,
+            ctrl: None,
+        })
     }
     
     /// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The 
@@ -931,10 +944,18 @@ impl <'a> MemPool {
     ///   * First MemPool.pull -> MemDesc with id = 3
     ///   * Second MemPool.pull -> MemDesc with id = 100
     ///   * Third MemPool.pull -> MemDesc with id = 2,
-    fn pull_untracked(&self, bytes: Bytes)-> MemDescr<'a> {
-        // ensure bytes is smaller than u32 max
-        // update doc to indicate this
-        unimplemented!();
+    fn pull_untracked(&'a self, bytes: Bytes)-> MemDescr<'a> {
+        // Allocate heap memory via a vec, leak and cast
+        let ptr = Box::into_raw(vec![0u8; bytes.0].into_boxed_slice()) as *mut u8;
+
+        MemDescr {
+            ptr,
+            len: bytes.0,
+            id: None,
+            dealloc: true,
+            pool: &self,
+            ctrl: None,
+        }
     }
 }
 
