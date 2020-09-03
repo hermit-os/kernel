@@ -193,9 +193,9 @@ impl<'a> Virtq<'a> {
     /// ```
     /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
     /// part via the recv argument.
-    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) -> Result<TransferToken<'a>, VirtqError> {
+    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&'a self, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) -> Result<TransferToken<'a>, VirtqError> {
             match self {
-                Virtq::Packed(vq) => vq.prep_transfer(send, recv),
+                Virtq::Packed(vq) => vq.prep_transfer(self ,send, recv),
                 Virtq::Split(vq ) => unimplemented!(),
             }
     }
@@ -206,7 +206,13 @@ impl<'a> Virtq<'a> {
     /// * Data behind the respective raw pointers will NOT be deallocated. Under no circumstances. 
     /// * Calley is responsible for ensuring the raw pointers will remain valid from start till end of transfer.
     ///   * start: call of `fn prep_transfer_from_raw()`
-    ///   * end: closing of [Transfer](Transfer) via `Transfer.close()` or via `Transfer.ret()`.
+    ///   * end: closing of [Transfer](Transfer) via `Transfer.close()`.
+    ///   * In case the underlying BufferToken is reused, the raw pointers MUST still be valid all the time
+    ///   BufferToken exists.
+    /// * Transfer created from this TransferTokens will ONLY allow to return a copy of the data.
+    ///   * This is due to the fact, that the `Transfer.ret()` returns a `Box[u8]`, which must own
+    ///   the array. This would lead to unwanted frees, if not handled carefully
+    /// * Drivers must take care of keeping a copy of the respective `*mut T` and `*mut K` for themselves
     /// 
     /// **Parameters**
     /// * send: `Option<(*mut T, BuffSpec)>`
@@ -250,7 +256,7 @@ impl<'a> Virtq<'a> {
     /// ```
     /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
     /// part via the recv argument. 
-    pub fn prep_transfer_from_raw<T: AsSliceU8, K: AsSliceU8>(&self, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken<'a>, VirtqError> {
+    pub fn prep_transfer_from_raw<T: AsSliceU8, K: AsSliceU8>(&'a self, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken<'a>, VirtqError> {
         match self {
             Virtq::Packed(vq) => unimplemented!(),
             Virtq::Split(vq ) => unimplemented!(),
@@ -292,9 +298,9 @@ impl<'a> Virtq<'a> {
     /// //                                                                          ++++++++++++++++++++++++++
     /// ```
     /// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-    pub fn prep_buffer(&self, send: Option<BuffSpec>, recv: Option<BuffSpec>) -> Result<BufferToken<'a>, VirtqError> {
+    pub fn prep_buffer(&'a self, send: Option<BuffSpec>, recv: Option<BuffSpec>) -> Result<BufferToken<'a>, VirtqError> {
         match self {
-            Virtq::Packed(vq) => vq.prep_buffer(send, recv),
+            Virtq::Packed(vq) => vq.prep_buffer(&self, send, recv),
             Virtq::Split(vq ) => unimplemented!(),
         }
     }
@@ -313,9 +319,41 @@ impl<'a> Virtq<'a> {
 /// The trait needs to be implemented on structures which are to be used via the `prep_transfer()` function of virtqueues and for 
 /// structures which are to be used to write data into buffers of a [BufferToken](BufferToken) via `BufferToken.write()` or
 /// `BufferToken.write_seq()`.
+///
+/// **INFO:*
+/// The trait provides a decent default implementation. Please look at the code for details. 
+/// The provided default implementation computes the size of the given structure via `core::mem::size_of_val(&self)`
+/// and then casts the given `*const Self` pointer of the structure into an `*const u8`. 
+/// 
+/// Users must be really carefull, and check, wether the memory representation of the given structure equals
+/// the representation the device expects. It is advised to only use `#[repr(C)]` and to check the output 
+/// of `as_slice_u8` and `as_slice_u8_mut`.
 pub trait AsSliceU8 {
-    fn as_slice_u8(&self) -> &[u8];
-    fn as_slice_u8_mut(&self) -> &mut [u8];
+    /// Returns a slice of the given structure.
+    ///
+    /// ** WARN:**
+    /// * The slice must little endian coded in order to be understood by the device
+    /// * The slice must serialize the actual structure the device expects, as the queue will use 
+    /// the addresses of the slice in order to refer to the structure.
+    unsafe fn as_slice_u8(&self) -> &[u8] {
+        core::slice::from_raw_parts(
+           (self as *const Self) as *const u8,
+            core::mem::size_of_val(&self),
+        )
+    }
+
+    /// Returns a mutable slice of the given structure.
+    ///
+    /// ** WARN:**
+    /// * The slice must little endian coded in order to be understood by the device
+    /// * The slice must serialize the actual structure the device expects, as the queue will use 
+    /// the addresses of the slice in order to refer to the structure.
+    unsafe fn as_slice_u8_mut(&self) -> &mut [u8] {
+        core::slice::from_raw_parts_mut(
+            (self as *const Self) as *mut u8,
+             core::mem::size_of_val(&self)
+        )
+    }
 }
 
 
@@ -389,6 +427,7 @@ impl<'a> Transfer<'a> {
     pub fn ret(mut self) -> (Option<Box<[u8]>>, Option<Box<[u8]>>) {
         unimplemented!();
         // Returns the buffers as RetBuffers, which 
+        // NOT allowed if returnable == false
     }
 
     /// Closes an transfer. If the transfer was ongoing the respective transfer token will be returned to the virtqueue.
@@ -404,6 +443,7 @@ impl<'a> Transfer<'a> {
         // Returns a the buffer token, consumes the transfer.
         // Maybe return transfer again if it is ongoing to allowe recovery if falsely called?
         // - VirtqError would then trigger clean up of transfer when beeing dropped itself
+        // NOT allowed if reusable == false
     }
 
 }
@@ -485,15 +525,34 @@ impl <'a> TransferToken<'a> {
 /// The maximum number of descriptors per buffer is bounded by the size of the virtqueue.
 pub struct BufferToken<'a> {
     send_buff: Option<Buffer<'a>>,
-    send_desc_lst: Option<Vec<usize>>,
+    //send_desc_lst: Option<Vec<usize>>,
 
     recv_buff: Option<Buffer<'a>>,
-    recv_desc_lst: Option<Vec<usize>>,
+    //recv_desc_lst: Option<Vec<usize>>,
 
     vq: &'a Virtq<'a>,
-    /// indicates if Token still holds its buffers
-    /// or if they have been extracted
+    /// Indicates wether the buff is returnable
+    ret_send: bool,
+    ret_recv: bool,
+    /// Indicates if the token is allowed 
+    /// to be reused.
     reusable: bool,
+}
+
+// Private Interface of BufferToken
+impl <'a> BufferToken<'a> {
+    /// A new function to return a Buffertoken. This is needed in order to let rust know 
+    /// the correct lifetime of the Virtq reference.
+    fn new(send_buff: Option<Buffer<'a>>, recv_buff: Option<Buffer<'a>>, vq: &'a Virtq<'a>, ret_send: bool, ret_recv: bool, reusable: bool) -> BufferToken<'a> {
+        BufferToken {
+            send_buff,
+            recv_buff,
+            vq,
+            ret_send,
+            ret_recv,
+            reusable
+        }
+    }
 }
 
 // Public interface of BufferToken
@@ -559,6 +618,7 @@ enum Buffer<'a>{
 
 // Private Interface of Buffer
 impl<'a> Buffer <'a> {
+    
     /// Sets a [Pinned](Pinned)<[TransferToken](TransferToken)> for a Buffer. This is 
     /// useful if one wants to create a connection between the complex control structure
     /// of the [Virtq](Virtq) and the control structures defined by the standard. In essence
@@ -634,6 +694,9 @@ struct MemDescr<'a> {
 }
 
 impl<'a> MemDescr<'a> {
+
+    /// Sets the contorlling field to hold the given TransferToken
+    ///    
     /// MemDescr Pool does allocate one usize before the actual 
     /// Bytes in order to allow a reference to a pinned TransferToken.
     /// This function does allow to set this reference accordingly.
@@ -649,7 +712,7 @@ impl<'a> MemDescr<'a> {
         // direct array indexing is safe.
         let ptr_size = core::mem::size_of::<usize>();
         // Create a negativ counter for offsetting memory area correctly.
-        let rev_cnt = -(ptr_size as isize);
+        let mut rev_cnt = -(ptr_size as isize);
         for i in 0..ptr_size {
             let tkn_ref = unsafe {
                 &mut *(self.ptr.offset(rev_cnt))
@@ -673,6 +736,25 @@ impl<'a> MemDescr<'a> {
     /// Returns the length of the controlled memory area.
     fn len(&self) -> usize {
         self.len
+    }
+
+    /// Returns a "clone" of the Object, which will NOT be deallocated in order 
+    /// to prevent double frees!
+    ///
+    /// **WARNING**
+    ///
+    /// Be cautious with the usage of clones of `MemDescr`. Typically this function
+    /// should only be used to create a second controlling descriptor of an 
+    /// indirect buffer. See [Buffer](Buffer) `Buffer::Indirect` for details!
+    fn no_dealloc_clone(&self) -> Self {
+        MemDescr {
+            ptr: self.ptr,
+            len: self.len,
+            id: None,
+            pool: self.pool,
+            dealloc: false,
+            ctrl: self.ctrl,
+        }
     }
 }
 
@@ -702,6 +784,39 @@ impl <'a> Drop for MemDescr<'a> {
 /// A newtype for descriptor ids, for better readability.
 struct MemDescrId(u16);
 
+/// A newtype for a usize, which indiactes how many bytes the usize does refer to.
+#[derive(Debug, Clone, Copy)]
+pub struct Bytes(usize);
+
+// Public interface for Bytes
+impl Bytes {
+    /// Ensures the provided size is never greater than u32::MAX, as this is the maximum
+    /// allowed size in the virtio specification.
+    /// Returns a None therefore, if the size was to large.
+    pub fn new(size: usize) -> Option<Bytes> {
+        if core::mem::size_of_val(&size) <= core::mem::size_of::<u32>() {
+        // Usize is as maximum 32bit large. Smaller is not a probelm for the queue
+            Some(Bytes(size))
+        } else if core::mem::size_of_val(&size) == core::mem::size_of::<u64>(){
+        // Usize is equal to 64 bit
+            if (size as u64) <= (u32::MAX as u64) {
+                Some(Bytes(size))
+            } else {
+                None
+            }
+        } else {
+        // No support for machines over 64bit
+            None
+        }
+    }
+}
+
+impl From<Bytes> for usize {
+    fn from(byte: Bytes) -> Self {
+        byte.0
+    }
+}
+
 /// MemPool allows to easily control, request and provide memory for Virtqueues. 
 ///
 /// * The struct is initalized with a limit of free running "tracked" (see `fn pull_untracked`) 
@@ -720,14 +835,73 @@ struct MemPool {
     limit: u16,
 }
 
-/// A newtype for a usize, which indiactes how many bytes the usize does refer to.
-#[derive(Debug, Clone, Copy)]
-pub struct Bytes(usize);
-
 impl <'a> MemPool {
     /// Returns a new instance, with a pool of the specified size.
     fn new(size: u16) -> MemPool {
         unimplemented!();
+    }
+
+    /// Creates a MemDescr which refers to already existing memory.
+    ///
+    /// **Info on Usage:**
+    /// * `Panics` if given `slice.len() == 0`
+    /// * One should set the dealloc parameter of the function to `false` ONLY
+    /// when the given memory is controlled somewhere else.
+    /// * The given slice MUST be a heap allocated slice.
+    ///
+    /// **Properties of Returned MemDescr:**
+    /// 
+    /// * The descriptor will consume one element of the pool. 
+    /// * The refered to memory area will be deallocated upon drop
+    ///   * Unless the field: `dealloc` is set to `false`.
+    ///   * OR the dealloc field parameter is set to false.
+    fn pull_from(&self, slice: &[u8], dealloc: bool) -> Result<MemDescr, VirtqError> {
+        // Zero sized descriptors are NOT allowed
+        assert!(slice.len() != 0);
+
+        let desc_id = match self.pool.pop() {
+            Some(id) => id,
+            None => return Err(VirtqError::NoDescrAvail),
+        };
+
+        Ok(MemDescr{
+            ptr: (&slice[0] as *const u8) as *mut u8,
+            len: slice.len(),
+            id: Some(desc_id),
+            dealloc,
+            pool: &self,
+            ctrl: None,
+        })
+    }
+
+    /// Creates a MemDescr which refers to already existing memory.
+    /// The MemDescr does NOT consume a place in the pool and should
+    /// be used with `Buffer::Indirect`.
+    ///
+    /// **Info on Usage:**
+    /// * `Panics` if given `slice.len() == 0`
+    /// * One should set the dealloc parameter of the function to `false` ONLY
+    /// when the given memory is controlled somewhere else.
+    /// * The given slice MUST be a heap allocated slice.
+    ///
+    /// **Properties of Returned MemDescr:**
+    /// 
+    /// * The descriptor will consume one element of the pool. 
+    /// * The refered to memory area will be deallocated upon drop
+    ///   * Unless the field: `dealloc` is set to `false`.
+    ///   * OR the dealloc field parameter is set to false.
+    fn pull_from_untracked(&self, slice: &[u8], dealloc: bool) -> MemDescr {
+        // Zero sized descriptors are NOT allowed
+        assert!(slice.len() != 0);
+
+        MemDescr{
+            ptr: (&slice[0] as *const u8) as *mut u8,
+            len: slice.len(),
+            id: None,
+            dealloc,
+            pool: &self,
+            ctrl: None,
+        }
     }
 
     /// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The 
@@ -742,7 +916,9 @@ impl <'a> MemPool {
     ///   * First MemPool.pull -> MemDesc with id = 3
     ///   * Second MemPool.pull -> MemDesc with id = 100
     ///   * Third MemPool.pull -> MemDesc with id = 2,
-    fn pull (&'a self, bytes: Bytes) -> Result<MemDescr<'a>, VirtqError> {
+    fn pull (&self, bytes: Bytes) -> Result<MemDescr<'a>, VirtqError> {
+        // ensure bytes is smaller than u32 max
+        // update doc to indicate this
         unimplemented!();
     }
     
@@ -755,7 +931,9 @@ impl <'a> MemPool {
     ///   * First MemPool.pull -> MemDesc with id = 3
     ///   * Second MemPool.pull -> MemDesc with id = 100
     ///   * Third MemPool.pull -> MemDesc with id = 2,
-    fn pull_untracked(&'a self, bytes: Bytes, ctrl: Option<&Pinned<TransferToken>>) -> MemDescr<'a> {
+    fn pull_untracked(&self, bytes: Bytes)-> MemDescr<'a> {
+        // ensure bytes is smaller than u32 max
+        // update doc to indicate this
         unimplemented!();
     }
 }
@@ -892,6 +1070,14 @@ pub enum DescrFlags {
     VIRTQ_DESC_F_USED = 1 << 15,
 }
 
+impl BitAnd for DescrFlags {
+    type Output = u16;
+
+    fn bitand(self, rhs: Self) -> Self::Output {
+        u16::from(self) & u16::from(rhs)
+    }
+}
+
 impl BitAnd<DescrFlags> for u16 {
     type Output = u16;
 
@@ -927,7 +1113,28 @@ impl From<DescrFlags> for u16 {
 pub mod error {
     pub enum VirtqError {
         General,
-        NoBufferSpecified,
+        /// Indirect is mixed with Direct descriptors, which is not allowed
+        /// according to the specification.
+        /// See [Buffer](Buffer) and [BuffSpec](BuffSpec) for details
+        BufferInWithDirect,
+        /// Call to create a BufferToken or TransferToken without 
+        /// any buffers to be inserted
+        BufferNotSpecified,
+        /// Selected queue does not exist or
+        /// is not known to the device and hence can not be used
         QueueNotExisting(u16),
+        /// Signals, that the queue does not have any free desciptors
+        /// left.
+        /// Typically this means, that the driver either has to provide
+        /// "unsend" `TransferToken` to the queue (see Docs for details)
+        /// or the device needs to process available descriptors in the queue.
+        NoDescrAvail,
+        /// Indicates that a [BuffSpec](super.BuffSpec) does have the right size
+        /// for a given structure. Returns the structures size in bytes.
+        /// 
+        /// E.g: A struct `T` with size of `4 bytes` must have a `BuffSpec`, which 
+        /// defines exactly 4 bytes. Regardeless of wether it is a `Single`, `Multiple`
+        /// or `Indirect` BuffSpec.
+        BufferSizeWrong(usize)
     }
 }
