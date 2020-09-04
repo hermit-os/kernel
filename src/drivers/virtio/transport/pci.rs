@@ -743,7 +743,7 @@ impl IsrStatusRaw {
             return None
         }
 
-        let mut virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
+        let virt_addr_raw: VirtMemAddr = cap.bar.mem_addr + cap.offset;
 
         // Create mutable reference to the PCI structure in the devices memory area
         let isr_stat_raw: &mut IsrStatusRaw = unsafe {
