@@ -15,6 +15,8 @@ use super::error::VirtqError;
 use self::error::VqPackedError;
 use core::convert::TryFrom;
 use alloc::boxed::Box;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 /// A newtype of bool used for convenience in context with 
 /// packed queues wrap counter.
@@ -245,7 +247,7 @@ impl EventSuppr {
 
 /// Packed virtqueue which provides the functionilaty as described in the 
 /// virtio specification v1.1. - 2.7
-pub struct PackedVq<'a> {
+pub struct PackedVq<'vq> {
     /// Ring which allows easy access to the raw ring structure of the 
     /// specfification
     descr_ring: DescriptorRing,
@@ -255,18 +257,20 @@ pub struct PackedVq<'a> {
     dev_event: Pinned<EventSuppr>,
     /// Memory pool controls the amount of "free floating" descriptors
     /// See [MemPool](super.MemPool) docs for detail.
-    mem_pool: MemPool,
+    mem_pool: Rc<MemPool>,
     /// The size of the queue, equals the number of descriptors which can
     /// be used
     size: u16,
     /// Holds all erly dropped `TransferToken`
     /// If `TransferToken.state == TransferState::Finished`
     /// the Token can be safely dropped
-    dropped: Vec<TransferToken<'a>>,
+    dropped: Vec<TransferToken<'vq>>,
 }
 
+
+
 // Public interface of PackedVq
-impl<'a> PackedVq<'a> {
+impl<'vq> PackedVq<'vq> {
     pub fn new(com_cfg: &mut ComCfg, size: VqSize, index: VqIndex) -> Result<Self, VqPackedError> {
         // Get a handler to the queues configuration area.
         let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -297,7 +301,7 @@ impl<'a> PackedVq<'a> {
 
 
         // Initalize new memory pool.
-        let mem_pool = MemPool::new(size.0);
+        let mem_pool = Rc::new(MemPool::new(size.0));
 
         // Initalize an empty vector for future dropped transfers
         let dropped: Vec<TransferToken> = Vec::new();
@@ -313,8 +317,8 @@ impl<'a> PackedVq<'a> {
     }
 
     /// See `Virtq.prep_transfer()` documentation.
-    pub fn prep_transfer<'b, T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'b Virtq<'b>, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) 
-        -> Result<TransferToken<'b>, VirtqError> {
+    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'vq Virtq, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) 
+        -> Result<TransferToken, VirtqError> {
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
             (Some((send_data, send_spec)), None) => {
@@ -327,7 +331,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(data_slice,true) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice,true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -335,14 +339,14 @@ impl<'a> PackedVq<'a> {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);
 
-                        let buff_tkn = BufferToken::new(
-                            Some(Buffer::Single(desc)),
-                            None,
-                            master,
-                            true,
-                            true,
-                            true,
-                        );
+                        let buff_tkn = BufferToken {
+                            send_buff: Some(Buffer::Single(desc)),
+                            recv_buff: None,
+                            vq: master,
+                            ret_send: true,
+                            ret_recv: true,
+                            reusable: true,
+                        };
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
@@ -362,7 +366,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -399,13 +403,13 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, true));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, Some(&desc_lst), None) {
+                        let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -438,7 +442,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(data_slice,true) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice,true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -471,7 +475,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -508,13 +512,13 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, true));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, None, Some(&desc_lst)) {
+                        let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -547,7 +551,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(send_data_slice, true) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -562,7 +566,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(recv_data_slice, true) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -591,7 +595,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(send_data_slice, true) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -610,7 +614,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -647,7 +651,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -670,7 +674,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -707,7 +711,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -726,7 +730,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(recv_data_slice, true) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, true) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -759,7 +763,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            send_desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, true));
+                            send_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -779,7 +783,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, true));
+                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -788,7 +792,7 @@ impl<'a> PackedVq<'a> {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(recv_data);  
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, Some(&send_desc_lst), Some(&recv_desc_lst)) {
+                        let ctrl_desc = match self.create_indirect_ctrl(Some(&send_desc_lst), Some(&recv_desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         }; 
@@ -818,8 +822,8 @@ impl<'a> PackedVq<'a> {
     }
 
     /// See `Virtq.prep_transfer_from_raw()` documentation.
-    pub fn prep_transfer_from_raw<'b, T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'b Virtq<'b>, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
-        -> Result<TransferToken<'b>, VirtqError> {
+    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&mut self, master: &'vq Virtq, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
+        -> Result<TransferToken, VirtqError> {
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
             (Some((send_data, send_spec)), None) => {
@@ -832,7 +836,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(data_slice, false) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -862,7 +866,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -896,13 +900,13 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, false));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, Some(&desc_lst), None) {
+                        let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -932,7 +936,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(data_slice, false) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -962,7 +966,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -996,13 +1000,13 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, false));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, None, Some(&desc_lst)) {
+                        let ctrl_desc = match self.create_indirect_ctrl( None, Some(&desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1032,7 +1036,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(send_data_slice, false) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1044,7 +1048,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(recv_data_slice, false) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1070,7 +1074,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(send_data_slice, false) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1086,7 +1090,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1120,7 +1124,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1140,7 +1144,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1174,7 +1178,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(next_slice, false) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1190,7 +1194,7 @@ impl<'a> PackedVq<'a> {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(recv_data_slice, false) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, false) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1220,7 +1224,7 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            send_desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, false));
+                            send_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1237,13 +1241,13 @@ impl<'a> PackedVq<'a> {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(next_slice, false));
+                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, Some(&send_desc_lst), Some(&recv_desc_lst)) {
+                        let ctrl_desc = match self.create_indirect_ctrl( Some(&send_desc_lst), Some(&recv_desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         }; 
@@ -1273,15 +1277,15 @@ impl<'a> PackedVq<'a> {
     }
 
     /// See `Virtq.prep_buffer()` documentation.
-    pub fn prep_buffer<'b>(&self, master: &'b Virtq<'b>, send: Option<BuffSpec>, recv: Option<BuffSpec>) 
-        -> Result<BufferToken<'b>, VirtqError> {
+    pub fn prep_buffer(&self, master: &'vq Virtq, send: Option<BuffSpec>, recv: Option<BuffSpec>) 
+        -> Result<BufferToken, VirtqError> {
         match (send, recv) {
             // No buffers specified
             (None, None) => return Err(VirtqError::BufferNotSpecified),
             // Send buffer specified, No recv buffer
             (Some(spec), None) => {
                 match spec {
-                    BuffSpec::Single(size) => match self.mem_pool.pull(size) {
+                    BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
                             let buffer = Buffer::Single(desc);
 
@@ -1300,7 +1304,7 @@ impl<'a> PackedVq<'a> {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 
                         for size in size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1324,11 +1328,11 @@ impl<'a> PackedVq<'a> {
                             // As the indirect list does only consume one descriptor for the 
                             // control descriptor, the actual list is untracked
                             desc_lst.push(
-                                self.mem_pool.pull_untracked(*size)
+                                self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
                         }
 
-                        let ctrl_desc = match self.create_indirect_ctrl(master, Some(&desc_lst), None) {
+                        let ctrl_desc = match self.create_indirect_ctrl( Some(&desc_lst), None) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1349,7 +1353,7 @@ impl<'a> PackedVq<'a> {
             // No send buffer, recv buffer is specified
             (None, Some(spec)) => {
                 match spec {
-                    BuffSpec::Single(size) => match self.mem_pool.pull(size) {
+                    BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
                             let buffer = Buffer::Single(desc);
 
@@ -1368,7 +1372,7 @@ impl<'a> PackedVq<'a> {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
 
                         for size in size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1392,11 +1396,11 @@ impl<'a> PackedVq<'a> {
                             // As the indirect list does only consume one descriptor for the 
                             // control descriptor, the actual list is untracked
                             desc_lst.push(
-                                self.mem_pool.pull_untracked(*size)
+                                self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
                         }
 
-                        let ctrl_desc =  match self.create_indirect_ctrl(master, None, Some(&desc_lst)) {
+                        let ctrl_desc =  match self.create_indirect_ctrl( None, Some(&desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1418,14 +1422,14 @@ impl<'a> PackedVq<'a> {
             (Some(send_spec), Some(recv_spec)) => {
                 match (send_spec, recv_spec) {
                     (BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-                        let send_buff = match self.mem_pool.pull(send_size) {
+                        let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
                             Ok(desc) => {
                                 Some(Buffer::Single(desc))
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
 
-                        let recv_buff = match self.mem_pool.pull(recv_size) {
+                        let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
                             Ok(desc) => {
                                 Some(Buffer::Single(desc))
                             }
@@ -1442,7 +1446,7 @@ impl<'a> PackedVq<'a> {
                         })
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-                        let send_buff = match self.mem_pool.pull(send_size) {
+                        let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
                             Ok(desc) => {
                                 Some(Buffer::Single(desc))
                             }
@@ -1452,7 +1456,7 @@ impl<'a> PackedVq<'a> {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
 
                         for size in recv_size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1474,7 +1478,7 @@ impl<'a> PackedVq<'a> {
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
 
                         for size in send_size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1485,7 +1489,7 @@ impl<'a> PackedVq<'a> {
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
 
                         for size in recv_size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1506,7 +1510,7 @@ impl<'a> PackedVq<'a> {
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
 
                         for size in send_size_lst {
-                            match self.mem_pool.pull(*size) {
+                            match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
@@ -1514,7 +1518,7 @@ impl<'a> PackedVq<'a> {
 
                         let send_buff = Some(Buffer::Multiple(send_desc_lst));
 
-                        let recv_buff = match self.mem_pool.pull(recv_size) {
+                        let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
                             Ok(desc) => {
                                 Some(Buffer::Single(desc))
                             }
@@ -1537,7 +1541,7 @@ impl<'a> PackedVq<'a> {
                             // As the indirect list does only consume one descriptor for the 
                             // control descriptor, the actual list is untracked
                             send_desc_lst.push(
-                                self.mem_pool.pull_untracked(*size)
+                                self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
                         }
 
@@ -1547,11 +1551,11 @@ impl<'a> PackedVq<'a> {
                             // As the indirect list does only consume one descriptor for the 
                             // control descriptor, the actual list is untracked
                             recv_desc_lst.push(
-                                self.mem_pool.pull_untracked(*size)
+                                self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
                         }
 
-                        let ctrl_desc =  match self.create_indirect_ctrl(master, Some(&send_desc_lst), Some(&recv_desc_lst)) {
+                        let ctrl_desc =  match self.create_indirect_ctrl( Some(&send_desc_lst), Some(&recv_desc_lst)) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1585,10 +1589,10 @@ impl<'a> PackedVq<'a> {
 }
 
 // Private Interface for PackedVq
-impl<'a> PackedVq<'a> {
-    fn create_indirect_ctrl<'b>(&self, vq: &'b Virtq, send: Option<&Vec<MemDescr>>, recv: Option<&Vec<MemDescr>>) -> Result<MemDescr<'b>, VirtqError>{
+impl<'vq> PackedVq<'vq> {
+    fn create_indirect_ctrl(&self, send: Option<&Vec<MemDescr>>, recv: Option<&Vec<MemDescr>>) -> Result<MemDescr, VirtqError>{
         // Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
-        let mut len: usize;
+        let len: usize;
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
             (None, Some(recv_desc_lst)) => {
@@ -1603,7 +1607,7 @@ impl<'a> PackedVq<'a> {
         }
 
         let sz_indrct_lst = Bytes(core::mem::size_of::<Descriptor>() * len);
-        let mut ctrl_desc = match self.mem_pool.pull(sz_indrct_lst) {
+        let mut ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
             Ok(desc) => desc,
             Err(vq_err) => return Err(vq_err),
         };
@@ -1686,7 +1690,7 @@ impl<'a> PackedVq<'a> {
     }
 }
 
-impl<'a> Drop for PackedVq<'a> {
+impl<'vq> Drop for PackedVq<'vq> {
     fn drop(&mut self) {
         todo!("rerutn leaked memory and ensure deallocation")
     }

@@ -53,11 +53,11 @@ struct NetDevCfgRaw {
 	mtu: u16,
 }
 
-struct CtrlQueue<'a> (Option<Virtq<'a>>);
+struct CtrlQueue<'vq> (Option<Virtq<'vq>>);
 
-struct RxQueues<'a> (Vec<Virtq<'a>>);
+struct RxQueues<'vq> (Vec<Virtq<'vq>>);
 
-impl<'a> RxQueues<'a> {
+impl<'vq> RxQueues<'vq> {
     /// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
     fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
@@ -68,9 +68,9 @@ impl<'a> RxQueues<'a> {
     } 
 }
 
-struct TxQueues<'a> (Vec<Virtq<'a>>);
+struct TxQueues<'vq> (Vec<Virtq<'vq>>);
 
-impl<'a> TxQueues<'a> {
+impl<'vq> TxQueues<'vq> {
     fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         todo!();
     } 
@@ -88,20 +88,20 @@ struct TxBuffer {
 ///
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
-pub struct VirtioNetDriver<'a> {
+pub struct VirtioNetDriver<'vq> {
     dev_cfg: NetDevCfg,
     com_cfg: ComCfg,
     isr_stat: IsrStatus,
     notif_cfg: NotifCfg,
 
-    ctrl_vq: CtrlQueue<'a>,
-    recv_vqs: RxQueues<'a>, 
-    send_vqs: TxQueues<'a>,
+    ctrl_vq: CtrlQueue<'vq>,
+    recv_vqs: RxQueues<'vq>, 
+    send_vqs: TxQueues<'vq>,
 
     num_vqs: u16,
 }
 
-impl<'a> VirtioDriver for VirtioNetDriver<'a> {
+impl<'p,'vq> VirtioDriver for VirtioNetDriver<'vq> {
     fn add_buff(&self) {
         unimplemented!();
     }
@@ -120,7 +120,7 @@ impl<'a> VirtioDriver for VirtioNetDriver<'a> {
 }
 
 // Private funtctions for Virtio network driver
-impl<'a> VirtioNetDriver<'a> {
+impl<'vq> VirtioNetDriver<'vq> {
     fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
         if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
             error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
@@ -383,14 +383,14 @@ impl<'a> VirtioNetDriver<'a> {
         // see Virtio specification v1.1. - 5.1.2 
         for i in 1..self.num_vqs+1 {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                let mut vq = Virtq::new(&mut self.com_cfg,
+                let vq = Virtq::new(&mut self.com_cfg,
                  VqSize::from(VIRTIO_MAX_QUEUE_SIZE), 
                        VqType::Packed, 
                 VqIndex::from(2*i-1)
                     );
                 self.recv_vqs.add(vq, &self.dev_cfg);
         
-                let mut vq = Virtq::new(&mut self.com_cfg,
+                let vq = Virtq::new(&mut self.com_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
              VqIndex::from(2*i)
@@ -409,7 +409,7 @@ impl<'a> VirtioNetDriver<'a> {
 }
 
 // Public interface for virtio network driver.
-impl<'a> VirtioNetDriver<'a> { 
+impl<'vq> VirtioNetDriver<'vq> { 
     /// Initializes virtio network device by mapping configuration layout to 
     /// respective structs (configuration structs are:
     /// [ComCfg](structs.comcfg.html), [NotifCfg](structs.notifcfg.html)
