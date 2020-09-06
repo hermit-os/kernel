@@ -11,11 +11,11 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::processor::msb;
 use crate::arch::scheduler::{TaskStacks, TaskTLS};
-use crate::collections::{DoublyLinkedList, Node};
 use crate::scheduler::CoreId;
-use alloc::collections::VecDeque;
+use alloc::collections::{BTreeSet, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use core::cmp::Ordering;
 use core::convert::TryInto;
 use core::fmt;
 
@@ -480,14 +480,34 @@ struct BlockedTask {
 	wakeup_time: Option<u64>,
 }
 
+impl PartialOrd for BlockedTask {
+	fn partial_cmp(&self, other: &BlockedTask) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl Ord for BlockedTask {
+	fn cmp(&self, other: &BlockedTask) -> Ordering {
+		other.wakeup_time.cmp(&self.wakeup_time)
+	}
+}
+
+impl PartialEq for BlockedTask {
+	fn eq(&self, other: &BlockedTask) -> bool {
+		self.wakeup_time == other.wakeup_time
+	}
+}
+
+impl Eq for BlockedTask {}
+
 pub struct BlockedTaskQueue {
-	list: DoublyLinkedList<BlockedTask>,
+	list: BTreeSet<BlockedTask>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
 		Self {
-			list: DoublyLinkedList::new(),
+			list: BTreeSet::new(),
 		}
 	}
 
@@ -522,6 +542,8 @@ impl BlockedTaskQueue {
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
+		let task_id = task.borrow().id;
+
 		{
 			// Set the task status to Blocked.
 			let mut borrowed = task.borrow_mut();
@@ -536,65 +558,36 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = Node::new(BlockedTask { task, wakeup_time });
+		let new_node = BlockedTask { task, wakeup_time };
+		self.list.insert(new_node);
 
 		// Shall the task automatically be woken up after a certain time?
-		if let Some(wt) = wakeup_time {
-			let mut first_task = true;
+		if wakeup_time.is_some() {
+			if let Some(node) = self.list.first() {
+				let node_id = node.task.borrow().id;
 
-			// Yes, then insert it at the right position into the list sorted by wakeup time.
-			for node in self.list.iter() {
-				let node_wakeup_time = node.borrow().value.wakeup_time;
-				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
-					self.list.insert_before(new_node, node);
-
-					// If this is the new first task in the list, update the One-Shot Timer
-					// to fire when this task shall be woken up.
-					if first_task {
-						arch::set_oneshot_timer(wakeup_time);
-					}
-
-					return;
+				if task_id == node_id {
+					arch::set_oneshot_timer(wakeup_time);
 				}
-
-				first_task = false;
 			}
-
-			// The right position is at the end of the list or the list is empty.
-			self.list.push(new_node);
-			if first_task {
-				arch::set_oneshot_timer(wakeup_time);
-			}
-		} else {
-			// No, then just insert it at the end of the list.
-			self.list.push(new_node);
 		}
 	}
 
 	/// Manually wake up a blocked task.
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
-		let mut first_task = true;
-		let mut iter = self.list.iter();
+		let mut wakeup_tasks: BTreeSet<_> = self
+			.list
+			.drain_filter(|node| node.task.borrow().id == task.get_id())
+			.collect();
 
-		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
-			if node.borrow().value.task.borrow().id == task.get_id() {
-				// Remove it from the list of blocked tasks and wake it up.
-				self.list.remove(node.clone());
-				Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Custom);
+		// loop through all tasks, which we have to wakeup
+		while let Some(node) = wakeup_tasks.pop_first() {
+			Self::wakeup_task(node.task.clone(), WakeupReason::Custom);
+		}
 
-				// If this is the first task, adjust the One-Shot Timer to fire at the
-				// next task's wakeup time (if any).
-				if first_task {
-					if let Some(next_node) = iter.next() {
-						arch::set_oneshot_timer(next_node.borrow().value.wakeup_time);
-					}
-				}
-
-				break;
-			}
-
-			first_task = false;
+		if let Some(node) = self.list.first() {
+			// Adjust the One-Shot Timer to fire at first wakeup time (if any)
+			arch::set_oneshot_timer(node.wakeup_time);
 		}
 	}
 
@@ -605,22 +598,19 @@ impl BlockedTaskQueue {
 	pub fn handle_waiting_tasks(&mut self) {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
+		let mut wakeup_tasks: BTreeSet<_> = self
+			.list
+			.drain_filter(|task| task.wakeup_time.is_none() || time > task.wakeup_time.unwrap())
+			.collect();
 
-		// Loop through all blocked tasks.
-		for node in self.list.iter() {
-			// Get the wakeup time of this task and check if we have reached the first task
-			// that hasn't elapsed yet or waits indefinitely.
-			let node_wakeup_time = node.borrow().value.wakeup_time;
-			if node_wakeup_time.is_none() || time < node_wakeup_time.unwrap() {
-				// Adjust the One-Shot Timer to fire at this task's wakeup time (if any)
-				// and exit the loop.
-				arch::set_oneshot_timer(node_wakeup_time);
-				break;
-			}
+		// loop through all tasks, which we have to wakeup
+		while let Some(node) = wakeup_tasks.pop_first() {
+			Self::wakeup_task(node.task.clone(), WakeupReason::Timer);
+		}
 
-			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			self.list.remove(node.clone());
-			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Timer);
+		if let Some(node) = self.list.first() {
+			// Adjust the One-Shot Timer to fire at first wakeup time (if any)
+			arch::set_oneshot_timer(node.wakeup_time);
 		}
 	}
 }

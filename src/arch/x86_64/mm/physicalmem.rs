@@ -13,7 +13,6 @@ use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paddr_to_slice;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::collections::Node;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::*;
@@ -46,12 +45,12 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			VirtAddr(m.base_address())
 		};
 
-		let entry = Node::new(FreeListEntry {
-			start: start_address.as_usize(),
-			end: (m.base_address() + m.length()) as usize,
-		});
+		let entry = FreeListEntry::new(
+			start_address.as_usize(),
+			(m.base_address() + m.length()) as usize,
+		);
 		let _ = TOTAL_MEMORY.fetch_add((m.base_address() + m.length()) as usize, Ordering::SeqCst);
-		PHYSICAL_FREE_LIST.lock().list.push(entry);
+		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 	}
 
 	assert!(
@@ -68,12 +67,9 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let entry = Node::new(FreeListEntry {
-		start: mm::kernel_end_address().as_usize(),
-		end: limit,
-	});
+	let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
 	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
-	PHYSICAL_FREE_LIST.lock().list.push(entry);
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 
 	Ok(())
 }
@@ -101,7 +97,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size)?
+			.allocate(size, None)?
 			.try_into()
 			.unwrap(),
 	))
@@ -128,7 +124,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, ()> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate_aligned(size, alignment)?
+			.allocate(size, Some(alignment))?
 			.try_into()
 			.unwrap(),
 	))

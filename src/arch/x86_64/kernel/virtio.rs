@@ -878,7 +878,7 @@ extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFra
 	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
 	let check_scheduler = match get_network_driver() {
-		Some(driver) => driver.borrow_mut().handle_interrupt(),
+		Some(driver) => driver.handle_interrupt(),
 		_ => false,
 	};
 

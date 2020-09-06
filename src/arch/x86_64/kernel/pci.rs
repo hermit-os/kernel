@@ -11,11 +11,8 @@ use crate::arch::x86_64::kernel::virtio;
 use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
 use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
 
@@ -50,8 +47,8 @@ pub const PCI_MULTIFUNCTION_MASK: u32 = 0x0080_0000;
 
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
-static PCI_ADAPTERS: SpinlockIrqSave<Vec<PciAdapter>> = SpinlockIrqSave::new(Vec::new());
-static PCI_DRIVERS: SpinlockIrqSave<Vec<PciDriver>> = SpinlockIrqSave::new(Vec::new());
+static mut PCI_ADAPTERS: Vec<PciAdapter> = Vec::new();
+static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
 /// Classes of PCI nodes.
 #[allow(dead_code)]
@@ -126,27 +123,34 @@ pub struct MemoryBar {
 }
 
 pub enum PciDriver<'a> {
-	VirtioFs(Rc<RefCell<VirtioFsDriver<'a>>>),
-	VirtioNet(Rc<RefCell<VirtioNetDriver<'a>>>),
+	VirtioFs(VirtioFsDriver<'a>),
+	VirtioNet(VirtioNetDriver<'a>),
 }
 
-pub fn register_driver(drv: PciDriver<'static>) {
-	let mut drivers = PCI_DRIVERS.lock();
-	drivers.push(drv);
-}
-
-pub fn get_network_driver() -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
-	let drivers = PCI_DRIVERS.lock();
-	for i in drivers.iter() {
-		match &*i {
-			PciDriver::VirtioNet(nic_driver) => {
-				return Some(nic_driver.clone());
-			}
-			_ => {}
+impl<'a> PciDriver<'a> {
+	fn get_network_driver(&mut self) -> Option<&mut VirtioNetDriver<'a>> {
+		match self {
+			Self::VirtioNet(drv) => Some(drv),
+			_ => None,
 		}
 	}
+}
+pub fn register_driver(drv: PciDriver<'static>) {
+	unsafe {
+		PCI_DRIVERS.push(drv);
+	}
+}
 
-	None
+pub fn get_network_driver() -> Option<&'static mut VirtioNetDriver<'static>> {
+	unsafe {
+		PCI_DRIVERS.iter_mut().find_map(|drv| {
+			drv.get_network_driver()
+			/*match &mut i {
+				PciDriver::VirtioNet(nic_driver) => Some(nic_driver),
+				_ =>  None,
+			}*/
+		})
+	}
 }
 
 /// Reads all bar registers of specified device and returns vector of PciBar's containing addresses and sizes.
@@ -451,8 +455,7 @@ pub fn write_config(bus: u8, device: u8, register: u32, data: u32) {
 }
 
 pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
-	let adapters = PCI_ADAPTERS.lock();
-	for adapter in adapters.iter() {
+	for adapter in unsafe { PCI_ADAPTERS.iter() } {
 		if adapter.vendor_id == vendor_id && adapter.device_id == device_id {
 			return Some(adapter.clone());
 		}
@@ -463,7 +466,6 @@ pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
 
 pub fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
-	let mut adapters = PCI_ADAPTERS.lock();
 
 	// HermitCore only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
@@ -476,7 +478,9 @@ pub fn init() {
 				let vendor_id = device_vendor_id as u16;
 				let adapter = PciAdapter::new(bus, device, vendor_id, device_id);
 				if let Some(adapter) = adapter {
-					adapters.push(adapter);
+					unsafe {
+						PCI_ADAPTERS.push(adapter);
+					}
 				}
 			}
 		}
@@ -484,9 +488,8 @@ pub fn init() {
 }
 
 pub fn init_drivers() {
-	let adapters = PCI_ADAPTERS.lock();
 	// virtio: 4.1.2 PCI Device Discovery
-	for adapter in adapters.iter() {
+	for adapter in unsafe { PCI_ADAPTERS.iter() } {
 		if adapter.vendor_id == 0x1AF4 && adapter.device_id >= 0x1000 && adapter.device_id <= 0x107F
 		{
 			info!(
@@ -501,8 +504,7 @@ pub fn init_drivers() {
 pub fn print_information() {
 	infoheader!(" PCI BUS INFORMATION ");
 
-	let adapters = PCI_ADAPTERS.lock();
-	for adapter in adapters.iter() {
+	for adapter in unsafe { PCI_ADAPTERS.iter() } {
 		info!("{}", adapter);
 	}
 

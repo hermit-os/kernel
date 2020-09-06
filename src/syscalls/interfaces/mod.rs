@@ -118,42 +118,42 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn get_mac_address(&self) -> Result<[u8; 6], ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => Ok(driver.borrow().get_mac_address()),
+			Some(driver) => Ok(driver.get_mac_address()),
 			_ => Err(()),
 		})
 	}
 
 	fn get_mtu(&self) -> Result<u16, ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => Ok(driver.borrow().get_mtu()),
+			Some(driver) => Ok(driver.get_mtu()),
 			_ => Err(()),
 		})
 	}
 
 	fn has_packet(&self) -> bool {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => driver.borrow().has_packet(),
+			Some(driver) => driver.has_packet(),
 			_ => false,
 		})
 	}
 
 	fn get_tx_buffer(&self, len: usize) -> Result<(*mut u8, usize), ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => driver.borrow_mut().get_tx_buffer(len),
+			Some(driver) => driver.get_tx_buffer(len),
 			_ => Err(()),
 		})
 	}
 
 	fn send_tx_buffer(&self, handle: usize, len: usize) -> Result<(), ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => driver.borrow_mut().send_tx_buffer(handle, len),
+			Some(driver) => driver.send_tx_buffer(handle, len),
 			_ => Err(()),
 		})
 	}
 
 	fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
-			Some(driver) => driver.borrow().receive_rx_buffer(),
+			Some(driver) => driver.receive_rx_buffer(),
 			_ => Err(()),
 		})
 	}
@@ -161,7 +161,7 @@ pub trait SyscallInterface: Send + Sync {
 	fn rx_buffer_consumed(&self) -> Result<(), ()> {
 		irqsave(|| match arch::kernel::pci::get_network_driver() {
 			Some(driver) => {
-				driver.borrow_mut().rx_buffer_consumed();
+				driver.rx_buffer_consumed();
 				Ok(())
 			}
 			_ => Err(()),
