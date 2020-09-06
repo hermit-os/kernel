@@ -488,13 +488,22 @@ impl PartialOrd for BlockedTask {
 
 impl Ord for BlockedTask {
 	fn cmp(&self, other: &BlockedTask) -> Ordering {
-		other.wakeup_time.cmp(&self.wakeup_time)
+		match (self.wakeup_time, other.wakeup_time) {
+			(Some(ref lhs), Some(ref rhs)) => lhs.cmp(rhs).reverse(),
+			(None, None) => Ordering::Equal,
+			(Some(_), None) => Ordering::Greater,
+			(None, Some(_)) => Ordering::Less,
+		}
 	}
 }
 
 impl PartialEq for BlockedTask {
 	fn eq(&self, other: &BlockedTask) -> bool {
-		self.wakeup_time == other.wakeup_time
+		match (self.wakeup_time, other.wakeup_time) {
+			(Some(ref lhs), Some(ref rhs)) => lhs == rhs,
+			(None, None) => true,
+			_ => false,
+		}
 	}
 }
 
