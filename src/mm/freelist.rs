@@ -54,7 +54,7 @@ impl FreeList {
 					// Return the address to the beginning of that region and shrink the region by that size.
 					if let Some(align) = alignment {
 						let new_addr = align_up!(region_start, align);
-						node.start += new_size;
+						node.start += size + (new_addr - region_start);
 						if new_addr != region_start {
 							let new_entry = FreeListEntry::new(region_start, new_addr);
 							cursor.insert_before(new_entry);
@@ -210,7 +210,7 @@ fn allocate() {
 	cursor.move_next();
 	assert!(cursor.current().is_some());
 	if let Some(node) = cursor.current() {
-		assert_eq!(node.start, 0x14000);
+		assert_eq!(node.start, 0x13000);
 	}
 }
 
