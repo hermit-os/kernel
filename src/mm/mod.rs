@@ -115,21 +115,29 @@ pub fn init() {
 	let mut map_addr: VirtAddr;
 	let mut map_size: usize;
 
+	let available_memory = align_down!(
+		total_memory_size() - kernel_end_address().as_usize() - reserved_space,
+		LargePageSize::SIZE
+	);
+
+	// we reserve 10% of the memory for stack allocations
+	let stack_reserve: usize = (available_memory * 10) / 100;
+
 	#[cfg(feature = "newlib")]
 	{
 		info!("An application with a C-based runtime is running on top of HermitCore!");
+		let kernel_heap_size = 10 * LargePageSize::SIZE;
 
-		let size = 10 * LargePageSize::SIZE;
 		unsafe {
-			let start = allocate(size, true);
-			crate::ALLOCATOR.lock().init(start.as_usize(), size);
+			let start = allocate(kernel_heap_size, true);
+			crate::ALLOCATOR
+				.lock()
+				.init(start.as_usize(), kernel_heap_size);
 		}
 
-		info!("Kernel heap size: {} MB", size >> 20);
+		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
 		let user_heap_size = align_down!(
-			total_memory_size()
-				- kernel_end_address().as_usize()
-				- reserved_space - 3 * LargePageSize::SIZE,
+			available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE,
 			LargePageSize::SIZE
 		);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
@@ -149,12 +157,7 @@ pub fn init() {
 		// Afterwards, we already use the heap and map the rest into
 		// the virtual address space.
 
-		let virt_size: usize = {
-			let size = total_memory_size() - kernel_end_address().as_usize() - reserved_space;
-
-			// we reserve 10% of the memory for stack allocations
-			align_down!(size - (size * 10) / 100, LargePageSize::SIZE)
-		};
+		let virt_size: usize = align_down!(available_memory - stack_reserve, LargePageSize::SIZE);
 
 		let virt_addr = if has_1gib_pages && virt_size > HugePageSize::SIZE {
 			arch::mm::virtualmem::allocate_aligned(
