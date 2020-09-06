@@ -105,6 +105,19 @@ impl FreeList {
 			if region_start == end {
 				// The deallocated memory extends this free memory region to the left.
 				node.start = address;
+
+				// Check if it can even reunite with the previous region.
+				if let Some(prev_node) = cursor.peek_prev() {
+					let prev_region_end = prev_node.end;
+
+					if prev_region_end == address {
+						// It can reunite, so let the current region span over the reunited region and move the duplicate node
+						// into the pool for deletion or reuse.
+						prev_node.end = region_end;
+						cursor.remove_current();
+					}
+				}
+
 				return;
 			} else if region_end == address {
 				node.end = end;
