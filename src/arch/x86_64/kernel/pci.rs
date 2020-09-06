@@ -11,6 +11,7 @@ use crate::arch::x86_64::kernel::virtio;
 use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
 use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
 use alloc::vec::Vec;
 use core::convert::TryInto;
@@ -123,12 +124,12 @@ pub struct MemoryBar {
 }
 
 pub enum PciDriver<'a> {
-	VirtioFs(VirtioFsDriver<'a>),
-	VirtioNet(VirtioNetDriver<'a>),
+	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
+	VirtioNet(SpinlockIrqSave<VirtioNetDriver<'a>>),
 }
 
 impl<'a> PciDriver<'a> {
-	fn get_network_driver(&mut self) -> Option<&mut VirtioNetDriver<'a>> {
+	fn get_network_driver(&mut self) -> Option<&SpinlockIrqSave<VirtioNetDriver<'a>>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
 			_ => None,
@@ -141,7 +142,7 @@ pub fn register_driver(drv: PciDriver<'static>) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static mut VirtioNetDriver<'static>> {
+pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
 	unsafe {
 		PCI_DRIVERS.iter_mut().find_map(|drv| {
 			drv.get_network_driver()
