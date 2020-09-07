@@ -14,9 +14,7 @@ use crate::syscalls::fs;
 use crate::util;
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::{fmt, u32, u8};
 
 #[repr(C)]
@@ -236,9 +234,7 @@ impl FuseInterface for VirtioFsDriver<'_> {
 	*/
 }
 
-pub fn create_virtiofs_driver(
-	adapter: &pci::PciAdapter,
-) -> Option<Rc<RefCell<VirtioFsDriver<'static>>>> {
+pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDriver<'static>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -299,19 +295,19 @@ pub fn create_virtiofs_driver(
 	// TODO: also load the other 2 cap types (?).
 
 	// Instanciate driver on heap, so it outlives this function
-	let drv = Rc::new(RefCell::new(VirtioFsDriver {
+	let mut drv = VirtioFsDriver {
 		common_cfg,
 		device_cfg,
 		notify_cfg,
 		vqueues: None,
-	}));
+	};
 
 	trace!("Driver before init: {:?}", drv);
-	drv.borrow_mut().init();
+	drv.init();
 	trace!("Driver after init: {:?}", drv);
 
 	// Instanciate global fuse object
-	let fuse = fuse::Fuse::new(drv.clone());
+	let fuse = fuse::Fuse::new();
 
 	// send FUSE_INIT to create session
 	fuse.send_init();

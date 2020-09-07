@@ -11,9 +11,8 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::processor::msb;
 use crate::arch::scheduler::{TaskStacks, TaskTLS};
-use crate::collections::{DoublyLinkedList, Node};
 use crate::scheduler::CoreId;
-use alloc::collections::VecDeque;
+use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::convert::TryInto;
@@ -406,7 +405,7 @@ impl Task {
 		task_prio: Priority,
 		stack_size: usize,
 	) -> Task {
-		debug!("Creating new task {}", tid);
+		debug!("Creating new task {} on core {}", tid, core_id);
 
 		Task {
 			id: tid,
@@ -481,13 +480,13 @@ struct BlockedTask {
 }
 
 pub struct BlockedTaskQueue {
-	list: DoublyLinkedList<BlockedTask>,
+	list: LinkedList<BlockedTask>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
 		Self {
-			list: DoublyLinkedList::new(),
+			list: LinkedList::new(),
 		}
 	}
 
@@ -536,17 +535,17 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = Node::new(BlockedTask { task, wakeup_time });
+		let new_node = BlockedTask { task, wakeup_time };
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
 			let mut first_task = true;
+			let mut cursor = self.list.cursor_front_mut();
 
-			// Yes, then insert it at the right position into the list sorted by wakeup time.
-			for node in self.list.iter() {
-				let node_wakeup_time = node.borrow().value.wakeup_time;
+			while let Some(node) = cursor.current() {
+				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
-					self.list.insert_before(new_node, node);
+					cursor.insert_before(new_node);
 
 					// If this is the new first task in the list, update the One-Shot Timer
 					// to fire when this task shall be woken up.
@@ -558,36 +557,31 @@ impl BlockedTaskQueue {
 				}
 
 				first_task = false;
-			}
-
-			// The right position is at the end of the list or the list is empty.
-			self.list.push(new_node);
-			if first_task {
-				arch::set_oneshot_timer(wakeup_time);
+				cursor.move_next();
 			}
 		} else {
 			// No, then just insert it at the end of the list.
-			self.list.push(new_node);
+			self.list.push_back(new_node);
 		}
 	}
 
 	/// Manually wake up a blocked task.
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		let mut first_task = true;
-		let mut iter = self.list.iter();
+		let mut cursor = self.list.cursor_front_mut();
 
 		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
-			if node.borrow().value.task.borrow().id == task.get_id() {
+		while let Some(node) = cursor.current() {
+			if node.task.borrow().id == task.get_id() {
 				// Remove it from the list of blocked tasks and wake it up.
-				self.list.remove(node.clone());
-				Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Custom);
+				Self::wakeup_task(node.task.clone(), WakeupReason::Custom);
+				cursor.remove_current();
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).
 				if first_task {
-					if let Some(next_node) = iter.next() {
-						arch::set_oneshot_timer(next_node.borrow().value.wakeup_time);
+					if let Some(next_node) = cursor.current() {
+						arch::set_oneshot_timer(next_node.wakeup_time);
 					}
 				}
 
@@ -595,6 +589,7 @@ impl BlockedTaskQueue {
 			}
 
 			first_task = false;
+			cursor.move_next();
 		}
 	}
 
@@ -605,12 +600,13 @@ impl BlockedTaskQueue {
 	pub fn handle_waiting_tasks(&mut self) {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
+		let mut cursor = self.list.cursor_front_mut();
 
 		// Loop through all blocked tasks.
-		for node in self.list.iter() {
+		while let Some(node) = cursor.current() {
 			// Get the wakeup time of this task and check if we have reached the first task
 			// that hasn't elapsed yet or waits indefinitely.
-			let node_wakeup_time = node.borrow().value.wakeup_time;
+			let node_wakeup_time = node.wakeup_time;
 			if node_wakeup_time.is_none() || time < node_wakeup_time.unwrap() {
 				// Adjust the One-Shot Timer to fire at this task's wakeup time (if any)
 				// and exit the loop.
@@ -619,8 +615,8 @@ impl BlockedTaskQueue {
 			}
 
 			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			self.list.remove(node.clone());
-			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Timer);
+			Self::wakeup_task(node.task.clone(), WakeupReason::Timer);
+			cursor.remove_current();
 		}
 	}
 }
