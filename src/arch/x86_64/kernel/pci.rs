@@ -129,9 +129,16 @@ pub enum PciDriver<'a> {
 }
 
 impl<'a> PciDriver<'a> {
-	fn get_network_driver(&mut self) -> Option<&SpinlockIrqSave<VirtioNetDriver<'a>>> {
+	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<VirtioNetDriver<'a>>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
+			_ => None,
+		}
+	}
+
+	fn get_filesystem_driver(&self) -> Option<&SpinlockIrqSave<VirtioFsDriver<'a>>> {
+		match self {
+			Self::VirtioFs(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -144,12 +151,16 @@ pub fn register_driver(drv: PciDriver<'static>) {
 
 pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
 	unsafe {
-		PCI_DRIVERS.iter_mut().find_map(|drv| {
+		PCI_DRIVERS.iter().find_map(|drv| {
 			drv.get_network_driver()
-			/*match &mut i {
-				PciDriver::VirtioNet(nic_driver) => Some(nic_driver),
-				_ =>  None,
-			}*/
+		})
+	}
+}
+
+pub fn get_filesystem_driver() -> Option<&'static SpinlockIrqSave<VirtioFsDriver<'static>>> {
+	unsafe {
+		PCI_DRIVERS.iter().find_map(|drv| {
+			drv.get_filesystem_driver()
 		})
 	}
 }
