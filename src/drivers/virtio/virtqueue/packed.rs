@@ -822,7 +822,7 @@ impl<'vq> PackedVq<'vq> {
     }
 
     /// See `Virtq.prep_transfer_from_raw()` documentation.
-    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&mut self, master: &'vq Virtq, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
+    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'vq Virtq, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
         -> Result<TransferToken, VirtqError> {
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),

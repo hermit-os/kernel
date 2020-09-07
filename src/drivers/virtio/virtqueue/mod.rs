@@ -25,6 +25,7 @@ use super::transport::pci::ComCfg;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 
+use alloc::collections::VecDeque;
 use core::ops::{BitAnd, Deref, DerefMut};
 use core::cell::RefCell;
 use alloc::rc::Rc;
@@ -258,9 +259,9 @@ impl<'vq> Virtq<'vq> {
     /// ```
     /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
     /// part via the recv argument. 
-    pub fn prep_transfer_from_raw<T: AsSliceU8, K: AsSliceU8>(&'vq mut self, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken, VirtqError> {
+    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&'vq self, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken, VirtqError> {
         match self {
-            Virtq::Packed(vq) => unimplemented!(),
+            Virtq::Packed(vq) => vq.prep_transfer_from_raw(self, send, recv),
             Virtq::Split(vq ) => unimplemented!(),
         }
     }
@@ -399,6 +400,7 @@ impl<'vq> Drop for Transfer<'vq> {
     }
 }
 
+// Public Interface of Transfer
 impl<'vq> Transfer<'vq> {
     /// Used to poll the current state of the transfer.
     /// * true = Transfer is finished and can be closed, reused or return data
@@ -446,6 +448,13 @@ impl<'vq> Transfer<'vq> {
         // Maybe return transfer again if it is ongoing to allowe recovery if falsely called?
         // - VirtqError would then trigger clean up of transfer when beeing dropped itself
         // NOT allowed if reusable == false
+    }
+
+    /// Provides a Queue in which all Transfers will be placed upon finish. This reduces the overhead
+    /// for checking in an array for finished transfers, which would
+    /// otherwise be needed if multiple transfers are ongoing.
+    pub fn await_at(mut self, queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>) {
+        unimplemented!();
     }
 
 }
@@ -990,6 +999,7 @@ impl MemPool {
 /// let indirect = BuffSpec::Indirect(&desc_lst);
 /// 
 /// ```
+#[derive(Debug, Clone)]
 pub enum BuffSpec<'a>{
     /// Create a buffer with a single descriptor of size `usize`
     Single(Bytes),
