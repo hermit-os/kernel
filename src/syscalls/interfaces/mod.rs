@@ -233,7 +233,7 @@ pub trait SyscallInterface: Send + Sync {
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mut read_bytes = 0;
-		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile + Send>| {
 			let dat = file.read(len as u32).unwrap(); // TODO: might fail
 
 			read_bytes = dat.len();
@@ -254,7 +254,7 @@ pub trait SyscallInterface: Send + Sync {
 
 			let mut written_bytes = 0;
 			let mut fs = fs::FILESYSTEM.lock();
-			fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+			fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile + Send>| {
 				written_bytes = file.write(buf).unwrap(); // TODO: might fail
 			});
 			debug!("Write done! {}", written_bytes);
@@ -278,7 +278,7 @@ pub trait SyscallInterface: Send + Sync {
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mut ret = 0;
-		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile>| {
+		fs.fd_op(fd as u64, |file: &mut Box<dyn PosixFile + Send>| {
 			ret = file.lseek(offset, whence.try_into().unwrap()).unwrap(); // TODO: might fail
 		});
 
