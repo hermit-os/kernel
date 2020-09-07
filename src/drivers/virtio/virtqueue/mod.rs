@@ -387,7 +387,8 @@ pub struct Transfer<'vq> {
     /// Needs to be Option<Pinned<TransferToken>> in order to prevent deallocation via None
     // See custom drop function for clarity
     transfer_tk: Option<Pinned<TransferToken<'vq>>>, 
-    vq: &'vq Virtq<'vq>
+    vq: &'vq Virtq<'vq>,
+    await_queue: Option<Rc<RefCell<VecDeque<Transfer<'vq>>>>>,
 }
 
 impl<'vq> Drop for Transfer<'vq> {
@@ -453,8 +454,8 @@ impl<'vq> Transfer<'vq> {
     /// Provides a Queue in which all Transfers will be placed upon finish. This reduces the overhead
     /// for checking in an array for finished transfers, which would
     /// otherwise be needed if multiple transfers are ongoing.
-    pub fn await_at(mut self, queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>) {
-        unimplemented!();
+    pub fn await_at(mut self, queue: Rc<RefCell<VecDeque<Transfer>>>) {
+        todo!("Lock the system here to be safe for IRQs and everthink");
     }
 
 }
@@ -1001,13 +1002,15 @@ impl MemPool {
 /// ```
 #[derive(Debug, Clone)]
 pub enum BuffSpec<'a>{
-    /// Create a buffer with a single descriptor of size `usize`
+    /// Create a buffer with a single descriptor of size `Bytes`
     Single(Bytes),
-    /// Create a buffer consisting of multiple descriptors, which size is
-    /// defined by `usize.`
+    /// Create a buffer consisting of multiple descriptors, where each descriptors size
+    // is defined by  the respective `Bytes` inside the slice. Overall buffer will be 
+    // the sum of all `Bytes` in the slide
     Multiple(&'a [Bytes]),
-    /// Creates a buffer consisting of multiple descriptors, which size is
-    /// defined by `usize`. But consumes only ONE descriptor of the actual 
+    /// Create a buffer consisting of multiple descriptors, where each descriptors size
+    // is defined by  the respective `Bytes` inside the slice. Overall buffer will be 
+    // the sum of all `Bytes` in the slide. But consumes only ONE descriptor of the actual 
     /// virtqueue. 
     Indirect(&'a [(Bytes)]),
 }

@@ -14,27 +14,38 @@ use config::VIRTIO_MAX_QUEUE_SIZE;
 
 use core::result::Result;
 use alloc::vec::Vec;
+use alloc::collections::VecDeque;
+use alloc::boxed::Box;
 use core::mem;
 use core::ops::Deref;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 use drivers::virtio::env::memory::{MemLen, MemOff};
 use drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfgAlt, PciCap};
 use drivers::virtio::transport::pci;
 use drivers::virtio::driver::VirtioDriver;
 use drivers::virtio::error::VirtioError;
-use drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex};
+use drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes};
 
 use self::error::VirtioNetError;
 use self::constants::{Features, Status, FeatureSet, MAX_NUM_VQ};
 
 
+#[repr(C)]
+struct VirtioNetHdr{
+    flags: u8,
+    gso_type: u8,
+    hdr_len: u16,
+    csum_start: u16,
+    csum_offset: u16,
+    num_buffer: u16,
+}
 
 /// A wrapper struct for the raw configuration structure. 
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
-///
-/// 
-pub struct NetDevCfg {
+struct NetDevCfg {
     raw: &'static NetDevCfgRaw,
     dev_id: u16,
 
@@ -53,25 +64,165 @@ struct NetDevCfgRaw {
 	mtu: u16,
 }
 
-struct CtrlQueue<'vq> (Option<Virtq<'vq>>);
+struct CtrlQueue<'vq> (Option<Box<Virtq<'vq>>>);
 
-struct RxQueues<'vq> (Vec<Virtq<'vq>>);
+struct RxQueues<'vq> {
+    vqs: Vec<Box<Virtq<'vq>>>,
+    poll_queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>
+}
 
 impl<'vq> RxQueues<'vq> {
     /// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
-    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
+    fn add(&mut self, vq: Box<Virtq<'vq>>, dev_cfg: &NetDevCfg) {
+        // Safe virtqueue
+        self.vqs.push(vq);
+        // Unwrapping is safe, as one virtq will be definitely in the vector.
+        let vq = self.vqs.get(self.vqs.len()-1).unwrap();
+
         if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
             | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
             | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_UFO) {
-                    
+            // Receive Buffers must be at least 65562 bytes large with theses features set.
+            // See Virtio specification v1.1 - 5.1.6.3.1
+
+            // Buffers can be merged upon receiption, hence using multiple descriptors
+            // per buffer. 
+            if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
+                match u16::from(vq.size()) {
+                    // Currently we choose indirect descriptors for small queue sizes, in order to allow 
+                    // as many packages as possible inside the queue, while the allocated
+                    size if size <= 256 => {
+                        let desc_sizes = [Bytes::new(512).unwrap();17];
+                        let spec = BuffSpec::Indirect(&desc_sizes);
+
+                        for _ in 0..size {
+                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                                Ok(tkn) => tkn,
+                                Err(vq_err) => {
+                                    error!("Setup of network queue failed, which should not happen!");
+                                    panic!("setup of network queue failed!");
+                                }
+                            };
+
+                            // BufferTokens are directly provided to the queue
+                            // TransferTokens are directly dispatched
+                            // Transfers will be awaited at the queue
+                            buff_tkn.provide()
+                                .dispatch()
+                                .await_at(Rc::clone(&self.poll_queue)
+                            );
+                        }
+                    },
+                    // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
+                    // virtqueue. This is duet to not consuming to much memory.
+                    // If the queue_size mod 17 is not zero. We use the rest of the descriptors with indirect
+                    // descriptors list, to fully utilize the queue.
+                    size if size > 256 => {
+                        let num_chains = size / 17;
+                        let num_indirect = size % 17;
+                        // Typically must assert that the size of the virtqueue is not exceeded
+                        assert!(size == num_chains*17+num_indirect);
+
+                        // Create all next lists
+                        let desc_sizes = [Bytes::new(512).unwrap();17];
+                        let spec = BuffSpec::Multiple(&desc_sizes);
+
+                        for _ in 0..num_chains {
+                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                                Ok(tkn) => tkn,
+                                Err(vq_err) => {
+                                    error!("Setup of network queue failed, which should not happen!");
+                                    panic!("setup of network queue failed!");
+                                }
+                            };
+
+                            // BufferTokens are directly provided to the queue
+                            // TransferTokens are directly dispatched
+                            // Transfers will be awaited at the queue
+                            buff_tkn.provide()
+                                .dispatch()
+                                .await_at(Rc::clone(&self.poll_queue)
+                            ); 
+                        }
+
+                        // Create remaining indirect descriptors
+                        let spec = BuffSpec::Indirect(&desc_sizes);
+                        for _ in 0..num_indirect {
+                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                                Ok(tkn) => tkn,
+                                Err(vq_err) => {
+                                    error!("Setup of network queue failed, which should not happen!");
+                                    panic!("setup of network queue failed!");
+                                }
+                            };
+
+                            // BufferTokens are directly provided to the queue
+                            // TransferTokens are directly dispatched
+                            // Transfers will be awaited at the queue
+                            buff_tkn.provide()
+                                .dispatch()
+                                .await_at(Rc::clone(&self.poll_queue)
+                            );
+                        }
+                    },
+                    _ => unreachable!(),
+                }
+            } else {
+            // Buffers can not be merged, hence using a single descriptor per buffer.
+                let spec = BuffSpec::Single(Bytes::new(65562).unwrap());
+                for _ in 0..u16::from(vq.size()) {
+                    let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                        Ok(tkn) => tkn,
+                        Err(vq_err) => {
+                            error!("Setup of network queue failed, which should not happen!");
+                            panic!("setup of network queue failed!");
+                        }
+                    };
+
+                    // BufferTokens are directly provided to the queue
+                    // TransferTokens are directly dispatched
+                    // Transfers will be awaited at the queue
+                    buff_tkn.provide()
+                        .dispatch()
+                        .await_at(Rc::clone(&self.poll_queue)
+                    );
+                }  
             }
-    } 
+        } else {
+            // If above features not set, buffers must be at least 1526 bytes large.
+            // See Virtio specification v1.1 - 5.1.6.3.1
+            //
+            // In this case, the driver does not check if 
+            // VIRTIO_NET_F_MRG_RXBUF is set, as a single descriptor will be used anyway.
+            let spec = BuffSpec::Single(Bytes::new(1526usize).unwrap());
+            for _ in 0..u16::from(vq.size()) {
+                let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                    Ok(tkn) => tkn,
+                    Err(vq_err) => {
+                        error!("Setup of network queue failed, which should not happen!");
+                        panic!("setup of network queue failed!");
+                    }
+                };
+
+                // BufferTokens are directly provided to the queue
+                // TransferTokens are directly dispatched
+                // Transfers will be awaited at the queue
+                buff_tkn.provide()
+                    .dispatch()
+                    .await_at(Rc::clone(&self.poll_queue)
+                );
+            } 
+        }
+    }
 }
 
-struct TxQueues<'vq> (Vec<Virtq<'vq>>);
+struct TxQueues<'vq> { 
+    vqs: Vec<Box<Virtq<'vq>>>,
+    poll_queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>,
+} 
 
 impl<'vq> TxQueues<'vq> {
-    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
+    fn add(&mut self, vq: Box<Virtq<'vq>>, dev_cfg: &NetDevCfg) {
         todo!();
     } 
 }
@@ -101,7 +252,7 @@ pub struct VirtioNetDriver<'vq> {
     num_vqs: u16,
 }
 
-impl<'p,'vq> VirtioDriver for VirtioNetDriver<'vq> {
+impl<'vq> VirtioDriver for VirtioNetDriver<'vq> {
     fn add_buff(&self) {
         unimplemented!();
     }
@@ -192,9 +343,14 @@ impl<'vq> VirtioNetDriver<'vq> {
             notif_cfg,
 
             ctrl_vq: CtrlQueue(None),
-            recv_vqs: RxQueues(Vec::<Virtq>::new()),
-            send_vqs: TxQueues(Vec::<Virtq>::new()),
-
+            recv_vqs: RxQueues {
+                vqs: Vec::<Box<Virtq>>::new(),
+                poll_queue: Rc::new(RefCell::new(VecDeque::new())),
+            },
+            send_vqs: TxQueues {
+                vqs: Vec::<Box<Virtq>>::new(),
+                poll_queue: Rc::new(RefCell::new(VecDeque::new())),
+            },
             num_vqs: 0,
         })
     }
@@ -229,6 +385,8 @@ impl<'vq> VirtioNetDriver<'vq> {
  
         // If wanted, push new features into feats here:
         // 
+        // Merging RxBuffers is possible and wanted
+        feats.push(Features::VIRTIO_NET_F_MRG_RXBUF);
 
         // Negotiate features with device. Automatically reduces selected feats in order to meet device capabilites.
         // Aborts in case incompatible features are selected by the dricer or the device does not support min_feat_set.
@@ -337,19 +495,22 @@ impl<'vq> VirtioNetDriver<'vq> {
         // Add a control if feature is negotiated
         if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_CTRL_VQ) {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                self.ctrl_vq = CtrlQueue(Some(Virtq::new(&mut self.com_cfg,
+                self.ctrl_vq = CtrlQueue(Some(Box::new(Virtq::new(&mut self.com_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
              VqIndex::from(2*self.num_vqs+1)
-                )));
+                ))));
             } else {
                 todo!("Implement control queue for split queue")
             }
         }
 
+        // If device does not take care of MAC address, the driver has to create one
+        if !self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MAC) {
+            todo!("Driver created MAC address should be passed to device here.")
+        }
 
-        // PLACEHOLDER FOR COMPILER
-        Err(VirtioNetError::General)
+        Ok(())
     }
 
     /// Initalize virtqueues via the queue interface and populates receiving queues
@@ -383,28 +544,24 @@ impl<'vq> VirtioNetDriver<'vq> {
         // see Virtio specification v1.1. - 5.1.2 
         for i in 1..self.num_vqs+1 {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                let vq = Virtq::new(&mut self.com_cfg,
+                let vq = Box::new(Virtq::new(&mut self.com_cfg,
                  VqSize::from(VIRTIO_MAX_QUEUE_SIZE), 
                        VqType::Packed, 
                 VqIndex::from(2*i-1)
-                    );
+                    ));
                 self.recv_vqs.add(vq, &self.dev_cfg);
         
-                let vq = Virtq::new(&mut self.com_cfg,
+                let vq = Box::new(Virtq::new(&mut self.com_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
              VqIndex::from(2*i)
-                );
+                ));
                 self.send_vqs.add(vq, &self.dev_cfg);
             } else {
                 todo!("Integrate split virtqueue into network driver");
             }
         }
-
-
-
-        // PLACEHOLDER FOR COMPILER
-        Err(VirtioNetError::General)
+        Ok(())
     }
 }
 
@@ -445,6 +602,7 @@ impl<'vq> VirtioNetDriver<'vq> {
     }
 
     pub fn dev_status(&self) -> u16 {
+        todo!("Check if check for status feature bit is necessary here");
         self.dev_cfg.raw.status
     }
 }
