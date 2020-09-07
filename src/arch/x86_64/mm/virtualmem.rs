@@ -9,7 +9,6 @@ use core::convert::TryInto;
 
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::VirtAddr;
-use crate::collections::Node;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::*;
@@ -17,11 +16,11 @@ use crate::synch::spinlock::*;
 static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
 pub fn init() {
-	let entry = Node::new(FreeListEntry {
-		start: mm::kernel_end_address().as_usize(),
-		end: kernel_heap_end().as_usize(),
-	});
-	KERNEL_FREE_LIST.lock().list.push(entry);
+	let entry = FreeListEntry::new(
+		mm::kernel_end_address().as_usize(),
+		kernel_heap_end().as_usize(),
+	);
+	KERNEL_FREE_LIST.lock().list.push_back(entry);
 }
 
 pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
@@ -35,7 +34,11 @@ pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
 	);
 
 	Ok(VirtAddr(
-		KERNEL_FREE_LIST.lock().allocate(size)?.try_into().unwrap(),
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(size, None)?
+			.try_into()
+			.unwrap(),
 	))
 }
 
@@ -60,7 +63,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, ()> {
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate_aligned(size, alignment)?
+			.allocate(size, Some(alignment))?
 			.try_into()
 			.unwrap(),
 	))
@@ -98,7 +101,7 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		.deallocate(virtual_address.as_usize(), size);
 }
 
-pub fn reserve(virtual_address: VirtAddr, size: usize) {
+/*pub fn reserve(virtual_address: VirtAddr, size: usize) {
 	assert!(
 		virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
 		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
@@ -134,7 +137,7 @@ pub fn reserve(virtual_address: VirtAddr, size: usize) {
 		size,
 		virtual_address
 	);
-}
+}*/
 
 pub fn print_information() {
 	KERNEL_FREE_LIST

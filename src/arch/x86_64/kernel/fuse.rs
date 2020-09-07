@@ -5,11 +5,10 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::kernel::pci::get_filesystem_driver;
 use crate::syscalls::fs::{FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence};
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::{fmt, u32, u8};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
@@ -27,14 +26,11 @@ pub trait FuseInterface {
 		T: FuseOut + core::fmt::Debug;
 }
 
-pub struct Fuse<T: FuseInterface> {
-	driver: Rc<RefCell<T>>,
-}
+pub struct Fuse;
 
-impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
-	fn open(&self, path: &str, perms: FilePerms) -> Result<Box<dyn PosixFile>, FileError> {
+impl PosixFileSystem for Fuse {
+	fn open(&self, path: &str, perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError> {
 		let mut file = FuseFile {
-			driver: self.driver.clone(),
 			fuse_nid: None,
 			fuse_fh: None,
 			offset: 0,
@@ -54,15 +50,19 @@ impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp) = create_open(file.fuse_nid.unwrap(), perms.raw);
-			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			let rsp = get_filesystem_driver()
+				.ok_or(FileError::ENOSYS())?
+				.lock()
+				.send_command(cmd, Some(rsp))
+				.unwrap();
 			trace!("Open answer {:?}", rsp);
-			file.fuse_fh = Some(rsp.unwrap().rsp.fh);
+			file.fuse_fh = Some(rsp.rsp.fh);
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
 			let (cmd, rsp) = create_create(path, perms.raw, perms.mode);
-			let rsp = self
-				.driver
-				.borrow_mut()
+			let rsp = get_filesystem_driver()
+				.ok_or(FileError::ENOSYS())?
+				.lock()
 				.send_command(cmd, Some(rsp))
 				.unwrap();
 			trace!("Create answer {:?}", rsp);
@@ -76,42 +76,53 @@ impl<T: FuseInterface + 'static> PosixFileSystem for Fuse<T> {
 
 	fn unlink(&self, path: &str) -> core::result::Result<(), FileError> {
 		let (cmd, rsp) = create_unlink(path);
-		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+		let rsp = get_filesystem_driver()
+			.ok_or(FileError::ENOSYS())?
+			.lock()
+			.send_command(cmd, Some(rsp));
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
 	}
 }
 
-impl<T: FuseInterface + 'static> Fuse<T> {
-	pub fn new(driver: Rc<RefCell<T>>) -> Self {
-		Self { driver }
+impl Fuse {
+	pub fn new() -> Self {
+		Self {}
 	}
 
 	pub fn send_init(&self) {
 		let (cmd, rsp) = create_init();
-		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+		let rsp = get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd, Some(rsp));
 		trace!("fuse init answer: {:?}", rsp);
 	}
 
 	pub fn lookup(&self, name: &str) -> Option<u64> {
 		let (cmd, rsp) = create_lookup(name);
-		let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+		let rsp = get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd, Some(rsp));
 		Some(rsp.unwrap().rsp.nodeid)
 	}
 }
 
-struct FuseFile<T: FuseInterface> {
-	driver: Rc<RefCell<T>>,
+struct FuseFile {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
 	offset: usize,
 }
 
-impl<T: FuseInterface> PosixFile for FuseFile<T> {
+impl PosixFile for FuseFile {
 	fn close(&mut self) -> Result<(), FileError> {
 		let (cmd, rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
-		self.driver.borrow_mut().send_command(cmd, Some(rsp));
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS())?
+			.lock()
+			.send_command(cmd, Some(rsp));
 
 		Ok(())
 	}
@@ -124,7 +135,10 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 		}
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_read(fh, len, self.offset as u64);
-			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			let rsp = get_filesystem_driver()
+				.ok_or(FileError::ENOSYS())?
+				.lock()
+				.send_command(cmd, Some(rsp));
 			let rsp = rsp.unwrap();
 			let len = rsp.header.len as usize - ::core::mem::size_of::<fuse_out_header>();
 			self.offset += len;
@@ -152,7 +166,10 @@ impl<T: FuseInterface> PosixFile for FuseFile<T> {
 		}
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_write(fh, &buf[..len], self.offset as u64);
-			let rsp = self.driver.borrow_mut().send_command(cmd, Some(rsp));
+			let rsp = get_filesystem_driver()
+				.ok_or(FileError::ENOSYS())?
+				.lock()
+				.send_command(cmd, Some(rsp));
 			trace!("write response: {:?}", rsp);
 			let rsp = rsp.unwrap();
 

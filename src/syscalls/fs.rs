@@ -56,10 +56,10 @@ pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
 
 pub struct Filesystem {
 	// Keep track of mount-points
-	mounts: BTreeMap<String, Box<dyn PosixFileSystem>>,
+	mounts: BTreeMap<String, Box<dyn PosixFileSystem + Send>>,
 
 	// Keep track of open files
-	files: BTreeMap<u64, Box<dyn PosixFile>>,
+	files: BTreeMap<u64, Box<dyn PosixFile + Send>>,
 }
 
 impl Filesystem {
@@ -86,7 +86,7 @@ impl Filesystem {
 
 	/// Gets a new fd for a file and inserts it into open files.
 	/// Returns file descriptor
-	fn add_file(&mut self, file: Box<dyn PosixFile>) -> u64 {
+	fn add_file(&mut self, file: Box<dyn PosixFile + Send>) -> u64 {
 		let fd = self.assign_new_fd();
 		self.files.insert(fd, file);
 		fd
@@ -97,7 +97,7 @@ impl Filesystem {
 	fn parse_path<'a, 'b>(
 		&'a self,
 		path: &'b str,
-	) -> Result<(&'a dyn PosixFileSystem, &'b str), FileError> {
+	) -> Result<(&'a (dyn PosixFileSystem + Send), &'b str), FileError> {
 		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
 		if !path.starts_with('/') {
 			warn!("Relative paths not allowed!");
@@ -146,7 +146,11 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(&mut self, mntpath: &str, mntobj: Box<dyn PosixFileSystem>) -> Result<(), ()> {
+	pub fn mount(
+		&mut self,
+		mntpath: &str,
+		mntobj: Box<dyn PosixFileSystem + Send>,
+	) -> Result<(), ()> {
 		info!("Mounting {}", mntpath);
 		if mntpath.contains('/') {
 			warn!(
@@ -168,7 +172,7 @@ impl Filesystem {
 	}
 
 	/// Run closure on file referenced by file descriptor.
-	pub fn fd_op(&mut self, fd: u64, f: impl FnOnce(&mut Box<dyn PosixFile>)) {
+	pub fn fd_op(&mut self, fd: u64, f: impl FnOnce(&mut Box<dyn PosixFile + Send>)) {
 		f(self.files.get_mut(&fd).unwrap());
 	}
 }
@@ -180,7 +184,7 @@ pub enum FileError {
 }
 
 pub trait PosixFileSystem {
-	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile>, FileError>;
+	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
 }
 

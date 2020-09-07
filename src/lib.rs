@@ -31,6 +31,7 @@
 #![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]
+#![feature(linked_list_cursors)]
 #![feature(llvm_asm)]
 #![feature(panic_info_message)]
 #![feature(specialization)]

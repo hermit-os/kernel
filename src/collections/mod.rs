@@ -8,10 +8,8 @@
 use crate::arch::irq;
 
 mod cachepadded;
-mod doublylinkedlist;
 
 pub use self::cachepadded::*;
-pub use self::doublylinkedlist::*;
 
 /// `irqsave` guarantees that the call of the closure
 /// will be not disturbed by an interrupt
