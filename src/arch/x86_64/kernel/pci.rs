@@ -150,19 +150,15 @@ pub fn register_driver(drv: PciDriver<'static>) {
 }
 
 pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
-	unsafe {
-		PCI_DRIVERS.iter().find_map(|drv| {
-			drv.get_network_driver()
-		})
-	}
+	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
 pub fn get_filesystem_driver() -> Option<&'static SpinlockIrqSave<VirtioFsDriver<'static>>> {
-	unsafe {
-		PCI_DRIVERS.iter().find_map(|drv| {
-			drv.get_filesystem_driver()
-		})
-	}
+		unsafe {
+			PCI_DRIVERS
+				.iter()
+				.find_map(|drv| drv.get_filesystem_driver())
+		}
 }
 
 /// Reads all bar registers of specified device and returns vector of PciBar's containing addresses and sizes.
