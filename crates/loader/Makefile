@@ -10,14 +10,18 @@ opt := --release
 rdir := release
 endif
 
+CONVERT :=
 RN :=
 ifdef COMSPEC
 RM := del
 else
 RM := rm -rf
 endif
-SYSROOT:=$(shell rustc --print sysroot)
-OBJCOPY:=$(shell find $(SYSROOT) -name llvm-objcopy)
+SYSROOT := $(shell rustc --print sysroot)
+OBJCOPY := $(shell find $(SYSROOT) -name llvm-objcopy)
+ifeq ($(arch), x86_64)
+CONVERT := $(OBJCOPY) --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
+endif
 
 .PHONY: all loader clean docs
 
@@ -33,4 +37,4 @@ docs:
 loader:
 	@echo Build loader
 	cargo build -Z build-std=core,alloc $(opt) --target $(target)-loader.json
-	$(OBJCOPY) --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
+	$(CONVERT)
