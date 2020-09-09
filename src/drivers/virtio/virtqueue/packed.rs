@@ -10,7 +10,7 @@
 use alloc::vec::Vec;
 
 use super::super::transport::pci::ComCfg;
-use super::{VqSize, VqIndex, MemPool, MemDescrId, MemDescr, BufferToken, TransferToken, TransferState, Buffer, BuffSpec, Bytes, AsSliceU8, Pinned, Virtq, DescrFlags};
+use super::{VqSize, VqIndex, MemPool, MemDescrId, MemDescr, BufferToken, TransferToken, Transfer, TransferState, Buffer, BuffSpec, Bytes, AsSliceU8, Pinned, Virtq, DescrFlags};
 use super::error::VirtqError;
 use self::error::VqPackedError;
 use core::convert::TryFrom;
@@ -247,7 +247,7 @@ impl EventSuppr {
 
 /// Packed virtqueue which provides the functionilaty as described in the 
 /// virtio specification v1.1. - 2.7
-pub struct PackedVq<'vq> {
+pub struct PackedVq {
     /// Ring which allows easy access to the raw ring structure of the 
     /// specfification
     descr_ring: DescriptorRing,
@@ -260,17 +260,31 @@ pub struct PackedVq<'vq> {
     mem_pool: Rc<MemPool>,
     /// The size of the queue, equals the number of descriptors which can
     /// be used
-    size: u16,
+    size: VqSize,
+    /// The virtqueues index. This identifies the virtqueue to the 
+    /// device and is unique on a per device basis
+    index: VqIndex,
     /// Holds all erly dropped `TransferToken`
     /// If `TransferToken.state == TransferState::Finished`
     /// the Token can be safely dropped
-    dropped: Vec<TransferToken<'vq>>,
+    dropped: Vec<Pinned<TransferToken>>,
 }
 
 
 
 // Public interface of PackedVq
-impl<'vq> PackedVq<'vq> {
+// This interface is also public in order to allow people to use the PackedVq directly!
+// This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin 
+// queue. This could be eased 
+impl PackedVq {
+    pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
+        unimplemented!();
+    }
+
+    pub fn index(&self) -> VqIndex {
+        self.index
+    }
+
     pub fn new(com_cfg: &mut ComCfg, size: VqSize, index: VqIndex) -> Result<Self, VqPackedError> {
         // Get a handler to the queues configuration area.
         let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -304,20 +318,26 @@ impl<'vq> PackedVq<'vq> {
         let mem_pool = Rc::new(MemPool::new(size.0));
 
         // Initalize an empty vector for future dropped transfers
-        let dropped: Vec<TransferToken> = Vec::new();
+        let dropped: Vec<Pinned<TransferToken>> = Vec::new();
 
         Ok(PackedVq {
             descr_ring,
             drv_event, 
             dev_event, 
             mem_pool,
-            size: size.into(),
+            size,
+            index,
             dropped,
         })
     }
 
     /// See `Virtq.prep_transfer()` documentation.
-    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'vq Virtq, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) 
+    pub fn dispatch(&self, tkn: TransferToken) -> Transfer {
+        unimplemented!();
+    }
+
+    /// See `Virtq.prep_transfer()` documentation.
+    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: Rc<Virtq>, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) 
         -> Result<TransferToken, VirtqError> {
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
@@ -339,19 +359,19 @@ impl<'vq> PackedVq<'vq> {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);
 
-                        let buff_tkn = BufferToken {
+                        let buff_tkn = Some(BufferToken {
                             send_buff: Some(Buffer::Single(desc)),
                             recv_buff: None,
                             vq: master,
                             ret_send: true,
-                            ret_recv: true,
+                            ret_recv: false,
                             reusable: true,
-                        };
+                        });
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn,
-                            vq: master,
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
@@ -380,15 +400,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(desc_lst)),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
-                                ret_recv: true,
+                                ret_recv: false,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
@@ -419,15 +439,15 @@ impl<'vq> PackedVq<'vq> {
                         
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
-                                ret_recv: true,
+                                ret_recv: false,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                 }
@@ -452,15 +472,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Single(desc)),
                                 vq: master,
-                                ret_send: true,
+                                ret_send: false,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
@@ -489,15 +509,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Multiple(desc_lst)),
                                 vq: master,
-                                ret_send: true,
+                                ret_send: false,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
@@ -528,15 +548,15 @@ impl<'vq> PackedVq<'vq> {
                         
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
                                 vq: master,
-                                ret_send: true,
+                                ret_send: false,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                 }
@@ -576,15 +596,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Single(send_desc)),
                                 recv_buff: Some(Buffer::Single(recv_desc)),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
@@ -628,15 +648,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Single(send_desc)),
                                 recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
@@ -688,15 +708,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(send_desc_lst)),
                                 recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
@@ -740,15 +760,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(send_desc_lst)),
                                 recv_buff: Some(Buffer::Single(recv_desc)),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
@@ -799,15 +819,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 recv_buff: Some(Buffer::Indirect((ctrl_desc.no_dealloc_clone(), recv_desc_lst))),
                                 send_buff: Some(Buffer::Indirect((ctrl_desc, send_desc_lst))),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
                                 reusable: true,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Indirect(_), BuffSpec::Single(_)) | (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
@@ -822,7 +842,7 @@ impl<'vq> PackedVq<'vq> {
     }
 
     /// See `Virtq.prep_transfer_from_raw()` documentation.
-    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: &'vq Virtq, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
+    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, master: Rc<Virtq>, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) 
         -> Result<TransferToken, VirtqError> {
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
@@ -843,15 +863,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Single(desc)),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
@@ -877,15 +897,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(desc_lst)),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
@@ -913,15 +933,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                 }
@@ -943,15 +963,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Single(desc)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
@@ -977,15 +997,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Multiple(desc_lst)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
@@ -1013,15 +1033,15 @@ impl<'vq> PackedVq<'vq> {
                         
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: None,
                                 recv_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                 }
@@ -1055,15 +1075,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Single(send_desc)),
                                 recv_buff: Some(Buffer::Single(recv_desc)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
@@ -1101,15 +1121,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Single(send_desc)),
                                 recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
@@ -1155,15 +1175,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(send_desc_lst)),
                                 recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
@@ -1201,15 +1221,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 send_buff: Some(Buffer::Multiple(send_desc_lst)),
                                 recv_buff: Some(Buffer::Single(recv_desc)),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
@@ -1254,15 +1274,15 @@ impl<'vq> PackedVq<'vq> {
 
                         Ok(TransferToken{
                             state: TransferState::Ready,
-                            buff_tkn: BufferToken {
+                            buff_tkn: Some(BufferToken {
                                 recv_buff: Some(Buffer::Indirect((ctrl_desc.no_dealloc_clone(), recv_desc_lst))),
                                 send_buff: Some(Buffer::Indirect((ctrl_desc, send_desc_lst))),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
                                 reusable: false,
-                            },
-                            vq: master,
+                            }),
+                            await_queue: None,
                         })
                     },
                     (BuffSpec::Indirect(_), BuffSpec::Single(_)) | (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
@@ -1277,7 +1297,7 @@ impl<'vq> PackedVq<'vq> {
     }
 
     /// See `Virtq.prep_buffer()` documentation.
-    pub fn prep_buffer(&self, master: &'vq Virtq, send: Option<BuffSpec>, recv: Option<BuffSpec>) 
+    pub fn prep_buffer(&self, master: Rc<Virtq>, send: Option<BuffSpec>, recv: Option<BuffSpec>) 
         -> Result<BufferToken, VirtqError> {
         match (send, recv) {
             // No buffers specified
@@ -1294,7 +1314,7 @@ impl<'vq> PackedVq<'vq> {
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
-                                ret_recv: true,
+                                ret_recv: false,
                                 reusable: true,
                             })
                         }
@@ -1317,7 +1337,7 @@ impl<'vq> PackedVq<'vq> {
                             recv_buff: None,
                             vq: master,
                             ret_send: true,
-                            ret_recv: true,
+                            ret_recv: false,
                             reusable: true,
                         })
                     },
@@ -1344,7 +1364,7 @@ impl<'vq> PackedVq<'vq> {
                             recv_buff: None,
                             vq: master,
                             ret_send: true,
-                            ret_recv: true,
+                            ret_recv: false,
                             reusable: true,
                         }) 
                     },
@@ -1361,7 +1381,7 @@ impl<'vq> PackedVq<'vq> {
                                 send_buff: None,
                                 recv_buff: Some(buffer),
                                 vq: master,
-                                ret_send: true,
+                                ret_send: false,
                                 ret_recv: true,
                                 reusable: true,
                             })
@@ -1384,7 +1404,7 @@ impl<'vq> PackedVq<'vq> {
                             send_buff: None,
                             recv_buff: Some(buffer),
                             vq: master,
-                            ret_send: true,
+                            ret_send: false,
                             ret_recv: true,
                             reusable: true,
                         })
@@ -1411,7 +1431,7 @@ impl<'vq> PackedVq<'vq> {
                             send_buff: None,
                             recv_buff: Some(buffer),
                             vq: master,
-                            ret_send: true,
+                            ret_send: false,
                             ret_recv: true,
                             reusable: true,
                         })
@@ -1584,12 +1604,12 @@ impl<'vq> PackedVq<'vq> {
     }
 
     pub fn size(&self) -> VqSize {
-        VqSize(self.size)
+        self.size
     }
 }
 
 // Private Interface for PackedVq
-impl<'vq> PackedVq<'vq> {
+impl PackedVq {
     fn create_indirect_ctrl(&self, send: Option<&Vec<MemDescr>>, recv: Option<&Vec<MemDescr>>) -> Result<MemDescr, VirtqError>{
         // Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
         let len: usize;
@@ -1690,7 +1710,7 @@ impl<'vq> PackedVq<'vq> {
     }
 }
 
-impl<'vq> Drop for PackedVq<'vq> {
+impl Drop for PackedVq {
     fn drop(&mut self) {
         todo!("rerutn leaked memory and ensure deallocation")
     }
