@@ -64,18 +64,18 @@ struct NetDevCfgRaw {
 	mtu: u16,
 }
 
-struct CtrlQueue<'vq> (Option<Box<Virtq<'vq>>>);
+struct CtrlQueue(Option<Rc<Virtq>>);
 
-struct RxQueues<'vq> {
-    vqs: Vec<Box<Virtq<'vq>>>,
-    poll_queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>
+struct RxQueues {
+    vqs: Vec<Rc<Virtq>>,
+    poll_queue: Rc<RefCell<VecDeque<Transfer>>>
 }
 
-impl<'vq> RxQueues<'vq> {
+impl RxQueues {
     /// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
-    fn add(&mut self, vq: Box<Virtq<'vq>>, dev_cfg: &NetDevCfg) {
+    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         // Safe virtqueue
-        self.vqs.push(vq);
+        self.vqs.push(Rc::new(vq));
         // Unwrapping is safe, as one virtq will be definitely in the vector.
         let vq = self.vqs.get(self.vqs.len()-1).unwrap();
 
@@ -96,7 +96,7 @@ impl<'vq> RxQueues<'vq> {
                         let spec = BuffSpec::Indirect(&desc_sizes);
 
                         for _ in 0..size {
-                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                                 Ok(tkn) => tkn,
                                 Err(vq_err) => {
                                     error!("Setup of network queue failed, which should not happen!");
@@ -108,9 +108,7 @@ impl<'vq> RxQueues<'vq> {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch()
-                                .await_at(Rc::clone(&self.poll_queue)
-                            );
+                                .dispatch_await(Rc::clone(&self.poll_queue));
                         }
                     },
                     // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
@@ -128,7 +126,7 @@ impl<'vq> RxQueues<'vq> {
                         let spec = BuffSpec::Multiple(&desc_sizes);
 
                         for _ in 0..num_chains {
-                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                                 Ok(tkn) => tkn,
                                 Err(vq_err) => {
                                     error!("Setup of network queue failed, which should not happen!");
@@ -140,15 +138,13 @@ impl<'vq> RxQueues<'vq> {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch()
-                                .await_at(Rc::clone(&self.poll_queue)
-                            ); 
+                                .dispatch_await(Rc::clone(&self.poll_queue));
                         }
 
                         // Create remaining indirect descriptors
                         let spec = BuffSpec::Indirect(&desc_sizes);
                         for _ in 0..num_indirect {
-                            let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                                 Ok(tkn) => tkn,
                                 Err(vq_err) => {
                                     error!("Setup of network queue failed, which should not happen!");
@@ -160,9 +156,7 @@ impl<'vq> RxQueues<'vq> {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch()
-                                .await_at(Rc::clone(&self.poll_queue)
-                            );
+                                .dispatch_await(Rc::clone(&self.poll_queue));
                         }
                     },
                     _ => unreachable!(),
@@ -171,7 +165,7 @@ impl<'vq> RxQueues<'vq> {
             // Buffers can not be merged, hence using a single descriptor per buffer.
                 let spec = BuffSpec::Single(Bytes::new(65562).unwrap());
                 for _ in 0..u16::from(vq.size()) {
-                    let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                    let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                         Ok(tkn) => tkn,
                         Err(vq_err) => {
                             error!("Setup of network queue failed, which should not happen!");
@@ -183,9 +177,7 @@ impl<'vq> RxQueues<'vq> {
                     // TransferTokens are directly dispatched
                     // Transfers will be awaited at the queue
                     buff_tkn.provide()
-                        .dispatch()
-                        .await_at(Rc::clone(&self.poll_queue)
-                    );
+                        .dispatch_await(Rc::clone(&self.poll_queue));
                 }  
             }
         } else {
@@ -196,7 +188,7 @@ impl<'vq> RxQueues<'vq> {
             // VIRTIO_NET_F_MRG_RXBUF is set, as a single descriptor will be used anyway.
             let spec = BuffSpec::Single(Bytes::new(1526usize).unwrap());
             for _ in 0..u16::from(vq.size()) {
-                let buff_tkn = match vq.prep_buffer(None, Some(spec.clone())) {
+                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                     Ok(tkn) => tkn,
                     Err(vq_err) => {
                         error!("Setup of network queue failed, which should not happen!");
@@ -208,21 +200,19 @@ impl<'vq> RxQueues<'vq> {
                 // TransferTokens are directly dispatched
                 // Transfers will be awaited at the queue
                 buff_tkn.provide()
-                    .dispatch()
-                    .await_at(Rc::clone(&self.poll_queue)
-                );
+                    .dispatch_await(Rc::clone(&self.poll_queue));
             } 
         }
     }
 }
 
-struct TxQueues<'vq> { 
-    vqs: Vec<Box<Virtq<'vq>>>,
-    poll_queue: Rc<RefCell<VecDeque<Transfer<'vq>>>>,
+struct TxQueues { 
+    vqs: Vec<Rc<Virtq>>,
+    poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 } 
 
-impl<'vq> TxQueues<'vq> {
-    fn add(&mut self, vq: Box<Virtq<'vq>>, dev_cfg: &NetDevCfg) {
+impl TxQueues {
+    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         todo!();
     } 
 }
@@ -239,20 +229,20 @@ struct TxBuffer {
 ///
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
-pub struct VirtioNetDriver<'vq> {
+pub struct VirtioNetDriver{
     dev_cfg: NetDevCfg,
     com_cfg: ComCfg,
     isr_stat: IsrStatus,
     notif_cfg: NotifCfg,
 
-    ctrl_vq: CtrlQueue<'vq>,
-    recv_vqs: RxQueues<'vq>, 
-    send_vqs: TxQueues<'vq>,
+    ctrl_vq: CtrlQueue,
+    recv_vqs: RxQueues, 
+    send_vqs: TxQueues,
 
     num_vqs: u16,
 }
 
-impl<'vq> VirtioDriver for VirtioNetDriver<'vq> {
+impl VirtioDriver for VirtioNetDriver {
     fn add_buff(&self) {
         unimplemented!();
     }
@@ -271,7 +261,7 @@ impl<'vq> VirtioDriver for VirtioNetDriver<'vq> {
 }
 
 // Private funtctions for Virtio network driver
-impl<'vq> VirtioNetDriver<'vq> {
+impl VirtioNetDriver {
     fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
         if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
             error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
@@ -344,11 +334,11 @@ impl<'vq> VirtioNetDriver<'vq> {
 
             ctrl_vq: CtrlQueue(None),
             recv_vqs: RxQueues {
-                vqs: Vec::<Box<Virtq>>::new(),
+                vqs: Vec::<Rc<Virtq>>::new(),
                 poll_queue: Rc::new(RefCell::new(VecDeque::new())),
             },
             send_vqs: TxQueues {
-                vqs: Vec::<Box<Virtq>>::new(),
+                vqs: Vec::<Rc<Virtq>>::new(),
                 poll_queue: Rc::new(RefCell::new(VecDeque::new())),
             },
             num_vqs: 0,
@@ -495,7 +485,7 @@ impl<'vq> VirtioNetDriver<'vq> {
         // Add a control if feature is negotiated
         if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_CTRL_VQ) {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                self.ctrl_vq = CtrlQueue(Some(Box::new(Virtq::new(&mut self.com_cfg,
+                self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(&mut self.com_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
              VqIndex::from(2*self.num_vqs+1)
@@ -544,18 +534,18 @@ impl<'vq> VirtioNetDriver<'vq> {
         // see Virtio specification v1.1. - 5.1.2 
         for i in 1..self.num_vqs+1 {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                let vq = Box::new(Virtq::new(&mut self.com_cfg,
+                let vq = Virtq::new(&mut self.com_cfg,
                  VqSize::from(VIRTIO_MAX_QUEUE_SIZE), 
                        VqType::Packed, 
                 VqIndex::from(2*i-1)
-                    ));
+                );
                 self.recv_vqs.add(vq, &self.dev_cfg);
         
-                let vq = Box::new(Virtq::new(&mut self.com_cfg,
+                let vq = Virtq::new(&mut self.com_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
              VqIndex::from(2*i)
-                ));
+                );
                 self.send_vqs.add(vq, &self.dev_cfg);
             } else {
                 todo!("Integrate split virtqueue into network driver");
@@ -566,7 +556,7 @@ impl<'vq> VirtioNetDriver<'vq> {
 }
 
 // Public interface for virtio network driver.
-impl<'vq> VirtioNetDriver<'vq> { 
+impl VirtioNetDriver { 
     /// Initializes virtio network device by mapping configuration layout to 
     /// respective structs (configuration structs are:
     /// [ComCfg](structs.comcfg.html), [NotifCfg](structs.notifcfg.html)

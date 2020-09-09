@@ -30,7 +30,7 @@ use core::ops::{BitAnd, Deref, DerefMut};
 use core::cell::RefCell;
 use alloc::rc::Rc;
 
-/// A usize newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
+/// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
 /// smaller-equal to `min(u16::MAX , T::MAX)`. 
 ///
 /// Currently implements `From<u16>` and `From<u32>`.
@@ -59,7 +59,7 @@ impl From<u32> for VqIndex {
     }
 }
 
-/// A usize newtype. If instantiated via ``VqSize::from(T)``, the newtype is ensured to be
+/// A u16 newtype. If instantiated via ``VqSize::from(T)``, the newtype is ensured to be
 /// smaller-equal to `min(u16::MAX , T::MAX)`. 
 ///
 /// Currently implements `From<u16>` and `From<u32>`.
@@ -101,26 +101,36 @@ pub enum VqType{
 /// might not provide the complete feature set of each queue. Drivers who
 /// do need these features should refrain from providing support for both 
 /// Virtqueue types and use the structs directly instead.
-pub enum Virtq<'vq> {
-    Packed(PackedVq<'vq>),
+pub enum Virtq {
+    Packed(PackedVq),
     Split(SplitVq),
 }
 
-// private interface of Virtq
-impl<'vq> Virtq<'vq> {
+// Public interface of Virtq
+impl Virtq {
     /// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective 
-    /// virtqueue implementation.
-    fn batched(&mut self, tkns: Vec<TransferToken>) -> Transfer {
+    /// virtqueue implementation. Pleace see the respective docs for details
+    pub fn dispatch_batch(tkns: Vec<TransferToken>) -> Vec<Transfer> {
+        todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+    }
+
+    /// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
+    /// upon finish.
+    ///
+    /// The actuall behaviour depends on the respective 
+    /// virtqueue implementation. Please see the respective docs for details.
+    pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>) {
+        todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+    }
+
+    pub fn dispatch(&self, tkn: TransferToken) -> Transfer {
         match self {
-            Virtq::Packed(vq) => unimplemented!(),
+            Virtq::Packed(vq) => vq.dispatch(tkn),
             Virtq::Split(vq) => unimplemented!(),
         }
-    } 
-}
-
-// Public interface of Virtq
-impl<'vq> Virtq<'vq> {
-    /// Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
+    }
+    
+    // Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
     /// The index represents the "ID" of the virtqueue. 
     /// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
     ///
@@ -147,7 +157,7 @@ impl<'vq> Virtq<'vq> {
     // Returns the index (ID) of a Virtqueue. 
     pub fn index(&self) -> VqIndex {
         match self {
-            Virtq::Packed(vq) => unimplemented!(),
+            Virtq::Packed(vq) => vq.index(),
             Virtq::Split(vq) => unimplemented!(),
         }
     } 
@@ -196,9 +206,9 @@ impl<'vq> Virtq<'vq> {
     /// ```
     /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
     /// part via the recv argument.
-    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&'vq self, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) -> Result<TransferToken<'vq>, VirtqError> {
+    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, rc_self: Rc<Virtq>, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) -> Result<TransferToken, VirtqError> {
             match self {
-                Virtq::Packed(vq) => vq.prep_transfer(self ,send, recv),
+                Virtq::Packed(vq) => vq.prep_transfer(rc_self ,send, recv),
                 Virtq::Split(vq ) => unimplemented!(),
             }
     }
@@ -259,9 +269,9 @@ impl<'vq> Virtq<'vq> {
     /// ```
     /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
     /// part via the recv argument. 
-    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&'vq self, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken, VirtqError> {
+    pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, rc_self: Rc<Virtq>, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken, VirtqError> {
         match self {
-            Virtq::Packed(vq) => vq.prep_transfer_from_raw(self, send, recv),
+            Virtq::Packed(vq) => vq.prep_transfer_from_raw(rc_self, send, recv),
             Virtq::Split(vq ) => unimplemented!(),
         }
     }
@@ -301,19 +311,19 @@ impl<'vq> Virtq<'vq> {
     /// //                                                                          ++++++++++++++++++++++++++
     /// ```
     /// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-    pub fn prep_buffer(&'vq self, send: Option<BuffSpec>, recv: Option<BuffSpec>) -> Result<BufferToken, VirtqError> {
+    pub fn prep_buffer(&self, rc_self: Rc<Virtq>, send: Option<BuffSpec>, recv: Option<BuffSpec>) -> Result<BufferToken, VirtqError> {
         match self {
-            Virtq::Packed(vq) => vq.prep_buffer(self, send, recv),
+            Virtq::Packed(vq) => vq.prep_buffer(rc_self, send, recv),
             Virtq::Split(vq ) => unimplemented!(),
         }
     }
 
     /// Early drop provides a mechanism for the queue to detect, if an ongoing transfer or a transfer not yet polled by the driver 
-    /// has been dropped. The queue implementation is responsible to taking care what should happen to the respective TransferToken
+    /// has been dropped. The queue implementation is responsible for taking care what should happen to the respective TransferToken
     /// and BufferToken.
-    pub fn early_drop(&self, transfer_tk: Pinned<TransferToken>) {
+    fn early_drop(&self, transfer_tk: Pinned<TransferToken>) {
         match self {
-            Virtq::Packed(vq) => unimplemented!(),
+            Virtq::Packed(vq) => vq.early_drop(transfer_tk),
             Virtq::Split(vq ) => unimplemented!(),
         }
     }
@@ -335,27 +345,31 @@ pub trait AsSliceU8 {
     /// Returns a slice of the given structure.
     ///
     /// ** WARN:**
-    /// * The slice must little endian coded in order to be understood by the device
+    /// * The slice must be little endian coded in order to be understood by the device
     /// * The slice must serialize the actual structure the device expects, as the queue will use 
     /// the addresses of the slice in order to refer to the structure.
-    unsafe fn as_slice_u8(&self) -> &[u8] {
-        core::slice::from_raw_parts(
-           (self as *const Self) as *const u8,
-            core::mem::size_of_val(&self),
-        )
+    fn as_slice_u8(&self) -> &[u8] {
+        unsafe { 
+            core::slice::from_raw_parts(
+            (self as *const Self) as *const u8,
+                core::mem::size_of_val(&self),
+            )
+        }
     }
 
     /// Returns a mutable slice of the given structure.
     ///
     /// ** WARN:**
-    /// * The slice must little endian coded in order to be understood by the device
+    /// * The slice must be little endian coded in order to be understood by the device
     /// * The slice must serialize the actual structure the device expects, as the queue will use 
     /// the addresses of the slice in order to refer to the structure.
-    unsafe fn as_slice_u8_mut(&self) -> &mut [u8] {
-        core::slice::from_raw_parts_mut(
-            (self as *const Self) as *mut u8,
-             core::mem::size_of_val(&self)
-        )
+     fn as_slice_u8_mut(&self) -> &mut [u8] {
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                (self as *const Self) as *mut u8,
+                core::mem::size_of_val(&self)
+            )
+        }
     }
 }
 
@@ -383,31 +397,111 @@ pub trait AsSliceU8 {
 /// One could "abuse" this procedure in order to realize a "fire-and-forget" transfer. 
 /// A warning here: The respective queue implementation is taking care of handling this case and there are no guarantees that the queue 
 /// won't be unusable afterwards. 
-pub struct Transfer<'vq> {
+pub struct Transfer {
     /// Needs to be Option<Pinned<TransferToken>> in order to prevent deallocation via None
     // See custom drop function for clarity
-    transfer_tk: Option<Pinned<TransferToken<'vq>>>, 
-    vq: &'vq Virtq<'vq>,
-    await_queue: Option<Rc<RefCell<VecDeque<Transfer<'vq>>>>>,
+    transfer_tkn: Option<Pinned<TransferToken>>, 
+    await_queue: Option<Rc<RefCell<VecDeque<Transfer>>>>,
 }
 
-impl<'vq> Drop for Transfer<'vq> {
+impl Drop for Transfer {
     /// When an unclosed transfer is dropped. The [Pinned](Pinned)<[TransferToken](struct.TransferToken.html)> is returned to the respective
     /// virtqueue, who is responsible of handling these situations. 
     fn drop(&mut self) {
-        if let Some(tkn) = self.transfer_tk.take() {
-            self.vq.early_drop(tkn)
+        if let Some(tkn) = self.transfer_tkn.take() {
+            // Unwrapping is okay here, as TransferToken MUST hold a BufferToken
+            let vq_ref = Rc::clone(&tkn.buff_tkn.as_ref().unwrap().vq);
+            vq_ref.early_drop(tkn)
         }
     }
 }
 
 // Public Interface of Transfer
-impl<'vq> Transfer<'vq> {
+impl Transfer {
     /// Used to poll the current state of the transfer.
     /// * true = Transfer is finished and can be closed, reused or return data
     /// * false = Transfer is ongoing
     pub fn poll(&self)-> bool {
-        unimplemented!();
+        // Unwrapping is okay here, as Transfers must hold a TransferToken
+        match self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => true,
+            TransferState::Ready => unreachable!("Transfers owned by other than queue should have Tokens, of Finished or Processing State!"),
+            TransferState::Processing => false,
+        }
+    }
+
+    /// Returns a copy if the respective send and receiving buffers
+    /// The actul buffers remain in the BufferToken and hence the token can be 
+    /// reused afterwards.
+    /// 
+   /// **Return Tuple**
+    ///
+    /// `(sended_data, received_data)`
+    /// 
+    /// The returned data is of type `Box<[Box<[u8]>]>`. This function therefore preserves
+    /// the scattered structure of the buffer,
+    /// 
+    /// If one create this buffer via a `Virtq.prep_transfer()` or `Virtq.prep_transfer_from_raw()` 
+    /// call, a casting back to the original structure `T` is NOT possible.
+    /// In theses cases please use `Transfer.ret_cpy()` or use 'BuffSpec::Single' only!
+    pub fn ret_scat_cpy(&self) -> Result<(Option<Box<[Box<[u8]>]>>, Option<Box<[Box<[u8]>]>>), VirtqError> {
+        match &self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                let send_data: Option<Box<[Box<[u8]>]>>;
+                let mut arr = Vec::new();
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => match buff {
+                        Buffer::Single(desc) => {
+                            arr.push(desc.cpy_into_box());
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Multiple(descr_lst) => {
+                            for desc in descr_lst {
+                                arr.push(desc.cpy_into_box());
+                            }
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Indirect((_, descr_lst)) => {
+                            for desc in descr_lst {
+                                arr.push(desc.cpy_into_box());
+                            }
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                    },
+                    None => send_data = None,
+                }
+
+                let recv_data: Option<Box<[Box<[u8]>]>>;
+                let mut arr = Vec::new();
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().recv_buff {
+                    Some(buff) => match buff {
+                        Buffer::Single(desc) => {
+                            arr.push(desc.cpy_into_box());
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Multiple(descr_lst) => {
+                            for desc in descr_lst {
+                                arr.push(desc.cpy_into_box());
+                            }
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Indirect((_, descr_lst)) => {
+                            for desc in descr_lst {
+                                arr.push(desc.cpy_into_box());
+                            }
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                    },
+                    None => recv_data = None,
+                }
+
+                Ok((send_data, recv_data))
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(None)),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"),
+        }
     }
 
     /// Returns a copy if the respective send and receiving buffers
@@ -417,50 +511,210 @@ impl<'vq> Transfer<'vq> {
     /// **Return Tuple**
     ///
     /// `(sended_data, received_data)`
-    pub fn ret_cpy(&self) -> (Option<Box<[u8]>>, Option<Box<[u8]>>){
-        unimplemented!();
-        // Returns a copy of the content
-        // Transfer can later be resused via the reuse function
-    } 
+    /// 
+    /// The sended_data is `Box<[u8]>`. This function herefore merges (if multiple descriptors
+    /// were requested for one buffer) into a single `[u8]`. 
+    /// 
+    /// It can be assumed, that if one created the send buffer from a structure `T`, that 
+    /// `&sended_data[0] as *const u8 == *const T`
+    pub fn ret_cpy(&self) -> Result<(Option<Box<[u8]>>, Option<Box<[u8]>>), VirtqError> {
+        match &self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                let send_data: Option<Box<[u8]>>;
+                let mut arr = Vec::new();
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => match buff {
+                        Buffer::Single(desc) => {
+                            arr.append(&mut desc.cpy_into_vec());
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Multiple(descr_lst) => {
+                            for desc in descr_lst {
+                                arr.append(&mut desc.cpy_into_vec());
+                            }
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Indirect((_, descr_lst)) => {
+                            for desc in descr_lst {
+                                arr.append(&mut desc.cpy_into_vec());
+                            }
+                            send_data = Some(arr.into_boxed_slice());
+                        },
+                    },
+                    None => send_data = None,
+                }
+
+                let recv_data: Option<Box<[u8]>>;
+                let mut arr = Vec::new();
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().recv_buff {
+                    Some(buff) => match buff {
+                        Buffer::Single(desc) => {
+                            arr.append(&mut desc.cpy_into_vec());
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Multiple(descr_lst) => {
+                            for desc in descr_lst {
+                                arr.append(&mut desc.cpy_into_vec());
+                            }
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                        Buffer::Indirect((_, descr_lst)) => {
+                            for desc in descr_lst {
+                                arr.append(&mut desc.cpy_into_vec());
+                            }
+                            recv_data = Some(arr.into_boxed_slice());
+                        },
+                    },
+                    None => recv_data = None,
+                }
+
+                Ok((send_data, recv_data))
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(None)),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"), 
+        }
+    }
 
     /// Returns the actual send and receiving buffers.
     /// The function consumes the tranfer and cleans up all tokens.
+    /// Failes if `TransferState != Finished`.
     /// 
     /// **Return Tuple**
     ///
     /// `(sended_data, received_data)`
-    pub fn ret(mut self) -> (Option<Box<[u8]>>, Option<Box<[u8]>>) {
-        unimplemented!();
-        // Returns the buffers as RetBuffers, which 
-        // NOT allowed if returnable == false
+    ///
+    /// Returned data is of type `Box<[Box<[u8]>]>` in order to preserve the memory regions
+    /// and to prevent copying of data.
+    pub fn ret(mut self) -> Result<(Option<Box<[Box<[u8]>]>>, Option<Box<[Box<[u8]>]>>), VirtqError> {
+        let state = self.transfer_tkn.as_ref().unwrap().state;
+
+        match state {
+            TransferState::Finished => {
+                // Desctructure Token
+                let mut transfer_tkn = self.transfer_tkn.take().unwrap().into_inner();
+                let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
+
+                let send_data: Option<Box<[Box<[u8]>]>>;
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                if buffer_tkn.ret_send {
+                    let mut arr = Vec::new();
+                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                    match buffer_tkn.send_buff {
+                        Some(buff) => match buff {
+                            Buffer::Single(desc) => {
+                                arr.push(desc.into_boxed());
+                                send_data = Some(arr.into_boxed_slice());
+                            },
+                            Buffer::Multiple(descr_lst) => {
+                               for desc in descr_lst {
+                                   arr.push(desc.into_boxed());
+                               }
+                                send_data = Some(arr.into_boxed_slice());
+                            },
+                            Buffer::Indirect((_, descr_lst)) => {
+                                for desc in descr_lst {
+                                    arr.push(desc.into_boxed());
+                                }
+                                send_data = Some(arr.into_boxed_slice());
+                            },
+                        },
+                        None => send_data = None,
+                    }
+                    // This data is not a second time returnable
+                    // Unessecary, because token will be dropped.
+                    // But to be consistent in state.
+                    //
+                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                    buffer_tkn.ret_send = false;
+                } else {
+                    send_data = None;
+                }
+
+                let recv_data: Option<Box<[Box<[u8]>]>>;
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                if buffer_tkn.ret_recv {
+                    let mut arr = Vec::new();
+                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                    match buffer_tkn.recv_buff {
+                        Some(buff) => match buff {
+                            Buffer::Single(desc) => {
+                                arr.push(desc.into_boxed());
+                                recv_data = Some(arr.into_boxed_slice());
+                            },
+                            Buffer::Multiple(descr_lst) => {
+                                for desc in descr_lst {
+                                    arr.push(desc.into_boxed());
+                                }
+                                recv_data = Some(arr.into_boxed_slice());
+                            },
+                            Buffer::Indirect((_, descr_lst)) => {
+                                for desc in descr_lst {
+                                    arr.push(desc.into_boxed());
+                                }
+                                recv_data = Some(arr.into_boxed_slice());
+                            },
+                        },
+                        None => recv_data = None,
+                    }
+                    // This data is not a second time returnable.
+                    // Unessecary, because token will be dropped.
+                    // But to be consistent in state.
+                    //
+                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                    buffer_tkn.ret_recv = false;
+                } else {
+                    recv_data = None;
+                }
+                // Prevent Token to be reusable although it will be dropped
+                // later in this function.
+                // Unessecary but to be consistent in state.
+                //
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                buffer_tkn.reusable = false;
+
+                Ok((send_data, recv_data))
+            }, 
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(Some(self))),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"), 
+        }
     }
 
     /// Closes an transfer. If the transfer was ongoing the respective transfer token will be returned to the virtqueue.
     /// If it was finished the resources will be cleaned up.
     pub fn close(mut self) {
-        // Consuming function which closes transfer. Simply drops transfer, which handles clean up of data.
+        match self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Processing => {
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                let vq = Rc::clone(&self.transfer_tkn.as_ref().unwrap().get_vq());
+                let transfer_tkn = self.transfer_tkn.take().unwrap();
+                vq.early_drop(transfer_tkn);
+            },
+            TransferState::Ready => unreachable!("Transfers MUST have tokens of states Processing or Finished."),
+            TransferState::Finished => (),// Do nothing and free everything.
+        }
     }
 
     /// If the transfer was finished returns the BufferToken inside the transfer else returns an error.
-    pub fn reuse(mut self) -> Result<BufferToken<'vq>, VirtqError> {
-        // Should I return BufferToken or Buffers which could then be uses via prep buffers?
-        unimplemented!();
-        // Returns a the buffer token, consumes the transfer.
-        // Maybe return transfer again if it is ongoing to allowe recovery if falsely called?
-        // - VirtqError would then trigger clean up of transfer when beeing dropped itself
-        // NOT allowed if reusable == false
+    pub fn reuse(mut self) -> Result<BufferToken, VirtqError> {
+        // Unwrapping is okay here, as TransferToken must hold a BufferToken
+        match self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                if self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().reusable {
+                    Ok(self.transfer_tkn.take().unwrap().into_inner().buff_tkn.take().unwrap())
+                } else {
+                    Err(VirtqError::NoReuseBuffer)
+                }
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(Some(self))),
+            TransferState::Ready => unreachable!("Transfers coming from outside the queue must be Processing or Finished"),
+        }
     }
-
-    /// Provides a Queue in which all Transfers will be placed upon finish. This reduces the overhead
-    /// for checking in an array for finished transfers, which would
-    /// otherwise be needed if multiple transfers are ongoing.
-    pub fn await_at(mut self, queue: Rc<RefCell<VecDeque<Transfer>>>) {
-        todo!("Lock the system here to be safe for IRQs and everthink");
-    }
-
 }
 
-/// Enum indicates the current state of a transfer. 
+/// Enum indicates the current state of a transfer.
+#[derive(PartialEq, Copy, Clone, Debug)]
 enum TransferState {
     /// Queue finished transfer
     Finished,
@@ -472,28 +726,39 @@ enum TransferState {
 
 /// The struct represents buffers which are ready to be send via the 
 /// virtqueue. Buffers can no longer be written or retrieved. 
-pub struct TransferToken<'vq> {
+pub struct TransferToken {
     state: TransferState,
-    buff_tkn: BufferToken<'vq>,
-    vq: &'vq Virtq<'vq>,
+    /// Must be some in order to prevent drop
+    /// upon reuse.
+    buff_tkn: Option<BufferToken>,
+    /// Structure which allows to await Transfers
+    /// If Some, finished TransferTokens will be placed here 
+    /// as finished `Transfers`. If None, only the state 
+    /// of the Token will be changed.
+    await_queue: Option<Rc<RefCell<VecDeque<Transfer>>>>,
 }
 
-impl <'vq> TransferToken<'vq> {
-    /// Allows the batched transfer of Transfer Tokens.
-    /// The respective buffers will be placed into the queue in sequence and when 
-    /// the last one is placed, the queue notifies the queue.
-    ///
-    /// INFO: This function is part of TransferToken as the tokens can in theory be 
-    /// form different queues, so this ensures, the right queue is called.
-    pub fn dispatch_batched(self, other: Vec<TransferToken>) -> Vec<Transfer> {
-        unimplemented!();
-        // sort virtques after indexes and then call their respective batched function
-        // return all as transfer.
+/// Public Interface for TransferToken
+impl TransferToken {
+    /// Returns a refernce to the holding virtqueue
+    pub fn get_vq(&self) -> Rc<Virtq> {
+        // Unwrapping is okay here, as TransferToken must hold a BufferToken
+        Rc::clone(&self.buff_tkn.as_ref().unwrap().vq)
+    }
+
+    pub fn dispatch_await(mut self, await_queue: Rc<RefCell<VecDeque<Transfer>>>) {
+        self.await_queue = Some(Rc::clone(&await_queue));
+        
+        // Prevent TransferToken from beeing dropped 
+        // I.e. do NOT run the costum constructor which will 
+        // deallocate memory, as we never call drop upon
+        // the ManuallyDrop<Pinned<TransferToken>>
+        core::mem::ManuallyDrop::new(self.get_vq().dispatch(self).transfer_tkn.take());
     }
 
     /// Dispatches the provided TransferToken to the respective queue and returns a transfer.
-    pub fn dispatch(self) -> Transfer<'vq> {
-        unimplemented!();
+    pub fn dispatch(self) -> Transfer {
+        self.get_vq().dispatch(self)
     }
 
     /// Dispatches the provided TransferToken to the respectuve queue and does 
@@ -503,9 +768,14 @@ impl <'vq> TransferToken<'vq> {
     /// finished and the returned [Transfer](Transfer) can be reused, copyied from
     /// or retrun the underlying buffers.
     /// Allthough it is recomended to ensure the finished state via`Transfer.poll()` beforehand.
-    pub fn dispatch_blocking(&self) -> Result<Transfer, VirtqError> {
-        unimplemented!();
-        // Transfer is finished and can be directly polled to return the eventual data.
+    pub fn dispatch_blocking(self) -> Result<Transfer, VirtqError> {
+        let transfer = self.get_vq().dispatch(self);
+
+        while transfer.transfer_tkn.as_ref().unwrap().state != TransferState::Finished {
+            // Keep Spinning untill the state changes to Finished
+        }
+
+        Ok(transfer)
     }
 }
 
@@ -535,14 +805,14 @@ impl <'vq> TransferToken<'vq> {
 /// Each of these descriptors consumes one "element" of the
 /// respective virtqueue.
 /// The maximum number of descriptors per buffer is bounded by the size of the virtqueue.
-pub struct BufferToken<'vq> {
+pub struct BufferToken {
     send_buff: Option<Buffer>,
     //send_desc_lst: Option<Vec<usize>>,
 
     recv_buff: Option<Buffer>,
     //recv_desc_lst: Option<Vec<usize>>,
 
-    vq: &'vq Virtq<'vq>,
+    vq: Rc<Virtq>,
     /// Indicates wether the buff is returnable
     ret_send: bool,
     ret_recv: bool,
@@ -552,7 +822,7 @@ pub struct BufferToken<'vq> {
 }
 
 // Public interface of BufferToken
-impl<'vq> BufferToken<'vq> {
+impl BufferToken {
     /// Writes the provided datastructures into the respective buffers. `K` into `self.send_buff` and `H` into 
     /// `self.recv_buff`. 
     /// If the provided datastructures do not "fit" into the respective buffers, the function will return an error. Even
@@ -565,7 +835,7 @@ impl<'vq> BufferToken<'vq> {
     /// descriptors. 
     /// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a sinlge continous 
     /// memeory element and as a result writes `T` or `H` as a slice of bytes into this memory.
-    pub fn write<K: AsSliceU8, H: AsSliceU8>(self, send: Option<K>, recv: Option<H>) -> Result<TransferToken<'vq>, VirtqError> {
+    pub fn write<K: AsSliceU8, H: AsSliceU8>(mut self, send: Option<K>, recv: Option<H>) -> Result<TransferToken, VirtqError> {
         unimplemented!();
         // writes K into the send_buff
         // VIrtqError::WriteToLarge(BufferToken) will return the token for recovery
@@ -583,16 +853,18 @@ impl<'vq> BufferToken<'vq> {
     ///   * Will result in 4 bytes written to the second buffer descriptor of the recv buffer. Nothing is written into the second buffer descriptor.
     /// * Third Write: `write_seq(Some(10 bytes, Some(4 bytes))`:
     ///   * Will result in 10 bytes written to the second buffer descriptor of the send buffer and 4 bytes written to the third buffer descriptor of the recv buffer.
-    pub fn write_seq<K: AsSliceU8, H: AsSliceU8>(send_seq: Option<K>, recv_seq: Option<H>) -> Result<Bytes, VirtqError> {
-        unimplemented!();
+    pub fn write_seq<K: AsSliceU8, H: AsSliceU8>(mut self, send_seq: Option<K>, recv_seq: Option<H>) -> Result<Self, VirtqError> {
+        todo!("Implement, but need to change PACKED vq, as state is needed in Buffer enum!");
+        // If this works and Buffer::{...} can be adjusted accordingly, then must set 
+        // last_write to zero, when BuffToken Transformed into TransferToken
         // writes K into the first send_buff element. Next write will be written to the next buff.
     }
 
     /// Consumes the [BufferToken](BufferToken) and returns a [TransferToken](TransferToken), that can be used to actually start the transfer.
     /// 
     /// After this call, the buffers are no longer writable. 
-    pub fn provide(mut self) -> TransferToken<'vq> {
-        unreachable!();
+    pub fn provide(mut self) -> TransferToken {
+        todo!("Set Last write to zero! for bufferToken");
     }
 }
 
@@ -614,30 +886,6 @@ enum Buffer {
 
 // Private Interface of Buffer
 impl Buffer {
-    
-    /// Sets a [Pinned](Pinned)<[TransferToken](TransferToken)> for a Buffer. This is 
-    /// useful if one wants to create a connection between the complex control structure
-    /// of the [Virtq](Virtq) and the control structures defined by the standard. In essence
-    /// it allows to store a reference between `TransferToken` and `Descriptors` (Descriptors)
-    /// used in the actual raw virtqueue. See Virtio specification v1.1 *Descriptor Area* for 
-    /// both queues.
-    fn set_ctrl_tkn(&mut self, tkn: &Pinned<TransferToken>) {
-        match self {
-            Buffer::Single(descr) => descr.set_ctrl_tkn(tkn),
-            Buffer::Multiple(descr_lst) => {
-                for descr in descr_lst {
-                    descr.set_ctrl_tkn(tkn);
-                }
-            }
-            Buffer::Indirect((vq_desc, descr_lst)) => {
-                vq_desc.set_ctrl_tkn(tkn);
-                for descr in descr_lst {
-                    descr.set_ctrl_tkn(tkn);
-                }
-            } 
-        }
-    }
-
     /// Retruns the number of descriptors inside a buffer.
     fn num_descr(&self ) -> usize {
         match self {
@@ -646,6 +894,27 @@ impl Buffer {
             Buffer::Indirect((_, desc_lst)) => desc_lst.len(),
         }
     }
+
+    /// Returns the overall number of bytes in this Buffer
+    fn len(&self) -> usize {
+        unimplemented!("After Buffer enum is changed");
+    }
+
+    /// Returns the complete Buffer as a vector of mutable slices.
+    ///
+    /// As Buffers are able to consist of multiple descriptors
+    /// this will return a Vector of slices. One element 
+    /// (`&[u8]`) for each descriptor.
+    fn as_mut_slice(&self) -> &mut [MemDescr] {
+        unimplemented!();
+    }
+
+    ///
+    fn as_slice(&mut self) -> &[MemDescr] {
+        unimplemented!();
+    }
+
+
 }
 
 /// Describes a chunk of heap allocated memory. This memory chunk will 
@@ -656,17 +925,18 @@ impl Buffer {
 /// controlled by the kernel space or rather by someone else. In these
 /// cases the `MemDesc` field `dealloc: bool` allows to prevent the deallocation
 /// during drop of the object. 
-/// * The Memory area defined by the `ptr: *mut u8`and `len: usize` fields is
-/// prepended by a `usize` long memory area. This allows to store a reference
-/// to a [Pinned](Pinned)<[TransferToken](TransferToken)> in this area. 
-///   * This feature is needed for Virtqueues, in order to operate fast
-///   * In cases where it is not used, it does not waste to much memory.
 struct MemDescr {
     /// Points to the controlled memory area
     ptr: *mut u8,
     /// Defines the length of the controlled memory area
     /// starting a `ptr: *mut u8`
     len: usize,
+    /// Memory is creaeted via vectors to_raw_parts()
+    /// function and transformed back into tracked mempry
+    /// via from_raw_parts.
+    /// Allthouhg it is unlikely to be important, as the vector will be
+    /// "full" (at cap == len) when leaeked, this is for safety reasons
+    _cap: usize,
     /// If `id == None` this is an untracked memory descriptor
     /// * Meaining: The descriptor does NOT count as a descriptor 
     /// taken from the [MemPool](MemPool).
@@ -681,49 +951,38 @@ struct MemDescr {
     ///     of deallocation.
     /// * Default is true.
     dealloc: bool,
-
-    /// Boolean if a usize is prepended to the memory
-    /// area, which holds a reference to a
-    /// `Pinned<TransferToken>`
-    ctrl_set: bool,
 }
 
 impl MemDescr {
-    /// Sets the contorlling field to hold the given TransferToken
-    ///    
-    /// MemDescr Pool does allocate one usize before the actual 
-    /// Bytes in order to allow a reference to a pinned TransferToken.
-    /// This function does allow to set this reference accordingly.
-    fn set_ctrl_tkn(&mut self, tkn: &Pinned<TransferToken>) {
-        let ctrl_raw_ptr = tkn.raw_addr() as usize;
-        let addr_slice = ctrl_raw_ptr.to_ne_bytes();
+    /// Provides a handle to the given memory area by
+    /// giving a Box ownership to it.
+    fn into_boxed(mut self) -> Box<[u8]> {
+        // Prevent double frees, as ownership will be tracked by 
+        // Box from now on.
+        self.dealloc = false;
 
-        // Write address of token into the usized memory area 
-        // placed before the memory are where MemDesc.ptr points to.
-        // 
-        // addr_slice will be of length == ptr_size, always. Hence this
-        // direct array indexing is safe.
-        let ptr_size = core::mem::size_of::<usize>();
-        // Create a negativ counter for offsetting memory area correctly.
-        let mut rev_cnt = -(ptr_size as isize);
-        for i in 0..ptr_size {
-            let tkn_ref = unsafe {
-                &mut *(self.ptr.offset(rev_cnt))
-            };
-
-            // write into bytes. Behind MemDescr.ptr area.
-            *tkn_ref = addr_slice[i];
-            // As the writes starts at ptr.offset(- NUM_BYTES_OF_USIZE),
-            // the rev_cnt must move "forward" to memory address indicated
-            // by self.ptr.
-            rev_cnt += 1;
+        unsafe {
+            Vec::from_raw_parts(self.ptr, self.len, self._cap).into_boxed_slice()
         }
-        self.ctrl_set = true;
+    }
+
+    /// Copies the given memory area into a Vector.
+    fn cpy_into_vec(&self) -> Vec<u8> {
+        let mut vec = vec![0u8;self.len];
+        vec.copy_from_slice(&self);
+        vec
+    }
+
+    /// Copies the given memory area into a Box.
+    fn cpy_into_box(&self) -> Box<[u8]> {
+        let mut vec = vec![0u8;self.len];
+        vec.copy_from_slice(&self);
+        vec.into_boxed_slice() 
     }
 
     /// Returns the raw pointer from where the controlled 
     /// memory area starts.
-    fn ptr(&self) -> *mut u8 {
+    fn raw_ptr(&self) -> *mut u8 {
         self.ptr
     }
 
@@ -744,10 +1003,10 @@ impl MemDescr {
         MemDescr {
             ptr: self.ptr,
             len: self.len,
+            _cap: self._cap,
             id: None,
             pool: Rc::clone(&self.pool),
             dealloc: false,
-            ctrl_set: self.ctrl_set,
         }
     }
 }
@@ -769,6 +1028,7 @@ impl DerefMut for MemDescr {
     }
 }
 
+
 impl Drop for MemDescr {
     fn drop(&mut self) {
         // Handle returning of Id's to pool
@@ -782,7 +1042,7 @@ impl Drop for MemDescr {
 
         if self.dealloc {
             unsafe{
-                todo!("Deallocate [u8]");
+                Vec::from_raw_parts(self.ptr, self.len, self.len);
             }
         }
     }
@@ -850,7 +1110,21 @@ impl MemPool {
 
     /// Returns a new instance, with a pool of the specified size.
     fn new(size: u16) -> MemPool {
-        unimplemented!();
+        // Not really safe "as usize". But the minimum usize on rust is currently 
+        // usize = 16bit. So it should work, as long as this does not change changes.
+        // Thus asserting here, to catch this change!
+        assert!(core::mem::size_of::<usize>() >= 2);
+
+        let mut id_vec = Vec::with_capacity(size as usize);
+
+        for i in 1..(size+1) {
+            id_vec.push(MemDescrId(i));
+        }
+
+        MemPool {
+            pool: RefCell::new(id_vec),
+            limit: size,
+        }
     }
 
     /// Creates a MemDescr which refers to already existing memory.
@@ -879,10 +1153,10 @@ impl MemPool {
         Ok(MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _cap: slice.len(),
             id: Some(desc_id),
             dealloc,
             pool: rc_self,
-            ctrl_set: false,
         })
     }
 
@@ -909,10 +1183,10 @@ impl MemPool {
         MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _cap: slice.len(),
             id: None,
             dealloc,
             pool: rc_self,
-            ctrl_set: false,
         }
     }
 
@@ -935,15 +1209,15 @@ impl MemPool {
         };
 
         // Allocate heap memory via a vec, leak and cast
-        let ptr = Box::into_raw(vec![0u8; bytes.0].into_boxed_slice()) as *mut u8;
+        let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
 
         Ok(MemDescr {
             ptr,
-            len: bytes.0,
+            len,
+            _cap: cap,
             id: Some(id),
             dealloc: true,
             pool: rc_self,
-            ctrl_set: false,
         })
     }
     
@@ -958,15 +1232,15 @@ impl MemPool {
     ///   * Third MemPool.pull -> MemDesc with id = 2,
     fn pull_untracked(&self, rc_self: Rc<MemPool>, bytes: Bytes)-> MemDescr {
         // Allocate heap memory via a vec, leak and cast
-        let ptr = Box::into_raw(vec![0u8; bytes.0].into_boxed_slice()) as *mut u8;
+        let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
 
         MemDescr {
             ptr,
-            len: bytes.0,
+            len,
+            _cap: cap,
             id: None,
             dealloc: true,
             pool: rc_self,
-            ctrl_set: false,
         }
     }
 }
@@ -1048,6 +1322,16 @@ impl<T: Sized> Pinned<T> {
     fn from_boxed(boxed: Box<T>) -> Pinned<T> {
         Pinned {
             raw_ptr: Box::into_raw(boxed)
+        }
+    }
+    
+    /// Unpins the pinned value and returns it. This is only
+    /// save as long as no one relies on the
+    /// memory location of `T`, as this location
+    /// will no longer be constant.
+    fn into_inner(self) -> T {
+        unsafe {
+            *Box::from_raw(self.raw_ptr)
         }
     }
 
@@ -1147,6 +1431,8 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying 
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
+    use super::Transfer;
+
     pub enum VirtqError {
         General,
         /// Indirect is mixed with Direct descriptors, which is not allowed
@@ -1171,6 +1457,21 @@ pub mod error {
         /// E.g: A struct `T` with size of `4 bytes` must have a `BuffSpec`, which 
         /// defines exactly 4 bytes. Regardeless of wether it is a `Single`, `Multiple`
         /// or `Indirect` BuffSpec.
-        BufferSizeWrong(usize)
+        BufferSizeWrong(usize),
+        /// The requested BufferToken for reuse is signed as not reusable and hence 
+        /// can not be used twice.
+        /// Typically this is the case if one created the BufferToken indirectly
+        /// via `Virtq.prep_transfer_from_raw()`. Due to the fact, that reusing 
+        /// Buffers which refer to raw pointers seems dangerours, this is forbidden.
+        NoReuseBuffer,
+        /// Indicates that a Transfer method was called, that is only allowed to be 
+        /// called when the transfer is Finished (or Ready, allthough this state is 
+        /// only allowed for Transfer structs owned by the Virtqueue). 
+        /// The Error returns the called Transfer for recovery, if called from a 
+        /// consuming function as a `Some(Transfer)`. For non-consuming 
+        /// functions returns `None`.
+        OngoingTransfer(Option<Transfer>),
+        /// Indicates a write into a Buffer that is not existing
+        NoBufferAvail
     }
 }
