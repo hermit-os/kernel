@@ -345,6 +345,7 @@ impl PackedVq {
                 match send_spec {
                     BuffSpec::Single(size) => {
                         let data_slice = unsafe {send_data.as_slice_u8()};
+                        let len = data_slice.len();
 
                         // Buffer must have the right size
                         if data_slice.len() != size.into() {
@@ -360,7 +361,7 @@ impl PackedVq {
                         Box::leak(send_data);
 
                         let buff_tkn = Some(BufferToken {
-                            send_buff: Some(Buffer::Single(desc)),
+                            send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, last_write: 0 }),
                             recv_buff: None,
                             vq: master,
                             ret_send: true,
@@ -376,6 +377,7 @@ impl PackedVq {
                     },
                     BuffSpec::Multiple(size_lst) => {
                         let data_slice = unsafe {send_data.as_slice_u8()};
+                        let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
 
@@ -401,7 +403,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(desc_lst)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
@@ -412,7 +414,8 @@ impl PackedVq {
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
-                        let data_slice = unsafe {send_data.as_slice_u8()};
+                        let data_slice = send_data.as_slice_u8();
+                        let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
 
@@ -440,7 +443,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, last_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
@@ -455,7 +458,8 @@ impl PackedVq {
             (None, Some((recv_data, recv_spec))) => {
                 match recv_spec {
                     BuffSpec::Single(size) => {
-                        let data_slice = unsafe {recv_data.as_slice_u8()};
+                        let data_slice = recv_data.as_slice_u8();
+                        let len = data_slice.len();
 
                         // Buffer must have the right size
                         if data_slice.len() != size.into() {
@@ -474,7 +478,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Single(desc)),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -485,6 +489,7 @@ impl PackedVq {
                     },
                     BuffSpec::Multiple(size_lst) => {
                         let data_slice = unsafe {recv_data.as_slice_u8()};
+                        let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
 
@@ -511,7 +516,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Multiple(desc_lst)),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -522,6 +527,7 @@ impl PackedVq {
                     },
                     BuffSpec::Indirect(size_lst) => {
                         let data_slice = unsafe {recv_data.as_slice_u8()};
+                        let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
 
@@ -550,7 +556,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -564,7 +570,8 @@ impl PackedVq {
             (Some((send_data, send_spec)), Some((recv_data, recv_spec))) => {
                 match (send_spec, recv_spec) {
                     (BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
-                        let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_data_slice = send_data.as_slice_u8();
+                        let send_len = send_data_slice.len();
 
                         // Buffer must have the right size
                         if send_data_slice.len() != send_size.into() {
@@ -580,6 +587,7 @@ impl PackedVq {
                         Box::leak(send_data);
 
                         let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_len = recv_data_slice.len();
 
                         // Buffer must have the right size
                         if recv_data_slice.len() != recv_size.into() {
@@ -597,8 +605,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single(send_desc)),
-                                recv_buff: Some(Buffer::Single(recv_desc)),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, last_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -609,6 +617,7 @@ impl PackedVq {
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
                         let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_len = send_data_slice.len();
 
                         // Buffer must have the right size
                         if send_data_slice.len() != send_size.into() {
@@ -624,6 +633,7 @@ impl PackedVq {
                         Box::leak(send_data);
 
                         let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;
 
@@ -649,8 +659,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single(send_desc)),
-                                recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, last_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -661,6 +671,7 @@ impl PackedVq {
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
                         let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
 
@@ -684,6 +695,7 @@ impl PackedVq {
                         Box::leak(send_data);  
 
                         let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;
 
@@ -709,8 +721,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(send_desc_lst)),
-                                recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, last_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -721,6 +733,7 @@ impl PackedVq {
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
                         let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
 
@@ -744,6 +757,7 @@ impl PackedVq {
                         Box::leak(send_data);  
 
                         let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_len = recv_data_slice.len();
 
                         // Buffer must have the right size
                         if recv_data_slice.len() != recv_size.into() {
@@ -761,8 +775,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(send_desc_lst)),
-                                recv_buff: Some(Buffer::Single(recv_desc)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, last_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -773,6 +787,7 @@ impl PackedVq {
                     },
                     (BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
                         let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
 
@@ -793,6 +808,7 @@ impl PackedVq {
                         Box::leak(send_data);  
 
                         let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;
 
@@ -820,8 +836,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                recv_buff: Some(Buffer::Indirect((ctrl_desc.no_dealloc_clone(), recv_desc_lst))),
-                                send_buff: Some(Buffer::Indirect((ctrl_desc, send_desc_lst))),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len, last_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_len, last_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -864,7 +880,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single(desc)),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -898,7 +914,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(desc_lst)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -934,7 +950,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), last_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -965,7 +981,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Single(desc)),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -999,7 +1015,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Multiple(desc_lst)),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1035,7 +1051,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Indirect((ctrl_desc,desc_lst))),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1076,8 +1092,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single(send_desc)),
-                                recv_buff: Some(Buffer::Single(recv_desc)),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1122,8 +1138,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single(send_desc)),
-                                recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1176,8 +1192,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(send_desc_lst)),
-                                recv_buff: Some(Buffer::Multiple(recv_desc_lst)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1222,8 +1238,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple(send_desc_lst)),
-                                recv_buff: Some(Buffer::Single(recv_desc)),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1275,8 +1291,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                recv_buff: Some(Buffer::Indirect((ctrl_desc.no_dealloc_clone(), recv_desc_lst))),
-                                send_buff: Some(Buffer::Indirect((ctrl_desc, send_desc_lst))),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_data_slice.len(), last_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1307,7 +1323,7 @@ impl PackedVq {
                 match spec {
                     BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
-                            let buffer = Buffer::Single(desc);
+                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), last_write: 0};
 
                             Ok(BufferToken {
                                 send_buff: Some(buffer),
@@ -1322,15 +1338,17 @@ impl PackedVq {
                     },
                     BuffSpec::Multiple(size_lst) => {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+                        let mut len = 0usize;
 
                         for size in size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            len += usize::from(*size);
                         }
 
-                        let buffer = Buffer::Multiple(desc_lst);
+                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0};
 
                         Ok(BufferToken{
                             send_buff: Some(buffer),
@@ -1343,6 +1361,7 @@ impl PackedVq {
                     },
                     BuffSpec::Indirect(size_lst) => {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+                        let mut len = 0usize;
 
                         for size in size_lst {
                             // As the indirect list does only consume one descriptor for the 
@@ -1350,6 +1369,7 @@ impl PackedVq {
                             desc_lst.push(
                                 self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
+                            len += usize::from(*size);;
                         }
 
                         let ctrl_desc = match self.create_indirect_ctrl( Some(&desc_lst), None) {
@@ -1357,7 +1377,7 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let buffer = Buffer::Indirect((ctrl_desc, desc_lst));
+                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, last_write: 0};
 
                         Ok(BufferToken{
                             send_buff: Some(buffer),
@@ -1375,7 +1395,7 @@ impl PackedVq {
                 match spec {
                     BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
-                            let buffer = Buffer::Single(desc);
+                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), last_write: 0};
 
                             Ok(BufferToken {
                                 send_buff: None,
@@ -1390,15 +1410,17 @@ impl PackedVq {
                     },
                     BuffSpec::Multiple(size_lst) => {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+                        let mut len = 0usize;
 
                         for size in size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            len += usize::from(*size);;
                         }
 
-                        let buffer = Buffer::Multiple(desc_lst);
+                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0};
 
                         Ok(BufferToken{
                             send_buff: None,
@@ -1411,6 +1433,7 @@ impl PackedVq {
                     },
                     BuffSpec::Indirect(size_lst) => {
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
+                        let mut len = 0usize;
 
                         for size in size_lst {
                             // As the indirect list does only consume one descriptor for the 
@@ -1418,6 +1441,7 @@ impl PackedVq {
                             desc_lst.push(
                                 self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
+                            len += usize::from(*size);
                         }
 
                         let ctrl_desc =  match self.create_indirect_ctrl( None, Some(&desc_lst)) {
@@ -1425,7 +1449,7 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let buffer = Buffer::Indirect((ctrl_desc, desc_lst));
+                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, last_write: 0};
 
                         Ok(BufferToken{
                             send_buff: None,
@@ -1443,15 +1467,15 @@ impl PackedVq {
                 match (send_spec, recv_spec) {
                     (BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
                         let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
-                            Ok(desc) => {
-                                Some(Buffer::Single(desc))
+                            Ok(send_desc) => {
+                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), last_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
 
                         let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
-                            Ok(desc) => {
-                                Some(Buffer::Single(desc))
+                            Ok(recv_desc) => {
+                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), last_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1467,22 +1491,24 @@ impl PackedVq {
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
                         let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
-                            Ok(desc) => {
-                                Some(Buffer::Single(desc))
+                            Ok(send_desc) => {
+                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), last_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
 
-                        let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
+                        let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
+                        let mut recv_len = 0usize;
 
                         for size in recv_size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
-                                Ok(desc) => desc_lst.push(desc),
+                                Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            recv_len += usize::from(*size);
                         }
 
-                        let recv_buff = Some(Buffer::Multiple(desc_lst));
+                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , last_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,
@@ -1496,26 +1522,29 @@ impl PackedVq {
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
-
+                        let mut send_len = 0usize;
                         for size in send_size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            send_len += usize::from(*size);
                         }
 
-                        let send_buff = Some(Buffer::Multiple(send_desc_lst));
+                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , last_write: 0 });
 
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
+                        let mut recv_len = 0usize;
 
                         for size in recv_size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            recv_len += usize::from(*size);
                         }
 
-                        let recv_buff = Some(Buffer::Multiple(recv_desc_lst));
+                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , last_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,
@@ -1528,19 +1557,21 @@ impl PackedVq {
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
+                        let mut send_len = 0usize;
 
                         for size in send_size_lst {
                             match self.mem_pool.pull(Rc::clone(&self.mem_pool), *size) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             }
+                            send_len += usize::from(*size);
                         }
 
-                        let send_buff = Some(Buffer::Multiple(send_desc_lst));
+                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , last_write: 0 });
 
                         let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
-                            Ok(desc) => {
-                                Some(Buffer::Single(desc))
+                            Ok(recv_desc) => {
+                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), last_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1556,6 +1587,7 @@ impl PackedVq {
                     },
                     (BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
+                        let mut send_len = 0usize;
 
                         for size in send_size_lst {
                             // As the indirect list does only consume one descriptor for the 
@@ -1563,9 +1595,11 @@ impl PackedVq {
                             send_desc_lst.push(
                                 self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
+                            send_len += usize::from(*size);
                         }
 
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
+                        let mut recv_len = 0usize;
 
                         for size in recv_size_lst {
                             // As the indirect list does only consume one descriptor for the 
@@ -1573,6 +1607,7 @@ impl PackedVq {
                             recv_desc_lst.push(
                                 self.mem_pool.pull_untracked(Rc::clone(&self.mem_pool), *size)
                             );
+                            recv_len += usize::from(*size);
                         }
 
                         let ctrl_desc =  match self.create_indirect_ctrl( Some(&send_desc_lst), Some(&recv_desc_lst)) {
@@ -1580,8 +1615,8 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let recv_buff = Some(Buffer::Indirect((ctrl_desc.no_dealloc_clone(), recv_desc_lst)));
-                        let send_buff = Some(Buffer::Indirect((ctrl_desc, send_desc_lst)));
+                        let recv_buff = Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len , last_write: 0 });
+                        let send_buff = Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc, len: send_len , last_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,

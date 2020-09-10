@@ -447,60 +447,21 @@ impl Transfer {
     pub fn ret_scat_cpy(&self) -> Result<(Option<Box<[Box<[u8]>]>>, Option<Box<[Box<[u8]>]>>), VirtqError> {
         match &self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
-                let send_data: Option<Box<[Box<[u8]>]>>;
-                let mut arr = Vec::new();
                 // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
-                    Some(buff) => match buff {
-                        Buffer::Single(desc) => {
-                            arr.push(desc.cpy_into_box());
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Multiple(descr_lst) => {
-                            for desc in descr_lst {
-                                arr.push(desc.cpy_into_box());
-                            }
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Indirect((_, descr_lst)) => {
-                            for desc in descr_lst {
-                                arr.push(desc.cpy_into_box());
-                            }
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                    },
-                    None => send_data = None,
-                }
+                let send_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => Some(buff.scat_cpy()),
+                    None => None,
+                };
 
-                let recv_data: Option<Box<[Box<[u8]>]>>;
-                let mut arr = Vec::new();
-                // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().recv_buff {
-                    Some(buff) => match buff {
-                        Buffer::Single(desc) => {
-                            arr.push(desc.cpy_into_box());
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Multiple(descr_lst) => {
-                            for desc in descr_lst {
-                                arr.push(desc.cpy_into_box());
-                            }
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Indirect((_, descr_lst)) => {
-                            for desc in descr_lst {
-                                arr.push(desc.cpy_into_box());
-                            }
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                    },
-                    None => recv_data = None,
-                }
+                let recv_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => Some(buff.scat_cpy()),
+                    None => None,
+                };
 
                 Ok((send_data, recv_data))
             },
             TransferState::Processing => Err(VirtqError::OngoingTransfer(None)),
-            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"), 
         }
     }
 
@@ -520,55 +481,16 @@ impl Transfer {
     pub fn ret_cpy(&self) -> Result<(Option<Box<[u8]>>, Option<Box<[u8]>>), VirtqError> {
         match &self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
-                let send_data: Option<Box<[u8]>>;
-                let mut arr = Vec::new();
                 // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
-                    Some(buff) => match buff {
-                        Buffer::Single(desc) => {
-                            arr.append(&mut desc.cpy_into_vec());
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Multiple(descr_lst) => {
-                            for desc in descr_lst {
-                                arr.append(&mut desc.cpy_into_vec());
-                            }
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Indirect((_, descr_lst)) => {
-                            for desc in descr_lst {
-                                arr.append(&mut desc.cpy_into_vec());
-                            }
-                            send_data = Some(arr.into_boxed_slice());
-                        },
-                    },
-                    None => send_data = None,
-                }
+                let send_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => Some(buff.cpy()),
+                    None => None,
+                };
 
-                let recv_data: Option<Box<[u8]>>;
-                let mut arr = Vec::new();
-                // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().recv_buff {
-                    Some(buff) => match buff {
-                        Buffer::Single(desc) => {
-                            arr.append(&mut desc.cpy_into_vec());
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Multiple(descr_lst) => {
-                            for desc in descr_lst {
-                                arr.append(&mut desc.cpy_into_vec());
-                            }
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                        Buffer::Indirect((_, descr_lst)) => {
-                            for desc in descr_lst {
-                                arr.append(&mut desc.cpy_into_vec());
-                            }
-                            recv_data = Some(arr.into_boxed_slice());
-                        },
-                    },
-                    None => recv_data = None,
-                }
+                let recv_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => Some(buff.cpy()),
+                    None => None,
+                };
 
                 Ok((send_data, recv_data))
             },
@@ -596,77 +518,33 @@ impl Transfer {
                 let mut transfer_tkn = self.transfer_tkn.take().unwrap().into_inner();
                 let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
 
-                let send_data: Option<Box<[Box<[u8]>]>>;
-                // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                if buffer_tkn.ret_send {
-                    let mut arr = Vec::new();
-                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                    match buffer_tkn.send_buff {
-                        Some(buff) => match buff {
-                            Buffer::Single(desc) => {
-                                arr.push(desc.into_boxed());
-                                send_data = Some(arr.into_boxed_slice());
-                            },
-                            Buffer::Multiple(descr_lst) => {
-                               for desc in descr_lst {
-                                   arr.push(desc.into_boxed());
-                               }
-                                send_data = Some(arr.into_boxed_slice());
-                            },
-                            Buffer::Indirect((_, descr_lst)) => {
-                                for desc in descr_lst {
-                                    arr.push(desc.into_boxed());
-                                }
-                                send_data = Some(arr.into_boxed_slice());
-                            },
+                let send_data = match buffer_tkn.ret_send {
+                    True => match buffer_tkn.send_buff {
+                        Some(buff) => {
+                            // This data is not a second time returnable
+                            // Unessecary, because token will be dropped.
+                            // But to be consistent in state.
+                            buffer_tkn.ret_send = false;
+                            Some(buff.into_boxed())
                         },
-                        None => send_data = None,
-                    }
-                    // This data is not a second time returnable
-                    // Unessecary, because token will be dropped.
-                    // But to be consistent in state.
-                    //
-                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                    buffer_tkn.ret_send = false;
-                } else {
-                    send_data = None;
-                }
+                        None => None,
+                    },
+                    False => None,
+                };
 
-                let recv_data: Option<Box<[Box<[u8]>]>>;
-                // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                if buffer_tkn.ret_recv {
-                    let mut arr = Vec::new();
-                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                    match buffer_tkn.recv_buff {
-                        Some(buff) => match buff {
-                            Buffer::Single(desc) => {
-                                arr.push(desc.into_boxed());
-                                recv_data = Some(arr.into_boxed_slice());
-                            },
-                            Buffer::Multiple(descr_lst) => {
-                                for desc in descr_lst {
-                                    arr.push(desc.into_boxed());
-                                }
-                                recv_data = Some(arr.into_boxed_slice());
-                            },
-                            Buffer::Indirect((_, descr_lst)) => {
-                                for desc in descr_lst {
-                                    arr.push(desc.into_boxed());
-                                }
-                                recv_data = Some(arr.into_boxed_slice());
-                            },
+                let recv_data = match buffer_tkn.ret_recv {
+                    True => match buffer_tkn.recv_buff {
+                        Some(buff) => {
+                            // This data is not a second time returnable
+                            // Unessecary, because token will be dropped.
+                            // But to be consistent in state.
+                            buffer_tkn.ret_recv = false;
+                            Some(buff.into_boxed())
                         },
-                        None => recv_data = None,
-                    }
-                    // This data is not a second time returnable.
-                    // Unessecary, because token will be dropped.
-                    // But to be consistent in state.
-                    //
-                    // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                    buffer_tkn.ret_recv = false;
-                } else {
-                    recv_data = None;
-                }
+                        None => None,
+                    },
+                    False => None,
+                };
                 // Prevent Token to be reusable although it will be dropped
                 // later in this function.
                 // Unessecary but to be consistent in state.
@@ -871,47 +749,178 @@ impl BufferToken {
 /// Describes the type of a buffer and unifies them.
 enum Buffer {
     /// A buffer consisting of a single [Memory Descriptor](MemDescr).
-    Single(MemDescr),
+    Single {
+        desc_lst: Box<[MemDescr]>,
+        len: usize,
+        last_write: usize
+    },
     /// A buffer consisting of a chain of [Memory Descriptors](MemDescr). 
     /// Especially useful if one wants to send multiple structures to a device,
     /// as he can sequentially write (see [BufferToken](BufferToken) `write_seq()`)
     /// those structs into the descriptors.
-    Multiple(Vec<MemDescr>),
+    Multiple {
+        desc_lst: Box<[MemDescr]>,
+        len: usize,
+        last_write: usize
+    },
     /// A buffer consisting of a single descriptor in the actuall virtqueue,
     /// referencing a list of descriptors somewhere in memory. 
     /// Especially useful of one wants to extend the capacity of the virtqueue.
     /// Also has the same advantages as a `Buffer::Multiple`.
-    Indirect((MemDescr, Vec<MemDescr>)),
+    Indirect {
+        desc_lst: Box<[MemDescr]>,
+        ctrl_desc: MemDescr,
+        len: usize,
+        last_write: usize
+    },
 }
 
 // Private Interface of Buffer
 impl Buffer {
+    fn into_boxed(mut self) -> Box<[Box<[u8]>]> {
+        match self {
+            Buffer::Single{mut desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter_mut() {
+                    // Need to be a little carefull here. 
+                    // As it is NOT possible to move out of Box<[MemDescr]>, we
+                    // copy a no_dealloc_clone which is consumed by into_boxed()
+                    // and set the actual descriptor.dealloc = false to prevent double frees.
+                    desc.dealloc = false;
+                    arr.push(desc.no_dealloc_clone().into_boxed());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Multiple{mut desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter_mut() {
+                    // Need to be a little carefull here. 
+                    // As it is NOT possible to move out of Box<[MemDescr]>, we
+                    // copy a no_dealloc_clone which is consumed by into_boxed()
+                    // and set the actual descriptor.dealloc = false to prevent double frees.
+                    desc.dealloc = false;
+                    arr.push(desc.no_dealloc_clone().into_boxed());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Indirect{mut desc_lst, ctrl_desc, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter_mut() {
+                    // Need to be a little carefull here. 
+                    // As it is NOT possible to move out of Box<[MemDescr]>, we
+                    // copy a no_dealloc_clone which is consumed by into_boxed()
+                    // and set the actual descriptor.dealloc = false to prevent double frees.
+                    desc.dealloc = false;
+                    arr.push(desc.no_dealloc_clone().into_boxed());
+                }
+                arr.into_boxed_slice()
+            } ,
+        }
+    }
+
+    fn cpy(&self) -> Box<[u8]>{
+        match &self {
+            Buffer::Single{desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(*len);
+                
+                for desc in desc_lst.iter() {
+                    arr.append(&mut desc.cpy_into_vec());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Multiple{desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(*len);
+                
+                for desc in desc_lst.iter() {
+                    arr.append(&mut desc.cpy_into_vec());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
+                let mut arr = Vec::with_capacity(*len);
+                
+                for desc in desc_lst.iter() {
+                    arr.append(&mut desc.cpy_into_vec());
+                }
+                arr.into_boxed_slice()
+            } ,
+        }
+    }
+
+    fn scat_cpy (&self) -> Box<[Box<[u8]>]> {
+        match &self {
+            Buffer::Single{desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter() {
+                    arr.push(desc.cpy_into_box());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Multiple{desc_lst, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter() {
+                    arr.push(desc.cpy_into_box());
+                }
+                arr.into_boxed_slice()
+            } ,
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
+                let mut arr = Vec::with_capacity(desc_lst.len());
+                
+                for desc in desc_lst.iter() {
+                    arr.push(desc.cpy_into_box());
+                }
+                arr.into_boxed_slice()
+            } ,
+        }
+    }
+
     /// Retruns the number of descriptors inside a buffer.
     fn num_descr(&self ) -> usize {
-        match self {
-            Buffer::Single(_) => 1,
-            Buffer::Multiple(desc_lst) => desc_lst.len(),
-            Buffer::Indirect((_, desc_lst)) => desc_lst.len(),
+        match &self {
+            Buffer::Single{desc_lst, last_write, len} => desc_lst.len(),
+            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.len(),
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.len(),
         }
     }
 
     /// Returns the overall number of bytes in this Buffer
     fn len(&self) -> usize {
-        unimplemented!("After Buffer enum is changed");
+        match &self {
+            Buffer::Single{desc_lst, last_write, len} => *len,
+            Buffer::Multiple{desc_lst, last_write, len} => *len,
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => *len,
+        }
     }
 
-    /// Returns the complete Buffer as a vector of mutable slices.
+    /// Returns the complete Buffer as a mutable slice of MemDescr, which themselves deref into a `&mut [u8]`.
     ///
     /// As Buffers are able to consist of multiple descriptors
-    /// this will return a Vector of slices. One element 
-    /// (`&[u8]`) for each descriptor.
-    fn as_mut_slice(&self) -> &mut [MemDescr] {
-        unimplemented!();
+    /// this will return one element 
+    /// (`&mut [u8]`) for each descriptor.
+    fn as_mut_slice(&mut self) -> &mut [MemDescr] {
+        match self {
+            Buffer::Single{desc_lst, last_write, len} => desc_lst.as_mut(),
+            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.as_mut(),
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.as_mut(),
+        } 
     }
 
+    /// Returns the complete Buffer as a slice of MemDescr, which themselves deref into a `&[u8]`.
     ///
-    fn as_slice(&mut self) -> &[MemDescr] {
-        unimplemented!();
+    /// As Buffers are able to consist of multiple descriptors
+    /// this will return one element 
+    /// (`&[u8]`) for each descriptor.
+    fn as_slice(&self) -> &[MemDescr] {
+        match self {
+            Buffer::Single{desc_lst, last_write, len} => desc_lst.as_ref(),
+            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.as_ref(),
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.as_ref(),
+        }
     }
 
 
