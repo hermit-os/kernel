@@ -19,7 +19,7 @@ pub mod split;
 
 use self::packed::PackedVq;
 use self::split::SplitVq;
-use self::error::VirtqError;
+use self::error::{VirtqError, BufferError};
 
 use super::transport::pci::ComCfg;
 use alloc::vec::Vec;
@@ -150,7 +150,7 @@ impl Virtq {
     pub fn size(&self) -> VqSize {
         match self {
             Virtq::Packed(vq) => vq.size(),
-            Virtq::Split(vq) => vq.size(),
+            Virtq::Split(vq) => unimplemented!(),
         }
     }
 
@@ -644,7 +644,7 @@ impl TransferToken {
     ///
     /// The resultaing [TransferState](TransferState) in this case is of course 
     /// finished and the returned [Transfer](Transfer) can be reused, copyied from
-    /// or retrun the underlying buffers.
+    /// or return the underlying buffers.
     /// Allthough it is recomended to ensure the finished state via`Transfer.poll()` beforehand.
     pub fn dispatch_blocking(self) -> Result<Transfer, VirtqError> {
         let transfer = self.get_vq().dispatch(self);
@@ -714,9 +714,84 @@ impl BufferToken {
     /// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a sinlge continous 
     /// memeory element and as a result writes `T` or `H` as a slice of bytes into this memory.
     pub fn write<K: AsSliceU8, H: AsSliceU8>(mut self, send: Option<K>, recv: Option<H>) -> Result<TransferToken, VirtqError> {
-        unimplemented!();
-        // writes K into the send_buff
-        // VIrtqError::WriteToLarge(BufferToken) will return the token for recovery
+        match send {
+            Some(data) => {
+                match self.send_buff.as_mut() {
+                    Some(buff) => {
+                        if buff.len() < data.as_slice_u8().len() {
+                            return Err(VirtqError::WriteToLarge(self))
+                        } else {
+                            let data_slc = data.as_slice_u8();
+                            let mut from = 0usize;
+
+                            for i in 0..buff.num_descr() {
+                                // Must check array boundaries, as allocated buffer might be larger 
+                                // than acutal data to be written.
+                                let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
+                                    data_slc.len()
+                                } else {
+                                    from + buff.as_slice()[i].len()
+                                };
+
+                                // Unwrapping is okay here as sizes are checked above
+                                from += buff.next_write(&data_slc[from..to]).unwrap();
+                            }
+                            
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => (),
+        }
+
+        match recv {
+            Some(data) => {
+                match self.send_buff.as_mut() {
+                    Some(buff) => {
+                        if buff.len() < data.as_slice_u8().len() {
+                            return Err(VirtqError::WriteToLarge(self))
+                        } else {
+                            let data_slc = data.as_slice_u8();
+                            let mut from = 0usize;
+
+                            for i in 0..buff.num_descr() {
+                                // Must check array boundaries, as allocated buffer might be larger 
+                                // than acutal data to be written.
+                                let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
+                                    data_slc.len()
+                                } else {
+                                    from + buff.as_slice()[i].len()
+                                };
+
+                                // Unwrapping is okay here as sizes are checked above 
+                                from += buff.next_write(&data_slc[from..to]).unwrap();
+                            }
+                            
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => (),
+        }
+
+        // Reset write positions insode the buffer
+        // Needed if the BufferToken is reused.
+        // If no write happend, this is not harmfull.
+        if let Some(buff) = self.send_buff.as_mut() {
+            buff.reset_write();
+        }
+
+        if let Some(buff) = self.recv_buff.as_mut() {
+            buff.reset_write();
+        }
+
+        Ok(TransferToken {
+            state: TransferState::Ready,
+            buff_tkn: Some(self),
+            await_queue: None,
+        })
     }
 
     /// Writes `K` or `H` respectively into the next buffer descriptor. 
@@ -732,17 +807,67 @@ impl BufferToken {
     /// * Third Write: `write_seq(Some(10 bytes, Some(4 bytes))`:
     ///   * Will result in 10 bytes written to the second buffer descriptor of the send buffer and 4 bytes written to the third buffer descriptor of the recv buffer.
     pub fn write_seq<K: AsSliceU8, H: AsSliceU8>(mut self, send_seq: Option<K>, recv_seq: Option<H>) -> Result<Self, VirtqError> {
-        todo!("Implement, but need to change PACKED vq, as state is needed in Buffer enum!");
-        // If this works and Buffer::{...} can be adjusted accordingly, then must set 
-        // last_write to zero, when BuffToken Transformed into TransferToken
-        // writes K into the first send_buff element. Next write will be written to the next buff.
+        match send_seq {
+            Some(data) => {
+                match self.send_buff.as_mut() {
+                    Some(buff) => {
+                        match buff.next_write(data.as_slice_u8()) {
+                            Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
+                            Err(_) => {
+                                // Need no match here, as result is the same, but for the future one could 
+                                // pass on the actual BufferError wrapped inside a VirtqError, for better recovery
+                                return Err(VirtqError::WriteToLarge(self))
+                            },
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => (),
+        }
+
+        match recv_seq {
+            Some(data) => {
+                match self.send_buff.as_mut() {
+                    Some(buff) => {
+                        match buff.next_write(data.as_slice_u8()) {
+                            Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
+                            Err(_) => {
+                                // Need no match here, as result is the same, but for the future one could 
+                                // pass on the actual BufferError wrapped inside a VirtqError, for better recovery
+                                return Err(VirtqError::WriteToLarge(self))
+                            },
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => (),
+        }
+
+        Ok(self)
     }
 
     /// Consumes the [BufferToken](BufferToken) and returns a [TransferToken](TransferToken), that can be used to actually start the transfer.
     /// 
     /// After this call, the buffers are no longer writable. 
     pub fn provide(mut self) -> TransferToken {
-        todo!("Set Last write to zero! for bufferToken");
+        // Reset write positions inside the buffer
+        // Needed if the BufferToken is reused.
+        // If no write happend, this is not harmfull.
+        if let Some(buff) = self.send_buff.as_mut() {
+            buff.reset_write();
+        }
+
+        if let Some(buff) = self.recv_buff.as_mut() {
+            buff.reset_write();
+        }
+
+        TransferToken {
+            state: TransferState::Ready,
+            buff_tkn: Some(self),
+            await_queue: None,
+        }
     }
 }
 
@@ -775,8 +900,58 @@ enum Buffer {
     },
 }
 
+
 // Private Interface of Buffer
 impl Buffer {
+    fn next_write(&mut self, slice: &[u8]) -> Result<usize, BufferError> {
+        match self {
+            Buffer::Single{desc_lst, last_write, len} => {
+                if (desc_lst.len()-1) < *last_write {
+                    Err(BufferError::ToManyWrites)
+                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                    Err(BufferError::WriteToLarge)
+                } else {
+                    desc_lst[*last_write].copy_from_slice(slice);
+                    *last_write += 1;
+
+                    Ok(slice.len()) 
+                }
+            },
+            Buffer::Multiple{desc_lst, last_write, len} => {
+                if (desc_lst.len()-1) < *last_write {
+                    Err(BufferError::ToManyWrites)
+                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                    Err(BufferError::WriteToLarge)
+                } else {
+                    desc_lst[*last_write].copy_from_slice(slice);
+                    *last_write += 1;
+
+                    Ok(slice.len()) 
+                }
+            },
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
+                if (desc_lst.len()-1) < *last_write {
+                    Err(BufferError::ToManyWrites)
+                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                    Err(BufferError::WriteToLarge)
+                } else {
+                    desc_lst[*last_write].copy_from_slice(slice);
+                    *last_write += 1;
+
+                    Ok(slice.len()) 
+                }
+            },
+        }
+    }
+
+    fn reset_write(&mut self) {
+        match self {
+            Buffer::Single{desc_lst, last_write, len} => *last_write = 0,
+            Buffer::Multiple{desc_lst,last_write, len} => *last_write = 0,
+            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => *last_write = 0,
+        }
+    }
+
     fn into_boxed(mut self) -> Box<[Box<[u8]>]> {
         match self {
             Buffer::Single{mut desc_lst, last_write, len} => {
@@ -1440,8 +1615,16 @@ impl From<DescrFlags> for u16 {
 /// This module unifies errors provided to useres of a virtqueue, independent of the underlying 
 /// virtqueue implementation, realized via the different enum variants.
 pub mod error {
-    use super::Transfer;
+    use super::{Transfer, BufferToken};
 
+    #[derive(Debug)]
+    // Internal Error Handling for Buffers
+    pub enum BufferError {
+        WriteToLarge,
+        ToManyWrites,
+    }
+
+    // External Error Handling for users of the virtqueue.
     pub enum VirtqError {
         General,
         /// Indirect is mixed with Direct descriptors, which is not allowed
@@ -1481,6 +1664,9 @@ pub mod error {
         /// functions returns `None`.
         OngoingTransfer(Option<Transfer>),
         /// Indicates a write into a Buffer that is not existing
-        NoBufferAvail
+        NoBufferAvail,
+        /// Indicates that a write to a Buffer happened and the data to be written into 
+        /// the buffer/descriptor was to large for the buffer.
+        WriteToLarge(BufferToken),
     }
 }
