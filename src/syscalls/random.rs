@@ -36,20 +36,34 @@ fn __sys_rand64() -> u64 {
 	}
 }
 
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub extern "C" fn sys_rand32() -> u32 {
+pub fn sys_rand32() -> u32 {
 	kernel_function!(__sys_rand32())
 }
 
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub extern "C" fn sys_rand64() -> u64 {
+pub fn sys_rand64() -> u64 {
 	kernel_function!(__sys_rand64())
+}
+
+#[cfg(feature = "newlib")]
+pub extern "C" fn sys_srand(seed: u32) {
+	kernel_function!(__sys_srand32(seed))
 }
 
 fn __sys_srand(seed: u32) {
 	*(PARK_MILLER_LEHMER_SEED.lock()) = seed;
 }
 
+#[cfg(feature = "newlib")]
+#[no_mangle]
+pub fn sys_srand(seed: u32) {
+	kernel_function!(__sys_srand(seed))
+}
+
+#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_srand(seed: u32) {
 	kernel_function!(__sys_srand(seed))
