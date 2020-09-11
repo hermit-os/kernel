@@ -108,6 +108,45 @@ pub enum Virtq {
     Split(SplitVq),
 }
 
+// Public Interface solely for page boundary checking
+impl Virtq {
+    /// Allows to check, if a given structure crosses a physical page boundary.
+    /// Returns true, if the structure does NOT cross a bounadary or crosses only
+    /// contigous physical page boundaries. 
+    ///
+    /// Structures provided to the Queue must pass this test, otherwise the queue
+    /// currently panics.
+    pub fn check_bounds<T: AsSliceU8>(data: T) -> bool {
+        let slice = data.as_slice_u8();
+
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len()-1] as *const u8) as usize ; 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        end_phy == end_phy_calc
+    }
+
+    /// Allows to check, if a given slice crosses a physical page boundary.
+    /// Returns true, if the slice does NOT cross a bounadary or crosses only
+    /// contigous physical page boundaries. 
+    ///
+    /// This check is especially usefull if one wants to check if slices
+    /// into which the queue will destructure a structure are valid for the queue.
+    ///
+    /// Slices provided to the Queue must pass this test, otherwise the queue
+    /// currently panics.
+    pub fn check_bounds_slice(slice: &[u8]) -> bool {
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len()-1] as *const u8) as usize ; 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        end_phy == end_phy_calc
+    }
+
+}
+
 // Public interface of Virtq
 impl Virtq {
     /// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective 
@@ -1457,7 +1496,7 @@ impl MemPool {
 
         assert_eq!(end_phy, end_phy_calc);
 
-        
+
         MemDescr {
             ptr,
             len,
