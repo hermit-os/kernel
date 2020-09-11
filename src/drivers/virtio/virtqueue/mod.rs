@@ -17,6 +17,8 @@
 pub mod packed;
 pub mod split;
 
+use arch::x86_64::mm::paging;
+
 use self::packed::PackedVq;
 use self::split::SplitVq;
 use self::error::{VirtqError, BufferError};
@@ -877,7 +879,7 @@ enum Buffer {
     Single {
         desc_lst: Box<[MemDescr]>,
         len: usize,
-        last_write: usize
+        next_write: usize
     },
     /// A buffer consisting of a chain of [Memory Descriptors](MemDescr). 
     /// Especially useful if one wants to send multiple structures to a device,
@@ -886,7 +888,7 @@ enum Buffer {
     Multiple {
         desc_lst: Box<[MemDescr]>,
         len: usize,
-        last_write: usize
+        next_write: usize
     },
     /// A buffer consisting of a single descriptor in the actuall virtqueue,
     /// referencing a list of descriptors somewhere in memory. 
@@ -896,7 +898,7 @@ enum Buffer {
         desc_lst: Box<[MemDescr]>,
         ctrl_desc: MemDescr,
         len: usize,
-        last_write: usize
+        next_write: usize
     },
 }
 
@@ -905,38 +907,38 @@ enum Buffer {
 impl Buffer {
     fn next_write(&mut self, slice: &[u8]) -> Result<usize, BufferError> {
         match self {
-            Buffer::Single{desc_lst, last_write, len} => {
-                if (desc_lst.len()-1) < *last_write {
+            Buffer::Single{desc_lst, next_write, len} => {
+                if (desc_lst.len()-1) < *next_write {
                     Err(BufferError::ToManyWrites)
-                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*last_write].copy_from_slice(slice);
-                    *last_write += 1;
+                    desc_lst[*next_write].copy_from_slice(slice);
+                    *next_write += 1;
 
                     Ok(slice.len()) 
                 }
             },
-            Buffer::Multiple{desc_lst, last_write, len} => {
-                if (desc_lst.len()-1) < *last_write {
+            Buffer::Multiple{desc_lst, next_write, len} => {
+                if (desc_lst.len()-1) < *next_write {
                     Err(BufferError::ToManyWrites)
-                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*last_write].copy_from_slice(slice);
-                    *last_write += 1;
+                    desc_lst[*next_write].copy_from_slice(slice);
+                    *next_write += 1;
 
                     Ok(slice.len()) 
                 }
             },
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
-                if (desc_lst.len()-1) < *last_write {
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => {
+                if (desc_lst.len()-1) < *next_write {
                     Err(BufferError::ToManyWrites)
-                } else if desc_lst.get(*last_write).unwrap().len() < slice.len() {
+                } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*last_write].copy_from_slice(slice);
-                    *last_write += 1;
+                    desc_lst[*next_write].copy_from_slice(slice);
+                    *next_write += 1;
 
                     Ok(slice.len()) 
                 }
@@ -946,15 +948,15 @@ impl Buffer {
 
     fn reset_write(&mut self) {
         match self {
-            Buffer::Single{desc_lst, last_write, len} => *last_write = 0,
-            Buffer::Multiple{desc_lst,last_write, len} => *last_write = 0,
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => *last_write = 0,
+            Buffer::Single{desc_lst, next_write, len} => *next_write = 0,
+            Buffer::Multiple{desc_lst,next_write, len} => *next_write = 0,
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => *next_write = 0,
         }
     }
 
     fn into_boxed(mut self) -> Box<[Box<[u8]>]> {
         match self {
-            Buffer::Single{mut desc_lst, last_write, len} => {
+            Buffer::Single{mut desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter_mut() {
@@ -967,7 +969,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Multiple{mut desc_lst, last_write, len} => {
+            Buffer::Multiple{mut desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter_mut() {
@@ -980,7 +982,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Indirect{mut desc_lst, ctrl_desc, last_write, len} => {
+            Buffer::Indirect{mut desc_lst, ctrl_desc, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter_mut() {
@@ -998,7 +1000,7 @@ impl Buffer {
 
     fn cpy(&self) -> Box<[u8]>{
         match &self {
-            Buffer::Single{desc_lst, last_write, len} => {
+            Buffer::Single{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(*len);
                 
                 for desc in desc_lst.iter() {
@@ -1006,7 +1008,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Multiple{desc_lst, last_write, len} => {
+            Buffer::Multiple{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(*len);
                 
                 for desc in desc_lst.iter() {
@@ -1014,7 +1016,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => {
                 let mut arr = Vec::with_capacity(*len);
                 
                 for desc in desc_lst.iter() {
@@ -1027,7 +1029,7 @@ impl Buffer {
 
     fn scat_cpy (&self) -> Box<[Box<[u8]>]> {
         match &self {
-            Buffer::Single{desc_lst, last_write, len} => {
+            Buffer::Single{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter() {
@@ -1035,7 +1037,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Multiple{desc_lst, last_write, len} => {
+            Buffer::Multiple{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter() {
@@ -1043,7 +1045,7 @@ impl Buffer {
                 }
                 arr.into_boxed_slice()
             } ,
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => {
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
                 
                 for desc in desc_lst.iter() {
@@ -1057,18 +1059,18 @@ impl Buffer {
     /// Retruns the number of descriptors inside a buffer.
     fn num_descr(&self ) -> usize {
         match &self {
-            Buffer::Single{desc_lst, last_write, len} => desc_lst.len(),
-            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.len(),
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.len(),
+            Buffer::Single{desc_lst, next_write, len} => desc_lst.len(),
+            Buffer::Multiple{desc_lst, next_write, len} => desc_lst.len(),
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => desc_lst.len(),
         }
     }
 
     /// Returns the overall number of bytes in this Buffer
     fn len(&self) -> usize {
         match &self {
-            Buffer::Single{desc_lst, last_write, len} => *len,
-            Buffer::Multiple{desc_lst, last_write, len} => *len,
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => *len,
+            Buffer::Single{desc_lst, next_write, len} => *len,
+            Buffer::Multiple{desc_lst, next_write, len} => *len,
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => *len,
         }
     }
 
@@ -1079,9 +1081,9 @@ impl Buffer {
     /// (`&mut [u8]`) for each descriptor.
     fn as_mut_slice(&mut self) -> &mut [MemDescr] {
         match self {
-            Buffer::Single{desc_lst, last_write, len} => desc_lst.as_mut(),
-            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.as_mut(),
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.as_mut(),
+            Buffer::Single{desc_lst, next_write, len} => desc_lst.as_mut(),
+            Buffer::Multiple{desc_lst, next_write, len} => desc_lst.as_mut(),
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => desc_lst.as_mut(),
         } 
     }
 
@@ -1092,9 +1094,9 @@ impl Buffer {
     /// (`&[u8]`) for each descriptor.
     fn as_slice(&self) -> &[MemDescr] {
         match self {
-            Buffer::Single{desc_lst, last_write, len} => desc_lst.as_ref(),
-            Buffer::Multiple{desc_lst, last_write, len} => desc_lst.as_ref(),
-            Buffer::Indirect{desc_lst, ctrl_desc, last_write, len} => desc_lst.as_ref(),
+            Buffer::Single{desc_lst, next_write, len} => desc_lst.as_ref(),
+            Buffer::Multiple{desc_lst, next_write, len} => desc_lst.as_ref(),
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => desc_lst.as_ref(),
         }
     }
 
@@ -1318,6 +1320,7 @@ impl MemPool {
     /// * One should set the dealloc parameter of the function to `false` ONLY
     /// when the given memory is controlled somewhere else.
     /// * The given slice MUST be a heap allocated slice.
+    /// * Panics if slice crosses page boundaries!
     ///
     /// **Properties of Returned MemDescr:**
     /// 
@@ -1327,7 +1330,17 @@ impl MemPool {
     ///   * OR the dealloc field parameter is set to false.
     fn pull_from(&self, rc_self: Rc<MemPool>, slice: &[u8], dealloc: bool) -> Result<MemDescr, VirtqError> {
         // Zero sized descriptors are NOT allowed
+        // This also prohibids a panic due to accessing wrong index below
         assert!(slice.len() != 0);
+
+        // Assert descriptor does not cross a page barrier
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        assert_eq!(end_phy, end_phy_calc);
+       
 
         let desc_id = match self.pool.borrow_mut().pop() {
             Some(id) => id,
@@ -1362,7 +1375,16 @@ impl MemPool {
     ///   * OR the dealloc field parameter is set to false.
     fn pull_from_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8], dealloc: bool) -> MemDescr {
         // Zero sized descriptors are NOT allowed
+        // This also prohibids a panic due to accessing wrong index below
         assert!(slice.len() != 0);
+
+        // Assert descriptor does not cross a page barrier
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        assert_eq!(end_phy, end_phy_calc);
 
         MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
@@ -1395,6 +1417,15 @@ impl MemPool {
         // Allocate heap memory via a vec, leak and cast
         let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
 
+        // Assert descriptor does not cross a page barrier
+        let start_virt = ptr as usize;
+        let end_virt = start_virt + (len -1); 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (len - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        assert_eq!(end_phy, end_phy_calc);
+
+
         Ok(MemDescr {
             ptr,
             len,
@@ -1418,6 +1449,15 @@ impl MemPool {
         // Allocate heap memory via a vec, leak and cast
         let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
 
+        // Assert descriptor does not cross a page barrier
+        let start_virt = ptr as usize;
+        let end_virt = start_virt + (len -1); 
+        let end_phy_calc = paging::virt_to_phys(start_virt) + (len - 1);
+        let end_phy = paging::virt_to_phys(end_virt);
+
+        assert_eq!(end_phy, end_phy_calc);
+
+        
         MemDescr {
             ptr,
             len,
