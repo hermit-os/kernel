@@ -18,17 +18,32 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-fn __sys_rand() -> u32 {
-	if let Some(value) = arch::processor::generate_random_number() {
+fn __sys_rand32() -> u32 {
+	if let Some(value) = arch::processor::generate_random_number32() {
 		value
 	} else {
+		debug!("Fallback to a software-based random number generator");
 		generate_park_miller_lehmer_random_number()
 	}
 }
 
+fn __sys_rand64() -> u64 {
+	if let Some(value) = arch::processor::generate_random_number64() {
+		value
+	} else {
+		debug!("Fallback to a software-based random number generator");
+		generate_park_miller_lehmer_random_number() as u64
+	}
+}
+
 #[no_mangle]
-pub extern "C" fn sys_rand() -> u32 {
-	kernel_function!(__sys_rand())
+pub extern "C" fn sys_rand32() -> u32 {
+	kernel_function!(__sys_rand32())
+}
+
+#[no_mangle]
+pub extern "C" fn sys_rand64() -> u64 {
+	kernel_function!(__sys_rand64())
 }
 
 fn __sys_srand(seed: u32) {
