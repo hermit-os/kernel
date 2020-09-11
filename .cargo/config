@@ -1,5 +1,8 @@
-#[target.x86_64-unknown-hermit-kernel]
-#runner = "uhyve -v"
+[unstable]
+build-std = ["core", "alloc"]
+
+[build]
+target = "x86_64-unknown-hermit-kernel"
 
 [target.x86_64-unknown-hermit-kernel]
 runner = "tests/hermit_test_runner.py"
