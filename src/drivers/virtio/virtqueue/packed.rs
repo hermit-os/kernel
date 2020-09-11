@@ -361,7 +361,7 @@ impl PackedVq {
                         Box::leak(send_data);
 
                         let buff_tkn = Some(BufferToken {
-                            send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, last_write: 0 }),
+                            send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, next_write: 0 }),
                             recv_buff: None,
                             vq: master,
                             ret_send: true,
@@ -403,7 +403,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, next_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
@@ -443,7 +443,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, last_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, next_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: true,
@@ -478,7 +478,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len, next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -516,7 +516,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len, next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -556,7 +556,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len, next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: true,
@@ -605,8 +605,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, last_write: 0 }),
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, last_write: 0 }),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, next_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, next_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -659,8 +659,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, last_write: 0 }),
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, last_write: 0 }),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_len, next_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, next_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -721,8 +721,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, last_write: 0 }),
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, next_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len, next_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -775,8 +775,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, last_write: 0 }),
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len, next_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_len, next_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -836,8 +836,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len, last_write: 0 }),
-                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_len, last_write: 0 }),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len, next_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_len, next_write: 0 }),
                                 vq: master,
                                 ret_send: true,
                                 ret_recv: true,
@@ -880,7 +880,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), next_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -914,7 +914,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), next_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -950,7 +950,7 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), next_write: 0 }),
                                 recv_buff: None,
                                 vq: master,
                                 ret_send: false,
@@ -981,7 +981,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![desc].into_boxed_slice(), len: data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1015,7 +1015,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: desc_lst.into_boxed_slice(), len: data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1051,7 +1051,7 @@ impl PackedVq {
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
                                 send_buff: None,
-                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1092,8 +1092,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), next_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1138,8 +1138,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_data_slice.len(), next_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1192,8 +1192,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
-                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), next_write: 0 }),
+                                recv_buff: Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1238,8 +1238,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), last_write: 0 }),
-                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), last_write: 0 }),
+                                send_buff: Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_data_slice.len(), next_write: 0 }),
+                                recv_buff: Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1291,8 +1291,8 @@ impl PackedVq {
                         Ok(TransferToken{
                             state: TransferState::Ready,
                             buff_tkn: Some(BufferToken {
-                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_data_slice.len(), last_write: 0 }),
-                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_data_slice.len(), last_write: 0 }),
+                                recv_buff: Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_data_slice.len(), next_write: 0 }),
+                                send_buff: Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc, len: send_data_slice.len(), next_write: 0 }),
                                 vq: master,
                                 ret_send: false,
                                 ret_recv: false,
@@ -1323,7 +1323,7 @@ impl PackedVq {
                 match spec {
                     BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
-                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), last_write: 0};
+                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), next_write: 0};
 
                             Ok(BufferToken {
                                 send_buff: Some(buffer),
@@ -1348,7 +1348,7 @@ impl PackedVq {
                             len += usize::from(*size);
                         }
 
-                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0};
+                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, next_write: 0};
 
                         Ok(BufferToken{
                             send_buff: Some(buffer),
@@ -1377,7 +1377,7 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, last_write: 0};
+                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, next_write: 0};
 
                         Ok(BufferToken{
                             send_buff: Some(buffer),
@@ -1395,7 +1395,7 @@ impl PackedVq {
                 match spec {
                     BuffSpec::Single(size) => match self.mem_pool.pull(Rc::clone(&self.mem_pool), size) {
                         Ok(desc) => {
-                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), last_write: 0};
+                            let buffer = Buffer::Single{desc_lst: vec![desc].into_boxed_slice(), len: size.into(), next_write: 0};
 
                             Ok(BufferToken {
                                 send_buff: None,
@@ -1420,7 +1420,7 @@ impl PackedVq {
                             len += usize::from(*size);;
                         }
 
-                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, last_write: 0};
+                        let buffer = Buffer::Multiple{desc_lst: desc_lst.into_boxed_slice(), len, next_write: 0};
 
                         Ok(BufferToken{
                             send_buff: None,
@@ -1449,7 +1449,7 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, last_write: 0};
+                        let buffer = Buffer::Indirect{desc_lst: desc_lst.into_boxed_slice(), ctrl_desc, len, next_write: 0};
 
                         Ok(BufferToken{
                             send_buff: None,
@@ -1468,14 +1468,14 @@ impl PackedVq {
                     (BuffSpec::Single(send_size), BuffSpec::Single(recv_size)) => {
                         let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
                             Ok(send_desc) => {
-                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), last_write: 0 })
+                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), next_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
 
                         let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
                             Ok(recv_desc) => {
-                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), last_write: 0 })
+                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), next_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1492,7 +1492,7 @@ impl PackedVq {
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
                         let send_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), send_size) {
                             Ok(send_desc) => {
-                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), last_write: 0 })
+                                Some(Buffer::Single{ desc_lst: vec![send_desc].into_boxed_slice(), len: send_size.into(), next_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1508,7 +1508,7 @@ impl PackedVq {
                             recv_len += usize::from(*size);
                         }
 
-                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , last_write: 0 });
+                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , next_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,
@@ -1531,7 +1531,7 @@ impl PackedVq {
                             send_len += usize::from(*size);
                         }
 
-                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , last_write: 0 });
+                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , next_write: 0 });
 
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut recv_len = 0usize;
@@ -1544,7 +1544,7 @@ impl PackedVq {
                             recv_len += usize::from(*size);
                         }
 
-                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , last_write: 0 });
+                        let recv_buff = Some(Buffer::Multiple{ desc_lst: recv_desc_lst.into_boxed_slice(), len: recv_len , next_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,
@@ -1567,11 +1567,11 @@ impl PackedVq {
                             send_len += usize::from(*size);
                         }
 
-                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , last_write: 0 });
+                        let send_buff = Some(Buffer::Multiple{ desc_lst: send_desc_lst.into_boxed_slice(), len: send_len , next_write: 0 });
 
                         let recv_buff = match self.mem_pool.pull(Rc::clone(&self.mem_pool), recv_size) {
                             Ok(recv_desc) => {
-                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), last_write: 0 })
+                                Some(Buffer::Single{ desc_lst: vec![recv_desc].into_boxed_slice(), len: recv_size.into(), next_write: 0 })
                             }
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1615,8 +1615,8 @@ impl PackedVq {
                             Err(vq_err) => return Err(vq_err),
                         };
                         
-                        let recv_buff = Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len , last_write: 0 });
-                        let send_buff = Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc, len: send_len , last_write: 0 });
+                        let recv_buff = Some(Buffer::Indirect{ desc_lst: recv_desc_lst.into_boxed_slice(), ctrl_desc: ctrl_desc.no_dealloc_clone(), len: recv_len , next_write: 0 });
+                        let send_buff = Some(Buffer::Indirect{ desc_lst: send_desc_lst.into_boxed_slice(), ctrl_desc, len: send_len , next_write: 0 });
 
                         Ok(BufferToken{
                             send_buff,
