@@ -878,14 +878,18 @@ fn print_cpu_information() {
 }*/
 
 pub fn generate_random_number() -> Option<u32> {
-	if unsafe { SUPPORTS_RDRAND } {
-		let value: u32;
-		unsafe {
-			llvm_asm!("rdrand $0" : "=r"(value) ::: "volatile");
+	unsafe {
+		if SUPPORTS_RDRAND {
+			let mut value: u32 = 0;
+
+			while core::arch::x86_64::_rdrand32_step(&mut value) == 1 {
+				spin_loop_hint();
+			}
+
+			Some(value)
+		} else {
+			None
 		}
-		Some(value)
-	} else {
-		None
 	}
 }
 
