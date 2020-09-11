@@ -7,7 +7,6 @@
 
 use crate::arch;
 use crate::synch::spinlock::Spinlock;
-use core::convert::TryInto;
 
 static PARK_MILLER_LEHMER_SEED: Spinlock<u32> = Spinlock::new(0);
 
@@ -70,7 +69,7 @@ pub extern "C" fn sys_srand(seed: u32) {
 }
 
 pub fn random_init() {
-	let seed: u32 = arch::processor::get_timestamp().try_into().unwrap();
+	let seed: u32 = arch::processor::get_timestamp() as u32;
 
 	*PARK_MILLER_LEHMER_SEED.lock() = seed;
 }
