@@ -1,4 +1,4 @@
-name: Test
+name: Build and test
 
 on:
   push:
@@ -55,8 +55,9 @@ jobs:
       - name: Check Cargo availability
         run: cargo --version
       - name: Cargo Test libhermit-rs (Unittests on Host)
-        run: cargo test --lib
+        run: cargo test --lib --target x86_64-unknown-linux-gnu
         working-directory: libhermit-rs
+        if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Install qemu/nasm (apt)
         run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
         if: ${{ matrix.os == 'ubuntu-latest' }}
