@@ -866,6 +866,10 @@ pub fn print_information() {
 		if supports_1gib_pages() { "Yes" } else { "No" }
 	);
 	infofooter!();
+
+	if unsafe { SUPPORTS_RDRAND == false } {
+		warn!("RDRAND support is missing! Switch to a software-based random number generator!");
+	}
 }
 
 /*#[cfg(not(target_os = "hermit"))]

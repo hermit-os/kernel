@@ -30,7 +30,6 @@ fn __sys_rand64() -> u64 {
 	if let Some(value) = arch::processor::generate_random_number64() {
 		value
 	} else {
-		debug!("Fallback to a software-based random number generator");
 		generate_park_miller_lehmer_random_number() as u64
 	}
 }
