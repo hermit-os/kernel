@@ -20,11 +20,11 @@ jobs:
         include:
           - os: macOS-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview, rustfmt'
+            components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-apple-darwin'
           - os: windows-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview, rustfmt'
+            components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
@@ -58,6 +58,7 @@ jobs:
         run: cargo --version
       - name: Check Formatting
         run: cargo fmt -- --check
+        if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Cargo Test libhermit-rs (Unittests on Host)
         run: cargo test --lib --target x86_64-unknown-linux-gnu
         working-directory: libhermit-rs
