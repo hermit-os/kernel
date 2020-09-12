@@ -17,51 +17,43 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-fn __sys_rand32() -> u32 {
+fn __sys_rand32() -> Option<u32> {
+	arch::processor::generate_random_number32()
+}
+
+fn __sys_rand64() -> Option<u64> {
+	arch::processor::generate_random_number64()
+}
+
+fn __sys_rand() -> u32 {
 	if let Some(value) = arch::processor::generate_random_number32() {
 		value
 	} else {
-		debug!("Fallback to a software-based random number generator");
 		generate_park_miller_lehmer_random_number()
-	}
-}
-
-fn __sys_rand64() -> u64 {
-	if let Some(value) = arch::processor::generate_random_number64() {
-		value
-	} else {
-		generate_park_miller_lehmer_random_number() as u64
 	}
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub fn sys_rand32() -> u32 {
+pub fn sys_secure_rand32() -> Option<u32> {
 	kernel_function!(__sys_rand32())
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub fn sys_rand64() -> u64 {
+pub fn sys_secure_rand64() -> Option<u64> {
 	kernel_function!(__sys_rand64())
 }
 
-#[cfg(feature = "newlib")]
-pub extern "C" fn sys_srand(seed: u32) {
-	kernel_function!(__sys_srand32(seed))
+#[no_mangle]
+pub extern "C" fn sys_rand() -> u32 {
+	kernel_function!(__sys_rand())
 }
 
 fn __sys_srand(seed: u32) {
 	*(PARK_MILLER_LEHMER_SEED.lock()) = seed;
 }
 
-#[cfg(feature = "newlib")]
-#[no_mangle]
-pub fn sys_srand(seed: u32) {
-	kernel_function!(__sys_srand(seed))
-}
-
-#[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub extern "C" fn sys_srand(seed: u32) {
 	kernel_function!(__sys_srand(seed))
