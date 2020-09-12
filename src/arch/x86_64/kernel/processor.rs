@@ -877,15 +877,35 @@ fn print_cpu_information() {
 	print_information();
 }*/
 
-pub fn generate_random_number() -> Option<u32> {
-	if unsafe { SUPPORTS_RDRAND } {
-		let value: u32;
-		unsafe {
-			llvm_asm!("rdrand $0" : "=r"(value) ::: "volatile");
+pub fn generate_random_number32() -> Option<u32> {
+	unsafe {
+		if SUPPORTS_RDRAND {
+			let mut value: u32 = 0;
+
+			while core::arch::x86_64::_rdrand32_step(&mut value) == 1 {
+				spin_loop_hint();
+			}
+
+			Some(value)
+		} else {
+			None
 		}
-		Some(value)
-	} else {
-		None
+	}
+}
+
+pub fn generate_random_number64() -> Option<u64> {
+	unsafe {
+		if SUPPORTS_RDRAND {
+			let mut value: u64 = 0;
+
+			while core::arch::x86_64::_rdrand64_step(&mut value) == 1 {
+				spin_loop_hint();
+			}
+
+			Some(value)
+		} else {
+			None
+		}
 	}
 }
 
