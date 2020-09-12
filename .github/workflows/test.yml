@@ -1,10 +1,12 @@
 name: Build and test
 
 on:
-  push:
   pull_request:
+  push:
     branches:
       - master
+      - staging
+      - trying
 
 jobs:
   build:
@@ -18,15 +20,15 @@ jobs:
         include:
           - os: macOS-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
+            components: 'rust-src, llvm-tools-preview, rustfmt'
             targets: 'x86_64-apple-darwin'
           - os: windows-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
+            components: 'rust-src, llvm-tools-preview, rustfmt'
             targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
+            components: 'rust-src, llvm-tools-preview, rustfmt'
             targets: 'x86_64-unknown-linux-gnu'
 
 
@@ -54,6 +56,8 @@ jobs:
           path: 'libhermit-rs'
       - name: Check Cargo availability
         run: cargo --version
+      - name: Check Formatting
+        run: cargo fmt -- --check
       - name: Cargo Test libhermit-rs (Unittests on Host)
         run: cargo test --lib --target x86_64-unknown-linux-gnu
         working-directory: libhermit-rs
