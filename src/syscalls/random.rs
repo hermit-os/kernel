@@ -26,11 +26,7 @@ fn __sys_rand64() -> Option<u64> {
 }
 
 fn __sys_rand() -> u32 {
-	if let Some(value) = arch::processor::generate_random_number32() {
-		value
-	} else {
-		generate_park_miller_lehmer_random_number()
-	}
+	generate_park_miller_lehmer_random_number()
 }
 
 #[cfg(not(feature = "newlib"))]
