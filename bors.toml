@@ -1,5 +1,8 @@
 status = [
-  "Test", "continuous-integration/travis-ci/push"
+  "Test (ubuntu-latest)",
+  "Test (windows-latest)",
+  "Test (macOS-latest)",
+  "continuous-integration/travis-ci/push"
 ]
 delete_merged_branches = true
 timeout_sec = 7200
