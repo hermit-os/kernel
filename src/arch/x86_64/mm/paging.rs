@@ -29,7 +29,7 @@ use crate::scheduler;
 const BOOT_GDT: PhysAddr = PhysAddr(0x1000);
 
 /// Pointer to the root page table (PML4)
-const PML4_ADDRESS: *mut PageTable<PML4> = 0xFFFF_FFFF_FFFF_F000 as *mut PageTable<PML4>;
+const PML4_ADDRESS: VirtAddr = VirtAddr(0xFFFF_FFFF_FFFF_F000);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -611,7 +611,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
 	root_pagetable.get_page_table_entry(page)
 }
 
@@ -619,7 +619,7 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
 	let address = root_pagetable
 		.get_page_table_entry(page)
 		.expect("Entry not present")
@@ -681,7 +681,7 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
@@ -693,7 +693,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
@@ -706,7 +706,7 @@ pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 		last_page.address()
 	);
 
-	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
+	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
 	let range = Page::<BasePageSize>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().read_only().execute_disable();
