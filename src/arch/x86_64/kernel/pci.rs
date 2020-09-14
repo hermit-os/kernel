@@ -13,7 +13,8 @@ use drivers::virtio::depr::virtio_fs::VirtioFsDriver;
 use drivers::virtio::depr::virtio_net::VirtioNetDriver;
 use drivers::net::virtio_net::VirtioNetDriver as VnetDrv;
 use drivers::virtio::depr::virtio;
-//use drivers::virtio::transport::pci as pci_virtio;
+use drivers::virtio::transport::pci as pci_virtio;
+use drivers::virtio::transport::pci::VirtioDriver;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
@@ -492,19 +493,15 @@ pub fn init_drivers() {
 				adapter.device_id
 			);
 
-			/* New initalization function
-			 * 
-			 *  match pci_virtio::init_device(adapter) {
-             *     Ok(PciDriver) => {
-             *	       pci::register_driver(PciDriver);
-			 *     },
-			 *     Err() => {
-			 *	       // Handle Error, probably just warn!(...)
-			 *     }
-			 * }
-			 *  
-			 */
-			virtio::init_virtio_device(adapter);
+			// This weird match and back to match and then match driver is needed 
+			// in order to let the compiler know, that we are giving him a static driver struct.
+			match pci_virtio::init_device(&adapter) {
+                Ok(drv) => match drv {
+					VirtioDriver::Network(drv) => PCI_DRIVERS.lock().push(PciDriver::VirtioNetNew(drv)),
+				},
+			    Err(_) => (), // could have an info which driver failed
+			}
+			//virtio::init_virtio_device(adapter);
 		}
 	}
 }
