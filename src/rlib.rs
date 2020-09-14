@@ -69,10 +69,12 @@ pub unsafe extern "C" fn memcmp(s1: *const u8, s2: *const u8, n: usize) -> i32 {
 	0
 }
 
+#[cfg(not(target_os = "hermit"))]
 #[cfg(test)]
 mod test {
 	use super::{memcmp, memcpy, memmove, memset};
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memcmp_single_byte_pointers() {
 		unsafe {
@@ -81,6 +83,7 @@ mod test {
 		}
 	}
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memcmp_strings() {
 		{
@@ -101,6 +104,7 @@ mod test {
 		}
 	}
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memset_single_byte_pointers() {
 		let mut x: u8 = 0xFF;
@@ -115,6 +119,7 @@ mod test {
 		}
 	}
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memset_array() {
 		let mut buffer = [b'X'; 100];
@@ -126,16 +131,18 @@ mod test {
 		}
 	}
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memcpy_and_memcmp_arrays() {
 		let (src, mut dst) = ([b'X'; 100], [b'Y'; 100]);
 		unsafe {
-			assert!(memcmp(src.as_ptr(), dst.as_ptr(), 100) != 0);
+			assert_ne!(memcmp(src.as_ptr(), dst.as_ptr(), 100), 0);
 			let _ = memcpy(dst.as_mut_ptr(), src.as_ptr(), 100);
 			assert_eq!(memcmp(src.as_ptr(), dst.as_ptr(), 100), 0);
 		}
 	}
 
+	#[cfg(not(target_os = "hermit"))]
 	#[test]
 	fn memmove_overlapping() {
 		{

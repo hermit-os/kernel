@@ -9,19 +9,17 @@
 #![allow(dead_code)]
 
 #[cfg(feature = "acpi")]
-use arch::x86_64::kernel::acpi;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::pic;
-use arch::x86_64::kernel::pit;
-use arch::x86_64::kernel::BOOT_INFO;
+use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::{idt, irq, pic, pit, BOOT_INFO};
+use crate::environment;
+use crate::x86::controlregs::*;
+use crate::x86::cpuid::*;
+use crate::x86::msr::*;
+use core::arch::x86_64::__rdtscp as rdtscp;
+use core::arch::x86_64::_rdtsc as rdtsc;
+use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, intrinsics, u32};
-use environment;
-use x86::controlregs::*;
-use x86::cpuid::*;
-use x86::msr::*;
-use x86::time::*;
+use core::{fmt, u32};
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -49,6 +47,7 @@ static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut SUPPORTS_FSGS: bool = false;
+static mut RUN_ON_HYPERVISOR: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
 
 #[repr(C, align(16))]
@@ -282,9 +281,11 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cpuid_hypervisor_info(&mut self, cpuid: &CpuId) -> Result<(), ()> {
+		const KHZ_TO_HZ: u64 = 1000;
+		const MHZ_TO_HZ: u64 = 1000000;
 		let hypervisor_info = cpuid.get_hypervisor_info().ok_or(())?;
-		let freq = hypervisor_info.tsc_frequency().ok_or(())?;
-		let mhz = (freq / 1000000u32) as u16;
+		let freq = hypervisor_info.tsc_frequency().ok_or(())? as u64 * KHZ_TO_HZ;
+		let mhz: u16 = (freq / MHZ_TO_HZ).try_into().unwrap();
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::HypervisorTscInfo)
 	}
 
@@ -297,8 +298,8 @@ impl CpuFrequency {
 			.expect("CPUID Brand String not available!");
 
 		let ghz_find = brand_string.find("GHz");
-		if ghz_find.is_some() {
-			let index = ghz_find.unwrap() - 4;
+		if let Some(ghz_find) = ghz_find {
+			let index = ghz_find - 4;
 			let thousand_char = brand_string.chars().nth(index).unwrap();
 			let decimal_char = brand_string.chars().nth(index + 1).unwrap();
 			let hundred_char = brand_string.chars().nth(index + 2).unwrap();
@@ -318,9 +319,23 @@ impl CpuFrequency {
 		Err(())
 	}
 
-	unsafe fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
-		let cpu_freq = intrinsics::volatile_load(&(*BOOT_INFO).cpu_freq);
-		self.set_detected_cpu_frequency(cpu_freq as u16, CpuFrequencySources::Hypervisor)
+	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
+		fn detect_from_uhyve() -> Result<u16, ()> {
+			if environment::is_uhyve() {
+				unsafe {
+					let cpu_freq = core::ptr::read_volatile(&(*BOOT_INFO).cpu_freq);
+					if cpu_freq > (u16::MAX as u32) {
+						return Err(());
+					}
+					Ok(cpu_freq as u16)
+				}
+			} else {
+				Err(())
+			}
+		}
+		// future implementations could add support for different hypervisors
+		// by adding or_else here
+		self.set_detected_cpu_frequency(detect_from_uhyve()?, CpuFrequencySources::Hypervisor)
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
@@ -332,14 +347,14 @@ impl CpuFrequency {
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
-	#[cfg(test)]
+	#[cfg(not(target_os = "hermit"))]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// return just Ok because the real implementation must run in ring 0
 		self.source = CpuFrequencySources::Measurement;
 		Ok(())
 	}
 
-	#[cfg(not(test))]
+	#[cfg(target_os = "hermit")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if environment::is_uhyve() {
@@ -364,12 +379,12 @@ impl CpuFrequency {
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
-		let first_tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+		let first_tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 
 		// Wait until the tick count changes.
 		// As soon as it has done, we are at the start of a new time slice.
 		let start_tick = loop {
-			let tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick != first_tick {
 				break tick;
 			}
@@ -381,7 +396,7 @@ impl CpuFrequency {
 		let start = get_timestamp();
 
 		loop {
-			let tick = unsafe { intrinsics::volatile_load(&MEASUREMENT_TIMER_TICKS) };
+			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick - start_tick >= tick_count {
 				break;
 			}
@@ -406,10 +421,10 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect(&mut self) {
-		let mut cpuid = CpuId::new();
+		let cpuid = CpuId::new();
 		self.detect_from_cpuid(&cpuid)
-			.or_else(|_e| self.detect_from_cpuid_tsc_info(&mut cpuid))
-			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&mut cpuid))
+			.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
+			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
 			.or_else(|_e| self.detect_from_hypervisor())
 			//.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
@@ -521,6 +536,9 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.feature_info.has_x2apic() {
 			write!(f, "X2APIC ")?;
 		}
+		if self.feature_info.has_hypervisor() {
+			write!(f, "HYPERVISOR ")?;
+		}
 
 		if self.extended_feature_info.has_avx2() {
 			write!(f, "AVX2 ")?;
@@ -585,8 +603,7 @@ pub fn run_on_hypervisor() -> bool {
 	if environment::is_uhyve() {
 		true
 	} else {
-		let cpuid = CpuId::new();
-		cpuid.get_hypervisor_info().is_some()
+		unsafe { RUN_ON_HYPERVISOR }
 	}
 }
 
@@ -717,6 +734,7 @@ pub fn detect_features() {
 		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
 		SUPPORTS_X2APIC = feature_info.has_x2apic();
 		SUPPORTS_XSAVE = feature_info.has_xsave();
+		RUN_ON_HYPERVISOR = feature_info.has_hypervisor();
 		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
 
 		if extended_function_info.has_rdtscp() {
@@ -774,10 +792,7 @@ pub fn configure() {
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
 	} else {
-		error!("libhermit-rs requires the CPU feature FSGSBASE");
-		loop {
-			spin_loop_hint();
-		}
+		panic!("libhermit-rs requires the CPU feature FSGSBASE");
 	}
 
 	debug!("Set CR4 to 0x{:x}", cr4);
@@ -853,7 +868,8 @@ pub fn print_information() {
 	infofooter!();
 }
 
-/*#[test]
+/*#[cfg(not(target_os = "hermit"))]
+#[test]
 fn print_cpu_information() {
 	::logging::init();
 	detect_features();
@@ -861,15 +877,35 @@ fn print_cpu_information() {
 	print_information();
 }*/
 
-pub fn generate_random_number() -> Option<u32> {
-	if unsafe { SUPPORTS_RDRAND } {
-		let value: u32;
-		unsafe {
-			llvm_asm!("rdrand $0" : "=r"(value) ::: "volatile");
+pub fn generate_random_number32() -> Option<u32> {
+	unsafe {
+		if SUPPORTS_RDRAND {
+			let mut value: u32 = 0;
+
+			while core::arch::x86_64::_rdrand32_step(&mut value) == 1 {
+				spin_loop_hint();
+			}
+
+			Some(value)
+		} else {
+			None
 		}
-		Some(value)
-	} else {
-		None
+	}
+}
+
+pub fn generate_random_number64() -> Option<u64> {
+	unsafe {
+		if SUPPORTS_RDRAND {
+			let mut value: u64 = 0;
+
+			while core::arch::x86_64::_rdrand64_step(&mut value) == 1 {
+				spin_loop_hint();
+			}
+
+			Some(value)
+		} else {
+			None
+		}
 	}
 }
 
@@ -992,7 +1028,6 @@ pub fn get_timestamp() -> u64 {
 	unsafe { TIMESTAMP_FUNCTION() }
 }
 
-#[inline]
 unsafe fn get_timestamp_rdtsc() -> u64 {
 	llvm_asm!("lfence" ::: "memory" : "volatile");
 	let value = rdtsc();
@@ -1000,9 +1035,9 @@ unsafe fn get_timestamp_rdtsc() -> u64 {
 	value
 }
 
-#[inline]
 unsafe fn get_timestamp_rdtscp() -> u64 {
-	let value = rdtscp();
+	let mut aux: u32 = 0;
+	let value = rdtscp(&mut aux as *mut u32);
 	llvm_asm!("lfence" ::: "memory" : "volatile");
 	value
 }

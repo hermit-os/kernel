@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::percore::*;
-use scheduler::task::{TaskHandlePriorityQueue, TaskId};
-use synch::spinlock::Spinlock;
+use crate::arch::percore::*;
+use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
+use crate::synch::spinlock::Spinlock;
 
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,

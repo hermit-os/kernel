@@ -19,14 +19,14 @@ use smoltcp::phy::{self, Device, DeviceCapabilities};
 use smoltcp::time::Instant;
 use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::irq::*;
-use arch::x86_64::kernel::pci;
-use arch::x86_64::kernel::percore::core_scheduler;
-use arch::x86_64::mm::paging::virt_to_phys;
-use drivers::net::{networkd, NETWORK_TASK_ID, NET_SEM};
-use scheduler;
-use x86::io::*;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::irq::*;
+use crate::arch::x86_64::kernel::pci;
+use crate::arch::x86_64::kernel::percore::core_scheduler;
+use crate::arch::x86_64::mm::paging::virt_to_phys;
+use crate::drivers::net::{networkd, NETWORK_TASK_ID, NET_SEM};
+use crate::scheduler;
+use crate::x86::io::*;
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;

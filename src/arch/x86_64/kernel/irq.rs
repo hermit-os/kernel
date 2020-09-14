@@ -6,14 +6,21 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::processor;
-use arch::x86_64::mm::paging;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::idt;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::processor;
+use crate::arch::x86_64::mm::paging;
+use crate::scheduler;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::x86::bits64::rflags;
+
+use crate::alloc::string::ToString;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
 use core::fmt;
-use scheduler;
-use x86::bits64::rflags;
+
+static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
@@ -82,20 +89,18 @@ pub fn disable() {
 /// This function together with nested_enable can be used
 /// in situations when interrupts shouldn't be activated if they
 /// were not activated before calling this function.
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[inline]
 pub fn nested_disable() -> bool {
-	let result = unsafe {
+	unsafe {
 		let flags: u64;
 
 		llvm_asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
 		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
-	};
-
-	result
+	}
 }
 
-#[cfg(test)]
+#[cfg(not(target_os = "hermit"))]
 pub fn nested_disable() -> bool {
 	false
 }
@@ -197,9 +202,20 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	idt::set_gate((32 + irq_number) as u8, handler, 0);
 }
 
+pub fn add_irq_name(irq_number: u32, name: &'static str) {
+	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	IRQ_NAMES.lock().insert(32 + irq_number, name.to_string());
+}
+
+pub fn get_irq_name(irq_number: u32) -> Option<String> {
+	let name = IRQ_NAMES.lock().get(&irq_number)?.clone();
+	Some(name)
+}
+
 fn unhandled_interrupt(irq_number: u8) {
 	warn!("Receive unhandled interrupt {}", irq_number);
 	apic::eoi();
+	increment_irq_counter((32 + irq_number).into());
 }
 
 extern "x86-interrupt" fn unhandled_interrupt0(_stack_frame: &mut ExceptionStackFrame) {
@@ -374,6 +390,8 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: &mut Exce
 	// We set the CR0_TASK_SWITCHED flag every time we switch to a task.
 	// This causes the "Device Not Available" Exception (int #7) to be thrown as soon as we use the FPU for the first time.
 
+	increment_irq_counter(7);
+
 	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
 	unsafe {
 		llvm_asm!("clts" :::: "volatile");
@@ -469,4 +487,20 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: &mut ExceptionSt
 extern "x86-interrupt" fn reserved_exception(stack_frame: &mut ExceptionStackFrame) {
 	error!("Reserved Exception: {:#?}", stack_frame);
 	scheduler::abort();
+}
+
+#[derive(Clone, Copy)]
+#[repr(align(64))]
+pub struct IrqStatistics {
+	pub counters: [u64; 256],
+}
+
+impl IrqStatistics {
+	pub const fn new() -> Self {
+		IrqStatistics { counters: [0; 256] }
+	}
+
+	pub fn inc(&mut self, pos: usize) {
+		self.counters[pos] += 1;
+	}
 }

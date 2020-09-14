@@ -5,8 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::mm::paging;
-use arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags};
 use x86::shared::io::*;
 
 const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;

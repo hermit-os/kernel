@@ -21,10 +21,10 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-use arch;
+use crate::arch;
 
 fn __sys_getpagesize() -> i32 {
-	arch::mm::paging::get_application_page_size() as i32
+	arch::x86_64::mm::paging::get_application_page_size() as i32
 }
 
 #[no_mangle]

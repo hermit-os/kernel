@@ -5,31 +5,30 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch;
+#[cfg(feature = "acpi")]
+use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::irq::IrqStatistics;
+#[cfg(target_os = "hermit")]
+use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
+use crate::arch::x86_64::kernel::IRQ_COUNTERS;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::{paging, virtualmem};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::collections::CachePadded;
+use crate::config::*;
+use crate::environment;
+use crate::mm;
+use crate::scheduler;
+use crate::scheduler::CoreId;
+use crate::x86::controlregs::*;
+use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch;
-#[cfg(feature = "acpi")]
-use arch::x86_64::kernel::acpi;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::processor;
-#[cfg(not(test))]
-use arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
-use arch::x86_64::kernel::BOOT_INFO;
-use arch::x86_64::mm::paging;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use arch::x86_64::mm::virtualmem;
-use config::*;
+use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, intrinsics, mem, ptr, u32};
-use environment;
-use mm;
-use scheduler;
-use scheduler::CoreId;
-use x86::controlregs::*;
-use x86::msr::*;
+use core::{cmp, fmt, mem, ptr, u32};
 
 const APIC_ICR2: usize = 0x0310;
 
@@ -64,7 +63,7 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// While our boot processor is already in x86-64 mode, application processors boot up in 16-bit real mode
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
-const SMP_BOOT_CODE_ADDRESS: usize = 0x8000;
+const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
 
 const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
@@ -72,8 +71,8 @@ const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
-static mut LOCAL_APIC_ADDRESS: usize = 0;
-static mut IOAPIC_ADDRESS: usize = 0;
+static mut LOCAL_APIC_ADDRESS: VirtAddr = VirtAddr::zero();
+static mut IOAPIC_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
@@ -141,6 +140,7 @@ impl fmt::Display for IoApicRecord {
 
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
+	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
 	unsafe {
 		cr3_write(cr3());
 	}
@@ -162,6 +162,7 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
+	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
 	eoi();
@@ -184,7 +185,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 }
 
 #[cfg(feature = "acpi")]
-fn detect_from_acpi() -> Result<usize, ()> {
+fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");
 	let madt_header = unsafe { &*(madt.table_start_address() as *const AcpiMadtHeader) };
@@ -227,7 +228,7 @@ fn detect_from_acpi() -> Result<usize, ()> {
 					flags.device().writable().execute_disable();
 					paging::map::<BasePageSize>(
 						IOAPIC_ADDRESS,
-						ioapic_record.address as usize,
+						PhysAddr(ioapic_record.address.into()),
 						1,
 						flags,
 					);
@@ -243,12 +244,12 @@ fn detect_from_acpi() -> Result<usize, ()> {
 
 	// Successfully derived all information from the MADT.
 	// Return the physical address of the Local APIC.
-	Ok(madt_header.local_apic_address as usize)
+	Ok(PhysAddr(madt_header.local_apic_address.into()))
 }
 
-fn detect_from_uhyve() -> Result<usize, ()> {
+fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if environment::is_uhyve() {
-		let defaullt_address = 0xFEC0_0000usize;
+		let defaullt_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
 			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
@@ -262,7 +263,7 @@ fn detect_from_uhyve() -> Result<usize, ()> {
 			paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
 		}
 
-		return Ok(0xFEE0_0000usize);
+		return Ok(PhysAddr(0xFEE0_0000));
 	}
 
 	Err(())
@@ -274,6 +275,13 @@ pub extern "C" fn eoi() {
 }
 
 pub fn init() {
+	let boxed_irq = Box::new(IrqStatistics::new());
+	let boxed_irq_raw = Box::into_raw(boxed_irq);
+	unsafe {
+		IRQ_COUNTERS.insert(0, &(*boxed_irq_raw));
+		PERCORE.irq_statistics.set(boxed_irq_raw);
+	}
+
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
 	unsafe {
 		CPU_LOCAL_APIC_IDS = Some(Vec::new());
@@ -304,6 +312,7 @@ pub fn init() {
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
 	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
+	irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
 	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
 	idt::set_gate(
 		SPURIOUS_INTERRUPT_NUMBER,
@@ -311,6 +320,7 @@ pub fn init() {
 		0,
 	);
 	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 0);
+	irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
 
 	// Initialize interrupt handling over APIC.
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.
@@ -486,21 +496,37 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let boxed_percore = Box::new(PerCoreVariables::new(core_id));
+	let mut boxed_percore = Box::new(CachePadded::new(PerCoreInnerVariables::new(core_id)));
+	let boxed_irq = Box::new(IrqStatistics::new());
+	let boxed_irq_raw = Box::into_raw(boxed_irq);
+
 	unsafe {
-		intrinsics::volatile_store(&mut (*BOOT_INFO).current_stack_address, stack as u64);
-		intrinsics::volatile_store(
+		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
+		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
+
+		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack.as_u64());
+		core::ptr::write_volatile(
 			&mut (*BOOT_INFO).current_percore_address,
 			Box::into_raw(boxed_percore) as u64,
 		);
+
+		trace!(
+			"Initialize per core data at 0x{:x} (size {} bytes)",
+			core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address),
+			mem::size_of::<PerCoreVariables>()
+		);
 	}
+}
+
+extern "C" {
+	fn _start();
 }
 
 /// Boot all Application Processors
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
@@ -516,27 +542,31 @@ pub fn boot_application_processors() {
 	);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, SMP_BOOT_CODE_ADDRESS, 1, flags);
+	paging::map::<BasePageSize>(
+		SMP_BOOT_CODE_ADDRESS,
+		PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
+		1,
+		flags,
+	);
 	unsafe {
 		ptr::copy_nonoverlapping(
 			&SMP_BOOT_CODE as *const u8,
-			SMP_BOOT_CODE_ADDRESS as *mut u8,
+			SMP_BOOT_CODE_ADDRESS.as_mut_ptr(),
 			SMP_BOOT_CODE.len(),
 		);
 	}
 
 	unsafe {
 		// Pass the PML4 page table address to the boot code.
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4) as *mut u32) = cr3() as u32;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_PML4).as_mut_ptr::<u32>()) =
+			cr3().try_into().unwrap();
 		// Set entry point
 		debug!(
 			"Set entry point for application processor to 0x{:x}",
-			arch::x86_64::kernel::start::_start as usize
+			_start as u64
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY) as *mut usize) =
-			arch::x86_64::kernel::start::_start as usize;
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO) as *mut usize) =
-			BOOT_INFO as usize;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) = _start as u64;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) = BOOT_INFO as u64;
 	}
 
 	// Now wake up each application processor.
@@ -578,7 +608,7 @@ pub fn boot_application_processors() {
 				IA32_X2APIC_ICR,
 				destination
 					| APIC_ICR_DELIVERY_MODE_STARTUP
-					| ((SMP_BOOT_CODE_ADDRESS as u64) >> 12),
+					| ((SMP_BOOT_CODE_ADDRESS.as_u64()) >> 12),
 			);
 			debug!("Waiting for it to respond");
 
@@ -635,8 +665,8 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 
 /// Translate the x2APIC MSR into an xAPIC memory address.
 #[inline]
-fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> usize {
-	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as usize & 0xFF) << 4) }
+fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
+	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as u64 & 0xFF) << 4) }
 }
 
 fn local_apic_read(x2apic_msr: u32) -> u32 {
@@ -644,15 +674,15 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 		// x2APIC is simple, we can just read from the given MSR.
 		unsafe { rdmsr(x2apic_msr) as u32 }
 	} else {
-		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *const u32) }
+		unsafe { *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_ptr::<u32>()) }
 	}
 }
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
-		intrinsics::volatile_store(
-			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *mut u32,
+		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
+		core::ptr::write_volatile(
+			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
 			value,
 		);
 	}
@@ -662,9 +692,9 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		intrinsics::volatile_store(IOAPIC_ADDRESS as *mut u32, reg);
+		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
 		value =
-			intrinsics::volatile_load((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()) as *const u32);
+			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_ptr::<u32>());
 	}
 
 	value
@@ -689,22 +719,23 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
 			let destination = ((value >> 8) & 0xFF00_0000) as u32;
-			let icr2 = unsafe { &mut *((LOCAL_APIC_ADDRESS + APIC_ICR2) as *mut u32) };
+			let icr2 = unsafe { &mut *((LOCAL_APIC_ADDRESS + APIC_ICR2).as_mut_ptr::<u32>()) };
 			*icr2 = destination;
 
 			// The remaining data without the destination will now be written into ICR1.
 		}
 
 		// Write the value.
-		let value_ref =
-			unsafe { &mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr) as *mut u32) };
+		let value_ref = unsafe {
+			&mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>())
+		};
 		*value_ref = value as u32;
 
 		if x2apic_msr == IA32_X2APIC_ICR {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
 			// Wait until the CPU clears it.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { intrinsics::volatile_load(value_ref) }
+			while (unsafe { core::ptr::read_volatile(value_ref) }
 				& APIC_ICR_DELIVERY_STATUS_PENDING)
 				> 0
 			{

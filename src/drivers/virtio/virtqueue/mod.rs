@@ -17,7 +17,8 @@
 pub mod packed;
 pub mod split;
 
-use arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 
 use self::packed::PackedVq;
 use self::split::SplitVq;
@@ -26,7 +27,6 @@ use self::error::{VirtqError, BufferError};
 use super::transport::pci::ComCfg;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
-
 use alloc::collections::VecDeque;
 use core::ops::{BitAnd, Deref, DerefMut};
 use core::cell::RefCell;
@@ -116,13 +116,13 @@ impl Virtq {
     ///
     /// Structures provided to the Queue must pass this test, otherwise the queue
     /// currently panics.
-    pub fn check_bounds<T: AsSliceU8>(data: T) -> bool {
+    pub fn check_bounds<T: AsSliceU8>(data: Box<T>) -> bool {
         let slice = data.as_slice_u8();
 
         let start_virt = (&slice[0] as *const u8) as usize;
         let end_virt = (&slice[slice.len()-1] as *const u8) as usize ; 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         end_phy == end_phy_calc
     }
@@ -130,6 +130,8 @@ impl Virtq {
     /// Allows to check, if a given slice crosses a physical page boundary.
     /// Returns true, if the slice does NOT cross a bounadary or crosses only
     /// contigous physical page boundaries. 
+    /// Slice MUST come from a boxed value. Otherwise the slice might be moved and 
+    /// the test of this function is not longer valid.
     ///
     /// This check is especially usefull if one wants to check if slices
     /// into which the queue will destructure a structure are valid for the queue.
@@ -139,8 +141,8 @@ impl Virtq {
     pub fn check_bounds_slice(slice: &[u8]) -> bool {
         let start_virt = (&slice[0] as *const u8) as usize;
         let end_virt = (&slice[slice.len()-1] as *const u8) as usize ; 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         end_phy == end_phy_calc
     }
@@ -1375,8 +1377,8 @@ impl MemPool {
         // Assert descriptor does not cross a page barrier
         let start_virt = (&slice[0] as *const u8) as usize;
         let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         assert_eq!(end_phy, end_phy_calc);
        
@@ -1420,8 +1422,8 @@ impl MemPool {
         // Assert descriptor does not cross a page barrier
         let start_virt = (&slice[0] as *const u8) as usize;
         let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         assert_eq!(end_phy, end_phy_calc);
 
@@ -1459,8 +1461,8 @@ impl MemPool {
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
         let end_virt = start_virt + (len -1); 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (len - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (len - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         assert_eq!(end_phy, end_phy_calc);
 
@@ -1491,8 +1493,8 @@ impl MemPool {
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
         let end_virt = start_virt + (len -1); 
-        let end_phy_calc = paging::virt_to_phys(start_virt) + (len - 1);
-        let end_phy = paging::virt_to_phys(end_virt);
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (len - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         assert_eq!(end_phy, end_phy_calc);
 

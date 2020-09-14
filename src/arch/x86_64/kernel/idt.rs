@@ -8,12 +8,12 @@
 
 #![allow(dead_code)]
 
-use arch::x86_64::kernel::gdt;
+use crate::arch::x86_64::kernel::gdt;
+use crate::x86::bits64::paging::VAddr;
+use crate::x86::dtables::{self, DescriptorTablePointer};
+use crate::x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
+use crate::x86::Ring;
 use core::sync::atomic::{AtomicBool, Ordering};
-use x86::bits64::paging::VAddr;
-use x86::dtables::{self, DescriptorTablePointer};
-use x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
-use x86::Ring;
 
 /// An interrupt gate descriptor.
 ///
@@ -84,7 +84,7 @@ impl IdtEntry {
 			base_lo: ((handler.as_usize() as u64) & 0xFFFF) as u16,
 			base_hi: handler.as_usize() as u64 >> 16,
 			selector: gdt_code_selector,
-			ist_index: ist_index,
+			ist_index,
 			flags: dpl as u8 | ty.pack() | (1 << 7),
 			reserved1: 0,
 		}

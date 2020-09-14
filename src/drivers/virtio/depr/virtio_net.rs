@@ -7,45 +7,47 @@
 
 #![allow(unused)]
 
-use arch::x86_64::kernel::pci;
-use drivers::virtio::depr::virtio::{
+use crate::arch::x86_64::kernel::pci;
+use crate::drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use arch::x86_64::mm::{paging, virtualmem};
-use drivers::net::netwakeup;
-use synch::spinlock::SpinlockIrqSave;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
+#[cfg(not(feature = "newlib"))]
+use crate::drivers::net::netwakeup;
+use crate::synch::spinlock::SpinlockIrqSave;
 
+use crate::x86::io::*;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
-use x86::io::*;
 
-const VIRTIO_NET_F_CSUM: u32 = 0;
-const VIRTIO_NET_F_GUEST_CSUM: u32 = 1;
-const VIRTIO_NET_F_CTRL_GUEST_OFFLOADS: u32 = 2;
-const VIRTIO_NET_F_MTU: u32 = 3;
-const VIRTIO_NET_F_MAC: u32 = 5;
-const VIRTIO_NET_F_GUEST_TSO4: u32 = 7;
-const VIRTIO_NET_F_GUEST_TSO6: u32 = 8;
-const VIRTIO_NET_F_GUEST_ECN: u32 = 9;
-const VIRTIO_NET_F_GUEST_UFO: u32 = 10;
-const VIRTIO_NET_F_HOST_TSO4: u32 = 11;
-const VIRTIO_NET_F_HOST_TSO6: u32 = 12;
-const VIRTIO_NET_F_HOST_ECN: u32 = 13;
-const VIRTIO_NET_F_HOST_UFO: u32 = 14;
-const VIRTIO_NET_F_MRG_RXBUF: u32 = 15;
-const VIRTIO_NET_F_STATUS: u32 = 16;
-const VIRTIO_NET_F_CTRL_VQ: u32 = 17;
-const VIRTIO_NET_F_CTRL_RX: u32 = 18;
-const VIRTIO_NET_F_CTRL_VLAN: u32 = 19;
-const VIRTIO_NET_F_CTRL_RX_EXTRA: u32 = 20;
-const VIRTIO_NET_F_GUEST_ANNOUNCE: u32 = 21;
-const VIRTIO_NET_F_MQ: u32 = 22;
-const VIRTIO_NET_F_CTRL_MAC_ADDR: u32 = 23;
+const VIRTIO_NET_F_CSUM: u64 = 0;
+const VIRTIO_NET_F_GUEST_CSUM: u64 = 1;
+const VIRTIO_NET_F_CTRL_GUEST_OFFLOADS: u64 = 2;
+const VIRTIO_NET_F_MTU: u64 = 3;
+const VIRTIO_NET_F_MAC: u64 = 5;
+const VIRTIO_NET_F_GUEST_TSO4: u64 = 7;
+const VIRTIO_NET_F_GUEST_TSO6: u64 = 8;
+const VIRTIO_NET_F_GUEST_ECN: u64 = 9;
+const VIRTIO_NET_F_GUEST_UFO: u64 = 10;
+const VIRTIO_NET_F_HOST_TSO4: u64 = 11;
+const VIRTIO_NET_F_HOST_TSO6: u64 = 12;
+const VIRTIO_NET_F_HOST_ECN: u64 = 13;
+const VIRTIO_NET_F_HOST_UFO: u64 = 14;
+const VIRTIO_NET_F_MRG_RXBUF: u64 = 15;
+const VIRTIO_NET_F_STATUS: u64 = 16;
+const VIRTIO_NET_F_CTRL_VQ: u64 = 17;
+const VIRTIO_NET_F_CTRL_RX: u64 = 18;
+const VIRTIO_NET_F_CTRL_VLAN: u64 = 19;
+const VIRTIO_NET_F_CTRL_RX_EXTRA: u64 = 20;
+const VIRTIO_NET_F_GUEST_ANNOUNCE: u64 = 21;
+const VIRTIO_NET_F_MQ: u64 = 22;
+const VIRTIO_NET_F_CTRL_MAC_ADDR: u64 = 23;
+const VIRTIO_NET_F_RSC_EXT: u64 = 61;
 const VIRTIO_NET_F_GSO: u32 = 6;
 const VIRTIO_NET_S_LINK_UP: u16 = 1;
 const VIRTIO_NET_S_ANNOUNCE: u16 = 2;
@@ -79,6 +81,8 @@ const VIRTIO_NET_CTRL_GUEST_OFFLOADS_SET: u32 = 0;*/
 const VIRTIO_NET_HDR_F_NEEDS_CSUM: u8 = 1;
 /// csum is valid
 const VIRTIO_NET_HDR_F_DATA_VALID: u8 = 2;
+// reports number of coalesced TCP segments
+const VIRTIO_NET_HDR_F_RSC_INFO: u8 = 4;
 
 /// not a GSO frame
 const VIRTIO_NET_HDR_GSO_NONE: u8 = 0;
@@ -90,6 +94,11 @@ const VIRTIO_NET_HDR_GSO_UDP: u8 = 3;
 const VIRTIO_NET_HDR_GSO_TCPV6: u8 = 4;
 /// TCP has ECN set
 const VIRTIO_NET_HDR_GSO_ECN: u8 = 0x80;
+
+/// Number of the RX Queue
+const VIRTIO_NET_RX_QUEUE: usize = 0;
+/// Number of the TX Queue
+const VIRTIO_NET_TX_QUEUE: usize = 1;
 
 #[repr(C)]
 struct virtio_net_config {
@@ -170,32 +179,29 @@ impl virtio_net_hdr {
 
 #[derive(Debug)]
 struct RxBuffer {
-	pub addr: usize,
+	pub addr: VirtAddr,
 	pub len: usize,
 }
 
 impl RxBuffer {
 	pub fn new(len: usize) -> Self {
 		let sz = align_up!(len, BasePageSize::SIZE);
-		let addr = ::mm::allocate(sz, true);
+		let addr = crate::mm::allocate(sz, true);
 
-		Self {
-			addr: addr,
-			len: sz,
-		}
+		Self { addr, len: sz }
 	}
 }
 
 impl Drop for RxBuffer {
 	fn drop(&mut self) {
 		// free buffer
-		::mm::deallocate(self.addr, self.len);
+		crate::mm::deallocate(self.addr, self.len);
 	}
 }
 
 #[derive(Debug)]
 struct TxBuffer {
-	pub addr: usize,
+	pub addr: VirtAddr,
 	pub len: usize,
 	pub in_use: bool,
 }
@@ -203,10 +209,10 @@ struct TxBuffer {
 impl TxBuffer {
 	pub fn new(len: usize) -> Self {
 		let sz = align_up!(len + mem::size_of::<virtio_net_hdr>(), BasePageSize::SIZE);
-		let addr = ::mm::allocate(sz, true);
+		let addr = crate::mm::allocate(sz, true);
 
 		Self {
-			addr: addr,
+			addr,
 			len: sz,
 			in_use: false,
 		}
@@ -216,7 +222,7 @@ impl TxBuffer {
 impl Drop for TxBuffer {
 	fn drop(&mut self) {
 		// free buffer
-		::mm::deallocate(self.addr, self.len);
+		crate::mm::deallocate(self.addr, self.len);
 	}
 }
 
@@ -270,7 +276,7 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = RxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[0].add_buffer(i, addr.try_into().unwrap(), buffer_size, VIRTQ_DESC_F_WRITE);
+				vqueues[VIRTIO_NET_RX_QUEUE].add_buffer(i, addr, buffer_size, VIRTQ_DESC_F_WRITE);
 				vec_buffer.push(buffer);
 			}
 		}
@@ -281,7 +287,7 @@ impl<'a> VirtioNetDriver<'a> {
 			for i in 0..vqsize {
 				let buffer = TxBuffer::new(buffer_size);
 				let addr = buffer.addr;
-				vqueues[1].add_buffer(i, addr.try_into().unwrap(), buffer_size, 0);
+				vqueues[VIRTIO_NET_TX_QUEUE].add_buffer(i, addr, buffer_size, VIRTQ_DESC_F_DEFAULT);
 				vec_buffer.push(buffer);
 			}
 		}
@@ -297,18 +303,27 @@ impl<'a> VirtioNetDriver<'a> {
 		common_cfg.device_feature_select = 1;
 		device_features |= (common_cfg.device_feature as u64) << 32;
 
-		let required: u64 = ((1 << VIRTIO_NET_F_MAC)
+		let required: u64 = (1 << VIRTIO_NET_F_MAC)
 			| (1 << VIRTIO_NET_F_STATUS)
 			| (1 << VIRTIO_NET_F_GUEST_UFO)
 			| (1 << VIRTIO_NET_F_GUEST_TSO4)
 			| (1 << VIRTIO_NET_F_GUEST_TSO6)
-			| (1 << VIRTIO_NET_F_GUEST_CSUM)/*| VIRTIO_F_RING_EVENT_IDX*/) as u64;
+			| (1 << VIRTIO_NET_F_GUEST_CSUM)
+			/*| (1 << VIRTIO_NET_F_RSC_EXT) | VIRTIO_F_RING_EVENT_IDX*/;
 
 		if device_features & required == required {
 			common_cfg.driver_feature_select = 1;
 			common_cfg.driver_feature |= required as u32;
+			info!(
+				"Virtio features: device 0x{:x} vs required 0x{:x}",
+				device_features, required
+			);
 		} else {
 			error!("Device doesn't offer required feature to support Virtio-Net");
+			error!(
+				"Virtio features: 0x{:x} vs 0x{:x}",
+				device_features, required
+			);
 		}
 	}
 
@@ -357,17 +372,18 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn handle_interrupt(&mut self) -> bool {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			//self.check_used_elements();
+			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
+			netwakeup();
 
-			if self.has_packet() {
-				// handle incoming packets
-				netwakeup();
-
-				return true;
-			}
+			return true;
 		}
 
 		false
+	}
+
+	pub fn set_polling_mode(&mut self, value: bool) {
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_RX_QUEUE].set_polling_mode(value);
 	}
 
 	pub fn get_mac_address(&self) -> [u8; 6] {
@@ -382,24 +398,24 @@ impl<'a> VirtioNetDriver<'a> {
 		let mut buffers = &mut self.tx_buffers;
 
 		// do we have free buffers?
-		if buffers.iter().position(|b| b.in_use == false).is_none() {
+		if buffers.iter().position(|b| !b.in_use).is_none() {
 			// if not, check if we are able to free used elements
 			self.check_used_elements();
 		}
 
-		let index = (self.vqueues.as_ref().unwrap())[1].get_available_buffer()?;
+		let index = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_TX_QUEUE].get_available_buffer()?;
 		let index = index as usize;
 
 		let mut buffers = &mut self.tx_buffers;
-		if buffers[index].in_use == false {
+		if !buffers[index].in_use {
 			buffers[index].in_use = true;
-			let header = buffers[index].addr as *mut virtio_net_hdr;
+			let header = buffers[index].addr.as_mut_ptr::<virtio_net_hdr>();
 			unsafe {
 				(*header).init(len);
 			}
 
 			Ok((
-				(buffers[index].addr + mem::size_of::<virtio_net_hdr>()) as *mut u8,
+				(buffers[index].addr + mem::size_of::<virtio_net_hdr>()).as_mut_ptr::<u8>(),
 				index,
 			))
 		} else {
@@ -409,21 +425,21 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
-		(self.vqueues.as_deref_mut().unwrap())[1]
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_TX_QUEUE]
 			.send_non_blocking(index, len + mem::size_of::<virtio_net_hdr>())
 	}
 
 	pub fn has_packet(&self) -> bool {
-		(self.vqueues.as_ref().unwrap())[0].has_packet()
+		(self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].has_packet()
 	}
 
 	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
-		let (idx, len) = (self.vqueues.as_ref().unwrap())[0].get_used_buffer()?;
+		let (idx, len) = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].get_used_buffer()?;
 		let addr = self.rx_buffers[idx as usize].addr;
-		let virtio_net_hdr = unsafe { &*(addr as *const virtio_net_hdr) };
+		let virtio_net_hdr = unsafe { &*(addr.as_ptr::<virtio_net_hdr>()) };
 		let rx_buffer_slice = unsafe {
 			slice::from_raw_parts(
-				(addr + mem::size_of::<virtio_net_hdr>()) as *const u8,
+				(addr + mem::size_of::<virtio_net_hdr>()).as_ptr::<u8>(),
 				len as usize,
 			)
 		};
@@ -432,13 +448,11 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn rx_buffer_consumed(&mut self) {
-		(self.vqueues.as_deref_mut().unwrap())[0].buffer_consumed();
+		(self.vqueues.as_deref_mut().unwrap())[VIRTIO_NET_RX_QUEUE].buffer_consumed();
 	}
 }
 
-pub fn create_virtionet_driver(
-	adapter: &pci::PciAdapter,
-) -> Option<Rc<RefCell<VirtioNetDriver<'static>>>> {
+pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDriver<'static>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -459,7 +473,7 @@ pub fn create_virtionet_driver(
 	let common_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
 			Some((cap_common_raw, _)) => unsafe {
-				&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
+				&mut *(cap_common_raw.as_mut_ptr::<virtio_pci_common_cfg>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
@@ -470,7 +484,7 @@ pub fn create_virtionet_driver(
 	let device_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
 			Some((cap_device_raw, _)) => unsafe {
-				&mut *(cap_device_raw as *mut virtio_net_config)
+				&mut *(cap_device_raw.as_mut_ptr::<virtio_net_config>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
@@ -479,7 +493,7 @@ pub fn create_virtionet_driver(
 		};
 	let isr_cfg = match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_ISR_CFG)
 	{
-		Some((cap_isr_raw, _)) => unsafe { &mut *(cap_isr_raw as *mut u32) },
+		Some((cap_isr_raw, _)) => unsafe { &mut *(cap_isr_raw.as_mut_ptr::<u32>()) },
 		None => {
 			error!("Could not find VIRTIO_PCI_CAP_ISR_CFG. Aborting!");
 			return None;
@@ -490,7 +504,7 @@ pub fn create_virtionet_driver(
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
 			Some((cap_notification_raw, notify_off_multiplier)) => {
 				(
-					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
+					cap_notification_raw.as_mut_ptr::<u16>(), // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
 					notify_off_multiplier,
 				)
 			}
@@ -507,7 +521,7 @@ pub fn create_virtionet_driver(
 	// TODO: also load the other cap types (?).
 
 	// Instanciate driver on heap, so it outlives this function
-	let drv = Rc::new(RefCell::new(VirtioNetDriver {
+	let mut drv = VirtioNetDriver {
 		tx_buffers: Vec::new(),
 		rx_buffers: Vec::new(),
 		common_cfg,
@@ -515,10 +529,10 @@ pub fn create_virtionet_driver(
 		isr_cfg,
 		notify_cfg,
 		vqueues: None,
-	}));
+	};
 
 	trace!("Driver before init: {:?}", drv);
-	drv.borrow_mut().init();
+	drv.init();
 	trace!("Driver after init: {:?}", drv);
 
 	if device_cfg.status & VIRTIO_NET_S_LINK_UP == VIRTIO_NET_S_LINK_UP {
@@ -526,10 +540,7 @@ pub fn create_virtionet_driver(
 	} else {
 		info!("Virtio-Net link is down");
 	}
-	info!(
-		"Virtio-Net status: 0x{:x}",
-		drv.borrow().common_cfg.device_status
-	);
+	info!("Virtio-Net status: 0x{:x}", drv.common_cfg.device_status);
 
 	Some(drv)
 }

@@ -1,26 +1,26 @@
+use core::isize;
+#[cfg(feature = "newlib")]
+use core::sync::atomic::AtomicUsize;
+use core::sync::atomic::{AtomicU32, Ordering};
+
 // Copyright (c) 2018 Colin Finck, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
-
-use arch;
-use arch::kernel::get_processor_count;
-use arch::percore::*;
-use config::USER_STACK_SIZE;
-use core::convert::TryInto;
-use core::isize;
+use crate::arch;
+use crate::arch::get_processor_count;
+use crate::arch::percore::*;
+use crate::arch::processor::{get_frequency, get_timestamp};
+use crate::config::USER_STACK_SIZE;
+use crate::errno::*;
 #[cfg(feature = "newlib")]
-use core::sync::atomic::AtomicUsize;
-use core::sync::atomic::{AtomicU32, Ordering};
-use errno::*;
-#[cfg(feature = "newlib")]
-use mm::{task_heap_end, task_heap_start};
-use scheduler;
-use scheduler::task::{Priority, TaskId};
-use syscalls;
-use syscalls::timer::timespec;
+use crate::mm::{task_heap_end, task_heap_start};
+use crate::scheduler;
+use crate::scheduler::task::{Priority, TaskId};
+use crate::syscalls;
+use crate::syscalls::timer::timespec;
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);
@@ -57,7 +57,7 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 
 fn __sys_exit(arg: i32) -> ! {
 	debug!("Exit program with error code {}!", arg);
-	syscalls::__sys_shutdown(arg);
+	syscalls::__sys_shutdown(arg)
 }
 
 #[no_mangle]
@@ -67,7 +67,7 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 
 fn __sys_thread_exit(arg: i32) -> ! {
 	debug!("Exit thread with error code {}!", arg);
-	core_scheduler().exit(arg);
+	core_scheduler().exit(arg)
 }
 
 #[no_mangle]
@@ -113,7 +113,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 }
 
 pub fn __sys_usleep(usecs: u64) {
-	if usecs > (scheduler::TASK_TIME_SLICE as u64) {
+	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
@@ -124,7 +124,10 @@ pub fn __sys_usleep(usecs: u64) {
 		core_scheduler.reschedule();
 	} else if usecs > 0 {
 		// Not enough time to set a wakeup timer, so just do busy-waiting.
-		arch::processor::udelay(usecs);
+		let end = arch::processor::get_timestamp() + u64::from(get_frequency()) * usecs;
+		while get_timestamp() < end {
+			__sys_yield();
+		}
 	}
 }
 
@@ -235,14 +238,8 @@ fn __sys_spawn2(
 		selector as u32
 	};
 
-	scheduler::PerCoreScheduler::spawn(
-		func,
-		arg,
-		Priority::from(prio),
-		core_id.try_into().unwrap(),
-		stack_size,
-	)
-	.into() as Tid
+	scheduler::PerCoreScheduler::spawn(func, arg, Priority::from(prio), core_id, stack_size).into()
+		as Tid
 }
 
 #[no_mangle]

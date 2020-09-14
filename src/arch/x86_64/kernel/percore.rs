@@ -5,15 +5,19 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::BOOT_INFO;
-use core::{intrinsics, ptr};
-use scheduler::{CoreId, PerCoreScheduler};
-use x86::bits64::task::TaskStateSegment;
-use x86::msr::*;
+use crate::arch::x86_64::kernel::irq::IrqStatistics;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::collections::CachePadded;
+use crate::scheduler::{CoreId, PerCoreScheduler};
+use crate::x86::bits64::task::TaskStateSegment;
+use crate::x86::msr::*;
+use core::ptr;
 
-pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
+pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
 
-pub struct PerCoreVariables {
+pub type PerCoreVariables = CachePadded<PerCoreInnerVariables>;
+
+pub struct PerCoreInnerVariables {
 	/// Sequential ID of this CPU Core.
 	core_id: PerCoreVariable<CoreId>,
 	/// Scheduler for this CPU Core.
@@ -22,15 +26,18 @@ pub struct PerCoreVariables {
 	pub tss: PerCoreVariable<*mut TaskStateSegment>,
 	/// start address of the kernel stack
 	pub kernel_stack: PerCoreVariable<u64>,
+	/// Interface to the interrupt counters
+	pub irq_statistics: PerCoreVariable<*mut IrqStatistics>,
 }
 
-impl PerCoreVariables {
+impl PerCoreInnerVariables {
 	pub const fn new(core_id: CoreId) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
 			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
 			kernel_stack: PerCoreVariable::new(0),
+			irq_statistics: PerCoreVariable::new(ptr::null_mut() as *mut IrqStatistics),
 		}
 	}
 }
@@ -46,7 +53,7 @@ pub trait PerCoreVariableMethods<T> {
 }
 
 impl<T> PerCoreVariable<T> {
-	const fn new(value: T) -> Self {
+	pub const fn new(value: T) -> Self {
 		Self { data: value }
 	}
 
@@ -60,7 +67,7 @@ impl<T> PerCoreVariable<T> {
 
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
 // Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
-// The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
+// The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
 impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
 	default unsafe fn get(&self) -> T {
@@ -95,13 +102,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[inline]
 pub fn core_id() -> CoreId {
 	unsafe { PERCORE.core_id.get() }
 }
 
-#[cfg(test)]
+#[cfg(not(target_os = "hermit"))]
 pub fn core_id() -> CoreId {
 	0
 }
@@ -128,10 +135,18 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	}
 }
 
+#[inline]
+pub fn increment_irq_counter(irq_no: usize) {
+	unsafe {
+		let irq = &mut *PERCORE.irq_statistics.get();
+		irq.inc(irq_no);
+	}
+}
+
 pub fn init() {
 	unsafe {
 		// Store the address to the PerCoreVariables structure allocated for this core in GS.
-		let address = intrinsics::volatile_load(&(*BOOT_INFO).current_percore_address);
+		let address = core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address);
 		if address == 0 {
 			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
 		} else {

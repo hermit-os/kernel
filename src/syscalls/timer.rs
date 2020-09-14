@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch;
-use errno::*;
-use syscalls::__sys_usleep;
+use crate::arch;
+use crate::errno::*;
+use crate::syscalls::__sys_usleep;
 
 #[derive(Copy, Clone, Debug)]
 #[repr(C)]

@@ -5,11 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::aarch64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
-use mm::{MM_LOCK, POOL};
+use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
+use crate::collections::Node;
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::mm::{MM_LOCK, POOL};
 
 static mut KERNEL_FREE_LIST: FreeList = FreeList::new();
 
@@ -34,8 +34,9 @@ pub fn init() {
 
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -62,15 +63,17 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
@@ -94,15 +97,17 @@ pub fn reserve(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < KERNEL_VIRTUAL_MEMORY_END",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE

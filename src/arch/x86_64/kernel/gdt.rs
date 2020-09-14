@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::config::*;
+use crate::x86::bits64::segmentation::*;
+use crate::x86::bits64::task::*;
+use crate::x86::dtables::{self, DescriptorTablePointer};
+use crate::x86::segmentation::*;
+use crate::x86::task::*;
+use crate::x86::Ring;
 use alloc::boxed::Box;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::BOOT_INFO;
-use config::*;
-use core::{intrinsics, mem};
-use x86::bits64::segmentation::*;
-use x86::bits64::task::*;
-use x86::dtables::{self, DescriptorTablePointer};
-use x86::segmentation::*;
-use x86::task::*;
-use x86::Ring;
+use core::mem;
 
 pub const GDT_NULL: u16 = 0;
 pub const GDT_KERNEL_CODE: u16 = 1;
@@ -44,7 +44,7 @@ struct Gdt {
 pub fn init() {
 	unsafe {
 		// Dynamically allocate memory for the GDT.
-		GDT = ::mm::allocate(mem::size_of::<Gdt>(), false) as *mut Gdt;
+		GDT = crate::mm::allocate(mem::size_of::<Gdt>(), false).as_mut_ptr::<Gdt>();
 
 		// The NULL descriptor is always the first entry.
 		(*GDT).entries[GDT_NULL as usize] = Descriptor::NULL;
@@ -88,16 +88,16 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = unsafe { intrinsics::volatile_load(&(*BOOT_INFO).current_stack_address) }
+	boxed_tss.rsp[0] = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).current_stack_address) }
 		+ KERNEL_STACK_SIZE as u64
-		- 0x10;
+		- 0x10u64;
 	set_kernel_stack(boxed_tss.rsp[0] as u64);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
-		let ist = ::mm::allocate(KERNEL_STACK_SIZE, true);
-		boxed_tss.ist[i] = (ist + KERNEL_STACK_SIZE - 0x10) as u64;
+		let ist = crate::mm::allocate(KERNEL_STACK_SIZE, true);
+		boxed_tss.ist[i] = ist.as_u64() + KERNEL_STACK_SIZE as u64 - 0x10u64;
 	}
 
 	unsafe {
@@ -130,7 +130,8 @@ pub fn add_current_core() {
 	}
 }
 
+#[inline(never)]
 #[no_mangle]
-pub extern "C" fn set_current_kernel_stack() {
+pub fn set_current_kernel_stack() {
 	core_scheduler().set_current_kernel_stack();
 }

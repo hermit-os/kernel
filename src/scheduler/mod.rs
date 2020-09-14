@@ -6,32 +6,30 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-pub mod task;
-
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
-use arch;
-use arch::irq;
-use arch::percore::*;
-use arch::switch;
-use collections::AvoidInterrupts;
-use config::*;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
-use scheduler::task::*;
-use synch::spinlock::*;
 
-/// Time slice of a task in microseconds.
-/// When this time has elapsed and the scheduler is called, it may switch to another ready task.
-pub const TASK_TIME_SLICE: u64 = 10_000;
+use crate::arch;
+use crate::arch::irq;
+use crate::arch::mm::VirtAddr;
+use crate::arch::percore::*;
+use crate::arch::{switch_to_fpu_owner, switch_to_task};
+use crate::collections::irqsave;
+use crate::config::*;
+use crate::scheduler::task::*;
+use crate::synch::spinlock::*;
+
+pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Option<BTreeMap<CoreId, &PerCoreScheduler>> = None;
+static mut SCHEDULERS: BTreeMap<CoreId, &PerCoreScheduler> = BTreeMap::new();
 /// Map between Task ID and Task Control Block
-static TASKS: SpinlockIrqSave<Option<BTreeMap<TaskId, VecDeque<TaskHandle>>>> =
-	SpinlockIrqSave::new(None);
+static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
+	SpinlockIrqSave::new(BTreeMap::new());
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -62,14 +60,12 @@ pub struct PerCoreScheduler {
 	fpu_owner: Rc<RefCell<Task>>,
 	/// Queue of tasks, which are ready
 	ready_queue: PriorityTaskQueue,
-	/// Queues to handle incoming requests from the other cores
-	input: SpinlockIrqSave<SchedulerInput>,
 	/// Queue of tasks, which are finished and can be released
-	finished_tasks: VecDeque<TaskId>,
+	finished_tasks: VecDeque<Rc<RefCell<Task>>>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
-	/// Processor Timer Tick when we last switched the current task.
-	last_task_switch_tick: u64,
+	/// Queues to handle incoming requests from the other cores
+	input: SpinlockIrqSave<SchedulerInput>,
 }
 
 impl PerCoreScheduler {
@@ -95,18 +91,14 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS
-				.lock()
-				.as_mut()
-				.unwrap()
-				.insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(task.clone());
+				input_locked.new_tasks.push_back(task);
 				true
 			} else {
-				core_scheduler().ready_queue.push(task.clone());
+				core_scheduler().ready_queue.push(task);
 				false
 			}
 		};
@@ -125,13 +117,12 @@ impl PerCoreScheduler {
 
 	/// Terminate the current task on the current core.
 	pub fn exit(&mut self, exit_code: i32) -> ! {
-		{
-			let _ = AvoidInterrupts::new();
-
+		let closure = || {
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
-			assert!(
-				current_task_borrowed.status != TaskStatus::TaskIdle,
+			assert_ne!(
+				current_task_borrowed.status,
+				TaskStatus::TaskIdle,
 				"Trying to terminate the idle task"
 			);
 
@@ -142,7 +133,9 @@ impl PerCoreScheduler {
 			);
 			current_task_borrowed.status = TaskStatus::TaskFinished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
-		}
+		};
+
+		irqsave(closure);
 
 		self.scheduler();
 
@@ -150,9 +143,8 @@ impl PerCoreScheduler {
 		panic!("exit failed!")
 	}
 
-	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
-		let _ = AvoidInterrupts::new();
 
 		// Get the Core ID of the next CPU.
 		let core_id: CoreId = {
@@ -183,17 +175,13 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS
-				.lock()
-				.as_mut()
-				.unwrap()
-				.insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(clone_task.clone());
+				input_locked.new_tasks.push_back(clone_task);
 				true
 			} else {
-				core_scheduler().ready_queue.push(clone_task.clone());
+				core_scheduler().ready_queue.push(clone_task);
 				false
 			}
 		};
@@ -211,6 +199,10 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
+		irqsave(|| self.clone_impl(func, arg))
+	}
+
 	/// Returns `true` if a reschedule is required
 	#[inline]
 	pub fn is_scheduling(&self) -> bool {
@@ -219,14 +211,12 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
-		let _ = AvoidInterrupts::new();
-		self.blocked_tasks.handle_waiting_tasks();
+		irqsave(|| self.blocked_tasks.handle_waiting_tasks());
 	}
 
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
-			let _ = AvoidInterrupts::new();
-			self.blocked_tasks.custom_wakeup(task);
+			irqsave(|| self.blocked_tasks.custom_wakeup(task));
 		} else {
 			get_scheduler(task.get_core_id())
 				.input
@@ -240,69 +230,71 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
-		let _ = AvoidInterrupts::new();
-		self.blocked_tasks
-			.add(self.current_task.clone(), wakeup_time);
+		irqsave(|| {
+			self.blocked_tasks
+				.add(self.current_task.clone(), wakeup_time)
+		});
 	}
 
 	#[inline]
 	pub fn get_current_task_handle(&self) -> TaskHandle {
-		let _ = AvoidInterrupts::new();
-		let current_task_borrowed = self.current_task.borrow();
+		irqsave(|| {
+			let current_task_borrowed = self.current_task.borrow();
 
-		TaskHandle::new(
-			current_task_borrowed.id,
-			current_task_borrowed.prio,
-			current_task_borrowed.core_id,
-		)
+			TaskHandle::new(
+				current_task_borrowed.id,
+				current_task_borrowed.prio,
+				current_task_borrowed.core_id,
+			)
+		})
 	}
 
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn set_lwip_errno(&self, errno: i32) {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow_mut().lwip_errno = errno;
+		irqsave(|| self.current_task.borrow_mut().lwip_errno = errno);
 	}
 
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn get_lwip_errno(&self) -> i32 {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow().lwip_errno
+		irqsave(|| self.current_task.borrow().lwip_errno);
 	}
 
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow().id
+		irqsave(|| self.current_task.borrow().id)
+	}
+
+	#[inline]
+	pub fn get_current_task_prio(&self) -> Priority {
+		irqsave(|| self.current_task.borrow().prio)
 	}
 
 	#[inline]
 	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow_mut().last_wakeup_reason
+		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason)
 	}
 
 	#[inline]
 	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
-		let _ = AvoidInterrupts::new();
-		self.current_task.borrow_mut().last_wakeup_reason = reason;
+		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason = reason);
 	}
 
 	#[inline]
-	pub fn get_current_user_stack(&self) -> usize {
+	pub fn get_current_user_stack(&self) -> VirtAddr {
 		self.current_task.borrow().user_stack_pointer
 	}
 
 	#[inline]
-	pub fn set_current_user_stack(&mut self, addr: usize) {
+	pub fn set_current_user_stack(&mut self, addr: VirtAddr) {
 		self.current_task.borrow_mut().user_stack_pointer = addr;
 	}
 
 	#[cfg(target_arch = "x86_64")]
 	#[inline]
-	pub fn get_current_kernel_stack(&self) -> usize {
-		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10
+	pub fn get_current_kernel_stack(&self) -> VirtAddr {
+		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10u64
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -312,11 +304,13 @@ impl PerCoreScheduler {
 
 		tss.rsp[0] = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
-			- 0x10) as u64;
+			- 0x10u64)
+			.as_u64();
 		set_kernel_stack(tss.rsp[0]);
 		tss.ist[0] = (current_task_borrowed.stacks.get_interupt_stack()
 			+ current_task_borrowed.stacks.get_interupt_stack_size()
-			- 0x10) as u64;
+			- 0x10u64)
+			.as_u64();
 	}
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
@@ -341,11 +335,12 @@ impl PerCoreScheduler {
 		let mut result = false;
 
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
-		while let Some(id) = self.finished_tasks.pop_front() {
-			debug!("Cleaning up task {}", id);
+		while let Some(finished_task) = self.finished_tasks.pop_front() {
+			let borrowed = finished_task.borrow();
+			debug!("Cleaning up task {}", borrowed.id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			match TASKS.lock().as_mut().unwrap().remove(&id) {
+			match TASKS.lock().remove(&borrowed.id) {
 				Some(mut queue) => {
 					while let Some(task) = queue.pop_front() {
 						result = true;
@@ -380,7 +375,7 @@ impl PerCoreScheduler {
 	}
 
 	/// Only the idle task should call this function to
-	/// reschdule the system. Set the idle task in halt
+	/// reschedule the system. Set the idle task in halt
 	/// state by leaving this function.
 	pub fn reschedule_and_wait(&mut self) {
 		irq::disable();
@@ -410,7 +405,7 @@ impl PerCoreScheduler {
 			let mut borrowed = self.current_task.borrow_mut();
 			(
 				borrowed.id,
-				&mut borrowed.last_stack_pointer as *mut usize,
+				&mut borrowed.last_stack_pointer as *mut _ as *mut usize,
 				borrowed.prio,
 				borrowed.status,
 			)
@@ -420,31 +415,15 @@ impl PerCoreScheduler {
 
 		if status == TaskStatus::TaskRunning {
 			// A task is currently running.
-			// Check if a task with a higher priority is available.
-			let higher_prio = Priority::from(prio.into() + 1);
-			if let Some(task) = self.ready_queue.pop_with_prio(higher_prio) {
-				// This higher priority task becomes the new task.
-				debug!("Task with a higher priority is available.");
+			// Check if a task with a equal or higher priority is available.
+			if let Some(task) = self.ready_queue.pop_with_prio(prio) {
 				new_task = Some(task);
-			} else {
-				// No task with a higher priority is available, but a task with the same priority as ours may be available.
-				// We implement Round-Robin Scheduling for this case.
-				// Check if our current task has been running for at least the task time slice.
-				if arch::processor::get_timer_ticks() > self.last_task_switch_tick + TASK_TIME_SLICE
-				{
-					// Check if a task with our own priority is available.
-					if let Some(task) = self.ready_queue.pop_with_prio(prio) {
-						// This task becomes the new task.
-						debug!("Time slice expired for current task.");
-						new_task = Some(task);
-					}
-				}
 			}
 		} else {
 			if status == TaskStatus::TaskFinished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
 				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
-				self.finished_tasks.push_back(id);
+				self.finished_tasks.push_back(self.current_task.clone());
 			}
 
 			// No task is currently running.
@@ -471,14 +450,18 @@ impl PerCoreScheduler {
 			}
 
 			// Handle the new task and get information about it.
-			let (new_id, new_stack_pointer) = {
+			let (new_id, new_stack_pointer, is_idle) = {
 				let mut borrowed = task.borrow_mut();
 				if borrowed.status != TaskStatus::TaskIdle {
 					// Mark the new task as running.
 					borrowed.status = TaskStatus::TaskRunning;
 				}
 
-				(borrowed.id, borrowed.last_stack_pointer)
+				(
+					borrowed.id,
+					borrowed.last_stack_pointer,
+					borrowed.status == TaskStatus::TaskIdle,
+				)
 			};
 
 			if id != new_id {
@@ -491,10 +474,17 @@ impl PerCoreScheduler {
 					new_stack_pointer
 				);
 				self.current_task = task;
-				self.last_task_switch_tick = arch::processor::get_timer_ticks();
 
 				// Finally save our current context and restore the context of the new task.
-				switch(last_stack_pointer, new_stack_pointer);
+				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+					unsafe {
+						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				} else {
+					unsafe {
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				}
 			}
 		}
 	}
@@ -502,21 +492,14 @@ impl PerCoreScheduler {
 
 fn get_tid() -> TaskId {
 	static TID_COUNTER: AtomicU32 = AtomicU32::new(0);
-	let mut guard = TASKS.lock();
+	let guard = TASKS.lock();
 
 	loop {
 		let id = TaskId::from(TID_COUNTER.fetch_add(1, Ordering::SeqCst));
-		if !guard.as_mut().unwrap().contains_key(&id) {
+		if !guard.contains_key(&id) {
 			return id;
 		}
 	}
-}
-
-pub fn init() {
-	unsafe {
-		SCHEDULERS = Some(BTreeMap::new());
-	}
-	*TASKS.lock() = Some(BTreeMap::new());
 }
 
 #[inline]
@@ -532,39 +515,34 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS
-		.lock()
-		.as_mut()
-		.unwrap()
-		.insert(tid, VecDeque::with_capacity(1));
+	TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
 		core_id, tid
 	);
 	let boxed_scheduler = Box::new(PerCoreScheduler {
-		core_id: core_id,
+		core_id,
 		current_task: idle_task.clone(),
 		idle_task: idle_task.clone(),
 		fpu_owner: idle_task,
 		ready_queue: PriorityTaskQueue::new(),
-		input: SpinlockIrqSave::new(SchedulerInput::new()),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
-		last_task_switch_tick: 0,
+		input: SpinlockIrqSave::new(SchedulerInput::new()),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe {
-		SCHEDULERS.as_mut().unwrap().insert(core_id, &(*scheduler));
+		SCHEDULERS.insert(core_id, &(*scheduler));
 	}
 }
 
 #[inline]
 fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	if let Some(result) = unsafe { SCHEDULERS.as_ref().unwrap().get(&core_id) } {
+	if let Some(result) = unsafe { SCHEDULERS.get(&core_id) } {
 		result
 	} else {
 		panic!(
@@ -585,7 +563,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 
 	{
 		let mut guard = TASKS.lock();
-		match guard.as_mut().unwrap().get_mut(&id) {
+		match guard.get_mut(&id) {
 			Some(queue) => {
 				queue.push_back(core_scheduler.get_current_task_handle());
 				core_scheduler.block_current_task(None);

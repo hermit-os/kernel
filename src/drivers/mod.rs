@@ -18,14 +18,14 @@ pub mod net;
 
 pub mod virtio;
 
-use drivers::error::DriverError;
+use crate::drivers::error::DriverError;
 pub type Result<T> = core::result::Result<T, DriverError>;
 
 /// A common error module for drivers.
 /// [DriverError](enums.drivererror.html) values will be
 /// passed on to higher layers.
 pub mod error {
-    use drivers::virtio::error::VirtioError;
+    use crate::drivers::virtio::error::VirtioError;
     use core::fmt;
     #[derive(Debug)]
     pub enum DriverError {

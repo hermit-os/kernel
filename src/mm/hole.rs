@@ -27,7 +27,7 @@ impl HoleList {
 	/// creates a hole at the given `hole_addr`. This can cause undefined behavior if this address
 	/// is invalid or if memory from the `[hole_addr, hole_addr+size) range is used somewhere else.
 	pub unsafe fn new(hole_addr: usize, hole_size: usize) -> HoleList {
-		assert!(size_of::<Hole>() == Self::min_size());
+		assert_eq!(size_of::<Hole>(), Self::min_size());
 
 		let ptr = hole_addr as *mut Hole;
 		ptr.write(Hole::new(hole_size, None));
@@ -88,7 +88,7 @@ impl HoleList {
 }
 
 /// A block containing free memory. It points to the next hole and thus forms a linked list.
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub struct Hole {
 	size: usize,
 	next: Option<&'static mut Hole>,
@@ -96,7 +96,7 @@ pub struct Hole {
 	padding: [usize; 6],
 }
 
-#[cfg(test)]
+#[cfg(not(target_os = "hermit"))]
 pub struct Hole {
 	pub size: usize,
 	pub next: Option<&'static mut Hole>,

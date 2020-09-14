@@ -15,58 +15,69 @@ pub mod x86_64;
 
 // Export our platform-specific modules.
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::*;
+pub use crate::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::stubs::{set_oneshot_timer, switch, wakeup_core};
+pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, switch, wakeup_core};
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::{
+pub use crate::arch::aarch64::kernel::{
 	application_processor_init, boot_application_processors, boot_processor_init,
 	get_processor_count, message_output_init, output_message_byte,
 };
 
 #[cfg(target_arch = "aarch64")]
-use arch::aarch64::kernel::percore::core_scheduler;
+use crate::arch::aarch64::kernel::percore::core_scheduler;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::percore;
+pub use crate::arch::aarch64::kernel::percore;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::scheduler;
+pub use crate::arch::aarch64::kernel::scheduler;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::processor;
+pub use crate::arch::aarch64::kernel::processor;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::irq;
+pub use crate::arch::aarch64::kernel::irq;
 
 #[cfg(target_arch = "aarch64")]
-pub use arch::aarch64::kernel::systemtime::get_boot_time;
+pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::*;
+pub use crate::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::apic::{set_oneshot_timer, wakeup_core};
+pub use crate::arch::x86_64::kernel::apic::{set_oneshot_timer, wakeup_core};
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::gdt::set_current_kernel_stack;
+pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::irq;
+pub use crate::arch::x86_64::kernel::irq;
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::percore;
+pub use crate::arch::x86_64::kernel::percore;
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::processor;
+pub use crate::arch::x86_64::kernel::processor;
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::scheduler;
+pub use crate::arch::x86_64::kernel::scheduler;
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::switch::switch;
+pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
+#[cfg(target_os = "hermit")]
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::systemtime::get_boot_time;
-#[cfg(not(test))]
-#[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::{
+pub use crate::arch::x86_64::kernel::{
 	application_processor_init, boot_application_processors, boot_processor_init,
 };
 #[cfg(target_arch = "x86_64")]
-pub use arch::x86_64::kernel::{get_processor_count, message_output_init, output_message_byte};
+pub use crate::arch::x86_64::kernel::{
+	get_processor_count, message_output_init, output_message_buf, output_message_byte,
+};
+
+#[cfg(test)]
+pub fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {}
+#[cfg(test)]
+pub fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {}
+
+#[cfg(not(test))]
+extern "C" {
+	pub fn switch_to_task(old_stack: *mut usize, new_stack: usize);
+	pub fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize);
+}

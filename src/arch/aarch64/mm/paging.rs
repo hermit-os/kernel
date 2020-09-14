@@ -5,14 +5,15 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::aarch64::kernel::percore::*;
-use arch::aarch64::kernel::processor;
-use arch::aarch64::mm::physicalmem;
-use arch::aarch64::mm::virtualmem;
 use core::marker::PhantomData;
 use core::{fmt, ptr, usize};
-use mm;
-use scheduler;
+
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::processor;
+use crate::arch::aarch64::mm::physicalmem;
+use crate::arch::aarch64::mm::virtualmem;
+use crate::mm;
+use crate::scheduler;
 
 extern "C" {
 	#[linkage = "extern_weak"]
@@ -135,8 +136,9 @@ impl PageTableEntry {
 	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT, INNER_SHAREABLE, and ACCESSED flags are set automatically)
 	fn set(&mut self, physical_address: usize, flags: PageTableEntryFlags) {
 		// Verify that the offset bits for a 4 KiB page are zero.
-		assert!(
-			physical_address % BasePageSize::SIZE == 0,
+		assert_eq!(
+			physical_address % BasePageSize::SIZE,
+			0,
 			"Physical address is not on a 4 KiB page boundary (physical_address = {:#X})",
 			physical_address
 		);
@@ -371,7 +373,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		physical_address: usize,
 		flags: PageTableEntryFlags,
 	) {
-		assert!(L::LEVEL == S::MAP_LEVEL);
+		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
@@ -387,7 +389,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	/// This is the default implementation called only for L3Table.
 	/// It is overridden by a specialized implementation for all tables with sub tables (all except L3Table).
 	default fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
-		assert!(L::LEVEL == S::MAP_LEVEL);
+		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
 		if self.entries[index].is_present() {
