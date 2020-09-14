@@ -1166,7 +1166,8 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
 /// Checks existing drivers for support of given device. Upon match, provides
 /// driver with a [Caplist](struct.Caplist.html) struct, holding the structures of the capabilities
 /// list of the given device.
-pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
+pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
+
     match DevId::from(adapter.device_id) {
         DevId::VIRTIO_TRANS_DEV_ID_NET | 
         DevId::VIRTIO_TRANS_DEV_ID_BLK | 
@@ -1189,7 +1190,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
                     info!(
                         "Virtio network driver initalized with Virtio network device."
                     );
-                    return Ok(PciDriver::VirtioNetNew(virt_net_drv))
+                    return Ok(VirtioDriver::Network(virt_net_drv))
                 },
                 Err(virtio_error) => {
                     error!(
@@ -1219,6 +1220,9 @@ pub fn init_device(adapter: &PciAdapter) -> Result<PciDriver, DriverError> {
     }
 }
 
+pub enum VirtioDriver {
+    Network(VirtioNetDriver),
+}
 /// The module contains constants specific to PCI.
 pub mod constants {
     // PCI constants
