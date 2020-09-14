@@ -69,7 +69,7 @@ jobs:
       # Note: The add-path must be kept in sync with the version of binutils installed by homebrew
       - name: Install qemu/nasm/binutils (macos)
         run: |
-          brew update && brew install qemu nasm binutils
+          brew install qemu nasm binutils
           echo "::add-path::/usr/local/Cellar/binutils/2.34/bin/"
         if: ${{ matrix.os == 'macOS-latest' }}
       - name: Install qemu/nasm (windows)
