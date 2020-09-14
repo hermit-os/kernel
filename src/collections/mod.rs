@@ -5,24 +5,21 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::irq;
+use crate::arch::irq;
 
-mod doublylinkedlist;
+mod cachepadded;
 
-pub use self::doublylinkedlist::*;
+pub use self::cachepadded::*;
 
-pub struct AvoidInterrupts(bool);
-
-impl AvoidInterrupts {
-	#[inline]
-	pub fn new() -> Self {
-		Self(irq::nested_disable())
-	}
-}
-
-impl Drop for AvoidInterrupts {
-	#[inline]
-	fn drop(&mut self) {
-		irq::nested_enable(self.0);
-	}
+/// `irqsave` guarantees that the call of the closure
+/// will be not disturbed by an interrupt
+#[inline]
+pub fn irqsave<F, R>(f: F) -> R
+where
+	F: FnOnce() -> R,
+{
+	let irq = irq::nested_disable();
+	let ret = f();
+	irq::nested_enable(irq);
+	ret
 }

@@ -5,21 +5,23 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::irq::*;
-use arch::x86_64::kernel::pci::{
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::irq::*;
+use crate::arch::x86_64::kernel::pci::{
 	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
 };
-use arch::x86_64::kernel::percore::core_scheduler;
-use drivers::virtio::depr::virtio_fs;
-use drivers::virtio::depr::virtio_net;
+use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
+use crate::drivers::virtio::depr::virtio_fs;
+use crate::drivers::virtio::depr::virtio_net;
 
-use arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::VirtAddr;
+use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::synch::spinlock::SpinlockIrqSave;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use config::VIRTIO_MAX_QUEUE_SIZE;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
@@ -50,13 +52,16 @@ pub mod consts {
 	pub const VIRTIO_F_NOTIFICATION_DATA: u64 = 1 << 38;
 
 	// Descriptor flags
+	pub const VIRTQ_DESC_F_DEFAULT: u16 = 0;
 	pub const VIRTQ_DESC_F_NEXT: u16 = 1; // Buffer continues via next field
 	pub const VIRTQ_DESC_F_WRITE: u16 = 2; // Buffer is device write-only (instead of read-only)
 	pub const VIRTQ_DESC_F_INDIRECT: u16 = 4; // Buffer contains list of virtq_desc
 
-	// The Guest uses this in flag to advise the Host: don't interrupt me
+	// The guest uses this in flag to advise the host: don't interrupt me
 	// when you consume a buffer.
 	pub const VRING_AVAIL_F_NO_INTERRUPT: u16 = 1;
+	/// Default behaviour, where the guest expects interrupts from the host
+	pub const VRING_AVAIL_F_DEFAULT: u16 = 0;
 }
 
 pub struct Virtq<'a> {
@@ -164,9 +169,11 @@ impl<'a> Virtq<'a> {
 		// Tell device about the guest-physical addresses of our queue structs:
 		// TODO: cleanup pointer conversions (use &mut vq....?)
 		common_cfg.queue_select = index;
-		common_cfg.queue_desc = paging::virt_to_phys(desc_table.as_ptr() as usize) as u64;
-		common_cfg.queue_avail = paging::virt_to_phys(avail_flags as *mut _ as usize) as u64;
-		common_cfg.queue_used = paging::virt_to_phys(used_flags as *const _ as usize) as u64;
+		common_cfg.queue_desc = paging::virt_to_phys(VirtAddr(desc_table.as_ptr() as u64)).as_u64();
+		common_cfg.queue_avail =
+			paging::virt_to_phys(VirtAddr(avail_flags as *mut _ as u64)).as_u64();
+		common_cfg.queue_used =
+			paging::virt_to_phys(VirtAddr(used_flags as *const _ as u64)).as_u64();
 		common_cfg.queue_enable = 1;
 
 		debug!(
@@ -196,7 +203,7 @@ impl<'a> Virtq<'a> {
 			notify_cfg.get_notify_addr(common_cfg.queue_notify_off as u32),
 		);
 
-		return Some(vq);
+		Some(vq)
 	}
 
 	fn notify_device(&mut self) {
@@ -285,7 +292,7 @@ impl<'a> Virtq<'a> {
 			let req = &mut chain.0.last_mut().unwrap().raw;
 
 			// 2. Set d.addr to the physical address of the start of b
-			req.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
+			req.addr = paging::virt_to_phys(VirtAddr(dat.as_ptr() as u64)).as_u64();
 
 			// 3. Set d.len to the length of b.
 			req.len = dat.len() as u32; // TODO: better cast?
@@ -305,7 +312,7 @@ impl<'a> Virtq<'a> {
 			for dat in rsp_buf {
 				self.virtq_desc.extend(&mut chain);
 				let rsp = &mut chain.0.last_mut().unwrap().raw;
-				rsp.addr = paging::virt_to_phys(dat.as_ptr() as usize) as u64;
+				rsp.addr = paging::virt_to_phys(VirtAddr(dat.as_ptr() as u64)).as_u64();
 				rsp.len = dat.len() as u32; // TODO: better cast?
 				rsp.flags = VIRTQ_DESC_F_WRITE;
 				trace!("written in descriptor: {:?} @ {:p}", rsp, rsp);
@@ -367,12 +374,12 @@ impl<'a> Virtq<'a> {
 		vqused.check_elements()
 	}
 
-	pub fn add_buffer(&mut self, index: usize, addr: u64, len: usize, flags: u16) {
+	pub fn add_buffer(&mut self, index: usize, addr: VirtAddr, len: usize, flags: u16) {
 		let chainrc = self.virtq_desc.get_empty_chain();
 		let mut chain = chainrc.borrow_mut();
 		self.virtq_desc.extend(&mut chain);
 		let rsp = &mut chain.0.last_mut().unwrap().raw;
-		rsp.addr = paging::virt_to_phys(addr as usize) as u64;
+		rsp.addr = paging::virt_to_phys(addr).as_u64();
 		rsp.len = len.try_into().unwrap();
 		rsp.flags = flags;
 
@@ -393,6 +400,15 @@ impl<'a> Virtq<'a> {
 		} else {
 			let aind = index % self.vqsize as usize;
 			vqavail.ring[aind] = chain.0.first().unwrap().index;
+		}
+	}
+
+	pub fn set_polling_mode(&mut self, value: bool) {
+		let mut vqavail = self.avail.borrow_mut();
+		if value {
+			*vqavail.flags = VRING_AVAIL_F_NO_INTERRUPT;
+		} else {
+			*vqavail.flags = VRING_AVAIL_F_DEFAULT;
 		}
 	}
 
@@ -636,8 +652,8 @@ impl<'a> VirtqUsed<'a> {
 
 		fence(Ordering::SeqCst);
 
-		assert!(usedelem.id == chain.0.first().unwrap().index as u32);
-		return true;
+		assert_eq!(usedelem.id, chain.0.first().unwrap().index as u32);
+		true
 
 		// current version cannot fail.
 		//false
@@ -732,7 +748,7 @@ pub fn map_virtiocap(
 	adapter: &PciAdapter,
 	caplist: u32,
 	virtiocaptype: u32,
-) -> Option<(usize, u32)> {
+) -> Option<(VirtAddr, u32)> {
 	let mut nextcaplist = caplist;
 	if nextcaplist < 0x40 {
 		error!(
@@ -819,7 +835,7 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 						PciNetworkControllerSubclass::EthernetController => {
 							// TODO: proper error handling on driver creation fail
 							let drv = virtio_net::create_virtionet_driver(adapter).unwrap();
-							pci::register_driver(PciDriver::VirtioNet(drv));
+							pci::register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)));
 						}
 						_ => {
 							warn!("Virtio device is NOT supported, skipping!");
@@ -837,7 +853,8 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 			info!("Found Virtio-FS device!");
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			virtio_fs::create_virtiofs_driver(adapter).unwrap();
+			let drv = virtio_fs::create_virtiofs_driver(adapter).unwrap();
+			pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(drv)));
 		}
 		_ => {
 			warn!("Virtio device is NOT supported, skipping!");
@@ -846,16 +863,24 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 	};
 
 	// Install interrupt handler
+	unsafe {
+		VIRTIO_IRQ_NO = adapter.irq;
+	}
 	irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
+	add_irq_name(adapter.irq as u32, "virtio");
 }
+
+/// Specifies the interrupt number of the virtio device
+static mut VIRTIO_IRQ_NO: u8 = 0;
 
 #[cfg(target_arch = "x86_64")]
 extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
 	debug!("Receive virtio interrupt");
 	apic::eoi();
+	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
 	let check_scheduler = match get_network_driver() {
-		Some(driver) => driver.borrow_mut().handle_interrupt(),
+		Some(driver) => driver.lock().handle_interrupt(),
 		_ => false,
 	};
 

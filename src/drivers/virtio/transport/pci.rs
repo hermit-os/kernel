@@ -10,22 +10,26 @@
 //! 
 //! The module contains ...
 
-use arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
-use arch::x86_64::kernel::pci as kernel_pci;
-use arch::x86_64::kernel::pci::error::PciError;
-use arch::x86_64::mm::paging;
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
+use crate::arch::x86_64::kernel::pci as kernel_pci;
+use crate::arch::x86_64::kernel::pci::error::PciError;
+use crate::arch::x86_64::mm::paging;
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use core::result::Result;
 use core::convert::TryInto;
 use core::mem;
 
-use drivers::error::DriverError;
-use drivers::virtio::error::VirtioError;
-use drivers::virtio::env::memory::{VirtMemAddr, PhyMemAddr, MemOff, MemLen};
-use drivers::virtio::env;
-use drivers::net::virtio_net::VirtioNetDriver;
-use drivers::virtio::device;
+use crate::drivers::error::DriverError;
+use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::env::memory::{VirtMemAddr, PhyMemAddr, MemOff, MemLen};
+use crate::drivers::virtio::env;
+use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::virtio::device;
+
+use crate::drivers::virtio::depr::virtio_fs;
 
 
 /// Virtio device ID's 
@@ -412,17 +416,17 @@ impl <'a> VqCfgHandler<'a> {
 
     pub fn set_ring_addr(&mut self, vq_index: u16, addr: usize) {
         self.raw.queue_select = vq_index;
-        self.raw.queue_desc = paging::virt_to_phys(addr) as u64;
+        self.raw.queue_desc = paging::virt_to_phys(VirtAddr::from(addr)).into();
     }
 
     pub fn set_drv_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
         self.raw.queue_select = vq_index;
-        self.raw.queue_driver = paging::virt_to_phys(addr) as u64;
+        self.raw.queue_driver = paging::virt_to_phys(VirtAddr::from(addr)).into();
     }
 
     pub fn set_dev_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
         self.raw.queue_select = vq_index;
-        self.raw.queue_device = paging::virt_to_phys(addr) as u64;
+        self.raw.queue_device = paging::virt_to_phys(VirtAddr::from(addr)).into();
     }
 }
 
@@ -438,8 +442,8 @@ impl ComCfg {
         if self.com_cfg.queue_size == 0 {
             None
         } else {
-            if self.com_cfg.queue_size > ::config::VIRTIO_MAX_QUEUE_SIZE {
-                self.com_cfg.queue_size = ::config::VIRTIO_MAX_QUEUE_SIZE;
+            if self.com_cfg.queue_size > crate::config::VIRTIO_MAX_QUEUE_SIZE {
+                self.com_cfg.queue_size = crate::config::VIRTIO_MAX_QUEUE_SIZE;
             }
 
             Some(VqCfgHandler{
@@ -1202,11 +1206,16 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
             };
         },
 		DevId::VIRTIO_DEV_ID_FS => {
-		    // TODO: Proper error handling in driver creation fail
-            // virtio_fs::create_virtiofs_driver(adapter).unwrap()
-
-            // PLACEHOLDER TO GET RIGHT RETURNvi    
-            Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(adapter.device_id)))
+            info!("Found Virtio-FS device!");
+            // TODO: check subclass
+            // TODO: proper error handling on driver creation fail
+            match virtio_fs::create_virtiofs_driver(adapter) {
+                Some(virt_fs_drv) => {
+                    kernel_pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(virt_fs_drv)));
+                    Ok(VirtioDriver::FileSystem)
+                },
+                None => Err(DriverError::InitVirtioDevFail(VirtioError::Unknown)),
+            }
 	    },
 		_ => {
             warn!(
@@ -1222,6 +1231,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 
 pub enum VirtioDriver {
     Network(VirtioNetDriver),
+    FileSystem,
 }
 /// The module contains constants specific to PCI.
 pub mod constants {

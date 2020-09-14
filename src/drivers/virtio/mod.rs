@@ -15,19 +15,21 @@ pub mod env;
 
 pub mod error {
     use core::fmt;
-    use arch::x86_64::kernel::pci::error::PciError;
-    use drivers::net::virtio_net::error::VirtioNetError;
+    use crate::arch::x86_64::kernel::pci::error::PciError;
+    use crate::drivers::net::virtio_net::error::VirtioNetError;
 
     #[derive(Debug)]
     pub enum VirtioError {
         FromPci(PciError),
         DevNotSupported(u16),
         NetDriver(VirtioNetError),
+        Unknown,
     }
 
     impl fmt::Display for VirtioError {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             match self {
+                VirtioError::Unknown =>write!(f, "Driver failed to initalize virtio device due to unknown reasosn!"),
                 VirtioError::FromPci(pci_error) => match pci_error {
                     PciError::General(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Due to unknown reasosn!", id),
                     PciError::NoBar(id ) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No BAR's found.", id), 
@@ -73,21 +75,6 @@ pub mod features {
     }
 }
 
-
-/// A module containing virtios driver trait.
-/// 
-/// The module contains ...
-pub mod driver {
-    use super::transport::pci::ComCfg;
-    use super::error::VirtioError;
-    use super::device::DevCfg;
-    pub trait VirtioDriver {
-        fn add_buff(&self);
-        fn get_buff(&self);
-        fn process_buff(&self);
-        fn set_notif(&self);
-    }
-}
 
 /// A module containing virtios device specfific information.
 pub mod device {

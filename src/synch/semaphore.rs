@@ -6,9 +6,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::percore::*;
-use scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
-use synch::spinlock::SpinlockIrqSave;
+use crate::arch::percore::*;
+use crate::scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
+use crate::synch::spinlock::SpinlockIrqSave;
 
 struct SemaphoreState {
 	/// Resource available count
@@ -62,18 +62,18 @@ impl Semaphore {
 	pub const fn new(count: isize) -> Self {
 		Self {
 			state: SpinlockIrqSave::new(SemaphoreState {
-				count: count,
+				count,
 				queue: TaskHandlePriorityQueue::new(),
 			}),
 		}
 	}
 
 	/// Acquires a resource of this semaphore, blocking the current thread until
-	/// it can do so or until the wakeup time has elapsed.
+	/// it can do so or until the wakeup time (in ms) has elapsed.
 	///
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
-	pub fn acquire(&self, wakeup_time: Option<u64>) -> bool {
+	pub fn acquire(&self, time: Option<u64>) -> bool {
 		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
 		core_scheduler.set_current_task_wakeup_reason(WakeupReason::Custom);
@@ -95,6 +95,11 @@ impl Semaphore {
 						.remove(core_scheduler.get_current_task_handle());
 					return false;
 				}
+
+				let wakeup_time = match time {
+					Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
+					_ => None,
+				};
 
 				// We couldn't acquire the semaphore.
 				// Block the current task and add it to the wakeup queue.

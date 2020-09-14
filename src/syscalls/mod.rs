@@ -6,6 +6,25 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#[cfg(not(feature = "newlib"))]
+use crate::drivers::net::*;
+use crate::environment;
+#[cfg(feature = "newlib")]
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::syscalls::interfaces::SyscallInterface;
+#[cfg(target_os = "hermit")]
+use crate::{__sys_free, __sys_malloc, __sys_realloc};
+
+pub use self::condvar::*;
+pub use self::processor::*;
+pub use self::random::*;
+pub use self::recmutex::*;
+pub use self::semaphore::*;
+pub use self::spinlock::*;
+pub use self::system::*;
+pub use self::tasks::*;
+pub use self::timer::*;
+
 mod condvar;
 pub mod fs;
 mod interfaces;
@@ -19,24 +38,6 @@ mod spinlock;
 mod system;
 mod tasks;
 mod timer;
-
-pub use self::condvar::*;
-pub use self::processor::*;
-pub use self::random::*;
-pub use self::recmutex::*;
-pub use self::semaphore::*;
-pub use self::spinlock::*;
-pub use self::system::*;
-pub use self::tasks::*;
-pub use self::timer::*;
-#[cfg(not(test))]
-use crate::{__sys_free, __sys_malloc, __sys_realloc};
-
-use drivers::net::*;
-use environment;
-#[cfg(feature = "newlib")]
-use synch::spinlock::SpinlockIrqSave;
-use syscalls::interfaces::SyscallInterface;
 
 #[cfg(feature = "newlib")]
 const LWIP_FD_BIT: i32 = 1 << 30;
@@ -65,22 +66,22 @@ pub fn init() {
 	sbrk_init();
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 	__sys_malloc(size, align)
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	__sys_realloc(ptr, size, align, new_size)
+	unsafe { __sys_realloc(ptr, size, align, new_size) }
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	__sys_free(ptr, size, align)
+	unsafe { __sys_free(ptr, size, align) }
 }
 
 pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
@@ -142,24 +143,26 @@ pub fn sys_rx_buffer_consumed() -> Result<(), ()> {
 }
 
 #[cfg(not(feature = "newlib"))]
-#[no_mangle]
-pub fn sys_netwakeup() {
-	kernel_function!(netwakeup());
-}
-
-pub fn __sys_netwait(millis: Option<u64>) {
-	if unsafe { SYS.has_packet() } == false {
-		netwait(millis)
-	}
+fn __sys_netwait(handle: usize, millis: Option<u64>) {
+	netwait(handle, millis)
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub fn sys_netwait(millis: Option<u64>) {
-	kernel_function!(__sys_netwait(millis));
+pub fn sys_netwait(handle: usize, millis: Option<u64>) {
+	kernel_function!(__sys_netwait(handle, millis));
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
+pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
+	kernel_function!(netwait_and_wakeup(handles, millis));
 }
 
 pub fn __sys_shutdown(arg: i32) -> ! {
+	// print some performance statistics
+	crate::arch::kernel::print_statistics();
+
 	unsafe { SYS.shutdown(arg) }
 }
 

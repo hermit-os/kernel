@@ -5,12 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::processor;
-use arch::x86_64::kernel::BOOT_INFO;
-use core::intrinsics;
+use crate::arch::x86_64::kernel::irq;
+use crate::arch::x86_64::kernel::processor;
+use crate::arch::x86_64::kernel::BOOT_INFO;
+use crate::environment;
 use core::sync::atomic::spin_loop_hint;
-use environment;
 use x86::io::*;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
@@ -226,7 +225,7 @@ fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8
 }
 
 pub fn get_boot_time() -> u64 {
-	unsafe { intrinsics::volatile_load(&(*BOOT_INFO).boot_gtod) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).boot_gtod) }
 }
 
 pub fn init() {
@@ -237,7 +236,7 @@ pub fn init() {
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
 		microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
-		unsafe { intrinsics::volatile_store(&mut (*BOOT_INFO).boot_gtod, microseconds_offset) }
+		unsafe { core::ptr::write_volatile(&mut (*BOOT_INFO).boot_gtod, microseconds_offset) }
 	}
 
 	let (year, month, day, hour, minute, second) = date_from_microseconds(microseconds_offset);

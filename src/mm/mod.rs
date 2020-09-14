@@ -11,48 +11,50 @@ mod hole;
 #[cfg(test)]
 mod test;
 
-use arch;
-use arch::mm::paging::{BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use arch::mm::physicalmem::total_memory_size;
+use crate::arch;
+use crate::arch::mm::paging::{
+	BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags,
+};
+use crate::arch::mm::physicalmem::total_memory_size;
 #[cfg(feature = "newlib")]
-use arch::mm::virtualmem::kernel_heap_end;
+use crate::arch::mm::virtualmem::kernel_heap_end;
+use crate::arch::mm::{PhysAddr, VirtAddr};
+use crate::environment;
 use core::mem;
-use core::sync::atomic::spin_loop_hint;
-use environment;
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()
-static mut KERNEL_START_ADDRESS: usize = 0;
+static mut KERNEL_START_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Physical and virtual address of the first page after the kernel.
 /// Can be easily accessed through kernel_end_address()
-static mut KERNEL_END_ADDRESS: usize = 0;
+static mut KERNEL_END_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// Start address of the user heap
-static mut HEAP_START_ADDRESS: usize = 0;
+static mut HEAP_START_ADDRESS: VirtAddr = VirtAddr::zero();
 
 /// End address of the user heap
-static mut HEAP_END_ADDRESS: usize = 0;
+static mut HEAP_END_ADDRESS: VirtAddr = VirtAddr::zero();
 
-pub fn kernel_start_address() -> usize {
+pub fn kernel_start_address() -> VirtAddr {
 	unsafe { KERNEL_START_ADDRESS }
 }
 
-pub fn kernel_end_address() -> usize {
+pub fn kernel_end_address() -> VirtAddr {
 	unsafe { KERNEL_END_ADDRESS }
 }
 
 #[cfg(feature = "newlib")]
-pub fn task_heap_start() -> usize {
+pub fn task_heap_start() -> VirtAddr {
 	unsafe { HEAP_START_ADDRESS }
 }
 
 #[cfg(feature = "newlib")]
-pub fn task_heap_end() -> usize {
+pub fn task_heap_end() -> VirtAddr {
 	unsafe { HEAP_END_ADDRESS }
 }
 
-fn map_heap<S: PageSize>(virt_addr: usize, size: usize) -> usize {
+fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
 	let mut i: usize = 0;
 	let mut flags = PageTableEntryFlags::empty();
 
@@ -74,24 +76,24 @@ fn map_heap<S: PageSize>(virt_addr: usize, size: usize) -> usize {
 	i
 }
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
-		KERNEL_START_ADDRESS = align_down!(
-			environment::get_base_address(),
-			arch::mm::paging::LargePageSize::SIZE
-		);
-		KERNEL_END_ADDRESS = align_up!(
-			environment::get_base_address() + environment::get_image_size(),
-			arch::mm::paging::LargePageSize::SIZE
-		);
+		KERNEL_START_ADDRESS = environment::get_base_address().align_down_to_large_page();
+		KERNEL_END_ADDRESS = (environment::get_base_address() + environment::get_image_size())
+			.align_up_to_large_page();
 	}
 
 	arch::mm::init();
 	arch::mm::init_page_tables();
 
 	info!("Total memory size: {} MB", total_memory_size() >> 20);
+	info!(
+		"Kernel region: [0x{:x} - 0x{:x}]",
+		kernel_start_address(),
+		kernel_end_address()
+	);
 
 	// we reserve physical memory for the required page tables
 	// In worst case, we use page size of BasePageSize::SIZE
@@ -105,15 +107,12 @@ pub fn init() {
 
 	//info!("reserved space {} KB", reserved_space >> 10);
 
-	if total_memory_size() < kernel_end_address() + reserved_space + LargePageSize::SIZE {
-		error!("No enough memory available!");
-
-		loop {
-			spin_loop_hint();
-		}
+	if total_memory_size() < kernel_end_address().as_usize() + reserved_space + LargePageSize::SIZE
+	{
+		panic!("No enough memory available!");
 	}
 
-	let mut map_addr: usize;
+	let mut map_addr: VirtAddr;
 	let mut map_size: usize;
 
 	#[cfg(feature = "newlib")]
@@ -123,12 +122,14 @@ pub fn init() {
 		let size = 2 * LargePageSize::SIZE;
 		unsafe {
 			let start = allocate(size, true);
-			::ALLOCATOR.lock().init(start, size);
+			crate::ALLOCATOR.lock().init(start, size);
 		}
 
 		info!("Kernel heap size: {} MB", size >> 20);
 		let user_heap_size = align_down!(
-			total_memory_size() - kernel_end_address() - reserved_space - 3 * LargePageSize::SIZE,
+			total_memory_size()
+				- kernel_end_address().as_usize()
+				- reserved_space - 3 * LargePageSize::SIZE,
 			LargePageSize::SIZE
 		);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
@@ -149,7 +150,7 @@ pub fn init() {
 		// the virtual address space.
 
 		let virt_size: usize = {
-			let size = total_memory_size() - kernel_end_address() - reserved_space;
+			let size = total_memory_size() - kernel_end_address().as_usize() - reserved_space;
 
 			// we reserve 10% of the memory for stack allocations
 			align_down!(size - (size * 10) / 100, LargePageSize::SIZE)
@@ -185,7 +186,9 @@ pub fn init() {
 
 		unsafe {
 			HEAP_START_ADDRESS = virt_addr;
-			::ALLOCATOR.lock().init(virt_addr, virt_size);
+			crate::ALLOCATOR
+				.lock()
+				.init(virt_addr.as_usize(), virt_size);
 		}
 
 		map_addr = virt_addr + counter;
@@ -194,7 +197,7 @@ pub fn init() {
 
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE
-		&& (map_addr & !(HugePageSize::SIZE - 1)) == 0
+		&& (map_addr.as_usize() & !(HugePageSize::SIZE - 1)) == 0
 	{
 		let counter = map_heap::<HugePageSize>(map_addr, map_size);
 		map_size -= counter;
@@ -236,14 +239,14 @@ pub fn print_information() {
 	virtual_address
 }*/
 
-pub fn allocate(sz: usize, no_execution: bool) -> usize {
+pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = align_up!(sz, BasePageSize::SIZE);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
 
 	map(physical_address, size, true, no_execution, false)
 }
 
-pub fn deallocate(virtual_address: usize, sz: usize) {
+pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
 	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
@@ -260,12 +263,12 @@ pub fn deallocate(virtual_address: usize, sz: usize) {
 
 /// Maps a given physical address and size in virtual space and returns address.
 pub fn map(
-	physical_address: usize,
+	physical_address: PhysAddr,
 	sz: usize,
 	writable: bool,
 	no_execution: bool,
 	no_cache: bool,
-) -> usize {
+) -> VirtAddr {
 	let size = align_up!(sz, BasePageSize::SIZE);
 	let count = size / BasePageSize::SIZE;
 
@@ -289,10 +292,10 @@ pub fn map(
 
 #[allow(dead_code)]
 /// unmaps virtual address, without 'freeing' physical memory it is mapped to!
-pub fn unmap(virtual_address: usize, sz: usize) {
+pub fn unmap(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE);
 
-	if let Some(_) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
+	if arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(virtual_address, size / BasePageSize::SIZE);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 	} else {

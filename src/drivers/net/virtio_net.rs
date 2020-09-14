@@ -8,9 +8,9 @@
 //! A module containing a virtio network driver.
 //! 
 //! The module contains ...
-use arch::x86_64::kernel::pci::PciAdapter;
-use arch::x86_64::kernel::pci::error::PciError;
-use config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::arch::x86_64::kernel::pci::PciAdapter;
+use crate::arch::x86_64::kernel::pci::error::PciError;
+use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 
 use core::result::Result;
 use alloc::vec::Vec;
@@ -21,12 +21,11 @@ use core::ops::Deref;
 use core::cell::RefCell;
 use alloc::rc::Rc;
 
-use drivers::virtio::env::memory::{MemLen, MemOff};
-use drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfgAlt, PciCap};
-use drivers::virtio::transport::pci;
-use drivers::virtio::driver::VirtioDriver;
-use drivers::virtio::error::VirtioError;
-use drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes};
+use crate::drivers::virtio::env::memory::{MemLen, MemOff};
+use crate::drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfgAlt, PciCap};
+use crate::drivers::virtio::transport::pci;
+use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes};
 
 use self::error::VirtioNetError;
 use self::constants::{Features, Status, FeatureSet, MAX_NUM_VQ};
@@ -240,24 +239,6 @@ pub struct VirtioNetDriver{
     send_vqs: TxQueues,
 
     num_vqs: u16,
-}
-
-impl VirtioDriver for VirtioNetDriver {
-    fn add_buff(&self) {
-        unimplemented!();
-    }
-
-    fn get_buff(&self) {
-        unimplemented!();
-    }
-
-    fn process_buff(&self) {
-        unimplemented!();
-    }
-
-    fn set_notif(&self){
-        unimplemented!();
-    }
 }
 
 // Private funtctions for Virtio network driver

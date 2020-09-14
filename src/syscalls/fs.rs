@@ -5,12 +5,13 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::synch::spinlock::Spinlock;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
-use synch::spinlock::Spinlock;
+use core::ops::Deref;
 
 /*
 Design:
@@ -55,10 +56,10 @@ pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
 
 pub struct Filesystem {
 	// Keep track of mount-points
-	mounts: BTreeMap<String, Box<dyn PosixFileSystem>>,
+	mounts: BTreeMap<String, Box<dyn PosixFileSystem + Send>>,
 
 	// Keep track of open files
-	files: BTreeMap<u64, Box<dyn PosixFile>>,
+	files: BTreeMap<u64, Box<dyn PosixFile + Send>>,
 }
 
 impl Filesystem {
@@ -85,7 +86,7 @@ impl Filesystem {
 
 	/// Gets a new fd for a file and inserts it into open files.
 	/// Returns file descriptor
-	fn add_file(&mut self, file: Box<dyn PosixFile>) -> u64 {
+	fn add_file(&mut self, file: Box<dyn PosixFile + Send>) -> u64 {
 		let fd = self.assign_new_fd();
 		self.files.insert(fd, file);
 		fd
@@ -96,25 +97,25 @@ impl Filesystem {
 	fn parse_path<'a, 'b>(
 		&'a self,
 		path: &'b str,
-	) -> Result<(&'a Box<dyn PosixFileSystem>, &'b str), FileError> {
+	) -> Result<(&'a (dyn PosixFileSystem + Send), &'b str), FileError> {
 		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
-		if !path.starts_with("/") {
+		if !path.starts_with('/') {
 			warn!("Relative paths not allowed!");
 			return Err(FileError::ENOENT());
 		}
-		let mut pathsplit = path.splitn(3, "/");
+		let mut pathsplit = path.splitn(3, '/');
 		pathsplit.next(); // always empty, since first char is /
 		let mount = pathsplit.next().unwrap();
 		let internal_path = pathsplit.next().unwrap(); //TODO: this can fail from userspace, eg when passing "/test"
 
 		if let Some(fs) = self.mounts.get(mount) {
-			Ok((fs, internal_path))
+			Ok((fs.deref(), internal_path))
 		} else {
 			info!(
 				"Trying to open file on non-existing mount point '{}'!",
 				mount
 			);
-			return Err(FileError::ENOENT());
+			Err(FileError::ENOENT())
 		}
 	}
 
@@ -145,9 +146,13 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	pub fn mount(&mut self, mntpath: &str, mntobj: Box<dyn PosixFileSystem>) -> Result<(), ()> {
+	pub fn mount(
+		&mut self,
+		mntpath: &str,
+		mntobj: Box<dyn PosixFileSystem + Send>,
+	) -> Result<(), ()> {
 		info!("Mounting {}", mntpath);
-		if mntpath.contains("/") {
+		if mntpath.contains('/') {
 			warn!(
 				"Trying to mount at '{}', but slashes in name are not supported!",
 				mntpath
@@ -167,7 +172,7 @@ impl Filesystem {
 	}
 
 	/// Run closure on file referenced by file descriptor.
-	pub fn fd_op(&mut self, fd: u64, f: impl FnOnce(&mut Box<dyn PosixFile>)) {
+	pub fn fd_op(&mut self, fd: u64, f: impl FnOnce(&mut Box<dyn PosixFile + Send>)) {
 		f(self.files.get_mut(&fd).unwrap());
 	}
 }
@@ -179,7 +184,7 @@ pub enum FileError {
 }
 
 pub trait PosixFileSystem {
-	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile>, FileError>;
+	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
 }
 

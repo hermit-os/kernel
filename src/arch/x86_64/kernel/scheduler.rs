@@ -8,69 +8,72 @@
 
 //! Architecture dependent interface to initialize a task
 
-use arch::x86_64::kernel::apic;
-use arch::x86_64::kernel::idt;
-use arch::x86_64::kernel::irq;
-use arch::x86_64::kernel::percore::*;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use config::*;
+use alloc::alloc::{alloc, dealloc, Layout};
+use core::convert::TryInto;
 use core::{mem, ptr};
-use environment;
-use mm;
-use scheduler::task::{Task, TaskFrame};
+
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::idt;
+use crate::arch::x86_64::kernel::irq;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::config::*;
+use crate::environment;
+use crate::scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
 struct State {
 	/// FS register for TLS support
-	fs: usize,
+	fs: u64,
 	/// R15 register
-	r15: usize,
+	r15: u64,
 	/// R14 register
-	r14: usize,
+	r14: u64,
 	/// R13 register
-	r13: usize,
+	r13: u64,
 	/// R12 register
-	r12: usize,
+	r12: u64,
 	/// R11 register
-	r11: usize,
+	r11: u64,
 	/// R10 register
-	r10: usize,
+	r10: u64,
 	/// R9 register
-	r9: usize,
+	r9: u64,
 	/// R8 register
-	r8: usize,
+	r8: u64,
 	/// RDI register
-	rdi: usize,
+	rdi: u64,
 	/// RSI register
-	rsi: usize,
+	rsi: u64,
 	/// RBP register
-	rbp: usize,
+	rbp: u64,
 	/// RBX register
-	rbx: usize,
+	rbx: u64,
 	/// RDX register
-	rdx: usize,
+	rdx: u64,
 	/// RCX register
-	rcx: usize,
+	rcx: u64,
 	/// RAX register
-	rax: usize,
+	rax: u64,
 	/// status flags
-	rflags: usize,
+	rflags: u64,
 	/// instruction pointer
-	rip: usize,
+	rip: u64,
 }
 
 pub struct BootStack {
 	/// stack for kernel tasks
-	stack: usize,
+	stack: VirtAddr,
 	/// stack to handle interrupts
-	ist0: usize,
+	ist0: VirtAddr,
 }
 
 pub struct CommonStack {
 	/// start address of allocated virtual memory region
-	virt_addr: usize,
+	virt_addr: VirtAddr,
 	/// start address of allocated virtual memory region
-	phys_addr: usize,
+	phys_addr: PhysAddr,
 	/// total size of all stacks
 	total_size: usize,
 }
@@ -88,9 +91,9 @@ impl TaskStacks {
 			align_up!(size, BasePageSize::SIZE)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
-		let virt_addr = ::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
+		let virt_addr = crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
 			.expect("Failed to allocate Virtual Memory for TaskStacks");
-		let phys_addr = ::arch::mm::physicalmem::allocate(total_size)
+		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
 		debug!(
@@ -103,7 +106,7 @@ impl TaskStacks {
 		flags.normal().writable().execute_disable();
 
 		// map IST0 into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
 			KERNEL_STACK_SIZE / BasePageSize::SIZE,
@@ -111,7 +114,7 @@ impl TaskStacks {
 		);
 
 		// map kernel stack into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE,
@@ -119,7 +122,7 @@ impl TaskStacks {
 		);
 
 		// map user stack into the address space
-		::arch::mm::paging::map::<BasePageSize>(
+		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE,
@@ -130,30 +133,27 @@ impl TaskStacks {
 		unsafe {
 			ptr::write_bytes(
 				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
-					as *mut u8,
+					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
 			);
 		}
 
 		TaskStacks::Common(CommonStack {
-			virt_addr: virt_addr,
-			phys_addr: phys_addr,
-			total_size: total_size,
+			virt_addr,
+			phys_addr,
+			total_size,
 		})
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let tss = unsafe { &(*PERCORE.tss.get()) };
-		let stack = tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE;
+		let stack = VirtAddr::from_usize(tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE);
 		debug!("Using boot stack {:#X}", stack);
-		let ist0 = tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE;
+		let ist0 = VirtAddr::from_usize(tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE);
 		debug!("IST0 is located at {:#X}", ist0);
 
-		TaskStacks::Boot(BootStack {
-			stack: stack,
-			ist0: ist0,
-		})
+		TaskStacks::Boot(BootStack { stack, ist0 })
 	}
 
 	pub fn get_user_stack_size(&self) -> usize {
@@ -165,16 +165,16 @@ impl TaskStacks {
 		}
 	}
 
-	pub fn get_user_stack(&self) -> usize {
+	pub fn get_user_stack(&self) -> VirtAddr {
 		match self {
-			TaskStacks::Boot(_) => 0,
+			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
 				stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
 			}
 		}
 	}
 
-	pub fn get_kernel_stack(&self) -> usize {
+	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
 			TaskStacks::Common(stacks) => {
@@ -190,7 +190,7 @@ impl TaskStacks {
 		}
 	}
 
-	pub fn get_interupt_stack(&self) -> usize {
+	pub fn get_interupt_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.ist0,
 			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
@@ -214,15 +214,15 @@ impl Drop for TaskStacks {
 					stacks.total_size >> 10,
 				);
 
-				::arch::mm::paging::unmap::<BasePageSize>(
+				crate::arch::mm::paging::unmap::<BasePageSize>(
 					stacks.virt_addr,
 					stacks.total_size / BasePageSize::SIZE + 4,
 				);
-				::arch::mm::virtualmem::deallocate(
+				crate::arch::mm::virtualmem::deallocate(
 					stacks.virt_addr,
 					stacks.total_size + 4 * BasePageSize::SIZE,
 				);
-				::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
+				crate::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
 			}
 		}
 	}
@@ -240,9 +240,9 @@ impl Clone for TaskStacks {
 }
 
 pub struct TaskTLS {
-	address: usize,
-	size: usize,
-	fs: usize,
+	address: VirtAddr,
+	fs: VirtAddr,
+	layout: Layout,
 }
 
 impl TaskTLS {
@@ -252,10 +252,11 @@ impl TaskTLS {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
-		// We allocate in BasePageSize granularity, so we don't have to manually impose an
-		// additional alignment for TLS variables.
-		let memory_size = align_up!(tls_allocation_size, BasePageSize::SIZE);
-		let ptr = ::mm::allocate(memory_size, true);
+		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
+		let memory_size = align_up!(tls_allocation_size, 128);
+		let layout =
+			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
+		let ptr = VirtAddr(unsafe { alloc(layout) as u64 });
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = ptr + align_up!(tls_size, 32);
@@ -263,13 +264,14 @@ impl TaskTLS {
 		unsafe {
 			// Copy over TLS variables with their initial values.
 			ptr::copy_nonoverlapping(
-				environment::get_tls_start() as *const u8,
-				ptr as *mut u8,
+				environment::get_tls_start().as_ptr::<u8>(),
+				ptr.as_mut_ptr::<u8>(),
 				tdata_size,
 			);
 
 			ptr::write_bytes(
-				(ptr + tdata_size) as *mut u8,
+				ptr.as_mut_ptr::<u8>()
+					.offset(tdata_size.try_into().unwrap()),
 				0,
 				align_up!(tls_size, 32) - tdata_size,
 			);
@@ -279,7 +281,7 @@ impl TaskTLS {
 			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
 			//
 			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
-			*(tls_pointer as *mut usize) = tls_pointer;
+			*(tls_pointer.as_mut_ptr::<u64>()) = tls_pointer.as_u64();
 		}
 
 		debug!(
@@ -289,18 +291,18 @@ impl TaskTLS {
 
 		Self {
 			address: ptr,
-			size: memory_size,
 			fs: tls_pointer,
+			layout: layout,
 		}
 	}
 
 	#[inline]
-	pub fn address(&self) -> usize {
+	pub fn address(&self) -> VirtAddr {
 		self.address
 	}
 
 	#[inline]
-	pub fn get_fs(&self) -> usize {
+	pub fn get_fs(&self) -> VirtAddr {
 		self.fs
 	}
 }
@@ -308,10 +310,13 @@ impl TaskTLS {
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
 		debug!(
-			"Deallocate TLS at 0x{:x} (size 0x{:x})",
-			self.address, self.size
+			"Deallocate TLS at 0x{:x} (layout {:?})",
+			self.address, self.layout,
 		);
-		mm::deallocate(self.address, self.size);
+
+		unsafe {
+			dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
+		}
 	}
 }
 
@@ -321,63 +326,69 @@ impl Clone for TaskTLS {
 	}
 }
 
-#[cfg(test)]
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {}
+#[cfg(not(target_os = "hermit"))]
+extern "C" fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64) {}
 
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
+extern "C" {
+	fn task_start(func: extern "C" fn(usize), arg: usize, user_stack: u64);
+}
+
 #[inline(never)]
-#[naked]
+#[no_mangle]
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Call the actual entry point of the task.
-	switch_to_user!();
 	func(arg);
 	switch_to_kernel!();
 
 	// Exit task
-	core_scheduler().exit(0);
+	core_scheduler().exit(0)
 }
 
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		// Check if the task (process or thread) uses Thread-Local-Storage.
 		let tls_size = environment::get_tls_memsz();
-		self.tls = if tls_size > 0 {
-			Some(TaskTLS::new(tls_size))
-		} else {
-			None
-		};
+		// check is TLS is already allocated
+		if self.tls.is_none() && tls_size > 0 {
+			self.tls = Some(TaskTLS::new(tls_size))
+		}
 
 		unsafe {
 			// Set a marker for debugging at the very top.
-			let mut stack = (self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size()
-				- 0x10) as *mut usize;
-			*stack = 0xDEAD_BEEFusize;
+			let mut stack =
+				self.stacks.get_kernel_stack() + self.stacks.get_kernel_stack_size() - 0x10u64;
+			*stack.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
 
 			// Put the State structure expected by the ASM switch() function on the stack.
-			stack = (stack as usize - mem::size_of::<State>()) as *mut usize;
+			stack = stack - mem::size_of::<State>();
 
-			let state = stack as *mut State;
-			ptr::write_bytes(state as *mut u8, 0, mem::size_of::<State>());
+			let state = stack.as_mut_ptr::<State>();
+			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = tls.get_fs();
+				(*state).fs = tls.get_fs().as_u64();
 			}
-			(*state).rip = task_entry as usize;
-			(*state).rdi = func as usize;
-			(*state).rsi = arg as usize;
+			(*state).rip = task_start as u64;
+			(*state).rdi = func as u64;
+			(*state).rsi = arg as u64;
 
 			// per default we disable interrupts
-			(*state).rflags = 0x1202usize;
+			(*state).rflags = 0x1202u64;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
-			self.last_stack_pointer = stack as usize;
+			self.last_stack_pointer = stack;
 			self.user_stack_pointer =
-				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10;
+				self.stacks.get_user_stack() + self.stacks.get_user_stack_size() - 0x10u64;
+
+			// rdx is required to intialize the stack
+			(*state).rdx = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
 		}
 	}
 }
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER.into());
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
 	core_scheduler().scheduler();
@@ -385,4 +396,5 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: &mut irq::ExceptionStackFr
 
 pub fn install_timer_handler() {
 	idt::set_gate(apic::TIMER_INTERRUPT_NUMBER, timer_handler as usize, 0);
+	irq::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
 }

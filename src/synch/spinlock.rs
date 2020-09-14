@@ -5,7 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::irq;
+use crate::arch::irq;
+use crate::collections::CachePadded;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::marker::Sync;
@@ -45,8 +46,8 @@ use core::sync::atomic::{spin_loop_hint, AtomicBool, AtomicUsize, Ordering};
 /// assert_eq!(answer, 2);
 /// ```
 pub struct Spinlock<T: ?Sized> {
-	queue: AtomicUsize,
-	dequeue: AtomicUsize,
+	queue: CachePadded<AtomicUsize>,
+	dequeue: CachePadded<AtomicUsize>,
 	data: UnsafeCell<T>,
 }
 
@@ -55,19 +56,19 @@ pub struct Spinlock<T: ?Sized> {
 /// When the guard falls out of scope it will release the lock.
 pub struct SpinlockGuard<'a, T: ?Sized + 'a> {
 	//queue: &'a AtomicUsize,
-	dequeue: &'a AtomicUsize,
+	dequeue: &'a CachePadded<AtomicUsize>,
 	data: &'a mut T,
 }
 
 // Same unsafe impls as `Spinlock`
-unsafe impl<T: ?Sized> Sync for Spinlock<T> {}
-unsafe impl<T: ?Sized> Send for Spinlock<T> {}
+unsafe impl<T: ?Sized + Send> Sync for Spinlock<T> {}
+unsafe impl<T: ?Sized + Send> Send for Spinlock<T> {}
 
 impl<T> Spinlock<T> {
 	pub const fn new(user_data: T) -> Spinlock<T> {
 		Spinlock {
-			queue: AtomicUsize::new(0),
-			dequeue: AtomicUsize::new(1),
+			queue: CachePadded::new(AtomicUsize::new(0)),
+			dequeue: CachePadded::new(AtomicUsize::new(1)),
 			data: UnsafeCell::new(user_data),
 		}
 	}
@@ -167,8 +168,8 @@ impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T> {
 /// assert_eq!(answer, 2);
 /// ```
 pub struct SpinlockIrqSave<T: ?Sized> {
-	queue: AtomicUsize,
-	dequeue: AtomicUsize,
+	queue: CachePadded<AtomicUsize>,
+	dequeue: CachePadded<AtomicUsize>,
 	irq: AtomicBool,
 	data: UnsafeCell<T>,
 }
@@ -178,20 +179,20 @@ pub struct SpinlockIrqSave<T: ?Sized> {
 /// When the guard falls out of scope it will release the lock.
 pub struct SpinlockIrqSaveGuard<'a, T: ?Sized + 'a> {
 	//queue: &'a AtomicUsize,
-	dequeue: &'a AtomicUsize,
+	dequeue: &'a CachePadded<AtomicUsize>,
 	irq: &'a AtomicBool,
 	data: &'a mut T,
 }
 
 // Same unsafe impls as `SoinlockIrqSave`
-unsafe impl<T: ?Sized> Sync for SpinlockIrqSave<T> {}
-unsafe impl<T: ?Sized> Send for SpinlockIrqSave<T> {}
+unsafe impl<T: ?Sized + Send> Sync for SpinlockIrqSave<T> {}
+unsafe impl<T: ?Sized + Send> Send for SpinlockIrqSave<T> {}
 
 impl<T> SpinlockIrqSave<T> {
 	pub const fn new(user_data: T) -> SpinlockIrqSave<T> {
 		SpinlockIrqSave {
-			queue: AtomicUsize::new(0),
-			dequeue: AtomicUsize::new(1),
+			queue: CachePadded::new(AtomicUsize::new(0)),
+			dequeue: CachePadded::new(AtomicUsize::new(1)),
 			irq: AtomicBool::new(false),
 			data: UnsafeCell::new(user_data),
 		}

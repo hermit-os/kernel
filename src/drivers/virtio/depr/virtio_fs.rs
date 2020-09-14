@@ -5,18 +5,16 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::fuse::{self, FuseInterface};
-use arch::x86_64::kernel::pci;
-use drivers::virtio::depr::virtio::{
+use crate::arch::x86_64::kernel::fuse::{self, FuseInterface};
+use crate::arch::x86_64::kernel::pci;
+use crate::drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
-use syscalls::fs;
-use util;
+use crate::syscalls::fs;
+use crate::util;
 
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::{fmt, u32, u8};
 
 #[repr(C)]
@@ -236,9 +234,7 @@ impl FuseInterface for VirtioFsDriver<'_> {
 	*/
 }
 
-pub fn create_virtiofs_driver(
-	adapter: &pci::PciAdapter,
-) -> Option<Rc<RefCell<VirtioFsDriver<'static>>>> {
+pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDriver<'static>> {
 	// Scan capabilities to get common config, which we need to reset the device and get basic info.
 	// also see https://elixir.bootlin.com/linux/latest/source/drivers/virtio/virtio_pci_modern.c#L581 (virtio_pci_modern_probe)
 	// Read status register
@@ -259,7 +255,7 @@ pub fn create_virtiofs_driver(
 	let common_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_COMMON_CFG) {
 			Some((cap_common_raw, _)) => unsafe {
-				&mut *(cap_common_raw as *mut virtio_pci_common_cfg)
+				&mut *(cap_common_raw.as_mut_ptr::<virtio_pci_common_cfg>())
 			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_COMMON_CFG. Aborting!");
@@ -269,7 +265,9 @@ pub fn create_virtiofs_driver(
 	// get device config mapped, cast to virtio_fs_config
 	let device_cfg =
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_DEVICE_CFG) {
-			Some((cap_device_raw, _)) => unsafe { &mut *(cap_device_raw as *mut virtio_fs_config) },
+			Some((cap_device_raw, _)) => unsafe {
+				&mut *(cap_device_raw.as_mut_ptr::<virtio_fs_config>())
+			},
 			None => {
 				error!("Could not find VIRTIO_PCI_CAP_DEVICE_CFG. Aborting!");
 				return None;
@@ -280,7 +278,7 @@ pub fn create_virtiofs_driver(
 		match virtio::map_virtiocap(bus, device, adapter, caplist, VIRTIO_PCI_CAP_NOTIFY_CFG) {
 			Some((cap_notification_raw, notify_off_multiplier)) => {
 				(
-					cap_notification_raw as *mut u16, // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
+					cap_notification_raw.as_mut_ptr::<u16>(), // unsafe { core::slice::from_raw_parts_mut::<u16>(...)}
 					notify_off_multiplier,
 				)
 			}
@@ -297,19 +295,19 @@ pub fn create_virtiofs_driver(
 	// TODO: also load the other 2 cap types (?).
 
 	// Instanciate driver on heap, so it outlives this function
-	let drv = Rc::new(RefCell::new(VirtioFsDriver {
+	let mut drv = VirtioFsDriver {
 		common_cfg,
 		device_cfg,
 		notify_cfg,
 		vqueues: None,
-	}));
+	};
 
 	trace!("Driver before init: {:?}", drv);
-	drv.borrow_mut().init();
+	drv.init();
 	trace!("Driver after init: {:?}", drv);
 
 	// Instanciate global fuse object
-	let fuse = fuse::Fuse::new(drv.clone());
+	let fuse = fuse::Fuse::new();
 
 	// send FUSE_INIT to create session
 	fuse.send_init();

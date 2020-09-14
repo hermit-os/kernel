@@ -4,19 +4,18 @@
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
-
+use crate::arch::irq;
+use crate::drivers::net::NetworkInterface;
 use alloc::boxed::Box;
-use arch::irq;
-use drivers::net::NetworkInterface;
 
 #[cfg(target_arch = "x86_64")]
-use arch::x86_64::kernel::irq::*;
+use crate::arch::x86_64::kernel::irq::*;
 #[cfg(target_arch = "x86_64")]
-use arch::x86_64::kernel::uhyve_get_ip;
+use crate::arch::x86_64::kernel::uhyve_get_ip;
 #[cfg(target_arch = "x86_64")]
-use arch::x86_64::mm::paging::virt_to_phys;
+use crate::arch::x86_64::mm::paging::virt_to_phys;
 #[cfg(target_arch = "x86_64")]
-use x86::io::*;
+use crate::x86::io::*;
 
 const UHYVE_IRQ_NET: u32 = 11;
 const UHYVE_PORT_NETINFO: u16 = 0x600;

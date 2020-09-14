@@ -5,10 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::errno::*;
+use crate::synch::semaphore::Semaphore;
 use alloc::boxed::Box;
-use arch;
-use errno::*;
-use synch::semaphore::Semaphore;
 
 fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 	if sem.is_null() {
@@ -86,16 +85,11 @@ fn __sys_sem_timedwait(sem: *const Semaphore, ms: u32) -> i32 {
 		return -EINVAL;
 	}
 
-	// Calculate the absolute wakeup time in processor timer ticks out of the relative timeout in milliseconds.
-	let wakeup_time = if ms > 0 {
-		Some(arch::processor::get_timer_ticks() + u64::from(ms) * 1000)
-	} else {
-		None
-	};
+	let delay = if ms > 0 { Some(u64::from(ms)) } else { None };
 
 	// Get a reference to the given semaphore and wait until we have acquired it or the wakeup time has elapsed.
 	let semaphore = unsafe { &*sem };
-	if semaphore.acquire(wakeup_time) {
+	if semaphore.acquire(delay) {
 		0
 	} else {
 		-ETIME

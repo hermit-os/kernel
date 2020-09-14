@@ -6,17 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use alloc::collections::VecDeque;
+use crate::arch;
+use crate::arch::mm::VirtAddr;
+use crate::arch::percore::*;
+use crate::arch::processor::msb;
+use crate::arch::scheduler::{TaskStacks, TaskTLS};
+use crate::scheduler::CoreId;
+use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
-use arch;
-use arch::percore::*;
-use arch::processor::msb;
-use arch::scheduler::{TaskStacks, TaskTLS};
-use collections::{DoublyLinkedList, Node};
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::fmt;
-use scheduler::CoreId;
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -98,9 +98,9 @@ pub struct TaskHandle {
 impl TaskHandle {
 	pub fn new(id: TaskId, priority: Priority, core_id: CoreId) -> Self {
 		Self {
-			id: id,
-			priority: priority,
-			core_id: core_id,
+			id,
+			priority,
+			core_id,
 		}
 	}
 
@@ -141,7 +141,7 @@ impl TaskHandlePriorityQueue {
 		let i = task.priority.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		self.prio_bitmap |= 1 << i;
+		self.prio_bitmap |= (1 << i) as u64;
 		if let Some(queue) = &mut self.queues[i] {
 			queue.push_back(task);
 		} else {
@@ -271,7 +271,7 @@ impl PriorityTaskQueue {
 		let i = task.borrow().prio.into() as usize;
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
-		self.prio_bitmap |= 1 << i;
+		self.prio_bitmap |= (1 << i) as u64;
 		match self.queues[i].tail {
 			None => {
 				// first element in the queue
@@ -291,7 +291,7 @@ impl PriorityTaskQueue {
 			}
 		}
 
-		self.queues[i].tail = Some(task.clone());
+		self.queues[i].tail = Some(task);
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
@@ -360,7 +360,8 @@ impl PriorityTaskQueue {
 }
 
 /// A task control block, which identifies either a process or a thread
-#[repr(align(64))]
+#[cfg_attr(target_arch = "x86_64", repr(align(128)))]
+#[cfg_attr(not(target_arch = "x86_64"), repr(align(64)))]
 pub struct Task {
 	/// The ID of this context
 	pub id: TaskId,
@@ -369,9 +370,9 @@ pub struct Task {
 	/// Task priority,
 	pub prio: Priority,
 	/// Last stack pointer before a context switch to another task
-	pub last_stack_pointer: usize,
+	pub last_stack_pointer: VirtAddr,
 	/// Last stack pointer on the user stack before jumping to kernel space
-	pub user_stack_pointer: usize,
+	pub user_stack_pointer: VirtAddr,
 	/// Last FPU state before a context switch to another task using the FPU
 	pub last_fpu_state: arch::processor::FPUState,
 	/// ID of the core this task is running on
@@ -404,16 +405,16 @@ impl Task {
 		task_prio: Priority,
 		stack_size: usize,
 	) -> Task {
-		debug!("Creating new task {}", tid);
+		debug!("Creating new task {} on core {}", tid, core_id);
 
 		Task {
 			id: tid,
 			status: task_status,
 			prio: task_prio,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: TaskStacks::new(stack_size),
 			next: None,
 			prev: None,
@@ -431,10 +432,10 @@ impl Task {
 			id: tid,
 			status: TaskStatus::TaskIdle,
 			prio: IDLE_PRIO,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
 			next: None,
 			prev: None,
@@ -452,10 +453,10 @@ impl Task {
 			id: tid,
 			status: TaskStatus::TaskReady,
 			prio: task.prio,
-			last_stack_pointer: 0,
-			user_stack_pointer: 0,
+			last_stack_pointer: VirtAddr(0u64),
+			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: core_id,
+			core_id,
 			stacks: task.stacks.clone(),
 			next: None,
 			prev: None,
@@ -479,13 +480,13 @@ struct BlockedTask {
 }
 
 pub struct BlockedTaskQueue {
-	list: DoublyLinkedList<BlockedTask>,
+	list: LinkedList<BlockedTask>,
 }
 
 impl BlockedTaskQueue {
 	pub const fn new() -> Self {
 		Self {
-			list: DoublyLinkedList::new(),
+			list: LinkedList::new(),
 		}
 	}
 
@@ -525,28 +526,26 @@ impl BlockedTaskQueue {
 			let mut borrowed = task.borrow_mut();
 			debug!("Blocking task {}", borrowed.id);
 
-			assert!(
-				borrowed.status == TaskStatus::TaskRunning,
+			assert_eq!(
+				borrowed.status,
+				TaskStatus::TaskRunning,
 				"Trying to block task {} which is not running",
 				borrowed.id
 			);
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = Node::new(BlockedTask {
-			task: task,
-			wakeup_time: wakeup_time,
-		});
+		let new_node = BlockedTask { task, wakeup_time };
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
 			let mut first_task = true;
+			let mut cursor = self.list.cursor_front_mut();
 
-			// Yes, then insert it at the right position into the list sorted by wakeup time.
-			for node in self.list.iter() {
-				let node_wakeup_time = node.borrow().value.wakeup_time;
+			while let Some(node) = cursor.current() {
+				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
-					self.list.insert_before(new_node, node);
+					cursor.insert_before(new_node);
 
 					// If this is the new first task in the list, update the One-Shot Timer
 					// to fire when this task shall be woken up.
@@ -558,36 +557,31 @@ impl BlockedTaskQueue {
 				}
 
 				first_task = false;
-			}
-
-			// The right position is at the end of the list or the list is empty.
-			self.list.push(new_node);
-			if first_task {
-				arch::set_oneshot_timer(wakeup_time);
+				cursor.move_next();
 			}
 		} else {
 			// No, then just insert it at the end of the list.
-			self.list.push(new_node);
+			self.list.push_back(new_node);
 		}
 	}
 
 	/// Manually wake up a blocked task.
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		let mut first_task = true;
-		let mut iter = self.list.iter();
+		let mut cursor = self.list.cursor_front_mut();
 
 		// Loop through all blocked tasks to find it.
-		while let Some(node) = iter.next() {
-			if node.borrow().value.task.borrow().id == task.get_id() {
+		while let Some(node) = cursor.current() {
+			if node.task.borrow().id == task.get_id() {
 				// Remove it from the list of blocked tasks and wake it up.
-				self.list.remove(node.clone());
-				Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Custom);
+				Self::wakeup_task(node.task.clone(), WakeupReason::Custom);
+				cursor.remove_current();
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).
 				if first_task {
-					if let Some(next_node) = iter.next() {
-						arch::set_oneshot_timer(next_node.borrow().value.wakeup_time);
+					if let Some(next_node) = cursor.current() {
+						arch::set_oneshot_timer(next_node.wakeup_time);
 					}
 				}
 
@@ -595,6 +589,7 @@ impl BlockedTaskQueue {
 			}
 
 			first_task = false;
+			cursor.move_next();
 		}
 	}
 
@@ -605,12 +600,13 @@ impl BlockedTaskQueue {
 	pub fn handle_waiting_tasks(&mut self) {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
+		let mut cursor = self.list.cursor_front_mut();
 
 		// Loop through all blocked tasks.
-		for node in self.list.iter() {
+		while let Some(node) = cursor.current() {
 			// Get the wakeup time of this task and check if we have reached the first task
 			// that hasn't elapsed yet or waits indefinitely.
-			let node_wakeup_time = node.borrow().value.wakeup_time;
+			let node_wakeup_time = node.wakeup_time;
 			if node_wakeup_time.is_none() || time < node_wakeup_time.unwrap() {
 				// Adjust the One-Shot Timer to fire at this task's wakeup time (if any)
 				// and exit the loop.
@@ -619,8 +615,8 @@ impl BlockedTaskQueue {
 			}
 
 			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			self.list.remove(node.clone());
-			Self::wakeup_task(node.borrow().value.task.clone(), WakeupReason::Timer);
+			Self::wakeup_task(node.task.clone(), WakeupReason::Timer);
+			cursor.remove_current();
 		}
 	}
 }

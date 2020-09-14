@@ -5,50 +5,52 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::kernel::{get_limit, get_mbinfo};
-use arch::x86_64::mm::paddr_to_slice;
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
+use core::convert::TryInto;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
 use multiboot::{MemoryType, Multiboot};
-use synch::spinlock::*;
+
+use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
+use crate::arch::x86_64::mm::paddr_to_slice;
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::synch::spinlock::*;
 
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 fn detect_from_multiboot_info() -> Result<(), ()> {
 	let mb_info = get_mbinfo();
-	if mb_info == 0 {
+	if mb_info.is_zero() {
 		return Err(());
 	}
 
-	let mb = unsafe { Multiboot::new(mb_info as u64, paddr_to_slice).unwrap() };
+	let mb = unsafe { Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap() };
 	let all_regions = mb
 		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
 	let ram_regions = all_regions.filter(|m| {
 		m.memory_type() == MemoryType::Available
-			&& m.base_address() + m.length() > mm::kernel_end_address() as u64
+			&& m.base_address() + m.length() > mm::kernel_end_address().as_u64()
 	});
 	let mut found_ram = false;
 
 	for m in ram_regions {
 		found_ram = true;
 
-		let start_address = if m.base_address() <= mm::kernel_start_address() as u64 {
+		let start_address = if m.base_address() <= mm::kernel_start_address().as_u64() {
 			mm::kernel_end_address()
 		} else {
-			m.base_address() as usize
+			VirtAddr(m.base_address())
 		};
 
-		let entry = Node::new(FreeListEntry {
-			start: start_address,
-			end: (m.base_address() + m.length()) as usize,
-		});
+		let entry = FreeListEntry::new(
+			start_address.as_usize(),
+			(m.base_address() + m.length()) as usize,
+		);
 		let _ = TOTAL_MEMORY.fetch_add((m.base_address() + m.length()) as usize, Ordering::SeqCst);
-		PHYSICAL_FREE_LIST.lock().list.push(entry);
+		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 	}
 
 	assert!(
@@ -65,12 +67,9 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let entry = Node::new(FreeListEntry {
-		start: mm::kernel_end_address(),
-		end: limit,
-	});
+	let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
 	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
-	PHYSICAL_FREE_LIST.lock().list.push(entry);
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 
 	Ok(())
 }
@@ -85,54 +84,72 @@ pub fn total_memory_size() -> usize {
 	TOTAL_MEMORY.load(Ordering::SeqCst)
 }
 
-pub fn allocate(size: usize) -> Result<usize, ()> {
+pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST.lock().allocate(size)
+	Ok(PhysAddr(
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(size, None)?
+			.try_into()
+			.unwrap(),
+	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
-	assert!(
-		size % alignment == 0,
+	assert_eq!(
+		size % alignment,
+		0,
 		"Size {:#X} is not a multiple of the given alignment {:#X}",
 		size,
 		alignment
 	);
-	assert!(
-		alignment % BasePageSize::SIZE == 0,
+	assert_eq!(
+		alignment % BasePageSize::SIZE,
+		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST.lock().allocate_aligned(size, alignment)
+	Ok(PhysAddr(
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(size, Some(alignment))?
+			.try_into()
+			.unwrap(),
+	))
 }
 
 /// This function must only be called from mm::deallocate!
 /// Otherwise, it may fail due to an empty node pool (POOL.maintain() is called in virtualmem::deallocate)
-pub fn deallocate(physical_address: usize, size: usize) {
+pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	assert!(
-		physical_address >= mm::kernel_end_address(),
+		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
 		"Physical address {:#X} is not >= KERNEL_END_ADDRESS",
 		physical_address
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST.lock().deallocate(physical_address, size);
+	PHYSICAL_FREE_LIST
+		.lock()
+		.deallocate(physical_address.as_usize(), size);
 }
 
 pub fn print_information() {

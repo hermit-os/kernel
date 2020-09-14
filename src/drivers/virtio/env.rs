@@ -226,11 +226,12 @@ pub mod memory {
 /// Meaning they are converted into big endian values on big endian machines and 
 /// are not changed on little endian machines.
 pub mod pci {
-    use drivers::virtio::env::memory::{VirtMemAddr};
-    use drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-    use arch::x86_64::kernel::pci;
-    use arch::x86_64::kernel::pci::{PciAdapter, PciBar};
-    use arch::x86_64::kernel::pci::error::PciError;
+    use crate::drivers::virtio::env::memory::{VirtMemAddr};
+    use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
+    use crate::arch::x86_64::kernel::pci;
+    use crate::arch::x86_64::kernel::pci::{PciAdapter, PciBar};
+    use crate::arch::x86_64::kernel::pci::error::PciError;
+    use crate::arch::x86_64::mm::PhysAddr;
     use alloc::vec::Vec;
     use core::result::Result;
 
@@ -294,7 +295,7 @@ pub mod pci {
                         continue;
                     }
                     
-                    let virtual_address = VirtMemAddr::from(crate::mm::map(bar.addr, bar.size, true, true, true));
+                    let virtual_address = VirtMemAddr::from(crate::mm::map(PhysAddr::from(bar.addr), bar.size, true, true, true).0);
                     
                     mapped_bars.push(VirtioPciBar::new(bar.index, virtual_address, bar.size as u64));
                 }

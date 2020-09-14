@@ -9,14 +9,13 @@
 //! Minor functions that Rust really expects to be defined by the compiler,
 //! but which we need to provide manually because we're on bare metal.
 
+use crate::arch::kernel::processor::run_on_hypervisor;
+use crate::{__sys_shutdown, arch};
 use alloc::alloc::Layout;
-use arch;
-use arch::kernel::processor::run_on_hypervisor;
 use core::panic::PanicInfo;
-use syscalls::__sys_shutdown;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
-#[cfg(not(test))]
+#[cfg(target_os = "hermit")]
 #[linkage = "weak"]
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
@@ -30,7 +29,7 @@ fn panic(info: &PanicInfo) -> ! {
 		print!("{}", message);
 	}
 
-	println!("");
+	println!();
 
 	if run_on_hypervisor() {
 		__sys_shutdown(1);

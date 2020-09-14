@@ -13,6 +13,9 @@ pub use self::paging::init_page_tables;
 use core::mem;
 use core::slice;
 
+pub use x86::bits64::paging::PAddr as PhysAddr;
+pub use x86::bits64::paging::VAddr as VirtAddr;
+
 fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
 	unsafe {
 		let ptr = mem::transmute(p);

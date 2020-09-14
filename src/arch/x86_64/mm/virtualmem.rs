@@ -5,56 +5,73 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use collections::Node;
-use mm;
-use mm::freelist::{FreeList, FreeListEntry};
-use synch::spinlock::*;
+use core::convert::TryInto;
+
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::VirtAddr;
+use crate::mm;
+use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::synch::spinlock::*;
 
 static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 
 pub fn init() {
-	let entry = Node::new(FreeListEntry {
-		start: mm::kernel_end_address(),
-		end: kernel_heap_end(),
-	});
-	KERNEL_FREE_LIST.lock().list.push(entry);
+	let entry = FreeListEntry::new(
+		mm::kernel_end_address().as_usize(),
+		kernel_heap_end().as_usize(),
+	);
+	KERNEL_FREE_LIST.lock().list.push_back(entry);
 }
 
-pub fn allocate(size: usize) -> Result<usize, ()> {
+pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
 	);
 
-	KERNEL_FREE_LIST.lock().allocate(size)
+	Ok(VirtAddr(
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(size, None)?
+			.try_into()
+			.unwrap(),
+	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<usize, ()> {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
-	assert!(
-		size % alignment == 0,
+	assert_eq!(
+		size % alignment,
+		0,
 		"Size {:#X} is not a multiple of the given alignment {:#X}",
 		size,
 		alignment
 	);
-	assert!(
-		alignment % BasePageSize::SIZE == 0,
+	assert_eq!(
+		alignment % BasePageSize::SIZE,
+		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
 		BasePageSize::SIZE
 	);
 
-	KERNEL_FREE_LIST.lock().allocate_aligned(size, alignment)
+	Ok(VirtAddr(
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(size, Some(alignment))?
+			.try_into()
+			.unwrap(),
+	))
 }
 
-pub fn deallocate(virtual_address: usize, size: usize) {
+pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	assert!(
-		virtual_address >= mm::kernel_end_address(),
+		virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
 		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
 		virtual_address
 	);
@@ -63,26 +80,30 @@ pub fn deallocate(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
 	);
 
-	KERNEL_FREE_LIST.lock().deallocate(virtual_address, size);
+	KERNEL_FREE_LIST
+		.lock()
+		.deallocate(virtual_address.as_usize(), size);
 }
 
-pub fn reserve(virtual_address: usize, size: usize) {
+/*pub fn reserve(virtual_address: VirtAddr, size: usize) {
 	assert!(
-		virtual_address >= mm::kernel_end_address(),
+		virtual_address >= VirtAddr(mm::kernel_end_address().as_u64()),
 		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
 		virtual_address
 	);
@@ -91,28 +112,32 @@ pub fn reserve(virtual_address: usize, size: usize) {
 		"Virtual address {:#X} is not < kernel_heap_end()",
 		virtual_address
 	);
-	assert!(
-		virtual_address % BasePageSize::SIZE == 0,
+	assert_eq!(
+		virtual_address % BasePageSize::SIZE,
+		0,
 		"Virtual address {:#X} is not a multiple of {:#X}",
 		virtual_address,
 		BasePageSize::SIZE
 	);
 	assert!(size > 0);
-	assert!(
-		size % BasePageSize::SIZE == 0,
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
 		BasePageSize::SIZE
 	);
 
-	let result = KERNEL_FREE_LIST.lock().reserve(virtual_address, size);
+	let result = KERNEL_FREE_LIST
+		.lock()
+		.reserve(virtual_address.as_usize(), size);
 	assert!(
 		result.is_ok(),
 		"Could not reserve {:#X} bytes of virtual memory at {:#X}",
 		size,
 		virtual_address
 	);
-}
+}*/
 
 pub fn print_information() {
 	KERNEL_FREE_LIST
@@ -125,12 +150,12 @@ pub fn print_information() {
 /// In case of pure rust applications, we don't have a task heap.
 #[cfg(not(feature = "newlib"))]
 #[inline]
-pub const fn kernel_heap_end() -> usize {
-	0x8000_0000_0000
+pub const fn kernel_heap_end() -> VirtAddr {
+	VirtAddr(0x8000_0000_0000u64)
 }
 
 #[cfg(feature = "newlib")]
 #[inline]
-pub const fn kernel_heap_end() -> usize {
-	0x1_0000_0000
+pub const fn kernel_heap_end() -> VirtAddr {
+	VirtAddr(0x1_0000_0000u64)
 }

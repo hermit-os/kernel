@@ -24,14 +24,15 @@
 
 //! Architecture dependent interface to initialize a task
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
 use alloc::rc::Rc;
-use arch::aarch64::kernel::percore::*;
-use arch::aarch64::kernel::processor;
 use core::cell::RefCell;
 use core::{mem, ptr};
-use scheduler::task::{Task, TaskFrame, TaskTLS};
+
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::processor;
+use crate::scheduler::task::{Task, TaskFrame, TaskTLS};
+
+include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
 
 extern "C" {
 	static tls_start: u8;
@@ -70,7 +71,7 @@ impl Drop for TaskStacks {
 }
 
 extern "C" fn leave_task() -> ! {
-	core_scheduler().exit(0);
+	core_scheduler().exit(0)
 }
 
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
