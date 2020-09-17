@@ -16,20 +16,22 @@ use self::error::VqPackedError;
 use core::convert::TryFrom;
 use alloc::boxed::Box;
 use core::cell::RefCell;
+use core::sync::atomic::{fence, Ordering};
 use alloc::rc::Rc;
+use core::ops::Deref;
 
 /// A newtype of bool used for convenience in context with 
 /// packed queues wrap counter.
 ///
 /// For more details see Virtio specification v1.1. - 2.7.1
 #[derive(Copy, Clone, Debug)]
-pub struct WrapCount(bool);
+struct WrapCount(bool);
 
 impl WrapCount {
     /// Returns a new WrapCount struct initalized to true or 1.
     /// 
     /// See virtio specification v1.1. - 2.7.1
-    pub fn new() -> Self {
+    fn new() -> Self {
         WrapCount(true)
     }
 
@@ -37,13 +39,26 @@ impl WrapCount {
     ///
     /// If WrapCount(true) returns WrapCount(false), 
     /// if WrapCount(false) returns WrapCount(true).
-    pub fn wrap(&mut self) {
+    fn wrap(&mut self) {
         if self.0 == false {
             self.0 = true;
         } else {
             self.0 = false;
         }
     }
+
+    /// Creates avail and used flags inside u16 in accordance to the 
+    /// virito specification v1.1. - 2.7.1
+    ///
+    /// I.e.: Set avail flag to match the WrapCount and the used flag
+    /// to NOT match the WrapCount.
+    fn as_flags(&self) -> u16 {
+        if self.0 == true {
+            1 << 7
+        } else {
+            1 << 15
+        }
+    } 
 }
 
 /// Structure which allows to control raw ring and operate easily on it
@@ -51,24 +66,27 @@ impl WrapCount {
 /// WARN: NEVER PUSH TO THE RING AFTER DESCRIPTORRING HAS BEEN INITALIZED AS THIS WILL PROBABLY RESULT IN A 
 /// RELOCATION OF THE VECTOR AND HENCE THE DEVICE WILL NO LONGER NO THE RINGS ADDRESS!
 struct DescriptorRing {
-    ring: Pinned<Vec<Descriptor>>, 
+    ring: Box<[Descriptor]>,
+    //ring: Pinned<Vec<Descriptor>>, 
+    tkn_ref_ring: Box<[*mut TransferToken]>,
 
     // Controlling variables for the ring
     //
     /// where to insert availble descriptors next
-    write_index: u16,
+    write_index: usize,
     /// How much descriptors can be inserted
-    capacity: u16,
+    capacity: usize,
     /// Where to expect the next used descriptor by the device
-    poll_index: u16,
+    poll_index: usize,
     /// See Virtio specification v1.1. - 2.7.1
     wrap_count: WrapCount,
 }
 
 impl DescriptorRing {
     fn new(size: u16) -> Self {
+        let size = usize::try_from(size).unwrap();
         // WARN: Uncatched as usize call here. Could panic if used with usize < u16
-        let mut ring = Box::new(Vec::with_capacity(usize::try_from(size).unwrap()));
+        let mut ring = Box::new(Vec::with_capacity(size));
         for _ in 0..size {
             ring.push(Descriptor {
                 address: 0,
@@ -78,9 +96,14 @@ impl DescriptorRing {
             });
         }
         
+        // Descriptor ID's run from 1 to size_of_queue. In order to index directly into the 
+        // refernece ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
+        // and do not care about the first element beeing unused.
+        let tkn_ref_ring = vec![0usize as *mut TransferToken; size+1].into_boxed_slice();
 
         DescriptorRing { 
-            ring: Pinned::from_boxed(ring),
+            ring: ring.into_boxed_slice(),
+            tkn_ref_ring,
             write_index: 0,
             capacity: size,
             poll_index: 0,
@@ -91,29 +114,248 @@ impl DescriptorRing {
     /// # Unsafe
     /// Polls last index postiion. If used. use the address and the prepended reference to the 
     /// to return an TransferToken reference. Also sets the poll index to show the next item in list. 
-    fn poll(&mut self) -> Option<&TransferToken> {
+    fn poll(&mut self) -> Option<Pinned<TransferToken>> {
         unimplemented!();
     }
 
-    fn push() {
-        // places a new descriptor into the ring
-        // Was soll übergeben werden? Ein Raw element, oder soll der Ring sich auch um das Managen der BufferIds etc. kümmern
-        // also ehere einen MemDescr nehmen?
-        unimplemented!();
+    fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> Vec<Pinned<TransferToken>> {
+        todo!("implement batch push of ring");
+    }
+
+    fn push(&mut self, tkn: TransferToken) -> Pinned<TransferToken> {
+        // fix memory address of token
+        let mut pinned = Pinned::new(tkn);
+
+        // Check length and if its fits. This should always be true due to the restriction of
+        // the memory pool, but to be sure.
+        assert!(pinned.buff_tkn.as_ref().unwrap().len() <= self.capacity);
+
+        // create an counter that wrappes to the first element
+        // after reaching a the end of the ring 
+        let mut ctrl = self.get_write_ctrler();
+
+        // write the descriptors in reversed order into the queue. Starting with recv descriptors.
+        // As the device MUST see all readable descriptors, bevore any writable descriptors
+        // See Virtio specification v1.1. - 2.7.17
+        //
+        // Importance here is:
+        // * distinguish between Indirect and direct buffers
+        // * write descriptors in the correct order
+        // * make them available in the right order (reversed order or i.e. lastly where device polls)
+        match (&pinned.buff_tkn.as_ref().unwrap().send_buff, &pinned.buff_tkn.as_ref().unwrap().recv_buff) {
+            (Some(send_buff), Some(recv_buff)) => {
+                // It is important to differentiate between indirect and direct descriptors here and if
+                // send & recv descriptors are defined or only one of them. 
+                match (send_buff.get_ctrl_desc(), recv_buff.get_ctrl_desc()) {
+                    (Some(ctrl_desc), Some(_)) => {
+                        // One indirect descriptor with only flag indirect set    
+                        ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                    },
+                    (None, None) => {
+                        let mut buff_len = send_buff.as_slice().len() + recv_buff.as_slice().len();
+
+                        for desc in send_buff.as_slice() {
+                            if buff_len > 1 {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+                            } else {
+                                ctrl.write_desc(desc, 0);
+                            }
+                            buff_len -= 1;
+                        }
+
+                        for desc in recv_buff.as_slice() {
+                            if buff_len > 1 {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                            } else {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+                            }
+                            buff_len -= 1;
+                        } 
+                    }
+                    (None, Some(_)) => panic!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken
+                    (Some(_), None) => panic!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken,
+                }                
+            },
+            (Some(send_buff), None) => {
+                match send_buff.get_ctrl_desc() {
+                    Some(ctrl_desc) => {
+                       // One indirect descriptor with only flag indirect set    
+                       ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                    },
+                    None => {
+                        let mut buff_len = send_buff.as_slice().len();
+
+                        for desc in send_buff.as_slice() {
+                            if buff_len > 1 {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+                            } else {
+                                ctrl.write_desc(desc, 0);
+                            }
+                            buff_len -= 1;
+                        } 
+                    }
+                }
+            },
+            (None, Some(recv_buff)) => {
+                match recv_buff.get_ctrl_desc() {
+                    Some(ctrl_desc) => {
+                       // One indirect descriptor with only flag indirect set    
+                       ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                    },
+                    None => {
+                        let mut buff_len = recv_buff.as_slice().len();
+
+                        for desc in recv_buff.as_slice() {
+                            if buff_len > 1 {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                            } else {
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+                            }
+                            buff_len -= 1;
+                        } 
+                    }
+                }
+            },
+            (None, None) => panic!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+        }
+
+        // Update flags of the first descriptor and set new write_index
+        ctrl.make_avail(pinned.raw_addr());
+
+        // Update the state of the actual Token
+        pinned.state = TransferState::Processing;
+
+        pinned
     }
 
     /// # Unsafe
     /// Returns the memory address of the first element of the descriptor ring
     fn raw_addr(&self) -> usize {
-        let temp_ring = unsafe {
-            Box::from_raw(self.ring.raw_addr())
-        };
-        let (ptr, len, cap) = temp_ring.into_raw_parts();
-        // return only pointer as usize
-        ptr as usize
+        self.ring.as_ptr() as usize
+    }
+
+    /// Returns an initalized write controler in order
+    /// to write the queue correctly.
+    fn get_write_ctrler(&mut self) -> WriteCtrl {
+        WriteCtrl{
+            start: self.write_index,
+            position: self.write_index,
+            modulo: self.ring.len(),
+            wrap_at_init: self.wrap_count,
+            buff_id: 0,
+
+            desc_ring: self,
+        }
     }
 }
 
+
+/// Convenient struct, allowing to increment and decrement inside the given 
+/// modulo. Furthermore allows to convinently write descritpros into the queue.
+/// 
+/// **Example:**
+/// 
+/// The following code will count 6 steps backwards from 3 inside the modulo 9.
+/// The output will be: 3,2,1,0,8,7.
+///
+/// ```
+/// let mut writer = WriteCtrl {
+///    val: 3,
+///    modulo: 9
+/// };
+///
+/// for i in 0..6 {
+///    println!("{}", index.val);
+///    index.decrmt();
+/// }
+/// ```
+struct WriteCtrl<'a>{
+    /// Where did the write of the buffer start in the descriptor ring
+    /// This is important, as we must make this descriptor available 
+    /// lastly.
+    start: usize,
+    /// Where to write next. This should always be equal to the Rings
+    /// write_next field.
+    position: usize,
+    modulo: usize,
+    /// What was the WrapCount at the first write position
+    /// Important in order to set the right avail and used flags
+    wrap_at_init: WrapCount,
+    /// Buff ID of this write
+    buff_id: u16,
+
+    desc_ring: &'a mut DescriptorRing,
+}
+
+
+impl<'a> WriteCtrl<'a> {
+    /// **This function MUST only be used within the WriteCtrl.write_desc() function!**
+    ///
+    /// Incrementing index by one. The index wrappes around to zero when 
+    /// reaching (modulo -1).
+    ///
+    /// Also takes care of wrapping the WrapCount of the associated 
+    /// DescriptorRing.
+    fn incrmt(&mut self) {
+        // Firstly check if we are at all allowed to write a descriptor
+        assert!(self.desc_ring.capacity != 0);
+        self.desc_ring.capacity -= 1;
+        // check if increment wrapped around end of ring
+        // then also wrap the wrap counter.
+        if self.position + 1 == self.modulo {
+            self.desc_ring.wrap_count.wrap();
+        }
+        // Also update the write_index
+        self.desc_ring.write_index = (self.desc_ring.write_index + 1) % self.modulo;
+
+        self.position = (self.position + 1) % self.modulo;
+    }
+
+    /// Writes a descriptor of a buffer into the queue. At the correct position, and 
+    /// with the given flags.
+    /// * Flags for avail and used will be set by the queue itself.
+    ///   * -> Only set different flags here.
+    fn write_desc(&mut self, mem_desc: &MemDescr, flags: u16) {
+        // This also sets the buff_id for the WriteCtrl stuct to the ID of the first 
+        // descriptor.
+        if self.start == self.position {
+            let desc_ref = &mut self.desc_ring.ring[self.position];
+            desc_ref.address = mem_desc.ptr as u64;
+            desc_ref.len = mem_desc.len as u32;
+            desc_ref.buff_id = mem_desc.id.as_ref().unwrap().0; 
+            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+            // See Virtio specfification v1.1. - 2.7.21
+            fence(Ordering::SeqCst);
+            // Remove possibly set avail and used flags
+            desc_ref.flags = flags & 0xFEFE;
+
+            self.buff_id = mem_desc.id.as_ref().unwrap().0;
+            self.incrmt();
+        } else {
+            let mut desc_ref = &mut self.desc_ring.ring[self.position];
+            desc_ref.address = mem_desc.ptr as u64;
+            desc_ref.len = mem_desc.len as u32;
+            desc_ref.buff_id = self.buff_id;
+            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+            // See Virtio specfification v1.1. - 2.7.21
+            fence(Ordering::SeqCst);
+            // Remove possibly set avail and used flags and then set avail and used 
+            // according to the current WrapCount.
+            desc_ref.flags = (flags & 0xFEFE) | self.desc_ring.wrap_count.as_flags();
+
+            self.incrmt()
+        }
+    }
+
+    fn make_avail(&mut self, raw_tkn: *mut TransferToken) {
+        // provide reference, in order to let TransferToken now upon finish.
+        self.desc_ring.tkn_ref_ring[usize::try_from(self.buff_id).unwrap()] = raw_tkn;
+        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+        // See Virtio specfification v1.1. - 2.7.21
+		fence(Ordering::SeqCst);
+        self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags();
+    }
+}
 
 #[repr(C, align(16))]
 struct Descriptor {
@@ -174,22 +416,9 @@ impl Descriptor {
         desc_bytes
     }
 
-    fn read() {
-        unimplemented!();
-    }
-
-    fn mark_avail(&self) {
-        unimplemented!();
-    }
-
     fn is_used() {
         unimplemented!();
     }
-
-    fn is_avail() {
-        unimplemented!();
-    }
-
 }
 
 /// Driver and device event suppression struct used in packed virtqueues.
@@ -250,11 +479,11 @@ impl EventSuppr {
 pub struct PackedVq {
     /// Ring which allows easy access to the raw ring structure of the 
     /// specfification
-    descr_ring: DescriptorRing,
+    descr_ring: RefCell<DescriptorRing>,
     /// Raw EventSuppr structure
-    drv_event: Pinned<EventSuppr>,
+    drv_event: Box<EventSuppr>,
     /// Raw
-    dev_event: Pinned<EventSuppr>,
+    dev_event: Box<EventSuppr>,
     /// Memory pool controls the amount of "free floating" descriptors
     /// See [MemPool](super.MemPool) docs for detail.
     mem_pool: Rc<MemPool>,
@@ -267,7 +496,7 @@ pub struct PackedVq {
     /// Holds all erly dropped `TransferToken`
     /// If `TransferToken.state == TransferState::Finished`
     /// the Token can be safely dropped
-    dropped: Vec<Pinned<TransferToken>>,
+    dropped: RefCell<Vec<Pinned<TransferToken>>>,
 }
 
 
@@ -278,7 +507,14 @@ pub struct PackedVq {
 // queue. This could be eased 
 impl PackedVq {
     pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
-        unimplemented!();
+        match tkn.state {
+            TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
+            TransferState::Ready => panic!("Early dropped transfers are not allowed to be state == Ready"),
+            TransferState::Processing => {
+                // Keep token until state is finished. This needs to be checked/cleaned up later
+                self.dropped.borrow_mut().push(tkn);
+            }
+        }
     }
 
     pub fn index(&self) -> VqIndex {
@@ -303,23 +539,26 @@ impl PackedVq {
             vq_size = vq_handler.set_vq_size(size.0);
         }
         
-        let descr_ring = DescriptorRing::new(vq_size);
-        let drv_event = Pinned::new(EventSuppr::new());
-        let dev_event= Pinned::new(EventSuppr::new());
+        let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
+        let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
+        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));Box::new(EventSuppr::new());
 
         // Provide memory areas of the queues data structures to the device
-        vq_handler.set_ring_addr(index.into(), descr_ring.raw_addr());
+        vq_handler.set_ring_addr(index.into(), descr_ring.borrow().raw_addr());
         // As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-        vq_handler.set_drv_ctrl_addr(index.into(), drv_event.raw_addr() as usize);
-        vq_handler.set_dev_ctrl_addr(index.into(), dev_event.raw_addr() as usize);
+        vq_handler.set_drv_ctrl_addr(index.into(), drv_event as usize);
+        vq_handler.set_dev_ctrl_addr(index.into(), dev_event as usize);
+
+        let drv_event = unsafe{Box::from_raw(drv_event)};
+        let dev_event = unsafe{Box::from_raw(dev_event)};
 
 
         // Initalize new memory pool.
         let mem_pool = Rc::new(MemPool::new(size.0));
 
         // Initalize an empty vector for future dropped transfers
-        let dropped: Vec<Pinned<TransferToken>> = Vec::new();
-
+        let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
+    
         Ok(PackedVq {
             descr_ring,
             drv_event, 
@@ -333,7 +572,9 @@ impl PackedVq {
 
     /// See `Virtq.prep_transfer()` documentation.
     pub fn dispatch(&self, tkn: TransferToken) -> Transfer {
-        unimplemented!();
+        Transfer {
+            transfer_tkn: Some(self.descr_ring.borrow_mut().push(tkn)),
+        }
     }
 
     /// See `Virtq.prep_transfer()` documentation.

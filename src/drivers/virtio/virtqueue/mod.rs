@@ -226,8 +226,14 @@ impl Virtq {
     /// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
     ///
     /// **Details on Usage:**
-    ///
-    /// * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
+    /// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
+    /// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements. 
+    /// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
+    /// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
+    /// many elements in the queue.
+    /// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
+    /// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element. 
+    ///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
     /// descriptors, the queue will merge the send and recv structure as follows:
     /// ```
     /// //+++++++++++++++++++++++
@@ -289,8 +295,14 @@ impl Virtq {
     /// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
     ///
     /// **Details on Usage:**
-    ///
-    /// * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
+    /// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
+    /// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements. 
+    /// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
+    /// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
+    /// many elements in the queue.
+    /// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
+    /// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element. 
+    ///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
     /// descriptors, the queue will merge the send and recv structure as follows:
     /// ```
     /// //+++++++++++++++++++++++
@@ -335,14 +347,20 @@ impl Virtq {
     ///         * [BuffSpec](BuffSpec) defines the size of the buffer and how the buffer is 
     ///         Buffer will be structured. See documentation on `BuffSpec` for details.
     ///
-    /// ** Reasons for Failure:** 
+    /// **Reasons for Failure:** 
     /// * Queue does not have enough descriptors left to create the desired amount of descriptors as indicated by the `BuffSpec`.
     /// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
     /// * Systerm does not have enough memory resources left.
     /// 
     /// **Details on Usage:**
-    ///
-    /// * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
+    /// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
+    /// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements. 
+    /// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
+    /// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
+    /// many elements in the queue.
+    /// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
+    /// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element. 
+    ///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
     /// descriptors, the queue will merge the send and recv structure as follows:
     /// ```
     /// //+++++++++++++++++++++++
@@ -444,7 +462,6 @@ pub struct Transfer {
     /// Needs to be Option<Pinned<TransferToken>> in order to prevent deallocation via None
     // See custom drop function for clarity
     transfer_tkn: Option<Pinned<TransferToken>>, 
-    await_queue: Option<Rc<RefCell<VecDeque<Transfer>>>>,
 }
 
 impl Drop for Transfer {
@@ -740,6 +757,23 @@ pub struct BufferToken {
     /// Indicates if the token is allowed 
     /// to be reused.
     reusable: bool,
+}
+
+// Private interface of BufferToken
+impl BufferToken {
+    /// Returns the overall length of the buffer
+    fn len(&self) -> usize {
+        let mut len = 0usize;
+
+        if let Some(buffer) = &self.recv_buff {
+            len += buffer.len();
+        }
+
+        if let Some(buffer) = &self.send_buff {
+            len += buffer.len();
+        }
+        len
+    }
 }
 
 // Public interface of BufferToken
@@ -1141,6 +1175,15 @@ impl Buffer {
         }
     }
 
+    /// Returns the buffers ctrl descriptor if available. 
+    fn get_ctrl_desc(&self) -> Option<&MemDescr> {
+        match self {
+            Buffer::Single{desc_lst, next_write, len} => None,
+            Buffer::Multiple{desc_lst, next_write, len} => None, 
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => Some(ctrl_desc),
+        } 
+    }
+
 
 }
 
@@ -1276,7 +1319,7 @@ impl Drop for MemDescr {
 }
 
 /// A newtype for descriptor ids, for better readability.
-struct MemDescrId(u16);
+struct MemDescrId(pub u16);
 
 /// A newtype for a usize, which indiactes how many bytes the usize does refer to.
 #[derive(Debug, Clone, Copy)]
@@ -1589,6 +1632,13 @@ impl<T: Sized> Pinned<T> {
             raw_ptr: Box::into_raw(boxed)
         }
     }
+
+    /// Create a new pinned `T` from a `*mut T`
+    fn from_raw(raw_ptr: *mut T) -> Pinned<T> {
+        Pinned {
+            raw_ptr
+        }
+    }
     
     /// Unpins the pinned value and returns it. This is only
     /// save as long as no one relies on the
@@ -1613,6 +1663,14 @@ impl<T> Deref for Pinned<T> {
     fn deref(&self) -> &Self::Target {
         unsafe {
             & *(self.raw_ptr)
+        }
+    }
+}
+
+impl<T> DerefMut for Pinned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe {
+            &mut *(self.raw_ptr)
         }
     }
 }
