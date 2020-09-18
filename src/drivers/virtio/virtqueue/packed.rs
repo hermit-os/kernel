@@ -9,7 +9,8 @@
 //! See Virito specification v1.1. - 2.7
 use alloc::vec::Vec;
 
-use super::super::transport::pci::ComCfg;
+use super::super::features::Features;
+use super::super::transport::pci::{ComCfg, NotifCtrl, NotifCfg, IsrStatus};
 use super::{VqSize, VqIndex, MemPool, MemDescrId, MemDescr, BufferToken, TransferToken, Transfer, TransferState, Buffer, BuffSpec, Bytes, AsSliceU8, Pinned, Virtq, DescrFlags};
 use super::error::VirtqError;
 use self::error::VqPackedError;
@@ -19,6 +20,7 @@ use core::cell::RefCell;
 use core::sync::atomic::{fence, Ordering};
 use alloc::rc::Rc;
 use core::ops::Deref;
+use alloc::collections::VecDeque;
 
 /// A newtype of bool used for convenience in context with 
 /// packed queues wrap counter.
@@ -129,8 +131,9 @@ impl DescriptorRing {
 
     /// Polls poll index and sets states of eventually used TransferTokens to finished.
     /// If Await_qeue is available, the Transfer will be provieded to the queue.
-    fn poll(&mut self) {
+    fn poll(&mut self) -> Option<Vec<Pinned<TransferToken>>> {
         let mut ctrl = self.get_read_ctrler();
+        let mut tkn_lst = Vec::new();
 
         while let Some(mut tkn) = ctrl.poll_next() {
             tkn.state = TransferState::Finished;
@@ -142,16 +145,148 @@ impl DescriptorRing {
                         transfer_tkn: Some(tkn),
                     });
                 },
-                None => (),
+                None => tkn_lst.push(tkn),
             }
+        }
+
+        if tkn_lst.is_empty() {
+            None
+        } else {
+            Some(tkn_lst)
         }
     }
 
-    fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> Vec<Pinned<TransferToken>> {
-        todo!("implement batch push of ring");
+    fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (Vec<Pinned<TransferToken>>, usize, u8) {
+        // Catch empty push, in order to allow zero initalized first_ctrl_settings struct
+        // which will be overwritten in the first iteration of the for-loop
+        assert!(tkn_lst.len() > 0);
+
+        let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
+        let mut pind_lst = Vec::with_capacity(tkn_lst.len());
+
+        for (i, tkn) in tkn_lst.into_iter().enumerate() {
+                   // fix memory address of token
+            let mut pinned = Pinned::new(tkn);
+
+            // Check length and if its fits. This should always be true due to the restriction of
+            // the memory pool, but to be sure.
+            assert!(pinned.buff_tkn.as_ref().unwrap().len() <= self.capacity);
+
+            // create an counter that wrappes to the first element
+            // after reaching a the end of the ring 
+            let mut ctrl = self.get_write_ctrler();
+
+            // write the descriptors in reversed order into the queue. Starting with recv descriptors.
+            // As the device MUST see all readable descriptors, bevore any writable descriptors
+            // See Virtio specification v1.1. - 2.7.17
+            //
+            // Importance here is:
+            // * distinguish between Indirect and direct buffers
+            // * write descriptors in the correct order
+            // * make them available in the right order (reversed order or i.e. lastly where device polls)
+            match (&pinned.buff_tkn.as_ref().unwrap().send_buff, &pinned.buff_tkn.as_ref().unwrap().recv_buff) {
+                (Some(send_buff), Some(recv_buff)) => {
+                    // It is important to differentiate between indirect and direct descriptors here and if
+                    // send & recv descriptors are defined or only one of them. 
+                    match (send_buff.get_ctrl_desc(), recv_buff.get_ctrl_desc()) {
+                        (Some(ctrl_desc), Some(_)) => {
+                            // One indirect descriptor with only flag indirect set    
+                            ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                        },
+                        (None, None) => {
+                            let mut buff_len = send_buff.as_slice().len() + recv_buff.as_slice().len();
+
+                            for desc in send_buff.as_slice() {
+                                if buff_len > 1 {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+                                } else {
+                                    ctrl.write_desc(desc, 0);
+                                }
+                                buff_len -= 1;
+                            }
+
+                            for desc in recv_buff.as_slice() {
+                                if buff_len > 1 {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                } else {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+                                }
+                                buff_len -= 1;
+                            } 
+                        }
+                        (None, Some(_)) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken
+                        (Some(_), None) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken,
+                    }                
+                },
+                (Some(send_buff), None) => {
+                    match send_buff.get_ctrl_desc() {
+                        Some(ctrl_desc) => {
+                        // One indirect descriptor with only flag indirect set    
+                        ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                        },
+                        None => {
+                            let mut buff_len = send_buff.as_slice().len();
+
+                            for desc in send_buff.as_slice() {
+                                if buff_len > 1 {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT.into());
+                                } else {
+                                    ctrl.write_desc(desc, 0);
+                                }
+                                buff_len -= 1;
+                            } 
+                        }
+                    }
+                },
+                (None, Some(recv_buff)) => {
+                    match recv_buff.get_ctrl_desc() {
+                        Some(ctrl_desc) => {
+                        // One indirect descriptor with only flag indirect set    
+                        ctrl.write_desc(ctrl_desc, DescrFlags::VIRTQ_DESC_F_INDIRECT.into()); 
+                        },
+                        None => {
+                            let mut buff_len = recv_buff.as_slice().len();
+
+                            for desc in recv_buff.as_slice() {
+                                if buff_len > 1 {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                } else {
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
+                                }
+                                buff_len -= 1;
+                            } 
+                        }
+                    }
+                },
+                (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+            }
+
+            if i == 0 {
+                first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
+            } else {
+                // Update flags of the first descriptor and set new write_index
+                ctrl.make_avail(pinned.raw_addr());
+            }
+            
+            // Update the state of the actual Token
+            pinned.state = TransferState::Processing;
+            pind_lst.push(pinned);
+        }
+        // Manually make the first buffer available lastly
+        //
+        // Providing the first buffer in the list manually
+        // provide reference, in order to let TransferToken now upon finish.
+        self.tkn_ref_ring[usize::try_from(first_ctrl_settings.1).unwrap()] = pind_lst[0].raw_addr();
+        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+        // See Virtio specfification v1.1. - 2.7.21
+		fence(Ordering::SeqCst);
+        self.ring[first_ctrl_settings.0].flags |= first_ctrl_settings.2.as_flags_avail();
+
+        // Converting a boolean as u8 is fine
+        (pind_lst, first_ctrl_settings.0, first_ctrl_settings.2.0 as u8)
     }
 
-    fn push(&mut self, tkn: TransferToken) -> Pinned<TransferToken> {
+    fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, usize, u8) {
         // fix memory address of token
         let mut pinned = Pinned::new(tkn);
 
@@ -254,7 +389,8 @@ impl DescriptorRing {
         // Update the state of the actual Token
         pinned.state = TransferState::Processing;
 
-        pinned
+        // Converting a boolean as u8 is fine
+        (pinned, ctrl.start, ctrl.wrap_at_init.0 as u8)
     }
 
     /// # Unsafe
@@ -589,6 +725,11 @@ impl<'a> WriteCtrl<'a> {
     }
 
     fn make_avail(&mut self, raw_tkn: *mut TransferToken) {
+        // We fail if one wants to make a buffer availbale without inserting one element!
+        assert!(self.start != self.position);
+        // We also fail if buff_id is not set!
+        assert!(self.buff_id == 0);
+
         // provide reference, in order to let TransferToken now upon finish.
         self.desc_ring.tkn_ref_ring[usize::try_from(self.buff_id).unwrap()] = raw_tkn;
         // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
@@ -666,10 +807,54 @@ impl Descriptor {
 ///
 /// Structure layout see Virtio specification v1.1. - 2.7.14
 /// Alignment see Virtio specification v1.1. - 2.7.10.1
+///
+// /* Enable events */
+// #define RING_EVENT_FLAGS_ENABLE 0x0
+// /* Disable events */
+// #define RING_EVENT_FLAGS_DISABLE 0x1
+// /*
+//  * Enable events for a specific descriptor
+//  * (as specified by Descriptor Ring Change Event Offset/Wrap Counter). * Only valid if VIRTIO_F_RING_EVENT_IDX has been negotiated.
+//  */
+//  #define RING_EVENT_FLAGS_DESC 0x2
+//  /* The value 0x3 is reserved */
+//
+// struct pvirtq_event_suppress {
+//      le16 {
+//         desc_event_off : 15;     /* Descriptor Ring Change Event Offset */
+//         desc_event_wrap : 1;     /* Descriptor Ring Change Event Wrap Counter */
+//      } desc;                     /* If desc_event_flags set to RING_EVENT_FLAGS_DESC */ -> For a single descriptor notification settings
+//      le16 {
+//         desc_event_flags : 2,    /* Descriptor Ring Change Event Flags */ -> General notification on/off
+//         reserved : 14;           /* Reserved, set to 0 */
+//      } flags;
+// };
 #[repr(C, align(4))]
 struct EventSuppr {
    event: u16,
    flags: u16, 
+}
+
+/// A newtype in order to implement the correct functionality upon
+/// the `EventSuppr` structure for driver notifications settings.
+/// The Driver Event Suppression structure is read-only by the device 
+/// and controls the used buffer notifications sent by the device to the driver.
+struct DrvNotif{
+    /// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
+    f_notif_idx : bool,
+    /// Actual structure to read from, if device wants notifs
+    raw: Box<EventSuppr>
+}
+
+/// A newtype in order to implement the correct functionality upon
+/// the `EventSuppr` structure for device notifications settings.
+/// The Device Event Suppression structure is read-only by the driver 
+/// and controls the available buffer notifica- tions sent by the driver to the device.
+struct DevNotif {
+    /// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
+    f_notif_idx : bool,
+    /// Actual structure to read from, if device wants notifs
+    raw: Box<EventSuppr>
 }
 
 impl EventSuppr {
@@ -680,38 +865,72 @@ impl EventSuppr {
             flags: 0,
         }
     }
-    
+}
+
+impl DrvNotif {
     /// Enables notifications by setting the LSB.
     /// See Virito specification v1.1. - 2.7.10
-    fn enable_notif() {
-        unimplemented!();
+    fn enable_notif(&mut self) {
+        self.raw.flags |= 1 << 0;
     }
 
     /// Disables notifications by unsetting the LSB.
     /// See Virtio specification v1.1. - 2.7.10
-    fn disable_notif() {
-        unimplemented!();
+    fn disable_notif(&mut self) {
+        self.raw.flags |= !(1 << 0);
     }
+
+    /// Enables a notification by the device for a specific descriptor.
+    fn enable_specific(&mut self, at_offset: u16, at_wrap: u8) {
+        // Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
+        if self.f_notif_idx {
+            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+            // See Virtio specfification v1.1. - 2.7.21
+            fence(Ordering::SeqCst);
+            self.raw.flags |= 1 << 1;
+            // Reset event fields
+            self.raw.event = 0;
+            self.raw.event = at_offset;
+            self.raw.event |= (at_wrap as u16) << 15;
+        }
+    }
+}
+
+impl DevNotif {
+    /// Enables the notificication capability for a specific buffer.
+    pub fn enable_notif_specific(&mut self) {
+        self.f_notif_idx = true;
+    }
+
 
     /// Reads notification bit (i.e. LSB) and returns value.
     /// If notifications are enabled returns true, else false.
-    fn is_notif() -> bool {
-        unimplemented!();
+    fn is_notif(&self) -> bool {
+        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+        // See Virtio specfification v1.1. - 2.7.21
+        fence(Ordering::SeqCst);
+        
+        self.raw.flags & 1 << 0 == 1
     }
 
+    fn is_notif_specfic(&self, next_off: usize, next_wrap: u8) -> bool {
+        if self.f_notif_idx {
+            // The driver performs a suitable memory barrier
+            // See Virtio specfification v1.1. - 2.7.21.3.1
+            fence(Ordering::SeqCst);
+            if self.raw.flags & 1 << 1 == 2 {
+                // as u16 is okay for usize, as size of queue is restricted to 2^15
+                // it is also okay to just loose the upper 8 bits, as we only check the LSB in second clause.
+                let desc_event_off = self.raw.event & !(1 << 15);
+                let desc_event_wrap = (self.raw.event >> 15) as u8;
 
-    fn enable_specific(descriptor_id: u16, on_count: WrapCount) {
-        // Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
-
-        // Check if descriptor_id is below 2^15
-
-        // Set second bit from LSB to true
-
-        // Set descriptor id, triggering notification
-
-        // Set which wrap counter triggers
-
-        unimplemented!();
+                desc_event_off == next_off as u16 && desc_event_wrap == next_wrap as u8
+            } else {
+                false
+            }
+        } else {
+            false
+        }
     }
 }
 
@@ -721,10 +940,12 @@ pub struct PackedVq {
     /// Ring which allows easy access to the raw ring structure of the 
     /// specfification
     descr_ring: RefCell<DescriptorRing>,
-    /// Raw EventSuppr structure
-    drv_event: Box<EventSuppr>,
-    /// Raw
-    dev_event: Box<EventSuppr>,
+    /// Allows to tell the device if notifications are wanted
+    drv_event: RefCell<DrvNotif>,
+    /// Allows to check, if the device wants a notification
+    dev_event: DevNotif,
+    /// Actually notify device about avail buffers
+    notif_ctrl:  NotifCtrl,
     /// Memory pool controls the amount of "free floating" descriptors
     /// See [MemPool](super.MemPool) docs for detail.
     mem_pool: Rc<MemPool>,
@@ -747,15 +968,191 @@ pub struct PackedVq {
 // This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin 
 // queue. This could be eased 
 impl PackedVq {
-    /// See `Virtq.poll()` documentation
-    pub fn poll(&self) {
-        self.descr_ring.borrow_mut().poll();
+    /// Enables interrupts for this virtqueue upon receiving a transfer
+    pub fn enable_notifs(&self) {
+        self.drv_event.borrow_mut().enable_notif();
     }
 
+    /// Disables interrupts for this virtqueue upon receiving a transfer
+    pub fn disable_notifs(&self) {
+        self.drv_event.borrow_mut().disable_notif();
+    }
+
+    /// This function does check if early dropped TransferTokens are finished 
+    /// and removes them if this is the case.
+    pub fn clean_up(&self) {
+        // remove and drop all finished Transfers
+        if !self.dropped.borrow().is_empty() {
+            self.dropped.borrow_mut().drain_filter(|tkn| tkn.state == TransferState::Finished);
+        }
+    }
+
+    /// See `Virtq.poll()` documentation
+    pub fn poll(&self) {
+        let tkn_lst = self.descr_ring.borrow_mut().poll();
+
+        // Currently we simply forget these upon poll as the Drivers already hold them inside a Transfer struct
+        if let Some(tkn_lst) = tkn_lst {
+            core::mem::ManuallyDrop::new(tkn_lst);
+        }
+    }
+
+    /// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in 
+    /// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+    /// a device notification if wanted by the device.
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
+        // Zero transfers are not allowed
+        assert!(tkns.len() > 0);
+
+        let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+        
+        if notif {
+            self.drv_event.borrow_mut().enable_specific(next_off as u16, next_wrap);
+        }
+
+        if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap){
+            let index = self.index.0.to_le_bytes();
+            let mut index = index.into_iter();
+            // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
+            let flags = (next_off as u16) << 1;
+            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
+            let mut flags = flags.into_iter();
+            let mut notif_data: [u8; 4] = [0,0,0,0];
+            
+            for (i, byte) in notif_data.iter_mut().enumerate() {
+                if i < 2 {
+                    *byte = *index.next().unwrap();
+                } else {
+                    *byte = *flags.next().unwrap();
+                }
+            }
+
+            self.notif_ctrl.notify_dev(&notif_data)
+        }
+
+        let mut transfer_lst = Vec::with_capacity(pin_tkn_lst.len());
+
+        for pinned in pin_tkn_lst {
+            transfer_lst.push(Transfer{
+                transfer_tkn: Some(pinned)
+            })
+        }
+
+        transfer_lst
+    }
+
+    /// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
+    /// upon finish.
+    /// 
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    ///
+    /// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in 
+    /// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+    /// a device notification if wanted by the device.
+    ///
+    /// Tokens to get a reference to the provided await_queue, where they will be placed upon finish. 
+    pub fn dispatch_batch_await(&self, mut tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>, notif: bool) {
+        // Zero transfers are not allowed
+        assert!(tkns.len() > 0);
+
+        // We have to iterate here too, in order to ensure, tokens are placed into the await_queue
+        for tkn in tkns.iter_mut() {
+            tkn.await_queue = Some(Rc::clone(&await_queue));
+        }
+
+        let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+
+        if notif {
+            self.drv_event.borrow_mut().enable_specific(next_off as u16, next_wrap);
+        }
+        
+        if self.dev_event.is_notif() {
+            let index = self.index.0.to_le_bytes();
+            let mut index = index.into_iter();
+            // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
+            let flags = (next_off as u16) << 1;
+            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
+            let mut flags = flags.into_iter();
+            let mut notif_data: [u8; 4] = [0,0,0,0];
+            
+            for (i, byte) in notif_data.iter_mut().enumerate() {
+                if i < 2 {
+                    *byte = *index.next().unwrap();
+                } else {
+                    *byte = *flags.next().unwrap();
+                }
+            }
+
+            self.notif_ctrl.notify_dev(&notif_data)
+        }
+
+        let mut transfer_lst = Vec::with_capacity(pin_tkn_lst.len());
+
+        for pinned in pin_tkn_lst {
+            transfer_lst.push(Transfer{
+                transfer_tkn: Some(pinned)
+            })
+        } 
+        
+        // Prevent TransferToken from beeing dropped 
+        // I.e. do NOT run the costum constructor which will 
+        // deallocate memory, as we never call drop upon
+        // the ManuallyDrop<Pinned<TransferToken>>
+        core::mem::ManuallyDrop::new(transfer_lst);
+    }
+
+    /// See `Virtq.prep_transfer()` documentation.
+    /// 
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
+        let (pin_tkn, next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
+
+        if notif {
+            self.drv_event.borrow_mut().enable_specific(next_off as u16, next_wrap);
+        }
+
+        if self.dev_event.is_notif() {
+            let index = self.index.0.to_le_bytes();
+            let mut index = index.into_iter();
+            // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
+            let flags = (next_off as u16) << 1;
+            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
+            let mut flags = flags.into_iter();
+            let mut notif_data: [u8; 4] = [0,0,0,0];
+            
+            for (i, byte) in notif_data.iter_mut().enumerate() {
+                if i < 2 {
+                    *byte = *index.next().unwrap();
+                } else {
+                    *byte = *flags.next().unwrap();
+                }
+            }
+
+            self.notif_ctrl.notify_dev(&notif_data)
+        }
+
+        Transfer {
+            transfer_tkn: Some(pin_tkn),
+        }
+    }
+
+    /// The packed virtqueue handles early dropped transfers by moving the respective tokens into 
+    /// an vector. Here they will remain until they are finished. In order to ensure this the queue
+    /// will check theses descriptors from time to time during its poll function.
+    ///
+    /// Also see `Virtq.early_drop()` documentation
     pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
         match tkn.state {
             TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
-            TransferState::Ready => panic!("Early dropped transfers are not allowed to be state == Ready"),
+            TransferState::Ready => unreachable!("Early dropped transfers are not allowed to be state == Ready"),
             TransferState::Processing => {
                 // Keep token until state is finished. This needs to be checked/cleaned up later
                 self.dropped.borrow_mut().push(tkn);
@@ -763,11 +1160,18 @@ impl PackedVq {
         }
     }
 
+    /// See `Virtq.index()` documentation
     pub fn index(&self) -> VqIndex {
         self.index
     }
 
-    pub fn new(com_cfg: &mut ComCfg, size: VqSize, index: VqIndex) -> Result<Self, VqPackedError> {
+    /// See `Virtq::new()` documentation
+    pub fn new(com_cfg: &mut ComCfg, 
+        notif_cfg: &NotifCfg, 
+        size: VqSize, 
+        index: VqIndex, 
+        feats: u64) 
+        -> Result<Self, VqPackedError> {
         // Get a handler to the queues configuration area.
         let mut vq_handler = match com_cfg.select_vq(index.into()) {
             Some(handler) => handler,
@@ -787,40 +1191,54 @@ impl PackedVq {
         
         let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
         let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
-        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));Box::new(EventSuppr::new());
+        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));
 
         // Provide memory areas of the queues data structures to the device
-        vq_handler.set_ring_addr(index.into(), descr_ring.borrow().raw_addr());
+        vq_handler.set_ring_addr(descr_ring.borrow().raw_addr());
         // As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-        vq_handler.set_drv_ctrl_addr(index.into(), drv_event as usize);
-        vq_handler.set_dev_ctrl_addr(index.into(), dev_event as usize);
+        vq_handler.set_drv_ctrl_addr(drv_event as usize);
+        vq_handler.set_dev_ctrl_addr(dev_event as usize);
 
-        let drv_event = unsafe{Box::from_raw(drv_event)};
-        let dev_event = unsafe{Box::from_raw(dev_event)};
+        let drv_event = RefCell::new(DrvNotif {
+            f_notif_idx: false,
+            raw: unsafe{Box::from_raw(drv_event)},
+        });
 
+        let dev_event = DevNotif {
+            f_notif_idx: false,
+            raw: unsafe{Box::from_raw(dev_event)},
+        };
+
+        let mut notif_ctrl = NotifCtrl::new(
+            (notif_cfg.base() + usize::try_from(vq_handler.notif_off()).unwrap() + usize::try_from(notif_cfg.multiplier()).unwrap()) as *mut usize,
+        );
+
+        if feats & Features::VIRTIO_F_NOTIFICATION_DATA == Features::VIRTIO_F_NOTIFICATION_DATA {
+            notif_ctrl.enable_notif_data();
+        }
+
+        if feats & Features::VIRTIO_F_RING_EVENT_IDX == Features::VIRTIO_F_RING_EVENT_IDX {
+            drv_event.borrow_mut().f_notif_idx = true;
+        }
 
         // Initalize new memory pool.
         let mem_pool = Rc::new(MemPool::new(size.0));
 
         // Initalize an empty vector for future dropped transfers
         let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
+
+        vq_handler.enable_queue();
     
         Ok(PackedVq {
             descr_ring,
             drv_event, 
-            dev_event, 
+            dev_event,
+            notif_ctrl,
             mem_pool,
             size,
             index,
             dropped,
         })
-    }
-
-    /// See `Virtq.prep_transfer()` documentation.
-    pub fn dispatch(&self, tkn: TransferToken) -> Transfer {
-        Transfer {
-            transfer_tkn: Some(self.descr_ring.borrow_mut().push(tkn)),
-        }
     }
 
     /// See `Virtq.prep_transfer()` documentation.
@@ -2222,12 +2640,6 @@ impl PackedVq {
                 Ok(ctrl_desc)
             },
         }
-    }
-}
-
-impl Drop for PackedVq {
-    fn drop(&mut self) {
-        todo!("rerutn leaked memory and ensure deallocation")
     }
 }
 

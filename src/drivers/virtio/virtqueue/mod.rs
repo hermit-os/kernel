@@ -24,7 +24,7 @@ use self::packed::PackedVq;
 use self::split::SplitVq;
 use self::error::{VirtqError, BufferError};
 
-use super::transport::pci::ComCfg;
+use super::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
@@ -112,9 +112,13 @@ pub enum Virtq {
 impl Virtq {
     /// Entry function which the TransferTokens can use, when they are dispatching 
     /// themselves via their `Rc<Virtq>` reference
-    fn dispatch(&self, tkn: TransferToken) -> Transfer {
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
         match self {
-            Virtq::Packed(vq) => vq.dispatch(tkn),
+            Virtq::Packed(vq) => vq.dispatch(tkn, notif),
             Virtq::Split(vq) => unimplemented!(),
         }
     }
@@ -163,6 +167,22 @@ impl Virtq {
 
 // Public interface of Virtq
 impl Virtq {
+    /// Enables interrupts for this virtqueue upon receiving a transfer
+    pub fn enable_notifs(&self) {
+        match self {
+            Virtq::Packed(vq) => vq.enable_notifs(),
+            Virtq::Split(vq) => unimplemented!(),
+        }
+    }
+
+    /// Disables interrupts for this virtqueue upon receiving a transfer
+    pub fn disable_notifs(&self) {
+        match self {
+            Virtq::Packed(vq) => vq.disable_notifs(),
+            Virtq::Split(vq) => unimplemented!(),
+        }
+    }
+
     /// Checks if new used descriptors have been written by the device.
     /// This activates the queue and polls the descriptor ring of the queue.
     ///
@@ -176,10 +196,29 @@ impl Virtq {
         }
     }
 
+    /// Does maintenacen of the queue. This involces currently only, checking if early dropped transfers
+    /// have been finished and removes them and frees their ID's and memory areas.
+    ///
+    /// This function is especially usefull if ones memory pool is empty and one uses early drop of transfers
+    /// in order to fire-and-forget.
+    pub fn clean_up(&self) {
+        match self {
+            Virtq::Packed(vq) => vq.clean_up(),
+            Virtq::Split(vq) => unimplemented!(),
+        }
+    }
+
     /// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective 
     /// virtqueue implementation. Pleace see the respective docs for details
-    pub fn dispatch_batch(tkns: Vec<TransferToken>) -> Vec<Transfer> {
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
         todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+
+        // Sort the TransferTokens depending in the queue their coming from.
+        // then call dispatch_batch of that queue
     }
 
     /// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
@@ -187,8 +226,15 @@ impl Virtq {
     ///
     /// The actuall behaviour depends on the respective 
     /// virtqueue implementation. Please see the respective docs for details.
-    pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>) {
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>, notif: bool) {
         todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+
+        // Sort the TransferTokens depending in the queue their coming from.
+        // then call dispatch_batch_await of that queue
     }
     
     // Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
@@ -196,9 +242,9 @@ impl Virtq {
     /// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
     ///
     /// Be aware, that devices define a maximum number of queues and a maximal size they can handle.
-    pub fn new(com_cfg: &mut ComCfg, size: VqSize, vq_type: VqType, index: VqIndex) -> Self {
+    pub fn new(com_cfg: &mut ComCfg, notif_cfg: &NotifCfg, size: VqSize, vq_type: VqType, index: VqIndex, feats: u64) -> Self {
         match vq_type {
-            VqType::Packed => match PackedVq::new(com_cfg, size, index) {
+            VqType::Packed => match PackedVq::new(com_cfg, notif_cfg, size, index, feats) {
                 Ok(packed_vq) => Virtq::Packed(packed_vq),
                 Err(vq_error) => panic!("Currently panics if queue fails to be created")
             },
@@ -702,19 +748,28 @@ impl TransferToken {
         Rc::clone(&self.buff_tkn.as_ref().unwrap().vq)
     }
 
-    pub fn dispatch_await(mut self, await_queue: Rc<RefCell<VecDeque<Transfer>>>) {
+    /// Dispatches a TransferToken and awaits it at the specified queue.
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch_await(mut self, await_queue: Rc<RefCell<VecDeque<Transfer>>>, notif: bool) {
         self.await_queue = Some(Rc::clone(&await_queue));
         
         // Prevent TransferToken from beeing dropped 
         // I.e. do NOT run the costum constructor which will 
         // deallocate memory, as we never call drop upon
         // the ManuallyDrop<Pinned<TransferToken>>
-        core::mem::ManuallyDrop::new(self.get_vq().dispatch(self).transfer_tkn.take());
+        core::mem::ManuallyDrop::new(self.get_vq().dispatch(self, notif).transfer_tkn.take());
     }
 
     /// Dispatches the provided TransferToken to the respective queue and returns a transfer.
-    pub fn dispatch(self) -> Transfer {
-        self.get_vq().dispatch(self)
+    ///
+    /// The `notif` parameter indicates if the driver wants to have a notification for this specific
+    /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
+    /// updated notification flags before finishing transfers!
+    pub fn dispatch(self, notif: bool) -> Transfer {
+        self.get_vq().dispatch(self, notif)
     }
 
     /// Dispatches the provided TransferToken to the respectuve queue and does 
@@ -723,9 +778,8 @@ impl TransferToken {
     /// The resultaing [TransferState](TransferState) in this case is of course 
     /// finished and the returned [Transfer](Transfer) can be reused, copyied from
     /// or return the underlying buffers.
-    /// Allthough it is recomended to ensure the finished state via`Transfer.poll()` beforehand.
     pub fn dispatch_blocking(self) -> Result<Transfer, VirtqError> {
-        let transfer = self.get_vq().dispatch(self);
+        let transfer = self.get_vq().dispatch(self, false);
 
         while transfer.transfer_tkn.as_ref().unwrap().state != TransferState::Finished {
             // Keep Spinning untill the state changes to Finished

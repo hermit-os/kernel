@@ -22,7 +22,7 @@ use core::cell::RefCell;
 use alloc::rc::Rc;
 
 use crate::drivers::virtio::env::memory::{MemLen, MemOff};
-use crate::drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, IsrStatus, PciCfgAlt, PciCap};
+use crate::drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, NotifCtrl, IsrStatus, PciCfgAlt, PciCap};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes};
@@ -107,7 +107,7 @@ impl RxQueues {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue));
+                                .dispatch_await(Rc::clone(&self.poll_queue), false);
                         }
                     },
                     // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
@@ -137,7 +137,7 @@ impl RxQueues {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue));
+                                .dispatch_await(Rc::clone(&self.poll_queue), false);
                         }
 
                         // Create remaining indirect descriptors
@@ -155,7 +155,7 @@ impl RxQueues {
                             // TransferTokens are directly dispatched
                             // Transfers will be awaited at the queue
                             buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue));
+                                .dispatch_await(Rc::clone(&self.poll_queue), false);
                         }
                     },
                     _ => unreachable!(),
@@ -176,7 +176,7 @@ impl RxQueues {
                     // TransferTokens are directly dispatched
                     // Transfers will be awaited at the queue
                     buff_tkn.provide()
-                        .dispatch_await(Rc::clone(&self.poll_queue));
+                        .dispatch_await(Rc::clone(&self.poll_queue), false);
                 }  
             }
         } else {
@@ -199,7 +199,7 @@ impl RxQueues {
                 // TransferTokens are directly dispatched
                 // Transfers will be awaited at the queue
                 buff_tkn.provide()
-                    .dispatch_await(Rc::clone(&self.poll_queue));
+                    .dispatch_await(Rc::clone(&self.poll_queue), false);
             } 
         }
     }
@@ -467,10 +467,15 @@ impl VirtioNetDriver {
         if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_CTRL_VQ) {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
                 self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(&mut self.com_cfg,
+                    &self.notif_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
-             VqIndex::from(2*self.num_vqs+1)
+             VqIndex::from(2*self.num_vqs+1),
+                    self.dev_cfg.features.into()
                 ))));
+
+                self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
+
             } else {
                 todo!("Implement control queue for split queue")
             }
@@ -516,18 +521,45 @@ impl VirtioNetDriver {
         for i in 1..self.num_vqs+1 {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
                 let vq = Virtq::new(&mut self.com_cfg,
-                 VqSize::from(VIRTIO_MAX_QUEUE_SIZE), 
-                       VqType::Packed, 
-                VqIndex::from(2*i-1)
+                    &self.notif_cfg,
+                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Packed,
+                    VqIndex::from(2*i-1),
+                    self.dev_cfg.features.into()
                 );
+                vq.enable_notifs();
+
+                // Others than the first recv and send queue are disabled by default.
+                if i > 1 {
+                    let vq_handler = self.com_cfg.select_vq(2*i);
+
+                    if let Some(mut handler) = vq_handler {
+                        handler.disable_queue();
+                    }
+                }
+
                 self.recv_vqs.add(vq, &self.dev_cfg);
         
                 let vq = Virtq::new(&mut self.com_cfg,
-              VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-                    VqType::Packed, 
-             VqIndex::from(2*i)
+                    &self.notif_cfg,
+                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Packed,
+                    VqIndex::from(2*i),
+                    self.dev_cfg.features.into()
                 );
+                vq.enable_notifs();
+
+                // Others than the first recv and send queue are disabled by default.
+                if i > 1 {
+                    let vq_handler = self.com_cfg.select_vq(2*i);
+
+                    if let Some(mut handler) = vq_handler {
+                        handler.disable_queue();
+                    }
+                }
+
                 self.send_vqs.add(vq, &self.dev_cfg);
+
             } else {
                 todo!("Integrate split virtqueue into network driver");
             }
