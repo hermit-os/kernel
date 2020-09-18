@@ -52,13 +52,27 @@ impl WrapCount {
     ///
     /// I.e.: Set avail flag to match the WrapCount and the used flag
     /// to NOT match the WrapCount.
-    fn as_flags(&self) -> u16 {
+    fn as_flags_avail(&self) -> u16 {
         if self.0 == true {
             1 << 7
         } else {
             1 << 15
         }
-    } 
+    }
+
+    /// Creates avail and used flags inside u16 in accordance to the 
+    /// virito specification v1.1. - 2.7.1
+    ///
+    /// I.e.: Set avail flag to match the WrapCount and the used flag
+    /// to also match the WrapCount.
+    fn as_flags_used(&self) -> u16 {
+        if self.0 == true {
+            1 << 7 | 1 << 15
+        } else {
+            0
+        }
+    }
+
 }
 
 /// Structure which allows to control raw ring and operate easily on it
@@ -79,7 +93,8 @@ struct DescriptorRing {
     /// Where to expect the next used descriptor by the device
     poll_index: usize,
     /// See Virtio specification v1.1. - 2.7.1
-    wrap_count: WrapCount,
+    drv_wc: WrapCount,
+    dev_wc: WrapCount,
 }
 
 impl DescriptorRing {
@@ -107,15 +122,29 @@ impl DescriptorRing {
             write_index: 0,
             capacity: size,
             poll_index: 0,
-            wrap_count: WrapCount::new(),
+            drv_wc: WrapCount::new(),
+            dev_wc: WrapCount::new(),
          }
     }
 
-    /// # Unsafe
-    /// Polls last index postiion. If used. use the address and the prepended reference to the 
-    /// to return an TransferToken reference. Also sets the poll index to show the next item in list. 
-    fn poll(&mut self) -> Option<Pinned<TransferToken>> {
-        unimplemented!();
+    /// Polls poll index and sets states of eventually used TransferTokens to finished.
+    /// If Await_qeue is available, the Transfer will be provieded to the queue.
+    fn poll(&mut self) {
+        let mut ctrl = self.get_read_ctrler();
+
+        while let Some(mut tkn) = ctrl.poll_next() {
+            tkn.state = TransferState::Finished;
+
+            match tkn.await_queue {
+                Some(_) => {
+                    let queue = tkn.await_queue.take().unwrap();
+                    queue.borrow_mut().push_back(Transfer {
+                        transfer_tkn: Some(tkn),
+                    });
+                },
+                None => (),
+            }
+        }
     }
 
     fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> Vec<Pinned<TransferToken>> {
@@ -172,8 +201,8 @@ impl DescriptorRing {
                             buff_len -= 1;
                         } 
                     }
-                    (None, Some(_)) => panic!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken
-                    (Some(_), None) => panic!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken,
+                    (None, Some(_)) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken
+                    (Some(_), None) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken,
                 }                
             },
             (Some(send_buff), None) => {
@@ -216,7 +245,7 @@ impl DescriptorRing {
                     }
                 }
             },
-            (None, None) => panic!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+            (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
         }
 
         // Update flags of the first descriptor and set new write_index
@@ -241,34 +270,246 @@ impl DescriptorRing {
             start: self.write_index,
             position: self.write_index,
             modulo: self.ring.len(),
-            wrap_at_init: self.wrap_count,
+            wrap_at_init: self.drv_wc,
             buff_id: 0,
+
+            desc_ring: self,
+        }
+    }
+
+    /// Returns an initalized read controler in order
+    /// to read the queue correctly.
+    fn get_read_ctrler(&mut self) -> ReadCtrl {
+        ReadCtrl{
+            start: self.poll_index,
+            modulo: self.ring.len(),
 
             desc_ring: self,
         }
     }
 }
 
+struct ReadCtrl<'a> {
+    /// Poll index of the ring at init of ReadCtrl
+    start: usize,
+    modulo: usize,
 
-/// Convenient struct, allowing to increment and decrement inside the given 
-/// modulo. Furthermore allows to convinently write descritpros into the queue.
-/// 
-/// **Example:**
-/// 
-/// The following code will count 6 steps backwards from 3 inside the modulo 9.
-/// The output will be: 3,2,1,0,8,7.
-///
-/// ```
-/// let mut writer = WriteCtrl {
-///    val: 3,
-///    modulo: 9
-/// };
-///
-/// for i in 0..6 {
-///    println!("{}", index.val);
-///    index.decrmt();
-/// }
-/// ```
+    desc_ring: &'a mut DescriptorRing, 
+}
+
+impl<'a> ReadCtrl<'a> {
+    /// Polls the ring for a new finished buffer. If buffer is marked as used, takes care of 
+    /// updating the queue and returns the respective TransferToken.
+    fn poll_next(&mut self) -> Option<Pinned<TransferToken>> {
+        // Check if descriptor has been marked used.
+        if self.desc_ring.ring[self.start].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
+            let tkn;
+            let recv_buff;
+            let send_buff;
+
+            unsafe {
+                tkn = &mut *(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.start].buff_id).unwrap()]);
+                // unset the reference in the refernce ring for security!
+                self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.start].buff_id).unwrap()] = 0 as *mut TransferToken;
+                // This is perfectly fine, as we operate on two different datastructures inside one datastructure.
+                let raw_ptr = (tkn.buff_tkn.as_ref().unwrap() as *const BufferToken) as *mut BufferToken;
+                recv_buff = &mut (*raw_ptr).recv_buff;
+                send_buff = &mut (*raw_ptr).send_buff;
+            }
+
+            // Check if we have an used descriptor which is an indirect one. We have to handle this one differently
+            if self.desc_ring.ring[self.start].flags & DescrFlags::VIRTQ_DESC_F_INDIRECT == DescrFlags::VIRTQ_DESC_F_INDIRECT {
+                match (send_buff, recv_buff) {
+                    (Some(send_buff), Some(recv_buff)) => self.update_indirect( Some(send_buff), Some(recv_buff)),
+                    (Some(send_buff), None) => self.update_indirect( Some(send_buff), None),
+                    (None, Some(recv_buff)) => self.update_indirect( None, Some(recv_buff)),
+                    (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+                }
+            } else {
+                match (send_buff, recv_buff) {
+                    (Some(send_buff), Some(recv_buff)) => {
+                        for desc in send_buff.as_mut_slice() {
+                            self.update_send(desc);
+                        }
+
+                        for desc in recv_buff.as_mut_slice() {
+                            self.update_recv(desc);
+                        } 
+                    },
+                    (Some(send_buff), None) => {
+                        for desc in send_buff.as_mut_slice() {
+                            self.update_send(desc);
+                        } 
+                    },
+                    (None, Some(recv_buff)) => {
+                        for desc in recv_buff.as_mut_slice() {
+                            self.update_recv(desc);
+                        } 
+                    },
+                    (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+                }
+            }
+                
+            Some(Pinned::from_raw(tkn as *mut TransferToken))
+        } else {
+            None 
+        }
+    }
+
+    /// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with 
+    /// the amount of data written by the device.
+    fn update_indirect(&mut self, send_buff: Option<&mut Buffer>, recv_buff: Option<&mut Buffer>) {
+        match (send_buff, recv_buff) {
+            (Some(send_buff), Some(recv_buff)) => {
+                // This is perfectly fine as we operate on two different datastructures inside one datastructure
+                // we can have two mutable references via the same wrapping datastructure
+                let ctrl_desc = unsafe {
+                    let raw_ref = &mut *((send_buff as *const Buffer) as *mut Buffer);
+                    raw_ref.get_ctrl_desc_mut().unwrap()
+                };
+
+                // This should read the descriptors inside the ctrl desc memory and update the memory 
+                // accordingly
+                let desc_slice = unsafe {
+                    let size = core::mem::size_of::<Descriptor>();
+                    core::slice::from_raw_parts(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                };
+
+                let mut desc_iter = desc_slice.into_iter();
+
+                for desc in send_buff.as_mut_slice() {
+                    // Unwrapping is fine here, as lists must be of same size and same ordering
+                    desc_iter.next().unwrap();
+                    self.incrmt();
+                }
+
+                for desc in recv_buff.as_mut_slice() {
+                    // Unwrapping is fine here, as lists must be of same size and same ordering
+                    let ring_desc = desc_iter.next().unwrap();
+                    
+                    if ring_desc.flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+                        desc.len = usize::try_from(ring_desc.len).unwrap();
+                        self.incrmt();
+                    } else {
+                        desc.len = 0;
+                        self.incrmt();
+                    }
+                }
+            },
+            (Some(send_buff), None) => {
+                // This is perfectly fine as we operate on two different datastructures inside one datastructure
+                // we can have two mutable references via the same wrapping datastructure
+                let ctrl_desc = unsafe {
+                    let raw_ref = &mut *((send_buff as *const Buffer) as *mut Buffer);
+                    raw_ref.get_ctrl_desc_mut().unwrap()
+                };
+
+                // This should read the descriptors inside the ctrl desc memory and update the memory 
+                // accordingly
+                let desc_slice = unsafe {
+                    let size = core::mem::size_of::<Descriptor>();
+                    core::slice::from_raw_parts(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                };
+
+                let mut desc_iter = desc_slice.into_iter();
+
+                for desc in send_buff.as_mut_slice() {
+                    // Unwrapping is fine here, as lists must be of same size and same ordering
+                    desc_iter.next().unwrap();
+                    self.incrmt();
+                }
+            },
+            (None, Some(recv_buff)) => {
+                // This is perfectly fine as we operate on two different datastructures inside one datastructure
+                // we can have two mutable references via the same wrapping datastructure
+                let ctrl_desc = unsafe {
+                    let raw_ref = &mut *((recv_buff as *const Buffer) as *mut Buffer);
+                    raw_ref.get_ctrl_desc_mut().unwrap()
+                };
+
+                // This should read the descriptors inside the ctrl desc memory and update the memory 
+                // accordingly
+                let desc_slice = unsafe {
+                    let size = core::mem::size_of::<Descriptor>();
+                    core::slice::from_raw_parts(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                };
+
+                let mut desc_iter = desc_slice.into_iter();
+
+                for desc in recv_buff.as_mut_slice() {
+                    // Unwrapping is fine here, as lists must be of same size and same ordering
+                    let ring_desc = desc_iter.next().unwrap();
+                    
+                    if ring_desc.flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+                        desc.len = usize::try_from(ring_desc.len).unwrap();
+                        self.incrmt();
+                    } else {
+                        desc.len = 0;
+                        self.incrmt();
+                    }
+                }
+            },
+            (None, None) => unreachable!("Empty transfers are not allowed."),
+        }
+    }
+    
+    /// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with 
+    /// the amount of data written by the device.
+    /// Updates the descriptor flags inside the actual ring if necessary and 
+    /// increments the poll_index by one.
+    fn update_recv(&mut self, desc: &mut MemDescr) {
+        if self.desc_ring.ring[self.desc_ring.poll_index].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+            desc.len = usize::try_from(self.desc_ring.ring[self.desc_ring.poll_index].len).unwrap();
+        } else {
+            desc.len = 0;
+        }
+
+        if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
+            // Update flags here, to be consistent
+            debug!("Device is NOT updating the complete list consistently. Driver is doing that instead");
+    
+            if self.desc_ring.dev_wc.0 {
+                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
+                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 15; 
+            } else {
+                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 7);
+                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 15);
+            }
+        }
+        self.incrmt();
+
+    }
+
+    /// Updates the descriptor flags inside the actual ring if necessary and 
+    /// increments the poll_index by one.
+    fn update_send(&mut self, desc: &mut MemDescr) {
+        if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
+            // Update flags here, to be consistent
+            debug!("Device is NOT updating the complete list consistently. Driver is doing that instead");
+
+            if self.desc_ring.dev_wc.0 {
+                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
+                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 15; 
+            } else {
+                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 7);
+                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 15);
+            }
+        }
+        self.incrmt();
+    }
+
+    fn incrmt(&mut self) {
+        if self.desc_ring.poll_index + 1 == self.modulo {
+            self.desc_ring.dev_wc.wrap()
+        }
+
+        self.desc_ring.poll_index = (self.desc_ring.poll_index + 1) % self.modulo;
+    }
+}
+
+/// Convenient struct that allows to convinently write descritpros into the queue.
+/// The struct takes care of updating the state of the queue correctly and to write 
+/// the correct flags.
 struct WriteCtrl<'a>{
     /// Where did the write of the buffer start in the descriptor ring
     /// This is important, as we must make this descriptor available 
@@ -303,7 +544,7 @@ impl<'a> WriteCtrl<'a> {
         // check if increment wrapped around end of ring
         // then also wrap the wrap counter.
         if self.position + 1 == self.modulo {
-            self.desc_ring.wrap_count.wrap();
+            self.desc_ring.drv_wc.wrap();
         }
         // Also update the write_index
         self.desc_ring.write_index = (self.desc_ring.write_index + 1) % self.modulo;
@@ -341,7 +582,7 @@ impl<'a> WriteCtrl<'a> {
             fence(Ordering::SeqCst);
             // Remove possibly set avail and used flags and then set avail and used 
             // according to the current WrapCount.
-            desc_ref.flags = (flags & 0xFEFE) | self.desc_ring.wrap_count.as_flags();
+            desc_ref.flags = (flags & 0xFEFE) | self.desc_ring.drv_wc.as_flags_avail();
 
             self.incrmt()
         }
@@ -353,7 +594,7 @@ impl<'a> WriteCtrl<'a> {
         // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
         // See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
-        self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags();
+        self.desc_ring.ring[self.start].flags |= self.wrap_at_init.as_flags_avail();
     }
 }
 
@@ -506,6 +747,11 @@ pub struct PackedVq {
 // This is currently unlikely, as the Tokens hold a Rc<Virtq> for refering to their origin 
 // queue. This could be eased 
 impl PackedVq {
+    /// See `Virtq.poll()` documentation
+    pub fn poll(&self) {
+        self.descr_ring.borrow_mut().poll();
+    }
+
     pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
         match tkn.state {
             TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
@@ -1914,70 +2160,63 @@ impl PackedVq {
         // in an array.
         let mut crtl_desc_iter = 0usize;
 
+        let desc_slice = unsafe {
+            let size = core::mem::size_of::<Descriptor>();
+            core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+        };
+
         match (send, recv) {
             (None, None) => return Err(VirtqError::BufferNotSpecified),
             // Only recving descriptorsn (those are writabel by device)
             (None, Some(recv_desc_lst)) => {
                 for desc in recv_desc_lst {
-                   let raw: [u8; 16] = Descriptor::new(
-                        (desc.ptr as u64),
-                        (desc.len as u32),
+                    desc_slice[crtl_desc_iter] = Descriptor::new(
+                        desc.ptr as u64,
+                        desc.len as u32,
                         0,
                         DescrFlags::VIRTQ_DESC_F_WRITE.into()
-                   ).to_le_bytes();
-                   
-                   for byte in 0..16 {
-                       ctrl_desc[crtl_desc_iter] = raw[byte];
-                       crtl_desc_iter += 1;
-                   }
+                    );
+
+                    crtl_desc_iter += 1;
                 }
                 Ok(ctrl_desc)
             },
             // Only sending descritpors
             (Some(send_desc_lst), None) => {
                 for desc in send_desc_lst {
-                    let raw: [u8; 16] = Descriptor::new(
-                        (desc.ptr as u64),
-                        (desc.len as u32),
+                    desc_slice[crtl_desc_iter] = Descriptor::new(
+                        desc.ptr as u64,
+                        desc.len as u32,
                         0,
-                        0, 
-                   ).to_le_bytes();
-                   
-                   for byte in 0..16 {
-                       ctrl_desc[crtl_desc_iter] = raw[byte];
-                       crtl_desc_iter += 1;
-                   }
+                        0,
+                    );
+
+                    crtl_desc_iter += 1;
                 }
                 Ok(ctrl_desc)
             },
             (Some(send_desc_lst), Some(recv_desc_lst)) => {
                 // Send descriptors ALWAYS before receiving ones.
                 for desc in send_desc_lst {
-                    let raw: [u8; 16] = Descriptor::new(
-                        (desc.ptr as u64),
-                        (desc.len as u32),
+                    desc_slice[crtl_desc_iter] = Descriptor::new(
+                        desc.ptr as u64,
+                        desc.len as u32,
                         0,
-                        0, 
-                   ).to_le_bytes();
-                   
-                   for byte in 0..16 {
-                       ctrl_desc[crtl_desc_iter] = raw[byte];
-                       crtl_desc_iter += 1;
-                   }
+                       0, 
+                    );
+
+                    crtl_desc_iter += 1;
                 }
 
                 for desc in recv_desc_lst {
-                    let raw: [u8; 16] = Descriptor::new(
-                        (desc.ptr as u64),
-                        (desc.len as u32),
+                    desc_slice[crtl_desc_iter] = Descriptor::new(
+                        desc.ptr as u64,
+                        desc.len as u32,
                         0,
                         DescrFlags::VIRTQ_DESC_F_WRITE.into()
-                   ).to_le_bytes();
-                   
-                   for byte in 0..16 {
-                       ctrl_desc[crtl_desc_iter] = raw[byte];
-                       crtl_desc_iter += 1;
-                   }
+                    );
+
+                    crtl_desc_iter += 1;
                 }
 
                 Ok(ctrl_desc)
