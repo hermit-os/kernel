@@ -108,6 +108,18 @@ pub enum Virtq {
     Split(SplitVq),
 }
 
+// Private Interface of the Virtq
+impl Virtq {
+    /// Entry function which the TransferTokens can use, when they are dispatching 
+    /// themselves via their `Rc<Virtq>` reference
+    fn dispatch(&self, tkn: TransferToken) -> Transfer {
+        match self {
+            Virtq::Packed(vq) => vq.dispatch(tkn),
+            Virtq::Split(vq) => unimplemented!(),
+        }
+    }
+}
+
 // Public Interface solely for page boundary checking
 impl Virtq {
     /// Allows to check, if a given structure crosses a physical page boundary.
@@ -151,6 +163,19 @@ impl Virtq {
 
 // Public interface of Virtq
 impl Virtq {
+    /// Checks if new used descriptors have been written by the device.
+    /// This activates the queue and polls the descriptor ring of the queue.
+    ///
+    /// * `TransferTokens` which hold an `await_queue` will be placed into 
+    /// theses queues 
+    /// * All finished `TransferTokens` will have a state of `TransferState::Finished`.
+    pub fn poll(&self) {
+        match self {
+            Virtq::Packed(vq) => vq.poll(),
+            Virtq::Split(vq) => unimplemented!(),
+        }
+    }
+
     /// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective 
     /// virtqueue implementation. Pleace see the respective docs for details
     pub fn dispatch_batch(tkns: Vec<TransferToken>) -> Vec<Transfer> {
@@ -164,13 +189,6 @@ impl Virtq {
     /// virtqueue implementation. Please see the respective docs for details.
     pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>) {
         todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
-    }
-
-    pub fn dispatch(&self, tkn: TransferToken) -> Transfer {
-        match self {
-            Virtq::Packed(vq) => vq.dispatch(tkn),
-            Virtq::Split(vq) => unimplemented!(),
-        }
     }
     
     // Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
@@ -1175,8 +1193,17 @@ impl Buffer {
         }
     }
 
-    /// Returns the buffers ctrl descriptor if available. 
+    /// Returns a reference to the buffers ctrl descriptor if available. 
     fn get_ctrl_desc(&self) -> Option<&MemDescr> {
+        match self {
+            Buffer::Single{desc_lst, next_write, len} => None,
+            Buffer::Multiple{desc_lst, next_write, len} => None, 
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => Some(ctrl_desc),
+        } 
+    }
+
+    /// Returns a mutable reference to the buffers ctrl descriptor if available. 
+    fn get_ctrl_desc_mut(&mut self) -> Option<&MemDescr> {
         match self {
             Buffer::Single{desc_lst, next_write, len} => None,
             Buffer::Multiple{desc_lst, next_write, len} => None, 
@@ -1198,9 +1225,11 @@ impl Buffer {
 struct MemDescr {
     /// Points to the controlled memory area
     ptr: *mut u8,
+    /// Defines the len of the memory area that is accessible by users
+    len: usize,
     /// Defines the length of the controlled memory area
     /// starting a `ptr: *mut u8`
-    len: usize,
+    _mem_len: usize,
     /// Memory is creaeted via vectors to_raw_parts()
     /// function and transformed back into tracked mempry
     /// via from_raw_parts.
@@ -1222,6 +1251,7 @@ struct MemDescr {
     /// * Default is true.
     dealloc: bool,
 }
+
 
 impl MemDescr {
     /// Provides a handle to the given memory area by
@@ -1256,7 +1286,7 @@ impl MemDescr {
         self.ptr
     }
 
-    /// Returns the length of the controlled memory area.
+    /// Returns the length of the accesible memory area.
     fn len(&self) -> usize {
         self.len
     }
@@ -1273,6 +1303,7 @@ impl MemDescr {
         MemDescr {
             ptr: self.ptr,
             len: self.len,
+            _mem_len: self._mem_len,
             _cap: self._cap,
             id: None,
             pool: Rc::clone(&self.pool),
@@ -1312,7 +1343,7 @@ impl Drop for MemDescr {
 
         if self.dealloc {
             unsafe{
-                Vec::from_raw_parts(self.ptr, self.len, self.len);
+                Vec::from_raw_parts(self.ptr, self._mem_len, self._cap);
             }
         }
     }
@@ -1434,6 +1465,7 @@ impl MemPool {
         Ok(MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _mem_len: slice.len(),
             _cap: slice.len(),
             id: Some(desc_id),
             dealloc,
@@ -1473,6 +1505,7 @@ impl MemPool {
         MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _mem_len: slice.len(),
             _cap: slice.len(),
             id: None,
             dealloc,
@@ -1513,6 +1546,7 @@ impl MemPool {
         Ok(MemDescr {
             ptr,
             len,
+            _mem_len: len,
             _cap: cap,
             id: Some(id),
             dealloc: true,
@@ -1545,6 +1579,7 @@ impl MemPool {
         MemDescr {
             ptr,
             len,
+            _mem_len: len,
             _cap: cap,
             id: None,
             dealloc: true,
