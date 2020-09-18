@@ -414,19 +414,34 @@ impl <'a> VqCfgHandler<'a> {
         }
     }
 
-    pub fn set_ring_addr(&mut self, vq_index: u16, addr: usize) {
-        self.raw.queue_select = vq_index;
+    pub fn set_ring_addr(&mut self, addr: usize) {
+        self.raw.queue_select = self.vq_index;
         self.raw.queue_desc = paging::virt_to_phys(VirtAddr::from(addr)).into();
     }
 
-    pub fn set_drv_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
-        self.raw.queue_select = vq_index;
+    pub fn set_drv_ctrl_addr(&mut self, addr: usize) {
+        self.raw.queue_select = self.vq_index;
         self.raw.queue_driver = paging::virt_to_phys(VirtAddr::from(addr)).into();
     }
 
-    pub fn set_dev_ctrl_addr(&mut self, vq_index: u16, addr: usize) {
-        self.raw.queue_select = vq_index;
+    pub fn set_dev_ctrl_addr(&mut self, addr: usize) {
+        self.raw.queue_select = self.vq_index;
         self.raw.queue_device = paging::virt_to_phys(VirtAddr::from(addr)).into();
+    }
+
+    pub fn notif_off(&mut self) -> u16 {
+        self.raw.queue_select = self.vq_index;
+        self.raw.queue_notify_off
+    }
+
+    pub fn enable_queue(&mut self) {
+        self.raw.queue_select = self.vq_index;
+        self.raw.queue_enable = 1;
+    }
+
+    pub fn disable_queue(&mut self) {
+        self.raw.queue_select = self.vq_index;
+        self.raw.queue_enable = 0;
     }
 }
 
@@ -633,6 +648,7 @@ impl ComCfgRaw {
 /// See Virtio specification v1.1 - 4.1.4.4 
 // 
 pub struct NotifCfg {
+    /// Start addr, from where the notification addresses for the virtqueues are computed
     base_addr: VirtMemAddr,
     notify_off_multiplier: u32,
     /// Preferences of the device for this config. From 1 (highest) to 2^7-1 (lowest)
@@ -677,14 +693,66 @@ impl NotifCfg {
         })
     }
     
-    //
-    // THIS IS PLACEHOLDER JUST TO GET THE IDEA RIGHT
-    //
-    fn write(&self, queue_notif_off: u32) {
-        unimplemented!();
-        // Write to memory address = self.base_addr + queue_notif_off * self.notifiy_off_multiplier
-        //
-        // WHAT TO WRITE IS THE QUESTION?
+    /// Returns base address of notification area as an usize
+    pub fn base(&self) -> usize {
+        usize::from(self.base_addr)
+    }
+
+    /// Returns the multiplier, needed in order to calculate the 
+    /// notification address for a specific queue.
+    pub fn multiplier(&self) -> u32 {
+        self.notify_off_multiplier
+    }
+
+}
+
+/// Control structure, allowing to notify a device via PCI bus.
+/// Typcially hold by a virtqueue.
+pub struct NotifCtrl {
+    /// Indicates if VIRTIO_F_NOTIFICATION_DATA has been negotiated
+    f_notif_data: bool,
+    /// Where to write notification
+    notif_addr: *mut usize,
+}
+
+impl NotifCtrl {
+    /// Retunrs a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA 
+    /// are disabled.
+    pub fn new(notif_addr: *mut usize) -> Self {
+        NotifCtrl {
+            f_notif_data: false,
+            notif_addr, 
+        }
+    }
+
+    /// Enables VIRTIO_F_NOTIFICATION_DATA. This changes which data is provided to the device. ONLY a good idea if Feature has been negotiated.
+    pub fn enable_notif_data(&mut self) {
+        self.f_notif_data = true;
+    }
+
+    pub fn notify_dev(&self, notif_data: &[u8]) {
+        // See Virtio specification v.1.1. - 4.1.5.2
+        // Depending in the feature negotiation, we write eitehr only the 
+        // virtqueue index or the index and the next position inside the queue. 
+        if self. f_notif_data {
+            unsafe{
+                let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 4);
+                let mut notif_data = notif_data.into_iter();
+
+                for byte in notif_area {
+                    *byte = *notif_data.next().unwrap();
+                }
+            }
+        } else {
+            unsafe{
+                let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 2);
+                let mut notif_data = notif_data.into_iter();
+
+                for byte in notif_area {
+                    *byte = *notif_data.next().unwrap();
+                }
+            }
+        }
     }
 
 }
