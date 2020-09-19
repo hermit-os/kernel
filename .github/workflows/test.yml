@@ -126,6 +126,7 @@ jobs:
         run:
           cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader
         continue-on-error: true
-
-
-
+      - name: (Experimental) - Integration Tests (smp)
+        run:
+          cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader --num_cores 2
+        continue-on-error: true
