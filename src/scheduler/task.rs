@@ -468,15 +468,21 @@ impl Task {
 	}
 }
 
-/*impl Drop for Task {
+impl Drop for Task {
 	fn drop(&mut self) {
 		debug!("Drop task {}", self.id);
 	}
-}*/
+}
 
 struct BlockedTask {
 	task: Rc<RefCell<Task>>,
 	wakeup_time: Option<u64>,
+}
+
+impl BlockedTask {
+	pub fn new(task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) -> Self {
+		Self { task, wakeup_time }
+	}
 }
 
 pub struct BlockedTaskQueue {
@@ -535,7 +541,7 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = BlockedTask { task, wakeup_time };
+		let new_node = BlockedTask::new(task.clone(), wakeup_time);
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
@@ -558,6 +564,15 @@ impl BlockedTaskQueue {
 
 				first_task = false;
 				cursor.move_next();
+			}
+
+			// No, then just insert it at the end of the list.
+			self.list.push_back(new_node);
+
+			// If this is the new first task in the list, update the One-Shot Timer
+			// to fire when this task shall be woken up.
+			if first_task {
+				arch::set_oneshot_timer(wakeup_time);
 			}
 		} else {
 			// No, then just insert it at the end of the list.
