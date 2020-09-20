@@ -569,8 +569,8 @@ impl BlockedTaskQueue {
 			// No, then just insert it at the end of the list.
 			self.list.push_back(new_node);
 
-			// If this is the new first task in the list, update the One-Shot Timer
-			// to fire when this task shall be woken up.
+			// If this is the task with the ealiest deadline (=> first elemen of the list),
+			// update the one-shot timer to fire when this task shall be woken up.
 			if first_task {
 				arch::set_oneshot_timer(wakeup_time);
 			}
