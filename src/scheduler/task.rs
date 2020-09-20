@@ -547,17 +547,18 @@ impl BlockedTaskQueue {
 		if let Some(wt) = wakeup_time {
 			let mut first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
+			let mut _guard = scopeguard::guard(first_task, |first_task| {
+				// If the task is the new first task in the list, update the one-shot timer
+				// to fire when this task shall be woken up.
+				if first_task {
+					arch::set_oneshot_timer(wakeup_time);
+				}
+			});
 
 			while let Some(node) = cursor.current() {
 				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
 					cursor.insert_before(new_node);
-
-					// If this is the new first task in the list, update the One-Shot Timer
-					// to fire when this task shall be woken up.
-					if first_task {
-						arch::set_oneshot_timer(wakeup_time);
-					}
 
 					return;
 				}
@@ -568,12 +569,6 @@ impl BlockedTaskQueue {
 
 			// No, then just insert it at the end of the list.
 			self.list.push_back(new_node);
-
-			// If this is the task with the ealiest deadline (=> first elemen of the list),
-			// update the one-shot timer to fire when this task shall be woken up.
-			if first_task {
-				arch::set_oneshot_timer(wakeup_time);
-			}
 		} else {
 			// No, then just insert it at the end of the list.
 			self.list.push_back(new_node);
