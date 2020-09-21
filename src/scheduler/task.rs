@@ -6,6 +6,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#![allow(unused_assignments)]
+
 use crate::arch;
 use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
@@ -541,7 +543,7 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = BlockedTask::new(task.clone(), wakeup_time);
+		let new_node = BlockedTask::new(task, wakeup_time);
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
