@@ -128,13 +128,13 @@ pub struct MemoryBar {
 pub enum PciDriver<'a> {
 	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
 	VirtioNet(SpinlockIrqSave<VirtioNetDriver<'a>>),
-	VirtioNetNew(VnetDrv),
+	VirtioNetNew(SpinlockIrqSave<VnetDrv>),
 }
 
 impl<'a> PciDriver<'a> {
-	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<VirtioNetDriver<'a>>> {
+	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<VnetDrv>> {
 		match self {
-			Self::VirtioNet(drv) => Some(drv),
+			Self::VirtioNetNew(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -152,7 +152,7 @@ pub fn register_driver(drv: PciDriver<'static>) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
+pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VnetDrv>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
@@ -514,7 +514,7 @@ pub fn init_drivers() {
 			// in order to let the compiler know, that we are giving him a static driver struct.
 			match pci_virtio::init_device(&adapter) {
                 Ok(drv) => match drv {
-					VirtioDriver::Network(drv) => register_driver(PciDriver::VirtioNetNew(drv)),
+					VirtioDriver::Network(drv) => register_driver(PciDriver::VirtioNetNew(SpinlockIrqSave::new(drv))),
 					VirtioDriver::FileSystem => (), // Filesystem is pushed to the driver struct inside init_device()
 				},
 			    Err(_) => (), // could have an info which driver failed

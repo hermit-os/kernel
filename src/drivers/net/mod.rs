@@ -27,7 +27,7 @@ fn set_polling_mode(value: bool) {
 	// is the driver already in polling mode?
 	if POLLING.swap(value, Ordering::SeqCst) != value {
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().set_polling_mode(value);
+			unimplemented!();
 		}
 
 		// wakeup network thread to sleep for longer time
@@ -68,7 +68,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 
 	if reset_nic {
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().set_polling_mode(false);
+			driver.lock().disable_interrupts();
 		};
 	} else {
 		NET_SEM.acquire(millis);

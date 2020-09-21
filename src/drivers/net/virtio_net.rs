@@ -11,6 +11,8 @@
 use crate::arch::x86_64::kernel::pci::PciAdapter;
 use crate::arch::x86_64::kernel::pci::error::PciError;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+#[cfg(not(feature = "newlib"))]
+use super::netwakeup;
 
 use core::result::Result;
 use alloc::vec::Vec;
@@ -91,7 +93,26 @@ impl RxQueues {
                     // Currently we choose indirect descriptors for small queue sizes, in order to allow 
                     // as many packages as possible inside the queue, while the allocated
                     size if size <= 256 => {
-                        let desc_sizes = [Bytes::new(512).unwrap();17];
+                        let desc_sizes = [
+                            Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            ];
                         let spec = BuffSpec::Indirect(&desc_sizes);
 
                         for _ in 0..size {
@@ -121,7 +142,26 @@ impl RxQueues {
                         assert!(size == num_chains*17+num_indirect);
 
                         // Create all next lists
-                        let desc_sizes = [Bytes::new(512).unwrap();17];
+                        let desc_sizes = [
+                            Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            Bytes::new(512).unwrap(),
+                            ];
                         let spec = BuffSpec::Multiple(&desc_sizes);
 
                         for _ in 0..num_chains {
@@ -162,7 +202,7 @@ impl RxQueues {
                 }
             } else {
             // Buffers can not be merged, hence using a single descriptor per buffer.
-                let spec = BuffSpec::Single(Bytes::new(65562).unwrap());
+                let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65562).unwrap());
                 for _ in 0..u16::from(vq.size()) {
                     let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                         Ok(tkn) => tkn,
@@ -185,7 +225,7 @@ impl RxQueues {
             //
             // In this case, the driver does not check if 
             // VIRTIO_NET_F_MRG_RXBUF is set, as a single descriptor will be used anyway.
-            let spec = BuffSpec::Single(Bytes::new(1526usize).unwrap());
+            let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1526usize).unwrap());
             for _ in 0..u16::from(vq.size()) {
                 let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                     Ok(tkn) => tkn,
@@ -239,6 +279,38 @@ pub struct VirtioNetDriver{
     send_vqs: TxQueues,
 
     num_vqs: u16,
+}
+
+// Kernel interface
+impl VirtioNetDriver {
+	pub fn get_mac_address(&self) -> [u8; 6] {
+        self.dev_cfg.raw.mac
+	}
+
+	pub fn get_mtu(&self) -> u16 {
+		1500 //self.dev_cfg.raw.mtu
+	}
+
+	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+		unimplemented!();
+	}
+
+	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
+        unimplemented!();	
+	}
+
+	pub fn has_packet(&self) -> bool {
+		unimplemented!();
+	}
+
+	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
+		unimplemented!();
+	}
+
+	pub fn rx_buffer_consumed(&mut self) {
+		unimplemented!();
+	}
+
 }
 
 // Private funtctions for Virtio network driver
@@ -608,6 +680,22 @@ impl VirtioNetDriver {
         todo!("Check if check for status feature bit is necessary here");
         self.dev_cfg.raw.status
     }
+
+    pub fn disable_interrupts(&self) {
+        unimplemented!();
+    }
+
+	pub fn handle_interrupt(&self) -> bool {
+		if self.isr_stat.is_interrupt() {
+			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
+			netwakeup();
+
+			true
+		} else {
+            false
+        }
+	}
 }
 
 mod constants {
