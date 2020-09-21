@@ -778,6 +778,14 @@ impl IsrStatus {
             rank,
         }
     }
+
+    pub fn is_interrupt(&self) -> bool {
+        self.isr_stat.flags & 1 << 0 == 1
+    }
+
+    pub fn is_cfg_change(&self) -> bool {
+        self.isr_stat.flags & 1 << 1 == 1 << 1
+    }
 }
 
 /// ISR status structure of Virtio PCI devices.
