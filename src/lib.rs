@@ -61,6 +61,7 @@ extern crate num;
 #[macro_use]
 extern crate num_derive;
 extern crate num_traits;
+extern crate scopeguard;
 #[cfg(not(target_os = "hermit"))]
 #[macro_use]
 extern crate std;
