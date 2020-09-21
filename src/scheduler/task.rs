@@ -6,8 +6,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![allow(unused_assignments)]
-
 use crate::arch;
 use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
@@ -528,6 +526,7 @@ impl BlockedTaskQueue {
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
+	#[allow(unused_assignments)]
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
 			// Set the task status to Blocked.
