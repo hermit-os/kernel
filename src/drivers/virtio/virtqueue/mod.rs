@@ -17,8 +17,8 @@
 pub mod packed;
 pub mod split;
 
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr, PhysAddr};
 
 use self::packed::PackedVq;
 use self::split::SplitVq;
@@ -623,6 +623,19 @@ impl Transfer {
         }
     }
 
+    /// # UNSAFE, HIGLY EXPERIMENTIALLY
+    /// This function returns a Vector to the allocated memory areas. A vector is necessary as boxes are introducing 
+    /// dealloc panics. Currently the complete behaviour of this function is not well tested and it should be used with care.
+    /// One could even do something like:
+    /// ``` 
+    /// unsafe {
+    ///     let (send_data, recv_data) = a_transfer.ret(); 
+    ///     // Where T is a data structure provided to the queue via prep_transfer() or prep_transfer_from_raw()
+    ///     let refrence_to_data: &T = & *(send.data[0][0] as *const u8) as const T)
+    /// }
+    /// ```
+    /// The above will result in undefined bevaiour and dealloc failure if the buffer was created via `prep_buffer()`!
+    ///
     /// Returns the actual send and receiving buffers.
     /// The function consumes the tranfer and cleans up all tokens.
     /// Failes if `TransferState != Finished`.
@@ -633,7 +646,8 @@ impl Transfer {
     ///
     /// Returned data is of type `Box<[Box<[u8]>]>` in order to preserve the memory regions
     /// and to prevent copying of data.
-    pub fn ret(mut self) -> Result<(Option<Box<[Box<[u8]>]>>, Option<Box<[Box<[u8]>]>>), VirtqError> {
+    ///
+    pub unsafe fn ret(mut self) -> Result<(Option<Vec<Vec<u8>>>, Option<Vec<Vec<u8>>>), VirtqError> {
         let state = self.transfer_tkn.as_ref().unwrap().state;
 
         match state {
@@ -1101,7 +1115,10 @@ impl Buffer {
         }
     }
 
-    fn into_boxed(mut self) -> Box<[Box<[u8]>]> {
+    /// Not entirely sure if this is a good idea, as we possibly deallocate memory via rust deallocator 
+    /// which has been allocate via `crate::mm::allocate()`... Hence it is unsafe and its 
+    /// behaviour is currently undefined.
+    unsafe fn into_boxed(mut self) -> Vec<Vec<u8>> {
         match self {
             Buffer::Single{mut desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1111,10 +1128,10 @@ impl Buffer {
                     // As it is NOT possible to move out of Box<[MemDescr]>, we
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
-                    desc.dealloc = false;
-                    arr.push(desc.no_dealloc_clone().into_boxed());
+                    desc.dealloc = Dealloc::Not;
+                    arr.push(desc.no_dealloc_clone().into_vec());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
             Buffer::Multiple{mut desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1124,10 +1141,10 @@ impl Buffer {
                     // As it is NOT possible to move out of Box<[MemDescr]>, we
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
-                    desc.dealloc = false;
-                    arr.push(desc.no_dealloc_clone().into_boxed());
+                    desc.dealloc = Dealloc::Not;
+                    arr.push(desc.no_dealloc_clone().into_vec());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
             Buffer::Indirect{mut desc_lst, ctrl_desc, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1137,15 +1154,16 @@ impl Buffer {
                     // As it is NOT possible to move out of Box<[MemDescr]>, we
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
-                    desc.dealloc = false;
-                    arr.push(desc.no_dealloc_clone().into_boxed());
+                    desc.dealloc = Dealloc::Not;
+                    arr.push(desc.no_dealloc_clone().into_vec());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
         }
     }
 
-    fn cpy(&self) -> Box<[u8]>{
+    /// Retruns a copy of the buffer.
+    fn cpy(&self) -> Box<[u8]> {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(*len);
@@ -1174,6 +1192,8 @@ impl Buffer {
         }
     }
 
+    /// Returns a scattered copy of the buffer, which preserves the structure of the 
+    /// buffer beeing possibly split up between different descriptors.
     fn scat_cpy (&self) -> Box<[Box<[u8]>]> {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => {
@@ -1284,12 +1304,6 @@ struct MemDescr {
     /// Defines the length of the controlled memory area
     /// starting a `ptr: *mut u8`
     _mem_len: usize,
-    /// Memory is creaeted via vectors to_raw_parts()
-    /// function and transformed back into tracked mempry
-    /// via from_raw_parts.
-    /// Allthouhg it is unlikely to be important, as the vector will be
-    /// "full" (at cap == len) when leaeked, this is for safety reasons
-    _cap: usize,
     /// If `id == None` this is an untracked memory descriptor
     /// * Meaining: The descriptor does NOT count as a descriptor 
     /// taken from the [MemPool](MemPool).
@@ -1303,20 +1317,20 @@ struct MemDescr {
     ///     that someone else is "controlling" area and takes
     ///     of deallocation.
     /// * Default is true.
-    dealloc: bool,
+    dealloc: Dealloc,
 }
 
 
 impl MemDescr {
     /// Provides a handle to the given memory area by
     /// giving a Box ownership to it.
-    fn into_boxed(mut self) -> Box<[u8]> {
+    fn into_vec(mut self) -> Vec<u8> {
         // Prevent double frees, as ownership will be tracked by 
         // Box from now on.
-        self.dealloc = false;
+        self.dealloc = Dealloc::Not;
 
         unsafe {
-            Vec::from_raw_parts(self.ptr, self.len, self._cap).into_boxed_slice()
+            Vec::from_raw_parts(self.ptr, self._mem_len, 0)
         }
     }
 
@@ -1358,10 +1372,9 @@ impl MemDescr {
             ptr: self.ptr,
             len: self.len,
             _mem_len: self._mem_len,
-            _cap: self._cap,
             id: None,
             pool: Rc::clone(&self.pool),
-            dealloc: false,
+            dealloc: Dealloc::Not,
         }
     }
 }
@@ -1395,10 +1408,14 @@ impl Drop for MemDescr {
             None => (),
         }
 
-        if self.dealloc {
-            unsafe{
-                Vec::from_raw_parts(self.ptr, self._mem_len, self._cap);
-            }
+        match self.dealloc {
+            Dealloc::Not => (),
+            Dealloc::AsSlice => unsafe {
+                let temp = Vec::from_raw_parts(self.ptr, self._mem_len, 0);
+            },
+            Dealloc::AsPage => {
+                crate::mm::deallocate(VirtAddr::from(self.ptr as usize), self._mem_len);
+            },
         }
     }
 }
@@ -1437,6 +1454,12 @@ impl From<Bytes> for usize {
     fn from(byte: Bytes) -> Self {
         byte.0
     }
+}
+
+enum Dealloc {
+    Not, 
+    AsPage,
+    AsSlice,
 }
 
 /// MemPool allows to easily control, request and provide memory for Virtqueues. 
@@ -1486,8 +1509,7 @@ impl MemPool {
     ///
     /// **Info on Usage:**
     /// * `Panics` if given `slice.len() == 0`
-    /// * One should set the dealloc parameter of the function to `false` ONLY
-    /// when the given memory is controlled somewhere else.
+    /// * `Panics` if slice crosses physical page boundary
     /// * The given slice MUST be a heap allocated slice.
     /// * Panics if slice crosses page boundaries!
     ///
@@ -1495,9 +1517,7 @@ impl MemPool {
     /// 
     /// * The descriptor will consume one element of the pool. 
     /// * The refered to memory area will be deallocated upon drop
-    ///   * Unless the field: `dealloc` is set to `false`.
-    ///   * OR the dealloc field parameter is set to false.
-    fn pull_from(&self, rc_self: Rc<MemPool>, slice: &[u8], dealloc: bool) -> Result<MemDescr, VirtqError> {
+    fn pull_from(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
         // Zero sized descriptors are NOT allowed
         // This also prohibids a panic due to accessing wrong index below
         assert!(slice.len() != 0);
@@ -1520,9 +1540,49 @@ impl MemPool {
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
             _mem_len: slice.len(),
-            _cap: slice.len(),
             id: Some(desc_id),
-            dealloc,
+            dealloc: Dealloc::AsSlice,
+            pool: rc_self,
+        })
+    }
+
+    /// Creates a MemDescr which refers to already existing memory.
+    ///
+    /// **Info on Usage:**
+    /// * `Panics` if given `slice.len() == 0`
+    /// * `Panics` if slice crosses physical page boundary
+    /// * The given slice MUST be a heap allocated slice.
+    /// * Panics if slice crosses page boundaries!
+    ///
+    /// **Properties of Returned MemDescr:**
+    /// 
+    /// * The descriptor will consume one element of the pool. 
+    /// * The refered to memory area will NOT be deallocated upon drop
+    fn pull_from_raw(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
+        // Zero sized descriptors are NOT allowed
+        // This also prohibids a panic due to accessing wrong index below
+        assert!(slice.len() != 0);
+
+        // Assert descriptor does not cross a page barrier
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
+
+        assert_eq!(end_phy, end_phy_calc);
+       
+
+        let desc_id = match self.pool.borrow_mut().pop() {
+            Some(id) => id,
+            None => return Err(VirtqError::NoDescrAvail),
+        };
+
+        Ok(MemDescr{
+            ptr: (&slice[0] as *const u8) as *mut u8,
+            len: slice.len(),
+            _mem_len: slice.len(),
+            id: Some(desc_id),
+            dealloc: Dealloc::Not,
             pool: rc_self,
         })
     }
@@ -1533,17 +1593,14 @@ impl MemPool {
     ///
     /// **Info on Usage:**
     /// * `Panics` if given `slice.len() == 0`
-    /// * One should set the dealloc parameter of the function to `false` ONLY
-    /// when the given memory is controlled somewhere else.
+    /// * `Panics` if slice crosses physical page boundary
     /// * The given slice MUST be a heap allocated slice.
     ///
     /// **Properties of Returned MemDescr:**
     /// 
     /// * The descriptor will consume one element of the pool. 
     /// * The refered to memory area will be deallocated upon drop
-    ///   * Unless the field: `dealloc` is set to `false`.
-    ///   * OR the dealloc field parameter is set to false.
-    fn pull_from_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8], dealloc: bool) -> MemDescr {
+    fn pull_from_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> MemDescr {
         // Zero sized descriptors are NOT allowed
         // This also prohibids a panic due to accessing wrong index below
         assert!(slice.len() != 0);
@@ -1560,9 +1617,44 @@ impl MemPool {
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
             _mem_len: slice.len(),
-            _cap: slice.len(),
             id: None,
-            dealloc,
+            dealloc: Dealloc::AsSlice,
+            pool: rc_self,
+        }
+    }
+    
+    /// Creates a MemDescr which refers to already existing memory.
+    /// The MemDescr does NOT consume a place in the pool and should
+    /// be used with `Buffer::Indirect`.
+    ///
+    /// **Info on Usage:**
+    /// * `Panics` if given `slice.len() == 0`
+    /// * `Panics` if slice crosses physical page boundary
+    /// * The given slice MUST be a heap allocated slice.
+    ///
+    /// **Properties of Returned MemDescr:**
+    /// 
+    /// * The descriptor will consume one element of the pool. 
+    /// * The refered to memory area will NOT be deallocated upon drop
+    fn pull_from_raw_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> MemDescr {
+        // Zero sized descriptors are NOT allowed
+        // This also prohibids a panic due to accessing wrong index below
+        assert!(slice.len() != 0);
+
+        // Assert descriptor does not cross a page barrier
+        let start_virt = (&slice[0] as *const u8) as usize;
+        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
+        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
+        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
+
+        assert_eq!(end_phy, end_phy_calc);
+
+        MemDescr{
+            ptr: (&slice[0] as *const u8) as *mut u8,
+            len: slice.len(),
+            _mem_len: slice.len(),
+            id: None,
+            dealloc: Dealloc::Not,
             pool: rc_self,
         }
     }
@@ -1585,8 +1677,11 @@ impl MemPool {
             None => return Err(VirtqError::NoDescrAvail),
         };
 
+        let len = bytes.0;
+
         // Allocate heap memory via a vec, leak and cast
-        let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
+        let sz = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(sz, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1601,9 +1696,8 @@ impl MemPool {
             ptr,
             len,
             _mem_len: len,
-            _cap: cap,
             id: Some(id),
-            dealloc: true,
+            dealloc: Dealloc::AsPage,
             pool: rc_self,
         })
     }
@@ -1618,8 +1712,11 @@ impl MemPool {
     ///   * Second MemPool.pull -> MemDesc with id = 100
     ///   * Third MemPool.pull -> MemDesc with id = 2,
     fn pull_untracked(&self, rc_self: Rc<MemPool>, bytes: Bytes)-> MemDescr {
+        let len = bytes.0;
+
         // Allocate heap memory via a vec, leak and cast
-        let (ptr, len, cap) = vec![0u8; bytes.0].into_raw_parts();
+        let sz = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(sz, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1634,9 +1731,8 @@ impl MemPool {
             ptr,
             len,
             _mem_len: len,
-            _cap: cap,
             id: None,
-            dealloc: true,
+            dealloc: Dealloc::AsPage,
             pool: rc_self,
         }
     }
