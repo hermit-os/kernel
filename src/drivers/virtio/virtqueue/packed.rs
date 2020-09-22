@@ -1249,7 +1249,7 @@ impl PackedVq {
             (Some((send_data, send_spec)), None) => {
                 match send_spec {
                     BuffSpec::Single(size) => {
-                        let data_slice = unsafe {send_data.as_slice_u8()};
+                        let data_slice = send_data.as_slice_u8();
                         let len = data_slice.len();
 
                         // Buffer must have the right size
@@ -1257,7 +1257,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice,true) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1281,7 +1281,7 @@ impl PackedVq {
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
-                        let data_slice = unsafe {send_data.as_slice_u8()};
+                        let data_slice =  send_data.as_slice_u8();
                         let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
@@ -1293,7 +1293,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1331,7 +1331,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1371,7 +1371,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice,true) {
+                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1393,7 +1393,7 @@ impl PackedVq {
                         })
                     },
                     BuffSpec::Multiple(size_lst) => {
-                        let data_slice = unsafe {recv_data.as_slice_u8()};
+                        let data_slice = recv_data.as_slice_u8();
                         let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
@@ -1405,7 +1405,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1431,7 +1431,7 @@ impl PackedVq {
                         })
                     },
                     BuffSpec::Indirect(size_lst) => {
-                        let data_slice = unsafe {recv_data.as_slice_u8()};
+                        let data_slice = recv_data.as_slice_u8();
                         let len = data_slice.len();
                         let mut desc_lst: Vec<MemDescr> = Vec::with_capacity(size_lst.len());
                         let mut index = 0usize;
@@ -1443,7 +1443,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
+                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1483,7 +1483,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, true) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1491,7 +1491,7 @@ impl PackedVq {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);
 
-                        let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_data_slice = recv_data.as_slice_u8();
                         let recv_len = recv_data_slice.len();
 
                         // Buffer must have the right size
@@ -1499,7 +1499,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, true) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1521,7 +1521,7 @@ impl PackedVq {
                         })
                     },
                     (BuffSpec::Single(send_size), BuffSpec::Multiple(recv_size_lst)) => {
-                        let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_data_slice = send_data.as_slice_u8();
                         let send_len = send_data_slice.len();
 
                         // Buffer must have the right size
@@ -1529,7 +1529,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, true) {
+                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1549,7 +1549,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1575,7 +1575,7 @@ impl PackedVq {
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Multiple(recv_size_lst)) => {
-                        let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_data_slice = send_data.as_slice_u8();
                         let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
@@ -1587,7 +1587,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1599,7 +1599,7 @@ impl PackedVq {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);  
 
-                        let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_data_slice = recv_data.as_slice_u8();
                         let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;
@@ -1611,7 +1611,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1637,7 +1637,7 @@ impl PackedVq {
                         })
                     },
                     (BuffSpec::Multiple(send_size_lst), BuffSpec::Single(recv_size)) => {
-                        let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_data_slice = send_data.as_slice_u8();
                         let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
@@ -1649,7 +1649,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, true) {
+                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1661,7 +1661,7 @@ impl PackedVq {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);  
 
-                        let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_data_slice = recv_data.as_slice_u8();
                         let recv_len = recv_data_slice.len();
 
                         // Buffer must have the right size
@@ -1669,7 +1669,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, true) {
+                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1691,7 +1691,7 @@ impl PackedVq {
                         })
                     },
                     (BuffSpec::Indirect(send_size_lst), BuffSpec::Indirect(recv_size_lst)) => {
-                        let send_data_slice = unsafe {send_data.as_slice_u8()};
+                        let send_data_slice = send_data.as_slice_u8();
                         let send_len = send_data_slice.len();
                         let mut send_desc_lst: Vec<MemDescr> = Vec::with_capacity(send_size_lst.len());
                         let mut index = 0usize;
@@ -1703,7 +1703,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            send_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
+                            send_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1712,7 +1712,7 @@ impl PackedVq {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);  
 
-                        let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_data_slice = recv_data.as_slice_u8();
                         let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;
@@ -1724,7 +1724,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, true));
+                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1777,7 +1777,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice, false) {
+                        let desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1807,7 +1807,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1841,7 +1841,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
+                            desc_lst.push(self.mem_pool.pull_from_raw_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1877,7 +1877,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(data_slice.len()))
                         }
 
-                        let desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), data_slice, false) {
+                        let desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1907,7 +1907,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -1941,7 +1941,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(data_slice.len())),
                             };
 
-                            desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
+                            desc_lst.push(self.mem_pool.pull_from_raw_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -1977,7 +1977,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, false) {
+                        let send_desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), send_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -1989,7 +1989,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, false) {
+                        let recv_desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), recv_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -2015,7 +2015,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(send_data_slice.len()))
                         }
 
-                        let send_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), send_data_slice, false) {
+                        let send_desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), send_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -2031,7 +2031,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -2065,7 +2065,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -2085,7 +2085,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => recv_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -2119,7 +2119,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), next_slice, false) {
+                            match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), next_slice) {
                                 Ok(desc) => send_desc_lst.push(desc),
                                 Err(vq_err) => return Err(vq_err),
                             };
@@ -2135,7 +2135,7 @@ impl PackedVq {
                             return Err(VirtqError::BufferSizeWrong(recv_data_slice.len()))
                         }
 
-                        let recv_desc = match self.mem_pool.pull_from(Rc::clone(&self.mem_pool), recv_data_slice, false) {
+                        let recv_desc = match self.mem_pool.pull_from_raw(Rc::clone(&self.mem_pool), recv_data_slice) {
                             Ok(desc) => desc,
                             Err(vq_err) => return Err(vq_err),
                         };
@@ -2165,7 +2165,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(send_data_slice.len())),
                             };
 
-                            send_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
+                            send_desc_lst.push(self.mem_pool.pull_from_raw_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
@@ -2182,7 +2182,7 @@ impl PackedVq {
                                 None => return Err(VirtqError::BufferSizeWrong(recv_data_slice.len())),
                             };
 
-                            recv_desc_lst.push(self.mem_pool.pull_from_untracked(Rc::clone(&self.mem_pool), next_slice, false));
+                            recv_desc_lst.push(self.mem_pool.pull_from_raw_untracked(Rc::clone(&self.mem_pool), next_slice));
 
                             // update the starting index for the next iteration
                             index = index + usize::from(*byte);
