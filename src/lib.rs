@@ -95,7 +95,7 @@ pub mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
-#[cfg(not(feature = "newlib"))]
+
 mod rlib;
 #[cfg(target_os = "hermit")]
 mod runtime_glue;
