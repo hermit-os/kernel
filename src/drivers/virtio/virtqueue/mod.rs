@@ -568,7 +568,7 @@ impl Transfer {
     /// If one create this buffer via a `Virtq.prep_transfer()` or `Virtq.prep_transfer_from_raw()` 
     /// call, a casting back to the original structure `T` is NOT possible.
     /// In theses cases please use `Transfer.ret_cpy()` or use 'BuffSpec::Single' only!
-    pub fn ret_scat_cpy(&self) -> Result<(Option<Box<[Box<[u8]>]>>, Option<Box<[Box<[u8]>]>>), VirtqError> {
+    pub fn ret_scat_cpy(&self) -> Result<(Option<Vec<Box<[u8]>>>, Option<Vec<Box<[u8]>>>), VirtqError> {
         match &self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
                 // Unwrapping is okay here, as TransferToken must hold a BufferToken
@@ -718,7 +718,8 @@ impl Transfer {
         match self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
                 if self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().reusable {
-                    Ok(self.transfer_tkn.take().unwrap().into_inner().buff_tkn.take().unwrap())
+                    let tkn = self.transfer_tkn.take().unwrap().into_inner().buff_tkn.take().unwrap();
+                    Ok(tkn.reset())
                 } else {
                     Err(VirtqError::NoReuseBuffer)
                 }
@@ -847,23 +848,113 @@ pub struct BufferToken {
 
 // Private interface of BufferToken
 impl BufferToken {
-    /// Returns the overall length of the buffer
-    fn len(&self) -> usize {
+    /// Returns the overall number of descriptors 
+    fn num_descr(&self) -> usize {
         let mut len = 0usize;
 
         if let Some(buffer) = &self.recv_buff {
-            len += buffer.len();
+            len += buffer.num_descr();
         }
 
         if let Some(buffer) = &self.send_buff {
-            len += buffer.len();
+            len += buffer.num_descr();
         }
         len
+    }
+
+    // Returns the number of descritprors that will be placed in the queue
+    fn num_consuming_descr(&self) -> usize {
+        let mut len = 0usize;
+
+        if let Some(buffer) = &self.send_buff {
+            match buffer.get_ctrl_desc() {
+                Some(_) => len += 1,
+                None => len += buffer.len(),
+            }
+        } 
+
+        if let Some(buffer) = &self.recv_buff {
+            match buffer.get_ctrl_desc() {
+                Some(_) => len += 1,
+                None => len += buffer.len(),
+            }
+        } 
+        len
+    }
+
+    /// Resets all properties from the previous transfer.
+    fn reset(mut self) -> Self {
+        match self.send_buff.as_mut() {
+            Some(buff) => {
+                buff.reset_write();
+
+                for desc in buff.as_mut_slice() {
+                    desc.len = desc._mem_len;
+                }
+            },
+            None => (),
+        }
+
+        match self.recv_buff.as_mut() {
+            Some(buff) => {
+                buff. reset_write();
+
+                for desc in buff.as_mut_slice() {
+                    desc.len = desc._mem_len;
+                }
+            },
+            None => (),
+        }
+
+        self
     }
 }
 
 // Public interface of BufferToken
 impl BufferToken {
+    pub fn len(&self) -> (usize, usize) {
+        match (self.send_buff.as_ref(), self.recv_buff.as_ref()) {
+            (Some(send_buff), Some(recv_buff)) => (send_buff.len(), recv_buff.len()),
+            (Some(send_buff), None) => (send_buff.len(), 0),
+            (None, Some(recv_buff)) => (0, recv_buff.len()),
+            (None, None) => unreachable!("Empty BufferToken not allowed!"),
+        }
+    }
+    /// Returns the underlying raw pointers to the memory hold by the Buffertoken. This is mostly
+    /// useful in order to provide the user space with pointers to write to. 
+    ///
+    /// **WARN:** The Buffertoken is controlling the memory and must not be dropped as long as 
+    /// userspace has access to it!
+    pub fn raw_ptrs(&mut self) -> (Option<Box<[(*mut u8, usize)]>>, Option<Box<[(*mut u8, usize)]>>){
+        let mut send_ptrs = Vec::new();
+        let mut recv_ptrs = Vec::new();
+
+        match self.send_buff.as_mut() {
+            Some(buff) => {
+                for desc in buff.as_slice() {
+                    send_ptrs.push((desc.ptr, desc._mem_len));
+                }
+            },
+            None => (),
+        }
+
+        match self.recv_buff.as_ref() {
+            Some(buff) => {
+                for desc in buff.as_slice() {
+                    recv_ptrs.push((desc.ptr, desc._mem_len));
+                }
+            },
+            None => (),
+        }
+
+        match (send_ptrs.len(), recv_ptrs.len()) {
+            (0,0) => unreachable!("Empty transfer, Not allowed"),
+            (0,_) => (Some(send_ptrs.into_boxed_slice()), None),
+            (_,0) => (None, Some(recv_ptrs.into_boxed_slice())),
+            (_,_) => (Some(send_ptrs.into_boxed_slice()), Some(recv_ptrs.into_boxed_slice()))
+        }
+    }
+
     /// Writes the provided datastructures into the respective buffers. `K` into `self.send_buff` and `H` into 
     /// `self.recv_buff`. 
     /// If the provided datastructures do not "fit" into the respective buffers, the function will return an error. Even
@@ -899,7 +990,6 @@ impl BufferToken {
                                 // Unwrapping is okay here as sizes are checked above
                                 from += buff.next_write(&data_slc[from..to]).unwrap();
                             }
-                            
                         }
                     },
                     None => return Err(VirtqError::NoBufferAvail),
@@ -1015,17 +1105,6 @@ impl BufferToken {
     /// 
     /// After this call, the buffers are no longer writable. 
     pub fn provide(mut self) -> TransferToken {
-        // Reset write positions inside the buffer
-        // Needed if the BufferToken is reused.
-        // If no write happend, this is not harmfull.
-        if let Some(buff) = self.send_buff.as_mut() {
-            buff.reset_write();
-        }
-
-        if let Some(buff) = self.recv_buff.as_mut() {
-            buff.reset_write();
-        }
-
         TransferToken {
             state: TransferState::Ready,
             buff_tkn: Some(self),
@@ -1194,7 +1273,7 @@ impl Buffer {
 
     /// Returns a scattered copy of the buffer, which preserves the structure of the 
     /// buffer beeing possibly split up between different descriptors.
-    fn scat_cpy (&self) -> Box<[Box<[u8]>]> {
+    fn scat_cpy (&self) -> Vec<Box<[u8]>> {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1202,7 +1281,7 @@ impl Buffer {
                 for desc in desc_lst.iter() {
                     arr.push(desc.cpy_into_box());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
             Buffer::Multiple{desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1210,7 +1289,7 @@ impl Buffer {
                 for desc in desc_lst.iter() {
                     arr.push(desc.cpy_into_box());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
             Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1218,7 +1297,7 @@ impl Buffer {
                 for desc in desc_lst.iter() {
                     arr.push(desc.cpy_into_box());
                 }
-                arr.into_boxed_slice()
+                arr
             } ,
         }
     }
@@ -1680,8 +1759,8 @@ impl MemPool {
         let len = bytes.0;
 
         // Allocate heap memory via a vec, leak and cast
-        let sz = align_up!(len, BasePageSize::SIZE);
-		let ptr = (crate::mm::allocate(sz, true).0 as *const u8) as *mut u8;
+        let len = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(len, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1715,8 +1794,8 @@ impl MemPool {
         let len = bytes.0;
 
         // Allocate heap memory via a vec, leak and cast
-        let sz = align_up!(len, BasePageSize::SIZE);
-		let ptr = (crate::mm::allocate(sz, true).0 as *const u8) as *mut u8;
+        let len = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(len, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1992,5 +2071,22 @@ pub mod error {
         /// Indicates that a write to a Buffer happened and the data to be written into 
         /// the buffer/descriptor was to large for the buffer.
         WriteToLarge(BufferToken),
+    }
+
+    impl core::fmt::Debug for VirtqError {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            match self {
+                VirtqError::General => write!(f, "Virtq failure due to unknown reasons!"),
+                VirtqError::NoBufferAvail => write!(f, "Virtq detected write into non existing Buffer!"),
+                VirtqError::BufferInWithDirect => write!(f, "Virtq detected creation of Token, where Indirect and direct buffers where mixed!"),
+                VirtqError::BufferNotSpecified => write!(f, "Virtq detected creation of Token, without a BuffSpec"),
+                VirtqError::QueueNotExisting(u16) => write!(f, "Virtq does not exist and can not be used!"),
+                VirtqError::NoDescrAvail => write!(f, "Virtqs memory pool is exhausted!"),
+                VirtqError::BufferSizeWrong(usize) => write!(f, "Specified Buffer is to small for write!"),
+                VirtqError::NoReuseBuffer => write!(f, "Buffer can not be reused!"),
+                VirtqError::OngoingTransfer(_) => write!(f, "Transfer is ongoging and can not be used currently!"),
+                VirtqError::WriteToLarge(_) => write!(f, "Write is to large for BufferToken!"),
+            }
+        }
     }
 }

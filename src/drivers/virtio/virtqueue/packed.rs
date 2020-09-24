@@ -170,7 +170,7 @@ impl DescriptorRing {
 
             // Check length and if its fits. This should always be true due to the restriction of
             // the memory pool, but to be sure.
-            assert!(pinned.buff_tkn.as_ref().unwrap().len() <= self.capacity);
+            assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
 
             // create an counter that wrappes to the first element
             // after reaching a the end of the ring 
@@ -292,7 +292,7 @@ impl DescriptorRing {
 
         // Check length and if its fits. This should always be true due to the restriction of
         // the memory pool, but to be sure.
-        assert!(pinned.buff_tkn.as_ref().unwrap().len() <= self.capacity);
+        assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
 
         // create an counter that wrappes to the first element
         // after reaching a the end of the ring 

@@ -133,13 +133,13 @@ pub fn sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
 	kernel_function!(__sys_receive_rx_buffer())
 }
 
-fn __sys_rx_buffer_consumed() -> Result<(), ()> {
-	unsafe { SYS.rx_buffer_consumed() }
+fn __sys_rx_buffer_consumed(data: &'static [u8]) -> Result<(), ()> {
+	unsafe { SYS.rx_buffer_consumed(data) }
 }
 
 #[no_mangle]
-pub fn sys_rx_buffer_consumed() -> Result<(), ()> {
-	kernel_function!(__sys_rx_buffer_consumed())
+pub fn sys_rx_buffer_consumed(data: &'static [u8]) -> Result<(), ()> {
+	kernel_function!(__sys_rx_buffer_consumed(data))
 }
 
 #[cfg(not(feature = "newlib"))]

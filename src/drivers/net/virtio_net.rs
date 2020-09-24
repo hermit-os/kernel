@@ -31,7 +31,8 @@ use crate::drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec
 
 use self::error::VirtioNetError;
 use self::constants::{Features, Status, FeatureSet, MAX_NUM_VQ};
-
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 
 #[repr(C)]
 struct VirtioNetHdr{
@@ -77,192 +78,346 @@ impl RxQueues {
     fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         // Safe virtqueue
         self.vqs.push(Rc::new(vq));
-        // Unwrapping is safe, as one virtq will be definitely in the vector.
-        let vq = self.vqs.get(self.vqs.len()-1).unwrap();
+        if self.vqs.len() == 1 {
+            // Unwrapping is safe, as one virtq will be definitely in the vector.
+            let vq = self.vqs.get(0).unwrap();
 
-        if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
-            | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
-            | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_UFO) {
-            // Receive Buffers must be at least 65562 bytes large with theses features set.
-            // See Virtio specification v1.1 - 5.1.6.3.1
+            if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
+                | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
+                | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_UFO) {
+                // Receive Buffers must be at least 65562 bytes large with theses features set.
+                // See Virtio specification v1.1 - 5.1.6.3.1
 
-            // Buffers can be merged upon receiption, hence using multiple descriptors
-            // per buffer. 
-            if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
-                match u16::from(vq.size()) {
-                    // Currently we choose indirect descriptors for small queue sizes, in order to allow 
-                    // as many packages as possible inside the queue, while the allocated
-                    size if size <= 256 => {
-                        let desc_sizes = [
-                            Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            ];
-                        let spec = BuffSpec::Indirect(&desc_sizes);
+                // Buffers can be merged upon receiption, hence using multiple descriptors
+                // per buffer. 
+                if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
+                    match u16::from(vq.size()) {
+                        // Currently we choose indirect descriptors for small queue sizes, in order to allow 
+                        // as many packages as possible inside the queue, while the allocated
+                        size if size <= 256 => {
+                            let desc_sizes = [
+                                Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                ];
+                            let spec = BuffSpec::Indirect(&desc_sizes);
 
-                        for _ in 0..size {
-                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                Ok(tkn) => tkn,
-                                Err(vq_err) => {
-                                    error!("Setup of network queue failed, which should not happen!");
-                                    panic!("setup of network queue failed!");
-                                }
-                            };
+                            for _ in 0..size {
+                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                                    Ok(tkn) => tkn,
+                                    Err(vq_err) => {
+                                        error!("Setup of network queue failed, which should not happen!");
+                                        panic!("setup of network queue failed!");
+                                    }
+                                };
 
-                            // BufferTokens are directly provided to the queue
-                            // TransferTokens are directly dispatched
-                            // Transfers will be awaited at the queue
-                            buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue), false);
-                        }
-                    },
-                    // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
-                    // virtqueue. This is duet to not consuming to much memory.
-                    // If the queue_size mod 17 is not zero. We use the rest of the descriptors with indirect
-                    // descriptors list, to fully utilize the queue.
-                    size if size > 256 => {
-                        let num_chains = size / 17;
-                        let num_indirect = size % 17;
-                        // Typically must assert that the size of the virtqueue is not exceeded
-                        assert!(size == num_chains*17+num_indirect);
+                                // BufferTokens are directly provided to the queue
+                                // TransferTokens are directly dispatched
+                                // Transfers will be awaited at the queue
+                                // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                                buff_tkn.provide()
+                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
+                            }
+                        },
+                        // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
+                        // virtqueue. This is duet to not consuming to much memory.
+                        // If the queue_size mod 17 is not zero. We use the rest of the descriptors with indirect
+                        // descriptors list, to fully utilize the queue.
+                        size if size > 256 => {
+                            let num_chains = size / 17;
+                            let num_indirect = size % 17;
+                            // Typically must assert that the size of the virtqueue is not exceeded
+                            assert!(size == num_chains*17+num_indirect);
 
-                        // Create all next lists
-                        let desc_sizes = [
-                            Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            Bytes::new(512).unwrap(),
-                            ];
-                        let spec = BuffSpec::Multiple(&desc_sizes);
+                            // Create all next lists
+                            let desc_sizes = [
+                                Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                Bytes::new(4096).unwrap(),
+                                ];
+                            let spec = BuffSpec::Multiple(&desc_sizes);
 
-                        for _ in 0..num_chains {
-                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                Ok(tkn) => tkn,
-                                Err(vq_err) => {
-                                    error!("Setup of network queue failed, which should not happen!");
-                                    panic!("setup of network queue failed!");
-                                }
-                            };
+                            for _ in 0..num_chains {
+                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                                    Ok(tkn) => tkn,
+                                    Err(vq_err) => {
+                                        error!("Setup of network queue failed, which should not happen!");
+                                        panic!("setup of network queue failed!");
+                                    }
+                                };
 
-                            // BufferTokens are directly provided to the queue
-                            // TransferTokens are directly dispatched
-                            // Transfers will be awaited at the queue
-                            buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue), false);
-                        }
+                                // BufferTokens are directly provided to the queue
+                                // TransferTokens are directly dispatched
+                                // Transfers will be awaited at the queue
+                                // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                                buff_tkn.provide()
+                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
+                            }
 
-                        // Create remaining indirect descriptors
-                        let spec = BuffSpec::Indirect(&desc_sizes);
-                        for _ in 0..num_indirect {
-                            let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                Ok(tkn) => tkn,
-                                Err(vq_err) => {
-                                    error!("Setup of network queue failed, which should not happen!");
-                                    panic!("setup of network queue failed!");
-                                }
-                            };
+                            // Create remaining indirect descriptors
+                            let spec = BuffSpec::Indirect(&desc_sizes);
+                            for _ in 0..num_indirect {
+                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                                    Ok(tkn) => tkn,
+                                    Err(vq_err) => {
+                                        error!("Setup of network queue failed, which should not happen!");
+                                        panic!("setup of network queue failed!");
+                                    }
+                                };
 
-                            // BufferTokens are directly provided to the queue
-                            // TransferTokens are directly dispatched
-                            // Transfers will be awaited at the queue
-                            buff_tkn.provide()
-                                .dispatch_await(Rc::clone(&self.poll_queue), false);
-                        }
-                    },
-                    _ => unreachable!(),
+                                // BufferTokens are directly provided to the queue
+                                // TransferTokens are directly dispatched
+                                // Transfers will be awaited at the queue
+                                // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                                buff_tkn.provide()
+                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
+                            }
+                        },
+                        _ => unreachable!(),
+                    }
+                } else {
+                // Buffers can not be merged, hence using a single descriptor per buffer.
+                    let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65562).unwrap());
+                    for _ in 0..u16::from(vq.size()) {
+                        let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                            Ok(tkn) => tkn,
+                            Err(vq_err) => {
+                                error!("Setup of network queue failed, which should not happen!");
+                                panic!("setup of network queue failed!");
+                            }
+                        };
+
+                        // BufferTokens are directly provided to the queue
+                        // TransferTokens are directly dispatched
+                        // Transfers will be awaited at the queue
+                        // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                        buff_tkn.provide()
+                            .dispatch_await(Rc::clone(&self.poll_queue), false);
+                    }  
                 }
             } else {
-            // Buffers can not be merged, hence using a single descriptor per buffer.
-                let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65562).unwrap());
-                for _ in 0..u16::from(vq.size()) {
-                    let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                        Ok(tkn) => tkn,
-                        Err(vq_err) => {
-                            error!("Setup of network queue failed, which should not happen!");
-                            panic!("setup of network queue failed!");
-                        }
-                    };
+                // If above features not set, buffers must be at least 1526 bytes large.
+                // See Virtio specification v1.1 - 5.1.6.3.1
+                //
+                // Buffers can be merged upon receiption, hence using multiple descriptors
+                // per buffer. 
+                if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
+                    let buff_def =[Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1526).unwrap()];
+                    let spec = BuffSpec::Indirect(&buff_def);
 
-                    // BufferTokens are directly provided to the queue
-                    // TransferTokens are directly dispatched
-                    // Transfers will be awaited at the queue
-                    buff_tkn.provide()
-                        .dispatch_await(Rc::clone(&self.poll_queue), false);
-                }  
+                    for _ in 0..u16::from(vq.size()) {
+                        let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                            Ok(tkn) => tkn,
+                            Err(vq_err) => {
+                                error!("Setup of network queue failed, which should not happen!");
+                                panic!("setup of network queue failed!");
+                            }
+                        };
+
+                        // BufferTokens are directly provided to the queue
+                        // TransferTokens are directly dispatched
+                        // Transfers will be awaited at the queue
+                        // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                        buff_tkn.provide()
+                            .dispatch_await(Rc::clone(&self.poll_queue), false);
+                    }  
+                } else {
+                    let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1526usize).unwrap());
+
+                    for _ in 0..u16::from(vq.size()) {
+                        let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                            Ok(tkn) => tkn,
+                            Err(vq_err) => {
+                                error!("Setup of network queue failed, which should not happen!");
+                                panic!("setup of network queue failed!");
+                            }
+                        };
+
+                        // BufferTokens are directly provided to the queue
+                        // TransferTokens are directly dispatched
+                        // Transfers will be awaited at the queue
+                        // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                        buff_tkn.provide()
+                            .dispatch_await(Rc::clone(&self.poll_queue), false);
+                    } 
+                }
             }
         } else {
-            // If above features not set, buffers must be at least 1526 bytes large.
-            // See Virtio specification v1.1 - 5.1.6.3.1
-            //
-            // In this case, the driver does not check if 
-            // VIRTIO_NET_F_MRG_RXBUF is set, as a single descriptor will be used anyway.
-            let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1526usize).unwrap());
-            for _ in 0..u16::from(vq.size()) {
-                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                    Ok(tkn) => tkn,
-                    Err(vq_err) => {
-                        error!("Setup of network queue failed, which should not happen!");
-                        panic!("setup of network queue failed!");
-                    }
-                };
-
-                // BufferTokens are directly provided to the queue
-                // TransferTokens are directly dispatched
-                // Transfers will be awaited at the queue
-                buff_tkn.provide()
-                    .dispatch_await(Rc::clone(&self.poll_queue), false);
-            } 
+            // Currently all additional quues are not populated and are inacrtive.
         }
+    }
+
+    fn get_next(&mut self) -> Option<Box<[u8]>> {
+        match self.poll_queue.borrow_mut().pop_front() {
+            Some(transfer) => {
+                let (_, recv_data) = transfer.ret_scat_cpy().unwrap();
+                let mut recv_data = recv_data.unwrap();
+
+                // Reuse transfer directly
+                // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                transfer.reuse().unwrap().provide().dispatch_await(Rc::clone(&self.poll_queue), false);
+
+                if recv_data.len() == 1 {
+                    // VirtioNetHeader is inside same memory area
+                    let mut data = Vec::with_capacity(&recv_data[0].len() - mem::size_of::<VirtioNetHdr>());
+                    data.extend_from_slice(&recv_data[0][mem::size_of::<VirtioNetHdr>()..]);
+                    let header = unsafe{ & *((&recv_data[0][0] as *const _) as *const VirtioNetHdr)};
+                    // Header is NOT rewriten
+                todo!("Write virtioNetHdr here");
+                    Some(data.into_boxed_slice())
+                } else {
+                    let data = recv_data.pop().unwrap();
+                    let header = unsafe{Box::from_raw((Box::into_raw(recv_data.pop().unwrap()) as *const _) as *mut VirtioNetHdr)}; 
+// Header is NOT rewriten
+todo!("Write virtioNetHdr here");
+                    Some(data)
+                }
+            }, 
+            None => {
+                // Maybe queue has not placed them yet in the queue.
+               self.poll();
+
+                match self.poll_queue.borrow_mut().pop_front() {
+                    Some(transfer) => {
+                        let (_, recv_data) = transfer.ret_scat_cpy().unwrap();
+                        let mut recv_data = recv_data.unwrap();
+        
+                        // Reuse transfer directly
+                        // Header is NOT rewriten
+                        todo!("Write virtioNetHdr here");
+                        transfer.reuse().unwrap().provide().dispatch_await(Rc::clone(&self.poll_queue), false);
+        
+                        if recv_data.len() == 1 {
+                            // VirtioNetHeader is inside same memory area
+                            let mut data = Vec::with_capacity(&recv_data[0].len() - mem::size_of::<VirtioNetHdr>());
+                            data.extend_from_slice(&recv_data[0][mem::size_of::<VirtioNetHdr>()..]);
+                            let header = unsafe{ & *((&recv_data[0][0] as *const _) as *const VirtioNetHdr)}; 
+                             // Header is NOT rewriten
+                                todo!("Write virtioNetHdr here");
+                            Some(data.into_boxed_slice())
+                        } else {
+                            let data = recv_data.pop().unwrap();
+                            let header = unsafe{Box::from_raw((Box::into_raw(recv_data.pop().unwrap()) as *const _) as *mut VirtioNetHdr)}; 
+                            // Header is NOT rewriten
+                            todo!("Write virtioNetHdr here");
+                            Some(data)
+                        }
+                    }, 
+                    None => {
+                        None
+                    }
+                }
+            }
+        }
+        // check if next is availabke
+        // if yes copy data into box u8
+        // then device whether to resue transfer or not
+        // propably depending on whether the token comes from one of the additional queues or not
+    }
+
+    fn poll(&self) {
+        unimplemented!();
     }
 }
 
 struct TxQueues { 
     vqs: Vec<Rc<Virtq>>,
     poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+    ready_queue: Vec<BufferToken>,
 } 
 
 impl TxQueues {
+    fn poll(&self) {
+        unimplemented!();
+    }
+
     fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
-        todo!();
-    } 
+        // Safe virtqueue
+        self.vqs.push(Rc::new(vq));
+        if self.vqs.len() == 1 {
+            // Unwrapping is safe, as one virtq will be definitely in the vector.
+            let vq = self.vqs.get(0).unwrap();;
+
+            // Currently we have a fixed size MTU
+            //let buff_def = [Bytes(mem::size_of::<VirtioNetHdr>()), Bytes(dev_cfg.raw.mtu)]
+            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1500).unwrap()];
+            let spec = BuffSpec::Indirect(&buff_def);
+
+            for i in 0..vq.size().into() {
+                self.ready_queue.push(
+                    vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None).unwrap()
+                )
+            }
+        } else {
+            // Currently we are doing nothing with the additional queues. They are inactive and might be used in the
+            // future
+        }
+    }
+
+    fn get_tkn(&mut self, len: usize) -> Option<BufferToken> {
+        match self.ready_queue.pop() {
+            Some(tkn) => Some(tkn),
+            None => {
+                // Check if one of the used buffers is already finished
+                match self.poll_queue.borrow_mut().pop_front() {
+                    Some(transfer) => Some(transfer.reuse().unwrap()),
+                    None => {
+                        // Maybe the queue has not yet returned them
+                        self.poll();
+                        // Check again
+                        match self.poll_queue.borrow_mut().pop_front() {
+                            Some(transfer) => Some(transfer.reuse().unwrap()),
+                            None => {
+                                // Now we either can use one of the additional queues or return
+                                // None
+                                // Currently NONE
+                                None
+                            }
+                        } 
+                    }
+                }
+            }
+        }
+    }
 }
 
-struct RxBuffer {
-
-}
-
-struct TxBuffer {
-
-}
 
 /// Virtio network driver struct. 
 ///
@@ -283,32 +438,74 @@ pub struct VirtioNetDriver{
 
 // Kernel interface
 impl VirtioNetDriver {
+    /// Returns the mac address of the device
 	pub fn get_mac_address(&self) -> [u8; 6] {
         self.dev_cfg.raw.mac
 	}
 
+    /// Returns the current MTU of the device
+    /// Currently static to 1500 bytes
 	pub fn get_mtu(&self) -> u16 {
 		1500 //self.dev_cfg.raw.mtu
 	}
 
+    /// Provides the "user-space" with a pointer to usable memory.
+    ///
+    /// Therefore the driver checks if a free BufferToken is in its TxQueues struct.
+    /// If one is found, the function does return a pointer to the memory area, where 
+    /// the "user-space" can write to and a raw pointer to the token in order to provide 
+    /// it to the queue after the "user-space" driver has written to the buffer.
+    ///
+    /// If not BufferToken is found the functions returns an error.
 	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
-		unimplemented!();
+        match self.send_vqs.get_tkn(len) {
+            Some(mut buff_tkn) => {
+                let (send_ptrs, _) = buff_tkn.raw_ptrs();
+                // Queue places the "data buffer" directly after the VirtioNetHdr and 
+                // send tkn do always carry (buffer >= 2) for this mode: one for header, one for data
+                // see TxBuffer.add()
+                let (buff_ptr, len_buff)= send_ptrs.unwrap()[1];;
+                
+                if len != len_buff {
+                    return Err(())
+                }
+
+                Ok((buff_ptr, Box::into_raw(Box::new(buff_tkn)) as usize))
+            }, 
+            None => Err(())
+        }
 	}
 
-	pub fn send_tx_buffer(&mut self, index: usize, len: usize) -> Result<(), ()> {
-        unimplemented!();	
+	pub fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()> {
+        let tkn = unsafe{Box::from_raw((tkn_handle as *mut BufferToken))};
+
+        todo!("Write virtioNetHdr here");
+
+        tkn.provide().dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
+
+        Ok(())
 	}
 
 	pub fn has_packet(&self) -> bool {
-		unimplemented!();
+        !self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
-		unimplemented!();
+	pub fn receive_rx_buffer(&mut self) -> Result<&'static [u8], ()> {
+        match self.recv_vqs.get_next() {
+            Some(data) => {
+                // leak data and ref
+                let data_ref: &'static [u8] = unsafe{& *(Box::into_raw(data))};
+                Ok(data_ref)
+            },
+            None => Err(())
+        } 
 	}
 
-	pub fn rx_buffer_consumed(&mut self) {
-		unimplemented!();
+	pub fn rx_buffer_consumed(&mut self, data_ref: &'static [u8]) {
+		unsafe{
+                let refer = (data_ref as *const [u8]) as *mut [u8];
+                let val = Box::from_raw(refer);
+        }
 	}
 
 }
@@ -393,6 +590,7 @@ impl VirtioNetDriver {
             send_vqs: TxQueues {
                 vqs: Vec::<Rc<Virtq>>::new(),
                 poll_queue: Rc::new(RefCell::new(VecDeque::new())),
+                ready_queue: Vec::new(),
             },
             num_vqs: 0,
         })
