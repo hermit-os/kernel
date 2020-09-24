@@ -157,10 +157,10 @@ pub trait SyscallInterface: Send + Sync {
 		}
 	}
 
-	fn rx_buffer_consumed(&self) -> Result<(), ()> {
+	fn rx_buffer_consumed(&self, data: &'static [u8]) -> Result<(), ()> {
 		match arch::kernel::pci::get_network_driver() {
 			Some(driver) => {
-				driver.lock().rx_buffer_consumed();
+				driver.lock().rx_buffer_consumed(data);
 				Ok(())
 			}
 			_ => Err(()),
