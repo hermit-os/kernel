@@ -27,21 +27,56 @@ use crate::drivers::virtio::env::memory::{MemLen, MemOff};
 use crate::drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, NotifCtrl, IsrStatus, PciCfgAlt, PciCap};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes};
+use crate::drivers::virtio::virtqueue::{Virtq, VqType, VqSize, VqIndex, BuffSpec, BufferToken, TransferToken, Transfer, Bytes, AsSliceU8};
 
 use self::error::VirtioNetError;
-use self::constants::{Features, Status, FeatureSet, MAX_NUM_VQ};
+use self::constants::{Features, Status, FeatureSet, MAX_NUM_VQ, NetHdrGSO, NetHdrFlag};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 
+const EthHdr: usize = 0usize;
+
+#[derive(Debug)]
 #[repr(C)]
 struct VirtioNetHdr{
     flags: u8,
     gso_type: u8,
-    hdr_len: u16,
-    csum_start: u16,
+    /// Ethernet + IP + tcp/udp hdrs
+	hdr_len: u16,
+	/// Bytes to append to hdr_len per frame
+	gso_size: u16,
+	/// Position to start checksumming from
+	csum_start: u16,
+    /// Offset after that to place checksum
     csum_offset: u16,
-    num_buffer: u16,
+}
+
+// Using the default implementation of the trait for VirtioNetHdr
+impl AsSliceU8 for VirtioNetHdr{}
+
+impl VirtioNetHdr {
+    fn get_tx_hdr() -> VirtioNetHdr {
+        VirtioNetHdr {
+            flags: 0,//NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM.into(),
+            gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
+            hdr_len: 0,
+            gso_size: 0,
+            csum_start: 0,
+            csum_offset: 0,
+        }
+    }
+
+    fn get_rx_hdr() -> VirtioNetHdr {
+        VirtioNetHdr {
+            flags: 0,
+            gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
+            hdr_len: 0,
+            gso_size: 0,
+            csum_start: 0,
+            csum_offset: 0,
+        }
+    }
+
 }
 
 /// A wrapper struct for the raw configuration structure. 
@@ -60,158 +95,186 @@ struct NetDevCfg {
 ///
 #[repr(C)]
 struct NetDevCfgRaw {
-	mac: [u8; 6],
-	status: u16,
-	max_virtqueue_pairs: u16,
+    // Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
+    mac: [u8; 6],
+    // Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
+    status: u16,
+    // Indicates number of allowed vq-pairs. Only valid if VIRTIO_NET_F_MQ is set.
+    max_virtqueue_pairs: u16,
+    // Indicates the maximum MTU driver should use. Only valid if VIRTIONET_F_MTU is set.
 	mtu: u16,
 }
 
 struct CtrlQueue(Option<Rc<Virtq>>);
 
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum CtrlClass {
+    VIRTIO_NET_CTRL_RX = 1 << 0,
+    VIRTIO_NET_CTRL_MAC =  1 << 1,
+    VIRTIO_NET_CTRL_VLAN = 1 << 2,
+    VIRTIO_NET_CTRL_ANNOUNCE = 1 << 3,
+    VIRTIO_NET_CTRL_MQ = 1 << 4,
+}
+
+impl From<CtrlClass> for u8 {
+    fn from(val: CtrlClass) -> Self {
+        match val {
+            CtrlClass::VIRTIO_NET_CTRL_RX => 1 << 0,
+            CtrlClass::VIRTIO_NET_CTRL_MAC =>  1 << 1,
+            CtrlClass::VIRTIO_NET_CTRL_VLAN => 1 << 2,
+            CtrlClass::VIRTIO_NET_CTRL_ANNOUNCE => 1 << 3,
+            CtrlClass::VIRTIO_NET_CTRL_MQ => 1 << 4,
+        }
+    }
+}
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum RxCmd{
+    VIRTIO_NET_CTRL_RX_PROMISC    = 1 <<  0,
+    VIRTIO_NET_CTRL_RX_ALLMULTI   = 1 <<  1,
+    VIRTIO_NET_CTRL_RX_ALLUNI     = 1 <<  2,
+    VIRTIO_NET_CTRL_RX_NOMULTI    = 1 <<  3,
+    VIRTIO_NET_CTRL_RX_NOUNI      = 1 <<  4,
+    VIRTIO_NET_CTRL_RX_NOBCAST    = 1 <<  5,
+}
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum MacCmd{
+    VIRTIO_NET_CTRL_MAC_TABLE_SET    = 1 <<  0,
+    VIRTIO_NET_CTRL_MAC_ADDR_SET    = 1 <<  1,
+}
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum VlanCmd{
+    VIRTIO_NET_CTRL_VLAN_ADD    = 1 <<  0,
+    VIRTIO_NET_CTRL_VLAN_DEL    = 1 <<  1,
+}
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum AnceCmd{
+    VIRTIO_NET_CTRL_ANNOUNCE_ACK    = 1 <<  0,
+}
+
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug)]
+#[repr(u8)]
+enum MqCmd{
+    VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET    = 1 <<  0,
+    VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MIN = 1 << 1,
+    VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX = 0x80,
+}
+
 struct RxQueues {
     vqs: Vec<Rc<Virtq>>,
-    poll_queue: Rc<RefCell<VecDeque<Transfer>>>
+    poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+    is_multi: bool,
 }
 
 impl RxQueues {
     /// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
+    ///
+    /// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
     fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         // Safe virtqueue
-        self.vqs.push(Rc::new(vq));
-        if self.vqs.len() == 1 {
-            // Unwrapping is safe, as one virtq will be definitely in the vector.
-            let vq = self.vqs.get(0).unwrap();
+        let rc_vq = Rc::new(vq);
+        let vq = &rc_vq;
 
-            if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
-                | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
-                | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_UFO) {
-                // Receive Buffers must be at least 65562 bytes large with theses features set.
-                // See Virtio specification v1.1 - 5.1.6.3.1
+        if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4) 
+            | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
+            | dev_cfg.features.is_feature(Features::VIRTIO_NET_F_GUEST_UFO) {
+            // Receive Buffers must be at least 65562 bytes large with theses features set.
+            // See Virtio specification v1.1 - 5.1.6.3.1
 
-                // Buffers can be merged upon receiption, hence using multiple descriptors
-                // per buffer. 
-                if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
-                    match u16::from(vq.size()) {
-                        // Currently we choose indirect descriptors for small queue sizes, in order to allow 
-                        // as many packages as possible inside the queue, while the allocated
-                        size if size <= 256 => {
-                            let desc_sizes = [
-                                Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                ];
-                            let spec = BuffSpec::Indirect(&desc_sizes);
+            match u16::from(vq.size()) {
+                // Currently we choose indirect descriptors for small queue sizes, in order to allow 
+                // as many packages as possible inside the queue, while the allocated
+                size if size <= 256 => {
+                    let desc_sizes = [
+                        Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        ];
+                    let spec = BuffSpec::Indirect(&desc_sizes);
 
-                            for _ in 0..size {
-                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                    Ok(tkn) => tkn,
-                                    Err(vq_err) => {
-                                        error!("Setup of network queue failed, which should not happen!");
-                                        panic!("setup of network queue failed!");
-                                    }
-                                };
-
-                                // BufferTokens are directly provided to the queue
-                                // TransferTokens are directly dispatched
-                                // Transfers will be awaited at the queue
-                                // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                                buff_tkn.provide()
-                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
+                    for _ in 0..size {
+                        let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                            Ok(tkn) => tkn,
+                            Err(vq_err) => {
+                                error!("Setup of network queue failed, which should not happen!");
+                                panic!("setup of network queue failed!");
                             }
-                        },
-                        // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
-                        // virtqueue. This is duet to not consuming to much memory.
-                        // If the queue_size mod 17 is not zero. We use the rest of the descriptors with indirect
-                        // descriptors list, to fully utilize the queue.
-                        size if size > 256 => {
-                            let num_chains = size / 17;
-                            let num_indirect = size % 17;
-                            // Typically must assert that the size of the virtqueue is not exceeded
-                            assert!(size == num_chains*17+num_indirect);
+                        };
 
-                            // Create all next lists
-                            let desc_sizes = [
-                                Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                Bytes::new(4096).unwrap(),
-                                ];
-                            let spec = BuffSpec::Multiple(&desc_sizes);
-
-                            for _ in 0..num_chains {
-                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                    Ok(tkn) => tkn,
-                                    Err(vq_err) => {
-                                        error!("Setup of network queue failed, which should not happen!");
-                                        panic!("setup of network queue failed!");
-                                    }
-                                };
-
-                                // BufferTokens are directly provided to the queue
-                                // TransferTokens are directly dispatched
-                                // Transfers will be awaited at the queue
-                                // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                                buff_tkn.provide()
-                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
-                            }
-
-                            // Create remaining indirect descriptors
-                            let spec = BuffSpec::Indirect(&desc_sizes);
-                            for _ in 0..num_indirect {
-                                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                                    Ok(tkn) => tkn,
-                                    Err(vq_err) => {
-                                        error!("Setup of network queue failed, which should not happen!");
-                                        panic!("setup of network queue failed!");
-                                    }
-                                };
-
-                                // BufferTokens are directly provided to the queue
-                                // TransferTokens are directly dispatched
-                                // Transfers will be awaited at the queue
-                                // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                                buff_tkn.provide()
-                                    .dispatch_await(Rc::clone(&self.poll_queue), false);
-                            }
-                        },
-                        _ => unreachable!(),
+                        let header = VirtioNetHdr::get_rx_hdr();
+                        // BufferTokens are directly provided to the queue
+                        // TransferTokens are directly dispatched
+                        // Transfers will be awaited at the queue
+                        buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+                            .unwrap()
+                            .provide()
+                            .dispatch_await(Rc::clone(&self.poll_queue), false);
                     }
-                } else {
-                // Buffers can not be merged, hence using a single descriptor per buffer.
-                    let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65562).unwrap());
-                    for _ in 0..u16::from(vq.size()) {
+                },
+                // For queues with a size larger than 256 we choose multiple descriptors inside the actua 
+                // virtqueue. This is duet to not consuming to much memory.
+                // If the queue_size mod 17 is not zero. We use the rest of the descriptors with indirect
+                // descriptors list, to fully utilize the queue.
+                size if size > 256 => {
+                    let num_chains = size / 17;
+                    let num_indirect = size % 17;
+                    // Typically must assert that the size of the virtqueue is not exceeded
+                    assert!(size == num_chains*17+num_indirect);
+
+                    // Create all next lists
+                    let desc_sizes = [
+                        Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        Bytes::new(4096).unwrap(),
+                        ];
+                    let spec = BuffSpec::Multiple(&desc_sizes);
+
+                    for _ in 0..num_chains {
                         let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                             Ok(tkn) => tkn,
                             Err(vq_err) => {
@@ -223,23 +286,15 @@ impl RxQueues {
                         // BufferTokens are directly provided to the queue
                         // TransferTokens are directly dispatched
                         // Transfers will be awaited at the queue
-                        // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                        buff_tkn.provide()
+                        buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+                            .unwrap()
+                            .provide()
                             .dispatch_await(Rc::clone(&self.poll_queue), false);
-                    }  
-                }
-            } else {
-                // If above features not set, buffers must be at least 1526 bytes large.
-                // See Virtio specification v1.1 - 5.1.6.3.1
-                //
-                // Buffers can be merged upon receiption, hence using multiple descriptors
-                // per buffer. 
-                if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF) {
-                    let buff_def =[Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1526).unwrap()];
-                    let spec = BuffSpec::Indirect(&buff_def);
+                    }
 
-                    for _ in 0..u16::from(vq.size()) {
+                    // Create remaining indirect descriptors
+                    let spec = BuffSpec::Indirect(&desc_sizes);
+                    for _ in 0..num_indirect {
                         let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                             Ok(tkn) => tkn,
                             Err(vq_err) => {
@@ -251,171 +306,172 @@ impl RxQueues {
                         // BufferTokens are directly provided to the queue
                         // TransferTokens are directly dispatched
                         // Transfers will be awaited at the queue
-                        // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                        buff_tkn.provide()
+                        buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+                            .unwrap()
+                            .provide()
                             .dispatch_await(Rc::clone(&self.poll_queue), false);
-                    }  
-                } else {
-                    let spec = BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1526usize).unwrap());
-
-                    for _ in 0..u16::from(vq.size()) {
-                        let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-                            Ok(tkn) => tkn,
-                            Err(vq_err) => {
-                                error!("Setup of network queue failed, which should not happen!");
-                                panic!("setup of network queue failed!");
-                            }
-                        };
-
-                        // BufferTokens are directly provided to the queue
-                        // TransferTokens are directly dispatched
-                        // Transfers will be awaited at the queue
-                        // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                        buff_tkn.provide()
-                            .dispatch_await(Rc::clone(&self.poll_queue), false);
-                    } 
-                }
+                    }
+                },
+                _ => unreachable!(),
             }
         } else {
-            // Currently all additional quues are not populated and are inacrtive.
+            // If above features not set, buffers must be at least 1526 bytes large.
+            // See Virtio specification v1.1 - 5.1.6.3.1
+            //
+            let buff_def =[Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1526).unwrap()];
+            let spec = BuffSpec::Indirect(&buff_def);
+
+            for _ in 0..u16::from(vq.size()) {
+                let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+                    Ok(tkn) => tkn,
+                    Err(vq_err) => {
+                        error!("Setup of network queue failed, which should not happen!");
+                        panic!("setup of network queue failed!");
+                    }
+                };
+
+                // BufferTokens are directly provided to the queue
+                // TransferTokens are directly dispatched
+                // Transfers will be awaited at the queue
+                buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr())) 
+                            .unwrap()
+                            .provide()
+                            .dispatch_await(Rc::clone(&self.poll_queue), false);
+            }  
+        }
+
+        // Safe virtqueue
+        self.vqs.push(rc_vq);
+
+        if self.vqs.len() > 1 {
+            self.is_multi = true;
         }
     }
 
-    fn get_next(&mut self) -> Option<Box<[u8]>> {
+    fn get_next(&mut self) -> Option<Transfer> {
         match self.poll_queue.borrow_mut().pop_front() {
-            Some(transfer) => {
-                let (_, recv_data) = transfer.ret_scat_cpy().unwrap();
-                let mut recv_data = recv_data.unwrap();
-
-                // Reuse transfer directly
-                // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                transfer.reuse().unwrap().provide().dispatch_await(Rc::clone(&self.poll_queue), false);
-
-                if recv_data.len() == 1 {
-                    // VirtioNetHeader is inside same memory area
-                    let mut data = Vec::with_capacity(&recv_data[0].len() - mem::size_of::<VirtioNetHdr>());
-                    data.extend_from_slice(&recv_data[0][mem::size_of::<VirtioNetHdr>()..]);
-                    let header = unsafe{ & *((&recv_data[0][0] as *const _) as *const VirtioNetHdr)};
-                    // Header is NOT rewriten
-                todo!("Write virtioNetHdr here");
-                    Some(data.into_boxed_slice())
-                } else {
-                    let data = recv_data.pop().unwrap();
-                    let header = unsafe{Box::from_raw((Box::into_raw(recv_data.pop().unwrap()) as *const _) as *mut VirtioNetHdr)}; 
-// Header is NOT rewriten
-todo!("Write virtioNetHdr here");
-                    Some(data)
-                }
-            }, 
+            Some(transfer) => Some(transfer),
             None => {
-                // Maybe queue has not placed them yet in the queue.
+                // Maybe virtqueu has not placed them yet in the await_queue.
                self.poll();
 
                 match self.poll_queue.borrow_mut().pop_front() {
-                    Some(transfer) => {
-                        let (_, recv_data) = transfer.ret_scat_cpy().unwrap();
-                        let mut recv_data = recv_data.unwrap();
-        
-                        // Reuse transfer directly
-                        // Header is NOT rewriten
-                        todo!("Write virtioNetHdr here");
-                        transfer.reuse().unwrap().provide().dispatch_await(Rc::clone(&self.poll_queue), false);
-        
-                        if recv_data.len() == 1 {
-                            // VirtioNetHeader is inside same memory area
-                            let mut data = Vec::with_capacity(&recv_data[0].len() - mem::size_of::<VirtioNetHdr>());
-                            data.extend_from_slice(&recv_data[0][mem::size_of::<VirtioNetHdr>()..]);
-                            let header = unsafe{ & *((&recv_data[0][0] as *const _) as *const VirtioNetHdr)}; 
-                             // Header is NOT rewriten
-                                todo!("Write virtioNetHdr here");
-                            Some(data.into_boxed_slice())
-                        } else {
-                            let data = recv_data.pop().unwrap();
-                            let header = unsafe{Box::from_raw((Box::into_raw(recv_data.pop().unwrap()) as *const _) as *mut VirtioNetHdr)}; 
-                            // Header is NOT rewriten
-                            todo!("Write virtioNetHdr here");
-                            Some(data)
-                        }
-                    }, 
+                    Some(transfer) => Some(transfer), 
                     None => {
                         None
                     }
                 }
             }
         }
-        // check if next is availabke
-        // if yes copy data into box u8
-        // then device whether to resue transfer or not
-        // propably depending on whether the token comes from one of the additional queues or not
     }
 
     fn poll(&self) {
-        unimplemented!();
+        if self.is_multi {
+            for vq in &self.vqs {
+                // Poll all queues. 
+                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
+                // of inactive ones
+                vq.poll();
+            }
+        } else {
+            // Only poll the main virtqueue
+            self.vqs[0].poll();
+        }
     }
 }
 
+/// Structure which handles transmission of packets and delegation
+/// to the respective queue structures.
 struct TxQueues { 
     vqs: Vec<Rc<Virtq>>,
     poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
     ready_queue: Vec<BufferToken>,
+    /// Indicates, whether the Driver/Device are using multiple
+    /// queues for communication.
+    is_multi: bool,
 } 
 
 impl TxQueues {
     fn poll(&self) {
-        unimplemented!();
+        if self.is_multi {
+            for vq in &self.vqs {
+                // Poll all queues. 
+                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
+                // of inactive ones
+                vq.poll();
+            }
+        } else {
+            // Only poll the main virtqueue
+            self.vqs[0].poll();
+        }
     }
 
-    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
+    fn add(&mut self, vq: Virtq, mtu: u16) {
         // Safe virtqueue
         self.vqs.push(Rc::new(vq));
         if self.vqs.len() == 1 {
             // Unwrapping is safe, as one virtq will be definitely in the vector.
-            let vq = self.vqs.get(0).unwrap();;
+            let vq = self.vqs.get(0).unwrap();
 
-            // Currently we have a fixed size MTU
-            //let buff_def = [Bytes(mem::size_of::<VirtioNetHdr>()), Bytes(dev_cfg.raw.mtu)]
-            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1500).unwrap()];
+            // As usize is currently safe as the minimal usize is defined as 16bit in rust.
+            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new((mtu as usize) + EthHdr).unwrap()];
             let spec = BuffSpec::Indirect(&buff_def);
 
             for i in 0..vq.size().into() {
                 self.ready_queue.push(
-                    vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None).unwrap()
+                    vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+                        .unwrap()
+                        .write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
+                        .unwrap()
                 )
             }
         } else {
+            self.is_multi = true;
             // Currently we are doing nothing with the additional queues. They are inactive and might be used in the
             // future
         }
     }
 
-    fn get_tkn(&mut self, len: usize) -> Option<BufferToken> {
-        match self.ready_queue.pop() {
-            Some(tkn) => Some(tkn),
-            None => {
-                // Check if one of the used buffers is already finished
-                match self.poll_queue.borrow_mut().pop_front() {
-                    Some(transfer) => Some(transfer.reuse().unwrap()),
-                    None => {
-                        // Maybe the queue has not yet returned them
-                        self.poll();
-                        // Check again
-                        match self.poll_queue.borrow_mut().pop_front() {
-                            Some(transfer) => Some(transfer.reuse().unwrap()),
-                            None => {
-                                // Now we either can use one of the additional queues or return
-                                // None
-                                // Currently NONE
-                                None
-                            }
-                        } 
-                    }
-                }
+    /// Returns either a buffertoken and the corresponding index of the 
+    /// virtqueue it is coming from. (Index in the TxQueues.vqs vector)
+    ///
+    /// OR returns None, if no Buffertoken could be generated
+    fn get_tkn(&mut self, len: usize) -> Option<(BufferToken, usize)> {
+        // CHeck all ready token, for correct size. 
+        // Drop token if not so
+        while let Some(tkn) = self.ready_queue.pop() {
+            let (send_len, _) = tkn.len();
+
+            if send_len == len {
+                return Some((tkn, 0))
             }
         }
-    }
+        
+        self.poll();
+
+        while let Some(transfer) = self.poll_queue.borrow_mut().pop_back() {
+            let tkn = transfer.reuse().unwrap();
+            let (send_len, _) = tkn.len();
+
+            if send_len == len {
+                return Some((tkn, 0))
+            } 
+        }
+
+        // As usize is currently safe as the minimal usize is defined as 16bit in rust.
+        let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(len).unwrap()];
+        let spec = BuffSpec::Indirect(&buff_def);
+
+        match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
+            Ok(tkn) => return Some((tkn, 0)),
+            Err(_) => {
+                // Here it is possible if multiple ques are enabled to get another buffertoken from them!
+                // Info the queues are disbaled upon initalization and should be enabled somehow!
+                None
+            }
+        }
+
+    } 
 }
 
 
@@ -438,16 +494,66 @@ pub struct VirtioNetDriver{
 
 // Kernel interface
 impl VirtioNetDriver {
-    /// Returns the mac address of the device
+    /// Returns the mac address of the device.
+    /// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	pub fn get_mac_address(&self) -> [u8; 6] {
-        self.dev_cfg.raw.mac
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MAC) {
+            self.dev_cfg.raw.mac
+        } else {
+            unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
+        }
 	}
 
-    /// Returns the current MTU of the device
-    /// Currently static to 1500 bytes
+    /// Returns the current MTU of the device.
+    /// Currently, if VIRTIO_NET_F_MAC is not set
+    //  MTU is set static to 1500 bytes.
 	pub fn get_mtu(&self) -> u16 {
-		1500 //self.dev_cfg.raw.mtu
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
+            self.dev_cfg.raw.mtu
+        } else {
+            1500    
+        }
 	}
+
+    /// Returns the current status of the device, if VIRTIO_NET_F_STATUS 
+    /// has been negotiated. Otherwise returns zero.
+    pub fn dev_status(&self) -> u16 {
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_STATUS) {
+            self.dev_cfg.raw.status
+        } else {
+           0 
+        }
+    }
+
+    fn is_link_up(&self) -> bool {
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_STATUS) {
+            self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_LINK_UP) == u16::from(Status::VIRTIO_NET_S_LINK_UP)
+        } else {
+           false 
+        }
+    }
+
+    fn is_announce(&self) -> bool {
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_STATUS) {
+            self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_ANNOUNCE) == u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
+        } else {
+           false
+        }
+    }
+
+    /// Returns the maximal number of virtqueue pairs allowed. This is the 
+    /// dominant setting to define the number of virtqueues for the network 
+    /// device and overrides the num_vq field in the common config.
+    /// 
+    /// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
+    fn get_max_vq_pairs(&self) -> u16 {
+        if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
+            self.dev_cfg.raw.max_virtqueue_pairs
+        } else {
+           1
+        } 
+    }
+
 
     /// Provides the "user-space" with a pointer to usable memory.
     ///
@@ -459,16 +565,12 @@ impl VirtioNetDriver {
     /// If not BufferToken is found the functions returns an error.
 	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
         match self.send_vqs.get_tkn(len) {
-            Some(mut buff_tkn) => {
+            Some((mut buff_tkn, vq_index)) => {
                 let (send_ptrs, _) = buff_tkn.raw_ptrs();
                 // Queue places the "data buffer" directly after the VirtioNetHdr and 
                 // send tkn do always carry (buffer >= 2) for this mode: one for header, one for data
                 // see TxBuffer.add()
-                let (buff_ptr, len_buff)= send_ptrs.unwrap()[1];;
-                
-                if len != len_buff {
-                    return Err(())
-                }
+                let (buff_ptr, len_buff)= send_ptrs.unwrap()[1];
 
                 Ok((buff_ptr, Box::into_raw(Box::new(buff_tkn)) as usize))
             }, 
@@ -477,22 +579,43 @@ impl VirtioNetDriver {
 	}
 
 	pub fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()> {
-        let tkn = unsafe{Box::from_raw((tkn_handle as *mut BufferToken))};
+        // This does not result in a new assignment, or in a drop of the BufferToken, which 
+        // would be dangerous, as the memory is freed then. 
+        let tkn = *unsafe{Box::from_raw(tkn_handle as *mut BufferToken)};
 
-        todo!("Write virtioNetHdr here");
 
-        tkn.provide().dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
+        tkn.write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
+            .unwrap()
+            .provide()
+            .dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
 
         Ok(())
 	}
 
 	pub fn has_packet(&self) -> bool {
+        self.recv_vqs.poll();
         !self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
 	pub fn receive_rx_buffer(&mut self) -> Result<&'static [u8], ()> {
         match self.recv_vqs.get_next() {
-            Some(data) => {
+            Some(transfer) => {
+                let (_, recv_data) = transfer.ret_scat_cpy().unwrap();
+                let mut recv_data = recv_data.unwrap();
+
+                // Reuse transfer directly
+                // Currently header is not rewriten again
+                transfer.reuse()
+                    .unwrap()
+                    //.write_seq(None, VirtioNetHdr.get_recv_hdr())
+                    //.unwrap()
+                    .provide()
+                    .dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+
+
+                let data = recv_data.pop().unwrap();
+                let header = unsafe{Box::from_raw((Box::into_raw(recv_data.pop().unwrap()) as *const _) as *mut VirtioNetHdr)}; 
+
                 // leak data and ref
                 let data_ref: &'static [u8] = unsafe{& *(Box::into_raw(data))};
                 Ok(data_ref)
@@ -500,11 +623,47 @@ impl VirtioNetDriver {
             None => Err(())
         } 
 	}
-
+    
+    // Tells driver, that buffer is consumed and can be deallocated
 	pub fn rx_buffer_consumed(&mut self, data_ref: &'static [u8]) {
 		unsafe{
                 let refer = (data_ref as *const [u8]) as *mut [u8];
                 let val = Box::from_raw(refer);
+        }
+    }
+    
+    pub fn set_polling_mode(&mut self, value: bool) {
+        if value {
+            self.enable_interrupts()
+        } else {
+            self.disable_interrupts()
+        }
+    }
+
+    pub fn disable_interrupts(&self) {
+        unimplemented!();
+        // Für send und receive queues?
+        // Nur für receive? Weil send eh ausgeschaltet ist?
+    }
+
+    pub fn enable_interrupts(&self) {
+        unimplemented!()
+        // Für send und receive queues?
+        // Nur für receive? Weil send eh ausgeschaltet ist?
+    }
+
+	pub fn handle_interrupt(&self) -> bool {
+		if self.isr_stat.is_interrupt() {
+			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
+			netwakeup();
+
+			true
+		} else if self.isr_stat.is_cfg_change(){
+            info!("Configuration changes are not possible! Aborting");
+            todo!("Implement possibiity to change config on the fly...");
+        } else {
+            false
         }
 	}
 
@@ -586,11 +745,13 @@ impl VirtioNetDriver {
             recv_vqs: RxQueues {
                 vqs: Vec::<Rc<Virtq>>::new(),
                 poll_queue: Rc::new(RefCell::new(VecDeque::new())),
+                is_multi: false,
             },
             send_vqs: TxQueues {
                 vqs: Vec::<Rc<Virtq>>::new(),
                 poll_queue: Rc::new(RefCell::new(VecDeque::new())),
                 ready_queue: Vec::new(),
+                is_multi: false,
             },
             num_vqs: 0,
         })
@@ -626,8 +787,8 @@ impl VirtioNetDriver {
  
         // If wanted, push new features into feats here:
         // 
-        // Merging RxBuffers is possible and wanted
-        feats.push(Features::VIRTIO_NET_F_MRG_RXBUF);
+        // MTU setting is possible
+        feats.push(Features::VIRTIO_NET_F_MTU);
 
         // Negotiate features with device. Automatically reduces selected feats in order to meet device capabilites.
         // Aborts in case incompatible features are selected by the dricer or the device does not support min_feat_set.
@@ -797,6 +958,7 @@ impl VirtioNetDriver {
                     VqIndex::from(2*i-1),
                     self.dev_cfg.features.into()
                 );
+                // Interrupt for receiving packets is wanted
                 vq.enable_notifs();
 
                 // Others than the first recv and send queue are disabled by default.
@@ -817,6 +979,7 @@ impl VirtioNetDriver {
                     VqIndex::from(2*i),
                     self.dev_cfg.features.into()
                 );
+                // Interrupt for comunicating that a sended packet left, is not needed
                 vq.enable_notifs();
 
                 // Others than the first recv and send queue are disabled by default.
@@ -828,7 +991,7 @@ impl VirtioNetDriver {
                     }
                 }
 
-                self.send_vqs.add(vq, &self.dev_cfg);
+                self.send_vqs.add(vq, self.get_mtu());
 
             } else {
                 todo!("Integrate split virtqueue into network driver");
@@ -865,7 +1028,7 @@ impl VirtioNetDriver {
             },
         }
 
-        if drv.dev_status() & u16::from(Status::VIRTIO_NET_S_LINK_UP) == u16::from(Status::VIRTIO_NET_S_LINK_UP) {
+        if drv.is_link_up() {
             info!("Virtio-net link is up after initalization.")
         } else {
             info!("Virtio-net link is down after initalization!")
@@ -874,26 +1037,6 @@ impl VirtioNetDriver {
         Ok(drv)
     }
 
-    pub fn dev_status(&self) -> u16 {
-        todo!("Check if check for status feature bit is necessary here");
-        self.dev_cfg.raw.status
-    }
-
-    pub fn disable_interrupts(&self) {
-        unimplemented!();
-    }
-
-	pub fn handle_interrupt(&self) -> bool {
-		if self.isr_stat.is_interrupt() {
-			// handle incoming packets
-			#[cfg(not(feature = "newlib"))]
-			netwakeup();
-
-			true
-		} else {
-            false
-        }
-	}
 }
 
 mod constants {
@@ -905,6 +1048,154 @@ mod constants {
     // Configuration constants
     pub const MAX_NUM_VQ:u16 = 2;
     
+
+    /// Enum containing Virtios netword header flags
+    ///
+    /// See Virtio specification v1.1. - 5.1.6
+    #[allow(dead_code, non_camel_case_types)]
+    #[derive(Copy, Clone, Debug)]
+    #[repr(u8)]
+    ///
+    pub enum NetHdrFlag {
+        /// use csum_start, csum_offset
+        VIRTIO_NET_HDR_F_NEEDS_CSUM =   1,
+        /// csum is valid 
+        VIRTIO_NET_HDR_F_DATA_VALID =   2,
+        /// reports number of coalesced TCP segments
+        VIRTIO_NET_HDR_F_RSC_INFO   =   4,
+    }
+
+    impl From<NetHdrFlag> for u8 {
+        fn from(val: NetHdrFlag) -> Self {
+            match val {
+                NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM => 1,
+                NetHdrFlag::VIRTIO_NET_HDR_F_DATA_VALID => 2,
+                NetHdrFlag::VIRTIO_NET_HDR_F_RSC_INFO => 4,
+            }
+        }
+    }
+
+    impl BitOr for NetHdrFlag {
+        type Output = u8;
+
+        fn bitor(self, rhs: Self) -> Self::Output {
+            u8::from(self) | u8::from(rhs) 
+        }
+    }
+
+    impl BitOr<NetHdrFlag> for u8 {
+        type Output = u8;
+
+        fn bitor(self, rhs: NetHdrFlag) -> Self::Output {
+            self | u8::from(rhs)
+        }
+    }
+
+    impl BitOrAssign<NetHdrFlag> for u8 {
+        fn bitor_assign(&mut self, rhs: NetHdrFlag) {
+            *self |= u8::from(rhs);
+        }
+    }
+
+    impl BitAnd for NetHdrFlag {
+        type Output = u8; 
+
+        fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
+            u8::from(self) & u8::from(rhs)
+        }
+    }
+
+    impl BitAnd<NetHdrFlag> for u8 {
+        type Output = u8;
+
+        fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
+            self & u8::from(rhs)
+        }
+    }
+
+    impl BitAndAssign<NetHdrFlag> for u8 {
+        fn bitand_assign(&mut self, rhs: NetHdrFlag) {
+            *self &= u8::from(rhs);
+        }
+    }
+
+    
+
+    /// Enum containing Virtios netword GSO types
+    ///
+    /// See Virtio specification v1.1. - 5.1.6
+    #[allow(dead_code, non_camel_case_types)]
+    #[derive(Copy, Clone, Debug)]
+    #[repr(u8)]
+    pub enum NetHdrGSO{
+        /// not a GSO frame
+        VIRTIO_NET_HDR_GSO_NONE  =     0,
+        /// GSO frame, IPv4 TCP (TSO)
+        VIRTIO_NET_HDR_GSO_TCPV4  =     1,
+        /// GSO frame, IPv4 UDP (UFO)
+        VIRTIO_NET_HDR_GSO_UDP     =    3,
+        /// GSO frame, IPv6 TCP
+        VIRTIO_NET_HDR_GSO_TCPV6    =   4,
+        /// TCP has ECN set
+        VIRTIO_NET_HDR_GSO_ECN      = 0x80,
+    }
+
+    impl From<NetHdrGSO> for u8 {
+        fn from(val: NetHdrGSO) -> Self {
+           match val {
+               NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE => 0,
+               NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV4 => 1,
+               NetHdrGSO::VIRTIO_NET_HDR_GSO_UDP => 3,
+               NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6 => 4,
+               NetHdrGSO::VIRTIO_NET_HDR_GSO_ECN => 0x80,
+           } 
+        }
+    }
+
+    impl BitOr for NetHdrGSO {
+        type Output = u8;
+
+        fn bitor(self, rhs: Self) -> Self::Output {
+            u8::from(self) | u8::from(rhs) 
+        }
+    }
+
+    impl BitOr<NetHdrGSO> for u8 {
+        type Output = u8;
+
+        fn bitor(self, rhs: NetHdrGSO) -> Self::Output {
+            self | u8::from(rhs)
+        }
+    }
+
+    impl BitOrAssign<NetHdrGSO> for u8 {
+        fn bitor_assign(&mut self, rhs: NetHdrGSO) {
+            *self |= u8::from(rhs);
+        }
+    }
+
+    impl BitAnd for NetHdrGSO {
+        type Output = u8; 
+
+        fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
+            u8::from(self) & u8::from(rhs)
+        }
+    }
+
+    impl BitAnd<NetHdrGSO> for u8 {
+        type Output = u8;
+
+        fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
+            self & u8::from(rhs)
+        }
+    }
+
+    impl BitAndAssign<NetHdrGSO> for u8 {
+        fn bitand_assign(&mut self, rhs: NetHdrGSO) {
+            *self &= u8::from(rhs);
+        }
+    }
+
     /// Enum contains virtio's network device features and general features of Virtio.
     ///
     /// See Virtio specification v1.1. - 5.1.3

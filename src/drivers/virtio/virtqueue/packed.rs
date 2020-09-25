@@ -1537,7 +1537,7 @@ impl PackedVq {
                         // Leak the box, as the memory will be deallocated upon drop of MemDescr
                         Box::leak(send_data);
 
-                        let recv_data_slice = unsafe {recv_data.as_slice_u8()};
+                        let recv_data_slice = recv_data.as_slice_u8();
                         let recv_len = recv_data_slice.len();
                         let mut recv_desc_lst: Vec<MemDescr> = Vec::with_capacity(recv_size_lst.len());
                         let mut index = 0usize;

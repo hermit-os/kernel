@@ -488,7 +488,7 @@ pub trait AsSliceU8 {
     /// * The slice must be little endian coded in order to be understood by the device
     /// * The slice must serialize the actual structure the device expects, as the queue will use 
     /// the addresses of the slice in order to refer to the structure.
-     fn as_slice_u8_mut(&self) -> &mut [u8] {
+    fn as_slice_u8_mut(&mut self) -> &mut [u8] {
         unsafe {
             core::slice::from_raw_parts_mut(
                 (self as *const Self) as *mut u8,
@@ -912,6 +912,8 @@ impl BufferToken {
 
 // Public interface of BufferToken
 impl BufferToken {
+    /// Returns the overall number of bytes in the send and receive memory area 
+    /// respectively for this BufferToken
     pub fn len(&self) -> (usize, usize) {
         match (self.send_buff.as_ref(), self.recv_buff.as_ref()) {
             (Some(send_buff), Some(recv_buff)) => (send_buff.len(), recv_buff.len()),
