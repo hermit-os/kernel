@@ -28,6 +28,7 @@
 #![feature(allocator_api)]
 #![feature(const_btree_new)]
 #![feature(const_fn)]
+#![feature(const_mut_refs)]
 #![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]

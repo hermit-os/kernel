@@ -217,11 +217,10 @@ pub fn exit(failure: bool) -> ! {
 /// Debug exit from qemu with a returncode
 /// '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04' must be passed to qemu for this to work
 pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
-	use x86_64::instructions::port::Port;
+	use x86::io::outl;
 
 	unsafe {
-		let mut port = Port::new(0xf4);
-		port.write(exit_code as u32);
+		outl(0xf4, exit_code as u32);
 	}
 	println!("Warning - Failed to debug exit qemu - exiting via sys_exit()");
 	hermit::sys_exit(0) //sys_exit exitcode on qemu gets silently dropped
