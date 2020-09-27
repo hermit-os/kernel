@@ -45,7 +45,6 @@ pci = []
 acpi = []
 
 [dev-dependencies]
-x86_64 = "0.11.0"
 float-cmp = "0.8.0"
 
 [dependencies.scopeguard]
