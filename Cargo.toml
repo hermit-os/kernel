@@ -1,6 +1,6 @@
 [package]
 name = "rusty-hermit"
-version = "0.3.39"
+version = "0.3.40"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
@@ -45,7 +45,7 @@ pci = []
 acpi = []
 
 [dev-dependencies]
-x86 = { version = "0.*", default-features = false }
+x86 = { version = "0.34.*", default-features = false }
 float-cmp = "0.8.0"
 
 [dependencies.scopeguard]
@@ -77,10 +77,10 @@ default-features = false
 #features = ["release_max_level_info"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
-version = "0.*"
+version = "0.3.*"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-version = "0.*"
+version = "0.34.*"
 default-features = false
 
 # The development profile, used for `cargo build`.
