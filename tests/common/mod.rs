@@ -217,7 +217,7 @@ pub fn exit(failure: bool) -> ! {
 /// Debug exit from qemu with a returncode
 /// '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04' must be passed to qemu for this to work
 pub fn exit_qemu(exit_code: QemuExitCode) -> ! {
-	use x86_64::instructions::port::Port;
+	use x86::io::outl;
 
 	unsafe {
 		outl(0xf4, exit_code as u32);
