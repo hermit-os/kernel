@@ -10,7 +10,7 @@
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
-use core::alloc::{AllocErr, AllocRef, GlobalAlloc, Layout};
+use core::alloc::{AllocErr, GlobalAlloc, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -157,17 +157,6 @@ impl Heap {
 	}
 }
 
-unsafe impl AllocRef for Heap {
-	fn alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, AllocErr> {
-		let (ptr, size) = self.allocate_first_fit(layout)?;
-		Ok(NonNull::slice_from_raw_parts(ptr, size))
-	}
-
-	unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
-		self.deallocate(ptr, layout);
-	}
-}
-
 pub struct LockedHeap(SpinlockIrqSave<Heap>);
 
 impl LockedHeap {
@@ -203,11 +192,9 @@ unsafe impl GlobalAlloc for LockedHeap {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
 			.lock()
-			.alloc(layout)
+			.allocate_first_fit(layout)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |mut mem| {
-				mem.as_mut().as_mut_ptr()
-			})
+			.map_or(ptr::null_mut() as *mut u8, |(mut mem, _)| mem.as_mut())
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {

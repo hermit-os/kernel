@@ -28,6 +28,7 @@
 #![feature(allocator_api)]
 #![feature(const_btree_new)]
 #![feature(const_fn)]
+#![feature(const_mut_refs)]
 #![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]
@@ -63,6 +64,7 @@ extern crate num;
 #[macro_use]
 extern crate num_derive;
 extern crate num_traits;
+extern crate scopeguard;
 #[cfg(not(target_os = "hermit"))]
 #[macro_use]
 extern crate std;

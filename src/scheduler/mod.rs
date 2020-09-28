@@ -369,9 +369,7 @@ impl PerCoreScheduler {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag will be cleared during the reschedule
 	pub fn reschedule(&mut self) {
-		let irq = irq::nested_disable();
-		self.scheduler();
-		irq::nested_enable(irq);
+		irqsave(|| self.scheduler());
 	}
 
 	/// Only the idle task should call this function to

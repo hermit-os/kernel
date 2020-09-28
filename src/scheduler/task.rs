@@ -479,6 +479,12 @@ struct BlockedTask {
 	wakeup_time: Option<u64>,
 }
 
+impl BlockedTask {
+	pub fn new(task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) -> Self {
+		Self { task, wakeup_time }
+	}
+}
+
 pub struct BlockedTaskQueue {
 	list: LinkedList<BlockedTask>,
 }
@@ -520,6 +526,7 @@ impl BlockedTaskQueue {
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
+	#[allow(unused_assignments)]
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
 			// Set the task status to Blocked.
@@ -535,23 +542,24 @@ impl BlockedTaskQueue {
 			borrowed.status = TaskStatus::TaskBlocked;
 		}
 
-		let new_node = BlockedTask { task, wakeup_time };
+		let new_node = BlockedTask::new(task, wakeup_time);
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
 			let mut first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
+			let mut _guard = scopeguard::guard(first_task, |first_task| {
+				// If the task is the new first task in the list, update the one-shot timer
+				// to fire when this task shall be woken up.
+				if first_task {
+					arch::set_oneshot_timer(wakeup_time);
+				}
+			});
 
 			while let Some(node) = cursor.current() {
 				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
 					cursor.insert_before(new_node);
-
-					// If this is the new first task in the list, update the One-Shot Timer
-					// to fire when this task shall be woken up.
-					if first_task {
-						arch::set_oneshot_timer(wakeup_time);
-					}
 
 					return;
 				}
@@ -559,6 +567,9 @@ impl BlockedTaskQueue {
 				first_task = false;
 				cursor.move_next();
 			}
+
+			// No, then just insert it at the end of the list.
+			self.list.push_back(new_node);
 		} else {
 			// No, then just insert it at the end of the list.
 			self.list.push_back(new_node);
