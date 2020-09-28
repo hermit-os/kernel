@@ -1717,7 +1717,7 @@ mod constants {
         /// `FeatureSet::check_features(feats: Vec<Features>) -> Result<(), VirtioNetError>` function.
         pub fn set_features(&mut self, feats: &Vec<Features>) {
             for feat in feats { 
-                self.0 | *feat;
+                self.0 |= *feat;
             }
         }
 
