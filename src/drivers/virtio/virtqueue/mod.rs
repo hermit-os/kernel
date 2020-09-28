@@ -124,7 +124,7 @@ impl Virtq {
     }
 }
 
-// Public Interface solely for page boundary checking
+// Public Interface solely for page boundary checking and other convenience functions
 impl Virtq {
     /// Allows to check, if a given structure crosses a physical page boundary.
     /// Returns true, if the structure does NOT cross a bounadary or crosses only
@@ -161,6 +161,11 @@ impl Virtq {
         let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
         end_phy == end_phy_calc
+    }
+
+    /// Frees memory regions gained access to via `Transfer.ret_raw()`.
+    pub fn free_raw(ptr: *mut u8, len: usize) {
+        crate::mm::deallocate(VirtAddr::from(ptr as usize), len);
     }
 
 }
@@ -268,63 +273,6 @@ impl Virtq {
             Virtq::Split(vq) => unimplemented!(),
         }
     } 
-
-    /// Provides the calley with a TransferToken. Fails upon multiple circumstances.
-    /// 
-    /// **Parameters**
-    /// * send: `Option<(Box<T>, BuffSpec)>`
-    ///     * None: No send buffers are provided to the device
-    ///     * Some: 
-    ///         * `T` defines the structure which will be provided to the device
-    ///         * [BuffSpec](BuffSpec) defines how this struct will be presented to the device. 
-    ///         See documentation on `BuffSpec` for details.
-    /// * recv: `Option<(Box<K>, BuffSpec)>`
-    ///     * None: No buffers, which are writable for the device are provided to the device.
-    ///     * Some: 
-    ///         * `K` defines the structure which will be provided to the device
-    ///         * [BuffSpec](BuffSpec) defines how this struct will be presented to the device. 
-    ///         See documentation on `BuffSpec` for details.
-    ///
-    /// **Reasons for Failure:**
-    /// * Queue does not have enough descriptors left, to split `T` or `K` into the desired amount of memory chunks.
-    /// * Calley mixed `Indirect (Direct::Indirect())` with `Direct(BuffSpec::Single() or BuffSpec::Multiple())` descriptors.
-    ///
-    /// **Details on Usage:**
-    /// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
-    /// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements. 
-    /// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
-    /// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
-    /// many elements in the queue.
-    /// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
-    /// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element. 
-    ///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
-    /// descriptors, the queue will merge the send and recv structure as follows:
-    /// ```
-    /// //+++++++++++++++++++++++
-    /// //+        Queue        +
-    /// //+++++++++++++++++++++++
-    /// //+ Indirect descriptor + -> refers to a descriptor list in the form of ->  ++++++++++++++++++++++++++
-    /// //+         ...         +                                                   +     Descriptors for T  +
-    /// //+++++++++++++++++++++++                                                   +     Descriptors for K  +
-    /// //                                                                          ++++++++++++++++++++++++++
-    /// ```
-    /// As a result indirect descriptors result in a single descriptor consumption in the actual queue.
-    ///
-    /// * If one wants to have a structure in the style of:
-    /// ```
-    /// struct send_recv_struct {
-    ///     // send_part: ...
-    ///     // recv_part: ...
-    /// }
-    /// ```
-    /// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other 
-    /// part via the recv argument.
-    pub fn prep_transfer<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, rc_self: Rc<Virtq>, send: Option<(Box<T>, BuffSpec)>, recv: Option<(Box<K>, BuffSpec)>) -> Result<TransferToken, VirtqError> {
-            match self {
-                Virtq::Packed(vq) => vq.prep_transfer(rc_self ,send, recv),
-                Virtq::Split(vq ) => unimplemented!(),
-            }
-    }
 
     /// Provides the calley with a TransferToken. Fails upon multiple circumstances.
     ///
@@ -554,6 +502,54 @@ impl Transfer {
         }
     }
 
+    /// Retruns a vector of immutable slices to the underlying memory areas.
+    ///
+    /// The vectors contain the slices in creation order. 
+    /// E.g.:
+    /// * Driver creates buffer as
+    ///   * send buffer: 50 bytes, 60 bytes
+    ///   * receive buffer: 10 bytes
+    /// * The return tuple will be:
+    ///  * (Some(vec[50, 60]), Some(vec[10]))
+    ///  * Where 50 refers to a slice of u8 of length 50. 
+    /// The other numbers follow the same principle.
+    pub fn as_slices(&self) -> Result<(Option<Vec<&[u8]>>, Option<Vec<&[u8]>>), VirtqError> {
+        match &self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                let send_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => {
+                        let mut arr = Vec::with_capacity(buff.as_slice().len());
+                        
+                        for desc in buff.as_slice() {
+                            arr.push(desc.deref())
+                        }
+                        
+                        Some(arr)
+                    }
+                    None => None,
+                };
+
+                let recv_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                    Some(buff) => {
+                        let mut arr = Vec::with_capacity(buff.as_slice().len());
+                        
+                        for desc in buff.as_slice() {
+                            arr.push(desc.deref())
+                        }
+                        
+                        Some(arr)
+                    }
+                    None => None,
+                };
+
+                Ok((send_data, recv_data))
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(None)),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"), 
+        }
+    }
+
     /// Returns a copy if the respective send and receiving buffers
     /// The actul buffers remain in the BufferToken and hence the token can be 
     /// reused afterwards.
@@ -623,9 +619,12 @@ impl Transfer {
         }
     }
 
-    /// # UNSAFE, HIGLY EXPERIMENTIALLY
-    /// This function returns a Vector to the allocated memory areas. A vector is necessary as boxes are introducing 
-    /// dealloc panics. Currently the complete behaviour of this function is not well tested and it should be used with care.
+    /// # HIGLY EXPERIMENTIALLY
+    /// This function returns a Vector of tuples to the allocated memory areas Currently the complete behaviour of this function is not well tested and it should be used with care.
+    ///
+    /// **INFO:** 
+    /// * Memory regions MUST be deallocated via Virtq::free_raw(*mut u8, len) 
+    ///
     /// One could even do something like:
     /// ``` 
     /// unsafe {
@@ -636,18 +635,10 @@ impl Transfer {
     /// ```
     /// The above will result in undefined bevaiour and dealloc failure if the buffer was created via `prep_buffer()`!
     ///
-    /// Returns the actual send and receiving buffers.
+    /// Returns the actual send and receiving buffers in form of (*mut u8, len) tuples.
     /// The function consumes the tranfer and cleans up all tokens.
     /// Failes if `TransferState != Finished`.
-    /// 
-    /// **Return Tuple**
-    ///
-    /// `(sended_data, received_data)`
-    ///
-    /// Returned data is of type `Box<[Box<[u8]>]>` in order to preserve the memory regions
-    /// and to prevent copying of data.
-    ///
-    pub unsafe fn ret(mut self) -> Result<(Option<Vec<Vec<u8>>>, Option<Vec<Vec<u8>>>), VirtqError> {
+    pub fn ret_raw(mut self) -> Result<(Option<Vec<(*mut u8, usize)>>, Option<Vec<(*mut u8, usize)>>), VirtqError> {
         let state = self.transfer_tkn.as_ref().unwrap().state;
 
         match state {
@@ -656,32 +647,34 @@ impl Transfer {
                 let mut transfer_tkn = self.transfer_tkn.take().unwrap().into_inner();
                 let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
 
-                let send_data = match buffer_tkn.ret_send {
-                    True => match buffer_tkn.send_buff {
+                let send_data = if buffer_tkn.ret_send {
+                    match buffer_tkn.send_buff {
                         Some(buff) => {
                             // This data is not a second time returnable
                             // Unessecary, because token will be dropped.
                             // But to be consistent in state.
                             buffer_tkn.ret_send = false;
-                            Some(buff.into_boxed())
+                            Some(buff.into_raw())
                         },
                         None => None,
-                    },
-                    False => None,
+                    }
+                } else {
+                    return Err(VirtqError::NoReuseBuffer)
                 };
 
-                let recv_data = match buffer_tkn.ret_recv {
-                    True => match buffer_tkn.recv_buff {
+                let recv_data =  if buffer_tkn.ret_recv {
+                    match buffer_tkn.recv_buff {
                         Some(buff) => {
                             // This data is not a second time returnable
                             // Unessecary, because token will be dropped.
                             // But to be consistent in state.
                             buffer_tkn.ret_recv = false;
-                            Some(buff.into_boxed())
+                            Some(buff.into_raw())
                         },
                         None => None,
-                    },
-                    False => None,
+                    }
+                } else {
+                    return Err(VirtqError::NoReuseBuffer)
                 };
                 // Prevent Token to be reusable although it will be dropped
                 // later in this function.
@@ -1199,7 +1192,7 @@ impl Buffer {
     /// Not entirely sure if this is a good idea, as we possibly deallocate memory via rust deallocator 
     /// which has been allocate via `crate::mm::allocate()`... Hence it is unsafe and its 
     /// behaviour is currently undefined.
-    unsafe fn into_boxed(mut self) -> Vec<Vec<u8>> {
+    fn into_raw(mut self) -> Vec<(*mut u8, usize)> {
         match self {
             Buffer::Single{mut desc_lst, next_write, len} => {
                 let mut arr = Vec::with_capacity(desc_lst.len());
@@ -1210,7 +1203,7 @@ impl Buffer {
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
-                    arr.push(desc.no_dealloc_clone().into_vec());
+                    arr.push((desc.ptr, desc._mem_len));
                 }
                 arr
             } ,
@@ -1223,7 +1216,7 @@ impl Buffer {
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
-                    arr.push(desc.no_dealloc_clone().into_vec());
+                    arr.push((desc.ptr, desc._mem_len));
                 }
                 arr
             } ,
@@ -1236,7 +1229,7 @@ impl Buffer {
                     // copy a no_dealloc_clone which is consumed by into_boxed()
                     // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
-                    arr.push(desc.no_dealloc_clone().into_vec());
+                    arr.push((desc.ptr, desc._mem_len));
                 }
                 arr
             } ,
@@ -1586,46 +1579,6 @@ impl MemPool {
         }
     }
 
-    /// Creates a MemDescr which refers to already existing memory.
-    ///
-    /// **Info on Usage:**
-    /// * `Panics` if given `slice.len() == 0`
-    /// * `Panics` if slice crosses physical page boundary
-    /// * The given slice MUST be a heap allocated slice.
-    /// * Panics if slice crosses page boundaries!
-    ///
-    /// **Properties of Returned MemDescr:**
-    /// 
-    /// * The descriptor will consume one element of the pool. 
-    /// * The refered to memory area will be deallocated upon drop
-    fn pull_from(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
-        // Zero sized descriptors are NOT allowed
-        // This also prohibids a panic due to accessing wrong index below
-        assert!(slice.len() != 0);
-
-        // Assert descriptor does not cross a page barrier
-        let start_virt = (&slice[0] as *const u8) as usize;
-        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
-        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-        assert_eq!(end_phy, end_phy_calc);
-       
-
-        let desc_id = match self.pool.borrow_mut().pop() {
-            Some(id) => id,
-            None => return Err(VirtqError::NoDescrAvail),
-        };
-
-        Ok(MemDescr{
-            ptr: (&slice[0] as *const u8) as *mut u8,
-            len: slice.len(),
-            _mem_len: slice.len(),
-            id: Some(desc_id),
-            dealloc: Dealloc::AsSlice,
-            pool: rc_self,
-        })
-    }
 
     /// Creates a MemDescr which refers to already existing memory.
     ///
@@ -1668,42 +1621,6 @@ impl MemPool {
         })
     }
 
-    /// Creates a MemDescr which refers to already existing memory.
-    /// The MemDescr does NOT consume a place in the pool and should
-    /// be used with `Buffer::Indirect`.
-    ///
-    /// **Info on Usage:**
-    /// * `Panics` if given `slice.len() == 0`
-    /// * `Panics` if slice crosses physical page boundary
-    /// * The given slice MUST be a heap allocated slice.
-    ///
-    /// **Properties of Returned MemDescr:**
-    /// 
-    /// * The descriptor will consume one element of the pool. 
-    /// * The refered to memory area will be deallocated upon drop
-    fn pull_from_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> MemDescr {
-        // Zero sized descriptors are NOT allowed
-        // This also prohibids a panic due to accessing wrong index below
-        assert!(slice.len() != 0);
-
-        // Assert descriptor does not cross a page barrier
-        let start_virt = (&slice[0] as *const u8) as usize;
-        let end_virt = (&slice[slice.len() - 1 ] as *const u8) as usize; 
-        let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
-        let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
-
-        assert_eq!(end_phy, end_phy_calc);
-
-        MemDescr{
-            ptr: (&slice[0] as *const u8) as *mut u8,
-            len: slice.len(),
-            _mem_len: slice.len(),
-            id: None,
-            dealloc: Dealloc::AsSlice,
-            pool: rc_self,
-        }
-    }
-    
     /// Creates a MemDescr which refers to already existing memory.
     /// The MemDescr does NOT consume a place in the pool and should
     /// be used with `Buffer::Indirect`.
