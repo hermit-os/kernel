@@ -381,18 +381,6 @@ impl ComCfg {
             rank,
         }
     }
-
-    fn set_vq_desc_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: u16,) {
-        unimplemented!();
-    }
-
-    fn set_vq_dev_area(raw_cfg: &ComCfgRaw, dev_ddr: PhyMemAddr, vq_id: u16) {
-        unimplemented!();
-    }
-
-    fn set_vq_driv_area(raw_cfg: &ComCfgRaw, desc_addr: PhyMemAddr, vq_id: u16) {
-        unimplemented!();
-    }
 }
 
 pub struct VqCfgHandler<'a> {
@@ -406,6 +394,8 @@ impl <'a> VqCfgHandler<'a> {
     ///
     /// Returns the set size in form of a `u16`.
     pub fn set_vq_size(&mut self, size: u16) -> u16 {
+        self.raw.queue_select = self.vq_index;
+
         if self.raw.queue_size < size {
             self.raw.queue_size
         } else {
@@ -438,11 +428,6 @@ impl <'a> VqCfgHandler<'a> {
         self.raw.queue_select = self.vq_index;
         self.raw.queue_enable = 1;
     }
-
-    pub fn disable_queue(&mut self) {
-        self.raw.queue_select = self.vq_index;
-        self.raw.queue_enable = 0;
-    }
 }
 
 // Public Interface of ComCfg
@@ -457,9 +442,6 @@ impl ComCfg {
         if self.com_cfg.queue_size == 0 {
             None
         } else {
-            if self.com_cfg.queue_size > crate::config::VIRTIO_MAX_QUEUE_SIZE {
-                self.com_cfg.queue_size = crate::config::VIRTIO_MAX_QUEUE_SIZE;
-            }
 
             Some(VqCfgHandler{
                 vq_index: index,
@@ -529,7 +511,7 @@ impl ComCfg {
         self.com_cfg.device_feature_select = 1;
 
         // read high 32 bits of device features
-        let mut dev_feat = u64::from(self.com_cfg.device_feature);
+        let mut dev_feat = u64::from(self.com_cfg.device_feature) << 32;
 
         // Indicate device to show low 32 bits in device_feature field.
         // See Virtio specification v1.1. - 4.1.4.3

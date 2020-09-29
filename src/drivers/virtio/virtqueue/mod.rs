@@ -425,7 +425,7 @@ pub trait AsSliceU8 {
         unsafe { 
             core::slice::from_raw_parts(
             (self as *const Self) as *const u8,
-                core::mem::size_of_val(&self),
+                core::mem::size_of_val(self),
             )
         }
     }
@@ -440,7 +440,7 @@ pub trait AsSliceU8 {
         unsafe {
             core::slice::from_raw_parts_mut(
                 (self as *const Self) as *mut u8,
-                core::mem::size_of_val(&self)
+                core::mem::size_of_val(self)
             )
         }
     }
@@ -1009,7 +1009,7 @@ impl BufferToken {
 
         match recv {
             Some(data) => {
-                match self.send_buff.as_mut() {
+                match self.recv_buff.as_mut() {
                     Some(buff) => {
                         if buff.len() < data.as_slice_u8().len() {
                             return Err(VirtqError::WriteToLarge(self))
@@ -1036,17 +1036,6 @@ impl BufferToken {
                 }
             },
             None => (),
-        }
-
-        // Reset write positions insode the buffer
-        // Needed if the BufferToken is reused.
-        // If no write happend, this is not harmfull.
-        if let Some(buff) = self.send_buff.as_mut() {
-            buff.reset_write();
-        }
-
-        if let Some(buff) = self.recv_buff.as_mut() {
-            buff.reset_write();
         }
 
         Ok(TransferToken {
@@ -1090,7 +1079,7 @@ impl BufferToken {
 
         match recv_seq {
             Some(data) => {
-                match self.send_buff.as_mut() {
+                match self.recv_buff.as_mut() {
                     Some(buff) => {
                         match buff.next_write(data.as_slice_u8()) {
                             Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
@@ -1164,7 +1153,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1176,7 +1165,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1188,7 +1177,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1437,14 +1426,14 @@ impl MemDescr {
     /// Copies the given memory area into a Vector.
     fn cpy_into_vec(&self) -> Vec<u8> {
         let mut vec = vec![0u8;self.len];
-        vec.copy_from_slice(&self);
+        vec.copy_from_slice(&self.deref());
         vec
     }
 
     /// Copies the given memory area into a Box.
     fn cpy_into_box(&self) -> Box<[u8]> {
         let mut vec = vec![0u8;self.len];
-        vec.copy_from_slice(&self);
+        vec.copy_from_slice(&self.deref());
         vec.into_boxed_slice() 
     }
 
