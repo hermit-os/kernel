@@ -122,7 +122,7 @@ pub fn init() {
 		let size = 10 * LargePageSize::SIZE;
 		unsafe {
 			let start = allocate(size, true);
-			crate::ALLOCATOR.lock().init(start, size);
+			crate::ALLOCATOR.lock().init(start.as_usize(), size);
 		}
 
 		info!("Kernel heap size: {} MB", size >> 20);

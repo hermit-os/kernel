@@ -85,14 +85,14 @@ static SBRK_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "newlib")]
 pub fn sbrk_init() {
-	SBRK_COUNTER.store(task_heap_start(), Ordering::SeqCst);
+	SBRK_COUNTER.store(task_heap_start().as_usize(), Ordering::SeqCst);
 }
 
 #[cfg(feature = "newlib")]
 fn __sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
-	let task_heap_start = task_heap_start();
-	let task_heap_end = task_heap_end();
+	let task_heap_start = task_heap_start().as_usize();
+	let task_heap_end = task_heap_end().as_usize();
 	let old_end;
 
 	if incr >= 0 {
