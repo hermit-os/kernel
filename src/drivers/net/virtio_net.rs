@@ -198,11 +198,16 @@ impl RxQueues {
 
             // Currently we choose indirect descriptors for small queue sizes, in order to allow 
             // as many packages as possible inside the queue, while the allocated
-            let desc_sizes = [
+            let buff_def = [
                 Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
                 Bytes::new(65550).unwrap(),
                 ];
-            let spec = BuffSpec::Indirect(&desc_sizes);
+
+            let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
+                BuffSpec::Indirect(&buff_def)
+            } else {
+                BuffSpec::Multiple(&buff_def)
+            };
 
             for _ in 0..vq.size().into(){
                 let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
@@ -227,7 +232,11 @@ impl RxQueues {
             // See Virtio specification v1.1 - 5.1.6.3.1
             //
             let buff_def =[Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(1514).unwrap()];
-            let spec = BuffSpec::Indirect(&buff_def);
+            let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
+                BuffSpec::Indirect(&buff_def)
+            } else {
+                BuffSpec::Multiple(&buff_def)
+            };
 
             for _ in 0..u16::from(vq.size()) {
                 let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
@@ -370,7 +379,7 @@ impl TxQueues {
         }
     }
 
-    fn add(&mut self, vq: Virtq, mtu: u16) {
+    fn add(&mut self, vq: Virtq, dev_cfg: &NetDevCfg) {
         // Safe virtqueue
         self.vqs.push(Rc::new(vq));
         if self.vqs.len() == 1 {
@@ -378,8 +387,12 @@ impl TxQueues {
             let vq = self.vqs.get(0).unwrap();
 
             // As usize is currently safe as the minimal usize is defined as 16bit in rust.
-            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new((mtu as usize) + EthHdr).unwrap()];
-            let spec = BuffSpec::Indirect(&buff_def);
+            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new((dev_cfg.raw.mtu as usize) + EthHdr).unwrap()];
+            let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
+                BuffSpec::Indirect(&buff_def)
+            } else {
+                BuffSpec::Multiple(&buff_def)
+            };
 
             for i in 0..vq.size().into() {
                 self.ready_queue.push(
@@ -424,7 +437,7 @@ impl TxQueues {
 
         // As usize is currently safe as the minimal usize is defined as 16bit in rust.
         let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(len).unwrap()];
-        let spec = BuffSpec::Indirect(&buff_def);
+        let spec = BuffSpec::Multiple(&buff_def);
 
         match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
             Ok(tkn) => return Some((tkn, 0)),
@@ -754,6 +767,7 @@ impl VirtioNetDriver {
             Features::VIRTIO_NET_F_STATUS,
             Features::VIRTIO_NET_F_GUEST_TSO4,
             Features::VIRTIO_NET_F_GUEST_TSO6,
+            Features::VIRTIO_F_RING_INDIRECT_DESC,
         ];
 
         let mut min_feat_set = FeatureSet::new(0);
@@ -876,7 +890,7 @@ impl VirtioNetDriver {
                     &self.notif_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
-             VqIndex::from(2*self.num_vqs+1),
+             VqIndex::from(2*self.num_vqs),
                     self.dev_cfg.features.into()
                 ))));
 
@@ -916,7 +930,7 @@ impl VirtioNetDriver {
             self.num_vqs = 2;
         }
 
-        // The loop is running from 1 to num_vqs+1 and the indexes are provided to the VqIndex::from function in this way 
+        // The loop is running from 0 to num_vqs and the indexes are provided to the VqIndex::from function in this way 
         // in order to allow the indexes of the queues to be in a form of: 
         //
         // index i for receiv queue 
@@ -924,29 +938,8 @@ impl VirtioNetDriver {
         //
         // as it is wanted by the network network device. 
         // see Virtio specification v1.1. - 5.1.2 
-        for i in 1..self.num_vqs+1 {
+        for i in 0..self.num_vqs {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
-                let vq = Virtq::new(&mut self.com_cfg,
-                    &self.notif_cfg,
-                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
-                    VqType::Packed,
-                    VqIndex::from(2*i-1),
-                    self.dev_cfg.features.into()
-                );
-                // Interrupt for receiving packets is wanted
-                vq.enable_notifs();
-
-                // Others than the first recv and send queue are disabled by default.
-                if i > 1 {
-                    let vq_handler = self.com_cfg.select_vq(2*i);
-
-                    if let Some(mut handler) = vq_handler {
-                        handler.disable_queue();
-                    }
-                }
-
-                self.recv_vqs.add(vq, &self.dev_cfg);
-        
                 let vq = Virtq::new(&mut self.com_cfg,
                     &self.notif_cfg,
                     VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
@@ -954,19 +947,22 @@ impl VirtioNetDriver {
                     VqIndex::from(2*i),
                     self.dev_cfg.features.into()
                 );
+                // Interrupt for receiving packets is wanted
+                vq.enable_notifs();
+
+                self.recv_vqs.add(vq, &self.dev_cfg);
+        
+                let vq = Virtq::new(&mut self.com_cfg,
+                    &self.notif_cfg,
+                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Packed,
+                    VqIndex::from(2*i+1),
+                    self.dev_cfg.features.into()
+                );
                 // Interrupt for comunicating that a sended packet left, is not needed
                 vq.enable_notifs();
 
-                // Others than the first recv and send queue are disabled by default.
-                if i > 1 {
-                    let vq_handler = self.com_cfg.select_vq(2*i);
-
-                    if let Some(mut handler) = vq_handler {
-                        handler.disable_queue();
-                    }
-                }
-
-                self.send_vqs.add(vq, self.get_mtu());
+                self.send_vqs.add(vq, &self.dev_cfg);
 
             } else {
                 todo!("Integrate split virtqueue into network driver");
