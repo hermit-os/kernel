@@ -623,21 +623,14 @@ impl Transfer {
     /// This function returns a Vector of tuples to the allocated memory areas Currently the complete behaviour of this function is not well tested and it should be used with care.
     ///
     /// **INFO:** 
-    /// * Memory regions MUST be deallocated via Virtq::free_raw(*mut u8, len) 
+    /// * Memory regions MUST be deallocated via `Virtq::free_raw(*mut u8, len)`
+    /// * Memeory regions length might be larger than expected due to the used 
+    /// allocation function in the kernel. Hence one MUST NOT assume valid data 
+    /// after the length of the buffer, that was given at creation, is reached.
+    ///   * Still the provided `Virtq::free_raw(*mut u8, len)` function MUST be provided
+    /// with the actual usize returned by this function in order to prevent memory leaks or failure.
+    /// * Failes if `TransferState != Finished`.
     ///
-    /// One could even do something like:
-    /// ``` 
-    /// unsafe {
-    ///     let (send_data, recv_data) = a_transfer.ret(); 
-    ///     // Where T is a data structure provided to the queue via prep_transfer() or prep_transfer_from_raw()
-    ///     let refrence_to_data: &T = & *(send.data[0][0] as *const u8) as const T)
-    /// }
-    /// ```
-    /// The above will result in undefined bevaiour and dealloc failure if the buffer was created via `prep_buffer()`!
-    ///
-    /// Returns the actual send and receiving buffers in form of (*mut u8, len) tuples.
-    /// The function consumes the tranfer and cleans up all tokens.
-    /// Failes if `TransferState != Finished`.
     pub fn ret_raw(mut self) -> Result<(Option<Vec<(*mut u8, usize)>>, Option<Vec<(*mut u8, usize)>>), VirtqError> {
         let state = self.transfer_tkn.as_ref().unwrap().state;
 
@@ -766,9 +759,8 @@ impl TransferToken {
         
         // Prevent TransferToken from beeing dropped 
         // I.e. do NOT run the costum constructor which will 
-        // deallocate memory, as we never call drop upon
-        // the ManuallyDrop<Pinned<TransferToken>>
-        core::mem::ManuallyDrop::new(self.get_vq().dispatch(self, notif).transfer_tkn.take());
+        // deallocate memory.
+        core::mem::forget(self.get_vq().dispatch(self, notif).transfer_tkn.take());
     }
 
     /// Dispatches the provided TransferToken to the respective queue and returns a transfer.
@@ -786,12 +778,22 @@ impl TransferToken {
     /// The resultaing [TransferState](TransferState) in this case is of course 
     /// finished and the returned [Transfer](Transfer) can be reused, copyied from
     /// or return the underlying buffers.
+    ///
+    /// **INFO:**
+    /// Currently this function is constantly polling the queue while keeping the notifications disabled.
+    /// Upon finish notifications are enabled again.
     pub fn dispatch_blocking(self) -> Result<Transfer, VirtqError> {
+        let vq = self.get_vq();
         let transfer = self.get_vq().dispatch(self, false);
+
+        vq.disable_notifs();
 
         while transfer.transfer_tkn.as_ref().unwrap().state != TransferState::Finished {
             // Keep Spinning untill the state changes to Finished
+            vq.poll()
         }
+
+        vq.enable_notifs();
 
         Ok(transfer)
     }
@@ -841,7 +843,7 @@ pub struct BufferToken {
 
 // Private interface of BufferToken
 impl BufferToken {
-    /// Returns the overall number of descriptors 
+    /// Returns the overall number of descriptors.
     fn num_descr(&self) -> usize {
         let mut len = 0usize;
 
@@ -855,7 +857,10 @@ impl BufferToken {
         len
     }
 
-    // Returns the number of descritprors that will be placed in the queue
+    /// Returns the number of descritprors that will be placed in the queue.
+    /// This number can differ from the `BufferToken.num_descr()` function value
+    /// as indirect buffers only consume one descriptor in the queue, but can have 
+    /// more descriptors that are accesible via the desciptor in the queue.
     fn num_consuming_descr(&self) -> usize {
         let mut len = 0usize;
 
@@ -882,7 +887,7 @@ impl BufferToken {
                 buff.reset_write();
 
                 for desc in buff.as_mut_slice() {
-                    desc.len = desc._mem_len;
+                    desc.len = desc._init_len;
                 }
             },
             None => (),
@@ -893,7 +898,7 @@ impl BufferToken {
                 buff. reset_write();
 
                 for desc in buff.as_mut_slice() {
-                    desc.len = desc._mem_len;
+                    desc.len = desc._init_len;
                 }
             },
             None => (),
@@ -915,8 +920,17 @@ impl BufferToken {
             (None, None) => unreachable!("Empty BufferToken not allowed!"),
         }
     }
-    /// Returns the underlying raw pointers to the memory hold by the Buffertoken. This is mostly
-    /// useful in order to provide the user space with pointers to write to. 
+    /// Returns the underlying raw pointers to the user accesible memory hold by the Buffertoken. This is mostly
+    /// useful in order to provide the user space with pointers to write to. Return tuple has the form 
+    /// (`pointer_to_mem_area`, `length_of_accesible_mem_area`).
+    /// 
+    /// **INFO:**
+    ///
+    /// The length of the given memory area MUST NOT express the actual allocated memory area. This is due to the behaviour 
+    /// of the allocation function. Allthough it is ensured that the allocated memory area length is always larger or equal 
+    /// to the "accesible memory area". Hence one MUST NOT use this information in order to deallocate the underlying memory.
+    /// If this is wanted the savest way is to simpyl drop the BufferToken.
+    /// 
     ///
     /// **WARN:** The Buffertoken is controlling the memory and must not be dropped as long as 
     /// userspace has access to it!
@@ -927,7 +941,7 @@ impl BufferToken {
         match self.send_buff.as_mut() {
             Some(buff) => {
                 for desc in buff.as_slice() {
-                    send_ptrs.push((desc.ptr, desc._mem_len));
+                    send_ptrs.push((desc.ptr, desc.len()));
                 }
             },
             None => (),
@@ -936,17 +950,17 @@ impl BufferToken {
         match self.recv_buff.as_ref() {
             Some(buff) => {
                 for desc in buff.as_slice() {
-                    recv_ptrs.push((desc.ptr, desc._mem_len));
+                    recv_ptrs.push((desc.ptr, desc.len()));
                 }
             },
             None => (),
         }
 
-        match (send_ptrs.len(), recv_ptrs.len()) {
-            (0,0) => unreachable!("Empty transfer, Not allowed"),
-            (0,_) => (Some(send_ptrs.into_boxed_slice()), None),
-            (_,0) => (None, Some(recv_ptrs.into_boxed_slice())),
-            (_,_) => (Some(send_ptrs.into_boxed_slice()), Some(recv_ptrs.into_boxed_slice()))
+        match (send_ptrs.is_empty(), recv_ptrs.is_empty()) {
+            (true, true) => unreachable!("Empty transfer, Not allowed"),
+            (false, true) => (Some(send_ptrs.into_boxed_slice()), None),
+            (true, false) => (None, Some(recv_ptrs.into_boxed_slice())),
+            (false, false) => (Some(send_ptrs.into_boxed_slice()), Some(recv_ptrs.into_boxed_slice()))
         }
     }
 
@@ -1140,6 +1154,8 @@ enum Buffer {
 
 // Private Interface of Buffer
 impl Buffer {
+    /// Writes a given slice into a Descriptor element of a Buffer. Hereby the function ensures, that the 
+    /// slice fits into the memory area and that not to many writes already have happened.
     fn next_write(&mut self, slice: &[u8]) -> Result<usize, BufferError> {
         match self {
             Buffer::Single{desc_lst, next_write, len} => {
@@ -1181,6 +1197,7 @@ impl Buffer {
         }
     }
 
+    /// Resets the write status of a Buffertoken in order to be able to reuse a Buffertoken.
     fn reset_write(&mut self) {
         match self {
             Buffer::Single{desc_lst, next_write, len} => *next_write = 0,
@@ -1189,9 +1206,10 @@ impl Buffer {
         }
     }
 
-    /// Not entirely sure if this is a good idea, as we possibly deallocate memory via rust deallocator 
-    /// which has been allocate via `crate::mm::allocate()`... Hence it is unsafe and its 
-    /// behaviour is currently undefined.
+    /// This consumes the the given buffer and returns the raw information (i.e. a `*mut u8` and a `usize` inidacting the start and 
+    /// length of the buffers memory).
+    ///
+    /// After this call the users is responsible for deallocating the given memory via the kenrel `mem::dealloc` function.
     fn into_raw(mut self) -> Vec<(*mut u8, usize)> {
         match self {
             Buffer::Single{mut desc_lst, next_write, len} => {
@@ -1236,7 +1254,7 @@ impl Buffer {
         }
     }
 
-    /// Retruns a copy of the buffer.
+    /// Returns a copy of the buffer.
     fn cpy(&self) -> Box<[u8]> {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => {
@@ -1374,9 +1392,17 @@ struct MemDescr {
     /// Points to the controlled memory area
     ptr: *mut u8,
     /// Defines the len of the memory area that is accessible by users
+    /// Can change after the device wrote to the memory area partially.
+    /// Hence, this always defines the length of the memory area that has 
+    /// useful information or is accesible.
     len: usize,
+    /// Defines the len of the memory area that is accesible by users
+    /// This field is needed as the `MemDescr.len` field might change
+    /// after writes of the device, but the Descriptors need to be reset
+    /// in case they are reused. So the inital length must be preserved.
+    _init_len: usize,
     /// Defines the length of the controlled memory area
-    /// starting a `ptr: *mut u8`
+    /// starting a `ptr: *mut u8`. Never Changes.
     _mem_len: usize,
     /// If `id == None` this is an untracked memory descriptor
     /// * Meaining: The descriptor does NOT count as a descriptor 
@@ -1445,6 +1471,7 @@ impl MemDescr {
         MemDescr {
             ptr: self.ptr,
             len: self.len,
+            _init_len: self.len(),
             _mem_len: self._mem_len,
             id: None,
             pool: Rc::clone(&self.pool),
@@ -1614,6 +1641,7 @@ impl MemPool {
         Ok(MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _init_len: slice.len(),
             _mem_len: slice.len(),
             id: Some(desc_id),
             dealloc: Dealloc::Not,
@@ -1650,6 +1678,7 @@ impl MemPool {
         MemDescr{
             ptr: (&slice[0] as *const u8) as *mut u8,
             len: slice.len(),
+            _init_len: slice.len(),
             _mem_len: slice.len(),
             id: None,
             dealloc: Dealloc::Not,
@@ -1678,8 +1707,8 @@ impl MemPool {
         let len = bytes.0;
 
         // Allocate heap memory via a vec, leak and cast
-        let len = align_up!(len, BasePageSize::SIZE);
-		let ptr = (crate::mm::allocate(len, true).0 as *const u8) as *mut u8;
+        let _mem_len = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1693,7 +1722,8 @@ impl MemPool {
         Ok(MemDescr {
             ptr,
             len,
-            _mem_len: len,
+            _init_len: len,
+            _mem_len,
             id: Some(id),
             dealloc: Dealloc::AsPage,
             pool: rc_self,
@@ -1713,8 +1743,8 @@ impl MemPool {
         let len = bytes.0;
 
         // Allocate heap memory via a vec, leak and cast
-        let len = align_up!(len, BasePageSize::SIZE);
-		let ptr = (crate::mm::allocate(len, true).0 as *const u8) as *mut u8;
+        let _mem_len = align_up!(len, BasePageSize::SIZE);
+		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
         // Assert descriptor does not cross a page barrier
         let start_virt = ptr as usize;
@@ -1728,7 +1758,8 @@ impl MemPool {
         MemDescr {
             ptr,
             len,
-            _mem_len: len,
+            _init_len: len,
+            _mem_len,
             id: None,
             dealloc: Dealloc::AsPage,
             pool: rc_self,

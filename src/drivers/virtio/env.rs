@@ -14,6 +14,7 @@
 pub mod memory {
     use core::ops::Add;
     use core::mem;
+    use core::convert::TryFrom;
 
     /// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
     /// to [VirtMemAddr](VirtMemAddr). 
@@ -24,29 +25,19 @@ pub mod memory {
     // the respective From<Offset> for u32 implementation.
     impl From<u32> for MemOff{
         fn from(val: u32 ) -> Self {
-            match mem::size_of::<usize>() {
-                4 => MemOff(val as usize),
-                _ => panic!("MemOff: Casting to 32 bit usize with non 32 bit value!"),
-            }
+            MemOff(usize::try_from(val).unwrap())
         }
     }
 
     impl From<u64> for MemOff{
         fn from(val: u64 ) -> Self {
-            match mem::size_of::<usize>() {
-                8 => MemOff(val as usize),
-                _ => panic!("MemOff: Casting to 64 bit usize with non 64 bit value!"),
-            }
+            MemOff(usize::try_from(val).unwrap())
         }
     }
 
     impl From<MemOff> for u32 {
         fn from(val: MemOff) -> u32 {
-            // Check if Offset is not larger than 32 bit
-            match mem::size_of::<MemOff>() {
-                4 => val.0 as u32,
-                _ => panic!("MemOff: Casting to u32 with non 32 bit value!"),
-            }
+            u32::try_from(val.0).unwrap()
         }
     }
 
@@ -59,19 +50,13 @@ pub mod memory {
     // the respective From<Offset> for u32 implementation.
     impl From<u32> for MemLen {
         fn from(val: u32 ) -> Self {
-            match mem::size_of::<usize>() {
-                4 => MemLen(val as usize),
-                _ => panic!("MemLen: Casting to u32 with non 32 bit value!"),
-            }
+            MemLen(usize::try_from(val).unwrap())
         }
     }
 
     impl From<u64> for MemLen {
         fn from(val: u64 ) -> Self {
-            match mem::size_of::<usize>() {
-                8 => MemLen(val as usize),
-                _ => panic!("MemLen: Casting to 64 bit usize with non 64 bit value!"),
-            }
+            MemLen(usize::try_from(val).unwrap())
         } 
     }
 
@@ -89,22 +74,13 @@ pub mod memory {
 
     impl From<MemLen> for u32 {
         fn from(val: MemLen) -> u32 {
-            // Check if Offset is not larger than 32 bit
-            match mem::size_of::<usize>() {
-                4 => val.0 as u32,
-                _ => panic!("MemLen: Casting to u32 with non 32 bit value!"),
-            }
+            u32::try_from(val.0).unwrap()
         }
     }
 
     impl From<MemLen> for u64 {
         fn from(val: MemLen) -> u64 {
-            // Check if Offset is not larger than 32 bit
-            match mem::size_of::<usize>() {
-                4 => val.0 as u64,
-                8 => val.0 as u64,
-                _ => panic!("MemLen: Missing support for conversions from others than 32 and 64 bit usize."),
-            }
+            u64::try_from(val.0).unwrap()
         }
     }
 
@@ -136,21 +112,13 @@ pub mod memory {
 
     impl From<u32> for VirtMemAddr {
         fn from(addr: u32) -> Self {
-            match mem::size_of::<usize>() {
-                4 => VirtMemAddr(addr as usize),
-                8 => VirtMemAddr(addr as usize),
-                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
-            }
+            VirtMemAddr(usize::try_from(addr).unwrap())
         }
     }
 
     impl From<u64> for VirtMemAddr {
         fn from(addr: u64) -> Self {
-            match mem::size_of::<usize>() {
-                4 => VirtMemAddr(addr as usize),
-                8 => VirtMemAddr(addr as usize),
-                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
-            }
+            VirtMemAddr(usize::try_from(addr).unwrap())
         }
     }
 
@@ -179,21 +147,13 @@ pub mod memory {
 
     impl From<u32> for PhyMemAddr {
         fn from(addr: u32) -> Self {
-            match mem::size_of::<usize>() {
-                4 => PhyMemAddr(addr as usize),
-                8 => PhyMemAddr(addr as usize),
-                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
-            }
+            PhyMemAddr(usize::try_from(addr).unwrap())
         }
     }
 
     impl From<u64> for PhyMemAddr {
         fn from(addr: u64) -> Self {
-            match mem::size_of::<usize>() {
-                4 => PhyMemAddr(addr as usize), 
-                8 => PhyMemAddr(addr as usize),
-                _ => panic!("Currently only support for 32 and 64 bit machines given!"),
-            }
+            PhyMemAddr(usize::try_from(addr).unwrap())
         }
     }
 

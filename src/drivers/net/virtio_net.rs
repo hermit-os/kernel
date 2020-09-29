@@ -777,26 +777,26 @@ impl VirtioNetDriver {
                     },
                     VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => {
                         // Create a new matching feature set for device and driver if the minimal set is met!
-                        if (min_feat_set & drv_feats) != min_feat_set {
+                        if (min_feat_set & dev_feats) != min_feat_set {
                             return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id))
                         } else {
                             feats = match Features::into_features(dev_feats & drv_feats) {
                                 Some(feats) => feats,
                                 None => return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id))
                             };
-                        }
 
-                        match self.negotiate_features(&feats) {
-                            Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {:?}", self.dev_cfg.dev_id, &feats),
-                            Err(vnet_err) => {
-                                match vnet_err {
-                                    VirtioNetError::FeatReqNotMet(feat_set) => {
-                                        error!("Network device offers a feature set {:x} when used completly does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
-                                        return Err(vnet_err)
-                                    },
-                                    _ => {
-                                        error!("Feature Set after reduction still not usable. Set: {:?}. Aborting!", feats);
-                                        return Err(vnet_err) 
+                            match self.negotiate_features(&feats) {
+                                Ok(_) => info!("Driver found a subset of features for virtio device {:x}. Features are: {:?}", self.dev_cfg.dev_id, &feats),
+                                Err(vnet_err) => {
+                                    match vnet_err {
+                                        VirtioNetError::FeatReqNotMet(feat_set) => {
+                                            error!("Network device offers a feature set {:x} when used completly does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
+                                            return Err(vnet_err)
+                                        },
+                                        _ => {
+                                            error!("Feature Set after reduction still not usable. Set: {:?}. Aborting!", feats);
+                                            return Err(vnet_err) 
+                                        }
                                     }
                                 }
                             }
