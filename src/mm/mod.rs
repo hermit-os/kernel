@@ -119,7 +119,7 @@ pub fn init() {
 	{
 		info!("An application with a C-based runtime is running on top of HermitCore!");
 
-		let size = 2 * LargePageSize::SIZE;
+		let size = 10 * LargePageSize::SIZE;
 		unsafe {
 			let start = allocate(size, true);
 			crate::ALLOCATOR.lock().init(start, size);
