@@ -87,7 +87,7 @@ static SBRK_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(feature = "newlib")]
 pub fn sbrk_init() {
-	SBRK_COUNTER.store(task_heap_start(), Ordering::SeqCst);
+	SBRK_COUNTER.store(task_heap_start().as_usize(), Ordering::SeqCst);
 }
 
 #[cfg(feature = "newlib")]
@@ -99,10 +99,10 @@ fn __sys_sbrk(incr: isize) -> usize {
 
 	if incr >= 0 {
 		old_end = SBRK_COUNTER.fetch_add(incr as usize, Ordering::SeqCst);
-		assert!(task_heap_end >= old_end + incr as usize);
+		assert!(task_heap_end.as_usize() >= old_end + incr as usize);
 	} else {
 		old_end = SBRK_COUNTER.fetch_sub(incr.abs() as usize, Ordering::SeqCst);
-		assert!(task_heap_start < old_end - incr.abs() as usize);
+		assert!(task_heap_start.as_usize() < old_end - incr.abs() as usize);
 	}
 
 	old_end

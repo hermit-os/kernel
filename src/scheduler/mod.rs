@@ -258,7 +258,7 @@ impl PerCoreScheduler {
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn get_lwip_errno(&self) -> i32 {
-		irqsave(|| self.current_task.borrow().lwip_errno);
+		irqsave(|| self.current_task.borrow().lwip_errno)
 	}
 
 	#[inline]
