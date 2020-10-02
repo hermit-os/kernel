@@ -10,7 +10,7 @@
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
-use core::alloc::{AllocErr, GlobalAlloc, Layout};
+use core::alloc::{AllocError, GlobalAlloc, Layout};
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -69,14 +69,14 @@ impl Heap {
 	}
 
 	/// An allocation using the always available Bootstrap Allocator.
-	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
+	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocError> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
 		let size = align_up!(layout.size(), HoleList::min_size());
 
 		// Bump the heap index and align it up to the next boundary.
 		self.index = align_up!(self.index + size, HoleList::min_size());
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
-			Err(AllocErr)
+			Err(AllocError)
 		} else {
 			Ok((NonNull::new(ptr).unwrap(), layout.size()))
 		}
@@ -87,7 +87,7 @@ impl Heap {
 	/// This function scans the list of free memory blocks and uses the first block that is big
 	/// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
 	/// reasonably fast for small allocations.
-	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
+	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocError> {
 		if self.bottom == 0 {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
