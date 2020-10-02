@@ -96,6 +96,15 @@ pub enum VqType{
     Split,
 }
 
+/// The General Descriptor struct for both Packed and SplitVq.
+#[repr(C, align(16))]
+struct Descriptor {
+    address: u64,
+    len: u32,
+    buff_id: u16,
+    flags: u16,
+}
+
 /// The Virtq enum unifies access to the two different Virtqueue types 
 /// [PackedVq](structs.PackedVq.html) and [SplitVq](structs.SplitVq.html).
 ///
@@ -517,7 +526,14 @@ impl Transfer {
         match &self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
                 // Unwrapping is okay here, as TransferToken must hold a BufferToken
-                let send_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                let send_data = match &self.transfer_tkn
+                    .as_ref()
+                    .unwrap()
+                    .buff_tkn
+                    .as_ref()
+                    .unwrap()
+                    .send_buff 
+                    {
                     Some(buff) => {
                         let mut arr = Vec::with_capacity(buff.as_slice().len());
                         
@@ -530,7 +546,14 @@ impl Transfer {
                     None => None,
                 };
 
-                let recv_data = match &self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().send_buff {
+                let recv_data = match &self.transfer_tkn
+                    .as_ref()
+                    .unwrap()
+                    .buff_tkn
+                    .as_ref()
+                    .unwrap()
+                    .recv_buff
+                    {
                     Some(buff) => {
                         let mut arr = Vec::with_capacity(buff.as_slice().len());
                         
@@ -637,7 +660,10 @@ impl Transfer {
         match state {
             TransferState::Finished => {
                 // Desctructure Token
-                let mut transfer_tkn = self.transfer_tkn.take().unwrap().into_inner();
+                let mut transfer_tkn = self.transfer_tkn.take()
+                    .unwrap()
+                    .unpin();
+
                 let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
 
                 let send_data = if buffer_tkn.ret_send {
@@ -704,7 +730,13 @@ impl Transfer {
         match self.transfer_tkn.as_ref().unwrap().state {
             TransferState::Finished => {
                 if self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().reusable {
-                    let tkn = self.transfer_tkn.take().unwrap().into_inner().buff_tkn.take().unwrap();
+                    let tkn = self.transfer_tkn.take()
+                        .unwrap()
+                        .unpin()
+                        .buff_tkn
+                        .take()
+                        .unwrap();
+
                     Ok(tkn.reset())
                 } else {
                     Err(VirtqError::NoReuseBuffer)
@@ -867,49 +899,256 @@ impl BufferToken {
         if let Some(buffer) = &self.send_buff {
             match buffer.get_ctrl_desc() {
                 Some(_) => len += 1,
-                None => len += buffer.len(),
+                None => len += buffer.num_descr(),
             }
         } 
 
         if let Some(buffer) = &self.recv_buff {
             match buffer.get_ctrl_desc() {
                 Some(_) => len += 1,
-                None => len += buffer.len(),
+                None => len += buffer.num_descr(),
             }
         } 
         len
     }
 
-    /// Resets all properties from the previous transfer.
-    fn reset(mut self) -> Self {
+   /// Resets all properties from the previous transfer.
+   ///
+   /// Includes:
+   /// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
+   /// * Resetting the MemDescr length at initalization. This length might be reduced upon writes 
+   /// of the driver or the device.
+   fn reset(mut self) -> Self {
+        let mut ctrl_desc_cnt = 0usize;
+
         match self.send_buff.as_mut() {
             Some(buff) => {
                 buff.reset_write();
+                let mut init_buff_len = 0usize;
 
-                for desc in buff.as_mut_slice() {
-                    desc.len = desc._init_len;
+                match buff.get_ctrl_desc_mut() {
+                    Some(ctrl_desc) => {
+                        let ind_desc_lst = unsafe {
+                            let size = core::mem::size_of::<Descriptor>();
+                            core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                        };
+
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            // This is fine as the length of the descriptors is restricted 
+                            // by u32::MAX (see also Bytes::new())
+                            ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+                            ctrl_desc_cnt += 1;
+                            init_buff_len += desc._init_len;
+                        }
+                    },
+                    None => {
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            init_buff_len += desc._init_len;
+                        }
+                    }
                 }
+
+                buff.reset_len(init_buff_len);
             },
             None => (),
         }
 
         match self.recv_buff.as_mut() {
             Some(buff) => {
-                buff. reset_write();
+                buff.reset_write();
+                let mut init_buff_len = 0usize;
 
-                for desc in buff.as_mut_slice() {
-                    desc.len = desc._init_len;
+                match buff.get_ctrl_desc_mut() {
+                    Some(ctrl_desc) => {
+                        let ind_desc_lst = unsafe {
+                            let size = core::mem::size_of::<Descriptor>();
+                            core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                        };
+
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            // This is fine as the length of the descriptors is restricted 
+                            // by u32::MAX (see also Bytes::new())
+                            ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+                            ctrl_desc_cnt += 1;
+                            init_buff_len += desc._init_len;
+                        }
+                    },
+                    None => {
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            init_buff_len += desc._init_len;
+                        }
+                    }
                 }
+                
+                buff.reset_len(init_buff_len);
             },
             None => (),
         }
-
-        self
+    self
     }
 }
 
 // Public interface of BufferToken
 impl BufferToken {
+    /// Restricts the size of a given BufferToken. One must specifiy either a `new_send_len` or/and `new_recv_len`. If possible
+    /// the function will restrict the respective buffers size to this value. This is especially useful if one has to provide the 
+    /// user-space or the device with a buffer and has already a free buffer at hand, which is to large. With this method the user
+    /// of the buffer will only see the given sizes. Allthough the buffer is NOT reallocated.
+    ///
+    /// **INFO:**
+    /// * Upon Transfer.resue() call the Buffers will restore their original size, which was provided at creation time!
+    /// * Fails if buffer to be restricted is non exisiting -> VirtqError::NoBufferAvail
+    /// * Fails if buffer to be restricted is to small (i.e. `buff.len < new_len`) -> VirtqError::General
+    pub fn restr_size(&mut self, new_send_len: Option<usize>, new_recv_len: Option<usize>) -> Result<(usize, usize), VirtqError> {
+        let send_len = match new_send_len {
+            Some(new_len) => {
+                match self.send_buff.as_mut() {
+                    Some(send_buff) => {
+                        let mut ctrl_desc_cnt = 0usize;
+
+                        match send_buff.get_ctrl_desc() {
+                            None => {
+                                if send_buff.len() < new_len {
+                                    return Err(VirtqError::General);
+                                } else {
+                                    let mut len_now = 0usize;
+                                    let mut rest_zero = false;
+                                    for desc in send_buff.as_mut_slice() {
+                                        len_now += desc.len;
+                                        
+                                        if len_now >= new_len && !rest_zero{
+                                            desc.len -= len_now - new_len;
+                                            rest_zero = true;
+                                        } else if rest_zero {
+                                            desc.len = 0;
+                                        }
+                                    }
+
+                                    send_buff.restr_len(new_len);
+                                    new_len
+                                }
+                            },
+                            Some(ctrl_desc)=> {
+                                if send_buff.len() < new_len {
+                                    return Err(VirtqError::General);
+                                } else {
+                                    let ind_desc_lst = unsafe {
+                                        let size = core::mem::size_of::<Descriptor>();
+                                        core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                                    };
+
+                                    let mut len_now = 0usize;
+                                    let mut rest_zero = false;
+
+                                    for desc in send_buff.as_mut_slice() {
+                                        len_now += desc.len;
+
+                                        if len_now >= new_len && !rest_zero{
+                                            desc.len -= len_now - new_len;
+                                            // As u32 is save here as all buffers length is restricted by u32::MAX
+                                            ind_desc_lst[ctrl_desc_cnt].len -= (len_now - new_len) as u32;
+                                            
+                                            rest_zero = true;
+                                        } else if rest_zero {
+                                            desc.len = 0;
+                                            ind_desc_lst[ctrl_desc_cnt].len = 0;
+                                        }
+                                        ctrl_desc_cnt += 1;
+                                    }
+
+                                    send_buff.restr_len(new_len);
+                                    new_len
+                                }
+                            }
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => match self.send_buff.as_mut() {
+                Some(send_buff) => send_buff.len(),
+                None => 0,
+            },
+        };
+
+        let recv_len = match new_recv_len {
+            Some(new_len) => {
+                match self.recv_buff.as_mut() {
+                    Some(recv_buff) => {
+                        let mut ctrl_desc_cnt = 0usize;
+
+                        match recv_buff.get_ctrl_desc() {
+                            None => {
+                                if recv_buff.len() < new_len {
+                                    return Err(VirtqError::General);
+                                } else {
+                                    let mut len_now = 0usize;
+                                    let mut rest_zero = false;
+                                    for desc in recv_buff.as_mut_slice() {
+                                        len_now += desc.len;
+                                        
+                                        if len_now >= new_len && !rest_zero{
+                                            desc.len -= len_now - new_len;
+                                            rest_zero = true;
+                                        } else if rest_zero {
+                                            desc.len = 0;
+                                        }
+                                    }
+                                    
+                                    recv_buff.restr_len(new_len);
+                                    new_len
+                                }
+                            },
+                            Some(ctrl_desc)=> {
+                                if recv_buff.len() < new_len {
+                                    return Err(VirtqError::General);
+                                } else {
+                                    let ind_desc_lst = unsafe {
+                                        let size = core::mem::size_of::<Descriptor>();
+                                        core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                                    };
+
+                                    let mut len_now = 0usize;
+                                    let mut rest_zero = false;
+
+                                    for desc in recv_buff.as_mut_slice() {
+                                        len_now += desc.len;
+
+                                        if len_now >= new_len && !rest_zero{
+                                            desc.len -= len_now - new_len;
+                                            // As u32 is save here as all buffers length is restricted by u32::MAX
+                                            ind_desc_lst[ctrl_desc_cnt].len -= (len_now - new_len) as u32;
+                                            
+                                            rest_zero = true;
+                                        } else if rest_zero {
+                                            desc.len = 0;
+                                            ind_desc_lst[ctrl_desc_cnt].len = 0;
+                                        }
+                                        ctrl_desc_cnt += 1;
+                                    }
+
+                                    recv_buff.restr_len(new_len);
+                                    new_len
+                                }
+                            }
+                        }
+                    },
+                    None => return Err(VirtqError::NoBufferAvail),
+                }
+            },
+            None => match self.recv_buff.as_mut() {
+                Some(recv_buff) => recv_buff.len(),
+                None => 0,
+            },
+        };
+
+        Ok((send_len, recv_len))
+    }
+
     /// Returns the overall number of bytes in the send and receive memory area 
     /// respectively for this BufferToken
     pub fn len(&self) -> (usize, usize) {
@@ -970,6 +1209,11 @@ impl BufferToken {
     /// if only one of the two structures is to large.
     /// The same error will be triggered in case the respective buffer wasn't even existing, as not all transfers consist
     /// of send and recv buffers.
+    ///
+    /// This write DOES NOT reduce the overall size of the buffer to length_of(`K` or `H`). The devive will observe the length of 
+    /// the buffer as given by `BufferToken.len()`.
+    /// Use `BufferToken.restr_size()` in order to change this property.
+    /// 
     ///
     /// # Detailed Description
     /// The respective send and recv buffers (see [BufferToken](BufferToken) docs for details on buffers) consist of multiple 
@@ -1143,6 +1387,26 @@ enum Buffer {
 
 // Private Interface of Buffer
 impl Buffer {
+    /// Resets the Buffers length to the given len. This MUST be the length at initalization.
+    fn reset_len(&mut self, init_len: usize) {
+        match self {
+            Buffer::Single{desc_lst, next_write, len} => *len = init_len,
+            Buffer::Multiple{desc_lst,next_write, len} => *len = init_len,
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => *len = init_len,
+        }
+    }
+
+    /// Restricts the Buffers length to the given len. This length MUST NOT be larger than the 
+    /// length at initalization or smaller-equal 0.
+    fn restr_len(&mut self, new_len: usize) {
+        match self {
+            Buffer::Single{desc_lst, next_write, len} => *len = new_len,
+            Buffer::Multiple{desc_lst,next_write, len} => *len = new_len,
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => *len = new_len,
+        }
+    }
+
+
     /// Writes a given slice into a Descriptor element of a Buffer. Hereby the function ensures, that the 
     /// slice fits into the memory area and that not to many writes already have happened.
     fn next_write(&mut self, slice: &[u8]) -> Result<usize, BufferError> {
@@ -1153,7 +1417,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1165,7 +1429,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1177,7 +1441,7 @@ impl Buffer {
                 } else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
                     Err(BufferError::WriteToLarge)
                 } else {
-                    desc_lst[*next_write].deref_mut().copy_from_slice(slice);
+                    desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
                     *next_write += 1;
 
                     Ok(slice.len()) 
@@ -1206,9 +1470,6 @@ impl Buffer {
                 
                 for desc in desc_lst.iter_mut() {
                     // Need to be a little carefull here. 
-                    // As it is NOT possible to move out of Box<[MemDescr]>, we
-                    // copy a no_dealloc_clone which is consumed by into_boxed()
-                    // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
                     arr.push((desc.ptr, desc._mem_len));
                 }
@@ -1219,9 +1480,6 @@ impl Buffer {
                 
                 for desc in desc_lst.iter_mut() {
                     // Need to be a little carefull here. 
-                    // As it is NOT possible to move out of Box<[MemDescr]>, we
-                    // copy a no_dealloc_clone which is consumed by into_boxed()
-                    // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
                     arr.push((desc.ptr, desc._mem_len));
                 }
@@ -1232,9 +1490,6 @@ impl Buffer {
                 
                 for desc in desc_lst.iter_mut() {
                     // Need to be a little carefull here. 
-                    // As it is NOT possible to move out of Box<[MemDescr]>, we
-                    // copy a no_dealloc_clone which is consumed by into_boxed()
-                    // and set the actual descriptor.dealloc = false to prevent double frees.
                     desc.dealloc = Dealloc::Not;
                     arr.push((desc.ptr, desc._mem_len));
                 }
@@ -1313,7 +1568,11 @@ impl Buffer {
         }
     }
 
-    /// Returns the overall number of bytes in this Buffer
+    /// Returns the overall number of bytes in this Buffer.
+    ///
+    /// In case of a Indirect desriptor, this describes the accumulated length of the memory area of the descriptors
+    /// inside the indirect descriptor list. NOT the length of the memory area of the indirect descriptor placed in the actual
+    /// descriptor area!
     fn len(&self) -> usize {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => *len,
@@ -1814,32 +2073,34 @@ pub enum BuffSpec<'a>{
 /// *  Drops `T` upon drop.
 struct Pinned<T>{
     raw_ptr: *mut T,
-    // This marker might be needed when drop is implemented.
-    //_marker: PhantomData<T>,
+    _drop_inner: bool,
 }
 
 impl<T: Sized> Pinned<T> {
     /// Creates a new pinned `T` by boxing and leaking it.
     /// Be aware that this will result in a new heap allocation
     /// for `T` to be boxed.
-    fn new (val: T)  -> Pinned<T>{
+    fn pin(val: T)  -> Pinned<T>{
         let boxed = Box::new(val);
         Pinned {
             raw_ptr: Box::into_raw(boxed),
+            _drop_inner: true,
         }
     }
 
     /// Creates a new pinned `T` from a boxed `T`.
     fn from_boxed(boxed: Box<T>) -> Pinned<T> {
         Pinned {
-            raw_ptr: Box::into_raw(boxed)
+            raw_ptr: Box::into_raw(boxed),
+            _drop_inner: true,
         }
     }
 
     /// Create a new pinned `T` from a `*mut T`
     fn from_raw(raw_ptr: *mut T) -> Pinned<T> {
         Pinned {
-            raw_ptr
+            raw_ptr,
+            _drop_inner: true,
         }
     }
     
@@ -1847,7 +2108,9 @@ impl<T: Sized> Pinned<T> {
     /// save as long as no one relies on the
     /// memory location of `T`, as this location
     /// will no longer be constant.
-    fn into_inner(self) -> T {
+    fn unpin(mut self) -> T {
+        self._drop_inner = false;
+
         unsafe {
             *Box::from_raw(self.raw_ptr)
         }
@@ -1880,8 +2143,10 @@ impl<T> DerefMut for Pinned<T> {
 
 impl<T> Drop for Pinned<T> {
     fn drop(&mut self) {
-        unsafe {
-            Box::from_raw(self.raw_ptr);
+        if self._drop_inner {
+            unsafe {
+                Box::from_raw(self.raw_ptr);
+            }
         }
     }
 }
@@ -1914,6 +2179,29 @@ pub enum DescrFlags {
     VIRTQ_DESC_F_INDIRECT = 1 << 2,
     VIRTQ_DESC_F_AVAIL = 1 << 7,
     VIRTQ_DESC_F_USED = 1 << 15,
+}
+use core::ops::Not;
+impl Not for DescrFlags {
+    type Output = u16;
+
+    fn not(self) -> Self::Output {
+        !(u16::from(self))
+    }
+}
+
+use core::ops::BitOr;
+impl BitOr for DescrFlags {
+    type Output = u16;
+    fn bitor(self, rhs: DescrFlags) -> Self::Output {
+        u16::from(self) | u16::from(rhs)
+    }
+}
+
+impl BitOr<DescrFlags> for u16 {
+    type Output = u16;
+    fn bitor(self, rhs: DescrFlags) -> Self::Output {
+        self | u16::from(rhs)
+    }
 }
 
 impl BitAnd for DescrFlags {
@@ -2010,6 +2298,11 @@ pub mod error {
         /// Indicates that a write to a Buffer happened and the data to be written into 
         /// the buffer/descriptor was to large for the buffer.
         WriteToLarge(BufferToken),
+        /// Indicates that a Bytes::new() call failed or generally that a buffer is to large to 
+        /// be transferred as one. The Maximum size is u32::MAX. This also is the maximum for indirect
+        /// descriptors (both the one placed in the queue, as also the ones the indirect descriptor is 
+        /// referring to).
+        BufferToLarge,
     }
 
     impl core::fmt::Debug for VirtqError {
@@ -2025,6 +2318,7 @@ pub mod error {
                 VirtqError::NoReuseBuffer => write!(f, "Buffer can not be reused!"),
                 VirtqError::OngoingTransfer(_) => write!(f, "Transfer is ongoging and can not be used currently!"),
                 VirtqError::WriteToLarge(_) => write!(f, "Write is to large for BufferToken!"),
+                VirtqError::BufferToLarge => write!(f, "Buffer to large for queue! u32::MAX exceeded."),
             }
         }
     }
