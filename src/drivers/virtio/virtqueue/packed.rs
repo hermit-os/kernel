@@ -8,7 +8,8 @@
 //! This module contains Virtio's packed virtqueue. 
 //! See Virito specification v1.1. - 2.7
 use alloc::vec::Vec;
-
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr, PhysAddr};
 use super::super::features::Features;
 use super::super::transport::pci::{ComCfg, NotifCtrl, NotifCfg, IsrStatus};
 use super::{VqSize, VqIndex, MemPool, MemDescrId, MemDescr, BufferToken, TransferToken, Transfer, TransferState, Buffer, BuffSpec, Bytes, AsSliceU8, Pinned, Virtq, DescrFlags};
@@ -166,7 +167,7 @@ impl DescriptorRing {
 
         for (i, tkn) in tkn_lst.into_iter().enumerate() {
                    // fix memory address of token
-            let mut pinned = Pinned::new(tkn);
+            let mut pinned = Pinned::pin(tkn);
 
             // Check length and if its fits. This should always be true due to the restriction of
             // the memory pool, but to be sure.
@@ -288,7 +289,7 @@ impl DescriptorRing {
 
     fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, usize, u8) {
         // fix memory address of token
-        let mut pinned = Pinned::new(tkn);
+        let mut pinned = Pinned::pin(tkn);
 
         // Check length and if its fits. This should always be true due to the restriction of
         // the memory pool, but to be sure.
@@ -329,7 +330,7 @@ impl DescriptorRing {
 
                         for desc in recv_buff.as_slice() {
                             if buff_len > 1 {
-                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE);
                             } else {
                                 ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
                             }
@@ -371,7 +372,7 @@ impl DescriptorRing {
 
                         for desc in recv_buff.as_slice() {
                             if buff_len > 1 {
-                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE);
                             } else {
                                 ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
                             }
@@ -417,7 +418,7 @@ impl DescriptorRing {
     /// to read the queue correctly.
     fn get_read_ctrler(&mut self) -> ReadCtrl {
         ReadCtrl{
-            start: self.poll_index,
+            position: self.poll_index,
             modulo: self.ring.len(),
 
             desc_ring: self,
@@ -427,7 +428,7 @@ impl DescriptorRing {
 
 struct ReadCtrl<'a> {
     /// Poll index of the ring at init of ReadCtrl
-    start: usize,
+    position: usize,
     modulo: usize,
 
     desc_ring: &'a mut DescriptorRing, 
@@ -438,15 +439,14 @@ impl<'a> ReadCtrl<'a> {
     /// updating the queue and returns the respective TransferToken.
     fn poll_next(&mut self) -> Option<Pinned<TransferToken>> {
         // Check if descriptor has been marked used.
-        if self.desc_ring.ring[self.start].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
-            let tkn;
+        if self.desc_ring.ring[self.position].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
+            let tkn = Pinned::from_raw(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()]);
             let recv_buff;
             let send_buff;
 
             unsafe {
-                tkn = &mut *(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.start].buff_id).unwrap()]);
                 // unset the reference in the refernce ring for security!
-                self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.start].buff_id).unwrap()] = 0 as *mut TransferToken;
+                self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()] = 0 as *mut TransferToken;
                 // This is perfectly fine, as we operate on two different datastructures inside one datastructure.
                 let raw_ptr = (tkn.buff_tkn.as_ref().unwrap() as *const BufferToken) as *mut BufferToken;
                 recv_buff = &mut (*raw_ptr).recv_buff;
@@ -454,7 +454,7 @@ impl<'a> ReadCtrl<'a> {
             }
 
             // Check if we have an used descriptor which is an indirect one. We have to handle this one differently
-            if self.desc_ring.ring[self.start].flags & DescrFlags::VIRTQ_DESC_F_INDIRECT == DescrFlags::VIRTQ_DESC_F_INDIRECT {
+            if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_INDIRECT == DescrFlags::VIRTQ_DESC_F_INDIRECT {
                 match (send_buff, recv_buff) {
                     (Some(send_buff), Some(recv_buff)) => self.update_indirect( Some(send_buff), Some(recv_buff)),
                     (Some(send_buff), None) => self.update_indirect( Some(send_buff), None),
@@ -486,7 +486,7 @@ impl<'a> ReadCtrl<'a> {
                 }
             }
                 
-            Some(Pinned::from_raw(tkn as *mut TransferToken))
+            Some(tkn)
         } else {
             None 
         }
@@ -602,7 +602,7 @@ impl<'a> ReadCtrl<'a> {
 
         if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
             // Update flags here, to be consistent
-            debug!("Device is NOT updating the complete list consistently. Driver is doing that instead");
+            info!("Device is NOT updating the complete list consistently. Driver is doing that instead");
     
             if self.desc_ring.dev_wc.0 {
                 self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
@@ -621,7 +621,7 @@ impl<'a> ReadCtrl<'a> {
     fn update_send(&mut self, desc: &mut MemDescr) {
         if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
             // Update flags here, to be consistent
-            debug!("Device is NOT updating the complete list consistently. Driver is doing that instead");
+            info!("Device is NOT updating the complete list consistently. Driver is doing that instead");
 
             if self.desc_ring.dev_wc.0 {
                 self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
@@ -639,7 +639,12 @@ impl<'a> ReadCtrl<'a> {
             self.desc_ring.dev_wc.wrap()
         }
 
+        // Increment capcity as we have one more free now!
+        assert!(self.desc_ring.capacity <= self.desc_ring.ring.len());
+        self.desc_ring.capacity += 1;
+
         self.desc_ring.poll_index = (self.desc_ring.poll_index + 1) % self.modulo;
+        self.position = self.desc_ring.poll_index;
     }
 }
 
@@ -697,20 +702,20 @@ impl<'a> WriteCtrl<'a> {
         // descriptor.
         if self.start == self.position {
             let desc_ref = &mut self.desc_ring.ring[self.position];
-            desc_ref.address = mem_desc.ptr as u64;
+            desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
             desc_ref.len = mem_desc.len as u32;
             desc_ref.buff_id = mem_desc.id.as_ref().unwrap().0; 
             // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
             // See Virtio specfification v1.1. - 2.7.21
             fence(Ordering::SeqCst);
             // Remove possibly set avail and used flags
-            desc_ref.flags = flags & 0xFEFE;
+            desc_ref.flags = flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED);
 
             self.buff_id = mem_desc.id.as_ref().unwrap().0;
             self.incrmt();
         } else {
             let mut desc_ref = &mut self.desc_ring.ring[self.position];
-            desc_ref.address = mem_desc.ptr as u64;
+            desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
             desc_ref.len = mem_desc.len as u32;
             desc_ref.buff_id = self.buff_id;
             // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
@@ -718,7 +723,7 @@ impl<'a> WriteCtrl<'a> {
             fence(Ordering::SeqCst);
             // Remove possibly set avail and used flags and then set avail and used 
             // according to the current WrapCount.
-            desc_ref.flags = (flags & 0xFEFE) | self.desc_ring.drv_wc.as_flags_avail();
+            desc_ref.flags = (flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED)) | self.desc_ring.drv_wc.as_flags_avail();
 
             self.incrmt()
         }
@@ -728,7 +733,7 @@ impl<'a> WriteCtrl<'a> {
         // We fail if one wants to make a buffer availbale without inserting one element!
         assert!(self.start != self.position);
         // We also fail if buff_id is not set!
-        assert!(self.buff_id == 0);
+        assert!(self.buff_id != 0);
 
         // provide reference, in order to let TransferToken now upon finish.
         self.desc_ring.tkn_ref_ring[usize::try_from(self.buff_id).unwrap()] = raw_tkn;
@@ -1182,22 +1187,21 @@ impl PackedVq {
         // Must catch size larger 32768 (2^15) as it is not allowed for packed queues.
         //
         // See Virtio specification v1.1. - 4.1.4.3.2
-        let vq_size;
-        if (size.0 == 0) | (size.0 > 32768) {
-            return Err(VqPackedError::SizeNotAllowed(size.0));
+        let vq_size = if (size.0 == 0) | (size.0 > 32768) {
+            return Err(VqPackedError::SizeNotAllowed(size.0))
         } else {
-            vq_size = vq_handler.set_vq_size(size.0);
-        }
+            vq_handler.set_vq_size(size.0)
+        };
         
         let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
         let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
         let dev_event= Box::into_raw(Box::new(EventSuppr::new()));
 
         // Provide memory areas of the queues data structures to the device
-        vq_handler.set_ring_addr(descr_ring.borrow().raw_addr());
+        vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(descr_ring.borrow().raw_addr() as u64)));
         // As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-        vq_handler.set_drv_ctrl_addr(drv_event as usize);
-        vq_handler.set_dev_ctrl_addr(dev_event as usize);
+        vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event as u64)));
+        vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(dev_event as u64)));
 
         let drv_event = RefCell::new(DrvNotif {
             f_notif_idx: false,
@@ -1222,20 +1226,22 @@ impl PackedVq {
         }
 
         // Initalize new memory pool.
-        let mem_pool = Rc::new(MemPool::new(size.0));
+        let mem_pool = Rc::new(MemPool::new(vq_size));
 
         // Initalize an empty vector for future dropped transfers
         let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
 
         vq_handler.enable_queue();
-    
+        
+        info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
+
         Ok(PackedVq {
             descr_ring,
             drv_event, 
             dev_event,
             notif_ctrl,
             mem_pool,
-            size,
+            size: VqSize::from(vq_size),
             index,
             dropped,
         })
@@ -2045,7 +2051,11 @@ impl PackedVq {
             },
         }
 
-        let sz_indrct_lst = Bytes(core::mem::size_of::<Descriptor>() * len);
+        let sz_indrct_lst = match Bytes::new(core::mem::size_of::<Descriptor>() * len) {
+            Some(bytes) => bytes,
+            None => return Err(VirtqError::BufferToLarge)
+        };
+
         let mut ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
             Ok(desc) => desc,
             Err(vq_err) => return Err(vq_err),
@@ -2068,7 +2078,7 @@ impl PackedVq {
             (None, Some(recv_desc_lst)) => {
                 for desc in recv_desc_lst {
                     desc_slice[crtl_desc_iter] = Descriptor::new(
-                        desc.ptr as u64,
+                        paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
                         desc.len as u32,
                         0,
                         DescrFlags::VIRTQ_DESC_F_WRITE.into()
@@ -2082,7 +2092,7 @@ impl PackedVq {
             (Some(send_desc_lst), None) => {
                 for desc in send_desc_lst {
                     desc_slice[crtl_desc_iter] = Descriptor::new(
-                        desc.ptr as u64,
+                        paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
                         desc.len as u32,
                         0,
                         0,
@@ -2096,7 +2106,7 @@ impl PackedVq {
                 // Send descriptors ALWAYS before receiving ones.
                 for desc in send_desc_lst {
                     desc_slice[crtl_desc_iter] = Descriptor::new(
-                        desc.ptr as u64,
+                        paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
                         desc.len as u32,
                         0,
                        0, 
@@ -2107,7 +2117,7 @@ impl PackedVq {
 
                 for desc in recv_desc_lst {
                     desc_slice[crtl_desc_iter] = Descriptor::new(
-                        desc.ptr as u64,
+                        paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
                         desc.len as u32,
                         0,
                         DescrFlags::VIRTQ_DESC_F_WRITE.into()

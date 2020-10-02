@@ -22,6 +22,7 @@ use core::mem;
 use core::ops::Deref;
 use core::cell::RefCell;
 use alloc::rc::Rc;
+use core::convert::TryFrom;
 
 use crate::drivers::virtio::env::memory::{MemLen, MemOff};
 use crate::drivers::virtio::transport::pci::{UniCapsColl, ComCfg, ShMemCfg, NotifCfg, NotifCtrl, IsrStatus, PciCfgAlt, PciCap};
@@ -209,7 +210,13 @@ impl RxQueues {
                 BuffSpec::Multiple(&buff_def)
             };
 
-            for _ in 0..vq.size().into(){
+            let num_buff: u16 = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
+                vq.size().into()
+            } else {
+                u16::from(vq.size())/u16::try_from(buff_def.len()).unwrap()
+            };
+
+            for _ in 0..num_buff{
                 let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                     Ok(tkn) => tkn,
                     Err(vq_err) => {
@@ -266,14 +273,23 @@ impl RxQueues {
     }
 
     fn get_next(&mut self) -> Option<Transfer> {
-        match self.poll_queue.borrow_mut().pop_front() {
+        let transfer = match self.poll_queue.borrow_mut().pop_front() {
+            Some(transfer) =>{
+                Some(transfer)
+            },
+            None => None, 
+        };
+        
+        match transfer {
             Some(transfer) => Some(transfer),
             None => {
-                // Maybe virtqueu has not placed them yet in the await_queue.
-               self.poll();
+                // Check if any not yet provided transfers are in the queue.
+                self.poll();
 
                 match self.poll_queue.borrow_mut().pop_front() {
-                    Some(transfer) => Some(transfer), 
+                    Some(transfer) => {
+                        Some(transfer)
+                    }, 
                     None => {
                         None
                     }
@@ -387,14 +403,12 @@ impl TxQueues {
             let vq = self.vqs.get(0).unwrap();
 
             // As usize is currently safe as the minimal usize is defined as 16bit in rust.
-            let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new((dev_cfg.raw.mtu as usize) + EthHdr).unwrap()];
-            let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
-                BuffSpec::Indirect(&buff_def)
-            } else {
-                BuffSpec::Multiple(&buff_def)
-            };
+            let buff_def = Bytes::new(mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.mtu as usize) + EthHdr).unwrap();
+            let spec = BuffSpec::Single(buff_def);
 
-            for i in 0..vq.size().into() {
+            let num_buff: u16 = vq.size().into();
+
+            for _ in 0..num_buff {
                 self.ready_queue.push(
                     vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
                         .unwrap()
@@ -414,13 +428,21 @@ impl TxQueues {
     ///
     /// OR returns None, if no Buffertoken could be generated
     fn get_tkn(&mut self, len: usize) -> Option<(BufferToken, usize)> {
-        // CHeck all ready token, for correct size. 
+        // Check all ready token, for correct size. 
         // Drop token if not so
-        while let Some(tkn) = self.ready_queue.pop() {
+        //
+        // All Tokens inside the ready_queue are comming from the main queu with index 0.
+        while let Some(mut tkn) = self.ready_queue.pop() {
             let (send_len, _) = tkn.len();
 
             if send_len == len {
                 return Some((tkn, 0))
+            } else if send_len > len {
+                tkn.restr_size(Some(len), None);
+                return Some((tkn, 0))
+            } else {
+                // Otherwise we are freeing the queue from the token.
+                drop(tkn);
             }
         }
         
@@ -581,24 +603,48 @@ impl VirtioNetDriver {
 	pub fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
         match self.recv_vqs.get_next() {
             Some(transfer) => {
-                let (_, recv_data) = transfer.as_slices().unwrap();
-                // Currently we have two descriptors in the queue per buffer. One for the 
-                // virtio net header and for the actual data.
-                // See RxQueues.add() function.
-                // If this changes we fail for security, therefore the assert!
-                let mut recv_data = recv_data.unwrap();
-                assert_eq!(recv_data.len(), 2);
-                
-                let recv_data = recv_data.pop().unwrap();
-                let recv_ref = (recv_data as *const [u8]) as *mut [u8];
+                let (_, recv_data_opt) = transfer.as_slices().unwrap();
+                let mut recv_data = recv_data_opt.unwrap();
 
-                let raw_transfer = Box::into_raw(Box::new(transfer));
+                // Currently we are matching either for single buffers or 
+                // for multiple/indirect buffers of length two (one descriptor for
+                // the header and one for the data). 
+                if recv_data.len() == 1 {
+                    let recv_data = recv_data.pop().unwrap();
+                    let recv_payload: &'static [u8] = unsafe {
+                        core::slice::from_raw_parts(
+                             (((&recv_data[0] as *const u8) as usize) + mem::size_of::<VirtioNetHdr>()) as *mut u8,
+                            recv_data.len() - mem::size_of::<VirtioNetHdr>(),
+                        )
+                    };
 
-                // Create static refrence for the user-space 
-                // As long as we keep the Transfer in a raw refernce this refernce is static,
-                // so this is fine.
-                let ref_data: &'static [u8] = unsafe{& *(recv_ref)};
-                Ok((ref_data, raw_transfer as usize))
+                    let header = unsafe {
+                             &mut *((&recv_data[0] as *const _) as *mut VirtioNetHdr)
+                    };
+
+                    let raw_transfer = Box::into_raw(Box::new(transfer));
+                    Ok((recv_payload, raw_transfer as usize))
+
+                } else {
+                    // As we are not willing to copy data, we will only allow a single continous
+                    // descriptor of "data" for the user-space, which we can make the user-space
+                    // availabel via an refernce. Hence the assert to ensure this...
+                    assert_eq!(recv_data.len(), 2);
+
+                    let recv_payload = recv_data.pop().unwrap();
+                    let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
+
+                    let header = unsafe {
+                        &mut *((&recv_data.pop().unwrap()[0] as *const _) as *mut VirtioNetHdr);
+                    };
+
+                    // Create static refrence for the user-space 
+                    // As long as we keep the Transfer in a raw refernce this refernce is static,
+                    // so this is fine.
+                    let ref_data: &'static [u8] = unsafe{& *(recv_ref)};
+                    let raw_transfer = Box::into_raw(Box::new(transfer));
+                    Ok((ref_data, raw_transfer as usize))
+                }
             },
             None => Err(())
         } 
@@ -642,6 +688,7 @@ impl VirtioNetDriver {
 
 	pub fn handle_interrupt(&self) -> bool {
 		if self.isr_stat.is_interrupt() {
+            info!("Network virito device interrupt...");
 			// handle incoming packets
 			#[cfg(not(feature = "newlib"))]
 			netwakeup();
@@ -762,6 +809,7 @@ impl VirtioNetDriver {
 
         // Define minimal feature set
         let min_feats: Vec<Features>  = vec![Features::VIRTIO_F_VERSION_1,
+            Features::VIRTIO_F_RING_PACKED,
             Features::VIRTIO_NET_F_GUEST_CSUM,
             Features::VIRTIO_NET_F_MAC, 
             Features::VIRTIO_NET_F_STATUS,
@@ -863,7 +911,7 @@ impl VirtioNetDriver {
         // Checks if the selected feature set is compatible with requirements for 
         // features according to Virtio spec. v1.1 - 5.1.3.1.
         match FeatureSet::check_features(&wanted_feats) {
-            Ok(_) => info!("Feature set wanted by network driver, matches virtio netword devices capabiliites."),
+            Ok(_) => info!("Feature set wanted by network driver are in conformance with specification."),
             Err(vnet_err) => return Err(vnet_err),
         }
 
@@ -890,7 +938,7 @@ impl VirtioNetDriver {
                     &self.notif_cfg,
               VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
                     VqType::Packed, 
-             VqIndex::from(2*self.num_vqs),
+             VqIndex::from(self.num_vqs),
                     self.dev_cfg.features.into()
                 ))));
 
@@ -920,10 +968,10 @@ impl VirtioNetDriver {
         // - the num_queues is found in the ComCfg struct of the device and defines the maximal number 
         // of supported queues.
         if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
-            if self.dev_cfg.raw.max_virtqueue_pairs <= MAX_NUM_VQ {
+            if self.dev_cfg.raw.max_virtqueue_pairs*2 >= MAX_NUM_VQ {
                 self.num_vqs = MAX_NUM_VQ;
             } else {
-                self.num_vqs = self.dev_cfg.raw.max_virtqueue_pairs;
+                self.num_vqs = self.dev_cfg.raw.max_virtqueue_pairs*2;
             }
         } else {
             // Minimal number of virtqueues defined in the standard v1.1. - 5.1.5 Step 1
@@ -938,7 +986,10 @@ impl VirtioNetDriver {
         //
         // as it is wanted by the network network device. 
         // see Virtio specification v1.1. - 5.1.2 
-        for i in 0..self.num_vqs {
+        // Assure that we have always an even number of queues (i.e. pairs of queues).
+        assert_eq!(self.num_vqs % 2, 0);
+
+        for i in 0..(self.num_vqs/2) {
             if self.dev_cfg.features.is_feature(Features::VIRTIO_F_RING_PACKED) {
                 let vq = Virtq::new(&mut self.com_cfg,
                     &self.notif_cfg,

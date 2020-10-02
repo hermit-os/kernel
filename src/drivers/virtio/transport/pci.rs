@@ -404,19 +404,19 @@ impl <'a> VqCfgHandler<'a> {
         }
     }
 
-    pub fn set_ring_addr(&mut self, addr: usize) {
+    pub fn set_ring_addr(&mut self, addr: PhysAddr) {
         self.raw.queue_select = self.vq_index;
-        self.raw.queue_desc = paging::virt_to_phys(VirtAddr::from(addr)).into();
+        self.raw.queue_desc = addr.as_u64();
     }
 
-    pub fn set_drv_ctrl_addr(&mut self, addr: usize) {
+    pub fn set_drv_ctrl_addr(&mut self, addr: PhysAddr) {
         self.raw.queue_select = self.vq_index;
-        self.raw.queue_driver = paging::virt_to_phys(VirtAddr::from(addr)).into();
+        self.raw.queue_driver = addr.as_u64();
     }
 
-    pub fn set_dev_ctrl_addr(&mut self, addr: usize) {
+    pub fn set_dev_ctrl_addr(&mut self, addr: PhysAddr) {
         self.raw.queue_select = self.vq_index;
-        self.raw.queue_device = paging::virt_to_phys(VirtAddr::from(addr)).into();
+        self.raw.queue_device = addr.as_u64();
     }
 
     pub fn notif_off(&mut self) -> u16 {
@@ -555,7 +555,7 @@ struct ComCfgRaw {
     device_feature: u32, // read-only for driver
     driver_feature_select: u32,  // read-write
     driver_feature: u32,  // read-write
-    config_msix_vector: u32,  // read-write
+    config_msix_vector: u16,  // read-write
     num_queues: u16,  // read-only for driver
     device_status: u8, // read-write
     config_generation: u8,  // read-only for driver
