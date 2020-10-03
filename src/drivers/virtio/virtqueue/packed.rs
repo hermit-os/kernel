@@ -434,59 +434,75 @@ struct ReadCtrl<'a> {
     desc_ring: &'a mut DescriptorRing, 
 }
 
+
 impl<'a> ReadCtrl<'a> {
     /// Polls the ring for a new finished buffer. If buffer is marked as used, takes care of 
     /// updating the queue and returns the respective TransferToken.
     fn poll_next(&mut self) -> Option<Pinned<TransferToken>> {
         // Check if descriptor has been marked used.
         if self.desc_ring.ring[self.position].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
-            let tkn = Pinned::from_raw(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()]);
-            let recv_buff;
-            let send_buff;
+            let tkn;
+            let recv_buff_opt;
+            let send_buff_opt;
 
             unsafe {
+                tkn = &mut *(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()]);
+                // println!("[DEBUG] Finished TransferToken is: {:?}", tkn);
+
+                // println!("[DEBUG] Reference Table at read: {:?}", self.desc_ring.tkn_ref_ring);
                 // unset the reference in the refernce ring for security!
                 self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()] = 0 as *mut TransferToken;
+                // println!("[DEBUG] Reference Table after read: {:?}", self.desc_ring.tkn_ref_ring);
                 // This is perfectly fine, as we operate on two different datastructures inside one datastructure.
                 let raw_ptr = (tkn.buff_tkn.as_ref().unwrap() as *const BufferToken) as *mut BufferToken;
-                recv_buff = &mut (*raw_ptr).recv_buff;
-                send_buff = &mut (*raw_ptr).send_buff;
+                recv_buff_opt = &mut (*raw_ptr).recv_buff;
+                send_buff_opt = &mut (*raw_ptr).send_buff;
             }
 
-            // Check if we have an used descriptor which is an indirect one. We have to handle this one differently
-            if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_INDIRECT == DescrFlags::VIRTQ_DESC_F_INDIRECT {
-                match (send_buff, recv_buff) {
-                    (Some(send_buff), Some(recv_buff)) => self.update_indirect( Some(send_buff), Some(recv_buff)),
-                    (Some(send_buff), None) => self.update_indirect( Some(send_buff), None),
-                    (None, Some(recv_buff)) => self.update_indirect( None, Some(recv_buff)),
-                    (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
-                }
+            // Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
+            // This is necessary in order to provide the drivers with the correct access, to usable data.
+            //
+            // According to the standard the device signals solely via the first written descriptor if anything has been written to
+            // the write descriptors of a buffer. 
+            // See Virtio specification v1.1. - 2.7.4
+            //                                - 2.7.5
+            //                                - 2.7.6
+            let mut write_len = if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+                self.desc_ring.ring[self.position].len
             } else {
-                match (send_buff, recv_buff) {
-                    (Some(send_buff), Some(recv_buff)) => {
-                        for desc in send_buff.as_mut_slice() {
-                            self.update_send(desc);
-                        }
+                0
+            };
 
-                        for desc in recv_buff.as_mut_slice() {
-                            self.update_recv(desc);
-                        } 
-                    },
-                    (Some(send_buff), None) => {
-                        for desc in send_buff.as_mut_slice() {
-                            self.update_send(desc);
-                        } 
-                    },
-                    (None, Some(recv_buff)) => {
-                        for desc in recv_buff.as_mut_slice() {
-                            self.update_recv(desc);
-                        } 
-                    },
-                    (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
-                }
+            match (send_buff_opt, recv_buff_opt) {
+                (Some(send_buff), Some(recv_buff)) => {
+                    // Need to only check for either send or receive buff to contain 
+                    // a ctrl_desc as, both carry the same if they carry one.
+                    if send_buff.is_indirect() {
+                        self.update_indirect(Some(send_buff), Some((recv_buff, write_len)));
+                    } else {
+                        self.update_send(send_buff);
+                        self.update_recv((recv_buff, write_len));
+                    }
+                },
+                (Some(send_buff), None) => {
+                    if send_buff.is_indirect() {
+                        self.update_indirect(Some(send_buff), None);
+                    } else {
+                        self.update_send(send_buff);
+                    }
+                },
+                (None, Some(recv_buff)) => {
+                    if recv_buff.is_indirect() {
+                        self.update_indirect(None, Some((recv_buff, write_len)));
+                    } else {
+                        self.update_recv((recv_buff, write_len));
+                    }
+                },
+                (None, None) => unreachable!("Empty Transfers are not allowed..."),
             }
-                
-            Some(tkn)
+
+            let pin = Pinned::from_raw(tkn as *mut TransferToken);
+            Some(pin)
         } else {
             None 
         }
@@ -494,9 +510,12 @@ impl<'a> ReadCtrl<'a> {
 
     /// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with 
     /// the amount of data written by the device.
-    fn update_indirect(&mut self, send_buff: Option<&mut Buffer>, recv_buff: Option<&mut Buffer>) {
-        match (send_buff, recv_buff) {
-            (Some(send_buff), Some(recv_buff)) => {
+    ///
+    /// Indirect descriptor tables are read-only for devices. Hence all information comes from the
+    /// used descriptor in the actual ring.
+    fn update_indirect(&mut self, send_buff: Option<&mut Buffer>, recv_buff_spec: Option<(&mut Buffer, u32)>) {
+        match (send_buff, recv_buff_spec) {
+            (Some(send_buff), Some((recv_buff, mut write_len))) => {
                 // This is perfectly fine as we operate on two different datastructures inside one datastructure
                 // we can have two mutable references via the same wrapping datastructure
                 let ctrl_desc = unsafe {
@@ -508,27 +527,30 @@ impl<'a> ReadCtrl<'a> {
                 // accordingly
                 let desc_slice = unsafe {
                     let size = core::mem::size_of::<Descriptor>();
-                    core::slice::from_raw_parts(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                    core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
                 };
 
-                let mut desc_iter = desc_slice.into_iter();
+                let mut desc_iter = desc_slice.iter_mut();
 
                 for desc in send_buff.as_mut_slice() {
                     // Unwrapping is fine here, as lists must be of same size and same ordering
                     desc_iter.next().unwrap();
-                    self.incrmt();
                 }
+
+                recv_buff.restr_len(usize::try_from(write_len).unwrap());
 
                 for desc in recv_buff.as_mut_slice() {
                     // Unwrapping is fine here, as lists must be of same size and same ordering
                     let ring_desc = desc_iter.next().unwrap();
                     
-                    if ring_desc.flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
-                        desc.len = usize::try_from(ring_desc.len).unwrap();
-                        self.incrmt();
+                    if write_len >= ring_desc.len {
+                        // Complete length has been written but reduce len_written for next one
+                        write_len -= ring_desc.len;
                     } else {
-                        desc.len = 0;
-                        self.incrmt();
+                        ring_desc.len = write_len;
+                        desc.len = write_len as usize;
+                        write_len -= ring_desc.len;
+                        assert_eq!(write_len, 0);
                     }
                 }
             },
@@ -552,10 +574,9 @@ impl<'a> ReadCtrl<'a> {
                 for desc in send_buff.as_mut_slice() {
                     // Unwrapping is fine here, as lists must be of same size and same ordering
                     desc_iter.next().unwrap();
-                    self.incrmt();
                 }
             },
-            (None, Some(recv_buff)) => {
+            (None, Some((recv_buff, mut write_len))) => {
                 // This is perfectly fine as we operate on two different datastructures inside one datastructure
                 // we can have two mutable references via the same wrapping datastructure
                 let ctrl_desc = unsafe {
@@ -567,71 +588,83 @@ impl<'a> ReadCtrl<'a> {
                 // accordingly
                 let desc_slice = unsafe {
                     let size = core::mem::size_of::<Descriptor>();
-                    core::slice::from_raw_parts(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                    core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
                 };
 
-                let mut desc_iter = desc_slice.into_iter();
+                let mut desc_iter = desc_slice.iter_mut();
+
+                recv_buff.restr_len(usize::try_from(write_len).unwrap());
 
                 for desc in recv_buff.as_mut_slice() {
                     // Unwrapping is fine here, as lists must be of same size and same ordering
                     let ring_desc = desc_iter.next().unwrap();
                     
-                    if ring_desc.flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
-                        desc.len = usize::try_from(ring_desc.len).unwrap();
-                        self.incrmt();
+                    if write_len >= ring_desc.len {
+                        // Complete length has been written but reduce len_written for next one
+                        write_len -= ring_desc.len;
                     } else {
-                        desc.len = 0;
-                        self.incrmt();
+                        ring_desc.len = write_len;
+                        desc.len = write_len as usize;
+                        write_len -= ring_desc.len;
+                        assert_eq!(write_len, 0);
                     }
                 }
             },
             (None, None) => unreachable!("Empty transfers are not allowed."),
         }
+
+        // Increase poll_index and reset ring position beforehand in order to have a consistent and clean 
+        // data structure.
+        self.reset_ring_pos();
+        self.incrmt();
+    }
+
+    /// Resets the current position in the ring in order to have a consistent data structure.
+    fn reset_ring_pos(&mut self) {
+        self.desc_ring.ring[self.position].address = 0; 
+        self.desc_ring.ring[self.position].len = 0;
+        self.desc_ring.ring[self.position].buff_id = 0;
+        self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used();
     }
     
     /// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with 
     /// the amount of data written by the device.
     /// Updates the descriptor flags inside the actual ring if necessary and 
     /// increments the poll_index by one.
-    fn update_recv(&mut self, desc: &mut MemDescr) {
-        if self.desc_ring.ring[self.desc_ring.poll_index].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
-            desc.len = usize::try_from(self.desc_ring.ring[self.desc_ring.poll_index].len).unwrap();
-        } else {
-            desc.len = 0;
-        }
+    ///
+    /// The given buffer must NEVER be an indirect buffer.
+    fn update_recv(&mut self, recv_buff_spec: (&mut Buffer, u32)) {
+        let (recv_buff, write_len) = recv_buff_spec;
+        let mut write_len = usize::try_from(write_len).unwrap();
 
-        if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
-            // Update flags here, to be consistent
-            info!("Device is NOT updating the complete list consistently. Driver is doing that instead");
-    
-            if self.desc_ring.dev_wc.0 {
-                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
-                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 15; 
+        recv_buff.restr_len(write_len);
+
+        for desc in recv_buff.as_mut_slice() {
+            if write_len >= desc.len {
+                // Complete length has been written but reduce len_written for next one
+                write_len -= desc.len;
             } else {
-                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 7);
-                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 15);
+                desc.len = write_len;
+                write_len -= desc.len;
+                assert_eq!(write_len, 0);
             }
-        }
-        self.incrmt();
 
+            // Increase poll_index and reset ring position beforehand in order to have a consistent and clean 
+            // data structure.
+            self.reset_ring_pos();
+            self.incrmt();
+        } 
     }
 
     /// Updates the descriptor flags inside the actual ring if necessary and 
     /// increments the poll_index by one.
-    fn update_send(&mut self, desc: &mut MemDescr) {
-        if self.desc_ring.ring[self.desc_ring.poll_index].flags & self.desc_ring.dev_wc.as_flags_used() != self.desc_ring.dev_wc.as_flags_used() {
-            // Update flags here, to be consistent
-            info!("Device is NOT updating the complete list consistently. Driver is doing that instead");
-
-            if self.desc_ring.dev_wc.0 {
-                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 7;
-                self.desc_ring.ring[self.desc_ring.poll_index].flags |= 1 << 15; 
-            } else {
-                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 7);
-                self.desc_ring.ring[self.desc_ring.poll_index].flags &= !(1 << 15);
-            }
-        }
-        self.incrmt();
+    fn update_send(&mut self, send_buff: &mut Buffer) {
+        for desc in send_buff.as_slice() {
+            // Increase poll_index and reset ring position beforehand in order to have a consistent and clean 
+            // data structure.
+            self.reset_ring_pos();
+            self.incrmt();
+        } 
     }
 
     fn incrmt(&mut self) {
@@ -876,13 +909,19 @@ impl DrvNotif {
     /// Enables notifications by setting the LSB.
     /// See Virito specification v1.1. - 2.7.10
     fn enable_notif(&mut self) {
+        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+        // See Virtio specfification v1.1. - 2.7.21
+        fence(Ordering::SeqCst);
         self.raw.flags |= 1 << 0;
     }
 
     /// Disables notifications by unsetting the LSB.
     /// See Virtio specification v1.1. - 2.7.10
     fn disable_notif(&mut self) {
-        self.raw.flags |= !(1 << 0);
+        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
+        // See Virtio specfification v1.1. - 2.7.21
+        fence(Ordering::SeqCst);
+        self.raw.flags &= !(1 << 0);
     }
 
     /// Enables a notification by the device for a specific descriptor.
@@ -1177,6 +1216,18 @@ impl PackedVq {
         index: VqIndex, 
         feats: u64) 
         -> Result<Self, VqPackedError> {
+        // Currently we do not have support for in order use.
+        // This steems from the fact, that the packedVq ReadCtrl currently is not 
+        // able to derive other finished transfer from a used-buffer notification.
+        // In order to allow this, the queue MUST track the sequence in which 
+        // TransferTokens are inserted into the queue. Furthermore the Queu should 
+        // carry a feature u64 in order to check which features are used currently
+        // and adjust its ReadCtrl accordingly.
+        if feats & Features::VIRTIO_F_IN_ORDER == Features::VIRTIO_F_IN_ORDER {
+            info!("PackedVq has no support for VIRTIO_F_IN_ORDER. Aborting...");
+            return Err(VqPackedError::FeatNotSupported(feats & Features::VIRTIO_F_IN_ORDER))
+        }
+
         // Get a handler to the queues configuration area.
         let mut vq_handler = match com_cfg.select_vq(index.into()) {
             Some(handler) => handler,
@@ -2136,6 +2187,7 @@ pub mod error {
     pub enum VqPackedError {
         General,
         SizeNotAllowed(u16),
-        QueueNotExisting(u16)
+        QueueNotExisting(u16),
+        FeatNotSupported(u64),
     }
 }

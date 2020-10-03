@@ -30,6 +30,12 @@ use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 
 use crate::drivers::virtio::depr::virtio_fs;
+use crate::arch::x86_64::kernel::apic;
+use crate::arch::x86_64::kernel::irq::*;
+use crate::drivers::virtio::virtio_irqhandler;
+
+/// Specifies the interrupt number of the virtio device
+static mut VIRTIO_IRQ_NO: u8 = 0;
 
 
 /// Virtio device ID's 
@@ -1230,7 +1236,7 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
 /// list of the given device.
 pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 
-    match DevId::from(adapter.device_id) {
+    let return_val = match DevId::from(adapter.device_id) {
         DevId::VIRTIO_TRANS_DEV_ID_NET | 
         DevId::VIRTIO_TRANS_DEV_ID_BLK | 
         DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL   |
@@ -1284,7 +1290,16 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
             // Return Driver error inidacting device is not supported
             Err(DriverError::InitVirtioDevFail(VirtioError::DevNotSupported(adapter.device_id)))
         },
+    };
+
+    unsafe {
+        VIRTIO_IRQ_NO = adapter.irq;
     }
+    // Install interrupt handler
+    irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
+    add_irq_name(adapter.irq as u32, "virtio");
+
+    return_val
 }
 
 pub enum VirtioDriver {
