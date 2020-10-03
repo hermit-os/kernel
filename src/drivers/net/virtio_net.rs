@@ -50,6 +50,8 @@ struct VirtioNetHdr{
 	csum_start: u16,
     /// Offset after that to place checksum
     csum_offset: u16,
+    /// Number of buffers this Packet consists of
+    num_buffers: u16,
 }
 
 // Using the default implementation of the trait for VirtioNetHdr
@@ -64,6 +66,7 @@ impl VirtioNetHdr {
             gso_size: 0,
             csum_start: 0,
             csum_offset: 0,
+            num_buffers: 0,
         }
     }
 
@@ -75,6 +78,7 @@ impl VirtioNetHdr {
             gso_size: 0,
             csum_start: 0,
             csum_offset: 0,
+            num_buffers: 0,
         }
     }
 
@@ -197,8 +201,8 @@ impl RxQueues {
             // Receive Buffers must be at least 65562 bytes large with theses features set.
             // See Virtio specification v1.1 - 5.1.6.3.1
 
-            // Currently we choose indirect descriptors for small queue sizes, in order to allow 
-            // as many packages as possible inside the queue, while the allocated
+            // Currently we choose indirect descriptors if posible in order to allow 
+            // as many packages as possible inside the queue.  
             let buff_def = [
                 Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
                 Bytes::new(65550).unwrap(),
@@ -402,6 +406,9 @@ impl TxQueues {
             // Unwrapping is safe, as one virtq will be definitely in the vector.
             let vq = self.vqs.get(0).unwrap();
 
+            // Virtio specification v1.1. - 5.1.6.2 point 5. 
+            //      Header and data are added as ONE output descriptor to the transmitvq.
+            //      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
             // As usize is currently safe as the minimal usize is defined as 16bit in rust.
             let buff_def = Bytes::new(mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.mtu as usize) + EthHdr).unwrap();
             let spec = BuffSpec::Single(buff_def);
@@ -411,8 +418,6 @@ impl TxQueues {
             for _ in 0..num_buff {
                 self.ready_queue.push(
                     vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
-                        .unwrap()
-                        .write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
                         .unwrap()
                 )
             }
@@ -565,13 +570,20 @@ impl VirtioNetDriver {
     ///
     /// If not BufferToken is found the functions returns an error.
 	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+        // Adding virtio header size to length.
+        let len = len + core::mem::size_of::<VirtioNetHdr>();
+
         match self.send_vqs.get_tkn(len) {
             Some((mut buff_tkn, vq_index)) => {
                 let (send_ptrs, _) = buff_tkn.raw_ptrs();
-                // Queue places the "data buffer" directly after the VirtioNetHdr and 
-                // send tkn do always carry (buffer >= 2) for this mode: one for header, one for data
-                // see TxBuffer.add()
-                let (buff_ptr, _)= send_ptrs.unwrap()[1];
+                // Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
+                // see TxQueue.add()
+                let (buff_ptr, _)= send_ptrs.unwrap()[0];
+
+                // Do not show user-space memory for VirtioNetHdr.
+                let buff_ptr = unsafe {
+                    buff_ptr.offset(isize::try_from(core::mem::size_of::<VirtioNetHdr>()).unwrap())
+                };
 
                 Ok((buff_ptr, Box::into_raw(Box::new(buff_tkn)) as usize))
             }, 
@@ -606,44 +618,39 @@ impl VirtioNetDriver {
                 let (_, recv_data_opt) = transfer.as_slices().unwrap();
                 let mut recv_data = recv_data_opt.unwrap();
 
-                // Currently we are matching either for single buffers or 
-                // for multiple/indirect buffers of length two (one descriptor for
-                // the header and one for the data). 
-                if recv_data.len() == 1 {
-                    let recv_data = recv_data.pop().unwrap();
-                    let recv_payload: &'static [u8] = unsafe {
-                        core::slice::from_raw_parts(
-                             (((&recv_data[0] as *const u8) as usize) + mem::size_of::<VirtioNetHdr>()) as *mut u8,
-                            recv_data.len() - mem::size_of::<VirtioNetHdr>(),
-                        )
-                    };
+                // Currently the driver does only support indirect/multiple 
+                // descriptors with two descriptor. 
+                // One for the header. One for the payload.
+                assert_eq!(recv_data.len(), 2);
 
-                    let header = unsafe {
-                             &mut *((&recv_data[0] as *const _) as *mut VirtioNetHdr)
-                    };
+                let recv_payload = recv_data.pop().unwrap();
 
-                    let raw_transfer = Box::into_raw(Box::new(transfer));
-                    Ok((recv_payload, raw_transfer as usize))
-
-                } else {
-                    // As we are not willing to copy data, we will only allow a single continous
-                    // descriptor of "data" for the user-space, which we can make the user-space
-                    // availabel via an refernce. Hence the assert to ensure this...
-                    assert_eq!(recv_data.len(), 2);
-
-                    let recv_payload = recv_data.pop().unwrap();
-                    let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
-
-                    let header = unsafe {
-                        &mut *((&recv_data.pop().unwrap()[0] as *const _) as *mut VirtioNetHdr);
-                    };
+                if recv_payload.len() > 0 {
+                    // Currently we are doing nothing with the header.
+                    // If VIRTIO_NET_F_MRG_RXBUF or other feautres which rely on VirtioNetHdr data
+                    // are active, the driver should further process them here.
+                    //
+                    // let header = unsafe {
+                    //     &mut *((&recv_data.pop().unwrap()[0] as *const _) as *mut VirtioNetHdr)
+                    // };
 
                     // Create static refrence for the user-space 
                     // As long as we keep the Transfer in a raw refernce this refernce is static,
                     // so this is fine.
+                    let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
                     let ref_data: &'static [u8] = unsafe{& *(recv_ref)};
                     let raw_transfer = Box::into_raw(Box::new(transfer));
+
                     Ok((ref_data, raw_transfer as usize))
+                } else {
+                    transfer.reuse()
+                    .unwrap()
+                    .write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+                    .unwrap()
+                    .provide()
+                    .dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+
+                    Err(()) 
                 }
             },
             None => Err(())
@@ -659,8 +666,8 @@ impl VirtioNetDriver {
                 // Currently header is not rewriten again
                 transfer.reuse()
                     .unwrap()
-                    //.write_seq(None, VirtioNetHdr.get_recv_hdr())
-                    //.unwrap()
+                    .write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+                    .unwrap()
                     .provide()
                     .dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
         }

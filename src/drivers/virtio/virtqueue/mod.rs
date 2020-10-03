@@ -725,6 +725,11 @@ impl Transfer {
     }
 
     /// If the transfer was finished returns the BufferToken inside the transfer else returns an error.
+    ///
+    /// **WARN:** 
+    ///
+    /// This function does restore the actual size of the Buffer at creation but does NOT reset the 
+    /// written memory areas to zero! If this is needed please use `Transfer.reuse_reset`
     pub fn reuse(mut self) -> Result<BufferToken, VirtqError> {
         // Unwrapping is okay here, as TransferToken must hold a BufferToken
         match self.transfer_tkn.as_ref().unwrap().state {
@@ -746,6 +751,36 @@ impl Transfer {
             TransferState::Ready => unreachable!("Transfers coming from outside the queue must be Processing or Finished"),
         }
     }
+
+    /// If the transfer was finished returns the BufferToken inside the transfer else returns an error.
+    ///
+    ///
+    /// This function does restore the actual size of the Buffer at creation and does reset the 
+    /// written memory areas to zero! Depending on the size of the Buffer this might take some time and
+    /// one could prefere to allocate a new token via prep_buffer() of the wanted size.
+    pub fn reuse_reset(mut self) -> Result<BufferToken, VirtqError> {
+        // Unwrapping is okay here, as TransferToken must hold a BufferToken
+        match self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                if self.transfer_tkn.as_ref().unwrap().buff_tkn.as_ref().unwrap().reusable {
+                    let tkn = self.transfer_tkn.take()
+                        .unwrap()
+                        .unpin()
+                        .buff_tkn
+                        .take()
+                        .unwrap();
+
+                    Ok(tkn.reset_purge())
+                } else {
+                    Err(VirtqError::NoReuseBuffer)
+                }
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(Some(self))),
+            TransferState::Ready => unreachable!("Transfers coming from outside the queue must be Processing or Finished"),
+        }
+    }
+
+
 }
 
 /// Enum indicates the current state of a transfer.
@@ -910,6 +945,106 @@ impl BufferToken {
             }
         } 
         len
+    }
+
+    /// Resets all properties from the previous transfer.
+    ///
+    /// Includes:
+    /// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
+    /// * Resetting the MemDescr length at initalization. This length might be reduced upon writes 
+    /// of the driver or the device. 
+    /// * Erazing all memory areas with zeros
+    fn reset_purge(mut self) -> Self {
+        let mut ctrl_desc_cnt = 0usize;
+
+        match self.send_buff.as_mut() {
+            Some(buff) => {
+                buff.reset_write();
+                let mut init_buff_len = 0usize;
+
+                match buff.get_ctrl_desc_mut() {
+                    Some(ctrl_desc) => {
+                        let ind_desc_lst = unsafe {
+                            let size = core::mem::size_of::<Descriptor>();
+                            core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                        };
+
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            // This is fine as the length of the descriptors is restricted 
+                            // by u32::MAX (see also Bytes::new())
+                            ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+                            ctrl_desc_cnt += 1;
+                            init_buff_len += desc._init_len;
+
+                            // Resetting written memory
+                            for byte in desc.deref_mut() {
+                                *byte = 0;
+                            }
+                        }
+                    },
+                    None => {
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            init_buff_len += desc._init_len;
+
+                            // Resetting written memory
+                            for byte in desc.deref_mut() {
+                                *byte = 0;
+                            }
+                        }
+                    }
+                }
+
+                buff.reset_len(init_buff_len);
+            },
+            None => (),
+        }
+
+        match self.recv_buff.as_mut() {
+            Some(buff) => {
+                buff.reset_write();
+                let mut init_buff_len = 0usize;
+
+                match buff.get_ctrl_desc_mut() {
+                    Some(ctrl_desc) => {
+                        let ind_desc_lst = unsafe {
+                            let size = core::mem::size_of::<Descriptor>();
+                            core::slice::from_raw_parts_mut(ctrl_desc.ptr as *mut Descriptor, ctrl_desc.len / size)
+                        };
+
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            // This is fine as the length of the descriptors is restricted 
+                            // by u32::MAX (see also Bytes::new())
+                            ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+                            ctrl_desc_cnt += 1;
+                            init_buff_len += desc._init_len;
+
+                            // Resetting written memory
+                            for byte in desc.deref_mut() {
+                                *byte = 0;
+                            }
+                        }
+                    },
+                    None => {
+                        for desc in buff.as_mut_slice() {
+                            desc.len = desc._init_len;
+                            init_buff_len += desc._init_len;
+
+                            // Resetting written memory
+                            for byte in desc.deref_mut() {
+                                *byte = 0;
+                            }
+                        }
+                    }
+                }
+                
+                buff.reset_len(init_buff_len);
+            },
+            None => (),
+        }
+    self
     }
 
    /// Resets all properties from the previous transfer.
@@ -1559,7 +1694,12 @@ impl Buffer {
         }
     }
 
-    /// Retruns the number of descriptors inside a buffer.
+    /// Retruns the number of usable descriptors inside a buffer.
+    /// In case of Indirect Buffers this will return the number of
+    /// descriptors inside the indirect descriptor table. As a result
+    /// the return value most certainly IS NOT equall to the number of 
+    /// descriptors that will be placed inside the virtqueue.
+    /// In order to retrieve this value, please use `BufferToken.num_consuming_desc()`. 
     fn num_descr(&self ) -> usize {
         match &self {
             Buffer::Single{desc_lst, next_write, len} => desc_lst.len(),
@@ -1567,6 +1707,7 @@ impl Buffer {
             Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => desc_lst.len(),
         }
     }
+
 
     /// Returns the overall number of bytes in this Buffer.
     ///
@@ -1617,7 +1758,7 @@ impl Buffer {
     }
 
     /// Returns a mutable reference to the buffers ctrl descriptor if available. 
-    fn get_ctrl_desc_mut(&mut self) -> Option<&MemDescr> {
+    fn get_ctrl_desc_mut(&mut self) -> Option<&mut MemDescr> {
         match self {
             Buffer::Single{desc_lst, next_write, len} => None,
             Buffer::Multiple{desc_lst, next_write, len} => None, 
@@ -1625,7 +1766,14 @@ impl Buffer {
         } 
     }
 
-
+     /// Returns true if the buffer is an indirect one
+     fn is_indirect(&self) -> bool {
+        match self {
+            Buffer::Single{desc_lst, next_write, len} => false,
+            Buffer::Multiple{desc_lst, next_write, len} => false, 
+            Buffer::Indirect{desc_lst, ctrl_desc, next_write, len} => true,
+        } 
+    }
 }
 
 /// Describes a chunk of heap allocated memory. This memory chunk will 
