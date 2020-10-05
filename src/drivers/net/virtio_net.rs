@@ -714,6 +714,7 @@ impl VirtioNetDriver {
 // Private funtctions for Virtio network driver
 impl VirtioNetDriver {
     fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
+        /*
         if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
             error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
                 cap.dev_id(),
@@ -733,6 +734,8 @@ impl VirtioNetDriver {
         let dev_cfg: &mut NetDevCfgRaw = unsafe {
             &mut *(usize::from(virt_addr_raw) as *mut NetDevCfgRaw)
         };
+        */
+        let dev_cfg: &'static NetDevCfgRaw = pci::map_dev_cfg::<NetDevCfgRaw>(cap).unwrap();
 
         Some(NetDevCfg {
             raw: dev_cfg,
