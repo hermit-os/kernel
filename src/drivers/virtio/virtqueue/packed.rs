@@ -1131,19 +1131,13 @@ impl PackedVq {
             self.notif_ctrl.notify_dev(&notif_data)
         }
 
-        let mut transfer_lst = Vec::with_capacity(pin_tkn_lst.len());
 
         for pinned in pin_tkn_lst {
-            transfer_lst.push(Transfer{
-                transfer_tkn: Some(pinned)
-            })
+            // Prevent TransferToken from beeing dropped 
+            // I.e. do NOT run the costum constructor which will 
+            // deallocate memory.
+            pinned.into_raw();
         } 
-        
-        // Prevent TransferToken from beeing dropped 
-        // I.e. do NOT run the costum constructor which will 
-        // deallocate memory, as we never call drop upon
-        // the ManuallyDrop<Pinned<TransferToken>>
-        core::mem::ManuallyDrop::new(transfer_lst);
     }
 
     /// See `Virtq.prep_transfer()` documentation.
