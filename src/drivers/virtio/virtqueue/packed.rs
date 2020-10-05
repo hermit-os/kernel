@@ -912,7 +912,7 @@ impl DrvNotif {
         // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
         // See Virtio specfification v1.1. - 2.7.21
         fence(Ordering::SeqCst);
-        self.raw.flags |= 1 << 0;
+        self.raw.flags &= !(1 << 0);
     }
 
     /// Disables notifications by unsetting the LSB.
@@ -921,7 +921,7 @@ impl DrvNotif {
         // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
         // See Virtio specfification v1.1. - 2.7.21
         fence(Ordering::SeqCst);
-        self.raw.flags &= !(1 << 0);
+        self.raw.flags |= 1 << 0;
     }
 
     /// Enables a notification by the device for a specific descriptor.
@@ -954,7 +954,7 @@ impl DevNotif {
         // See Virtio specfification v1.1. - 2.7.21
         fence(Ordering::SeqCst);
         
-        self.raw.flags & 1 << 0 == 1
+        self.raw.flags & (1 << 0) == 0
     }
 
     fn is_notif_specfic(&self, next_off: usize, next_wrap: u8) -> bool {
@@ -1055,11 +1055,11 @@ impl PackedVq {
 
         if self.dev_event.is_notif() | self.dev_event.is_notif_specfic(next_off, next_wrap){
             let index = self.index.0.to_le_bytes();
-            let mut index = index.into_iter();
+            let mut index = index.iter();
             // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
-            let flags = (next_off as u16) << 1;
-            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
-            let mut flags = flags.into_iter();
+            let det_notif_data: u16 = (next_off as u16) >> 1;
+            let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
+            let mut flags = flags.iter();
             let mut notif_data: [u8; 4] = [0,0,0,0];
             
             for (i, byte) in notif_data.iter_mut().enumerate() {
@@ -1113,11 +1113,11 @@ impl PackedVq {
         
         if self.dev_event.is_notif() {
             let index = self.index.0.to_le_bytes();
-            let mut index = index.into_iter();
+            let mut index = index.iter();
             // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
-            let flags = (next_off as u16) << 1;
-            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
-            let mut flags = flags.into_iter();
+            let det_notif_data: u16 = (next_off as u16) >> 1;
+            let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
+            let mut flags = flags.iter();
             let mut notif_data: [u8; 4] = [0,0,0,0];
             
             for (i, byte) in notif_data.iter_mut().enumerate() {
@@ -1154,11 +1154,11 @@ impl PackedVq {
 
         if self.dev_event.is_notif() {
             let index = self.index.0.to_le_bytes();
-            let mut index = index.into_iter();
+            let mut index = index.iter();
             // Even on 64bit systems this is fine, as we have a queue_size < 2^15!
-            let flags = (next_off as u16) << 1;
-            let flags = (flags | u16::from(next_wrap)).to_le_bytes();
-            let mut flags = flags.into_iter();
+            let det_notif_data: u16 = (next_off as u16) >> 1;
+            let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
+            let mut flags = flags.iter();
             let mut notif_data: [u8; 4] = [0,0,0,0];
             
             for (i, byte) in notif_data.iter_mut().enumerate() {

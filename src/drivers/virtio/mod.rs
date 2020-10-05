@@ -27,7 +27,8 @@ pub extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStac
 	apic::eoi();
 	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
 
-	println!("[DEBUG] INTERRUPT OF VIRTIO DEVICE");
+    println!("[DEBUG] INTERRUPT OF VIRTIO DEVICE");
+    info!("Interrupt of Virtio Device.");
 	let check_scheduler = match kernel_pci::get_network_driver() {
 		Some(driver) => driver.lock().handle_interrupt(),
 		_ => false,

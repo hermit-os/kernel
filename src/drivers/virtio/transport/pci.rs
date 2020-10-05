@@ -634,28 +634,6 @@ impl ComCfgRaw {
 
         Some(com_cfg_raw)
     }
-
-    fn set_queue_size(&mut self, size: u16, packed: bool) {
-    // TODO:
-    // Should set queue size and forbid to set queue size equal to zer0 if packed feature
-    // has been negotiated.
-    }
-
-    fn read_dev_feat(&self) -> u32 {
-        self.device_feature
-    }
-
-    fn read_num_vq(&self) -> u16 {
-        self.num_queues
-    }
-
-    fn read_cfg_gen(&self) -> u8 {
-        self.config_generation
-    }
-
-    fn read_notif(&self) -> u16 {
-        self.queue_notify_off
-    }
 }
 
 /// Notification Structure to handle virtqueue notification settings.
@@ -686,7 +664,7 @@ impl NotifCfg {
         // This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
         let notify_off_multiplier = env::pci::read_cfg_no_adapter(
             cap.origin.bus, 
-            cap.origin.bus,
+            cap.origin.dev,
             cap.origin.cfg_ptr + u32::from(cap.origin.cap_struct.cap_len)
         );
 
