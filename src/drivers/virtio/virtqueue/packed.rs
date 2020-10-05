@@ -132,28 +132,29 @@ impl DescriptorRing {
 
     /// Polls poll index and sets states of eventually used TransferTokens to finished.
     /// If Await_qeue is available, the Transfer will be provieded to the queue.
-    fn poll(&mut self) -> Option<Vec<Pinned<TransferToken>>> {
+    fn poll(&mut self) {
         let mut ctrl = self.get_read_ctrler();
-        let mut tkn_lst = Vec::new();
 
-        while let Some(mut tkn) = ctrl.poll_next() {
-            tkn.state = TransferState::Finished;
+        while let Some(tkn) = ctrl.poll_next() {
+            // The state of the TransferToken up to this point MUST NOT be 
+            // finished. As soon as we mark the token as finished, we can not
+            // be sure, that the token is not dropped, which would making 
+            // the dereferencing operation undefined behaviour as also 
+            // all operations on the reference.
+            let tkn = unsafe{&mut *(tkn)};
 
             match tkn.await_queue {
                 Some(_) => {
+                    tkn.state = TransferState::Finished;
                     let queue = tkn.await_queue.take().unwrap();
+                    
+                    // Turn the raw pointer into a Pinned again, which will hold ownership of the Token
                     queue.borrow_mut().push_back(Transfer {
-                        transfer_tkn: Some(tkn),
+                        transfer_tkn: Some(Pinned::from_raw(tkn as *mut TransferToken)),
                     });
                 },
-                None => tkn_lst.push(tkn),
+                None => tkn.state = TransferState::Finished,
             }
-        }
-
-        if tkn_lst.is_empty() {
-            None
-        } else {
-            Some(tkn_lst)
         }
     }
 
@@ -438,7 +439,7 @@ struct ReadCtrl<'a> {
 impl<'a> ReadCtrl<'a> {
     /// Polls the ring for a new finished buffer. If buffer is marked as used, takes care of 
     /// updating the queue and returns the respective TransferToken.
-    fn poll_next(&mut self) -> Option<Pinned<TransferToken>> {
+    fn poll_next(&mut self) -> Option<*mut TransferToken> {
         // Check if descriptor has been marked used.
         if self.desc_ring.ring[self.position].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
             let tkn;
@@ -501,8 +502,7 @@ impl<'a> ReadCtrl<'a> {
                 (None, None) => unreachable!("Empty Transfers are not allowed..."),
             }
 
-            let pin = Pinned::from_raw(tkn as *mut TransferToken);
-            Some(pin)
+            Some(tkn as *mut TransferToken)
         } else {
             None 
         }
@@ -1033,12 +1033,7 @@ impl PackedVq {
 
     /// See `Virtq.poll()` documentation
     pub fn poll(&self) {
-        let tkn_lst = self.descr_ring.borrow_mut().poll();
-
-        // Currently we simply forget these upon poll as the Drivers already hold them inside a Transfer struct
-        if let Some(tkn_lst) = tkn_lst {
-            core::mem::ManuallyDrop::new(tkn_lst);
-        }
+        self.descr_ring.borrow_mut().poll();
     }
 
     /// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in 
