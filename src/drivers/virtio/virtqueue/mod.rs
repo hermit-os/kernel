@@ -827,7 +827,11 @@ impl TransferToken {
         // Prevent TransferToken from beeing dropped 
         // I.e. do NOT run the costum constructor which will 
         // deallocate memory.
-        core::mem::forget(self.get_vq().dispatch(self, notif).transfer_tkn.take());
+        self.get_vq().dispatch(self, notif)
+            .transfer_tkn
+            .take()
+            .unwrap()
+            .into_raw();
     }
 
     /// Dispatches the provided TransferToken to the respective queue and returns a transfer.
@@ -2225,6 +2229,12 @@ struct Pinned<T>{
 }
 
 impl<T: Sized> Pinned<T> {
+    /// Turns a `Pinned<T>` into a *mut T. Memory will remain valid.
+    fn into_raw(mut self) -> *mut T {
+        self._drop_inner = false;
+        self.raw_ptr
+    }
+
     /// Creates a new pinned `T` by boxing and leaking it.
     /// Be aware that this will result in a new heap allocation
     /// for `T` to be boxed.
