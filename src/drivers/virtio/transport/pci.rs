@@ -154,6 +154,32 @@ pub struct Origin {
     cap_struct: PciCapRaw,
 }
 
+/// Maps a given device specific pci configuration structure and 
+/// returns a static reference to it.
+pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
+    if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
+        error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
+            cap.dev_id(),
+        );
+        return None
+    }
+
+    // Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
+    if cap.len() < MemLen::from(mem::size_of::<T>()*8) {
+        error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
+        return None 
+    }
+
+    let virt_addr_raw = cap.bar_addr() + cap.offset();
+
+    // Create mutable reference to the PCI structure in PCI memory
+    let dev_cfg: &'static mut T = unsafe {
+        &mut *(usize::from(virt_addr_raw) as *mut T)
+    };
+
+    Some(dev_cfg)
+}
+
 /// Virtio's PCI capabilites structure.
 /// See Virtio specification v.1.1 - 4.1.4
 ///
