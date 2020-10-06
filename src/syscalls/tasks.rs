@@ -298,6 +298,7 @@ fn __sys_block_current_task() {
 	core_scheduler.block_current_task(None);
 }
 
+/// Set the current task state to `blocked`
 #[no_mangle]
 pub extern "C" fn sys_block_current_task() {
 	kernel_function!(__sys_block_current_task())
@@ -311,7 +312,18 @@ fn __sys_wakeup_task(id: Tid) {
 	}
 }
 
+/// Wake up the task with the identifier `id`
 #[no_mangle]
 pub extern "C" fn sys_wakeup_task(id: Tid) {
 	kernel_function!(__sys_wakeup_task(id))
+}
+
+fn __sys_get_priority() -> u8 {
+	core_scheduler().get_current_task_prio().into()
+}
+
+/// Determine the priority of the current thread
+#[no_mangle]
+pub extern "C" fn sys_get_priority() -> u8 {
+	kernel_function!(__sys_get_priority())
 }
