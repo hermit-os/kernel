@@ -573,6 +573,80 @@ impl Transfer {
         }
     }
 
+    /// Retruns a vector of mutable slices to the underlying memory areas.
+    ///
+    /// The vectors contain the slices in creation order. 
+    /// E.g.:
+    /// * Driver creates buffer as
+    ///   * send buffer: 50 bytes, 60 bytes
+    ///   * receive buffer: 10 bytes
+    /// * The return tuple will be:
+    ///  * (Some(vec[50, 60]), Some(vec[10]))
+    ///  * Where 50 refers to a slice of u8 of length 50. 
+    /// The other numbers follow the same principle.
+    pub fn as_slices_mut(&mut self) -> Result<(Option<Vec<&mut [u8]>>, Option<Vec<&mut [u8]>>), VirtqError> {
+        match &self.transfer_tkn.as_ref().unwrap().state {
+            TransferState::Finished => {
+                // This is perfetctly fine, as we create references to two different data structures 
+                // inside the TransferToken
+                let send_buff = unsafe {
+                    let tkn_ref = self.transfer_tkn
+                    .as_ref()
+                    .unwrap()
+                    .buff_tkn
+                    .as_ref()
+                    .unwrap();
+
+                let raw_ref = (tkn_ref as *const BufferToken) as *mut BufferToken;
+                (&mut *(raw_ref)).send_buff.as_mut()
+                };
+
+                let recv_buff = unsafe {
+                    let tkn_ref = self.transfer_tkn
+                        .as_ref()
+                        .unwrap()
+                        .buff_tkn
+                        .as_ref()
+                        .unwrap();
+
+                    let raw_ref = (tkn_ref as *const BufferToken) as *mut BufferToken;
+                    (&mut *(raw_ref)).recv_buff.as_mut()
+                };
+
+                // Unwrapping is okay here, as TransferToken must hold a BufferToken
+                let send_data = match send_buff {
+                    Some(buff) => {
+                        let mut arr = Vec::with_capacity(buff.as_slice().len());
+                        
+                        for desc in buff.as_mut_slice() {
+                            arr.push(desc.deref_mut())
+                        }
+                        
+                        Some(arr)
+                    }
+                    None => None,
+                };
+
+                let recv_data = match recv_buff {
+                    Some(buff) => {
+                        let mut arr = Vec::with_capacity(buff.as_slice().len());
+                        
+                        for desc in buff.as_mut_slice() {
+                            arr.push(desc.deref_mut())
+                        }
+                        
+                        Some(arr)
+                    }
+                    None => None,
+                };
+
+                Ok((send_data, recv_data))
+            },
+            TransferState::Processing => Err(VirtqError::OngoingTransfer(None)),
+            TransferState::Ready => unreachable!("Transfers not owned by a queue Must have state Finished or Processing!"), 
+        }
+    }
+
     /// Returns a copy if the respective send and receiving buffers
     /// The actul buffers remain in the BufferToken and hence the token can be 
     /// reused afterwards.

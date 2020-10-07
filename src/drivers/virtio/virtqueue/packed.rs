@@ -468,11 +468,16 @@ impl<'a> ReadCtrl<'a> {
             // See Virtio specification v1.1. - 2.7.4
             //                                - 2.7.5
             //                                - 2.7.6
-            let mut write_len = if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
-                self.desc_ring.ring[self.position].len
-            } else {
-                0
-            };
+            // let mut write_len = if self.desc_ring.ring[self.position].flags & DescrFlags::VIRTQ_DESC_F_WRITE == DescrFlags::VIRTQ_DESC_F_WRITE {
+            //      self.desc_ring.ring[self.position].len
+            //  } else {
+            //      0
+            //  };
+            //
+            // INFO: 
+            // Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this 
+            // flag correctly upon writes. Hence we omit it, in order to receive data. 
+            let mut write_len = self.desc_ring.ring[self.position].len;
 
             match (send_buff_opt, recv_buff_opt) {
                 (Some(send_buff), Some(recv_buff)) => {
@@ -620,10 +625,12 @@ impl<'a> ReadCtrl<'a> {
     }
 
     /// Resets the current position in the ring in order to have a consistent data structure.
+    ///
+    /// This does currently NOT include, resetting address, len and buff_id. 
     fn reset_ring_pos(&mut self) {
-        self.desc_ring.ring[self.position].address = 0; 
-        self.desc_ring.ring[self.position].len = 0;
-        self.desc_ring.ring[self.position].buff_id = 0;
+        // self.desc_ring.ring[self.position].address = 0; 
+        // self.desc_ring.ring[self.position].len = 0;
+        // self.desc_ring.ring[self.position].buff_id = 0;
         self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used();
     }
     
