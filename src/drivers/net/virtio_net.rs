@@ -187,6 +187,21 @@ struct RxQueues {
 }
 
 impl RxQueues {
+    /// Takes care if handling packets correctly which need some processing after beeing received. 
+    /// This currently include nothing. But in the future it might include among others::
+    /// * Calculating missing checksums
+    /// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
+    fn post_processing(mut transfer: Transfer) -> Result<Transfer, VirtioNetError> {
+        if transfer.poll() {
+            // Here we could implement all features.
+            Ok(transfer)
+        } else {
+            warn!("Unfinished transfer in post processing. Returning buffer to queue. This will need explicit cleanup.");
+            transfer.close();
+            Err(VirtioNetError::ProcessOngoing)
+        }
+    }
+
     /// Adds a given queue to the underlying vector and populates the queue with RecvBuffers.
     ///
     /// Queues are all populated according to Virtio specification v1.1. - 5.1.6.3.1
@@ -614,7 +629,15 @@ impl VirtioNetDriver {
 
 	pub fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
         match self.recv_vqs.get_next() {
-            Some(transfer) => {
+            Some(mut transfer) => {
+                let mut transfer = match RxQueues::post_processing(transfer) {
+                    Ok(trf) => trf,
+                    Err(vnet_err) => {
+                        error!("Post processing failed. Err: {:?}", vnet_err);
+                        return Err(())
+                    },
+                };
+
                 let (_, recv_data_opt) = transfer.as_slices().unwrap();
                 let mut recv_data = recv_data_opt.unwrap();
 
@@ -625,15 +648,8 @@ impl VirtioNetDriver {
 
                 let recv_payload = recv_data.pop().unwrap();
 
+                // If the given length is zero, we currently fail.
                 if recv_payload.len() > 0 {
-                    // Currently we are doing nothing with the header.
-                    // If VIRTIO_NET_F_MRG_RXBUF or other feautres which rely on VirtioNetHdr data
-                    // are active, the driver should further process them here.
-                    //
-                    // let header = unsafe {
-                    //     &mut *((&recv_data.pop().unwrap()[0] as *const _) as *mut VirtioNetHdr)
-                    // };
-
                     // Create static refrence for the user-space 
                     // As long as we keep the Transfer in a raw refernce this refernce is static,
                     // so this is fine.
@@ -820,12 +836,8 @@ impl VirtioNetDriver {
         // Define minimal feature set
         let min_feats: Vec<Features>  = vec![Features::VIRTIO_F_VERSION_1,
             Features::VIRTIO_F_RING_PACKED,
-            Features::VIRTIO_NET_F_GUEST_CSUM,
             Features::VIRTIO_NET_F_MAC, 
             Features::VIRTIO_NET_F_STATUS,
-            Features::VIRTIO_NET_F_GUEST_TSO4,
-            Features::VIRTIO_NET_F_GUEST_TSO6,
-            Features::VIRTIO_F_RING_INDIRECT_DESC,
         ];
 
         let mut min_feat_set = FeatureSet::new(0);
@@ -833,9 +845,21 @@ impl VirtioNetDriver {
         let mut feats: Vec<Features> = Vec::from(min_feats);
  
         // If wanted, push new features into feats here:
-        // 
+        //
+        // Indirect descriptors can be used
+        feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
         // MTU setting is possible
         feats.push(Features::VIRTIO_NET_F_MTU);
+
+        // Currently the driver does NOT support the features below.
+        // In order to provide functionality for theses, the driver
+        // needs to take care of calculating checksum in 
+        // RxQueues.post_processing()
+        // feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
+        // feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
+        // feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
+
+
 
         // Negotiate features with device. Automatically reduces selected feats in order to meet device capabilites.
         // Aborts in case incompatible features are selected by the dricer or the device does not support min_feat_set.
@@ -1804,6 +1828,9 @@ pub mod error {
         FeatReqNotMet(FeatureSet),
         /// The first u64 contains the feature bits wanted by the driver.
         /// but which are incompatible with the device feature set, second u64.
-        IncompFeatsSet(FeatureSet, FeatureSet)
+        IncompFeatsSet(FeatureSet, FeatureSet),
+        /// Indicates that an operation for finished Transfers, was performed on 
+        /// an ongoing transfer
+        ProcessOngoing,
     }
 }
