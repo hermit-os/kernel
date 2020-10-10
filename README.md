@@ -37,6 +37,15 @@ cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-k
 
 The resulting library then can be found in `target/x86_64-unknown-hermit-kernel/debug/libhermit.a`
 
+However, the Rust **nightly** toolchain is sometimes broken and doesn't work with `libhermit-rs`.
+We try to solve these issues as soon as possible.
+The latest version of a workable toolchain is always available as docker container.
+You can build `libhermit-rs` with Docker as follows:
+
+```sh
+docker pull registry.git.rwth-aachen.de/acs/public/hermitcore/hermitrust:latest
+docker run -v $PWD:/volume -e USER=$USER -w /volume --rm -t registry.git.rwth-aachen.de/acs/public/hermitcore/hermitrust cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
+```
 
 ### Control the kernel messages verbosity
 
