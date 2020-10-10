@@ -10,7 +10,7 @@ on:
 
 jobs:
   check:
-    name: Test
+    name: Format check
     runs-on: ubuntu-latest
 
     strategy:
