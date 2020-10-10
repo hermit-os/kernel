@@ -1,4 +1,4 @@
-name: Build and test
+name: Format check
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
       - trying
 
 jobs:
-  build:
+  check:
     name: Test
     runs-on: ubuntu-latest
 
