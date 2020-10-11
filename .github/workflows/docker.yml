@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Test
+    name: Tests
     runs-on: ubuntu-18.04 # linux required if you want to use docker
     container:
       image: registry.git.rwth-aachen.de/acs/public/hermitcore/hermitrust
