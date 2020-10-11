@@ -1,4 +1,4 @@
-name: Build and test
+name: Tests (experimental)
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: Test
+    name: Tests (experimental)
     runs-on: ${{ matrix.os }}
     # these tests based on the nightly compiler, which can be broken
     # consequently, we continue on an error
