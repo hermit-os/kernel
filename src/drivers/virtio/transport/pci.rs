@@ -157,6 +157,10 @@ pub struct Origin {
 /// Maps a given device specific pci configuration structure and 
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
+    if cap.id != u8::from(CfgType::VIRTIO_PCI_CAP_DEVICE_CFG) {
+        return None
+    };
+
     if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
         error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
             cap.dev_id(),
@@ -165,12 +169,12 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
     }
 
     // Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-    if cap.len() < MemLen::from(mem::size_of::<T>()*8) {
-        error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
+    if cap.len() < MemLen::from(mem::size_of::<T>()) {
+        error!("Device specific config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
         return None 
     }
 
-    let virt_addr_raw = cap.bar_addr() + cap.offset();
+    let virt_addr_raw: VirtMemAddr = cap.bar_addr() + cap.offset();
 
     // Create mutable reference to the PCI structure in PCI memory
     let dev_cfg: &'static mut T = unsafe {
@@ -1323,6 +1327,7 @@ pub enum VirtioDriver {
     FileSystem,
 }
 /// The module contains constants specific to PCI.
+#[allow(dead_code)]
 pub mod constants {
     // PCI constants
     pub const PCI_MAX_BUS_NUMBER: u8 = 32;
@@ -1332,6 +1337,7 @@ pub mod constants {
     pub const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
     pub const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;  
     pub const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
+
     /// PCI registers offset inside header,
     /// if PCI header is of type 00h.
     #[allow(dead_code, non_camel_case_types)]

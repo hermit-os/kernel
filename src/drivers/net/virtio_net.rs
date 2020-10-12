@@ -751,7 +751,10 @@ impl VirtioNetDriver {
             &mut *(usize::from(virt_addr_raw) as *mut NetDevCfgRaw)
         };
         */
-        let dev_cfg: &'static NetDevCfgRaw = pci::map_dev_cfg::<NetDevCfgRaw>(cap).unwrap();
+        let dev_cfg: &'static NetDevCfgRaw = match pci::map_dev_cfg::<NetDevCfgRaw>(cap) {
+            Some(cfg) => cfg,
+            None => return None,
+        };
 
         Some(NetDevCfg {
             raw: dev_cfg,
