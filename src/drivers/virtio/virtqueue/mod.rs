@@ -251,7 +251,7 @@ impl Virtq {
         // then call dispatch_batch_await of that queue
     }
     
-    // Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
+    /// Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
     /// The index represents the "ID" of the virtqueue. 
     /// Upon creation the virtqueue is "registered" at the device via the `ComCfg` struct.
     ///

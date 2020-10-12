@@ -31,6 +31,11 @@ use alloc::collections::VecDeque;
 struct WrapCount(bool);
 
 impl WrapCount {
+    /// Masks all other bits, besides the wrap count specific ones.
+    fn flag_mask() -> u16 {
+        1 << 7 | 1 << 15
+    }
+
     /// Returns a new WrapCount struct initalized to true or 1.
     /// 
     /// See virtio specification v1.1. - 2.7.1
@@ -441,7 +446,7 @@ impl<'a> ReadCtrl<'a> {
     /// updating the queue and returns the respective TransferToken.
     fn poll_next(&mut self) -> Option<*mut TransferToken> {
         // Check if descriptor has been marked used.
-        if self.desc_ring.ring[self.position].flags & self.desc_ring.dev_wc.as_flags_used() == self.desc_ring.dev_wc.as_flags_used() {
+        if self.desc_ring.ring[self.position].flags & WrapCount::flag_mask() == self.desc_ring.dev_wc.as_flags_used() {
             let tkn;
             let recv_buff_opt;
             let send_buff_opt;
