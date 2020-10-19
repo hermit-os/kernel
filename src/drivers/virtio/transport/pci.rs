@@ -158,11 +158,12 @@ pub struct Origin {
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
     if cap.id != u8::from(CfgType::VIRTIO_PCI_CAP_DEVICE_CFG) {
+        error!("Capability of device config has wrong id. Mapping not possible...");
         return None
     };
 
     if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
-        error!("Network config of device {:x}, does not fit into memeory specified by bar!", 
+        error!("Device config of device {:x}, does not fit into memeory specified by bar!", 
             cap.dev_id(),
         );
         return None
