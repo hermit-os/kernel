@@ -103,7 +103,7 @@ impl From<u16> for DevId {
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case! 
 #[allow(dead_code, non_camel_case_types)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum CfgType {
     INVALID = 0,
@@ -157,7 +157,7 @@ pub struct Origin {
 /// Maps a given device specific pci configuration structure and 
 /// returns a static reference to it.
 pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
-    if cap.id != u8::from(CfgType::VIRTIO_PCI_CAP_DEVICE_CFG) {
+    if cap.cfg_type!= CfgType::VIRTIO_PCI_CAP_DEVICE_CFG {
         error!("Capability of device config has wrong id. Mapping not possible...");
         return None
     };
