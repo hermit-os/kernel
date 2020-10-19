@@ -779,21 +779,30 @@ impl VirtioNetDriver {
         let com_cfg =  loop { 
             match caps_coll.get_com_cfg() {
                 Some(com_cfg) => break com_cfg,
-                None => return Err(error::VirtioNetError::NoComCfg(adapter.device_id)),
+                None => {
+                    error!("No common config. Aborting!");
+                    return Err(error::VirtioNetError::NoComCfg(adapter.device_id))
+                },
             }
         };
 
         let isr_stat = loop {
             match caps_coll.get_isr_cfg(){
                 Some(isr_stat) => break isr_stat,
-                None => return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id)),
+                None => {
+                    error!("No ISR status config. Aborting!");
+                    return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id))
+                },
             }
         };
 
         let notif_cfg = loop {
             match caps_coll.get_notif_cfg() {
                 Some(notif_cfg) => break notif_cfg,
-                None => return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id)),
+                None => {
+                    error!("No notif config. Aborting!");
+                    return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id))
+                },
             }
         };
 
@@ -805,7 +814,10 @@ impl VirtioNetDriver {
                         None => (),
                     }
                 },
-                None => return Err(error::VirtioNetError::NoDevCfg(adapter.device_id)),
+                None => {
+                    error!("No dev config. Aborting!");
+                    return Err(error::VirtioNetError::NoDevCfg(adapter.device_id))
+                },
             }
         };
 
@@ -887,11 +899,15 @@ impl VirtioNetDriver {
                     VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => {
                         // Create a new matching feature set for device and driver if the minimal set is met!
                         if (min_feat_set & dev_feats) != min_feat_set {
+                            error!("Device features set, does not satisfy minimal features needed. Aborting!");
                             return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id))
                         } else {
                             feats = match Features::into_features(dev_feats & drv_feats) {
                                 Some(feats) => feats,
-                                None => return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id))
+                                None => {
+                                    error!("Feature negotiation failed with minimal feature set. Aborting!");
+                                    return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id))
+                                }
                             };
 
                             match self.negotiate_features(&feats) {
@@ -1084,9 +1100,15 @@ impl VirtioNetDriver {
         let mut drv = match pci::map_caps(adapter) {
             Ok(caps) => match VirtioNetDriver::new(caps, adapter) {
                 Ok(driver) => driver,
-                Err(vnet_err) => return Err(VirtioError::NetDriver(vnet_err)),
+                Err(vnet_err) => {
+                    error!("Initializing new network driver failed. Aborting!");
+                    return Err(VirtioError::NetDriver(vnet_err))
+                },
             },
-            Err(pci_error) => return Err(VirtioError::FromPci(pci_error)),
+            Err(pci_error) => {
+                error!("Mapping capabilites failed. Aborting!");
+                return Err(VirtioError::FromPci(pci_error))
+            },
         };
 
         match drv.init_dev() {
