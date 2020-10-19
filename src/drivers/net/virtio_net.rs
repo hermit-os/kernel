@@ -264,7 +264,13 @@ impl RxQueues {
                 BuffSpec::Multiple(&buff_def)
             };
 
-            for _ in 0..u16::from(vq.size()) {
+            let num_buff: u16 = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
+                vq.size().into()
+            } else {
+                u16::from(vq.size())/u16::try_from(buff_def.len()).unwrap()
+            };
+
+            for _ in 0..num_buff {
                 let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
                     Ok(tkn) => tkn,
                     Err(vq_err) => {
@@ -469,17 +475,22 @@ impl TxQueues {
         self.poll();
 
         while let Some(transfer) = self.poll_queue.borrow_mut().pop_back() {
-            let tkn = transfer.reuse().unwrap();
+            let mut tkn = transfer.reuse().unwrap();
             let (send_len, _) = tkn.len();
 
             if send_len == len {
                 return Some((tkn, 0))
-            } 
+            } else if send_len > len {
+                tkn.restr_size(Some(len), None);
+                return Some((tkn, 0))
+            } else {
+                // Otherwise we are freeing the queue from the token.
+                drop(tkn);
+            }
         }
 
         // As usize is currently safe as the minimal usize is defined as 16bit in rust.
-        let buff_def = [Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(), Bytes::new(len).unwrap()];
-        let spec = BuffSpec::Multiple(&buff_def);
+        let spec = BuffSpec::Single(Bytes::new(len).unwrap());
 
         match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
             Ok(tkn) => return Some((tkn, 0)),
@@ -679,7 +690,6 @@ impl VirtioNetDriver {
                 let transfer = *Box::from_raw(trf_handle as *mut Transfer);
 
                 // Reuse transfer directly
-                // Currently header is not rewriten again
                 transfer.reuse()
                     .unwrap()
                     .write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
