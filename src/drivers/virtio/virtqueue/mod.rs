@@ -728,7 +728,7 @@ impl Transfer {
     /// with the actual usize returned by this function in order to prevent memory leaks or failure.
     /// * Failes if `TransferState != Finished`.
     ///
-    pub fn ret_raw(mut self) -> Result<(Option<Vec<(*mut u8, usize)>>, Option<Vec<(*mut u8, usize)>>), VirtqError> {
+    pub fn into_raw(mut self) -> Result<(Option<Vec<(*mut u8, usize)>>, Option<Vec<(*mut u8, usize)>>), VirtqError> {
         let state = self.transfer_tkn.as_ref().unwrap().state;
 
         match state {

@@ -452,13 +452,12 @@ impl<'a> ReadCtrl<'a> {
             let send_buff_opt;
 
             unsafe {
-                tkn = &mut *(self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()]);
-                // println!("[DEBUG] Finished TransferToken is: {:?}", tkn);
+                let raw_tkn = self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()];
+                assert!(!raw_tkn.is_null());
+                tkn = &mut *(raw_tkn);
 
-                // println!("[DEBUG] Reference Table at read: {:?}", self.desc_ring.tkn_ref_ring);
                 // unset the reference in the refernce ring for security!
                 self.desc_ring.tkn_ref_ring[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()] = 0 as *mut TransferToken;
-                // println!("[DEBUG] Reference Table after read: {:?}", self.desc_ring.tkn_ref_ring);
                 // This is perfectly fine, as we operate on two different datastructures inside one datastructure.
                 let raw_ptr = (tkn.buff_tkn.as_ref().unwrap() as *const BufferToken) as *mut BufferToken;
                 recv_buff_opt = &mut (*raw_ptr).recv_buff;
