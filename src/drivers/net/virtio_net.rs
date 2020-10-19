@@ -326,13 +326,9 @@ impl RxQueues {
     fn poll(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.poll();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].poll();
         }
     }
@@ -340,13 +336,9 @@ impl RxQueues {
     fn enable_notifs(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.enable_notifs();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].enable_notifs();
         } 
     }
@@ -354,13 +346,9 @@ impl RxQueues {
     fn disable_notifs(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.disable_notifs();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].disable_notifs();
         } 
     }
@@ -381,13 +369,9 @@ impl TxQueues {
     fn enable_notifs(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.enable_notifs();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].enable_notifs();
         } 
     }
@@ -395,13 +379,9 @@ impl TxQueues {
     fn disable_notifs(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.disable_notifs();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].disable_notifs();
         } 
     }
@@ -409,13 +389,9 @@ impl TxQueues {
     fn poll(&self) {
         if self.is_multi {
             for vq in &self.vqs {
-                // Poll all queues. 
-                // TODO: A mode boolean, actice or inactive would be nice for the vqs. In order to prevent polling 
-                // of inactive ones
                 vq.poll();
             }
         } else {
-            // Only poll the main virtqueue
             self.vqs[0].poll();
         }
     }
@@ -708,15 +684,15 @@ impl VirtioNetDriver {
     }
 
     pub fn disable_interrupts(&self) {
-        unimplemented!();
         // Für send und receive queues?
         // Nur für receive? Weil send eh ausgeschaltet ist?
+        self.recv_vqs.disable_notifs();
     }
 
     pub fn enable_interrupts(&self) {
-        unimplemented!()
         // Für send und receive queues?
         // Nur für receive? Weil send eh ausgeschaltet ist?
+        self.recv_vqs.enable_notifs();
     }
 
 	pub fn handle_interrupt(&self) -> bool {
@@ -1074,7 +1050,7 @@ impl VirtioNetDriver {
                     self.dev_cfg.features.into()
                 );
                 // Interrupt for comunicating that a sended packet left, is not needed
-                vq.enable_notifs();
+                vq.disable_notifs();
 
                 self.send_vqs.add(vq, &self.dev_cfg);
 

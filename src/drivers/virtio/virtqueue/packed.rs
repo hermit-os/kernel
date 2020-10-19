@@ -846,10 +846,6 @@ impl Descriptor {
 
         desc_bytes
     }
-
-    fn is_used() {
-        unimplemented!();
-    }
 }
 
 /// Driver and device event suppression struct used in packed virtqueues.
