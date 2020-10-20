@@ -749,9 +749,6 @@ impl<'a> WriteCtrl<'a> {
             desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
             desc_ref.len = mem_desc.len as u32;
             desc_ref.buff_id = mem_desc.id.as_ref().unwrap().0; 
-            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-            // See Virtio specfification v1.1. - 2.7.21
-            fence(Ordering::SeqCst);
             // Remove possibly set avail and used flags
             desc_ref.flags = flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED);
 
@@ -762,9 +759,6 @@ impl<'a> WriteCtrl<'a> {
             desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
             desc_ref.len = mem_desc.len as u32;
             desc_ref.buff_id = self.buff_id;
-            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-            // See Virtio specfification v1.1. - 2.7.21
-            fence(Ordering::SeqCst);
             // Remove possibly set avail and used flags and then set avail and used 
             // according to the current WrapCount.
             desc_ref.flags = (flags & !(DescrFlags::VIRTQ_DESC_F_AVAIL) & !(DescrFlags::VIRTQ_DESC_F_USED)) | self.desc_ring.drv_wc.as_flags_avail();
@@ -916,18 +910,12 @@ impl DrvNotif {
     /// Enables notifications by setting the LSB.
     /// See Virito specification v1.1. - 2.7.10
     fn enable_notif(&mut self) {
-        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-        // See Virtio specfification v1.1. - 2.7.21
-        fence(Ordering::SeqCst);
         self.raw.flags &= !(1 << 0);
     }
 
     /// Disables notifications by unsetting the LSB.
     /// See Virtio specification v1.1. - 2.7.10
     fn disable_notif(&mut self) {
-        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-        // See Virtio specfification v1.1. - 2.7.21
-        fence(Ordering::SeqCst);
         self.raw.flags |= 1 << 0;
     }
 
@@ -935,9 +923,6 @@ impl DrvNotif {
     fn enable_specific(&mut self, at_offset: u16, at_wrap: u8) {
         // Check if VIRTIO_F_RING_EVENT_IDX has been negotiated
         if self.f_notif_idx {
-            // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-            // See Virtio specfification v1.1. - 2.7.21
-            fence(Ordering::SeqCst);
             self.raw.flags |= 1 << 1;
             // Reset event fields
             self.raw.event = 0;
@@ -957,18 +942,11 @@ impl DevNotif {
     /// Reads notification bit (i.e. LSB) and returns value.
     /// If notifications are enabled returns true, else false.
     fn is_notif(&self) -> bool {
-        // The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
-        // See Virtio specfification v1.1. - 2.7.21
-        fence(Ordering::SeqCst);
-        
         self.raw.flags & (1 << 0) == 0
     }
 
     fn is_notif_specfic(&self, next_off: usize, next_wrap: u8) -> bool {
         if self.f_notif_idx {
-            // The driver performs a suitable memory barrier
-            // See Virtio specfification v1.1. - 2.7.21.3.1
-            fence(Ordering::SeqCst);
             if self.raw.flags & 1 << 1 == 2 {
                 // as u16 is okay for usize, as size of queue is restricted to 2^15
                 // it is also okay to just loose the upper 8 bits, as we only check the LSB in second clause.
