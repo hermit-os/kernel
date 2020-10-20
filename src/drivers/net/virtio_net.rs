@@ -608,9 +608,7 @@ impl VirtioNetDriver {
 	}
 
 	pub fn has_packet(&self) -> bool {
-        self.recv_vqs.disable_notifs();
         self.recv_vqs.poll();
-        self.recv_vqs.enable_notifs();
         !self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
@@ -677,9 +675,9 @@ impl VirtioNetDriver {
     
     pub fn set_polling_mode(&mut self, value: bool) {
         if value {
-            self.enable_interrupts()
-        } else {
             self.disable_interrupts()
+        } else {
+            self.enable_interrupts()
         }
     }
 
@@ -697,7 +695,6 @@ impl VirtioNetDriver {
 
 	pub fn handle_interrupt(&self) -> bool {
 		if self.isr_stat.is_interrupt() {
-            info!("Network virito device interrupt...");
 			// handle incoming packets
 			#[cfg(not(feature = "newlib"))]
 			netwakeup();
