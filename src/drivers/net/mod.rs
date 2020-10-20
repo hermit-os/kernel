@@ -68,7 +68,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 
 	if reset_nic {
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().disable_interrupts();
+			driver.lock().set_polling_mode(false);
 		};
 	} else {
 		NET_SEM.acquire(millis);
