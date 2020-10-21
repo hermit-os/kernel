@@ -448,7 +448,9 @@ impl TxQueues {
             }
         }
         
-        self.poll();
+        if self.poll_queue.borrow().is_empty() {
+            self.poll();
+        }
 
         while let Some(transfer) = self.poll_queue.borrow_mut().pop_back() {
             let mut tkn = transfer.reuse().unwrap();
@@ -845,7 +847,7 @@ impl VirtioNetDriver {
         // If wanted, push new features into feats here:
         //
         // Indirect descriptors can be used
-        feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
+        // feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
         // MTU setting is possible
         feats.push(Features::VIRTIO_NET_F_MTU);
 
