@@ -10,7 +10,6 @@ use core::convert::TryInto;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::synch::spinlock::SpinlockIrqSave;
-use crate::collections::Node;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 
@@ -25,11 +24,11 @@ fn detect_from_limits() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let entry = Node::new(FreeListEntry {
+	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),
 		end: unsafe { limit },
-	});
-	PHYSICAL_FREE_LIST.lock().list.push(entry);
+	};
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 
 	Ok(())
 }
@@ -57,7 +56,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size)?
+			.allocate(size, None)?
 			.try_into()
 			.unwrap()
 	))
@@ -84,7 +83,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, ()> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate_aligned(size, alignment)?
+			.allocate(size, Some(alignment))?
 			.try_into()
 			.unwrap()
 	))

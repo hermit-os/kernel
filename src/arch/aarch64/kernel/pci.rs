@@ -1,5 +1,6 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use crate::synch::spinlock::SpinlockIrqSave;
 
 // Currently, onbly a dummy implementation
 pub struct VirtioNetDriver;
@@ -40,6 +41,6 @@ impl VirtioNetDriver {
     }
 }
 
-pub fn get_network_driver() -> Option<Rc<RefCell<VirtioNetDriver>>> {
+pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver>>  {
     None
 }

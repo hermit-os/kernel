@@ -5,6 +5,7 @@ version = 3
 [[package]]
 name = "aarch64"
 version = "0.0.4"
+source = "git+https://github.com/hermitcore/rust-aarch64#be582eb53b6abe67d8f2eaee6bf5d89ff8978501"
 dependencies = [
  "cortex-a",
 ]

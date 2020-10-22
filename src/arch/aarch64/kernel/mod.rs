@@ -12,7 +12,6 @@ pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-pub mod start;
 pub mod stubs;
 pub mod systemtime;
 
@@ -288,4 +287,13 @@ pub fn network_adapter_init() -> i32 {
 }
 
 pub fn print_statistics() {
+}
+
+#[inline(never)]
+#[no_mangle]
+pub unsafe fn pre_init() -> ! {
+    let com1 = SerialPort::new(0x9000000);
+
+    com1.write_byte('H' as u8);
+    loop {}
 }

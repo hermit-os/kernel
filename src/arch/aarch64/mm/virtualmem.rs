@@ -9,7 +9,6 @@ use core::convert::TryInto;
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::collections::Node;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::SpinlockIrqSave;
@@ -26,11 +25,11 @@ const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
 const TASK_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x8000_0000_0000);
 
 pub fn init() {
-	let entry = Node::new(FreeListEntry {
+	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),
 		end: KERNEL_VIRTUAL_MEMORY_END.as_usize(),
-	});
-	KERNEL_FREE_LIST.lock().list.push(entry);
+	};
+	KERNEL_FREE_LIST.lock().list.push_back(entry);
 }
 
 pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
@@ -44,7 +43,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
 	);
 
 	Ok(VirtAddr(
-		KERNEL_FREE_LIST.lock().allocate(size)?.try_into().unwrap(),
+		KERNEL_FREE_LIST.lock().allocate(size, None)?.try_into().unwrap(),
 	))
 }
 
@@ -69,7 +68,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, ()> {
 	Ok(VirtAddr(
 			KERNEL_FREE_LIST
 					.lock()
-					.allocate_aligned(size, alignment)?
+					.allocate(size, Some(alignment))?
 					.try_into()
 					.unwrap(),
 	))
@@ -105,7 +104,7 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	KERNEL_FREE_LIST.lock().deallocate(virtual_address.as_usize(), size);
 }
 
-pub fn reserve(virtual_address: VirtAddr, size: usize) {
+/*pub fn reserve(virtual_address: VirtAddr, size: usize) {
 	assert!(
 		virtual_address >= mm::kernel_end_address(),
 		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
@@ -139,7 +138,7 @@ pub fn reserve(virtual_address: VirtAddr, size: usize) {
 		size,
 		virtual_address
 	);
-}
+}*/
 
 pub fn print_information() {
 	KERNEL_FREE_LIST.lock().print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");

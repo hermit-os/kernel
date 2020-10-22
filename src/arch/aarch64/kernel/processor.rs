@@ -29,7 +29,11 @@ impl FPUState {
 	}
 }
 
-pub fn generate_random_number() -> Option<u32> {
+pub fn generate_random_number32() -> Option<u32> {
+	None
+}
+
+pub fn generate_random_number64() -> Option<u64> {
 	None
 }
 
