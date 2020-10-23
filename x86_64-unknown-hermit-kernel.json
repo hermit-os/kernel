@@ -4,7 +4,7 @@
     "target-endian": "little",
     "target-pointer-width": "64",
     "target-c-int-width" : "32",
-    "os": "none",
+    "os": "hermit",
     "arch": "x86_64",
     "data-layout": "e-m:e-i64:64-f80:128-n8:16:32:64-S128",
     "pre-link-args": {
