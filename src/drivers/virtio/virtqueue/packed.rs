@@ -88,7 +88,7 @@ impl WrapCount {
 /// WARN: NEVER PUSH TO THE RING AFTER DESCRIPTORRING HAS BEEN INITALIZED AS THIS WILL PROBABLY RESULT IN A 
 /// RELOCATION OF THE VECTOR AND HENCE THE DEVICE WILL NO LONGER NO THE RINGS ADDRESS!
 struct DescriptorRing {
-    ring: Box<[Descriptor]>,
+    ring:  &'static mut [Descriptor],
     //ring: Pinned<Vec<Descriptor>>, 
     tkn_ref_ring: Box<[*mut TransferToken]>,
 
@@ -109,7 +109,7 @@ impl DescriptorRing {
     fn new(size: u16) -> Self {
         let size = usize::try_from(size).unwrap();
         // WARN: Uncatched as usize call here. Could panic if used with usize < u16
-        let mut ring = Box::new(Vec::with_capacity(size));
+        /*let mut ring = Box::new(Vec::with_capacity(size));
         for _ in 0..size {
             ring.push(Descriptor {
                 address: 0,
@@ -117,15 +117,23 @@ impl DescriptorRing {
                 buff_id: 0,
                 flags: 0,
             });
-        }
+        }*/
+        // Allocate heap memory via a vec, leak and cast
+        let _mem_len = align_up!(size * core::mem::size_of::<Descriptor>(), BasePageSize::SIZE);
+        let ptr = (crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
+        
+        let ring: &'static mut [Descriptor] = unsafe {
+            core::slice::from_raw_parts_mut(ptr, size)
+        };
         
         // Descriptor ID's run from 1 to size_of_queue. In order to index directly into the 
         // refernece ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
         // and do not care about the first element beeing unused.
         let tkn_ref_ring = vec![0usize as *mut TransferToken; size+1].into_boxed_slice();
 
+
         DescriptorRing { 
-            ring: ring.into_boxed_slice(),
+            ring,
             tkn_ref_ring,
             write_index: 0,
             capacity: size,
@@ -140,7 +148,7 @@ impl DescriptorRing {
     fn poll(&mut self) {
         let mut ctrl = self.get_read_ctrler();
 
-        while let Some(tkn) = ctrl.poll_next() {
+        if let Some(tkn) = ctrl.poll_next() {
             // The state of the TransferToken up to this point MUST NOT be 
             // finished. As soon as we mark the token as finished, we can not
             // be sure, that the token is not dropped, which would making 
@@ -390,8 +398,10 @@ impl DescriptorRing {
             (None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
         }
 
+        fence(Ordering::SeqCst);
         // Update flags of the first descriptor and set new write_index
         ctrl.make_avail(pinned.raw_addr());
+        fence(Ordering::SeqCst);
 
         // Update the state of the actual Token
         pinned.state = TransferState::Processing;
@@ -882,7 +892,7 @@ struct DrvNotif{
     /// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
     f_notif_idx : bool,
     /// Actual structure to read from, if device wants notifs
-    raw: Box<EventSuppr>
+    raw: &'static mut EventSuppr
 }
 
 /// A newtype in order to implement the correct functionality upon
@@ -893,7 +903,7 @@ struct DevNotif {
     /// Indicates if VIRTIO_F_RING_EVENT_IDX has been negotiated
     f_notif_idx : bool,
     /// Actual structure to read from, if device wants notifs
-    raw: Box<EventSuppr>
+    raw: &'static mut EventSuppr
 }
 
 impl EventSuppr {
@@ -910,13 +920,13 @@ impl DrvNotif {
     /// Enables notifications by setting the LSB.
     /// See Virito specification v1.1. - 2.7.10
     fn enable_notif(&mut self) {
-        self.raw.flags &= !(1 << 0);
+        self.raw.flags = 0;
     }
 
     /// Disables notifications by unsetting the LSB.
     /// See Virtio specification v1.1. - 2.7.10
     fn disable_notif(&mut self) {
-        self.raw.flags |= 1 << 0;
+        self.raw.flags = 0;
     }
 
     /// Enables a notification by the device for a specific descriptor.
@@ -1219,23 +1229,38 @@ impl PackedVq {
         };
         
         let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
-        let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
-        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));
+        /*let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
+        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));*/
+
+        // Allocate heap memory via a vec, leak and cast
+        let _mem_len = align_up!(core::mem::size_of::<EventSuppr>(), BasePageSize::SIZE);
+
+        let drv_event_ptr = (crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;
+        let dev_event_ptr = (crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;
 
         // Provide memory areas of the queues data structures to the device
         vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(descr_ring.borrow().raw_addr() as u64)));
         // As usize is safe here, as the *mut EventSuppr raw pointer is a thin pointer of size usize
-        vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event as u64)));
-        vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(dev_event as u64)));
+        vq_handler.set_drv_ctrl_addr(paging::virt_to_phys(VirtAddr::from(drv_event_ptr as u64)));
+        vq_handler.set_dev_ctrl_addr(paging::virt_to_phys(VirtAddr::from(dev_event_ptr as u64)));
+
+        let drv_event: &'static mut EventSuppr = unsafe {
+            &mut *(drv_event_ptr)
+        };
+
+        let dev_event: &'static mut EventSuppr = unsafe {
+            &mut *(dev_event_ptr)
+        };
+
 
         let drv_event = RefCell::new(DrvNotif {
             f_notif_idx: false,
-            raw: unsafe{Box::from_raw(drv_event)},
+            raw: drv_event,
         });
 
         let dev_event = DevNotif {
             f_notif_idx: false,
-            raw: unsafe{Box::from_raw(dev_event)},
+            raw: dev_event,
         };
 
         let mut notif_ctrl = NotifCtrl::new(
