@@ -1,4 +1,4 @@
-name: Build and test
+name: Tests (experimental)
 
 on:
   pull_request:
@@ -10,8 +10,11 @@ on:
 
 jobs:
   build:
-    name: Test
+    name: Tests (experimental)
     runs-on: ${{ matrix.os }}
+    # these tests based on the nightly compiler, which can be broken
+    # consequently, we continue on an error
+    continue-on-error: true
 
     strategy:
       matrix:
@@ -56,9 +59,6 @@ jobs:
           path: 'libhermit-rs'
       - name: Check Cargo availability
         run: cargo --version
-      - name: Check Formatting
-        run: cargo fmt -- --check
-        if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Cargo Test libhermit-rs (Unittests on Host)
         run: cargo test --lib --target x86_64-unknown-linux-gnu
         working-directory: libhermit-rs

@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use core::isize;
 #[cfg(feature = "newlib")]
 use core::sync::atomic::AtomicUsize;
@@ -18,7 +19,8 @@ use crate::errno::*;
 #[cfg(feature = "newlib")]
 use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler;
-use crate::scheduler::task::{Priority, TaskId};
+use crate::scheduler::task::{Priority, TaskHandle, TaskId};
+use crate::synch::spinlock::SpinlockIrqSave;
 use crate::syscalls;
 use crate::syscalls::timer::timespec;
 
@@ -97,10 +99,10 @@ fn __sys_sbrk(incr: isize) -> usize {
 
 	if incr >= 0 {
 		old_end = SBRK_COUNTER.fetch_add(incr as usize, Ordering::SeqCst);
-		assert!(task_heap_end >= old_end + incr as usize);
+		assert!(task_heap_end.as_usize() >= old_end + incr as usize);
 	} else {
 		old_end = SBRK_COUNTER.fetch_sub(incr.abs() as usize, Ordering::SeqCst);
-		assert!(task_heap_start < old_end - incr.abs() as usize);
+		assert!(task_heap_start.as_usize() < old_end - incr.abs() as usize);
 	}
 
 	old_end
@@ -282,4 +284,46 @@ fn __sys_join(id: Tid) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_join(id: Tid) -> i32 {
 	kernel_function!(__sys_join(id))
+}
+
+/// Mapping between TaskID and TaskHandle
+static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
+
+fn __sys_block_current_task() {
+	let core_scheduler = core_scheduler();
+	let handle = core_scheduler.get_current_task_handle();
+	let tid = core_scheduler.get_current_task_id();
+
+	TASKS.lock().insert(tid, handle);
+	core_scheduler.block_current_task(None);
+}
+
+/// Set the current task state to `blocked`
+#[no_mangle]
+pub extern "C" fn sys_block_current_task() {
+	kernel_function!(__sys_block_current_task())
+}
+
+fn __sys_wakeup_task(id: Tid) {
+	let task_id = TaskId::from(id);
+
+	if let Some(handle) = TASKS.lock().remove(&task_id) {
+		core_scheduler().custom_wakeup(handle);
+	}
+}
+
+/// Wake up the task with the identifier `id`
+#[no_mangle]
+pub extern "C" fn sys_wakeup_task(id: Tid) {
+	kernel_function!(__sys_wakeup_task(id))
+}
+
+fn __sys_get_priority() -> u8 {
+	core_scheduler().get_current_task_prio().into()
+}
+
+/// Determine the priority of the current thread
+#[no_mangle]
+pub extern "C" fn sys_get_priority() -> u8 {
+	kernel_function!(__sys_get_priority())
 }

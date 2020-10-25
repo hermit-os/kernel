@@ -1,0 +1,69 @@
+name: Docker tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - staging
+      - trying
+
+jobs:
+  build:
+    name: Tests
+    runs-on: ubuntu-18.04 # linux required if you want to use docker
+    container:
+      image: registry.git.rwth-aachen.de/acs/public/hermitcore/hermitrust
+      options: --cpus 2 
+
+    steps:
+      - name: Checkout rusty-hermit
+        uses: actions/checkout@v2
+        with:
+          repository: 'hermitcore/rusty-hermit'
+          ref: 'master'
+          submodules: 'true'
+      - name: Remove submodule libhermit-rs
+        run: rm -r libhermit-rs
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          path: 'libhermit-rs'
+      - name: Check Cargo availability
+        run: cargo --version
+      - name: Cargo Test libhermit-rs (Unittests on Host)
+        run: cargo test --lib --target x86_64-unknown-linux-gnu
+        working-directory: libhermit-rs
+      - name: Building dev version
+        run:
+          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
+      - name: Building release version
+        run:
+          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release
+        env:
+         RUSTFLAGS: -Clinker-plugin-lto
+      - name: Build loader
+        working-directory: loader
+        run: make
+      - name: Test dev version
+        run:
+          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
+      - name: Test dev version (smp)
+        run:
+          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
+        timeout-minutes: 20
+      - name: Test release version
+        run:
+          qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
+      - name: Test release version (smp)
+        run:
+          qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr
+        timeout-minutes: 20
+      - name: Integration Tests
+        run:
+          cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader
+        working-directory: libhermit-rs
+      - name: Integration Tests (smp)
+        run:
+          cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader --num_cores 2
+        working-directory: libhermit-rs
