@@ -108,16 +108,7 @@ struct DescriptorRing {
 impl DescriptorRing {
     fn new(size: u16) -> Self {
         let size = usize::try_from(size).unwrap();
-        // WARN: Uncatched as usize call here. Could panic if used with usize < u16
-        /*let mut ring = Box::new(Vec::with_capacity(size));
-        for _ in 0..size {
-            ring.push(Descriptor {
-                address: 0,
-                len: 0,
-                buff_id: 0,
-                flags: 0,
-            });
-        }*/
+
         // Allocate heap memory via a vec, leak and cast
         let _mem_len = align_up!(size * core::mem::size_of::<Descriptor>(), BasePageSize::SIZE);
         let ptr = (crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
@@ -1229,9 +1220,6 @@ impl PackedVq {
         };
         
         let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
-        /*let drv_event = Box::into_raw(Box::new(EventSuppr::new()));
-        let dev_event= Box::into_raw(Box::new(EventSuppr::new()));*/
-
         // Allocate heap memory via a vec, leak and cast
         let _mem_len = align_up!(core::mem::size_of::<EventSuppr>(), BasePageSize::SIZE);
 
