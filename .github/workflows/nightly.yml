@@ -1,4 +1,4 @@
-name: Tests (experimental)
+name: Tests (nightly)
 
 on:
   pull_request:
