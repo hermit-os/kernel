@@ -31,7 +31,7 @@ jobs:
             targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview, rustfmt'
+            components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-unknown-linux-gnu'
 
 
