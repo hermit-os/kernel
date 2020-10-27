@@ -43,7 +43,6 @@ pub mod macros;
 pub mod arch;
 pub mod console;
 pub mod mm;
-mod rlib;
 mod runtime_glue;
 
 extern "C" {

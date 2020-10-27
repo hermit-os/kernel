@@ -1,3 +1,7 @@
+[unstable]
+build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
+
 [target.x86_64-unknown-hermit-loader]
 rustflags = [
   "-C", "link-arg=-Tsrc/arch/x86_64/link.ld"
