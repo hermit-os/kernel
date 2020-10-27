@@ -14,7 +14,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     # these tests based on the nightly compiler, which can be broken
     # consequently, we continue on an error
-    continue-on-error: true
+    #continue-on-error: true
 
     strategy:
       matrix:
