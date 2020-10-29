@@ -214,7 +214,7 @@ impl DescriptorRing {
 
                             for desc in recv_buff.as_slice() {
                                 if buff_len > 1 {
-                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE);
                                 } else {
                                     ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
                                 }
@@ -256,7 +256,7 @@ impl DescriptorRing {
 
                             for desc in recv_buff.as_slice() {
                                 if buff_len > 1 {
-                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT & DescrFlags::VIRTQ_DESC_F_WRITE);
+                                    ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_NEXT | DescrFlags::VIRTQ_DESC_F_WRITE);
                                 } else {
                                     ctrl.write_desc(desc, DescrFlags::VIRTQ_DESC_F_WRITE.into());
                                 }
