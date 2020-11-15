@@ -84,6 +84,22 @@ add_custom_command(
 	COMMAND
 		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
 
+	# rename basic functions like memcpy to avoid collisions with the user space
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memmove=kernel_memmove $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memcpy=kernel_memcpy $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memset=kernel_memset $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memcmp=kernel_memcmp $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym bcmp=kernel_bcmp $<TARGET_FILE:hermit-bootstrap>
+
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
 	# linking against the one supplied by the toolchain)
