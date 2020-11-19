@@ -39,6 +39,7 @@
 #![feature(nonnull_slice_from_raw_parts)]
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
+#![feature(vec_into_raw_parts)]
 #![allow(unused_macros)]
 #![no_std]
 #![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
