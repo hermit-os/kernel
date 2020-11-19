@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::{mem, ptr, slice};
+use core::{mem, ptr};
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -215,50 +215,46 @@ impl SyscallInterface for Uhyve {
 	/// ToDo: Add an Errors section - What happens when e.g. malloc fails, how is that handled (currently it isn't)
 	#[cfg(target_os = "hermit")]
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
-		//FIXME: Determine how to make this safer, check return values of malloc etc
-		// and then remove the unsafe block and only wrap the parts where it is needed
-		unsafe {
-			// determine the number of arguments and environment variables
-			let mut syscmdsize = SysCmdsize::new();
-			uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
+		// determine the number of arguments and environment variables
+		let mut syscmdsize = SysCmdsize::new();
+		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
 
-			// create array to receive all arguments
-			let mut argv = vec![ptr::null(); syscmdsize.argc as usize];
-			let mut argv_phy = vec![ptr::null(); syscmdsize.argc as usize];
-			for i in 0..syscmdsize.argc as usize {
-				argv[i] = crate::__sys_malloc(
-					syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
-					1,
-				);
-				argv_phy[i] =
-					paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8;
-			}
-
-			// create array to receive the environment
-			let mut env = vec![ptr::null(); syscmdsize.envc as usize + 1];
-			let mut env_phy = vec![ptr::null(); syscmdsize.envc as usize + 1];
-			for i in 0..syscmdsize.envc as usize {
-				env[i] = crate::__sys_malloc(
-					syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
-					1,
-				);
-				env_phy[i] =
-					paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8;
-			}
-
-			// ask uhyve for the environment
-			let mut syscmdval =
-				SysCmdval::new(VirtAddr(argv_phy.as_ptr() as u64), VirtAddr(env_phy.as_ptr() as u64));
-			uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
-
-			let (argv_ptr, _, _) = argv.into_raw_parts();
-			let (env_ptr, _, _) = env.into_raw_parts();
-			(
-				syscmdsize.argc,
-				argv_ptr as *const *const u8,
-				env_ptr as *const *const u8,
-			)
+		// create array to receive all arguments
+		let mut argv = vec![ptr::null(); syscmdsize.argc as usize];
+		let mut argv_phy = vec![ptr::null(); syscmdsize.argc as usize];
+		for i in 0..syscmdsize.argc as usize {
+			argv[i] = crate::__sys_malloc(
+				syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
+				1,
+			);
+			argv_phy[i] =
+				paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8;
 		}
+
+		// create array to receive the environment
+		let mut env = vec![ptr::null(); syscmdsize.envc as usize + 1];
+		let mut env_phy = vec![ptr::null(); syscmdsize.envc as usize + 1];
+		for i in 0..syscmdsize.envc as usize {
+			env[i] = crate::__sys_malloc(
+				syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
+				1,
+			);
+			env_phy[i] =
+				paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8;
+		}
+
+		// ask uhyve for the environment
+		let mut syscmdval =
+			SysCmdval::new(VirtAddr(argv_phy.as_ptr() as u64), VirtAddr(env_phy.as_ptr() as u64));
+		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
+
+		let (argv_ptr, _, _) = argv.into_raw_parts();
+		let (env_ptr, _, _) = env.into_raw_parts();
+		(
+			syscmdsize.argc,
+			argv_ptr as *const *const u8,
+			env_ptr as *const *const u8,
+		)
 	}
 
 	fn shutdown(&self, arg: i32) -> ! {
