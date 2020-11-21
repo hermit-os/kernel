@@ -5,6 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use alloc::prelude::v1::Box;
 use core::{mem, ptr};
 
 #[cfg(target_arch = "x86_64")]
@@ -220,11 +221,11 @@ impl SyscallInterface for Uhyve {
 		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
 
 		// create array to receive all arguments
-		let mut argv = vec![ptr::null(); syscmdsize.argc as usize];
+		let mut argv = Box::new(vec![ptr::null(); syscmdsize.argc as usize]);
 		let mut argv_phy = vec![ptr::null(); syscmdsize.argc as usize];
 		for i in 0..syscmdsize.argc as usize {
 			argv[i] = crate::__sys_malloc(
-				syscmdsize.argsz[i] as usize * mem::size_of::<*const u8>(),
+				syscmdsize.argsz[i] as usize * mem::size_of::<u8>(),
 				1,
 			);
 			argv_phy[i] =
@@ -232,11 +233,11 @@ impl SyscallInterface for Uhyve {
 		}
 
 		// create array to receive the environment
-		let mut env = vec![ptr::null(); syscmdsize.envc as usize + 1];
+		let mut env = Box::new(vec![ptr::null(); syscmdsize.envc as usize + 1]);
 		let mut env_phy = vec![ptr::null(); syscmdsize.envc as usize + 1];
 		for i in 0..syscmdsize.envc as usize {
 			env[i] = crate::__sys_malloc(
-				syscmdsize.envsz[i] as usize * mem::size_of::<*const u8>(),
+				syscmdsize.envsz[i] as usize * mem::size_of::<u8>(),
 				1,
 			);
 			env_phy[i] =
