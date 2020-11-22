@@ -62,6 +62,6 @@ pub unsafe extern "C" fn __rg_oom(size: usize, align: usize) -> ! {
 	rust_oom(layout)
 }
 
-// TODO: currently, the implementation of "stack probes" is missing
+#[cfg(not(target_os = "hermit"))]
 #[no_mangle]
 pub unsafe extern "C" fn __rust_probestack() {}
