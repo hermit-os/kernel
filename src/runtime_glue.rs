@@ -59,3 +59,9 @@ pub unsafe extern "C" fn __rg_oom(size: usize, align: usize) -> ! {
 	let layout = Layout::from_size_align_unchecked(size, align);
 	rust_oom(layout)
 }
+
+
+// TODO: currently, the implementation of "stack probes" is missing
+#[no_mangle]
+pub unsafe extern "C" fn __rust_probestack() {
+}
