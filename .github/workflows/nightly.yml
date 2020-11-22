@@ -36,7 +36,7 @@ jobs:
 
 
     steps:
-      - uses: hecrj/setup-rust-action@v1.3.1
+      - uses: hecrj/setup-rust-action@v1
         with:
           rust-version: ${{ matrix.rust }}
           components: ${{ matrix.components || '' }}
@@ -67,16 +67,19 @@ jobs:
         run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
         if: ${{ matrix.os == 'ubuntu-latest' }}
       # Note: The add-path must be kept in sync with the version of binutils installed by homebrew
-      - name: Install qemu/nasm/binutils (macos)
+      - name: Install qemu/nasm (macos)
         run: |
-          brew install qemu nasm binutils
-          echo "::add-path::/usr/local/Cellar/binutils/2.34/bin/"
+          brew install qemu nasm
         if: ${{ matrix.os == 'macOS-latest' }}
       - name: Install qemu/nasm (windows)
+        uses: crazy-max/ghaction-chocolatey@v1
+        with:
+          args: install qemu nasm
+        if: ${{ matrix.os == 'windows-latest' }}
+      - name: Set path to qemu/nasm (Windows)
         run: |
-          choco install qemu nasm
-          echo "::add-path::C:\Program Files\NASM"
-          echo "::add-path::C:\Program Files\qemu"
+          echo "C:\Program Files\qemu" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files\nasm" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         if: ${{ matrix.os == 'windows-latest' }}
       - name: Building dev version
         run:
@@ -85,7 +88,7 @@ jobs:
         run:
           cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --release
         env:
-         RUSTFLAGS: -Clinker-plugin-lto
+          RUSTFLAGS: -Clinker-plugin-lto
       - name: Build loader (unix)
         working-directory: loader
         run: make
