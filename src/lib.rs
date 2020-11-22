@@ -95,7 +95,6 @@ pub mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
-#[cfg(target_os = "hermit")]
 mod runtime_glue;
 mod scheduler;
 mod synch;
