@@ -67,10 +67,9 @@ jobs:
         run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
         if: ${{ matrix.os == 'ubuntu-latest' }}
       # Note: The add-path must be kept in sync with the version of binutils installed by homebrew
-      - name: Install qemu/nasm/binutils (macos)
+      - name: Install qemu/nasm (macos)
         run: |
-          brew install qemu nasm binutils
-          echo "::add-path::/usr/local/Cellar/binutils/2.34/bin/"
+          brew install qemu nasm
         if: ${{ matrix.os == 'macOS-latest' }}
       - name: Install qemu/nasm (windows)
         uses: crazy-max/ghaction-chocolatey@v1
