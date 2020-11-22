@@ -224,10 +224,7 @@ impl SyscallInterface for Uhyve {
 		let mut argv = Box::new(vec![ptr::null(); syscmdsize.argc as usize]);
 		let mut argv_phy = vec![ptr::null(); syscmdsize.argc as usize];
 		for i in 0..syscmdsize.argc as usize {
-			argv[i] = crate::__sys_malloc(
-				syscmdsize.argsz[i] as usize * mem::size_of::<u8>(),
-				1,
-			);
+			argv[i] = crate::__sys_malloc(syscmdsize.argsz[i] as usize * mem::size_of::<u8>(), 1);
 			argv_phy[i] =
 				paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8;
 		}
@@ -236,17 +233,15 @@ impl SyscallInterface for Uhyve {
 		let mut env = Box::new(vec![ptr::null(); syscmdsize.envc as usize + 1]);
 		let mut env_phy = vec![ptr::null(); syscmdsize.envc as usize + 1];
 		for i in 0..syscmdsize.envc as usize {
-			env[i] = crate::__sys_malloc(
-				syscmdsize.envsz[i] as usize * mem::size_of::<u8>(),
-				1,
-			);
-			env_phy[i] =
-				paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8;
+			env[i] = crate::__sys_malloc(syscmdsize.envsz[i] as usize * mem::size_of::<u8>(), 1);
+			env_phy[i] = paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8;
 		}
 
 		// ask uhyve for the environment
-		let mut syscmdval =
-			SysCmdval::new(VirtAddr(argv_phy.as_ptr() as u64), VirtAddr(env_phy.as_ptr() as u64));
+		let mut syscmdval = SysCmdval::new(
+			VirtAddr(argv_phy.as_ptr() as u64),
+			VirtAddr(env_phy.as_ptr() as u64),
+		);
 		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
 
 		let (argv_ptr, _, _) = argv.into_raw_parts();
