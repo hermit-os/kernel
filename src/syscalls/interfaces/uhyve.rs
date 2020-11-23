@@ -225,16 +225,24 @@ impl SyscallInterface for Uhyve {
 		let mut argv = Box::new(Vec::with_capacity(syscmdsize.argc as usize));
 		let mut argv_phy = Vec::with_capacity(syscmdsize.argc as usize);
 		for i in 0..syscmdsize.argc as usize {
-			argv.push(crate::__sys_malloc(syscmdsize.argsz[i] as usize * mem::size_of::<u8>(), 1));
-			argv_phy.push(paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8);
+			argv.push(crate::__sys_malloc(
+				syscmdsize.argsz[i] as usize * mem::size_of::<u8>(),
+				1,
+			));
+			argv_phy
+				.push(paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8);
 		}
 
 		// create array to receive the environment
 		let mut env = Box::new(Vec::with_capacity(syscmdsize.envc as usize + 1));
 		let mut env_phy = Vec::with_capacity(syscmdsize.envc as usize + 1);
 		for i in 0..syscmdsize.envc as usize {
-			env.push(crate::__sys_malloc(syscmdsize.envsz[i] as usize * mem::size_of::<u8>(), 1));
-			env_phy.push(paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8);
+			env.push(crate::__sys_malloc(
+				syscmdsize.envsz[i] as usize * mem::size_of::<u8>(),
+				1,
+			));
+			env_phy
+				.push(paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8);
 		}
 
 		// ask uhyve for the environment
