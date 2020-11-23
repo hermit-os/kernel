@@ -7,7 +7,7 @@
 
 use alloc::prelude::v1::Box;
 use alloc::vec::Vec;
-use core::mem;
+use core::{mem, ptr};
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -39,8 +39,8 @@ extern "C" {
 
 /// forward a request to the hypervisor uhyve
 #[inline]
-fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(data as *mut _ as u64);
+fn hypercall<T>(port: u16, data: &T) {
+	let ptr = VirtAddr(data as *const _ as u64);
 	let physical_address = paging::virtual_to_physical(ptr);
 
 	#[cfg(target_arch = "x86_64")]
@@ -191,24 +191,24 @@ pub struct Uhyve;
 
 impl SyscallInterface for Uhyve {
 	fn open(&self, name: *const u8, flags: i32, mode: i32) -> i32 {
-		let mut sysopen = SysOpen::new(VirtAddr(name as u64), flags, mode);
-		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
+		let sysopen = SysOpen::new(VirtAddr(name as u64), flags, mode);
+		hypercall(UHYVE_PORT_OPEN, &sysopen);
 
-		sysopen.ret
+		unsafe { ptr::read_unaligned(&sysopen.ret) }
 	}
 
 	fn unlink(&self, name: *const u8) -> i32 {
-		let mut sysunlink = SysUnlink::new(VirtAddr(name as u64));
-		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
+		let sysunlink = SysUnlink::new(VirtAddr(name as u64));
+		hypercall(UHYVE_PORT_UNLINK, &sysunlink);
 
-		sysunlink.ret
+		unsafe { ptr::read_unaligned(&sysunlink.ret) }
 	}
 
 	fn close(&self, fd: i32) -> i32 {
-		let mut sysclose = SysClose::new(fd);
-		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
+		let sysclose = SysClose::new(fd);
+		hypercall(UHYVE_PORT_CLOSE, &sysclose);
 
-		sysclose.ret
+		unsafe { ptr::read_unaligned(&sysclose.ret) }
 	}
 
 	/// ToDo: This function needs a description - also applies to trait in src/syscalls/interfaces/mod.rs
@@ -218,15 +218,19 @@ impl SyscallInterface for Uhyve {
 	#[cfg(target_os = "hermit")]
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		// determine the number of arguments and environment variables
-		let mut syscmdsize = SysCmdsize::new();
-		uhyve_send(UHYVE_PORT_CMDSIZE, &mut syscmdsize);
+		let syscmdsize = SysCmdsize::new();
+		hypercall(UHYVE_PORT_CMDSIZE, &syscmdsize);
+
+		let argc = unsafe { ptr::read_unaligned(&syscmdsize.argc) as usize };
+		let envc = unsafe { ptr::read_unaligned(&syscmdsize.envc) as usize };
 
 		// create array to receive all arguments
-		let mut argv = Box::new(Vec::with_capacity(syscmdsize.argc as usize));
-		let mut argv_phy = Vec::with_capacity(syscmdsize.argc as usize);
+		let mut argv = Box::new(Vec::with_capacity(argc));
+		let mut argv_phy = Vec::with_capacity(argc);
 		for i in 0..syscmdsize.argc as usize {
 			argv.push(crate::__sys_malloc(
-				syscmdsize.argsz[i] as usize * mem::size_of::<u8>(),
+				unsafe { ptr::read_unaligned(&syscmdsize.argsz[i]) } as usize
+					* mem::size_of::<u8>(),
 				1,
 			));
 			argv_phy
@@ -234,11 +238,12 @@ impl SyscallInterface for Uhyve {
 		}
 
 		// create array to receive the environment
-		let mut env = Box::new(Vec::with_capacity(syscmdsize.envc as usize + 1));
-		let mut env_phy = Vec::with_capacity(syscmdsize.envc as usize + 1);
+		let mut env = Box::new(Vec::with_capacity(envc + 1));
+		let mut env_phy = Vec::with_capacity(envc + 1);
 		for i in 0..syscmdsize.envc as usize {
 			env.push(crate::__sys_malloc(
-				syscmdsize.envsz[i] as usize * mem::size_of::<u8>(),
+				unsafe { ptr::read_unaligned(&syscmdsize.envsz[i]) } as usize
+					* mem::size_of::<u8>(),
 				1,
 			));
 			env_phy
@@ -246,11 +251,11 @@ impl SyscallInterface for Uhyve {
 		}
 
 		// ask uhyve for the environment
-		let mut syscmdval = SysCmdval::new(
+		let syscmdval = SysCmdval::new(
 			VirtAddr(argv_phy.as_ptr() as u64),
 			VirtAddr(env_phy.as_ptr() as u64),
 		);
-		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
+		hypercall(UHYVE_PORT_CMDVAL, &syscmdval);
 
 		let (argv_ptr, _, _) = argv.into_raw_parts();
 		let (env_ptr, _, _) = env.into_raw_parts();
@@ -262,8 +267,8 @@ impl SyscallInterface for Uhyve {
 	}
 
 	fn shutdown(&self, arg: i32) -> ! {
-		let mut sysexit = SysExit::new(arg);
-		uhyve_send(UHYVE_PORT_EXIT, &mut sysexit);
+		let sysexit = SysExit::new(arg);
+		hypercall(UHYVE_PORT_EXIT, &sysexit);
 
 		loop {
 			arch::processor::halt();
@@ -290,10 +295,10 @@ impl SyscallInterface for Uhyve {
 			}
 		}
 
-		let mut sysread = SysRead::new(fd, buf, len);
-		uhyve_send(UHYVE_PORT_READ, &mut sysread);
+		let sysread = SysRead::new(fd, buf, len);
+		hypercall(UHYVE_PORT_READ, &sysread);
 
-		sysread.ret
+		unsafe { ptr::read_unaligned(&sysread.ret) }
 	}
 
 	fn write(&self, fd: i32, buf: *const u8, len: usize) -> isize {
@@ -316,16 +321,16 @@ impl SyscallInterface for Uhyve {
 			}
 		}
 
-		let mut syswrite = SysWrite::new(fd, buf, len);
-		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
+		let syswrite = SysWrite::new(fd, buf, len);
+		hypercall(UHYVE_PORT_WRITE, &syswrite);
 
-		syswrite.len as isize
+		unsafe { ptr::read_unaligned(&syswrite.len) as isize }
 	}
 
 	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
-		let mut syslseek = SysLseek::new(fd, offset, whence);
-		uhyve_send(UHYVE_PORT_LSEEK, &mut syslseek);
+		let syslseek = SysLseek::new(fd, offset, whence);
+		hypercall(UHYVE_PORT_LSEEK, &syslseek);
 
-		syslseek.offset
+		unsafe { ptr::read_unaligned(&syslseek.offset) }
 	}
 }
