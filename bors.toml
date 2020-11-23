@@ -1,5 +1,4 @@
 status = [
-  "Tests",
   "Tests (macOS-latest, nightly)",
   "Tests (windows-latest, nightly)",
   "Tests (ubuntu-latest, nightly)",
