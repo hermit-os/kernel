@@ -126,9 +126,11 @@ jobs:
         working-directory: libhermit-rs
         run:
           cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader
+        experimental: true
         if: ${{ matrix.os == 'ubuntu-latest' }}
       - name: Integration Tests (smp)
         working-directory: libhermit-rs
         run:
           cargo test --tests --no-fail-fast -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel -- --bootloader_path=../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader --num_cores 2
+        experimental: true
         if: ${{ matrix.os == 'ubuntu-latest' }}
