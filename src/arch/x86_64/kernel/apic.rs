@@ -437,7 +437,7 @@ fn calibrate_timer() {
 	}
 }
 
-pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		if processor::supports_tsc_deadline() {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
@@ -478,6 +478,11 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	}
 }
 
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	irqsave(|| {
+		__set_oneshot_timer(wakeup_time);
+	});
+}
 pub fn init_x2apic() {
 	if processor::supports_x2apic() {
 		debug!("Enable x2APIC support");
