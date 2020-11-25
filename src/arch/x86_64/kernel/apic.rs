@@ -733,10 +733,18 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The ICR1 register in xAPIC mode also has a Delivery Status bit.
 			// Wait until previous interrupt was deliverd.
 			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
+			for _ in 0..100 {
+				if (unsafe { core::ptr::read_volatile(value_ref) }
+					& APIC_ICR_DELIVERY_STATUS_PENDING)
+					> 0
+				{
+					spin_loop_hint();
+				}
+			}
+
 			if (unsafe { core::ptr::read_volatile(value_ref) } & APIC_ICR_DELIVERY_STATUS_PENDING)
 				> 0
 			{
-				spin_loop_hint();
 				info!("Previous interrupt is missing");
 			}
 
