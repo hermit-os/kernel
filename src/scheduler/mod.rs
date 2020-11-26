@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicU32, Ordering, spin_loop_hint};
+use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
 
 use crate::arch;
 use crate::arch::irq;
@@ -501,10 +501,10 @@ impl PerCoreScheduler {
 					}
 				}
 			}
-			
+
 			false
-		} else { 
-			status == TaskStatus::TaskIdle 
+		} else {
+			status == TaskStatus::TaskIdle
 		}
 	}
 }
