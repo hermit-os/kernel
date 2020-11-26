@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering, spin_loop_hint};
 
 use crate::arch;
 use crate::arch::irq;
@@ -372,28 +372,45 @@ impl PerCoreScheduler {
 		irqsave(|| self.scheduler());
 	}
 
-	/// Only the idle task should call this function to
-	/// reschedule the system. Set the idle task in halt
-	/// state by leaving this function.
-	pub fn reschedule_and_wait(&mut self) {
-		irq::disable();
-		self.scheduler();
+	/// Only the idle task should call this function.
+	/// Set the idle task to halt state if not another
+	/// available.
+	pub fn run(&mut self) -> ! {
+		// counts how often the idle task wasn't interrupted by
+		// a common task
+		let mut idle_counter: u64 = 0;
 
-		// do housekeeping
-		let wakeup_tasks = self.cleanup_tasks();
+		loop {
+			irq::disable();
+			if self.scheduler() {
+				idle_counter = idle_counter + 1;
+			} else {
+				idle_counter = 0;
+			}
 
-		// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
-		// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
-		if !wakeup_tasks {
-			irq::enable_and_wait();
-		} else {
-			irq::enable();
+			// do housekeeping
+			let wakeup_tasks = self.cleanup_tasks();
+
+			// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
+			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
+			if !wakeup_tasks {
+				if idle_counter > 1000 {
+					irq::enable_and_wait();
+				} else {
+					irq::enable();
+					spin_loop_hint();
+				}
+			} else {
+				irq::enable();
+			}
 		}
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
-	pub fn scheduler(&mut self) {
+	/// Returns `true` if the new and the old task is the idle task,
+	/// otherwise the function returns `false`.
+	pub fn scheduler(&mut self) -> bool {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
 		let _ = self.cleanup_tasks();
@@ -484,6 +501,10 @@ impl PerCoreScheduler {
 					}
 				}
 			}
+			
+			false
+		} else { 
+			status == TaskStatus::TaskIdle 
 		}
 	}
 }

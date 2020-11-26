@@ -349,9 +349,7 @@ fn boot_processor_main() -> ! {
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	loop {
-		core_scheduler.reschedule_and_wait();
-	}
+	core_scheduler.run();
 }
 
 /// Entry Point of HermitCore for an Application Processor
@@ -366,7 +364,5 @@ fn application_processor_main() -> ! {
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	loop {
-		core_scheduler.reschedule_and_wait();
-	}
+	core_scheduler.run();
 }
