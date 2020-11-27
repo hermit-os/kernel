@@ -382,7 +382,7 @@ impl PerCoreScheduler {
 
 		loop {
 			irq::disable();
-			if self.scheduler() {
+			if self.scheduler() && idle_counter <= 1000 {
 				idle_counter = idle_counter + 1;
 			} else {
 				idle_counter = 0;
