@@ -7,7 +7,8 @@
 
 use alloc::prelude::v1::Box;
 use alloc::vec::Vec;
-use core::{mem, ptr};
+use core::intrinsics::unaligned_volatile_load;
+use core::mem;
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -194,21 +195,21 @@ impl SyscallInterface for Uhyve {
 		let sysopen = SysOpen::new(VirtAddr(name as u64), flags, mode);
 		hypercall(UHYVE_PORT_OPEN, &sysopen);
 
-		unsafe { ptr::read_unaligned(&sysopen.ret) }
+		unsafe { unaligned_volatile_load(&sysopen.ret) }
 	}
 
 	fn unlink(&self, name: *const u8) -> i32 {
 		let sysunlink = SysUnlink::new(VirtAddr(name as u64));
 		hypercall(UHYVE_PORT_UNLINK, &sysunlink);
 
-		unsafe { ptr::read_unaligned(&sysunlink.ret) }
+		unsafe { unaligned_volatile_load(&sysunlink.ret) }
 	}
 
 	fn close(&self, fd: i32) -> i32 {
 		let sysclose = SysClose::new(fd);
 		hypercall(UHYVE_PORT_CLOSE, &sysclose);
 
-		unsafe { ptr::read_unaligned(&sysclose.ret) }
+		unsafe { unaligned_volatile_load(&sysclose.ret) }
 	}
 
 	/// ToDo: This function needs a description - also applies to trait in src/syscalls/interfaces/mod.rs
@@ -221,15 +222,15 @@ impl SyscallInterface for Uhyve {
 		let syscmdsize = SysCmdsize::new();
 		hypercall(UHYVE_PORT_CMDSIZE, &syscmdsize);
 
-		let argc = unsafe { ptr::read_unaligned(&syscmdsize.argc) as usize };
-		let envc = unsafe { ptr::read_unaligned(&syscmdsize.envc) as usize };
+		let argc = unsafe { unaligned_volatile_load(&syscmdsize.argc) as usize };
+		let envc = unsafe { unaligned_volatile_load(&syscmdsize.envc) as usize };
 
 		// create array to receive all arguments
 		let mut argv = Box::new(Vec::with_capacity(argc));
 		let mut argv_phy = Vec::with_capacity(argc);
 		for i in 0..syscmdsize.argc as usize {
 			argv.push(crate::__sys_malloc(
-				unsafe { ptr::read_unaligned(&syscmdsize.argsz[i]) } as usize
+				unsafe { unaligned_volatile_load(&syscmdsize.argsz[i]) } as usize
 					* mem::size_of::<u8>(),
 				1,
 			));
@@ -242,7 +243,7 @@ impl SyscallInterface for Uhyve {
 		let mut env_phy = Vec::with_capacity(envc + 1);
 		for i in 0..syscmdsize.envc as usize {
 			env.push(crate::__sys_malloc(
-				unsafe { ptr::read_unaligned(&syscmdsize.envsz[i]) } as usize
+				unsafe { unaligned_volatile_load(&syscmdsize.envsz[i]) } as usize
 					* mem::size_of::<u8>(),
 				1,
 			));
@@ -298,7 +299,7 @@ impl SyscallInterface for Uhyve {
 		let sysread = SysRead::new(fd, buf, len);
 		hypercall(UHYVE_PORT_READ, &sysread);
 
-		unsafe { ptr::read_unaligned(&sysread.ret) }
+		unsafe { unaligned_volatile_load(&sysread.ret) }
 	}
 
 	fn write(&self, fd: i32, buf: *const u8, len: usize) -> isize {
@@ -324,13 +325,13 @@ impl SyscallInterface for Uhyve {
 		let syswrite = SysWrite::new(fd, buf, len);
 		hypercall(UHYVE_PORT_WRITE, &syswrite);
 
-		unsafe { ptr::read_unaligned(&syswrite.len) as isize }
+		unsafe { unaligned_volatile_load(&syswrite.len) as isize }
 	}
 
 	fn lseek(&self, fd: i32, offset: isize, whence: i32) -> isize {
 		let syslseek = SysLseek::new(fd, offset, whence);
 		hypercall(UHYVE_PORT_LSEEK, &syslseek);
 
-		unsafe { ptr::read_unaligned(&syslseek.offset) }
+		unsafe { unaligned_volatile_load(&syslseek.offset) }
 	}
 }
