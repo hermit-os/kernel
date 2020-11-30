@@ -60,7 +60,7 @@ impl AsSliceU8 for VirtioNetHdr{}
 impl VirtioNetHdr {
     fn get_tx_hdr() -> VirtioNetHdr {
         VirtioNetHdr {
-            flags: 0,//NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM.into(),
+            flags: 0,
             gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
             hdr_len: 0,
             gso_size: 0,
@@ -73,7 +73,7 @@ impl VirtioNetHdr {
     fn get_rx_hdr() -> VirtioNetHdr {
         VirtioNetHdr {
             flags: 0,
-            gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
+            gso_type: 0,
             hdr_len: 0,
             gso_size: 0,
             csum_start: 0,
@@ -226,13 +226,13 @@ impl RxQueues {
             let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
                 BuffSpec::Indirect(&buff_def)
             } else {
-                BuffSpec::Multiple(&buff_def)
+                BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
             };
 
             let num_buff: u16 = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
                 vq.size().into()
             } else {
-                u16::from(vq.size())/u16::try_from(buff_def.len()).unwrap()
+                vq.size().into()
             };
 
             for _ in 0..num_buff{
@@ -244,12 +244,10 @@ impl RxQueues {
                     }
                 };
 
-                let header = VirtioNetHdr::get_rx_hdr();
                 // BufferTokens are directly provided to the queue
                 // TransferTokens are directly dispatched
                 // Transfers will be awaited at the queue
-                buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
-                    .unwrap()
+                buff_tkn
                     .provide()
                     .dispatch_await(Rc::clone(&self.poll_queue), false);
             }
@@ -261,13 +259,13 @@ impl RxQueues {
             let spec = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
                 BuffSpec::Indirect(&buff_def)
             } else {
-                BuffSpec::Multiple(&buff_def)
+                BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1514).unwrap())
             };
 
             let num_buff: u16 = if dev_cfg.features.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC) {
                 vq.size().into()
             } else {
-                u16::from(vq.size())/u16::try_from(buff_def.len()).unwrap()
+                vq.size().into()
             };
 
             for _ in 0..num_buff {
@@ -282,10 +280,8 @@ impl RxQueues {
                 // BufferTokens are directly provided to the queue
                 // TransferTokens are directly dispatched
                 // Transfers will be awaited at the queue
-                buff_tkn.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr())) 
-                            .unwrap()
-                            .provide()
-                            .dispatch_await(Rc::clone(&self.poll_queue), false);
+                buff_tkn .provide()
+                    .dispatch_await(Rc::clone(&self.poll_queue), false);
             }  
         }
 
@@ -416,6 +412,8 @@ impl TxQueues {
                 self.ready_queue.push(
                     vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
                         .unwrap()
+                        .write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
+                        .unwrap()
                 )
             }
         } else {
@@ -440,7 +438,7 @@ impl TxQueues {
             if send_len == len {
                 return Some((tkn, 0))
             } else if send_len > len {
-                tkn.restr_size(Some(len), None);
+                tkn.restr_size(Some(len), None).unwrap();
                 return Some((tkn, 0))
             } else {
                 // Otherwise we are freeing the queue from the token.
@@ -459,7 +457,7 @@ impl TxQueues {
             if send_len == len {
                 return Some((tkn, 0))
             } else if send_len > len {
-                tkn.restr_size(Some(len), None);
+                tkn.restr_size(Some(len), None).unwrap();
                 return Some((tkn, 0))
             } else {
                 // Otherwise we are freeing the queue from the token.
@@ -601,10 +599,8 @@ impl VirtioNetDriver {
         let tkn = *unsafe{Box::from_raw(tkn_handle as *mut BufferToken)};
 
 
-        tkn.write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
-            .unwrap()
-            .provide()
-            .dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
+        tkn.provide()
+           .dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
 
         Ok(())
 	}
@@ -628,15 +624,9 @@ impl VirtioNetDriver {
                 let (_, recv_data_opt) = transfer.as_slices().unwrap();
                 let mut recv_data = recv_data_opt.unwrap();
 
-                // Currently the driver does only support indirect/multiple 
-                // descriptors with two descriptor. 
-                // One for the header. One for the payload.
-                assert_eq!(recv_data.len(), 2);
-
-                let recv_payload = recv_data.pop().unwrap();
-
                 // If the given length is zero, we currently fail.
-                if recv_payload.len() > 0 {
+                if recv_data.len() ==  2 {
+                    let recv_payload = recv_data.pop().unwrap();
                     // Create static refrence for the user-space 
                     // As long as we keep the Transfer in a raw refernce this refernce is static,
                     // so this is fine.
@@ -645,7 +635,16 @@ impl VirtioNetDriver {
                     let raw_transfer = Box::into_raw(Box::new(transfer));
 
                     Ok((ref_data, raw_transfer as usize))
+                } else if recv_data.len() == 1 {
+                    let packet = recv_data.pop().unwrap();
+                    let payload_ptr= (&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
+                    
+                    let ref_data: &'static [u8] = unsafe{ core::slice::from_raw_parts(payload_ptr, packet.len() - mem::size_of::<VirtioNetHdr>())};
+                    let raw_transfer = Box::into_raw(Box::new(transfer));
+
+                    Ok((ref_data, raw_transfer as usize))
                 } else {
+                    error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
                     transfer.reuse()
                     .unwrap()
                     .write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
@@ -667,8 +666,6 @@ impl VirtioNetDriver {
 
                 // Reuse transfer directly
                 transfer.reuse()
-                    .unwrap()
-                    .write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
                     .unwrap()
                     .provide()
                     .dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
@@ -835,7 +832,6 @@ impl VirtioNetDriver {
 
         // Define minimal feature set
         let min_feats: Vec<Features>  = vec![Features::VIRTIO_F_VERSION_1,
-            Features::VIRTIO_F_RING_PACKED,
             Features::VIRTIO_NET_F_MAC, 
             Features::VIRTIO_NET_F_STATUS,
         ];
@@ -847,9 +843,11 @@ impl VirtioNetDriver {
         // If wanted, push new features into feats here:
         //
         // Indirect descriptors can be used
-        // feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
-        // MTU setting is possible
+        feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
+        // MTU setting can be used
         feats.push(Features::VIRTIO_NET_F_MTU);
+        // Packed Vq can be used
+        feats.push(Features::VIRTIO_F_RING_PACKED);
 
         // Currently the driver does NOT support the features below.
         // In order to provide functionality for theses, the driver
@@ -927,7 +925,6 @@ impl VirtioNetDriver {
             Ok(_) => info!("Device specific initalization for Virtio network defice {:x} finished", self.dev_cfg.dev_id),
             Err(vnet_err) => return Err(vnet_err),
         }
-
         // At this point the device is "live"
         self.com_cfg.drv_ok();
 
@@ -981,9 +978,16 @@ impl VirtioNetDriver {
                 ))));
 
                 self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
-
             } else {
-                todo!("Implement control queue for split queue")
+                self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(&mut self.com_cfg,
+                    &self.notif_cfg,
+              VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Split, 
+             VqIndex::from(self.num_vqs),
+                    self.dev_cfg.features.into()
+                ))));
+
+                self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
             }
         }
 
@@ -1054,7 +1058,29 @@ impl VirtioNetDriver {
                 self.send_vqs.add(vq, &self.dev_cfg);
 
             } else {
-                todo!("Integrate split virtqueue into network driver");
+                let vq = Virtq::new(&mut self.com_cfg,
+                    &self.notif_cfg,
+                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Split,
+                    VqIndex::from(2*i),
+                    self.dev_cfg.features.into()
+                );
+                // Interrupt for receiving packets is wanted
+                vq.enable_notifs();
+
+                self.recv_vqs.add(vq, &self.dev_cfg);
+        
+                let vq = Virtq::new(&mut self.com_cfg,
+                    &self.notif_cfg,
+                    VqSize::from(VIRTIO_MAX_QUEUE_SIZE),
+                    VqType::Split,
+                    VqIndex::from(2*i+1),
+                    self.dev_cfg.features.into()
+                );
+                // Interrupt for comunicating that a sended packet left, is not needed
+                vq.disable_notifs();
+
+                self.send_vqs.add(vq, &self.dev_cfg);
             }
         }
         Ok(())
