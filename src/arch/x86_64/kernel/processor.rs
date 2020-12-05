@@ -760,7 +760,7 @@ pub fn configure() {
 	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
 	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
 
-	// Call the IRQ7 handler on the first FPU access.
+	// if set, the first FPU access will trigger interupt 7.
 	cr0.insert(Cr0::CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
@@ -789,6 +789,12 @@ pub fn configure() {
 		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
 	}
 
+	// Disable Performance-Monitoring Counters
+	cr4.remove(Cr4::CR4_ENABLE_PPMC);
+	// clear TSD => every privilege level is able
+	// to use rdtsc
+	cr4.remove(Cr4::CR4_TIME_STAMP_DISABLE);
+
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
 	} else {
@@ -813,6 +819,7 @@ pub fn configure() {
 			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
+		debug!("Set XCR0 to 0x{:x}", xcr0);
 		unsafe {
 			xcr0_write(xcr0);
 		}
@@ -821,10 +828,10 @@ pub fn configure() {
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	writefs(0);
 
-	//
-	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
-	//
 	unsafe {
+		//
+		// ENHANCED INTEL SPEEDSTEP CONFIGURATION
+		//
 		CPU_SPEEDSTEP.configure();
 	}
 }
