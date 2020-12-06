@@ -11,12 +11,18 @@ use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
 use core::alloc::{AllocError, GlobalAlloc, Layout};
+use core::cmp;
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
+
+#[cfg(target_arch = "x86_64")]
+const CACHE_LINE_SIZE: usize = 128;
+#[cfg(not(target_arch = "x86_64"))]
+const CACHE_LINE_SIZE: usize = 64;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
 pub struct Heap {
@@ -97,12 +103,10 @@ impl Heap {
 		if self.bottom == 0 {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
-			let mut size = layout.size();
-			if size < HoleList::min_size() {
-				size = HoleList::min_size();
-			}
-			let size = align_up!(size, mem::align_of::<Hole>());
-			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+			let mut size = cmp::max(layout.size(), HoleList::min_size());
+			size = align_up!(size, mem::align_of::<Hole>());
+			size = align_up!(size, CACHE_LINE_SIZE);
+			let layout = Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
 
 			self.holes.allocate_first_fit(layout)
 		}
@@ -123,12 +127,10 @@ impl Heap {
 		// any significant amounts of memory.
 		// So check if this is a pointer allocated by the System Allocator.
 		if address >= kernel_end_address().as_usize() {
-			let mut size = layout.size();
-			if size < HoleList::min_size() {
-				size = HoleList::min_size();
-			}
-			let size = align_up!(size, mem::align_of::<Hole>());
-			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+			let mut size = cmp::max(layout.size(), HoleList::min_size());
+			size = align_up!(size, mem::align_of::<Hole>());
+			size = align_up!(size, CACHE_LINE_SIZE);
+			let layout = Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
 
 			self.holes.deallocate(ptr, layout);
 		}
@@ -194,6 +196,8 @@ impl Deref for LockedHeap {
 	}
 }
 
+/// To avoid false sharing, the global memory allocator align
+/// all requests to a cache line.
 unsafe impl GlobalAlloc for LockedHeap {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
@@ -204,7 +208,7 @@ unsafe impl GlobalAlloc for LockedHeap {
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-		let ptr = self.alloc(layout.clone());
+		let ptr = self.alloc(layout);
 		if !ptr.is_null() {
 			ptr::write_bytes(ptr, 0, layout.size());
 		}
