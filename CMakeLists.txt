@@ -100,6 +100,12 @@ add_custom_command(
 	COMMAND
 		${CMAKE_OBJCOPY} --redefine-sym bcmp=kernel_bcmp $<TARGET_FILE:hermit-bootstrap>
 
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym __umodti3=kernel_umodti3 $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym __udivti3=kernel_udivti3 $<TARGET_FILE:hermit-bootstrap>
+
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to
 	# linking against the one supplied by the toolchain)
