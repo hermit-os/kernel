@@ -17,7 +17,6 @@ use x86::irq::PageFaultError;
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
-use crate::arch::x86_64::kernel::is_uhyve;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::physicalmem;
 use crate::arch::x86_64::mm::{paddr_to_slice, PhysAddr, VirtAddr};
@@ -507,8 +506,8 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE).unwrap();
-				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
+				let new_entry = physicalmem::allocate(BasePageSize::SIZE).unwrap();
+				self.entries[index].set(new_entry, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
@@ -678,9 +677,9 @@ pub fn map<S: PageSize>(
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
-		"Mapping virtual address {:#X} to physical address {:#X} ({} pages)",
-		virtual_address,
+		"Mapping physical address {:#X} to virtual address {:#X} ({} pages)",
 		physical_address,
+		virtual_address,
 		count
 	);
 
@@ -734,26 +733,24 @@ pub fn init_page_tables() {
 	debug!("Create new view to the kernel space");
 
 	unsafe {
-		if !is_uhyve() {
-			let pml4 = controlregs::cr3();
-			let pde = pml4 + 2 * BasePageSize::SIZE as u64;
+		let pml4 = controlregs::cr3();
+		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
 
-			debug!("Found PML4 at 0x{:x}", pml4);
+		debug!("Found PML4 at 0x{:x}", pml4);
 
-			// make sure that only the required areas are mapped
-			let start = pde
-				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
-					* mem::size_of::<u64>()) as u64;
-			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
-				* mem::size_of::<u64>();
+		// make sure that only the required areas are mapped
+		let start = pde
+			+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
+				* mem::size_of::<u64>()) as u64;
+		let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
+			* mem::size_of::<u64>();
 
-			ptr::write_bytes(start as *mut u8, 0u8, size);
+		ptr::write_bytes(start as *mut u8, 0u8, size);
 
-			//TODO: clearing the memory befor kernel_start_address()
+		//TODO: clearing the memory befor kernel_start_address()
 
-			// flush tlb
-			controlregs::cr3_write(pml4);
-		}
+		// flush tlb
+		controlregs::cr3_write(pml4);
 
 		// Identity-map the supplied Multiboot information and command line.
 		let mb_info = get_mbinfo();
