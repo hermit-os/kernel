@@ -225,30 +225,110 @@ impl Virtq {
     /// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective 
     /// virtqueue implementation. Pleace see the respective docs for details
     ///
+    /// **INFO:**
+    /// Due to the missing HashMap implementation in the kernel, this function currently uses a nested 
+    /// for-loop. The first iteration is over the number if dispatched tokens. Inside this loop, the
+    /// function iterates over a list of all already "used" virtqueues. If the given token belongs to an 
+    /// existing queue it is inserted into the corresponding list of tokens, if it belongs to no queue,
+    /// a new entry in the "used" virtqueues list is made.
+    /// This procedure can possibly be very slow.
+    ///
     /// The `notif` parameter indicates if the driver wants to have a notification for this specific
     /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
     /// updated notification flags before finishing transfers!
     pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
-        todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+        let mut used_vqs: Vec<(Rc<Virtq>, Vec<TransferToken>)> = Vec::new();
 
         // Sort the TransferTokens depending in the queue their coming from.
         // then call dispatch_batch of that queue
+        for tkn in tkns {
+            let index = tkn.get_vq().index();
+            let mut used = false;
+            let mut index_used = 0usize;
+
+            for (pos, (vq, _)) in used_vqs.iter_mut().enumerate() {
+                if index == vq.index() {
+                    index_used = pos;
+                    used = true;
+                    break;
+                } 
+            }
+
+            if used {
+                let (_, tkn_lst) = &mut used_vqs[index_used];
+                tkn_lst.push(tkn);
+            } else {
+                let mut new_tkn_lst = Vec::new();
+                let vq = tkn.get_vq();
+                new_tkn_lst.push(tkn);
+
+                used_vqs.push((vq, new_tkn_lst)) 
+            }
+            used = false;
+        }
+
+        let mut transfer_lst = Vec::new();
+        for (vq_ref, tkn_lst) in used_vqs {
+            match vq_ref.as_ref() {
+                Virtq::Packed(vq) => transfer_lst.append(vq.dispatch_batch(tkn_lst, notif).as_mut()),
+                Virtq::Split(vq) => transfer_lst.append(vq.dispatch_batch(tkn_lst, notif).as_mut()), 
+            }
+        }
+
+        transfer_lst
     }
 
     /// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
     /// upon finish.
     ///
-    /// The actuall behaviour depends on the respective 
-    /// virtqueue implementation. Please see the respective docs for details.
+    /// **INFO:**
+    /// Due to the missing HashMap implementation in the kernel, this function currently uses a nested 
+    /// for-loop. The first iteration is over the number if dispatched tokens. Inside this loop, the
+    /// function iterates over a list of all already "used" virtqueues. If the given token belongs to an 
+    /// existing queue it is inserted into the corresponding list of tokens, if it belongs to no queue,
+    /// a new entry in the "used" virtqueues list is made.
+    /// This procedure can possibly be very slow.
     ///
     /// The `notif` parameter indicates if the driver wants to have a notification for this specific
     /// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the 
     /// updated notification flags before finishing transfers!
     pub fn dispatch_batch_await(tkns: Vec<TransferToken>, await_queue: Rc<RefCell<VecDeque<Transfer>>>, notif: bool) {
-        todo!("Implement dispatch, best would be with a HashMap(index, Vec<Tkn>)");
+        let mut used_vqs: Vec<(Rc<Virtq>, Vec<TransferToken>)> = Vec::new();
 
         // Sort the TransferTokens depending in the queue their coming from.
-        // then call dispatch_batch_await of that queue
+        // then call dispatch_batch of that queue
+        for tkn in tkns {
+            let index = tkn.get_vq().index();
+            let mut used = false;
+            let mut index_used = 0usize;
+
+            for (pos, (vq, _)) in used_vqs.iter_mut().enumerate() {
+                if index == vq.index() {
+                    index_used = pos;
+                    used = true;
+                    break;
+                } 
+            }
+
+            if used {
+                let (_, tkn_lst) = &mut used_vqs[index_used];
+                tkn_lst.push(tkn);
+            } else {
+                let mut new_tkn_lst = Vec::new();
+                let vq = tkn.get_vq();
+                new_tkn_lst.push(tkn);
+
+                used_vqs.push((vq, new_tkn_lst)) 
+            }
+            used = false;
+        }
+
+        for (vq, tkn_lst) in used_vqs {
+            match vq.as_ref() {
+                Virtq::Packed(vq) => vq.dispatch_batch_await(tkn_lst, Rc::clone(&await_queue), notif),
+                Virtq::Split(vq) => vq.dispatch_batch_await(tkn_lst, Rc::clone(&await_queue), notif),
+            }
+        }
     }
     
     /// Creates a new Virtq of the specified (VqType)[VqType], (VqSize)[VqSize] and the (VqIndex)[VqIndex]. 
