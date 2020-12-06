@@ -133,6 +133,8 @@ pub fn init() {
 			crate::ALLOCATOR
 				.lock()
 				.init(start.as_usize(), kernel_heap_size);
+
+			info!("Kernel heap starts at 0x{:x}", start);
 		}
 
 		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
@@ -245,8 +247,17 @@ pub fn print_information() {
 pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = align_up!(sz, BasePageSize::SIZE);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
+	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
-	map(physical_address, size, true, no_execution, false)
+	let count = size / BasePageSize::SIZE;
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	if no_execution {
+		flags.execute_disable();
+	}
+	arch::mm::paging::map::<BasePageSize>(virtual_address, physical_address, count, flags);
+
+	virtual_address
 }
 
 pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
