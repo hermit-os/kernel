@@ -128,7 +128,7 @@ impl Virtq {
     fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
         match self {
             Virtq::Packed(vq) => vq.dispatch(tkn, notif),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.dispatch(tkn, notif), 
         }
     }
 }
@@ -185,7 +185,7 @@ impl Virtq {
     pub fn enable_notifs(&self) {
         match self {
             Virtq::Packed(vq) => vq.enable_notifs(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.enable_notifs(), 
         }
     }
 
@@ -193,7 +193,7 @@ impl Virtq {
     pub fn disable_notifs(&self) {
         match self {
             Virtq::Packed(vq) => vq.disable_notifs(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.disable_notifs(), 
         }
     }
 
@@ -206,7 +206,7 @@ impl Virtq {
     pub fn poll(&self) {
         match self {
             Virtq::Packed(vq) => vq.poll(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.poll(), 
         }
     }
 
@@ -218,7 +218,7 @@ impl Virtq {
     pub fn clean_up(&self) {
         match self {
             Virtq::Packed(vq) => vq.clean_up(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.clean_up(), 
         }
     }
 
@@ -262,7 +262,10 @@ impl Virtq {
                 Ok(packed_vq) => Virtq::Packed(packed_vq),
                 Err(vq_error) => panic!("Currently panics if queue fails to be created")
             },
-            VqType::Split => unimplemented!()
+            VqType::Split => match SplitVq::new(com_cfg, notif_cfg, size, index, feats) {
+                Ok(split_vq) => Virtq::Split(split_vq),
+                Err(vq_error) => panic!("Currently panics if queue fails to be created")
+            },
         }
     }
 
@@ -271,7 +274,7 @@ impl Virtq {
     pub fn size(&self) -> VqSize {
         match self {
             Virtq::Packed(vq) => vq.size(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.size(), 
         }
     }
 
@@ -279,7 +282,7 @@ impl Virtq {
     pub fn index(&self) -> VqIndex {
         match self {
             Virtq::Packed(vq) => vq.index(),
-            Virtq::Split(vq) => unimplemented!(),
+            Virtq::Split(vq) => vq.index(),
         }
     } 
 
@@ -348,7 +351,7 @@ impl Virtq {
     pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(&self, rc_self: Rc<Virtq>, send: Option<(*mut T, BuffSpec)>, recv: Option<(*mut K, BuffSpec)>) -> Result<TransferToken, VirtqError> {
         match self {
             Virtq::Packed(vq) => vq.prep_transfer_from_raw(rc_self, send, recv),
-            Virtq::Split(vq ) => unimplemented!(),
+            Virtq::Split(vq ) => vq.prep_transfer_from_raw(rc_self, send, recv),
         }
     }
 
@@ -396,7 +399,7 @@ impl Virtq {
     pub fn prep_buffer(&self, rc_self: Rc<Virtq>, send: Option<BuffSpec>, recv: Option<BuffSpec>) -> Result<BufferToken, VirtqError> {
         match self {
             Virtq::Packed(vq) => vq.prep_buffer(rc_self, send, recv),
-            Virtq::Split(vq ) => unimplemented!(),
+            Virtq::Split(vq ) => vq.prep_buffer(rc_self, send, recv),
         }
     }
 
@@ -406,7 +409,7 @@ impl Virtq {
     fn early_drop(&self, transfer_tk: Pinned<TransferToken>) {
         match self {
             Virtq::Packed(vq) => vq.early_drop(transfer_tk),
-            Virtq::Split(vq ) => unimplemented!(),
+            Virtq::Split(vq ) => vq.early_drop(transfer_tk),
         }
     }
 }
