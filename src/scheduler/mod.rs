@@ -9,7 +9,9 @@
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::convert::{TryFrom, TryInto};
 use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
 
 use crate::arch;
@@ -26,7 +28,7 @@ pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: BTreeMap<CoreId, &PerCoreScheduler> = BTreeMap::new();
+static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
 /// Map between Task ID and Task Control Block
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	SpinlockIrqSave::new(BTreeMap::new());
@@ -557,14 +559,14 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe {
-		SCHEDULERS.insert(core_id, &(*scheduler));
+		SCHEDULERS.insert(core_id.try_into().unwrap(), &(*scheduler));
 	}
 }
 
 #[inline]
 fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	if let Some(result) = unsafe { SCHEDULERS.get(&core_id) } {
+	if let Some(result) = unsafe { SCHEDULERS.get(usize::try_from(core_id).unwrap()) } {
 		result
 	} else {
 		panic!(
