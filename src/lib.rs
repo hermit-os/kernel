@@ -55,6 +55,7 @@
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
+extern crate crossbeam_utils;
 #[macro_use]
 extern crate log;
 #[cfg(target_arch = "x86_64")]

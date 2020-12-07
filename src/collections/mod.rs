@@ -7,10 +7,6 @@
 
 use crate::arch::irq;
 
-mod cachepadded;
-
-pub use self::cachepadded::*;
-
 /// `irqsave` guarantees that the call of the closure
 /// will be not disturbed by an interrupt
 #[inline]
