@@ -106,7 +106,8 @@ impl Heap {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
 			size = align_up!(size, mem::align_of::<Hole>());
 			size = align_up!(size, CACHE_LINE_SIZE);
-			let layout = Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
+			let layout =
+				Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
 
 			self.holes.allocate_first_fit(layout)
 		}
@@ -130,7 +131,8 @@ impl Heap {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
 			size = align_up!(size, mem::align_of::<Hole>());
 			size = align_up!(size, CACHE_LINE_SIZE);
-			let layout = Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
+			let layout =
+				Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
 
 			self.holes.deallocate(ptr, layout);
 		}
