@@ -15,7 +15,7 @@ use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::collections::{irqsave, CachePadded};
+use crate::collections::irqsave;
 use crate::config::*;
 use crate::environment;
 use crate::mm;
@@ -29,6 +29,7 @@ use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, ptr, u32};
+use crossbeam_utils::CachePadded;
 
 const APIC_ICR2: usize = 0x0310;
 
