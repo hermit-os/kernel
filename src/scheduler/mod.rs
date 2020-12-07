@@ -559,7 +559,7 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe {
-		SCHEDULERS.insert(core_id.try_into().unwrap(), &(*scheduler));
+		SCHEDULERS.insert(core_id.try_into().unwrap(), scheduler.as_ref().unwrap());
 	}
 }
 
