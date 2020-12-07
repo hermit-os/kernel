@@ -25,6 +25,8 @@ const CACHE_LINE_SIZE: usize = 128;
 const CACHE_LINE_SIZE: usize = 64;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
+#[cfg_attr(target_arch = "x86_64", repr(align(128)))]
+#[cfg_attr(not(target_arch = "x86_64"), repr(align(64)))]
 pub struct Heap {
 	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
 	index: usize,
@@ -80,10 +82,9 @@ impl Heap {
 		layout: Layout,
 	) -> Result<(NonNull<u8>, usize), AllocError> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
-		let size = align_up!(layout.size(), HoleList::min_size());
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + size, HoleList::min_size());
+		self.index = align_up!(self.index + layout.size(), CACHE_LINE_SIZE);
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocError)
 		} else {
