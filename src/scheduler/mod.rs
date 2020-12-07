@@ -12,7 +12,8 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::{TryFrom, TryInto};
-use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
+use crossbeam_utils::Backoff;
 
 use crate::arch;
 use crate::arch::irq;
@@ -387,6 +388,7 @@ impl PerCoreScheduler {
 		// counts how often the idle task wasn't interrupted by
 		// a common task
 		let mut idle_counter: u64 = 0;
+		let backoff = Backoff::new();
 
 		loop {
 			irq::disable();
@@ -404,9 +406,10 @@ impl PerCoreScheduler {
 			if !wakeup_tasks {
 				if idle_counter > 1000 {
 					irq::enable_and_wait();
+					backoff.reset();
 				} else {
 					irq::enable();
-					spin_loop_hint();
+					backoff.spin();
 				}
 			} else {
 				irq::enable();
