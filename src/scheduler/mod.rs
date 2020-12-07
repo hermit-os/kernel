@@ -385,17 +385,12 @@ impl PerCoreScheduler {
 	/// Set the idle task to halt state if not another
 	/// available.
 	pub fn run(&mut self) -> ! {
-		// counts how often the idle task wasn't interrupted by
-		// a common task
-		let mut idle_counter: u64 = 0;
 		let backoff = Backoff::new();
 
 		loop {
 			irq::disable();
-			if self.scheduler() && idle_counter <= 1000 {
-				idle_counter = idle_counter + 1;
-			} else {
-				idle_counter = 0;
+			if !self.scheduler() {
+				backoff.reset()
 			}
 
 			// do housekeeping
@@ -404,9 +399,8 @@ impl PerCoreScheduler {
 			// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
 			if !wakeup_tasks {
-				if idle_counter > 1000 {
+				if backoff.is_completed() {
 					irq::enable_and_wait();
-					backoff.reset();
 				} else {
 					irq::enable();
 					backoff.spin();
