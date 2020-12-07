@@ -17,9 +17,9 @@ mod tests {
 	use crate::mm::allocator::*;
 	use crate::mm::hole::*;
 
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 	const CACHE_LINE_SIZE: usize = 128;
-	#[cfg(not(target_arch = "x86_64"))]
+	#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 	const CACHE_LINE_SIZE: usize = 64;
 
 	fn new_heap() -> Heap {

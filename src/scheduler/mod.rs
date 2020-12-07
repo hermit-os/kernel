@@ -52,8 +52,11 @@ impl SchedulerInput {
 	}
 }
 
-#[cfg_attr(target_arch = "x86_64", repr(align(128)))]
-#[cfg_attr(not(target_arch = "x86_64"), repr(align(64)))]
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
+#[cfg_attr(
+	not(any(target_arch = "x86_64", target_arch = "aarch64")),
+	repr(align(64))
+)]
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	core_id: CoreId,
