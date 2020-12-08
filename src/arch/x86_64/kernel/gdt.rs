@@ -38,21 +38,25 @@ static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer {
 };
 
 #[repr(align(4096))]
-struct Gdt([Descriptor; GDT_ENTRIES]);
+struct Gdt {
+	entries: [Descriptor; GDT_ENTRIES],
+}
 
 impl Gdt {
 	pub const fn new() -> Self {
-		Gdt([Descriptor::NULL; GDT_ENTRIES])
+		Gdt {
+			entries: [Descriptor::NULL; GDT_ENTRIES],
+		}
 	}
 }
 pub fn init() {
 	unsafe {
 		// The NULL descriptor is always the first entry.
-		GDT.0[GDT_NULL as usize] = Descriptor::NULL;
+		GDT.entries[GDT_NULL as usize] = Descriptor::NULL;
 
 		// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		GDT.0[GDT_KERNEL_CODE as usize] =
+		GDT.entries[GDT_KERNEL_CODE as usize] =
 			DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
 				.present()
 				.dpl(Ring::Ring0)
@@ -61,14 +65,14 @@ pub fn init() {
 
 		// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
 		// All other parameters are ignored.
-		GDT.0[GDT_KERNEL_DATA as usize] =
+		GDT.entries[GDT_KERNEL_DATA as usize] =
 			DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
 
 		// Let GDTR point to our newly crafted GDT.
-		GDTR = DescriptorTablePointer::new_from_slice(&(GDT.0[0..GDT_ENTRIES]));
+		GDTR = DescriptorTablePointer::new_from_slice(&(GDT.entries[0..GDT_ENTRIES]));
 	}
 }
 
@@ -116,9 +120,10 @@ pub fn add_current_core() {
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
-			GDT.0[idx..idx + 2].copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(
-				tss_descriptor,
-			));
+			GDT.entries[idx..idx + 2]
+				.copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(
+					tss_descriptor,
+				));
 		}
 
 		// Load it.
