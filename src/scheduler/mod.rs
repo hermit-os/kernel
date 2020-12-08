@@ -9,8 +9,11 @@
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
+use core::convert::{TryFrom, TryInto};
+use core::sync::atomic::{AtomicU32, Ordering};
+use crossbeam_utils::Backoff;
 
 use crate::arch;
 use crate::arch::irq;
@@ -26,7 +29,7 @@ pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: BTreeMap<CoreId, &PerCoreScheduler> = BTreeMap::new();
+static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
 /// Map between Task ID and Task Control Block
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	SpinlockIrqSave::new(BTreeMap::new());
@@ -49,6 +52,12 @@ impl SchedulerInput {
 		}
 	}
 }
+
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
+#[cfg_attr(
+	not(any(target_arch = "x86_64", target_arch = "aarch64")),
+	repr(align(64))
+)]
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
 	core_id: CoreId,
@@ -376,16 +385,12 @@ impl PerCoreScheduler {
 	/// Set the idle task to halt state if not another
 	/// available.
 	pub fn run(&mut self) -> ! {
-		// counts how often the idle task wasn't interrupted by
-		// a common task
-		let mut idle_counter: u64 = 0;
+		let backoff = Backoff::new();
 
 		loop {
 			irq::disable();
-			if self.scheduler() && idle_counter <= 1000 {
-				idle_counter = idle_counter + 1;
-			} else {
-				idle_counter = 0;
+			if !self.scheduler() {
+				backoff.reset()
 			}
 
 			// do housekeeping
@@ -394,11 +399,11 @@ impl PerCoreScheduler {
 			// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
 			if !wakeup_tasks {
-				if idle_counter > 1000 {
+				if backoff.is_completed() {
 					irq::enable_and_wait();
 				} else {
 					irq::enable();
-					spin_loop_hint();
+					backoff.snooze();
 				}
 			} else {
 				irq::enable();
@@ -554,14 +559,14 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	unsafe {
-		SCHEDULERS.insert(core_id, &(*scheduler));
+		SCHEDULERS.insert(core_id.try_into().unwrap(), scheduler.as_ref().unwrap());
 	}
 }
 
 #[inline]
 fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
-	if let Some(result) = unsafe { SCHEDULERS.get(&core_id) } {
+	if let Some(result) = unsafe { SCHEDULERS.get(usize::try_from(core_id).unwrap()) } {
 		result
 	} else {
 		panic!(

@@ -10,7 +10,9 @@
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
+use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 use core::alloc::{AllocError, GlobalAlloc, Layout};
+use core::cmp;
 use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{mem, ptr};
@@ -19,6 +21,11 @@ use core::{mem, ptr};
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
+#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
+#[cfg_attr(
+	not(any(target_arch = "x86_64", target_arch = "aarch64")),
+	repr(align(64))
+)]
 pub struct Heap {
 	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
 	index: usize,
@@ -74,10 +81,9 @@ impl Heap {
 		layout: Layout,
 	) -> Result<(NonNull<u8>, usize), AllocError> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
-		let size = align_up!(layout.size(), HoleList::min_size());
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + size, HoleList::min_size());
+		self.index = align_up!(self.index + layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocError)
 		} else {
@@ -97,12 +103,14 @@ impl Heap {
 		if self.bottom == 0 {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
-			let mut size = layout.size();
-			if size < HoleList::min_size() {
-				size = HoleList::min_size();
-			}
-			let size = align_up!(size, mem::align_of::<Hole>());
-			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+			let mut size = cmp::max(layout.size(), HoleList::min_size());
+			size = align_up!(size, mem::align_of::<Hole>());
+			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let layout = Layout::from_size_align(
+				size,
+				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+			)
+			.unwrap();
 
 			self.holes.allocate_first_fit(layout)
 		}
@@ -123,12 +131,14 @@ impl Heap {
 		// any significant amounts of memory.
 		// So check if this is a pointer allocated by the System Allocator.
 		if address >= kernel_end_address().as_usize() {
-			let mut size = layout.size();
-			if size < HoleList::min_size() {
-				size = HoleList::min_size();
-			}
-			let size = align_up!(size, mem::align_of::<Hole>());
-			let layout = Layout::from_size_align(size, layout.align()).unwrap();
+			let mut size = cmp::max(layout.size(), HoleList::min_size());
+			size = align_up!(size, mem::align_of::<Hole>());
+			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let layout = Layout::from_size_align(
+				size,
+				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+			)
+			.unwrap();
 
 			self.holes.deallocate(ptr, layout);
 		}
@@ -194,6 +204,8 @@ impl Deref for LockedHeap {
 	}
 }
 
+/// To avoid false sharing, the global memory allocator align
+/// all requests to a cache line.
 unsafe impl GlobalAlloc for LockedHeap {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
@@ -204,7 +216,7 @@ unsafe impl GlobalAlloc for LockedHeap {
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-		let ptr = self.alloc(layout.clone());
+		let ptr = self.alloc(layout);
 		if !ptr.is_null() {
 			ptr::write_bytes(ptr, 0, layout.size());
 		}
