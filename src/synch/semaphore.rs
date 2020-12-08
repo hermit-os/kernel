@@ -9,6 +9,7 @@
 use crate::arch::percore::*;
 use crate::scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
 use crate::synch::spinlock::SpinlockIrqSave;
+use crossbeam_utils::Backoff;
 
 struct SemaphoreState {
 	/// Resource available count
@@ -74,9 +75,15 @@ impl Semaphore {
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
 	pub fn acquire(&self, time: Option<u64>) -> bool {
+		let backoff = Backoff::new();
 		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
 		core_scheduler.set_current_task_wakeup_reason(WakeupReason::Custom);
+
+		let wakeup_time = match time {
+			Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
+			_ => None,
+		};
 
 		// Loop until we have acquired the semaphore.
 		loop {
@@ -87,27 +94,28 @@ impl Semaphore {
 					// Successfully acquired the semaphore.
 					locked_state.count -= 1;
 					return true;
-				} else if core_scheduler.get_current_task_wakeup_reason() == WakeupReason::Timer {
-					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
-					// Don't try again and return the failure status.
-					locked_state
-						.queue
-						.remove(core_scheduler.get_current_task_handle());
-					return false;
+				} else if let Some(t) = wakeup_time {
+					if t < crate::arch::processor::get_timer_ticks() {
+						// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
+						// Don't try again and return the failure status.
+						locked_state
+							.queue
+							.remove(core_scheduler.get_current_task_handle());
+						return false;
+					}
 				}
 
-				let wakeup_time = match time {
-					Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
-					_ => None,
-				};
-
-				// We couldn't acquire the semaphore.
-				// Block the current task and add it to the wakeup queue.
-				core_scheduler.block_current_task(wakeup_time);
-				locked_state
-					.queue
-					.push(core_scheduler.get_current_task_handle());
+				if backoff.is_completed() {
+					// We couldn't acquire the semaphore.
+					// Block the current task and add it to the wakeup queue.
+					core_scheduler.block_current_task(wakeup_time);
+					locked_state
+						.queue
+						.push(core_scheduler.get_current_task_handle());
+				}
 			}
+
+			backoff.snooze();
 
 			// Switch to the next task.
 			core_scheduler.reschedule();

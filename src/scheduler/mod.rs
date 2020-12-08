@@ -403,7 +403,7 @@ impl PerCoreScheduler {
 					irq::enable_and_wait();
 				} else {
 					irq::enable();
-					backoff.spin();
+					backoff.snooze();
 				}
 			} else {
 				irq::enable();
