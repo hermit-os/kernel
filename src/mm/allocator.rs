@@ -10,6 +10,7 @@
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
+use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 use core::alloc::{AllocError, GlobalAlloc, Layout};
 use core::cmp;
 use core::ops::Deref;
@@ -18,11 +19,6 @@ use core::{mem, ptr};
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
-
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-const CACHE_LINE_SIZE: usize = 128;
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-const CACHE_LINE_SIZE: usize = 64;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
 #[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
@@ -87,7 +83,7 @@ impl Heap {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + layout.size(), CACHE_LINE_SIZE);
+		self.index = align_up!(self.index + layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocError)
 		} else {
@@ -109,9 +105,12 @@ impl Heap {
 		} else {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
 			size = align_up!(size, mem::align_of::<Hole>());
-			size = align_up!(size, CACHE_LINE_SIZE);
-			let layout =
-				Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
+			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let layout = Layout::from_size_align(
+				size,
+				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+			)
+			.unwrap();
 
 			self.holes.allocate_first_fit(layout)
 		}
@@ -134,9 +133,12 @@ impl Heap {
 		if address >= kernel_end_address().as_usize() {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
 			size = align_up!(size, mem::align_of::<Hole>());
-			size = align_up!(size, CACHE_LINE_SIZE);
-			let layout =
-				Layout::from_size_align(size, cmp::max(layout.align(), CACHE_LINE_SIZE)).unwrap();
+			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let layout = Layout::from_size_align(
+				size,
+				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+			)
+			.unwrap();
 
 			self.holes.deallocate(ptr, layout);
 		}

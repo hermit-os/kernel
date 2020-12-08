@@ -16,15 +16,11 @@ mod tests {
 
 	use crate::mm::allocator::*;
 	use crate::mm::hole::*;
-
-	#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-	const CACHE_LINE_SIZE: usize = 128;
-	#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-	const CACHE_LINE_SIZE: usize = 64;
+	use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
 	fn new_heap() -> Heap {
 		const HEAP_SIZE: usize = 1000;
-		let layout = Layout::from_size_align(HEAP_SIZE, CACHE_LINE_SIZE).unwrap();
+		let layout = Layout::from_size_align(HEAP_SIZE, HW_DESTRUCTIVE_INTERFERENCE_SIZE).unwrap();
 		let heap_space = unsafe { alloc(layout) as *const u8 };
 
 		let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
@@ -36,7 +32,8 @@ mod tests {
 	fn new_max_heap() -> Heap {
 		const HEAP_SIZE: usize = 1024;
 		const HEAP_SIZE_MAX: usize = 2048;
-		let layout = Layout::from_size_align(HEAP_SIZE_MAX, CACHE_LINE_SIZE).unwrap();
+		let layout =
+			Layout::from_size_align(HEAP_SIZE_MAX, HW_DESTRUCTIVE_INTERFERENCE_SIZE).unwrap();
 		let heap_space = unsafe { alloc(layout) as *const u8 };
 
 		let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
@@ -80,7 +77,7 @@ mod tests {
 		let (hole_addr, hole_size) = heap.holes.first_hole().expect("ERROR: no hole left");
 
 		// note: the smallest allocation granularity is 64 byte
-		let size = align_up!(size, CACHE_LINE_SIZE);
+		let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 		assert!(hole_addr == heap.bottom() + size);
 		assert!(hole_size == heap.size() - size);
 
@@ -120,12 +117,12 @@ mod tests {
 			// note: the smallest allocation granularity is 64 byte
 			assert_eq!(
 				(*(y.as_ptr() as *const Hole)).size,
-				align_up!(layout.size(), CACHE_LINE_SIZE)
+				align_up!(layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE)
 			);
 			heap.deallocate(x, layout.clone());
 			assert_eq!(
 				(*(x.as_ptr() as *const Hole)).size,
-				align_up!(layout.size(), CACHE_LINE_SIZE) * 2
+				align_up!(layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE) * 2
 			);
 			heap.deallocate(z, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size());
@@ -145,7 +142,7 @@ mod tests {
 
 		unsafe {
 			heap.deallocate(x, layout.clone());
-			let size = align_up!(size, CACHE_LINE_SIZE);
+			let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);
 			heap.deallocate(y, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size * 2);
@@ -169,7 +166,7 @@ mod tests {
 		unsafe {
 			heap.deallocate(x, layout.clone());
 			// note: the smallest allocation granularity is 64 byte
-			let size = align_up!(size, CACHE_LINE_SIZE);
+			let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);
 			heap.deallocate(z, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);
