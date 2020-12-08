@@ -6,12 +6,12 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::arch::irq;
-use crate::collections::CachePadded;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::marker::Sync;
 use core::ops::{Deref, DerefMut, Drop};
 use core::sync::atomic::{spin_loop_hint, AtomicBool, AtomicUsize, Ordering};
+use crossbeam_utils::CachePadded;
 
 /// This type provides a lock based on busy waiting to realize mutual exclusion of tasks.
 ///

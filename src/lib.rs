@@ -55,6 +55,7 @@
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
+extern crate crossbeam_utils;
 #[macro_use]
 extern crate log;
 #[cfg(target_arch = "x86_64")]
@@ -294,6 +295,8 @@ extern "C" fn initd(_arg: usize) {
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
 	let (argc, argv, environ) = syscalls::get_application_parameters();
+
+	config::sanity_check();
 
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
