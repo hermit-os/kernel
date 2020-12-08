@@ -98,11 +98,15 @@ impl IdtEntry {
 pub const IDT_ENTRIES: usize = 256;
 
 #[repr(align(4096))]
-struct IdtArray([IdtEntry; IDT_ENTRIES]);
+struct IdtArray {
+	entries: [IdtEntry; IDT_ENTRIES],
+}
 
 impl IdtArray {
 	pub const fn new() -> Self {
-		IdtArray([IdtEntry::MISSING; IDT_ENTRIES])
+		IdtArray {
+			entries: [IdtEntry::MISSING; IDT_ENTRIES],
+		}
 	}
 }
 
@@ -119,11 +123,11 @@ pub fn install() {
 		let is_init = IDT_INIT.swap(true, Ordering::SeqCst);
 
 		if !is_init {
-			debug!("IDT address: 0x{:x}", &IDT.0 as *const _ as usize);
+			debug!("IDT address: 0x{:x}", &IDT.entries as *const _ as usize);
 
 			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
 			// implement "new" as "const fn" and do this call already in the initialization of IDTP.
-			IDTP = DescriptorTablePointer::new_from_slice(&IDT.0);
+			IDTP = DescriptorTablePointer::new_from_slice(&IDT.entries);
 		};
 
 		dtables::lidt(&IDTP);
@@ -149,6 +153,6 @@ pub fn set_gate(index: u8, handler: usize, ist_index: u8) {
 	);
 
 	unsafe {
-		IDT.0[index as usize] = entry;
+		IDT.entries[index as usize] = entry;
 	}
 }
