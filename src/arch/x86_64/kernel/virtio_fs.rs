@@ -306,6 +306,12 @@ pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDrive
 	drv.init();
 	trace!("Driver after init: {:?}", drv);
 
+	Some(drv)
+}
+
+pub fn init_fs() {
+	let drv = pci::get_filesystem_driver().expect("Unable to get access to the device driver");
+
 	// Instanciate global fuse object
 	let fuse = fuse::Fuse::new();
 
@@ -313,10 +319,8 @@ pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDrive
 	fuse.send_init();
 
 	let mut fs = fs::FILESYSTEM.lock();
-	let tag = util::c_buf_to_str(&device_cfg.tag);
+	let tag = util::c_buf_to_str(&drv.lock().device_cfg.tag);
 	info!("Mounting virtio-fs at /{}", tag);
 	fs.mount(tag, Box::new(fuse))
 		.expect("Mount failed. Duplicate tag?");
-
-	Some(drv)
 }
