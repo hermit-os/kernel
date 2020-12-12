@@ -850,11 +850,15 @@ pub fn init_virtio_device(adapter: &pci::PciAdapter) {
 			}
 		}
 		0x105a => {
-			info!("Found Virtio-FS device!");
+			info!("Found VirtioFS device!");
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			let drv = virtio_fs::create_virtiofs_driver(adapter).unwrap();
-			pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(drv)));
+			{
+				let drv = virtio_fs::create_virtiofs_driver(adapter).unwrap();
+				pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(drv)));
+			}
+			// initialize file system
+			virtio_fs::init_fs();
 		}
 		_ => {
 			warn!("Virtio device is NOT supported, skipping!");
