@@ -66,9 +66,12 @@ dependencies = [
 
 [[package]]
 name = "multiboot"
-version = "0.3.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "745e351d4f128ea9e266fe2dd04a1bd7349c60441d45ec8677520bae08e25d43"
+checksum = "0f442c65adef7bc9676eb8212598d14b7ba799b8bb2a312ed32f410e85e2f5ad"
+dependencies = [
+ "paste",
+]
 
 [[package]]
 name = "num"
@@ -144,6 +147,12 @@ checksum = "ac267bcc07f48ee5f8935ab0d24f316fb722d7a1292e2913f0cc196b29ffd611"
 dependencies = [
  "autocfg",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5d65c4d95931acda4498f675e332fcbdc9a06705cd07086c510e9b6009cd1c1"
 
 [[package]]
 name = "proc-macro2"
