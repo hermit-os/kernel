@@ -65,7 +65,7 @@ num-derive = "0.3"
 crossbeam-utils = { version = "0.8", default-features = false }
 
 [dependencies.num]
-version = "0.2"
+version = "0.3"
 default-features = false
 
 [dependencies.num-traits]
