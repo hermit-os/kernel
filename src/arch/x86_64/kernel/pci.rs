@@ -499,17 +499,16 @@ pub fn init() {
 pub fn init_drivers() {
 	// virtio: 4.1.2 PCI Device Discovery
 	irqsave(|| {
-		for adapter in unsafe { PCI_ADAPTERS.iter() } {
-			if adapter.vendor_id == 0x1AF4
-				&& adapter.device_id >= 0x1000
-				&& adapter.device_id <= 0x107F
-			{
-				info!(
-					"Found virtio device with device id 0x{:x}",
-					adapter.device_id
-				);
-				virtio::init_virtio_device(adapter);
-			}
+		for adapter in unsafe {
+			PCI_ADAPTERS
+				.iter()
+				.filter(|x| x.vendor_id == 0x1AF4 && x.device_id >= 0x1000 && x.device_id <= 0x107F)
+		} {
+			info!(
+				"Found virtio device with device id 0x{:x}",
+				adapter.device_id
+			);
+			virtio::init_virtio_device(adapter);
 		}
 	});
 }
