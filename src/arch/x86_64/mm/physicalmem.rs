@@ -7,11 +7,11 @@
 
 use core::convert::TryInto;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use multiboot::{MemoryType, Multiboot};
+use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
-use crate::arch::x86_64::mm::paddr_to_slice;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::MEM;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
@@ -26,7 +26,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let mb = unsafe { Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap() };
+	let mb = unsafe { Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap() };
 	let all_regions = mb
 		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
