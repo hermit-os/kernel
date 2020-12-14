@@ -109,7 +109,7 @@ impl Filesystem {
 				return Ok((fs.deref(), internal_path));
 			}
 
-			info!(
+			warn!(
 				"Trying to open file on non-existing mount point '{}'!",
 				mount
 			);
@@ -126,6 +126,7 @@ impl Filesystem {
 				"Assume that the directory '{}' is used as mount point!",
 				mount
 			);
+
 			if let Some(fs) = self.mounts.get(mount) {
 				return Ok((fs.deref(), internal_path));
 			}
