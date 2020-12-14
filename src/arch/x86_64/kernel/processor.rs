@@ -809,7 +809,13 @@ pub fn configure() {
 		// => replace short jump with nops
 		// => see switch.s
 		unsafe {
-			let base = environment::get_base_address().as_u64();
+			#[cfg(not(feature = "newlib"))]
+			let base: u64 = environment::get_base_address().as_u64();
+			// newlib based application doesn't support relocatable binaries
+			// => we don't have to recalulate the address
+			#[cfg(feature = "newlib")]
+			let base: u64 = 0;
+
 			let addr = &Lpatch0 as *const _ as u64;
 			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
 			let addr = &Lpatch1 as *const _ as u64;
