@@ -16,12 +16,40 @@ use core::slice;
 pub use x86::bits64::paging::PAddr as PhysAddr;
 pub use x86::bits64::paging::VAddr as VirtAddr;
 
-fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-	unsafe {
+/// Memory translation, allocation and deallocation for MultibootInformation
+struct MultibootMemory;
+
+impl MultibootMemory {
+	const fn new() -> Self {
+		Self {}
+	}
+}
+
+impl multiboot::information::MemoryManagement for MultibootMemory {
+	unsafe fn paddr_to_slice(
+		&self,
+		p: multiboot::information::PAddr,
+		sz: usize,
+	) -> Option<&'static [u8]> {
 		let ptr = mem::transmute(p);
 		Some(slice::from_raw_parts(ptr, sz))
 	}
+
+	unsafe fn allocate(
+		&mut self,
+		_length: usize,
+	) -> Option<(multiboot::information::PAddr, &mut [u8])> {
+		None
+	}
+
+	unsafe fn deallocate(&mut self, addr: multiboot::information::PAddr) {
+		if addr != 0 {
+			unimplemented!()
+		}
+	}
 }
+
+static mut MEM: MultibootMemory = MultibootMemory::new();
 
 pub fn init() {
 	paging::init();
