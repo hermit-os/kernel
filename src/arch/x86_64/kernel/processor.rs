@@ -19,7 +19,7 @@ use core::arch::x86_64::__rdtscp as rdtscp;
 use core::arch::x86_64::_rdtsc as rdtsc;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, u32};
+use core::{fmt, ptr, u32};
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -49,6 +49,13 @@ static mut SUPPORTS_XSAVE: bool = false;
 static mut SUPPORTS_FSGS: bool = false;
 static mut RUN_ON_HYPERVISOR: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
+
+extern "C" {
+	static Lpatch0: u64;
+	static Lpatch1: u64;
+	static Lpatch2: u64;
+	static Lpatch3: u64;
+}
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
@@ -797,8 +804,21 @@ pub fn configure() {
 
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-	} else {
-		panic!("libhermit-rs requires the CPU feature FSGSBASE");
+
+		// enable the usage of fsgsbase during a context switch
+		// => replace short jump with nops
+		// => see switch.s
+		unsafe {
+			let base = environment::get_base_address().as_u64();
+			let addr = &Lpatch0 as *const _ as u64;
+			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
+			let addr = &Lpatch1 as *const _ as u64;
+			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
+			let addr = &Lpatch2 as *const _ as u64;
+			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
+			let addr = &Lpatch3 as *const _ as u64;
+			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
+		}
 	}
 
 	debug!("Set CR4 to 0x{:x}", cr4);
