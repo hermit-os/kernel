@@ -10,7 +10,7 @@
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
-use multiboot::Multiboot;
+use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
@@ -19,7 +19,7 @@ use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::physicalmem;
-use crate::arch::x86_64::mm::{paddr_to_slice, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
 use crate::environment;
 use crate::mm;
 use crate::scheduler;
@@ -759,7 +759,7 @@ pub fn init_page_tables() {
 			identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
 
 			// Map the "Memory Map" information too.
-			let mb = Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap();
+			let mb = Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap();
 			let memory_map_address = mb
 				.memory_regions()
 				.expect("Could not find a memory map in the Multiboot information")
