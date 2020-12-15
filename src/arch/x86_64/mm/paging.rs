@@ -14,6 +14,7 @@ use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
+#[cfg(not(feature = "nosmp"))]
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
@@ -566,6 +567,7 @@ where
 		}
 
 		if send_ipi {
+			#[cfg(not(feature = "nosmp"))]
 			apic::ipi_tlb_flush();
 		}
 	}
