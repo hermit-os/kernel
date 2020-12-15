@@ -43,6 +43,7 @@ vga = []
 newlib = []
 pci = []
 acpi = []
+nosmp = []
 
 [dev-dependencies]
 x86 = { version = "0.34.*", default-features = false }
