@@ -9,7 +9,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -21,15 +21,15 @@ use crate::environment;
 use crate::mm;
 use crate::scheduler;
 use crate::scheduler::CoreId;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 use crate::x86::controlregs::*;
 use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 use core::convert::TryInto;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 use core::ptr;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, u32};
@@ -40,12 +40,12 @@ const APIC_ICR2: usize = 0x0310;
 const APIC_DIV_CONF_DIVIDE_BY_8: u64 = 0b0010;
 const APIC_EOI_ACK: u64 = 0;
 const APIC_ICR_DELIVERY_MODE_FIXED: u64 = 0x000;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const APIC_ICR_DELIVERY_MODE_INIT: u64 = 0x500;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const APIC_ICR_DELIVERY_MODE_STARTUP: u64 = 0x600;
 const APIC_ICR_DELIVERY_STATUS_PENDING: u32 = 1 << 12;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const APIC_ICR_LEVEL_TRIGGERED: u64 = 1 << 15;
 const APIC_ICR_LEVEL_ASSERT: u64 = 1 << 14;
 const APIC_LVT_MASK: u64 = 1 << 16;
@@ -71,14 +71,14 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// While our boot processor is already in x86-64 mode, application processors boot up in 16-bit real mode
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
 
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
@@ -150,7 +150,7 @@ impl fmt::Display for IoApicRecord {
 	}
 }
 
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
@@ -324,7 +324,7 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
-	#[cfg(not(feature = "nosmp"))]
+	#[cfg(feature = "smp")]
 	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
 	irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
 	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
@@ -545,7 +545,7 @@ extern "C" {
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
@@ -640,7 +640,7 @@ pub fn boot_application_processors() {
 	}
 }
 
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 pub fn ipi_tlb_flush() {
 	if arch::get_processor_count() > 1 {
 		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
