@@ -39,7 +39,7 @@ pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 mod smp_boot_code;
 pub mod systemtime;
 #[cfg(feature = "vga")]
@@ -198,12 +198,12 @@ pub fn get_mbinfo() -> VirtAddr {
 	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).mb_info)) }
 }
 
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cpu_online) as u32 }
 }
 
-#[cfg(feature = "nosmp")]
+#[cfg(not(feature = "smp"))]
 pub fn get_processor_count() -> u32 {
 	1
 }
@@ -354,13 +354,13 @@ pub fn boot_processor_init() {
 /// Called after the Boot Processor has been fully initialized along with its scheduler.
 #[cfg(target_os = "hermit")]
 pub fn boot_application_processors() {
-	#[cfg(not(feature = "nosmp"))]
+	#[cfg(feature = "smp")]
 	apic::boot_application_processors();
 	apic::print_information();
 }
 
 /// Application Processor initialization
-#[cfg(all(target_os = "hermit", not(feature = "nosmp")))]
+#[cfg(all(target_os = "hermit", feature = "smp"))]
 pub fn application_processor_init() {
 	percore::init();
 	processor::configure();
@@ -430,11 +430,11 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	if boot_info.cpu_online == 0 {
 		crate::boot_processor_main()
 	} else {
-		#[cfg(not(feature = "nosmp"))]
+		#[cfg(feature = "smp")]
 		crate::application_processor_main();
-		#[cfg(feature = "nosmp")]
+		#[cfg(not(feature = "smp"))]
 		error!("SMP support deactivated");
-		#[cfg(feature = "nosmp")]
+		#[cfg(not(feature = "smp"))]
 		loop {
 			processor::halt();
 		}

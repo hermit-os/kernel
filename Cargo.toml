@@ -38,12 +38,12 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "acpi"]
+default = ["pci", "acpi", "smp"]
 vga = []
 newlib = []
 pci = []
 acpi = []
-nosmp = []
+smp = []
 
 [dev-dependencies]
 x86 = { version = "0.34.*", default-features = false }

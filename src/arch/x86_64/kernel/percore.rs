@@ -72,7 +72,7 @@ impl<T> PerCoreVariable<T> {
 // The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
 impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
-	#[cfg(not(feature = "nosmp"))]
+	#[cfg(feature = "smp")]
 	default unsafe fn get(&self) -> T
 	where
 		T: Copy,
@@ -83,7 +83,7 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 
 	#[inline]
-	#[cfg(feature = "nosmp")]
+	#[cfg(not(feature = "smp"))]
 	default unsafe fn get(&self) -> T
 	where
 		T: Copy,
@@ -93,13 +93,13 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 
 	#[inline]
-	#[cfg(not(feature = "nosmp"))]
+	#[cfg(feature = "smp")]
 	default unsafe fn set(&self, value: T) {
 		llvm_asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
 	}
 
 	#[inline]
-	#[cfg(feature = "nosmp")]
+	#[cfg(not(feature = "smp"))]
 	default unsafe fn set(&self, new_value: T) {
 		let value: *mut T = core::mem::transmute(&PERCORE as *const _ as usize + self.offset());
 		*value = new_value;

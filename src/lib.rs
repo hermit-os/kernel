@@ -73,7 +73,7 @@ extern crate x86;
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
 
 use arch::percore::*;
@@ -311,7 +311,7 @@ extern "C" fn initd(_arg: usize) {
 	test_main();
 }
 
-#[cfg(not(feature = "nosmp"))]
+#[cfg(feature = "smp")]
 fn synch_all_cores() {
 	static CORE_COUNTER: AtomicU32 = AtomicU32::new(0);
 
@@ -347,7 +347,7 @@ fn boot_processor_main() -> ! {
 		arch::boot_application_processors();
 	}
 
-	#[cfg(not(feature = "nosmp"))]
+	#[cfg(feature = "smp")]
 	synch_all_cores();
 
 	// Start the initd task.
@@ -359,7 +359,7 @@ fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of HermitCore for an Application Processor
-#[cfg(all(target_os = "hermit", not(feature = "nosmp")))]
+#[cfg(all(target_os = "hermit", feature = "smp"))]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
