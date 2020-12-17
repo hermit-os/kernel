@@ -11,7 +11,9 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-use core::convert::{TryFrom, TryInto};
+#[cfg(feature = "smp")]
+use core::convert::TryFrom;
+use core::convert::TryInto;
 use core::sync::atomic::{AtomicU32, Ordering};
 use crossbeam_utils::Backoff;
 
@@ -37,6 +39,7 @@ static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 /// Unique identifier for a core.
 pub type CoreId = u32;
 
+#[cfg(feature = "smp")]
 struct SchedulerInput {
 	/// Queue of new tasks
 	new_tasks: VecDeque<Rc<RefCell<Task>>>,
@@ -44,6 +47,7 @@ struct SchedulerInput {
 	wakeup_tasks: VecDeque<TaskHandle>,
 }
 
+#[cfg(feature = "smp")]
 impl SchedulerInput {
 	pub fn new() -> Self {
 		Self {
@@ -74,6 +78,7 @@ pub struct PerCoreScheduler {
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
 	/// Queues to handle incoming requests from the other cores
+	#[cfg(feature = "smp")]
 	input: SpinlockIrqSave<SchedulerInput>,
 }
 
@@ -99,10 +104,12 @@ impl PerCoreScheduler {
 
 		// Add it to the task lists.
 		let wakeup = {
+			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
 			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
+			#[cfg(feature = "smp")]
 			if core_id != core_scheduler().core_id {
 				input_locked.new_tasks.push_back(task);
 				true
@@ -110,6 +117,14 @@ impl PerCoreScheduler {
 				core_scheduler().ready_queue.push(task);
 				false
 			}
+			#[cfg(not(feature = "smp"))]
+			if core_id == core_scheduler().core_id {
+				core_scheduler().ready_queue.push(task);
+				false
+			} else {
+				panic!("Invalid  core_id {}!", core_id)
+			}
+
 		};
 
 		debug!(
@@ -183,15 +198,24 @@ impl PerCoreScheduler {
 
 		// Add it to the task lists.
 		let wakeup = {
+			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
 			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
+			#[cfg(feature = "smp")]
 			if core_id != core_scheduler().core_id {
 				input_locked.new_tasks.push_back(clone_task);
 				true
 			} else {
 				core_scheduler().ready_queue.push(clone_task);
 				false
+			}
+			#[cfg(not(feature = "smp"))]
+			if core_id == core_scheduler().core_id {
+				core_scheduler().ready_queue.push(clone_task);
+				false
+			} else {
+				panic!("Invalid core_id {}!", core_id);
 			}
 		};
 
@@ -223,6 +247,12 @@ impl PerCoreScheduler {
 		irqsave(|| self.blocked_tasks.handle_waiting_tasks());
 	}
 
+	#[cfg(not(feature = "smp"))]
+	pub fn custom_wakeup(&mut self, task: TaskHandle) {
+		irqsave(|| self.blocked_tasks.custom_wakeup(task));
+	}
+
+	#[cfg(feature = "smp")]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
 			irqsave(|| self.blocked_tasks.custom_wakeup(task));
@@ -363,6 +393,7 @@ impl PerCoreScheduler {
 		result
 	}
 
+	#[cfg(feature = "smp")]
 	pub fn check_input(&mut self) {
 		let mut input_locked = self.input.lock();
 
@@ -553,6 +584,7 @@ pub fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
+		#[cfg(feature = "smp")]
 		input: SpinlockIrqSave::new(SchedulerInput::new()),
 	});
 
@@ -564,6 +596,7 @@ pub fn add_current_core() {
 }
 
 #[inline]
+#[cfg(feature = "smp")]
 fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
 	// Get the scheduler for the desired core.
 	if let Some(result) = unsafe { SCHEDULERS.get(usize::try_from(core_id).unwrap()) } {
