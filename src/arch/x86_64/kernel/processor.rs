@@ -1027,25 +1027,54 @@ pub fn get_frequency() -> u16 {
 #[inline]
 pub fn readfs() -> usize {
 	let val: u64;
+
 	unsafe {
-		llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
+		if supports_fsgs() {
+			llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
+		} else {
+			let rdx: u64;
+			let rax: u64;
+
+			llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000100u64) :: "volatile");
+
+			val = (rdx << 32) | rax;
+		}
 	}
+
 	val as usize
 }
 
 #[inline]
 pub fn readgs() -> usize {
 	let val: u64;
+
 	unsafe {
-		llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
+		if supports_fsgs() {
+			llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
+		} else {
+			let rdx: u64;
+			let rax: u64;
+
+			llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000101u64) :: "volatile");
+
+			val = (rdx << 32) | rax;
+		}
 	}
+
 	val as usize
 }
 
 #[inline]
 pub fn writefs(fs: usize) {
 	unsafe {
-		llvm_asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
+		if supports_fsgs() {
+			llvm_asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
+		} else {
+			let edx = fs >> 32;
+			let eax = fs as u64 & (u32::MAX - 1) as u64;
+
+			llvm_asm!("wrmsr" :: "%rcx"(0xc0000100u64), "%rdx"(edx), "%rax"(eax) :: "volatile");
+		}
 	}
 }
 
