@@ -32,11 +32,8 @@ switch_to_task:
 	push %r14
 	push %r15
     // push fs registers
-	mov $0xc0000100, %ecx
-	rdmsr
-	sub $8, %rsp
-	mov %edx, 4(%rsp)
-	mov %eax, (%rsp)
+	rdfsbaseq %rax
+	push %rax
 	// store the old stack pointer in the dereferenced first parameter\n\t\
 	// and load the new stack pointer in the second parameter.\n\t\
 	mov %rsp, (%rdi)
@@ -48,11 +45,8 @@ switch_to_task:
 	// set stack pointer in TSS
 	call set_current_kernel_stack
 	// restore context
-	mov $0xc0000100, %ecx
-	mov 4(%rsp), %edx
-	mov (%rsp), %eax
-	add $8, %rsp
-	wrmsr
+	pop %rax
+	wrfsbaseq %rax
 	pop %r15
 	pop %r14
 	pop %r13
@@ -97,11 +91,8 @@ switch_to_fpu_owner:
 	push %r14
 	push %r15
 	// push fs registers
-	mov $0xc0000100, %ecx
-	rdmsr
-	sub $8, %rsp
-	mov %edx, 4(%rsp)
-	mov %eax, (%rsp)
+	rdfsbaseq %rax
+	push %rax
 	// store the old stack pointer in the dereferenced first parameter\n\t\
 	// and load the new stack pointer in the second parameter.\n\t\
 	mov %rsp, (%rdi)
@@ -109,11 +100,8 @@ switch_to_fpu_owner:
 	// set stack pointer in TSS
 	call set_current_kernel_stack
 	// restore context
-	mov $0xc0000100, %ecx
-	mov 4(%rsp), %edx
-	mov (%rsp), %eax
-	add $8, %rsp
-	wrmsr
+	pop %rax
+	wrfsbaseq %rax
 	pop %r15
 	pop %r14
 	pop %r13

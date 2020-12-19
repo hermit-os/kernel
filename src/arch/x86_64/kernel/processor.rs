@@ -19,7 +19,7 @@ use core::arch::x86_64::__rdtscp as rdtscp;
 use core::arch::x86_64::_rdtsc as rdtsc;
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
-use core::{fmt, ptr, u32};
+use core::{fmt, u32};
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -49,13 +49,6 @@ static mut SUPPORTS_XSAVE: bool = false;
 static mut SUPPORTS_FSGS: bool = false;
 static mut RUN_ON_HYPERVISOR: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
-
-extern "C" {
-	static Lpatch0: u64;
-	static Lpatch1: u64;
-	static Lpatch2: u64;
-	static Lpatch3: u64;
-}
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
@@ -804,27 +797,13 @@ pub fn configure() {
 
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-
-		// enable the usage of fsgsbase during a context switch
-		// => replace short jump with nops
-		// => see switch.s
-		unsafe {
-			#[cfg(not(feature = "newlib"))]
-			let base: u64 = environment::get_base_address().as_u64();
-			// newlib based application doesn't support relocatable binaries
-			// => we don't have to recalulate the address
-			#[cfg(feature = "newlib")]
-			let base: u64 = 0;
-
-			let addr = &Lpatch0 as *const _ as u64;
-			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
-			let addr = &Lpatch1 as *const _ as u64;
-			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
-			let addr = &Lpatch2 as *const _ as u64;
-			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
-			let addr = &Lpatch3 as *const _ as u64;
-			ptr::write_bytes((addr + base) as *mut u8, 0x90, 2);
-		}
+		#[cfg(feature = "fsgsbase")]
+		info!("Enable FSGSBASE support");
+	}
+	#[cfg(feature = "fsgsbase")]
+	if !supports_fsgs() {
+		error!("FSGSBASE support is enabled, but the processor doesn't support it!");
+		loop {}
 	}
 
 	debug!("Set CR4 to 0x{:x}", cr4);
@@ -1025,63 +1004,90 @@ pub fn get_frequency() -> u16 {
 }
 
 #[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn readfs() -> usize {
 	let val: u64;
 
 	unsafe {
-		if supports_fsgs() {
-			llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
-		} else {
-			let rdx: u64;
-			let rax: u64;
-
-			llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000100u64) :: "volatile");
-
-			val = (rdx << 32) | rax;
-		}
+		llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
 	}
 
 	val as usize
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn readfs() -> usize {
+	let rdx: u64;
+	let rax: u64;
+
+	unsafe {
+		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000100u64) :: "volatile");
+	}
+
+	((rdx << 32) | rax) as usize
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn readgs() -> usize {
 	let val: u64;
 
 	unsafe {
-		if supports_fsgs() {
-			llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
-		} else {
-			let rdx: u64;
-			let rax: u64;
-
-			llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000101u64) :: "volatile");
-
-			val = (rdx << 32) | rax;
-		}
+		llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
 	}
 
 	val as usize
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn readgs() -> usize {
+	let rdx: u64;
+	let rax: u64;
+
+	unsafe {
+		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000101u64) :: "volatile");
+	}
+
+	((rdx << 32) | rax) as usize
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn writefs(fs: usize) {
 	unsafe {
-		if supports_fsgs() {
-			llvm_asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
-		} else {
-			let edx = fs >> 32;
-			let eax = fs as u64 & (u32::MAX - 1) as u64;
-
-			llvm_asm!("wrmsr" :: "%rcx"(0xc0000100u64), "%rdx"(edx), "%rax"(eax) :: "volatile");
-		}
+		llvm_asm!("wrfsbase $0" :: "r"(fs) :: "volatile");
 	}
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn writefs(fs: usize) {
+	let rdx = fs >> 32;
+	let rax = fs & (u32::MAX - 1) as usize;
+
+	unsafe {
+		llvm_asm!("wrmsr" :: "%rcx"(0xc0000100u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
+	}
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn writegs(gs: usize) {
 	unsafe {
-		llvm_asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile");
+		llvm_asm!("wrgsbase $0" :: "r"(gs) :: "volatile");
+	}
+}
+
+#[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn writegs(gs: usize) {
+	let rdx = gs >> 32;
+	let rax = gs & (u32::MAX - 1) as usize;
+
+	unsafe {
+		llvm_asm!("wrmsr" :: "%rcx"(0xc0000101u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
 	}
 }
 
