@@ -50,8 +50,10 @@ pub mod virtio_net;
 
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));
-#[cfg(not(test))]
+#[cfg(all(not(test), not(fsgsbase)))]
 global_asm!(include_str!("switch.s"));
+#[cfg(all(not(test), fsgsbase))]
+global_asm!(include_str!("switch_fsgsbase.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
