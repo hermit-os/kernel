@@ -24,6 +24,7 @@ const POLL_PERIOD: u64 = 20_000;
 fn set_polling_mode(value: bool) {
 	// is the driver already in polling mode?
 	if POLLING.swap(value, Ordering::SeqCst) != value {
+		#[cfg(feature = "pci")]
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
 			driver.lock().set_polling_mode(value);
 		}
@@ -65,6 +66,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	}
 
 	if reset_nic {
+		#[cfg(feature = "pci")]
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
 			driver.lock().set_polling_mode(false);
 		};

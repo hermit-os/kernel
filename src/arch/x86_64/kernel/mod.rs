@@ -25,6 +25,7 @@ use crate::scheduler::CoreId;
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
+#[cfg(feature = "pci")]
 pub mod fuse;
 pub mod gdt;
 pub mod idt;
@@ -44,8 +45,11 @@ mod smp_boot_code;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
+#[cfg(feature = "pci")]
 pub mod virtio;
+#[cfg(feature = "pci")]
 pub mod virtio_fs;
+#[cfg(feature = "pci")]
 pub mod virtio_net;
 
 #[cfg(not(test))]
