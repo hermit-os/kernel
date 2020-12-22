@@ -2,8 +2,6 @@
 
 # RustyHermit: libhermit-rs
 
-[![Build Status](https://travis-ci.com/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.com/hermitcore/libhermit-rs)
-![Actions Status](https://github.com/hermitcore/libhermit-rs/workflows/Build/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/libhermit-rs/hermit/)
 [![License](https://img.shields.io/crates/l/rusty-hermit.svg)](https://img.shields.io/crates/l/rusty-hermit.svg)
 [![Slack Status](https://matrix.osbyexample.com:3008/badge.svg)](https://matrix.osbyexample.com:3008)
