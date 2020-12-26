@@ -49,11 +49,20 @@ jobs:
       run: |
           brew update && brew install qemu nasm
       if: ${{ matrix.os == 'macOS-latest' }}
-    - name: Install qemu/nasm (windows)
+    - name: Install nasm (windows)
+      uses: crazy-max/ghaction-chocolatey@v1
+      with:
+          args: install nasm
+      if: ${{ matrix.os == 'windows-latest' }}
+    - name: Install qemu (windows)
+      uses: crazy-max/ghaction-chocolatey@v1
+      with:
+        args: install qemu --version=2020.08.14
+      if: ${{ matrix.os == 'windows-latest' }}
+    - name: Set path to qemu/nasm (Windows)
       run: |
-          choco install qemu nasm
-          echo "::add-path::C:\Program Files\NASM"
-          echo "::add-path::C:\Program Files\qemu"
+          echo "C:\Program Files\qemu" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "C:\Program Files\nasm" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       if: ${{ matrix.os == 'windows-latest' }}
     - name: Build loader (unix)
       run: make
