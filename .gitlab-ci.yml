@@ -2,7 +2,6 @@ stages:
 - prepare
 - build
 - test
-- deploy
 
 variables:
   DOCKER_FILE: Dockerfile
@@ -36,138 +35,22 @@ build:demo:
   stage: build
   image: ${CI_REGISTRY_IMAGE}
   script:
+    - if [ -d "$HOME/tmp_libhermit-rs" ]; then rm -rf $HOME/tmp_libhermit-rs; fi
+    - mkdir $HOME/tmp_libhermit-rs
+    - shopt -s dotglob nullglob && mv ./* $HOME/tmp_libhermit-rs
+    # If for some reason target exists (due to a bad cache) then delete it.
+    - if [ -d "$HOME/tmp_libhermit-rs/target" ]; then rm -rf $HOME/tmp_libhermit-rs/target; fi
+    - git clone https://github.com/hermitcore/rusty-hermit.git
+    - cd rusty-hermit
+    - echo "rusty-hermit at commit $(git rev-parse HEAD)"
+    # Ensure that libhermit-rs is empty - This shouldn't be necessary since we don't initialize the submodules
+    # But let's do it anyway to be safe
+    - if [ -d "$CI_BUILDS_DIR/rusty-hermit/libhermit-rs" ]; then rm -rf $CI_BUILDS_DIR/rusty-hermit/libhermit-rs; fi
+    - mkdir $CI_BUILD_DIR/rusty-hermit/libhermit-rs
+    - shopt -s dotglob nullglob && mv $HOME/tmp_libhermit-rs/* $CI_BUILD_DIR/rusty-hermit/libhermit-rs/.
     - cargo build -p rusty_demo
     - RUSTFLAGS="-Clinker-plugin-lto" cargo build -p rusty_demo --release
   artifacts:
     paths:
       - target/x86_64-unknown-hermit/debug/rusty_demo
       - target/x86_64-unknown-hermit/release/rusty_demo
-
-build:httpd:
-  stage: build
-  image: ${CI_REGISTRY_IMAGE}
-  script:
-    - RUSTFLAGS="-Clinker-plugin-lto" cargo build -p httpd --release
-  artifacts:
-    paths:
-      - target/x86_64-unknown-hermit/release/httpd
-
-test:uhyve:
-   stage: test
-   dependencies:
-     - build:demo
-   image: ${CI_REGISTRY_IMAGE}
-   script:
-     - lscpu
-     - kvm-ok
-     - uhyve -v -c 1 target/x86_64-unknown-hermit/debug/rusty_demo
-     - uhyve -v -c 2 target/x86_64-unknown-hermit/debug/rusty_demo
-     - uhyve -v -c 1 target/x86_64-unknown-hermit/release/rusty_demo
-     - uhyve -v -c 2 target/x86_64-unknown-hermit/release/rusty_demo
-   tags:
-     - privileged
-
-test:qemu:
-   stage: test
-   dependencies:
-     - build:demo
-   image: ${CI_REGISTRY_IMAGE}
-   script:
-     - lscpu
-     - kvm-ok
-     - cd loader
-     - make
-     - make release=1
-     - cd ..
-     - qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu host -enable-kvm
-     - qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd target/x86_64-unknown-hermit/debug/rusty_demo -cpu host -enable-kvm
-     - qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/release/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu host -enable-kvm
-     - qemu-system-x86_64 -display none -smp 2 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/release/rusty-loader -initrd target/x86_64-unknown-hermit/release/rusty_demo -cpu host -enable-kvm
-   tags:
-     - privileged
-
-test:image:
-   stage: test
-   dependencies:
-     - build:httpd
-   image: ${CI_REGISTRY_IMAGE}
-   script:
-     - cd loader
-     - make release=1
-     - cd ..
-     - dd if=/dev/zero of=disk.img bs=1k count=1M
-     - echo ';' | sfdisk disk.img
-     - mkfs.ext2 -F -E offset=1048576 disk.img
-     - kpartx -a -v disk.img
-     - LOOP_DEVICE=$(losetup -j ${PWD}/disk.img | awk '{sub(/:/,"",$1); print $1}')
-     - LOOP_NAME=$(basename ${LOOP_DEVICE})
-     - mount /dev/mapper/${LOOP_NAME}p1 /mnt/
-     - grub-install --recheck --target=i386-pc --root-directory=/mnt --locales= --themes= --fonts= --no-floppy --modules="normal part_msdos ext2 multiboot biosdisk" ${LOOP_DEVICE}
-     - cp target/x86_64-unknown-hermit/release/httpd /mnt/boot/
-     - cp loader/target/x86_64-unknown-hermit-loader/release/rusty-loader /mnt/boot
-     - |
-       cat > /mnt/boot/grub.cfg << EOF
-       default=0
-       timeout=0
-       menuentry "httpd" {
-         multiboot /boot/rusty-loader -uart=io:0x3f8
-         module /boot/httpd
-         boot
-       }
-       EOF
-     - umount /mnt
-     - kpartx -d disk.img
-     - gzip -9 disk.img
-   tags:
-     - privileged
-   artifacts:
-    paths:
-      - disk.img.gz
-   only:
-     refs:
-        - master
-
-deploy:image:
-  stage: deploy
-  dependencies:
-    - test:image
-  variables:
-    KUBECONFIG: /root/.kube/config
-  environment:
-    name: production
-  image: registry.git.rwth-aachen.de/acs/internal/cloud/kubernetes/deployment:2
-  before_script:
-    - mkdir -p $(dirname ${KUBECONFIG})
-    - echo "${KUBECONFIG_ENCODED}" | base64 -d > ${KUBECONFIG}
-    - kubectl cluster-info
-    - kubectl version
-    - helm version
-  script:
-    - echo -n "Hello"
-  only:
-    refs:
-      - master
-
-# deploy:docker:
-#   stage: deploy
-#   dependencies:
-#     - build:httpd
-#   image:
-#     name: quay.io/buildah/stable
-#   variables:
-#     _BUILDAH_STARTED_IN_USERNS: ""
-#     BUILDAH_ISOLATION: chroot
-#     BUILDAH_LAYERS: "true"
-#   before_script:
-#     - buildah version
-#     - buildah login --username "${CI_REGISTRY_USER}" --password "${CI_REGISTRY_PASSWORD}" "${CI_REGISTRY}"
-#   script:
-#     - buildah bud -f Dockerfile.qemu -t httpd:latest .
-#     - buildah push httpd:latest docker://httpd:latest
-#   after_script:
-#     - buildah logout "${CI_REGISTRY}"
-#   tags:
-#     - builder
-#   only:
-#     refs:
-#       - master
