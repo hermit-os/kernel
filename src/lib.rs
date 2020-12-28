@@ -347,6 +347,13 @@ fn boot_processor_main() -> ! {
 
 	synch_all_cores();
 
+	#[cfg(feature = "pci")]
+	info!("Compiled with PCI support");
+	#[cfg(feature = "acpi")]
+	info!("Compiled with ACPI support");
+	#[cfg(feature = "fsgsbase")]
+	info!("Compiled with FSGSBASE support");
+
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
 
