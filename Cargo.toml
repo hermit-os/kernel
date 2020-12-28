@@ -16,7 +16,7 @@ edition = "2018"
 description = """
 A Rust-based library operting system
 """
-exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
+exclude = ["/img/*", "./CMakeLists.txt", "/Dockerfile", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
 
 [lib]
 crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
