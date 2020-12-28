@@ -47,7 +47,7 @@ jobs:
       if: ${{ matrix.os == 'ubuntu-latest' }}
     - name: Install qemu/nasm (macos)
       run: |
-          brew update && brew install qemu nasm
+          brew install qemu nasm
       if: ${{ matrix.os == 'macOS-latest' }}
     - name: Install nasm (windows)
       uses: crazy-max/ghaction-chocolatey@v1
