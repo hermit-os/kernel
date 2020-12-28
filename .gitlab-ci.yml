@@ -40,7 +40,7 @@ build:demo:
     - shopt -s dotglob nullglob && mv ./* $HOME/tmp_libhermit-rs
     # If for some reason target exists (due to a bad cache) then delete it.
     - if [ -d "$HOME/tmp_libhermit-rs/target" ]; then rm -rf $HOME/tmp_libhermit-rs/target; fi
-    - cd $CI_BUILD_DIR
+    - cd $CI_BUILDS_DIR
     - git clone https://github.com/hermitcore/rusty-hermit.git
     - cd rusty-hermit
     - echo "rusty-hermit at commit $(git rev-parse HEAD)"
