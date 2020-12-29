@@ -124,7 +124,6 @@ impl PerCoreScheduler {
 			} else {
 				panic!("Invalid  core_id {}!", core_id)
 			}
-
 		};
 
 		debug!(
