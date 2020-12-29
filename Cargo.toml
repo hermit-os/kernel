@@ -1,6 +1,6 @@
 [package]
 name = "rusty-hermit"
-version = "0.3.44"
+version = "0.3.45"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
@@ -16,10 +16,7 @@ edition = "2018"
 description = """
 A Rust-based library operting system
 """
-exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
-
-[badges]
-travis-ci = { repository = "hermitcore/libhermit-rs" }
+exclude = ["/img/*", "./CMakeLists.txt", "/Dockerfile", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
 
 [lib]
 crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
@@ -38,12 +35,13 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "acpi", "smp"]
+default = ["pci", "acpi", "fsgsbase", "smp"]
 vga = []
 newlib = []
 pci = []
 acpi = []
 smp = []
+fsgsbase = []
 
 [dev-dependencies]
 x86 = { version = "0.34.*", default-features = false }
