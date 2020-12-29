@@ -65,6 +65,12 @@ test:integration:
         bash -c "cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve"
     - |
         bash -c "cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve --num_cores 2"
+  artifacts:
+    when: always
+    paths:
+      - /builds/acs/public/hermitcore/libhermit-rs/target/x86_64-unknown-hermit-kernel/debug/deps/basic_*
+      - target/x86_64-unknown-hermit-kernel/debug/deps/measure_*
+      - target/x86_64-unknown-hermit-kernel/debug/deps/thread*
   tags:
     - privileged
 
