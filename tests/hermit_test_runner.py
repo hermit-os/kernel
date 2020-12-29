@@ -57,17 +57,26 @@ class TestRunner:
             return True
 
     def run_test(self):
+        """
+        :return: returncode, stdout, stderr, elapsed_time, timed_out: bool
+        """
         print("Calling {}".format(type(self).__name__))
-        start_time = time.perf_counter()  # https://docs.python.org/3/library/time.html#time.perf_counter
-        if self.custom_env is None:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
-                    timeout=self.timeout)
-        else:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
-                               timeout=self.timeout, env=self.custom_env)
-        end_time = time.perf_counter()
+        try:
+            start_time = time.perf_counter()  # https://docs.python.org/3/library/time.html#time.perf_counter
+            if self.custom_env is None:
+                p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
+                        timeout=self.timeout)
+            else:
+                p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
+                                timeout=self.timeout, env=self.custom_env)
+            end_time = time.perf_counter()
+            elapsed_time = end_time - start_time
+        except subprocess.TimeoutExpired as e:
+            elapsed_time = self.timeout * (10 ** 9)
+            return None, e.stdout, e.stderr, elapsed_time, True
+
         # ToDo: add some timeout
-        return p.returncode, p.stdout, p.stderr, end_time - start_time
+        return p.returncode, p.stdout, p.stderr, elapsed_time, False
 
 
 class QemuTestRunner(TestRunner):
@@ -250,9 +259,13 @@ if test_name == "hermit":
     print("`{}`".format(' '.join(test_runner.test_command)))
     exit(0)
 
-rc, stdout, stderr, execution_time = test_runner.run_test()
+rc, stdout, stderr, execution_time, timed_out = test_runner.run_test()
+if timed_out:
+    print('Test {} did not finish before timeout of {} seconds'.format(test_name, args.timeout))
+    print("Test failed - Dumping Stderr:\n{}\n\nDumping Stdout:\n{}\n".format(stderr, stdout), file=sys.stderr)
+    exit(1)
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
-if test_ok:
+if test_ok :
     print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time))
     if args.verbose or args.veryverbose:
         print("Test {} stdout: {}".format(test_name, stdout))
