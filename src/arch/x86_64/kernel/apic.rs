@@ -677,7 +677,7 @@ pub fn ipi_tlb_flush() {
 		});
 	}
 }
-	
+
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
 #[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
