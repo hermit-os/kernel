@@ -288,7 +288,7 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize PCI Drivers if on x86_64
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
 	x86_64::kernel::pci::init_drivers();
 
 	syscalls::init();
@@ -349,6 +349,13 @@ fn boot_processor_main() -> ! {
 
 	#[cfg(feature = "smp")]
 	synch_all_cores();
+
+	#[cfg(feature = "pci")]
+	info!("Compiled with PCI support");
+	#[cfg(feature = "acpi")]
+	info!("Compiled with ACPI support");
+	#[cfg(feature = "fsgsbase")]
+	info!("Compiled with FSGSBASE support");
 
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);

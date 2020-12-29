@@ -197,7 +197,7 @@ pub fn add_local_apic_id(id: u8) {
 }
 
 #[cfg(not(feature = "acpi"))]
-fn detect_from_acpi() -> Result<usize, ()> {
+fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// dummy implementation if acpi support is disabled
 	Err(())
 }
