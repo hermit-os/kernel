@@ -63,9 +63,9 @@ test:integration:
     - kvm-ok
     - python3 --version
     - |
-        bash -c "HERMIT_LOG_LEVEL_FILTER=Debug cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve --veryverbose"
+        HERMIT_LOG_LEVEL_FILTER=Debug cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve --veryverbose
     - |
-        bash -c "HERMIT_LOG_LEVEL_FILTER=Debug cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve --num_cores 2 --veryverbose"
+        HERMIT_LOG_LEVEL_FILTER=Debug cargo test --tests --no-fail-fast -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi --target x86_64-unknown-hermit-kernel -- --uhyve_path=$HOME/.cargo/bin/uhyve --num_cores 2 --veryverbose
   tags:
     - privileged
 
