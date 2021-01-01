@@ -36,5 +36,5 @@ docs:
 
 loader:
 	@echo Build loader
-	cargo build -Z build-std=core,alloc $(opt) --target $(target)-loader.json
+	cargo build $(opt) --target $(target)-loader.json
 	$(CONVERT)
