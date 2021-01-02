@@ -166,6 +166,7 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn receive_rx_buffer(&self) -> Result<(&'static [u8], usize), ()> {
+		#[cfg(feature = "pci")]
 		match arch::kernel::pci::get_network_driver() {
 			Some(driver) => driver.lock().receive_rx_buffer(),
 			_ => Err(()),
@@ -175,6 +176,7 @@ pub trait SyscallInterface: Send + Sync {
 	}
 
 	fn rx_buffer_consumed(&self, handle: usize) -> Result<(), ()> {
+		#[cfg(feature = "pci")]
 		match arch::kernel::pci::get_network_driver() {
 			Some(driver) => {
 				driver.lock().rx_buffer_consumed(handle);
