@@ -1268,16 +1268,16 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 			match VirtioNetDriver::init(adapter) {
 				Ok(virt_net_drv) => {
 					info!("Virtio network driver initalized with Virtio network device.");
-					return Ok(VirtioDriver::Network(virt_net_drv));
+					Ok(VirtioDriver::Network(virt_net_drv))
 				}
 				Err(virtio_error) => {
 					error!(
 						"Virtio networkd driver could not be initalized with device: {:x}",
 						adapter.device_id
 					);
-					return Err(DriverError::InitVirtioDevFail(virtio_error));
+					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}
-			};
+			}
 		}
 		DevId::VIRTIO_DEV_ID_FS => {
 			info!("Found Virtio-FS device!");
@@ -1310,6 +1310,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		Ok(drv) => {
 			match &drv {
 				VirtioDriver::Network(_) => {
+					info!("Install virtio interrupt handler at line {}", adapter.irq);
 					unsafe {
 						VIRTIO_IRQ_NO = adapter.irq;
 					}
