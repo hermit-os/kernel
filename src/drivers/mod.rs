@@ -5,9 +5,9 @@
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
-// 
+//
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
-//! 
+//!
 //! The module contains ...
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -25,24 +25,26 @@ pub type Result<T> = core::result::Result<T, DriverError>;
 /// [DriverError](enums.drivererror.html) values will be
 /// passed on to higher layers.
 pub mod error {
-    use crate::drivers::virtio::error::VirtioError;
-    use core::fmt;
-    #[derive(Debug)]
-    pub enum DriverError {
-        InitVirtioDevFail(VirtioError),
-    }
+	use crate::drivers::virtio::error::VirtioError;
+	use core::fmt;
+	#[derive(Debug)]
+	pub enum DriverError {
+		InitVirtioDevFail(VirtioError),
+	}
 
-    impl From<VirtioError> for DriverError {
-        fn from(err: VirtioError) -> Self {
-            DriverError::InitVirtioDevFail(err)
-        }
-    }
+	impl From<VirtioError> for DriverError {
+		fn from(err: VirtioError) -> Self {
+			DriverError::InitVirtioDevFail(err)
+		}
+	}
 
-    impl fmt::Display for DriverError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            match *self {
-                DriverError::InitVirtioDevFail(ref err) => write!(f, "Virtio driver failed: {:?}", err),
-            }  
-        }
-    }
+	impl fmt::Display for DriverError {
+		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			match *self {
+				DriverError::InitVirtioDevFail(ref err) => {
+					write!(f, "Virtio driver failed: {:?}", err)
+				}
+			}
+		}
+	}
 }

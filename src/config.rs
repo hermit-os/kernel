@@ -8,7 +8,7 @@ pub const DEFAULT_STACK_SIZE: usize = 32_768;
 pub const USER_STACK_SIZE: usize = 1_048_576;
 
 #[allow(dead_code)]
-pub const VIRTIO_MAX_QUEUE_SIZE: u16 = 256;
+pub const VIRTIO_MAX_QUEUE_SIZE: u16 = 2048;
 
 /// See https://github.com/facebook/folly/blob/1b5288e6eea6df074758f877c849b6e73bbb9fbb/folly/lang/Align.h#L107 for details
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]

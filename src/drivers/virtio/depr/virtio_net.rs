@@ -8,13 +8,13 @@
 #![allow(unused)]
 
 use crate::arch::x86_64::kernel::pci;
-use crate::drivers::virtio::depr::virtio::{
-	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
-};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 #[cfg(not(feature = "newlib"))]
 use crate::drivers::net::netwakeup;
+use crate::drivers::virtio::depr::virtio::{
+	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
+};
 use crate::synch::spinlock::SpinlockIrqSave;
 
 use crate::x86::io::*;
