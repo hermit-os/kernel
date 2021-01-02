@@ -1264,21 +1264,19 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 				VirtioError::DevNotSupported(adapter.device_id),
 			))
 		}
-		DevId::VIRTIO_DEV_ID_NET => {
-			match VirtioNetDriver::init(adapter) {
-				Ok(virt_net_drv) => {
-					info!("Virtio network driver initalized with Virtio network device.");
-					Ok(VirtioDriver::Network(virt_net_drv))
-				}
-				Err(virtio_error) => {
-					error!(
-						"Virtio networkd driver could not be initalized with device: {:x}",
-						adapter.device_id
-					);
-					Err(DriverError::InitVirtioDevFail(virtio_error))
-				}
+		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(adapter) {
+			Ok(virt_net_drv) => {
+				info!("Virtio network driver initalized with Virtio network device.");
+				Ok(VirtioDriver::Network(virt_net_drv))
 			}
-		}
+			Err(virtio_error) => {
+				error!(
+					"Virtio networkd driver could not be initalized with device: {:x}",
+					adapter.device_id
+				);
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		DevId::VIRTIO_DEV_ID_FS => {
 			info!("Found Virtio-FS device!");
 			// TODO: check subclass
