@@ -28,7 +28,7 @@ fn set_polling_mode(value: bool) {
 	if POLLING.swap(value, Ordering::SeqCst) != value {
 		#[cfg(feature = "pci")]
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().set_polling_mode(value)	
+			driver.lock().set_polling_mode(value)
 		}
 
 		// wakeup network thread to sleep for longer time
