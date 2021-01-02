@@ -11,8 +11,8 @@ use crate::arch::x86_64::kernel::pci::{
 	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
 };
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
-use crate::arch::x86_64::kernel::virtio_fs;
-use crate::arch::x86_64::kernel::virtio_net;
+use crate::drivers::virtio::depr::virtio_fs;
+use crate::drivers::virtio::depr::virtio_net;
 
 use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::VirtAddr;
@@ -550,7 +550,7 @@ impl VirtqDescriptors {
 			.used_chains
 			.borrow()
 			.iter()
-			.position(|c| c.borrow().0.last().unwrap().index == index.try_into().unwrap())
+			.position(|c| c.borrow().0.last().unwrap().index == index as u16)
 			.unwrap();
 		self.used_chains.borrow()[idx].clone()
 	}
