@@ -45,12 +45,6 @@ mod smp_boot_code;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
-#[cfg(feature = "pci")]
-pub mod virtio;
-#[cfg(feature = "pci")]
-pub mod virtio_fs;
-#[cfg(feature = "pci")]
-pub mod virtio_net;
 
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));

@@ -6,15 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
-use crate::arch::x86_64::kernel::virtio;
-use crate::arch::x86_64::kernel::virtio_fs::VirtioFsDriver;
-use crate::arch::x86_64::kernel::virtio_net::VirtioNetDriver;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
 use alloc::vec::Vec;
+use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
+use crate::drivers::virtio::depr::virtio_fs::VirtioFsDriver;
+use crate::drivers::virtio::depr::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio_net::VirtioNetDriver as VnetDrv;
+use crate::drivers::virtio::transport::pci as pci_virtio;
+use crate::drivers::virtio::transport::pci::VirtioDriver;
 use core::convert::TryInto;
 use core::{fmt, u32, u8};
 
@@ -127,12 +129,13 @@ pub struct MemoryBar {
 pub enum PciDriver<'a> {
 	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
 	VirtioNet(SpinlockIrqSave<VirtioNetDriver<'a>>),
+	VirtioNetNew(SpinlockIrqSave<VnetDrv>),
 }
 
 impl<'a> PciDriver<'a> {
-	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<VirtioNetDriver<'a>>> {
+	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<VnetDrv>> {
 		match self {
-			Self::VirtioNet(drv) => Some(drv),
+			Self::VirtioNetNew(drv) => Some(drv),
 			_ => None,
 		}
 	}
@@ -150,7 +153,7 @@ pub fn register_driver(drv: PciDriver<'static>) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver<'static>>> {
+pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VnetDrv>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
@@ -445,6 +448,8 @@ impl fmt::Display for PciAdapter {
 	}
 }
 
+/// Returns the value (indicated by bus, device and register) of the pci 
+/// configuration space. 
 pub fn read_config(bus: u8, device: u8, register: u32) -> u32 {
 	let address =
 		PCI_CONFIG_ADDRESS_ENABLE | u32::from(bus) << 16 | u32::from(device) << 11 | register;
@@ -508,7 +513,16 @@ pub fn init_drivers() {
 				"Found virtio device with device id 0x{:x}",
 				adapter.device_id
 			);
-			virtio::init_virtio_device(adapter);
+
+			// This weird match and back to match and then match driver is needed 
+			// in order to let the compiler know, that we are giving him a static driver struct.
+			match pci_virtio::init_device(&adapter) {
+                Ok(drv) => match drv {
+					VirtioDriver::Network(drv) => register_driver(PciDriver::VirtioNetNew(SpinlockIrqSave::new(drv))),
+					VirtioDriver::FileSystem => (), // Filesystem is pushed to the driver struct inside init_device()
+				},
+			    Err(_) => (), // could have an info which driver failed
+			}
 		}
 	});
 }
@@ -521,4 +535,21 @@ pub fn print_information() {
 	}
 
 	infofooter!();
+}
+
+/// A module containg PCI specifc errors
+///
+/// Errors include...
+pub mod error {
+	/// An enum of PciErrors
+	/// typically carrying the device's id as an u16.
+	#[derive(Debug)]
+    pub enum PciError {
+		General(u16),
+		NoBar(u16),
+		NoCapPtr(u16),
+		BadCapPtr(u16),
+		NoBarForCap(u16),
+		NoVirtioCaps(u16),
+    }
 }
