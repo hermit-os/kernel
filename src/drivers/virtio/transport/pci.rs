@@ -30,7 +30,7 @@ use crate::drivers::virtio::error::VirtioError;
 
 use crate::arch::x86_64::kernel::irq::*;
 use crate::drivers::virtio::depr::virtio_fs;
-use crate::drivers::virtio::{VIRTIO_IRQ_NO, virtio_irqhandler};
+use crate::drivers::virtio::{virtio_irqhandler, VIRTIO_IRQ_NO};
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5
