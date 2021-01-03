@@ -14,11 +14,14 @@
 //!
 //! Drivers who need a more fine grained access to the specifc queues must
 //! use the respective virtqueue structs directly.
+#![allow(dead_code)]
+#![allow(unused)]
+
 pub mod packed;
 pub mod split;
 
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 
 use self::error::{BufferError, VirtqError};
 use self::packed::PackedVq;
@@ -1779,7 +1782,7 @@ impl BufferToken {
 	/// Consumes the [BufferToken](BufferToken) and returns a [TransferToken](TransferToken), that can be used to actually start the transfer.
 	///
 	/// After this call, the buffers are no longer writable.
-	pub fn provide(mut self) -> TransferToken {
+	pub fn provide(self) -> TransferToken {
 		TransferToken {
 			state: TransferState::Ready,
 			buff_tkn: Some(self),
@@ -1946,7 +1949,7 @@ impl Buffer {
 	/// length of the buffers memory).
 	///
 	/// After this call the users is responsible for deallocating the given memory via the kenrel `mem::dealloc` function.
-	fn into_raw(mut self) -> Vec<(*mut u8, usize)> {
+	fn into_raw(self) -> Vec<(*mut u8, usize)> {
 		match self {
 			Buffer::Single {
 				mut desc_lst,
@@ -2684,7 +2687,7 @@ pub enum BuffSpec<'a> {
 ///
 /// * `Pinned<T>` behaves like T and implements `Deref`.
 /// *  Drops `T` upon drop.
-struct Pinned<T> {
+pub struct Pinned<T> {
 	raw_ptr: *mut T,
 	_drop_inner: bool,
 }

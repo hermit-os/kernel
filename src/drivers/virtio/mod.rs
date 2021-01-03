@@ -13,10 +13,10 @@ pub mod env;
 pub mod transport;
 pub mod virtqueue;
 
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::irq::*;
-use crate::arch::x86_64::kernel::pci as kernel_pci;
-use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
+use crate::arch::kernel::apic;
+use crate::arch::kernel::irq::*;
+use crate::arch::kernel::pci as kernel_pci;
+use crate::arch::kernel::percore::{core_scheduler, increment_irq_counter};
 
 /// Specifies the interrupt number of the virtio device
 static mut VIRTIO_IRQ_NO: u8 = 0;

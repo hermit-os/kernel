@@ -6,6 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 #![allow(unused)]
+#![allow(dead_code)]
 
 use crate::arch::x86_64::kernel::pci;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
