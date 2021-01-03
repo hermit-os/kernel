@@ -8,8 +8,8 @@
 //! Kernel Message Buffer for Multi-Kernel mode.
 //! Can be read from the Linux side as no serial port is available.
 
-use crate::collections::CachePadded;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use crossbeam_utils::CachePadded;
 
 const KMSG_SIZE: usize = 0x1000;
 

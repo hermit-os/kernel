@@ -760,7 +760,7 @@ pub fn configure() {
 	cr0.insert(Cr0::CR0_MONITOR_COPROCESSOR | Cr0::CR0_NUMERIC_ERROR);
 	cr0.remove(Cr0::CR0_EMULATE_COPROCESSOR);
 
-	// Call the IRQ7 handler on the first FPU access.
+	// if set, the first FPU access will trigger interupt 7.
 	cr0.insert(Cr0::CR0_TASK_SWITCHED);
 
 	// Prevent writes to read-only pages in Ring 0.
@@ -789,10 +789,21 @@ pub fn configure() {
 		cr4.insert(Cr4::CR4_ENABLE_OS_XSAVE);
 	}
 
+	// Disable Performance-Monitoring Counters
+	cr4.remove(Cr4::CR4_ENABLE_PPMC);
+	// clear TSD => every privilege level is able
+	// to use rdtsc
+	cr4.remove(Cr4::CR4_TIME_STAMP_DISABLE);
+
 	if supports_fsgs() {
 		cr4.insert(Cr4::CR4_ENABLE_FSGSBASE);
-	} else {
-		panic!("libhermit-rs requires the CPU feature FSGSBASE");
+		#[cfg(feature = "fsgsbase")]
+		info!("Enable FSGSBASE support");
+	}
+	#[cfg(feature = "fsgsbase")]
+	if !supports_fsgs() {
+		error!("FSGSBASE support is enabled, but the processor doesn't support it!");
+		loop {}
 	}
 
 	debug!("Set CR4 to 0x{:x}", cr4);
@@ -813,6 +824,7 @@ pub fn configure() {
 			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
+		debug!("Set XCR0 to 0x{:x}", xcr0);
 		unsafe {
 			xcr0_write(xcr0);
 		}
@@ -821,10 +833,10 @@ pub fn configure() {
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	writefs(0);
 
-	//
-	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
-	//
 	unsafe {
+		//
+		// ENHANCED INTEL SPEEDSTEP CONFIGURATION
+		//
 		CPU_SPEEDSTEP.configure();
 	}
 }
@@ -992,34 +1004,90 @@ pub fn get_frequency() -> u16 {
 }
 
 #[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn readfs() -> usize {
 	let val: u64;
+
 	unsafe {
 		llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
 	}
+
 	val as usize
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn readfs() -> usize {
+	let rdx: u64;
+	let rax: u64;
+
+	unsafe {
+		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000100u64) :: "volatile");
+	}
+
+	((rdx << 32) | rax) as usize
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn readgs() -> usize {
 	let val: u64;
+
 	unsafe {
 		llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
 	}
+
 	val as usize
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn readgs() -> usize {
+	let rdx: u64;
+	let rax: u64;
+
+	unsafe {
+		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000101u64) :: "volatile");
+	}
+
+	((rdx << 32) | rax) as usize
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn writefs(fs: usize) {
 	unsafe {
-		llvm_asm!("wrfsbase $0" :: "r"(fs as u64) :: "volatile");
+		llvm_asm!("wrfsbase $0" :: "r"(fs) :: "volatile");
 	}
 }
 
 #[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn writefs(fs: usize) {
+	let rdx = fs >> 32;
+	let rax = fs & (u32::MAX - 1) as usize;
+
+	unsafe {
+		llvm_asm!("wrmsr" :: "%rcx"(0xc0000100u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
+	}
+}
+
+#[inline]
+#[cfg(feature = "fsgsbase")]
 pub fn writegs(gs: usize) {
 	unsafe {
-		llvm_asm!("wrgsbase $0" :: "r"(gs as u64) :: "volatile");
+		llvm_asm!("wrgsbase $0" :: "r"(gs) :: "volatile");
+	}
+}
+
+#[inline]
+#[cfg(not(feature = "fsgsbase"))]
+pub fn writegs(gs: usize) {
+	let rdx = gs >> 32;
+	let rax = gs & (u32::MAX - 1) as usize;
+
+	unsafe {
+		llvm_asm!("wrmsr" :: "%rcx"(0xc0000101u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
 	}
 }
 

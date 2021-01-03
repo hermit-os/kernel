@@ -1,6 +1,6 @@
 [package]
 name = "rusty-hermit"
-version = "0.3.40"
+version = "0.3.45"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
@@ -16,10 +16,7 @@ edition = "2018"
 description = """
 A Rust-based library operting system
 """
-exclude = ["/img/*", "./CMakeLists.txt", "/.travis.yml", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
-
-[badges]
-travis-ci = { repository = "hermitcore/libhermit-rs" }
+exclude = ["/img/*", "./CMakeLists.txt", "/Dockerfile", "/.gitlab-ci.yml", ".gitignore", ".gitattributes", "/.vscode/*", "/.github/*"]
 
 [lib]
 crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
@@ -38,11 +35,12 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "acpi"]
+default = ["pci", "acpi", "fsgsbase"]
 vga = []
 newlib = []
 pci = []
 acpi = []
+fsgsbase = []
 
 [dev-dependencies]
 x86 = { version = "0.34.*", default-features = false }
@@ -62,9 +60,10 @@ bitflags = "1.2"
 #cfg-if = "0.1"
 #byteorder = { version = "1.0", default-features = false }
 num-derive = "0.3"
+crossbeam-utils = { version = "0.8", default-features = false }
 
 [dependencies.num]
-version = "0.2"
+version = "0.3"
 default-features = false
 
 [dependencies.num-traits]
@@ -77,7 +76,7 @@ default-features = false
 #features = ["release_max_level_info"]
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.multiboot]
-version = "0.3.*"
+version = "0.6.*"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.34.*"

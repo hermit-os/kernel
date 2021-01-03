@@ -7,11 +7,11 @@
 
 use core::convert::TryInto;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use multiboot::{MemoryType, Multiboot};
+use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
-use crate::arch::x86_64::mm::paddr_to_slice;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
+use crate::arch::x86_64::mm::MEM;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
@@ -26,7 +26,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let mb = unsafe { Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap() };
+	let mb = unsafe { Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap() };
 	let all_regions = mb
 		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
@@ -62,14 +62,28 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 }
 
 fn detect_from_limits() -> Result<(), ()> {
+	let apic_gap = 0xFE000000;
 	let limit = get_limit();
 	if limit == 0 {
 		return Err(());
 	}
 
-	let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
-	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
-	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+	// add gap for the APIC
+	if limit > apic_gap {
+		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), apic_gap);
+		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+		if limit > 0x100000000 {
+			let entry = FreeListEntry::new(0x100000000, limit - 0x100000000);
+			PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+			TOTAL_MEMORY.store(limit - (0x100000000 - apic_gap), Ordering::SeqCst);
+		} else {
+			TOTAL_MEMORY.store(apic_gap, Ordering::SeqCst);
+		}
+	} else {
+		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
+		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+	}
 
 	Ok(())
 }

@@ -5,6 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::environment::is_uhyve;
 use crate::synch::spinlock::Spinlock;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
@@ -98,25 +99,45 @@ impl Filesystem {
 		&'a self,
 		path: &'b str,
 	) -> Result<(&'a (dyn PosixFileSystem + Send), &'b str), FileError> {
-		// assert start with / (no pwd relative!), split path at /, look first element. Determine backing fs. If non existent, -ENOENT
-		if !path.starts_with('/') {
-			warn!("Relative paths not allowed!");
-			return Err(FileError::ENOENT());
-		}
-		let mut pathsplit = path.splitn(3, '/');
-		pathsplit.next(); // always empty, since first char is /
-		let mount = pathsplit.next().unwrap();
-		let internal_path = pathsplit.next().unwrap(); //TODO: this can fail from userspace, eg when passing "/test"
+		if path.starts_with('/') {
+			let mut pathsplit = path.splitn(3, '/');
+			pathsplit.next(); // empty, since first char is /
 
-		if let Some(fs) = self.mounts.get(mount) {
-			Ok((fs.deref(), internal_path))
+			let mount = pathsplit.next().unwrap();
+			let internal_path = pathsplit.next().unwrap();
+			if let Some(fs) = self.mounts.get(mount) {
+				return Ok((fs.deref(), internal_path));
+			}
+
+			warn!(
+				"Trying to open file on non-existing mount point '{}'!",
+				mount
+			);
 		} else {
+			let mut pathsplit = path.splitn(3, '/');
+			let mount = if !is_uhyve() {
+				option_env!("HERMIT_WD").unwrap_or("root")
+			} else {
+				"."
+			};
+			let internal_path = pathsplit.next().unwrap();
+
+			debug!(
+				"Assume that the directory '{}' is used as mount point!",
+				mount
+			);
+
+			if let Some(fs) = self.mounts.get(mount) {
+				return Ok((fs.deref(), internal_path));
+			}
+
 			info!(
 				"Trying to open file on non-existing mount point '{}'!",
 				mount
 			);
-			Err(FileError::ENOENT())
 		}
+
+		Err(FileError::ENOENT())
 	}
 
 	/// Tries to open file at given path (/MOUNTPOINT/internal-path).

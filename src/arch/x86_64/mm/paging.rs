@@ -10,17 +10,16 @@
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
-use multiboot::Multiboot;
+use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
-use crate::arch::x86_64::kernel::is_uhyve;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::physicalmem;
-use crate::arch::x86_64::mm::{paddr_to_slice, PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
 use crate::environment;
 use crate::mm;
 use crate::scheduler;
@@ -507,8 +506,8 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE).unwrap();
-				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
+				let new_entry = physicalmem::allocate(BasePageSize::SIZE).unwrap();
+				self.entries[index].set(new_entry, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
@@ -611,7 +610,9 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.get_page_table_entry(page)
 }
 
@@ -619,7 +620,9 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr())
+	};
 	let address = root_pagetable
 		.get_page_table_entry(page)
 		.expect("Entry not present")
@@ -674,14 +677,16 @@ pub fn map<S: PageSize>(
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
-		"Mapping virtual address {:#X} to physical address {:#X} ({} pages)",
-		virtual_address,
+		"Mapping physical address {:#X} to virtual address {:#X} ({} pages)",
 		physical_address,
+		virtual_address,
 		count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
@@ -693,7 +698,9 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
@@ -706,7 +713,9 @@ pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 		last_page.address()
 	);
 
-	let root_pagetable = unsafe { &mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr()) };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<PML4>>(PML4_ADDRESS.as_mut_ptr())
+	};
 	let range = Page::<BasePageSize>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().read_only().execute_disable();
@@ -724,26 +733,24 @@ pub fn init_page_tables() {
 	debug!("Create new view to the kernel space");
 
 	unsafe {
-		if !is_uhyve() {
-			let pml4 = controlregs::cr3();
-			let pde = pml4 + 2 * BasePageSize::SIZE as u64;
+		let pml4 = controlregs::cr3();
+		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
 
-			debug!("Found PML4 at 0x{:x}", pml4);
+		debug!("Found PML4 at 0x{:x}", pml4);
 
-			// make sure that only the required areas are mapped
-			let start = pde
-				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
-					* mem::size_of::<u64>()) as u64;
-			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
-				* mem::size_of::<u64>();
+		// make sure that only the required areas are mapped
+		let start = pde
+			+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
+				* mem::size_of::<u64>()) as u64;
+		let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
+			* mem::size_of::<u64>();
 
-			ptr::write_bytes(start as *mut u8, 0u8, size);
+		ptr::write_bytes(start as *mut u8, 0u8, size);
 
-			//TODO: clearing the memory befor kernel_start_address()
+		//TODO: clearing the memory befor kernel_start_address()
 
-			// flush tlb
-			controlregs::cr3_write(pml4);
-		}
+		// flush tlb
+		controlregs::cr3_write(pml4);
 
 		// Identity-map the supplied Multiboot information and command line.
 		let mb_info = get_mbinfo();
@@ -752,7 +759,7 @@ pub fn init_page_tables() {
 			identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
 
 			// Map the "Memory Map" information too.
-			let mb = Multiboot::new(mb_info.as_u64(), paddr_to_slice).unwrap();
+			let mb = Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap();
 			let memory_map_address = mb
 				.memory_regions()
 				.expect("Could not find a memory map in the Multiboot information")
