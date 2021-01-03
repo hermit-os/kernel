@@ -9,14 +9,13 @@
 //! A module containing all virtio specific pci functionality
 //!
 //! The module contains ...
+#![allow(dead_code)]
 
-use crate::arch::x86_64::kernel::pci as kernel_pci;
-use crate::arch::x86_64::kernel::pci::error::PciError;
-use crate::arch::x86_64::kernel::pci::{PciAdapter, PciDriver};
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::kernel::pci as kernel_pci;
+use crate::arch::kernel::pci::error::PciError;
+use crate::arch::kernel::pci::{PciAdapter, PciDriver};
+use crate::arch::mm::PhysAddr;
 use crate::synch::spinlock::SpinlockIrqSave;
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::convert::TryInto;
 use core::mem;
@@ -26,10 +25,9 @@ use crate::drivers::error::DriverError;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env;
-use crate::drivers::virtio::env::memory::{MemLen, MemOff, PhyMemAddr, VirtMemAddr};
+use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
-use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::irq::*;
 use crate::drivers::virtio::depr::virtio_fs;
 use crate::drivers::virtio::virtio_irqhandler;
@@ -1286,6 +1284,8 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 					kernel_pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(
 						virt_fs_drv,
 					)));
+					// initialize file system
+					virtio_fs::init_fs();
 					Ok(VirtioDriver::FileSystem)
 				}
 				None => Err(DriverError::InitVirtioDevFail(VirtioError::Unknown)),

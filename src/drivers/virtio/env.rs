@@ -10,10 +10,10 @@
 //! The module should easy partability of the code. Furthermore it provides
 //! a clean boundary between virtio and the rest of the kernel. One additional aspect is to
 //! ensure only a single location needs changes, in cases where the underlying kernel code is changed
+#![allow(dead_code)]
 
 pub mod memory {
 	use core::convert::TryFrom;
-	use core::mem;
 	use core::ops::Add;
 
 	/// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
