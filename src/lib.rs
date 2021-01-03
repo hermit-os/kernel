@@ -56,6 +56,7 @@
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
+extern crate crossbeam_utils;
 #[macro_use]
 extern crate log;
 #[cfg(target_arch = "x86_64")]
@@ -97,8 +98,6 @@ pub mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
-#[cfg(not(feature = "newlib"))]
-mod rlib;
 #[cfg(target_os = "hermit")]
 mod runtime_glue;
 mod scheduler;
@@ -289,7 +288,7 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize PCI Drivers if on x86_64
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
 	x86_64::kernel::pci::init_drivers();
 
 	syscalls::init();
@@ -297,6 +296,8 @@ extern "C" fn initd(_arg: usize) {
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
 	let (argc, argv, environ) = syscalls::get_application_parameters();
+
+	config::sanity_check();
 
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
@@ -347,14 +348,19 @@ fn boot_processor_main() -> ! {
 
 	synch_all_cores();
 
+	#[cfg(feature = "pci")]
+	info!("Compiled with PCI support");
+	#[cfg(feature = "acpi")]
+	info!("Compiled with ACPI support");
+	#[cfg(feature = "fsgsbase")]
+	info!("Compiled with FSGSBASE support");
+
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	loop {
-		core_scheduler.reschedule_and_wait();
-	}
+	core_scheduler.run();
 }
 
 /// Entry Point of HermitCore for an Application Processor
@@ -369,7 +375,5 @@ fn application_processor_main() -> ! {
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	loop {
-		core_scheduler.reschedule_and_wait();
-	}
+	core_scheduler.run();
 }

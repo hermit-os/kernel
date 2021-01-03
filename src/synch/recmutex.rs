@@ -75,7 +75,10 @@ impl RecursiveMutex {
 			// But let's just trust our code using this function for the sake of simplicity and performance.
 
 			// Decrement the counter (recursive mutex behavior).
-			locked_state.count -= 1;
+			if locked_state.count > 0 {
+				locked_state.count -= 1;
+			}
+
 			if locked_state.count == 0 {
 				// Release the entire recursive mutex.
 				locked_state.current_tid = None;

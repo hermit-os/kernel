@@ -5,6 +5,8 @@
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
+
+#[cfg(feature = "pci")]
 pub mod virtio_net;
 
 use crate::arch::kernel::percore::*;
@@ -26,8 +28,9 @@ const POLL_PERIOD: u64 = 20_000;
 fn set_polling_mode(value: bool) {
 	// is the driver already in polling mode?
 	if POLLING.swap(value, Ordering::SeqCst) != value {
+		#[cfg(feature = "pci")]
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().set_polling_mode(value)	
+			driver.lock().set_polling_mode(value)
 		}
 
 		// wakeup network thread to sleep for longer time
@@ -67,6 +70,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	}
 
 	if reset_nic {
+		#[cfg(feature = "pci")]
 		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
 			driver.lock().set_polling_mode(false);
 		};

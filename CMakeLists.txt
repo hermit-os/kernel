@@ -5,7 +5,7 @@ set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kerne
 add_custom_target(hermit_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/librs
-		cargo xbuild ${CARGO_BUILDTYPE_PARAMETER} --target ${HERMIT_ARCH}-unknown-hermit-kernel.json --features newlib
+		cargo build ${CARGO_BUILDTYPE_PARAMETER} -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-asm,compiler-builtins-mem --target ${HERMIT_ARCH}-unknown-hermit-kernel.json --features newlib
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
@@ -83,6 +83,28 @@ add_custom_command(
 	# Convert the combined library to osabi "Standalone"
 	COMMAND
 		${CMAKE_ELFEDIT} --output-osabi Standalone $<TARGET_FILE:hermit-bootstrap>
+
+	# rename basic functions like memcpy to avoid collisions with the user space
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memmove=kernel_memmove $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memcpy=kernel_memcpy $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memset=kernel_memset $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym memcmp=kernel_memcmp $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym bcmp=kernel_bcmp $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym __umodti3=kernel_umodti3 $<TARGET_FILE:hermit-bootstrap>
+
+	COMMAND
+		${CMAKE_OBJCOPY} --redefine-sym __udivti3=kernel_udivti3 $<TARGET_FILE:hermit-bootstrap>
 
 	# Copy libhermit.a into local prefix directory so that all subsequent
 	# targets can link against the freshly built version (as opposed to

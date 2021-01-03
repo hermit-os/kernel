@@ -58,7 +58,7 @@ macro_rules! infoheader {
 	($str:expr) => {{
 		info!("");
 		info!("{:=^70}", $str);
-		}};
+	}};
 }
 
 macro_rules! infoentry {
@@ -70,5 +70,5 @@ macro_rules! infofooter {
 	() => {{
 		info!("{:=^70}", '=');
 		info!("");
-		}};
+	}};
 }

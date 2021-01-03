@@ -2,7 +2,7 @@
 // (https://github.com/phil-opp/linked-list-allocator).
 // This crate is dual-licensed under MIT or the Apache License (Version 2.0).
 
-use alloc::alloc::{AllocErr, Layout};
+use alloc::alloc::{AllocError, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 
@@ -18,7 +18,6 @@ impl HoleList {
 			first: Hole {
 				size: 0,
 				next: None,
-				padding: [0; 6],
 			},
 		}
 	}
@@ -43,7 +42,10 @@ impl HoleList {
 	/// block is returned.
 	/// This function uses the “first fit” strategy, so it uses the first hole that is big
 	/// enough. Thus the runtime is in O(n) but it should be reasonably fast for small allocations.
-	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<(NonNull<u8>, usize), AllocErr> {
+	pub fn allocate_first_fit(
+		&mut self,
+		layout: Layout,
+	) -> Result<(NonNull<u8>, usize), AllocError> {
 		assert!(layout.size() >= Self::min_size());
 
 		allocate_first_fit(&mut self.first, layout).map(|allocation| {
@@ -74,7 +76,7 @@ impl HoleList {
 
 	/// Returns the minimal allocation size. Smaller allocations or deallocations are not allowed.
 	pub fn min_size() -> usize {
-		64
+		size_of::<usize>() * 2
 	}
 
 	/// Returns information about the first hole for test purposes.
@@ -92,26 +94,18 @@ impl HoleList {
 pub struct Hole {
 	size: usize,
 	next: Option<&'static mut Hole>,
-	#[allow(dead_code)]
-	padding: [usize; 6],
 }
 
 #[cfg(not(target_os = "hermit"))]
 pub struct Hole {
 	pub size: usize,
 	pub next: Option<&'static mut Hole>,
-	#[allow(dead_code)]
-	padding: [usize; 6],
 }
 
 impl Hole {
 	/// Create a new Hole
 	pub const fn new(size: usize, next: Option<&'static mut Hole>) -> Self {
-		Hole {
-			size,
-			next,
-			padding: [0; 6],
-		}
+		Hole { size, next }
 	}
 	/// Returns basic information about the hole.
 	fn info(&self) -> HoleInfo {
@@ -203,7 +197,7 @@ fn split_hole(hole: HoleInfo, required_layout: Layout) -> Option<Allocation> {
 /// care of freeing it again.
 /// This function uses the “first fit” strategy, so it breaks as soon as a big enough hole is
 /// found (and returns it).
-fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocation, AllocErr> {
+fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocation, AllocError> {
 	loop {
 		let allocation: Option<Allocation> = previous
 			.next
@@ -221,7 +215,7 @@ fn allocate_first_fit(mut previous: &mut Hole, layout: Layout) -> Result<Allocat
 			}
 			None => {
 				// this was the last hole, so no hole is big enough -> allocation not possible
-				return Err(AllocErr);
+				return Err(AllocError);
 			}
 		}
 	}

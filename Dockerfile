@@ -2,16 +2,17 @@ FROM ubuntu:latest
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Update Software repository
-RUN apt-get clean 
-RUN apt-get -qq update &&  apt-get install -y apt-transport-https curl wget vim nano git binutils autoconf automake make cmake qemu-kvm qemu-system-x86 nasm gcc g++ build-essential libtool bsdmainutils pkg-config libssl-dev lld
+RUN apt-get update && \
+    apt-get -y install cpu-checker util-linux apt-transport-https curl wget binutils build-essential gcc libtool bsdmainutils pkg-config libssl-dev git qemu-kvm qemu-system-x86 nasm seabios qemu-utils fdisk grub-pc grub-pc-bin grub-imageboot grub-legacy-ec2 multiboot kpartx gzip python3 && \
+    apt-get clean
 
 # Install Rust toolchain
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly --profile minimal
 RUN /root/.cargo/bin/cargo install cargo-download
 RUN /root/.cargo/bin/cargo install uhyve
 RUN /root/.cargo/bin/rustup component add rust-src
 RUN /root/.cargo/bin/rustup component add llvm-tools-preview
+
 
 ENV PATH="/root/.cargo/bin:/root/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/x86_64-unknown-linux-gnu/bin/:${PATH}"
 ENV EDITOR=vim

@@ -6,12 +6,12 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::arch::irq;
-use crate::collections::CachePadded;
 use core::cell::UnsafeCell;
 use core::fmt;
 use core::marker::Sync;
 use core::ops::{Deref, DerefMut, Drop};
-use core::sync::atomic::{spin_loop_hint, AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use crossbeam_utils::{Backoff, CachePadded};
 
 /// This type provides a lock based on busy waiting to realize mutual exclusion of tasks.
 ///
@@ -85,9 +85,10 @@ impl<T> Spinlock<T> {
 
 impl<T: ?Sized> Spinlock<T> {
 	fn obtain_lock(&self) {
+		let backoff = Backoff::new();
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			spin_loop_hint();
+			backoff.spin();
 		}
 	}
 
@@ -211,10 +212,11 @@ impl<T> SpinlockIrqSave<T> {
 impl<T: ?Sized> SpinlockIrqSave<T> {
 	fn obtain_lock(&self) {
 		let irq = irq::nested_disable();
-
+		let backoff = Backoff::new();
 		let ticket = self.queue.fetch_add(1, Ordering::SeqCst) + 1;
+
 		while self.dequeue.load(Ordering::SeqCst) != ticket {
-			spin_loop_hint();
+			backoff.spin();
 		}
 
 		self.irq.store(irq, Ordering::SeqCst);

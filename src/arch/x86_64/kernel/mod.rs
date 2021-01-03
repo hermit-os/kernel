@@ -25,6 +25,7 @@ use crate::scheduler::CoreId;
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
+#[cfg(feature = "pci")]
 pub mod fuse;
 pub mod gdt;
 pub mod idt;
@@ -47,8 +48,10 @@ mod vga;
 
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));
-#[cfg(not(test))]
+#[cfg(all(not(test), not(fsgsbase)))]
 global_asm!(include_str!("switch.s"));
+#[cfg(all(not(test), fsgsbase))]
+global_asm!(include_str!("switch_fsgsbase.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 

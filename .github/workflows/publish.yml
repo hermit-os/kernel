@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v1
+        uses: actions/checkout@v2
         with:
          submodules: true
       - name: Install nightly toolchain
@@ -42,7 +42,7 @@ jobs:
           EOL
       - name: Deploy documentation
         if: success()
-        uses: crazy-max/ghaction-github-pages@v1
+        uses: crazy-max/ghaction-github-pages@v2.2.0
         with:
           target_branch: gh-pages
           build_dir: target/x86_64-unknown-hermit-kernel/doc

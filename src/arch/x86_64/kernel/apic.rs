@@ -15,7 +15,7 @@ use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::collections::CachePadded;
+use crate::collections::irqsave;
 use crate::config::*;
 use crate::environment;
 use crate::mm;
@@ -29,6 +29,7 @@ use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{cmp, fmt, mem, ptr, u32};
+use crossbeam_utils::CachePadded;
 
 const APIC_ICR2: usize = 0x0310;
 
@@ -179,7 +180,7 @@ pub fn add_local_apic_id(id: u8) {
 }
 
 #[cfg(not(feature = "acpi"))]
-fn detect_from_acpi() -> Result<usize, ()> {
+fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// dummy implementation if acpi support is disabled
 	Err(())
 }
@@ -437,7 +438,7 @@ fn calibrate_timer() {
 	}
 }
 
-pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		if processor::supports_tsc_deadline() {
 			// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
@@ -478,6 +479,11 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	}
 }
 
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	irqsave(|| {
+		__set_oneshot_timer(wakeup_time);
+	});
+}
 pub fn init_x2apic() {
 	if processor::supports_x2apic() {
 		debug!("Enable x2APIC support");
@@ -632,34 +638,38 @@ pub fn ipi_tlb_flush() {
 		}
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
-		for core_id_to_interrupt in 0..apic_ids.len() {
-			if core_id_to_interrupt != core_id.try_into().unwrap() {
-				let local_apic_id = apic_ids[core_id_to_interrupt];
-				let destination = u64::from(local_apic_id) << 32;
-				local_apic_write(
-					IA32_X2APIC_ICR,
-					destination
-						| APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED
-						| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
-				);
+		irqsave(|| {
+			for core_id_to_interrupt in 0..apic_ids.len() {
+				if core_id_to_interrupt != core_id.try_into().unwrap() {
+					let local_apic_id = apic_ids[core_id_to_interrupt];
+					let destination = u64::from(local_apic_id) << 32;
+					local_apic_write(
+						IA32_X2APIC_ICR,
+						destination
+							| APIC_ICR_LEVEL_ASSERT | APIC_ICR_DELIVERY_MODE_FIXED
+							| u64::from(TLB_FLUSH_INTERRUPT_NUMBER),
+					);
+				}
 			}
-		}
+		});
 	}
 }
 
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	if core_id_to_wakeup != core_id() {
-		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
-		let local_apic_id = apic_ids[core_id_to_wakeup as usize];
-		let destination = u64::from(local_apic_id) << 32;
-		local_apic_write(
-			IA32_X2APIC_ICR,
-			destination
-				| APIC_ICR_LEVEL_ASSERT
-				| APIC_ICR_DELIVERY_MODE_FIXED
-				| u64::from(WAKEUP_INTERRUPT_NUMBER),
-		);
+		irqsave(|| {
+			let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
+			let destination = u64::from(local_apic_id) << 32;
+			local_apic_write(
+				IA32_X2APIC_ICR,
+				destination
+					| APIC_ICR_LEVEL_ASSERT
+					| APIC_ICR_DELIVERY_MODE_FIXED
+					| u64::from(WAKEUP_INTERRUPT_NUMBER),
+			);
+		});
 	}
 }
 
@@ -715,7 +725,22 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			wrmsr(x2apic_msr, value);
 		}
 	} else {
+		// Write the value.
+		let value_ref = unsafe {
+			&mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>())
+		};
+
 		if x2apic_msr == IA32_X2APIC_ICR {
+			// The ICR1 register in xAPIC mode also has a Delivery Status bit.
+			// Wait until previous interrupt was deliverd.
+			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
+			while (unsafe { core::ptr::read_volatile(value_ref) }
+				& APIC_ICR_DELIVERY_STATUS_PENDING)
+				> 0
+			{
+				spin_loop_hint();
+			}
+
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
 			let destination = ((value >> 8) & 0xFF00_0000) as u32;
@@ -725,23 +750,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// The remaining data without the destination will now be written into ICR1.
 		}
 
-		// Write the value.
-		let value_ref = unsafe {
-			&mut *(translate_x2apic_msr_to_xapic_address(x2apic_msr).as_mut_ptr::<u32>())
-		};
 		*value_ref = value as u32;
-
-		if x2apic_msr == IA32_X2APIC_ICR {
-			// The ICR1 register in xAPIC mode also has a Delivery Status bit that must be checked.
-			// Wait until the CPU clears it.
-			// This bit does not exist in x2APIC mode (cf. Intel Vol. 3A, 10.12.9).
-			while (unsafe { core::ptr::read_volatile(value_ref) }
-				& APIC_ICR_DELIVERY_STATUS_PENDING)
-				> 0
-			{
-				spin_loop_hint();
-			}
-		}
 	}
 }
 

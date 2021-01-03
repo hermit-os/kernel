@@ -2,11 +2,9 @@
 
 # RustyHermit: libhermit-rs
 
-[![Build Status](https://travis-ci.com/hermitcore/libhermit-rs.svg?branch=master)](https://travis-ci.com/hermitcore/libhermit-rs)
-![Actions Status](https://github.com/hermitcore/libhermit-rs/workflows/Build/badge.svg)
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/libhermit-rs/hermit/)
 [![License](https://img.shields.io/crates/l/rusty-hermit.svg)](https://img.shields.io/crates/l/rusty-hermit.svg)
-[![Slack Status](https://radiant-ridge-95061.herokuapp.com/badge.svg)](https://radiant-ridge-95061.herokuapp.com)
+[![Slack Status](https://matrix.osbyexample.com:3008/badge.svg)](https://matrix.osbyexample.com:3008)
 
 _libhermit-rs_ is the kernel of the [RustyHermit](https://github.com/hermitcore/rusty-hermit) unikernel project.
 
