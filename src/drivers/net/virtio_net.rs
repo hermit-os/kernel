@@ -12,8 +12,8 @@
 
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
-use crate::arch::x86_64::kernel::pci::error::PciError;
-use crate::arch::x86_64::kernel::pci::PciAdapter;
+use crate::arch::kernel::pci::error::PciError;
+use crate::arch::kernel::pci::PciAdapter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 
 use alloc::boxed::Box;

@@ -8,9 +8,9 @@
 #![allow(unused)]
 #![allow(dead_code)]
 
-use crate::arch::x86_64::kernel::pci;
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
+use crate::arch::kernel::pci;
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::{paging, virtualmem, VirtAddr};
 #[cfg(not(feature = "newlib"))]
 use crate::drivers::net::netwakeup;
 use crate::drivers::virtio::depr::virtio::{
