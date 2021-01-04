@@ -7,6 +7,8 @@
 
 //! This module contains Virtio's split virtqueue.
 //! See Virito specification v1.1. - 2.6
+#![allow(dead_code)]
+#![allow(unused)]
 
 use super::super::features::Features;
 use super::super::transport::pci::{ComCfg, IsrStatus, NotifCfg, NotifCtrl};
@@ -15,8 +17,8 @@ use super::{
 	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemDescrId, MemPool,
 	Pinned, Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
@@ -310,7 +312,7 @@ impl SplitVq {
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	pub fn dispatch_batch_await(
 		&self,
-		mut tkns: Vec<TransferToken>,
+		tkns: Vec<TransferToken>,
 		await_queue: Rc<RefCell<VecDeque<Transfer>>>,
 		notif: bool,
 	) {
@@ -462,7 +464,7 @@ impl SplitVq {
 			used_ring,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(
+		let notif_ctrl = NotifCtrl::new(
 			(notif_cfg.base()
 				+ usize::try_from(vq_handler.notif_off()).unwrap()
 				+ usize::try_from(notif_cfg.multiplier()).unwrap()) as *mut usize,
@@ -1528,7 +1530,7 @@ impl SplitVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let mut ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
+		let ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};

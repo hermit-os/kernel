@@ -19,11 +19,6 @@ pub mod net;
 #[cfg(feature = "pci")]
 pub mod virtio;
 
-#[cfg(feature = "pci")]
-use crate::drivers::error::DriverError;
-#[cfg(feature = "pci")]
-pub type Result<T> = core::result::Result<T, DriverError>;
-
 /// A common error module for drivers.
 /// [DriverError](enums.drivererror.html) values will be
 /// passed on to higher layers.
