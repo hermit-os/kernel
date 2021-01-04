@@ -124,22 +124,22 @@ pub fn sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
 	kernel_function!(__sys_send_tx_buffer(handle, len))
 }
 
-fn __sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
+fn __sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
 	unsafe { SYS.receive_rx_buffer() }
 }
 
 #[no_mangle]
-pub fn sys_receive_rx_buffer() -> Result<&'static [u8], ()> {
+pub fn sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
 	kernel_function!(__sys_receive_rx_buffer())
 }
 
-fn __sys_rx_buffer_consumed() -> Result<(), ()> {
-	unsafe { SYS.rx_buffer_consumed() }
+fn __sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
+	unsafe { SYS.rx_buffer_consumed(handle) }
 }
 
 #[no_mangle]
-pub fn sys_rx_buffer_consumed() -> Result<(), ()> {
-	kernel_function!(__sys_rx_buffer_consumed())
+pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
+	kernel_function!(__sys_rx_buffer_consumed(handle))
 }
 
 #[cfg(not(feature = "newlib"))]

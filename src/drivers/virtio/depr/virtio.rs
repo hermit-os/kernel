@@ -5,19 +5,11 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::irq::*;
-use crate::arch::x86_64::kernel::pci::{
-	self, get_network_driver, PciAdapter, PciClassCode, PciDriver, PciNetworkControllerSubclass,
-};
-use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
-use crate::arch::x86_64::kernel::virtio_fs;
-use crate::arch::x86_64::kernel::virtio_net;
+use crate::arch::kernel::pci::{self, PciAdapter};
 
-use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::VirtAddr;
+use crate::arch::mm::paging;
+use crate::arch::mm::VirtAddr;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 use alloc::boxed::Box;
 use alloc::rc::Rc;
@@ -29,6 +21,7 @@ use core::sync::atomic::{fence, Ordering};
 
 use self::consts::*;
 
+#[allow(dead_code)]
 pub mod consts {
 	/* Common configuration */
 	pub const VIRTIO_PCI_CAP_COMMON_CFG: u32 = 1;
@@ -550,7 +543,7 @@ impl VirtqDescriptors {
 			.used_chains
 			.borrow()
 			.iter()
-			.position(|c| c.borrow().0.last().unwrap().index == index.try_into().unwrap())
+			.position(|c| c.borrow().0.last().unwrap().index == index as u16)
 			.unwrap();
 		self.used_chains.borrow()[idx].clone()
 	}
@@ -816,79 +809,5 @@ pub fn map_virtiocap(
 	} else {
 		warn!("Could not map virtio-cap-bar!");
 		None
-	}
-}
-
-pub fn init_virtio_device(adapter: &pci::PciAdapter) {
-	// TODO: 2.3.1: Loop until get_config_generation static, since it might change mid-read
-
-	match adapter.device_id {
-		0x1000..=0x103F => {
-			// Legacy device, skip
-			warn!("Legacy Virtio devices are not supported, skipping!");
-			return;
-		}
-		0x1041 => {
-			match num::FromPrimitive::from_u8(adapter.class_id).unwrap() {
-				PciClassCode::NetworkController => {
-					match num::FromPrimitive::from_u8(adapter.subclass_id).unwrap() {
-						PciNetworkControllerSubclass::EthernetController => {
-							// TODO: proper error handling on driver creation fail
-							let drv = virtio_net::create_virtionet_driver(adapter).unwrap();
-							pci::register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)));
-						}
-						_ => {
-							warn!("Virtio device is NOT supported, skipping!");
-							return;
-						}
-					}
-				}
-				_ => {
-					warn!("Virtio device is NOT supported, skipping!");
-					return;
-				}
-			}
-		}
-		0x105a => {
-			info!("Found VirtioFS device!");
-			// TODO: check subclass
-			// TODO: proper error handling on driver creation fail
-			{
-				let drv = virtio_fs::create_virtiofs_driver(adapter).unwrap();
-				pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(drv)));
-			}
-			// initialize file system
-			virtio_fs::init_fs();
-		}
-		_ => {
-			warn!("Virtio device is NOT supported, skipping!");
-			return;
-		}
-	};
-
-	// Install interrupt handler
-	unsafe {
-		VIRTIO_IRQ_NO = adapter.irq;
-	}
-	irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
-	add_irq_name(adapter.irq as u32, "virtio");
-}
-
-/// Specifies the interrupt number of the virtio device
-static mut VIRTIO_IRQ_NO: u8 = 0;
-
-#[cfg(target_arch = "x86_64")]
-extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	debug!("Receive virtio interrupt");
-	apic::eoi();
-	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
-
-	let check_scheduler = match get_network_driver() {
-		Some(driver) => driver.lock().handle_interrupt(),
-		_ => false,
-	};
-
-	if check_scheduler {
-		core_scheduler().scheduler();
 	}
 }
