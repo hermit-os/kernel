@@ -7,6 +7,9 @@
 
 //! This module contains Virtio's packed virtqueue.
 //! See Virito specification v1.1. - 2.7
+#![allow(dead_code)]
+#![allow(unused)]
+
 use self::error::VqPackedError;
 use super::super::features::Features;
 use super::super::transport::pci::{ComCfg, IsrStatus, NotifCfg, NotifCtrl};
@@ -15,8 +18,8 @@ use super::{
 	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemDescrId, MemPool,
 	Pinned, Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
@@ -520,7 +523,7 @@ impl<'a> ReadCtrl<'a> {
 			// INFO:
 			// Due to the behaviour of the currently used devices and the virtio code from the linux kernel, we assume, that device do NOT set this
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
-			let mut write_len = self.desc_ring.ring[self.position].len;
+			let write_len = self.desc_ring.ring[self.position].len;
 
 			match (send_buff_opt, recv_buff_opt) {
 				(Some(send_buff), Some(recv_buff)) => {
@@ -2390,7 +2393,7 @@ impl PackedVq {
 			None => return Err(VirtqError::BufferToLarge),
 		};
 
-		let mut ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
+		let ctrl_desc = match self.mem_pool.pull(Rc::clone(&self.mem_pool), sz_indrct_lst) {
 			Ok(desc) => desc,
 			Err(vq_err) => return Err(vq_err),
 		};

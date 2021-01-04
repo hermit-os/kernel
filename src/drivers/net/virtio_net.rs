@@ -8,10 +8,12 @@
 //! A module containing a virtio network driver.
 //!
 //! The module contains ...
+#![allow(unused)]
+
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
-use crate::arch::x86_64::kernel::pci::error::PciError;
-use crate::arch::x86_64::kernel::pci::PciAdapter;
+use crate::arch::kernel::pci::error::PciError;
+use crate::arch::kernel::pci::PciAdapter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 
 use alloc::boxed::Box;
@@ -40,7 +42,7 @@ use self::error::VirtioNetError;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 
-const EthHdr: usize = 14usize;
+const ETH_HDR: usize = 14usize;
 
 #[derive(Debug)]
 #[repr(C)]
@@ -424,7 +426,7 @@ impl TxQueues {
 			//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 			// As usize is currently safe as the minimal usize is defined as 16bit in rust.
 			let buff_def =
-				Bytes::new(mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.mtu as usize) + EthHdr)
+				Bytes::new(mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.mtu as usize) + ETH_HDR)
 					.unwrap();
 			let spec = BuffSpec::Single(buff_def);
 
