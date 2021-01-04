@@ -16,7 +16,13 @@ class TestRunner:
         Subclassed by QemuTestRunner and UhyveTestRunner that extend this class
     """
 
-    def __init__(self, test_command, num_cores=1, memory_in_megabyte=512, gdb_enabled=False, verbose=False):
+    def __init__(self,
+                 test_command,
+                 timeout_seconds: int,
+                 num_cores=1,
+                 memory_in_megabyte=512,
+                 gdb_enabled=False,
+                 verbose=False):
         online_cpus = multiprocessing.cpu_count()
         if num_cores > online_cpus:
             print("WARNING: You specified num_cores={}, however only {} cpu cores are available."
@@ -29,6 +35,7 @@ class TestRunner:
         self.verbose: bool = verbose
         self.test_command = test_command
         self.custom_env = None
+        self.timeout: int = timeout_seconds
 
     def validate_test_success(self, rc, stdout, stderr, execution_time) -> bool:
         """
@@ -50,16 +57,26 @@ class TestRunner:
             return True
 
     def run_test(self):
+        """
+        :return: returncode, stdout, stderr, elapsed_time, timed_out: bool
+        """
         print("Calling {}".format(type(self).__name__))
-        start_time = time.perf_counter()  # https://docs.python.org/3/library/time.html#time.perf_counter
-        if self.custom_env is None:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-        else:
-            p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
-                               env=self.custom_env)
-        end_time = time.perf_counter()
+        try:
+            start_time = time.perf_counter()  # https://docs.python.org/3/library/time.html#time.perf_counter
+            if self.custom_env is None:
+                p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
+                        timeout=self.timeout)
+            else:
+                p = subprocess.run(self.test_command, stdout=PIPE, stderr=PIPE, universal_newlines=True,
+                                timeout=self.timeout, env=self.custom_env)
+            end_time = time.perf_counter()
+            elapsed_time = end_time - start_time
+        except subprocess.TimeoutExpired as e:
+            elapsed_time = self.timeout * (10 ** 9)
+            return None, e.stdout, e.stderr, elapsed_time, True
+
         # ToDo: add some timeout
-        return p.returncode, p.stdout, p.stderr, end_time - start_time
+        return p.returncode, p.stdout, p.stderr, elapsed_time, False
 
 
 class QemuTestRunner(TestRunner):
@@ -70,6 +87,7 @@ class QemuTestRunner(TestRunner):
 
     def __init__(self,
                  test_exe_path: str,
+                 timeout_seconds: int,
                  bootloader_path: str = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader',
                  num_cores=1,
                  memory_in_megabyte=512,
@@ -87,7 +105,13 @@ class QemuTestRunner(TestRunner):
                         '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
                         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
                         ]
-        super().__init__(test_command, num_cores, memory_in_megabyte, gdb_enabled, verbose=False)
+        super().__init__(test_command, 
+                        timeout_seconds=timeout_seconds, 
+                        num_cores = num_cores, 
+                        memory_in_megabyte = memory_in_megabyte, 
+                        gdb_enabled = gdb_enabled, 
+                        verbose=False
+                        )
         if self.gdb_enabled:
             self.gdb_port = 1234
             self.test_command.append('-s')
@@ -108,8 +132,14 @@ class QemuTestRunner(TestRunner):
 
 
 class UhyveTestRunner(TestRunner):
-    def __init__(self, test_exe_path: str, uhyve_path=None, num_cores=1, memory_in_megabyte=512, gdb_enabled=False,
-                 verbose=False):
+    def __init__(self, 
+                test_exe_path: str, 
+                timeout_seconds: int,
+                uhyve_path=None, 
+                num_cores=1, 
+                memory_in_megabyte=512, 
+                gdb_enabled=False,
+                verbose=False):
         if platform.system() == 'Windows':
             print("Error: using uhyve requires kvm. Please use Linux or Mac OS", file=sys.stderr)
             raise OSError
@@ -122,7 +152,7 @@ class UhyveTestRunner(TestRunner):
         if verbose:
             test_command.append('-v')
         test_command.append(test_exe_path)
-        super().__init__(test_command=test_command, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
+        super().__init__(test_command=test_command, timeout_seconds=timeout_seconds, num_cores=num_cores, memory_in_megabyte=memory_in_megabyte,
                          gdb_enabled=gdb_enabled, verbose=verbose)
         # ToDo: This could be done a lot nicer if we could use flags to pass these options to uhyve
         if gdb_enabled or num_cores != 1:
@@ -189,6 +219,8 @@ parser.add_argument('-vv', '--veryverbose', action='store_true', help='verbose a
 parser.add_argument('--gdb', action='store_true', help='Enables gdb on port 1234 and stops at test executable '
                                                        'entrypoint')
 parser.add_argument('--num_cores', type=int, default=1, help="Number of CPU cores the test should run on")
+parser.add_argument('--timeout', type=int, default=300, help="Timeout in seconds for the test process.")
+
 args = parser.parse_args()
 print("Arguments: {}".format(args.runner_args))
 
@@ -196,19 +228,30 @@ print("Arguments: {}".format(args.runner_args))
 test_exe = args.runner_args[-1]
 assert isinstance(test_exe, str)
 assert os.path.isfile(test_exe)  # If this fails likely something about runner args changed
+assert args.timeout > 0, "Timeout must be a positive integer" # Todo: add range checking directly into parser.add_argument
 # ToDo: Add additional test based arguments for qemu / uhyve
 
 test_name = os.path.basename(test_exe)
 test_name = clean_test_name(test_name)
 
 if args.bootloader_path is not None:
-    test_runner = QemuTestRunner(test_exe, args.bootloader_path, gdb_enabled=args.gdb, num_cores=args.num_cores)
+    test_runner = QemuTestRunner(test_exe, 
+                    timeout_seconds=args.timeout, 
+                    bootloader_path = args.bootloader_path, 
+                    gdb_enabled=args.gdb, 
+                    num_cores=args.num_cores
+                    )
 elif platform.system() == 'Windows':
     print("Error: using uhyve requires kvm. Please use Linux or Mac OS, or use qemu", file=sys.stderr)
     exit(-1)
 else:
-    test_runner = UhyveTestRunner(test_exe, verbose=args.veryverbose, gdb_enabled=args.gdb, num_cores=args.num_cores,
-                                  uhyve_path=args.uhyve_path)
+    test_runner = UhyveTestRunner(test_exe, 
+                    timeout_seconds=args.timeout, 
+                    verbose=args.veryverbose, 
+                    gdb_enabled=args.gdb, 
+                    num_cores=args.num_cores,
+                    uhyve_path=args.uhyve_path)
+
 if test_name == "hermit":
     print("Executing the Unittests is currently broken... Skipping Test NOT marking as failed")
     # print("Note: If you want to execute all tests, consider adding the '--no-fail-fast' flag")
@@ -216,9 +259,13 @@ if test_name == "hermit":
     print("`{}`".format(' '.join(test_runner.test_command)))
     exit(0)
 
-rc, stdout, stderr, execution_time = test_runner.run_test()
+rc, stdout, stderr, execution_time, timed_out = test_runner.run_test()
+if timed_out:
+    print('Test {} did not finish before timeout of {} seconds'.format(test_name, args.timeout))
+    print("Test failed - Dumping Stderr:\n{}\n\nDumping Stdout:\n{}\n".format(stderr, stdout), file=sys.stderr)
+    exit(1)
 test_ok = test_runner.validate_test_success(rc, stdout, stderr, execution_time)
-if test_ok:
+if test_ok :
     print("Test Ok: {} - runtime: {} seconds".format(test_name, execution_time))
     if args.verbose or args.veryverbose:
         print("Test {} stdout: {}".format(test_name, stdout))
