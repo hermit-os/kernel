@@ -17,7 +17,6 @@ use core::convert::TryInto;
 use core::sync::atomic::{AtomicU32, Ordering};
 use crossbeam_utils::Backoff;
 
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use crate::arch;
 use crate::arch::irq;
 use crate::arch::mm::VirtAddr;
@@ -28,6 +27,7 @@ use crate::config::*;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
+use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 pub mod task;
 

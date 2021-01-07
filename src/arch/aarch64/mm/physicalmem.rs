@@ -9,9 +9,9 @@ use core::convert::TryInto;
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::synch::spinlock::SpinlockIrqSave;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
+use crate::synch::spinlock::SpinlockIrqSave;
 
 extern "C" {
 	static limit: usize;
@@ -58,7 +58,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
 			.lock()
 			.allocate(size, None)?
 			.try_into()
-			.unwrap()
+			.unwrap(),
 	))
 }
 
@@ -85,7 +85,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, ()> {
 			.lock()
 			.allocate(size, Some(alignment))?
 			.try_into()
-			.unwrap()
+			.unwrap(),
 	))
 }
 
@@ -106,9 +106,13 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	PHYSICAL_FREE_LIST.lock().deallocate(physical_address.as_usize(), size);
+	PHYSICAL_FREE_LIST
+		.lock()
+		.deallocate(physical_address.as_usize(), size);
 }
 
 pub fn print_information() {
-	PHYSICAL_FREE_LIST.lock().print_information(" PHYSICAL MEMORY FREE LIST ");
+	PHYSICAL_FREE_LIST
+		.lock()
+		.print_information(" PHYSICAL MEMORY FREE LIST ");
 }

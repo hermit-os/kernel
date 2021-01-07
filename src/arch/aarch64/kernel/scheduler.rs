@@ -6,19 +6,18 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-
 //! Architecture dependent interface to initialize a task
 
-use alloc::rc::Rc;
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::arch::aarch64::mm::paging::{PageSize,BasePageSize,PageTableEntryFlags};
+use crate::environment;
+use crate::scheduler::task::{Task, TaskFrame};
+use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::{mem, ptr};
-use crate::scheduler::task::{Task, TaskFrame};
-use crate::environment;
 
 extern "C" {
 	static tls_start: u8;
@@ -123,42 +122,42 @@ impl TaskStacks {
 
 	pub fn get_user_stack_size(&self) -> usize {
 		match self {
-				TaskStacks::Boot(_) => 0,
-				TaskStacks::Common(stacks) => {
-						stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE
-				}
+			TaskStacks::Boot(_) => 0,
+			TaskStacks::Common(stacks) => {
+				stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE
+			}
 		}
 	}
 
 	pub fn get_user_stack(&self) -> VirtAddr {
 		match self {
-				TaskStacks::Boot(_) => VirtAddr::zero(),
-				TaskStacks::Common(stacks) => {
-						stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
-				}
+			TaskStacks::Boot(_) => VirtAddr::zero(),
+			TaskStacks::Common(stacks) => {
+				stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
+			}
 		}
 	}
 
 	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
-				TaskStacks::Boot(stacks) => stacks.stack,
-				TaskStacks::Common(stacks) => {
-						stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE
-				}
+			TaskStacks::Boot(stacks) => stacks.stack,
+			TaskStacks::Common(stacks) => {
+				stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE
+			}
 		}
 	}
 
 	pub fn get_kernel_stack_size(&self) -> usize {
 		match self {
-				TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
-				TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
+			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
+			TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
 		}
 	}
 
 	pub fn get_interupt_stack(&self) -> VirtAddr {
 		match self {
-				TaskStacks::Boot(stacks) => stacks.ist0,
-				TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
+			TaskStacks::Boot(stacks) => stacks.ist0,
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
 		}
 	}
 
@@ -169,12 +168,12 @@ impl TaskStacks {
 
 impl Clone for TaskStacks {
 	fn clone(&self) -> TaskStacks {
-			match self {
-					TaskStacks::Boot(_) => TaskStacks::new(0),
-					TaskStacks::Common(stacks) => {
-							TaskStacks::new(stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE)
-					}
+		match self {
+			TaskStacks::Boot(_) => TaskStacks::new(0),
+			TaskStacks::Common(stacks) => {
+				TaskStacks::new(stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE)
 			}
+		}
 	}
 }
 
@@ -212,31 +211,33 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	pub fn new(tls_size: usize) -> Self {
-		Self { address: VirtAddr::zero() }
+		Self {
+			address: VirtAddr::zero(),
+		}
 	}
 
 	#[inline]
-    pub fn address(&self) -> VirtAddr {
-        self.address
-    }
+	pub fn address(&self) -> VirtAddr {
+		self.address
+	}
 }
 
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
-			/*debug!(
-					"Deallocate TLS at 0x{:x} (layout {:?})",
-					self.address, self.layout,
-			);
+		/*debug!(
+				"Deallocate TLS at 0x{:x} (layout {:?})",
+				self.address, self.layout,
+		);
 
-			unsafe {
-					dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
-			}*/
+		unsafe {
+				dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
+		}*/
 	}
 }
 
 impl Clone for TaskTLS {
 	fn clone(&self) -> Self {
-			TaskTLS::new(environment::get_tls_memsz())
+		TaskTLS::new(environment::get_tls_memsz())
 	}
 }
 

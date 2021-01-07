@@ -121,7 +121,11 @@ pub struct PageTableEntry {
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(&self) -> PhysAddr {
-		PhysAddr(self.physical_address_and_flags.as_u64() & !(BasePageSize::SIZE as u64 - 1u64) & !(u64::MAX << 48))
+		PhysAddr(
+			self.physical_address_and_flags.as_u64()
+				& !(BasePageSize::SIZE as u64 - 1u64)
+				& !(u64::MAX << 48),
+		)
 	}
 
 	/// Returns whether this entry is valid (present).
@@ -259,7 +263,8 @@ impl<S: PageSize> Page<S> {
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(&self) -> usize {
 		assert!(L::LEVEL <= S::MAP_LEVEL);
-		self.virtual_address.as_usize() >> PAGE_BITS >> (3 - L::LEVEL) * PAGE_MAP_BITS & PAGE_MAP_MASK
+		self.virtual_address.as_usize() >> PAGE_BITS >> (3 - L::LEVEL) * PAGE_MAP_BITS
+			& PAGE_MAP_MASK
 	}
 }
 
@@ -456,7 +461,8 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE).expect("Unable to allocate physical memory");
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE)
+					.expect("Unable to allocate physical memory");
 				self.entries[index].set(
 					physical_address,
 					PageTableEntryFlags::NORMAL | PageTableEntryFlags::TABLE_OR_4KIB_PAGE,
@@ -599,8 +605,7 @@ pub fn map<S: PageSize>(
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
-pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
-}
+pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {}
 
 #[inline]
 pub fn get_application_page_size() -> usize {

@@ -21,10 +21,10 @@ use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::config::*;
 use crate::environment;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
-use crate::config::*;
 use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -138,7 +138,7 @@ pub fn get_cmdsize() -> usize {
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	VirtAddr(unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdline)})
+	VirtAddr(unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdline) })
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -148,14 +148,18 @@ pub fn message_output_init() {
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
-		unsafe { COM1.init(SERIAL_PORT_BAUDRATE); }
+		unsafe {
+			COM1.init(SERIAL_PORT_BAUDRATE);
+		}
 	}
 }
 
 pub fn output_message_byte(byte: u8) {
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
-		unsafe { COM1.write_byte(byte); } 
+		unsafe {
+			COM1.write_byte(byte);
+		}
 	} else {
 		// Output messages to the kernel message buffer in multi-kernel mode.
 		kernel_message_buffer::write_byte(byte);
@@ -164,7 +168,7 @@ pub fn output_message_byte(byte: u8) {
 
 pub fn output_message_buf(buf: &[u8]) {
 	for byte in buf {
-			output_message_byte(*byte);
+		output_message_byte(*byte);
 	}
 }
 
@@ -287,14 +291,13 @@ pub fn network_adapter_init() -> i32 {
 	-1
 }
 
-pub fn print_statistics() {
-}
+pub fn print_statistics() {}
 
 #[inline(never)]
 #[no_mangle]
 pub unsafe fn pre_init() -> ! {
-    let com1 = SerialPort::new(0x9000000);
+	let com1 = SerialPort::new(0x9000000);
 
-    com1.write_byte('H' as u8);
-    loop {}
+	com1.write_byte('H' as u8);
+	loop {}
 }

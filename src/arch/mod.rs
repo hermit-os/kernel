@@ -23,7 +23,7 @@ pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, switch_to_task,
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::{
 	application_processor_init, boot_application_processors, boot_processor_init,
-	get_processor_count, message_output_init, output_message_byte, output_message_buf,
+	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
 
 #[cfg(target_arch = "aarch64")]

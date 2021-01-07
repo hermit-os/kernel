@@ -43,7 +43,11 @@ pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
 	);
 
 	Ok(VirtAddr(
-		KERNEL_FREE_LIST.lock().allocate(size, None)?.try_into().unwrap(),
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(size, None)?
+			.try_into()
+			.unwrap(),
 	))
 }
 
@@ -51,26 +55,26 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, ()> {
 	assert!(size > 0);
 	assert!(alignment > 0);
 	assert_eq!(
-			size % alignment,
-			0,
-			"Size {:#X} is not a multiple of the given alignment {:#X}",
-			size,
-			alignment
+		size % alignment,
+		0,
+		"Size {:#X} is not a multiple of the given alignment {:#X}",
+		size,
+		alignment
 	);
 	assert_eq!(
-			alignment % BasePageSize::SIZE,
-			0,
-			"Alignment {:#X} is not a multiple of {:#X}",
-			alignment,
-			BasePageSize::SIZE
+		alignment % BasePageSize::SIZE,
+		0,
+		"Alignment {:#X} is not a multiple of {:#X}",
+		alignment,
+		BasePageSize::SIZE
 	);
 
 	Ok(VirtAddr(
-			KERNEL_FREE_LIST
-					.lock()
-					.allocate(size, Some(alignment))?
-					.try_into()
-					.unwrap(),
+		KERNEL_FREE_LIST
+			.lock()
+			.allocate(size, Some(alignment))?
+			.try_into()
+			.unwrap(),
 	))
 }
 
@@ -101,7 +105,9 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 		BasePageSize::SIZE
 	);
 
-	KERNEL_FREE_LIST.lock().deallocate(virtual_address.as_usize(), size);
+	KERNEL_FREE_LIST
+		.lock()
+		.deallocate(virtual_address.as_usize(), size);
 }
 
 /*pub fn reserve(virtual_address: VirtAddr, size: usize) {
@@ -141,7 +147,9 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 }*/
 
 pub fn print_information() {
-	KERNEL_FREE_LIST.lock().print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
+	KERNEL_FREE_LIST
+		.lock()
+		.print_information(" KERNEL VIRTUAL MEMORY FREE LIST ");
 }
 
 #[inline]
