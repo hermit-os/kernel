@@ -62,6 +62,23 @@ scopeguard = { version = "1.1", default-features = false }
 multiboot = "0.7"
 x86 = { version = "0.41", default-features = false }
 
+[dependencies.scopeguard]
+version = "1.1"
+default-features = false
+
+[dependencies.num]
+version = "0.3"
+default-features = false
+
+[dependencies.num-traits]
+version = "0.2"
+default-features = false
+
+[dependencies.log]
+version = "0.4"
+default-features = false
+#features = ["release_max_level_info"]
+
 [dev-dependencies]
 float-cmp = "0.9"
 num-traits = { version = "0.2", default-features = false }
