@@ -436,13 +436,14 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	if boot_info.cpu_online == 0 {
 		crate::boot_processor_main()
 	} else {
+		#[cfg(not(feature = "smp"))]
+		{
+			error!("SMP support deactivated");
+			loop {
+				processor::halt();
+			}
+		}
 		#[cfg(feature = "smp")]
 		crate::application_processor_main();
-		#[cfg(not(feature = "smp"))]
-		error!("SMP support deactivated");
-		#[cfg(not(feature = "smp"))]
-		loop {
-			processor::halt();
-		}
 	}
 }
