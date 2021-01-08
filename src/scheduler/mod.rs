@@ -64,6 +64,7 @@ impl SchedulerInput {
 )]
 pub struct PerCoreScheduler {
 	/// Core ID of this per-core scheduler
+	#[cfg(feature = "smp")]
 	core_id: CoreId,
 	/// Task which is currently running
 	current_task: Rc<RefCell<Task>>,
@@ -118,7 +119,7 @@ impl PerCoreScheduler {
 				false
 			}
 			#[cfg(not(feature = "smp"))]
-			if core_id == core_scheduler().core_id {
+			if core_id == 0 {
 				core_scheduler().ready_queue.push(task);
 				false
 			} else {
@@ -210,7 +211,7 @@ impl PerCoreScheduler {
 				false
 			}
 			#[cfg(not(feature = "smp"))]
-			if core_id == core_scheduler().core_id {
+			if core_id == 0 {
 				core_scheduler().ready_queue.push(clone_task);
 				false
 			} else {
@@ -576,6 +577,7 @@ pub fn add_current_core() {
 		core_id, tid
 	);
 	let boxed_scheduler = Box::new(PerCoreScheduler {
+		#[cfg(feature = "smp")]
 		core_id,
 		current_task: idle_task.clone(),
 		idle_task: idle_task.clone(),
