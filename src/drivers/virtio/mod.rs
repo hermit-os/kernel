@@ -13,30 +13,6 @@ pub mod env;
 pub mod transport;
 pub mod virtqueue;
 
-use crate::arch::kernel::apic;
-use crate::arch::kernel::irq::*;
-use crate::arch::kernel::pci as kernel_pci;
-use crate::arch::kernel::percore::{core_scheduler, increment_irq_counter};
-
-/// Specifies the interrupt number of the virtio device
-static mut VIRTIO_IRQ_NO: u8 = 0;
-
-#[cfg(target_arch = "x86_64")]
-pub extern "x86-interrupt" fn virtio_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	debug!("Receive virtio interrupt");
-	apic::eoi();
-	increment_irq_counter((32 + unsafe { VIRTIO_IRQ_NO }).into());
-
-	let check_scheduler = match kernel_pci::get_network_driver() {
-		Some(driver) => driver.lock().handle_interrupt(),
-		_ => false,
-	};
-
-	if check_scheduler {
-		core_scheduler().scheduler();
-	}
-}
-
 pub mod error {
 	use crate::arch::x86_64::kernel::pci::error::PciError;
 	use crate::drivers::net::virtio_net::error::VirtioNetError;
