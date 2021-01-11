@@ -1,4 +1,4 @@
-// Copyright (c) 2019 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2019-2021 Stefan Lankes, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
@@ -7,25 +7,19 @@
 
 // The driver based on the online manual http://www.lowlevel.eu/wiki/RTL8139
 
-#![allow(dead_code)]
+#![allow(unused)]
 
-use alloc::collections::BTreeMap;
 use core::convert::TryInto;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use core::{mem, str};
+use core::mem;
 
-use smoltcp::iface::{EthernetInterfaceBuilder, NeighborCache, Routes};
-use smoltcp::phy::{self, Device, DeviceCapabilities};
-use smoltcp::time::Instant;
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
-
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::irq::*;
-use crate::arch::x86_64::kernel::pci;
-use crate::arch::x86_64::kernel::percore::core_scheduler;
-use crate::arch::x86_64::mm::paging::virt_to_phys;
-use crate::drivers::net::{networkd, NETWORK_TASK_ID, NET_SEM};
-use crate::scheduler;
+use crate::arch::kernel::apic;
+use crate::arch::kernel::irq::*;
+use crate::arch::kernel::pci;
+use crate::arch::kernel::percore::{core_scheduler, increment_irq_counter};
+use crate::arch::mm::paging::virt_to_phys;
+use crate::arch::mm::VirtAddr;
+use crate::drivers::error::DriverError;
+use crate::drivers::net::{netwakeup, network_irqhandler, NetworkInterface};
 use crate::x86::io::*;
 
 /// size of the receive buffer
@@ -49,6 +43,8 @@ const TSAD2: u16 = 0x28;
 const TSAD3: u16 = 0x2c;
 /// command register (1byte)
 const CR: u16 = 0x37;
+/// current address of packet read (2byte, C mode, initial value 0xFFF0)
+const CAPR: u16 = 0x38;
 /// interrupt mask register (2byte)
 const IMR: u16 = 0x3c;
 /// interrupt status register (2byte)
@@ -198,92 +194,293 @@ const INT_MASK_NO_ROK: u16 = (ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER);
 
 const NO_TX_BUFFERS: usize = 4;
 
-static TX_ID: AtomicUsize = AtomicUsize::new(0);
-static mut TX_IN_USE: [bool; NO_TX_BUFFERS] = [false; NO_TX_BUFFERS];
-static mut IOBASE: u16 = 0;
-
-static POOLING: AtomicBool = AtomicBool::new(false);
-
-fn is_pooling() -> bool {
-	POOLING.load(Ordering::SeqCst)
+#[derive(Debug)]
+pub enum RTL8139Error {
+	InitFailed,
+	ResetFailed,
+	Unknown,
 }
 
-extern "C" fn rtl8139_thread(arg: usize) {
-	let adapter;
+/// RealTek RTL8139 network driver struct.
+///
+/// Struct allows to control device queus as also
+/// the device itself.
+pub struct RTL8139Driver {
+	iobase: u16,
+	mtu: u16,
+	irq: u8,
+	mac: [u8; 6],
+	tx_in_use: [bool; NO_TX_BUFFERS],
+	tx_counter: usize,
+	rxbuffer: VirtAddr,
+	rxpos: usize,
+	txbuffer: VirtAddr,
+}
 
-	debug!("Hello from network thread!");
-
-	unsafe {
-		adapter = *(arg as *const pci::PciAdapter);
-		IOBASE = adapter.base_addresses[0].try_into().unwrap();
-		info!(
-			"Found RTL8139 at iobase 0x{:x} (irq {})",
-			IOBASE, adapter.irq
-		);
+impl NetworkInterface for RTL8139Driver {
+	/// Returns the MAC address of the network interface
+	fn get_mac_address(&self) -> [u8; 6] {
+		self.mac
 	}
 
-	::arch::irq::disable();
-
-	let neighbor_cache = NeighborCache::new(BTreeMap::new());
-	let ethernet_addr;
-	unsafe {
-		ethernet_addr = EthernetAddress([
-			inb(IOBASE + IDR0 + 0),
-			inb(IOBASE + IDR0 + 1),
-			inb(IOBASE + IDR0 + 2),
-			inb(IOBASE + IDR0 + 3),
-			inb(IOBASE + IDR0 + 4),
-			inb(IOBASE + IDR0 + 5),
-		]);
+	/// Returns the current MTU of the device.
+	fn get_mtu(&self) -> u16 {
+		self.mtu
 	}
-	let ip_addrs = [IpCidr::new(IpAddress::v4(10, 0, 2, 5), 24)];
-	//let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-	let default_gw = Ipv4Address::new(10, 0, 2, 2);
-	let mut routes_storage = [None; 1];
-	let mut routes = Routes::new(&mut routes_storage[..]);
-	routes.add_default_ipv4_route(default_gw).unwrap();
 
-	info!("MAC address {}", ethernet_addr);
+	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+		let id = self.tx_counter % NO_TX_BUFFERS;
+
+		if self.tx_in_use[id] || len > TX_BUF_LEN {
+			error!("Unable to get TX buffer");
+			Err(())
+		} else {
+			self.tx_in_use[id] = true;
+			self.tx_counter = self.tx_counter + 1;
+
+			Ok(((self.txbuffer.as_usize() + id * TX_BUF_LEN) as *mut u8, id))
+		}
+	}
+
+	fn send_tx_buffer(&mut self, id: usize, len: usize) -> Result<(), ()> {
+		// send the packet
+		unsafe {
+			outl(
+				self.iobase + TSD0 as u16 + (4 * id as u16),
+				len.try_into().unwrap(),
+			); //|0x3A0000);
+		}
+
+		Ok(())
+	}
+
+	fn has_packet(&self) -> bool {
+		let cmd = unsafe { inb(self.iobase + CR as u16) };
+
+		if (cmd & CR_BUFE) != CR_BUFE {
+			let header: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
+
+			if header & ISR_ROK == ISR_ROK {
+				return true;
+			}
+		}
+
+		false
+	}
+
+	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
+		let cmd = unsafe { inb(self.iobase + CR as u16) };
+
+		if (cmd & CR_BUFE) != CR_BUFE {
+			let header: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
+			self.rxpos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+
+			if header & ISR_ROK == ISR_ROK {
+				let length: u16 =
+					unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) } - 4; // copy packet (but not the CRC)
+
+				Ok((
+					unsafe {
+						core::slice::from_raw_parts(
+							(self.rxbuffer.as_usize() + self.rxpos + mem::size_of::<u16>())
+								as *const u8,
+							length as usize,
+						)
+					},
+					self.rxpos,
+				))
+			} else {
+				error!(
+					"RTL8192: invalid header 0x{:x}, rx_pos {}\n",
+					header, self.rxpos
+				);
+
+				Err(())
+			}
+		} else {
+			Err(())
+		}
+	}
+
+	// Tells driver, that buffer is consumed and can be deallocated
+	fn rx_buffer_consumed(&mut self, handle: usize) {
+		if self.rxpos != handle {
+			warn!("Invalid handle {} != {}", self.rxpos, handle)
+		}
+
+		let length: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
+		self.rxpos = (self.rxpos + length as usize + mem::size_of::<u16>()) % RX_BUF_LEN;
+
+		// packets are dword aligned
+		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
+		unsafe {
+			outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+		}
+	}
+
+	fn set_polling_mode(&mut self, value: bool) {
+		if value {
+			// disable interrupts from the NIC
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK_NO_ROK);
+			}
+		} else {
+			// Enable all known interrupts by setting the interrupt mask.
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK);
+			}
+		}
+	}
+
+	fn handle_interrupt(&mut self) -> bool {
+		increment_irq_counter((32 + self.irq).into());
+
+		let isr_contents = unsafe { inw(self.iobase + ISR) };
+
+		if (isr_contents & ISR_TOK) == ISR_TOK {
+			self.tx_handler();
+		}
+
+		if (isr_contents & ISR_RER) == ISR_RER {
+			error!("RTL88139: RX error detected!\n");
+		}
+
+		if (isr_contents & ISR_TER) == ISR_TER {
+			error!("RTL88139r: TX error detected!\n");
+		}
+
+		if (isr_contents & ISR_RXOVW) == ISR_RXOVW {
+			error!("RTL88139: RX overflow detected!\n");
+		}
+
+		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
+		if ret {
+			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
+			netwakeup();
+		}
+
+		unsafe {
+			outw(
+				self.iobase + ISR,
+				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
+			);
+		}
+
+		ret
+	}
+}
+
+impl RTL8139Driver {
+	fn tx_handler(&mut self) {
+		for i in 0..self.tx_in_use.len() {
+			if self.tx_in_use[i] {
+				let txstatus = unsafe { inl(self.iobase + TSD0 + i as u16 * 4) };
+
+				if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
+					error!("RTL8139: major error");
+					continue;
+				}
+
+				if (txstatus & TSD_TUN) == TSD_TUN {
+					error!("RTL8139: transmit underrun");
+				}
+
+				if (txstatus & TSD_TOK) == TSD_TOK {
+					self.tx_in_use[i] = false;
+				}
+			}
+		}
+	}
+}
+
+impl Drop for RTL8139Driver {
+	fn drop(&mut self) {
+		debug!("Dropping RTL8129Driver!");
+
+		// Software reset
+		unsafe {
+			outb(self.iobase + CR, CR_RST);
+		}
+
+		crate::mm::deallocate(self.rxbuffer, RX_BUF_LEN);
+		crate::mm::deallocate(self.txbuffer, NO_TX_BUFFERS * TX_BUF_LEN);
+	}
+}
+
+pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverError> {
+	let mut iter = adapter.base_addresses.iter().filter_map(|&x| match x {
+		pci::PciBar::IO(base) => Some(base.addr),
+		_ => None,
+	});
+	let iobase: u16 = iter
+		.next()
+		.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?
+		.try_into()
+		.unwrap();
+
+	debug!(
+		"Found RTL8139 at iobase 0x{:x} (irq {})",
+		iobase, adapter.irq
+	);
+
+	adapter.make_bus_master();
+
+	let mac: [u8; 6] = unsafe {
+		[
+			inb(iobase + IDR0 + 0),
+			inb(iobase + IDR0 + 1),
+			inb(iobase + IDR0 + 2),
+			inb(iobase + IDR0 + 3),
+			inb(iobase + IDR0 + 4),
+			inb(iobase + IDR0 + 5),
+		]
+	};
+
+	debug!(
+		"MAC address {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+		mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+	);
 
 	unsafe {
-		if inl(IOBASE + TCR) == 0x00FF_FFFFu32 {
-			info!("Unable to initialize RTL 8192");
-			return;
+		if inl(iobase + TCR) == 0x00FF_FFFFu32 {
+			error!("Unable to initialize RTL8192");
+			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::InitFailed));
 		}
 
 		// Software reset
-		outb(IOBASE + CR, CR_RST);
+		outb(iobase + CR, CR_RST);
 
 		// The RST bit must be checked to make sure that the chip has finished the reset.
 		// If the RST bit is high (1), then the reset is still in operation.
-		::arch::kernel::processor::udelay(10000);
+		crate::arch::kernel::processor::udelay(10000);
 		let mut tmp: u16 = 10000;
-		while (inb(IOBASE + CR) & CR_RST) == CR_RST && tmp > 0 {
+		while (inb(iobase + CR) & CR_RST) == CR_RST && tmp > 0 {
 			tmp -= 1;
 		}
 
 		if tmp == 0 {
-			info!("RTL8139 reset failed");
-			return;
+			error!("RTL8139 reset failed");
+			return Err(DriverError::InitRTL8139DevFail(RTL8139Error::ResetFailed));
 		}
 
 		// Enable Receive and Transmitter
-		outb(IOBASE + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
+		outb(iobase + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
 
 		// lock config register
-		outb(IOBASE + CR9346, CR9346_EEM1 | CR9346_EEM0);
+		outb(iobase + CR9346, CR9346_EEM1 | CR9346_EEM0);
 
 		// clear all of CONFIG1
-		outb(IOBASE + CONFIG1, 0);
+		outb(iobase + CONFIG1, 0);
 
 		// disable driver loaded and lanwake bits, turn driver loaded bit back on
 		outb(
-			IOBASE + CONFIG1,
-			(inb(IOBASE + CONFIG1) & !(CONFIG1_DVRLOAD | CONFIG1_LWACT)) | CONFIG1_DVRLOAD,
+			iobase + CONFIG1,
+			(inb(iobase + CONFIG1) & !(CONFIG1_DVRLOAD | CONFIG1_LWACT)) | CONFIG1_DVRLOAD,
 		);
 
 		// unlock config register
-		outb(IOBASE + CR9346, 0);
+		outb(iobase + CR9346, 0);
 
 		/*
 		 * configure receive buffer
@@ -293,46 +490,71 @@ extern "C" fn rtl8139_thread(arg: usize) {
 		 * AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
 		 */
 		outl(
-			IOBASE + RCR,
+			iobase + RCR,
 			RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP,
 		); // The WRAP bit isn't set!
 
 		// set the transmit config register to
 		// be the normal interframe gap time
 		// set DMA max burst to 64bytes
-		outl(IOBASE + TCR, TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
+		outl(iobase + TCR, TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
-	let rxbuffer = ::mm::allocate_iomem(RX_BUF_LEN);
-	let txbuffer = ::mm::allocate_iomem(NO_TX_BUFFERS * TX_BUF_LEN);
-	if txbuffer == 0 || rxbuffer == 0 {
+	let rxbuffer = crate::mm::allocate(RX_BUF_LEN, true);
+	let txbuffer = crate::mm::allocate(NO_TX_BUFFERS * TX_BUF_LEN, true);
+	if txbuffer.is_zero() || rxbuffer.is_zero() {
 		error!("Unable to allocate buffers for RTL8139");
-		return;
+		return Err(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown));
 	}
+
 	debug!(
 		"Allocate TxBuffer at 0x{:x} and RxBuffer at 0x{:x}",
 		txbuffer, rxbuffer
 	);
-	let device = RTL8139::new(rxbuffer, txbuffer);
 
 	unsafe {
 		// register the receive buffer
-		outl(IOBASE + RBSTART, virt_to_phys(rxbuffer).try_into().unwrap());
+		outl(
+			iobase + RBSTART,
+			virt_to_phys(rxbuffer).as_u64().try_into().unwrap(),
+		);
 
 		// set each of the transmitter start address descriptors
-		for i in 0..NO_TX_BUFFERS {
-			outl(
-				IOBASE + TSAD0,
-				virt_to_phys(txbuffer + i * TX_BUF_LEN).try_into().unwrap(),
-			);
-		}
+		outl(
+			iobase + TSAD0,
+			virt_to_phys(txbuffer + 0 * TX_BUF_LEN)
+				.as_u64()
+				.try_into()
+				.unwrap(),
+		);
+		outl(
+			iobase + TSAD1,
+			virt_to_phys(txbuffer + 1 * TX_BUF_LEN)
+				.as_u64()
+				.try_into()
+				.unwrap(),
+		);
+		outl(
+			iobase + TSAD2,
+			virt_to_phys(txbuffer + 2 * TX_BUF_LEN)
+				.as_u64()
+				.try_into()
+				.unwrap(),
+		);
+		outl(
+			iobase + TSAD3,
+			virt_to_phys(txbuffer + 3 * TX_BUF_LEN)
+				.as_u64()
+				.try_into()
+				.unwrap(),
+		);
 
 		// Enable all known interrupts by setting the interrupt mask.
-		outw(IOBASE + IMR, INT_MASK);
+		outw(iobase + IMR, INT_MASK);
 
-		outw(IOBASE + BMCR, BMCR_ANE);
+		outw(iobase + BMCR, BMCR_ANE);
 		let speed;
-		let tmp = inw(IOBASE + BMCR);
+		let tmp = inw(iobase + BMCR);
 		if tmp & BMCR_SPD1000 == BMCR_SPD1000 {
 			speed = 1000;
 		} else if tmp & BMCR_SPD100 == BMCR_SPD100 {
@@ -342,306 +564,30 @@ extern "C" fn rtl8139_thread(arg: usize) {
 		}
 
 		// Enable Receive and Transmitter
-		outb(IOBASE + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
+		outb(iobase + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
 
 		info!(
 			"RTL8139: CR = 0x{:x}, ISR = 0x{:x}, speed = {} mbps",
-			inb(IOBASE + CR),
-			inw(IOBASE + ISR),
+			inb(iobase + CR),
+			inw(iobase + ISR),
 			speed
 		);
 	}
 
-	let mut iface = EthernetInterfaceBuilder::new(device)
-		.ethernet_addr(ethernet_addr)
-		.neighbor_cache(neighbor_cache)
-		.ip_addrs(ip_addrs)
-		.routes(routes)
-		.finalize();
-
 	// Install interrupt handler for RTL8139
 	debug!("Install interrupt handler for RTL8139 at {}", adapter.irq);
-	irq_install_handler(adapter.irq.into(), rtl8139_irqhandler as usize);
+	irq_install_handler(adapter.irq.into(), network_irqhandler as usize);
+	add_irq_name(adapter.irq as u32, "rtl8139_net");
 
-	::arch::irq::enable();
-
-	networkd(&mut iface, is_pooling);
-}
-
-unsafe fn tx_handler() {
-	for i in 0..TX_IN_USE.len() {
-		if TX_IN_USE[i] {
-			let txstatus = inl(IOBASE + TSD0 + i as u16 * 4);
-
-			if (txstatus & (TSD_TABT | TSD_OWC)) > 0 {
-				error!("RTL8139: major error\n");
-				continue;
-			}
-
-			if (txstatus & TSD_TUN) == TSD_TUN {
-				error!("RTL8139: transmit underrun\n");
-			}
-
-			if (txstatus & TSD_TOK) == TSD_TOK {
-				TX_IN_USE[i] = false;
-			}
-		}
-	}
-}
-
-extern "x86-interrupt" fn rtl8139_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
-	debug!("Receive network interrupt from RTL8139");
-
-	unsafe {
-		let mut isr_contents = inw(IOBASE + ISR);
-		while isr_contents != 0 {
-			if (isr_contents & ISR_ROK) == ISR_ROK && !is_pooling() {
-				info!("Wakeup network thread!");
-				// disable interrupts from the NIC
-				outw(IOBASE + IMR, INT_MASK_NO_ROK);
-				// switch to polling mode
-				POOLING.store(true, Ordering::SeqCst);
-				NET_SEM.release();
-			}
-
-			if (isr_contents & ISR_TOK) == ISR_TOK {
-				tx_handler();
-			}
-
-			if (isr_contents & ISR_RER) == ISR_RER {
-				error!("RTL88139: RX error detected!\n");
-			}
-
-			if (isr_contents & ISR_TER) == ISR_TER {
-				error!("RTL88139r: TX error detected!\n");
-			}
-
-			if (isr_contents & ISR_RXOVW) == ISR_RXOVW {
-				error!("RTL88139: RX overflow detected!\n");
-			}
-
-			outw(
-				IOBASE + ISR,
-				isr_contents & (ISR_RXOVW | ISR_TER | ISR_RER | ISR_TOK | ISR_ROK),
-			);
-
-			isr_contents = inw(IOBASE + ISR);
-		}
-	}
-
-	apic::eoi();
-	core_scheduler().scheduler();
-}
-
-/// A network device for uhyve.
-pub struct RTL8139 {
-	rxbuffer: usize,
-	txbuffer: usize,
-	rxpos: usize,
-}
-
-impl RTL8139 {
-	pub fn new(rxbuffer: usize, txbuffer: usize) -> Self {
-		RTL8139 {
-			rxbuffer,
-			txbuffer,
-			rxpos: 0,
-		}
-	}
-}
-
-impl<'a> Device<'a> for RTL8139 {
-	type RxToken = RxToken;
-	type TxToken = TxToken;
-
-	fn capabilities(&self) -> DeviceCapabilities {
-		let mut cap = DeviceCapabilities::default();
-		cap.max_transmission_unit = 1500;
-		cap
-	}
-
-	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-		let cmd = unsafe { inb(IOBASE + CR as u16) };
-
-		if (cmd & CR_BUFE) != CR_BUFE {
-			let header: u16 = unsafe { *((self.rxbuffer + self.rxpos) as *const u16) };
-			self.rxpos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
-
-			if header & ISR_ROK == ISR_ROK {
-				let length: u16 = unsafe { *((self.rxbuffer + self.rxpos) as *const u16) } - 4; // copy packet (but not the CRC)
-				self.rxpos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
-
-				debug!("resize message to {} bytes", length);
-
-				let tx = TxToken::new(self.txbuffer);
-				let rx = RxToken::new(self.rxbuffer, length as usize);
-
-				// check also output buffers
-				unsafe {
-					tx_handler();
-				}
-
-				return Some((rx, tx));
-			} else {
-				error!(
-					"RTL8192: invalid header 0x{:x}, rx_pos {}\n",
-					header, self.rxpos
-				);
-			}
-		}
-
-		POOLING.store(false, Ordering::SeqCst);
-		// enable all known interrupts
-		unsafe {
-			outw(IOBASE + IMR, INT_MASK);
-		}
-
-		None
-	}
-
-	fn transmit(&'a mut self) -> Option<Self::TxToken> {
-		Some(TxToken::new(self.txbuffer))
-	}
-}
-
-#[doc(hidden)]
-pub struct RxToken {
-	rxbuffer: usize,
-	len: usize,
-}
-
-impl RxToken {
-	pub fn new(addr: usize, len: usize) -> RxToken {
-		RxToken {
-			rxbuffer: addr,
-			len: len,
-		}
-	}
-}
-
-impl phy::RxToken for RxToken {
-	fn consume<R, F>(self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
-	where
-		F: FnOnce(&[u8]) -> smoltcp::Result<R>,
-	{
-		let buffer = unsafe { core::slice::from_raw_parts(self.rxbuffer as *mut u8, RX_BUF_LEN) };
-		let (first, _) = buffer.split_at(self.len);
-		f(first)
-	}
-}
-
-#[doc(hidden)]
-pub struct TxToken {
-	txbuffer: usize,
-}
-
-impl TxToken {
-	pub fn new(txbuffer: usize) -> Self {
-		TxToken { txbuffer: txbuffer }
-	}
-}
-
-impl phy::TxToken for TxToken {
-	fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
-	where
-		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
-	{
-		let id = TX_ID.fetch_add(1, Ordering::SeqCst) % NO_TX_BUFFERS;
-
-		unsafe {
-			if TX_IN_USE[id] {
-				Err(smoltcp::Error::Dropped)
-			} else if len > TX_BUF_LEN {
-				Err(smoltcp::Error::Exhausted)
-			} else if (inb(IOBASE + MSR) & MSR_LINKB) == MSR_LINKB {
-				Err(smoltcp::Error::Illegal)
-			} else {
-				let mut buffer = core::slice::from_raw_parts_mut(
-					(self.txbuffer + id * TX_BUF_LEN) as *mut u8,
-					len,
-				);
-				let result = f(&mut buffer);
-				if result.is_ok() {
-					TX_IN_USE[id] = true;
-
-					// send the packet
-					outl(
-						IOBASE + TSD0 as u16 + (4 * id as u16),
-						len.try_into().unwrap(),
-					); //|0x3A0000);
-				}
-				result
-			}
-		}
-	}
-}
-
-struct Boards {
-	pub vendor_name: &'static str,
-	pub device_name: &'static str,
-	pub vendor_id: u16,
-	pub device_id: u16,
-}
-
-impl Boards {
-	pub const fn new(
-		vendor_name: &'static str,
-		device_name: &'static str,
-		vendor_id: u16,
-		device_id: u16,
-	) -> Self {
-		Boards {
-			vendor_name: vendor_name,
-			device_name: device_name,
-			vendor_id: vendor_id,
-			device_id: device_id,
-		}
-	}
-}
-
-static BOARDS: [Boards; 7] = [
-	Boards::new("RealTek", "RealTek RTL8139", 0x10ec, 0x8139),
-	Boards::new("RealTek", "RealTek RTL8129 Fast Ethernet", 0x10ec, 0x8129),
-	Boards::new("RealTek", "RealTek RTL8139B PCI", 0x10ec, 0x8138),
-	Boards::new(
-		"SMC",
-		"SMC1211TX EZCard 10/100 (RealTek RTL8139)",
-		0x1113,
-		0x1211,
-	),
-	Boards::new("D-Link", "D-Link DFE-538TX (RTL8139)", 0x1186, 0x1300),
-	Boards::new("LevelOne", "LevelOne FPC-0106Tx (RTL8139)", 0x018a, 0x0106),
-	Boards::new("Compaq", "Compaq HNE-300 (RTL8139c)", 0x021b, 0x8139),
-];
-
-fn find_adapter() -> Result<pci::PciAdapter, ()> {
-	for i in 0..BOARDS.len() {
-		match pci::get_adapter(BOARDS[i].vendor_id, BOARDS[i].device_id) {
-			Some(adapter) => {
-				return Ok(adapter);
-			}
-			_ => {}
-		}
-	}
-
-	Err(())
-}
-pub fn init() -> Result<(), ()> {
-	let adapter = find_adapter()?;
-	adapter.make_bus_master();
-
-	let core_scheduler = core_scheduler();
-	unsafe {
-		NETWORK_TASK_ID = core_scheduler.spawn(
-			rtl8139_thread,
-			&adapter as *const _ as usize,
-			scheduler::task::HIGH_PRIO,
-			Some(crate::arch::mm::virtualmem::task_heap_start()),
-		);
-	}
-
-	mem::forget(adapter);
-	core_scheduler.scheduler();
-
-	Ok(())
+	Ok(RTL8139Driver {
+		iobase: iobase,
+		mtu: 1500,
+		irq: adapter.irq,
+		mac: mac,
+		tx_in_use: [false; NO_TX_BUFFERS],
+		tx_counter: 0,
+		rxbuffer: rxbuffer,
+		rxpos: 0,
+		txbuffer: txbuffer,
+	})
 }
