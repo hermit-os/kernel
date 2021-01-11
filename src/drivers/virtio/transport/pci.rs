@@ -29,8 +29,8 @@ use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
 use crate::arch::x86_64::kernel::irq::*;
+use crate::drivers::net::network_irqhandler;
 use crate::drivers::virtio::depr::virtio_fs;
-use crate::drivers::virtio::{virtio_irqhandler, VIRTIO_IRQ_NO};
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5
@@ -1306,11 +1306,8 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 			match &drv {
 				VirtioDriver::Network(_) => {
 					info!("Install virtio interrupt handler at line {}", adapter.irq);
-					unsafe {
-						VIRTIO_IRQ_NO = adapter.irq;
-					}
 					// Install interrupt handler
-					irq_install_handler(adapter.irq as u32, virtio_irqhandler as usize);
+					irq_install_handler(adapter.irq as u32, network_irqhandler as usize);
 					add_irq_name(adapter.irq as u32, "virtio_net");
 
 					Ok(drv)

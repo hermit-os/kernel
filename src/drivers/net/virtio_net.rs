@@ -14,7 +14,9 @@
 use super::netwakeup;
 use crate::arch::kernel::pci::error::PciError;
 use crate::arch::kernel::pci::PciAdapter;
+use crate::arch::kernel::percore::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
+use crate::drivers::net::NetworkInterface;
 
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
@@ -518,13 +520,13 @@ pub struct VirtioNetDriver {
 	send_vqs: TxQueues,
 
 	num_vqs: u16,
+	irq: u8,
 }
 
-// Kernel interface
-impl VirtioNetDriver {
+impl NetworkInterface for VirtioNetDriver {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
-	pub fn get_mac_address(&self) -> [u8; 6] {
+	fn get_mac_address(&self) -> [u8; 6] {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MAC) {
 			self.dev_cfg.raw.mac
 		} else {
@@ -535,66 +537,11 @@ impl VirtioNetDriver {
 	/// Returns the current MTU of the device.
 	/// Currently, if VIRTIO_NET_F_MAC is not set
 	//  MTU is set static to 1500 bytes.
-	pub fn get_mtu(&self) -> u16 {
+	fn get_mtu(&self) -> u16 {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.dev_cfg.raw.mtu
 		} else {
 			1500
-		}
-	}
-
-	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
-	/// has been negotiated. Otherwise returns zero.
-	pub fn dev_status(&self) -> u16 {
-		if self
-			.dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_NET_F_STATUS)
-		{
-			self.dev_cfg.raw.status
-		} else {
-			0
-		}
-	}
-
-	/// Returns the links status.
-	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
-	fn is_link_up(&self) -> bool {
-		if self
-			.dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_NET_F_STATUS)
-		{
-			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_LINK_UP)
-				== u16::from(Status::VIRTIO_NET_S_LINK_UP)
-		} else {
-			true
-		}
-	}
-
-	fn is_announce(&self) -> bool {
-		if self
-			.dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_NET_F_STATUS)
-		{
-			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
-				== u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
-		} else {
-			false
-		}
-	}
-
-	/// Returns the maximal number of virtqueue pairs allowed. This is the
-	/// dominant setting to define the number of virtqueues for the network
-	/// device and overrides the num_vq field in the common config.
-	///
-	/// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
-	fn get_max_vq_pairs(&self) -> u16 {
-		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
-			self.dev_cfg.raw.max_virtqueue_pairs
-		} else {
-			1
 		}
 	}
 
@@ -606,7 +553,7 @@ impl VirtioNetDriver {
 	/// it to the queue after the "user-space" driver has written to the buffer.
 	///
 	/// If not BufferToken is found the functions returns an error.
-	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
 		// Adding virtio header size to length.
 		let len = len + core::mem::size_of::<VirtioNetHdr>();
 
@@ -628,7 +575,7 @@ impl VirtioNetDriver {
 		}
 	}
 
-	pub fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()> {
+	fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()> {
 		// This does not result in a new assignment, or in a drop of the BufferToken, which
 		// would be dangerous, as the memory is freed then.
 		let tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
@@ -639,12 +586,12 @@ impl VirtioNetDriver {
 		Ok(())
 	}
 
-	pub fn has_packet(&self) -> bool {
+	fn has_packet(&self) -> bool {
 		self.recv_vqs.poll();
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	pub fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
+	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
 		match self.recv_vqs.get_next() {
 			Some(mut transfer) => {
 				let mut transfer = match RxQueues::post_processing(transfer) {
@@ -701,7 +648,7 @@ impl VirtioNetDriver {
 	}
 
 	// Tells driver, that buffer is consumed and can be deallocated
-	pub fn rx_buffer_consumed(&mut self, trf_handle: usize) {
+	fn rx_buffer_consumed(&mut self, trf_handle: usize) {
 		unsafe {
 			let transfer = *Box::from_raw(trf_handle as *mut Transfer);
 
@@ -714,11 +661,87 @@ impl VirtioNetDriver {
 		}
 	}
 
-	pub fn set_polling_mode(&mut self, value: bool) {
+	fn set_polling_mode(&mut self, value: bool) {
 		if value {
 			self.disable_interrupts()
 		} else {
 			self.enable_interrupts()
+		}
+	}
+
+	fn handle_interrupt(&mut self) -> bool {
+		increment_irq_counter((32 + self.irq).into());
+
+		if self.isr_stat.is_interrupt() {
+			// handle incoming packets
+			#[cfg(not(feature = "newlib"))]
+			netwakeup();
+
+			true
+		} else if self.isr_stat.is_cfg_change() {
+			info!("Configuration changes are not possible! Aborting");
+			todo!("Implement possibiity to change config on the fly...");
+			false
+		} else {
+			false
+		}
+	}
+}
+
+// Kernel interface
+impl VirtioNetDriver {
+	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
+	/// has been negotiated. Otherwise returns zero.
+	pub fn dev_status(&self) -> u16 {
+		if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_STATUS)
+		{
+			self.dev_cfg.raw.status
+		} else {
+			0
+		}
+	}
+
+	/// Returns the links status.
+	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
+	fn is_link_up(&self) -> bool {
+		if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_STATUS)
+		{
+			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_LINK_UP)
+				== u16::from(Status::VIRTIO_NET_S_LINK_UP)
+		} else {
+			true
+		}
+	}
+
+	fn is_announce(&self) -> bool {
+		if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_STATUS)
+		{
+			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
+				== u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
+		} else {
+			false
+		}
+	}
+
+	/// Returns the maximal number of virtqueue pairs allowed. This is the
+	/// dominant setting to define the number of virtqueues for the network
+	/// device and overrides the num_vq field in the common config.
+	///
+	/// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
+	fn get_max_vq_pairs(&self) -> u16 {
+		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
+			self.dev_cfg.raw.max_virtqueue_pairs
+		} else {
+			1
 		}
 	}
 
@@ -732,21 +755,6 @@ impl VirtioNetDriver {
 		// Für send und receive queues?
 		// Nur für receive? Weil send eh ausgeschaltet ist?
 		self.recv_vqs.enable_notifs();
-	}
-
-	pub fn handle_interrupt(&self) -> bool {
-		if self.isr_stat.is_interrupt() {
-			// handle incoming packets
-			#[cfg(not(feature = "newlib"))]
-			netwakeup();
-
-			true
-		} else if self.isr_stat.is_cfg_change() {
-			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibiity to change config on the fly...");
-		} else {
-			false
-		}
 	}
 }
 
@@ -854,6 +862,7 @@ impl VirtioNetDriver {
 				is_multi: false,
 			},
 			num_vqs: 0,
+			irq: adapter.irq,
 		})
 	}
 
