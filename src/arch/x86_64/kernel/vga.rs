@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags};
-use x86::shared::io::*;
+use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
+use crate::x86::io::*;
 
 const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
 const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
@@ -18,7 +18,7 @@ const ATTRIBUTE_BLACK: u8 = 0x00;
 const ATTRIBUTE_LIGHTGREY: u8 = 0x07;
 const COLS: usize = 80;
 const ROWS: usize = 25;
-const VGA_BUFFER_ADDRESS: usize = 0xB8000;
+const VGA_BUFFER_ADDRESS: u64 = 0xB8000;
 
 static mut VGA_SCREEN: VgaScreen = VgaScreen::new();
 
@@ -59,7 +59,12 @@ impl VgaScreen {
 		// Identity map the VGA buffer. We only need the first page.
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(VGA_BUFFER_ADDRESS, VGA_BUFFER_ADDRESS, 1, flags);
+		paging::map::<BasePageSize>(
+			VirtAddr(VGA_BUFFER_ADDRESS),
+			PhysAddr(VGA_BUFFER_ADDRESS),
+			1,
+			flags,
+		);
 
 		// Disable the cursor.
 		unsafe {
