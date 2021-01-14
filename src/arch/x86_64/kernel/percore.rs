@@ -48,7 +48,9 @@ pub struct PerCoreVariable<T> {
 }
 
 pub trait PerCoreVariableMethods<T> {
-	unsafe fn get(&self) -> T;
+	unsafe fn get(&self) -> T
+	where
+		T: Copy;
 	unsafe fn set(&self, value: T);
 }
 
@@ -70,15 +72,37 @@ impl<T> PerCoreVariable<T> {
 // The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
 impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	#[inline]
-	default unsafe fn get(&self) -> T {
+	#[cfg(feature = "smp")]
+	default unsafe fn get(&self) -> T
+	where
+		T: Copy,
+	{
 		let value: T;
 		llvm_asm!("movq %gs:($1), $0" : "=r"(value) : "r"(self.offset()) :: "volatile");
 		value
 	}
 
 	#[inline]
+	#[cfg(not(feature = "smp"))]
+	default unsafe fn get(&self) -> T
+	where
+		T: Copy,
+	{
+		let value: *const T = core::mem::transmute(&PERCORE as *const _ as usize + self.offset());
+		*value
+	}
+
+	#[inline]
+	#[cfg(feature = "smp")]
 	default unsafe fn set(&self, value: T) {
 		llvm_asm!("movq $0, %gs:($1)" :: "r"(value), "r"(self.offset()) :: "volatile");
+	}
+
+	#[inline]
+	#[cfg(not(feature = "smp"))]
+	default unsafe fn set(&self, new_value: T) {
+		let value: *mut T = core::mem::transmute(&PERCORE as *const _ as usize + self.offset());
+		*value = new_value;
 	}
 }
 

@@ -49,6 +49,8 @@ pub use crate::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::apic::{set_oneshot_timer, wakeup_core};
+#[cfg(all(target_arch = "x86_64", target_os = "hermit", feature = "smp"))]
+pub use crate::arch::x86_64::kernel::application_processor_init;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch = "x86_64")]
@@ -61,11 +63,8 @@ pub use crate::arch::x86_64::kernel::processor;
 pub use crate::arch::x86_64::kernel::scheduler;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
-#[cfg(target_os = "hermit")]
-#[cfg(target_arch = "x86_64")]
-pub use crate::arch::x86_64::kernel::{
-	application_processor_init, boot_application_processors, boot_processor_init,
-};
+#[cfg(all(target_arch = "x86_64", target_os = "hermit"))]
+pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processor_init};
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::{
 	get_processor_count, message_output_init, output_message_buf, output_message_byte,

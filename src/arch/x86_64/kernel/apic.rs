@@ -9,7 +9,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-#[cfg(target_os = "hermit")]
+#[cfg(all(target_os = "hermit", feature = "smp"))]
 use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -21,25 +21,34 @@ use crate::environment;
 use crate::mm;
 use crate::scheduler;
 use crate::scheduler::CoreId;
+#[cfg(feature = "smp")]
 use crate::x86::controlregs::*;
 use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
+#[cfg(feature = "smp")]
 use core::convert::TryInto;
+#[cfg(feature = "smp")]
+use core::ptr;
 use core::sync::atomic::spin_loop_hint;
-use core::{cmp, fmt, mem, ptr, u32};
+use core::{cmp, fmt, mem, u32};
 use crossbeam_utils::CachePadded;
 
 const APIC_ICR2: usize = 0x0310;
 
 const APIC_DIV_CONF_DIVIDE_BY_8: u64 = 0b0010;
 const APIC_EOI_ACK: u64 = 0;
+#[cfg(feature = "smp")]
 const APIC_ICR_DELIVERY_MODE_FIXED: u64 = 0x000;
+#[cfg(feature = "smp")]
 const APIC_ICR_DELIVERY_MODE_INIT: u64 = 0x500;
+#[cfg(feature = "smp")]
 const APIC_ICR_DELIVERY_MODE_STARTUP: u64 = 0x600;
 const APIC_ICR_DELIVERY_STATUS_PENDING: u32 = 1 << 12;
+#[cfg(feature = "smp")]
 const APIC_ICR_LEVEL_TRIGGERED: u64 = 1 << 15;
+#[cfg(feature = "smp")]
 const APIC_ICR_LEVEL_ASSERT: u64 = 1 << 14;
 const APIC_LVT_MASK: u64 = 1 << 16;
 const APIC_LVT_TIMER_TSC_DEADLINE: u64 = 1 << 18;
@@ -53,7 +62,9 @@ const IOAPIC_REG_VER: u32 = 0x0001;
 /// Redirection table base
 const IOAPIC_REG_TABLE: u32 = 0x0010;
 
+#[cfg(feature = "smp")]
 const TLB_FLUSH_INTERRUPT_NUMBER: u8 = 112;
+#[cfg(feature = "smp")]
 const WAKEUP_INTERRUPT_NUMBER: u8 = 121;
 pub const TIMER_INTERRUPT_NUMBER: u8 = 123;
 const ERROR_INTERRUPT_NUMBER: u8 = 126;
@@ -64,10 +75,14 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 /// While our boot processor is already in x86-64 mode, application processors boot up in 16-bit real mode
 /// and need an address in the CS:IP addressing scheme to jump to.
 /// The CS:IP addressing scheme is limited to 2^20 bytes (= 1 MiB).
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
 
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
+#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
@@ -139,6 +154,7 @@ impl fmt::Display for IoApicRecord {
 	}
 }
 
+#[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
@@ -161,6 +177,7 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::Exce
 	scheduler::abort();
 }
 
+#[cfg(feature = "smp")]
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
@@ -312,7 +329,9 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
+	#[cfg(feature = "smp")]
 	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
+	#[cfg(feature = "smp")]
 	irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
 	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
 	idt::set_gate(
@@ -320,7 +339,9 @@ pub fn init() {
 		spurious_interrupt_handler as usize,
 		0,
 	);
+	#[cfg(feature = "smp")]
 	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 0);
+	#[cfg(feature = "smp")]
 	irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
 
 	// Initialize interrupt handling over APIC.
@@ -484,6 +505,7 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 		__set_oneshot_timer(wakeup_time);
 	});
 }
+
 pub fn init_x2apic() {
 	if processor::supports_x2apic() {
 		debug!("Enable x2APIC support");
@@ -532,7 +554,7 @@ extern "C" {
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
-#[cfg(target_os = "hermit")]
+#[cfg(all(target_os = "hermit", feature = "smp"))]
 pub fn boot_application_processors() {
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
@@ -627,6 +649,7 @@ pub fn boot_application_processors() {
 	}
 }
 
+#[cfg(feature = "smp")]
 pub fn ipi_tlb_flush() {
 	if arch::get_processor_count() > 1 {
 		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
@@ -656,7 +679,9 @@ pub fn ipi_tlb_flush() {
 }
 
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
+#[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
+	#[cfg(feature = "smp")]
 	if core_id_to_wakeup != core_id() {
 		irqsave(|| {
 			let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };

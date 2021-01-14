@@ -14,6 +14,7 @@ use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
+#[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::kernel::irq;
@@ -566,6 +567,7 @@ where
 		}
 
 		if send_ipi {
+			#[cfg(feature = "smp")]
 			apic::ipi_tlb_flush();
 		}
 	}
