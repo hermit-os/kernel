@@ -15,8 +15,7 @@ use crate::environment;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
-use core::arch::x86_64::__rdtscp as rdtscp;
-use core::arch::x86_64::_rdtsc as rdtsc;
+use core::arch::x86_64::{__rdtscp as rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc as rdtsc};
 use core::convert::TryInto;
 use core::sync::atomic::spin_loop_hint;
 use core::{fmt, u32};
@@ -34,6 +33,9 @@ const EFER_SVME: u64 = 1 << 12;
 const EFER_LMSLE: u64 = 1 << 13;
 const EFER_FFXSR: u64 = 1 << 14;
 const EFER_TCE: u64 = 1 << 15;
+
+// See Intel SDM - Volume 1 - Section 7.3.17.1
+const RDRAND_RETRY_LIMIT: usize = 10;
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
@@ -894,14 +896,13 @@ pub fn generate_random_number32() -> Option<u32> {
 		if SUPPORTS_RDRAND {
 			let mut value: u32 = 0;
 
-			while core::arch::x86_64::_rdrand32_step(&mut value) == 1 {
-				spin_loop_hint();
+			for _ in 0..RDRAND_RETRY_LIMIT {
+				if _rdrand32_step(&mut value) == 1 {
+					return Some(value);
+				}
 			}
-
-			Some(value)
-		} else {
-			None
 		}
+		None
 	}
 }
 
@@ -910,14 +911,13 @@ pub fn generate_random_number64() -> Option<u64> {
 		if SUPPORTS_RDRAND {
 			let mut value: u64 = 0;
 
-			while core::arch::x86_64::_rdrand64_step(&mut value) == 1 {
-				spin_loop_hint();
+			for _ in 0..RDRAND_RETRY_LIMIT {
+				if _rdrand64_step(&mut value) == 1 {
+					return Some(value);
+				}
 			}
-
-			Some(value)
-		} else {
-			None
 		}
+		None
 	}
 }
 
