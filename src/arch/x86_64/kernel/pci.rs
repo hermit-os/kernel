@@ -6,6 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#[cfg(feature = "pci_ids")]
 use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
@@ -391,6 +392,7 @@ impl fmt::Display for PciAdapter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		// Look for the best matching class name in the PCI Database.
 		let mut class_name = "Unknown Class";
+		#[cfg(feature = "pci_ids")]
 		for ref c in CLASSES {
 			if c.id == self.class_id {
 				class_name = c.name;
@@ -408,6 +410,7 @@ impl fmt::Display for PciAdapter {
 		// Look for the vendor and device name in the PCI Database.
 		let mut vendor_name = "Unknown Vendor";
 		let mut device_name = "Unknown Device";
+		#[cfg(feature = "pci_ids")]
 		for ref v in VENDORS {
 			if v.id == self.vendor_id {
 				vendor_name = v.name;

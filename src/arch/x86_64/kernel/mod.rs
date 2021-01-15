@@ -32,7 +32,7 @@ pub mod idt;
 pub mod irq;
 #[cfg(feature = "pci")]
 pub mod pci;
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "pci", feature = "pci_ids"))]
 mod pci_ids;
 pub mod percore;
 pub mod pic;
