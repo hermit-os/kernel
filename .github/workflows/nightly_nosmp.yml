@@ -1,4 +1,4 @@
-name: Tests with SMP support (nightly)
+name: Tests without SMP support (nightly)
 
 on:
   pull_request:
