@@ -115,10 +115,12 @@ impl Semaphore {
 				}
 			}
 
-			backoff.snooze();
-
-			// Switch to the next task.
-			core_scheduler.reschedule();
+			if backoff.is_completed() {
+				// Switch to the next task.
+				core_scheduler.reschedule();
+			} else {
+				backoff.snooze();
+			}
 		}
 	}
 
