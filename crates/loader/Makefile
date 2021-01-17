@@ -36,5 +36,5 @@ docs:
 
 loader:
 	@echo Build loader
-	cargo build $(opt) --target $(target)-loader.json
+	cargo build $(opt) -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem,compiler-builtins-asm --target $(target)-loader.json
 	$(CONVERT)
