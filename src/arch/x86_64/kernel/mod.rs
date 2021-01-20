@@ -342,11 +342,6 @@ pub fn boot_processor_init() {
 			#[cfg(feature = "acpi")]
 			acpi::init();
 		}
-		if crate::drivers::net::virtio_net::uhyve_init_network().is_ok() {
-			info!("Virtio network interface intialized!");
-		} else {
-			error!("Unable to initialize virtio network interface");
-		}
 	}
 
 	apic::init();

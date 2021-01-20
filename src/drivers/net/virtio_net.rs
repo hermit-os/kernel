@@ -756,7 +756,10 @@ impl VirtioNetDriver {
 		// Nur für receive? Weil send eh ausgeschaltet ist?
 		self.recv_vqs.enable_notifs();
 	}
+}
 
+// Private funtctions for Virtio network driver
+impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
 		/*
 		if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
@@ -793,17 +796,16 @@ impl VirtioNetDriver {
 
 	/// Instanciates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
 	/// configuration structures and moving them into the struct.
-	pub fn new(
+	fn new(
 		mut caps_coll: UniCapsColl,
-		device_id: u16,
-		irq: u8,
+		adapter: &PciAdapter,
 	) -> Result<Self, error::VirtioNetError> {
 		let com_cfg = loop {
 			match caps_coll.get_com_cfg() {
 				Some(com_cfg) => break com_cfg,
 				None => {
 					error!("No common config. Aborting!");
-					return Err(error::VirtioNetError::NoComCfg(device_id));
+					return Err(error::VirtioNetError::NoComCfg(adapter.device_id));
 				}
 			}
 		};
@@ -813,7 +815,7 @@ impl VirtioNetDriver {
 				Some(isr_stat) => break isr_stat,
 				None => {
 					error!("No ISR status config. Aborting!");
-					return Err(error::VirtioNetError::NoIsrCfg(device_id));
+					return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id));
 				}
 			}
 		};
@@ -823,7 +825,7 @@ impl VirtioNetDriver {
 				Some(notif_cfg) => break notif_cfg,
 				None => {
 					error!("No notif config. Aborting!");
-					return Err(error::VirtioNetError::NoNotifCfg(device_id));
+					return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id));
 				}
 			}
 		};
@@ -836,7 +838,7 @@ impl VirtioNetDriver {
 				},
 				None => {
 					error!("No dev config. Aborting!");
-					return Err(error::VirtioNetError::NoDevCfg(device_id));
+					return Err(error::VirtioNetError::NoDevCfg(adapter.device_id));
 				}
 			}
 		};
@@ -860,7 +862,7 @@ impl VirtioNetDriver {
 				is_multi: false,
 			},
 			num_vqs: 0,
-			irq: irq,
+			irq: adapter.irq,
 		})
 	}
 
@@ -1165,7 +1167,10 @@ impl VirtioNetDriver {
 		}
 		Ok(())
 	}
+}
 
+// Public interface for virtio network driver.
+impl VirtioNetDriver {
 	/// Initializes virtio network device by mapping configuration layout to
 	/// respective structs (configuration structs are:
 	/// [ComCfg](structs.comcfg.html), [NotifCfg](structs.notifcfg.html)
@@ -1176,7 +1181,7 @@ impl VirtioNetDriver {
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
 	pub fn init(adapter: &PciAdapter) -> Result<VirtioNetDriver, VirtioError> {
 		let mut drv = match pci::map_caps(adapter) {
-			Ok(caps) => match VirtioNetDriver::new(caps, adapter.device_id, adapter.irq) {
+			Ok(caps) => match VirtioNetDriver::new(caps, adapter) {
 				Ok(driver) => driver,
 				Err(vnet_err) => {
 					error!("Initializing new network driver failed. Aborting!");
@@ -1955,10 +1960,4 @@ pub mod error {
 		/// an ongoing transfer
 		ProcessOngoing,
 	}
-}
-
-pub fn uhyve_init_network() -> Result<VirtioNetDriver, VirtioNetError> {
-	let device_id: u16 = 0x1041;
-
-	Err(error::VirtioNetError::NoComCfg(device_id))
 }
