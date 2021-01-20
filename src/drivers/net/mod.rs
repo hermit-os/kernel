@@ -13,6 +13,7 @@ pub mod virtio_net;
 
 use crate::arch::kernel::apic;
 use crate::arch::kernel::irq::ExceptionStackFrame;
+#[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
 use crate::scheduler::task::TaskHandle;
@@ -145,6 +146,7 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: &mut ExceptionSta
 	debug!("Receive network interrupt");
 	apic::eoi();
 
+	#[cfg(feature = "pci")]
 	let check_scheduler = match pci::get_network_driver() {
 		Some(driver) => driver.lock().handle_interrupt(),
 		_ => {
@@ -152,6 +154,8 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: &mut ExceptionSta
 			false
 		}
 	};
+	#[cfg(not(feature = "pci"))]
+	let check_scheduler = false;
 
 	if check_scheduler {
 		core_scheduler().scheduler();
