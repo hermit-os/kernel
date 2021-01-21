@@ -236,7 +236,8 @@ dependencies = [
  "num-derive",
  "num-traits",
  "scopeguard",
- "x86",
+ "x86 0.34.0",
+ "x86 0.35.0",
 ]
 
 [[package]]

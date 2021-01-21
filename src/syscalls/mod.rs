@@ -8,7 +8,7 @@
 
 #![allow(clippy::result_unit_err)]
 
-#[cfg(not(feature = "newlib"))]
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 use crate::drivers::net::*;
 use crate::environment;
 #[cfg(feature = "newlib")]
@@ -158,7 +158,7 @@ pub extern "C" fn sys_netwait() {
 	kernel_function!(netwait());
 }
 
-#[cfg(not(feature = "newlib"))]
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "C" fn sys_set_network_polling_mode(value: bool) {
 	kernel_function!(set_polling_mode(value));
