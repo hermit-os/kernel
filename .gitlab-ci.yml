@@ -58,6 +58,7 @@ build:demo:
 test:integration:
   stage: test
   image: ${CI_REGISTRY_IMAGE}
+  allow_failure: true
   script:
     - lscpu
     - kvm-ok
