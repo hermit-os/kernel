@@ -89,8 +89,9 @@ jobs:
           echo "C:\Program Files\nasm" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
         if: ${{ matrix.os == 'windows-latest' }}
       - name: Building minimal kernel
+        working-directory: libhermit-rs
         run:
-          cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit --manifest-path=Cargo.toml --no-default-features
+          cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-kernel --no-default-features
       - name: Building dev version
         run:
           cargo build -Z build-std=std,core,alloc,panic_abort --target x86_64-unknown-hermit
