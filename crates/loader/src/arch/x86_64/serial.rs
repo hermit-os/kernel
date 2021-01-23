@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 use x86::io::*;
 
 const UART_TX: u16 = 0;
@@ -47,7 +47,7 @@ impl SerialPort {
 
 	fn write_to_register(&self, register: u16, byte: u8) {
 		while self.is_transmitting() {
-			spin_loop_hint();
+			spin_loop();
 		}
 
 		unsafe {
