@@ -5,7 +5,7 @@ set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kerne
 add_custom_target(hermit_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/librs
-		cargo build ${CARGO_BUILDTYPE_PARAMETER} -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-asm,compiler-builtins-mem --target ${HERMIT_ARCH}-unknown-hermit-kernel.json --features newlib
+		cargo build ${CARGO_BUILDTYPE_PARAMETER} -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${HERMIT_ARCH}-unknown-hermit-kernel.json --features newlib
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 
