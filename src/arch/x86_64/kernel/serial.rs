@@ -7,7 +7,7 @@
 
 use crate::environment;
 use crate::x86::io::*;
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;
@@ -51,7 +51,7 @@ impl SerialPort {
 
 	fn write_to_register(&self, register: u16, byte: u8) {
 		while self.is_transmitting() {
-			spin_loop_hint();
+			spin_loop();
 		}
 
 		unsafe {

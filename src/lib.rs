@@ -75,7 +75,9 @@ extern crate x86;
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
 #[cfg(feature = "smp")]
-use core::sync::atomic::{spin_loop_hint, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, Ordering};
+#[cfg(feature = "smp")]
+use core::hint::spin_loop;
 
 use arch::percore::*;
 use mm::allocator::LockedHeap;
@@ -319,7 +321,7 @@ fn synch_all_cores() {
 	CORE_COUNTER.fetch_add(1, Ordering::SeqCst);
 
 	while CORE_COUNTER.load(Ordering::SeqCst) != get_processor_count() {
-		spin_loop_hint();
+		spin_loop();
 	}
 }
 
