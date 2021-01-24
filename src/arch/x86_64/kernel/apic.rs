@@ -29,9 +29,9 @@ use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 #[cfg(feature = "smp")]
 use core::convert::TryInto;
+use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::ptr;
-use core::hint::spin_loop;
 use core::{cmp, fmt, mem, u32};
 use crossbeam_utils::CachePadded;
 
