@@ -31,7 +31,7 @@ use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::convert::TryInto;
 #[cfg(feature = "smp")]
 use core::ptr;
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 use core::{cmp, fmt, mem, u32};
 use crossbeam_utils::CachePadded;
 
@@ -763,7 +763,7 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 				& APIC_ICR_DELIVERY_STATUS_PENDING)
 				> 0
 			{
-				spin_loop_hint();
+				spin_loop();
 			}
 
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).

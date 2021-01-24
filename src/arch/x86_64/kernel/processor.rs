@@ -17,7 +17,7 @@ use crate::x86::cpuid::*;
 use crate::x86::msr::*;
 use core::arch::x86_64::{__rdtscp as rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc as rdtsc};
 use core::convert::TryInto;
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 use core::{fmt, u32};
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -391,7 +391,7 @@ impl CpuFrequency {
 				break tick;
 			}
 
-			spin_loop_hint();
+			spin_loop();
 		};
 
 		// Count the number of CPU cycles during 3 timer ticks.
@@ -403,7 +403,7 @@ impl CpuFrequency {
 				break;
 			}
 
-			spin_loop_hint();
+			spin_loop();
 		}
 
 		let end = get_timestamp();
@@ -1115,6 +1115,6 @@ unsafe fn get_timestamp_rdtscp() -> u64 {
 pub fn udelay(usecs: u64) {
 	let end = get_timestamp() + u64::from(get_frequency()) * usecs;
 	while get_timestamp() < end {
-		spin_loop_hint();
+		spin_loop();
 	}
 }

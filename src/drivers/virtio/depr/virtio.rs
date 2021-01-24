@@ -16,7 +16,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::TryInto;
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 use core::sync::atomic::{fence, Ordering};
 
 use self::consts::*;
@@ -637,7 +637,7 @@ impl<'a> VirtqUsed<'a> {
 	fn wait_until_done(&mut self, chain: &VirtqDescriptorChain) -> bool {
 		// TODO: this might break if we have multiple running transfers at a time?
 		while unsafe { core::ptr::read_volatile(self.idx) } == self.last_idx {
-			spin_loop_hint();
+			spin_loop();
 		}
 		self.last_idx = *self.idx;
 
