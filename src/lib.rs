@@ -75,9 +75,9 @@ extern crate x86;
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
 #[cfg(feature = "smp")]
-use core::sync::atomic::{AtomicU32, Ordering};
-#[cfg(feature = "smp")]
 use core::hint::spin_loop;
+#[cfg(feature = "smp")]
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use arch::percore::*;
 use mm::allocator::LockedHeap;
