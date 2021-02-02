@@ -6,7 +6,7 @@ authors = [
 	"Colin Finck <colin.finck@rwth-aachen.de>"
 ]
 build = "build.rs"
-license = "MIT/Apache-2.0"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
@@ -82,6 +82,9 @@ version = "0.6.*"
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
 version = "0.35.*"
 default-features = false
+
+[patch.crates-io]
+x86 = { git = "https://github.com/stlankes/rust-x86", branch = "master" }
 
 # The development profile, used for `cargo build`.
 [profile.dev]
