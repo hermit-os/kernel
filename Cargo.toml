@@ -84,7 +84,7 @@ version = "0.35.*"
 default-features = false
 
 [patch.crates-io]
-x86 = { git = "https://github.com/stlankes/rust-x86", branch = "master" }
+x86 = { git = "https://github.com/gz/rust-x86.git", branch = "master" }
 
 # The development profile, used for `cargo build`.
 [profile.dev]
