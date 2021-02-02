@@ -210,7 +210,7 @@ checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
 [[package]]
 name = "x86"
 version = "0.35.0"
-source = "git+https://github.com/stlankes/rust-x86?branch=master#b79819bd82075e3065d87617380ce3b5b77d3371"
+source = "git+https://github.com/gz/rust-x86.git?branch=master#c8a844e36a55f0ab45ba81e3efa6919c2d5d0a6c"
 dependencies = [
  "bit_field",
  "bitflags",
