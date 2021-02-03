@@ -44,7 +44,7 @@ smp = []
 fsgsbase = []
 
 [dev-dependencies]
-x86 = { version = "0.35.*", default-features = false }
+x86 = { version = "0.36.*", default-features = false }
 float-cmp = "0.8.0"
 
 [dependencies.scopeguard]
@@ -80,11 +80,8 @@ default-features = false
 version = "0.6.*"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies.x86]
-version = "0.35.*"
+version = "0.36.*"
 default-features = false
-
-[patch.crates-io]
-x86 = { git = "https://github.com/gz/rust-x86.git", branch = "master" }
 
 # The development profile, used for `cargo build`.
 [profile.dev]
