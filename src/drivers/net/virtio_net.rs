@@ -498,7 +498,7 @@ impl TxQueues {
 			Ok(tkn) => return Some((tkn, 0)),
 			Err(_) => {
 				// Here it is possible if multiple ques are enabled to get another buffertoken from them!
-				// Info the queues are disbaled upon initalization and should be enabled somehow!
+				// Info the queues are disbaled upon initialization and should be enabled somehow!
 				None
 			}
 		}
@@ -866,7 +866,7 @@ impl VirtioNetDriver {
 		})
 	}
 
-	/// Initallizes the device in adherence to specificaton. Returns Some(VirtioNetError)
+	/// Initiallizes the device in adherence to specificaton. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
@@ -984,7 +984,7 @@ impl VirtioNetDriver {
 
 		match self.dev_spec_init() {
 			Ok(_) => info!(
-				"Device specific initalization for Virtio network defice {:x} finished",
+				"Device specific initialization for Virtio network defice {:x} finished",
 				self.dev_cfg.dev_id
 			),
 			Err(vnet_err) => return Err(vnet_err),
@@ -1024,10 +1024,10 @@ impl VirtioNetDriver {
 		}
 	}
 
-	/// Device Specfic initalization according to Virtio specifictation v1.1. - 5.1.5
+	/// Device Specfic initialization according to Virtio specifictation v1.1. - 5.1.5
 	fn dev_spec_init(&mut self) -> Result<(), VirtioNetError> {
 		match self.virtqueue_init() {
-			Ok(_) => info!("Network driver successfully initalized virtqueues."),
+			Ok(_) => info!("Network driver successfully initialized virtqueues."),
 			Err(vnet_err) => return Err(vnet_err),
 		}
 
@@ -1074,7 +1074,7 @@ impl VirtioNetDriver {
 		Ok(())
 	}
 
-	/// Initalize virtqueues via the queue interface and populates receiving queues
+	/// Initialize virtqueues via the queue interface and populates receiving queues
 	fn virtqueue_init(&mut self) -> Result<(), VirtioNetError> {
 		// We are assuming here, that the device single source of truth is the
 		// device specific configuration. Hence we do NOT check if
@@ -1196,7 +1196,7 @@ impl VirtioNetDriver {
 
 		match drv.init_dev() {
 			Ok(_) => info!(
-				"Network device with id {:x}, has been initalized by driver!",
+				"Network device with id {:x}, has been initialized by driver!",
 				drv.dev_cfg.dev_id
 			),
 			Err(vnet_err) => {
@@ -1206,9 +1206,9 @@ impl VirtioNetDriver {
 		}
 
 		if drv.is_link_up() {
-			info!("Virtio-net link is up after initalization.")
+			info!("Virtio-net link is up after initialization.")
 		} else {
-			info!("Virtio-net link is down after initalization!")
+			info!("Virtio-net link is down after initialization!")
 		}
 
 		Ok(drv)
@@ -1930,7 +1930,7 @@ mod constants {
 		}
 
 		/// Returns a new instance of (FeatureSet)[FeatureSet] with all features
-		/// initalized to false.
+		/// initialized to false.
 		pub fn new(val: u64) -> Self {
 			FeatureSet(val)
 		}
