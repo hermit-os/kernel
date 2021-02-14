@@ -1213,7 +1213,7 @@ impl BufferToken {
 	///
 	/// Includes:
 	/// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
-	/// * Resetting the MemDescr length at initalization. This length might be reduced upon writes
+	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
 	/// of the driver or the device.
 	/// * Erazing all memory areas with zeros
 	fn reset_purge(mut self) -> Self {
@@ -1319,7 +1319,7 @@ impl BufferToken {
 	///
 	/// Includes:
 	/// * Resetting the write status inside the MemDescr. -> Allowing to rewrite the buffers
-	/// * Resetting the MemDescr length at initalization. This length might be reduced upon writes
+	/// * Resetting the MemDescr length at initialization. This length might be reduced upon writes
 	/// of the driver or the device.
 	fn reset(mut self) -> Self {
 		let mut ctrl_desc_cnt = 0usize;
@@ -1822,7 +1822,7 @@ enum Buffer {
 
 // Private Interface of Buffer
 impl Buffer {
-	/// Resets the Buffers length to the given len. This MUST be the length at initalization.
+	/// Resets the Buffers length to the given len. This MUST be the length at initialization.
 	fn reset_len(&mut self, init_len: usize) {
 		match self {
 			Buffer::Single {
@@ -1845,7 +1845,7 @@ impl Buffer {
 	}
 
 	/// Restricts the Buffers length to the given len. This length MUST NOT be larger than the
-	/// length at initalization or smaller-equal 0.
+	/// length at initialization or smaller-equal 0.
 	fn restr_len(&mut self, new_len: usize) {
 		match self {
 			Buffer::Single {
@@ -2275,7 +2275,7 @@ struct MemDescr {
 	/// Defines the len of the memory area that is accesible by users
 	/// This field is needed as the `MemDescr.len` field might change
 	/// after writes of the device, but the Descriptors need to be reset
-	/// in case they are reused. So the inital length must be preserved.
+	/// in case they are reused. So the initial length must be preserved.
 	_init_len: usize,
 	/// Defines the length of the controlled memory area
 	/// starting a `ptr: *mut u8`. Never Changes.
@@ -2433,7 +2433,7 @@ enum Dealloc {
 
 /// MemPool allows to easily control, request and provide memory for Virtqueues.
 ///
-/// * The struct is initalized with a limit of free running "tracked" (see `fn pull_untracked`)
+/// * The struct is initialized with a limit of free running "tracked" (see `fn pull_untracked`)
 /// memory descriptors. As Virtqueus do only allow a limited amount of descriptors in their queue,
 /// the independent queues, can control the number of descriptors by this.
 /// * Furthermore the MemPool struct provides an interface to easily retrieve memory of a wanted size

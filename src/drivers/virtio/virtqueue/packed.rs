@@ -42,7 +42,7 @@ impl WrapCount {
 		1 << 7 | 1 << 15
 	}
 
-	/// Returns a new WrapCount struct initalized to true or 1.
+	/// Returns a new WrapCount struct initialized to true or 1.
 	///
 	/// See virtio specification v1.1. - 2.7.1
 	fn new() -> Self {
@@ -171,7 +171,7 @@ impl DescriptorRing {
 		&mut self,
 		tkn_lst: Vec<TransferToken>,
 	) -> (Vec<Pinned<TransferToken>>, usize, u8) {
-		// Catch empty push, in order to allow zero initalized first_ctrl_settings struct
+		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(tkn_lst.len() > 0);
 
@@ -444,7 +444,7 @@ impl DescriptorRing {
 		self.ring.as_ptr() as usize
 	}
 
-	/// Returns an initalized write controler in order
+	/// Returns an initialized write controler in order
 	/// to write the queue correctly.
 	fn get_write_ctrler(&mut self) -> WriteCtrl {
 		WriteCtrl {
@@ -458,7 +458,7 @@ impl DescriptorRing {
 		}
 	}
 
-	/// Returns an initalized read controler in order
+	/// Returns an initialized read controler in order
 	/// to read the queue correctly.
 	fn get_read_ctrler(&mut self) -> ReadCtrl {
 		ReadCtrl {
@@ -954,7 +954,7 @@ struct DevNotif {
 }
 
 impl EventSuppr {
-	/// Returns a zero initalized EventSuppr structure
+	/// Returns a zero initialized EventSuppr structure
 	fn new() -> Self {
 		EventSuppr { event: 0, flags: 0 }
 	}
@@ -1331,10 +1331,10 @@ impl PackedVq {
 			drv_event.borrow_mut().f_notif_idx = true;
 		}
 
-		// Initalize new memory pool.
+		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(vq_size));
 
-		// Initalize an empty vector for future dropped transfers
+		// Initialize an empty vector for future dropped transfers
 		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
 
 		vq_handler.enable_queue();
