@@ -470,10 +470,10 @@ impl SplitVq {
 				+ usize::try_from(notif_cfg.multiplier()).unwrap()) as *mut usize,
 		);
 
-		// Initalize new memory pool.
+		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(size));
 
-		// Initalize an empty vector for future dropped transfers
+		// Initialize an empty vector for future dropped transfers
 		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
 
 		vq_handler.enable_queue();

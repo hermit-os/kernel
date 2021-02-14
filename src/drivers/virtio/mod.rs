@@ -29,14 +29,14 @@ pub mod error {
 	impl fmt::Display for VirtioError {
 		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 			match self {
-                VirtioError::Unknown =>write!(f, "Driver failed to initalize virtio device due to unknown reasosn!"),
+                VirtioError::Unknown =>write!(f, "Driver failed to initialize virtio device due to unknown reasosn!"),
                 VirtioError::FromPci(pci_error) => match pci_error {
-                    PciError::General(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Due to unknown reasosn!", id),
-                    PciError::NoBar(id ) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No BAR's found.", id), 
-                    PciError::NoCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Capabilites pointer found.", id),
-                    PciError::BadCapPtr(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Malformed Capabilites pointer.", id),
-                    PciError::NoBarForCap(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: Bar indicated by capability not found.", id),
-                    PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initalize device with id: 0x{:x}. Reason: No Virtio capabilites were found.", id),
+                    PciError::General(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Due to unknown reasosn!", id),
+                    PciError::NoBar(id ) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No BAR's found.", id), 
+                    PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Capabilites pointer found.", id),
+                    PciError::BadCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: Malformed Capabilites pointer.", id),
+                    PciError::NoBarForCap(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: Bar indicated by capability not found.", id),
+                    PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Virtio capabilites were found.", id),
                 },
                 VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id),
                 VirtioError::NetDriver(net_error) => match net_error {
