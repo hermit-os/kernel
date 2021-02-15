@@ -44,7 +44,7 @@ use crate::drivers::virtio::depr::virtio_fs;
 #[repr(u16)]
 pub enum DevId {
 	INVALID = 0x0,
-	VIRTIO_TRANS_DEV_ID_NET = 0x0fff,
+	VIRTIO_TRANS_DEV_ID_NET = 0x1000,
 	VIRTIO_TRANS_DEV_ID_BLK = 0x1001,
 	VIRTIO_TRANS_DEV_ID_MEM_BALL = 0x1002,
 	VIRTIO_TRANS_DEV_ID_CONS = 0x1003,
@@ -58,7 +58,7 @@ pub enum DevId {
 impl From<DevId> for u16 {
 	fn from(val: DevId) -> u16 {
 		match val {
-			DevId::VIRTIO_TRANS_DEV_ID_NET => 0x0fff,
+			DevId::VIRTIO_TRANS_DEV_ID_NET => 0x1000,
 			DevId::VIRTIO_TRANS_DEV_ID_BLK => 0x1001,
 			DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL => 0x1002,
 			DevId::VIRTIO_TRANS_DEV_ID_CONS => 0x1003,
@@ -75,7 +75,7 @@ impl From<DevId> for u16 {
 impl From<u16> for DevId {
 	fn from(val: u16) -> Self {
 		match val {
-			0x0fff => DevId::VIRTIO_TRANS_DEV_ID_NET,
+			0x1000 => DevId::VIRTIO_TRANS_DEV_ID_NET,
 			0x1001 => DevId::VIRTIO_TRANS_DEV_ID_BLK,
 			0x1002 => DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL,
 			0x1003 => DevId::VIRTIO_TRANS_DEV_ID_CONS,
