@@ -56,9 +56,9 @@ dependencies = [
 
 [[package]]
 name = "multiboot"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f442c65adef7bc9676eb8212598d14b7ba799b8bb2a312ed32f410e85e2f5ad"
+checksum = "ade66c06b320f119f05e339924ac6b3d22127516ce99307da712c3040875f985"
 dependencies = [
  "paste",
 ]
