@@ -42,7 +42,7 @@ jobs:
           EOL
       - name: Deploy documentation
         if: success()
-        uses: crazy-max/ghaction-github-pages@v2.2.0
+        uses: crazy-max/ghaction-github-pages@v2.3.0
         with:
           target_branch: gh-pages
           build_dir: target/x86_64-unknown-hermit-kernel/doc
