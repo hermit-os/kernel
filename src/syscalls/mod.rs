@@ -153,25 +153,15 @@ pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 }
 
 #[cfg(not(feature = "newlib"))]
-extern "C" fn __sys_netwait(handle: usize, millis: &Option<u64>) {
-	netwait(handle, *millis)
+#[no_mangle]
+pub extern "C" fn sys_netwait() {
+	kernel_function!(netwait());
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub fn sys_netwait(handle: usize, millis: Option<u64>) {
-	kernel_function!(__sys_netwait(handle, &millis));
-}
-
-#[cfg(not(feature = "newlib"))]
-extern "C" fn __sys_netwait_and_wakeup(handles: &&[usize], millis: &Option<u64>) {
-	netwait_and_wakeup(*handles, *millis);
-}
-
-#[cfg(not(feature = "newlib"))]
-#[no_mangle]
-pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
-	kernel_function!(__sys_netwait_and_wakeup(&handles, &millis));
+pub extern "C" fn sys_set_network_polling_mode(value: bool) {
+	kernel_function!(set_polling_mode(value));
 }
 
 pub extern "C" fn __sys_shutdown(arg: i32) -> ! {
