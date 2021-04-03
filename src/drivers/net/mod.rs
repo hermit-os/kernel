@@ -17,7 +17,7 @@ use crate::arch::kernel::irq::ExceptionStackFrame;
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
 use crate::synch::semaphore::*;
-use core::sync::atomic::{AtomicBool, Ordering};
+use crate::synch::spinlock::SpinlockIrqSave;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {
@@ -42,15 +42,30 @@ pub trait NetworkInterface {
 }
 
 static NET_SEM: Semaphore = Semaphore::new(0);
-static POLLING: AtomicBool = AtomicBool::new(false);
 
 /// set driver in polling mode and threads will not be blocked
 pub fn set_polling_mode(value: bool) {
-	// is the driver already in polling mode?
-	if POLLING.swap(value, Ordering::SeqCst) != value {
-		#[cfg(feature = "pci")]
-		if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-			driver.lock().set_polling_mode(value)
+	static THREADS_IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
+
+	let mut guard = THREADS_IN_POLLING_MODE.lock();
+
+	if value == true {
+		*guard += 1;
+
+		if *guard == 1 {
+			#[cfg(feature = "pci")]
+			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+				driver.lock().set_polling_mode(value)
+			}
+		}
+	} else {
+		*guard -= 1;
+
+		if *guard == 0 {
+			#[cfg(feature = "pci")]
+			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+				driver.lock().set_polling_mode(value)
+			}
 		}
 	}
 }
