@@ -10,6 +10,11 @@ opt := --release
 rdir := release
 endif
 
+# Todo - make this feature toggleable
+ifeq ($(arch), aarch64)
+opt += --features "aarch64-qemu-stdout"
+endif
+
 CONVERT :=
 RN :=
 ifdef COMSPEC

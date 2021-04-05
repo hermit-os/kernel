@@ -10,6 +10,8 @@
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(lang_items)]
 #![feature(llvm_asm)]
+#![feature(global_asm)]
+#![feature(asm)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(naked_functions)]

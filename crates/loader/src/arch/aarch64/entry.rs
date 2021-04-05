@@ -12,6 +12,7 @@ extern "C" {
 }
 
 const BOOT_STACK_SIZE: usize = 4096;
+const BOOT_CORE_ID: u64 = 0;	// ID of CPU for booting on SMP systems - this might be board specific in the future
 
 #[link_section = ".data"]
 static STACK: [u8; BOOT_STACK_SIZE] = [0; BOOT_STACK_SIZE];
@@ -51,16 +52,16 @@ fn tcr_size(x: u64) -> u64 {
 	(((64) - (x)) << 16) | (((64) - (x)) << 0)
 }
 
+global_asm!(include_str!("entry.s"));
+
 #[inline(never)]
 #[no_mangle]
-#[naked]
-pub unsafe extern "C" fn _start() -> ! {
+pub unsafe fn _start_rust() -> ! {
 	// Pointer to stack base
 	llvm_asm!("mov sp, $0"
 		:: "r"(&STACK[BOOT_STACK_SIZE - 0x10] as *const u8 as usize)
         :: "volatile");
-
-	pre_init();
+	pre_init()
 }
 
 unsafe fn pre_init() -> ! {
@@ -171,4 +172,10 @@ unsafe fn pre_init() -> ! {
 
 	// we should never reach this  point
 	loop {}
+}
+
+pub unsafe fn wait_forever() -> ! {
+	loop {
+		asm!("wfe")
+	}
 }

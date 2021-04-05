@@ -6,6 +6,9 @@ license = "MIT/Apache-2.0"
 readme = "README.md"
 edition = "2018"
 
+[features]
+aarch64-qemu-stdout = []    # Output to special qemu address 0x3F20_1000 instead of trying to use uart
+
 [dependencies]
 bitflags = "1.2.*"
 

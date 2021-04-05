@@ -3,7 +3,7 @@ OUTPUT_ARCH("aarch64")
 ENTRY(_start)
 
 /* start address of the RAM, below belongs to the flash */
-phys = 0x40080000;
+phys = 0x00080000;
 
 SECTIONS
 {
