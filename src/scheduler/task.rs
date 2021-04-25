@@ -14,6 +14,7 @@ use crate::scheduler::CoreId;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
+use core::cmp::Ordering;
 use core::convert::TryInto;
 use core::fmt;
 use core::num::NonZeroU64;
@@ -128,6 +129,26 @@ impl TaskHandle {
 		self.priority
 	}
 }
+
+impl Ord for TaskHandle {
+	fn cmp(&self, other: &Self) -> Ordering {
+		self.id.cmp(&other.id)
+	}
+}
+
+impl PartialOrd for TaskHandle {
+	fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+		Some(self.cmp(other))
+	}
+}
+
+impl PartialEq for TaskHandle {
+	fn eq(&self, other: &Self) -> bool {
+		self.id == other.id
+	}
+}
+
+impl Eq for TaskHandle {}
 
 /// Realize a priority queue for task handles
 pub struct TaskHandlePriorityQueue {
@@ -567,6 +588,9 @@ impl BlockedTaskQueue {
 				if first_task {
 					if let Some(next_node) = cursor.current() {
 						arch::set_oneshot_timer(next_node.wakeup_time);
+					} else {
+						// if no task is available, we have to disable the timer
+						arch::set_oneshot_timer(None);
 					}
 				}
 
