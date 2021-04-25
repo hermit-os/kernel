@@ -240,7 +240,8 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 					debug!(
 						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-						ioapic_addr.read_unaligned(), IOAPIC_ADDRESS
+						ioapic_addr.read_unaligned(),
+						IOAPIC_ADDRESS
 					);
 
 					let mut flags = PageTableEntryFlags::empty();
