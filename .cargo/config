@@ -3,7 +3,7 @@ build-std = ["core", "alloc"]
 build-std-features = ["compiler-builtins-mem"]
 
 [build]
-target = "x86_64-unknown-hermit-kernel"
+target = "x86_64-unknown-none-hermitkernel"
 
 [target.x86_64-unknown-hermit-kernel]
 runner = "tests/hermit_test_runner.py"
