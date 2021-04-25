@@ -233,13 +233,14 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			1 => {
 				// I/O APIC
 				let ioapic_record = unsafe { &*(current_address as *const IoApicRecord) };
+				let ioapic_addr = core::ptr::addr_of!(ioapic_record.address);
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
 					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 					debug!(
 						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-						ioapic_record.address, IOAPIC_ADDRESS
+						ioapic_addr.read_unaligned(), IOAPIC_ADDRESS
 					);
 
 					let mut flags = PageTableEntryFlags::empty();
