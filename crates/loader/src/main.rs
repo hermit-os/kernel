@@ -37,6 +37,7 @@ pub unsafe extern "C" fn loader_main() -> ! {
 
 	let app = arch::find_kernel();
 	let elf = elf::Elf::parse(&app).expect("Unable to parse ELF file");
+	assert_ne!(elf.entry, 0, "Goblin failed to find entry point of the kernel in the Elf header");
 	let mem_size = check_kernel_elf_file(&elf);
 	let (kernel_location, entry_point) = load_kernel(&elf, app.as_ptr() as u64, mem_size);
 
