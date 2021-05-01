@@ -55,6 +55,5 @@ pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64)
 
 	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =
 		core::mem::transmute(entry_point);
-
-	func(&mut BOOT_INFO);
+	func(&mut BOOT_INFO)
 }

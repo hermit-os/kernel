@@ -42,5 +42,5 @@ pub unsafe extern "C" fn loader_main() -> ! {
 	let (kernel_location, entry_point) = load_kernel(&elf, app.as_ptr() as u64, mem_size);
 
 	// boot kernel
-	arch::boot_kernel(kernel_location, mem_size, entry_point);
+	arch::boot_kernel(kernel_location, mem_size, entry_point)
 }
