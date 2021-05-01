@@ -6,7 +6,6 @@
 // copied, modified, or distributed except according to those terms.
 
 .section .text
-.global _start
 .extern pre_init
 .extern do_bad_mode
 .extern do_irq
@@ -14,17 +13,6 @@
 .extern do_sync
 .extern do_error
 
-.align 16
-_start:
-	ldr     x8, [x0, #56]
-	adds    x8, x8, #0x8, lsl #12
-	subs    x8, x8, #0x10
-	mov     sp, x8
-	/* Set exception table */
-	adr     x8, vector_table
-	msr     vbar_el1, x8
-	bl      pre_init
-	brk     #0x1
 
 .macro trap_entry, el
      stp x29, x30, [sp, #-16]!

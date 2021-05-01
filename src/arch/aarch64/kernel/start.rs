@@ -14,16 +14,28 @@ static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 #[no_mangle]
 #[naked]
 pub unsafe extern "C" fn _start() -> ! {
-    // initialize stack pointer
-    llvm_asm!("ldr x1, =$0; mov sp, x1" :: "r"(&BOOT_STACK[0]+KERNEL_STACK_SIZE-0x10) :: "volatile");
-
-    //pre_init();
-    loop {}
+    asm!("ldr x1, {0}",
+         "add x1, x1, {1}",
+		 "sub x1, x1, #0x10",	/*Previous version subtracted 0x10 from End, so I'm doing this too. Not sure why though */
+         "mov sp, x1",
+		 /* Set exception table */
+		 "adr x8, vector_table", 		
+		 "msr vbar_el1, x8",
+         "b pre_init",
+        sym BOOT_STACK,
+        const KERNEL_STACK_SIZE,
+        options(noreturn),
+    )
 }
 
-unsafe fn pre_init() -> ! {
-    let com1 = SerialPort::new(0x9000000);
-
-    com1.write_byte('H' as u8);
-    loop {}
+#[inline(never)]
+#[no_mangle]
+unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
+    println!("Welcome to hermit kernel.");
+	loop {}
 }
+
+
+
+
+
