@@ -7,9 +7,11 @@
 
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::KERNEL_STACK_SIZE;
+use crate::arch::aarch64::kernel::BootInfo;
 
 static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
+/// Entrypoint - Initalize Stack pointer and Exception Table
 #[inline(never)]
 #[no_mangle]
 #[naked]
@@ -32,10 +34,17 @@ pub unsafe extern "C" fn _start() -> ! {
 #[no_mangle]
 unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
     println!("Welcome to hermit kernel.");
-	loop {}
+    if boot_info.cpu_online == 0 {
+		crate::boot_processor_main()
+	} else {
+		#[cfg(not(feature = "smp"))]
+		{
+			error!("SMP support deactivated");
+			loop {
+				//processor::halt();
+			}
+		}
+		#[cfg(feature = "smp")]
+		crate::application_processor_main();
+	}
 }
-
-
-
-
-
