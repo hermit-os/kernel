@@ -12,7 +12,7 @@ extern "C" {
 }
 
 const BOOT_STACK_SIZE: usize = 4096;
-const BOOT_CORE_ID: u64 = 0;	// ID of CPU for booting on SMP systems - this might be board specific in the future
+const BOOT_CORE_ID: u64 = 0; // ID of CPU for booting on SMP systems - this might be board specific in the future
 
 #[link_section = ".data"]
 static STACK: [u8; BOOT_STACK_SIZE] = [0; BOOT_STACK_SIZE];
@@ -76,10 +76,10 @@ unsafe fn pre_init() -> ! {
 
 	/* reset thread id registers */
 	asm!("msr tpidr_el0, {0}",
-        "msr tpidr_el1, {0}",
+		"msr tpidr_el1, {0}",
 		in(reg) 0_u64,
 		options(nostack),
-    );
+	);
 
 	/*
 	 * Disable the MMU. We may have entered the kernel with it on and
@@ -89,21 +89,17 @@ unsafe fn pre_init() -> ! {
 	 * would have also failed.
 	 */
 	asm!("dsb sy",
-        "mrs x2, sctlr_el1",
-        "bic x2, x2, {one}",
-        "msr sctlr_el1, x2",
-        "isb",
+		"mrs x2, sctlr_el1",
+		"bic x2, x2, {one}",
+		"msr sctlr_el1, x2",
+		"isb",
 		one = const 0x1,
 		out("x2") _,
 		options(nostack),
 		//::: "x2" : "volatile"
 	);
 
-	asm!("ic iallu",
-        "tlbi vmalle1is",
-        "dsb ish",
-		options(nostack),
-	);
+	asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack),);
 
 	/*
 	 * Setup memory attribute type tables
@@ -134,14 +130,14 @@ unsafe fn pre_init() -> ! {
 
 	// determine physical address size
 	asm!("mrs x0, id_aa64mmfr0_el1",
-        "and x0, x0, 0xF",
-        "lsl x0, x0, 32",
-        "orr x0, x0, {tcr_bits}",
-        "mrs x1, id_aa64mmfr0_el1",
-        "bfi x0, x1, #32, #3",
-        "msr tcr_el1, x0",
+		"and x0, x0, 0xF",
+		"lsl x0, x0, 32",
+		"orr x0, x0, {tcr_bits}",
+		"mrs x1, id_aa64mmfr0_el1",
+		"bfi x0, x1, #32, #3",
+		"msr tcr_el1, x0",
 		tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
-        out("x0") _,
+		out("x0") _,
 		out("x1") _,
 	);
 
