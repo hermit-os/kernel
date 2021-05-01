@@ -340,7 +340,7 @@ fn boot_processor_main() -> ! {
 		environment::get_tls_memsz()
 	);
 	info!("Entering Spinloop - please implement / fix more to proceed");
-	loop {}	/* Compiles up to here - loop prevents linker errors */
+	loop {} /* Compiles up to here - loop prevents linker errors */
 	arch::boot_processor_init();
 	scheduler::add_current_core();
 

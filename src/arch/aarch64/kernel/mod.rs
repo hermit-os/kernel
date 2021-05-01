@@ -12,10 +12,9 @@ pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-pub mod start;
+mod start;
 pub mod stubs;
 pub mod systemtime;
-mod start;
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -94,7 +93,6 @@ static mut BOOT_INFO: BootInfo = BootInfo {
 
 global_asm!(include_str!("start.s"));
 
-
 pub fn get_image_size() -> usize {
 	unsafe { core::ptr::read_volatile(&BOOT_INFO.image_size) as usize }
 }
@@ -162,7 +160,7 @@ pub fn message_output_init() {
 pub fn output_message_byte(byte: u8) {
 	#[cfg(feature = "aarch64-qemu-stdout")]
 	unsafe {
-		core::ptr::write_volatile(0x3F20_1000 as *mut u8, byte); 
+		core::ptr::write_volatile(0x3F20_1000 as *mut u8, byte);
 	}
 	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
@@ -302,4 +300,3 @@ pub fn network_adapter_init() -> i32 {
 }
 
 pub fn print_statistics() {}
-
