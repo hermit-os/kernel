@@ -149,6 +149,7 @@ pub fn get_cmdline() -> VirtAddr {
 pub fn message_output_init() {
 	percore::init();
 
+	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
@@ -159,6 +160,11 @@ pub fn message_output_init() {
 }
 
 pub fn output_message_byte(byte: u8) {
+	#[cfg(feature = "aarch64-qemu-stdout")]
+	unsafe {
+		core::ptr::write_volatile(0x3F20_1000 as *mut u8, byte); 
+	}
+	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
 		unsafe {
