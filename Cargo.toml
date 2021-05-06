@@ -96,9 +96,9 @@ debug-assertions = true # controls whether debug assertions are enabled
 
 # The release profile, used for `cargo build --release`.
 [profile.release]
-opt-level = 3
+opt-level = 2
 debug = false
 rpath = false
-lto = "thin"
+lto = false
 debug-assertions = false
 #panic = "abort"
