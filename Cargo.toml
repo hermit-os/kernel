@@ -1,6 +1,6 @@
 [package]
 name = "rusty-hermit"
-version = "0.3.48"
+version = "0.3.49"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>"
