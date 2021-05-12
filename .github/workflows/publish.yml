@@ -16,7 +16,7 @@ jobs:
         with:
          submodules: true
       - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1.0.7
         with:
           toolchain: nightly
           components: rust-src
