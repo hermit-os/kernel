@@ -22,7 +22,7 @@ jobs:
           components: rust-src
           override: true
       - name: Generate documentation
-        uses: actions-rs/cargo@v1
+        uses: actions-rs/cargo@v1.0.3
         with:
           command: doc
           args: -Z build-std=core,alloc,panic_abort -Z build-std-features=compiler-builtins-mem --target x86_64-unknown-hermit-kernel.json
