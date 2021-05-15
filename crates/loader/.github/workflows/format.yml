@@ -1,12 +1,12 @@
 name: Check format
 
 on:
+  pull_request:
   push:
     branches:
       - master
-  pull_request:
-    branches:
-      - master
+      - staging
+      - trying
 
 jobs:
   build:
