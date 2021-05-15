@@ -38,12 +38,12 @@ jobs:
          submodules: true
     - name: Check Cargo availability
       run: cargo --version
-    - name: Install qemu/nasm (apt)
-      run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
+    - name: Install qemu (apt)
+      run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-aarch64
       if: ${{ matrix.os == 'ubuntu-latest' }}
-    - name: Install qemu/nasm (macos)
+    - name: Install qemu (macos)
       run: |
-          brew install qemu nasm
+          brew install qemu
       if: ${{ matrix.os == 'macOS-latest' }}
     - name: Build loader (unix)
       run: make arch=aarch64
