@@ -6,7 +6,6 @@
 // copied, modified, or distributed except according to those terms.
 
 #![feature(allocator_api)]
-#![feature(const_fn)]
 #![feature(const_raw_ptr_to_usize_cast)]
 #![feature(lang_items)]
 #![feature(llvm_asm)]
