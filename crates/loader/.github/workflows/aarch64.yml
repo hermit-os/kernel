@@ -1,4 +1,4 @@
-name: Build aarch64
+name: Test aarch64
 
 on:
   push:
