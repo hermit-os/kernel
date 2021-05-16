@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-
+    name: Test aarch64
     runs-on: ${{ matrix.os }}
 
     strategy:

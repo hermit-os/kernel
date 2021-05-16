@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-
+    name: Format check
     runs-on: ${{ matrix.os }}
 
     strategy:
