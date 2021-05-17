@@ -1,16 +1,16 @@
 name: Check format
 
 on:
+  pull_request:
   push:
     branches:
       - master
-  pull_request:
-    branches:
-      - master
+      - staging
+      - trying
 
 jobs:
   build:
-
+    name: Format check
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -30,9 +30,9 @@ jobs:
          rust-version: ${{ matrix.rust }}
          components: ${{ matrix.components || '' }}
          targets: ${{ matrix.targets || '' }}
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
       with:
-         submodules: true
+          lfs: true
     - name: Check Cargo availability
       run: cargo --version
     - name: Check Formatting

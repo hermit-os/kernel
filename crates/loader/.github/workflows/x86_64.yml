@@ -1,16 +1,18 @@
-name: Build
+name: Test x86_64
 
 on:
-  push:
   pull_request:
+  push:
     branches:
       - master
+      - staging
+      - trying
   schedule:
     - cron: '0 0 * * 6'
 
 jobs:
   build:
-
+    name: Test x86_64
     runs-on: ${{ matrix.os }}
 
     strategy:
@@ -37,9 +39,9 @@ jobs:
          rust-version: ${{ matrix.rust }}
          components: ${{ matrix.components || '' }}
          targets: ${{ matrix.targets || '' }}
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v2
       with:
-         submodules: true
+          lfs: true
     - name: Check Cargo availability
       run: cargo --version
     - name: Install qemu/nasm (apt)
@@ -76,3 +78,6 @@ jobs:
           echo "LLVM Objcopy - $LLVM_OBJCOPY"
           Invoke-Expression "$LLVM_OBJCOPY --strip-debug -O elf32-i386 target/x86_64-unknown-hermit-loader/debug/rusty-loader"
       if: ${{ matrix.os == 'windows-latest' }}
+    - name: Test loader
+      run:
+        qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd data/hello_world -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand

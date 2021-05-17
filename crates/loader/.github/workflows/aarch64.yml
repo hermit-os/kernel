@@ -1,0 +1,51 @@
+name: Test aarch64
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - staging
+      - trying
+  schedule:
+    - cron: '0 0 * * 6'
+
+jobs:
+  build:
+    name: Test aarch64
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        rust: [nightly]
+        include:
+          - os: macOS-latest
+            rust: 'nightly'
+            components: 'rust-src, llvm-tools-preview'
+            targets: 'aarch64-apple-darwin'
+          - os: ubuntu-latest
+            rust: 'nightly'
+            components: 'rust-src, llvm-tools-preview'
+            targets: 'aarch64-unknown-linux-gnu'
+
+    steps:
+    - uses: hecrj/setup-rust-action@v1
+      with: 
+         rust-version: ${{ matrix.rust }}
+         components: ${{ matrix.components || '' }}
+         targets: ${{ matrix.targets || '' }}
+    - uses: actions/checkout@v2
+      with:
+          lfs: true
+    - name: Check Cargo availability
+      run: cargo --version
+    - name: Install qemu (apt)
+      run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-aarch64
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+    - name: Install qemu (macos)
+      run: |
+          brew install qemu
+      if: ${{ matrix.os == 'macOS-latest' }}
+    - name: Build loader (unix)
+      run: make arch=aarch64

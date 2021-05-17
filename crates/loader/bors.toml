@@ -1,6 +1,9 @@
 status = [
-  "Build / build (ubuntu-latest, nightly)",
-  "Format check / build (ubuntu-latest, nightly)",
+  "Test aarch64 (ubuntu-latest, nightly)",
+  "Test aarch64 (macOS-latest, nightly)",
+  "Test x86_64 (ubuntu-latest, nightly)",
+  "Test x86_64 (macOS-latest, nightly)",
+  "Format check (ubuntu-latest, nightly)",
 ]
 delete_merged_branches = true
 timeout_sec = 7200
