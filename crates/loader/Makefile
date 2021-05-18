@@ -13,7 +13,7 @@ endif
 # Todo - make this feature toggleable
 ifeq ($(arch), aarch64)
 opt += --features "aarch64-qemu-stdout"
-export HERMIT_APP ?= "$(PWD)/data/hello_world"
+export HERMIT_APP ?= "$(PWD)/data/hello_world_aarch64"
 endif
 
 CONVERT :=
