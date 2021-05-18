@@ -72,6 +72,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use arch::percore::*;
 use mm::allocator::LockedHeap;
 
+#[cfg(target_arch = "aarch64")]
+use qemu_exit::QEMUExit;
+
 pub use crate::arch::*;
 pub use crate::config::*;
 pub use crate::syscalls::*;
@@ -339,8 +342,15 @@ fn boot_processor_main() -> ! {
 		environment::get_tls_start(),
 		environment::get_tls_memsz()
 	);
-	info!("Entering Spinloop - please implement / fix more to proceed");
-	loop {} /* Compiles up to here - loop prevents linker errors */
+	#[cfg(target_arch = "aarch64")]
+	{
+		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
+		info!("Attempting to exit via QEMU.");
+		info!("This requires that you passed the `-semihosting` option to QEMU.");
+		let exit_handler = qemu_exit::AArch64::new();
+		exit_handler.exit_success();
+		loop {} /* Compiles up to here - loop prevents linker errors */
+	}
 	arch::boot_processor_init();
 	scheduler::add_current_core();
 
