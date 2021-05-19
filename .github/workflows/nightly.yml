@@ -72,13 +72,13 @@ jobs:
           brew install qemu nasm
         if: ${{ matrix.os == 'macOS-latest' }}
       - name: Install nasm (windows)
-        uses: crazy-max/ghaction-chocolatey@v1.4.2
+        uses: crazy-max/ghaction-chocolatey@v1.5.0
         with:
           args: install nasm 
         if: ${{ matrix.os == 'windows-latest' }}
       # Note: force version to 2020.08.14, as the november version seems to be broken.
       - name: Install qemu (windows)
-        uses: crazy-max/ghaction-chocolatey@v1.4.2
+        uses: crazy-max/ghaction-chocolatey@v1.5.0
         with:
           args: install qemu --version=2020.08.14
         if: ${{ matrix.os == 'windows-latest' }}
