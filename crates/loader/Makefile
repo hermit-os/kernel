@@ -1,7 +1,6 @@
 arch ?= x86_64
 target ?= $(arch)-unknown-hermit
 release ?= 0
-app ?= "$(PWD)/data/hello_world"
 
 opt :=
 rdir := debug
@@ -14,6 +13,7 @@ endif
 # Todo - make this feature toggleable
 ifeq ($(arch), aarch64)
 opt += --features "aarch64-qemu-stdout"
+export HERMIT_APP ?= $(PWD)/data/hello_world_aarch64
 endif
 
 CONVERT :=
@@ -42,5 +42,6 @@ docs:
 
 loader:
 	@echo Build loader
-	HERMIT_APP=$(app) cargo build $(opt) -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target $(target)-loader.json
+	echo "hermit app: $(HERMIT_APP)"
+	cargo build $(opt) -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target $(target)-loader.json
 	$(CONVERT)

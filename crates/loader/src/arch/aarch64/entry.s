@@ -2,6 +2,19 @@
 
 .equ _core_id_mask, 0b11    //Assume 4 core raspi3
 
+
+// Load the address of a symbol into a register, PC-relative.
+//
+// The symbol must lie within +/- 4 GiB of the Program Counter.
+//
+// # Resources
+//
+// - https://sourceware.org/binutils/docs-2.36/as/AArch64_002dRelocations.html
+.macro ADR_REL register, symbol
+	adrp	\register, \symbol
+	add	\register, \register, #:lo12:\symbol
+.endm
+
 .section .text._start
 
 _start:
@@ -13,7 +26,12 @@ _start:
 	b.ne	1f
 
 	// If execution reaches here, it is the boot core. Now, prepare the jump to Rust code.
-
+	
+	// This loads the physical address of the Stack end. For details see
+	// 	https://github.com/rust-embedded/rust-raspberrypi-OS-tutorials/blob/master/16_virtual_mem_part4_higher_half_kernel/src/bsp/raspberrypi/link.ld
+	ADR_REL	x4, __boot_core_stack_end_exclusive
+	mov	sp, x4
+	
 	// Jump to Rust code.
 	b	_start_rust
 

@@ -49,3 +49,6 @@ jobs:
       if: ${{ matrix.os == 'macOS-latest' }}
     - name: Build loader (unix)
       run: make arch=aarch64
+    - name: Test loader
+      run: qemu-system-aarch64 -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3 -semihosting
+      timeout-minutes: 1
