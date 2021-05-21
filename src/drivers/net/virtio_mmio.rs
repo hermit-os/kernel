@@ -5,6 +5,7 @@
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+#[cfg(target_arch = "x86_64")]
 use core::arch::x86_64::_mm_mfence;
 use core::cell::RefCell;
 use core::convert::TryInto;
@@ -38,8 +39,10 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let mtu = read_volatile(&self.mtu);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 
@@ -57,9 +60,11 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let mut src = self.mac.iter();
 				mac.fill_with(|| read_volatile(src.next().unwrap()));
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 
@@ -75,8 +80,10 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let status = read_volatile(&self.status);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 
@@ -92,8 +99,10 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let max_pairs = read_volatile(&self.max_virtqueue_pairs);
+				#[cfg(target_arch = "x86_64")]
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 

@@ -6,14 +6,24 @@ pub mod virtio_net;
 #[cfg(feature = "pci")]
 pub mod virtio_pci;
 
+#[cfg(target_arch = "riscv64")]
+pub mod gem;
+
+#[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
+#[cfg(target_arch = "riscv64")]
+use crate::arch::kernel::irq::external_eoi;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::irq::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 use crate::synch::semaphore::Semaphore;
 
 /// A trait for accessing the network interface
@@ -42,11 +52,17 @@ pub trait NetworkInterface {
 	fn handle_interrupt(&mut self) -> bool;
 }
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 static NET_SEM: Semaphore = Semaphore::new(0);
 
 /// set driver in polling mode and threads will not be blocked
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 pub extern "C" fn set_polling_mode(value: bool) {
 	use crate::synch::spinlock::SpinlockIrqSave;
 
@@ -75,12 +91,18 @@ pub extern "C" fn set_polling_mode(value: bool) {
 	}
 }
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 pub extern "C" fn netwait() {
 	NET_SEM.acquire(None);
 }
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 pub fn netwakeup() {
 	NET_SEM.release();
 }
@@ -89,6 +111,35 @@ pub fn netwakeup() {
 pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
 	debug!("Receive network interrupt");
 	apic::eoi();
+
+	#[cfg(feature = "pci")]
+	let check_scheduler = match pci::get_network_driver() {
+		Some(driver) => driver.lock().handle_interrupt(),
+		_ => {
+			debug!("Unable to handle interrupt!");
+			false
+		}
+	};
+	#[cfg(not(feature = "pci"))]
+	let check_scheduler = match mmio::get_network_driver() {
+		Some(driver) => driver.lock().handle_interrupt(),
+		_ => {
+			debug!("Unable to handle interrupt!");
+			false
+		}
+	};
+
+	if check_scheduler {
+		core_scheduler().scheduler();
+	}
+}
+
+#[cfg(target_arch = "riscv64")]
+pub fn network_irqhandler() {
+	debug!("Receive network interrupt");
+
+	// PLIC end of interrupt
+	external_eoi();
 
 	#[cfg(feature = "pci")]
 	let check_scheduler = match pci::get_network_driver() {

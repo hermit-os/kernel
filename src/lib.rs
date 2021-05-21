@@ -283,6 +283,10 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	arch::init_drivers();
 
+	// Initialize MMIO Drivers if on riscv64
+	#[cfg(target_arch = "riscv64")]
+	riscv::kernel::init_drivers();
+
 	syscalls::init();
 
 	// Get the application arguments and environment variables.
@@ -349,6 +353,8 @@ fn boot_processor_main() -> ! {
 		// Compiles up to here - loop prevents linker errors
 		loop {}
 	}
+
+	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
 	if env::is_single_kernel() && !env::is_uhyve() {
@@ -379,6 +385,7 @@ fn boot_processor_main() -> ! {
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
+	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
 	info!("Entering idle loop for application processor");
@@ -386,6 +393,8 @@ fn application_processor_main() -> ! {
 	synch_all_cores();
 
 	let core_scheduler = core_scheduler();
+
+	trace!("core_scheduler: {:p}", &core_scheduler);
 	// Run the scheduler loop.
 	core_scheduler.run();
 }

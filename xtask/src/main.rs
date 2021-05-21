@@ -251,6 +251,7 @@ fn target(arch: &str) -> Result<&'static str> {
 	match arch {
 		"x86_64" => Ok("x86_64-unknown-none"),
 		"aarch64" => Ok("aarch64-unknown-none-hermitkernel"),
+		"riscv64" => Ok("riscv64gc-unknown-none-hermitkernel"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
@@ -260,6 +261,11 @@ fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
 		"aarch64" => Ok(&[
 			"--target=targets/aarch64-unknown-none-hermitkernel.json",
+			"-Zbuild-std=core,alloc",
+			"-Zbuild-std-features=compiler-builtins-mem",
+		]),
+		"riscv64" => Ok(&[
+			"--target=targets/riscv64gc-unknown-none-hermitkernel.json",
 			"-Zbuild-std=core,alloc",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),

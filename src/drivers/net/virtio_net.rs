@@ -4,6 +4,7 @@
 
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::percore::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkInterface;
@@ -655,6 +656,7 @@ impl NetworkInterface for VirtioNetDriver {
 	}
 
 	fn handle_interrupt(&mut self) -> bool {
+		#[cfg(target_arch = "x86_64")]
 		increment_irq_counter((32 + self.irq).into());
 
 		let result = if self.isr_stat.is_interrupt() {

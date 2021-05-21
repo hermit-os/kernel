@@ -112,7 +112,7 @@ macro_rules! kernel_function {
 	};
 }
 
-#[cfg(target_arch = "aarch64")]
+#[cfg(any(target_arch = "aarch64", target_arch = "riscv64"))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		$f($($x)*)

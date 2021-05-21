@@ -1,6 +1,9 @@
 #![allow(clippy::result_unit_err)]
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 use crate::drivers::net::*;
 use crate::env;
 #[cfg(feature = "newlib")]
@@ -56,6 +59,8 @@ pub(crate) fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
+		// Uhyve interface is not (yet) supported on riscv
+		#[cfg(not(target_arch = "riscv64"))]
 		if env::is_proxy() {
 			panic!("Currently, we don't support the proxy mode!");
 		} else if env::is_uhyve() {
@@ -165,13 +170,19 @@ pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 	kernel_function!(__sys_rx_buffer_consumed(handle))
 }
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 #[no_mangle]
 pub extern "C" fn sys_netwait() {
 	kernel_function!(netwait());
 }
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+#[cfg(all(
+	not(feature = "newlib"),
+	any(target_arch = "x86_64", target_arch = "riscv64")
+))]
 #[no_mangle]
 pub extern "C" fn sys_set_network_polling_mode(value: bool) {
 	kernel_function!(set_polling_mode(value));

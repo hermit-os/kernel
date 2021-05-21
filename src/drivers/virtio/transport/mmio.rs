@@ -16,6 +16,9 @@ use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
 
+#[cfg(target_arch = "riscv64")]
+use crate::arch::riscv::kernel::irq::*;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::x86_64::kernel::irq::*;
 use crate::drivers::net::network_irqhandler;
 
@@ -370,6 +373,7 @@ pub fn init_device(
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
 					irq_install_handler(irq_no, network_irqhandler as usize);
+					#[cfg(target_arch = "x86_64")]
 					add_irq_name(irq_no, "virtio_net");
 
 					Ok(VirtioDriver::Network(virt_net_drv))

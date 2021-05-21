@@ -9,11 +9,17 @@ use crossbeam_utils::Backoff;
 use crate::arch;
 use crate::arch::irq;
 use crate::arch::percore::*;
+#[cfg(target_arch = "riscv64")]
+use crate::arch::switch::switch_to_task;
+#[cfg(not(target_arch = "riscv64"))]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
+
+#[cfg(target_arch = "riscv64")]
+use riscv::register::sstatus;
 
 pub mod task;
 
@@ -359,6 +365,18 @@ impl PerCoreScheduler {
 		})
 	}
 
+	#[cfg(target_arch = "riscv64")]
+	pub fn set_current_kernel_stack(&self) {
+		let current_task_borrowed = self.current_task.borrow();
+
+		set_kernel_stack(
+			(current_task_borrowed.stacks.get_kernel_stack()
+				+ current_task_borrowed.stacks.get_kernel_stack_size()
+				- TaskStacks::MARKER_SIZE)
+				.as_u64(),
+		);
+	}
+
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
 	pub fn fpu_switch(&mut self) {
@@ -528,14 +546,28 @@ impl PerCoreScheduler {
 					unsafe { *last_stack_pointer },
 					new_stack_pointer
 				);
-				self.current_task = task;
 
 				// Finally save our current context and restore the context of the new task.
+				#[cfg(not(target_arch = "riscv64"))]
 				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
 					unsafe {
+						self.current_task = task;
 						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
 					}
 				} else {
+					unsafe {
+						self.current_task = task;
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				}
+
+				#[cfg(target_arch = "riscv64")]
+				{
+					if sstatus::read().fs() == sstatus::FS::Dirty {
+						self.current_task.borrow_mut().last_fpu_state.save();
+					}
+					task.borrow().last_fpu_state.restore();
+					self.current_task = task;
 					unsafe {
 						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
 					}
