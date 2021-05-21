@@ -412,9 +412,7 @@ extern "x86-interrupt" fn double_fault_exception(
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn coprocessor_segment_overrun_exception(
-	stack_frame: ExceptionStackFrame,
-) {
+extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: ExceptionStackFrame) {
 	error!(
 		"CoProcessor Segment Overrun (#MF) Exception: {:#?}",
 		stack_frame
