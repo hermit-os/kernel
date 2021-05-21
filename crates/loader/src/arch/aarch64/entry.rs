@@ -11,11 +11,7 @@ extern "C" {
 	fn loader_main();
 }
 
-const BOOT_STACK_SIZE: usize = 4096;
 const BOOT_CORE_ID: u64 = 0; // ID of CPU for booting on SMP systems - this might be board specific in the future
-
-#[link_section = ".data"]
-static STACK: [u8; BOOT_STACK_SIZE] = [0; BOOT_STACK_SIZE];
 
 /*
  * Memory types available.
@@ -57,10 +53,6 @@ global_asm!(include_str!("entry.s"));
 #[inline(never)]
 #[no_mangle]
 pub unsafe fn _start_rust() -> ! {
-	// Pointer to stack base
-	llvm_asm!("mov sp, $0"
-		:: "r"(&STACK[BOOT_STACK_SIZE - 0x10] as *const u8 as usize)
-        :: "volatile");
 	pre_init()
 }
 
