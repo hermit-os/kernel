@@ -81,11 +81,11 @@ pub fn init() {
 	}
 }
 
-extern "x86-interrupt" fn spurious_interrupt_on_master(_stack_frame: &mut ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_on_master(_stack_frame: ExceptionStackFrame) {
 	debug!("Spurious Interrupt on Master PIC (IRQ7)");
 }
 
-extern "x86-interrupt" fn spurious_interrupt_on_slave(_stack_frame: &mut ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_on_slave(_stack_frame: ExceptionStackFrame) {
 	debug!("Spurious Interrupt on Slave PIC (IRQ15)");
 
 	// As this is an interrupt forwarded by the master, we have to acknowledge it on the master

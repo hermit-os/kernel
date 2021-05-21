@@ -142,7 +142,7 @@ pub fn netwait(handle: usize, millis: Option<u64>) {
 }
 
 #[cfg(target_arch = "x86_64")]
-pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: &mut ExceptionStackFrame) {
+pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
 	debug!("Receive network interrupt");
 	apic::eoi();
 
