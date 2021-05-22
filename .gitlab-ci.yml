@@ -30,6 +30,8 @@ prepare:docker:
 build:demo:
   stage: build
   image: ${CI_REGISTRY_IMAGE}
+  before_script:
+    - rustup update
   script:
     - if [ -d "$HOME/tmp_libhermit-rs" ]; then rm -rf $HOME/tmp_libhermit-rs; fi
     - mkdir $HOME/tmp_libhermit-rs
@@ -55,6 +57,8 @@ test:integration:
   stage: test
   image: ${CI_REGISTRY_IMAGE}
   allow_failure: true
+  before_script:
+    - rustup update
   script:
     - lscpu
     - kvm-ok
