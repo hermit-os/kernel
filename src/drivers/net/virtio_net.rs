@@ -495,7 +495,7 @@ impl TxQueues {
 		let spec = BuffSpec::Single(Bytes::new(len).unwrap());
 
 		match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
-			Ok(tkn) => return Some((tkn, 0)),
+			Ok(tkn) => Some((tkn, 0)),
 			Err(_) => {
 				// Here it is possible if multiple ques are enabled to get another buffertoken from them!
 				// Info the queues are disbaled upon initialization and should be enabled somehow!

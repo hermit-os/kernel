@@ -498,7 +498,7 @@ impl SplitVq {
 		recv: Option<(*mut K, BuffSpec)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			(Some((send_data, send_spec)), None) => {
 				match send_spec {
 					BuffSpec::Single(size) => {
@@ -1075,13 +1075,9 @@ impl SplitVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -1096,7 +1092,7 @@ impl SplitVq {
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Send buffer specified, No recv buffer
 			(Some(spec), None) => {
 				match spec {
@@ -1118,7 +1114,7 @@ impl SplitVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -1206,7 +1202,7 @@ impl SplitVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -1486,13 +1482,9 @@ impl SplitVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -1548,7 +1540,7 @@ impl SplitVq {
 		};
 
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Only recving descriptorsn (those are writabel by device)
 			(None, Some(recv_desc_lst)) => {
 				for desc in recv_desc_lst {
