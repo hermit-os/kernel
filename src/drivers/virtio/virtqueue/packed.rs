@@ -571,12 +571,7 @@ impl<'a> ReadCtrl<'a> {
 	) {
 		match (send_buff, recv_buff_spec) {
 			(Some(send_buff), Some((recv_buff, mut write_len))) => {
-				// This is perfectly fine as we operate on two different datastructures inside one datastructure
-				// we can have two mutable references via the same wrapping datastructure
-				let ctrl_desc = unsafe {
-					let raw_ref = &mut *((send_buff as *const Buffer) as *mut Buffer);
-					raw_ref.get_ctrl_desc_mut().unwrap()
-				};
+				let ctrl_desc = send_buff.get_ctrl_desc_mut().unwrap();
 
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
@@ -613,12 +608,7 @@ impl<'a> ReadCtrl<'a> {
 				}
 			}
 			(Some(send_buff), None) => {
-				// This is perfectly fine as we operate on two different datastructures inside one datastructure
-				// we can have two mutable references via the same wrapping datastructure
-				let ctrl_desc = unsafe {
-					let raw_ref = &mut *((send_buff as *const Buffer) as *mut Buffer);
-					raw_ref.get_ctrl_desc_mut().unwrap()
-				};
+				let ctrl_desc = send_buff.get_ctrl_desc_mut().unwrap();
 
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
@@ -638,12 +628,7 @@ impl<'a> ReadCtrl<'a> {
 				}
 			}
 			(None, Some((recv_buff, mut write_len))) => {
-				// This is perfectly fine as we operate on two different datastructures inside one datastructure
-				// we can have two mutable references via the same wrapping datastructure
-				let ctrl_desc = unsafe {
-					let raw_ref = &mut *((recv_buff as *const Buffer) as *mut Buffer);
-					raw_ref.get_ctrl_desc_mut().unwrap()
-				};
+				let ctrl_desc = recv_buff.get_ctrl_desc_mut().unwrap();
 
 				// This should read the descriptors inside the ctrl desc memory and update the memory
 				// accordingly
