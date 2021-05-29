@@ -6,7 +6,7 @@
 // copied, modified, or distributed except according to those terms.
 
 use alloc::collections::linked_list::LinkedList;
-use core::cmp::Ordering;
+use core::{alloc::AllocError, cmp::Ordering};
 
 pub struct FreeListEntry {
 	pub start: usize,
@@ -30,7 +30,7 @@ impl FreeList {
 		}
 	}
 
-	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, ()> {
+	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, AllocError> {
 		trace!(
 			"Allocating {} bytes from Free List {:#X}",
 			size,
@@ -85,7 +85,7 @@ impl FreeList {
 			cursor.move_next();
 		}
 
-		Err(())
+		Err(AllocError)
 	}
 
 	pub fn deallocate(&mut self, address: usize, size: usize) {
