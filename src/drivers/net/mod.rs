@@ -85,7 +85,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	let mut reset_nic = false;
 
 	// check if the driver should be in the polling mode
-	while POLLING.swap(false, Ordering::SeqCst) == true {
+	while POLLING.swap(false, Ordering::SeqCst) {
 		reset_nic = true;
 
 		let core_scheduler = core_scheduler();

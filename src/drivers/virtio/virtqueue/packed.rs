@@ -54,11 +54,7 @@ impl WrapCount {
 	/// If WrapCount(true) returns WrapCount(false),
 	/// if WrapCount(false) returns WrapCount(true).
 	fn wrap(&mut self) {
-		if self.0 == false {
-			self.0 = true;
-		} else {
-			self.0 = false;
-		}
+		self.0 = !self.0
 	}
 
 	/// Creates avail and used flags inside u16 in accordance to the
@@ -67,7 +63,7 @@ impl WrapCount {
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to NOT match the WrapCount.
 	fn as_flags_avail(&self) -> u16 {
-		if self.0 == true {
+		if self.0 {
 			1 << 7
 		} else {
 			1 << 15
@@ -80,7 +76,7 @@ impl WrapCount {
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to also match the WrapCount.
 	fn as_flags_used(&self) -> u16 {
-		if self.0 == true {
+		if self.0 {
 			1 << 7 | 1 << 15
 		} else {
 			0
