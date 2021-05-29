@@ -48,9 +48,9 @@ impl From<u16> for VqIndex {
 	}
 }
 
-impl Into<u16> for VqIndex {
-	fn into(self) -> u16 {
-		self.0
+impl From<VqIndex> for u16 {
+	fn from(i: VqIndex) -> Self {
+		i.0
 	}
 }
 
