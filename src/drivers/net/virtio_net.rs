@@ -984,7 +984,7 @@ impl VirtioNetDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, wanted_feats: &Vec<Features>) -> Result<(), VirtioNetError> {
+	fn negotiate_features(&mut self, wanted_feats: &[Features]) -> Result<(), VirtioNetError> {
 		let mut drv_feats = FeatureSet::new(0);
 
 		for feat in wanted_feats.iter() {
@@ -995,7 +995,7 @@ impl VirtioNetDriver {
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.1.3.1.
-		match FeatureSet::check_features(&wanted_feats) {
+		match FeatureSet::check_features(wanted_feats) {
 			Ok(_) => {
 				info!("Feature set wanted by network driver are in conformance with specification.")
 			}
@@ -1757,7 +1757,7 @@ mod constants {
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.
-		pub fn check_features(feats: &Vec<Features>) -> Result<(), VirtioNetError> {
+		pub fn check_features(feats: &[Features]) -> Result<(), VirtioNetError> {
 			let mut feat_bits = 0u64;
 
 			for feat in feats.iter() {
@@ -1906,9 +1906,8 @@ mod constants {
 
 		/// Sets features contained in feats to true.
 		///
-		/// WARN: Features should be checked before using this function via the
-		/// `FeatureSet::check_features(feats: Vec<Features>) -> Result<(), VirtioNetError>` function.
-		pub fn set_features(&mut self, feats: &Vec<Features>) {
+		/// WARN: Features should be checked before using this function via the [`check_features`] function.
+		pub fn set_features(&mut self, feats: &[Features]) {
 			for feat in feats {
 				self.0 |= *feat;
 			}
