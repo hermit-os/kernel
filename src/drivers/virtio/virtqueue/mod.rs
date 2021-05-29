@@ -2829,7 +2829,7 @@ impl BitAnd<DescrFlags> for u16 {
 
 impl PartialEq<DescrFlags> for u16 {
 	fn eq(&self, other: &DescrFlags) -> bool {
-		*self == u16::from(*other)
+		self == other
 	}
 }
 
