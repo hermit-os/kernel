@@ -73,6 +73,7 @@ macro_rules! kernel_function {
 		use crate::arch::kernel::percore::*;
 
 		#[allow(unused)]
+		#[allow(clippy::diverging_sub_expression)]
 		unsafe {
 			crate::arch::irq::disable();
 			let user_stack_pointer;
