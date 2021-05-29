@@ -24,10 +24,10 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.
@@ -486,25 +486,23 @@ impl<'a> ReadCtrl<'a> {
 		if self.desc_ring.ring[self.position].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let tkn;
-			let recv_buff_opt;
-			let send_buff_opt;
-
-			unsafe {
-				let raw_tkn = self.desc_ring.tkn_ref_ring
-					[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()];
-				assert!(!raw_tkn.is_null());
-				tkn = &mut *(raw_tkn);
-
+			let tkn = unsafe {
+				let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
+				let raw_tkn = self.desc_ring.tkn_ref_ring[buff_id];
 				// unset the reference in the refernce ring for security!
-				self.desc_ring.tkn_ref_ring
-					[usize::try_from(self.desc_ring.ring[self.position].buff_id).unwrap()] = 0 as *mut TransferToken;
-				// This is perfectly fine, as we operate on two different datastructures inside one datastructure.
-				let raw_ptr =
-					(tkn.buff_tkn.as_ref().unwrap() as *const BufferToken) as *mut BufferToken;
-				recv_buff_opt = &mut (*raw_ptr).recv_buff;
-				send_buff_opt = &mut (*raw_ptr).send_buff;
-			}
+				self.desc_ring.tkn_ref_ring[buff_id] = ptr::null_mut();
+				assert!(!raw_tkn.is_null());
+				&mut *raw_tkn
+			};
+
+			let (send_buff, recv_buff) = {
+				let BufferToken {
+					send_buff,
+					recv_buff,
+					..
+				} = tkn.buff_tkn.as_mut().unwrap();
+				(recv_buff.as_mut(), send_buff.as_mut())
+			};
 
 			// Retrieve if any has been written to the queue. If this is the case, we calculate the overall length
 			// This is necessary in order to provide the drivers with the correct access, to usable data.
@@ -525,7 +523,7 @@ impl<'a> ReadCtrl<'a> {
 			// flag correctly upon writes. Hence we omit it, in order to receive data.
 			let write_len = self.desc_ring.ring[self.position].len;
 
-			match (send_buff_opt, recv_buff_opt) {
+			match (send_buff, recv_buff) {
 				(Some(send_buff), Some(recv_buff)) => {
 					// Need to only check for either send or receive buff to contain
 					// a ctrl_desc as, both carry the same if they carry one.
