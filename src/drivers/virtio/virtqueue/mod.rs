@@ -16,6 +16,7 @@
 //! use the respective virtqueue structs directly.
 #![allow(dead_code)]
 #![allow(unused)]
+#![allow(clippy::type_complexity)]
 
 pub mod packed;
 pub mod split;
