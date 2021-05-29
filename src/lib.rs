@@ -23,6 +23,7 @@
 #![allow(clippy::single_match)]
 #![allow(clippy::cognitive_complexity)]
 #![allow(clippy::forget_copy)]
+#![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
