@@ -80,6 +80,7 @@ impl HoleList {
 	}
 
 	/// Returns information about the first hole for test purposes.
+	#[cfg(not(target_os = "hermit"))]
 	#[cfg(test)]
 	pub fn first_hole(&self) -> Option<(usize, usize)> {
 		self.first
