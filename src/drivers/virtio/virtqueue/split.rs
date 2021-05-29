@@ -555,7 +555,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -593,7 +593,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
@@ -677,7 +677,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -715,7 +715,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
@@ -836,7 +836,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -884,7 +884,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -910,7 +910,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -958,7 +958,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1018,7 +1018,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1041,7 +1041,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self

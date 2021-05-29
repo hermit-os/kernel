@@ -236,7 +236,7 @@ impl NetworkInterface for RTL8139Driver {
 			Err(())
 		} else {
 			self.tx_in_use[id] = true;
-			self.tx_counter = self.tx_counter + 1;
+			self.tx_counter += 1;
 
 			Ok(((self.txbuffer.as_usize() + id * TX_BUF_LEN) as *mut u8, id))
 		}
