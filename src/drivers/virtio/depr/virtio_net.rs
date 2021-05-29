@@ -399,7 +399,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let mut buffers = &mut self.tx_buffers;
 
 		// do we have free buffers?
-		if buffers.iter().position(|b| !b.in_use).is_none() {
+		if !buffers.iter().any(|b| !b.in_use) {
 			// if not, check if we are able to free used elements
 			self.check_used_elements();
 		}
