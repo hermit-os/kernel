@@ -22,11 +22,11 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::mem;
 use core::ops::Deref;
 use core::result::Result;
+use core::{cell::RefCell, cmp::Ordering};
 
 use crate::drivers::virtio::env::memory::{MemLen, MemOff};
 use crate::drivers::virtio::error::VirtioError;
@@ -450,14 +450,13 @@ impl TxQueues {
 		while let Some(mut tkn) = self.ready_queue.pop() {
 			let (send_len, _) = tkn.len();
 
-			if send_len == len {
-				return Some((tkn, 0));
-			} else if send_len > len {
-				tkn.restr_size(Some(len), None).unwrap();
-				return Some((tkn, 0));
-			} else {
-				// Otherwise we are freeing the queue from the token.
-				drop(tkn);
+			match send_len.cmp(&len) {
+				Ordering::Less => {}
+				Ordering::Equal => return Some((tkn, 0)),
+				Ordering::Greater => {
+					tkn.restr_size(Some(len), None).unwrap();
+					return Some((tkn, 0));
+				}
 			}
 		}
 
@@ -469,14 +468,13 @@ impl TxQueues {
 			let mut tkn = transfer.reuse().unwrap();
 			let (send_len, _) = tkn.len();
 
-			if send_len == len {
-				return Some((tkn, 0));
-			} else if send_len > len {
-				tkn.restr_size(Some(len), None).unwrap();
-				return Some((tkn, 0));
-			} else {
-				// Otherwise we are freeing the queue from the token.
-				drop(tkn);
+			match send_len.cmp(&len) {
+				Ordering::Less => {}
+				Ordering::Equal => return Some((tkn, 0)),
+				Ordering::Greater => {
+					tkn.restr_size(Some(len), None).unwrap();
+					return Some((tkn, 0));
+				}
 			}
 		}
 
