@@ -714,7 +714,7 @@ impl NotifCtrl {
 		if self.f_notif_data {
 			unsafe {
 				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 4);
-				let mut notif_data = notif_data.into_iter();
+				let mut notif_data = notif_data.iter();
 
 				for byte in notif_area {
 					*byte = *notif_data.next().unwrap();
@@ -723,7 +723,7 @@ impl NotifCtrl {
 		} else {
 			unsafe {
 				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 2);
-				let mut notif_data = notif_data.into_iter();
+				let mut notif_data = notif_data.iter();
 
 				for byte in notif_area {
 					*byte = *notif_data.next().unwrap();

@@ -626,7 +626,7 @@ impl<'a> ReadCtrl<'a> {
 					)
 				};
 
-				let mut desc_iter = desc_slice.into_iter();
+				let mut desc_iter = desc_slice.iter();
 
 				for desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
