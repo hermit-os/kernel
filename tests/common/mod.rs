@@ -176,7 +176,7 @@ pub fn test_runner(tests: &[&TestDescAndFn]) {
 
 /// For test_case (without `TestDesc`)
 pub trait Testable {
-	fn run(&self) -> ();
+	fn run(&self);
 }
 
 impl<T> Testable for T
