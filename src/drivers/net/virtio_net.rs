@@ -246,14 +246,7 @@ impl RxQueues {
 				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
 			};
 
-			let num_buff: u16 = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				vq.size().into()
-			} else {
-				vq.size().into()
-			};
+			let num_buff: u16 = vq.size().into();
 
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
@@ -288,14 +281,7 @@ impl RxQueues {
 				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1514).unwrap())
 			};
 
-			let num_buff: u16 = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				vq.size().into()
-			} else {
-				vq.size().into()
-			};
+			let num_buff: u16 = vq.size().into();
 
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
