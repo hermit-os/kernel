@@ -835,6 +835,7 @@ impl<'a> WriteCtrl<'a> {
 	}
 }
 
+#[derive(Clone, Copy)]
 #[repr(C, align(16))]
 struct Descriptor {
 	address: u64,
