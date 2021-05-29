@@ -387,7 +387,7 @@ struct PageTable<L> {
 /// This additional trait is necessary to make use of Rust's specialization feature and provide a default
 /// implementation of some methods.
 trait PageTableMethods {
-	fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry>;
+	fn get_page_table_entry<S: PageSize>(&mut self, page: Page<S>) -> Option<PageTableEntry>;
 	fn map_page_in_this_table<S: PageSize>(
 		&mut self,
 		page: Page<S>,
@@ -438,7 +438,10 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	///
 	/// This is the default implementation called only for PT.
 	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
-	default fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
+	default fn get_page_table_entry<S: PageSize>(
+		&mut self,
+		page: Page<S>,
+	) -> Option<PageTableEntry> {
 		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
@@ -472,7 +475,7 @@ where
 	///
 	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
 	/// It overrides the default implementation above.
-	fn get_page_table_entry<S: PageSize>(&self, page: Page<S>) -> Option<PageTableEntry> {
+	fn get_page_table_entry<S: PageSize>(&mut self, page: Page<S>) -> Option<PageTableEntry> {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
 		let index = page.table_index::<L>();
 
@@ -534,12 +537,12 @@ where
 	/// Returns the next subtable for the given page in the page table hierarchy.
 	///
 	/// Must only be called if a page of this size is mapped in a subtable!
-	fn subtable<S: PageSize>(&self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
+	fn subtable<S: PageSize>(&mut self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
 		assert!(L::LEVEL > S::MAP_LEVEL);
 
 		// Calculate the address of the subtable.
 		let index = page.table_index::<L>();
-		let table_address = self as *const PageTable<L> as usize;
+		let table_address = self as *mut PageTable<L> as usize;
 		let subtable_address = (table_address << PAGE_MAP_BITS) | (index << PAGE_BITS);
 		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
 	}
