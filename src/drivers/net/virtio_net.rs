@@ -324,23 +324,12 @@ impl RxQueues {
 	}
 
 	fn get_next(&mut self) -> Option<Transfer> {
-		let transfer = match self.poll_queue.borrow_mut().pop_front() {
-			Some(transfer) => Some(transfer),
-			None => None,
-		};
+		self.poll_queue.borrow_mut().pop_front().or_else(|| {
+			// Check if any not yet provided transfers are in the queue.
+			self.poll();
 
-		match transfer {
-			Some(transfer) => Some(transfer),
-			None => {
-				// Check if any not yet provided transfers are in the queue.
-				self.poll();
-
-				match self.poll_queue.borrow_mut().pop_front() {
-					Some(transfer) => Some(transfer),
-					None => None,
-				}
-			}
-		}
+			self.poll_queue.borrow_mut().pop_front()
+		})
 	}
 
 	fn poll(&self) {

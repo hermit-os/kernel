@@ -788,7 +788,7 @@ impl Transfer {
 		match &self.transfer_tkn.as_ref().unwrap().state {
 			TransferState::Finished => {
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
-				let send_data = match &self
+				let send_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -796,12 +796,10 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.scat_cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::scat_cpy);
 
-				let recv_data = match &self
+				let recv_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -809,10 +807,8 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.scat_cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::scat_cpy);
 
 				Ok((send_data, recv_data))
 			}
@@ -840,7 +836,7 @@ impl Transfer {
 		match &self.transfer_tkn.as_ref().unwrap().state {
 			TransferState::Finished => {
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
-				let send_data = match &self
+				let send_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -848,12 +844,10 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::cpy);
 
-				let recv_data = match &self
+				let recv_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -861,10 +855,8 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::cpy);
 
 				Ok((send_data, recv_data))
 			}
