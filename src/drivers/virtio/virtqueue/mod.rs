@@ -144,7 +144,7 @@ impl Virtq {
 	///
 	/// Structures provided to the Queue must pass this test, otherwise the queue
 	/// currently panics.
-	pub fn check_bounds<T: AsSliceU8>(data: Box<T>) -> bool {
+	pub fn check_bounds<T: AsSliceU8>(data: &T) -> bool {
 		let slice = data.as_slice_u8();
 
 		let start_virt = (&slice[0] as *const u8) as usize;
