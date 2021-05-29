@@ -1076,8 +1076,7 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 							// Drivers MUST ignore BAR values different then specified in Virtio spec v1.1. - 4.1.4
 							// See Virtio specification v1.1. - 4.1.4.1
 							if bar.index <= 5 && bar.index == cap_raw.bar_index {
-								// Need to clone here as every PciCap carrys it's bar
-								break bar.clone();
+								break *bar;
 							}
 						}
 						None => {
