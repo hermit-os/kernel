@@ -14,10 +14,10 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 use self::consts::*;
 
@@ -502,7 +502,7 @@ struct VirtqDescriptorChain(Vec<VirtqDescriptor>);
 // Two descriptor chains are equal, if memory address of vec is equal.
 impl PartialEq for VirtqDescriptorChain {
 	fn eq(&self, other: &Self) -> bool {
-		&self.0 as *const _ == &other.0 as *const _
+		ptr::eq(&self.0, &other.0)
 	}
 }
 
