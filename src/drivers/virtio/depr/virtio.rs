@@ -128,8 +128,8 @@ impl<'a> Virtq<'a> {
 		let desc_table = desc_table.into_boxed_slice();
 		// We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
 		// init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
-		let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
-		let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
+		let avail_mem_box = vec![0; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
+		let used_mem_box = vec![0; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
 
 		// Leak memory so it wont get deallocated
 		// TODO: create appropriate mem-owner-model. Pin these?
