@@ -795,7 +795,7 @@ impl Transfer {
 					.buff_tkn
 					.as_ref()
 					.unwrap()
-					.send_buff
+					.recv_buff
 					.as_ref()
 					.map(Buffer::scat_cpy);
 
@@ -843,7 +843,7 @@ impl Transfer {
 					.buff_tkn
 					.as_ref()
 					.unwrap()
-					.send_buff
+					.recv_buff
 					.as_ref()
 					.map(Buffer::cpy);
 
