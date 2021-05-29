@@ -666,7 +666,7 @@ impl NotifCfg {
 		// See Virtio specification v1.1. - 4.1.4.4
 		//
 		// Base address here already includes offset!
-		let base_addr = VirtMemAddr::from(cap.bar.mem_addr + cap.offset);
+		let base_addr = cap.bar.mem_addr + cap.offset;
 
 		Some(NotifCfg {
 			base_addr: base_addr,

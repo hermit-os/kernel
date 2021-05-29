@@ -877,7 +877,7 @@ impl VirtioNetDriver {
 
 		let mut min_feat_set = FeatureSet::new(0);
 		min_feat_set.set_features(&min_feats);
-		let mut feats: Vec<Features> = Vec::from(min_feats);
+		let mut feats: Vec<Features> = min_feats;
 
 		// If wanted, push new features into feats here:
 		//
