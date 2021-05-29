@@ -101,7 +101,7 @@ impl DescrRing {
 
 		if let Some(buff) = pin.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
 			if buff.is_indirect() {
-				if desc_lst.len() == 0 {
+				if desc_lst.is_empty() {
 					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
 					is_indirect = true;
 				} else if desc_lst.len() == 1 {

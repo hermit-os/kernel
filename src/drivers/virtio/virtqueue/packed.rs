@@ -173,7 +173,7 @@ impl DescriptorRing {
 	) -> (Vec<Pinned<TransferToken>>, usize, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
-		assert!(tkn_lst.len() > 0);
+		assert!(!tkn_lst.is_empty());
 
 		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
 		let mut pind_lst = Vec::with_capacity(tkn_lst.len());
@@ -1083,7 +1083,7 @@ impl PackedVq {
 	/// updated notification flags before finishing transfers!
 	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
 		// Zero transfers are not allowed
-		assert!(tkns.len() > 0);
+		assert!(!tkns.is_empty());
 
 		let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
 
@@ -1143,7 +1143,7 @@ impl PackedVq {
 		notif: bool,
 	) {
 		// Zero transfers are not allowed
-		assert!(tkns.len() > 0);
+		assert!(!tkns.is_empty());
 
 		// We have to iterate here too, in order to ensure, tokens are placed into the await_queue
 		for tkn in tkns.iter_mut() {
