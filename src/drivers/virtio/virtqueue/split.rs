@@ -150,45 +150,41 @@ impl DescrRing {
 						0,
 					)
 				}
-			} else {
-				if len > 1 {
-					let next_index = {
-						let (desc, _) = desc_lst[desc_cnt + 1];
-						desc.id.as_ref().unwrap().0 - 1
-					};
+			} else if len > 1 {
+				let next_index = {
+					let (desc, _) = desc_lst[desc_cnt + 1];
+					desc.id.as_ref().unwrap().0 - 1
+				};
 
-					if is_write {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
-							next_index,
-						)
-					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
-							next_index,
-						)
-					}
+				if is_write {
+					Descriptor::new(
+						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+						desc.len as u32,
+						DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
+						next_index,
+					)
 				} else {
-					if is_write {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
-							0,
-						)
-					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							0,
-							0,
-						)
-					}
+					Descriptor::new(
+						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+						desc.len as u32,
+						DescrFlags::VIRTQ_DESC_F_NEXT.into(),
+						next_index,
+					)
 				}
+			} else if is_write {
+				Descriptor::new(
+					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+					desc.len as u32,
+					DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+					0,
+				)
+			} else {
+				Descriptor::new(
+					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+					desc.len as u32,
+					0,
+					0,
+				)
 			};
 
 			self.descr_table.raw[write_indx] = descriptor;
