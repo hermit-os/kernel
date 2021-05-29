@@ -915,7 +915,7 @@ impl VirtioNetDriver {
 							error!("Device features set, does not satisfy minimal features needed. Aborting!");
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						} else {
-							feats = match Features::into_features(dev_feats & drv_feats) {
+							feats = match Features::from_set(dev_feats & drv_feats) {
 								Some(feats) => feats,
 								None => {
 									error!("Feature negotiation failed with minimal feature set. Aborting!");
@@ -1551,7 +1551,7 @@ mod constants {
 		/// INFO: In case the FEATURES enum is changed, this function MUST also be adjusted to the new set!
 		//
 		// Really UGLY function, but currently the most convenienvt one to reduce the set of features for the driver easily!
-		pub fn into_features(feat_set: FeatureSet) -> Option<Vec<Features>> {
+		pub fn from_set(feat_set: FeatureSet) -> Option<Vec<Features>> {
 			let mut vec_of_feats: Vec<Features> = Vec::new();
 			let feats = feat_set.0;
 
