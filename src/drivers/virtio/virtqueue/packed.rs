@@ -24,10 +24,10 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.
@@ -126,7 +126,7 @@ impl DescriptorRing {
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
 		// refernece ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
 		// and do not care about the first element beeing unused.
-		let tkn_ref_ring = vec![0usize as *mut TransferToken; size + 1].into_boxed_slice();
+		let tkn_ref_ring = vec![ptr::null_mut(); size + 1].into_boxed_slice();
 
 		DescriptorRing {
 			ring,

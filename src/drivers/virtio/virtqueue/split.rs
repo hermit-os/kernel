@@ -23,10 +23,10 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -454,7 +454,7 @@ impl SplitVq {
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
-			ref_ring: vec![0 as *mut TransferToken; size as usize].into_boxed_slice(),
+			ref_ring: vec![ptr::null_mut(); size as usize].into_boxed_slice(),
 			descr_table,
 			avail_ring,
 			used_ring,
