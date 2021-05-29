@@ -110,6 +110,12 @@ impl Fuse {
 	}
 }
 
+impl Default for Fuse {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
 struct FuseFile {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
