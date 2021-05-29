@@ -522,10 +522,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		// set each of the transmitter start address descriptors
 		outl(
 			iobase + TSAD0,
-			virt_to_phys(txbuffer + 0 * TX_BUF_LEN)
-				.as_u64()
-				.try_into()
-				.unwrap(),
+			virt_to_phys(txbuffer).as_u64().try_into().unwrap(),
 		);
 		outl(
 			iobase + TSAD1,
