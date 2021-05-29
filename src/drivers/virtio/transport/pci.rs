@@ -253,7 +253,7 @@ impl Eq for PciCapRaw {}
 // In order to compare two PciCapRaw structs PartialEq is needed
 impl PartialEq for PciCapRaw {
 	fn eq(&self, other: &Self) -> bool {
-		if self.cap_vndr == other.cap_vndr
+		self.cap_vndr == other.cap_vndr
 			&& self.cap_next == other.cap_next
 			&& self.cap_len == other.cap_len
 			&& self.cfg_type == other.cfg_type
@@ -261,11 +261,6 @@ impl PartialEq for PciCapRaw {
 			&& self.id == other.id
 			&& self.offset == other.offset
 			&& self.length == other.length
-		{
-			true
-		} else {
-			false
-		}
 	}
 }
 
