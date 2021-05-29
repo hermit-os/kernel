@@ -1050,8 +1050,6 @@ impl VirtioNetDriver {
 					VqIndex::from(self.num_vqs),
 					self.dev_cfg.features.into(),
 				))));
-
-				self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 			} else {
 				self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(
 					&mut self.com_cfg,
@@ -1061,9 +1059,9 @@ impl VirtioNetDriver {
 					VqIndex::from(self.num_vqs),
 					self.dev_cfg.features.into(),
 				))));
-
-				self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 			}
+
+			self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 		}
 
 		// If device does not take care of MAC address, the driver has to create one

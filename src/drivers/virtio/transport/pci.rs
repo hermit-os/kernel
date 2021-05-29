@@ -422,12 +422,11 @@ impl<'a> VqCfgHandler<'a> {
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
 		self.raw.queue_select = self.vq_index;
 
-		if self.raw.queue_size < size {
-			self.raw.queue_size
-		} else {
+		if self.raw.queue_size >= size {
 			self.raw.queue_size = size;
-			self.raw.queue_size
 		}
+
+		self.raw.queue_size
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {

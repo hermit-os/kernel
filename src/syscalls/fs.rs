@@ -99,8 +99,9 @@ impl Filesystem {
 		&'a self,
 		path: &'b str,
 	) -> Result<(&'a (dyn PosixFileSystem + Send), &'b str), FileError> {
+		let mut pathsplit = path.splitn(3, '/');
+
 		if path.starts_with('/') {
-			let mut pathsplit = path.splitn(3, '/');
 			pathsplit.next(); // empty, since first char is /
 
 			let mount = pathsplit.next().unwrap();
@@ -114,7 +115,6 @@ impl Filesystem {
 				mount
 			);
 		} else {
-			let mut pathsplit = path.splitn(3, '/');
 			let mount = if !is_uhyve() {
 				option_env!("HERMIT_WD").unwrap_or("root")
 			} else {
