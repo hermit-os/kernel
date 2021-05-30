@@ -705,32 +705,20 @@ impl Transfer {
 	) -> Result<(Option<Vec<&mut [u8]>>, Option<Vec<&mut [u8]>>), VirtqError> {
 		match &self.transfer_tkn.as_ref().unwrap().state {
 			TransferState::Finished => {
-				// This is perfetctly fine, as we create references to two different data structures
-				// inside the TransferToken
-				let send_buff = unsafe {
-					let tkn_ref = self
+				let (send_buff, recv_buff) = {
+					let BufferToken {
+						send_buff,
+						recv_buff,
+						..
+					} = self
 						.transfer_tkn
-						.as_ref()
+						.as_mut()
 						.unwrap()
 						.buff_tkn
-						.as_ref()
+						.as_mut()
 						.unwrap();
 
-					let raw_ref = (tkn_ref as *const BufferToken) as *mut BufferToken;
-					(&mut *(raw_ref)).send_buff.as_mut()
-				};
-
-				let recv_buff = unsafe {
-					let tkn_ref = self
-						.transfer_tkn
-						.as_ref()
-						.unwrap()
-						.buff_tkn
-						.as_ref()
-						.unwrap();
-
-					let raw_ref = (tkn_ref as *const BufferToken) as *mut BufferToken;
-					(&mut *(raw_ref)).recv_buff.as_mut()
+					(send_buff.as_mut(), recv_buff.as_mut())
 				};
 
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
