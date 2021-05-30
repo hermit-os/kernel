@@ -101,7 +101,7 @@ impl DescrRing {
 
 		if let Some(buff) = pin.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
 			if buff.is_indirect() {
-				if desc_lst.len() == 0 {
+				if desc_lst.is_empty() {
 					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
 					is_indirect = true;
 				} else if desc_lst.len() == 1 {
@@ -494,7 +494,7 @@ impl SplitVq {
 		recv: Option<(*mut K, BuffSpec)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			(Some((send_data, send_spec)), None) => {
 				match send_spec {
 					BuffSpec::Single(size) => {
@@ -551,7 +551,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -589,7 +589,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
@@ -673,7 +673,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -711,7 +711,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
@@ -832,7 +832,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -880,7 +880,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -906,7 +906,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -954,7 +954,7 @@ impl SplitVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1014,7 +1014,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1037,7 +1037,7 @@ impl SplitVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self
@@ -1071,13 +1071,9 @@ impl SplitVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -1092,7 +1088,7 @@ impl SplitVq {
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Send buffer specified, No recv buffer
 			(Some(spec), None) => {
 				match spec {
@@ -1114,7 +1110,7 @@ impl SplitVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -1202,7 +1198,7 @@ impl SplitVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -1482,13 +1478,9 @@ impl SplitVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -1544,7 +1536,7 @@ impl SplitVq {
 		};
 
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Only recving descriptorsn (those are writabel by device)
 			(None, Some(recv_desc_lst)) => {
 				for desc in recv_desc_lst {

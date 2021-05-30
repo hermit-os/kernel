@@ -169,7 +169,7 @@ impl DescriptorRing {
 	) -> (Vec<Pinned<TransferToken>>, usize, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
-		assert!(tkn_lst.len() > 0);
+		assert!(!tkn_lst.is_empty());
 
 		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
 		let mut pind_lst = Vec::with_capacity(tkn_lst.len());
@@ -1063,7 +1063,7 @@ impl PackedVq {
 	/// updated notification flags before finishing transfers!
 	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
 		// Zero transfers are not allowed
-		assert!(tkns.len() > 0);
+		assert!(!tkns.is_empty());
 
 		let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
 
@@ -1123,7 +1123,7 @@ impl PackedVq {
 		notif: bool,
 	) {
 		// Zero transfers are not allowed
-		assert!(tkns.len() > 0);
+		assert!(!tkns.is_empty());
 
 		// We have to iterate here too, in order to ensure, tokens are placed into the await_queue
 		for tkn in tkns.iter_mut() {
@@ -1341,7 +1341,7 @@ impl PackedVq {
 		recv: Option<(*mut K, BuffSpec)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			(Some((send_data, send_spec)), None) => {
 				match send_spec {
 					BuffSpec::Single(size) => {
@@ -1398,7 +1398,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -1436,7 +1436,7 @@ impl PackedVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(Some(&desc_lst), None) {
@@ -1520,7 +1520,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -1558,7 +1558,7 @@ impl PackedVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self.create_indirect_ctrl(None, Some(&desc_lst)) {
@@ -1679,7 +1679,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -1727,7 +1727,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1753,7 +1753,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						Ok(TransferToken {
@@ -1801,7 +1801,7 @@ impl PackedVq {
 							};
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1861,7 +1861,7 @@ impl PackedVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let recv_data_slice = unsafe { (*recv_data).as_slice_u8() };
@@ -1884,7 +1884,7 @@ impl PackedVq {
 							);
 
 							// update the starting index for the next iteration
-							index = index + usize::from(*byte);
+							index += usize::from(*byte);
 						}
 
 						let ctrl_desc = match self
@@ -1918,13 +1918,9 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -1939,7 +1935,7 @@ impl PackedVq {
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Send buffer specified, No recv buffer
 			(Some(spec), None) => {
 				match spec {
@@ -1961,7 +1957,7 @@ impl PackedVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -2049,7 +2045,7 @@ impl PackedVq {
 									reusable: true,
 								})
 							}
-							Err(vq_err) => return Err(vq_err),
+							Err(vq_err) => Err(vq_err),
 						}
 					}
 					BuffSpec::Multiple(size_lst) => {
@@ -2329,13 +2325,9 @@ impl PackedVq {
 						})
 					}
 					(BuffSpec::Indirect(_), BuffSpec::Single(_))
-					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Indirect(_), BuffSpec::Multiple(_)) => Err(VirtqError::BufferInWithDirect),
 					(BuffSpec::Single(_), BuffSpec::Indirect(_))
-					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => {
-						return Err(VirtqError::BufferInWithDirect)
-					}
+					| (BuffSpec::Multiple(_), BuffSpec::Indirect(_)) => Err(VirtqError::BufferInWithDirect),
 				}
 			}
 		}
@@ -2390,7 +2382,7 @@ impl PackedVq {
 		};
 
 		match (send, recv) {
-			(None, None) => return Err(VirtqError::BufferNotSpecified),
+			(None, None) => Err(VirtqError::BufferNotSpecified),
 			// Only recving descriptorsn (those are writabel by device)
 			(None, Some(recv_desc_lst)) => {
 				for desc in recv_desc_lst {

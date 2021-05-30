@@ -2470,7 +2470,7 @@ impl MemPool {
 	fn pull_from_raw(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
-		assert!(slice.len() != 0);
+		assert!(!slice.is_empty());
 
 		// Assert descriptor does not cross a page barrier
 		let start_virt = (&slice[0] as *const u8) as usize;
@@ -2512,7 +2512,7 @@ impl MemPool {
 	fn pull_from_raw_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> MemDescr {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
-		assert!(slice.len() != 0);
+		assert!(!slice.is_empty());
 
 		// Assert descriptor does not cross a page barrier
 		let start_virt = (&slice[0] as *const u8) as usize;

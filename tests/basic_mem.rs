@@ -10,8 +10,6 @@ extern crate alloc;
 use alloc::vec::Vec;
 use core::mem::size_of;
 
-use hermit::{print, println};
-
 //no-std otherwise std::mem::size_of
 mod common;
 
@@ -37,7 +35,7 @@ where
 	let mut pattern: T = t_base_pattern;
 	// Fill pattern of type T with size_of<T> times the byte pattern
 	// The "pre" and "post part of the destination vector are later filled with this pattern
-	for i in 1..size_of::<T>() {
+	for _i in 1..size_of::<T>() {
 		pattern = pattern.shl(8) + t_base_pattern;
 	}
 	let pattern = pattern; // remove mut
@@ -116,7 +114,7 @@ where
 			memcmp(
 				b.as_ptr().offset(pre_dest_vec_size as isize) as *const u8,
 				a.as_ptr() as *const u8,
-				((size_of::<T>() as usize) * vec_size as usize),
+				(size_of::<T>() as usize) * vec_size as usize,
 			),
 			0
 		);
