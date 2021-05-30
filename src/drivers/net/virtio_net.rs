@@ -246,14 +246,7 @@ impl RxQueues {
 				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
 			};
 
-			let num_buff: u16 = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				vq.size().into()
-			} else {
-				vq.size().into()
-			};
+			let num_buff: u16 = vq.size().into();
 
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
@@ -288,14 +281,7 @@ impl RxQueues {
 				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1514).unwrap())
 			};
 
-			let num_buff: u16 = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				vq.size().into()
-			} else {
-				vq.size().into()
-			};
+			let num_buff: u16 = vq.size().into();
 
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
@@ -787,33 +773,27 @@ impl VirtioNetDriver {
 		mut caps_coll: UniCapsColl,
 		adapter: &PciAdapter,
 	) -> Result<Self, error::VirtioNetError> {
-		let com_cfg = loop {
-			match caps_coll.get_com_cfg() {
-				Some(com_cfg) => break com_cfg,
-				None => {
-					error!("No common config. Aborting!");
-					return Err(error::VirtioNetError::NoComCfg(adapter.device_id));
-				}
+		let com_cfg = match caps_coll.get_com_cfg() {
+			Some(com_cfg) => com_cfg,
+			None => {
+				error!("No common config. Aborting!");
+				return Err(error::VirtioNetError::NoComCfg(adapter.device_id));
 			}
 		};
 
-		let isr_stat = loop {
-			match caps_coll.get_isr_cfg() {
-				Some(isr_stat) => break isr_stat,
-				None => {
-					error!("No ISR status config. Aborting!");
-					return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id));
-				}
+		let isr_stat = match caps_coll.get_isr_cfg() {
+			Some(isr_stat) => isr_stat,
+			None => {
+				error!("No ISR status config. Aborting!");
+				return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id));
 			}
 		};
 
-		let notif_cfg = loop {
-			match caps_coll.get_notif_cfg() {
-				Some(notif_cfg) => break notif_cfg,
-				None => {
-					error!("No notif config. Aborting!");
-					return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id));
-				}
+		let notif_cfg = match caps_coll.get_notif_cfg() {
+			Some(notif_cfg) => notif_cfg,
+			None => {
+				error!("No notif config. Aborting!");
+				return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id));
 			}
 		};
 
