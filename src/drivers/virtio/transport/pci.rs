@@ -253,7 +253,7 @@ impl Eq for PciCapRaw {}
 // In order to compare two PciCapRaw structs PartialEq is needed
 impl PartialEq for PciCapRaw {
 	fn eq(&self, other: &Self) -> bool {
-		if self.cap_vndr == other.cap_vndr
+		self.cap_vndr == other.cap_vndr
 			&& self.cap_next == other.cap_next
 			&& self.cap_len == other.cap_len
 			&& self.cfg_type == other.cfg_type
@@ -261,11 +261,6 @@ impl PartialEq for PciCapRaw {
 			&& self.id == other.id
 			&& self.offset == other.offset
 			&& self.length == other.length
-		{
-			true
-		} else {
-			false
-		}
 	}
 }
 
@@ -422,12 +417,11 @@ impl<'a> VqCfgHandler<'a> {
 	pub fn set_vq_size(&mut self, size: u16) -> u16 {
 		self.raw.queue_select = self.vq_index;
 
-		if self.raw.queue_size < size {
-			self.raw.queue_size
-		} else {
+		if self.raw.queue_size >= size {
 			self.raw.queue_size = size;
-			self.raw.queue_size
 		}
+
+		self.raw.queue_size
 	}
 
 	pub fn set_ring_addr(&mut self, addr: PhysAddr) {
@@ -667,7 +661,7 @@ impl NotifCfg {
 		// See Virtio specification v1.1. - 4.1.4.4
 		//
 		// Base address here already includes offset!
-		let base_addr = VirtMemAddr::from(cap.bar.mem_addr + cap.offset);
+		let base_addr = cap.bar.mem_addr + cap.offset;
 
 		Some(NotifCfg {
 			base_addr: base_addr,
@@ -720,7 +714,7 @@ impl NotifCtrl {
 		if self.f_notif_data {
 			unsafe {
 				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 4);
-				let mut notif_data = notif_data.into_iter();
+				let mut notif_data = notif_data.iter();
 
 				for byte in notif_area {
 					*byte = *notif_data.next().unwrap();
@@ -729,7 +723,7 @@ impl NotifCtrl {
 		} else {
 			unsafe {
 				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 2);
-				let mut notif_data = notif_data.into_iter();
+				let mut notif_data = notif_data.iter();
 
 				for byte in notif_area {
 					*byte = *notif_data.next().unwrap();
@@ -1081,11 +1075,8 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 						Some(bar) => {
 							// Drivers MUST ignore BAR values different then specified in Virtio spec v1.1. - 4.1.4
 							// See Virtio specification v1.1. - 4.1.4.1
-							if bar.index <= 5 {
-								if bar.index == cap_raw.bar_index {
-									// Need to clone here as every PciCap carrys it's bar
-									break bar.clone();
-								}
+							if bar.index <= 5 && bar.index == cap_raw.bar_index {
+								break *bar;
 							}
 						}
 						None => {

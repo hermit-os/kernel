@@ -369,8 +369,8 @@ impl TaskFrame for Task {
 			if let Some(tls) = &self.tls {
 				(*state).fs = tls.get_fs().as_u64();
 			}
-			(*state).rip = task_start as u64;
-			(*state).rdi = func as u64;
+			(*state).rip = task_start as usize as u64;
+			(*state).rdi = func as usize as u64;
 			(*state).rsi = arg as u64;
 
 			// per default we disable interrupts

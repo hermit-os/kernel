@@ -22,11 +22,11 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::mem;
 use core::ops::Deref;
 use core::result::Result;
+use core::{cell::RefCell, cmp::Ordering};
 
 use crate::drivers::virtio::env::memory::{MemLen, MemOff};
 use crate::drivers::virtio::error::VirtioError;
@@ -324,23 +324,12 @@ impl RxQueues {
 	}
 
 	fn get_next(&mut self) -> Option<Transfer> {
-		let transfer = match self.poll_queue.borrow_mut().pop_front() {
-			Some(transfer) => Some(transfer),
-			None => None,
-		};
+		self.poll_queue.borrow_mut().pop_front().or_else(|| {
+			// Check if any not yet provided transfers are in the queue.
+			self.poll();
 
-		match transfer {
-			Some(transfer) => Some(transfer),
-			None => {
-				// Check if any not yet provided transfers are in the queue.
-				self.poll();
-
-				match self.poll_queue.borrow_mut().pop_front() {
-					Some(transfer) => Some(transfer),
-					None => None,
-				}
-			}
-		}
+			self.poll_queue.borrow_mut().pop_front()
+		})
 	}
 
 	fn poll(&self) {
@@ -461,14 +450,13 @@ impl TxQueues {
 		while let Some(mut tkn) = self.ready_queue.pop() {
 			let (send_len, _) = tkn.len();
 
-			if send_len == len {
-				return Some((tkn, 0));
-			} else if send_len > len {
-				tkn.restr_size(Some(len), None).unwrap();
-				return Some((tkn, 0));
-			} else {
-				// Otherwise we are freeing the queue from the token.
-				drop(tkn);
+			match send_len.cmp(&len) {
+				Ordering::Less => {}
+				Ordering::Equal => return Some((tkn, 0)),
+				Ordering::Greater => {
+					tkn.restr_size(Some(len), None).unwrap();
+					return Some((tkn, 0));
+				}
 			}
 		}
 
@@ -480,14 +468,13 @@ impl TxQueues {
 			let mut tkn = transfer.reuse().unwrap();
 			let (send_len, _) = tkn.len();
 
-			if send_len == len {
-				return Some((tkn, 0));
-			} else if send_len > len {
-				tkn.restr_size(Some(len), None).unwrap();
-				return Some((tkn, 0));
-			} else {
-				// Otherwise we are freeing the queue from the token.
-				drop(tkn);
+			match send_len.cmp(&len) {
+				Ordering::Less => {}
+				Ordering::Equal => return Some((tkn, 0)),
+				Ordering::Greater => {
+					tkn.restr_size(Some(len), None).unwrap();
+					return Some((tkn, 0));
+				}
 			}
 		}
 
@@ -890,7 +877,7 @@ impl VirtioNetDriver {
 
 		let mut min_feat_set = FeatureSet::new(0);
 		min_feat_set.set_features(&min_feats);
-		let mut feats: Vec<Features> = Vec::from(min_feats);
+		let mut feats: Vec<Features> = min_feats;
 
 		// If wanted, push new features into feats here:
 		//
@@ -928,7 +915,7 @@ impl VirtioNetDriver {
 							error!("Device features set, does not satisfy minimal features needed. Aborting!");
 							return Err(VirtioNetError::FailFeatureNeg(self.dev_cfg.dev_id));
 						} else {
-							feats = match Features::into_features(dev_feats & drv_feats) {
+							feats = match Features::from_set(dev_feats & drv_feats) {
 								Some(feats) => feats,
 								None => {
 									error!("Feature negotiation failed with minimal feature set. Aborting!");
@@ -997,7 +984,7 @@ impl VirtioNetDriver {
 
 	/// Negotiates a subset of features, understood and wanted by both the OS
 	/// and the device.
-	fn negotiate_features(&mut self, wanted_feats: &Vec<Features>) -> Result<(), VirtioNetError> {
+	fn negotiate_features(&mut self, wanted_feats: &[Features]) -> Result<(), VirtioNetError> {
 		let mut drv_feats = FeatureSet::new(0);
 
 		for feat in wanted_feats.iter() {
@@ -1008,7 +995,7 @@ impl VirtioNetDriver {
 
 		// Checks if the selected feature set is compatible with requirements for
 		// features according to Virtio spec. v1.1 - 5.1.3.1.
-		match FeatureSet::check_features(&wanted_feats) {
+		match FeatureSet::check_features(wanted_feats) {
 			Ok(_) => {
 				info!("Feature set wanted by network driver are in conformance with specification.")
 			}
@@ -1050,8 +1037,6 @@ impl VirtioNetDriver {
 					VqIndex::from(self.num_vqs),
 					self.dev_cfg.features.into(),
 				))));
-
-				self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 			} else {
 				self.ctrl_vq = CtrlQueue(Some(Rc::new(Virtq::new(
 					&mut self.com_cfg,
@@ -1061,9 +1046,9 @@ impl VirtioNetDriver {
 					VqIndex::from(self.num_vqs),
 					self.dev_cfg.features.into(),
 				))));
-
-				self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 			}
+
+			self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
 		}
 
 		// If device does not take care of MAC address, the driver has to create one
@@ -1566,7 +1551,7 @@ mod constants {
 		/// INFO: In case the FEATURES enum is changed, this function MUST also be adjusted to the new set!
 		//
 		// Really UGLY function, but currently the most convenienvt one to reduce the set of features for the driver easily!
-		pub fn into_features(feat_set: FeatureSet) -> Option<Vec<Features>> {
+		pub fn from_set(feat_set: FeatureSet) -> Option<Vec<Features>> {
 			let mut vec_of_feats: Vec<Features> = Vec::new();
 			let feats = feat_set.0;
 
@@ -1772,7 +1757,7 @@ mod constants {
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.
-		pub fn check_features(feats: &Vec<Features>) -> Result<(), VirtioNetError> {
+		pub fn check_features(feats: &[Features]) -> Result<(), VirtioNetError> {
 			let mut feat_bits = 0u64;
 
 			for feat in feats.iter() {
@@ -1921,9 +1906,8 @@ mod constants {
 
 		/// Sets features contained in feats to true.
 		///
-		/// WARN: Features should be checked before using this function via the
-		/// `FeatureSet::check_features(feats: Vec<Features>) -> Result<(), VirtioNetError>` function.
-		pub fn set_features(&mut self, feats: &Vec<Features>) {
+		/// WARN: Features should be checked before using this function via the [`check_features`] function.
+		pub fn set_features(&mut self, feats: &[Features]) {
 			for feat in feats {
 				self.0 |= *feat;
 			}

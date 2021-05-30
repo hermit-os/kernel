@@ -85,7 +85,7 @@ pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	let mut reset_nic = false;
 
 	// check if the driver should be in the polling mode
-	while POLLING.swap(false, Ordering::SeqCst) == true {
+	while POLLING.swap(false, Ordering::SeqCst) {
 		reset_nic = true;
 
 		let core_scheduler = core_scheduler();
@@ -114,10 +114,7 @@ pub fn netwait(handle: usize, millis: Option<u64>) {
 	if is_polling {
 		set_polling_mode(true);
 	} else {
-		let wakeup_time = match millis {
-			Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
-			_ => None,
-		};
+		let wakeup_time = millis.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
 		let mut guard = NIC_QUEUE.lock();
 		let core_scheduler = core_scheduler();
 

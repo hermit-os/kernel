@@ -16,6 +16,7 @@
 //! use the respective virtqueue structs directly.
 #![allow(dead_code)]
 #![allow(unused)]
+#![allow(clippy::type_complexity)]
 
 pub mod packed;
 pub mod split;
@@ -48,9 +49,9 @@ impl From<u16> for VqIndex {
 	}
 }
 
-impl Into<u16> for VqIndex {
-	fn into(self) -> u16 {
-		self.0
+impl From<VqIndex> for u16 {
+	fn from(i: VqIndex) -> Self {
+		i.0
 	}
 }
 
@@ -144,7 +145,7 @@ impl Virtq {
 	///
 	/// Structures provided to the Queue must pass this test, otherwise the queue
 	/// currently panics.
-	pub fn check_bounds<T: AsSliceU8>(data: Box<T>) -> bool {
+	pub fn check_bounds<T: AsSliceU8>(data: &T) -> bool {
 		let slice = data.as_slice_u8();
 
 		let start_virt = (&slice[0] as *const u8) as usize;
@@ -788,7 +789,7 @@ impl Transfer {
 		match &self.transfer_tkn.as_ref().unwrap().state {
 			TransferState::Finished => {
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
-				let send_data = match &self
+				let send_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -796,12 +797,10 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.scat_cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::scat_cpy);
 
-				let recv_data = match &self
+				let recv_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -809,10 +808,8 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.scat_cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::scat_cpy);
 
 				Ok((send_data, recv_data))
 			}
@@ -840,7 +837,7 @@ impl Transfer {
 		match &self.transfer_tkn.as_ref().unwrap().state {
 			TransferState::Finished => {
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
-				let send_data = match &self
+				let send_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -848,12 +845,10 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::cpy);
 
-				let recv_data = match &self
+				let recv_data = self
 					.transfer_tkn
 					.as_ref()
 					.unwrap()
@@ -861,10 +856,8 @@ impl Transfer {
 					.as_ref()
 					.unwrap()
 					.send_buff
-				{
-					Some(buff) => Some(buff.cpy()),
-					None => None,
-				};
+					.as_ref()
+					.map(Buffer::cpy);
 
 				Ok((send_data, recv_data))
 			}
@@ -2837,7 +2830,7 @@ impl BitAnd<DescrFlags> for u16 {
 
 impl PartialEq<DescrFlags> for u16 {
 	fn eq(&self, other: &DescrFlags) -> bool {
-		*self == u16::from(*other)
+		self == other
 	}
 }
 

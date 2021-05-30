@@ -80,10 +80,7 @@ impl Semaphore {
 		let core_scheduler = core_scheduler();
 		core_scheduler.set_current_task_wakeup_reason(WakeupReason::Custom);
 
-		let wakeup_time = match time {
-			Some(ms) => Some(crate::arch::processor::get_timer_ticks() + ms * 1000),
-			_ => None,
-		};
+		let wakeup_time = time.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
 
 		// Loop until we have acquired the semaphore.
 		loop {

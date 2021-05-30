@@ -71,9 +71,9 @@ pub use crate::arch::x86_64::kernel::{
 };
 
 #[cfg(test)]
-pub fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {}
+pub unsafe fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {}
 #[cfg(test)]
-pub fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {}
+pub unsafe fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {}
 
 #[cfg(not(test))]
 extern "C" {

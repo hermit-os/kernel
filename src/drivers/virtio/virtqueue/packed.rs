@@ -24,10 +24,10 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.
@@ -54,11 +54,7 @@ impl WrapCount {
 	/// If WrapCount(true) returns WrapCount(false),
 	/// if WrapCount(false) returns WrapCount(true).
 	fn wrap(&mut self) {
-		if self.0 == false {
-			self.0 = true;
-		} else {
-			self.0 = false;
-		}
+		self.0 = !self.0
 	}
 
 	/// Creates avail and used flags inside u16 in accordance to the
@@ -67,7 +63,7 @@ impl WrapCount {
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to NOT match the WrapCount.
 	fn as_flags_avail(&self) -> u16 {
-		if self.0 == true {
+		if self.0 {
 			1 << 7
 		} else {
 			1 << 15
@@ -80,7 +76,7 @@ impl WrapCount {
 	/// I.e.: Set avail flag to match the WrapCount and the used flag
 	/// to also match the WrapCount.
 	fn as_flags_used(&self) -> u16 {
-		if self.0 == true {
+		if self.0 {
 			1 << 7 | 1 << 15
 		} else {
 			0
@@ -126,7 +122,7 @@ impl DescriptorRing {
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
 		// refernece ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
 		// and do not care about the first element beeing unused.
-		let tkn_ref_ring = vec![0usize as *mut TransferToken; size + 1].into_boxed_slice();
+		let tkn_ref_ring = vec![ptr::null_mut(); size + 1].into_boxed_slice();
 
 		DescriptorRing {
 			ring,
@@ -630,7 +626,7 @@ impl<'a> ReadCtrl<'a> {
 					)
 				};
 
-				let mut desc_iter = desc_slice.into_iter();
+				let mut desc_iter = desc_slice.iter();
 
 				for desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
@@ -839,6 +835,7 @@ impl<'a> WriteCtrl<'a> {
 	}
 }
 
+#[derive(Clone, Copy)]
 #[repr(C, align(16))]
 struct Descriptor {
 	address: u64,

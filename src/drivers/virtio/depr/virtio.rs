@@ -5,6 +5,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#![allow(clippy::vec_box)]
+
 use crate::arch::kernel::pci::{self, PciAdapter};
 
 use crate::arch::mm::paging;
@@ -14,10 +16,10 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 use self::consts::*;
 
@@ -128,8 +130,8 @@ impl<'a> Virtq<'a> {
 		let desc_table = desc_table.into_boxed_slice();
 		// We need to be careful not to overflow the stack here. Use into_boxed_slice to get safe heap mem of desired sizes
 		// init it as u16 to make casting to first to u16 elements easy. Need to divide by 2 compared to size in spec
-		let avail_mem_box = vec![0 as u16; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
-		let used_mem_box = vec![0 as u16; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
+		let avail_mem_box = vec![0; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
+		let used_mem_box = vec![0; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
 
 		// Leak memory so it wont get deallocated
 		// TODO: create appropriate mem-owner-model. Pin these?
@@ -502,7 +504,7 @@ struct VirtqDescriptorChain(Vec<VirtqDescriptor>);
 // Two descriptor chains are equal, if memory address of vec is equal.
 impl PartialEq for VirtqDescriptorChain {
 	fn eq(&self, other: &Self) -> bool {
-		&self.0 as *const _ == &other.0 as *const _
+		ptr::eq(&self.0, &other.0)
 	}
 }
 

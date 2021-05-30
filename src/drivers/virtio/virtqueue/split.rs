@@ -23,10 +23,10 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
 use core::convert::TryFrom;
 use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
+use core::{cell::RefCell, ptr};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -150,45 +150,41 @@ impl DescrRing {
 						0,
 					)
 				}
-			} else {
-				if len > 1 {
-					let next_index = {
-						let (desc, _) = desc_lst[desc_cnt + 1];
-						desc.id.as_ref().unwrap().0 - 1
-					};
+			} else if len > 1 {
+				let next_index = {
+					let (desc, _) = desc_lst[desc_cnt + 1];
+					desc.id.as_ref().unwrap().0 - 1
+				};
 
-					if is_write {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
-							next_index,
-						)
-					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_NEXT.into(),
-							next_index,
-						)
-					}
+				if is_write {
+					Descriptor::new(
+						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+						desc.len as u32,
+						DescrFlags::VIRTQ_DESC_F_WRITE | DescrFlags::VIRTQ_DESC_F_NEXT,
+						next_index,
+					)
 				} else {
-					if is_write {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							DescrFlags::VIRTQ_DESC_F_WRITE.into(),
-							0,
-						)
-					} else {
-						Descriptor::new(
-							paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
-							desc.len as u32,
-							0,
-							0,
-						)
-					}
+					Descriptor::new(
+						paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+						desc.len as u32,
+						DescrFlags::VIRTQ_DESC_F_NEXT.into(),
+						next_index,
+					)
 				}
+			} else if is_write {
+				Descriptor::new(
+					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+					desc.len as u32,
+					DescrFlags::VIRTQ_DESC_F_WRITE.into(),
+					0,
+				)
+			} else {
+				Descriptor::new(
+					paging::virt_to_phys(VirtAddr::from(desc.ptr as u64)).into(),
+					desc.len as u32,
+					0,
+					0,
+				)
 			};
 
 			self.descr_table.raw[write_indx] = descriptor;
@@ -338,7 +334,7 @@ impl SplitVq {
 			let mut index = index.iter();
 			// Even on 64bit systems this is fine, as we have a queue_size < 2^15!
 			let det_notif_data: u16 = (next_off as u16) >> 1;
-			let flags = (det_notif_data | (u16::from(next_wrap) << 15)).to_le_bytes();
+			let flags = (det_notif_data | (next_wrap << 15)).to_le_bytes();
 			let mut flags = flags.iter();
 			let mut notif_data: [u8; 4] = [0, 0, 0, 0];
 
@@ -458,7 +454,7 @@ impl SplitVq {
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
-			ref_ring: vec![0 as *mut TransferToken; size as usize].into_boxed_slice(),
+			ref_ring: vec![ptr::null_mut(); size as usize].into_boxed_slice(),
 			descr_table,
 			avail_ring,
 			used_ring,
