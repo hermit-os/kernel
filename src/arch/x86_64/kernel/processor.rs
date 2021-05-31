@@ -341,7 +341,7 @@ impl CpuFrequency {
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
-		_stack_frame: &mut irq::ExceptionStackFrame,
+		_stack_frame: irq::ExceptionStackFrame,
 	) {
 		unsafe {
 			MEASUREMENT_TIMER_TICKS += 1;

@@ -577,7 +577,7 @@ where
 }
 
 pub extern "x86-interrupt" fn page_fault_handler(
-	stack_frame: &mut irq::ExceptionStackFrame,
+	stack_frame: irq::ExceptionStackFrame,
 	error_code: u64,
 ) {
 	let virtual_address = unsafe { controlregs::cr2() };
