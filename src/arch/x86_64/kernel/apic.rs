@@ -155,7 +155,7 @@ impl fmt::Display for IoApicRecord {
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: irq::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
 	unsafe {
@@ -164,7 +164,7 @@ extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: &mut irq::ExceptionSta
 	eoi();
 }
 
-extern "x86-interrupt" fn error_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn error_interrupt_handler(stack_frame: irq::ExceptionStackFrame) {
 	error!("APIC LVT Error Interrupt");
 	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
 	error!("{:#?}", stack_frame);
@@ -172,13 +172,13 @@ extern "x86-interrupt" fn error_interrupt_handler(stack_frame: &mut irq::Excepti
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: &mut irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: irq::ExceptionStackFrame) {
 	error!("Spurious Interrupt: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn wakeup_handler(_stack_frame: &mut irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn wakeup_handler(_stack_frame: irq::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
