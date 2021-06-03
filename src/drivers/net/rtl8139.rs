@@ -577,14 +577,14 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 	add_irq_name(adapter.irq as u32, "rtl8139_net");
 
 	Ok(RTL8139Driver {
-		iobase: iobase,
+		iobase,
 		mtu: 1500,
 		irq: adapter.irq,
-		mac: mac,
+		mac,
 		tx_in_use: [false; NO_TX_BUFFERS],
 		tx_counter: 0,
-		rxbuffer: rxbuffer,
+		rxbuffer,
 		rxpos: 0,
-		txbuffer: txbuffer,
+		txbuffer,
 	})
 }

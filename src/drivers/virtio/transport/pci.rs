@@ -664,7 +664,7 @@ impl NotifCfg {
 		let base_addr = cap.bar.mem_addr + cap.offset;
 
 		Some(NotifCfg {
-			base_addr: base_addr,
+			base_addr,
 			notify_off_multiplier,
 			rank: cap.id,
 			length: cap.length,

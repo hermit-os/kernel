@@ -1434,7 +1434,7 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -1557,7 +1557,7 @@ impl PackedVq {
 								send_buff: None,
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -1890,7 +1890,7 @@ impl PackedVq {
 								}),
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: send_desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: send_data_slice.len(),
 									next_write: 0,
 								}),
