@@ -838,42 +838,27 @@ impl Descriptor {
 	}
 
 	fn to_le_bytes(self) -> [u8; 16] {
-		let mut desc_bytes_cnt = 0usize;
 		// 128 bits long raw descriptor bytes
 		let mut desc_bytes: [u8; 16] = [0; 16];
 
 		// Call to little endian, as device will read this and
 		// Virtio devices are inherently little endian coded.
 		let mem_addr: [u8; 8] = self.address.to_le_bytes();
-		// Write address as bytes in raw
-		for byte in 0..8 {
-			desc_bytes[desc_bytes_cnt] = mem_addr[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[0..8].copy_from_slice(&mem_addr);
 
 		// Must be 32 bit in order to fulfill specification.
 		// MemPool.pull and .pull_untracked ensure this automatically
 		// which makes this cast safe.
 		let mem_len: [u8; 4] = self.len.to_le_bytes();
-		// Write length of memory area as bytes in raw
-		for byte in 0..4 {
-			desc_bytes[desc_bytes_cnt] = mem_len[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[8..12].copy_from_slice(&mem_len);
 
 		// Write BuffID as bytes in raw.
 		let id: [u8; 2] = self.buff_id.to_le_bytes();
-		for byte in 0..2usize {
-			desc_bytes[desc_bytes_cnt] = id[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[12..14].copy_from_slice(&id);
 
 		// Write flags as bytes in raw.
 		let flags: [u8; 2] = self.flags.to_le_bytes();
-		// Write of flags as bytes in raw
-		for byte in 0..2usize {
-			desc_bytes[desc_bytes_cnt] = flags[byte];
-		}
+		desc_bytes[14..16].copy_from_slice(&flags);
 
 		desc_bytes
 	}

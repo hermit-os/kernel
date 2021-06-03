@@ -15,7 +15,6 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::redundant_field_names)]
 #![allow(clippy::identity_op)]
-#![allow(clippy::needless_range_loop)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]

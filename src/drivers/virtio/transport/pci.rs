@@ -1003,15 +1003,12 @@ fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
 	debug!("Converting read word from PCI device config space into native endian bytes.");
 
 	// Write words sequentialy into array
-	let mut index = 0;
-	for i in 0..4u32 {
+	for i in 0..4 {
 		// Read word need to be converted to little endian bytes as PCI is little endian.
 		// Intepretation of multi byte values needs to be swapped for big endian machines
 		let word: [u8; 4] = env::pci::read_config(adapter, register + 4 * i).to_le_bytes();
-		for j in 0..4 {
-			quadruple_word[index] = word[j];
-			index += 1;
-		}
+		let i = 4 * i as usize;
+		quadruple_word[i..i + 4].copy_from_slice(&word);
 	}
 
 	PciCapRaw {
