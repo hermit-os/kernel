@@ -428,7 +428,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 
 	let mac: [u8; 6] = unsafe {
 		[
-			inb(iobase + IDR0 + 0),
+			inb(iobase + IDR0),
 			inb(iobase + IDR0 + 1),
 			inb(iobase + IDR0 + 2),
 			inb(iobase + IDR0 + 3),
@@ -526,7 +526,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		);
 		outl(
 			iobase + TSAD1,
-			virt_to_phys(txbuffer + 1 * TX_BUF_LEN)
+			virt_to_phys(txbuffer + TX_BUF_LEN)
 				.as_u64()
 				.try_into()
 				.unwrap(),
