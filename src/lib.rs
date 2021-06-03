@@ -42,7 +42,6 @@
 #![feature(alloc_error_handler)]
 #![feature(vec_into_raw_parts)]
 #![feature(drain_filter)]
-#![allow(unused_macros)]
 #![no_std]
 #![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
 #![cfg_attr(target_os = "hermit", cfg_attr(test, test_runner(crate::test_runner)))]

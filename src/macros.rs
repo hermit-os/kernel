@@ -53,6 +53,7 @@ macro_rules! switch_to_kernel {
 	}
 }
 
+#[cfg(feature = "newlib")]
 macro_rules! switch_to_user {
 	() => {
 		use crate::arch::kernel::percore::*;
