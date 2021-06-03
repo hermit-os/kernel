@@ -39,7 +39,6 @@ macro_rules! println {
 macro_rules! switch_to_kernel {
 	() => {
 		crate::arch::irq::disable();
-		#[allow(unused)]
 		unsafe {
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
@@ -53,13 +52,13 @@ macro_rules! switch_to_kernel {
 	}
 }
 
+#[cfg(feature = "newlib")]
 macro_rules! switch_to_user {
 	() => {
 		use crate::arch::kernel::percore::*;
 
 		crate::arch::irq::disable();
 		let user_stack_pointer = core_scheduler().get_current_user_stack();
-		#[allow(unused)]
 		unsafe {
 			// Switch to the user stack
 			llvm_asm!("mov $0, %rsp" :: "r"(user_stack_pointer) :: "volatile");
@@ -72,8 +71,10 @@ macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		use crate::arch::kernel::percore::*;
 
-		#[allow(unused)]
 		#[allow(clippy::diverging_sub_expression)]
+		#[allow(unused_unsafe)]
+		#[allow(unused_variables)]
+		#[allow(unreachable_code)]
 		unsafe {
 			crate::arch::irq::disable();
 			let user_stack_pointer;

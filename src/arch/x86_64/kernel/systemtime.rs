@@ -56,17 +56,13 @@ impl Rtc {
 		hour & CMOS_12_HOUR_PM_FLAG > 0
 	}
 
-	/**
-	 * Returns the binary value for a given value in BCD (Binary-Coded Decimal).
-	 */
+	/// Returns the binary value for a given value in BCD (Binary-Coded Decimal).
 	const fn convert_bcd_value(value: u8) -> u8 {
 		((value / 16) * 10) + (value & 0xF)
 	}
 
-	/**
-		* Returns the number of microseconds since the epoch from a given date.
-		* Inspired by Linux Kernel's mktime64(), see kernel/time/time.c.
-		*/
+	/// Returns the number of microseconds since the epoch from a given date.
+	/// Inspired by Linux Kernel's mktime64(), see kernel/time/time.c.
 	fn microseconds_from_date(
 		year: u16,
 		month: u8,

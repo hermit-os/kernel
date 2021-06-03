@@ -292,7 +292,7 @@ impl TaskTLS {
 		Self {
 			address: ptr,
 			fs: tls_pointer,
-			layout: layout,
+			layout,
 		}
 	}
 

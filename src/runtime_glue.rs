@@ -18,7 +18,7 @@ use core::panic::PanicInfo;
 #[cfg(target_os = "hermit")]
 #[linkage = "weak"]
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo<'_>) -> ! {
 	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
 
 	if let Some(location) = info.location() {

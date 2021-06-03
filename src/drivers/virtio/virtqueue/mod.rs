@@ -15,20 +15,19 @@
 //! Drivers who need a more fine grained access to the specifc queues must
 //! use the respective virtqueue structs directly.
 #![allow(dead_code)]
-#![allow(unused)]
 #![allow(clippy::type_complexity)]
 
 pub mod packed;
 pub mod split;
 
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::{paging, VirtAddr};
 
 use self::error::{BufferError, VirtqError};
 use self::packed::PackedVq;
 use self::split::SplitVq;
 
-use super::transport::pci::{ComCfg, IsrStatus, NotifCfg};
+use super::transport::pci::{ComCfg, NotifCfg};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
@@ -267,7 +266,6 @@ impl Virtq {
 
 				used_vqs.push((vq, new_tkn_lst))
 			}
-			used = false;
 		}
 
 		let mut transfer_lst = Vec::new();
@@ -329,7 +327,6 @@ impl Virtq {
 
 				used_vqs.push((vq, new_tkn_lst))
 			}
-			used = false;
 		}
 
 		for (vq, tkn_lst) in used_vqs {
@@ -360,11 +357,11 @@ impl Virtq {
 		match vq_type {
 			VqType::Packed => match PackedVq::new(com_cfg, notif_cfg, size, index, feats) {
 				Ok(packed_vq) => Virtq::Packed(packed_vq),
-				Err(vq_error) => panic!("Currently panics if queue fails to be created"),
+				Err(_vq_error) => panic!("Currently panics if queue fails to be created"),
 			},
 			VqType::Split => match SplitVq::new(com_cfg, notif_cfg, size, index, feats) {
 				Ok(split_vq) => Virtq::Split(split_vq),
-				Err(vq_error) => panic!("Currently panics if queue fails to be created"),
+				Err(_vq_error) => panic!("Currently panics if queue fails to be created"),
 			},
 		}
 	}
@@ -451,8 +448,8 @@ impl Virtq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		rc_self: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match self {
 			Virtq::Packed(vq) => vq.prep_transfer_from_raw(rc_self, send, recv),
@@ -504,8 +501,8 @@ impl Virtq {
 	pub fn prep_buffer(
 		&self,
 		rc_self: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match self {
 			Virtq::Packed(vq) => vq.prep_buffer(rc_self, send, recv),
@@ -1200,98 +1197,92 @@ impl BufferToken {
 	fn reset_purge(mut self) -> Self {
 		let mut ctrl_desc_cnt = 0usize;
 
-		match self.send_buff.as_mut() {
-			Some(buff) => {
-				buff.reset_write();
-				let mut init_buff_len = 0usize;
+		if let Some(buff) = self.send_buff.as_mut() {
+			buff.reset_write();
+			let mut init_buff_len = 0usize;
 
-				match buff.get_ctrl_desc_mut() {
-					Some(ctrl_desc) => {
-						let ind_desc_lst = unsafe {
-							let size = core::mem::size_of::<Descriptor>();
-							core::slice::from_raw_parts_mut(
-								ctrl_desc.ptr as *mut Descriptor,
-								ctrl_desc.len / size,
-							)
-						};
+			match buff.get_ctrl_desc_mut() {
+				Some(ctrl_desc) => {
+					let ind_desc_lst = unsafe {
+						let size = core::mem::size_of::<Descriptor>();
+						core::slice::from_raw_parts_mut(
+							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.len / size,
+						)
+					};
 
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							// This is fine as the length of the descriptors is restricted
-							// by u32::MAX (see also Bytes::new())
-							ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
-							ctrl_desc_cnt += 1;
-							init_buff_len += desc._init_len;
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						// This is fine as the length of the descriptors is restricted
+						// by u32::MAX (see also Bytes::new())
+						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ctrl_desc_cnt += 1;
+						init_buff_len += desc._init_len;
 
-							// Resetting written memory
-							for byte in desc.deref_mut() {
-								*byte = 0;
-							}
-						}
-					}
-					None => {
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							init_buff_len += desc._init_len;
-
-							// Resetting written memory
-							for byte in desc.deref_mut() {
-								*byte = 0;
-							}
+						// Resetting written memory
+						for byte in desc.deref_mut() {
+							*byte = 0;
 						}
 					}
 				}
+				None => {
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						init_buff_len += desc._init_len;
 
-				buff.reset_len(init_buff_len);
+						// Resetting written memory
+						for byte in desc.deref_mut() {
+							*byte = 0;
+						}
+					}
+				}
 			}
-			None => (),
+
+			buff.reset_len(init_buff_len);
 		}
 
-		match self.recv_buff.as_mut() {
-			Some(buff) => {
-				buff.reset_write();
-				let mut init_buff_len = 0usize;
+		if let Some(buff) = self.recv_buff.as_mut() {
+			buff.reset_write();
+			let mut init_buff_len = 0usize;
 
-				match buff.get_ctrl_desc_mut() {
-					Some(ctrl_desc) => {
-						let ind_desc_lst = unsafe {
-							let size = core::mem::size_of::<Descriptor>();
-							core::slice::from_raw_parts_mut(
-								ctrl_desc.ptr as *mut Descriptor,
-								ctrl_desc.len / size,
-							)
-						};
+			match buff.get_ctrl_desc_mut() {
+				Some(ctrl_desc) => {
+					let ind_desc_lst = unsafe {
+						let size = core::mem::size_of::<Descriptor>();
+						core::slice::from_raw_parts_mut(
+							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.len / size,
+						)
+					};
 
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							// This is fine as the length of the descriptors is restricted
-							// by u32::MAX (see also Bytes::new())
-							ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
-							ctrl_desc_cnt += 1;
-							init_buff_len += desc._init_len;
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						// This is fine as the length of the descriptors is restricted
+						// by u32::MAX (see also Bytes::new())
+						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ctrl_desc_cnt += 1;
+						init_buff_len += desc._init_len;
 
-							// Resetting written memory
-							for byte in desc.deref_mut() {
-								*byte = 0;
-							}
-						}
-					}
-					None => {
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							init_buff_len += desc._init_len;
-
-							// Resetting written memory
-							for byte in desc.deref_mut() {
-								*byte = 0;
-							}
+						// Resetting written memory
+						for byte in desc.deref_mut() {
+							*byte = 0;
 						}
 					}
 				}
+				None => {
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						init_buff_len += desc._init_len;
 
-				buff.reset_len(init_buff_len);
+						// Resetting written memory
+						for byte in desc.deref_mut() {
+							*byte = 0;
+						}
+					}
+				}
 			}
-			None => (),
+
+			buff.reset_len(init_buff_len);
 		}
 		self
 	}
@@ -1305,78 +1296,72 @@ impl BufferToken {
 	fn reset(mut self) -> Self {
 		let mut ctrl_desc_cnt = 0usize;
 
-		match self.send_buff.as_mut() {
-			Some(buff) => {
-				buff.reset_write();
-				let mut init_buff_len = 0usize;
+		if let Some(buff) = self.send_buff.as_mut() {
+			buff.reset_write();
+			let mut init_buff_len = 0usize;
 
-				match buff.get_ctrl_desc_mut() {
-					Some(ctrl_desc) => {
-						let ind_desc_lst = unsafe {
-							let size = core::mem::size_of::<Descriptor>();
-							core::slice::from_raw_parts_mut(
-								ctrl_desc.ptr as *mut Descriptor,
-								ctrl_desc.len / size,
-							)
-						};
+			match buff.get_ctrl_desc_mut() {
+				Some(ctrl_desc) => {
+					let ind_desc_lst = unsafe {
+						let size = core::mem::size_of::<Descriptor>();
+						core::slice::from_raw_parts_mut(
+							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.len / size,
+						)
+					};
 
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							// This is fine as the length of the descriptors is restricted
-							// by u32::MAX (see also Bytes::new())
-							ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
-							ctrl_desc_cnt += 1;
-							init_buff_len += desc._init_len;
-						}
-					}
-					None => {
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							init_buff_len += desc._init_len;
-						}
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						// This is fine as the length of the descriptors is restricted
+						// by u32::MAX (see also Bytes::new())
+						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ctrl_desc_cnt += 1;
+						init_buff_len += desc._init_len;
 					}
 				}
-
-				buff.reset_len(init_buff_len);
+				None => {
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						init_buff_len += desc._init_len;
+					}
+				}
 			}
-			None => (),
+
+			buff.reset_len(init_buff_len);
 		}
 
-		match self.recv_buff.as_mut() {
-			Some(buff) => {
-				buff.reset_write();
-				let mut init_buff_len = 0usize;
+		if let Some(buff) = self.recv_buff.as_mut() {
+			buff.reset_write();
+			let mut init_buff_len = 0usize;
 
-				match buff.get_ctrl_desc_mut() {
-					Some(ctrl_desc) => {
-						let ind_desc_lst = unsafe {
-							let size = core::mem::size_of::<Descriptor>();
-							core::slice::from_raw_parts_mut(
-								ctrl_desc.ptr as *mut Descriptor,
-								ctrl_desc.len / size,
-							)
-						};
+			match buff.get_ctrl_desc_mut() {
+				Some(ctrl_desc) => {
+					let ind_desc_lst = unsafe {
+						let size = core::mem::size_of::<Descriptor>();
+						core::slice::from_raw_parts_mut(
+							ctrl_desc.ptr as *mut Descriptor,
+							ctrl_desc.len / size,
+						)
+					};
 
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							// This is fine as the length of the descriptors is restricted
-							// by u32::MAX (see also Bytes::new())
-							ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
-							ctrl_desc_cnt += 1;
-							init_buff_len += desc._init_len;
-						}
-					}
-					None => {
-						for desc in buff.as_mut_slice() {
-							desc.len = desc._init_len;
-							init_buff_len += desc._init_len;
-						}
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						// This is fine as the length of the descriptors is restricted
+						// by u32::MAX (see also Bytes::new())
+						ind_desc_lst[ctrl_desc_cnt].len = desc._init_len as u32;
+						ctrl_desc_cnt += 1;
+						init_buff_len += desc._init_len;
 					}
 				}
-
-				buff.reset_len(init_buff_len);
+				None => {
+					for desc in buff.as_mut_slice() {
+						desc.len = desc._init_len;
+						init_buff_len += desc._init_len;
+					}
+				}
 			}
-			None => (),
+
+			buff.reset_len(init_buff_len);
 		}
 		self
 	}
@@ -1584,22 +1569,16 @@ impl BufferToken {
 		let mut send_ptrs = Vec::new();
 		let mut recv_ptrs = Vec::new();
 
-		match self.send_buff.as_mut() {
-			Some(buff) => {
-				for desc in buff.as_slice() {
-					send_ptrs.push((desc.ptr, desc.len()));
-				}
+		if let Some(buff) = self.send_buff.as_mut() {
+			for desc in buff.as_slice() {
+				send_ptrs.push((desc.ptr, desc.len()));
 			}
-			None => (),
 		}
 
-		match self.recv_buff.as_ref() {
-			Some(buff) => {
-				for desc in buff.as_slice() {
-					recv_ptrs.push((desc.ptr, desc.len()));
-				}
+		if let Some(buff) = self.recv_buff.as_ref() {
+			for desc in buff.as_slice() {
+				recv_ptrs.push((desc.ptr, desc.len()));
 			}
-			None => (),
 		}
 
 		match (send_ptrs.is_empty(), recv_ptrs.is_empty()) {
@@ -1635,64 +1614,58 @@ impl BufferToken {
 		send: Option<K>,
 		recv: Option<H>,
 	) -> Result<TransferToken, VirtqError> {
-		match send {
-			Some(data) => {
-				match self.send_buff.as_mut() {
-					Some(buff) => {
-						if buff.len() < data.as_slice_u8().len() {
-							return Err(VirtqError::WriteToLarge(self));
-						} else {
-							let data_slc = data.as_slice_u8();
-							let mut from = 0usize;
+		if let Some(data) = send {
+			match self.send_buff.as_mut() {
+				Some(buff) => {
+					if buff.len() < data.as_slice_u8().len() {
+						return Err(VirtqError::WriteToLarge(self));
+					} else {
+						let data_slc = data.as_slice_u8();
+						let mut from = 0usize;
 
-							for i in 0..buff.num_descr() {
-								// Must check array boundaries, as allocated buffer might be larger
-								// than acutal data to be written.
-								let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
-									data_slc.len()
-								} else {
-									from + buff.as_slice()[i].len()
-								};
+						for i in 0..buff.num_descr() {
+							// Must check array boundaries, as allocated buffer might be larger
+							// than acutal data to be written.
+							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
+								data_slc.len()
+							} else {
+								from + buff.as_slice()[i].len()
+							};
 
-								// Unwrapping is okay here as sizes are checked above
-								from += buff.next_write(&data_slc[from..to]).unwrap();
-							}
+							// Unwrapping is okay here as sizes are checked above
+							from += buff.next_write(&data_slc[from..to]).unwrap();
 						}
 					}
-					None => return Err(VirtqError::NoBufferAvail),
 				}
+				None => return Err(VirtqError::NoBufferAvail),
 			}
-			None => (),
 		}
 
-		match recv {
-			Some(data) => {
-				match self.recv_buff.as_mut() {
-					Some(buff) => {
-						if buff.len() < data.as_slice_u8().len() {
-							return Err(VirtqError::WriteToLarge(self));
-						} else {
-							let data_slc = data.as_slice_u8();
-							let mut from = 0usize;
+		if let Some(data) = recv {
+			match self.recv_buff.as_mut() {
+				Some(buff) => {
+					if buff.len() < data.as_slice_u8().len() {
+						return Err(VirtqError::WriteToLarge(self));
+					} else {
+						let data_slc = data.as_slice_u8();
+						let mut from = 0usize;
 
-							for i in 0..buff.num_descr() {
-								// Must check array boundaries, as allocated buffer might be larger
-								// than acutal data to be written.
-								let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
-									data_slc.len()
-								} else {
-									from + buff.as_slice()[i].len()
-								};
+						for i in 0..buff.num_descr() {
+							// Must check array boundaries, as allocated buffer might be larger
+							// than acutal data to be written.
+							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
+								data_slc.len()
+							} else {
+								from + buff.as_slice()[i].len()
+							};
 
-								// Unwrapping is okay here as sizes are checked above
-								from += buff.next_write(&data_slc[from..to]).unwrap();
-							}
+							// Unwrapping is okay here as sizes are checked above
+							from += buff.next_write(&data_slc[from..to]).unwrap();
 						}
 					}
-					None => return Err(VirtqError::NoBufferAvail),
 				}
+				None => return Err(VirtqError::NoBufferAvail),
 			}
-			None => (),
 		}
 
 		Ok(TransferToken {
@@ -1719,42 +1692,36 @@ impl BufferToken {
 		send_seq: Option<K>,
 		recv_seq: Option<H>,
 	) -> Result<Self, VirtqError> {
-		match send_seq {
-			Some(data) => {
-				match self.send_buff.as_mut() {
-					Some(buff) => {
-						match buff.next_write(data.as_slice_u8()) {
-							Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
-							Err(_) => {
-								// Need no match here, as result is the same, but for the future one could
-								// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
-								return Err(VirtqError::WriteToLarge(self));
-							}
+		if let Some(data) = send_seq {
+			match self.send_buff.as_mut() {
+				Some(buff) => {
+					match buff.next_write(data.as_slice_u8()) {
+						Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
+						Err(_) => {
+							// Need no match here, as result is the same, but for the future one could
+							// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
+							return Err(VirtqError::WriteToLarge(self));
 						}
 					}
-					None => return Err(VirtqError::NoBufferAvail),
 				}
+				None => return Err(VirtqError::NoBufferAvail),
 			}
-			None => (),
 		}
 
-		match recv_seq {
-			Some(data) => {
-				match self.recv_buff.as_mut() {
-					Some(buff) => {
-						match buff.next_write(data.as_slice_u8()) {
-							Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
-							Err(_) => {
-								// Need no match here, as result is the same, but for the future one could
-								// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
-								return Err(VirtqError::WriteToLarge(self));
-							}
+		if let Some(data) = recv_seq {
+			match self.recv_buff.as_mut() {
+				Some(buff) => {
+					match buff.next_write(data.as_slice_u8()) {
+						Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
+						Err(_) => {
+							// Need no match here, as result is the same, but for the future one could
+							// pass on the actual BufferError wrapped inside a VirtqError, for better recovery
+							return Err(VirtqError::WriteToLarge(self));
 						}
 					}
-					None => return Err(VirtqError::NoBufferAvail),
 				}
+				None => return Err(VirtqError::NoBufferAvail),
 			}
-			None => (),
 		}
 
 		Ok(self)
@@ -1806,22 +1773,9 @@ impl Buffer {
 	/// Resets the Buffers length to the given len. This MUST be the length at initialization.
 	fn reset_len(&mut self, init_len: usize) {
 		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => *len = init_len,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => *len = init_len,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => *len = init_len,
+			Buffer::Single { len, .. }
+			| Buffer::Multiple { len, .. }
+			| Buffer::Indirect { len, .. } => *len = init_len,
 		}
 	}
 
@@ -1829,22 +1783,9 @@ impl Buffer {
 	/// length at initialization or smaller-equal 0.
 	fn restr_len(&mut self, new_len: usize) {
 		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => *len = new_len,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => *len = new_len,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => *len = new_len,
+			Buffer::Single { len, .. }
+			| Buffer::Multiple { len, .. }
+			| Buffer::Indirect { len, .. } => *len = new_len,
 		}
 	}
 
@@ -1855,40 +1796,17 @@ impl Buffer {
 			Buffer::Single {
 				desc_lst,
 				next_write,
-				len,
-			} => {
-				if (desc_lst.len() - 1) < *next_write {
-					Err(BufferError::ToManyWrites)
-				} else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
-					Err(BufferError::WriteToLarge)
-				} else {
-					desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
-					*next_write += 1;
-
-					Ok(slice.len())
-				}
+				..
 			}
-			Buffer::Multiple {
+			| Buffer::Multiple {
 				desc_lst,
 				next_write,
-				len,
-			} => {
-				if (desc_lst.len() - 1) < *next_write {
-					Err(BufferError::ToManyWrites)
-				} else if desc_lst.get(*next_write).unwrap().len() < slice.len() {
-					Err(BufferError::WriteToLarge)
-				} else {
-					desc_lst[*next_write].deref_mut()[0..slice.len()].copy_from_slice(slice);
-					*next_write += 1;
-
-					Ok(slice.len())
-				}
+				..
 			}
-			Buffer::Indirect {
+			| Buffer::Indirect {
 				desc_lst,
-				ctrl_desc,
 				next_write,
-				len,
+				..
 			} => {
 				if (desc_lst.len() - 1) < *next_write {
 					Err(BufferError::ToManyWrites)
@@ -1907,22 +1825,9 @@ impl Buffer {
 	/// Resets the write status of a Buffertoken in order to be able to reuse a Buffertoken.
 	fn reset_write(&mut self) {
 		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => *next_write = 0,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => *next_write = 0,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => *next_write = 0,
+			Buffer::Single { next_write, .. }
+			| Buffer::Multiple { next_write, .. }
+			| Buffer::Indirect { next_write, .. } => *next_write = 0,
 		}
 	}
 
@@ -1932,40 +1837,9 @@ impl Buffer {
 	/// After this call the users is responsible for deallocating the given memory via the kenrel `mem::dealloc` function.
 	fn into_raw(self) -> Vec<(*mut u8, usize)> {
 		match self {
-			Buffer::Single {
-				mut desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
-
-				for desc in desc_lst.iter_mut() {
-					// Need to be a little carefull here.
-					desc.dealloc = Dealloc::Not;
-					arr.push((desc.ptr, desc._mem_len));
-				}
-				arr
-			}
-			Buffer::Multiple {
-				mut desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
-
-				for desc in desc_lst.iter_mut() {
-					// Need to be a little carefull here.
-					desc.dealloc = Dealloc::Not;
-					arr.push((desc.ptr, desc._mem_len));
-				}
-				arr
-			}
-			Buffer::Indirect {
-				mut desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => {
+			Buffer::Single { mut desc_lst, .. }
+			| Buffer::Multiple { mut desc_lst, .. }
+			| Buffer::Indirect { mut desc_lst, .. } => {
 				let mut arr = Vec::with_capacity(desc_lst.len());
 
 				for desc in desc_lst.iter_mut() {
@@ -1981,36 +1855,9 @@ impl Buffer {
 	/// Returns a copy of the buffer.
 	fn cpy(&self) -> Box<[u8]> {
 		match &self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(*len);
-
-				for desc in desc_lst.iter() {
-					arr.append(&mut desc.cpy_into_vec());
-				}
-				arr.into_boxed_slice()
-			}
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(*len);
-
-				for desc in desc_lst.iter() {
-					arr.append(&mut desc.cpy_into_vec());
-				}
-				arr.into_boxed_slice()
-			}
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => {
+			Buffer::Single { desc_lst, len, .. }
+			| Buffer::Multiple { desc_lst, len, .. }
+			| Buffer::Indirect { desc_lst, len, .. } => {
 				let mut arr = Vec::with_capacity(*len);
 
 				for desc in desc_lst.iter() {
@@ -2025,36 +1872,9 @@ impl Buffer {
 	/// buffer beeing possibly split up between different descriptors.
 	fn scat_cpy(&self) -> Vec<Box<[u8]>> {
 		match &self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
-
-				for desc in desc_lst.iter() {
-					arr.push(desc.cpy_into_box());
-				}
-				arr
-			}
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => {
-				let mut arr = Vec::with_capacity(desc_lst.len());
-
-				for desc in desc_lst.iter() {
-					arr.push(desc.cpy_into_box());
-				}
-				arr
-			}
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => {
+			Buffer::Single { desc_lst, .. }
+			| Buffer::Multiple { desc_lst, .. }
+			| Buffer::Indirect { desc_lst, .. } => {
 				let mut arr = Vec::with_capacity(desc_lst.len());
 
 				for desc in desc_lst.iter() {
@@ -2073,22 +1893,9 @@ impl Buffer {
 	/// In order to retrieve this value, please use `BufferToken.num_consuming_desc()`.
 	fn num_descr(&self) -> usize {
 		match &self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.len(),
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.len(),
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => desc_lst.len(),
+			Buffer::Single { desc_lst, .. }
+			| Buffer::Multiple { desc_lst, .. }
+			| Buffer::Indirect { desc_lst, .. } => desc_lst.len(),
 		}
 	}
 
@@ -2099,22 +1906,9 @@ impl Buffer {
 	/// descriptor area!
 	fn len(&self) -> usize {
 		match &self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => *len,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => *len,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => *len,
+			Buffer::Single { len, .. }
+			| Buffer::Multiple { len, .. }
+			| Buffer::Indirect { len, .. } => *len,
 		}
 	}
 
@@ -2125,22 +1919,9 @@ impl Buffer {
 	/// (`&mut [u8]`) for each descriptor.
 	fn as_mut_slice(&mut self) -> &mut [MemDescr] {
 		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.as_mut(),
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.as_mut(),
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => desc_lst.as_mut(),
+			Buffer::Single { desc_lst, .. }
+			| Buffer::Multiple { desc_lst, .. }
+			| Buffer::Indirect { desc_lst, .. } => desc_lst.as_mut(),
 		}
 	}
 
@@ -2151,89 +1932,33 @@ impl Buffer {
 	/// (`&[u8]`) for each descriptor.
 	fn as_slice(&self) -> &[MemDescr] {
 		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.as_ref(),
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => desc_lst.as_ref(),
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => desc_lst.as_ref(),
+			Buffer::Single { desc_lst, .. } => desc_lst.as_ref(),
+			Buffer::Multiple { desc_lst, .. } => desc_lst.as_ref(),
+			Buffer::Indirect { desc_lst, .. } => desc_lst.as_ref(),
 		}
 	}
 
 	/// Returns a reference to the buffers ctrl descriptor if available.
 	fn get_ctrl_desc(&self) -> Option<&MemDescr> {
-		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => None,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => None,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => Some(ctrl_desc),
+		if let Buffer::Indirect { ctrl_desc, .. } = self {
+			Some(ctrl_desc)
+		} else {
+			None
 		}
 	}
 
 	/// Returns a mutable reference to the buffers ctrl descriptor if available.
 	fn get_ctrl_desc_mut(&mut self) -> Option<&mut MemDescr> {
-		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => None,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => None,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => Some(ctrl_desc),
+		if let Buffer::Indirect { ctrl_desc, .. } = self {
+			Some(ctrl_desc)
+		} else {
+			None
 		}
 	}
 
 	/// Returns true if the buffer is an indirect one
 	fn is_indirect(&self) -> bool {
-		match self {
-			Buffer::Single {
-				desc_lst,
-				next_write,
-				len,
-			} => false,
-			Buffer::Multiple {
-				desc_lst,
-				next_write,
-				len,
-			} => false,
-			Buffer::Indirect {
-				desc_lst,
-				ctrl_desc,
-				next_write,
-				len,
-			} => true,
-		}
+		matches!(self, Buffer::Indirect { .. })
 	}
 }
 
@@ -2350,21 +2075,15 @@ impl DerefMut for MemDescr {
 impl Drop for MemDescr {
 	fn drop(&mut self) {
 		// Handle returning of Id's to pool
-		match &self.id {
-			Some(id) => {
-				let id = self.id.take().unwrap();
-				self.pool.ret_id(id);
-			}
-			None => (),
+		if let Some(id) = self.id.take() {
+			self.pool.ret_id(id);
 		}
 
 		match self.dealloc {
 			Dealloc::Not => (),
-			Dealloc::AsSlice => unsafe {
-				let temp = Vec::from_raw_parts(self.ptr, self._mem_len, 0);
-			},
+			Dealloc::AsSlice => unsafe { drop(Vec::from_raw_parts(self.ptr, self._mem_len, 0)) },
 			Dealloc::AsPage => {
-				crate::mm::deallocate(VirtAddr::from(self.ptr as usize), self._mem_len);
+				crate::mm::deallocate(VirtAddr::from(self.ptr as usize), self._mem_len)
 			}
 		}
 	}
@@ -2653,7 +2372,7 @@ pub enum BuffSpec<'a> {
 	// is defined by  the respective `Bytes` inside the slice. Overall buffer will be
 	// the sum of all `Bytes` in the slide. But consumes only ONE descriptor of the actual
 	/// virtqueue.
-	Indirect(&'a [(Bytes)]),
+	Indirect(&'a [Bytes]),
 }
 
 /// Ensures `T` is pinned at the same memory location.
@@ -2900,15 +2619,15 @@ pub mod error {
 	}
 
 	impl core::fmt::Debug for VirtqError {
-		fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 			match self {
                 VirtqError::General => write!(f, "Virtq failure due to unknown reasons!"),
                 VirtqError::NoBufferAvail => write!(f, "Virtq detected write into non existing Buffer!"),
                 VirtqError::BufferInWithDirect => write!(f, "Virtq detected creation of Token, where Indirect and direct buffers where mixed!"),
                 VirtqError::BufferNotSpecified => write!(f, "Virtq detected creation of Token, without a BuffSpec"),
-                VirtqError::QueueNotExisting(u16) => write!(f, "Virtq does not exist and can not be used!"),
+                VirtqError::QueueNotExisting(_) => write!(f, "Virtq does not exist and can not be used!"),
                 VirtqError::NoDescrAvail => write!(f, "Virtqs memory pool is exhausted!"),
-                VirtqError::BufferSizeWrong(usize) => write!(f, "Specified Buffer is to small for write!"),
+                VirtqError::BufferSizeWrong(_) => write!(f, "Specified Buffer is to small for write!"),
                 VirtqError::NoReuseBuffer => write!(f, "Buffer can not be reused!"),
                 VirtqError::OngoingTransfer(_) => write!(f, "Transfer is ongoging and can not be used currently!"),
                 VirtqError::WriteToLarge(_) => write!(f, "Write is to large for BufferToken!"),

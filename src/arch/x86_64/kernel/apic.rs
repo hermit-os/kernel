@@ -603,9 +603,8 @@ pub fn boot_application_processors() {
 	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
 	let core_id = core_id();
 
-	for core_id_to_boot in 0..apic_ids.len() {
+	for (core_id_to_boot, &apic_id) in apic_ids.iter().enumerate() {
 		if core_id_to_boot != core_id.try_into().unwrap() {
-			let apic_id = apic_ids[core_id_to_boot];
 			let destination = u64::from(apic_id) << 32;
 
 			debug!(
@@ -664,10 +663,9 @@ pub fn ipi_tlb_flush() {
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
 		irqsave(|| {
-			for core_id_to_interrupt in 0..apic_ids.len() {
+			for (core_id_to_interrupt, &apic_id) in apic_ids.iter().enumerate() {
 				if core_id_to_interrupt != core_id.try_into().unwrap() {
-					let local_apic_id = apic_ids[core_id_to_interrupt];
-					let destination = u64::from(local_apic_id) << 32;
+					let destination = u64::from(apic_id) << 32;
 					local_apic_write(
 						IA32_X2APIC_ICR,
 						destination
@@ -681,7 +679,6 @@ pub fn ipi_tlb_flush() {
 }
 
 /// Send an inter-processor interrupt to wake up a CPU Core that is in a HALT state.
-#[allow(unused_variables)]
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(feature = "smp")]
 	if core_id_to_wakeup != core_id() {

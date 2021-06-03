@@ -5,8 +5,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![allow(dead_code)]
-
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
@@ -26,6 +24,7 @@ use crate::mm;
 use crate::scheduler;
 
 /// Uhyve's address of the initial GDT
+#[allow(dead_code)]
 const BOOT_GDT: PhysAddr = PhysAddr(0x1000);
 
 /// Pointer to the root page table (PML4)
@@ -133,11 +132,13 @@ impl PageTableEntry {
 	}
 
 	/// Returns `true` if the page is a huge page
+	#[allow(dead_code)]
 	fn is_huge(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::HUGE_PAGE.bits()) != 0
 	}
 
 	/// Returns `true` if the page is accessible from the user space
+	#[allow(dead_code)]
 	fn is_user(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::USER_ACCESSIBLE.bits()) != 0
 	}

@@ -8,24 +8,22 @@
 //! This module contains Virtio's packed virtqueue.
 //! See Virito specification v1.1. - 2.7
 #![allow(dead_code)]
-#![allow(unused)]
 
 use self::error::VqPackedError;
 use super::super::features::Features;
-use super::super::transport::pci::{ComCfg, IsrStatus, NotifCfg, NotifCtrl};
+use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemDescrId, MemPool,
-	Pinned, Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
+	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::{paging, VirtAddr};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
 use core::{cell::RefCell, ptr};
 
@@ -442,7 +440,7 @@ impl DescriptorRing {
 
 	/// Returns an initialized write controler in order
 	/// to write the queue correctly.
-	fn get_write_ctrler(&mut self) -> WriteCtrl {
+	fn get_write_ctrler(&mut self) -> WriteCtrl<'_> {
 		WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
@@ -456,7 +454,7 @@ impl DescriptorRing {
 
 	/// Returns an initialized read controler in order
 	/// to read the queue correctly.
-	fn get_read_ctrler(&mut self) -> ReadCtrl {
+	fn get_read_ctrler(&mut self) -> ReadCtrl<'_> {
 		ReadCtrl {
 			position: self.poll_index,
 			modulo: self.ring.len(),
@@ -579,7 +577,7 @@ impl<'a> ReadCtrl<'a> {
 
 				let mut desc_iter = desc_slice.iter_mut();
 
-				for desc in send_buff.as_mut_slice() {
+				for _desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					desc_iter.next().unwrap();
 				}
@@ -616,7 +614,7 @@ impl<'a> ReadCtrl<'a> {
 
 				let mut desc_iter = desc_slice.iter();
 
-				for desc in send_buff.as_mut_slice() {
+				for _desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					desc_iter.next().unwrap();
 				}
@@ -704,7 +702,7 @@ impl<'a> ReadCtrl<'a> {
 	/// Updates the descriptor flags inside the actual ring if necessary and
 	/// increments the poll_index by one.
 	fn update_send(&mut self, send_buff: &mut Buffer) {
-		for desc in send_buff.as_slice() {
+		for _desc in send_buff.as_slice() {
 			// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
 			// data structure.
 			self.reset_ring_pos();
@@ -838,42 +836,27 @@ impl Descriptor {
 	}
 
 	fn to_le_bytes(self) -> [u8; 16] {
-		let mut desc_bytes_cnt = 0usize;
 		// 128 bits long raw descriptor bytes
 		let mut desc_bytes: [u8; 16] = [0; 16];
 
 		// Call to little endian, as device will read this and
 		// Virtio devices are inherently little endian coded.
 		let mem_addr: [u8; 8] = self.address.to_le_bytes();
-		// Write address as bytes in raw
-		for byte in 0..8 {
-			desc_bytes[desc_bytes_cnt] = mem_addr[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[0..8].copy_from_slice(&mem_addr);
 
 		// Must be 32 bit in order to fulfill specification.
 		// MemPool.pull and .pull_untracked ensure this automatically
 		// which makes this cast safe.
 		let mem_len: [u8; 4] = self.len.to_le_bytes();
-		// Write length of memory area as bytes in raw
-		for byte in 0..4 {
-			desc_bytes[desc_bytes_cnt] = mem_len[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[8..12].copy_from_slice(&mem_len);
 
 		// Write BuffID as bytes in raw.
 		let id: [u8; 2] = self.buff_id.to_le_bytes();
-		for byte in 0..2usize {
-			desc_bytes[desc_bytes_cnt] = id[byte];
-			desc_bytes_cnt += 1;
-		}
+		desc_bytes[12..14].copy_from_slice(&id);
 
 		// Write flags as bytes in raw.
 		let flags: [u8; 2] = self.flags.to_le_bytes();
-		// Write of flags as bytes in raw
-		for byte in 0..2usize {
-			desc_bytes[desc_bytes_cnt] = flags[byte];
-		}
+		desc_bytes[14..16].copy_from_slice(&flags);
 
 		desc_bytes
 	}
@@ -1337,8 +1320,8 @@ impl PackedVq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
@@ -1449,7 +1432,7 @@ impl PackedVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -1572,7 +1555,7 @@ impl PackedVq {
 								send_buff: None,
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -1905,7 +1888,7 @@ impl PackedVq {
 								}),
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: send_desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: send_data_slice.len(),
 									next_write: 0,
 								}),
@@ -1930,8 +1913,8 @@ impl PackedVq {
 	pub fn prep_buffer(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified

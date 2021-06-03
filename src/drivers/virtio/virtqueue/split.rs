@@ -8,23 +8,20 @@
 //! This module contains Virtio's split virtqueue.
 //! See Virito specification v1.1. - 2.6
 #![allow(dead_code)]
-#![allow(unused)]
 
-use super::super::features::Features;
-use super::super::transport::pci::{ComCfg, IsrStatus, NotifCfg, NotifCtrl};
+use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemDescrId, MemPool,
-	Pinned, Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
+	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::{paging, VirtAddr};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
 use core::{cell::RefCell, ptr};
 
@@ -214,7 +211,8 @@ impl DescrRing {
 				tkn.buff_tkn
 					.as_mut()
 					.unwrap()
-					.restr_size(None, Some(used_elem.len as usize));
+					.restr_size(None, Some(used_elem.len as usize))
+					.unwrap();
 			}
 			match tkn.await_queue {
 				Some(_) => {
@@ -290,7 +288,7 @@ impl SplitVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
+	pub fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) -> Vec<Transfer> {
 		unimplemented!();
 	}
 
@@ -308,9 +306,9 @@ impl SplitVq {
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
 	pub fn dispatch_batch_await(
 		&self,
-		tkns: Vec<TransferToken>,
-		await_queue: Rc<RefCell<VecDeque<Transfer>>>,
-		notif: bool,
+		_tkns: Vec<TransferToken>,
+		_await_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		_notif: bool,
 	) {
 		unimplemented!()
 	}
@@ -383,7 +381,7 @@ impl SplitVq {
 		notif_cfg: &NotifCfg,
 		size: VqSize,
 		index: VqIndex,
-		feats: u64,
+		_feats: u64,
 	) -> Result<Self, ()> {
 		// Get a handler to the queues configuration area.
 		let mut vq_handler = match com_cfg.select_vq(index.into()) {
@@ -423,9 +421,9 @@ impl SplitVq {
 		};
 
 		unsafe {
-			let index = avail_raw.offset(2) as usize - avail_raw as usize;
-			let ring = avail_raw.offset(4) as usize - avail_raw as usize;
-			let event = avail_raw.offset(4 + 2 * (size as isize)) as usize - avail_raw as usize;
+			let _index = avail_raw.offset(2) as usize - avail_raw as usize;
+			let _ring = avail_raw.offset(4) as usize - avail_raw as usize;
+			let _event = avail_raw.offset(4 + 2 * (size as isize)) as usize - avail_raw as usize;
 		}
 
 		let used_ring = unsafe {
@@ -441,9 +439,9 @@ impl SplitVq {
 		};
 
 		unsafe {
-			let index = used_raw.offset(2) as usize - used_raw as usize;
-			let ring = used_raw.offset(4) as usize - used_raw as usize;
-			let event = used_raw.offset(4 + 8 * (size as isize)) as usize - used_raw as usize;
+			let _index = used_raw.offset(2) as usize - used_raw as usize;
+			let _ring = used_raw.offset(4) as usize - used_raw as usize;
+			let _event = used_raw.offset(4 + 8 * (size as isize)) as usize - used_raw as usize;
 		}
 
 		// Provide memory areas of the queues data structures to the device
@@ -490,8 +488,8 @@ impl SplitVq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
@@ -602,7 +600,7 @@ impl SplitVq {
 							buff_tkn: Some(BufferToken {
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -725,7 +723,7 @@ impl SplitVq {
 								send_buff: None,
 								recv_buff: Some(Buffer::Indirect {
 									desc_lst: desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: data_slice.len(),
 									next_write: 0,
 								}),
@@ -1058,7 +1056,7 @@ impl SplitVq {
 								}),
 								send_buff: Some(Buffer::Indirect {
 									desc_lst: send_desc_lst.into_boxed_slice(),
-									ctrl_desc: ctrl_desc,
+									ctrl_desc,
 									len: send_data_slice.len(),
 									next_write: 0,
 								}),
@@ -1083,8 +1081,8 @@ impl SplitVq {
 	pub fn prep_buffer(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified

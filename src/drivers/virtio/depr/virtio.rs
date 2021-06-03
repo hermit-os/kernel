@@ -142,11 +142,11 @@ impl<'a> Virtq<'a> {
 		// try to use rust compilers ownership guarantees on virtq desc, by splitting array and putting owned values
 		// which do not have destructors
 		let mut desc_raw_wrappers: Vec<Box<virtq_desc_raw>> = Vec::new();
-		for i in 0..vqsize {
+		for desc in desc_table.iter_mut() {
 			// "Recast" desc table entry into box, so we can freely move it around without worrying about the buffer
 			// Since we have overwritten drop on virtq_desc_raw, this is safe, even if we never have allocated virtq_desc_raw with the global allocator!
 			// TODO: is this actually true?
-			let drw = unsafe { Box::from_raw(&mut desc_table[i] as *mut _) };
+			let drw = unsafe { Box::from_raw(desc) };
 			desc_raw_wrappers.push(drw);
 		}
 

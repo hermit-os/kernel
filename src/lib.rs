@@ -12,16 +12,8 @@
  * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
  */
 
-#![allow(clippy::redundant_field_names)]
-#![allow(clippy::identity_op)]
-#![allow(clippy::needless_range_loop)]
-#![allow(clippy::tabs_in_doc_comments)]
-#![allow(clippy::toplevel_ref_arg)]
+#![warn(rust_2018_idioms)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(clippy::println_empty_string)]
-#![allow(clippy::single_match)]
-#![allow(clippy::cognitive_complexity)]
-#![allow(clippy::forget_copy)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
@@ -41,7 +33,6 @@
 #![feature(alloc_error_handler)]
 #![feature(vec_into_raw_parts)]
 #![feature(drain_filter)]
-#![allow(unused_macros)]
 #![no_std]
 #![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
 #![cfg_attr(target_os = "hermit", cfg_attr(test, test_runner(crate::test_runner)))]
@@ -56,16 +47,10 @@
 extern crate alloc;
 #[macro_use]
 extern crate bitflags;
-extern crate crossbeam_utils;
 #[macro_use]
 extern crate log;
-#[cfg(target_arch = "x86_64")]
-extern crate multiboot;
-extern crate num;
 #[macro_use]
 extern crate num_derive;
-extern crate num_traits;
-extern crate scopeguard;
 #[cfg(not(target_os = "hermit"))]
 #[macro_use]
 extern crate std;
@@ -109,7 +94,7 @@ mod syscalls;
 mod util;
 
 #[doc(hidden)]
-pub fn _print(args: ::core::fmt::Arguments) {
+pub fn _print(args: ::core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
 }

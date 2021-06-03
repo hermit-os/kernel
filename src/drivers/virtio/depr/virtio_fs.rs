@@ -73,7 +73,7 @@ impl VirtioFsDriver<'_> {
 		}
 		// 1 highprio queue, and n normal request queues
 		let vqnum = device_cfg.num_request_queues + 1;
-		let mut vqueues = Vec::<Virtq>::new();
+		let mut vqueues = Vec::<Virtq<'_>>::new();
 
 		// create the queues and tell device about them
 		for i in 0..vqnum as u16 {

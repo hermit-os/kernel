@@ -138,7 +138,7 @@ struct SysClose {
 
 impl SysClose {
 	fn new(fd: i32) -> SysClose {
-		SysClose { fd: fd, ret: -1 }
+		SysClose { fd, ret: -1 }
 	}
 }
 

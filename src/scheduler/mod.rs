@@ -379,14 +379,11 @@ impl PerCoreScheduler {
 			debug!("Cleaning up task {}", borrowed.id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			match TASKS.lock().remove(&borrowed.id) {
-				Some(mut queue) => {
-					while let Some(task) = queue.pop_front() {
-						result = true;
-						self.custom_wakeup(task);
-					}
+			if let Some(mut queue) = TASKS.lock().remove(&borrowed.id) {
+				while let Some(task) = queue.pop_front() {
+					result = true;
+					self.custom_wakeup(task);
 				}
-				None => {}
 			}
 		}
 

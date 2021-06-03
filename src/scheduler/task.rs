@@ -78,11 +78,9 @@ impl fmt::Display for Priority {
 
 #[allow(dead_code)]
 pub const HIGH_PRIO: Priority = Priority::from(3);
-#[allow(dead_code)]
 pub const NORMAL_PRIO: Priority = Priority::from(2);
 #[allow(dead_code)]
 pub const LOW_PRIO: Priority = Priority::from(1);
-#[allow(dead_code)]
 pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
@@ -228,40 +226,9 @@ pub struct PriorityTaskQueue {
 impl PriorityTaskQueue {
 	/// Creates an empty priority queue for tasks
 	pub const fn new() -> PriorityTaskQueue {
+		const QUEUE_HEAD: QueueHead = QueueHead::new();
 		PriorityTaskQueue {
-			queues: [
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-			],
+			queues: [QUEUE_HEAD; NO_PRIORITIES],
 			prio_bitmap: 0,
 		}
 	}
@@ -295,30 +262,22 @@ impl PriorityTaskQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let new_head;
-		let task;
+		let (new_head, task) = {
+			let head = self.queues[queue_index].head.as_mut()?;
+			let mut borrow = head.borrow_mut();
 
-		match self.queues[queue_index].head {
-			None => {
-				return None;
+			if let Some(ref mut nhead) = borrow.next {
+				nhead.borrow_mut().prev = None;
 			}
-			Some(ref mut head) => {
-				let mut borrow = head.borrow_mut();
 
-				match borrow.next {
-					Some(ref mut nhead) => {
-						nhead.borrow_mut().prev = None;
-					}
-					None => {}
-				}
+			let new_head = borrow.next.clone();
+			borrow.next = None;
+			borrow.prev = None;
 
-				new_head = borrow.next.clone();
-				borrow.next = None;
-				borrow.prev = None;
+			let task = head.clone();
 
-				task = head.clone();
-			}
-		}
+			(new_head, task)
+		};
 
 		self.queues[queue_index].head = new_head;
 		if self.queues[queue_index].head.is_none() {
@@ -529,7 +488,6 @@ impl BlockedTaskQueue {
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
-	#[allow(unused_assignments)]
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
 			// Set the task status to Blocked.
@@ -549,7 +507,7 @@ impl BlockedTaskQueue {
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
-			let mut first_task = true;
+			let first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
 			let mut _guard = scopeguard::guard(first_task, |first_task| {
 				// If the task is the new first task in the list, update the one-shot timer
@@ -567,7 +525,6 @@ impl BlockedTaskQueue {
 					return;
 				}
 
-				first_task = false;
 				cursor.move_next();
 			}
 

@@ -27,7 +27,7 @@ pub mod error {
 	}
 
 	impl fmt::Display for VirtioError {
-		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match self {
                 VirtioError::Unknown =>write!(f, "Driver failed to initialize virtio device due to unknown reasosn!"),
                 VirtioError::FromPci(pci_error) => match pci_error {
