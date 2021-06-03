@@ -518,17 +518,9 @@ pub fn init_drivers() {
 				adapter.device_id
 			);
 
-			// This weird match and back to match and then match driver is needed
-			// in order to let the compiler know, that we are giving him a static driver struct.
-			match pci_virtio::init_device(&adapter) {
-				Ok(drv) => match drv {
-					VirtioDriver::Network(drv) => {
-						nic_available = true;
-						register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)))
-					}
-					VirtioDriver::FileSystem => (), // Filesystem is pushed to the driver struct inside init_device()
-				},
-				Err(_) => (), // could have an info which driver failed
+			if let Ok(VirtioDriver::Network(drv)) = pci_virtio::init_device(&adapter) {
+				nic_available = true;
+				register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)))
 			}
 		}
 
@@ -545,9 +537,8 @@ pub fn init_drivers() {
 					adapter.device_id
 				);
 
-				match rtl8139::init_device(&adapter) {
-					Ok(drv) => register_driver(PciDriver::RTL8139Net(SpinlockIrqSave::new(drv))),
-					Err(_) => (), // could have an info which driver failed
+				if let Ok(drv) = rtl8139::init_device(&adapter) {
+					register_driver(PciDriver::RTL8139Net(SpinlockIrqSave::new(drv)))
 				}
 			}
 		}

@@ -18,7 +18,6 @@
 #![allow(clippy::needless_range_loop)]
 #![allow(clippy::tabs_in_doc_comments)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-#![allow(clippy::single_match)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]

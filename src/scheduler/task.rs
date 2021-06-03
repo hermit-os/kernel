@@ -305,11 +305,8 @@ impl PriorityTaskQueue {
 			Some(ref mut head) => {
 				let mut borrow = head.borrow_mut();
 
-				match borrow.next {
-					Some(ref mut nhead) => {
-						nhead.borrow_mut().prev = None;
-					}
-					None => {}
+				if let Some(ref mut nhead) = borrow.next {
+					nhead.borrow_mut().prev = None;
 				}
 
 				new_head = borrow.next.clone();

@@ -799,10 +799,11 @@ impl VirtioNetDriver {
 
 		let dev_cfg = loop {
 			match caps_coll.get_dev_cfg() {
-				Some(cfg) => match VirtioNetDriver::map_cfg(&cfg) {
-					Some(dev_cfg) => break dev_cfg,
-					None => (),
-				},
+				Some(cfg) => {
+					if let Some(dev_cfg) = VirtioNetDriver::map_cfg(&cfg) {
+						break dev_cfg;
+					}
+				}
 				None => {
 					error!("No dev config. Aborting!");
 					return Err(error::VirtioNetError::NoDevCfg(adapter.device_id));
