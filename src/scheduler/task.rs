@@ -228,40 +228,9 @@ pub struct PriorityTaskQueue {
 impl PriorityTaskQueue {
 	/// Creates an empty priority queue for tasks
 	pub const fn new() -> PriorityTaskQueue {
+		const QUEUE_HEAD: QueueHead = QueueHead::new();
 		PriorityTaskQueue {
-			queues: [
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-				QueueHead::new(),
-			],
+			queues: [QUEUE_HEAD; NO_PRIORITIES],
 			prio_bitmap: 0,
 		}
 	}
