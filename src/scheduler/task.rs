@@ -78,11 +78,9 @@ impl fmt::Display for Priority {
 
 #[allow(dead_code)]
 pub const HIGH_PRIO: Priority = Priority::from(3);
-#[allow(dead_code)]
 pub const NORMAL_PRIO: Priority = Priority::from(2);
 #[allow(dead_code)]
 pub const LOW_PRIO: Priority = Priority::from(1);
-#[allow(dead_code)]
 pub const IDLE_PRIO: Priority = Priority::from(0);
 
 /// Maximum number of priorities
@@ -490,7 +488,6 @@ impl BlockedTaskQueue {
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
-	#[allow(unused_assignments)]
 	pub fn add(&mut self, task: Rc<RefCell<Task>>, wakeup_time: Option<u64>) {
 		{
 			// Set the task status to Blocked.
@@ -510,7 +507,7 @@ impl BlockedTaskQueue {
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
-			let mut first_task = true;
+			let first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
 			let mut _guard = scopeguard::guard(first_task, |first_task| {
 				// If the task is the new first task in the list, update the one-shot timer
@@ -528,7 +525,6 @@ impl BlockedTaskQueue {
 					return;
 				}
 
-				first_task = false;
 				cursor.move_next();
 			}
 

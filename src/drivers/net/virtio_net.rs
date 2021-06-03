@@ -8,11 +8,9 @@
 //! A module containing a virtio network driver.
 //!
 //! The module contains ...
-#![allow(unused)]
 
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
-use crate::arch::kernel::pci::error::PciError;
 use crate::arch::kernel::pci::PciAdapter;
 use crate::arch::kernel::percore::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -24,25 +22,18 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
 use core::mem;
-use core::ops::Deref;
 use core::result::Result;
 use core::{cell::RefCell, cmp::Ordering};
 
-use crate::drivers::virtio::env::memory::{MemLen, MemOff};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{
-	ComCfg, IsrStatus, NotifCfg, NotifCtrl, PciCap, PciCfgAlt, ShMemCfg, UniCapsColl,
-};
+use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg, PciCap, UniCapsColl};
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, TransferToken, Virtq, VqIndex, VqSize,
-	VqType,
+	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 
-use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
+use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{paging, virtualmem, VirtAddr};
 
 const ETH_HDR: usize = 14usize;
 
@@ -198,7 +189,7 @@ impl RxQueues {
 	/// This currently include nothing. But in the future it might include among others::
 	/// * Calculating missing checksums
 	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
-	fn post_processing(mut transfer: Transfer) -> Result<Transfer, VirtioNetError> {
+	fn post_processing(transfer: Transfer) -> Result<Transfer, VirtioNetError> {
 		if transfer.poll() {
 			// Here we could implement all features.
 			Ok(transfer)
@@ -251,7 +242,7 @@ impl RxQueues {
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
 					Ok(tkn) => tkn,
-					Err(vq_err) => {
+					Err(_vq_err) => {
 						error!("Setup of network queue failed, which should not happen!");
 						panic!("setup of network queue failed!");
 					}
@@ -286,7 +277,7 @@ impl RxQueues {
 			for _ in 0..num_buff {
 				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
 					Ok(tkn) => tkn,
-					Err(vq_err) => {
+					Err(_vq_err) => {
 						error!("Setup of network queue failed, which should not happen!");
 						panic!("setup of network queue failed!");
 					}
@@ -361,6 +352,7 @@ struct TxQueues {
 }
 
 impl TxQueues {
+	#[allow(dead_code)]
 	fn enable_notifs(&self) {
 		if self.is_multi {
 			for vq in &self.vqs {
@@ -371,6 +363,7 @@ impl TxQueues {
 		}
 	}
 
+	#[allow(dead_code)]
 	fn disable_notifs(&self) {
 		if self.is_multi {
 			for vq in &self.vqs {
@@ -531,7 +524,7 @@ impl NetworkInterface for VirtioNetDriver {
 		let len = len + core::mem::size_of::<VirtioNetHdr>();
 
 		match self.send_vqs.get_tkn(len) {
-			Some((mut buff_tkn, vq_index)) => {
+			Some((mut buff_tkn, _vq_index)) => {
 				let (send_ptrs, _) = buff_tkn.raw_ptrs();
 				// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
 				// see TxQueue.add()
@@ -548,7 +541,7 @@ impl NetworkInterface for VirtioNetDriver {
 		}
 	}
 
-	fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()> {
+	fn send_tx_buffer(&mut self, tkn_handle: usize, _len: usize) -> Result<(), ()> {
 		// This does not result in a new assignment, or in a drop of the BufferToken, which
 		// would be dangerous, as the memory is freed then.
 		let tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
@@ -566,8 +559,8 @@ impl NetworkInterface for VirtioNetDriver {
 
 	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
 		match self.recv_vqs.get_next() {
-			Some(mut transfer) => {
-				let mut transfer = match RxQueues::post_processing(transfer) {
+			Some(transfer) => {
+				let transfer = match RxQueues::post_processing(transfer) {
 					Ok(trf) => trf,
 					Err(vnet_err) => {
 						error!("Post processing failed. Err: {:?}", vnet_err);
@@ -653,8 +646,7 @@ impl NetworkInterface for VirtioNetDriver {
 			true
 		} else if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
-			todo!("Implement possibiity to change config on the fly...");
-			false
+			todo!("Implement possibiity to change config on the fly...")
 		} else {
 			false
 		}
@@ -692,6 +684,7 @@ impl VirtioNetDriver {
 		}
 	}
 
+	#[allow(dead_code)]
 	fn is_announce(&self) -> bool {
 		if self
 			.dev_cfg
@@ -710,6 +703,7 @@ impl VirtioNetDriver {
 	/// device and overrides the num_vq field in the common config.
 	///
 	/// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
+	#[allow(dead_code)]
 	fn get_max_vq_pairs(&self) -> u16 {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
 			self.dev_cfg.raw.max_virtqueue_pairs
@@ -1184,7 +1178,6 @@ impl VirtioNetDriver {
 mod constants {
 	use super::error::VirtioNetError;
 	use alloc::vec::Vec;
-	use core::fmt::Display;
 	use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
 	// Configuration constants

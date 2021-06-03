@@ -10,7 +10,6 @@
 //! The module should easy partability of the code. Furthermore it provides
 //! a clean boundary between virtio and the rest of the kernel. One additional aspect is to
 //! ensure only a single location needs changes, in cases where the underlying kernel code is changed
-#![allow(dead_code)]
 
 pub mod memory {
 	use core::convert::TryFrom;
@@ -213,6 +212,7 @@ pub mod pci {
 
 	/// Wrapper function to write the configuration space of a PCI
 	/// device at the given register.
+	#[allow(dead_code)]
 	pub fn write_config(adapter: &PciAdapter, register: u32, data: u32) {
 		pci::write_config(adapter.bus, adapter.device, register.to_le(), data.to_le());
 	}

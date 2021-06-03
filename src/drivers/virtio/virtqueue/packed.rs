@@ -8,24 +8,22 @@
 //! This module contains Virtio's packed virtqueue.
 //! See Virito specification v1.1. - 2.7
 #![allow(dead_code)]
-#![allow(unused)]
 
 use self::error::VqPackedError;
 use super::super::features::Features;
-use super::super::transport::pci::{ComCfg, IsrStatus, NotifCfg, NotifCtrl};
+use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemDescrId, MemPool,
-	Pinned, Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
+	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::arch::mm::{paging, VirtAddr};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::convert::TryFrom;
-use core::ops::Deref;
 use core::sync::atomic::{fence, Ordering};
 use core::{cell::RefCell, ptr};
 
@@ -579,7 +577,7 @@ impl<'a> ReadCtrl<'a> {
 
 				let mut desc_iter = desc_slice.iter_mut();
 
-				for desc in send_buff.as_mut_slice() {
+				for _desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					desc_iter.next().unwrap();
 				}
@@ -616,7 +614,7 @@ impl<'a> ReadCtrl<'a> {
 
 				let mut desc_iter = desc_slice.iter();
 
-				for desc in send_buff.as_mut_slice() {
+				for _desc in send_buff.as_mut_slice() {
 					// Unwrapping is fine here, as lists must be of same size and same ordering
 					desc_iter.next().unwrap();
 				}
@@ -704,7 +702,7 @@ impl<'a> ReadCtrl<'a> {
 	/// Updates the descriptor flags inside the actual ring if necessary and
 	/// increments the poll_index by one.
 	fn update_send(&mut self, send_buff: &mut Buffer) {
-		for desc in send_buff.as_slice() {
+		for _desc in send_buff.as_slice() {
 			// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
 			// data structure.
 			self.reset_ring_pos();

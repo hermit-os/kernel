@@ -5,24 +5,18 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![allow(unused)]
 #![allow(dead_code)]
 
 use crate::arch::kernel::pci;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, virtualmem, VirtAddr};
+use crate::arch::mm::VirtAddr;
 #[cfg(not(feature = "newlib"))]
 use crate::drivers::net::netwakeup;
 use crate::drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
-use crate::synch::spinlock::SpinlockIrqSave;
 
-use crate::x86::io::*;
-use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::RefCell;
-use core::convert::TryInto;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
 
@@ -118,7 +112,7 @@ impl fmt::Debug for virtio_net_config {
 			self.mac[0], self.mac[1], self.mac[2], self.mac[3], self.mac[4], self.mac[5]
 		)?;
 		write!(f, "max_virtqueue_pairs: {}, ", self.max_virtqueue_pairs)?;
-		write!(f, "mtu: {} ", self.mtu);
+		write!(f, "mtu: {} ", self.mtu)?;
 		write!(f, "}}")
 	}
 }
@@ -141,7 +135,7 @@ struct virtio_net_hdr_legacy {
 }
 
 impl virtio_net_hdr_legacy {
-	pub fn init(&mut self, len: usize) {
+	pub fn init(&mut self, _len: usize) {
 		self.flags = 0;
 		self.gso_type = VIRTIO_NET_HDR_GSO_NONE;
 		self.hdr_len = 0;
@@ -168,7 +162,7 @@ struct virtio_net_hdr {
 }
 
 impl virtio_net_hdr {
-	pub fn init(&mut self, len: usize) {
+	pub fn init(&mut self, _len: usize) {
 		self.flags = 0;
 		self.gso_type = VIRTIO_NET_HDR_GSO_NONE;
 		self.hdr_len = 0;
@@ -255,7 +249,6 @@ impl<'a> fmt::Debug for VirtioNetDriver<'a> {
 impl<'a> VirtioNetDriver<'a> {
 	pub fn init_vqs(&mut self) {
 		let common_cfg = &mut self.common_cfg;
-		let device_cfg = &self.device_cfg;
 		let notify_cfg = &mut self.notify_cfg;
 
 		debug!("Setting up virtqueues...");
@@ -273,7 +266,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let vqsize = common_cfg.queue_size as usize;
 		{
 			let buffer_size: usize = 65562;
-			let mut vec_buffer = &mut self.rx_buffers;
+			let vec_buffer = &mut self.rx_buffers;
 			for i in 0..vqsize {
 				let buffer = RxBuffer::new(buffer_size);
 				let addr = buffer.addr;
@@ -284,7 +277,7 @@ impl<'a> VirtioNetDriver<'a> {
 
 		{
 			let buffer_size: usize = self.get_mtu() as usize;
-			let mut vec_buffer = &mut self.tx_buffers;
+			let vec_buffer = &mut self.tx_buffers;
 			for i in 0..vqsize {
 				let buffer = TxBuffer::new(buffer_size);
 				let addr = buffer.addr;
@@ -362,7 +355,7 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn check_used_elements(&mut self) {
-		let mut buffers = &mut self.tx_buffers;
+		let buffers = &mut self.tx_buffers;
 		while let Some(idx) = (self.vqueues.as_deref_mut().unwrap())[1].check_used_elements() {
 			buffers[idx as usize].in_use = false;
 		}
@@ -396,7 +389,7 @@ impl<'a> VirtioNetDriver<'a> {
 	}
 
 	pub fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
-		let mut buffers = &mut self.tx_buffers;
+		let buffers = &mut self.tx_buffers;
 
 		// do we have free buffers?
 		if !buffers.iter().any(|b| !b.in_use) {
@@ -407,7 +400,7 @@ impl<'a> VirtioNetDriver<'a> {
 		let index = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_TX_QUEUE].get_available_buffer()?;
 		let index = index as usize;
 
-		let mut buffers = &mut self.tx_buffers;
+		let buffers = &mut self.tx_buffers;
 		if !buffers[index].in_use {
 			buffers[index].in_use = true;
 			let header = buffers[index].addr.as_mut_ptr::<virtio_net_hdr>();
@@ -437,7 +430,6 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn receive_rx_buffer(&self) -> Result<&'static [u8], ()> {
 		let (idx, len) = (self.vqueues.as_ref().unwrap())[VIRTIO_NET_RX_QUEUE].get_used_buffer()?;
 		let addr = self.rx_buffers[idx as usize].addr;
-		let virtio_net_hdr = unsafe { &*(addr.as_ptr::<virtio_net_hdr>()) };
 		let rx_buffer_slice = unsafe {
 			slice::from_raw_parts(
 				(addr + mem::size_of::<virtio_net_hdr>()).as_ptr::<u8>(),

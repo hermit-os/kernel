@@ -6,8 +6,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#![allow(dead_code)]
-
 use crate::arch::x86_64::kernel::gdt;
 use crate::x86::bits64::paging::VAddr;
 use crate::x86::dtables::{self, DescriptorTablePointer};
@@ -38,6 +36,7 @@ struct IdtEntry {
 
 enum Type {
 	InterruptGate,
+	#[allow(dead_code)]
 	TrapGate,
 }
 

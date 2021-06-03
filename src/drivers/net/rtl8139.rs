@@ -7,15 +7,14 @@
 
 // The driver based on the online manual http://www.lowlevel.eu/wiki/RTL8139
 
-#![allow(unused)]
+#![allow(dead_code)]
 
 use core::convert::TryInto;
 use core::mem;
 
-use crate::arch::kernel::apic;
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
-use crate::arch::kernel::percore::{core_scheduler, increment_irq_counter};
+use crate::arch::kernel::percore::increment_irq_counter;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
@@ -149,8 +148,8 @@ const TCR_CLRABT: u32 = 0x01; // Clear abort, attempt retransmit (when in abort 
 
 // Basic mode control register
 const BMCR_RESET: u16 = 0x8000; // set the status and control of PHY to default
-const BMCR_SPD100: u16 = (1 << 13); // 100 MBit
-const BMCR_SPD1000: u16 = (1 << 6); // 1000 MBit
+const BMCR_SPD100: u16 = 1 << 13; // 100 MBit
+const BMCR_SPD1000: u16 = 1 << 6; // 1000 MBit
 const BMCR_ANE: u16 = 0x1000; // enable N-way autonegotiation (ignore above if set)
 const BMCR_RAN: u16 = 0x400; // restart auto-negotiation
 const BMCR_DUPLEX: u16 = 0x200; // Duplex mode, generally a value of 1 means full-duplex
@@ -172,25 +171,25 @@ const ISR_ROK: u16 = 0x01; // Rx OK
 const R39_INTERRUPT_MASK: u16 = 0x7f;
 
 // Transmit Status of Descriptor0-3 (C mode only)
-const TSD_CRS: u32 = (1 << 31); // carrier sense lost (during packet transmission)
-const TSD_TABT: u32 = (1 << 30); // transmission abort
-const TSD_OWC: u32 = (1 << 29); // out of window collision
-const TSD_CDH: u32 = (1 << 28); // CD Heart beat (Cleared in 100Mb mode)
+const TSD_CRS: u32 = 1 << 31; // carrier sense lost (during packet transmission)
+const TSD_TABT: u32 = 1 << 30; // transmission abort
+const TSD_OWC: u32 = 1 << 29; // out of window collision
+const TSD_CDH: u32 = 1 << 28; // CD Heart beat (Cleared in 100Mb mode)
 const TSD_NCC: u32 = 0x0F00_0000; // Number of collisions counted (during transmission)
 const TSD_EARTH: u32 = 0x003F_0000; // threshold to begin transmission (0 = 8bytes, 1->2^6 = * 32bytes)
-const TSD_TOK: u32 = (1 << 15); // Transmission OK, successful
-const TSD_TUN: u32 = (1 << 14); // Transmission FIFO underrun
-const TSD_OWN: u32 = (1 << 13); // Tx DMA operation finished (driver must set to 0 when TBC is written)
+const TSD_TOK: u32 = 1 << 15; // Transmission OK, successful
+const TSD_TUN: u32 = 1 << 14; // Transmission FIFO underrun
+const TSD_OWN: u32 = 1 << 13; // Tx DMA operation finished (driver must set to 0 when TBC is written)
 const TSD_SIZE: u32 = 0x1fff; // Descriptor size, the total size in bytes of data to send (max 1792)
 
 /// To set the RTL8139 to accept only the Transmit OK (TOK) and Receive OK (ROK)
 /// interrupts, we would have the TOK and ROK bits of the IMR high and leave the
 /// rest low. That way when a TOK or ROK IRQ happens, it actually will go through
 /// and fire up an IRQ.
-const INT_MASK: u16 = (ISR_ROK | ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER);
+const INT_MASK: u16 = ISR_ROK | ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER;
 
 /// Beside Receive OK (ROK) interrupt, this mask enable all other interrupts
-const INT_MASK_NO_ROK: u16 = (ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER);
+const INT_MASK_NO_ROK: u16 = ISR_TOK | ISR_RXOVW | ISR_TER | ISR_RER;
 
 const NO_TX_BUFFERS: usize = 4;
 

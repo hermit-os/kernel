@@ -56,7 +56,6 @@ static mut PCI_ADAPTERS: Vec<PciAdapter> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver<'_>> = Vec::new();
 
 /// Classes of PCI nodes.
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum PciClassCode {
 	TooOld = 0x00,
@@ -80,7 +79,6 @@ pub enum PciClassCode {
 }
 
 /// Network Controller Sub Classes
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum PciNetworkControllerSubclass {
 	EthernetController = 0x00,
