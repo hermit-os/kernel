@@ -442,7 +442,7 @@ impl DescriptorRing {
 
 	/// Returns an initialized write controler in order
 	/// to write the queue correctly.
-	fn get_write_ctrler(&mut self) -> WriteCtrl {
+	fn get_write_ctrler(&mut self) -> WriteCtrl<'_> {
 		WriteCtrl {
 			start: self.write_index,
 			position: self.write_index,
@@ -456,7 +456,7 @@ impl DescriptorRing {
 
 	/// Returns an initialized read controler in order
 	/// to read the queue correctly.
-	fn get_read_ctrler(&mut self) -> ReadCtrl {
+	fn get_read_ctrler(&mut self) -> ReadCtrl<'_> {
 		ReadCtrl {
 			position: self.poll_index,
 			modulo: self.ring.len(),
@@ -1337,8 +1337,8 @@ impl PackedVq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
@@ -1930,8 +1930,8 @@ impl PackedVq {
 	pub fn prep_buffer(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified

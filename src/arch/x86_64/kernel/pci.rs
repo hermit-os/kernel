@@ -53,7 +53,7 @@ pub const PCI_MULTIFUNCTION_MASK: u32 = 0x0080_0000;
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
 static mut PCI_ADAPTERS: Vec<PciAdapter> = Vec::new();
-static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
+static mut PCI_DRIVERS: Vec<PciDriver<'_>> = Vec::new();
 
 /// Classes of PCI nodes.
 #[allow(dead_code)]

@@ -261,7 +261,7 @@ impl<'a> VirtioNetDriver<'a> {
 		debug!("Setting up virtqueues...");
 
 		let vqnum = 2;
-		let mut vqueues = Vec::<Virtq>::new();
+		let mut vqueues = Vec::<Virtq<'_>>::new();
 
 		// create the queues and tell device about them
 		for i in 0..vqnum as u16 {

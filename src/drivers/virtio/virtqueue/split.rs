@@ -490,8 +490,8 @@ impl SplitVq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match (send, recv) {
 			(None, None) => Err(VirtqError::BufferNotSpecified),
@@ -1083,8 +1083,8 @@ impl SplitVq {
 	pub fn prep_buffer(
 		&self,
 		master: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match (send, recv) {
 			// No buffers specified

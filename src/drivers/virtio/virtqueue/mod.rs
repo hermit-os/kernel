@@ -451,8 +451,8 @@ impl Virtq {
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
 		rc_self: Rc<Virtq>,
-		send: Option<(*mut T, BuffSpec)>,
-		recv: Option<(*mut K, BuffSpec)>,
+		send: Option<(*mut T, BuffSpec<'_>)>,
+		recv: Option<(*mut K, BuffSpec<'_>)>,
 	) -> Result<TransferToken, VirtqError> {
 		match self {
 			Virtq::Packed(vq) => vq.prep_transfer_from_raw(rc_self, send, recv),
@@ -504,8 +504,8 @@ impl Virtq {
 	pub fn prep_buffer(
 		&self,
 		rc_self: Rc<Virtq>,
-		send: Option<BuffSpec>,
-		recv: Option<BuffSpec>,
+		send: Option<BuffSpec<'_>>,
+		recv: Option<BuffSpec<'_>>,
 	) -> Result<BufferToken, VirtqError> {
 		match self {
 			Virtq::Packed(vq) => vq.prep_buffer(rc_self, send, recv),
@@ -2900,7 +2900,7 @@ pub mod error {
 	}
 
 	impl core::fmt::Debug for VirtqError {
-		fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 			match self {
                 VirtqError::General => write!(f, "Virtq failure due to unknown reasons!"),
                 VirtqError::NoBufferAvail => write!(f, "Virtq detected write into non existing Buffer!"),

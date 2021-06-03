@@ -47,7 +47,7 @@ pub mod error {
 	}
 
 	impl fmt::Display for DriverError {
-		fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match *self {
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {:?}", err)

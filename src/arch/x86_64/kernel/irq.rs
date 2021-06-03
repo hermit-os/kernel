@@ -44,10 +44,10 @@ pub struct ExceptionStackFrame {
 }
 
 impl fmt::Debug for ExceptionStackFrame {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		struct Hex(u64);
 		impl fmt::Debug for Hex {
-			fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+			fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 				write!(f, "{:#x}", self.0)
 			}
 		}

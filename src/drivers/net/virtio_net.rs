@@ -1484,7 +1484,7 @@ mod constants {
 	}
 
 	impl core::fmt::Display for Features {
-		fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+		fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
 			match *self {
 				Features::VIRTIO_NET_F_CSUM => write!(f, "VIRTIO_NET_F_CSUM"),
 				Features::VIRTIO_NET_F_GUEST_CSUM => write!(f, "VIRTIO_NET_F_GUEST_CSUM"),

@@ -456,7 +456,7 @@ impl ComCfg {
 	/// returns `Some(VqCfgHandler)`.
 	///
 	/// INFO: The queue size is automatically bounded by constant `src::config:VIRTIO_MAX_QUEUE_SIZE`.
-	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler> {
+	pub fn select_vq(&mut self, index: u16) -> Option<VqCfgHandler<'_>> {
 		self.com_cfg.queue_select = index;
 
 		if self.com_cfg.queue_size == 0 {
