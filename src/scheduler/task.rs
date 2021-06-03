@@ -295,27 +295,22 @@ impl PriorityTaskQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let new_head;
-		let task;
+		let (new_head, task) = {
+			let head = self.queues[queue_index].head.as_mut()?;
+			let mut borrow = head.borrow_mut();
 
-		match self.queues[queue_index].head {
-			None => {
-				return None;
+			if let Some(ref mut nhead) = borrow.next {
+				nhead.borrow_mut().prev = None;
 			}
-			Some(ref mut head) => {
-				let mut borrow = head.borrow_mut();
 
-				if let Some(ref mut nhead) = borrow.next {
-					nhead.borrow_mut().prev = None;
-				}
+			let new_head = borrow.next.clone();
+			borrow.next = None;
+			borrow.prev = None;
 
-				new_head = borrow.next.clone();
-				borrow.next = None;
-				borrow.prev = None;
+			let task = head.clone();
 
-				task = head.clone();
-			}
-		}
+			(new_head, task)
+		};
 
 		self.queues[queue_index].head = new_head;
 		if self.queues[queue_index].head.is_none() {
