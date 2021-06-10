@@ -45,7 +45,7 @@ const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
 const VA_BITS: u64 = 48;
 
 fn tcr_size(x: u64) -> u64 {
-	(((64) - (x)) << 16) | (((64) - (x)) << 0)
+	((64 - x) << 16) | (64 - x)
 }
 
 global_asm!(include_str!("entry.s"));
@@ -158,43 +158,42 @@ unsafe fn pre_init() -> ! {
 			- Fill in the missing Documentation for some of the bits and verify if we care about them
 			  or if loading ond not setting them would be the appropriate action.
 	*/
-	let sctrl_el1: u64 = 0
-		| (1 << 26) 	/* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
-					 				DC CVAC and IC IVAU instructions */
-		| (0 << 25)		/* EE      	Explicit data accesses at EL1 and Stage 1 translation
-					 				table walks at EL1 & EL0 are little-endian*/
-		| (0 << 24)		/* EOE     	Explicit data accesses at EL0 are little-endian*/
-		| (1 << 23)
-		| (1 << 22)
-		| (1 << 20)
-		| (0 << 19)		/* WXN     	Regions with write permission are not forced to XN */
-		| (1 << 18)		/* nTWE     WFE instructions are executed as normal*/
-		| (0 << 17)
-		| (1 << 16)		/* nTWI    	WFI instructions are executed as normal*/
-		| (1 << 15)		/* UCT     	Enables EL0 access in AArch64 to the CTR_EL0 register*/
-		| (1 << 14)		/* DZE     	Execution of the DC ZVA instruction is allowed at EL0*/
-		| (0 << 13)
-		| (1 << 12)		/* I       	Instruction caches enabled at EL0 and EL1*/
-		| (1 << 11)
-		| (0 << 10)
-		| (0 << 9)		/* UMA      Disable access to the interrupt masks from EL0*/
-		| (1 << 8)		/* SED      The SETEND instruction is available*/
-		| (0 << 7)		/* ITD      The IT instruction functionality is available*/
-		| (0 << 6)		/* THEE    	ThumbEE is disabled*/
-		| (0 << 5)		/* CP15BEN  CP15 barrier operations disabled*/
-		| (1 << 4)		/* SA0     	Stack Alignment check for EL0 enabled*/
-		| (1 << 3)		/* SA      	Stack Alignment check enabled*/
-		| (1 << 2)		/* C       	Data and unified enabled*/
-		| (0 << 1)		/* A       	Alignment fault checking disabled*/
-		| (0 << 0)		/* M       	MMU enable*/
-		;
+	let sctrl_el1: u64 = 0;
+	// | (1 << 26) 	/* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
+	// 			 				DC CVAC and IC IVAU instructions */
+	// | (0 << 25)		/* EE      	Explicit data accesses at EL1 and Stage 1 translation
+	// 			 				table walks at EL1 & EL0 are little-endian*/
+	// | (0 << 24)		/* EOE     	Explicit data accesses at EL0 are little-endian*/
+	// | (1 << 23)
+	// | (1 << 22)
+	// | (1 << 20)
+	// | (0 << 19)		/* WXN     	Regions with write permission are not forced to XN */
+	// | (1 << 18)		/* nTWE     WFE instructions are executed as normal*/
+	// | (0 << 17)
+	// | (1 << 16)		/* nTWI    	WFI instructions are executed as normal*/
+	// | (1 << 15)		/* UCT     	Enables EL0 access in AArch64 to the CTR_EL0 register*/
+	// | (1 << 14)		/* DZE     	Execution of the DC ZVA instruction is allowed at EL0*/
+	// | (0 << 13)
+	// | (1 << 12)		/* I       	Instruction caches enabled at EL0 and EL1*/
+	// | (1 << 11)
+	// | (0 << 10)
+	// | (0 << 9)		/* UMA      Disable access to the interrupt masks from EL0*/
+	// | (1 << 8)		/* SED      The SETEND instruction is available*/
+	// | (0 << 7)		/* ITD      The IT instruction functionality is available*/
+	// | (0 << 6)		/* THEE    	ThumbEE is disabled*/
+	// | (0 << 5)		/* CP15BEN  CP15 barrier operations disabled*/
+	// | (1 << 4)		/* SA0     	Stack Alignment check for EL0 enabled*/
+	// | (1 << 3)		/* SA      	Stack Alignment check enabled*/
+	// | (1 << 2)		/* C       	Data and unified enabled*/
+	// | (0 << 1)		/* A       	Alignment fault checking disabled*/
+	// | (0 << 0)		/* M       	MMU enable*/
+	// ;
 	asm!("msr sctlr_el1, {0}", in(reg) sctrl_el1, options(nostack));
 
 	// Enter loader
 	loader_main();
 
-	// we should never reach this  point
-	loop {}
+	unreachable!()
 }
 
 pub unsafe fn wait_forever() -> ! {

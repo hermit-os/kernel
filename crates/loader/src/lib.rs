@@ -18,8 +18,10 @@
 #![feature(const_raw_ptr_deref)]
 #![feature(core_intrinsics)]
 #![no_std]
+#![allow(clippy::missing_safety_doc)]
 
 // EXTERNAL CRATES
+#[cfg(target_arch = "x86_64")]
 #[macro_use]
 extern crate bitflags;
 extern crate goblin;
@@ -55,7 +57,7 @@ extern "C" {
 }
 
 #[global_allocator]
-static ALLOCATOR: &'static mm::allocator::Allocator = &mm::allocator::Allocator;
+static ALLOCATOR: &mm::allocator::Allocator = &mm::allocator::Allocator;
 
 // FUNCTIONS
 pub unsafe fn sections_init() {
@@ -69,7 +71,7 @@ pub unsafe fn sections_init() {
 
 pub unsafe fn load_kernel(elf: &elf::Elf, elf_start: u64, mem_size: u64) -> (u64, u64) {
 	loaderlog!("start 0x{:x}, size 0x{:x}", elf_start, mem_size);
-	if elf.libraries.len() > 0 {
+	if !elf.libraries.is_empty() {
 		panic!(
 			"Error: file depends on following libraries: {:?}",
 			elf.libraries
@@ -147,7 +149,7 @@ pub unsafe fn load_kernel(elf: &elf::Elf, elf_start: u64, mem_size: u64) -> (u64
 }
 
 pub fn check_kernel_elf_file(elf: &elf::Elf) -> u64 {
-	if elf.libraries.len() > 0 {
+	if !elf.libraries.is_empty() {
 		panic!(
 			"Error: file depends on following libraries: {:?}",
 			elf.libraries

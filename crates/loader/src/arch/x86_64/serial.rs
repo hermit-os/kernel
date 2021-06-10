@@ -32,9 +32,7 @@ pub struct SerialPort {
 
 impl SerialPort {
 	pub const fn new(port_address: u16) -> Self {
-		Self {
-			port_address: port_address,
-		}
+		Self { port_address }
 	}
 
 	fn read_from_register(&self, register: u16) -> u8 {
