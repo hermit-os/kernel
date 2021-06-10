@@ -153,7 +153,7 @@ pub mod features {
 /// A module containing virtios device specfific information.
 pub mod device {
 	/// An enum of the device's status field interpretations.
-	#[allow(dead_code, non_camel_case_types)]
+	#[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
 	#[derive(Clone, Copy, Debug)]
 	#[repr(u8)]
 	pub enum Status {

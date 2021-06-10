@@ -40,7 +40,7 @@ use crate::drivers::virtio::depr::virtio_fs;
 // one MUST adjust the associated From<u16>
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case!
-#[allow(dead_code, non_camel_case_types)]
+#[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
 #[repr(u16)]
 pub enum DevId {
 	INVALID = 0x0,
@@ -96,7 +96,7 @@ impl From<u16> for DevId {
 // one MUST adjust the associated From<u8>
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case!
-#[allow(dead_code, non_camel_case_types)]
+#[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Copy, Clone, PartialEq)]
 #[repr(u8)]
 pub enum CfgType {
