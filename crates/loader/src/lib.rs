@@ -12,6 +12,7 @@
 #![feature(global_asm)]
 #![feature(asm)]
 #![feature(panic_info_message)]
+#![allow(incomplete_features)]
 #![feature(specialization)]
 #![feature(naked_functions)]
 #![feature(const_raw_ptr_deref)]
