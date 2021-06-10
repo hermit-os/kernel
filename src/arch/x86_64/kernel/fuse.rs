@@ -305,7 +305,7 @@ where
 			)
 		};
 		if let Some(extra) = &self.extra_buffer {
-			vec![rawcmd, &extra.as_ref()]
+			vec![rawcmd, extra]
 		} else {
 			vec![rawcmd]
 		}
@@ -322,7 +322,7 @@ where
 				::core::mem::size_of::<T>() + ::core::mem::size_of::<fuse_out_header>(),
 			)
 		};
-		if let Some(extra) = self.extra_buffer.as_mut() {
+		if let Some(extra) = &mut self.extra_buffer {
 			vec![rawrsp, extra]
 		} else {
 			vec![rawrsp]

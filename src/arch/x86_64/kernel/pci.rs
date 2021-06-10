@@ -389,10 +389,10 @@ impl fmt::Display for PciAdapter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		// Look for the best matching class name in the PCI Database.
 		let mut class_name = "Unknown Class";
-		for ref c in CLASSES {
+		for c in CLASSES {
 			if c.id == self.class_id {
 				class_name = c.name;
-				for ref sc in c.subclasses {
+				for sc in c.subclasses {
 					if sc.id == self.subclass_id {
 						class_name = sc.name;
 						break;
@@ -406,10 +406,10 @@ impl fmt::Display for PciAdapter {
 		// Look for the vendor and device name in the PCI Database.
 		let mut vendor_name = "Unknown Vendor";
 		let mut device_name = "Unknown Device";
-		for ref v in VENDORS {
+		for v in VENDORS {
 			if v.id == self.vendor_id {
 				vendor_name = v.name;
-				for ref d in v.devices {
+				for d in v.devices {
 					if d.id == self.device_id {
 						device_name = d.name;
 						break;
@@ -516,7 +516,7 @@ pub fn init_drivers() {
 				adapter.device_id
 			);
 
-			if let Ok(VirtioDriver::Network(drv)) = pci_virtio::init_device(&adapter) {
+			if let Ok(VirtioDriver::Network(drv)) = pci_virtio::init_device(adapter) {
 				nic_available = true;
 				register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)))
 			}
@@ -535,7 +535,7 @@ pub fn init_drivers() {
 					adapter.device_id
 				);
 
-				if let Ok(drv) = rtl8139::init_device(&adapter) {
+				if let Ok(drv) = rtl8139::init_device(adapter) {
 					register_driver(PciDriver::RTL8139Net(SpinlockIrqSave::new(drv)))
 				}
 			}

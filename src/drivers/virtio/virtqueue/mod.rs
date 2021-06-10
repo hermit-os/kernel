@@ -2016,14 +2016,14 @@ impl MemDescr {
 	/// Copies the given memory area into a Vector.
 	fn cpy_into_vec(&self) -> Vec<u8> {
 		let mut vec = vec![0u8; self.len];
-		vec.copy_from_slice(&self.deref());
+		vec.copy_from_slice(self.deref());
 		vec
 	}
 
 	/// Copies the given memory area into a Box.
 	fn cpy_into_box(&self) -> Box<[u8]> {
 		let mut vec = vec![0u8; self.len];
-		vec.copy_from_slice(&self.deref());
+		vec.copy_from_slice(self.deref());
 		vec.into_boxed_slice()
 	}
 

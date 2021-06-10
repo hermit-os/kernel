@@ -97,7 +97,7 @@ impl PerCoreScheduler {
 		let task = Rc::new(RefCell::new(Task::new(
 			tid,
 			core_id,
-			TaskStatus::TaskReady,
+			TaskStatus::Ready,
 			prio,
 			stack_size,
 		)));
@@ -146,7 +146,7 @@ impl PerCoreScheduler {
 			let mut current_task_borrowed = self.current_task.borrow_mut();
 			assert_ne!(
 				current_task_borrowed.status,
-				TaskStatus::TaskIdle,
+				TaskStatus::Idle,
 				"Trying to terminate the idle task"
 			);
 
@@ -155,7 +155,7 @@ impl PerCoreScheduler {
 				"Finishing task {} with exit code {}",
 				current_task_borrowed.id, exit_code
 			);
-			current_task_borrowed.status = TaskStatus::TaskFinished;
+			current_task_borrowed.status = TaskStatus::Finished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
 		};
 
@@ -461,16 +461,16 @@ impl PerCoreScheduler {
 
 		let mut new_task = None;
 
-		if status == TaskStatus::TaskRunning {
+		if status == TaskStatus::Running {
 			// A task is currently running.
 			// Check if a task with a equal or higher priority is available.
 			if let Some(task) = self.ready_queue.pop_with_prio(prio) {
 				new_task = Some(task);
 			}
 		} else {
-			if status == TaskStatus::TaskFinished {
+			if status == TaskStatus::Finished {
 				// Mark the finished task as invalid and add it to the finished tasks for a later cleanup.
-				self.current_task.borrow_mut().status = TaskStatus::TaskInvalid;
+				self.current_task.borrow_mut().status = TaskStatus::Invalid;
 				self.finished_tasks.push_back(self.current_task.clone());
 			}
 
@@ -480,7 +480,7 @@ impl PerCoreScheduler {
 				// This available task becomes the new task.
 				debug!("Task is available.");
 				new_task = Some(task);
-			} else if status != TaskStatus::TaskIdle {
+			} else if status != TaskStatus::Idle {
 				// The Idle task becomes the new task.
 				debug!("Only Idle Task is available.");
 				new_task = Some(self.idle_task.clone());
@@ -491,24 +491,24 @@ impl PerCoreScheduler {
 			// There is a new task we want to switch to.
 
 			// Handle the current task.
-			if status == TaskStatus::TaskRunning {
+			if status == TaskStatus::Running {
 				// Mark the running task as ready again and add it back to the queue.
-				self.current_task.borrow_mut().status = TaskStatus::TaskReady;
+				self.current_task.borrow_mut().status = TaskStatus::Ready;
 				self.ready_queue.push(self.current_task.clone());
 			}
 
 			// Handle the new task and get information about it.
 			let (new_id, new_stack_pointer, is_idle) = {
 				let mut borrowed = task.borrow_mut();
-				if borrowed.status != TaskStatus::TaskIdle {
+				if borrowed.status != TaskStatus::Idle {
 					// Mark the new task as running.
-					borrowed.status = TaskStatus::TaskRunning;
+					borrowed.status = TaskStatus::Running;
 				}
 
 				(
 					borrowed.id,
 					borrowed.last_stack_pointer,
-					borrowed.status == TaskStatus::TaskIdle,
+					borrowed.status == TaskStatus::Idle,
 				)
 			};
 
@@ -537,7 +537,7 @@ impl PerCoreScheduler {
 
 			false
 		} else {
-			status == TaskStatus::TaskIdle
+			status == TaskStatus::Idle
 		}
 	}
 }

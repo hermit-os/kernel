@@ -21,12 +21,12 @@ use core::fmt;
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum TaskStatus {
-	TaskInvalid,
-	TaskReady,
-	TaskRunning,
-	TaskBlocked,
-	TaskFinished,
-	TaskIdle,
+	Invalid,
+	Ready,
+	Running,
+	Blocked,
+	Finished,
+	Idle,
 }
 
 /// Reason why wakeup() has been called on a task.
@@ -392,7 +392,7 @@ impl Task {
 
 		Task {
 			id: tid,
-			status: TaskStatus::TaskIdle,
+			status: TaskStatus::Idle,
 			prio: IDLE_PRIO,
 			last_stack_pointer: VirtAddr(0u64),
 			user_stack_pointer: VirtAddr(0u64),
@@ -413,7 +413,7 @@ impl Task {
 
 		Task {
 			id: tid,
-			status: TaskStatus::TaskReady,
+			status: TaskStatus::Ready,
 			prio: task.prio,
 			last_stack_pointer: VirtAddr(0u64),
 			user_stack_pointer: VirtAddr(0u64),
@@ -475,11 +475,11 @@ impl BlockedTaskQueue {
 			);
 
 			assert!(
-				borrowed.status == TaskStatus::TaskBlocked,
+				borrowed.status == TaskStatus::Blocked,
 				"Trying to wake up task {} which is not blocked",
 				borrowed.id
 			);
-			borrowed.status = TaskStatus::TaskReady;
+			borrowed.status = TaskStatus::Ready;
 			borrowed.last_wakeup_reason = reason;
 		}
 
@@ -496,11 +496,11 @@ impl BlockedTaskQueue {
 
 			assert_eq!(
 				borrowed.status,
-				TaskStatus::TaskRunning,
+				TaskStatus::Running,
 				"Trying to block task {} which is not running",
 				borrowed.id
 			);
-			borrowed.status = TaskStatus::TaskBlocked;
+			borrowed.status = TaskStatus::Blocked;
 		}
 
 		let new_node = BlockedTask::new(task, wakeup_time);
