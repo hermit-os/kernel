@@ -7,16 +7,11 @@
 
 pub mod allocator;
 
+#[cfg(not(test))]
 use core::alloc::Layout;
 
 #[cfg(not(test))]
-#[lang = "oom"]
-#[no_mangle]
-pub fn rust_oom(layout: Layout) -> ! {
-	println!(
-		"[!!!OOM!!!] Memory allocation of {} bytes failed",
-		layout.size()
-	);
-
-	loop {}
+#[alloc_error_handler]
+fn alloc_error_handler(layout: Layout) -> ! {
+	panic!("[OOM] Allocation of {:?} failed", layout);
 }

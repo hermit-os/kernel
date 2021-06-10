@@ -5,9 +5,9 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#![feature(alloc_error_handler)]
 #![feature(allocator_api)]
 #![feature(const_raw_ptr_to_usize_cast)]
-#![feature(lang_items)]
 #![feature(llvm_asm)]
 #![feature(global_asm)]
 #![feature(asm)]
