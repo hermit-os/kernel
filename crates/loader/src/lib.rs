@@ -18,17 +18,13 @@
 #![feature(const_raw_ptr_deref)]
 #![feature(core_intrinsics)]
 #![no_std]
+#![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
 // EXTERNAL CRATES
 #[cfg(target_arch = "x86_64")]
 #[macro_use]
 extern crate bitflags;
-extern crate goblin;
-#[cfg(target_arch = "x86_64")]
-extern crate multiboot;
-#[cfg(target_arch = "x86_64")]
-extern crate x86;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::x86_64::paging::{LargePageSize, PageSize};
@@ -69,7 +65,7 @@ pub unsafe fn sections_init() {
 	);
 }
 
-pub unsafe fn load_kernel(elf: &elf::Elf, elf_start: u64, mem_size: u64) -> (u64, u64) {
+pub unsafe fn load_kernel(elf: &elf::Elf<'_>, elf_start: u64, mem_size: u64) -> (u64, u64) {
 	loaderlog!("start 0x{:x}, size 0x{:x}", elf_start, mem_size);
 	if !elf.libraries.is_empty() {
 		panic!(
@@ -148,7 +144,7 @@ pub unsafe fn load_kernel(elf: &elf::Elf, elf_start: u64, mem_size: u64) -> (u64
 	(address, elf.entry + address)
 }
 
-pub fn check_kernel_elf_file(elf: &elf::Elf) -> u64 {
+pub fn check_kernel_elf_file(elf: &elf::Elf<'_>) -> u64 {
 	if !elf.libraries.is_empty() {
 		panic!(
 			"Error: file depends on following libraries: {:?}",

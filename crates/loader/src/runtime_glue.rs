@@ -11,7 +11,7 @@
 use core::panic::PanicInfo;
 
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
+fn panic(info: &PanicInfo<'_>) -> ! {
 	loaderlog!("PANIC: ");
 
 	if let Some(location) = info.location() {
