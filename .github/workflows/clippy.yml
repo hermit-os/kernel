@@ -17,6 +17,8 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          toolchain: nightly
+          override: true
           components: rust-src, clippy
       - uses: actions-rs/cargo@v1
         with:
