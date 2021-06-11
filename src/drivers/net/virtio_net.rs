@@ -301,7 +301,9 @@ impl RxQueues {
 	}
 
 	fn get_next(&mut self) -> Option<Transfer> {
-		self.poll_queue.borrow_mut().pop_front().or_else(|| {
+		let transfer = self.poll_queue.borrow_mut().pop_front();
+
+		transfer.or_else(|| {
 			// Check if any not yet provided transfers are in the queue.
 			self.poll();
 
