@@ -36,7 +36,9 @@ add_custom_command(
 	COMMAND
 		nasm -f bin -o boot.bin ${CMAKE_CURRENT_LIST_DIR}/boot.asm
 	COMMAND
-		echo -n "static SMP_BOOT_CODE: [u8; " > smp_boot_code.rs
+		echo -e "//! Compiled `boot.asm`\n" > smp_boot_code.rs
+	COMMAND
+		echo -n "static SMP_BOOT_CODE: [u8; " >> smp_boot_code.rs
 	COMMAND
 		stat -c %s boot.bin >> smp_boot_code.rs
 	COMMAND
