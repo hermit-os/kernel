@@ -16,8 +16,7 @@ mod common;
 const PATTERN: u8 = 0xAB;
 
 /// Mainly test if memcpy works as expected. Also somewhat tests memcmp
-/// Works with u8, u16, u32, u64, i16, i32 and i64
-/// u128 is blocked due to issue with num_traits, for reason see `basic_math`
+/// Works with u8, u16, u32, u64, u128, i16, i32, i64 and i128
 /// Probably not a super good test
 fn mem<T>()
 where
@@ -133,10 +132,11 @@ where
 
 #[test_case]
 fn test_mem() {
+	mem::<u8>();
+	mem::<u16>();
 	mem::<u32>();
 	mem::<u64>();
-	mem::<u16>();
-	mem::<u8>();
+	mem::<u128>();
 	mem::<usize>();
 }
 
