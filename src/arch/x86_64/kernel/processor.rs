@@ -15,7 +15,10 @@ use crate::environment;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
-use core::arch::x86_64::{__rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc};
+use core::arch::x86_64::{
+	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
+	_xsave,
+};
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
@@ -167,39 +170,34 @@ impl FPUState {
 
 	pub fn restore(&self) {
 		if supports_xsave() {
-			let bitmask = u32::MAX;
 			unsafe {
-				llvm_asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
+				_xrstor(self as *const _ as _, u64::MAX);
 			}
 		} else {
-			unsafe {
-				llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
-			}
+			self.restore_common();
 		}
 	}
 
 	pub fn save(&mut self) {
 		if supports_xsave() {
-			let bitmask: u32 = u32::MAX;
 			unsafe {
-				llvm_asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
+				_xsave(self as *mut _ as _, u64::MAX);
 			}
 		} else {
-			unsafe {
-				llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
-			}
+			self.save_common();
 		}
 	}
 
 	pub fn restore_common(&self) {
 		unsafe {
-			llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+			_fxrstor(self as *const _ as _);
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+			_fxsave(self as *mut _ as _);
+			llvm_asm!("fnclex" :::: "volatile");
 		}
 	}
 }
@@ -1097,16 +1095,16 @@ pub fn get_timestamp() -> u64 {
 }
 
 unsafe fn get_timestamp_rdtsc() -> u64 {
-	llvm_asm!("lfence" ::: "memory" : "volatile");
+	_mm_lfence();
 	let value = _rdtsc();
-	llvm_asm!("lfence" ::: "memory" : "volatile");
+	_mm_lfence();
 	value
 }
 
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	let mut aux: u32 = 0;
 	let value = __rdtscp(&mut aux);
-	llvm_asm!("lfence" ::: "memory" : "volatile");
+	_mm_lfence();
 	value
 }
 
