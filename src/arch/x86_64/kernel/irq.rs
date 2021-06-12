@@ -6,6 +6,8 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
+
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::percore::*;
@@ -13,12 +15,12 @@ use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::paging;
 use crate::scheduler;
 use crate::synch::spinlock::SpinlockIrqSave;
-use crate::x86::bits64::rflags;
 
 use crate::alloc::string::ToString;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt;
+use x86_64::registers::rflags::{self, RFlags};
 
 static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 
@@ -62,47 +64,19 @@ impl fmt::Debug for ExceptionStackFrame {
 	}
 }
 
-/// Enable Interrupts
-#[inline]
-pub fn enable() {
-	unsafe { llvm_asm!("sti" :::: "volatile") };
-}
-
-/// Enable Interrupts and wait for the next interrupt (HLT instruction)
-/// According to https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html, this exact sequence of assembly
-/// instructions is guaranteed to be atomic.
-/// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
-#[inline]
-pub fn enable_and_wait() {
-	unsafe { llvm_asm!("sti; hlt" :::: "volatile") };
-}
-
-/// Disable Interrupts
-#[inline]
-pub fn disable() {
-	unsafe { llvm_asm!("cli" :::: "volatile") };
-}
-
 /// Disable IRQs (nested)
 ///
 /// Disable IRQs when unsure if IRQs were enabled at all.
 /// This function together with nested_enable can be used
 /// in situations when interrupts shouldn't be activated if they
 /// were not activated before calling this function.
-#[cfg(target_os = "hermit")]
 #[inline]
 pub fn nested_disable() -> bool {
-	unsafe {
-		let flags: u64;
-
-		llvm_asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
-		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
+	cfg!(target_os = "hermit") && {
+		let ret = rflags::read().contains(RFlags::INTERRUPT_FLAG);
+		disable();
+		ret
 	}
-}
-
-#[cfg(not(target_os = "hermit"))]
-pub fn nested_disable() -> bool {
-	false
 }
 
 /// Enable IRQs (nested)
