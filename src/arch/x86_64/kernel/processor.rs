@@ -15,7 +15,7 @@ use crate::environment;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
-use core::arch::x86_64::{__rdtscp as rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc as rdtsc};
+use core::arch::x86_64::{__rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc};
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
@@ -1098,14 +1098,14 @@ pub fn get_timestamp() -> u64 {
 
 unsafe fn get_timestamp_rdtsc() -> u64 {
 	llvm_asm!("lfence" ::: "memory" : "volatile");
-	let value = rdtsc();
+	let value = _rdtsc();
 	llvm_asm!("lfence" ::: "memory" : "volatile");
 	value
 }
 
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	let mut aux: u32 = 0;
-	let value = rdtscp(&mut aux as *mut u32);
+	let value = __rdtscp(&mut aux);
 	llvm_asm!("lfence" ::: "memory" : "volatile");
 	value
 }
