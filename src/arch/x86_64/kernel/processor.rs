@@ -198,7 +198,7 @@ impl FPUState {
 	pub fn save_common(&mut self) {
 		unsafe {
 			_fxsave(self as *mut _ as _);
-			llvm_asm!("fnclex" :::: "volatile");
+			asm!("fnclex", options(nomem, nostack));
 		}
 	}
 }
@@ -964,9 +964,9 @@ pub fn supports_fsgs() -> bool {
 #[inline(always)]
 pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
-		let ret: u64;
+		let ret;
 		unsafe {
-			llvm_asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile");
+			asm!("bsr {}, {}", out(reg) ret, in(reg) value, options(pure, nomem, nostack));
 		}
 		Some(ret)
 	} else {

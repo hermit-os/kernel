@@ -42,11 +42,15 @@ macro_rules! switch_to_kernel {
 		unsafe {
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
-			llvm_asm!(
-				"mov %rsp, $0; mov $1, %rsp"
-				: "=r"(user_stack_pointer) : "r"(get_kernel_stack()) :: "volatile"
+			// FIXME: Actually switch stacks https://github.com/hermitcore/libhermit-rs/issues/234
+			asm!(
+				"mov {}, rsp",
+				// "mov rsp, {}",
+				out(reg) user_stack_pointer,
+				// in(reg) get_kernel_stack(),
+				options(nomem, preserves_flags),
 			);
-			core_scheduler().set_current_user_stack(user_stack_pointer);
+			core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
 		}
 		crate::arch::irq::enable();
 	}
@@ -58,10 +62,13 @@ macro_rules! switch_to_user {
 		use crate::arch::kernel::percore::*;
 
 		crate::arch::irq::disable();
-		let user_stack_pointer = core_scheduler().get_current_user_stack();
 		unsafe {
 			// Switch to the user stack
-			llvm_asm!("mov $0, %rsp" :: "r"(user_stack_pointer) :: "volatile");
+			asm!(
+				"mov rsp, {}",
+				in(reg) core_scheduler().get_current_user_stack().0,
+				options(nomem, preserves_flags),
+			);
 		}
 		crate::arch::irq::enable();
 	}
@@ -70,6 +77,7 @@ macro_rules! switch_to_user {
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		use crate::arch::kernel::percore::*;
+		use crate::arch::mm::VirtAddr;
 
 		#[allow(clippy::diverging_sub_expression)]
 		#[allow(unused_unsafe)]
@@ -79,22 +87,25 @@ macro_rules! kernel_function {
 			crate::arch::irq::disable();
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
-			llvm_asm!(
-				"mov %rsp, $0; mov $1, %rsp"
-				: "=r"(user_stack_pointer)
-				: "r"(get_kernel_stack())
-				:: "volatile"
+			// FIXME: Actually switch stacks https://github.com/hermitcore/libhermit-rs/issues/234
+			asm!(
+				"mov {}, rsp",
+				// "mov rsp, {}",
+				out(reg) user_stack_pointer,
+				// in(reg) get_kernel_stack(),
+				options(nomem, preserves_flags),
 			);
-			core_scheduler().set_current_user_stack(user_stack_pointer);
+			core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
 			crate::arch::irq::enable();
 
 			let ret = $f($($x)*);
 
 			crate::arch::irq::disable();
 			// Switch to the user stack
-			llvm_asm!("mov $0, %rsp"
-				:: "r"(core_scheduler().get_current_user_stack())
-				:: "volatile"
+			asm!(
+				"mov rsp, {}",
+				in(reg) core_scheduler().get_current_user_stack().0,
+				options(nomem, preserves_flags),
 			);
 			crate::arch::irq::enable();
 

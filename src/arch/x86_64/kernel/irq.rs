@@ -394,7 +394,7 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: Exception
 
 	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
 	unsafe {
-		llvm_asm!("clts" :::: "volatile");
+		asm!("clts", options(nomem, nostack));
 	}
 
 	// Let the scheduler set up the FPU for the current task.
