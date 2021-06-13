@@ -3,6 +3,7 @@ status = [
   "Tests (windows-latest, nightly)",
   "Tests (ubuntu-latest, nightly)",
   "Format check (ubuntu-latest, nightly)",
+  "Clippy",
   "ci/gitlab/git.rwth-aachen.de",
 ]
 delete_merged_branches = true
