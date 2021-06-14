@@ -6,8 +6,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
-
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::percore::*;
@@ -20,7 +18,8 @@ use crate::alloc::string::ToString;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt;
-use x86_64::registers::rflags::{self, RFlags};
+use x86::bits64::rflags::{self, RFlags};
+use x86::irq;
 
 static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 
@@ -64,6 +63,33 @@ impl fmt::Debug for ExceptionStackFrame {
 	}
 }
 
+/// Enable Interrupts
+#[inline]
+pub fn enable() {
+	unsafe {
+		irq::enable();
+	}
+}
+
+/// Enable Interrupts and wait for the next interrupt (HLT instruction)
+/// According to https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html, this exact sequence of assembly
+/// instructions is guaranteed to be atomic.
+/// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
+#[inline]
+pub fn enable_and_wait() {
+	unsafe {
+		asm!("sti; hlt", options(nomem, nostack));
+	}
+}
+
+/// Disable Interrupts
+#[inline]
+pub fn disable() {
+	unsafe {
+		irq::disable();
+	}
+}
+
 /// Disable IRQs (nested)
 ///
 /// Disable IRQs when unsure if IRQs were enabled at all.
@@ -73,7 +99,7 @@ impl fmt::Debug for ExceptionStackFrame {
 #[inline]
 pub fn nested_disable() -> bool {
 	cfg!(target_os = "hermit") && {
-		let ret = rflags::read().contains(RFlags::INTERRUPT_FLAG);
+		let ret = rflags::read().contains(RFlags::FLAGS_IF);
 		disable();
 		ret
 	}

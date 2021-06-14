@@ -8,8 +8,6 @@
 
 #![allow(dead_code)]
 
-pub use x86_64::instructions::hlt as halt;
-
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{idt, irq, pic, pit, BOOT_INFO};
@@ -24,9 +22,7 @@ use core::arch::x86_64::{
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
-use x86_64::instructions::segmentation;
-use x86_64::registers::model_specific::{FsBase, GsBase};
-use x86_64::VirtAddr;
+use x86::bits64::segmentation;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -978,6 +974,13 @@ pub fn msb(value: u64) -> Option<u64> {
 	}
 }
 
+/// The halt function stops the processor until the next interrupt arrives
+pub fn halt() {
+	unsafe {
+		x86::halt();
+	}
+}
+
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
@@ -1004,7 +1007,7 @@ pub fn readfs() -> usize {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::rdfsbase() }
 	} else {
-		FsBase::read().as_u64()
+		unsafe { rdmsr(IA32_GS_BASE) }
 	}
 	.try_into()
 	.unwrap()
@@ -1015,7 +1018,7 @@ pub fn readgs() -> usize {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::rdgsbase() }
 	} else {
-		GsBase::read().as_u64()
+		unsafe { rdmsr(IA32_FS_BASE) }
 	}
 	.try_into()
 	.unwrap()
@@ -1027,7 +1030,7 @@ pub fn writefs(fs: usize) {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::wrfsbase(fs) }
 	} else {
-		FsBase::write(VirtAddr::new(fs))
+		unsafe { wrmsr(IA32_FS_BASE, fs) }
 	}
 }
 
@@ -1037,7 +1040,7 @@ pub fn writegs(gs: usize) {
 	if cfg!(feature = "fsgsbase") {
 		unsafe { segmentation::wrgsbase(gs) }
 	} else {
-		GsBase::write(VirtAddr::new(gs))
+		unsafe { wrmsr(IA32_GS_BASE, gs) }
 	}
 }
 

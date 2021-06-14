@@ -5,13 +5,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use core::convert::TryInto;
 use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
 use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
-use x86_64::instructions::tlb;
+use x86::tlb;
 
 #[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::apic;
@@ -248,8 +249,9 @@ impl<S: PageSize> Page<S> {
 
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(self) {
-		let addr = x86_64::VirtAddr::new(self.virtual_address.0);
-		tlb::flush(addr);
+		unsafe {
+			tlb::flush(self.virtual_address.0.try_into().unwrap());
+		}
 	}
 
 	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
