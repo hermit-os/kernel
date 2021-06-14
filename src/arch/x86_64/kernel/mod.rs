@@ -42,12 +42,12 @@ pub mod scheduler;
 pub mod serial;
 #[cfg(feature = "smp")]
 mod smp_boot_code;
+#[cfg(not(test))]
+mod start;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-#[cfg(not(test))]
-global_asm!(include_str!("start.s"));
 #[cfg(all(not(test), not(feature = "fsgsbase")))]
 global_asm!(include_str!("switch.s"));
 #[cfg(all(not(test), feature = "fsgsbase"))]
@@ -87,6 +87,44 @@ pub struct BootInfo {
 	hcip: [u8; 4],
 	hcgateway: [u8; 4],
 	hcmask: [u8; 4],
+}
+
+impl BootInfo {
+	const LAYOUT: Self = Self {
+		magic_number: 0,
+		version: 0,
+		base: 0,
+		limit: 0,
+		image_size: 0,
+		tls_start: 0,
+		tls_filesz: 0,
+		tls_memsz: 0,
+		current_stack_address: 0,
+		current_percore_address: 0,
+		host_logical_addr: 0,
+		boot_gtod: 0,
+		mb_info: 0,
+		cmdline: 0,
+		cmdsize: 0,
+		cpu_freq: 0,
+		boot_processor: 0,
+		cpu_online: 0,
+		possible_cpus: 0,
+		current_boot_id: 0,
+		uartport: 0,
+		single_kernel: 0,
+		uhyve: 0,
+		hcip: [0; 4],
+		hcgateway: [0; 4],
+		hcmask: [0; 4],
+	};
+
+	pub const fn current_stack_address_offset() -> isize {
+		let layout = Self::LAYOUT;
+		let start = ptr::addr_of!(layout);
+		let stack = ptr::addr_of!(layout.current_stack_address);
+		unsafe { stack.cast::<u8>().offset_from(start.cast()) }
+	}
 }
 
 /// Kernel header to announce machine features
