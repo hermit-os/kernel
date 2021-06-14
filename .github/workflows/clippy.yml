@@ -8,14 +8,16 @@ on:
       - trying
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: hermitcore/toolchain@downstream
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - name: Rustup (apply rust-toolchain.toml)
+        run: rustup show
+      - name: Clippy
+        run: cargo clippy -- -D warnings

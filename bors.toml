@@ -1,8 +1,8 @@
 status = [
-  "Tests (macOS-latest, nightly)",
-  "Tests (windows-latest, nightly)",
-  "Tests (ubuntu-latest, nightly)",
-  "Format check (ubuntu-latest, nightly)",
+  "Test (ubuntu-latest)",
+  "Test (macos-latest)",
+  "Test (windows-latest)",
+  "Format",
   "Clippy",
   "ci/gitlab/git.rwth-aachen.de",
 ]
