@@ -44,14 +44,10 @@ pub mod serial;
 mod smp_boot_code;
 #[cfg(not(test))]
 mod start;
+pub mod switch;
 pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
-
-#[cfg(all(not(test), not(feature = "fsgsbase")))]
-global_asm!(include_str!("switch.s"));
-#[cfg(all(not(test), feature = "fsgsbase"))]
-global_asm!(include_str!("switch_fsgsbase.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 

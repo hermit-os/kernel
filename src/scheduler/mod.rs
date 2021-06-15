@@ -21,7 +21,7 @@ use crate::arch;
 use crate::arch::irq;
 use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
-use crate::arch::{switch_to_fpu_owner, switch_to_task};
+use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
 use crate::config::*;
 use crate::scheduler::task::*;
