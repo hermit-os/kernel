@@ -23,7 +23,6 @@
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(const_ptr_offset_from)]
-#![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(linked_list_cursors)]
