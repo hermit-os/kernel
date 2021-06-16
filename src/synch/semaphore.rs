@@ -84,38 +84,35 @@ impl Semaphore {
 
 		// Loop until we have acquired the semaphore.
 		loop {
-			{
-				let mut locked_state = self.state.lock();
+			let mut locked_state = self.state.lock();
 
-				if locked_state.count > 0 {
-					// Successfully acquired the semaphore.
-					locked_state.count -= 1;
-					return true;
-				} else if let Some(t) = wakeup_time {
-					if t < crate::arch::processor::get_timer_ticks() {
-						// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
-						// Don't try again and return the failure status.
-						locked_state
-							.queue
-							.remove(core_scheduler.get_current_task_handle());
-						return false;
-					}
-				}
-
-				if backoff.is_completed() {
-					// We couldn't acquire the semaphore.
-					// Block the current task and add it to the wakeup queue.
-					core_scheduler.block_current_task(wakeup_time);
+			if locked_state.count > 0 {
+				// Successfully acquired the semaphore.
+				locked_state.count -= 1;
+				return true;
+			} else if let Some(t) = wakeup_time {
+				if t < crate::arch::processor::get_timer_ticks() {
+					// We could not acquire the semaphore and we were woken up because the wakeup time has elapsed.
+					// Don't try again and return the failure status.
 					locked_state
 						.queue
-						.push(core_scheduler.get_current_task_handle());
+						.remove(core_scheduler.get_current_task_handle());
+					return false;
 				}
 			}
 
 			if backoff.is_completed() {
+				// We couldn't acquire the semaphore.
+				// Block the current task and add it to the wakeup queue.
+				core_scheduler.block_current_task(wakeup_time);
+				locked_state
+					.queue
+					.push(core_scheduler.get_current_task_handle());
+				drop(locked_state);
 				// Switch to the next task.
 				core_scheduler.reschedule();
 			} else {
+				drop(locked_state);
 				backoff.snooze();
 			}
 		}
