@@ -48,9 +48,9 @@ mod vga;
 
 #[cfg(not(test))]
 global_asm!(include_str!("start.s"));
-#[cfg(all(not(test), not(fsgsbase)))]
+#[cfg(all(not(test), not(feature = "fsgsbase")))]
 global_asm!(include_str!("switch.s"));
-#[cfg(all(not(test), fsgsbase))]
+#[cfg(all(not(test), feature = "fsgsbase"))]
 global_asm!(include_str!("switch_fsgsbase.s"));
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
