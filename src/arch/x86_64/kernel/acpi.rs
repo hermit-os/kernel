@@ -9,7 +9,7 @@ use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlag
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::x86::io::*;
-use core::{mem, slice, str};
+use core::{mem, ptr, slice, str};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr(0x0000_040E);
@@ -411,8 +411,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	}
 
 	// Map the "Differentiated System Description Table" (DSDT).
-	// TODO: This must not require "unsafe", see https://github.com/rust-lang/rust/issues/46043#issuecomment-393072398
-	let x_dsdt_field_address = unsafe { &fadt_table.x_dsdt as *const _ as usize };
+	let x_dsdt_field_address = ptr::addr_of!(fadt_table.x_dsdt) as usize;
 	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
 		PhysAddr(fadt_table.x_dsdt)
 	} else {
