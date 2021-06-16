@@ -412,8 +412,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 
 	// Map the "Differentiated System Description Table" (DSDT).
 	// TODO: This must not require "unsafe", see https://github.com/rust-lang/rust/issues/46043#issuecomment-393072398
-	let x_dsdt = core::ptr::addr_of!(fadt_table.x_dsdt);
-	let x_dsdt_field_address = unsafe { x_dsdt.read_unaligned() as usize };
+	let x_dsdt_field_address = unsafe { &fadt_table.x_dsdt as *const _ as usize };
 	let dsdt_address = if x_dsdt_field_address < fadt.table_end_address() && fadt_table.x_dsdt > 0 {
 		PhysAddr(fadt_table.x_dsdt)
 	} else {
