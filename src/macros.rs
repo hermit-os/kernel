@@ -44,7 +44,7 @@ macro_rules! switch_to_kernel {
 			// Store the user stack pointer and switch to the kernel stack
 			llvm_asm!(
 				"mov %rsp, $0; mov $1, %rsp"
-				: "=r"(user_stack_pointer) : "r"(get_kernel_stack()) :: "volatile"
+				: "=&r"(user_stack_pointer) : "r"(get_kernel_stack()) :: "volatile"
 			);
 			core_scheduler().set_current_user_stack(user_stack_pointer);
 		}
@@ -81,7 +81,7 @@ macro_rules! kernel_function {
 			// Store the user stack pointer and switch to the kernel stack
 			llvm_asm!(
 				"mov %rsp, $0; mov $1, %rsp"
-				: "=r"(user_stack_pointer)
+				: "=&r"(user_stack_pointer)
 				: "r"(get_kernel_stack())
 				:: "volatile"
 			);
