@@ -10,7 +10,7 @@ use crate::arch;
 use crate::synch::spinlock::SpinlockIrqSave;
 use core::fmt;
 
-pub struct Console;
+pub struct Console(());
 
 /// A collection of methods that are required to format
 /// a message to HermitCore's console.
@@ -37,7 +37,7 @@ impl Console {
 	}
 }
 
-pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console);
+pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console(()));
 
 #[cfg(not(target_os = "hermit"))]
 #[test]
