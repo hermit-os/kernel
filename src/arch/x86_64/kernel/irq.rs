@@ -13,12 +13,13 @@ use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::paging;
 use crate::scheduler;
 use crate::synch::spinlock::SpinlockIrqSave;
-use crate::x86::bits64::rflags;
 
 use crate::alloc::string::ToString;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::fmt;
+use x86::bits64::rflags::{self, RFlags};
+use x86::irq;
 
 static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 
@@ -65,7 +66,9 @@ impl fmt::Debug for ExceptionStackFrame {
 /// Enable Interrupts
 #[inline]
 pub fn enable() {
-	unsafe { llvm_asm!("sti" :::: "volatile") };
+	unsafe {
+		irq::enable();
+	}
 }
 
 /// Enable Interrupts and wait for the next interrupt (HLT instruction)
@@ -74,13 +77,17 @@ pub fn enable() {
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
 pub fn enable_and_wait() {
-	unsafe { llvm_asm!("sti; hlt" :::: "volatile") };
+	unsafe {
+		asm!("sti; hlt", options(nomem, nostack));
+	}
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
-	unsafe { llvm_asm!("cli" :::: "volatile") };
+	unsafe {
+		irq::disable();
+	}
 }
 
 /// Disable IRQs (nested)
@@ -89,20 +96,13 @@ pub fn disable() {
 /// This function together with nested_enable can be used
 /// in situations when interrupts shouldn't be activated if they
 /// were not activated before calling this function.
-#[cfg(target_os = "hermit")]
 #[inline]
 pub fn nested_disable() -> bool {
-	unsafe {
-		let flags: u64;
-
-		llvm_asm!("pushfq; popq $0; cli" : "=r"(flags) :: "memory" : "volatile");
-		rflags::RFlags::from_bits_truncate(flags).contains(rflags::RFlags::FLAGS_IF)
+	cfg!(target_os = "hermit") && {
+		let ret = rflags::read().contains(RFlags::FLAGS_IF);
+		disable();
+		ret
 	}
-}
-
-#[cfg(not(target_os = "hermit"))]
-pub fn nested_disable() -> bool {
-	false
 }
 
 /// Enable IRQs (nested)
@@ -394,7 +394,7 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: Exception
 
 	// Clear CR0_TASK_SWITCHED so this doesn't happen again before the next switch.
 	unsafe {
-		llvm_asm!("clts" :::: "volatile");
+		asm!("clts", options(nomem, nostack));
 	}
 
 	// Let the scheduler set up the FPU for the current task.

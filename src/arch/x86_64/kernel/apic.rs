@@ -27,6 +27,7 @@ use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
+use core::arch::x86_64::_mm_mfence;
 #[cfg(feature = "smp")]
 use core::convert::TryInto;
 use core::hint::spin_loop;
@@ -658,7 +659,7 @@ pub fn ipi_tlb_flush() {
 
 		// Ensure that all memory operations have completed before issuing a TLB flush.
 		unsafe {
-			llvm_asm!("mfence" ::: "memory" : "volatile");
+			_mm_mfence();
 		}
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.

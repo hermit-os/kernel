@@ -15,10 +15,14 @@ use crate::environment;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
-use core::arch::x86_64::{__rdtscp as rdtscp, _rdrand32_step, _rdrand64_step, _rdtsc as rdtsc};
+use core::arch::x86_64::{
+	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
+	_xsave,
+};
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
+use x86::bits64::segmentation;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;
@@ -167,39 +171,34 @@ impl FPUState {
 
 	pub fn restore(&self) {
 		if supports_xsave() {
-			let bitmask = u32::MAX;
 			unsafe {
-				llvm_asm!("xrstorq $0" :: "*m"(self as *const Self), "{eax}"(bitmask), "{edx}"(bitmask) :: "volatile");
+				_xrstor(self as *const _ as _, u64::MAX);
 			}
 		} else {
-			unsafe {
-				llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
-			}
+			self.restore_common();
 		}
 	}
 
 	pub fn save(&mut self) {
 		if supports_xsave() {
-			let bitmask: u32 = u32::MAX;
 			unsafe {
-				llvm_asm!("xsaveq $0" : "=*m"(self as *mut Self) : "{eax}"(bitmask), "{edx}"(bitmask) : "memory" : "volatile");
+				_xsave(self as *mut _ as _, u64::MAX);
 			}
 		} else {
-			unsafe {
-				llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
-			}
+			self.save_common();
 		}
 	}
 
 	pub fn restore_common(&self) {
 		unsafe {
-			llvm_asm!("fxrstor $0" :: "*m"(self as *const Self) :: "volatile");
+			_fxrstor(self as *const _ as _);
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			llvm_asm!("fxsave $0; fnclex" : "=*m"(self as *mut Self) :: "memory" : "volatile");
+			_fxsave(self as *mut _ as _);
+			asm!("fnclex", options(nomem, nostack));
 		}
 	}
 }
@@ -965,9 +964,9 @@ pub fn supports_fsgs() -> bool {
 #[inline(always)]
 pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
-		let ret: u64;
+		let ret;
 		unsafe {
-			llvm_asm!("bsr $1, $0" : "=r"(ret) : "r"(value) : "cc" : "volatile");
+			asm!("bsr {}, {}", out(reg) ret, in(reg) value, options(pure, nomem, nostack));
 		}
 		Some(ret)
 	} else {
@@ -978,7 +977,7 @@ pub fn msb(value: u64) -> Option<u64> {
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
-		llvm_asm!("hlt" :::: "volatile");
+		x86::halt();
 	}
 }
 
@@ -1004,90 +1003,44 @@ pub fn get_frequency() -> u16 {
 }
 
 #[inline]
-#[cfg(feature = "fsgsbase")]
 pub fn readfs() -> usize {
-	let val: u64;
-
-	unsafe {
-		llvm_asm!("rdfsbase $0" : "=r"(val) ::: "volatile");
+	if cfg!(feature = "fsgsbase") {
+		unsafe { segmentation::rdfsbase() }
+	} else {
+		unsafe { rdmsr(IA32_GS_BASE) }
 	}
-
-	val as usize
+	.try_into()
+	.unwrap()
 }
 
 #[inline]
-#[cfg(not(feature = "fsgsbase"))]
-pub fn readfs() -> usize {
-	let rdx: u64;
-	let rax: u64;
-
-	unsafe {
-		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000100u64) :: "volatile");
-	}
-
-	((rdx << 32) | rax) as usize
-}
-
-#[inline]
-#[cfg(feature = "fsgsbase")]
 pub fn readgs() -> usize {
-	let val: u64;
-
-	unsafe {
-		llvm_asm!("rdgsbase $0" : "=r"(val) ::: "volatile");
+	if cfg!(feature = "fsgsbase") {
+		unsafe { segmentation::rdgsbase() }
+	} else {
+		unsafe { rdmsr(IA32_FS_BASE) }
 	}
-
-	val as usize
+	.try_into()
+	.unwrap()
 }
 
 #[inline]
-#[cfg(not(feature = "fsgsbase"))]
-pub fn readgs() -> usize {
-	let rdx: u64;
-	let rax: u64;
-
-	unsafe {
-		llvm_asm!("rdmsr" : "=%rdx"(rdx), "=%rax"(rax) : "%rcx"(0xc0000101u64) :: "volatile");
-	}
-
-	((rdx << 32) | rax) as usize
-}
-
-#[inline]
-#[cfg(feature = "fsgsbase")]
 pub fn writefs(fs: usize) {
-	unsafe {
-		llvm_asm!("wrfsbase $0" :: "r"(fs) :: "volatile");
+	let fs = fs.try_into().unwrap();
+	if cfg!(feature = "fsgsbase") {
+		unsafe { segmentation::wrfsbase(fs) }
+	} else {
+		unsafe { wrmsr(IA32_FS_BASE, fs) }
 	}
 }
 
 #[inline]
-#[cfg(not(feature = "fsgsbase"))]
-pub fn writefs(fs: usize) {
-	let rdx = fs >> 32;
-	let rax = fs & (u32::MAX - 1) as usize;
-
-	unsafe {
-		llvm_asm!("wrmsr" :: "%rcx"(0xc0000100u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
-	}
-}
-
-#[inline]
-#[cfg(feature = "fsgsbase")]
 pub fn writegs(gs: usize) {
-	unsafe {
-		llvm_asm!("wrgsbase $0" :: "r"(gs) :: "volatile");
-	}
-}
-
-#[inline]
-#[cfg(not(feature = "fsgsbase"))]
-pub fn writegs(gs: usize) {
-	let rdx = gs >> 32;
-	let rax = gs & (u32::MAX - 1) as usize;
-
-	unsafe {
-		llvm_asm!("wrmsr" :: "%rcx"(0xc0000101u64), "%rdx"(rdx), "%rax"(rax) :: "volatile");
+	let gs = gs.try_into().unwrap();
+	if cfg!(feature = "fsgsbase") {
+		unsafe { segmentation::wrgsbase(gs) }
+	} else {
+		unsafe { wrmsr(IA32_GS_BASE, gs) }
 	}
 }
 
@@ -1097,16 +1050,16 @@ pub fn get_timestamp() -> u64 {
 }
 
 unsafe fn get_timestamp_rdtsc() -> u64 {
-	llvm_asm!("lfence" ::: "memory" : "volatile");
-	let value = rdtsc();
-	llvm_asm!("lfence" ::: "memory" : "volatile");
+	_mm_lfence();
+	let value = _rdtsc();
+	_mm_lfence();
 	value
 }
 
 unsafe fn get_timestamp_rdtscp() -> u64 {
 	let mut aux: u32 = 0;
-	let value = rdtscp(&mut aux as *mut u32);
-	llvm_asm!("lfence" ::: "memory" : "volatile");
+	let value = __rdtscp(&mut aux);
+	_mm_lfence();
 	value
 }
 
