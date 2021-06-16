@@ -6,24 +6,13 @@ pub const USER_STACK_SIZE: usize = 1_048_576;
 
 pub const VIRTIO_MAX_QUEUE_SIZE: u16 = 2048;
 
-/// See https://github.com/facebook/folly/blob/1b5288e6eea6df074758f877c849b6e73bbb9fbb/folly/lang/Align.h#L107 for details
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-pub const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = 128;
-#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
-pub const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = 64;
+pub const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = {
+	use core::ptr;
+	use crossbeam_utils::CachePadded;
 
-use crossbeam_utils::CachePadded;
+	let array = [CachePadded::new(0_u8); 2];
+	let ptr0 = ptr::addr_of!(array[0]).cast::<u8>();
+	let ptr1 = ptr::addr_of!(array[1]).cast::<u8>();
 
-/// Sanity check for config parameters
-pub fn sanity_check() {
-	let array = [CachePadded::new(1i8), CachePadded::new(2i8)];
-	let addr1 = &*array[0] as *const i8 as usize;
-	let addr2 = &*array[1] as *const i8 as usize;
-
-	if HW_DESTRUCTIVE_INTERFERENCE_SIZE != addr2 - addr1 {
-		warn!(
-			"HW destructive interference size seems to be wrong. Expect false sharing and degraded performance. Should be {}, but is currently set to {}.",
-			addr2 - addr1 as usize, HW_DESTRUCTIVE_INTERFERENCE_SIZE
-		);
-	}
-}
+	unsafe { ptr1.offset_from(ptr0) as usize }
+};

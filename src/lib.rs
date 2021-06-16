@@ -21,6 +21,7 @@
 #![feature(const_btree_new)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
+#![feature(const_ptr_offset_from)]
 #![feature(global_asm)]
 #![feature(lang_items)]
 #![feature(linkage)]
@@ -284,8 +285,6 @@ extern "C" fn initd(_arg: usize) {
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
 	let (argc, argv, environ) = syscalls::get_application_parameters();
-
-	config::sanity_check();
 
 	// give the IP thread time to initialize the network interface
 	core_scheduler().reschedule();
