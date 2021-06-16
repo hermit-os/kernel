@@ -18,6 +18,7 @@
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
+#![feature(asm)]
 #![feature(const_btree_new)]
 #![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
