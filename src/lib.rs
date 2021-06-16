@@ -26,7 +26,6 @@
 #![feature(lang_items)]
 #![feature(linkage)]
 #![feature(linked_list_cursors)]
-#![feature(llvm_asm)]
 #![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(nonnull_slice_from_raw_parts)]
