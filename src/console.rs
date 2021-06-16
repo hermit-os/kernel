@@ -31,6 +31,12 @@ impl fmt::Write for Console {
 	}
 }
 
+impl Console {
+	pub fn write_all(&mut self, buf: &[u8]) {
+		arch::output_message_buf(buf)
+	}
+}
+
 pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console);
 
 #[cfg(not(target_os = "hermit"))]
