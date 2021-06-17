@@ -6,15 +6,17 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+#[macro_export]
 macro_rules! align_down {
 	($value:expr, $alignment:expr) => {
 		($value) & !($alignment - 1)
 	};
 }
 
+#[macro_export]
 macro_rules! align_up {
 	($value:expr, $alignment:expr) => {
-		align_down!($value + ($alignment - 1), $alignment)
+		$crate::align_down!($value + ($alignment - 1), $alignment)
 	};
 }
 
@@ -25,20 +27,23 @@ macro_rules! align_up {
 #[macro_export]
 macro_rules! print {
 	($($arg:tt)+) => ({
-        $crate::_print(format_args!($($arg)*));
+		$crate::_print(format_args!($($arg)*));
 	});
 }
 
 /// Print formatted text to our console, followed by a newline.
 #[macro_export]
 macro_rules! println {
-    () => (print!("\n"));
-	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
+	() => ($crate::print!("\n"));
+	($($arg:tt)+) => ($crate::print!("{}\n", format_args!($($arg)+)));
 }
 
+#[macro_export]
 macro_rules! switch_to_kernel {
-	() => {
-		crate::arch::irq::disable();
+	() => {{
+		use $crate::arch::{irq, kernel::percore, mm::VirtAddr};
+
+		irq::disable();
 		unsafe {
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
@@ -47,44 +52,45 @@ macro_rules! switch_to_kernel {
 				"mov {}, rsp",
 				// "mov rsp, {}",
 				out(reg) user_stack_pointer,
-				// in(reg) get_kernel_stack(),
+				// in(reg) percore::get_kernel_stack(),
 				options(nomem, preserves_flags),
 			);
-			core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
+			percore::core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
 		}
-		crate::arch::irq::enable();
-	}
+		irq::enable();
+	}}
 }
 
 #[cfg(feature = "newlib")]
+#[macro_export]
 macro_rules! switch_to_user {
-	() => {
-		use crate::arch::kernel::percore::*;
+	() => {{
+		use $crate::arch::{irq, kernel::percore};
 
-		crate::arch::irq::disable();
+		irq::disable();
 		unsafe {
 			// Switch to the user stack
 			asm!(
 				"mov rsp, {}",
-				in(reg) core_scheduler().get_current_user_stack().0,
+				in(reg) percore::core_scheduler().get_current_user_stack().0,
 				options(nomem, preserves_flags),
 			);
 		}
-		crate::arch::irq::enable();
-	}
+		irq::enable();
+	}}
 }
 
+#[macro_export]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
-		use crate::arch::kernel::percore::*;
-		use crate::arch::mm::VirtAddr;
+		use $crate::arch::{irq, kernel::percore, mm::VirtAddr};
 
 		#[allow(clippy::diverging_sub_expression)]
 		#[allow(unused_unsafe)]
 		#[allow(unused_variables)]
 		#[allow(unreachable_code)]
 		unsafe {
-			crate::arch::irq::disable();
+			irq::disable();
 			let user_stack_pointer;
 			// Store the user stack pointer and switch to the kernel stack
 			// FIXME: Actually switch stacks https://github.com/hermitcore/libhermit-rs/issues/234
@@ -95,19 +101,19 @@ macro_rules! kernel_function {
 				// in(reg) get_kernel_stack(),
 				options(nomem, preserves_flags),
 			);
-			core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
-			crate::arch::irq::enable();
+			percore::core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
+			irq::enable();
 
 			let ret = $f($($x)*);
 
-			crate::arch::irq::disable();
+			irq::disable();
 			// Switch to the user stack
 			asm!(
 				"mov rsp, {}",
-				in(reg) core_scheduler().get_current_user_stack().0,
+				in(reg) percore::core_scheduler().get_current_user_stack().0,
 				options(nomem, preserves_flags),
 			);
-			crate::arch::irq::enable();
+			irq::enable();
 
 			ret
 		}
