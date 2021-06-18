@@ -960,20 +960,6 @@ pub fn supports_fsgs() -> bool {
 	unsafe { SUPPORTS_FSGS }
 }
 
-/// Search the most significant bit
-#[inline(always)]
-pub fn msb(value: u64) -> Option<u64> {
-	if value > 0 {
-		let ret;
-		unsafe {
-			asm!("bsr {}, {}", out(reg) ret, in(reg) value, options(pure, nomem, nostack));
-		}
-		Some(ret)
-	} else {
-		None
-	}
-}
-
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
