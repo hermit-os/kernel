@@ -9,7 +9,6 @@
 use crate::arch;
 use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
-use crate::arch::processor::msb;
 use crate::arch::scheduler::{TaskStacks, TaskTLS};
 use crate::scheduler::CoreId;
 use alloc::collections::{LinkedList, VecDeque};
@@ -17,6 +16,21 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::convert::TryInto;
 use core::fmt;
+use core::num::NonZeroU64;
+
+/// Returns the most significant bit.
+///
+/// # Examples
+///
+/// ```
+/// assert_eq!(msb(0), None);
+/// assert_eq!(msb(1), 0);
+/// assert_eq!(msb(u64::MAX), 63);
+/// ```
+#[inline]
+fn msb(n: u64) -> Option<u32> {
+	NonZeroU64::new(n).map(|n| u64::BITS - 1 - n.leading_zeros())
+}
 
 /// The status of the task - used for scheduling
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -300,7 +314,7 @@ impl PriorityTaskQueue {
 	/// Pop the next task, which has a higher or the same priority as `prio`
 	pub fn pop_with_prio(&mut self, prio: Priority) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
-			if i >= u64::from(prio.into()) {
+			if i >= prio.into().try_into().unwrap() {
 				return self.pop_from_queue(i as usize);
 			}
 		}
