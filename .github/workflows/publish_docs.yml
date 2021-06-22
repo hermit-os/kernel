@@ -1,31 +1,23 @@
-name: Build docs
+name: Publish Docs
 
 on:
   push:
     branches:
       - master
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   publish:
-
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2.3.4
-        with:
-         submodules: true
-      - name: Install nightly toolchain
-        uses: actions-rs/toolchain@v1.0.7
-        with:
-          toolchain: nightly
-          components: rust-src
-          override: true
+        uses: actions/checkout@v2
+      - name: Rustup (apply rust-toolchain.toml)
+        run: rustup show
       - name: Generate documentation
-        uses: actions-rs/cargo@v1.0.3
-        with:
-          command: doc
-          args: -Z build-std=core,alloc,panic_abort -Z build-std-features=compiler-builtins-mem --target x86_64-unknown-hermit-kernel.json
+        run: cargo doc
       - name: Generate index.html
         run: |
           cat > target/x86_64-unknown-hermit-kernel/doc/index.html <<EOL
@@ -42,7 +34,7 @@ jobs:
           EOL
       - name: Deploy documentation
         if: success()
-        uses: crazy-max/ghaction-github-pages@v2.5.0
+        uses: crazy-max/ghaction-github-pages@v2
         with:
           target_branch: gh-pages
           build_dir: target/x86_64-unknown-hermit-kernel/doc
