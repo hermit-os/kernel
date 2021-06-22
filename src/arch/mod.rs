@@ -62,6 +62,8 @@ pub use crate::arch::x86_64::kernel::processor;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::scheduler;
 #[cfg(target_arch = "x86_64")]
+pub use crate::arch::x86_64::kernel::switch;
+#[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
 #[cfg(all(target_arch = "x86_64", target_os = "hermit"))]
 pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processor_init};
@@ -69,14 +71,3 @@ pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processo
 pub use crate::arch::x86_64::kernel::{
 	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
-
-#[cfg(test)]
-pub unsafe fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {}
-#[cfg(test)]
-pub unsafe fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {}
-
-#[cfg(not(test))]
-extern "C" {
-	pub fn switch_to_task(old_stack: *mut usize, new_stack: usize);
-	pub fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize);
-}
