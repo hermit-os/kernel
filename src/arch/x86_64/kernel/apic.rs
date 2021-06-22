@@ -234,22 +234,21 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			1 => {
 				// I/O APIC
 				let ioapic_record = unsafe { &*(current_address as *const IoApicRecord) };
-				let ioapic_addr = core::ptr::addr_of!(ioapic_record.address);
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
 					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+					let record_addr = ioapic_record.address;
 					debug!(
 						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-						ioapic_addr.read_unaligned(),
-						IOAPIC_ADDRESS
+						record_addr, IOAPIC_ADDRESS
 					);
 
 					let mut flags = PageTableEntryFlags::empty();
 					flags.device().writable().execute_disable();
 					paging::map::<BasePageSize>(
 						IOAPIC_ADDRESS,
-						PhysAddr(ioapic_record.address.into()),
+						PhysAddr(record_addr.into()),
 						1,
 						flags,
 					);
