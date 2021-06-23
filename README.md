@@ -30,10 +30,10 @@ rustup component add rust-src llvm-tools-preview
 You can then build `libhermit-rs` with the following command
 
 ```sh
-cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
+cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-none-hermitkernel
 ```
 
-The resulting library then can be found in `target/x86_64-unknown-hermit-kernel/debug/libhermit.a`
+The resulting library then can be found in `target/x86_64-unknown-none-hermitkernel/debug/libhermit.a`
 
 
 ### Control the kernel messages verbosity
@@ -44,7 +44,7 @@ You can change it by setting it at compile time to a string matching the name of
 If the variable is not set, or the name doesn't match, then `LevelFilter::Info` is used by default.
 
 ```sh
-$ HERMIT_LOG_LEVEL_FILTER=Debug cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-hermit-kernel
+$ HERMIT_LOG_LEVEL_FILTER=Debug cargo build -Z build-std=core,alloc,panic_abort --target x86_64-unknown-none-hermitkernel
 ```
 
 ## Credits
