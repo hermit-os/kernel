@@ -16,7 +16,7 @@ defaults:
     shell: bash
 
 jobs:
-  build:
+  test:
     name: Test
     runs-on: ${{ matrix.os }}
     strategy:

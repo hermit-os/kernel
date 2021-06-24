@@ -9,7 +9,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  publish:
+  publish_docs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
