@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "rusty-hermit"
-version = "0.3.50"
+version = "0.3.51"
 dependencies = [
  "bitflags",
  "crossbeam-utils",
