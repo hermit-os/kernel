@@ -1,11 +1,11 @@
 project(librs C)
 
 # Add the Cargo project to build the Rust library.
-set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-hermit-kernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit.a")
+set(HERMIT_RS "${CMAKE_BINARY_DIR}/hermit_rs/${HERMIT_ARCH}-unknown-none-hermitkernel/${CARGO_BUILDTYPE_OUTPUT}/libhermit.a")
 add_custom_target(hermit_rs
 	COMMAND
 		${CMAKE_COMMAND} -E env CARGO_TARGET_DIR=${CMAKE_BINARY_DIR}/hermit_rs RUST_TARGET_PATH=${HERMIT_ROOT}/librs
-		cargo build ${CARGO_BUILDTYPE_PARAMETER} -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${HERMIT_ARCH}-unknown-hermit-kernel.json --no-default-features --features pci,acpi,smp,newlib
+		cargo build ${CARGO_BUILDTYPE_PARAMETER} -Z build-std=core,alloc -Zbuild-std-features=compiler-builtins-mem --target ${HERMIT_ARCH}-unknown-none-hermitkernel --no-default-features --features pci,acpi,smp,newlib
 	WORKING_DIRECTORY
 		${CMAKE_CURRENT_LIST_DIR})
 

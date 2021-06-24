@@ -20,7 +20,7 @@ jobs:
         run: cargo doc
       - name: Generate index.html
         run: |
-          cat > target/x86_64-unknown-hermit-kernel/doc/index.html <<EOL
+          cat > target/x86_64-unknown-none-hermitkernel/doc/index.html <<EOL
           <!doctype html>
           <html>
             <head>
@@ -37,6 +37,6 @@ jobs:
         uses: crazy-max/ghaction-github-pages@v2
         with:
           target_branch: gh-pages
-          build_dir: target/x86_64-unknown-hermit-kernel/doc
+          build_dir: target/x86_64-unknown-none-hermitkernel/doc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
