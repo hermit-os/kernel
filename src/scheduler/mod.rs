@@ -320,16 +320,6 @@ impl PerCoreScheduler {
 		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason = reason);
 	}
 
-	#[inline]
-	pub fn get_current_user_stack(&self) -> VirtAddr {
-		self.current_task.borrow().user_stack_pointer
-	}
-
-	#[inline]
-	pub fn set_current_user_stack(&mut self, addr: VirtAddr) {
-		self.current_task.borrow_mut().user_stack_pointer = addr;
-	}
-
 	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn get_current_kernel_stack(&self) -> VirtAddr {

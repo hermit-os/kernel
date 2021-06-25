@@ -40,40 +40,31 @@ macro_rules! println {
 
 #[macro_export]
 macro_rules! kernel_function {
-	($f:ident($($x:tt)*)) => {{
-		use $crate::arch::{irq, kernel::percore, mm::VirtAddr};
+	($f:ident()) => {
+		$crate::arch::switch::kernel_function0($f)
+	};
 
-		#[allow(clippy::diverging_sub_expression)]
-		#[allow(unused_unsafe)]
-		#[allow(unused_variables)]
-		#[allow(unreachable_code)]
-		unsafe {
-			irq::disable();
-			let user_stack_pointer;
-			// Store the user stack pointer and switch to the kernel stack
-			// FIXME: Actually switch stacks https://github.com/hermitcore/libhermit-rs/issues/234
-			asm!(
-				"mov {}, rsp",
-				// "mov rsp, {}",
-				out(reg) user_stack_pointer,
-				// in(reg) get_kernel_stack(),
-				options(nomem, preserves_flags),
-			);
-			percore::core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
-			irq::enable();
+	($f:ident($arg1:expr)) => {
+		$crate::arch::switch::kernel_function1($f, $arg1)
+	};
 
-			let ret = $f($($x)*);
+	($f:ident($arg1:expr, $arg2:expr)) => {
+		$crate::arch::switch::kernel_function2($f, $arg1, $arg2)
+	};
 
-			irq::disable();
-			// Switch to the user stack
-			asm!(
-				"mov rsp, {}",
-				in(reg) percore::core_scheduler().get_current_user_stack().0,
-				options(nomem, preserves_flags),
-			);
-			irq::enable();
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {
+		$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3)
+	};
 
-			ret
-		}
-	}};
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {
+		$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4)
+	};
+
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {
+		$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
+	};
+
+	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {
+		$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
+	};
 }

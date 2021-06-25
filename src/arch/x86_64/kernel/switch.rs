@@ -1,3 +1,9 @@
+use core::{
+	mem::{self, MaybeUninit},
+	ptr,
+};
+
+use crate::percore;
 use crate::set_current_kernel_stack;
 
 #[cfg(feature = "fsgsbase")]
@@ -143,3 +149,120 @@ pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack:
 		options(noreturn),
 	);
 }
+
+macro_rules! kernel_function_impl {
+    ($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
+		/// Executes `f` on the kernel stack.
+        pub fn $kernel_function<R, $($A),*>(f: extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+            unsafe {
+                assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
+
+                $(
+                    assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
+                    let $arg = {
+                        let mut reg = MaybeUninit::<usize>::uninit().assume_init();
+						// SAFETY: $A is smaller than usize and directly fits in a register
+						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
+                        ptr::write(&mut reg as *mut _ as _, $arg);
+                        reg
+                    };
+                )*
+
+                let ret: u64;
+                asm!(
+                    // Save user stack pointer and switch to kernel stack
+                    "cli",
+                    "mov {user_stack_ptr}, rsp",
+                    "mov rsp, {kernel_stack_ptr}",
+                    "sti",
+
+                    "call {f}",
+
+                    // Switch back to user stack
+                    "cli",
+                    "mov rsp, {user_stack_ptr}",
+                    "sti",
+
+                    f = in(reg) f,
+                    user_stack_ptr = out(reg) _,
+                    kernel_stack_ptr = in(reg) percore::get_kernel_stack(),
+
+                    $($operands)*
+
+                    // Return argument in rax
+                    out("rax") ret,
+
+                    // All caller-saved registers must be marked as clobbered
+                    out("r10") _, out("r11") _,
+                );
+
+				// SAFETY: R is smaller than usize and directly fits in rax
+				// Since f returns R, we can safely convert ret to R
+                mem::transmute_copy(&ret)
+            }
+        }
+    };
+}
+
+kernel_function_impl!(kernel_function0() {
+	out("rdi") _,
+	out("rsi") _,
+	out("rdx") _,
+	out("rcx") _,
+	out("r8") _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function1(arg1: A1) {
+	inout("rdi") arg1 => _,
+	out("rsi") _,
+	out("rdx") _,
+	out("rcx") _,
+	out("r8") _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function2(arg1: A1, arg2: A2) {
+	inout("rdi") arg1 => _,
+	inout("rsi") arg2 => _,
+	out("rdx") _,
+	out("rcx") _,
+	out("r8") _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function3(arg1: A1, arg2: A2, arg3: A3) {
+	inout("rdi") arg1 => _,
+	inout("rsi") arg2 => _,
+	inout("rdx") arg3 => _,
+	out("rcx") _,
+	out("r8") _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function4(arg1: A1, arg2: A2, arg3: A3, arg4: A4) {
+	inout("rdi") arg1 => _,
+	inout("rsi") arg2 => _,
+	inout("rdx") arg3 => _,
+	inout("rcx") arg4 => _,
+	out("r8") _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function5(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5) {
+	inout("rdi") arg1 => _,
+	inout("rsi") arg2 => _,
+	inout("rdx") arg3 => _,
+	inout("rcx") arg4 => _,
+	inout("r8") arg5 => _,
+	out("r9") _,
+});
+
+kernel_function_impl!(kernel_function6(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5, arg6: A6) {
+	inout("rdi") arg1 => _,
+	inout("rsi") arg2 => _,
+	inout("rdx") arg3 => _,
+	inout("rcx") arg4 => _,
+	inout("r8") arg5 => _,
+	inout("r9") arg6 => _,
+});
