@@ -39,48 +39,6 @@ macro_rules! println {
 }
 
 #[macro_export]
-macro_rules! switch_to_kernel {
-	() => {{
-		use $crate::arch::{irq, kernel::percore, mm::VirtAddr};
-
-		irq::disable();
-		unsafe {
-			let user_stack_pointer;
-			// Store the user stack pointer and switch to the kernel stack
-			// FIXME: Actually switch stacks https://github.com/hermitcore/libhermit-rs/issues/234
-			asm!(
-				"mov {}, rsp",
-				// "mov rsp, {}",
-				out(reg) user_stack_pointer,
-				// in(reg) percore::get_kernel_stack(),
-				options(nomem, preserves_flags),
-			);
-			percore::core_scheduler().set_current_user_stack(VirtAddr(user_stack_pointer));
-		}
-		irq::enable();
-	}}
-}
-
-#[cfg(feature = "newlib")]
-#[macro_export]
-macro_rules! switch_to_user {
-	() => {{
-		use $crate::arch::{irq, kernel::percore};
-
-		irq::disable();
-		unsafe {
-			// Switch to the user stack
-			asm!(
-				"mov rsp, {}",
-				in(reg) percore::core_scheduler().get_current_user_stack().0,
-				options(nomem, preserves_flags),
-			);
-		}
-		irq::enable();
-	}}
-}
-
-#[macro_export]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		use $crate::arch::{irq, kernel::percore, mm::VirtAddr};

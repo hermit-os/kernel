@@ -359,10 +359,9 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 	// Call the actual entry point of the task.
 	func(arg);
-	switch_to_kernel!();
 
 	// Exit task
-	core_scheduler().exit(0)
+	crate::sys_thread_exit(0)
 }
 
 impl TaskFrame for Task {
