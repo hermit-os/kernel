@@ -157,8 +157,14 @@ pub fn sys_netwait(handle: usize, millis: Option<u64>) {
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
+fn __sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
+	netwait_and_wakeup(handles, millis);
+}
+
+#[cfg(not(feature = "newlib"))]
+#[no_mangle]
 pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
-	kernel_function!(netwait_and_wakeup(handles, millis));
+	kernel_function!(__sys_netwait_and_wakeup(handles, millis));
 }
 
 pub fn __sys_shutdown(arg: i32) -> ! {
