@@ -41,7 +41,7 @@ fn __sys_acquire_putchar_lock() {
 
 #[no_mangle]
 pub extern "C" fn sys_acquire_putchar_lock() {
-	kernel_function!(sys_acquire_putchar_lock())
+	kernel_function!(__sys_acquire_putchar_lock())
 }
 
 fn __sys_putchar(character: u8) {
