@@ -137,7 +137,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
 #[cfg(target_os = "hermit")]
-pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
+pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!(
@@ -179,31 +179,38 @@ pub fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 /// Returns null if the new layout does not meet the size and alignment constraints of the
 /// allocator, or if reallocation otherwise fails.
 #[cfg(target_os = "hermit")]
-pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	let layout_res = Layout::from_size_align(size, align);
-	if layout_res.is_err() || size == 0 || new_size == 0 {
-		warn!(
+pub extern "C" fn __sys_realloc(
+	ptr: *mut u8,
+	size: usize,
+	align: usize,
+	new_size: usize,
+) -> *mut u8 {
+	unsafe {
+		let layout_res = Layout::from_size_align(size, align);
+		if layout_res.is_err() || size == 0 || new_size == 0 {
+			warn!(
 			"__sys_realloc called with ptr 0x{:x}, size 0x{:x}, align 0x{:x}, new_size 0x{:x} is an invalid layout!",
 			ptr as usize, size, align, new_size
 		);
-		return core::ptr::null::<*mut u8>() as *mut u8;
-	}
-	let layout = layout_res.unwrap();
-	let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
+			return core::ptr::null::<*mut u8>() as *mut u8;
+		}
+		let layout = layout_res.unwrap();
+		let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
 
-	if new_ptr.is_null() {
-		debug!(
+		if new_ptr.is_null() {
+			debug!(
 			"__sys_realloc failed to resize ptr 0x{:x} with size 0x{:x}, align 0x{:x}, new_size 0x{:x} !",
 			ptr as usize, size, align, new_size
 		);
-	} else {
-		trace!(
-			"__sys_realloc: resized memory at 0x{:x}, new address 0x{:x}",
-			ptr as usize,
-			new_ptr as usize
-		);
+		} else {
+			trace!(
+				"__sys_realloc: resized memory at 0x{:x}, new address 0x{:x}",
+				ptr as usize,
+				new_ptr as usize
+			);
+		}
+		new_ptr
 	}
-	new_ptr
 }
 
 /// Interface to deallocate a memory region from the system heap
@@ -217,24 +224,26 @@ pub unsafe fn __sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: u
 /// # Errors
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
 #[cfg(target_os = "hermit")]
-pub unsafe fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
-	let layout_res = Layout::from_size_align(size, align);
-	if layout_res.is_err() || size == 0 {
-		warn!(
-			"__sys_free called with size 0x{:x}, align 0x{:x} is an invalid layout!",
-			size, align
-		);
-		debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
-		debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
-	} else {
-		trace!(
-			"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
-			ptr as usize,
-			size
-		);
+pub extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
+	unsafe {
+		let layout_res = Layout::from_size_align(size, align);
+		if layout_res.is_err() || size == 0 {
+			warn!(
+				"__sys_free called with size 0x{:x}, align 0x{:x} is an invalid layout!",
+				size, align
+			);
+			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
+			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
+		} else {
+			trace!(
+				"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
+				ptr as usize,
+				size
+			);
+		}
+		let layout = layout_res.unwrap();
+		ALLOCATOR.dealloc(ptr, layout);
 	}
-	let layout = layout_res.unwrap();
-	ALLOCATOR.dealloc(ptr, layout);
 }
 
 #[cfg(target_os = "hermit")]

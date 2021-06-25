@@ -77,20 +77,21 @@ pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
 #[cfg(target_os = "hermit")]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	unsafe { __sys_realloc(ptr, size, align, new_size) }
+	__sys_realloc(ptr, size, align, new_size)
 }
 
 #[cfg(target_os = "hermit")]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	unsafe { __sys_free(ptr, size, align) }
+	__sys_free(ptr, size, align)
 }
 
 pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	unsafe { SYS.get_application_parameters() }
 }
 
-fn __sys_get_mac_address() -> Result<[u8; 6], ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_get_mac_address() -> Result<[u8; 6], ()> {
 	unsafe { SYS.get_mac_address() }
 }
 
@@ -99,7 +100,8 @@ pub fn sys_get_mac_address() -> Result<[u8; 6], ()> {
 	kernel_function!(__sys_get_mac_address())
 }
 
-fn __sys_get_mtu() -> Result<u16, ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_get_mtu() -> Result<u16, ()> {
 	unsafe { SYS.get_mtu() }
 }
 
@@ -108,7 +110,8 @@ pub fn sys_get_mtu() -> Result<u16, ()> {
 	kernel_function!(__sys_get_mtu())
 }
 
-fn __sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
 	unsafe { SYS.get_tx_buffer(len) }
 }
 
@@ -117,7 +120,8 @@ pub fn sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
 	kernel_function!(__sys_get_tx_buffer(len))
 }
 
-fn __sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
 	unsafe { SYS.send_tx_buffer(handle, len) }
 }
 
@@ -126,7 +130,8 @@ pub fn sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
 	kernel_function!(__sys_send_tx_buffer(handle, len))
 }
 
-fn __sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
 	unsafe { SYS.receive_rx_buffer() }
 }
 
@@ -135,7 +140,8 @@ pub fn sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
 	kernel_function!(__sys_receive_rx_buffer())
 }
 
-fn __sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 	unsafe { SYS.rx_buffer_consumed(handle) }
 }
 
@@ -145,7 +151,8 @@ pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 }
 
 #[cfg(not(feature = "newlib"))]
-fn __sys_netwait(handle: usize, millis: Option<u64>) {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_netwait(handle: usize, millis: Option<u64>) {
 	netwait(handle, millis)
 }
 
@@ -156,8 +163,8 @@ pub fn sys_netwait(handle: usize, millis: Option<u64>) {
 }
 
 #[cfg(not(feature = "newlib"))]
-#[no_mangle]
-fn __sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	netwait_and_wakeup(handles, millis);
 }
 
@@ -167,7 +174,7 @@ pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	kernel_function!(__sys_netwait_and_wakeup(handles, millis));
 }
 
-pub fn __sys_shutdown(arg: i32) -> ! {
+pub extern "C" fn __sys_shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
@@ -179,7 +186,7 @@ pub extern "C" fn sys_shutdown(arg: i32) -> ! {
 	kernel_function!(__sys_shutdown(arg))
 }
 
-fn __sys_unlink(name: *const u8) -> i32 {
+extern "C" fn __sys_unlink(name: *const u8) -> i32 {
 	unsafe { SYS.unlink(name) }
 }
 
@@ -188,7 +195,7 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
-fn __sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
+extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
 	unsafe { SYS.open(name, flags, mode) }
 }
 
@@ -197,7 +204,7 @@ pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
 	kernel_function!(__sys_open(name, flags, mode))
 }
 
-fn __sys_close(fd: i32) -> i32 {
+extern "C" fn __sys_close(fd: i32) -> i32 {
 	unsafe { SYS.close(fd) }
 }
 
@@ -206,7 +213,7 @@ pub extern "C" fn sys_close(fd: i32) -> i32 {
 	kernel_function!(__sys_close(fd))
 }
 
-fn __sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
+extern "C" fn __sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
 	unsafe { SYS.read(fd, buf, len) }
 }
 #[no_mangle]
@@ -214,7 +221,7 @@ pub extern "C" fn sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
 	kernel_function!(__sys_read(fd, buf, len))
 }
 
-fn __sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
+extern "C" fn __sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
 	unsafe { SYS.write(fd, buf, len) }
 }
 
@@ -223,7 +230,7 @@ pub extern "C" fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
 	kernel_function!(__sys_write(fd, buf, len))
 }
 
-fn __sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
+extern "C" fn __sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
 	unsafe { SYS.lseek(fd, offset, whence) }
 }
 
@@ -232,7 +239,7 @@ pub extern "C" fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
-fn __sys_stat(file: *const u8, st: usize) -> i32 {
+extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {
 	unsafe { SYS.stat(file, st) }
 }
 

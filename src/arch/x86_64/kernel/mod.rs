@@ -145,7 +145,8 @@ pub fn has_ipdevice() -> bool {
 }
 
 #[cfg(not(feature = "newlib"))]
-pub fn __sys_uhyve_get_ip() -> [u8; 4] {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_uhyve_get_ip() -> [u8; 4] {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) }
 }
 
@@ -156,7 +157,8 @@ pub fn sys_uhyve_get_ip() -> [u8; 4] {
 }
 
 #[cfg(not(feature = "newlib"))]
-pub fn __sys_uhyve_get_gateway() -> [u8; 4] {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_uhyve_get_gateway() -> [u8; 4] {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcgateway) }
 }
 
@@ -167,7 +169,8 @@ pub fn sys_uhyve_get_gateway() -> [u8; 4] {
 }
 
 #[cfg(not(feature = "newlib"))]
-pub fn __sys_uhyve_get_mask() -> [u8; 4] {
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_uhyve_get_mask() -> [u8; 4] {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcmask) }
 }
 
@@ -178,7 +181,7 @@ pub fn sys_uhyve_get_mask() -> [u8; 4] {
 }
 
 #[cfg(feature = "newlib")]
-pub fn __sys_uhyve_get_ip(ip: *mut u8) {
+extern "C" fn __sys_uhyve_get_ip(ip: *mut u8) {
 	unsafe {
 		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcip);
 		slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
@@ -192,7 +195,7 @@ pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
 }
 
 #[cfg(feature = "newlib")]
-pub fn __sys_uhyve_get_gateway(gw: *mut u8) {
+extern "C" fn __sys_uhyve_get_gateway(gw: *mut u8) {
 	unsafe {
 		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcgateway);
 		slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
@@ -206,7 +209,7 @@ pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
 }
 
 #[cfg(feature = "newlib")]
-pub fn __sys_uhyve_get_mask(mask: *mut u8) {
+extern "C" fn __sys_uhyve_get_mask(mask: *mut u8) {
 	unsafe {
 		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcmask);
 		slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);

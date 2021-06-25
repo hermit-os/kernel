@@ -28,7 +28,7 @@ use crate::syscalls::timer::timespec;
 pub type SignalHandler = extern "C" fn(i32);
 pub type Tid = u32;
 
-fn __sys_getpid() -> Tid {
+extern "C" fn __sys_getpid() -> Tid {
 	core_scheduler().get_current_task_id().into()
 }
 
@@ -37,7 +37,7 @@ pub extern "C" fn sys_getpid() -> Tid {
 	kernel_function!(__sys_getpid())
 }
 
-fn __sys_getprio(id: *const Tid) -> i32 {
+extern "C" fn __sys_getprio(id: *const Tid) -> i32 {
 	let task = core_scheduler().get_current_task_handle();
 
 	if id.is_null() || unsafe { *id } == task.get_id().into() {
@@ -57,7 +57,7 @@ pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
 }
 
-fn __sys_exit(arg: i32) -> ! {
+extern "C" fn __sys_exit(arg: i32) -> ! {
 	debug!("Exit program with error code {}!", arg);
 	syscalls::__sys_shutdown(arg)
 }
@@ -67,7 +67,7 @@ pub extern "C" fn sys_exit(arg: i32) -> ! {
 	kernel_function!(__sys_exit(arg))
 }
 
-fn __sys_thread_exit(arg: i32) -> ! {
+extern "C" fn __sys_thread_exit(arg: i32) -> ! {
 	debug!("Exit thread with error code {}!", arg);
 	core_scheduler().exit(arg)
 }
@@ -91,7 +91,7 @@ pub fn sbrk_init() {
 }
 
 #[cfg(feature = "newlib")]
-fn __sys_sbrk(incr: isize) -> usize {
+extern "C" fn __sys_sbrk(incr: isize) -> usize {
 	// Get the boundaries of the task heap and verify that they are suitable for sbrk.
 	let task_heap_start = task_heap_start();
 	let task_heap_end = task_heap_end();
@@ -114,7 +114,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	kernel_function!(__sys_sbrk(incr))
 }
 
-pub fn __sys_usleep(usecs: u64) {
+pub extern "C" fn __sys_usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
@@ -143,7 +143,7 @@ pub extern "C" fn sys_msleep(ms: u32) {
 	kernel_function!(__sys_usleep(u64::from(ms) * 1000))
 }
 
-fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
+extern "C" fn __sys_nanosleep(rqtp: *const timespec, _rmtp: *mut timespec) -> i32 {
 	assert!(
 		!rqtp.is_null(),
 		"sys_nanosleep called with a zero rqtp parameter"
@@ -170,7 +170,7 @@ pub extern "C" fn sys_nanosleep(rqtp: *const timespec, rmtp: *mut timespec) -> i
 }
 
 #[cfg(feature = "newlib")]
-fn __sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
+extern "C" fn __sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
 	let task_id = core_scheduler().clone(func, arg);
 
 	if !id.is_null() {
@@ -188,7 +188,7 @@ pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize
 	kernel_function!(__sys_clone(id, func, arg))
 }
 
-fn __sys_yield() {
+extern "C" fn __sys_yield() {
 	core_scheduler().reschedule();
 }
 
@@ -198,7 +198,7 @@ pub extern "C" fn sys_yield() {
 }
 
 #[cfg(feature = "newlib")]
-fn __sys_kill(dest: Tid, signum: i32) -> i32 {
+extern "C" fn __sys_kill(dest: Tid, signum: i32) -> i32 {
 	debug!(
 		"sys_kill is unimplemented, returning -ENOSYS for killing {} with signal {}",
 		dest, signum
@@ -213,7 +213,7 @@ pub extern "C" fn sys_kill(dest: Tid, signum: i32) -> i32 {
 }
 
 #[cfg(feature = "newlib")]
-fn __sys_signal(_handler: SignalHandler) -> i32 {
+extern "C" fn __sys_signal(_handler: SignalHandler) -> i32 {
 	debug!("sys_signal is unimplemented");
 	0
 }
@@ -224,7 +224,7 @@ pub extern "C" fn sys_signal(handler: SignalHandler) -> i32 {
 	kernel_function!(__sys_signal(handler))
 }
 
-fn __sys_spawn2(
+extern "C" fn __sys_spawn2(
 	func: extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
@@ -274,7 +274,7 @@ pub extern "C" fn sys_spawn(
 	0
 }
 
-fn __sys_join(id: Tid) -> i32 {
+extern "C" fn __sys_join(id: Tid) -> i32 {
 	match scheduler::join(TaskId::from(id)) {
 		Ok(()) => 0,
 		_ => -EINVAL,
@@ -289,7 +289,7 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 /// Mapping between TaskID and TaskHandle
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
 
-fn __sys_block_current_task() {
+extern "C" fn __sys_block_current_task() {
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
@@ -304,7 +304,7 @@ pub extern "C" fn sys_block_current_task() {
 	kernel_function!(__sys_block_current_task())
 }
 
-fn __sys_wakeup_task(id: Tid) {
+extern "C" fn __sys_wakeup_task(id: Tid) {
 	let task_id = TaskId::from(id);
 
 	if let Some(handle) = TASKS.lock().remove(&task_id) {
@@ -318,7 +318,7 @@ pub extern "C" fn sys_wakeup_task(id: Tid) {
 	kernel_function!(__sys_wakeup_task(id))
 }
 
-fn __sys_get_priority() -> u8 {
+extern "C" fn __sys_get_priority() -> u8 {
 	core_scheduler().get_current_task_prio().into()
 }
 
