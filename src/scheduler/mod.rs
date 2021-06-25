@@ -24,6 +24,7 @@ use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
 use crate::config::*;
+use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
 
@@ -333,7 +334,8 @@ impl PerCoreScheduler {
 	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn get_current_kernel_stack(&self) -> VirtAddr {
-		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE - 0x10u64
+		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE
+			- TaskStacks::MARKER_SIZE
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -343,12 +345,12 @@ impl PerCoreScheduler {
 
 		tss.rsp[0] = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
-			- 0x10u64)
+			- TaskStacks::MARKER_SIZE)
 			.as_u64();
 		set_kernel_stack(tss.rsp[0]);
 		tss.ist[0] = (current_task_borrowed.stacks.get_interupt_stack()
 			+ current_task_borrowed.stacks.get_interupt_stack_size()
-			- 0x10u64)
+			- TaskStacks::MARKER_SIZE)
 			.as_u64();
 	}
 
