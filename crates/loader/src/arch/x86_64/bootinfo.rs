@@ -73,7 +73,7 @@ impl BootInfo {
 }
 
 impl fmt::Debug for BootInfo {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		writeln!(f, "magic_number 0x{:x}", self.magic_number)?;
 		writeln!(f, "version 0x{:x}", self.version)?;
 		writeln!(f, "base 0x{:x}", self.base)?;

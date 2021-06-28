@@ -174,7 +174,7 @@ impl<S: PageSize> Page<S> {
 	/// Although we could make this check depend on the actual linear address width from the CPU,
 	/// any extension above 48-bit would require a new page table level, which we don't implement.
 	fn is_valid_address(virtual_address: usize) -> bool {
-		virtual_address < 0x8000_0000_0000 || virtual_address >= 0xFFFF_8000_0000_0000
+		!(0x8000_0000_0000..0xFFFF_8000_0000_0000).contains(&virtual_address)
 	}
 
 	/// Returns a Page including the given virtual address.
@@ -193,14 +193,14 @@ impl<S: PageSize> Page<S> {
 		assert!(first.virtual_address <= last.virtual_address);
 		PageIter {
 			current: first,
-			last: last,
+			last,
 		}
 	}
 
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(&self) -> usize {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
-		self.virtual_address >> PAGE_BITS >> L::LEVEL * PAGE_MAP_BITS & PAGE_MAP_MASK
+		self.virtual_address >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
 	}
 }
 
@@ -396,7 +396,7 @@ where
 	/// Returns the next subtable for the given page in the page table hierarchy.
 	///
 	/// Must only be called if a page of this size is mapped in a subtable!
-	fn subtable<S: PageSize>(&self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
+	fn subtable<S: PageSize>(&mut self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
 		assert!(L::LEVEL > S::MAP_LEVEL);
 
 		// Calculate the address of the subtable.
