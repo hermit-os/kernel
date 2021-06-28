@@ -70,7 +70,8 @@ pub fn netwakeup() {
 	NET_SEM.release();
 }
 
-pub fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
+#[allow(improper_ctypes_definitions)]
+pub extern "C" fn netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
 	// do we have to wakeup a thread?
 	if !handles.is_empty() {
 		let mut guard = NIC_QUEUE.lock();

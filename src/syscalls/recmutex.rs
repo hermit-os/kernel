@@ -9,7 +9,7 @@ use crate::errno::*;
 use crate::synch::recmutex::RecursiveMutex;
 use alloc::boxed::Box;
 
-fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
+extern "C" fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -28,7 +28,7 @@ pub extern "C" fn sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	kernel_function!(__sys_recmutex_init(recmutex))
 }
 
-fn __sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
+extern "C" fn __sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -47,7 +47,7 @@ pub extern "C" fn sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	kernel_function!(__sys_recmutex_destroy(recmutex))
 }
 
-fn __sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
+extern "C" fn __sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}
@@ -63,7 +63,7 @@ pub extern "C" fn sys_recmutex_lock(recmutex: *mut RecursiveMutex) -> i32 {
 	kernel_function!(__sys_recmutex_lock(recmutex))
 }
 
-fn __sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
+extern "C" fn __sys_recmutex_unlock(recmutex: *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {
 		return -EINVAL;
 	}

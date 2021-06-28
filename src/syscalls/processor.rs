@@ -8,7 +8,7 @@
 use crate::arch::get_processor_count;
 use core::convert::TryInto;
 
-fn __sys_get_processor_count() -> usize {
+extern "C" fn __sys_get_processor_count() -> usize {
 	get_processor_count().try_into().unwrap()
 }
 
@@ -18,7 +18,7 @@ pub extern "C" fn sys_get_processor_count() -> usize {
 	kernel_function!(__sys_get_processor_count())
 }
 
-fn __sys_get_processor_frequency() -> u16 {
+extern "C" fn __sys_get_processor_frequency() -> u16 {
 	crate::arch::processor::get_frequency()
 }
 
