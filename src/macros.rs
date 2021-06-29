@@ -40,31 +40,33 @@ macro_rules! println {
 
 #[macro_export]
 macro_rules! kernel_function {
+	// FIXME: Actually switch to kernel stack
+	// See: https://github.com/hermitcore/libhermit-rs/issues/250
 	($f:ident()) => {
-		$crate::arch::switch::kernel_function0($f)
+		$f()
 	};
 
 	($f:ident($arg1:expr)) => {
-		$crate::arch::switch::kernel_function1($f, $arg1)
+		$f($arg1)
 	};
 
 	($f:ident($arg1:expr, $arg2:expr)) => {
-		$crate::arch::switch::kernel_function2($f, $arg1, $arg2)
+		$f($arg1, $arg2)
 	};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr)) => {
-		$crate::arch::switch::kernel_function3($f, $arg1, $arg2, $arg3)
+		$f($arg1, $arg2, $arg3)
 	};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr)) => {
-		$crate::arch::switch::kernel_function4($f, $arg1, $arg2, $arg3, $arg4)
+		$f($arg1, $arg2, $arg3, $arg4)
 	};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr)) => {
-		$crate::arch::switch::kernel_function5($f, $arg1, $arg2, $arg3, $arg4, $arg5)
+		$f($arg1, $arg2, $arg3, $arg4, $arg5)
 	};
 
 	($f:ident($arg1:expr, $arg2:expr, $arg3:expr, $arg4:expr, $arg5:expr, $arg6:expr)) => {
-		$crate::arch::switch::kernel_function6($f, $arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
+		$f($arg1, $arg2, $arg3, $arg4, $arg5, $arg6)
 	};
 }
