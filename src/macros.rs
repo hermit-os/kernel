@@ -38,6 +38,21 @@ macro_rules! println {
 	($($arg:tt)+) => ($crate::print!("{}\n", format_args!($($arg)+)));
 }
 
+/// Runs `f` on the kernel stack.
+///
+/// All arguments and return values have to fit into registers:
+///
+/// ```
+/// assert!(mem::size_of::<T>() <= mem::size_of::<usize>());
+/// ```
+///
+/// When working with bigger types, manually route the data over pointers:
+///
+/// ```
+/// f(&arg1, &mut ret);
+/// // instead of
+/// let ret = f(arg);
+/// ```
 #[macro_export]
 macro_rules! kernel_function {
 	($f:ident()) => {

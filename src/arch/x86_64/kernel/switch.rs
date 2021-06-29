@@ -176,6 +176,10 @@ macro_rules! kernel_function_impl {
                     "mov rsp, {kernel_stack_ptr}",
                     "sti",
 
+					// To make sure, Rust manages the stack in `f` correctly,
+					// we keep all arguments and return values in registers
+					// until we switch the stack back. Thus follows the sizing
+					// requirements for arguments and return types.
                     "call {f}",
 
                     // Switch back to user stack
