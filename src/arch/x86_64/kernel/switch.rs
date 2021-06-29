@@ -151,61 +151,61 @@ pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack:
 }
 
 macro_rules! kernel_function_impl {
-    ($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
+	($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
 		/// Executes `f` on the kernel stack.
-        pub fn $kernel_function<R, $($A),*>(f: extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
-            unsafe {
-                assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
+		pub fn $kernel_function<R, $($A),*>(f: extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+			unsafe {
+				assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
 
-                $(
-                    assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
-                    let $arg = {
-                        let mut reg = MaybeUninit::<usize>::uninit().assume_init();
+				$(
+					assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
+					let $arg = {
+						let mut reg = MaybeUninit::<usize>::uninit().assume_init();
 						// SAFETY: $A is smaller than usize and directly fits in a register
 						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
-                        ptr::write(&mut reg as *mut _ as _, $arg);
-                        reg
-                    };
-                )*
+						ptr::write(&mut reg as *mut _ as _, $arg);
+						reg
+					};
+				)*
 
-                let ret: u64;
-                asm!(
-                    // Save user stack pointer and switch to kernel stack
-                    "cli",
-                    "mov {user_stack_ptr}, rsp",
-                    "mov rsp, {kernel_stack_ptr}",
-                    "sti",
+				let ret: u64;
+				asm!(
+					// Save user stack pointer and switch to kernel stack
+					"cli",
+					"mov {user_stack_ptr}, rsp",
+					"mov rsp, {kernel_stack_ptr}",
+					"sti",
 
 					// To make sure, Rust manages the stack in `f` correctly,
 					// we keep all arguments and return values in registers
 					// until we switch the stack back. Thus follows the sizing
 					// requirements for arguments and return types.
-                    "call {f}",
+					"call {f}",
 
-                    // Switch back to user stack
-                    "cli",
-                    "mov rsp, {user_stack_ptr}",
-                    "sti",
+					// Switch back to user stack
+					"cli",
+					"mov rsp, {user_stack_ptr}",
+					"sti",
 
-                    f = in(reg) f,
-                    user_stack_ptr = out(reg) _,
-                    kernel_stack_ptr = in(reg) percore::get_kernel_stack(),
+					f = in(reg) f,
+					user_stack_ptr = out(reg) _,
+					kernel_stack_ptr = in(reg) percore::get_kernel_stack(),
 
-                    $($operands)*
+					$($operands)*
 
-                    // Return argument in rax
-                    out("rax") ret,
+					// Return argument in rax
+					out("rax") ret,
 
-                    // All caller-saved registers must be marked as clobbered
-                    out("r10") _, out("r11") _,
-                );
+					// All caller-saved registers must be marked as clobbered
+					out("r10") _, out("r11") _,
+				);
 
 				// SAFETY: R is smaller than usize and directly fits in rax
 				// Since f returns R, we can safely convert ret to R
-                mem::transmute_copy(&ret)
-            }
-        }
-    };
+				mem::transmute_copy(&ret)
+			}
+		}
+	};
 }
 
 kernel_function_impl!(kernel_function0() {
