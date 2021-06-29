@@ -291,12 +291,13 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
+	let wakeup_time = timeout.map(|timeout| arch::processor::get_timer_ticks() + timeout);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
 
 	TASKS.lock().insert(tid, handle);
-	core_scheduler.block_current_task(*timeout);
+	core_scheduler.block_current_task(wakeup_time);
 }
 
 /// Set the current task state to `blocked`
