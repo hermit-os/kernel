@@ -110,14 +110,15 @@ pub fn sys_get_mtu() -> Result<u16, ()> {
 	kernel_function!(__sys_get_mtu())
 }
 
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
-	unsafe { SYS.get_tx_buffer(len) }
+extern "C" fn __sys_get_tx_buffer(len: usize, ret: &mut Result<(*mut u8, usize), ()>) {
+	*ret = unsafe { SYS.get_tx_buffer(len) };
 }
 
 #[no_mangle]
 pub fn sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
-	kernel_function!(__sys_get_tx_buffer(len))
+	let mut ret = Err(());
+	kernel_function!(__sys_get_tx_buffer(len, &mut ret));
+	ret
 }
 
 #[allow(improper_ctypes_definitions)]
@@ -130,14 +131,15 @@ pub fn sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
 	kernel_function!(__sys_send_tx_buffer(handle, len))
 }
 
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
-	unsafe { SYS.receive_rx_buffer() }
+extern "C" fn __sys_receive_rx_buffer(ret: &mut Result<(&'static [u8], usize), ()>) {
+	*ret = unsafe { SYS.receive_rx_buffer() };
 }
 
 #[no_mangle]
 pub fn sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
-	kernel_function!(__sys_receive_rx_buffer())
+	let mut ret = Err(());
+	kernel_function!(__sys_receive_rx_buffer(&mut ret));
+	ret
 }
 
 #[allow(improper_ctypes_definitions)]
@@ -151,27 +153,25 @@ pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 }
 
 #[cfg(not(feature = "newlib"))]
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_netwait(handle: usize, millis: Option<u64>) {
-	netwait(handle, millis)
+extern "C" fn __sys_netwait(handle: usize, millis: &Option<u64>) {
+	netwait(handle, *millis)
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub fn sys_netwait(handle: usize, millis: Option<u64>) {
-	kernel_function!(__sys_netwait(handle, millis));
+	kernel_function!(__sys_netwait(handle, &millis));
 }
 
 #[cfg(not(feature = "newlib"))]
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
-	netwait_and_wakeup(handles, millis);
+extern "C" fn __sys_netwait_and_wakeup(handles: &&[usize], millis: &Option<u64>) {
+	netwait_and_wakeup(*handles, *millis);
 }
 
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub fn sys_netwait_and_wakeup(handles: &[usize], millis: Option<u64>) {
-	kernel_function!(__sys_netwait_and_wakeup(handles, millis));
+	kernel_function!(__sys_netwait_and_wakeup(&handles, &millis));
 }
 
 pub extern "C" fn __sys_shutdown(arg: i32) -> ! {
