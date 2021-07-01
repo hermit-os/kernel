@@ -294,7 +294,7 @@ pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDrive
 
 	// TODO: also load the other 2 cap types (?).
 
-	// Instanciate driver on heap, so it outlives this function
+	// Instantiate driver on heap, so it outlives this function
 	let mut drv = VirtioFsDriver {
 		common_cfg,
 		device_cfg,
@@ -312,7 +312,7 @@ pub fn create_virtiofs_driver(adapter: &pci::PciAdapter) -> Option<VirtioFsDrive
 pub fn init_fs() {
 	let drv = pci::get_filesystem_driver().expect("Unable to get access to the device driver");
 
-	// Instanciate global fuse object
+	// Instantiate global fuse object
 	let fuse = fuse::Fuse::new();
 
 	// send FUSE_INIT to create session

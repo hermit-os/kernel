@@ -158,7 +158,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 
 	if cap.bar_len() < u64::from(cap.len() + cap.offset()) {
 		error!(
-			"Device config of device {:x}, does not fit into memeory specified by bar!",
+			"Device config of device {:x}, does not fit into memory specified by bar!",
 			cap.dev_id(),
 		);
 		return None;
@@ -597,7 +597,7 @@ impl ComCfgRaw {
 	/// PCI devices memory space.
 	fn map(cap: &PciCap) -> Option<&'static mut ComCfgRaw> {
 		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("Common config of with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
                  cap.bar.index
@@ -638,7 +638,7 @@ pub struct NotifCfg {
 impl NotifCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < u64::from(u32::from(cap.length + cap.offset)) {
-			error!("Notification config with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+			error!("Notification config with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
                 cap.bar.index
@@ -791,7 +791,7 @@ impl IsrStatusRaw {
 	/// device and will not be moved.
 	fn map(cap: &PciCap) -> Option<&'static mut IsrStatusRaw> {
 		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("ISR status config with id {} of device {:x}, does not fit into memeory specified by bar {:x}!",
+			error!("ISR status config with id {} of device {:x}, does not fit into memory specified by bar {:x}!",
                 cap.id,
                 cap.origin.dev_id,
                 cap.bar.index
@@ -880,7 +880,7 @@ pub struct ShMemCfg {
 impl ShMemCfg {
 	fn new(cap: &PciCap) -> Option<Self> {
 		if cap.bar.length < u64::from(cap.length + cap.offset) {
-			error!("Shared memory config of with id {} of device {:x}, does not fit into memeory specified by bar {:x}!", 
+			error!("Shared memory config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
                  cap.bar.index

@@ -33,12 +33,12 @@ pub mod error {
                 VirtioError::FromPci(pci_error) => match pci_error {
                     PciError::General(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Due to unknown reasosn!", id),
                     PciError::NoBar(id ) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No BAR's found.", id), 
-                    PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Capabilites pointer found.", id),
-                    PciError::BadCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: Malformed Capabilites pointer.", id),
+                    PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Capabilities pointer found.", id),
+                    PciError::BadCapPtr(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: Malformed Capabilities pointer.", id),
                     PciError::NoBarForCap(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: Bar indicated by capability not found.", id),
-                    PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Virtio capabilites were found.", id),
+                    PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: 0x{:x}. Reason: No Virtio capabilities were found.", id),
                 },
-                VirtioError::DevNotSupported(id) => write!(f, "Devie with id 0x{:x} not supported.", id),
+                VirtioError::DevNotSupported(id) => write!(f, "Device with id 0x{:x} not supported.", id),
                 VirtioError::NetDriver(net_error) => match net_error {
                     VirtioNetError::General => write!(f, "Virtio network driver failed due to unknown reasons!"),
                     VirtioNetError::NoDevCfg(id) => write!(f, "Network driver failed, for device {:x}, due to a missing or malformed device config!", id),
