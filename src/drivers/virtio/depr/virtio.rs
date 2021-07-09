@@ -133,7 +133,7 @@ impl<'a> Virtq<'a> {
 		let avail_mem_box = vec![0; (6 + 2 * vqsize) >> 1].into_boxed_slice(); // has to be 2 byte aligned
 		let used_mem_box = vec![0; (6 + 8 * vqsize) >> 1].into_boxed_slice(); // has to be 4 byte aligned
 
-		// Leak memory so it wont get deallocated
+		// Leak memory so it won't get deallocated.
 		// TODO: create appropriate mem-owner-model. Pin these?
 		let desc_table = alloc::boxed::Box::leak(desc_table);
 		let avail_mem = alloc::boxed::Box::leak(avail_mem_box);
@@ -470,7 +470,7 @@ pub struct virtq_desc_raw {
 	// Address (guest-physical)
 	// possibly optimize: https://rust-lang.github.io/unsafe-code-guidelines/layout/enums.html#layout-of-a-data-carrying-enums-without-a-repr-annotation
 	// https://github.com/rust-lang/rust/pull/62514/files box will call destructor when removed.
-	// BUT: we dont know buffer size, so T is not sized in Option<Box<T>> --> Box not simply a pointer?? [TODO: verify this! from https://github.com/rust-lang/unsafe-code-guidelines/issues/157#issuecomment-509016096]
+	// BUT: we don't know buffer size, so T is not sized in Option<Box<T>> --> Box not simply a pointer?? [TODO: verify this! from https://github.com/rust-lang/unsafe-code-guidelines/issues/157#issuecomment-509016096]
 	// nice, we have docs on this: https://doc.rust-lang.org/nightly/std/boxed/index.html#memory-layout
 	// https://github.com/rust-lang/rust/issues/52976
 	// Vec<T> is sized! but not just an array in memory.. --> impossible

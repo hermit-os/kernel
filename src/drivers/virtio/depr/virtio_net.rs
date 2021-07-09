@@ -513,7 +513,7 @@ pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDri
 
 	// TODO: also load the other cap types (?).
 
-	// Instanciate driver on heap, so it outlives this function
+	// Instantiate driver on heap, so it outlives this function
 	let mut drv = VirtioNetDriver {
 		tx_buffers: Vec::new(),
 		rx_buffers: Vec::new(),

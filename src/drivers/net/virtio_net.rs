@@ -185,7 +185,7 @@ struct RxQueues {
 }
 
 impl RxQueues {
-	/// Takes care if handling packets correctly which need some processing after beeing received.
+	/// Takes care if handling packets correctly which need some processing after being received.
 	/// This currently include nothing. But in the future it might include among others::
 	/// * Calculating missing checksums
 	/// * Merging receive buffers, by simply checking the poll_queue (if VIRTIO_NET_F_MRG_BUF)
@@ -221,7 +221,7 @@ impl RxQueues {
 			// Receive Buffers must be at least 65562 bytes large with theses features set.
 			// See Virtio specification v1.1 - 5.1.6.3.1
 
-			// Currently we choose indirect descriptors if posible in order to allow
+			// Currently we choose indirect descriptors if possible in order to allow
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
@@ -427,7 +427,7 @@ impl TxQueues {
 		// Check all ready token, for correct size.
 		// Drop token if not so
 		//
-		// All Tokens inside the ready_queue are comming from the main queu with index 0.
+		// All Tokens inside the ready_queue are coming from the main queue with index 0.
 		while let Some(mut tkn) = self.ready_queue.pop() {
 			let (send_len, _) = tkn.len();
 
@@ -465,8 +465,8 @@ impl TxQueues {
 		match self.vqs[0].prep_buffer(Rc::clone(&self.vqs[0]), Some(spec), None) {
 			Ok(tkn) => Some((tkn, 0)),
 			Err(_) => {
-				// Here it is possible if multiple ques are enabled to get another buffertoken from them!
-				// Info the queues are disbaled upon initialization and should be enabled somehow!
+				// Here it is possible if multiple queues are enabled to get another buffertoken from them!
+				// Info the queues are disabled upon initialization and should be enabled somehow!
 				None
 			}
 		}
@@ -576,8 +576,8 @@ impl NetworkInterface for VirtioNetDriver {
 				// If the given length is zero, we currently fail.
 				if recv_data.len() == 2 {
 					let recv_payload = recv_data.pop().unwrap();
-					// Create static refrence for the user-space
-					// As long as we keep the Transfer in a raw refernce this refernce is static,
+					// Create static reference for the user-space
+					// As long as we keep the Transfer in a raw reference this reference is static,
 					// so this is fine.
 					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
 					let ref_data: &'static [u8] = unsafe { &*(recv_ref) };
@@ -732,7 +732,7 @@ impl VirtioNetDriver {
 	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
 		/*
 		if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
-			error!("Network config of device {:x}, does not fit into memeory specified by bar!",
+			error!("Network config of device {:x}, does not fit into memory specified by bar!",
 				cap.dev_id(),
 			);
 			return None

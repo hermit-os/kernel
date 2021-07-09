@@ -24,7 +24,7 @@ use crossbeam_utils::{Backoff, CachePadded};
 ///
 /// - By using busy waiting, it can be used outside the runtime.
 /// - It is a so called ticket lock (https://en.wikipedia.org/wiki/Ticket_lock)
-///   and completly fair.
+///   and completely fair.
 ///
 /// The interface is derived from https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html.
 ///
@@ -161,7 +161,7 @@ impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T> {
 /// - Interrupts save lock => Interrupts will be disabled
 /// - By using busy waiting, it can be used outside the runtime.
 /// - It is a so called ticket lock (https://en.wikipedia.org/wiki/Ticket_lock)
-///   and completly fair.
+///   and completely fair.
 ///
 /// The interface is derived from https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html.
 ///

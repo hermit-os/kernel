@@ -12,7 +12,7 @@
 //! Both queues are wrapped inside an enum [Virtqueue](enums.Virtqueue.html) in
 //! order to provide an unified interface.
 //!
-//! Drivers who need a more fine grained access to the specifc queues must
+//! Drivers who need a more fine grained access to the specific queues must
 //! use the respective virtqueue structs directly.
 #![allow(dead_code)]
 #![allow(clippy::type_complexity)]
@@ -140,7 +140,7 @@ impl Virtq {
 impl Virtq {
 	/// Allows to check, if a given structure crosses a physical page boundary.
 	/// Returns true, if the structure does NOT cross a bounadary or crosses only
-	/// contigous physical page boundaries.
+	/// contiguous physical page boundaries.
 	///
 	/// Structures provided to the Queue must pass this test, otherwise the queue
 	/// currently panics.
@@ -157,11 +157,11 @@ impl Virtq {
 
 	/// Allows to check, if a given slice crosses a physical page boundary.
 	/// Returns true, if the slice does NOT cross a bounadary or crosses only
-	/// contigous physical page boundaries.
+	/// contiguous physical page boundaries.
 	/// Slice MUST come from a boxed value. Otherwise the slice might be moved and
 	/// the test of this function is not longer valid.
 	///
-	/// This check is especially usefull if one wants to check if slices
+	/// This check is especially useful if one wants to check if slices
 	/// into which the queue will destructure a structure are valid for the queue.
 	///
 	/// Slices provided to the Queue must pass this test, otherwise the queue
@@ -203,7 +203,7 @@ impl Virtq {
 	/// This activates the queue and polls the descriptor ring of the queue.
 	///
 	/// * `TransferTokens` which hold an `await_queue` will be placed into
-	/// theses queues
+	/// these queues.
 	/// * All finished `TransferTokens` will have a state of `TransferState::Finished`.
 	pub fn poll(&self) {
 		match self {
@@ -212,10 +212,10 @@ impl Virtq {
 		}
 	}
 
-	/// Does maintenacen of the queue. This involces currently only, checking if early dropped transfers
+	/// Does maintenance of the queue. This involces currently only, checking if early dropped transfers
 	/// have been finished and removes them and frees their ID's and memory areas.
 	///
-	/// This function is especially usefull if ones memory pool is empty and one uses early drop of transfers
+	/// This function is especially useful if ones memory pool is empty and one uses early drop of transfers
 	/// in order to fire-and-forget.
 	pub fn clean_up(&self) {
 		match self {
@@ -224,8 +224,8 @@ impl Virtq {
 		}
 	}
 
-	/// Dispatches a batch of TransferTokens. The actuall behaviour depends on the respective
-	/// virtqueue implementation. Pleace see the respective docs for details
+	/// Dispatches a batch of TransferTokens. The actual behaviour depends on the respective
+	/// virtqueue implementation. Please see the respective docs for details.
 	///
 	/// **INFO:**
 	/// Due to the missing HashMap implementation in the kernel, this function currently uses a nested
@@ -443,7 +443,7 @@ impl Virtq {
 	///     // recv_part: ...
 	/// }
 	/// ```
-	/// Then he must split the strucutre after the send part and provide the respective part via the send argument and the respective other
+	/// Then he must split the structure after the send part and provide the respective part via the send argument and the respective other
 	/// part via the recv argument.
 	pub fn prep_transfer_from_raw<T: AsSliceU8 + 'static, K: AsSliceU8 + 'static>(
 		&self,
@@ -530,7 +530,7 @@ impl Virtq {
 /// The provided default implementation computes the size of the given structure via `core::mem::size_of_val(&self)`
 /// and then casts the given `*const Self` pointer of the structure into an `*const u8`.
 ///
-/// Users must be really carefull, and check, wether the memory representation of the given structure equals
+/// Users must be really careful, and check, whether the memory representation of the given structure equals
 /// the representation the device expects. It is advised to only use `#[repr(C)]` and to check the output
 /// of `as_slice_u8` and `as_slice_u8_mut`.
 pub trait AsSliceU8 {
@@ -581,8 +581,8 @@ pub trait AsSliceU8 {
 ///
 /// **Early dropped Transfers:**
 ///
-/// If a transfer is dropped without beeing closed (independent of beeing finished or ongoing), the transfer will return the respective
-/// `Pinned<TransferToken>` to the handling virtqueue, which will take of handling gracefull shutdown. Which generally should take
+/// If a transfer is dropped without being closed (independent of being finished or ongoing), the transfer will return the respective
+/// `Pinned<TransferToken>` to the handling virtqueue, which will take of handling graceful shutdown. Which generally should take
 /// care of waiting till the device handled the respective transfer and free the memory afterwards.
 ///
 /// One could "abuse" this procedure in order to realize a "fire-and-forget" transfer.
@@ -620,7 +620,7 @@ impl Transfer {
         }
 	}
 
-	/// Retruns a vector of immutable slices to the underlying memory areas.
+	/// Returns a vector of immutable slices to the underlying memory areas.
 	///
 	/// The vectors contain the slices in creation order.
 	/// E.g.:
@@ -686,7 +686,7 @@ impl Transfer {
 		}
 	}
 
-	/// Retruns a vector of mutable slices to the underlying memory areas.
+	/// Returns a vector of mutable slices to the underlying memory areas.
 	///
 	/// The vectors contain the slices in creation order.
 	/// E.g.:
@@ -767,7 +767,7 @@ impl Transfer {
 	///
 	/// If one create this buffer via a `Virtq.prep_transfer()` or `Virtq.prep_transfer_from_raw()`
 	/// call, a casting back to the original structure `T` is NOT possible.
-	/// In theses cases please use `Transfer.ret_cpy()` or use 'BuffSpec::Single' only!
+	/// In these cases please use `Transfer.ret_cpy()` or use 'BuffSpec::Single' only!
 	pub fn ret_scat_cpy(
 		&self,
 	) -> Result<(Option<Vec<Box<[u8]>>>, Option<Vec<Box<[u8]>>>), VirtqError> {
@@ -853,17 +853,17 @@ impl Transfer {
 		}
 	}
 
-	/// # HIGLY EXPERIMENTIALLY
+	/// # HIGHLY EXPERIMENTIALLY
 	/// This function returns a Vector of tuples to the allocated memory areas Currently the complete behaviour of this function is not well tested and it should be used with care.
 	///
 	/// **INFO:**
 	/// * Memory regions MUST be deallocated via `Virtq::free_raw(*mut u8, len)`
-	/// * Memeory regions length might be larger than expected due to the used
+	/// * Memory regions length might be larger than expected due to the used
 	/// allocation function in the kernel. Hence one MUST NOT assume valid data
 	/// after the length of the buffer, that was given at creation, is reached.
 	///   * Still the provided `Virtq::free_raw(*mut u8, len)` function MUST be provided
 	/// with the actual usize returned by this function in order to prevent memory leaks or failure.
-	/// * Failes if `TransferState != Finished`.
+	/// * Fails if `TransferState != Finished`.
 	///
 	pub fn into_raw(
 		mut self,
@@ -881,7 +881,7 @@ impl Transfer {
 					match buffer_tkn.send_buff {
 						Some(buff) => {
 							// This data is not a second time returnable
-							// Unessecary, because token will be dropped.
+							// Unnecessary, because token will be dropped.
 							// But to be consistent in state.
 							buffer_tkn.ret_send = false;
 							Some(buff.into_raw())
@@ -896,7 +896,7 @@ impl Transfer {
 					match buffer_tkn.recv_buff {
 						Some(buff) => {
 							// This data is not a second time returnable
-							// Unessecary, because token will be dropped.
+							// Unnecessary, because token will be dropped.
 							// But to be consistent in state.
 							buffer_tkn.ret_recv = false;
 							Some(buff.into_raw())
@@ -908,7 +908,7 @@ impl Transfer {
 				};
 				// Prevent Token to be reusable although it will be dropped
 				// later in this function.
-				// Unessecary but to be consistent in state.
+				// Unnecessary but to be consistent in state.
 				//
 				// Unwrapping is okay here, as TransferToken must hold a BufferToken
 				buffer_tkn.reusable = false;
@@ -984,7 +984,7 @@ impl Transfer {
 	///
 	/// This function does restore the actual size of the Buffer at creation and does reset the
 	/// written memory areas to zero! Depending on the size of the Buffer this might take some time and
-	/// one could prefere to allocate a new token via prep_buffer() of the wanted size.
+	/// one could prefer to allocate a new token via prep_buffer() of the wanted size.
 	pub fn reuse_reset(mut self) -> Result<BufferToken, VirtqError> {
 		// Unwrapping is okay here, as TransferToken must hold a BufferToken
 		match self.transfer_tkn.as_ref().unwrap().state {
@@ -1047,7 +1047,7 @@ pub struct TransferToken {
 
 /// Public Interface for TransferToken
 impl TransferToken {
-	/// Returns a refernce to the holding virtqueue
+	/// Returns a reference to the holding virtqueue
 	pub fn get_vq(&self) -> Rc<Virtq> {
 		// Unwrapping is okay here, as TransferToken must hold a BufferToken
 		Rc::clone(&self.buff_tkn.as_ref().unwrap().vq)
@@ -1061,7 +1061,7 @@ impl TransferToken {
 	pub fn dispatch_await(mut self, await_queue: Rc<RefCell<VecDeque<Transfer>>>, notif: bool) {
 		self.await_queue = Some(Rc::clone(&await_queue));
 
-		// Prevent TransferToken from beeing dropped
+		// Prevent TransferToken from being dropped
 		// I.e. do NOT run the costum constructor which will
 		// deallocate memory.
 		self.get_vq()
@@ -1085,7 +1085,7 @@ impl TransferToken {
 	/// return when, the queue finished the transfer.
 	///
 	/// The resultaing [TransferState](TransferState) in this case is of course
-	/// finished and the returned [Transfer](Transfer) can be reused, copyied from
+	/// finished and the returned [Transfer](Transfer) can be reused, copied from
 	/// or return the underlying buffers.
 	///
 	/// **INFO:**
@@ -1098,7 +1098,7 @@ impl TransferToken {
 		vq.disable_notifs();
 
 		while transfer.transfer_tkn.as_ref().unwrap().state != TransferState::Finished {
-			// Keep Spinning untill the state changes to Finished
+			// Keep Spinning until the state changes to Finished
 			vq.poll()
 		}
 
@@ -1108,9 +1108,9 @@ impl TransferToken {
 	}
 }
 
-/// The struct represents buffers which are ready to be writen or to be send.
+/// The struct represents buffers which are ready to be written or to be send.
 ///
-/// BufferTokens can be writen in two ways:
+/// BufferTokens can be written in two ways:
 /// * in one step via `BufferToken.write()
 ///   * consumes BufferToken and returns a TransferToken
 /// * sequentially via `BufferToken.write_seq()
@@ -1140,7 +1140,7 @@ pub struct BufferToken {
 	recv_buff: Option<Buffer>,
 	//recv_desc_lst: Option<Vec<usize>>,
 	vq: Rc<Virtq>,
-	/// Indicates wether the buff is returnable
+	/// Indicates whether the buff is returnable
 	ret_send: bool,
 	ret_recv: bool,
 	/// Indicates if the token is allowed
@@ -1167,7 +1167,7 @@ impl BufferToken {
 	/// Returns the number of descritprors that will be placed in the queue.
 	/// This number can differ from the `BufferToken.num_descr()` function value
 	/// as indirect buffers only consume one descriptor in the queue, but can have
-	/// more descriptors that are accesible via the desciptor in the queue.
+	/// more descriptors that are accessible via the descriptor in the queue.
 	fn num_consuming_descr(&self) -> usize {
 		let mut len = 0usize;
 
@@ -1369,14 +1369,14 @@ impl BufferToken {
 
 // Public interface of BufferToken
 impl BufferToken {
-	/// Restricts the size of a given BufferToken. One must specifiy either a `new_send_len` or/and `new_recv_len`. If possible
+	/// Restricts the size of a given BufferToken. One must specify either a `new_send_len` or/and `new_recv_len`. If possible
 	/// the function will restrict the respective buffers size to this value. This is especially useful if one has to provide the
 	/// user-space or the device with a buffer and has already a free buffer at hand, which is to large. With this method the user
-	/// of the buffer will only see the given sizes. Allthough the buffer is NOT reallocated.
+	/// of the buffer will only see the given sizes. Although the buffer is NOT reallocated.
 	///
 	/// **INFO:**
 	/// * Upon Transfer.resue() call the Buffers will restore their original size, which was provided at creation time!
-	/// * Fails if buffer to be restricted is non exisiting -> VirtqError::NoBufferAvail
+	/// * Fails if buffer to be restricted is non existing -> VirtqError::NoBufferAvail
 	/// * Fails if buffer to be restricted is to small (i.e. `buff.len < new_len`) -> VirtqError::General
 	pub fn restr_size(
 		&mut self,
@@ -1546,15 +1546,15 @@ impl BufferToken {
 			(None, None) => unreachable!("Empty BufferToken not allowed!"),
 		}
 	}
-	/// Returns the underlying raw pointers to the user accesible memory hold by the Buffertoken. This is mostly
+	/// Returns the underlying raw pointers to the user accessible memory hold by the Buffertoken. This is mostly
 	/// useful in order to provide the user space with pointers to write to. Return tuple has the form
 	/// (`pointer_to_mem_area`, `length_of_accesible_mem_area`).
 	///
 	/// **INFO:**
 	///
 	/// The length of the given memory area MUST NOT express the actual allocated memory area. This is due to the behaviour
-	/// of the allocation function. Allthough it is ensured that the allocated memory area length is always larger or equal
-	/// to the "accesible memory area". Hence one MUST NOT use this information in order to deallocate the underlying memory.
+	/// of the allocation function. Although it is ensured that the allocated memory area length is always larger or equal
+	/// to the "accessible memory area". Hence one MUST NOT use this information in order to deallocate the underlying memory.
 	/// If this is wanted the savest way is to simpyl drop the BufferToken.
 	///
 	///
@@ -1599,7 +1599,7 @@ impl BufferToken {
 	/// The same error will be triggered in case the respective buffer wasn't even existing, as not all transfers consist
 	/// of send and recv buffers.
 	///
-	/// This write DOES NOT reduce the overall size of the buffer to length_of(`K` or `H`). The devive will observe the length of
+	/// This write DOES NOT reduce the overall size of the buffer to length_of(`K` or `H`). The device will observe the length of
 	/// the buffer as given by `BufferToken.len()`.
 	/// Use `BufferToken.restr_size()` in order to change this property.
 	///
@@ -1607,8 +1607,8 @@ impl BufferToken {
 	/// # Detailed Description
 	/// The respective send and recv buffers (see [BufferToken](BufferToken) docs for details on buffers) consist of multiple
 	/// descriptors.
-	/// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a sinlge continous
-	/// memeory element and as a result writes `T` or `H` as a slice of bytes into this memory.
+	/// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a single continuous
+	/// memory element and as a result writes `T` or `H` as a slice of bytes into this memory.
 	pub fn write<K: AsSliceU8, H: AsSliceU8>(
 		mut self,
 		send: Option<K>,
@@ -1625,7 +1625,7 @@ impl BufferToken {
 
 						for i in 0..buff.num_descr() {
 							// Must check array boundaries, as allocated buffer might be larger
-							// than acutal data to be written.
+							// than actual data to be written.
 							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
 								data_slc.len()
 							} else {
@@ -1652,7 +1652,7 @@ impl BufferToken {
 
 						for i in 0..buff.num_descr() {
 							// Must check array boundaries, as allocated buffer might be larger
-							// than acutal data to be written.
+							// than actual data to be written.
 							let to = if (buff.as_slice()[i].len() + from) > data_slc.len() {
 								data_slc.len()
 							} else {
@@ -1756,7 +1756,7 @@ enum Buffer {
 		len: usize,
 		next_write: usize,
 	},
-	/// A buffer consisting of a single descriptor in the actuall virtqueue,
+	/// A buffer consisting of a single descriptor in the actual virtqueue,
 	/// referencing a list of descriptors somewhere in memory.
 	/// Especially useful of one wants to extend the capacity of the virtqueue.
 	/// Also has the same advantages as a `Buffer::Multiple`.
@@ -1834,7 +1834,7 @@ impl Buffer {
 	/// This consumes the the given buffer and returns the raw information (i.e. a `*mut u8` and a `usize` inidacting the start and
 	/// length of the buffers memory).
 	///
-	/// After this call the users is responsible for deallocating the given memory via the kenrel `mem::dealloc` function.
+	/// After this call the users is responsible for deallocating the given memory via the kernel `mem::dealloc` function.
 	fn into_raw(self) -> Vec<(*mut u8, usize)> {
 		match self {
 			Buffer::Single { mut desc_lst, .. }
@@ -1843,7 +1843,7 @@ impl Buffer {
 				let mut arr = Vec::with_capacity(desc_lst.len());
 
 				for desc in desc_lst.iter_mut() {
-					// Need to be a little carefull here.
+					// Need to be a little careful here.
 					desc.dealloc = Dealloc::Not;
 					arr.push((desc.ptr, desc._mem_len));
 				}
@@ -1869,7 +1869,7 @@ impl Buffer {
 	}
 
 	/// Returns a scattered copy of the buffer, which preserves the structure of the
-	/// buffer beeing possibly split up between different descriptors.
+	/// buffer being possibly split up between different descriptors.
 	fn scat_cpy(&self) -> Vec<Box<[u8]>> {
 		match &self {
 			Buffer::Single { desc_lst, .. }
@@ -1885,7 +1885,7 @@ impl Buffer {
 		}
 	}
 
-	/// Retruns the number of usable descriptors inside a buffer.
+	/// Returns the number of usable descriptors inside a buffer.
 	/// In case of Indirect Buffers this will return the number of
 	/// descriptors inside the indirect descriptor table. As a result
 	/// the return value most certainly IS NOT equall to the number of
@@ -1901,7 +1901,7 @@ impl Buffer {
 
 	/// Returns the overall number of bytes in this Buffer.
 	///
-	/// In case of a Indirect desriptor, this describes the accumulated length of the memory area of the descriptors
+	/// In case of a Indirect descriptor, this describes the accumulated length of the memory area of the descriptors
 	/// inside the indirect descriptor list. NOT the length of the memory area of the indirect descriptor placed in the actual
 	/// descriptor area!
 	fn len(&self) -> usize {
@@ -1976,9 +1976,9 @@ struct MemDescr {
 	/// Defines the len of the memory area that is accessible by users
 	/// Can change after the device wrote to the memory area partially.
 	/// Hence, this always defines the length of the memory area that has
-	/// useful information or is accesible.
+	/// useful information or is accessible.
 	len: usize,
-	/// Defines the len of the memory area that is accesible by users
+	/// Defines the len of the memory area that is accessible by users
 	/// This field is needed as the `MemDescr.len` field might change
 	/// after writes of the device, but the Descriptors need to be reset
 	/// in case they are reused. So the initial length must be preserved.
@@ -1992,7 +1992,7 @@ struct MemDescr {
 	id: Option<MemDescrId>,
 	/// Refers to the controlling [memory pool](MemPool)
 	pool: Rc<MemPool>,
-	/// Controls wether the memory area is deallocated
+	/// Controls whether the memory area is deallocated
 	/// upon drop.
 	/// * Should NEVER be set to true, when false.
 	///   * As false will be set after creation and indicates
@@ -2033,7 +2033,7 @@ impl MemDescr {
 		self.ptr
 	}
 
-	/// Returns the length of the accesible memory area.
+	/// Returns the length of the accessible memory area.
 	fn len(&self) -> usize {
 		self.len
 	}
@@ -2103,7 +2103,7 @@ impl Bytes {
 	/// Returns a None therefore, if the size was to large.
 	pub fn new(size: usize) -> Option<Bytes> {
 		if core::mem::size_of_val(&size) <= core::mem::size_of::<u32>() {
-			// Usize is as maximum 32bit large. Smaller is not a probelm for the queue
+			// Usize is as maximum 32bit large. Smaller is not a problem for the queue
 			Some(Bytes(size))
 		} else if core::mem::size_of_val(&size) == core::mem::size_of::<u64>() {
 			// Usize is equal to 64 bit
@@ -2139,7 +2139,7 @@ enum Dealloc {
 /// * Furthermore the MemPool struct provides an interface to easily retrieve memory of a wanted size
 /// via its `fn pull()`and `fn pull_untracked()` functions.
 /// The functions return a (MemDescr)[MemDescr] which provides an interface to read and write memory safely and handles clean up of memory
-/// upon beeing dropped.
+/// upon being dropped.
 ///   * `fn pull()`: Pulls a memory descriptor which refers to a memory of a defined size. The descriptor does consume an ID from the pool
 ///      and hence reduces the amount of left descriptors in the pool. Upon drop this ID will be returned to the pool.
 ///   * `fn pull_untracked`: Pulls a memory descriptor which refers to a memory of a defined size. The descriptor does NOT consume an ID and
@@ -2185,7 +2185,7 @@ impl MemPool {
 	/// **Properties of Returned MemDescr:**
 	///
 	/// * The descriptor will consume one element of the pool.
-	/// * The refered to memory area will NOT be deallocated upon drop
+	/// * The referred to memory area will NOT be deallocated upon drop.
 	fn pull_from_raw(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> Result<MemDescr, VirtqError> {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
@@ -2227,7 +2227,7 @@ impl MemPool {
 	/// **Properties of Returned MemDescr:**
 	///
 	/// * The descriptor will consume one element of the pool.
-	/// * The refered to memory area will NOT be deallocated upon drop
+	/// * The referred to memory area will NOT be deallocated upon drop.
 	fn pull_from_raw_untracked(&self, rc_self: Rc<MemPool>, slice: &[u8]) -> MemDescr {
 		// Zero sized descriptors are NOT allowed
 		// This also prohibids a panic due to accessing wrong index below
@@ -2478,7 +2478,7 @@ impl<T> Drop for Pinned<T> {
 //   }
 //}
 
-/// Virtqueue descr flags as defined in the specfication.
+/// Virtqueue descr flags as defined in the specification.
 ///
 /// See Virtio specification v1.1. - 2.6.5
 ///                          v1.1. - 2.7.1
@@ -2580,7 +2580,7 @@ pub mod error {
 		/// Selected queue does not exist or
 		/// is not known to the device and hence can not be used
 		QueueNotExisting(u16),
-		/// Signals, that the queue does not have any free desciptors
+		/// Signals, that the queue does not have any free descriptors
 		/// left.
 		/// Typically this means, that the driver either has to provide
 		/// "unsend" `TransferToken` to the queue (see Docs for details)
@@ -2590,7 +2590,7 @@ pub mod error {
 		/// for a given structure. Returns the structures size in bytes.
 		///
 		/// E.g: A struct `T` with size of `4 bytes` must have a `BuffSpec`, which
-		/// defines exactly 4 bytes. Regardeless of wether it is a `Single`, `Multiple`
+		/// defines exactly 4 bytes. Regardeless of whether it is a `Single`, `Multiple`
 		/// or `Indirect` BuffSpec.
 		BufferSizeWrong(usize),
 		/// The requested BufferToken for reuse is signed as not reusable and hence
@@ -2600,7 +2600,7 @@ pub mod error {
 		/// Buffers which refer to raw pointers seems dangerours, this is forbidden.
 		NoReuseBuffer,
 		/// Indicates that a Transfer method was called, that is only allowed to be
-		/// called when the transfer is Finished (or Ready, allthough this state is
+		/// called when the transfer is Finished (or Ready, although this state is
 		/// only allowed for Transfer structs owned by the Virtqueue).
 		/// The Error returns the called Transfer for recovery, if called from a
 		/// consuming function as a `Some(Transfer)`. For non-consuming

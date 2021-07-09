@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-//! A module containing all environment specific funtion calls.
+//! A module containing all environment specific function calls.
 //!
 //! The module should easy partability of the code. Furthermore it provides
 //! a clean boundary between virtio and the rest of the kernel. One additional aspect is to
@@ -15,7 +15,7 @@ pub mod memory {
 	use core::convert::TryFrom;
 	use core::ops::Add;
 
-	/// A newtype representing a memory offset wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
+	/// A newtype representing a memory offset which can be used to be added to [PhyMemAddr](PhyMemAddr) or
 	/// to [VirtMemAddr](VirtMemAddr).
 	#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 	pub struct MemOff(usize);
@@ -40,7 +40,7 @@ pub mod memory {
 		}
 	}
 
-	/// A newtype representing a memory length wich can be used to be added to [PhyMemAddr](PhyMemAddr) or
+	/// A newtype representing a memory length which can be used to be added to [PhyMemAddr](PhyMemAddr) or
 	/// to [VirtMemAddr](VirtMemAddr).
 	#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 	pub struct MemLen(usize);
@@ -231,7 +231,7 @@ pub mod pci {
 		}
 	}
 
-	/// Maps all memeory areas indicated by the devices BAR's into
+	/// Maps all memory areas indicated by the devices BAR's into
 	/// Virtual address space.
 	///
 	/// As this function uses parts of the kernel pci code it is
