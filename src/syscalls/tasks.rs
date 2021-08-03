@@ -291,7 +291,7 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
-	let wakeup_time = timeout.map(|timeout| arch::processor::get_timer_ticks() + timeout);
+	let wakeup_time = timeout.map(|timeout| arch::processor::get_timer_ticks() + timeout * 1000);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
@@ -308,8 +308,8 @@ pub extern "C" fn sys_block_current_task() {
 
 /// Set the current task state to `blocked`
 #[no_mangle]
-pub fn sys_block_current_task_with_timeout(timeout: Option<u64>) {
-	kernel_function!(__sys_block_current_task(&timeout))
+pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
+	kernel_function!(__sys_block_current_task(&Some(timeout)))
 }
 
 extern "C" fn __sys_wakeup_task(id: Tid) {
