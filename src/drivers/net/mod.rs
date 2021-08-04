@@ -49,7 +49,7 @@ pub extern "C" fn set_polling_mode(value: bool) {
 
 	let mut guard = THREADS_IN_POLLING_MODE.lock();
 
-	if value == true {
+	if value {
 		*guard += 1;
 
 		if *guard == 1 {
