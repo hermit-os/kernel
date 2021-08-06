@@ -74,7 +74,7 @@ pub extern "C" fn netwait() {
 	NET_SEM.acquire(None);
 }
 
-pub extern "C" fn netwakeup() {
+pub fn netwakeup() {
 	NET_SEM.release();
 }
 
