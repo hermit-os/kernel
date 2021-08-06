@@ -291,7 +291,7 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
-	let wakeup_time = timeout.map(|timeout| arch::processor::get_timer_ticks() + timeout * 1000);
+	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
 	let core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
