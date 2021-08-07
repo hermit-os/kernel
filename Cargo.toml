@@ -63,7 +63,7 @@ multiboot = "0.6"
 x86 = { version = "0.40", default-features = false }
 
 [dev-dependencies]
-float-cmp = "0.8"
+float-cmp = "0.9"
 num-traits = { version = "0.2", default-features = false }
 x86 = { version = "0.40", default-features = false }
 
