@@ -1,7 +1,4 @@
-use core::{
-	mem::{self, MaybeUninit},
-	ptr,
-};
+use core::{mem, ptr};
 
 use crate::percore;
 use crate::set_current_kernel_stack;
@@ -160,7 +157,7 @@ macro_rules! kernel_function_impl {
 				$(
 					assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
 					let $arg = {
-						let mut reg = MaybeUninit::<usize>::uninit().assume_init();
+						let mut reg = 0_usize;
 						// SAFETY: $A is smaller than usize and directly fits in a register
 						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
 						ptr::write(&mut reg as *mut _ as _, $arg);
