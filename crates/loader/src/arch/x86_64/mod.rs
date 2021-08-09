@@ -17,7 +17,7 @@ use core::convert::TryInto;
 use core::intrinsics::copy;
 use core::{mem, slice};
 use goblin::elf;
-use multiboot::Multiboot;
+use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 
 extern "C" {
 	static mb_info: usize;
@@ -35,10 +35,24 @@ const SERIAL_PORT_BAUDRATE: u32 = 115200;
 static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 
-fn paddr_to_slice<'a>(p: multiboot::PAddr, sz: usize) -> Option<&'a [u8]> {
-	unsafe {
+struct Mem;
+static mut MEM: Mem = Mem;
+
+impl MemoryManagement for Mem {
+	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
 		let ptr = mem::transmute(p);
 		Some(slice::from_raw_parts(ptr, sz))
+	}
+
+	// If you only want to read fields, you can simply return `None`.
+	unsafe fn allocate(&mut self, _length: usize) -> Option<(PAddr, &mut [u8])> {
+		None
+	}
+
+	unsafe fn deallocate(&mut self, addr: PAddr) {
+		if addr != 0 {
+			unimplemented!()
+		}
 	}
 }
 
@@ -59,7 +73,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::WRITABLE);
 
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
+	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
 	let modules_address = multiboot
 		.modules()
 		.expect("Could not find a memory map in the Multiboot information")
@@ -166,7 +180,7 @@ pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64)
 	loaderlog!("BootInfo located at 0x{:x}", &BOOT_INFO as *const _ as u64);
 	loaderlog!("Use stack address 0x{:x}", BOOT_INFO.current_stack_address);
 
-	let multiboot = Multiboot::new(mb_info as u64, paddr_to_slice).unwrap();
+	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
 	if let Some(cmdline) = multiboot.command_line() {
 		let address = cmdline.as_ptr();
 
