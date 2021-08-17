@@ -152,7 +152,7 @@ pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
 	kernel_function!(__sys_rx_buffer_consumed(handle))
 }
 
-#[cfg(not(feature = "newlib"))]
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 #[no_mangle]
 pub extern "C" fn sys_netwait() {
 	kernel_function!(netwait());
