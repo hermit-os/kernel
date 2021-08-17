@@ -27,7 +27,6 @@ use crate::config::*;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 pub mod task;
 
