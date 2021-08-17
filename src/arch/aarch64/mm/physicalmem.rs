@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::convert::TryInto;
+use core::{alloc::AllocError, convert::TryInto};
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -43,7 +43,7 @@ pub fn total_memory_size() -> usize {
 
 pub fn init_page_tables() {}
 
-pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
+pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
 	assert_eq!(
 		size % BasePageSize::SIZE,
@@ -62,7 +62,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, ()> {
 	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, ()> {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
 	assert!(alignment > 0);
 	assert_eq!(

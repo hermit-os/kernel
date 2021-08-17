@@ -5,7 +5,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use core::convert::TryInto;
+use core::{alloc::AllocError, convert::TryInto};
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -32,7 +32,7 @@ pub fn init() {
 	KERNEL_FREE_LIST.lock().list.push_back(entry);
 }
 
-pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
+pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 	assert!(size > 0);
 	assert_eq!(
 		size % BasePageSize::SIZE,
@@ -51,7 +51,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, ()> {
 	))
 }
 
-pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, ()> {
+pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, AllocError> {
 	assert!(size > 0);
 	assert!(alignment > 0);
 	assert_eq!(
