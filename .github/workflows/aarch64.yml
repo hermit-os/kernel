@@ -63,3 +63,7 @@ jobs:
           choco install make
           choco install qemu --version 2021.5.5
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
+      - name: Test kernel
+        run: qemu-system-aarch64 -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3
+        working-directory: loader
+        
