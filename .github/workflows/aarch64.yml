@@ -46,7 +46,7 @@ jobs:
         run: make arch=aarch64
         working-directory: loader
         env:
-          HERMIT_APP: ../../../target/aarch64-unknown-hermit/debug/hello_world
+          HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
       - name: Install QEMU (ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
