@@ -41,7 +41,12 @@ jobs:
         working-directory: libhermit-rs
         run: cargo build --no-default-features --target aarch64-unknown-hermit
       - name: Build dev profile
-        run: cargo build --target aarch64-unknown-hermit -p hello_world 
+        run: cargo build --target aarch64-unknown-hermit -p hello_world
+      - name: Build loader
+        run: make arch=aarch64
+        working-directory: loader
+        env:
+          HERMIT_APP: ../../../target/aarch64-unknown-hermit/debug/hello_world
       - name: Install QEMU (ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
