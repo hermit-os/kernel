@@ -18,9 +18,7 @@ pub mod x86_64;
 pub use crate::arch::aarch64::*;
 
 #[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::kernel::stubs::{
-	set_oneshot_timer, wakeup_core,
-};
+pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, wakeup_core};
 
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::{
