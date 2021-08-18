@@ -14,6 +14,7 @@ pub mod scheduler;
 pub mod serial;
 mod start;
 pub mod stubs;
+pub mod switch;
 pub mod systemtime;
 
 use crate::arch::aarch64::kernel::percore::*;
