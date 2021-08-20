@@ -5,7 +5,6 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::arch::aarch64::kernel::SERIAL_PORT_ADDRESS;
 use core::fmt;
 
 #[repr(C)]
@@ -60,7 +59,7 @@ impl BootInfo {
 			cpu_online: 0,
 			possible_cpus: 0,
 			current_boot_id: 0,
-			uartport: SERIAL_PORT_ADDRESS,
+			uartport: 0x9000000, // Initialize with QEMU's UART address
 			single_kernel: 1,
 			uhyve: 0,
 			hcip: [255, 255, 255, 255],

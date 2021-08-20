@@ -6,6 +6,7 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+mod bootinfo;
 pub mod irq;
 pub mod pci;
 pub mod percore;
@@ -17,6 +18,7 @@ pub mod stubs;
 pub mod switch;
 pub mod systemtime;
 
+use crate::arch::aarch64::kernel::bootinfo::BootInfo;
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::stubs::*;
@@ -33,62 +35,9 @@ const SERIAL_PORT_BAUDRATE: u32 = 115200;
 static mut COM1: SerialPort = SerialPort::new(0x9000000);
 static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
 
-#[repr(C)]
-struct BootInfo {
-	magic_number: u32,
-	version: u32,
-	base: u64,
-	limit: u64,
-	image_size: u64,
-	current_stack_address: u64,
-	current_percore_address: u64,
-	host_logical_addr: u64,
-	boot_gtod: u64,
-	mb_info: u64,
-	cmdline: u64,
-	cmdsize: u64,
-	cpu_freq: u32,
-	boot_processor: u32,
-	cpu_online: u32,
-	possible_cpus: u32,
-	current_boot_id: u32,
-	uartport: u32,
-	single_kernel: u8,
-	uhyve: u8,
-	hcip: [u8; 4],
-	hcgateway: [u8; 4],
-	hcmask: [u8; 4],
-	boot_stack: [u8; KERNEL_STACK_SIZE],
-}
-
 /// Kernel header to announce machine features
 #[link_section = ".mboot"]
-static mut BOOT_INFO: BootInfo = BootInfo {
-	magic_number: 0xC0DECAFEu32,
-	version: 0,
-	base: 0,
-	limit: 0,
-	image_size: 0,
-	current_stack_address: 0,
-	current_percore_address: 0,
-	host_logical_addr: 0,
-	boot_gtod: 0,
-	mb_info: 0,
-	cmdline: 0,
-	cmdsize: 0,
-	cpu_freq: 0,
-	boot_processor: !0,
-	cpu_online: 0,
-	possible_cpus: 0,
-	current_boot_id: 0,
-	uartport: 0x9000000, // Initialize with QEMU's UART address
-	single_kernel: 1,
-	uhyve: 0,
-	hcip: [10, 0, 5, 2],
-	hcgateway: [10, 0, 5, 1],
-	hcmask: [255, 255, 255, 0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE],
-};
+static mut BOOT_INFO: BootInfo = BootInfo::new();
 
 // FUNCTIONS
 
@@ -100,10 +49,6 @@ pub fn get_image_size() -> usize {
 
 pub fn get_limit() -> usize {
 	unsafe { core::ptr::read_volatile(&BOOT_INFO.limit) as usize }
-}
-
-pub fn get_mbinfo() -> usize {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.mb_info) as usize }
 }
 
 pub fn get_processor_count() -> u32 {
