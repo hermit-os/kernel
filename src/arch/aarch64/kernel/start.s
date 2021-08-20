@@ -204,3 +204,4 @@ ventry el0_irq_invalid          // IRQ 32-bit EL0
 ventry el0_fiq_invalid          // FIQ 32-bit EL0
 ventry el0_error_invalid        // Error 32-bit EL0
 .size vector_table, .-vector_table
+
