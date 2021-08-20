@@ -18,7 +18,7 @@ static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 pub unsafe extern "C" fn _start() -> ! {
 	asm!("ldr x1, {0}",
 		 "add x1, x1, {1}",
-		 "sub x1, x1, #0x10",	/*Previous version subtracted 0x10 from End, so I'm doing this too. Not sure why though */
+		 "sub x1, x1, #0x10",	/* Previous version subtracted 0x10 from End, so I'm doing this too. Not sure why though. COMMENT from SL: This is a habit of mine. I always start 16 bytes before the end of the stack. */
 		 "mov sp, x1",
 		 /* Set exception table */
 		 "adr x8, vector_table",
