@@ -242,7 +242,7 @@ impl Clone for TaskTLS {
 }
 
 extern "C" fn leave_task() -> ! {
-	core_scheduler().exit(0);
+	core_scheduler().exit(0)
 }
 
 extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
