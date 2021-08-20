@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 Stefan Lankes, RWTH Aachen University
+// Copyright (c) 2018-2021 Stefan Lankes, RWTH Aachen University
 //               2018 Colin Finck, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
