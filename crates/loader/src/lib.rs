@@ -7,7 +7,6 @@
 
 #![feature(alloc_error_handler)]
 #![feature(allocator_api)]
-#![feature(llvm_asm)]
 #![feature(global_asm)]
 #![feature(asm)]
 #![feature(panic_info_message)]
