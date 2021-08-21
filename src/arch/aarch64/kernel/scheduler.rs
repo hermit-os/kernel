@@ -46,6 +46,11 @@ pub enum TaskStacks {
 }
 
 impl TaskStacks {
+	/// Size of the debug marker at the very top of each stack.
+	///
+	/// We have a marker at the very top of the stack for debugging (`0xdeadbeef`), which should not be overridden.
+	pub const MARKER_SIZE: usize = 0x10;
+
 	pub fn new(size: usize) -> Self {
 		let user_stack_size = if size < KERNEL_STACK_SIZE {
 			KERNEL_STACK_SIZE
