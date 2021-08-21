@@ -13,7 +13,7 @@ const IRQ_FLAG_A: usize = 1 << 8;
 #[inline]
 pub fn enable() {
 	unsafe {
-		asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
+		llvm_asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
 	}
 }
 
@@ -24,14 +24,14 @@ pub fn enable() {
 #[inline]
 pub fn enable_and_wait() {
 	// TODO
-	unsafe { asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
+	unsafe { llvm_asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
 	unsafe {
-		asm!("msr daifset, 0b111" ::: "memory" : "volatile");
+		llvm_asm!("msr daifset, 0b111" ::: "memory" : "volatile");
 	}
 }
 
@@ -45,7 +45,7 @@ pub fn disable() {
 pub fn nested_disable() -> bool {
 	let flags: usize;
 	unsafe {
-		asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
+		llvm_asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
 	}
 
 	let mut was_enabled = true;

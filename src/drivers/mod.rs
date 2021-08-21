@@ -13,16 +13,16 @@
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // UNCOMMENTED FOR CORRECT USE STATEMENT; IS THIS CORRECT?
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-//#[cfg(not(feature = "newlib"))]
+#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
 pub mod net;
 
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
 pub mod virtio;
 
 /// A common error module for drivers.
 /// [DriverError](enums.drivererror.html) values will be
 /// passed on to higher layers.
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
 pub mod error {
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	use crate::drivers::virtio::error::VirtioError;

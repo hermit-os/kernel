@@ -5,21 +5,21 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::scheduler::PerCoreScheduler;
+use crate::scheduler::{CoreId, PerCoreScheduler};
 use core::ptr;
 
 #[no_mangle]
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
 
 pub struct PerCoreVariables {
-	/// APIC ID of this CPU Core.
-	core_id: PerCoreVariable<usize>,
-	/// Scheduler for this CPU Core.
+	/// ID of the current Core.
+	core_id: PerCoreVariable<CoreId>,
+	/// Scheduler of the current Core.
 	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
 }
 
 impl PerCoreVariables {
-	pub const fn new(core_id: usize) -> Self {
+	pub const fn new(core_id: CoreId) -> Self {
 		Self {
 			core_id: PerCoreVariable::new(core_id),
 			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
@@ -62,7 +62,7 @@ where
 }
 
 #[inline]
-pub fn core_id() -> usize {
+pub fn core_id() -> CoreId {
 	unsafe { PERCORE.core_id.get() }
 }
 

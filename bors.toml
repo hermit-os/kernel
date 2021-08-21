@@ -1,7 +1,10 @@
 status = [
-  "Test (ubuntu-latest)",
-  "Test (macos-latest)",
-  "Test (windows-latest)",
+  "x86 tests (ubuntu-latest)",
+  "x86 tests (macos-latest)",
+  "x86 tests (windows-latest)",
+  "aarch64 tests (ubuntu-latest)",
+  "aarch64 tests (macos-latest)",
+  "aarch64 tests (windows-latest)",
   "Format",
   "Clippy",
   "ci/gitlab/git.rwth-aachen.de",

@@ -1,0 +1,69 @@
+name: aarch64
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - staging
+      - trying
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: aarch64 tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Checkout rusty-hermit
+        uses: actions/checkout@v2
+        with:
+          repository: hermitcore/rusty-hermit
+          submodules: true
+      - name: Remove libhermit-rs submodule
+        run: git rm -r libhermit-rs
+      - name: Checkout libhermit-rs
+        uses: actions/checkout@v2
+        with:
+          path: libhermit-rs
+      - name: Rustup (apply rust-toolchain.toml)
+        working-directory: libhermit-rs
+        run: rustup show
+      - name: Build minimal kernel
+        working-directory: libhermit-rs
+        run: cargo build --no-default-features --target aarch64-unknown-hermit
+      - name: Build dev profile
+        run: cargo build --target aarch64-unknown-hermit -p hello_world
+      - name: Build loader
+        run: make arch=aarch64
+        working-directory: loader
+        env:
+          HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
+      - name: Install QEMU (ubuntu)
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install qemu-system-aarch64
+      - name: Install QEMU (macos)
+        if: ${{ matrix.os == 'macos-latest' }}
+        run: |
+          brew update
+          brew install qemu
+      - name: Install QEMU, GNU make (windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        run: |
+          choco install make
+          choco install qemu --version 2021.5.5
+          echo "C:\Program Files\qemu" >> $GITHUB_PATH
+      - name: Test kernel
+        run: qemu-system-aarch64 -semihosting -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3
+        working-directory: loader
+        

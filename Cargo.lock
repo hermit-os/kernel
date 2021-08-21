@@ -3,6 +3,14 @@
 version = 3
 
 [[package]]
+name = "aarch64"
+version = "0.0.5"
+source = "git+https://github.com/hermitcore/rust-aarch64#582ccd4f738501e4b90a5680e9343c48715a7d7a"
+dependencies = [
+ "cortex-a",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -25,6 +33,15 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "cortex-a"
+version = "6.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "509fc35485a2b4ddbacabe0bf2212cdfff88da93658608e5cc651afcb75b7733"
+dependencies = [
+ "tock-registers",
+]
 
 [[package]]
 name = "crossbeam-utils"
@@ -152,6 +169,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "qemu-exit"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "220eb94f40665452ab6114bf8a8d86aa1fd41c6dbfaa4ab71b5912c8adb80389"
+
+[[package]]
 name = "quote"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -173,6 +196,7 @@ dependencies = [
 name = "rusty-hermit"
 version = "0.3.52"
 dependencies = [
+ "aarch64",
  "bitflags",
  "crossbeam-utils",
  "float-cmp",
@@ -181,6 +205,7 @@ dependencies = [
  "num",
  "num-derive",
  "num-traits",
+ "qemu-exit",
  "scopeguard",
  "x86",
 ]
@@ -201,6 +226,12 @@ dependencies = [
  "quote",
  "unicode-xid",
 ]
+
+[[package]]
+name = "tock-registers"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ee8fba06c1f4d0b396ef61a54530bb6b28f0dc61c38bc8bc5a5a48161e6282e"
 
 [[package]]
 name = "unicode-xid"

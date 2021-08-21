@@ -1,25 +1,30 @@
-// Copyright (c) 2018 Stefan Lankes, RWTH Aachen University
-//                    Colin Finck, RWTH Aachen University
+// Copyright (c) 2018-2021 Stefan Lankes, RWTH Aachen University
+//               2018 Colin Finck, RWTH Aachen University
 //
 // Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
 // http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-include!(concat!(env!("CARGO_TARGET_DIR"), "/config.rs"));
-
+mod bootinfo;
 pub mod irq;
+pub mod pci;
 pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
+mod start;
 pub mod stubs;
+pub mod switch;
 pub mod systemtime;
 
+use crate::arch::aarch64::kernel::bootinfo::BootInfo;
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
+use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::config::*;
 use crate::environment;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
@@ -27,130 +32,104 @@ use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
-lazy_static! {
-	static ref COM1: SerialPort = SerialPort::new(unsafe { BOOT_INFO.uartport });
-	static ref CPU_ONLINE: Spinlock<&'static mut u32> =
-		Spinlock::new(unsafe { &mut BOOT_INFO.cpu_online });
-}
-
-#[repr(C)]
-struct BootInfo {
-	magic_number: u32,
-	version: u32,
-	base: u64,
-	limit: u64,
-	image_size: u64,
-	current_stack_address: u64,
-	current_percore_address: u64,
-	host_logical_addr: u64,
-	boot_gtod: u64,
-	mb_info: u64,
-	cmdline: u64,
-	cmdsize: u64,
-	cpu_freq: u32,
-	boot_processor: u32,
-	cpu_online: u32,
-	possible_cpus: u32,
-	current_boot_id: u32,
-	uartport: u32,
-	single_kernel: u8,
-	uhyve: u8,
-	hcip: [u8; 4],
-	hcgateway: [u8; 4],
-	hcmask: [u8; 4],
-	boot_stack: [u8; KERNEL_STACK_SIZE],
-}
+static mut COM1: SerialPort = SerialPort::new(0x9000000);
+static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
 
 /// Kernel header to announce machine features
 #[link_section = ".mboot"]
-static mut BOOT_INFO: BootInfo = BootInfo {
-	magic_number: 0xC0DECAFEu32,
-	version: 0,
-	base: 0,
-	limit: 0,
-	image_size: 0,
-	current_stack_address: 0,
-	current_percore_address: 0,
-	host_logical_addr: 0,
-	boot_gtod: 0,
-	mb_info: 0,
-	cmdline: 0,
-	cmdsize: 0,
-	cpu_freq: 0,
-	boot_processor: !0,
-	cpu_online: 0,
-	possible_cpus: 0,
-	current_boot_id: 0,
-	uartport: 0x9000000, // Initialize with QEMU's UART address
-	single_kernel: 1,
-	uhyve: 0,
-	hcip: [10, 0, 5, 2],
-	hcgateway: [10, 0, 5, 1],
-	hcmask: [255, 255, 255, 0],
-	boot_stack: [0xCD; KERNEL_STACK_SIZE],
-};
+static mut BOOT_INFO: BootInfo = BootInfo::new();
 
 // FUNCTIONS
 
+global_asm!(include_str!("start.s"));
+
 pub fn get_image_size() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.image_size) as usize }
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.limit) as usize }
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.limit) as usize }
 }
 
-pub fn get_mbinfo() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.mb_info) as usize }
+pub fn get_processor_count() -> u32 {
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.cpu_online) }
 }
 
-pub fn get_processor_count() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.cpu_online) as usize }
+pub fn get_base_address() -> VirtAddr {
+	VirtAddr::zero()
+}
+
+pub fn get_tls_start() -> VirtAddr {
+	VirtAddr::zero()
+}
+
+pub fn get_tls_filesz() -> usize {
+	0
+}
+
+pub fn get_tls_memsz() -> usize {
+	0
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { volatile_load(&BOOT_INFO.uhyve) != 0 }
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.uhyve) != 0 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { volatile_load(&BOOT_INFO.single_kernel) != 0 }
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.cmdsize) as usize }
+	unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdsize) as usize }
 }
 
-pub fn get_cmdline() -> usize {
-	unsafe { volatile_load(&BOOT_INFO.cmdline) as usize }
+pub fn get_cmdline() -> VirtAddr {
+	VirtAddr(unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdline) })
 }
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
 	percore::init();
 
+	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
-		COM1.init(SERIAL_PORT_BAUDRATE);
+		unsafe {
+			COM1.init(SERIAL_PORT_BAUDRATE);
+		}
 	}
 }
 
 pub fn output_message_byte(byte: u8) {
+	#[cfg(feature = "aarch64-qemu-stdout")]
+	unsafe {
+		core::ptr::write_volatile(0x3F20_1000 as *mut u8, byte);
+	}
+	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
-		COM1.write_byte(byte);
+		unsafe {
+			COM1.write_byte(byte);
+		}
 	} else {
 		// Output messages to the kernel message buffer in multi-kernel mode.
 		kernel_message_buffer::write_byte(byte);
 	}
 }
 
+pub fn output_message_buf(buf: &[u8]) {
+	for byte in buf {
+		output_message_byte(*byte);
+	}
+}
+
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
-	::mm::init();
-	::mm::print_information();
+	crate::mm::init();
+	crate::mm::print_information();
 	environment::init();
 
 	/*processor::detect_features();
@@ -190,24 +169,24 @@ pub fn boot_processor_init() {
 		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
 		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
-		asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
+		llvm_asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
 		debug!("pmuserenr_el0");
 
 		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
 		let pmcntenset_el0: u32 = 1 << 31;
-		asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
+		llvm_asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
 		debug!("pmcntenset_el0");
 
 		// Enable PMCCNTR_EL0 using PMCR_EL0.
 		let mut pmcr_el0: u32 = 0;
-		asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
+		llvm_asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
 		debug!(
 			"PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}",
 			pmcr_el0
 		);
 		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
-		asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
+		llvm_asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
 	}
 
 	// Read out PMCCNTR_EL0 in an infinite loop.
@@ -215,7 +194,7 @@ pub fn boot_processor_init() {
 	loop {
 		unsafe {
 			let pmccntr: u64;
-			asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
+			llvm_asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
 			println!("Count: {}", pmccntr);
 		}
 	}
@@ -258,10 +237,12 @@ fn finish_processor_init() {
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	**CPU_ONLINE.lock() += 1;
+	*CPU_ONLINE.lock() += 1;
 }
 
 pub fn network_adapter_init() -> i32 {
 	// AArch64 supports no network adapters on bare-metal/QEMU, so return a failure code.
 	-1
 }
+
+pub fn print_statistics() {}

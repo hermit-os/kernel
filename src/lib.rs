@@ -34,6 +34,8 @@
 #![feature(alloc_error_handler)]
 #![feature(vec_into_raw_parts)]
 #![feature(drain_filter)]
+#![feature(llvm_asm)]
+#![feature(global_asm)]
 #![no_std]
 #![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
 #![cfg_attr(target_os = "hermit", cfg_attr(test, test_runner(crate::test_runner)))]
@@ -55,6 +57,8 @@ extern crate num_derive;
 #[cfg(not(target_os = "hermit"))]
 #[macro_use]
 extern crate std;
+#[cfg(target_arch = "aarch64")]
+extern crate aarch64;
 #[cfg(target_arch = "x86_64")]
 extern crate x86;
 
@@ -67,6 +71,9 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use arch::percore::*;
 use mm::allocator::LockedHeap;
+
+#[cfg(target_arch = "aarch64")]
+use qemu_exit::QEMUExit;
 
 pub use crate::arch::*;
 pub use crate::config::*;
@@ -335,7 +342,15 @@ fn boot_processor_main() -> ! {
 		environment::get_tls_start(),
 		environment::get_tls_memsz()
 	);
-
+	#[cfg(target_arch = "aarch64")]
+	{
+		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
+		info!("Attempting to exit via QEMU.");
+		info!("This requires that you passed the `-semihosting` option to QEMU.");
+		let exit_handler = qemu_exit::AArch64::new();
+		exit_handler.exit_success();
+		loop {} /* Compiles up to here - loop prevents linker errors */
+	}
 	arch::boot_processor_init();
 	scheduler::add_current_core();
 

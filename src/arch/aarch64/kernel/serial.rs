@@ -24,12 +24,12 @@ impl SerialPort {
 		// LF newline characters need to be extended to CRLF over a real serial port.
 		if byte == b'\n' {
 			unsafe {
-				std::ptr::write_volatile(port, b'\r');
+				core::ptr::write_volatile(port, b'\r');
 			}
 		}
 
 		unsafe {
-			std::ptr::write_volatile(port, byte);
+			core::ptr::write_volatile(port, byte);
 		}
 	}
 

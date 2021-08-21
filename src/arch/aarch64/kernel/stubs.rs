@@ -5,12 +5,14 @@
 // http://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::scheduler::CoreId;
+
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	// TODO
 	debug!("set_oneshot_timer stub");
 }
 
-pub fn wakeup_core(core_to_wakeup: usize) {
+pub fn wakeup_core(core_to_wakeup: CoreId) {
 	// TODO
 	debug!("wakeup_core stub");
 }
@@ -47,6 +49,3 @@ pub extern "C" fn makecontext() {}
 
 #[no_mangle]
 pub extern "C" fn setcontext() {}
-
-#[no_mangle]
-pub extern "C" fn switch(_old_stack: *mut usize, _new_stack: usize) {}

@@ -1,4 +1,4 @@
-name: Test
+name: x86
 
 on:
   pull_request:
@@ -17,7 +17,7 @@ defaults:
 
 jobs:
   test:
-    name: Test
+    name: x86 tests
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
