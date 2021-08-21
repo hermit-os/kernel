@@ -7,7 +7,6 @@
 
 #![feature(alloc_error_handler)]
 #![feature(allocator_api)]
-#![feature(const_raw_ptr_to_usize_cast)]
 #![feature(llvm_asm)]
 #![feature(global_asm)]
 #![feature(asm)]
