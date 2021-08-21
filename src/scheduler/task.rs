@@ -562,13 +562,9 @@ impl BlockedTaskQueue {
 
 				cursor.move_next();
 			}
-
-			// No, then just insert it at the end of the list.
-			self.list.push_back(new_node);
-		} else {
-			// No, then just insert it at the end of the list.
-			self.list.push_back(new_node);
 		}
+
+		self.list.push_back(new_node);
 	}
 
 	/// Manually wake up a blocked task.
