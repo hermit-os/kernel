@@ -9,6 +9,7 @@ updates:
     # Check for updates every day (weekdays)
     schedule:
       interval: "daily"
+      timezone: "Europe/Berlin"
   # Enable version updates for Github Actions
   - package-ecosystem: "github-actions"
     # Set to `/` to check the Actions used in `.github/workflows`
@@ -16,3 +17,4 @@ updates:
     # Check for updates every day (weekdays)
     schedule:
       interval: "daily"
+      timezone: "Europe/Berlin"
