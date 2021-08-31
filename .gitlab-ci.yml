@@ -83,7 +83,7 @@ test:uhyve:
    script:
      - lscpu
      - kvm-ok
-     - cargo install uhyve
+     - cargo +nightly install uhyve --locked
      - uhyve -v -c 1 rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo
      - uhyve -v -c 2 rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo
      - uhyve -v -c 1 rusty-hermit/target/x86_64-unknown-hermit/release/rusty_demo
