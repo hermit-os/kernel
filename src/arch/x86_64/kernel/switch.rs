@@ -169,7 +169,7 @@ macro_rules! kernel_function_impl {
 				asm!(
 					// Save user stack pointer and switch to kernel stack
 					"cli",
-					"mov {user_stack_ptr}, rsp",
+					"mov r12, rsp",
 					"mov rsp, {kernel_stack_ptr}",
 					"sti",
 
@@ -181,20 +181,21 @@ macro_rules! kernel_function_impl {
 
 					// Switch back to user stack
 					"cli",
-					"mov rsp, {user_stack_ptr}",
+					"mov rsp, r12",
 					"sti",
 
 					f = in(reg) f,
-					user_stack_ptr = out(reg) _,
 					kernel_stack_ptr = in(reg) percore::get_kernel_stack(),
 
 					$($operands)*
 
+					// user_stack_ptr saved in r12
+					out("r12") _,
+
 					// Return argument in rax
 					out("rax") ret,
 
-					// All caller-saved registers must be marked as clobbered
-					out("r10") _, out("r11") _,
+					clobber_abi("C"),
 				);
 
 				// SAFETY: R is smaller than usize and directly fits in rax
@@ -205,65 +206,43 @@ macro_rules! kernel_function_impl {
 	};
 }
 
-kernel_function_impl!(kernel_function0() {
-	out("rdi") _,
-	out("rsi") _,
-	out("rdx") _,
-	out("rcx") _,
-	out("r8") _,
-	out("r9") _,
-});
+kernel_function_impl!(kernel_function0() {});
 
 kernel_function_impl!(kernel_function1(arg1: A1) {
-	inout("rdi") arg1 => _,
-	out("rsi") _,
-	out("rdx") _,
-	out("rcx") _,
-	out("r8") _,
-	out("r9") _,
+	in("rdi") arg1,
 });
 
 kernel_function_impl!(kernel_function2(arg1: A1, arg2: A2) {
-	inout("rdi") arg1 => _,
-	inout("rsi") arg2 => _,
-	out("rdx") _,
-	out("rcx") _,
-	out("r8") _,
-	out("r9") _,
+	in("rdi") arg1,
+	in("rsi") arg2,
 });
 
 kernel_function_impl!(kernel_function3(arg1: A1, arg2: A2, arg3: A3) {
-	inout("rdi") arg1 => _,
-	inout("rsi") arg2 => _,
-	inout("rdx") arg3 => _,
-	out("rcx") _,
-	out("r8") _,
-	out("r9") _,
+	in("rdi") arg1,
+	in("rsi") arg2,
+	in("rdx") arg3,
 });
 
 kernel_function_impl!(kernel_function4(arg1: A1, arg2: A2, arg3: A3, arg4: A4) {
-	inout("rdi") arg1 => _,
-	inout("rsi") arg2 => _,
-	inout("rdx") arg3 => _,
-	inout("rcx") arg4 => _,
-	out("r8") _,
-	out("r9") _,
+	in("rdi") arg1,
+	in("rsi") arg2,
+	in("rdx") arg3,
+	in("rcx") arg4,
 });
 
 kernel_function_impl!(kernel_function5(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5) {
-	inout("rdi") arg1 => _,
-	inout("rsi") arg2 => _,
-	inout("rdx") arg3 => _,
-	inout("rcx") arg4 => _,
-	inout("r8") arg5 => _,
-	out("r9") _,
+	in("rdi") arg1,
+	in("rsi") arg2,
+	in("rdx") arg3,
+	in("rcx") arg4,
+	in("r8") arg5,
 });
 
 kernel_function_impl!(kernel_function6(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5, arg6: A6) {
-	inout("rdi") arg1 => _,
-	inout("rsi") arg2 => _,
-	inout("rdx") arg3 => _,
-	inout("rcx") arg4 => _,
-	inout("r8") arg5 => _,
-	inout("r9") arg6 => _,
+	in("rdi") arg1,
+	in("rsi") arg2,
+	in("rdx") arg3,
+	in("rcx") arg4,
+	in("r8") arg5,
+	in("r9") arg6,
 });
