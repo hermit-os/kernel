@@ -5,7 +5,8 @@ version = 3
 [[package]]
 name = "aarch64"
 version = "0.0.6"
-source = "git+https://github.com/hermitcore/rust-aarch64#e920168c7d8d24b706b984d70ea8f90a2fc4a988"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fb59c3a5adf5ce5807ba9e635a0874c7c4136e07208caafeb4e2b0ecf0764cb"
 dependencies = [
  "cortex-a",
 ]
