@@ -56,14 +56,11 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           brew update
-          brew tap-new --no-git hermitcore/homebrew
-          brew extract --version 6.0.0 qemu hermitcore/homebrew
-          brew install hermitcore/homebrew/qemu@6.0.0
+          brew install qemu
       - name: Install QEMU, GNU make (windows)
         if: ${{ matrix.os == 'windows-latest' }}
         run: |
-          choco install make
-          choco install qemu --version 2021.5.5
+          choco install qemu make
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
       - name: Test kernel
         run: qemu-system-aarch64 -semihosting -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3
