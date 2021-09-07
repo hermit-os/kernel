@@ -59,7 +59,7 @@ jobs:
     - name: Install qemu (windows)
       uses: crazy-max/ghaction-chocolatey@v1
       with:
-        args: install qemu --version=2020.08.14
+        args: install qemu
       if: ${{ matrix.os == 'windows-latest' }}
     - name: Set path to qemu/nasm (Windows)
       run: |
