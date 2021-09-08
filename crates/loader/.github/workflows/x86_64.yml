@@ -59,7 +59,7 @@ jobs:
     - name: Install qemu (windows)
       uses: crazy-max/ghaction-chocolatey@v1
       with:
-        args: install qemu --version=2020.08.14
+        args: install qemu
       if: ${{ matrix.os == 'windows-latest' }}
     - name: Set path to qemu/nasm (Windows)
       run: |
@@ -80,4 +80,4 @@ jobs:
       if: ${{ matrix.os == 'windows-latest' }}
     - name: Test loader
       run:
-        qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd data/x86_64/hello_world -cpu qemu64,apic,fsgsbase,rdtscp,xsave,fxsr,rdrand
+        qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd data/x86_64/hello_world -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand
