@@ -102,7 +102,7 @@ class QemuTestRunner(TestRunner):
                         '-serial', 'stdio',
                         '-kernel', bootloader_path,
                         '-initrd', test_exe_path,
-                        '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,fxsr',
+                        '-cpu', 'qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr',
                         '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04',
                         ]
         super().__init__(test_command, 
