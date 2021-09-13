@@ -543,6 +543,10 @@ impl NetworkInterface for VirtioNetDriver {
 		}
 	}
 
+	fn free_tx_buffer(&self, token: usize) {
+		unsafe { drop(Box::from_raw(token as *mut BufferToken)) }
+	}
+
 	fn send_tx_buffer(&mut self, tkn_handle: usize, _len: usize) -> Result<(), ()> {
 		// This does not result in a new assignment, or in a drop of the BufferToken, which
 		// would be dangerous, as the memory is freed then.

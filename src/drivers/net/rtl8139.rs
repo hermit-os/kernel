@@ -241,6 +241,10 @@ impl NetworkInterface for RTL8139Driver {
 		}
 	}
 
+	fn free_tx_buffer(&self, _token: usize) {
+		// get_tx_buffer did not allocate
+	}
+
 	fn send_tx_buffer(&mut self, id: usize, len: usize) -> Result<(), ()> {
 		// send the packet
 		unsafe {
