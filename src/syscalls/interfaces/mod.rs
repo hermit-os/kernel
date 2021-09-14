@@ -154,6 +154,19 @@ pub trait SyscallInterface: Send + Sync {
 		Err(())
 	}
 
+	fn free_tx_buffer(&self, handle: usize) -> Result<(), ()> {
+		#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+		match arch::kernel::pci::get_network_driver() {
+			Some(driver) => {
+				driver.lock().free_tx_buffer(handle);
+				Ok(())
+			}
+			_ => Err(()),
+		}
+		#[cfg(not(all(feature = "pci", not(target_arch = "aarch64"))))]
+		Err(())
+	}
+
 	fn send_tx_buffer(&self, handle: usize, len: usize) -> Result<(), ()> {
 		#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
 		match arch::kernel::pci::get_network_driver() {

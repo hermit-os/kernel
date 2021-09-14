@@ -114,6 +114,16 @@ extern "C" fn __sys_get_tx_buffer(len: usize, ret: &mut Result<(*mut u8, usize),
 	*ret = unsafe { SYS.get_tx_buffer(len) };
 }
 
+#[allow(improper_ctypes_definitions)]
+extern "C" fn __sys_free_tx_buffer(handle: usize) -> Result<(), ()> {
+	unsafe { SYS.free_tx_buffer(handle) }
+}
+
+#[no_mangle]
+pub fn sys_free_tx_buffer(handle: usize) -> Result<(), ()> {
+	kernel_function!(__sys_free_tx_buffer(handle))
+}
+
 #[no_mangle]
 pub fn sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
 	let mut ret = Err(());

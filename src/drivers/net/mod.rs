@@ -26,8 +26,12 @@ pub trait NetworkInterface {
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16;
 	/// Get buffer to create a TX packet
+	///
+	/// This returns ownership of the TX buffer.
 	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()>;
-	/// Send TC packets
+	/// Frees the TX buffer (takes ownership)
+	fn free_tx_buffer(&self, token: usize);
+	/// Send TC packets (takes TX buffer ownership)
 	fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()>;
 	/// Check if a packet is available
 	fn has_packet(&self) -> bool;
