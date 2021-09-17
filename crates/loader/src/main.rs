@@ -29,7 +29,7 @@ pub unsafe extern "C" fn loader_main() -> ! {
 	arch::message_output_init();
 
 	loaderlog!(
-		"Loader: [0x{:x} - 0x{:x}]",
+		"Loader: [{:#x} - {:#x}]",
 		&kernel_start as *const u8 as usize,
 		&kernel_end as *const u8 as usize
 	);

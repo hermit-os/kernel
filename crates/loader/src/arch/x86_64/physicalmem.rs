@@ -20,7 +20,7 @@ pub fn allocate(size: usize) -> usize {
 	assert_eq!(
 		size % BasePageSize::SIZE,
 		0,
-		"Size 0x{:x} is a multiple of 0x{:x}",
+		"Size {:#x} is a multiple of {:#x}",
 		size,
 		BasePageSize::SIZE
 	);

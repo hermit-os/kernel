@@ -68,7 +68,7 @@ pub fn output_message_byte(byte: u8) {
 pub unsafe fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
-	loaderlog!("Found Multiboot information at 0x{:x}", mb_info);
+	loaderlog!("Found Multiboot information at {:#x}", mb_info);
 	let page_address = align_down!(mb_info, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::WRITABLE);
 
@@ -102,14 +102,10 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		}
 	}
 
-	loaderlog!(
-		"Found module: [0x{:x} - 0x{:x}]",
-		start_address,
-		end_address
-	);
+	loaderlog!("Found module: [{:#x} - {:#x}]", start_address, end_address);
 	let elf_start = start_address;
 	let elf_len = end_address - start_address;
-	loaderlog!("Module length: 0x{:x}", elf_len);
+	loaderlog!("Module length: {:#x}", elf_len);
 
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	physicalmem::init(align_up!(end_address, LargePageSize::SIZE));
@@ -120,12 +116,12 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		"Could not find a single module in the Multiboot information"
 	);
 	assert!(start_address > 0);
-	loaderlog!("Found an ELF module at 0x{:x}", start_address);
+	loaderlog!("Found an ELF module at {:#x}", start_address);
 	let page_address = align_down!(start_address, BasePageSize::SIZE);
 	let counter =
 		(align_up!(start_address, LargePageSize::SIZE) - page_address) / BasePageSize::SIZE;
 	loaderlog!(
-		"Map {} pages at 0x{:x} (page size {} KByte)",
+		"Map {} pages at {:#x} (page size {} KByte)",
 		counter,
 		page_address,
 		BasePageSize::SIZE / 1024
@@ -142,7 +138,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let counter = (align_up!(end_address, LargePageSize::SIZE) - address) / LargePageSize::SIZE;
 	if counter > 0 {
 		loaderlog!(
-			"Map {} pages at 0x{:x} (page size {} KByte)",
+			"Map {} pages at {:#x} (page size {} KByte)",
 			counter,
 			address,
 			LargePageSize::SIZE / 1024
@@ -177,8 +173,8 @@ pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64)
 		PageTableEntryFlags::WRITABLE,
 	);
 
-	loaderlog!("BootInfo located at 0x{:x}", &BOOT_INFO as *const _ as u64);
-	loaderlog!("Use stack address 0x{:x}", BOOT_INFO.current_stack_address);
+	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
+	loaderlog!("Use stack address {:#x}", BOOT_INFO.current_stack_address);
 
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
 	if let Some(cmdline) = multiboot.command_line() {
@@ -196,7 +192,7 @@ pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64)
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	let entry_point = entry_point - virtual_address + new_addr;
 	loaderlog!(
-		"Jumping to HermitCore Application Entry Point at 0x{:x}",
+		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);
 	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =

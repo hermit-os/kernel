@@ -40,7 +40,7 @@ pub fn find_kernel() -> &'static [u8] {
 pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64) -> ! {
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!(
-		"Jumping to HermitCore Application Entry Point at 0x{:x}",
+		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);
 

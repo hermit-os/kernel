@@ -64,7 +64,7 @@ pub unsafe fn sections_init() {
 }
 
 pub unsafe fn load_kernel(elf: &elf::Elf<'_>, elf_start: u64, mem_size: u64) -> (u64, u64) {
-	loaderlog!("start 0x{:x}, size 0x{:x}", elf_start, mem_size);
+	loaderlog!("start {:#x}, size {:#x}", elf_start, mem_size);
 	if !elf.libraries.is_empty() {
 		panic!(
 			"Error: file depends on following libraries: {:?}",
@@ -77,11 +77,11 @@ pub unsafe fn load_kernel(elf: &elf::Elf<'_>, elf_start: u64, mem_size: u64) -> 
 	assert!(elf.header.e_machine == ELF_ARCH);
 
 	if elf.header.e_ident[7] != 0xFF {
-		loaderlog!("Unsupported OS ABI 0x{:x}", elf.header.e_ident[7]);
+		loaderlog!("Unsupported OS ABI {:#x}", elf.header.e_ident[7]);
 	}
 
 	let address = get_memory(mem_size);
-	loaderlog!("Load HermitCore Application at 0x{:x}", address);
+	loaderlog!("Load HermitCore Application at {:#x}", address);
 
 	// load application
 	for program_header in &elf.program_headers {
@@ -106,7 +106,7 @@ pub unsafe fn load_kernel(elf: &elf::Elf<'_>, elf_start: u64, mem_size: u64) -> 
 			BOOT_INFO.tls_memsz = program_header.p_memsz as u64;
 
 			loaderlog!(
-				"Found TLS starts at 0x{:x} (size {} Bytes)",
+				"Found TLS starts at {:#x} (size {} Bytes)",
 				BOOT_INFO.tls_start,
 				BOOT_INFO.tls_memsz
 			);
@@ -169,7 +169,7 @@ pub fn check_kernel_elf_file(elf: &elf::Elf<'_>) -> u64 {
 	// Verify the information.
 	assert!(file_size > 0);
 	assert!(mem_size > 0);
-	loaderlog!("Found entry point: 0x{:x}", elf.entry);
+	loaderlog!("Found entry point: {:#x}", elf.entry);
 	loaderlog!("File Size: {} Bytes", file_size);
 	loaderlog!("Mem Size:  {} Bytes", mem_size);
 
