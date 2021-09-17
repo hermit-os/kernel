@@ -744,7 +744,7 @@ pub fn init_page_tables() {
 		let pml4 = controlregs::cr3();
 		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
 
-		debug!("Found PML4 at 0x{:x}", pml4);
+		debug!("Found PML4 at {:#x}", pml4);
 
 		// make sure that only the required areas are mapped
 		let start = pde
@@ -763,7 +763,7 @@ pub fn init_page_tables() {
 		// Identity-map the supplied Multiboot information and command line.
 		let mb_info = get_mbinfo();
 		if !mb_info.is_zero() {
-			info!("Found Multiboot info at 0x{:x}", mb_info);
+			info!("Found Multiboot info at {:#x}", mb_info);
 			identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
 
 			// Map the "Memory Map" information too.
@@ -780,7 +780,7 @@ pub fn init_page_tables() {
 		let cmdsize = environment::get_cmdsize();
 		if cmdsize > 0 {
 			let cmdline = environment::get_cmdline();
-			info!("Found cmdline at 0x{:x} (size {})", cmdline, cmdsize);
+			info!("Found cmdline at {:#x} (size {})", cmdline, cmdsize);
 			identity_map(
 				PhysAddr(cmdline.as_u64()),
 				PhysAddr(cmdline.as_u64()) + cmdsize - 1u64,

@@ -172,7 +172,7 @@ impl<'a> Virtq<'a> {
 		common_cfg.queue_enable = 1;
 
 		debug!(
-			"desc 0x{:x}, avail 0x{:x}, used 0x{:x}",
+			"desc {:#x}, avail {:#x}, used {:#x}",
 			common_cfg.queue_desc, common_cfg.queue_avail, common_cfg.queue_used
 		);
 
@@ -747,7 +747,7 @@ pub fn map_virtiocap(
 	let mut nextcaplist = caplist;
 	if nextcaplist < 0x40 {
 		error!(
-			"Caplist inside header! Offset: 0x{:x}, Aborting",
+			"Caplist inside header! Offset: {:#x}, Aborting",
 			nextcaplist
 		);
 		return None;
@@ -766,7 +766,7 @@ pub fn map_virtiocap(
 		}
 		let captypeword = pci::read_config(bus, device, nextcaplist);
 		debug!(
-			"Read cap at offset 0x{:x}: captype 0x{:x}",
+			"Read cap at offset {:#x}: captype {:#x}",
 			nextcaplist, captypeword
 		);
 		let captype = captypeword & 0xFF; // pci cap type
@@ -785,7 +785,7 @@ pub fn map_virtiocap(
 	let offset: usize = pci::read_config(bus, device, virtiocapoffset + 8) as usize; // get offset_of!(virtio_pci_cap, offset)
 	let length: usize = pci::read_config(bus, device, virtiocapoffset + 12) as usize; // get offset_of!(virtio_pci_cap, length)
 	debug!(
-		"Found virtio config bar as 0x{:x}, offset 0x{:x}, length 0x{:x}",
+		"Found virtio config bar as {:#x}, offset {:#x}, length {:#x}",
 		baridx, offset, length
 	);
 
@@ -795,7 +795,7 @@ pub fn map_virtiocap(
 
 		if size < offset + length {
 			error!(
-				"virtio config struct does not fit in bar! Aborting! 0x{:x} < 0x{:x}",
+				"virtio config struct does not fit in bar! Aborting! {:#x} < {:#x}",
 				size,
 				offset + length
 			);

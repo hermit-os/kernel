@@ -294,7 +294,7 @@ impl NetworkInterface for RTL8139Driver {
 				))
 			} else {
 				error!(
-					"RTL8192: invalid header 0x{:x}, rx_pos {}\n",
+					"RTL8192: invalid header {:#x}, rx_pos {}\n",
 					header, self.rxpos
 				);
 
@@ -423,7 +423,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		.unwrap();
 
 	debug!(
-		"Found RTL8139 at iobase 0x{:x} (irq {})",
+		"Found RTL8139 at iobase {:#x} (irq {})",
 		iobase, adapter.irq
 	);
 
@@ -511,7 +511,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 	}
 
 	debug!(
-		"Allocate TxBuffer at 0x{:x} and RxBuffer at 0x{:x}",
+		"Allocate TxBuffer at {:#x} and RxBuffer at {:#x}",
 		txbuffer, rxbuffer
 	);
 
@@ -567,7 +567,7 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		outb(iobase + CR, CR_TE | CR_RE); // Sets the RE and TE bits high
 
 		info!(
-			"RTL8139: CR = 0x{:x}, ISR = 0x{:x}, speed = {} mbps",
+			"RTL8139: CR = {:#x}, ISR = {:#x}, speed = {} mbps",
 			inb(iobase + CR),
 			inw(iobase + ISR),
 			speed

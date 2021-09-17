@@ -236,7 +236,7 @@ impl<'a> fmt::Debug for VirtioNetDriver<'a> {
 		write!(f, "VirtioNetDriver {{ ")?;
 		write!(f, "common_cfg: {:?}, ", self.common_cfg)?;
 		write!(f, "device_cfg: {:?}, ", self.device_cfg)?;
-		write!(f, "isr_cfg: 0x{:x}, ", self.isr_cfg)?;
+		write!(f, "isr_cfg: {:#x}, ", self.isr_cfg)?;
 		write!(f, "nofity_cfg: {:?}, ", self.notify_cfg)?;
 		match &self.vqueues {
 			None => write!(f, "Uninitialized VQs")?,
@@ -309,15 +309,12 @@ impl<'a> VirtioNetDriver<'a> {
 			common_cfg.driver_feature_select = 1;
 			common_cfg.driver_feature |= required as u32;
 			info!(
-				"Virtio features: device 0x{:x} vs required 0x{:x}",
+				"Virtio features: device {:#x} vs required {:#x}",
 				device_features, required
 			);
 		} else {
 			error!("Device doesn't offer required feature to support Virtio-Net");
-			error!(
-				"Virtio features: 0x{:x} vs 0x{:x}",
-				device_features, required
-			);
+			error!("Virtio features: {:#x} vs {:#x}", device_features, required);
 		}
 	}
 
@@ -533,7 +530,7 @@ pub fn create_virtionet_driver(adapter: &pci::PciAdapter) -> Option<VirtioNetDri
 	} else {
 		info!("Virtio-Net link is down");
 	}
-	info!("Virtio-Net status: 0x{:x}", drv.common_cfg.device_status);
+	info!("Virtio-Net status: {:#x}", drv.common_cfg.device_status);
 
 	Some(drv)
 }

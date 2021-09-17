@@ -1238,7 +1238,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		| DevId::VIRTIO_TRANS_DEV_ID_ENTROPY
 		| DevId::VIRTIO_TRANS_DEV_ID_9P => {
 			warn!(
-				"Legacy/transitional Virtio device, with id: 0x{:x} is NOT supported, skipping!",
+				"Legacy/transitional Virtio device, with id: {:#x} is NOT supported, skipping!",
 				adapter.device_id
 			);
 
@@ -1278,7 +1278,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		}
 		_ => {
 			warn!(
-				"Virtio device with id: 0x{:x} is NOT supported, skipping!",
+				"Virtio device with id: {:#x} is NOT supported, skipping!",
 				adapter.device_id
 			);
 

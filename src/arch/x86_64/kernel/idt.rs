@@ -122,7 +122,7 @@ pub fn install() {
 		let is_init = IDT_INIT.swap(true, Ordering::SeqCst);
 
 		if !is_init {
-			debug!("IDT address: 0x{:x}", &IDT.entries as *const _ as usize);
+			debug!("IDT address: {:#x}", &IDT.entries as *const _ as usize);
 
 			// TODO: As soon as https://github.com/rust-lang/rust/issues/44580 is implemented, it should be possible to
 			// implement "new" as "const fn" and do this call already in the initialization of IDTP.

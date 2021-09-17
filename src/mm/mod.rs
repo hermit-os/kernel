@@ -67,7 +67,7 @@ fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
 				i += S::SIZE;
 			}
 			Err(_) => {
-				error!("Unable to allocate page frame of size 0x{:x}", S::SIZE);
+				error!("Unable to allocate page frame of size {:#x}", S::SIZE);
 				return i;
 			}
 		}
@@ -90,7 +90,7 @@ pub fn init() {
 
 	info!("Total memory size: {} MB", total_memory_size() >> 20);
 	info!(
-		"Kernel region: [0x{:x} - 0x{:x}]",
+		"Kernel region: [{:#x} - {:#x}]",
 		kernel_start_address(),
 		kernel_end_address()
 	);
@@ -134,7 +134,7 @@ pub fn init() {
 				.lock()
 				.init(start.as_usize(), kernel_heap_size);
 
-			info!("Kernel heap starts at 0x{:x}", start);
+			info!("Kernel heap starts at {:#x}", start);
 		}
 
 		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
@@ -172,7 +172,7 @@ pub fn init() {
 		};
 
 		info!(
-			"Heap: size {} MB, start address 0x{:x}",
+			"Heap: size {} MB, start address {:#x}",
 			virt_size >> 20,
 			virt_addr
 		);
@@ -219,7 +219,7 @@ pub fn init() {
 		HEAP_END_ADDRESS = map_addr;
 
 		info!(
-			"Heap is located at 0x{:x} -- 0x{:x} ({} Bytes unmapped)",
+			"Heap is located at {:#x} -- {:#x} ({} Bytes unmapped)",
 			HEAP_START_ADDRESS, HEAP_END_ADDRESS, map_size
 		);
 	}

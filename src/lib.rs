@@ -148,7 +148,7 @@ pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!(
-			"__sys_malloc called with size 0x{:x}, align 0x{:x} is an invalid layout!",
+			"__sys_malloc called with size {:#x}, align {:#x} is an invalid layout!",
 			size, align
 		);
 		return core::ptr::null::<*mut u8>() as *mut u8;
@@ -157,7 +157,7 @@ pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
 	trace!(
-		"__sys_malloc: allocate memory at 0x{:x} (size 0x{:x}, align 0x{:x})",
+		"__sys_malloc: allocate memory at {:#x} (size {:#x}, align {:#x})",
 		ptr as usize,
 		size,
 		align
@@ -196,7 +196,7 @@ pub extern "C" fn __sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-			"__sys_realloc called with ptr 0x{:x}, size 0x{:x}, align 0x{:x}, new_size 0x{:x} is an invalid layout!",
+			"__sys_realloc called with ptr {:#x}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
 			ptr as usize, size, align, new_size
 		);
 			return core::ptr::null::<*mut u8>() as *mut u8;
@@ -206,12 +206,12 @@ pub extern "C" fn __sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-			"__sys_realloc failed to resize ptr 0x{:x} with size 0x{:x}, align 0x{:x}, new_size 0x{:x} !",
+			"__sys_realloc failed to resize ptr {:#x} with size {:#x}, align {:#x}, new_size {:#x} !",
 			ptr as usize, size, align, new_size
 		);
 		} else {
 			trace!(
-				"__sys_realloc: resized memory at 0x{:x}, new address 0x{:x}",
+				"__sys_realloc: resized memory at {:#x}, new address {:#x}",
 				ptr as usize,
 				new_ptr as usize
 			);
@@ -236,14 +236,14 @@ pub extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {
 			warn!(
-				"__sys_free called with size 0x{:x}, align 0x{:x} is an invalid layout!",
+				"__sys_free called with size {:#x}, align {:#x} is an invalid layout!",
 				size, align
 			);
 			debug_assert!(layout_res.is_err(), "__sys_free error: Invalid layout");
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
 		} else {
 			trace!(
-				"sys_free: deallocate memory at 0x{:x} (size 0x{:x})",
+				"sys_free: deallocate memory at {:#x} (size {:#x})",
 				ptr as usize,
 				size
 			);
@@ -333,12 +333,12 @@ fn boot_processor_main() -> ! {
 	logging::init();
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	info!("Kernel starts at 0x{:x}", environment::get_base_address());
-	info!("BSS starts at 0x{:x}", unsafe {
+	info!("Kernel starts at {:#x}", environment::get_base_address());
+	info!("BSS starts at {:#x}", unsafe {
 		&__bss_start as *const usize as usize
 	});
 	info!(
-		"TLS starts at 0x{:x} (size {} Bytes)",
+		"TLS starts at {:#x} (size {} Bytes)",
 		environment::get_tls_start(),
 		environment::get_tls_memsz()
 	);
