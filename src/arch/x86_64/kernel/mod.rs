@@ -379,7 +379,7 @@ pub fn boot_processor_init() {
 	processor::detect_frequency();
 	processor::print_information();
 	unsafe {
-		trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", cr0(), cr4());
+		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
 	systemtime::init();
 
@@ -421,7 +421,7 @@ pub fn application_processor_init() {
 	apic::init_x2apic();
 	apic::init_local_apic();
 	unsafe {
-		trace!("Cr0: 0x{:x}, Cr4: 0x{:x}", cr0(), cr4());
+		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
 	irq::enable();
 	finish_processor_init();

@@ -230,7 +230,7 @@ impl TaskTLS {
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
 		/*debug!(
-				"Deallocate TLS at 0x{:x} (layout {:?})",
+				"Deallocate TLS at {:#x} (layout {:?})",
 				self.address, self.layout,
 		);
 

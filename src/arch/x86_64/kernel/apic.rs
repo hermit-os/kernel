@@ -541,7 +541,7 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 		);
 
 		trace!(
-			"Initialize per core data at 0x{:x} (size {} bytes)",
+			"Initialize per core data at {:#x} (size {} bytes)",
 			core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address),
 			mem::size_of::<PerCoreVariables>()
 		);
@@ -592,7 +592,7 @@ pub fn boot_application_processors() {
 			cr3().try_into().unwrap();
 		// Set entry point
 		debug!(
-			"Set entry point for application processor to 0x{:x}",
+			"Set entry point for application processor to {:#x}",
 			_start as usize
 		);
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) = _start as usize;

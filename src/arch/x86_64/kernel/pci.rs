@@ -173,7 +173,7 @@ fn parse_bars(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Vec<PciBar
 		let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
 		let barword = read_config(bus, device, register);
 		debug!(
-			"Found bar{} @{:x}:{:x} as 0x{:x}",
+			"Found bar{} @{:x}:{:x} as {:#x}",
 			i, vendor_id, device_id, barword
 		);
 
@@ -214,7 +214,7 @@ fn parse_bars(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Vec<PciBar
 
 				let base_addr = ((barword_high as usize) << 32) + (barword & 0xFFFF_FFF0) as usize;
 				debug!(
-					"64-bit memory bar, merged next barword. Addr: 0x{:x}",
+					"64-bit memory bar, merged next barword. Addr: {:#x}",
 					base_addr
 				);
 
@@ -345,7 +345,7 @@ impl PciAdapter {
 		};
 
 		debug!(
-			"Mapping bar {} at 0x{:x} with length 0x{:x}",
+			"Mapping bar {} at {:#x} with length {:#x}",
 			index, pci_bar.addr, pci_bar.size
 		);
 
@@ -379,7 +379,7 @@ impl fmt::Display for PciBar {
 			PciBar::IO(io_bar) => ("IOBar", io_bar.addr as usize, io_bar.size as usize),
 			PciBar::Memory(mem_bar) => ("MemoryBar", mem_bar.addr, mem_bar.size),
 		};
-		write!(f, "{}: 0x{:x} (size 0x{:x})", typ, addr, size)?;
+		write!(f, "{}: {:#x} (size {:#x})", typ, addr, size)?;
 
 		Ok(())
 	}
@@ -512,7 +512,7 @@ pub fn init_drivers() {
 				.filter(|x| x.vendor_id == 0x1AF4 && x.device_id >= 0x1000 && x.device_id <= 0x107F)
 		} {
 			info!(
-				"Found virtio network device with device id 0x{:x}",
+				"Found virtio network device with device id {:#x}",
 				adapter.device_id
 			);
 
@@ -531,7 +531,7 @@ pub fn init_drivers() {
 				})
 			} {
 				info!(
-					"Found Realtek network device with device id 0x{:x}",
+					"Found Realtek network device with device id {:#x}",
 					adapter.device_id
 				);
 

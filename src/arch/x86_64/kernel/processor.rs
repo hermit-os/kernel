@@ -763,7 +763,7 @@ pub fn configure() {
 	// Prevent writes to read-only pages in Ring 0.
 	cr0.insert(Cr0::CR0_WRITE_PROTECT);
 
-	debug!("Set CR0 to 0x{:x}", cr0);
+	debug!("Set CR0 to {:#x}", cr0);
 	unsafe {
 		cr0_write(cr0);
 	}
@@ -803,7 +803,7 @@ pub fn configure() {
 		crate::__sys_shutdown(1);
 	}
 
-	debug!("Set CR4 to 0x{:x}", cr4);
+	debug!("Set CR4 to {:#x}", cr4);
 	unsafe {
 		cr4_write(cr4);
 	}
@@ -821,7 +821,7 @@ pub fn configure() {
 			xcr0.insert(Xcr0::XCR0_AVX_STATE);
 		}
 
-		debug!("Set XCR0 to 0x{:x}", xcr0);
+		debug!("Set XCR0 to {:#x}", xcr0);
 		unsafe {
 			xcr0_write(xcr0);
 		}

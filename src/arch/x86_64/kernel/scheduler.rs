@@ -292,7 +292,7 @@ impl TaskTLS {
 		}
 
 		debug!(
-			"Set up TLS at 0x{:x}, tdata_size 0x{:x}, tls_size 0x{:x}",
+			"Set up TLS at {:#x}, tdata_size {:#x}, tls_size {:#x}",
 			tls_pointer, tdata_size, tls_size
 		);
 
@@ -317,7 +317,7 @@ impl TaskTLS {
 impl Drop for TaskTLS {
 	fn drop(&mut self) {
 		debug!(
-			"Deallocate TLS at 0x{:x} (layout {:?})",
+			"Deallocate TLS at {:#x} (layout {:?})",
 			self.address, self.layout,
 		);
 
