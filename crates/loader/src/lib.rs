@@ -6,15 +6,11 @@
 // copied, modified, or distributed except according to those terms.
 
 #![feature(alloc_error_handler)]
-#![feature(allocator_api)]
-#![feature(global_asm)]
 #![feature(asm)]
+#![cfg_attr(target_arch = "aarch64", feature(global_asm))]
 #![feature(panic_info_message)]
 #![allow(incomplete_features)]
 #![feature(specialization)]
-#![feature(naked_functions)]
-#![feature(const_raw_ptr_deref)]
-#![feature(core_intrinsics)]
 #![no_std]
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
