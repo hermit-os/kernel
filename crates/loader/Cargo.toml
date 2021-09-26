@@ -22,7 +22,7 @@ target_build_utils = "0.3"
 
 # The release profile, used for `cargo build --release`.
 [profile.dev]
-opt-level = 1      # controls the `--opt-level` the compiler builds with
+opt-level = 2      # controls the `--opt-level` the compiler builds with
 debug = true       # controls whether the compiler passes `-C debuginfo`
                    # a value of `true` is equivalent to `2`
 rpath = false      # controls whether the compiler passes `-C rpath`
