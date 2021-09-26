@@ -15,6 +15,9 @@
 #![allow(clippy::missing_safety_doc)]
 
 // EXTERNAL CRATES
+#[macro_use]
+extern crate alloc;
+
 #[cfg(target_arch = "x86_64")]
 #[macro_use]
 extern crate bitflags;

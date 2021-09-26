@@ -1,13 +1,52 @@
-use crate::arch::{
-	self, get_memory,
-	x86_64::paging::{LargePageSize, PageSize},
-	BOOT_INFO,
-};
+use crate::arch::{self, get_memory, BOOT_INFO};
 use core::{
 	convert::TryInto,
 	ptr::{copy_nonoverlapping, write_bytes},
 };
-use goblin::elf::{header, program_header, reloc, Elf};
+use goblin::{
+	container::{Container, Ctx, Endian},
+	elf::{header, program_header, reloc, Dynamic, Elf, Header, ProgramHeader, RelocSection},
+	error::{Error as GoblinError, Result as GoblinResult},
+};
+
+fn parse_ctx(header: &Header) -> GoblinResult<Ctx> {
+	let is_lsb = header.e_ident[header::EI_DATA] == header::ELFDATA2LSB;
+	let endianness = Endian::from(is_lsb);
+	let class = header.e_ident[header::EI_CLASS];
+	if class != header::ELFCLASS64 && class != header::ELFCLASS32 {
+		return Err(GoblinError::Malformed(format!(
+			"Unknown values in ELF ident header: class: {} endianness: {}",
+			class,
+			header.e_ident[header::EI_DATA]
+		)));
+	}
+	let is_64 = class == header::ELFCLASS64;
+	let container = if is_64 {
+		Container::Big
+	} else {
+		Container::Little
+	};
+	let ctx = Ctx::new(container, endianness);
+
+	Ok(ctx)
+}
+
+pub fn parse(bytes: &[u8]) -> GoblinResult<Elf<'_>> {
+	let header = Elf::parse_header(bytes)?;
+	let mut elf = Elf::lazy_parse(header)?;
+	let ctx = parse_ctx(&header)?;
+
+	elf.program_headers =
+		ProgramHeader::parse(bytes, header.e_phoff as usize, header.e_phnum as usize, ctx)?;
+
+	elf.dynamic = Dynamic::parse(bytes, &elf.program_headers, ctx)?;
+	if let Some(dynamic) = &elf.dynamic {
+		let dyn_info = &dynamic.info;
+		elf.dynrelas = RelocSection::parse(bytes, dyn_info.rela, dyn_info.relasz, true, ctx)?;
+	}
+
+	Ok(elf)
+}
 
 pub fn check_kernel_elf_file(elf: &Elf<'_>) -> u64 {
 	if !elf.libraries.is_empty() {
@@ -107,6 +146,8 @@ pub unsafe fn load_kernel(elf: &Elf<'_>, elf_start: u64, mem_size: u64) -> (u64,
 		match rela.r_type {
 			#[cfg(target_arch = "x86_64")]
 			reloc::R_X86_64_RELATIVE => {
+				use crate::arch::x86_64::paging::{LargePageSize, PageSize};
+
 				let offset = (address + rela.r_offset) as *mut u64;
 				let new_addr =
 					align_up!(&kernel_end as *const u8 as usize, LargePageSize::SIZE) as u64;
