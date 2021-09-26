@@ -12,17 +12,7 @@ use core::panic::PanicInfo;
 
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-	loaderlog!("PANIC: ");
-
-	if let Some(location) = info.location() {
-		loaderlog!("{}:{}: ", location.file(), location.line());
-	}
-
-	if let Some(message) = info.message() {
-		loaderlog!("{}", message);
-	}
-
-	loaderlog!("\n");
+	loaderlog!("{}", info);
 
 	loop {}
 }
