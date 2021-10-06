@@ -284,7 +284,7 @@ fn default_apic() -> Result<PhysAddr, ()> {
 		paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
 	}
 
-	return Ok(PhysAddr(0xFEE0_0000));
+	Ok(PhysAddr(0xFEE0_0000))
 }
 
 fn detect_from_uhyve() -> Result<PhysAddr, ()> {
