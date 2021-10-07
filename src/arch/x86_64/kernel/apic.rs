@@ -270,18 +270,18 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
-	let defaullt_address = PhysAddr(0xFEC0_0000);
+	let default_address = PhysAddr(0xFEC0_0000);
 
 	unsafe {
 		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 		debug!(
 			"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-			defaullt_address, IOAPIC_ADDRESS
+			default_address, IOAPIC_ADDRESS
 		);
 
 		let mut flags = PageTableEntryFlags::empty();
 		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
+		paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
 	}
 
 	PhysAddr(0xFEE0_0000)
@@ -289,18 +289,18 @@ fn default_apic() -> PhysAddr {
 
 fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if environment::is_uhyve() {
-		let defaullt_address = PhysAddr(0xFEC0_0000);
+		let default_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
 			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
 			debug!(
 				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-				defaullt_address, IOAPIC_ADDRESS
+				default_address, IOAPIC_ADDRESS
 			);
 
 			let mut flags = PageTableEntryFlags::empty();
 			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(IOAPIC_ADDRESS, defaullt_address, 1, flags);
+			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
 		}
 
 		return Ok(PhysAddr(0xFEE0_0000));
