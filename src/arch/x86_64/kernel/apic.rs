@@ -329,8 +329,8 @@ pub fn init() {
 
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()
-		.or_else(|| detect_from_acpi())
-		.unwrap_or_else(|| default_apic());
+		.or_else(|_| detect_from_acpi())
+		.unwrap_or_else(|_| default_apic());
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
 	init_x2apic();
