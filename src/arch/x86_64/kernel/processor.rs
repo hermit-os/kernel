@@ -22,6 +22,7 @@ use core::arch::x86_64::{
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
+use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -965,9 +966,9 @@ pub fn shutdown() -> ! {
 	#[cfg(feature = "acpi")]
 	acpi::poweroff();
 
-	loop {
-		halt();
-	}
+	// assume that we running on Qemu
+	let exit_handler = qemu_exit::X86::new(0xf4, 1);
+	exit_handler.exit_success()
 }
 
 pub fn get_timer_ticks() -> u64 {
