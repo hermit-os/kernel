@@ -22,6 +22,7 @@ use core::arch::x86_64::{
 use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
+use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -424,7 +425,7 @@ impl CpuFrequency {
 			.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
 			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
 			.or_else(|_e| self.detect_from_hypervisor())
-			//.or_else(|_e| self.detect_from_cmdline())
+			.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 			.or_else(|_e| self.measure_frequency())
 			.expect("Could not determine the processor frequency");
@@ -965,9 +966,9 @@ pub fn shutdown() -> ! {
 	#[cfg(feature = "acpi")]
 	acpi::poweroff();
 
-	loop {
-		halt();
-	}
+	// assume that we running on Qemu
+	let exit_handler = qemu_exit::X86::new(0xf4, 3);
+	exit_handler.exit_success()
 }
 
 pub fn get_timer_ticks() -> u64 {
