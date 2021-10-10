@@ -967,7 +967,7 @@ pub fn shutdown() -> ! {
 	acpi::poweroff();
 
 	// assume that we running on Qemu
-	let exit_handler = qemu_exit::X86::new(0xf4, 1);
+	let exit_handler = qemu_exit::X86::new(0xf4, 3);
 	exit_handler.exit_success()
 }
 

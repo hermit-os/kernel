@@ -96,10 +96,14 @@ jobs:
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
           echo "FREQ = $FREQ"
-          qemu-system-x86_64 -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on -global virtio-mmio.force-legacy=on -nodefaults -no-user-config -display none -smp 1 -m 64M -serial stdio -kernel loader/target/x86_64-unknown-hermit-loader/release/rusty-loader -initrd target/x86_64-unknown-hermit/release/hello_world -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr -device isa-debug-exit,iobase=0xf4,iosize=0x04 -append "-freq $FREQ"
-          retVal=$?
-          if [ $retVal -eq 1 ]; then
-            echo "Qemu returns expected value"
-          fi
-        shell: bash
-        continue-on-error: true
+          qemu-system-x86_64 \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on \
+            -global virtio-mmio.force-legacy=on -nodefaults -no-user-config \
+            -display none -smp 1 -m 64M -serial stdio \
+            -kernel loader/target/x86_64-unknown-hermit-loader/release/rusty-loader \
+            -initrd target/x86_64-unknown-hermit/release/hello_world \
+            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -append "-freq $FREQ" \
+            || qemu_status=$?
+          test $qemu_status -eq 3
