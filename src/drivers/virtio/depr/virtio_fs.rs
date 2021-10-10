@@ -11,29 +11,38 @@ use crate::drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
 use crate::syscalls::fs;
-use crate::util;
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::{fmt, u32, u8};
+use core::{fmt, str, u32, u8};
 
-#[repr(C)]
-struct virtio_fs_config {
-	/* Filesystem name (UTF-8, not NUL-terminated, padded with NULs) */
-	tag: [u8; 36],
-	/* Number of request queues */
-	num_request_queues: u32,
+/// Filesystem name (UTF-8, not NUL-terminated, padded with NULs)
+#[allow(non_camel_case_types)]
+#[repr(transparent)]
+struct virtio_fs_config_tag {
+	inner: [u8; 36],
 }
 
-impl fmt::Debug for virtio_fs_config {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(
-			f,
-			"virtio_fs_config {{ tag: '{}', num_request_queues: {} }}",
-			core::str::from_utf8(&self.tag).unwrap(),
-			self.num_request_queues
-		)
+impl virtio_fs_config_tag {
+	fn as_str(&self) -> &str {
+		let nul_position = self.inner.iter().position(|&b| b == 0);
+		let slice = &self.inner[..nul_position.unwrap_or(self.inner.len())];
+		str::from_utf8(slice).unwrap()
 	}
+}
+
+impl fmt::Debug for virtio_fs_config_tag {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		self.as_str().fmt(f)
+	}
+}
+
+#[derive(Debug)]
+#[repr(C)]
+struct virtio_fs_config {
+	tag: virtio_fs_config_tag,
+	/* Number of request queues */
+	num_request_queues: u32,
 }
 
 pub struct VirtioFsDriver<'a> {
@@ -319,7 +328,7 @@ pub fn init_fs() {
 	fuse.send_init();
 
 	let mut fs = fs::FILESYSTEM.lock();
-	let tag = util::c_buf_to_str(&drv.lock().device_cfg.tag);
+	let tag = drv.lock().device_cfg.tag.as_str();
 	info!("Mounting virtio-fs at /{}", tag);
 	fs.mount(tag, Box::new(fuse))
 		.expect("Mount failed. Duplicate tag?");

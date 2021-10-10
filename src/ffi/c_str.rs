@@ -1,3 +1,5 @@
+//! A port of [`std::ffi::CStr`].
+
 use core::{slice, str};
 
 use super::c_char;

@@ -8,22 +8,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-/// Gets length of null terminated c string. Limited to buffer length.
-pub fn c_strbuflen(c_strbuf: &[u8]) -> usize {
-	c_strbuf
-		.iter()
-		.position(|&s| s == 0)
-		.unwrap_or_else(|| c_strbuf.len())
-}
-
-/// Converts (optional null terminated) c string buffer into owned rust utf8 string.
-/// Is safe, since input buffer has fixed length
-/// TODO: panics if not utf8. return error
-pub fn c_buf_to_str(c_strbuf: &[u8]) -> &str {
-	let len = c_strbuflen(c_strbuf);
-	core::str::from_utf8(&c_strbuf[0..len]).unwrap()
-}
-
 /// Splits a string at delimiter, except when its quoted with " or '. Useful for cmdline arguments.
 /// Returns a vector of the split arguments, unquoted and unescaped.
 pub fn tokenize(cmdline: &str, delimiter: char) -> Vec<String> {
