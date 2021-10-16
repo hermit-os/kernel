@@ -46,7 +46,7 @@ static mut ALLOCATOR_INFO: AllocatorInfo = AllocatorInfo::new();
 
 pub struct Allocator;
 
-unsafe impl<'a> GlobalAlloc for &'a Allocator {
+unsafe impl GlobalAlloc for Allocator {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		alloc_bootstrap(layout)
 	}

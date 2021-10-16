@@ -46,7 +46,7 @@ extern "C" {
 }
 
 #[global_allocator]
-static ALLOCATOR: &mm::allocator::Allocator = &mm::allocator::Allocator;
+static ALLOCATOR: mm::allocator::Allocator = mm::allocator::Allocator;
 
 // FUNCTIONS
 pub unsafe fn sections_init() {
