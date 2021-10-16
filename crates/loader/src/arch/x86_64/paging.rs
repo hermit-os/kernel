@@ -92,7 +92,7 @@ impl PageTableEntry {
 			assert_eq!(
 				physical_address % LargePageSize::SIZE,
 				0,
-				"Physical address is not on a 2 MiB page boundary (physical_address = 0x{:x})",
+				"Physical address is not on a 2 MiB page boundary (physical_address = {:#x})",
 				physical_address
 			);
 		} else {
@@ -100,7 +100,7 @@ impl PageTableEntry {
 			assert_eq!(
 				physical_address % BasePageSize::SIZE,
 				0,
-				"Physical address is not on a 4 KiB page boundary (physical_address = 0x{:x})",
+				"Physical address is not on a 4 KiB page boundary (physical_address = {:#x})",
 				physical_address
 			);
 		}
