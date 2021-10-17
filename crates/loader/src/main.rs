@@ -12,7 +12,6 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
-use goblin::elf;
 use rusty_loader::arch;
 use rusty_loader::*;
 
@@ -35,13 +34,13 @@ pub unsafe extern "C" fn loader_main() -> ! {
 	);
 
 	let app = arch::find_kernel();
-	let elf = elf::Elf::parse(app).expect("Unable to parse ELF file");
+	let elf = kernel::parse(app).expect("Unable to parse ELF file");
 	assert_ne!(
 		elf.entry, 0,
 		"Goblin failed to find entry point of the kernel in the Elf header"
 	);
-	let mem_size = check_kernel_elf_file(&elf);
-	let (kernel_location, entry_point) = load_kernel(&elf, app.as_ptr() as u64, mem_size);
+	let mem_size = kernel::check_kernel_elf_file(&elf);
+	let (kernel_location, entry_point) = kernel::load_kernel(&elf, app.as_ptr() as u64, mem_size);
 
 	// boot kernel
 	arch::boot_kernel(kernel_location, mem_size, entry_point)
