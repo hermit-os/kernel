@@ -1,13 +1,3 @@
-
-; Copyright (c) 2010-2016, Stefan Lankes, RWTH Aachen University
-; All rights reserved.
-;
-;
-; Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
-; http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
-; http://opensource.org/licenses/MIT>, at your option. This file may not be
-; copied, modified, or distributed except according to those terms.
-
 ; This is the kernel's entry point. We could either call main here,
 ; or we can use this to setup the stack or other nice stuff, like
 ; perhaps setting up the GDT and segments. Please note that interrupts
