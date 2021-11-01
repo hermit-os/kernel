@@ -7,8 +7,8 @@ use crate::arch;
 use crate::console::CONSOLE;
 use crate::environment;
 use crate::errno::*;
+use crate::ffi::CStr;
 use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
-use crate::util;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
@@ -199,12 +199,12 @@ pub trait SyscallInterface: Send + Sync {
 
 	#[cfg(target_arch = "x86_64")]
 	fn unlink(&self, name: *const u8) -> i32 {
-		let name = unsafe { util::c_str_to_str(name) };
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 		debug!("unlink {}", name);
 
 		fs::FILESYSTEM
 			.lock()
-			.unlink(&name)
+			.unlink(name)
 			.expect("Unlinking failed!"); // TODO: error handling
 		0
 	}
@@ -221,11 +221,11 @@ pub trait SyscallInterface: Send + Sync {
 		//! flags is bitmask of O_DEC_* defined above.
 		//! (taken from rust stdlib/sys hermit target )
 
-		let name = unsafe { util::c_str_to_str(name) };
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 		debug!("Open {}, {}, {}", name, flags, mode);
 
 		let mut fs = fs::FILESYSTEM.lock();
-		let fd = fs.open(&name, open_flags_to_perm(flags, mode as u32));
+		let fd = fs.open(name, open_flags_to_perm(flags, mode as u32));
 
 		if let Ok(fd) = fd {
 			fd as i32
