@@ -1,4 +1,5 @@
 [unstable]
+# Keep in sync with CI!
 build-std = ["core", "alloc"]
 build-std-features = ["compiler-builtins-mem"]
 
