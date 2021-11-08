@@ -21,8 +21,6 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
 use core::arch::x86_64::_mm_mfence;
-#[cfg(feature = "smp")]
-use core::convert::TryInto;
 use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::ptr;

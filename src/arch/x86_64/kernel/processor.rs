@@ -11,7 +11,6 @@ use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
 	_xsave,
 };
-use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::{fmt, u32};
 use qemu_exit::QEMUExit;

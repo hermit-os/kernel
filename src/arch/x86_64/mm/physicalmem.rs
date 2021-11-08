@@ -1,5 +1,5 @@
+use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use core::{alloc::AllocError, convert::TryInto};
 use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};

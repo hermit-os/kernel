@@ -1,5 +1,4 @@
 use alloc::collections::BTreeMap;
-use core::convert::TryInto;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::{intrinsics, ptr};

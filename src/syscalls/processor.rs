@@ -1,5 +1,4 @@
 use crate::arch::get_processor_count;
-use core::convert::TryInto;
 
 extern "C" fn __sys_get_processor_count() -> usize {
 	get_processor_count().try_into().unwrap()
