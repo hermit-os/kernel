@@ -221,6 +221,7 @@ impl TaskHandlePriorityQueue {
 	}
 }
 
+#[derive(Default)]
 struct QueueHead {
 	head: Option<Rc<RefCell<Task>>>,
 	tail: Option<Rc<RefCell<Task>>>,
@@ -228,15 +229,6 @@ struct QueueHead {
 
 impl QueueHead {
 	pub const fn new() -> Self {
-		Self {
-			head: None,
-			tail: None,
-		}
-	}
-}
-
-impl Default for QueueHead {
-	fn default() -> Self {
 		Self {
 			head: None,
 			tail: None,
