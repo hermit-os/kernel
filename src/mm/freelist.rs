@@ -84,7 +84,9 @@ impl FreeList {
 	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), AllocError> {
 		trace!(
 			"Try to reserve {} bytes at {:#X} from Free List {:#X}",
-			size, address, self as *const Self as usize
+			size,
+			address,
+			self as *const Self as usize
 		);
 
 		// Find a region in the Free List that has at least the requested size.
