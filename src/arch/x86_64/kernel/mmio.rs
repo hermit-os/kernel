@@ -7,13 +7,10 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::collections::irqsave;
-//use crate::drivers::virtio::transport::mmio as mmio_virtio;
 
-use crate::arch::x86_64::kernel::mmio::MmioDriver::VirtioNet;
 use crate::arch::x86_64::mm::paging;
-use crate::arch::x86_64::mm::paging::virt_to_phys;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::PhysAddr;
 use crate::drivers::net::virtio_mmio::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
@@ -35,6 +32,7 @@ pub enum MmioDriver {
 }
 
 impl MmioDriver {
+	#[allow(unreachable_patterns)]
 	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<dyn NetworkInterface>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
@@ -133,8 +131,6 @@ pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<dyn NetworkInterf
 }
 
 pub fn init_drivers() {
-	let mut nic_available = false;
-
 	// virtio: MMIO Device Discovery
 	irqsave(|| {
 		if let Ok(mmio) = detect_network() {

@@ -2,36 +2,8 @@
 //!
 //! The module contains ...
 
-#[cfg(not(feature = "newlib"))]
-use super::netwakeup;
-use crate::arch::kernel::percore::increment_irq_counter;
-use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::drivers::net::NetworkInterface;
-
-use alloc::boxed::Box;
-use alloc::collections::VecDeque;
-use alloc::rc::Rc;
-use alloc::vec::Vec;
-use core::convert::TryFrom;
-use core::mem;
-use core::result::Result;
-use core::{cell::RefCell, cmp::Ordering};
-
-use crate::drivers::virtio::error::VirtioError;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci;
-#[cfg(feature = "pci")]
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg, PciCap, UniCapsColl};
-use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
-};
-
-use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
-use self::error::VirtioNetError;
+use self::constants::NetHdrGSO;
+use crate::drivers::virtio::virtqueue::AsSliceU8;
 
 pub const ETH_HDR: usize = 14usize;
 

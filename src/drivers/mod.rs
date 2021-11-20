@@ -26,7 +26,6 @@ pub mod error {
 		InitVirtioDevFail(VirtioError),
 		#[cfg(feature = "pci")]
 		InitRTL8139DevFail(RTL8139Error),
-		Unknown,
 	}
 
 	impl From<VirtioError> for DriverError {
@@ -51,9 +50,6 @@ pub mod error {
 				#[cfg(feature = "pci")]
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {:?}", err)
-				}
-				DriverError::Unknown => {
-					write!(f, "Unknown driver error")
 				}
 			}
 		}

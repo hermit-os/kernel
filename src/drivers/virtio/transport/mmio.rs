@@ -11,11 +11,8 @@
 #![allow(dead_code)]
 
 use crate::arch::mm::PhysAddr;
-use crate::synch::spinlock::SpinlockIrqSave;
-use alloc::vec::Vec;
 use core::arch::x86_64::_mm_mfence;
 use core::convert::TryInto;
-use core::mem;
 use core::ptr::read_volatile;
 use core::result::Result;
 use core::u8;
@@ -23,8 +20,6 @@ use core::u8;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::virtio_mmio::VirtioNetDriver;
 use crate::drivers::virtio::device;
-use crate::drivers::virtio::env;
-use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 
 use crate::arch::x86_64::kernel::irq::*;
@@ -340,7 +335,9 @@ pub fn init_device(
 
 	if registers.version == 0x1 {
 		error!("Legacy interface isn't supported!");
-		return Err(DriverError::Unknown);
+		return Err(DriverError::InitVirtioDevFail(
+			VirtioError::DevNotSupported(dev_id),
+		));
 	}
 
 	// Verify the device-ID to find the network card
@@ -366,7 +363,10 @@ pub fn init_device(
 				"Device with id {:?} is currently not supported!",
 				registers.device_id
 			);
-			Err(DriverError::Unknown)
+			// Return Driver error inidacting device is not supported
+			Err(DriverError::InitVirtioDevFail(
+				VirtioError::DevNotSupported(dev_id),
+			))
 		}
 	}
 }

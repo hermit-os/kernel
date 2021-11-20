@@ -26,16 +26,13 @@ use core::ptr::read_volatile;
 use core::result::Result;
 use core::{cell::RefCell, cmp::Ordering};
 
-use crate::drivers::net::virtio_net::constants::{
-	FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ,
-};
+use crate::drivers::net::virtio_net::constants::{FeatureSet, Features, Status, MAX_NUM_VQ};
 use crate::drivers::net::virtio_net::error::VirtioNetError;
 use crate::drivers::net::virtio_net::{VirtioNetHdr, ETH_HDR};
-use crate::drivers::virtio::error::{self, VirtioError};
-use crate::drivers::virtio::transport::mmio;
+use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, MmioRegisterLayout, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
+	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 
 /// A wrapper struct for the raw configuration structure.
@@ -695,6 +692,7 @@ impl VirtioNetDriver {
 
 	/// Returns the links status.
 	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
+	#[allow(dead_code)]
 	fn is_link_up(&self) -> bool {
 		if self
 			.dev_cfg

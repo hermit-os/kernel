@@ -30,12 +30,10 @@ use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg, PciCap, UniCapsColl};
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
+	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 
-use crate::drivers::net::virtio_net::constants::{
-	FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ,
-};
+use crate::drivers::net::virtio_net::constants::{FeatureSet, Features, Status, MAX_NUM_VQ};
 use crate::drivers::net::virtio_net::error::VirtioNetError;
 
 /// A wrapper struct for the raw configuration structure.
