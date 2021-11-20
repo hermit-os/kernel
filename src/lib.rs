@@ -285,9 +285,8 @@ extern "C" fn initd(_arg: usize) {
 		info!("HermitCore is running on common system!");
 	}
 
-	// Initialize PCI Drivers if on x86_64
-	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
-	x86_64::kernel::pci::init_drivers();
+	// Initialize Drivers
+	arch::init_drivers();
 
 	syscalls::init();
 

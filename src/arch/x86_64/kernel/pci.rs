@@ -2,7 +2,7 @@ use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio_pci::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::depr::virtio_fs::VirtioFsDriver;
 use crate::drivers::virtio::transport::pci as pci_virtio;
@@ -139,6 +139,7 @@ impl<'a> PciDriver<'a> {
 		}
 	}
 }
+
 pub fn register_driver(drv: PciDriver<'static>) {
 	unsafe {
 		PCI_DRIVERS.push(drv);

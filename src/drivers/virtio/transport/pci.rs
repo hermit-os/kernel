@@ -14,7 +14,7 @@ use core::mem;
 use core::result::Result;
 
 use crate::drivers::error::DriverError;
-use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::net::virtio_pci::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
@@ -616,7 +616,6 @@ impl ComCfgRaw {
 
 /// Notification Structure to handle virtqueue notification settings.
 /// See Virtio specification v1.1 - 4.1.4.4
-//
 pub struct NotifCfg {
 	/// Start addr, from where the notification addresses for the virtqueues are computed
 	base_addr: VirtMemAddr,

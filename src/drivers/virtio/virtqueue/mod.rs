@@ -20,6 +20,9 @@ use self::error::{BufferError, VirtqError};
 use self::packed::PackedVq;
 use self::split::SplitVq;
 
+#[cfg(not(feature = "pci"))]
+use super::transport::mmio::{ComCfg, NotifCfg};
+#[cfg(feature = "pci")]
 use super::transport::pci::{ComCfg, NotifCfg};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;

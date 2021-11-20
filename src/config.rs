@@ -4,7 +4,10 @@ pub const DEFAULT_STACK_SIZE: usize = 32_768;
 
 pub const USER_STACK_SIZE: usize = 1_048_576;
 
+#[cfg(feature = "pci")]
 pub const VIRTIO_MAX_QUEUE_SIZE: u16 = 2048;
+#[cfg(not(feature = "pci"))]
+pub const VIRTIO_MAX_QUEUE_SIZE: u16 = 1024;
 
 pub const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = {
 	use core::ptr;

@@ -177,6 +177,7 @@ pub mod memory {
 /// coding. Values provided from PCI devices are passed as native endian values.
 /// Meaning they are converted into big endian values on big endian machines and
 /// are not changed on little endian machines.
+#[cfg(feature = "pci")]
 pub mod pci {
 	use crate::arch::x86_64::kernel::pci;
 	use crate::arch::x86_64::kernel::pci::error::PciError;

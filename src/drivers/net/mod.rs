@@ -1,10 +1,15 @@
 #[cfg(feature = "pci")]
 pub mod rtl8139;
-#[cfg(feature = "pci")]
+#[cfg(not(feature = "pci"))]
+pub mod virtio_mmio;
 pub mod virtio_net;
+#[cfg(feature = "pci")]
+pub mod virtio_pci;
 
 use crate::arch::kernel::apic;
 use crate::arch::kernel::irq::ExceptionStackFrame;
+#[cfg(not(feature = "pci"))]
+use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
@@ -88,7 +93,13 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 		}
 	};
 	#[cfg(not(feature = "pci"))]
-	let check_scheduler = false;
+	let check_scheduler = match mmio::get_network_driver() {
+		Some(driver) => driver.lock().handle_interrupt(),
+		_ => {
+			debug!("Unable to handle interrupt!");
+			false
+		}
+	};
 
 	if check_scheduler {
 		core_scheduler().scheduler();
