@@ -177,10 +177,9 @@ pub fn reserve(physical_address: PhysAddr, size: usize) {
 	);
 
 	// we are able to ignore errors because it could be already reserved
-	PHYSICAL_FREE_LIST
+	let _ = PHYSICAL_FREE_LIST
 		.lock()
-		.reserve(physical_address.as_usize(), size)
-		.expect("Unable to reserve memory region");
+		.reserve(physical_address.as_usize(), size);
 }
 
 pub fn print_information() {
