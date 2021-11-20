@@ -14,7 +14,7 @@ use core::mem;
 use core::result::Result;
 
 use crate::drivers::error::DriverError;
-use crate::drivers::net::virtio_pci::VirtioNetDriver;
+use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
@@ -512,7 +512,7 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
-		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK)
+		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK);
 	}
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
@@ -752,6 +752,10 @@ impl IsrStatus {
 
 	pub fn is_cfg_change(&self) -> bool {
 		self.isr_stat.flags & 1 << 1 == 1 << 1
+	}
+
+	pub fn acknowledge(&mut self) {
+		// nothing to do
 	}
 }
 

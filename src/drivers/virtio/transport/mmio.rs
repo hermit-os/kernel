@@ -18,7 +18,7 @@ use core::result::Result;
 use core::u8;
 
 use crate::drivers::error::DriverError;
-use crate::drivers::net::virtio_mmio::VirtioNetDriver;
+use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
 
@@ -154,6 +154,9 @@ impl ComCfg {
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
 		self.com_cfg.status = 0;
+		unsafe {
+			_mm_mfence();
+		}
 	}
 
 	/// Sets the device status field to FAILED.
@@ -161,25 +164,40 @@ impl ComCfg {
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
 		self.com_cfg.status = u32::from(device::Status::FAILED);
+		unsafe {
+			_mm_mfence();
+		}
 	}
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
-		self.com_cfg.status |= u32::from(device::Status::ACKNOWLEDGE);
+		unsafe {
+			let status = read_volatile(&self.com_cfg.status);
+			_mm_mfence();
+			self.com_cfg.status = status | u32::from(device::Status::ACKNOWLEDGE);
+		}
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
-		self.com_cfg.status |= u32::from(device::Status::DRIVER);
+		unsafe {
+			let status = read_volatile(&self.com_cfg.status);
+			_mm_mfence();
+			self.com_cfg.status = status | u32::from(device::Status::DRIVER);
+		}
 	}
 
 	/// Sets the FEATURES_OK bit in the device status field.
 	///
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
-		self.com_cfg.status |= u32::from(device::Status::FEATURES_OK);
+		unsafe {
+			let status = read_volatile(&self.com_cfg.status);
+			_mm_mfence();
+			self.com_cfg.status = status | u32::from(device::Status::FEATURES_OK);
+		}
 	}
 
 	/// In order to correctly check feature negotiaten, this function
@@ -189,15 +207,23 @@ impl ComCfg {
 	/// Re-reads device status to ensure the FEATURES_OK bit is still set:
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
-		self.com_cfg.status & u32::from(device::Status::FEATURES_OK)
-			== u32::from(device::Status::FEATURES_OK)
+		unsafe {
+			let status = read_volatile(&self.com_cfg.status);
+			_mm_mfence();
+			status & u32::from(device::Status::FEATURES_OK)
+				== u32::from(device::Status::FEATURES_OK)
+		}
 	}
 
 	/// Sets the DRIVER_OK bit in the device status field.
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
-		self.com_cfg.status |= u32::from(device::Status::DRIVER_OK)
+		unsafe {
+			let status = read_volatile(&self.com_cfg.status);
+			_mm_mfence();
+			self.com_cfg.status = status | u32::from(device::Status::DRIVER_OK);
+		}
 	}
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
