@@ -6,7 +6,6 @@ pub mod serial;
 pub use self::bootinfo::*;
 use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::serial::SerialPort;
-use core::convert::TryInto;
 use core::ptr::copy;
 use core::{mem, slice};
 use goblin::elf;

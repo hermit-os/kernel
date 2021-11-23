@@ -1,8 +1,5 @@
 use crate::arch::{self, get_memory, BOOT_INFO};
-use core::{
-	convert::TryInto,
-	ptr::{copy_nonoverlapping, write_bytes},
-};
+use core::ptr::{copy_nonoverlapping, write_bytes};
 use goblin::{
 	container::{Container, Ctx, Endian},
 	elf::{header, program_header, reloc, Dynamic, Elf, Header, ProgramHeader, RelocSection},
