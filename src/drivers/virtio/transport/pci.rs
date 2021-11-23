@@ -9,7 +9,6 @@ use crate::arch::kernel::pci::{PciAdapter, PciDriver};
 use crate::arch::mm::PhysAddr;
 use crate::synch::spinlock::SpinlockIrqSave;
 use alloc::vec::Vec;
-use core::convert::TryInto;
 use core::mem;
 use core::result::Result;
 

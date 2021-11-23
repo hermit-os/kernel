@@ -5,7 +5,6 @@
 //! ensure only a single location needs changes, in cases where the underlying kernel code is changed
 
 pub mod memory {
-	use core::convert::TryFrom;
 	use core::ops::Add;
 
 	/// A newtype representing a memory offset which can be used to be added to [PhyMemAddr](PhyMemAddr) or

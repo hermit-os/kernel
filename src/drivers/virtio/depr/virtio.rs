@@ -9,7 +9,6 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::sync::atomic::{fence, Ordering};
 use core::{cell::RefCell, ptr};

@@ -2,7 +2,6 @@
 
 #![allow(dead_code)]
 
-use core::convert::TryInto;
 use core::mem;
 
 use crate::arch::kernel::irq::*;

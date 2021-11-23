@@ -1,4 +1,4 @@
-use core::{alloc::AllocError, convert::TryInto};
+use core::alloc::AllocError;
 
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};

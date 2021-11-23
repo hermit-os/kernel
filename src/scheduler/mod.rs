@@ -3,9 +3,6 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
-#[cfg(feature = "smp")]
-use core::convert::TryFrom;
-use core::convert::TryInto;
 use core::sync::atomic::{AtomicU32, Ordering};
 use crossbeam_utils::Backoff;
 

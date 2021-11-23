@@ -1,7 +1,6 @@
 //! Architecture dependent interface to initialize a task
 
 use alloc::alloc::{alloc, dealloc, Layout};
-use core::convert::TryInto;
 use core::{mem, ptr};
 
 use crate::arch::x86_64::kernel::apic;
