@@ -159,6 +159,29 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		.deallocate(physical_address.as_usize(), size);
 }
 
+pub fn reserve(physical_address: PhysAddr, size: usize) {
+	assert_eq!(
+		physical_address % BasePageSize::SIZE,
+		0,
+		"Physical address {:#X} is not a multiple of {:#X}",
+		physical_address,
+		BasePageSize::SIZE
+	);
+	assert!(size > 0);
+	assert_eq!(
+		size % BasePageSize::SIZE,
+		0,
+		"Size {:#X} is not a multiple of {:#X}",
+		size,
+		BasePageSize::SIZE
+	);
+
+	// we are able to ignore errors because it could be already reserved
+	let _ = PHYSICAL_FREE_LIST
+		.lock()
+		.reserve(physical_address.as_usize(), size);
+}
+
 pub fn print_information() {
 	PHYSICAL_FREE_LIST
 		.lock()

@@ -1,18 +1,21 @@
 //! A module containing virtios core infrastructure for hermit-rs.
 //!
 //! The module contains virtios transport mechanisms, virtqueues and virtio specific errors
+#[cfg(feature = "pci")]
 pub mod depr;
 pub mod env;
 pub mod transport;
 pub mod virtqueue;
 
 pub mod error {
+	#[cfg(feature = "pci")]
 	use crate::arch::x86_64::kernel::pci::error::PciError;
-	use crate::drivers::net::virtio_net::error::VirtioNetError;
+	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
 	use core::fmt;
 
 	#[derive(Debug)]
 	pub enum VirtioError {
+		#[cfg(feature = "pci")]
 		FromPci(PciError),
 		DevNotSupported(u16),
 		NetDriver(VirtioNetError),
@@ -22,8 +25,9 @@ pub mod error {
 	impl fmt::Display for VirtioError {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match self {
-                VirtioError::Unknown =>write!(f, "Driver failed to initialize virtio device due to unknown reasosn!"),
-                VirtioError::FromPci(pci_error) => match pci_error {
+                VirtioError::Unknown => write!(f, "Driver failed to initialize virtio device due to unknown reasosn!"),
+                #[cfg(feature = "pci")]
+				VirtioError::FromPci(pci_error) => match pci_error {
                     PciError::General(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Due to unknown reasosn!", id),
                     PciError::NoBar(id ) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: No BAR's found.", id), 
                     PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: No Capabilities pointer found.", id),
@@ -42,6 +46,7 @@ pub mod error {
                     VirtioNetError::FeatReqNotMet(feats) => write!(f, "Network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
                     VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
                     VirtioNetError::ProcessOngoing => write!(f, "Driver performed an unsuitable operation upon an ongoging transfer."),
+					VirtioNetError::Unknown => write!(f, "Virtio network driver failed due unknown reason!"),
                 },
             }
 		}
@@ -159,6 +164,19 @@ pub mod device {
 	}
 
 	impl From<Status> for u8 {
+		fn from(stat: Status) -> Self {
+			match stat {
+				Status::ACKNOWLEDGE => 1,
+				Status::DRIVER => 2,
+				Status::DRIVER_OK => 4,
+				Status::FEATURES_OK => 8,
+				Status::DEVICE_NEEDS_RESET => 64,
+				Status::FAILED => 128,
+			}
+		}
+	}
+
+	impl From<Status> for u32 {
 		fn from(stat: Status) -> Self {
 			match stat {
 				Status::ACKNOWLEDGE => 1,

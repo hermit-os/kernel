@@ -511,7 +511,7 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
-		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK)
+		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK);
 	}
 
 	/// Returns the features offered by the device. Coded in a 64bit value.
@@ -615,7 +615,6 @@ impl ComCfgRaw {
 
 /// Notification Structure to handle virtqueue notification settings.
 /// See Virtio specification v1.1 - 4.1.4.4
-//
 pub struct NotifCfg {
 	/// Start addr, from where the notification addresses for the virtqueues are computed
 	base_addr: VirtMemAddr,
@@ -752,6 +751,10 @@ impl IsrStatus {
 
 	pub fn is_cfg_change(&self) -> bool {
 		self.isr_stat.flags & 1 << 1 == 1 << 1
+	}
+
+	pub fn acknowledge(&mut self) {
+		// nothing to do
 	}
 }
 

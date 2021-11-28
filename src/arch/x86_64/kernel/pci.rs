@@ -138,6 +138,7 @@ impl<'a> PciDriver<'a> {
 		}
 	}
 }
+
 pub fn register_driver(drv: PciDriver<'static>) {
 	unsafe {
 		PCI_DRIVERS.push(drv);

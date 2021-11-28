@@ -4,6 +4,9 @@
 
 use self::error::VqPackedError;
 use super::super::features::Features;
+#[cfg(not(feature = "pci"))]
+use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
+#[cfg(feature = "pci")]
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{

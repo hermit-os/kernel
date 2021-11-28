@@ -66,3 +66,11 @@ pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processo
 pub use crate::arch::x86_64::kernel::{
 	get_processor_count, message_output_init, output_message_buf, output_message_byte,
 };
+
+pub fn init_drivers() {
+	// Initialize PCI Drivers if on x86_64
+	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
+	crate::arch::x86_64::kernel::pci::init_drivers();
+	#[cfg(all(target_arch = "x86_64", not(feature = "pci")))]
+	crate::arch::x86_64::kernel::mmio::init_drivers();
+}

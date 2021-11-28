@@ -21,6 +21,8 @@ pub mod fuse;
 pub mod gdt;
 pub mod idt;
 pub mod irq;
+#[cfg(not(feature = "pci"))]
+pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
 #[cfg(feature = "pci")]

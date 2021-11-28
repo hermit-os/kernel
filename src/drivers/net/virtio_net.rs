@@ -4,7 +4,6 @@
 
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
-use crate::arch::kernel::pci::PciAdapter;
 use crate::arch::kernel::percore::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkInterface;
@@ -17,9 +16,14 @@ use core::mem;
 use core::result::Result;
 use core::{cell::RefCell, cmp::Ordering};
 
-use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::transport::pci;
-use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg, PciCap, UniCapsColl};
+#[cfg(not(feature = "pci"))]
+use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
+#[cfg(feature = "pci")]
+use crate::drivers::net::virtio_pci::NetDevCfgRaw;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+#[cfg(feature = "pci")]
+use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
 	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
@@ -27,11 +31,22 @@ use crate::drivers::virtio::virtqueue::{
 use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 
-const ETH_HDR: usize = 14usize;
+pub const ETH_HDR: usize = 14usize;
+
+/// A wrapper struct for the raw configuration structure.
+/// Handling the right access to fields, as some are read-only
+/// for the driver.
+pub struct NetDevCfg {
+	pub raw: &'static NetDevCfgRaw,
+	pub dev_id: u16,
+
+	// Feature booleans
+	pub features: FeatureSet,
+}
 
 #[derive(Debug)]
 #[repr(C)]
-struct VirtioNetHdr {
+pub struct VirtioNetHdr {
 	flags: u8,
 	gso_type: u8,
 	/// Ethernet + IP + tcp/udp hdrs
@@ -50,7 +65,7 @@ struct VirtioNetHdr {
 impl AsSliceU8 for VirtioNetHdr {}
 
 impl VirtioNetHdr {
-	fn get_tx_hdr() -> VirtioNetHdr {
+	pub fn get_tx_hdr() -> VirtioNetHdr {
 		VirtioNetHdr {
 			flags: 0,
 			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
@@ -62,7 +77,7 @@ impl VirtioNetHdr {
 		}
 	}
 
-	fn get_rx_hdr() -> VirtioNetHdr {
+	pub fn get_rx_hdr() -> VirtioNetHdr {
 		VirtioNetHdr {
 			flags: 0,
 			gso_type: 0,
@@ -75,33 +90,13 @@ impl VirtioNetHdr {
 	}
 }
 
-/// A wrapper struct for the raw configuration structure.
-/// Handling the right access to fields, as some are read-only
-/// for the driver.
-struct NetDevCfg {
-	raw: &'static NetDevCfgRaw,
-	dev_id: u16,
+pub struct CtrlQueue(Option<Rc<Virtq>>);
 
-	// Feature booleans
-	features: FeatureSet,
+impl CtrlQueue {
+	pub fn new(vq: Option<Rc<Virtq>>) -> Self {
+		CtrlQueue(vq)
+	}
 }
-
-/// Virtio's network device configuration structure.
-/// See specification v1.1. - 5.1.4
-///
-#[repr(C)]
-struct NetDevCfgRaw {
-	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
-	mac: [u8; 6],
-	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
-	status: u16,
-	// Indicates number of allowed vq-pairs. Only valid if VIRTIO_NET_F_MQ is set.
-	max_virtqueue_pairs: u16,
-	// Indicates the maximum MTU driver should use. Only valid if VIRTIONET_F_MTU is set.
-	mtu: u16,
-}
-
-struct CtrlQueue(Option<Rc<Virtq>>);
 
 #[allow(dead_code, non_camel_case_types)]
 #[derive(Copy, Clone, Debug)]
@@ -170,13 +165,25 @@ enum MqCmd {
 	VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX = 0x80,
 }
 
-struct RxQueues {
+pub struct RxQueues {
 	vqs: Vec<Rc<Virtq>>,
 	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 	is_multi: bool,
 }
 
 impl RxQueues {
+	pub fn new(
+		vqs: Vec<Rc<Virtq>>,
+		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		is_multi: bool,
+	) -> Self {
+		Self {
+			vqs,
+			poll_queue,
+			is_multi,
+		}
+	}
+
 	/// Takes care if handling packets correctly which need some processing after being received.
 	/// This currently include nothing. But in the future it might include among others::
 	/// * Calculating missing checksums
@@ -336,7 +343,7 @@ impl RxQueues {
 
 /// Structure which handles transmission of packets and delegation
 /// to the respective queue structures.
-struct TxQueues {
+pub struct TxQueues {
 	vqs: Vec<Rc<Virtq>>,
 	poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
 	ready_queue: Vec<BufferToken>,
@@ -346,6 +353,19 @@ struct TxQueues {
 }
 
 impl TxQueues {
+	pub fn new(
+		vqs: Vec<Rc<Virtq>>,
+		poll_queue: Rc<RefCell<VecDeque<Transfer>>>,
+		ready_queue: Vec<BufferToken>,
+		is_multi: bool,
+	) -> Self {
+		Self {
+			vqs,
+			poll_queue,
+			ready_queue,
+			is_multi,
+		}
+	}
 	#[allow(dead_code)]
 	fn enable_notifs(&self) {
 		if self.is_multi {
@@ -389,9 +409,10 @@ impl TxQueues {
 			//      Header and data are added as ONE output descriptor to the transmitvq.
 			//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 			// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-			let buff_def =
-				Bytes::new(mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.mtu as usize) + ETH_HDR)
-					.unwrap();
+			let buff_def = Bytes::new(
+				mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.get_mtu() as usize) + ETH_HDR,
+			)
+			.unwrap();
 			let spec = BuffSpec::Single(buff_def);
 
 			let num_buff: u16 = vq.size().into();
@@ -470,17 +491,17 @@ impl TxQueues {
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
 pub struct VirtioNetDriver {
-	dev_cfg: NetDevCfg,
-	com_cfg: ComCfg,
-	isr_stat: IsrStatus,
-	notif_cfg: NotifCfg,
+	pub(super) dev_cfg: NetDevCfg,
+	pub(super) com_cfg: ComCfg,
+	pub(super) isr_stat: IsrStatus,
+	pub(super) notif_cfg: NotifCfg,
 
-	ctrl_vq: CtrlQueue,
-	recv_vqs: RxQueues,
-	send_vqs: TxQueues,
+	pub(super) ctrl_vq: CtrlQueue,
+	pub(super) recv_vqs: RxQueues,
+	pub(super) send_vqs: TxQueues,
 
-	num_vqs: u16,
-	irq: u8,
+	pub(super) num_vqs: u16,
+	pub(super) irq: u8,
 }
 
 impl NetworkInterface for VirtioNetDriver {
@@ -488,7 +509,7 @@ impl NetworkInterface for VirtioNetDriver {
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MAC) {
-			self.dev_cfg.raw.mac
+			self.dev_cfg.raw.get_mac()
 		} else {
 			unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
 		}
@@ -499,7 +520,7 @@ impl NetworkInterface for VirtioNetDriver {
 	//  MTU is set static to 1500 bytes.
 	fn get_mtu(&self) -> u16 {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
-			self.dev_cfg.raw.mtu
+			self.dev_cfg.raw.get_mtu()
 		} else {
 			1500
 		}
@@ -636,7 +657,7 @@ impl NetworkInterface for VirtioNetDriver {
 	fn handle_interrupt(&mut self) -> bool {
 		increment_irq_counter((32 + self.irq).into());
 
-		if self.isr_stat.is_interrupt() {
+		let result = if self.isr_stat.is_interrupt() {
 			// handle incoming packets
 			#[cfg(not(feature = "newlib"))]
 			netwakeup();
@@ -647,12 +668,24 @@ impl NetworkInterface for VirtioNetDriver {
 			todo!("Implement possibiity to change config on the fly...")
 		} else {
 			false
-		}
+		};
+
+		self.isr_stat.acknowledge();
+
+		result
 	}
 }
 
-// Kernel interface
+// Backend-independent interface for Virtio network driver
 impl VirtioNetDriver {
+	pub fn get_dev_id(&self) -> u16 {
+		self.dev_cfg.dev_id
+	}
+
+	pub fn set_failed(&mut self) {
+		self.com_cfg.set_failed();
+	}
+
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise returns zero.
 	pub fn dev_status(&self) -> u16 {
@@ -661,7 +694,7 @@ impl VirtioNetDriver {
 			.features
 			.is_feature(Features::VIRTIO_NET_F_STATUS)
 		{
-			self.dev_cfg.raw.status
+			self.dev_cfg.raw.get_status()
 		} else {
 			0
 		}
@@ -669,13 +702,13 @@ impl VirtioNetDriver {
 
 	/// Returns the links status.
 	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
-	fn is_link_up(&self) -> bool {
+	pub fn is_link_up(&self) -> bool {
 		if self
 			.dev_cfg
 			.features
 			.is_feature(Features::VIRTIO_NET_F_STATUS)
 		{
-			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_LINK_UP)
+			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_LINK_UP)
 				== u16::from(Status::VIRTIO_NET_S_LINK_UP)
 		} else {
 			true
@@ -683,13 +716,13 @@ impl VirtioNetDriver {
 	}
 
 	#[allow(dead_code)]
-	fn is_announce(&self) -> bool {
+	pub fn is_announce(&self) -> bool {
 		if self
 			.dev_cfg
 			.features
 			.is_feature(Features::VIRTIO_NET_F_STATUS)
 		{
-			self.dev_cfg.raw.status & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
+			self.dev_cfg.raw.get_status() & u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
 				== u16::from(Status::VIRTIO_NET_S_ANNOUNCE)
 		} else {
 			false
@@ -702,9 +735,9 @@ impl VirtioNetDriver {
 	///
 	/// Returns 1 (i.e. minimum number of pairs) if VIRTIO_NET_F_MQ is not set.
 	#[allow(dead_code)]
-	fn get_max_vq_pairs(&self) -> u16 {
+	pub fn get_max_vq_pairs(&self) -> u16 {
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
-			self.dev_cfg.raw.max_virtqueue_pairs
+			self.dev_cfg.raw.get_max_virtqueue_pairs()
 		} else {
 			1
 		}
@@ -721,117 +754,13 @@ impl VirtioNetDriver {
 		// Nur für receive? Weil send eh ausgeschaltet ist?
 		self.recv_vqs.enable_notifs();
 	}
-}
-
-// Private funtctions for Virtio network driver
-impl VirtioNetDriver {
-	fn map_cfg(cap: &PciCap) -> Option<NetDevCfg> {
-		/*
-		if cap.bar_len() <  u64::from(cap.len() + cap.offset()) {
-			error!("Network config of device {:x}, does not fit into memory specified by bar!",
-				cap.dev_id(),
-			);
-			return None
-		}
-
-		// Drivers MAY do this check. See Virtio specification v1.1. - 4.1.4.1
-		if cap.len() < MemLen::from(mem::size_of::<NetDevCfg>()*8) {
-			error!("Network config from device {:x}, does not represent actual structure specified by the standard!", cap.dev_id());
-			return None
-		}
-
-		let virt_addr_raw = cap.bar_addr() + cap.offset();
-
-		// Create mutable reference to the PCI structure in PCI memory
-		let dev_cfg: &mut NetDevCfgRaw = unsafe {
-			&mut *(usize::from(virt_addr_raw) as *mut NetDevCfgRaw)
-		};
-		*/
-		let dev_cfg: &'static NetDevCfgRaw = match pci::map_dev_cfg::<NetDevCfgRaw>(cap) {
-			Some(cfg) => cfg,
-			None => return None,
-		};
-
-		Some(NetDevCfg {
-			raw: dev_cfg,
-			dev_id: cap.dev_id(),
-			features: FeatureSet::new(0),
-		})
-	}
-
-	/// Instanciates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
-	/// configuration structures and moving them into the struct.
-	fn new(
-		mut caps_coll: UniCapsColl,
-		adapter: &PciAdapter,
-	) -> Result<Self, error::VirtioNetError> {
-		let com_cfg = match caps_coll.get_com_cfg() {
-			Some(com_cfg) => com_cfg,
-			None => {
-				error!("No common config. Aborting!");
-				return Err(error::VirtioNetError::NoComCfg(adapter.device_id));
-			}
-		};
-
-		let isr_stat = match caps_coll.get_isr_cfg() {
-			Some(isr_stat) => isr_stat,
-			None => {
-				error!("No ISR status config. Aborting!");
-				return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id));
-			}
-		};
-
-		let notif_cfg = match caps_coll.get_notif_cfg() {
-			Some(notif_cfg) => notif_cfg,
-			None => {
-				error!("No notif config. Aborting!");
-				return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id));
-			}
-		};
-
-		let dev_cfg = loop {
-			match caps_coll.get_dev_cfg() {
-				Some(cfg) => {
-					if let Some(dev_cfg) = VirtioNetDriver::map_cfg(&cfg) {
-						break dev_cfg;
-					}
-				}
-				None => {
-					error!("No dev config. Aborting!");
-					return Err(error::VirtioNetError::NoDevCfg(adapter.device_id));
-				}
-			}
-		};
-
-		Ok(VirtioNetDriver {
-			dev_cfg,
-			com_cfg,
-			isr_stat,
-			notif_cfg,
-
-			ctrl_vq: CtrlQueue(None),
-			recv_vqs: RxQueues {
-				vqs: Vec::<Rc<Virtq>>::new(),
-				poll_queue: Rc::new(RefCell::new(VecDeque::new())),
-				is_multi: false,
-			},
-			send_vqs: TxQueues {
-				vqs: Vec::<Rc<Virtq>>::new(),
-				poll_queue: Rc::new(RefCell::new(VecDeque::new())),
-				ready_queue: Vec::new(),
-				is_multi: false,
-			},
-			num_vqs: 0,
-			irq: adapter.irq,
-		})
-	}
 
 	/// Initiallizes the device in adherence to specificaton. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.1.5
-	fn init_dev(&mut self) -> Result<(), VirtioNetError> {
+	pub fn init_dev(&mut self) -> Result<(), VirtioNetError> {
 		// Reset
 		self.com_cfg.reset_dev();
 
@@ -944,7 +873,7 @@ impl VirtioNetDriver {
 
 		match self.dev_spec_init() {
 			Ok(_) => info!(
-				"Device specific initialization for Virtio network defice {:x} finished",
+				"Device specific initialization for Virtio network device {:x} finished",
 				self.dev_cfg.dev_id
 			),
 			Err(vnet_err) => return Err(vnet_err),
@@ -1043,10 +972,10 @@ impl VirtioNetDriver {
 		// - the num_queues is found in the ComCfg struct of the device and defines the maximal number
 		// of supported queues.
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {
-			if self.dev_cfg.raw.max_virtqueue_pairs * 2 >= MAX_NUM_VQ {
+			if self.dev_cfg.raw.get_max_virtqueue_pairs() * 2 >= MAX_NUM_VQ {
 				self.num_vqs = MAX_NUM_VQ;
 			} else {
-				self.num_vqs = self.dev_cfg.raw.max_virtqueue_pairs * 2;
+				self.num_vqs = self.dev_cfg.raw.get_max_virtqueue_pairs() * 2;
 			}
 		} else {
 			// Minimal number of virtqueues defined in the standard v1.1. - 5.1.5 Step 1
@@ -1123,58 +1052,13 @@ impl VirtioNetDriver {
 				self.send_vqs.add(vq, &self.dev_cfg);
 			}
 		}
+
 		Ok(())
 	}
 }
 
-// Public interface for virtio network driver.
-impl VirtioNetDriver {
-	/// Initializes virtio network device by mapping configuration layout to
-	/// respective structs (configuration structs are:
-	/// [ComCfg](structs.comcfg.html), [NotifCfg](structs.notifcfg.html)
-	/// [IsrStatus](structs.isrstatus.html), [PciCfg](structs.pcicfg.html)
-	/// [ShMemCfg](structs.ShMemCfg)).
-	///
-	/// Returns a driver instance of
-	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
-	pub fn init(adapter: &PciAdapter) -> Result<VirtioNetDriver, VirtioError> {
-		let mut drv = match pci::map_caps(adapter) {
-			Ok(caps) => match VirtioNetDriver::new(caps, adapter) {
-				Ok(driver) => driver,
-				Err(vnet_err) => {
-					error!("Initializing new network driver failed. Aborting!");
-					return Err(VirtioError::NetDriver(vnet_err));
-				}
-			},
-			Err(pci_error) => {
-				error!("Mapping capabilites failed. Aborting!");
-				return Err(VirtioError::FromPci(pci_error));
-			}
-		};
-
-		match drv.init_dev() {
-			Ok(_) => info!(
-				"Network device with id {:x}, has been initialized by driver!",
-				drv.dev_cfg.dev_id
-			),
-			Err(vnet_err) => {
-				drv.com_cfg.set_failed();
-				return Err(VirtioError::NetDriver(vnet_err));
-			}
-		}
-
-		if drv.is_link_up() {
-			info!("Virtio-net link is up after initialization.")
-		} else {
-			info!("Virtio-net link is down after initialization!")
-		}
-
-		Ok(drv)
-	}
-}
-
-mod constants {
-	use super::error::VirtioNetError;
+pub mod constants {
+	pub use super::error::VirtioNetError;
 	use alloc::vec::Vec;
 	use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
@@ -1915,5 +1799,6 @@ pub mod error {
 		/// Indicates that an operation for finished Transfers, was performed on
 		/// an ongoing transfer
 		ProcessOngoing,
+		Unknown,
 	}
 }

@@ -81,6 +81,38 @@ impl FreeList {
 		Err(AllocError)
 	}
 
+	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), AllocError> {
+		trace!(
+			"Try to reserve {} bytes at {:#X} from Free List {:#X}",
+			size,
+			address,
+			self as *const Self as usize
+		);
+
+		// Find a region in the Free List that has at least the requested size.
+		let mut cursor = self.list.cursor_front_mut();
+		while let Some(node) = cursor.current() {
+			let (region_start, region_size) = (node.start, node.end - node.start);
+
+			if address > region_start && address + size < region_start + region_size {
+				node.start = address + size;
+				let new_entry = FreeListEntry::new(region_start, address);
+				cursor.insert_before(new_entry);
+				return Ok(());
+			} else if address > region_start && address + size == region_start + region_size {
+				node.start = address + size;
+				return Ok(());
+			} else if address == region_start && address + size < region_start + region_size {
+				node.start = region_start + size;
+				return Ok(());
+			}
+
+			cursor.move_next();
+		}
+
+		Err(AllocError)
+	}
+
 	pub fn deallocate(&mut self, address: usize, size: usize) {
 		trace!(
 			"Deallocating {} bytes at {:#X} from Free List {:#X}",

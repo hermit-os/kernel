@@ -4,6 +4,13 @@ version = "0.3.53"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>",
+	"Martin Kroening",
+	"Frederik Schulz",
+	"Thomas Lambertz",
+	"Jonathan Klimt <jonathan.klimt@eonerc.rwth-aachen.de>",
+	"Jonathan Schwender",
+	"Daniel Krebs",
+	"Yu Duan",
 ]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
