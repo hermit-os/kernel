@@ -21,7 +21,7 @@ x86 = { version = "0.43", default-features = false }
 target_build_utils = "0.3"
 
 [profile.dev]
-opt-level = 2
+opt-level = 1  # `opt-level = 0` makes bootloader to large for bootstrapping
 
 [profile.release]
 lto = true
