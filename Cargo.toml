@@ -80,22 +80,8 @@ x86 = { version = "0.43", default-features = false }
 version = "0.0.6"
 default-features = false
 
-# The development profile, used for `cargo build`.
 [profile.dev]
-opt-level = 1      # controls the `--opt-level` the compiler builds with
-debug = true       # controls whether the compiler passes `-C debuginfo`
-# a value of `true` is equivalent to `2`
-rpath = false      # controls whether the compiler passes `-C rpath`
-lto = false         # controls `-C lto` for binaries and staticlibs
-debug-assertions = true # controls whether debug assertions are enabled
-# Disabled because of https://github.com/rust-lang/cargo/issues/7359
-# panic = "abort" # Call abort on panic https://github.com/rust-lang/rust/pull/32900
+opt-level = 1
 
-# The release profile, used for `cargo build --release`.
 [profile.release]
 opt-level = 2
-debug = false
-rpath = false
-lto = false
-debug-assertions = false
-# panic = "abort"
