@@ -20,19 +20,9 @@ x86 = { version = "0.43", default-features = false }
 [build-dependencies]
 target_build_utils = "0.3"
 
-# The release profile, used for `cargo build --release`.
 [profile.dev]
-opt-level = 2      # controls the `--opt-level` the compiler builds with
-debug = true       # controls whether the compiler passes `-C debuginfo`
-                   # a value of `true` is equivalent to `2`
-rpath = false      # controls whether the compiler passes `-C rpath`
-lto = false         # controls `-C lto` for binaries and staticlibs
-debug-assertions = true # controls whether debug assertions are enabled
+opt-level = 2
 
 [profile.release]
-opt-level = 3
-debug = false
-rpath = false
 lto = true
-debug-assertions = false
 codegen-units = 1
