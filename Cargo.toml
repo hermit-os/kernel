@@ -9,6 +9,7 @@ authors = [
 	"Thomas Lambertz",
 	"Jonathan Klimt <jonathan.klimt@eonerc.rwth-aachen.de>",
 	"Jonathan Schwender",
+	"Daniel Krebs",
 	"Yu Duan",
 ]
 license = "MIT OR Apache-2.0"
