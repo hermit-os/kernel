@@ -117,14 +117,14 @@ impl BootInfo {
 }
 
 /// Kernel header to announce machine features
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(target_os = "none"))]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
-#[cfg(all(target_os = "hermit", not(feature = "newlib")))]
+#[cfg(all(target_os = "none", not(feature = "newlib")))]
 #[link_section = ".data"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
-#[cfg(all(target_os = "hermit", feature = "newlib"))]
+#[cfg(all(target_os = "none", feature = "newlib"))]
 #[link_section = ".mboot"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
@@ -292,7 +292,7 @@ pub fn message_output_init() {
 	}
 }
 
-#[cfg(all(not(target_os = "hermit"), not(target_os = "windows")))]
+#[cfg(all(not(target_os = "none"), not(target_os = "windows")))]
 pub fn output_message_byte(byte: u8) {
 	extern "C" {
 		fn write(fd: i32, buf: *const u8, count: usize) -> isize;
@@ -314,7 +314,7 @@ pub fn output_message_byte(byte: u8) {
 	}
 }
 
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(target_os = "none"))]
 #[test]
 fn test_output() {
 	output_message_byte('t' as u8);
@@ -324,7 +324,7 @@ fn test_output() {
 	output_message_byte('\n' as u8);
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 pub fn output_message_byte(byte: u8) {
 	if environment::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
@@ -342,7 +342,7 @@ pub fn output_message_byte(byte: u8) {
 	}
 }
 
-//#[cfg(target_os = "hermit")]
+//#[cfg(target_os = "none")]
 pub fn output_message_buf(buf: &[u8]) {
 	for byte in buf {
 		output_message_byte(*byte);
@@ -350,7 +350,7 @@ pub fn output_message_buf(buf: &[u8]) {
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
@@ -397,7 +397,7 @@ pub fn boot_processor_init() {
 
 /// Boots all available Application Processors on bare-metal or QEMU.
 /// Called after the Boot Processor has been fully initialized along with its scheduler.
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 pub fn boot_application_processors() {
 	#[cfg(feature = "smp")]
 	apic::boot_application_processors();
@@ -405,7 +405,7 @@ pub fn boot_application_processors() {
 }
 
 /// Application Processor initialization
-#[cfg(all(target_os = "hermit", feature = "smp"))]
+#[cfg(all(target_os = "none", feature = "smp"))]
 pub fn application_processor_init() {
 	percore::init();
 	processor::configure();
@@ -460,10 +460,10 @@ pub fn print_statistics() {
 	}
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
+pub unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	assert_eq!(boot_info.magic_number, BOOTINFO_MAGIC_NUMBER);
 	// Enable caching
 	let mut cr0 = cr0();

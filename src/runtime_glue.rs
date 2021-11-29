@@ -7,7 +7,7 @@ use alloc::alloc::Layout;
 use core::panic::PanicInfo;
 
 // see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
 	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
@@ -44,8 +44,8 @@ fn rust_oom(layout: Layout) -> ! {
 	}
 }
 
-#[no_mangle]
+/*#[no_mangle]
 pub unsafe extern "C" fn __rg_oom(size: usize, align: usize) -> ! {
 	let layout = Layout::from_size_align_unchecked(size, align);
 	rust_oom(layout)
-}
+}*/

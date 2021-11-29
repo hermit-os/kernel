@@ -80,7 +80,7 @@ impl HoleList {
 	}
 
 	/// Returns information about the first hole for test purposes.
-	#[cfg(not(target_os = "hermit"))]
+	#[cfg(not(target_os = "none"))]
 	#[cfg(test)]
 	pub fn first_hole(&self) -> Option<(usize, usize)> {
 		self.first
@@ -91,13 +91,13 @@ impl HoleList {
 }
 
 /// A block containing free memory. It points to the next hole and thus forms a linked list.
-#[cfg(target_os = "hermit")]
+#[cfg(target_os = "none")]
 pub struct Hole {
 	size: usize,
 	next: Option<&'static mut Hole>,
 }
 
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(target_os = "none"))]
 pub struct Hole {
 	pub size: usize,
 	pub next: Option<&'static mut Hole>,
