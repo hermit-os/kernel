@@ -90,7 +90,7 @@ pub fn disable() {
 /// were not activated before calling this function.
 #[inline]
 pub fn nested_disable() -> bool {
-	cfg!(target_os = "hermit") && {
+	cfg!(any(target_os = "none", target_os = "hermit")) && {
 		let ret = rflags::read().contains(RFlags::FLAGS_IF);
 		disable();
 		ret

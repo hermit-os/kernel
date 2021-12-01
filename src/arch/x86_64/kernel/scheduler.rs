@@ -305,12 +305,12 @@ impl Clone for TaskTLS {
 	}
 }
 
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(any(target_os = "none", target_os = "hermit")))]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	unimplemented!()
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 #[naked]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	// `f` is in the `rdi` register

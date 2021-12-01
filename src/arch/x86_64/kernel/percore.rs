@@ -137,13 +137,13 @@ impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 #[inline]
 pub fn core_id() -> CoreId {
 	unsafe { PERCORE.core_id.get() }
 }
 
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(any(target_os = "none", target_os = "hermit")))]
 pub fn core_id() -> CoreId {
 	0
 }

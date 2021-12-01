@@ -30,13 +30,19 @@
 #![feature(llvm_asm)]
 #![feature(global_asm)]
 #![no_std]
-#![cfg_attr(target_os = "hermit", feature(custom_test_frameworks))]
-#![cfg_attr(target_os = "hermit", cfg_attr(test, test_runner(crate::test_runner)))]
 #![cfg_attr(
-	target_os = "hermit",
+	any(target_os = "none", target_os = "hermit"),
+	feature(custom_test_frameworks)
+)]
+#![cfg_attr(
+	any(target_os = "none", target_os = "hermit"),
+	cfg_attr(test, test_runner(crate::test_runner))
+)]
+#![cfg_attr(
+	any(target_os = "none", target_os = "hermit"),
 	cfg_attr(test, reexport_test_harness_main = "test_main")
 )]
-#![cfg_attr(target_os = "hermit", cfg_attr(test, no_main))]
+#![cfg_attr(any(target_os = "none", target_os = "hermit"), cfg_attr(test, no_main))]
 
 // EXTERNAL CRATES
 #[macro_use]
@@ -47,7 +53,7 @@ extern crate bitflags;
 extern crate log;
 #[macro_use]
 extern crate num_derive;
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(any(target_os = "none", target_os = "hermit")))]
 #[macro_use]
 extern crate std;
 #[cfg(target_arch = "aarch64")]
@@ -88,7 +94,7 @@ mod errno;
 mod ffi;
 mod kernel_message_buffer;
 mod mm;
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 mod runtime_glue;
 mod scheduler;
 mod synch;
@@ -102,7 +108,7 @@ pub fn _print(args: ::core::fmt::Arguments<'_>) {
 }
 
 #[cfg(test)]
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 #[no_mangle]
 extern "C" fn runtime_entry(_argc: i32, _argv: *const *const u8, _env: *const *const u8) -> ! {
 	println!("Executing hermit unittests. Any arguments are dropped");
@@ -120,14 +126,14 @@ pub fn test_runner(tests: &[&dyn Fn()]) {
 	sys_exit(0);
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 #[test_case]
 fn trivial_test() {
 	println!("Test test test");
 	panic!("Test called");
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
@@ -137,7 +143,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 /// Returning a null pointer indicates that either memory is exhausted or
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
@@ -179,7 +185,7 @@ pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 /// # Errors
 /// Returns null if the new layout does not meet the size and alignment constraints of the
 /// allocator, or if reallocation otherwise fails.
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 pub extern "C" fn __sys_realloc(
 	ptr: *mut u8,
 	size: usize,
@@ -224,7 +230,7 @@ pub extern "C" fn __sys_realloc(
 ///
 /// # Errors
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 pub extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);
@@ -247,7 +253,7 @@ pub extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	}
 }
 
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 extern "C" {
 	static mut __bss_start: usize;
 }
@@ -259,7 +265,7 @@ fn has_ipdevice() -> bool {
 }
 
 /// Entry point of a kernel thread, which initialize the libos
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
 		#[cfg(not(test))]
@@ -319,7 +325,7 @@ fn synch_all_cores() {
 }
 
 /// Entry Point of HermitCore for the Boot Processor
-#[cfg(target_os = "hermit")]
+#[cfg(any(target_os = "none", target_os = "hermit"))]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	arch::message_output_init();
@@ -372,7 +378,7 @@ fn boot_processor_main() -> ! {
 }
 
 /// Entry Point of HermitCore for an Application Processor
-#[cfg(all(target_os = "hermit", feature = "smp"))]
+#[cfg(all(any(target_os = "none", target_os = "hermit"), feature = "smp"))]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
 	scheduler::add_current_core();
