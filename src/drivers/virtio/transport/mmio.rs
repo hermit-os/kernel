@@ -4,10 +4,11 @@
 #![allow(dead_code)]
 
 use crate::arch::mm::PhysAddr;
-use core::arch::x86_64::_mm_mfence;
 use core::convert::TryInto;
-use core::ptr::read_volatile;
+use core::ptr::{read_volatile, write_volatile};
 use core::result::Result;
+use core::sync::atomic::fence;
+use core::sync::atomic::Ordering;
 use core::u8;
 
 use crate::drivers::error::DriverError;
@@ -141,14 +142,13 @@ impl ComCfg {
 
 	/// Returns the device status field.
 	pub fn dev_status(&self) -> u8 {
-		self.com_cfg.status.try_into().unwrap()
+		unsafe { read_volatile(&self.com_cfg.status).try_into().unwrap() }
 	}
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
-		self.com_cfg.status = 0;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.com_cfg.status, 0u32);
 		}
 	}
 
@@ -156,9 +156,8 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
-		self.com_cfg.status = u32::from(device::Status::FAILED);
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.com_cfg.status, u32::from(device::Status::FAILED));
 		}
 	}
 
@@ -167,8 +166,10 @@ impl ComCfg {
 	pub fn ack_dev(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			_mm_mfence();
-			self.com_cfg.status = status | u32::from(device::Status::ACKNOWLEDGE);
+			write_volatile(
+				&mut self.com_cfg.status,
+				status | u32::from(device::Status::ACKNOWLEDGE),
+			);
 		}
 	}
 
@@ -177,8 +178,10 @@ impl ComCfg {
 	pub fn set_drv(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			_mm_mfence();
-			self.com_cfg.status = status | u32::from(device::Status::DRIVER);
+			write_volatile(
+				&mut self.com_cfg.status,
+				status | u32::from(device::Status::DRIVER),
+			);
 		}
 	}
 
@@ -188,8 +191,10 @@ impl ComCfg {
 	pub fn features_ok(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			_mm_mfence();
-			self.com_cfg.status = status | u32::from(device::Status::FEATURES_OK);
+			write_volatile(
+				&mut self.com_cfg.status,
+				status | u32::from(device::Status::FEATURES_OK),
+			);
 		}
 	}
 
@@ -202,7 +207,6 @@ impl ComCfg {
 	pub fn check_features(&self) -> bool {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			_mm_mfence();
 			status & u32::from(device::Status::FEATURES_OK)
 				== u32::from(device::Status::FEATURES_OK)
 		}
@@ -214,8 +218,10 @@ impl ComCfg {
 	pub fn drv_ok(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.com_cfg.status);
-			_mm_mfence();
-			self.com_cfg.status = status | u32::from(device::Status::DRIVER_OK);
+			write_volatile(
+				&mut self.com_cfg.status,
+				status | u32::from(device::Status::DRIVER_OK),
+			);
 		}
 	}
 
@@ -314,7 +320,6 @@ impl IsrStatus {
 	pub fn is_interrupt(&self) -> bool {
 		unsafe {
 			let status = read_volatile(&self.raw.interrupt_status);
-			_mm_mfence();
 			status & 0x1 == 0x1
 		}
 	}
@@ -322,7 +327,6 @@ impl IsrStatus {
 	pub fn is_cfg_change(&self) -> bool {
 		unsafe {
 			let status = read_volatile(&self.raw.interrupt_status);
-			_mm_mfence();
 			status & 0x2 == 0x2
 		}
 	}
@@ -330,8 +334,7 @@ impl IsrStatus {
 	pub fn acknowledge(&mut self) {
 		unsafe {
 			let status = read_volatile(&self.raw.interrupt_status);
-			_mm_mfence();
-			self.raw.interrupt_ack = status;
+			write_volatile(&mut self.raw.interrupt_ack, status);
 		}
 	}
 }
@@ -440,109 +443,96 @@ pub struct MmioRegisterLayout {
 
 impl MmioRegisterLayout {
 	pub fn get_magic_value(&self) -> u32 {
-		self.magic_value
+		unsafe { read_volatile(&self.magic_value) }
 	}
 
 	pub fn get_version(&self) -> u32 {
-		self.version
+		unsafe { read_volatile(&self.version) }
 	}
 
 	pub fn get_device_id(&self) -> DevId {
-		self.device_id
+		unsafe { read_volatile(&self.device_id) }
 	}
 
 	pub fn enable_queue(&mut self, sel: u32) {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			write_volatile(&mut self.queue_ready, 1u32);
 		}
-		self.queue_ready = 1;
 	}
 
 	pub fn get_max_queue_size(&mut self, sel: u32) -> u32 {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			read_volatile(&self.queue_num_max)
 		}
-		self.queue_num_max
 	}
 
 	pub fn set_queue_size(&mut self, sel: u32, size: u32) -> u32 {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
-		}
-		let num_max = self.queue_num_max;
+			write_volatile(&mut self.queue_sel, sel);
 
-		if num_max >= size {
-			self.queue_num = size;
-			size
-		} else {
-			self.queue_num = num_max;
-			num_max
+			let num_max = read_volatile(&self.queue_num_max);
+
+			if num_max >= size {
+				write_volatile(&mut self.queue_num, size);
+				size
+			} else {
+				write_volatile(&mut self.queue_num, num_max);
+				num_max
+			}
 		}
 	}
 
 	pub fn set_ring_addr(&mut self, sel: u32, addr: PhysAddr) {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			write_volatile(&mut self.queue_desc_low, addr.as_u64() as u32);
+			write_volatile(&mut self.queue_desc_high, (addr.as_u64() >> 32) as u32);
 		}
-		self.queue_desc_low = addr.as_u64() as u32;
-		self.queue_desc_high = (addr.as_u64() >> 32) as u32;
 	}
 
 	pub fn set_drv_ctrl_addr(&mut self, sel: u32, addr: PhysAddr) {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			write_volatile(&mut self.queue_driver_low, addr.as_u64() as u32);
+			write_volatile(&mut self.queue_driver_high, (addr.as_u64() >> 32) as u32);
 		}
-		self.queue_driver_low = addr.as_u64() as u32;
-		self.queue_driver_high = (addr.as_u64() >> 32) as u32;
 	}
 
 	pub fn set_dev_ctrl_addr(&mut self, sel: u32, addr: PhysAddr) {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			write_volatile(&mut self.queue_device_low, addr.as_u64() as u32);
+			write_volatile(&mut self.queue_device_high, (addr.as_u64() >> 32) as u32);
 		}
-		self.queue_device_low = addr.as_u64() as u32;
-		self.queue_device_high = (addr.as_u64() >> 32) as u32;
 	}
 
 	pub fn is_queue_ready(&mut self, sel: u32) -> bool {
-		self.queue_sel = sel;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.queue_sel, sel);
+			read_volatile(&self.queue_ready) != 0
 		}
-		self.queue_ready != 0
 	}
 
 	pub fn dev_features(&mut self) -> u64 {
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
-		self.device_features_sel = 1;
 		unsafe {
-			_mm_mfence();
+			write_volatile(&mut self.device_features_sel, 1u32);
+
+			// read high 32 bits of device features
+			let mut dev_feat = u64::from(read_volatile(&self.device_features)) << 32;
+
+			// Indicate device to show low 32 bits in device_feature field.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.device_features_sel, 0u32);
+
+			// read low 32 bits of device features
+			dev_feat |= u64::from(read_volatile(&self.device_features));
+
+			dev_feat
 		}
-
-		// read high 32 bits of device features
-		let mut dev_feat = u64::from(self.device_features) << 32;
-		unsafe {
-			_mm_mfence();
-		}
-
-		// Indicate device to show low 32 bits in device_feature field.
-		// See Virtio specification v1.1. - 4.1.4.3
-		self.device_features_sel = 0;
-		unsafe {
-			_mm_mfence();
-		}
-
-		// read low 32 bits of device features
-		dev_feat |= u64::from(self.device_features);
-
-		dev_feat
 	}
 
 	/// Write selected features into driver_select field.
@@ -550,28 +540,21 @@ impl MmioRegisterLayout {
 		let high: u32 = (feats >> 32) as u32;
 		let low: u32 = feats as u32;
 
-		// Indicate to device that driver_features field shows low 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		self.driver_features_sel = 0;
 		unsafe {
-			_mm_mfence();
-		}
+			// Indicate to device that driver_features field shows low 32 bits.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.driver_features_sel, 0u32);
 
-		// write low 32 bits of device features
-		self.driver_features = low;
-		unsafe {
-			_mm_mfence();
-		}
+			// write low 32 bits of device features
+			write_volatile(&mut self.driver_features, low);
 
-		// Indicate to device that driver_features field shows high 32 bits.
-		// See Virtio specification v1.1. - 4.1.4.3
-		self.driver_features_sel = 1;
-		unsafe {
-			_mm_mfence();
-		}
+			// Indicate to device that driver_features field shows high 32 bits.
+			// See Virtio specification v1.1. - 4.1.4.3
+			write_volatile(&mut self.driver_features_sel, 1u32);
 
-		// write high 32 bits of device features
-		self.driver_features = high;
+			// write high 32 bits of device features
+			write_volatile(&mut self.driver_features, high);
+		}
 	}
 
 	pub fn get_config(&mut self) -> [u32; 3] {
@@ -579,10 +562,11 @@ impl MmioRegisterLayout {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let config = read_volatile(&self.config);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let after = read_volatile(&self.config_generation);
+				fence(Ordering::SeqCst);
 
 				if before == after {
 					return config;
@@ -594,12 +578,20 @@ impl MmioRegisterLayout {
 	pub fn print_information(&mut self) {
 		infoheader!(" MMIO RREGISTER LAYOUT INFORMATION ");
 
-		infoentry!("Device version", "{:#X}", self.version);
-		infoentry!("Device ID", "{:?}", self.device_id);
-		infoentry!("Vendor ID", "{:#X}", self.vendor_id);
+		infoentry!("Device version", "{:#X}", self.get_version());
+		infoentry!("Device ID", "{:?}", unsafe {
+			read_volatile(&self.device_id)
+		});
+		infoentry!("Vendor ID", "{:#X}", unsafe {
+			read_volatile(&self.vendor_id)
+		});
 		infoentry!("Device Features", "{:#X}", self.dev_features());
-		infoentry!("Interrupt status", "{:#X}", self.interrupt_status);
-		infoentry!("Device status", "{:#X}", self.status);
+		infoentry!("Interrupt status", "{:#X}", unsafe {
+			read_volatile(&self.interrupt_status)
+		});
+		infoentry!("Device status", "{:#X}", unsafe {
+			read_volatile(&self.status)
+		});
 		infoentry!("Configuration space", "{:#X?}", self.get_config());
 
 		infofooter!();
