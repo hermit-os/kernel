@@ -295,16 +295,6 @@ impl TaskTLS {
 			layout,
 		}
 	}
-
-	#[inline]
-	pub fn address(&self) -> VirtAddr {
-		self.address
-	}
-
-	#[inline]
-	pub fn get_fs(&self) -> VirtAddr {
-		self.fs
-	}
 }
 
 impl Drop for TaskTLS {
@@ -379,7 +369,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = tls.get_fs().as_u64();
+				(*state).fs = tls.fs.as_u64();
 			}
 			(*state).rip = task_start as usize as u64;
 			(*state).rdi = func as usize as u64;

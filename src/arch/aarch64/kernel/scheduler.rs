@@ -212,11 +212,6 @@ impl TaskTLS {
 			address: VirtAddr::zero(),
 		}
 	}
-
-	#[inline]
-	pub fn address(&self) -> VirtAddr {
-		self.address
-	}
 }
 
 impl Drop for TaskTLS {
@@ -252,7 +247,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		let tls = TaskTLS::new(tls_allocation_size);
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = tls.address() + tls_size;
+		let tls_pointer = tls.address + tls_size;
 
 		// TODO: Implement AArch64 TLS
 
@@ -261,7 +256,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		debug!(
 			"Set up TLS for task {} at address {:#X}",
 			current_task_borrowed.id,
-			tls.address()
+			tls.address
 		);
 		current_task_borrowed.tls = Some(tls);
 	}*/
