@@ -4,26 +4,24 @@ stages:
 - test
 
 variables:
+  DOCKER_FILE: Dockerfile
   DOCKER_TAG: ${CI_COMMIT_BRANCH}
   DOCKER_IMAGE: ${CI_REGISTRY_IMAGE}
   GIT_SUBMODULE_STRATEGY: normal
   FF_GITLAB_REGISTRY_HELPER_IMAGE: 1
 
-# Build docker image with kaniko
-# kaniko does not require DinD or a shell runner.
 .prepare:docker: &prepare_docker
   stage: prepare
   image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [ "" ]
+    name: docker
+  before_script:
+    - docker version
+    - docker login --username "${CI_REGISTRY_USER}" --password "${CI_REGISTRY_PASSWORD}"
   script:
-  - mkdir -p /kaniko/.docker
-  - echo "{\"auths\":{\"${CI_REGISTRY}\":{\"username\":\"${CI_REGISTRY_USER}\",\"password\":\"${CI_REGISTRY_PASSWORD}\"}}}" > /kaniko/.docker/config.json
-  - /kaniko/executor
-    --context ${CI_PROJECT_DIR}
-    --dockerfile ${CI_PROJECT_DIR}/Dockerfile
-    --destination ${DOCKER_IMAGE}:${DOCKER_TAG}
-    --single-snapshot
+    - docker build -f ${DOCKER_FILE} -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+    - docker push ${DOCKER_IMAGE}:${DOCKER_TAG}
+  tags:
+    docker
 
 prepare:docker:
   <<: *prepare_docker
