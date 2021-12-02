@@ -120,6 +120,7 @@ pub unsafe fn load_kernel(elf: &Elf<'_>, elf_start: u64, mem_size: u64) -> (u64,
 			BOOT_INFO.tls_start = address + program_header.p_vaddr as u64;
 			BOOT_INFO.tls_filesz = program_header.p_filesz as u64;
 			BOOT_INFO.tls_memsz = program_header.p_memsz as u64;
+			BOOT_INFO.tls_align = program_header.p_align;
 
 			loaderlog!(
 				"Found TLS starts at {:#x} (size {} Bytes)",
