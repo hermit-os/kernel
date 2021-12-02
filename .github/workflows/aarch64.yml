@@ -21,7 +21,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest]
     steps:
       - name: Checkout rusty-hermit
         uses: actions/checkout@v2
@@ -47,21 +47,10 @@ jobs:
         working-directory: loader
         env:
           HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
-      - name: Install QEMU (ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-aarch64
-      - name: Install QEMU (macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          brew update
-          brew install qemu
-      - name: Install QEMU, GNU make (windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: |
-          choco install qemu make
-          echo "C:\Program Files\qemu" >> $GITHUB_PATH
       - name: Test kernel
         run: qemu-system-aarch64 -semihosting -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3
         working-directory: loader
