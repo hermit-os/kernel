@@ -44,17 +44,20 @@ pub fn thread_test() {
 #[test_case]
 pub fn test_thread_local() {
 	#[thread_local]
-	static BYTE: u8 = 0x42;
+	static mut BYTE: u8 = 0x42;
 
 	#[thread_local]
-	static CAFECAFE: u64 = 0xCAFECAFE;
+	static mut CAFECAFE: u64 = 0xCAFECAFE;
 
 	#[thread_local]
-	static DEADBEEF: u64 = 0xDEADBEEF;
+	static mut DEADBEEF: u64 = 0xDEADBEEF;
 
-	assert_eq!(0x42, BYTE);
-	assert_eq!(0xCAFECAFE, CAFECAFE);
-	assert_eq!(0xDEADBEEF, DEADBEEF);
+	// If the thread local statics are not mut, they get optimized away in release.
+	unsafe {
+		assert_eq!(0x42, BYTE);
+		assert_eq!(0xCAFECAFE, CAFECAFE);
+		assert_eq!(0xDEADBEEF, DEADBEEF);
+	}
 }
 
 #[no_mangle]
