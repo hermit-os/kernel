@@ -30,7 +30,7 @@ prepare:docker:
 
 build:demo:
   stage: build
-  image: ${CI_REGISTRY_IMAGE}
+  image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
   before_script:
     - rustup update
   script:
@@ -56,7 +56,7 @@ build:demo:
 
 test:integration:
   stage: test
-  image: ${CI_REGISTRY_IMAGE}
+  image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
   allow_failure: true
   before_script:
     - rustup update
@@ -80,7 +80,7 @@ test:uhyve:
    stage: test
    dependencies:
      - build:demo
-   image: ${CI_REGISTRY_IMAGE}
+   image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
    script:
      - lscpu
      - kvm-ok
@@ -96,7 +96,7 @@ test:qemu:
    stage: test
    dependencies:
      - build:demo
-   image: ${CI_REGISTRY_IMAGE}
+   image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
    script:
      - lscpu
      - kvm-ok
