@@ -63,6 +63,10 @@ pub fn get_tls_memsz() -> usize {
 	0
 }
 
+pub fn get_tls_align() -> usize {
+	0
+}
+
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
 	unsafe { core::ptr::read_volatile(&BOOT_INFO.uhyve) != 0 }

@@ -28,6 +28,7 @@ pub struct BootInfo {
 	pub hcip: [u8; 4],
 	pub hcgateway: [u8; 4],
 	pub hcmask: [u8; 4],
+	pub tls_align: u64,
 }
 
 impl BootInfo {
@@ -58,6 +59,7 @@ impl BootInfo {
 			hcip: [255, 255, 255, 255],
 			hcgateway: [255, 255, 255, 255],
 			hcmask: [255, 255, 255, 0],
+			tls_align: 0,
 		}
 	}
 }
@@ -71,6 +73,7 @@ impl fmt::Debug for BootInfo {
 		writeln!(f, "tls_start {:#x}", self.tls_start)?;
 		writeln!(f, "tls_filesz {:#x}", self.tls_filesz)?;
 		writeln!(f, "tls_memsz {:#x}", self.tls_memsz)?;
+		writeln!(f, "tls_align {:#x}", self.tls_align)?;
 		writeln!(f, "image_size {:#x}", self.image_size)?;
 		writeln!(f, "current_stack_address {:#x}", self.current_stack_address)?;
 		writeln!(
