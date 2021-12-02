@@ -207,7 +207,7 @@ pub struct TaskTLS {
 }
 
 impl TaskTLS {
-	pub fn new(tls_size: usize) -> Self {
+	fn from_environment() -> Self {
 		Self {
 			address: VirtAddr::zero(),
 		}
@@ -229,7 +229,7 @@ impl Drop for TaskTLS {
 
 impl Clone for TaskTLS {
 	fn clone(&self) -> Self {
-		TaskTLS::new(environment::get_tls_memsz())
+		TaskTLS::from_environment()
 	}
 }
 
@@ -244,7 +244,7 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) {
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
 		let tls_allocation_size = tls_size + mem::size_of::<usize>();
-		let tls = TaskTLS::new(tls_allocation_size);
+		let tls = TaskTLS::from_environment();
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
 		let tls_pointer = tls.address + tls_size;

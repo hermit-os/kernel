@@ -244,7 +244,7 @@ pub struct TaskTLS {
 }
 
 impl TaskTLS {
-	pub fn new(tls_size: usize) -> Self {
+	fn from_environment() -> Self {
 		let tls_align = environment::get_tls_align();
 		let tls_offset = align_up!(tls_size, tls_align);
 		// determine the size of tdata (tls without tbss)
@@ -312,7 +312,7 @@ impl Drop for TaskTLS {
 
 impl Clone for TaskTLS {
 	fn clone(&self) -> Self {
-		TaskTLS::new(environment::get_tls_memsz())
+		TaskTLS::from_environment()
 	}
 }
 
@@ -349,11 +349,9 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
-		// Check if the task (process or thread) uses Thread-Local-Storage.
-		let tls_size = environment::get_tls_memsz();
-		// check is TLS is already allocated
-		if self.tls.is_none() && tls_size > 0 {
-			self.tls = Some(TaskTLS::new(tls_size))
+		// Check if TLS is allocated already and if the task uses thread-local storage.
+		if self.tls.is_none() && environment::get_tls_memsz() > 0 {
+			self.tls = Some(TaskTLS::from_environment());
 		}
 
 		unsafe {
