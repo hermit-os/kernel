@@ -9,6 +9,8 @@ variables:
   GIT_SUBMODULE_STRATEGY: normal
   FF_GITLAB_REGISTRY_HELPER_IMAGE: 1
 
+# Build docker image with kaniko
+# kaniko does not require DinD or a shell runner.
 .prepare:docker: &prepare_docker
   stage: prepare
   image:
@@ -21,14 +23,14 @@ variables:
     --context ${CI_PROJECT_DIR}
     --dockerfile ${CI_PROJECT_DIR}/Dockerfile
     --destination ${DOCKER_IMAGE}:${DOCKER_TAG}
-    --snapshotMode=redo
+    --single-snapshot
 
 prepare:docker:
   <<: *prepare_docker
 
 build:demo:
   stage: build
-  image: ${CI_REGISTRY_IMAGE}
+  image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
   before_script:
     - rustup update
   script:
@@ -54,7 +56,7 @@ build:demo:
 
 test:integration:
   stage: test
-  image: ${CI_REGISTRY_IMAGE}
+  image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
   allow_failure: true
   before_script:
     - rustup update
@@ -78,7 +80,7 @@ test:uhyve:
    stage: test
    dependencies:
      - build:demo
-   image: ${CI_REGISTRY_IMAGE}
+   image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
    script:
      - lscpu
      - kvm-ok
@@ -94,7 +96,7 @@ test:qemu:
    stage: test
    dependencies:
      - build:demo
-   image: ${CI_REGISTRY_IMAGE}
+   image: ${CI_REGISTRY_IMAGE}:${DOCKER_TAG}
    script:
      - lscpu
      - kvm-ok
