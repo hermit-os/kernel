@@ -43,6 +43,9 @@ pub fn thread_test() {
 
 #[test_case]
 pub fn test_thread_local() {
+	#[repr(C, align(0x1000))]
+	struct AlignedByte(u8);
+
 	#[thread_local]
 	static mut BYTE: u8 = 0x42;
 
@@ -52,11 +55,15 @@ pub fn test_thread_local() {
 	#[thread_local]
 	static mut DEADBEEF: u64 = 0xDEADBEEF;
 
+	#[thread_local]
+	static mut ALIGNED_BYTE: AlignedByte = AlignedByte(0x53);
+
 	// If the thread local statics are not mut, they get optimized away in release.
 	unsafe {
 		assert_eq!(0x42, BYTE);
 		assert_eq!(0xCAFECAFE, CAFECAFE);
 		assert_eq!(0xDEADBEEF, DEADBEEF);
+		assert_eq!(0x53, ALIGNED_BYTE.0);
 	}
 }
 
