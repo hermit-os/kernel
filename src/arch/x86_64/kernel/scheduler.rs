@@ -245,11 +245,13 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	pub fn new(tls_size: usize) -> Self {
+		let tls_align = environment::get_tls_align();
+		let tls_offset = align_up!(tls_size, tls_align);
 		// determine the size of tdata (tls without tbss)
 		let tdata_size: usize = environment::get_tls_filesz();
 		// Yes, it does, so we have to allocate TLS memory.
 		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
+		let tls_allocation_size = align_up!(tls_size, tls_offset) + mem::size_of::<usize>();
 		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
 		let memory_size = align_up!(tls_allocation_size, 128);
 		let layout =
@@ -257,7 +259,7 @@ impl TaskTLS {
 		let ptr = VirtAddr(unsafe { alloc(layout) as u64 });
 
 		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = ptr + align_up!(tls_size, 32);
+		let tls_pointer = ptr + align_up!(tls_size, tls_offset);
 
 		unsafe {
 			// Copy over TLS variables with their initial values.
@@ -271,7 +273,7 @@ impl TaskTLS {
 				ptr.as_mut_ptr::<u8>()
 					.offset(tdata_size.try_into().unwrap()),
 				0,
-				align_up!(tls_size, 32) - tdata_size,
+				align_up!(tls_size, tls_offset) - tdata_size,
 			);
 
 			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
