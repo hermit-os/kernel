@@ -76,6 +76,7 @@ pub struct BootInfo {
 	hcip: [u8; 4],
 	hcgateway: [u8; 4],
 	hcmask: [u8; 4],
+	tls_align: u64,
 }
 
 impl BootInfo {
@@ -106,6 +107,7 @@ impl BootInfo {
 		hcip: [0; 4],
 		hcgateway: [0; 4],
 		hcmask: [0; 4],
+		tls_align: 0,
 	};
 
 	pub const fn current_stack_address_offset() -> isize {
@@ -237,6 +239,10 @@ pub fn get_tls_filesz() -> usize {
 
 pub fn get_tls_memsz() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
+}
+
+pub fn get_tls_align() -> usize {
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_align) as usize }
 }
 
 pub fn get_mbinfo() -> VirtAddr {

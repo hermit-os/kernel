@@ -1,7 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
-use alloc::alloc::{alloc, dealloc, Layout};
-use core::{mem, ptr};
+use alloc::boxed::Box;
+use core::{mem, ptr, slice};
 
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
@@ -238,89 +238,70 @@ impl Clone for TaskStacks {
 }
 
 pub struct TaskTLS {
-	address: VirtAddr,
-	fs: VirtAddr,
-	layout: Layout,
+	_block: Box<[u8]>,
+	thread_ptr: Box<*mut ()>,
 }
 
 impl TaskTLS {
-	pub fn new(tls_size: usize) -> Self {
-		// determine the size of tdata (tls without tbss)
-		let tdata_size: usize = environment::get_tls_filesz();
-		// Yes, it does, so we have to allocate TLS memory.
-		// Allocate enough space for the given size and one more variable of type usize, which holds the tls_pointer.
-		let tls_allocation_size = align_up!(tls_size, 32) + mem::size_of::<usize>();
-		// We allocate in 128 byte granularity (= cache line size) to avoid false sharing
-		let memory_size = align_up!(tls_allocation_size, 128);
-		let layout =
-			Layout::from_size_align(memory_size, 128).expect("TLS has an invalid size / alignment");
-		let ptr = VirtAddr(unsafe { alloc(layout) as u64 });
+	fn from_environment() -> Self {
+		// For details on thread-local storage data structures see
+		//
+		// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
+		// https://akkadia.org/drepper/tls.pdf
 
-		// The tls_pointer is the address to the end of the TLS area requested by the task.
-		let tls_pointer = ptr + align_up!(tls_size, 32);
+		// Get TLS initialization image
+		let tls_init_image = {
+			let tls_init_data = environment::get_tls_start().as_ptr::<u8>();
+			let tls_init_len = environment::get_tls_filesz();
 
-		unsafe {
-			// Copy over TLS variables with their initial values.
-			ptr::copy_nonoverlapping(
-				environment::get_tls_start().as_ptr::<u8>(),
-				ptr.as_mut_ptr::<u8>(),
-				tdata_size,
-			);
+			// SAFETY: We will have to trust the environment here.
+			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
+		};
 
-			ptr::write_bytes(
-				ptr.as_mut_ptr::<u8>()
-					.offset(tdata_size.try_into().unwrap()),
-				0,
-				align_up!(tls_size, 32) - tdata_size,
-			);
+		// Allocate TLS block
+		let mut block = {
+			let tls_len = environment::get_tls_memsz();
+			let tls_align = environment::get_tls_align();
 
-			// The x86-64 TLS specification also requires that the tls_pointer can be accessed at fs:0.
-			// This allows TLS variable values to be accessed by "mov rax, fs:0" and a later "lea rdx, [rax+VARIABLE_OFFSET]".
-			// See "ELF Handling For Thread-Local Storage", version 0.20 by Ulrich Drepper, page 12 for details.
-			//
-			// fs:0 is where tls_pointer points to and we have reserved space for a usize value above.
-			*(tls_pointer.as_mut_ptr::<u64>()) = tls_pointer.as_u64();
-		}
+			// As described in “ELF Handling For Thread-Local Storage”
+			let tls_offset = align_up!(tls_len, tls_align);
 
-		debug!(
-			"Set up TLS at {:#x}, tdata_size {:#x}, tls_size {:#x}",
-			tls_pointer, tdata_size, tls_size
-		);
+			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
+			// So the thread pointer needs to be `block_ptr + tls_offset`.
+			// Allocating only tls_len bytes would be enough to hold the TLS block.
+			// For the thread pointer to be sound though, we need it's value to be included in or one byte past the same allocation.
+			let block = Box::<[u8]>::new_zeroed_slice(tls_offset);
+
+			// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
+			unsafe { block.assume_init() }
+		};
+
+		// Initialize beginning of the TLS block with TLS initialization image
+		block[..tls_init_image.len()].copy_from_slice(tls_init_image);
+
+		// The end of the TLS block was already zeroed by the allocator
+
+		// thread_ptr = block_ptr + tls_offset
+		// block.len() == tls_offset
+		let thread_ptr = block.as_mut_ptr_range().end.cast::<()>();
+
+		// Put thread pointer on heap, so it does not move and can be referenced in fs:0
+		let thread_ptr = Box::new(thread_ptr);
 
 		Self {
-			address: ptr,
-			fs: tls_pointer,
-			layout,
+			_block: block,
+			thread_ptr,
 		}
 	}
 
-	#[inline]
-	pub fn address(&self) -> VirtAddr {
-		self.address
-	}
-
-	#[inline]
-	pub fn get_fs(&self) -> VirtAddr {
-		self.fs
-	}
-}
-
-impl Drop for TaskTLS {
-	fn drop(&mut self) {
-		debug!(
-			"Deallocate TLS at {:#x} (layout {:?})",
-			self.address, self.layout,
-		);
-
-		unsafe {
-			dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
-		}
+	fn thread_ptr(&self) -> &*mut () {
+		&*self.thread_ptr
 	}
 }
 
 impl Clone for TaskTLS {
 	fn clone(&self) -> Self {
-		TaskTLS::new(environment::get_tls_memsz())
+		Self::from_environment()
 	}
 }
 
@@ -357,11 +338,9 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
-		// Check if the task (process or thread) uses Thread-Local-Storage.
-		let tls_size = environment::get_tls_memsz();
-		// check is TLS is already allocated
-		if self.tls.is_none() && tls_size > 0 {
-			self.tls = Some(TaskTLS::new(tls_size))
+		// Check if TLS is allocated already and if the task uses thread-local storage.
+		if self.tls.is_none() && environment::get_tls_memsz() > 0 {
+			self.tls = Some(TaskTLS::from_environment());
 		}
 
 		unsafe {
@@ -377,7 +356,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = tls.get_fs().as_u64();
+				(*state).fs = tls.thread_ptr() as *const _ as u64;
 			}
 			(*state).rip = task_start as usize as u64;
 			(*state).rdi = func as usize as u64;
