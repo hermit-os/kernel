@@ -31,9 +31,9 @@ pub struct Heap {
 	index: usize,
 	bottom: usize,
 	size: usize,
-	#[cfg(target_os = "hermit")]
+	#[cfg(any(target_os = "none", target_os = "hermit"))]
 	holes: HoleList,
-	#[cfg(not(target_os = "hermit"))]
+	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
 	pub holes: HoleList,
 }
 

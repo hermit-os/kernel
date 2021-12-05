@@ -31,7 +31,7 @@ impl Console {
 
 pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console(()));
 
-#[cfg(not(target_os = "hermit"))]
+#[cfg(not(any(target_os = "none", target_os = "hermit")))]
 #[test]
 fn test_console() {
 	println!("HelloWorld");
