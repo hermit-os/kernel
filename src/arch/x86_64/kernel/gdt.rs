@@ -108,7 +108,7 @@ pub fn add_current_core() {
 			let tss_descriptor: Descriptor64 =
 				<DescriptorBuilder as GateDescriptorBuilder<u64>>::tss_descriptor(
 					base,
-					base + mem::size_of::<TaskStateSegment>() as u64 - 1,
+					mem::size_of::<TaskStateSegment>() as u64 - 1,
 					true,
 				)
 				.present()
