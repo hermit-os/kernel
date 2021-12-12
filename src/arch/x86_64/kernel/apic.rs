@@ -1,4 +1,4 @@
-#![allow(clippy::unaligned_references)]
+#![allow(unaligned_references)]
 
 use crate::arch;
 #[cfg(feature = "acpi")]
