@@ -1,5 +1,3 @@
-#![allow(unaligned_references)]
-
 use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -357,7 +355,9 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		Err(())
 	}?;
 
-	info!("Found MP config at 0x{:x}", mp_float.mp_config);
+	info!("Found MP config at {:#x}", unsafe {
+		ptr::read_unaligned(&mp_float.mp_config)
+	});
 	info!(
 		"System uses Multiprocessing Specification 1.{}",
 		mp_float.version
