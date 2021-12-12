@@ -11,3 +11,6 @@ rustflags = [
 rustflags = [
   "-C", "link-arg=-Tsrc/arch/aarch64/link.ld"
 ]
+
+[build]
+target = "x86_64-unknown-hermit-loader.json"
