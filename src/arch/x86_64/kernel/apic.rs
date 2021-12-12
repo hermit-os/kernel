@@ -20,13 +20,16 @@ use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
-#[cfg(feature = "pci")]
+#[cfg(any(feature = "pci", feature = "smp"))]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::ptr;
 use core::{cmp, fmt, mem, u32};
 use crossbeam_utils::CachePadded;
+
+const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
+const MP_CONFIG_SIGNATURE: u32 = 0x504d4350;
 
 const APIC_ICR2: usize = 0x0310;
 
@@ -93,6 +96,57 @@ static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
 /// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
 /// after 1 microsecond.
 static mut CALIBRATED_COUNTER_VALUE: u64 = 0;
+
+/// MP Floating Pointer Structure
+#[repr(C, packed)]
+struct ApicMP {
+	signature: u32,
+	mp_config: u32,
+	length: u8,
+	version: u8,
+	checksum: u8,
+	features: [u8; 5],
+}
+
+/// MP Configuration Table
+#[repr(C, packed)]
+struct ApicConfigTable {
+	signature: u32,
+	length: u16,
+	revision: u8,
+	checksum: u8,
+	oem_id: [u8; 8],
+	product_id: [u8; 12],
+	oem_table: u32,
+	oem_table_size: u16,
+	entry_count: u16,
+	lapic: u32,
+	extended_table_length: u16,
+	extended_table_checksum: u8,
+	reserved: u8,
+}
+
+/// APIC Processor Entry
+#[repr(C, packed)]
+struct ApicProcessorEntry {
+	typ: u8,
+	id: u8,
+	version: u8,
+	cpu_flags: u8,
+	cpu_signature: u32,
+	cpu_feature: u32,
+	reserved: [u32; 2],
+}
+
+/// IO APIC Entry
+#[repr(C, packed)]
+struct ApicIoEntry {
+	typ: u8,
+	id: u8,
+	version: u8,
+	enabled: u8,
+	addr: u32,
+}
 
 #[cfg(feature = "acpi")]
 #[repr(C, packed)]
@@ -259,6 +313,146 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	Ok(PhysAddr(madt_header.local_apic_address.into()))
 }
 
+/// Helper function to search Floating Pointer Structure of the Multiprocessing Specification
+fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP, ()> {
+	let virtual_address = virtualmem::allocate(BasePageSize::SIZE).map_err(|_| ())?;
+
+	for current_address in (start.as_usize()..end.as_usize()).step_by(BasePageSize::SIZE) {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable();
+		paging::map::<BasePageSize>(
+			virtual_address,
+			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE)),
+			1,
+			flags,
+		);
+
+		for i in 0..BasePageSize::SIZE / 4 {
+			let mut tmp: *const u32 = virtual_address.as_ptr();
+			tmp = unsafe { tmp.offset(i.try_into().unwrap()) };
+			let apic_mp: &ApicMP = unsafe { &(*(tmp as *const ApicMP)) };
+			if apic_mp.signature == MP_FLT_SIGNATURE {
+				if !(apic_mp.version > 4 || apic_mp.features[0] != 0) {
+					return Ok(apic_mp);
+				}
+			}
+		}
+	}
+
+	// frees obsolete virtual memory region for MMIO devices
+	virtualmem::deallocate(virtual_address, BasePageSize::SIZE);
+
+	Err(())
+}
+
+/// Helper function to detect APIC by the Multiprocessor Specification
+fn detect_from_mp() -> Result<PhysAddr, ()> {
+	let mp_float = if let Ok(mpf) = search_mp_floating(PhysAddr(0xF0000u64), PhysAddr(0x100000u64))
+	{
+		Ok(mpf)
+	} else if let Ok(mpf) = search_mp_floating(PhysAddr(0x9F000u64), PhysAddr(0xA0000u64)) {
+		Ok(mpf)
+	} else {
+		Err(())
+	}?;
+
+	info!("Found MP config at 0x{:x}", mp_float.mp_config);
+	info!(
+		"System uses Multiprocessing Specification 1.{}",
+		mp_float.version
+	);
+	info!("MP features 1: {}", mp_float.features[0]);
+
+	if mp_float.features[1] & 0x80 > 0 {
+		info!("PIC mode implemented");
+	} else {
+		info!("Virtual-Wire mode implemented");
+	}
+
+	let virtual_address = virtualmem::allocate(BasePageSize::SIZE).map_err(|_| ())?;
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.normal().writable();
+	paging::map::<BasePageSize>(
+		virtual_address,
+		PhysAddr::from(align_down!(mp_float.mp_config as usize, BasePageSize::SIZE)),
+		1,
+		flags,
+	);
+
+	let mut addr: usize =
+		virtual_address.as_usize() | (mp_float.mp_config as usize & (BasePageSize::SIZE - 1));
+	let mp_config: &ApicConfigTable = unsafe { &*(addr as *const ApicConfigTable) };
+	if mp_config.signature != MP_CONFIG_SIGNATURE {
+		warn!("Invalid MP config table");
+		virtualmem::deallocate(virtual_address, BasePageSize::SIZE);
+		return Err(());
+	}
+
+	if mp_config.entry_count == 0 {
+		warn!("No MP table entries! Guess IO-APIC!");
+		let default_address = PhysAddr(0xFEC0_0000);
+
+		unsafe {
+			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+			debug!(
+				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
+				default_address, IOAPIC_ADDRESS
+			);
+
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
+		}
+	} else {
+		// entries starts directly after the config table
+		addr += mem::size_of::<ApicConfigTable>();
+		for i in 0..mp_config.entry_count {
+			match unsafe { *(addr as *const u8) } {
+				// cpu entry
+				0 => {
+					let cpu_entry: &ApicProcessorEntry =
+						unsafe { &*(addr as *const ApicProcessorEntry) };
+					if cpu_entry.cpu_flags & 0x01 == 0x01 {
+						add_local_apic_id(cpu_entry.id);
+					}
+					addr += mem::size_of::<ApicProcessorEntry>();
+				}
+				// IO_APIC
+				2 => {
+					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
+					let ioapic = io_entry.addr;
+					info!("Found IOAPIC at 0x{:x}", ioapic);
+
+					unsafe {
+						IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+						debug!(
+							"Mapping IOAPIC at {:#X} to virtual address {:#X}",
+							ioapic, IOAPIC_ADDRESS
+						);
+
+						let mut flags = PageTableEntryFlags::empty();
+						flags.device().writable().execute_disable();
+						paging::map::<BasePageSize>(
+							IOAPIC_ADDRESS,
+							PhysAddr(ioapic as u64),
+							1,
+							flags,
+						);
+					}
+
+					addr += mem::size_of::<ApicIoEntry>();
+				}
+				_ => {
+					addr += 8;
+				}
+			}
+		}
+	}
+
+	Ok(PhysAddr(mp_config.lapic as u64))
+}
+
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
@@ -322,6 +516,7 @@ pub fn init() {
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()
 		.or_else(|_| detect_from_acpi())
+		.or_else(|_| detect_from_mp())
 		.unwrap_or_else(|_| default_apic());
 
 	// Initialize x2APIC or xAPIC, depending on what's available.
