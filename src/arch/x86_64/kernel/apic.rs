@@ -355,9 +355,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		Err(())
 	}?;
 
-	info!("Found MP config at {:#x}", unsafe {
-		ptr::read_unaligned(&mp_float.mp_config)
-	});
+	info!("Found MP config at {:#x}", { mp_float.mp_config });
 	info!(
 		"System uses Multiprocessing Specification 1.{}",
 		mp_float.version
