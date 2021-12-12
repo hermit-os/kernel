@@ -237,6 +237,7 @@ impl Clone for TaskStacks {
 	}
 }
 
+#[derive(Clone)]
 pub struct TaskTLS {
 	_block: Box<[u8]>,
 	thread_ptr: Box<*mut ()>,
@@ -296,12 +297,6 @@ impl TaskTLS {
 
 	fn thread_ptr(&self) -> &*mut () {
 		&*self.thread_ptr
-	}
-}
-
-impl Clone for TaskTLS {
-	fn clone(&self) -> Self {
-		Self::from_environment()
 	}
 }
 
