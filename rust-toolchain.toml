@@ -1,8 +1,9 @@
 [toolchain]
+# Manually sync this with Dockerfile!
 channel = "nightly-2021-12-04"
 components = [
-    "rust-src",
+    "clippy",
     "llvm-tools-preview",
     "rustfmt",
-    "clippy",
+    "rust-src",
 ]
