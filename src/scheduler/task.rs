@@ -437,7 +437,7 @@ impl Task {
 			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
-			stacks: task.stacks.clone(),
+			stacks: TaskStacks::new(task.stacks.get_user_stack_size()),
 			next: None,
 			prev: None,
 			tls: None,
