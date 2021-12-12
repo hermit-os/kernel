@@ -331,10 +331,10 @@ fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP,
 			let mut tmp: *const u32 = virtual_address.as_ptr();
 			tmp = unsafe { tmp.offset(i.try_into().unwrap()) };
 			let apic_mp: &ApicMP = unsafe { &(*(tmp as *const ApicMP)) };
-			if apic_mp.signature == MP_FLT_SIGNATURE {
-				if !(apic_mp.version > 4 || apic_mp.features[0] != 0) {
-					return Ok(apic_mp);
-				}
+			if apic_mp.signature == MP_FLT_SIGNATURE
+				&& !(apic_mp.version > 4 || apic_mp.features[0] != 0)
+			{
+				return Ok(apic_mp);
 			}
 		}
 	}
@@ -356,7 +356,9 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		Err(())
 	}?;
 
-	info!("Found MP config at 0x{:x}", mp_float.mp_config);
+	info!("Found MP config at 0x{:x}", unsafe {
+		ptr::read_unaligned(&mp_float.mp_config)
+	});
 	info!(
 		"System uses Multiprocessing Specification 1.{}",
 		mp_float.version
@@ -407,7 +409,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	} else {
 		// entries starts directly after the config table
 		addr += mem::size_of::<ApicConfigTable>();
-		for i in 0..mp_config.entry_count {
+		for _i in 0..mp_config.entry_count {
 			match unsafe { *(addr as *const u8) } {
 				// cpu entry
 				0 => {
