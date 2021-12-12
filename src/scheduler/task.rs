@@ -426,8 +426,11 @@ impl Task {
 		}
 	}
 
-	pub fn clone(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
-		debug!("Cloning task {} from task {}", tid, task.id);
+	pub fn new_like(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
+		debug!(
+			"Creating task {} on core {} like task {}",
+			tid, core_id, task.id
+		);
 
 		Task {
 			id: tid,

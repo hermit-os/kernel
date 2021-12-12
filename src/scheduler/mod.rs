@@ -179,7 +179,7 @@ impl PerCoreScheduler {
 
 		// Clone the current task.
 		let tid = get_tid();
-		let clone_task = Rc::new(RefCell::new(Task::clone(
+		let clone_task = Rc::new(RefCell::new(Task::new_like(
 			tid,
 			core_id,
 			&current_task_borrowed,
@@ -208,11 +208,6 @@ impl PerCoreScheduler {
 				panic!("Invalid core_id {}!", core_id);
 			}
 		};
-
-		debug!(
-			"Creating task {} on core {} by cloning task {}",
-			tid, core_id, current_task_borrowed.id
-		);
 
 		// Wake up the CPU
 		if wakeup {
