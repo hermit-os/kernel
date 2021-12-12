@@ -410,7 +410,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		addr += mem::size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
 			match unsafe { *(addr as *const u8) } {
-				// cpu entry
+				// CPU entry
 				0 => {
 					let cpu_entry: &ApicProcessorEntry =
 						unsafe { &*(addr as *const ApicProcessorEntry) };
@@ -419,7 +419,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 					}
 					addr += mem::size_of::<ApicProcessorEntry>();
 				}
-				// IO_APIC
+				// IO-APIC entry
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
 					let ioapic = io_entry.addr;
