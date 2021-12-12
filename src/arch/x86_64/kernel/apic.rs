@@ -1,3 +1,5 @@
+#![allow(clippy::unaligned_references)]
+
 use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -347,18 +349,15 @@ fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP,
 
 /// Helper function to detect APIC by the Multiprocessor Specification
 fn detect_from_mp() -> Result<PhysAddr, ()> {
-	let mp_float = if let Ok(mpf) = search_mp_floating(PhysAddr(0xF0000u64), PhysAddr(0x100000u64))
-	{
+	let mp_float = if let Ok(mpf) = search_mp_floating(PhysAddr(0x9F000u64), PhysAddr(0xA0000u64)) {
 		Ok(mpf)
-	} else if let Ok(mpf) = search_mp_floating(PhysAddr(0x9F000u64), PhysAddr(0xA0000u64)) {
+	} else if let Ok(mpf) = search_mp_floating(PhysAddr(0xF0000u64), PhysAddr(0x100000u64)) {
 		Ok(mpf)
 	} else {
 		Err(())
 	}?;
 
-	info!("Found MP config at 0x{:x}", unsafe {
-		ptr::read_unaligned(&mp_float.mp_config)
-	});
+	info!("Found MP config at 0x{:x}", unsafe { mp_float.mp_config });
 	info!(
 		"System uses Multiprocessing Specification 1.{}",
 		mp_float.version
