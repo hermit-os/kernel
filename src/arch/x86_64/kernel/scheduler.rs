@@ -299,12 +299,6 @@ impl TaskTLS {
 	}
 }
 
-impl Clone for TaskTLS {
-	fn clone(&self) -> Self {
-		Self::from_environment()
-	}
-}
-
 #[cfg(not(any(target_os = "none", target_os = "hermit")))]
 extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
 	unimplemented!()

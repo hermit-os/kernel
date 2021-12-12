@@ -227,12 +227,6 @@ impl Drop for TaskTLS {
 	}
 }
 
-impl Clone for TaskTLS {
-	fn clone(&self) -> Self {
-		TaskTLS::from_environment()
-	}
-}
-
 extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0)
 }

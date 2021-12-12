@@ -440,7 +440,7 @@ impl Task {
 			stacks: task.stacks.clone(),
 			next: None,
 			prev: None,
-			tls: task.tls.clone(),
+			tls: None,
 			last_wakeup_reason: task.last_wakeup_reason,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
