@@ -226,28 +226,23 @@ impl Drop for TaskStacks {
 	}
 }
 
-impl Clone for TaskStacks {
-	fn clone(&self) -> TaskStacks {
-		match self {
-			TaskStacks::Boot(_) => TaskStacks::new(0),
-			TaskStacks::Common(stacks) => {
-				TaskStacks::new(stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE)
-			}
-		}
-	}
-}
-
 pub struct TaskTLS {
 	_block: Box<[u8]>,
 	thread_ptr: Box<*mut ()>,
 }
 
 impl TaskTLS {
-	fn from_environment() -> Self {
+	fn from_environment() -> Option<Self> {
 		// For details on thread-local storage data structures see
 		//
 		// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
 		// https://akkadia.org/drepper/tls.pdf
+
+		let tls_len = environment::get_tls_memsz();
+
+		if environment::get_tls_memsz() == 0 {
+			return None;
+		}
 
 		// Get TLS initialization image
 		let tls_init_image = {
@@ -260,7 +255,6 @@ impl TaskTLS {
 
 		// Allocate TLS block
 		let mut block = {
-			let tls_len = environment::get_tls_memsz();
 			let tls_align = environment::get_tls_align();
 
 			// As described in “ELF Handling For Thread-Local Storage”
@@ -288,20 +282,15 @@ impl TaskTLS {
 		// Put thread pointer on heap, so it does not move and can be referenced in fs:0
 		let thread_ptr = Box::new(thread_ptr);
 
-		Self {
+		let this = Self {
 			_block: block,
 			thread_ptr,
-		}
+		};
+		Some(this)
 	}
 
 	fn thread_ptr(&self) -> &*mut () {
 		&*self.thread_ptr
-	}
-}
-
-impl Clone for TaskTLS {
-	fn clone(&self) -> Self {
-		Self::from_environment()
 	}
 }
 
@@ -339,8 +328,8 @@ extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
 impl TaskFrame for Task {
 	fn create_stack_frame(&mut self, func: extern "C" fn(usize), arg: usize) {
 		// Check if TLS is allocated already and if the task uses thread-local storage.
-		if self.tls.is_none() && environment::get_tls_memsz() > 0 {
-			self.tls = Some(TaskTLS::from_environment());
+		if self.tls.is_none() {
+			self.tls = TaskTLS::from_environment();
 		}
 
 		unsafe {

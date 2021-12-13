@@ -163,17 +163,6 @@ impl TaskStacks {
 	}
 }
 
-impl Clone for TaskStacks {
-	fn clone(&self) -> TaskStacks {
-		match self {
-			TaskStacks::Boot(_) => TaskStacks::new(0),
-			TaskStacks::Common(stacks) => {
-				TaskStacks::new(stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE)
-			}
-		}
-	}
-}
-
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
 		// we should never deallocate a boot stack
@@ -224,12 +213,6 @@ impl Drop for TaskTLS {
 		unsafe {
 				dealloc(self.address.as_mut_ptr::<u8>(), self.layout);
 		}*/
-	}
-}
-
-impl Clone for TaskTLS {
-	fn clone(&self) -> Self {
-		TaskTLS::from_environment()
 	}
 }
 

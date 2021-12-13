@@ -426,8 +426,11 @@ impl Task {
 		}
 	}
 
-	pub fn clone(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
-		debug!("Cloning task {} from task {}", tid, task.id);
+	pub fn new_like(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
+		debug!(
+			"Creating task {} on core {} like task {}",
+			tid, core_id, task.id
+		);
 
 		Task {
 			id: tid,
@@ -437,10 +440,10 @@ impl Task {
 			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
-			stacks: task.stacks.clone(),
+			stacks: TaskStacks::new(task.stacks.get_user_stack_size()),
 			next: None,
 			prev: None,
-			tls: task.tls.clone(),
+			tls: None,
 			last_wakeup_reason: task.last_wakeup_reason,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,

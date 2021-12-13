@@ -176,6 +176,7 @@ extern "C" fn __sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) 
 	0
 }
 
+/// Creates a new thread based on the configuration of the current thread.
 #[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_clone(id: *mut Tid, func: extern "C" fn(usize), arg: usize) -> i32 {
