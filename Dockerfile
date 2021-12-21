@@ -37,11 +37,7 @@ RUN set -eux; \
 FROM rust:bullseye as stable-deps
 RUN set -eux; \
     cargo install cargo-binutils; \
-    cargo install cargo-download;
-
-# Build dependencies with nightly toolchain channel
-FROM rustlang/rust:nightly as nightly-deps
-RUN set -eux; \
+    cargo install cargo-download; \
     cargo install --git https://github.com/hermitcore/uhyve.git --locked uhyve;
 
 # Build dependencies with libhermit-rs' toolchain channel
@@ -67,5 +63,5 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*;
 COPY --from=stable-deps $CARGO_HOME/bin/rust-objcopy $CARGO_HOME/bin/rust-objcopy
 COPY --from=stable-deps $CARGO_HOME/bin/cargo-download $CARGO_HOME/bin/cargo-download
-COPY --from=nightly-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
+COPY --from=stable-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
 COPY --from=hermit-deps rusty-loader/target/x86_64-unknown-hermit-loader/release/rusty-loader /usr/local/bin/rusty-loader
