@@ -13,17 +13,12 @@ on:
 jobs:
   build:
     name: Test aarch64
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest]
         rust: [nightly]
         include:
-          - os: macOS-latest
-            rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
-            targets: 'aarch64-apple-darwin'
           - os: ubuntu-latest
             rust: 'nightly'
             components: 'rust-src, llvm-tools-preview'
@@ -40,13 +35,9 @@ jobs:
           lfs: true
     - name: Check Cargo availability
       run: cargo --version
-    - name: Install qemu (apt)
+    - name: Install qemu
       run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-aarch64
       if: ${{ matrix.os == 'ubuntu-latest' }}
-    - name: Install qemu (macos)
-      run: |
-          brew install qemu
-      if: ${{ matrix.os == 'macOS-latest' }}
     - name: Build loader (unix)
       run: make arch=aarch64
     - name: Print list of machine types
