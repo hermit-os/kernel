@@ -1,4 +1,5 @@
 status = [
+  "Clippy",
   "Test aarch64 (nightly)",
   "Test x86_64 (ubuntu-latest, nightly)",
   "Test x86_64 (macOS-latest, nightly)",
