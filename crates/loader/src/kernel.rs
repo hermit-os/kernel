@@ -128,12 +128,12 @@ pub unsafe fn load_kernel(elf: &Elf<'_>, elf_start: u64, mem_size: u64) -> (Opti
 			);
 		} else if program_header.p_type == program_header::PT_TLS {
 			if elf.header.e_type == header::ET_DYN {
-				BOOT_INFO.tls_start = address + u64::from(program_header.p_vaddr);
+				BOOT_INFO.tls_start = address + program_header.p_vaddr;
 			} else {
-				BOOT_INFO.tls_start = program_header.p_vaddr.into();
+				BOOT_INFO.tls_start = program_header.p_vaddr;
 			}
-			BOOT_INFO.tls_filesz = program_header.p_filesz.into();
-			BOOT_INFO.tls_memsz = program_header.p_memsz.into();
+			BOOT_INFO.tls_filesz = program_header.p_filesz;
+			BOOT_INFO.tls_memsz = program_header.p_memsz;
 			BOOT_INFO.tls_align = program_header.p_align;
 
 			loaderlog!(
