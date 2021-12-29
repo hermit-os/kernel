@@ -1,6 +1,5 @@
 status = [
-  "Test aarch64 (ubuntu-latest, nightly)",
-  "Test aarch64 (macOS-latest, nightly)",
+  "Test aarch64 (nightly)",
   "Test x86_64 (ubuntu-latest, nightly)",
   "Test x86_64 (macOS-latest, nightly)",
   "Format check (ubuntu-latest, nightly)",
