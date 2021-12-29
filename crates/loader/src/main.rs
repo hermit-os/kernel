@@ -32,8 +32,9 @@ pub unsafe extern "C" fn loader_main() -> ! {
 		"Goblin failed to find entry point of the kernel in the Elf header"
 	);
 	let mem_size = kernel::check_kernel_elf_file(&elf);
-	let (kernel_location, entry_point) = kernel::load_kernel(&elf, app.as_ptr() as u64, mem_size);
+	let (elf_location, kernel_location, entry_point) =
+		kernel::load_kernel(&elf, app.as_ptr() as u64, mem_size);
 
 	// boot kernel
-	arch::boot_kernel(kernel_location, mem_size, entry_point)
+	arch::boot_kernel(elf_location, kernel_location, mem_size, entry_point)
 }
