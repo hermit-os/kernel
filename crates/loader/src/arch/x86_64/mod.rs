@@ -6,7 +6,7 @@ pub mod serial;
 pub use self::bootinfo::*;
 use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::serial::SerialPort;
-use core::ptr::copy;
+use core::ptr::{copy, write_bytes};
 use core::{mem, slice};
 use goblin::elf;
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
@@ -141,31 +141,56 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	slice::from_raw_parts(elf_start as *const u8, elf_len)
 }
 
-pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64) -> ! {
-	let new_addr = align_up!(&kernel_end as *const u8 as usize, LargePageSize::SIZE) as u64;
+pub unsafe fn boot_kernel(
+	elf_address: Option<u64>,
+	virtual_address: u64,
+	mem_size: u64,
+	entry_point: u64,
+) -> ! {
+	let new_addr = match elf_address {
+		Some(addr) => {
+			if virtual_address != addr {
+				loaderlog!("Copy kernel from {:#x} to {:#x}", virtual_address, addr);
 
-	// copy app to the new start address
-	copy(
-		virtual_address as *const u8,
-		new_addr as *mut u8,
-		mem_size.try_into().unwrap(),
-	);
+				// copy app to the new start address
+				copy(
+					virtual_address as *const u8,
+					addr as *mut u8,
+					mem_size.try_into().unwrap(),
+				);
+			}
+
+			addr
+		}
+		None => virtual_address,
+	};
+
+	// determine boot stack address
+	let new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
 
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = new_addr;
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.mb_info = mb_info as u64;
-	BOOT_INFO.current_stack_address = (new_addr - KERNEL_STACK_SIZE) as u64;
+	BOOT_INFO.current_stack_address = new_stack.try_into().unwrap();
 
 	// map stack in the address space
 	paging::map::<BasePageSize>(
-		(new_addr - KERNEL_STACK_SIZE).try_into().unwrap(),
-		(new_addr - KERNEL_STACK_SIZE).try_into().unwrap(),
+		new_stack,
+		new_stack,
 		KERNEL_STACK_SIZE as usize / BasePageSize::SIZE,
 		PageTableEntryFlags::WRITABLE,
 	);
 
+	// clear stack
+	write_bytes(
+		new_stack as *mut u8,
+		0,
+		KERNEL_STACK_SIZE.try_into().unwrap(),
+	);
+
 	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
+	//loaderlog!("BootInfo {:?}", BOOT_INFO);
 	loaderlog!("Use stack address {:#x}", BOOT_INFO.current_stack_address);
 
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
@@ -182,7 +207,6 @@ pub unsafe fn boot_kernel(virtual_address: u64, mem_size: u64, entry_point: u64)
 	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
-	let entry_point = entry_point - virtual_address + new_addr;
 	loaderlog!(
 		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
