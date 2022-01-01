@@ -545,7 +545,7 @@ pub fn print_information() {
 	infofooter!();
 }
 
-/// A module containg PCI specifc errors
+/// A module containing PCI specific errors
 ///
 /// Errors include...
 pub mod error {

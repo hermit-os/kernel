@@ -20,7 +20,7 @@ Design:
 - trait methods like open return Result<....>, so we can catch errors on eg open() and NOT permanently assign an fd to it!
 
 - have a FUSE filesystem, which implements both PosixFileSystem and PosixFile
-- fuse can have various FuseInterface backends. These only have to provide fuse command send/receive capabilites.
+- fuse can have various FuseInterface backends. These only have to provide fuse command send/receive capabilities.
 - virtiofs implements FuseInterface and sends commands via virtio queues.
 
 - fd management is only relevant for "user" facing code. We don't care how fuse etc. manages nodes internally.
@@ -28,7 +28,7 @@ Design:
 
 Open Questions:
 - what is the maximum number of open files I want to support? if small, could have static allocation, no need for hashmap?
-- create Stdin/out virtual files, assign fd's 0-2. Instanciate them on program start. currently fd 0-2 are hardcoded exceptions.
+- create Stdin/out virtual files, assign fd's 0-2. Instantiate them on program start. currently fd 0-2 are hardcoded exceptions.
 - optimize callchain? how does LTO work here?:
 	- app calls rust.open (which is stdlib hermit/fs.rs) [https://github.com/rust-lang/rust/blob/master/src/libstd/sys/hermit/fs.rs#L267]
 	- abi::open() (hermit-sys crate)

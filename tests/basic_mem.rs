@@ -43,7 +43,7 @@ where
 		//Vec containing 0..min(vec_size, T::max_value()) as pattern for vec_size elements
 		let mut a: Vec<T> = Vec::with_capacity(vec_size as usize);
 		let max = {
-			// the max value in a is the minimun of (vec_size -1) and T::max
+			// the max value in a is the minimum of (vec_size -1) and T::max
 			let tmax = T::max_value();
 			if T::from(vec_size).is_none() {
 				tmax.to_u64().unwrap() // If vec_size can't be represented in T, then tmax must fit in u64

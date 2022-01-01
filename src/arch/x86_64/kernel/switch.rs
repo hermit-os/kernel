@@ -125,7 +125,7 @@ pub unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usiz
 	);
 }
 
-/// Performa a context switch to an idle task or a task, which alread is owner
+/// Performa a context switch to an idle task or a task, which already is owner
 /// of the FPU.
 #[naked]
 pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack: usize) {

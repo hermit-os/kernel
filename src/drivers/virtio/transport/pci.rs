@@ -129,7 +129,7 @@ impl From<u8> for CfgType {
 }
 
 /// Public structure to allow drivers to read the configuration space
-/// savely
+/// safely
 #[derive(Clone)]
 pub struct Origin {
 	cfg_ptr: u32, // Register to be read to reach configuration structure of type cfg_type
@@ -169,12 +169,12 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 	Some(dev_cfg)
 }
 
-/// Virtio's PCI capabilites structure.
+/// Virtio's PCI capabilities structure.
 /// See Virtio specification v.1.1 - 4.1.4
 ///
 /// Indicating: Where the capability field is mapped in memory and
 /// Which id (sometimes also indicates priority for multiple
-/// capabilites of same type) it holds.
+/// capabilities of same type) it holds.
 ///
 /// This structure does NOT represent the structure in the standard,
 /// as it is not directly mapped into address space from PCI device
@@ -216,7 +216,7 @@ impl PciCap {
 	}
 }
 
-/// Virtio's PCI capabilites structure.
+/// Virtio's PCI capabilities structure.
 /// See Virtio specification v.1.1 - 4.1.4
 ///
 /// WARN: endianness of this structure should be seen as little endian.
@@ -260,7 +260,7 @@ impl PartialEq for PciCapRaw {
 ///
 /// As Virtio's PCI devices are allowed to present multiple capability
 /// structures of the same [CfgType](enums.cfgtype.html), the structure
-/// provides a driver with all capabilites, sorted in descending priority,
+/// provides a driver with all capabilities, sorted in descending priority,
 /// allowing the driver to choose.
 /// The structure contains a special dev_cfg_list field, a vector holding
 /// [PciCap](structs.pcicap.html) objects, to allow the driver to map its
@@ -360,7 +360,7 @@ impl UniCapsColl {
 		self.com_cfg_list.pop()
 	}
 
-	/// Returns the highest prioritized ISR status configuraiton structure.
+	/// Returns the highest prioritized ISR status configuration structure.
 	///
 	/// INFO: This function removes the Capability and returns ownership.
 	pub fn get_isr_cfg(&mut self) -> Option<IsrStatus> {
@@ -644,7 +644,7 @@ impl NotifCfg {
 			cap.origin.cfg_ptr + u32::from(cap.origin.cap_struct.cap_len),
 		);
 
-		// define base memory address from which the actuall Queue Notify address can be derived via
+		// define base memory address from which the actual Queue Notify address can be derived via
 		// base_addr + queue_notify_off * notify_off_multiplier.
 		//
 		// Where queue_notify_off is taken from the respective common configuration struct.
@@ -674,7 +674,7 @@ impl NotifCfg {
 }
 
 /// Control structure, allowing to notify a device via PCI bus.
-/// Typcially hold by a virtqueue.
+/// Typically hold by a virtqueue.
 pub struct NotifCtrl {
 	/// Indicates if VIRTIO_F_NOTIFICATION_DATA has been negotiated
 	f_notif_data: bool,
@@ -683,7 +683,7 @@ pub struct NotifCtrl {
 }
 
 impl NotifCtrl {
-	/// Retunrs a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
+	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.
 	pub fn new(notif_addr: *mut usize) -> Self {
 		NotifCtrl {
@@ -761,7 +761,7 @@ impl IsrStatus {
 /// ISR status structure of Virtio PCI devices.
 /// See Virtio specification v1.1. - 4.1.4.5
 ///
-/// Contains a single byte, containing the interrupt numnbers used
+/// Contains a single byte, containing the interrupt numbers used
 /// for handling interrupts.
 /// The 8-bit field is read as an bitmap and allows to distinguish between
 /// interrupts triggered by changes in the configuration and interrupts
@@ -855,7 +855,7 @@ impl PciCfgAlt {
 /// The shared memory region is defined via a PciCap64 structure.
 /// See Virtio specification v.1.1 - 4.1.4 for structure.
 ///
-// Only used for capabilites that require offsets or lengths
+// Only used for capabilities that require offsets or lengths
 // larger than 4GB.
 // #[repr(C)]
 // struct PciCap64 {
@@ -972,7 +972,7 @@ impl Drop for ShMem {
 /// PciBar stores the virtual memory address and associated length of memory space
 /// a PCI device's physical memory indicated by the device's BAR has been mapped to.
 //
-// Currently all fields are public as the struct is instanciated in the drivers::virtio::env module
+// Currently all fields are public as the struct is instantiated in the drivers::virtio::env module
 #[derive(Copy, Clone, Debug)]
 pub struct PciBar {
 	index: u8,
@@ -996,10 +996,10 @@ fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
 
 	debug!("Converting read word from PCI device config space into native endian bytes.");
 
-	// Write words sequentialy into array
+	// Write words sequentially into array
 	for i in 0..4 {
 		// Read word need to be converted to little endian bytes as PCI is little endian.
-		// Intepretation of multi byte values needs to be swapped for big endian machines
+		// Interpretation of multi byte values needs to be swapped for big endian machines
 		let word: [u8; 4] = env::pci::read_config(adapter, register + 4 * i).to_le_bytes();
 		let i = 4 * i as usize;
 		quadruple_word[i..i + 4].copy_from_slice(&word);
@@ -1020,10 +1020,10 @@ fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
 	}
 }
 
-/// Reads all PCI capabilities, starting at the capabilites list pointer from the
+/// Reads all PCI capabilities, starting at the capabilities list pointer from the
 /// PCI device.
 ///
-/// Returns ONLY Virtio specific capabilites, which allow to locate the actual capability
+/// Returns ONLY Virtio specific capabilities, which allow to locate the actual capability
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
 fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, PciError> {
 	let ptr: u32 = dev_caps_ptr(adapter);
@@ -1036,11 +1036,11 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 	};
 
 	let mut cap_list: Vec<PciCap> = Vec::new();
-	// Loop through capabilties list via next pointer
+	// Loop through capabilities list via next pointer
 	'cap_list: while next_ptr != 0u32 {
 		// read into raw capabilities structure
 		//
-		// Devices configuration space muste be read twice
+		// Devices configuration space must be read twice
 		// and only returns correct values if both reads
 		// return equal values.
 		// For clarity see Virtio specification v1.1. - 2.4.1
@@ -1123,7 +1123,7 @@ fn dev_status(adapter: &PciAdapter) -> u32 {
 	stat_com_reg >> 16
 }
 
-/// Wrapper function to get a devices capabilites list pointer, which represents
+/// Wrapper function to get a devices capabilities list pointer, which represents
 /// an offset starting from the header of the device's configuration space.
 fn dev_caps_ptr(adapter: &PciAdapter) -> u32 {
 	let cap_lst_reg = env::pci::read_config(
@@ -1139,7 +1139,7 @@ fn map_bars(adapter: &PciAdapter) -> Result<Vec<PciBar>, PciError> {
 }
 
 /// Checks if the status of the device inidactes the device is using the
-/// capabilites pointer and therefore defines a capabiites list.
+/// capabilities pointer and therefore defines a capabiites list.
 fn no_cap_list(adapter: &PciAdapter) -> bool {
 	dev_status(adapter) & u32::from(constants::Masks::PCI_MASK_STATUS_CAPABILITIES_LIST) == 0
 }
@@ -1149,7 +1149,7 @@ fn no_cap_list(adapter: &PciAdapter) -> bool {
 /// INFO: Currently only checks if at least one common config struct has been found and mapped.
 fn check_caps(caps: UniCapsColl) -> Result<UniCapsColl, PciError> {
 	if caps.com_cfg_list.is_empty() {
-		error!("Device with unknwon id, does not have a common config structure!");
+		error!("Device with unknown id, does not have a common config structure!");
 		return Err(PciError::General(0));
 	}
 

@@ -1,6 +1,6 @@
 //! A module containing virtios transport mechanisms.
 //!
-//! The module contains only PCI specifc transport mechanism.
+//! The module contains only PCI specific transport mechanism.
 //! Other mechanisms (MMIO and Channel I/O) are currently not
 //! supported.
 

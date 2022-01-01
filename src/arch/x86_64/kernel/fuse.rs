@@ -6,7 +6,7 @@ use core::{fmt, u32, u8};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
-// possible reponses for command: qemu/tools/virtiofsd/fuse_lowlevel.h
+// possible responses for command: qemu/tools/virtiofsd/fuse_lowlevel.h
 
 const FUSE_ROOT_ID: u64 = 1;
 const MAX_READ_LEN: usize = 1024 * 64;

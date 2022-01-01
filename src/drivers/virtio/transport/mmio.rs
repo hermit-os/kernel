@@ -268,7 +268,7 @@ impl NotifCfg {
 }
 
 /// Control structure, allowing to notify a device via PCI bus.
-/// Typcially hold by a virtqueue.
+/// Typically hold by a virtqueue.
 pub struct NotifCtrl {
 	/// Indicates if VIRTIO_F_NOTIFICATION_DATA has been negotiated
 	f_notif_data: bool,
@@ -277,7 +277,7 @@ pub struct NotifCtrl {
 }
 
 impl NotifCtrl {
-	/// Retunrs a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
+	/// Returns a new controller. By default MSI-X capabilities and VIRTIO_F_NOTIFICATION_DATA
 	/// are disabled.
 	pub fn new(notif_addr: *mut usize) -> Self {
 		NotifCtrl {

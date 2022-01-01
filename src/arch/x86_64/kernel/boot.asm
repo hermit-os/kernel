@@ -58,7 +58,7 @@ _pmstart:
 ALIGN 4
 gdtr:                           ; descritor table
         dw gdt_end-gdt-1        ; limit
-        dd gdt                  ; base adresse
+        dd gdt                  ; base address
 gdt:
         dd 0,0                  ; null descriptor
 codesel equ $-gdt

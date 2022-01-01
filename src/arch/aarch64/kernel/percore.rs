@@ -38,7 +38,7 @@ impl<T> PerCoreVariable<T> {
 
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
 // Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
-// The functions are implemented as default functions, which can be overriden in specialized implementations of the trait.
+// The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
 impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T>
 where
 	T: Clone,
