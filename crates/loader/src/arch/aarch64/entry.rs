@@ -149,7 +149,7 @@ unsafe fn pre_init() -> ! {
 			- Link origin of this documentation and check to which instruction set versions
 			  it applies (if applicable)
 			- Fill in the missing Documentation for some of the bits and verify if we care about them
-			  or if loading ond not setting them would be the appropriate action.
+			  or if loading and not setting them would be the appropriate action.
 	*/
 	let sctrl_el1: u64 = 0;
 	// | (1 << 26) 	/* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
