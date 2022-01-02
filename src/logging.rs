@@ -1,4 +1,4 @@
-use log::{set_logger, set_max_level, LevelFilter, Metadata, Record};
+use log::{set_logger_racy, set_max_level, LevelFilter, Metadata, Record};
 
 /// Data structure to filter kernel messages
 struct KernelLogger;
@@ -24,8 +24,8 @@ impl log::Log for KernelLogger {
 	}
 }
 
-pub fn init() {
-	set_logger(&KernelLogger).expect("Can't initialize logger");
+pub unsafe fn init() {
+	set_logger_racy(&KernelLogger).expect("Can't initialize logger");
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
 	let max_level: LevelFilter = match log_level {
@@ -56,7 +56,7 @@ macro_rules! infoheader {
 
 #[macro_export]
 macro_rules! infoentry {
-	($str:expr, $rhs:expr) => ($crate::infoentry!($str, "{}", $rhs));
+	($str:expr, $rhs:expr) => (crate::infoentry!($str, "{}", $rhs));
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 

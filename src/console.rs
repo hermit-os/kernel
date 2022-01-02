@@ -8,6 +8,7 @@ pub struct Console(());
 /// a message to HermitCore's console.
 impl fmt::Write for Console {
 	/// Print a string of characters.
+	#[inline]
 	fn write_str(&mut self, s: &str) -> fmt::Result {
 		if !s.is_empty() {
 			let buf = s.as_bytes();
@@ -16,14 +17,10 @@ impl fmt::Write for Console {
 
 		Ok(())
 	}
-
-	/// Print a single character.
-	fn write_char(&mut self, c: char) -> fmt::Result {
-		self.write_str(c.encode_utf8(&mut [0; 4]))
-	}
 }
 
 impl Console {
+	#[inline]
 	pub fn write_all(&mut self, buf: &[u8]) {
 		arch::output_message_buf(buf)
 	}
