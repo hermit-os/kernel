@@ -50,7 +50,7 @@ impl<'a> fmt::Debug for VirtioFsDriver<'a> {
 		write!(f, "VirtioFsDriver {{ ")?;
 		write!(f, "common_cfg: {:?}, ", self.common_cfg)?;
 		write!(f, "device_cfg: {:?}, ", self.device_cfg)?;
-		write!(f, "nofity_cfg: {:?}, ", self.notify_cfg)?;
+		write!(f, "notify_cfg: {:?}, ", self.notify_cfg)?;
 		match &self.vqueues {
 			None => write!(f, "Uninitialized VQs")?,
 			Some(vqs) => write!(f, "Initialized {} VQs", vqs.len())?,

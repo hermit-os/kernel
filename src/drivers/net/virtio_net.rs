@@ -755,7 +755,7 @@ impl VirtioNetDriver {
 		self.recv_vqs.enable_notifs();
 	}
 
-	/// Initiallizes the device in adherence to specificaton. Returns Some(VirtioNetError)
+	/// Initiallizes the device in adherence to specification. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
@@ -798,7 +798,7 @@ impl VirtioNetDriver {
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
 
-		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilites.
+		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
 		// Aborts in case incompatible features are selected by the dricer or the device does not support min_feat_set.
 		match self.negotiate_features(&feats) {
 			Ok(_) => info!(
@@ -832,7 +832,7 @@ impl VirtioNetDriver {
                                 Err(vnet_err) => {
                                     match vnet_err {
                                         VirtioNetError::FeatReqNotMet(feat_set) => {
-                                            error!("Network device offers a feature set {:x} when used completly does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
+                                            error!("Network device offers a feature set {:x} when used completely does not satisfy rules in section 5.1.3.1 of specification v1.1. Aborting!", u64::from(feat_set));
                                             return Err(vnet_err);
                                         },
                                         _ => {
@@ -913,7 +913,7 @@ impl VirtioNetDriver {
 		}
 	}
 
-	/// Device Specfic initialization according to Virtio specifictation v1.1. - 5.1.5
+	/// Device Specific initialization according to Virtio specifictation v1.1. - 5.1.5
 	fn dev_spec_init(&mut self) -> Result<(), VirtioNetError> {
 		match self.virtqueue_init() {
 			Ok(_) => info!("Network driver successfully initialized virtqueues."),
@@ -968,7 +968,7 @@ impl VirtioNetDriver {
 		//
 		// max_virtqueue_pairs + 1 < num_queues
 		//
-		// - the plus 1 is due to the possibility of an exisiting control queue
+		// - the plus 1 is due to the possibility of an existing control queue
 		// - the num_queues is found in the ComCfg struct of the device and defines the maximal number
 		// of supported queues.
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MQ) {

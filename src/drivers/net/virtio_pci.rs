@@ -84,7 +84,7 @@ impl VirtioNetDriver {
 		})
 	}
 
-	/// Instanciates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
+	/// Instantiates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		mut caps_coll: UniCapsColl,
@@ -169,7 +169,7 @@ impl VirtioNetDriver {
 				}
 			},
 			Err(pci_error) => {
-				error!("Mapping capabilites failed. Aborting!");
+				error!("Mapping capabilities failed. Aborting!");
 				return Err(VirtioError::FromPci(pci_error));
 			}
 		};

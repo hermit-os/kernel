@@ -151,14 +151,14 @@ impl TaskStacks {
 		}
 	}
 
-	pub fn get_interupt_stack(&self) -> VirtAddr {
+	pub fn get_interrupt_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.ist0,
 			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
 		}
 	}
 
-	pub fn get_interupt_stack_size(&self) -> usize {
+	pub fn get_interrupt_stack_size(&self) -> usize {
 		KERNEL_STACK_SIZE
 	}
 }

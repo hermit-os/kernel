@@ -4,7 +4,7 @@ use crate::KERNEL_STACK_SIZE;
 
 static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
-/// Entrypoint - Initalize Stack pointer and Exception Table
+/// Entrypoint - Initialize Stack pointer and Exception Table
 #[inline(never)]
 #[no_mangle]
 #[naked]

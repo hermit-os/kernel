@@ -76,7 +76,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		}
 
 		if version != 2 {
-			trace!("Found a leagacy device, which isn't supported");
+			trace!("Found a legacy device, which isn't supported");
 			continue;
 		}
 

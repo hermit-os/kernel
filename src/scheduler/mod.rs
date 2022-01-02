@@ -322,8 +322,8 @@ impl PerCoreScheduler {
 			- TaskStacks::MARKER_SIZE)
 			.as_u64();
 		set_kernel_stack(tss.rsp[0]);
-		tss.ist[0] = (current_task_borrowed.stacks.get_interupt_stack()
-			+ current_task_borrowed.stacks.get_interupt_stack_size()
+		tss.ist[0] = (current_task_borrowed.stacks.get_interrupt_stack()
+			+ current_task_borrowed.stacks.get_interrupt_stack_size()
 			- TaskStacks::MARKER_SIZE)
 			.as_u64();
 	}

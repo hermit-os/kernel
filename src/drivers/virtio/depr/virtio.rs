@@ -54,7 +54,7 @@ pub mod consts {
 pub struct Virtq<'a> {
 	index: u16,  // Index of vq in common config
 	vqsize: u16, // Elements in ring/descrs
-	// The actial descriptors (16 bytes each)
+	// The actual descriptors (16 bytes each)
 	virtq_desc: VirtqDescriptors,
 	// A ring of available descriptor heads with free-running index
 	avail: Rc<RefCell<VirtqAvail<'a>>>,

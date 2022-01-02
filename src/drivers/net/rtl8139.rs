@@ -52,7 +52,7 @@ const CONFIG0: u16 = 0x51;
 const CONFIG1: u16 = 0x52;
 /// media status register (1byte)
 const MSR: u16 = 0x58;
-/// recieve buffer start address (C mode, 4 byte alignment)
+/// receive buffer start address (C mode, 4 byte alignment)
 const RBSTART: u16 = 0x30;
 /// basic mode control register (2byte)
 const BMCR: u16 = 0x62;
@@ -61,7 +61,7 @@ const BMSR: u16 = 0x64;
 
 /// Reset, set to 1 to invoke S/W reset, held to 1 while resetting
 const CR_RST: u8 = 0x10;
-/// Reciever Enable, enables receiving
+/// Receiver Enable, enables receiving
 const CR_RE: u8 = 0x08;
 /// Transmitter Enable, enables transmitting
 const CR_TE: u8 = 0x04;
@@ -89,19 +89,19 @@ const CONFIG1_LWACT: u8 = 0x10;
 const CONFIG1_MEMMAP: u8 = 0x8;
 /// IO map enabled ?
 const CONFIG1_IOMAP: u8 = 0x4;
-/// enable the virtal product data
+/// enable the virtual product data
 const CONFIG1_VPD: u8 = 0x2;
-/// Power Managment Enable
+/// Power Management Enable
 const CONFIG1_PMEN: u8 = 0x1;
 
 // Media Status Register
 const MSR_TXFCE: u8 = 0x80; // Tx Flow Control enabled
 const MSR_RXFCE: u8 = 0x40; // Rx Flow Control enabled
-const MSR_AS: u8 = 0x10; // Auxilary status
+const MSR_AS: u8 = 0x10; // Auxiliary status
 const MSR_SPEED: u8 = 0x8; // set if currently talking on 10mbps network, clear if 100mbps
 const MSR_LINKB: u8 = 0x4; // Link Bad ?
 const MSR_TXPF: u8 = 0x2; // Transmit Pause flag
-const MSR_RXPF: u8 = 0x1; // Recieve Pause flag
+const MSR_RXPF: u8 = 0x1; // Receive Pause flag
 
 const RCR_ERTH3: u32 = 0x0800_0000; // early Rx Threshold 0
 const RCR_ERTH2: u32 = 0x0400_0000; // early Rx Threshold 1
@@ -194,7 +194,7 @@ pub enum RTL8139Error {
 
 /// RealTek RTL8139 network driver struct.
 ///
-/// Struct allows to control device queus as also
+/// Struct allows to control device queues as also
 /// the device itself.
 pub struct RTL8139Driver {
 	iobase: u16,

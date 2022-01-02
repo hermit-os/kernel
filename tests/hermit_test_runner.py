@@ -195,7 +195,7 @@ def clean_test_name(name: str):
     if len(parts) > 1:
         try:
             _hex = int(parts[-1], base=16)  # Test if last element is hex hash
-            clean_name = "-".join(parts[:-1])  # Rejoin with '-' as seperator in case test has it in filename
+            clean_name = "-".join(parts[:-1])  # Rejoin with '-' as separator in case test has it in filename
         except ValueError as e:
             print(e)
             clean_name = name  # In this case name doesn't contain a hash, so don't modify it any further

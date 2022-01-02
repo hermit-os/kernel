@@ -79,7 +79,7 @@ impl WrapCount {
 
 /// Structure which allows to control raw ring and operate easily on it
 ///
-/// WARN: NEVER PUSH TO THE RING AFTER DESCRIPTORRING HAS BEEN INITALIZED AS THIS WILL PROBABLY RESULT IN A
+/// WARN: NEVER PUSH TO THE RING AFTER DESCRIPTORRING HAS BEEN INITIALIZED AS THIS WILL PROBABLY RESULT IN A
 /// RELOCATION OF THE VECTOR AND HENCE THE DEVICE WILL NO LONGER NO THE RINGS ADDRESS!
 struct DescriptorRing {
 	ring: &'static mut [Descriptor],
@@ -88,7 +88,7 @@ struct DescriptorRing {
 
 	// Controlling variables for the ring
 	//
-	/// where to insert availble descriptors next
+	/// where to insert available descriptors next
 	write_index: usize,
 	/// How much descriptors can be inserted
 	capacity: usize,
@@ -113,8 +113,8 @@ impl DescriptorRing {
 		let ring: &'static mut [Descriptor] = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
 
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
-		// refernece ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
-		// and do not care about the first element beeing unused.
+		// reference ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
+		// and do not care about the first element being unused.
 		let tkn_ref_ring = vec![ptr::null_mut(); size + 1].into_boxed_slice();
 
 		DescriptorRing {
@@ -180,7 +180,7 @@ impl DescriptorRing {
 			let mut ctrl = self.get_write_ctrler();
 
 			// write the descriptors in reversed order into the queue. Starting with recv descriptors.
-			// As the device MUST see all readable descriptors, bevore any writable descriptors
+			// As the device MUST see all readable descriptors, before any writable descriptors
 			// See Virtio specification v1.1. - 2.7.17
 			//
 			// Importance here is:
@@ -227,10 +227,10 @@ impl DescriptorRing {
 						}
 						(None, Some(_)) => {
 							unreachable!("Indirect buffers mixed with direct buffers!")
-						} // This should already be catched at creation of BufferToken
+						} // This should already be caught at creation of BufferToken
 						(Some(_), None) => {
 							unreachable!("Indirect buffers mixed with direct buffers!")
-						} // This should already be catched at creation of BufferToken,
+						} // This should already be caught at creation of BufferToken,
 					}
 				}
 				(Some(send_buff), None) => {
@@ -277,7 +277,7 @@ impl DescriptorRing {
 						}
 					}
 				}
-				(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+				(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 			}
 
 			if i == 0 {
@@ -322,7 +322,7 @@ impl DescriptorRing {
 		let mut ctrl = self.get_write_ctrler();
 
 		// write the descriptors in reversed order into the queue. Starting with recv descriptors.
-		// As the device MUST see all readable descriptors, bevore any writable descriptors
+		// As the device MUST see all readable descriptors, before any writable descriptors
 		// See Virtio specification v1.1. - 2.7.17
 		//
 		// Importance here is:
@@ -365,8 +365,8 @@ impl DescriptorRing {
 							buff_len -= 1;
 						}
 					}
-					(None, Some(_)) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken
-					(Some(_), None) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be catched at creation of BufferToken,
+					(None, Some(_)) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be caught at creation of BufferToken
+					(Some(_), None) => unreachable!("Indirect buffers mixed with direct buffers!"), // This should already be caught at creation of BufferToken,
 				}
 			}
 			(Some(send_buff), None) => {
@@ -412,7 +412,7 @@ impl DescriptorRing {
 					}
 				}
 			}
-			(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be catched at creation of BufferToken
+			(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 		}
 
 		fence(Ordering::SeqCst);
@@ -433,7 +433,7 @@ impl DescriptorRing {
 		self.ring.as_ptr() as usize
 	}
 
-	/// Returns an initialized write controler in order
+	/// Returns an initialized write controller in order
 	/// to write the queue correctly.
 	fn get_write_ctrler(&mut self) -> WriteCtrl<'_> {
 		WriteCtrl {
@@ -447,7 +447,7 @@ impl DescriptorRing {
 		}
 	}
 
-	/// Returns an initialized read controler in order
+	/// Returns an initialized read controller in order
 	/// to read the queue correctly.
 	fn get_read_ctrler(&mut self) -> ReadCtrl<'_> {
 		ReadCtrl {
@@ -478,7 +478,7 @@ impl<'a> ReadCtrl<'a> {
 			let tkn = unsafe {
 				let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
 				let raw_tkn = self.desc_ring.tkn_ref_ring[buff_id];
-				// unset the reference in the refernce ring for security!
+				// unset the reference in the reference ring for security!
 				self.desc_ring.tkn_ref_ring[buff_id] = ptr::null_mut();
 				assert!(!raw_tkn.is_null());
 				&mut *raw_tkn
@@ -546,7 +546,7 @@ impl<'a> ReadCtrl<'a> {
 		}
 	}
 
-	/// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with
+	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
 	/// the amount of data written by the device.
 	///
 	/// Indirect descriptor tables are read-only for devices. Hence all information comes from the
@@ -665,7 +665,7 @@ impl<'a> ReadCtrl<'a> {
 		self.desc_ring.ring[self.position].flags = self.desc_ring.dev_wc.as_flags_used();
 	}
 
-	/// Updates the accesible len of the mempry areas accesible by the drivers to be consistend with
+	/// Updates the accessible len of the memory areas accessible by the drivers to be consistent with
 	/// the amount of data written by the device.
 	/// Updates the descriptor flags inside the actual ring if necessary and
 	/// increments the poll_index by one.
@@ -1137,8 +1137,8 @@ impl PackedVq {
 		}
 
 		for pinned in pin_tkn_lst {
-			// Prevent TransferToken from beeing dropped
-			// I.e. do NOT run the costum constructor which will
+			// Prevent TransferToken from being dropped
+			// I.e. do NOT run the custom constructor which will
 			// deallocate memory.
 			pinned.into_raw();
 		}

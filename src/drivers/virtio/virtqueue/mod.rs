@@ -135,7 +135,7 @@ impl Virtq {
 // Public Interface solely for page boundary checking and other convenience functions
 impl Virtq {
 	/// Allows to check, if a given structure crosses a physical page boundary.
-	/// Returns true, if the structure does NOT cross a bounadary or crosses only
+	/// Returns true, if the structure does NOT cross a boundary or crosses only
 	/// contiguous physical page boundaries.
 	///
 	/// Structures provided to the Queue must pass this test, otherwise the queue
@@ -152,7 +152,7 @@ impl Virtq {
 	}
 
 	/// Allows to check, if a given slice crosses a physical page boundary.
-	/// Returns true, if the slice does NOT cross a bounadary or crosses only
+	/// Returns true, if the slice does NOT cross a boundary or crosses only
 	/// contiguous physical page boundaries.
 	/// Slice MUST come from a boxed value. Otherwise the slice might be moved and
 	/// the test of this function is not longer valid.
@@ -751,7 +751,7 @@ impl Transfer {
 	}
 
 	/// Returns a copy if the respective send and receiving buffers
-	/// The actul buffers remain in the BufferToken and hence the token can be
+	/// The actual buffers remain in the BufferToken and hence the token can be
 	/// reused afterwards.
 	///
 	/// **Return Tuple**
@@ -802,7 +802,7 @@ impl Transfer {
 	}
 
 	/// Returns a copy if the respective send and receiving buffers
-	/// The actul buffers remain in the BufferToken and hence the token can be
+	/// The actual buffers remain in the BufferToken and hence the token can be
 	/// reused afterwards.
 	///
 	/// **Return Tuple**
@@ -1058,7 +1058,7 @@ impl TransferToken {
 		self.await_queue = Some(Rc::clone(&await_queue));
 
 		// Prevent TransferToken from being dropped
-		// I.e. do NOT run the costum constructor which will
+		// I.e. do NOT run the custom constructor which will
 		// deallocate memory.
 		self.get_vq()
 			.dispatch(self, notif)
@@ -1371,7 +1371,7 @@ impl BufferToken {
 	/// of the buffer will only see the given sizes. Although the buffer is NOT reallocated.
 	///
 	/// **INFO:**
-	/// * Upon Transfer.resue() call the Buffers will restore their original size, which was provided at creation time!
+	/// * Upon Transfer.reuse() call the Buffers will restore their original size, which was provided at creation time!
 	/// * Fails if buffer to be restricted is non existing -> VirtqError::NoBufferAvail
 	/// * Fails if buffer to be restricted is to small (i.e. `buff.len < new_len`) -> VirtqError::General
 	pub fn restr_size(
@@ -1544,7 +1544,7 @@ impl BufferToken {
 	}
 	/// Returns the underlying raw pointers to the user accessible memory hold by the Buffertoken. This is mostly
 	/// useful in order to provide the user space with pointers to write to. Return tuple has the form
-	/// (`pointer_to_mem_area`, `length_of_accesible_mem_area`).
+	/// (`pointer_to_mem_area`, `length_of_accessible_mem_area`).
 	///
 	/// **INFO:**
 	///
@@ -2292,7 +2292,7 @@ impl MemPool {
 	}
 
 	/// Pulls a memory descriptor, which owns a memory area of the specified size in bytes. The
-	/// descriptor consums NO ID and hence DOES NOT reduce the amount of descriptors left in the pool.
+	/// descriptor consumes NO ID and hence DOES NOT reduce the amount of descriptors left in the pool.
 	/// * ID`s of descriptor are by no means sorted. A descriptor can contain an ID between 1 and size_of_pool.
 	/// * Calleys can NOT rely on the next pulled descriptor to contain the subsequent ID after the previously
 	///  pulled descriptor.
