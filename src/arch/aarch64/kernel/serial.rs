@@ -16,7 +16,7 @@ impl SerialPort {
 		if byte == b'\n' {
 			unsafe {
 				asm!(
-					"str x8, [{port}]",
+					"strb w8, [{port}]",
 					port = in(reg) port,
 					in("x8") b'\r',
 					options(nostack),
@@ -26,7 +26,7 @@ impl SerialPort {
 
 		unsafe {
 			asm!(
-				"str x8, [{port}]",
+				"strb w8, [{port}]",
 				port = in(reg) port,
 				in("x8") byte,
 				options(nostack),
