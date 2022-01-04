@@ -103,7 +103,7 @@ mod synch;
 mod syscalls;
 mod util;
 
-fn _print(args: ::core::fmt::Arguments<'_>) {
+pub(crate) fn _print(args: ::core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
 }
