@@ -18,7 +18,7 @@ macro_rules! align_up {
 /// for HermitCore.
 #[macro_export]
 macro_rules! print {
-	($($arg:tt)*) => ($crate::_print(::core::format_args!($($arg)*)));
+	($($arg:tt)+) => ($crate::_print(::core::format_args!($($arg)+)));
 }
 
 /// Print formatted text to our console, followed by a newline.
