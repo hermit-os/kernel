@@ -1,11 +1,9 @@
 .section .text
-.extern pre_init
 .extern do_bad_mode
 .extern do_irq
 .extern do_fiq
 .extern do_sync
 .extern do_error
-
 
 .macro trap_entry, el
      stp x29, x30, [sp, #-16]!

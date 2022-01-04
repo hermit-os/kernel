@@ -24,70 +24,82 @@ use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
-static mut COM1: SerialPort = SerialPort::new(0x9000000);
+static mut COM1: SerialPort = SerialPort::new(0x800);
 static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
 
 /// Kernel header to announce machine features
+#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+
+#[cfg(all(any(target_os = "none", target_os = "hermit"), not(feature = "newlib")))]
+#[link_section = ".data"]
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+
+#[cfg(all(any(target_os = "none", target_os = "hermit"), feature = "newlib"))]
 #[link_section = ".mboot"]
-static mut BOOT_INFO: BootInfo = BootInfo::new();
+static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
 // FUNCTIONS
 
 global_asm!(include_str!("start.s"));
 
 pub fn get_image_size() -> usize {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.image_size) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
 }
 
 pub fn get_limit() -> usize {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.limit) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).limit) as usize }
 }
 
 pub fn get_processor_count() -> u32 {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.cpu_online) }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cpu_online) }
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr::zero()
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).base)) }
 }
 
 pub fn get_tls_start() -> VirtAddr {
-	VirtAddr::zero()
+	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).tls_start)) }
 }
 
 pub fn get_tls_filesz() -> usize {
-	0
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_filesz) as usize }
 }
 
 pub fn get_tls_memsz() -> usize {
-	0
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
 }
 
 pub fn get_tls_align() -> usize {
-	0
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_align) as usize }
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.uhyve) != 0 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) != 0 }
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.single_kernel) != 0 }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).single_kernel) != 0 }
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdsize) as usize }
+	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdsize) as usize }
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	VirtAddr(unsafe { core::ptr::read_volatile(&BOOT_INFO.cmdline) })
+	VirtAddr(unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdline) })
 }
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
 	percore::init();
+
+	unsafe {
+		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
+	}
 
 	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
@@ -106,7 +118,7 @@ pub fn output_message_byte(byte: u8) {
 	}
 	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
-		// Output messages to the serial port and VGA screen in unikernel mode.
+		// Output messages to the serial port.
 		unsafe {
 			COM1.write_byte(byte);
 		}
