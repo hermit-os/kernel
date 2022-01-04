@@ -101,7 +101,6 @@ pub fn message_output_init() {
 		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
 	}
 
-	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
@@ -112,11 +111,6 @@ pub fn message_output_init() {
 }
 
 pub fn output_message_byte(byte: u8) {
-	#[cfg(feature = "aarch64-qemu-stdout")]
-	unsafe {
-		core::ptr::write_volatile(0x3F20_1000 as *mut u8, byte);
-	}
-	#[cfg(not(feature = "aarch64-qemu-stdout"))]
 	if environment::is_single_kernel() {
 		// Output messages to the serial port.
 		unsafe {
