@@ -6,7 +6,11 @@ const IRQ_FLAG_A: usize = 1 << 8;
 #[inline]
 pub fn enable() {
 	unsafe {
-		llvm_asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
+		asm!(
+			"msr daifclr, {mask}",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
 	}
 }
 
@@ -16,15 +20,24 @@ pub fn enable() {
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
 pub fn enable_and_wait() {
-	// TODO
-	unsafe { llvm_asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
+	unsafe {
+		asm!(
+			"msr daifclr, {mask}; wfi",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
+	}
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
 	unsafe {
-		llvm_asm!("msr daifset, 0b111" ::: "memory" : "volatile");
+		asm!(
+			"msr daifset, {mask}",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
 	}
 }
 
@@ -38,7 +51,11 @@ pub fn disable() {
 pub fn nested_disable() -> bool {
 	let flags: usize;
 	unsafe {
-		llvm_asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
+		asm!(
+			"mrs {}, daif",
+			out(reg) flags,
+			options(nostack, nomem),
+		);
 	}
 
 	let mut was_enabled = true;
