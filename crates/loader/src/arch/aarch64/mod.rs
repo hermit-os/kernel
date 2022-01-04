@@ -14,8 +14,10 @@ extern "C" {
 
 pub const ELF_ARCH: u16 = elf::header::EM_AARCH64;
 
-const RAM_START: u64 = 0x40000000;
-const SERIAL_PORT_ADDRESS: u32 = 0x9000000;
+/// start address of the RAM
+const RAM_START: u64 = 0x80000;
+/// Physical address of UART0
+const SERIAL_PORT_ADDRESS: u32 = 0x3F201000;
 
 // VARIABLES
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
@@ -51,7 +53,7 @@ pub unsafe fn boot_kernel(
 
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = virtual_address;
-	BOOT_INFO.limit = 0x40000000 /* start address of the RAM */ + 0x4000000 /* 64 MB */;
+	BOOT_INFO.limit = RAM_START + 0x4000000 /* 64 MB */;
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.current_stack_address = RAM_START;
 	//loaderlog!("BOOT_INFO:");
