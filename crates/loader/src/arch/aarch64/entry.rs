@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use core::arch::{asm, global_asm};
+
 extern "C" {
 	fn loader_main();
 }
