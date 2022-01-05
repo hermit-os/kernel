@@ -56,7 +56,7 @@ macro_rules! infoheader {
 
 #[macro_export]
 macro_rules! infoentry {
-	($str:expr, $rhs:expr) => (crate::infoentry!($str, "{}", $rhs));
+	($str:expr, $rhs:expr) => ($crate::infoentry!($str, "{}", $rhs));
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 
