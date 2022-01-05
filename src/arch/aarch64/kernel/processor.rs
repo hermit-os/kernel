@@ -1,3 +1,4 @@
+use core::arch::asm;
 use core::sync::atomic::spin_loop_hint;
 
 extern "C" {

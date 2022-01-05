@@ -1,7 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
 use alloc::boxed::Box;
-use core::{mem, ptr, slice};
+use core::{arch::asm, mem, ptr, slice};
 
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;

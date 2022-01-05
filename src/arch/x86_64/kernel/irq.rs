@@ -9,6 +9,7 @@ use crate::synch::spinlock::SpinlockIrqSave;
 use crate::alloc::string::ToString;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
+use core::arch::asm;
 use core::fmt;
 use x86::bits64::rflags::{self, RFlags};
 use x86::irq;

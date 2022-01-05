@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::kernel::{
 	get_processor_count, scheduler::TaskStacks, BootInfo, BOOT_INFO,

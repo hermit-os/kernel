@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 pub struct SerialPort {
 	pub port_address: u32,
 }
