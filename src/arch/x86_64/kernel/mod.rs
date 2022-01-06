@@ -1,6 +1,7 @@
 use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
+use core::sync::atomic::{self, Ordering};
 use core::{intrinsics, ptr};
 
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
@@ -442,6 +443,7 @@ fn finish_processor_init() {
 	// to initialize the next processor.
 	unsafe {
 		let _ = intrinsics::atomic_xadd(&mut (*BOOT_INFO).cpu_online as *mut u32, 1);
+		atomic::fence(Ordering::SeqCst);
 	}
 }
 
@@ -477,6 +479,7 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 
 	BOOT_INFO = boot_info as *mut BootInfo;
 
+	atomic::fence(Ordering::SeqCst);
 	if boot_info.cpu_online == 0 {
 		crate::boot_processor_main()
 	} else {
