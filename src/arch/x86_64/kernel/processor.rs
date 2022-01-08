@@ -250,7 +250,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = environment::get_command_line_cpu_frequency();
+		let mhz = environment::get_command_line_cpu_frequency().ok_or(())?;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
 	}
 

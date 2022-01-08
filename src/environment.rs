@@ -95,8 +95,14 @@ pub fn init() {
 }
 
 /// CPU Frequency in MHz if given through the -freq command-line parameter, otherwise zero.
-pub fn get_command_line_cpu_frequency() -> u16 {
-	unsafe { COMMAND_LINE_CPU_FREQUENCY }
+pub fn get_command_line_cpu_frequency() -> Option<u16> {
+	unsafe {
+		if COMMAND_LINE_CPU_FREQUENCY > 0 {
+			Some(COMMAND_LINE_CPU_FREQUENCY)
+		} else {
+			None
+		}
+	}
 }
 
 /// Whether HermitCore shall communicate with the "proxy" application over a network interface.
