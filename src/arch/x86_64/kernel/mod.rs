@@ -377,12 +377,12 @@ pub fn boot_processor_init() {
 	idt::install();
 	pic::init();
 
-	irq::install();
 	processor::detect_frequency();
 	processor::print_information();
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
+	irq::install();
 	systemtime::init();
 
 	if environment::is_single_kernel() {
