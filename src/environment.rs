@@ -19,7 +19,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::{slice, str};
 
-static mut COMMAND_LINE_CPU_FREQUENCY: u16 = 0;
+static mut COMMAND_LINE_CPU_FREQUENCY: Option<u16> = None;
 static mut IS_PROXY: bool = false;
 static mut COMMAND_LINE_APPLICATION: Option<Vec<String>> = None;
 static mut COMMAND_LINE_PATH: Option<String> = None;
@@ -44,9 +44,7 @@ unsafe fn parse_command_line() {
 		match token.as_str() {
 			"-freq" => {
 				let mhz_str = tokeniter.next().expect("Invalid -freq command line");
-				COMMAND_LINE_CPU_FREQUENCY = mhz_str
-					.parse()
-					.expect("Could not parse -freq command line as number");
+				COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().ok();
 			}
 			"-proxy" => {
 				IS_PROXY = true;
@@ -95,7 +93,7 @@ pub fn init() {
 }
 
 /// CPU Frequency in MHz if given through the -freq command-line parameter, otherwise zero.
-pub fn get_command_line_cpu_frequency() -> u16 {
+pub fn get_command_line_cpu_frequency() -> Option<u16> {
 	unsafe { COMMAND_LINE_CPU_FREQUENCY }
 }
 

@@ -204,6 +204,7 @@ enum CpuFrequencySources {
 	CpuId,
 	CpuIdTscInfo,
 	HypervisorTscInfo,
+	Visionary,
 }
 
 impl fmt::Display for CpuFrequencySources {
@@ -216,6 +217,7 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::CpuId => write!(f, "CpuId"),
 			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
 			CpuFrequencySources::HypervisorTscInfo => write!(f, "Tsc Info from Hypervisor"),
+			CpuFrequencySources::Visionary => write!(f, "Visionary"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -250,7 +252,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = environment::get_command_line_cpu_frequency();
+		let mhz = environment::get_command_line_cpu_frequency().ok_or(())?;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
 	}
 
@@ -370,17 +372,26 @@ impl CpuFrequency {
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
 		let first_tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
+		let start = get_timestamp();
 
 		// Wait until the tick count changes.
 		// As soon as it has done, we are at the start of a new time slice.
 		let start_tick = loop {
 			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
 			if tick != first_tick {
-				break tick;
+				break Some(tick);
+			}
+
+			if get_timestamp() - start > 120000000 {
+				break None;
 			}
 
 			spin_loop();
-		};
+		}
+		.ok_or_else(|| {
+			irq::disable();
+			pit::deinit();
+		})?;
 
 		// Count the number of CPU cycles during 3 timer ticks.
 		let start = get_timestamp();
@@ -419,7 +430,11 @@ impl CpuFrequency {
 			.or_else(|_e| self.detect_from_cmdline())
 			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 			.or_else(|_e| self.measure_frequency())
-			.expect("Could not determine the processor frequency");
+			.or_else(|_e| {
+				warn!("Could not determine the processor frequency! Guess a frequncy of 2Ghz!");
+				self.set_detected_cpu_frequency(2000, CpuFrequencySources::Visionary)
+			})
+			.unwrap();
 	}
 
 	fn get(&self) -> u16 {
