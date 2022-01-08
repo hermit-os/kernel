@@ -216,7 +216,14 @@ impl<S: PageSize> Page<S> {
 		// We use "vale1is" instead of "vae1is" to always flush the last table level only (performance optimization).
 		// The "is" attribute broadcasts the TLB flush to all cores, so we don't need an IPI (unlike x86_64).
 		unsafe {
-			llvm_asm!("dsb ishst; tlbi vale1is, $0; dsb ish; isb" :: "r"(self.virtual_address) : "memory" : "volatile");
+			asm!(
+				"dsb ishst",
+				"tlbi vale1is, {}",
+				"dsb ish",
+				"isb",
+				in(reg) self.virtual_address.as_u64(),
+				options(nostack),
+			);
 		}
 	}
 
@@ -604,3 +611,5 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {}
 pub fn get_application_page_size() -> usize {
 	LargePageSize::SIZE
 }
+
+pub fn init() {}
