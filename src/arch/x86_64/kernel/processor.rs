@@ -204,7 +204,7 @@ enum CpuFrequencySources {
 	CpuId,
 	CpuIdTscInfo,
 	HypervisorTscInfo,
-	Guess,
+	Visionary,
 }
 
 impl fmt::Display for CpuFrequencySources {
@@ -217,7 +217,7 @@ impl fmt::Display for CpuFrequencySources {
 			CpuFrequencySources::CpuId => write!(f, "CpuId"),
 			CpuFrequencySources::CpuIdTscInfo => write!(f, "CpuId Tsc Info"),
 			CpuFrequencySources::HypervisorTscInfo => write!(f, "Tsc Info from Hypervisor"),
-			CpuFrequencySources::Guess => write!(f, "Guess"),
+			CpuFrequencySources::Visionary => write!(f, "Visionary"),
 			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
 		}
 	}
@@ -432,7 +432,7 @@ impl CpuFrequency {
 			.or_else(|_e| self.measure_frequency())
 			.or_else(|_e| {
 				warn!("Could not determine the processor frequency! Guess a frequncy of 2Ghz!");
-				self.set_detected_cpu_frequency(2000, CpuFrequencySources::Guess)
+				self.set_detected_cpu_frequency(2000, CpuFrequencySources::Visionary)
 			})
 			.unwrap();
 	}
