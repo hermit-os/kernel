@@ -387,7 +387,8 @@ impl CpuFrequency {
 			}
 
 			spin_loop();
-		}.ok_or({
+		}
+		.ok_or({
 			irq::disable();
 			pit::deinit();
 			()
