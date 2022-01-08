@@ -11,21 +11,6 @@ pub fn wakeup_core(core_to_wakeup: CoreId) {
 }
 
 #[no_mangle]
-pub extern "C" fn do_bad_mode() {}
-
-#[no_mangle]
-pub extern "C" fn do_error() {}
-
-#[no_mangle]
-pub extern "C" fn do_fiq() {}
-
-#[no_mangle]
-pub extern "C" fn do_irq() {}
-
-#[no_mangle]
-pub extern "C" fn do_sync() {}
-
-#[no_mangle]
 pub extern "C" fn eoi() {}
 
 #[no_mangle]

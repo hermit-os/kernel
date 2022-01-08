@@ -83,3 +83,48 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	info!("Install handler for interrupt {}", irq_number);
 	// TODO
 }
+
+#[no_mangle]
+pub extern "C" fn do_fiq(_: *const u8) {
+	debug!("Receive fast interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_irq(_: *const u8) {
+	debug!("Receive interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_sync(_: *const u8) {
+	debug!("Receive synchronous exception\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_bad_mode(_: *const u8, reason: u32) {
+	error!("Receive unhandled exception: {}\n", reason);
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_error(_: *const u8) {
+	error!("Receive error interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
