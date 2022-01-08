@@ -391,7 +391,6 @@ impl CpuFrequency {
 		.ok_or({
 			irq::disable();
 			pit::deinit();
-			()
 		})?;
 
 		// Count the number of CPU cycles during 3 timer ticks.
