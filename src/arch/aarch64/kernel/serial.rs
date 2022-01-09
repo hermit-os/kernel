@@ -1,7 +1,5 @@
-use core::ptr;
-
 pub struct SerialPort {
-	port_address: u32,
+	pub port_address: u32,
 }
 
 impl SerialPort {
@@ -17,16 +15,26 @@ impl SerialPort {
 		// LF newline characters need to be extended to CRLF over a real serial port.
 		if byte == b'\n' {
 			unsafe {
-				core::ptr::write_volatile(port, b'\r');
+				asm!(
+					"strb w8, [{port}]",
+					port = in(reg) port,
+					in("x8") b'\r',
+					options(nostack),
+				);
 			}
 		}
 
 		unsafe {
-			core::ptr::write_volatile(port, byte);
+			asm!(
+				"strb w8, [{port}]",
+				port = in(reg) port,
+				in("x8") byte,
+				options(nostack),
+			);
 		}
 	}
 
-	pub fn init(&self, baudrate: u32) {
+	pub fn init(&self, _baudrate: u32) {
 		// We don't do anything here (yet).
 	}
 }

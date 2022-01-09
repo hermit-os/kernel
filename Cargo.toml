@@ -48,14 +48,13 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "acpi", "fsgsbase", "smp", "aarch64-qemu-stdout"]
+default = ["pci", "acpi", "fsgsbase", "smp"]
 vga = []
 newlib = []
 pci = []
 acpi = []
 smp = []
 fsgsbase = []
-aarch64-qemu-stdout = []	# Doesn't do anything on x86 
 
 [dependencies]
 bitflags = "1.3"

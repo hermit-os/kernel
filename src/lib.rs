@@ -103,8 +103,7 @@ mod synch;
 mod syscalls;
 mod util;
 
-#[doc(hidden)]
-pub fn _print(args: ::core::fmt::Arguments<'_>) {
+pub(crate) fn _print(args: ::core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
 	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
 }
@@ -331,7 +330,9 @@ fn synch_all_cores() {
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
 	arch::message_output_init();
-	logging::init();
+	unsafe {
+		logging::init();
+	}
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
 	info!("Kernel starts at {:#x}", environment::get_base_address());
@@ -346,10 +347,16 @@ fn boot_processor_main() -> ! {
 	#[cfg(target_arch = "aarch64")]
 	{
 		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
-		info!("Attempting to exit via QEMU.");
-		info!("This requires that you passed the `-semihosting` option to QEMU.");
-		let exit_handler = qemu_exit::AArch64::new();
-		exit_handler.exit_success();
+		if environment::is_uhyve() {
+			syscalls::init();
+			syscalls::__sys_shutdown(0);
+		} else {
+			info!("Attempting to exit via QEMU.");
+			info!("This requires that you passed the `-semihosting` option to QEMU.");
+			let exit_handler = qemu_exit::AArch64::new();
+			exit_handler.exit_success();
+		}
+
 		loop {} /* Compiles up to here - loop prevents linker errors */
 	}
 	arch::boot_processor_init();

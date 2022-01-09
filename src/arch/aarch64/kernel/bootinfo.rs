@@ -1,7 +1,6 @@
-use core::fmt;
+use core::{fmt, ptr};
 
 #[repr(C)]
-#[derive(Clone, Copy)]
 pub struct BootInfo {
 	pub magic_number: u32,
 	pub version: u32,
@@ -32,40 +31,45 @@ pub struct BootInfo {
 }
 
 impl BootInfo {
-	pub const fn new() -> Self {
-		BootInfo {
-			magic_number: 0xC0DE_CAFEu32,
-			version: 1,
-			base: 0,
-			limit: 0,
-			tls_start: 0,
-			tls_filesz: 0,
-			tls_memsz: 0,
-			image_size: 0,
-			current_stack_address: 0,
-			current_percore_address: 0,
-			host_logical_addr: 0,
-			boot_gtod: 0,
-			cmdline: 0,
-			cmdsize: 0,
-			cpu_freq: 0,
-			boot_processor: !0,
-			cpu_online: 0,
-			possible_cpus: 0,
-			current_boot_id: 0,
-			uartport: 0x9000000, // Initialize with QEMU's UART address
-			single_kernel: 1,
-			uhyve: 0,
-			hcip: [255, 255, 255, 255],
-			hcgateway: [255, 255, 255, 255],
-			hcmask: [255, 255, 255, 0],
-			tls_align: 0,
-		}
+	const LAYOUT: Self = Self {
+		magic_number: 0,
+		version: 0,
+		base: 0,
+		limit: 0,
+		tls_start: 0,
+		tls_filesz: 0,
+		tls_memsz: 0,
+		image_size: 0,
+		current_stack_address: 0,
+		current_percore_address: 0,
+		host_logical_addr: 0,
+		boot_gtod: 0,
+		cmdline: 0,
+		cmdsize: 0,
+		cpu_freq: 0,
+		boot_processor: 0,
+		cpu_online: 0,
+		possible_cpus: 0,
+		current_boot_id: 0,
+		uartport: 0,
+		single_kernel: 0,
+		uhyve: 0,
+		hcip: [0; 4],
+		hcgateway: [0; 4],
+		hcmask: [0; 4],
+		tls_align: 0,
+	};
+
+	pub const fn current_stack_address_offset() -> isize {
+		let layout = Self::LAYOUT;
+		let start = ptr::addr_of!(layout);
+		let stack = ptr::addr_of!(layout.current_stack_address);
+		unsafe { stack.cast::<u8>().offset_from(start.cast()) }
 	}
 }
 
 impl fmt::Debug for BootInfo {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		writeln!(f, "magic_number {:#x}", self.magic_number)?;
 		writeln!(f, "version {:#x}", self.version)?;
 		writeln!(f, "base {:#x}", self.base)?;

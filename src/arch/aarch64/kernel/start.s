@@ -1,11 +1,9 @@
 .section .text
-.extern pre_init
 .extern do_bad_mode
 .extern do_irq
 .extern do_fiq
 .extern do_sync
 .extern do_error
-
 
 .macro trap_entry, el
      stp x29, x30, [sp, #-16]!
@@ -72,7 +70,7 @@ b       do_bad_mode
 .endm
 
 /*
- * SYNC & IRQ exception handler.
+ * SYNC exception handler.
  */
 .align 6
 el1_sync:
@@ -84,6 +82,9 @@ el1_sync:
 .size el1_sync, .-el1_sync
 .type el1_sync, @function
 
+/*
+ * IRQ handler.
+ */
 .align 6
 el1_irq:
       trap_entry 1
@@ -105,6 +106,9 @@ el1_irq:
 .size el1_irq, .-el1_irq
 .type el1_irq, @function
 
+/*
+ * FIQ handler.
+ */
 .align 6
 el1_fiq:
       trap_entry 1

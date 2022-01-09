@@ -6,7 +6,11 @@ const IRQ_FLAG_A: usize = 1 << 8;
 #[inline]
 pub fn enable() {
 	unsafe {
-		llvm_asm!("msr daifclr, 0b111" ::: "memory" : "volatile");
+		asm!(
+			"msr daifclr, {mask}",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
 	}
 }
 
@@ -16,15 +20,24 @@ pub fn enable() {
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
 pub fn enable_and_wait() {
-	// TODO
-	unsafe { llvm_asm!("msr daifclr, 0b111; wfi" :::: "volatile") };
+	unsafe {
+		asm!(
+			"msr daifclr, {mask}; wfi",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
+	}
 }
 
 /// Disable Interrupts
 #[inline]
 pub fn disable() {
 	unsafe {
-		llvm_asm!("msr daifset, 0b111" ::: "memory" : "volatile");
+		asm!(
+			"msr daifset, {mask}",
+			mask = const 0b111,
+			options(nostack, nomem),
+		);
 	}
 }
 
@@ -38,7 +51,11 @@ pub fn disable() {
 pub fn nested_disable() -> bool {
 	let flags: usize;
 	unsafe {
-		llvm_asm!("mrs $0, daif" : "=r"(flags) :: "memory" : "volatile");
+		asm!(
+			"mrs {}, daif",
+			out(reg) flags,
+			options(nostack, nomem),
+		);
 	}
 
 	let mut was_enabled = true;
@@ -65,4 +82,49 @@ pub fn nested_enable(was_enabled: bool) {
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	info!("Install handler for interrupt {}", irq_number);
 	// TODO
+}
+
+#[no_mangle]
+pub extern "C" fn do_fiq(_: *const u8) {
+	debug!("Receive fast interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_irq(_: *const u8) {
+	debug!("Receive interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_sync(_: *const u8) {
+	debug!("Receive synchronous exception\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_bad_mode(_: *const u8, reason: u32) {
+	error!("Receive unhandled exception: {}\n", reason);
+
+	loop {
+		crate::arch::processor::halt()
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn do_error(_: *const u8) {
+	error!("Receive error interrupt\n");
+
+	loop {
+		crate::arch::processor::halt()
+	}
 }

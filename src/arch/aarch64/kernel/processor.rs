@@ -39,9 +39,16 @@ pub fn run_on_hypervisor() -> bool {
 pub fn msb(value: u64) -> Option<u64> {
 	if value > 0 {
 		let ret: u64;
-		let u64_bits = 64;
+
 		unsafe {
-			llvm_asm!("clz $0, $1; sub $0, $2, $0" : "=r"(ret) : "r"(value), "r"(u64_bits - 1) : "cc" : "volatile");
+			asm!(
+				"clz {0}, {1}",
+				"sub {0}, {2}, {0}",
+				out(reg) ret,
+				in(reg) value,
+				const 64 - 1,
+				options(nostack, nomem),
+			);
 		}
 		Some(ret)
 	} else {
@@ -52,7 +59,7 @@ pub fn msb(value: u64) -> Option<u64> {
 /// The halt function stops the processor until the next interrupt arrives
 pub fn halt() {
 	unsafe {
-		llvm_asm!("wfi" :::: "volatile");
+		asm!("wfi", options(nostack, nomem),);
 	}
 }
 
