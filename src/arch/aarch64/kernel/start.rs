@@ -23,26 +23,6 @@ fn mair(attr: u64, mt: u64) -> u64 {
 	attr << (mt * 8)
 }
 
-/*
- * TCR flags
- */
-const TCR_IRGN_WBWA: u64 = ((1) << 8) | ((1) << 24);
-const TCR_ORGN_WBWA: u64 = ((1) << 10) | ((1) << 26);
-const TCR_SHARED: u64 = ((3) << 12) | ((3) << 28);
-const TCR_TBI0: u64 = 1 << 37;
-const TCR_TBI1: u64 = 1 << 38;
-const TCR_ASID16: u64 = 1 << 36;
-const TCR_TG1_16K: u64 = 1 << 30;
-const TCR_TG1_4K: u64 = 0 << 30;
-const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
-
-/// Number of virtual address bits for 4KB page
-const VA_BITS: u64 = 48;
-
-fn tcr_size(x: u64) -> u64 {
-	((64 - x) << 16) | (64 - x)
-}
-
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
@@ -125,25 +105,6 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	asm!(
 		"msr mair_el1, {0}",
 		in(reg) mair_el1,
-		options(nostack, nomem),
-	);
-
-	/*
-	 * Setup translation control register (TCR)
-	 */
-
-	// determine physical address size
-	asm!(
-		"mrs x0, id_aa64mmfr0_el1",
-		"and x0, x0, 0xF",
-		"lsl x0, x0, 32",
-		"orr x0, x0, {tcr_bits}",
-		"mrs x1, id_aa64mmfr0_el1",
-		"bfi x0, x1, #32, #3",
-		"msr tcr_el1, x0",
-		tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
-		out("x0") _,
-		out("x1") _,
 		options(nostack, nomem),
 	);
 
