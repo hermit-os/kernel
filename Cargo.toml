@@ -19,7 +19,7 @@ categories = ["os"]
 repository = "https://github.com/hermitcore/rusty-hermit"
 documentation = "https://hermitcore.github.io/libhermit-rs/hermit/"
 edition = "2021"
-description = "A Rust-based library operting system"
+description = "A Rust-based library operating system"
 exclude = [
 	"/.github/*",
 	"/.vscode/*",
