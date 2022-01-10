@@ -65,12 +65,6 @@ unsafe fn parse_command_line() {
 					tokeniter.next().expect("Invalid -gateway command line")
 				));
 			}
-			"-mac" => {
-				COMMAND_LINE_ENVIRONMENT.push(format!(
-					"HERMIT_MAC={}",
-					tokeniter.next().expect("Invalid -mac command line")
-				));
-			}
 			"-proxy" => {
 				IS_PROXY = true;
 			}
