@@ -48,16 +48,28 @@ unsafe fn parse_command_line() {
 				COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().ok();
 			}
 			"-ip" => {
-				COMMAND_LINE_ENVIRONMENT.push(format!("HERMIT_IP={}", tokeniter.next().expect("Invalid -ip command line")));
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_IP={}",
+					tokeniter.next().expect("Invalid -ip command line")
+				));
 			}
 			"-mask" => {
-				COMMAND_LINE_ENVIRONMENT.push(format!("HERMIT_MASK={}", tokeniter.next().expect("Invalid -mask command line")));
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_MASK={}",
+					tokeniter.next().expect("Invalid -mask command line")
+				));
 			}
 			"-gateway" => {
-				COMMAND_LINE_ENVIRONMENT.push(format!("HERMIT_GATEWAY={}", tokeniter.next().expect("Invalid -gateway command line")));
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_GATEWAY={}",
+					tokeniter.next().expect("Invalid -gateway command line")
+				));
 			}
 			"-mac" => {
-				COMMAND_LINE_ENVIRONMENT.push(format!("HERMIT_MAC={}", tokeniter.next().expect("Invalid -mac command line")));
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_MAC={}",
+					tokeniter.next().expect("Invalid -mac command line")
+				));
 			}
 			"-proxy" => {
 				IS_PROXY = true;
