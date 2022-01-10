@@ -105,7 +105,7 @@ pub trait SyscallInterface: Send + Sync {
 			let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
 			envv.push(ptr);
 		}
-		envv.push(0usize as *const u8);
+		envv.push(core::ptr::null::<u8>());
 
 		let argc = argv.len() as i32;
 		let argv = Box::leak(argv.into_boxed_slice()).as_ptr();
