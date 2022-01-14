@@ -53,7 +53,6 @@ build:demo:
 test:integration:
   stage: test
   image: ${DOCKER_IMAGE}:${DOCKER_TAG}
-  allow_failure: true
   script:
     - lscpu
     - kvm-ok
