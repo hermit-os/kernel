@@ -19,5 +19,9 @@ jobs:
       - uses: actions/checkout@v2
       - name: Rustup (apply rust-toolchain.toml)
         run: rustup show
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install nasm
       - name: Clippy
         run: cargo clippy -- -D warnings
