@@ -56,7 +56,3 @@ add_custom_target(smp_boot_code
 
 add_dependencies(hermit_rs pcidata)
 add_dependencies(hermit_rs smp_boot_code)
-
-# Set a source-level dependency from the entry point on the Rust library.
-# This causes the entry point to be reassembled when the Rust library changes and subsequently the Hermit library is relinked.
-set_source_files_properties("${CMAKE_CURRENT_LIST_DIR}/entry.asm" PROPERTIES OBJECT_DEPENDS ${HERMIT_RS})

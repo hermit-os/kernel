@@ -727,7 +727,7 @@ pub fn init_x2apic() {
 	}
 }
 
-/// Initialize the required entry.asm variables for the next CPU to be booted.
+/// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
