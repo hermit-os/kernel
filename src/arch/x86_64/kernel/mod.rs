@@ -25,8 +25,6 @@ pub mod irq;
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
-#[cfg(feature = "pci")]
-mod pci_ids;
 pub mod percore;
 pub mod pic;
 pub mod pit;
