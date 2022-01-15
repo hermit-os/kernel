@@ -443,7 +443,6 @@ fn finish_processor_init() {
 	// to initialize the next processor.
 	unsafe {
 		let _ = intrinsics::atomic_xadd(&mut (*BOOT_INFO).cpu_online as *mut u32, 1);
-		atomic::fence(Ordering::SeqCst);
 	}
 }
 
