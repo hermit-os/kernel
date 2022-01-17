@@ -669,7 +669,7 @@ pub unsafe fn init() {
 	}
 
 	let boot_info = get_boot_info_address().as_usize();
-	debug!("Bap BootInfo 0x{:x}", boot_info);
+	debug!("Map BootInfo 0x{:x}", boot_info);
 	let idx_lv3 = (boot_info >> PAGE_BITS) & PAGE_MAP_MASK;
 	let idx_lv2 = (boot_info >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
 	pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
