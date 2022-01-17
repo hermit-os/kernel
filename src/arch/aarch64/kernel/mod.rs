@@ -232,7 +232,7 @@ fn finish_processor_init() {
 		// Fortunately, the Core IDs are guaranteed to be sequential and match the Local APIC IDs.
 		apic::add_local_apic_id(core_id() as u8);
 
-		// uhyve also boots each processor into entry.asm itself and does not use apic::boot_application_processors.
+		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
 		apic::init_next_processor_variables(core_id() + 1);
 	}*/

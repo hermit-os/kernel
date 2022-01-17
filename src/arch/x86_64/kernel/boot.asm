@@ -1,9 +1,9 @@
 ; This is the entry point for the application processors.
 ; It is loaded at 0x8000 by HermitCore and filled with parameters.
 ; It does the switch from Real Mode -> Protected Mode -> Long Mode,
-; sets up CR3 for this CPU, and then calls into entry.asm.
+; sets up CR3 for this CPU, and then calls into _start.
 ;
-; In contrast to this self-contained entry point, entry.asm is linked
+; In contrast to this self-contained entry point, _start is linked
 ; to the rest of HermitCore and thus has access to all exported symbols
 ; (like the actual Rust entry point).
 
@@ -145,5 +145,5 @@ ALIGN 8
 start64:
     ; forward address to boot info
     mov rdi, qword [boot_info]
-    ; Jump to entry.asm
+    ; Jump to _start
     jmp qword [entry_point]
