@@ -21,6 +21,7 @@ use core::{slice, str};
 
 static mut COMMAND_LINE_CPU_FREQUENCY: Option<u16> = None;
 static mut IS_PROXY: bool = false;
+static mut COMMAND_LINE_ENVIRONMENT: Vec<String> = Vec::new();
 static mut COMMAND_LINE_APPLICATION: Option<Vec<String>> = None;
 static mut COMMAND_LINE_PATH: Option<String> = None;
 
@@ -45,6 +46,24 @@ unsafe fn parse_command_line() {
 			"-freq" => {
 				let mhz_str = tokeniter.next().expect("Invalid -freq command line");
 				COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().ok();
+			}
+			"-ip" => {
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_IP={}",
+					tokeniter.next().expect("Invalid -ip command line")
+				));
+			}
+			"-mask" => {
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_MASK={}",
+					tokeniter.next().expect("Invalid -mask command line")
+				));
+			}
+			"-gateway" => {
+				COMMAND_LINE_ENVIRONMENT.push(format!(
+					"HERMIT_GATEWAY={}",
+					tokeniter.next().expect("Invalid -gateway command line")
+				));
 			}
 			"-proxy" => {
 				IS_PROXY = true;
@@ -76,6 +95,10 @@ pub fn get_command_line_argv() -> Option<&'static [String]> {
 /// Returns the first cmdline argument, if not otherwise recognized. With qemu this is the host-path to the kernel (rusty-loader)
 pub fn get_command_line_path() -> Option<&'static str> {
 	unsafe { COMMAND_LINE_PATH.as_deref() }
+}
+
+pub fn get_command_line_envv() -> &'static [String] {
+	unsafe { COMMAND_LINE_ENVIRONMENT.as_slice() }
 }
 
 pub fn init() {
