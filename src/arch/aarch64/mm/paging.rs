@@ -3,15 +3,19 @@ use core::{fmt, ptr, usize};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
+use crate::arch::aarch64::kernel::{
+	get_base_address, get_boot_info_address, get_image_size, is_uhyve,
+};
 use crate::arch::aarch64::mm::physicalmem;
 use crate::arch::aarch64::mm::virtualmem;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::kernel::get_current_stack_address;
 use crate::mm;
 use crate::scheduler;
+use crate::KERNEL_STACK_SIZE;
 
 extern "C" {
-	#[linkage = "extern_weak"]
-	static runtime_osinit: *const u8;
+	static mut l0_pgtable: usize;
 }
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
@@ -69,6 +73,9 @@ bitflags! {
 
 		/// Set if code execution shall be disabled for memory referenced by this entry in unprivileged mode.
 		const UNPRIVILEGED_EXECUTE_NEVER = 1 << 54;
+
+		/// Self-reference to the Level 0 page table
+		const SELF = 1 << 55;
 	}
 }
 
@@ -557,29 +564,8 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
-	if virtual_address < mm::kernel_start_address() {
-		// Parts of the memory below the kernel image are identity-mapped.
-		// However, this range should never be used in a virtual_to_physical call.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too low",
-			virtual_address
-		);
-	} else if virtual_address < mm::kernel_end_address() {
-		// The kernel image is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_start() {
-		// The kernel memory is mapped in 4 KiB pages.
-		get_physical_address::<BasePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_end() {
-		// The application memory is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else {
-		// This range is currently unused by HermitCore.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too high",
-			virtual_address
-		);
-	}
+	// Currently, we use onyl 4K pages
+	get_physical_address::<BasePageSize>(virtual_address)
 }
 
 #[no_mangle]
@@ -609,7 +595,131 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {}
 
 #[inline]
 pub fn get_application_page_size() -> usize {
-	LargePageSize::SIZE
+	BasePageSize::SIZE
 }
 
-pub fn init() {}
+pub unsafe fn init() {
+	let aa64mmfr0: u64;
+
+	// determine physical address size
+	asm!(
+		"mrs {}, id_aa64mmfr0_el1",
+		out(reg) aa64mmfr0,
+		options(nostack),
+	);
+
+	let pa_range: u64 = match aa64mmfr0 & 0b1111 {
+		0b0000 => 32,
+		0b0001 => 36,
+		0b0010 => 40,
+		0b0011 => 42,
+		0b0100 => 44,
+		0b0101 => 48,
+		0b0110 => 52,
+		_ => panic!("Invalid physical address range"),
+	};
+	info!("Physical address range: {}GB", 1 << (pa_range - 30));
+
+	let tgran16: u64 = (aa64mmfr0 >> 20) & 0b1111;
+	let tgran64: u64 = (aa64mmfr0 >> 24) & 0b1111;
+	let tgran4: u64 = (aa64mmfr0 >> 28) & 0b1111;
+
+	info!("Support of 4KB pages: {}", tgran4 == 0);
+	info!("Support of 16KB pages: {}", tgran16 == 0);
+	info!("Support of 64KB pages: {}", tgran64 == 0);
+
+	assert!(tgran4 == 0);
+
+	// Initialize page tables
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut usize, 6 * 512);
+
+	// clear page tables
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+
+	let l0pgt = &l0_pgtable as *const usize as usize;
+	debug!("Root page table is located at 0x{:x}", l0pgt);
+
+	let flag = PageTableEntryFlags::PRESENT
+		| PageTableEntryFlags::TABLE_OR_4KIB_PAGE
+		| PageTableEntryFlags::INNER_SHAREABLE
+		| PageTableEntryFlags::ACCESSED
+		| PageTableEntryFlags::NORMAL;
+	let flag_nc = PageTableEntryFlags::PRESENT
+		| PageTableEntryFlags::TABLE_OR_4KIB_PAGE
+		| PageTableEntryFlags::INNER_SHAREABLE
+		| PageTableEntryFlags::ACCESSED
+		| PageTableEntryFlags::NORMAL_NC;
+
+	// Level 0 Page Table Entries - Idx 0 => 0
+	pgt_slice[0] = (l0pgt + 1 * BasePageSize::SIZE) | flag.bits() as usize;
+	pgt_slice[511] = l0pgt | (flag | PageTableEntryFlags::SELF).bits() as usize;
+	// Level 1 Page Table Entries - Idx 0 => 512
+	pgt_slice[512] = (l0pgt + 2 * BasePageSize::SIZE) | flag.bits() as usize;
+	// Level 2 Page Table Entries - Idx 0 => 1024
+	pgt_slice[1024 + 0] = (l0pgt + 3 * BasePageSize::SIZE) | flag.bits() as usize;
+	pgt_slice[1024 + 1] = (l0pgt + 4 * BasePageSize::SIZE) | flag.bits() as usize;
+	pgt_slice[1024 + 2] = (l0pgt + 5 * BasePageSize::SIZE) | flag.bits() as usize;
+
+	if is_uhyve() {
+		debug!("Map uhyve's I/O ports");
+		pgt_slice[1024 + 512] = flag_nc.bits() as usize;
+	}
+
+	let boot_info = get_boot_info_address().as_usize();
+	debug!("Bap BootInfo 0x{:x}", boot_info);
+	let idx_lv3 = (boot_info >> PAGE_BITS) & PAGE_MAP_MASK;
+	let idx_lv2 = (boot_info >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
+	pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
+		align_down!(boot_info, BasePageSize::SIZE) | flag.bits() as usize;
+
+	let start = get_base_address().as_usize();
+	let end = get_base_address().as_usize() + get_image_size();
+	debug!(
+		"Map kernel into the page tables: 0x{:x} - 0x{:x}",
+		start, end
+	);
+	for addr in (start..end).step_by(BasePageSize::SIZE) {
+		let idx_lv3 = (addr >> PAGE_BITS) & PAGE_MAP_MASK;
+		let idx_lv2 = (addr >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
+
+		pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
+			align_down!(addr, BasePageSize::SIZE) | flag.bits() as usize;
+	}
+
+	let stack = get_current_stack_address().as_usize();
+	debug!(
+		"Map boot stack 0:{:x} - 0x{:x}",
+		stack,
+		stack + KERNEL_STACK_SIZE
+	);
+	for addr in (stack..stack + KERNEL_STACK_SIZE).step_by(BasePageSize::SIZE) {
+		let idx_lv3 = (addr >> PAGE_BITS) & PAGE_MAP_MASK;
+		let idx_lv2 = (addr >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
+
+		pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
+			align_down!(addr, BasePageSize::SIZE) | flag.bits() as usize;
+	}
+
+	// Load TTBRx
+	asm!(
+		"msr ttbr1_el1, xzr",
+		"msr ttbr0_el1, {}",
+		"isb",
+		in(reg) l0pgt,
+		options(nostack),
+	);
+
+	// Enable paging
+	asm!(
+		"mrs x0, sctlr_el1",
+		"orr x0, x0, #1",
+		"msr sctlr_el1, x0",
+		"bl 0f",
+		"0:",
+		out("x0") _,
+		options(nostack),
+	);
+}

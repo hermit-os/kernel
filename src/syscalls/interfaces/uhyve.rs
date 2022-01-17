@@ -46,13 +46,13 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 #[cfg(target_arch = "aarch64")]
 fn uhyve_send<T>(port: u16, data: &mut T) {
 	let ptr = VirtAddr(data as *mut _ as u64);
-	//let physical_address = paging::virtual_to_physical(ptr);
+	let physical_address = paging::virtual_to_physical(ptr);
 
 	unsafe {
 		asm!(
 			"str x8, [{port}]",
 			port = in(reg) port,
-			in("x8") ptr.as_u64(),
+			in("x8") physical_address.as_u64(),
 			options(nostack),
 		);
 	}

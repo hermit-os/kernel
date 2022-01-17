@@ -9,6 +9,23 @@ extern "C" {
 }
 
 /*
+ * TCR flags
+ */
+const TCR_IRGN_WBWA: u64 = ((1) << 8) | ((1) << 24);
+const TCR_ORGN_WBWA: u64 = ((1) << 10) | ((1) << 26);
+const TCR_SHARED: u64 = ((3) << 12) | ((3) << 28);
+const TCR_TBI0: u64 = 1 << 37;
+const TCR_TBI1: u64 = 1 << 38;
+const TCR_ASID16: u64 = 1 << 36;
+const TCR_TG1_64K: u64 = 3 << 30;
+const TCR_TG1_16K: u64 = 1 << 30;
+const TCR_TG1_4K: u64 = 0 << 30;
+const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
+
+/// Number of virtual address bits for 4KB page
+const VA_BITS: u64 = 48;
+
+/*
  * Memory types available.
  */
 #[allow(non_upper_case_globals)]
@@ -19,7 +36,7 @@ const MT_DEVICE_GRE: u64 = 2;
 const MT_NORMAL_NC: u64 = 3;
 const MT_NORMAL: u64 = 4;
 
-fn mair(attr: u64, mt: u64) -> u64 {
+const fn mair(attr: u64, mt: u64) -> u64 {
 	attr << (mt * 8)
 }
 
@@ -74,10 +91,9 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	asm!(
 		"dsb sy",
 		"mrs x2, sctlr_el1",
-		"bic x2, x2, {one}",
+		"bic x2, x2, #1",
 		"msr sctlr_el1, x2",
 		"isb",
-		one = const 0x1,
 		out("x2") _,
 		options(nostack, nomem),
 	);
@@ -103,9 +119,25 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 		| mair(0x44, MT_NORMAL_NC)
 		| mair(0xff, MT_NORMAL);
 	asm!(
-		"msr mair_el1, {0}",
+		"msr mair_el1, {}",
 		in(reg) mair_el1,
 		options(nostack, nomem),
+	);
+
+	/// set translation control register
+	asm!(
+		"mrs x0, id_aa64mmfr0_el1",
+		"and x0, x0, 0xF",
+		"lsl x0, x0, 32",
+		"orr x0, x0, {0}",
+		"mrs x1, id_aa64mmfr0_el1",
+		"bfi x0, x1, #32, #3",
+		"msr tcr_el1, x0",
+		"isb",
+		in(reg) (((64 - VA_BITS) << 16) | ((64 - VA_BITS) << 0)) | TCR_TG1_4K | TCR_FLAGS,
+		out("x0") _,
+		out("x1") _,
+		options(nostack),
 	);
 
 	/*

@@ -43,6 +43,10 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
 global_asm!(include_str!("start.s"));
 
+pub fn get_boot_info_address() -> VirtAddr {
+	VirtAddr(unsafe { BOOT_INFO as u64 })
+}
+
 pub fn get_image_size() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
 }
@@ -61,6 +65,14 @@ pub fn get_base_address() -> VirtAddr {
 
 pub fn get_tls_start() -> VirtAddr {
 	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).tls_start)) }
+}
+
+pub fn get_current_stack_address() -> VirtAddr {
+	unsafe {
+		VirtAddr(core::ptr::read_volatile(
+			&(*BOOT_INFO).current_stack_address,
+		))
+	}
 }
 
 pub fn get_tls_filesz() -> usize {
@@ -130,10 +142,12 @@ pub fn output_message_buf(buf: &[u8]) {
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
+	//processor::configure();
+
 	crate::mm::init();
 	crate::mm::print_information();
-	environment::init();
 
+	return;
 	/*processor::detect_features();
 	processor::configure();
 
@@ -162,34 +176,6 @@ pub fn boot_processor_init() {
 
 	apic::init();
 	scheduler::install_timer_handler();*/
-
-	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
-	// However, this test code showed that it's apparently not supported under uhyve yet.
-	// Finish the boot loader for QEMU first and then run this code under QEMU, where it should be supported.
-	// If that's the case, find out what's wrong with uhyve.
-	unsafe {
-		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
-		// when reading PMCCNTR_EL0 works at all.
-		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
-		llvm_asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
-		debug!("pmuserenr_el0");
-
-		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
-		// when reading PMCCNTR_EL0 works at all.
-		let pmcntenset_el0: u32 = 1 << 31;
-		llvm_asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
-		debug!("pmcntenset_el0");
-
-		// Enable PMCCNTR_EL0 using PMCR_EL0.
-		let mut pmcr_el0: u32 = 0;
-		llvm_asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
-		debug!(
-			"PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}",
-			pmcr_el0
-		);
-		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
-		llvm_asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
-	}
 
 	// Read out PMCCNTR_EL0 in an infinite loop.
 	// TODO: This currently stays at zero on uhyve. Fix uhyve! :)

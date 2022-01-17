@@ -8,6 +8,9 @@ pub use aarch64::paging::VirtAddr;
 pub use self::physicalmem::init_page_tables;
 
 pub fn init() {
+	unsafe {
+		paging::init();
+	}
 	physicalmem::init();
 	virtualmem::init();
 }

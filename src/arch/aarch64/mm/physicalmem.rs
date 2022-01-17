@@ -1,37 +1,46 @@
 use core::alloc::AllocError;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::arch::aarch64::kernel::get_limit;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::environment::is_uhyve;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::SpinlockIrqSave;
 
-extern "C" {
-	static limit: usize;
-}
-
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
+
+const RAM_START: usize = 0x80000;
 
 fn detect_from_limits() -> Result<(), ()> {
-	if unsafe { limit } == 0 {
+	let limit = get_limit();
+	if limit == 0 {
 		return Err(());
 	}
 
 	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),
-		end: unsafe { limit },
+		end: limit,
 	};
 	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+
+	if is_uhyve() {
+		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+	} else {
+		TOTAL_MEMORY.store(limit - RAM_START, Ordering::SeqCst);
+	}
 
 	Ok(())
 }
 
 pub fn init() {
-	detect_from_limits().unwrap();
+	detect_from_limits().expect("Unable to determine physical address space!");
 }
 
 pub fn total_memory_size() -> usize {
-	0
+	TOTAL_MEMORY.load(Ordering::SeqCst)
 }
 
 pub fn init_page_tables() {}
