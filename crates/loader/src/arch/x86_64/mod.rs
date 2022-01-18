@@ -165,13 +165,41 @@ pub unsafe fn boot_kernel(
 		None => virtual_address,
 	};
 
-	// determine boot stack address
-	let new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
-
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = new_addr;
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.mb_info = mb_info as u64;
+
+	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
+	if let Some(cmdline) = multiboot.command_line() {
+		let address = cmdline.as_ptr();
+
+		// Identity-map the command line.
+		let page_address = align_down!(address as usize, BasePageSize::SIZE);
+		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+
+		//let cmdline = multiboot.command_line().unwrap();
+		BOOT_INFO.cmdline = address as u64;
+		BOOT_INFO.cmdsize = cmdline.len() as u64;
+	}
+
+	// determine boot stack address
+	let mut new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
+
+	if new_stack + KERNEL_STACK_SIZE as usize > mb_info as usize {
+		new_stack = align_up!(
+			mb_info + mem::size_of::<Multiboot<'_, '_>>(),
+			BasePageSize::SIZE
+		);
+	}
+
+	if new_stack + KERNEL_STACK_SIZE as usize > BOOT_INFO.cmdline as usize {
+		new_stack = align_up!(
+			(BOOT_INFO.cmdline + BOOT_INFO.cmdsize) as usize,
+			BasePageSize::SIZE
+		);
+	}
+
 	BOOT_INFO.current_stack_address = new_stack.try_into().unwrap();
 
 	// map stack in the address space
@@ -192,19 +220,6 @@ pub unsafe fn boot_kernel(
 	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
 	//loaderlog!("BootInfo {:?}", BOOT_INFO);
 	loaderlog!("Use stack address {:#x}", BOOT_INFO.current_stack_address);
-
-	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
-	if let Some(cmdline) = multiboot.command_line() {
-		let address = cmdline.as_ptr();
-
-		// Identity-map the command line.
-		let page_address = align_down!(address as usize, BasePageSize::SIZE);
-		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
-
-		//let cmdline = multiboot.command_line().unwrap();
-		BOOT_INFO.cmdline = address as u64;
-		BOOT_INFO.cmdsize = cmdline.len() as u64;
-	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!(
