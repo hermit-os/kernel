@@ -12,7 +12,6 @@ endif
 
 # Todo - make this feature toggleable
 ifeq ($(arch), aarch64)
-opt += --features "aarch64-qemu-stdout"
 export HERMIT_APP ?= $(PWD)/data/$(arch)/hello_world
 endif
 
