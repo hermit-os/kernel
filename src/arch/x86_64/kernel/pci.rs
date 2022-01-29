@@ -1,4 +1,3 @@
-use crate::arch::x86_64::kernel::pci_ids::{CLASSES, VENDORS};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
@@ -379,38 +378,19 @@ impl fmt::Display for PciBar {
 
 impl fmt::Display for PciAdapter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		// Look for the best matching class name in the PCI Database.
-		let mut class_name = "Unknown Class";
-		for c in CLASSES {
-			if c.id == self.class_id {
-				class_name = c.name;
-				for sc in c.subclasses {
-					if sc.id == self.subclass_id {
-						class_name = sc.name;
-						break;
-					}
-				}
+		use pci_ids::{Class, Device, FromId, Subclass};
 
-				break;
-			}
-		}
+		let class_name = Class::from_id(self.class_id).map_or("Unknown Class", |class| {
+			class
+				.subclasses()
+				.find(|s| s.id() == self.subclass_id)
+				.map(Subclass::name)
+				.unwrap_or_else(|| class.name())
+		});
 
-		// Look for the vendor and device name in the PCI Database.
-		let mut vendor_name = "Unknown Vendor";
-		let mut device_name = "Unknown Device";
-		for v in VENDORS {
-			if v.id == self.vendor_id {
-				vendor_name = v.name;
-				for d in v.devices {
-					if d.id == self.device_id {
-						device_name = d.name;
-						break;
-					}
-				}
-
-				break;
-			}
-		}
+		let (vendor_name, device_name) = Device::from_vid_pid(self.vendor_id, self.device_id)
+			.map(|device| (device.vendor().name(), device.name()))
+			.unwrap_or(("Unknown Vendor", "Unknown Device"));
 
 		// Output detailed readable information about this device.
 		write!(
