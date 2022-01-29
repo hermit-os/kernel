@@ -33,8 +33,6 @@ pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-#[cfg(feature = "smp")]
-mod smp_boot_code;
 #[cfg(not(test))]
 mod start;
 pub mod switch;
