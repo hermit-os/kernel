@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use core::arch::{asm, global_asm};
+
 extern "C" {
 	fn loader_main();
 }
@@ -17,7 +19,8 @@ const MT_DEVICE_GRE: u64 = 2;
 const MT_NORMAL_NC: u64 = 3;
 const MT_NORMAL: u64 = 4;
 
-fn mair(attr: u64, mt: u64) -> u64 {
+#[inline(always)]
+const fn mair(attr: u64, mt: u64) -> u64 {
 	attr << (mt * 8)
 }
 
@@ -37,7 +40,8 @@ const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
 /// Number of virtual address bits for 4KB page
 const VA_BITS: u64 = 48;
 
-fn tcr_size(x: u64) -> u64 {
+#[inline(always)]
+const fn tcr_size(x: u64) -> u64 {
 	((64 - x) << 16) | (64 - x)
 }
 
@@ -45,6 +49,7 @@ global_asm!(include_str!("entry.s"));
 
 #[inline(never)]
 #[no_mangle]
+#[link_section = ".text._start"]
 pub unsafe fn _start_rust() -> ! {
 	pre_init()
 }
@@ -60,11 +65,7 @@ unsafe fn pre_init() -> ! {
 	);
 
 	/* reset thread id registers */
-	asm!("msr tpidr_el0, {0}",
-		"msr tpidr_el1, {0}",
-		in(reg) 0_u64,
-		options(nostack),
-	);
+	asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack),);
 
 	/*
 	 * Disable the MMU. We may have entered the kernel with it on and
@@ -81,7 +82,6 @@ unsafe fn pre_init() -> ! {
 		one = const 0x1,
 		out("x2") _,
 		options(nostack),
-		//::: "x2" : "volatile"
 	);
 
 	asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack),);
@@ -104,7 +104,7 @@ unsafe fn pre_init() -> ! {
 		| mair(0x0c, MT_DEVICE_GRE)
 		| mair(0x44, MT_NORMAL_NC)
 		| mair(0xff, MT_NORMAL);
-	asm!("msr mair_el1, {0}",
+	asm!("msr mair_el1, {}",
 		in(reg) mair_el1,
 		options(nostack),
 	);
@@ -130,8 +130,8 @@ unsafe fn pre_init() -> ! {
 	 * Enable FP/ASIMD in Architectural Feature Access Control Register,
 	 */
 	let bit_mask: u64 = 3 << 20;
-	asm!("msr cpacr_el1, {0}",
-		in(reg) bit_mask,
+	asm!("msr cpacr_el1, {mask}",
+		mask = in(reg) bit_mask,
 		options(nostack),
 	);
 
@@ -140,48 +140,53 @@ unsafe fn pre_init() -> ! {
 	 */
 	asm!("msr mdscr_el1, xzr", options(nostack));
 
-	/* Turning on MMU */
+	/* Memory barrier */
 	asm!("dsb sy", options(nostack));
 
 	/*
 	* Prepare system control register (SCTRL)
 	* Todo: - Verify if all of these bits actually should be explicitly set
-			- Link origin of this documentation and check to which instruction set versions
-			  it applies (if applicable)
-			- Fill in the missing Documentation for some of the bits and verify if we care about them
-			  or if loading and not setting them would be the appropriate action.
+		   - Link origin of this documentation and check to which instruction set versions
+			 it applies (if applicable)
+		   - Fill in the missing Documentation for some of the bits and verify if we care about them
+			 or if loading and not setting them would be the appropriate action.
 	*/
-	let sctrl_el1: u64 = 0;
-	// | (1 << 26) 	/* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
-	// 			 				DC CVAC and IC IVAU instructions */
-	// | (0 << 25)		/* EE      	Explicit data accesses at EL1 and Stage 1 translation
-	// 			 				table walks at EL1 & EL0 are little-endian*/
-	// | (0 << 24)		/* EOE     	Explicit data accesses at EL0 are little-endian*/
-	// | (1 << 23)
-	// | (1 << 22)
-	// | (1 << 20)
-	// | (0 << 19)		/* WXN     	Regions with write permission are not forced to XN */
-	// | (1 << 18)		/* nTWE     WFE instructions are executed as normal*/
-	// | (0 << 17)
-	// | (1 << 16)		/* nTWI    	WFI instructions are executed as normal*/
-	// | (1 << 15)		/* UCT     	Enables EL0 access in AArch64 to the CTR_EL0 register*/
-	// | (1 << 14)		/* DZE     	Execution of the DC ZVA instruction is allowed at EL0*/
-	// | (0 << 13)
-	// | (1 << 12)		/* I       	Instruction caches enabled at EL0 and EL1*/
-	// | (1 << 11)
-	// | (0 << 10)
-	// | (0 << 9)		/* UMA      Disable access to the interrupt masks from EL0*/
-	// | (1 << 8)		/* SED      The SETEND instruction is available*/
-	// | (0 << 7)		/* ITD      The IT instruction functionality is available*/
-	// | (0 << 6)		/* THEE    	ThumbEE is disabled*/
-	// | (0 << 5)		/* CP15BEN  CP15 barrier operations disabled*/
-	// | (1 << 4)		/* SA0     	Stack Alignment check for EL0 enabled*/
-	// | (1 << 3)		/* SA      	Stack Alignment check enabled*/
-	// | (1 << 2)		/* C       	Data and unified enabled*/
-	// | (0 << 1)		/* A       	Alignment fault checking disabled*/
-	// | (0 << 0)		/* M       	MMU enable*/
-	// ;
-	asm!("msr sctlr_el1, {0}", in(reg) sctrl_el1, options(nostack));
+	let sctrl_el1: u64 = 0
+	 | (1 << 26) 	    /* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
+				 				    DC CVAC and IC IVAU instructions */
+	 | (0 << 25)		/* EE      	Explicit data accesses at EL1 and Stage 1 translation
+	 			 				    table walks at EL1 & EL0 are little-endian */
+	 | (0 << 24)		/* EOE     	Explicit data accesses at EL0 are little-endian */
+	 | (1 << 23)
+	 | (1 << 22)
+	 | (1 << 20)
+	 | (0 << 19)		/* WXN     	Regions with write permission are not forced to XN */
+	 | (1 << 18)		/* nTWE     WFE instructions are executed as normal */
+	 | (0 << 17)
+	 | (1 << 16)		/* nTWI    	WFI instructions are executed as normal */
+	 | (1 << 15)		/* UCT     	Enables EL0 access in AArch64 to the CTR_EL0 register */
+	 | (1 << 14)		/* DZE     	Execution of the DC ZVA instruction is allowed at EL0 */
+	 | (0 << 13)
+	 | (1 << 12)		/* I       	Instruction caches enabled at EL0 and EL1 */
+	 | (1 << 11)
+	 | (0 << 10)
+	 | (0 << 9)			/* UMA      Disable access to the interrupt masks from EL0 */
+	 | (1 << 8)			/* SED      The SETEND instruction is available */
+	 | (0 << 7)			/* ITD      The IT instruction functionality is available */
+	 | (0 << 6)			/* THEE    	ThumbEE is disabled */
+	 | (0 << 5)			/* CP15BEN  CP15 barrier operations disabled */
+	 | (1 << 4)			/* SA0     	Stack Alignment check for EL0 enabled */
+	 | (1 << 3)			/* SA      	Stack Alignment check enabled */
+	 | (1 << 2)			/* C       	Data and unified enabled */
+	 | (0 << 1)			/* A       	Alignment fault checking disabled */
+	 | (0 << 0)			/* M       	MMU enable */
+	;
+
+	asm!(
+		"msr sctlr_el1, {0}",
+		in(reg) sctrl_el1,
+		options(nostack),
+	);
 
 	// Enter loader
 	loader_main();

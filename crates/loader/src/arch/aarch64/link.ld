@@ -5,59 +5,49 @@
 OUTPUT_FORMAT("elf64-littleaarch64")
 OUTPUT_ARCH("aarch64")
 ENTRY(_start)
-
-/* start address of the RAM, below belongs to the flash */
-phys = 0x00080000;
+phys = 0x40000000;
 
 PHDRS
 {
-    segment_rx PT_LOAD FLAGS(5); /* 5 == RX */
-    segment_rw PT_LOAD FLAGS(6); /* 6 == RW */
+  segment_ro PT_LOAD FLAGS(4); /* 4 == RO */
+  segment_rx PT_LOAD FLAGS(5); /* 5 == RX */
+  segment_rw PT_LOAD FLAGS(6); /* 6 == RW */
 }
 
 SECTIONS
 {
   . = phys;
   kernel_start = .;
-  __rx_start = .;
   .text ALIGN(4096) : AT(phys) {
-      KEEP(*(.text._start))
-      *(.text._start_arguments) /* Constants (or statics in Rust speak) read by _start(). */
-      *(.text._start_rust)      /* The Rust entry point */
-      *(.text*)                 /* Everything else */
+    KEEP(*(.text._start))
+    *(.text)
+    *(.text.*)
   } :segment_rx
-  .rodata : ALIGN(8) { *(.rodata*) } :segment_rx
-  .got    : ALIGN(8) { *(.got)     } :segment_rx /* Global offset table Todo - do we use this?*/
-  . = ALIGN(64K); /* Align to page boundary */
-  __rx_end_exclusive = .;
-
-  __rw_start = .;
-  .data : { *(.data*) } :segment_rw
-
-  .bss : ALIGN(8) {
+  .rodata : ALIGN(8) {
+    *(.rodata)
+    *(.rodata.*)
+  } :segment_ro
+  .got    : ALIGN(8) {
+    /* Global offset table Todo */
+    *(.got)
+  } :segment_ro
+  .data   : ALIGN(8) {
+    *(.data)
+    *(.data.*)
+  } :segment_rw
+  .bss    : ALIGN(8) {
     bss_start = .;
-    *(.bss*);
-    . = ALIGN(8);
-    . += 8;
+    *(.bss)
+    *(.bss.*)
     bss_end = .;
-  } :NONE
-
-  . = ALIGN(64K); /* Align to page boundary */
-  __rw_end_exclusive = .;
-
+  } :segment_rw
+  . = ALIGN(4K); /* Align to page boundary */
   /***********************************************************************************************
-  * Guard Page between boot core stack and data
-  ***********************************************************************************************/
-  __boot_core_stack_guard_page_start = .;
-  . += 64K;
-  __boot_core_stack_guard_page_end_exclusive = .;
-
-  /***********************************************************************************************
-  * Boot Core Stack
-  ***********************************************************************************************/
-  __boot_core_stack_start = .;         /*   ^             */
+   * Boot Core Stack
+   ***********************************************************************************************/
+  __boot_core_stack_start = .;         /*   ^             */ 
                                        /*   | stack       */
-  . += 512K;                           /*   | growth      */
+  . += 16K;                           /*   | growth      */
                                        /*   | direction   */
   __boot_core_stack_end_exclusive = .; /*   |             */
   kernel_end = .;

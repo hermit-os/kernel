@@ -6,29 +6,46 @@ pub mod serial;
 pub use crate::arch::bootinfo::*;
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
+use core::arch::asm;
 use goblin::elf;
 
 extern "C" {
 	static kernel_end: u8;
+	static mut l0_pgtable: u64;
+	static mut l1_pgtable: u64;
+	static mut l2_pgtable: u64;
+	static mut l2k_pgtable: u64;
+	static mut l3_pgtable: u64;
+	static mut L0mib_pgtable: u64;
 }
 
 pub const ELF_ARCH: u16 = elf::header::EM_AARCH64;
 
-/// start address of the RAM
-const RAM_START: u64 = 0x80000;
-/// Physical address of UART0
-const SERIAL_PORT_ADDRESS: u32 = 0x3F201000;
+/// start address of the RAM at Qemu's virt emulation
+const RAM_START: u64 = 0x40000000;
+/// Physical address of UART0 at Qemu's virt emulation
+const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
+/// Default stack size of the kernel
+const KERNEL_STACK_SIZE: usize = 32_768;
+
+const PT_DEVICE: u64 = 0x707;
+const PT_PT: u64 = 0x713;
+const PT_MEM: u64 = 0x713;
+const PT_MEM_CD: u64 = 0x70F;
+const PT_SELF: u64 = 1 << 55;
 
 // VARIABLES
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
-static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
+static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 pub fn message_output_init() {
 	// nothing to do
 }
 
 pub fn output_message_byte(byte: u8) {
-	COM1.write_byte(byte);
+	unsafe {
+		COM1.write_byte(byte);
+	}
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
@@ -53,14 +70,82 @@ pub unsafe fn boot_kernel(
 
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = virtual_address;
-	BOOT_INFO.limit = RAM_START + 0x4000000 /* 64 MB */;
+	BOOT_INFO.limit = RAM_START + 0x10000000 /* 256 MB */;
 	BOOT_INFO.image_size = mem_size;
-	BOOT_INFO.current_stack_address = RAM_START;
-	//loaderlog!("BOOT_INFO:");
-	//loaderlog!("==========");
-	//loaderlog!("{:?}", BOOT_INFO);
+	BOOT_INFO.current_stack_address = virtual_address - KERNEL_STACK_SIZE as u64;
+	BOOT_INFO.uartport = 0x1000;
+	loaderlog!("BOOT_INFO:");
+	loaderlog!("==========");
+	loaderlog!("{:?}", BOOT_INFO);
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512);
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+	pgt_slice[0] = &l1_pgtable as *const u64 as u64 + PT_PT;
+	pgt_slice[511] = &l0_pgtable as *const u64 as u64 + PT_PT + PT_SELF;
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l1_pgtable as *mut u64, 512);
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+	pgt_slice[0] = &l2_pgtable as *const _ as u64 + PT_PT;
+	pgt_slice[1] = &l2k_pgtable as *const _ as u64 + PT_PT;
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l2_pgtable as *mut u64, 512);
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+	pgt_slice[0] = &l3_pgtable as *const u64 as u64 + PT_PT;
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l3_pgtable as *mut u64, 512);
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+	pgt_slice[1] = SERIAL_PORT_ADDRESS as u64 + PT_MEM_CD;
+
+	// map kernel to KERNEL_START and stack below the kernel
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut l2k_pgtable as *mut u64, 512);
+	for i in pgt_slice.iter_mut() {
+		*i = 0;
+	}
+	for i in 0..10 {
+		pgt_slice[i] =
+			&mut L0mib_pgtable as *mut _ as u64 + (i * BasePageSize::SIZE) as u64 + PT_PT;
+	}
+
+	let pgt_slice = core::slice::from_raw_parts_mut(&mut L0mib_pgtable as *mut u64, 10 * 512);
+	for (i, entry) in pgt_slice.iter_mut().enumerate() {
+		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
+	}
 
 	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =
 		core::mem::transmute(entry_point);
+	COM1.set_port(0x1000);
+
+	// Load TTBRx
+	asm!(
+			"msr ttbr1_el1, xzr",
+			"msr ttbr0_el1, {}",
+			"dsb sy",
+			"isb",
+			in(reg) &l0_pgtable as *const _ as u64,
+			options(nostack),
+	);
+
+	// Enable paging
+	asm!(
+			"mrs x0, sctlr_el1",
+			"orr x0, x0, #1",
+			"msr sctlr_el1, x0",
+			"bl 0f",
+			"0:",
+			out("x0") _,
+			options(nostack),
+	);
+
+	/* Memory barrier */
+	asm!("dsb sy", options(nostack));
+
 	func(&mut BOOT_INFO)
 }
