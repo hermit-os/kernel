@@ -1,4 +1,4 @@
-use crate::arch::aarch64::SERIAL_PORT_ADDRESS;
+use crate::arch::aarch64::{RAM_START, SERIAL_PORT_ADDRESS};
 use core::fmt;
 
 #[repr(C)]
@@ -7,11 +7,13 @@ pub struct BootInfo {
 	pub magic_number: u32,
 	pub version: u32,
 	pub base: u64,
+	pub ram_start: u64,
 	pub limit: u64,
 	pub image_size: u64,
 	pub tls_start: u64,
 	pub tls_filesz: u64,
 	pub tls_memsz: u64,
+	pub tls_align: u64,
 	pub current_stack_address: u64,
 	pub current_percore_address: u64,
 	pub host_logical_addr: u64,
@@ -29,7 +31,6 @@ pub struct BootInfo {
 	pub hcip: [u8; 4],
 	pub hcgateway: [u8; 4],
 	pub hcmask: [u8; 4],
-	pub tls_align: u64,
 }
 
 impl BootInfo {
@@ -38,10 +39,12 @@ impl BootInfo {
 			magic_number: 0xC0DE_CAFEu32,
 			version: 1,
 			base: 0,
+			ram_start: RAM_START,
 			limit: 0,
 			tls_start: 0,
 			tls_filesz: 0,
 			tls_memsz: 0,
+			tls_align: 0,
 			image_size: 0,
 			current_stack_address: 0,
 			current_percore_address: 0,
@@ -60,7 +63,6 @@ impl BootInfo {
 			hcip: [255, 255, 255, 255],
 			hcgateway: [255, 255, 255, 255],
 			hcmask: [255, 255, 255, 0],
-			tls_align: 0,
 		}
 	}
 }
@@ -70,6 +72,7 @@ impl fmt::Debug for BootInfo {
 		writeln!(f, "magic_number {:#x}", self.magic_number)?;
 		writeln!(f, "version {:#x}", self.version)?;
 		writeln!(f, "base {:#x}", self.base)?;
+		writeln!(f, "ram address {:#x}", self.ram_start)?;
 		writeln!(f, "limit {:#x}", self.limit)?;
 		writeln!(f, "tls_start {:#x}", self.tls_start)?;
 		writeln!(f, "tls_filesz {:#x}", self.tls_filesz)?;
