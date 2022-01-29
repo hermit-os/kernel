@@ -43,5 +43,5 @@ jobs:
     - name: Print list of machine types
       run: qemu-system-aarch64 -machine ?
     - name: Test loader
-      run: qemu-system-aarch64 -display none -smp 4 -m 1G -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine raspi3 -semihosting
+      run: qemu-system-aarch64 -semihosting -display none -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine virt,gic-version=max -m 512M -cpu max -smp 1
       timeout-minutes: 1
