@@ -74,9 +74,9 @@ pub unsafe fn boot_kernel(
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.current_stack_address = virtual_address - KERNEL_STACK_SIZE as u64;
 	BOOT_INFO.uartport = 0x1000;
-	loaderlog!("BOOT_INFO:");
-	loaderlog!("==========");
-	loaderlog!("{:?}", BOOT_INFO);
+	//loaderlog!("BOOT_INFO:");
+	//loaderlog!("==========");
+	//loaderlog!("{:?}", BOOT_INFO);
 
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512);
 	for i in pgt_slice.iter_mut() {
