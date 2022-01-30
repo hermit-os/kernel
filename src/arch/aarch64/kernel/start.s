@@ -202,9 +202,3 @@ ventry el0_fiq_invalid          // FIQ 32-bit EL0
 ventry el0_error_invalid        // Error 32-bit EL0
 .size vector_table, .-vector_table
 
-.section .bss
-.global l0_pgtable
-.align 12
-l0_pgtable:
-    .space 6*512*8, 0
-

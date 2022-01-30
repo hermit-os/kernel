@@ -47,6 +47,10 @@ pub fn get_boot_info_address() -> VirtAddr {
 	VirtAddr(unsafe { BOOT_INFO as u64 })
 }
 
+pub fn get_ram_address() -> PhysAddr {
+	unsafe { PhysAddr(core::ptr::read_volatile(&(*BOOT_INFO).ram_start)) }
+}
+
 pub fn get_image_size() -> usize {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
 }

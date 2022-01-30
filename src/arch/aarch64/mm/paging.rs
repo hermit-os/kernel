@@ -1,10 +1,10 @@
 use core::marker::PhantomData;
-use core::{fmt, ptr, usize};
+use core::{fmt, mem, ptr, usize};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::kernel::{
-	get_base_address, get_boot_info_address, get_image_size, is_uhyve,
+	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve,
 };
 use crate::arch::aarch64::mm::physicalmem;
 use crate::arch::aarch64::mm::virtualmem;
@@ -14,15 +14,11 @@ use crate::mm;
 use crate::scheduler;
 use crate::KERNEL_STACK_SIZE;
 
-extern "C" {
-	static mut l0_pgtable: usize;
-}
-
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
 ///
 /// See entry.S and ARM Cortex-A Series Programmer's Guide for ARMv8-A, Version 1.0, PDF page 172
-const L0TABLE_ADDRESS: *mut PageTable<L0Table> = 0x0000_FFFF_FFFF_F000 as *mut PageTable<L0Table>;
+const L0TABLE_ADDRESS: VirtAddr = VirtAddr(0x0000_FFFF_FFFF_F000u64);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -390,7 +386,12 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
+		if flags == PageTableEntryFlags::BLANK {
+			// in this case we unmap the pages
+			self.entries[index].set(physical_address, flags);
+		} else {
+			self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
+		}
 
 		if flush {
 			page.flush_from_tlb();
@@ -544,7 +545,9 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.get_page_table_entry(page)
 }
 
@@ -552,7 +555,9 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	let address = root_pagetable
 		.get_page_table_entry(page)
 		.expect("Entry not present")
@@ -587,11 +592,25 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
-pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {}
+pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
+	trace!(
+		"Unmapping virtual address {:#X} ({} pages)",
+		virtual_address,
+		count
+	);
+
+	let range = get_page_range::<S>(virtual_address, count);
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
+	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
+}
 
 #[inline]
 pub fn get_application_page_size() -> usize {
@@ -600,6 +619,9 @@ pub fn get_application_page_size() -> usize {
 
 pub unsafe fn init() {
 	let aa64mmfr0: u64;
+
+	let ram_start = get_ram_address();
+	info!("RAM starts at physical address 0x{:x}", ram_start);
 
 	// determine physical address size
 	asm!(
@@ -625,101 +647,10 @@ pub unsafe fn init() {
 	let tgran4: u64 = (aa64mmfr0 >> 28) & 0b1111;
 
 	info!("Support of 4KB pages: {}", tgran4 == 0);
-	info!("Support of 16KB pages: {}", tgran16 == 0);
+	info!("Support of 16KB pages: {}", tgran16 == 0b0001);
 	info!("Support of 64KB pages: {}", tgran64 == 0);
 
 	assert!(tgran4 == 0);
 
-	// Initialize page tables
-
-	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut usize, 6 * 512);
-
-	// clear page tables
-	for i in pgt_slice.iter_mut() {
-		*i = 0;
-	}
-
-	let l0pgt = &l0_pgtable as *const usize as usize;
-	debug!("Root page table is located at 0x{:x}", l0pgt);
-
-	let flag = PageTableEntryFlags::PRESENT
-		| PageTableEntryFlags::TABLE_OR_4KIB_PAGE
-		| PageTableEntryFlags::INNER_SHAREABLE
-		| PageTableEntryFlags::ACCESSED
-		| PageTableEntryFlags::NORMAL;
-	let flag_nc = PageTableEntryFlags::PRESENT
-		| PageTableEntryFlags::TABLE_OR_4KIB_PAGE
-		| PageTableEntryFlags::INNER_SHAREABLE
-		| PageTableEntryFlags::ACCESSED
-		| PageTableEntryFlags::NORMAL_NC;
-
-	// Level 0 Page Table Entries - Idx 0 => 0
-	pgt_slice[0] = (l0pgt + 1 * BasePageSize::SIZE) | flag.bits() as usize;
-	pgt_slice[511] = l0pgt | (flag | PageTableEntryFlags::SELF).bits() as usize;
-	// Level 1 Page Table Entries - Idx 0 => 512
-	pgt_slice[512] = (l0pgt + 2 * BasePageSize::SIZE) | flag.bits() as usize;
-	// Level 2 Page Table Entries - Idx 0 => 1024
-	pgt_slice[1024 + 0] = (l0pgt + 3 * BasePageSize::SIZE) | flag.bits() as usize;
-	pgt_slice[1024 + 1] = (l0pgt + 4 * BasePageSize::SIZE) | flag.bits() as usize;
-	pgt_slice[1024 + 2] = (l0pgt + 5 * BasePageSize::SIZE) | flag.bits() as usize;
-
-	if is_uhyve() {
-		debug!("Map uhyve's I/O ports");
-		pgt_slice[1024 + 512] = flag_nc.bits() as usize;
-	}
-
-	let boot_info = get_boot_info_address().as_usize();
-	debug!("Map BootInfo 0x{:x}", boot_info);
-	let idx_lv3 = (boot_info >> PAGE_BITS) & PAGE_MAP_MASK;
-	let idx_lv2 = (boot_info >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
-	pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
-		align_down!(boot_info, BasePageSize::SIZE) | flag.bits() as usize;
-
-	let start = get_base_address().as_usize();
-	let end = get_base_address().as_usize() + get_image_size();
-	debug!(
-		"Map kernel into the page tables: 0x{:x} - 0x{:x}",
-		start, end
-	);
-	for addr in (start..end).step_by(BasePageSize::SIZE) {
-		let idx_lv3 = (addr >> PAGE_BITS) & PAGE_MAP_MASK;
-		let idx_lv2 = (addr >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
-
-		pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
-			align_down!(addr, BasePageSize::SIZE) | flag.bits() as usize;
-	}
-
-	let stack = get_current_stack_address().as_usize();
-	debug!(
-		"Map boot stack 0:{:x} - 0x{:x}",
-		stack,
-		stack + KERNEL_STACK_SIZE
-	);
-	for addr in (stack..stack + KERNEL_STACK_SIZE).step_by(BasePageSize::SIZE) {
-		let idx_lv3 = (addr >> PAGE_BITS) & PAGE_MAP_MASK;
-		let idx_lv2 = (addr >> (PAGE_BITS + PAGE_MAP_BITS)) & PAGE_MAP_MASK;
-
-		pgt_slice[1024 + (idx_lv2 + 1) * 512 + idx_lv3] =
-			align_down!(addr, BasePageSize::SIZE) | flag.bits() as usize;
-	}
-
-	// Load TTBRx
-	asm!(
-		"msr ttbr1_el1, xzr",
-		"msr ttbr0_el1, {}",
-		"isb",
-		in(reg) l0pgt,
-		options(nostack),
-	);
-
-	// Enable paging
-	asm!(
-		"mrs x0, sctlr_el1",
-		"orr x0, x0, #1",
-		"msr sctlr_el1, x0",
-		"bl 0f",
-		"0:",
-		out("x0") _,
-		options(nostack),
-	);
+	// page tables are already initialized, we have just to remove obsolete entries
 }

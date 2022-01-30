@@ -103,8 +103,7 @@ pub fn init() {
 
 	//info!("reserved space {} KB", reserved_space >> 10);
 
-	if total_memory_size() < kernel_end_address().as_usize() + reserved_space + LargePageSize::SIZE
-	{
+	if total_memory_size() < environment::get_image_size() + reserved_space + LargePageSize::SIZE {
 		panic!("No enough memory available!");
 	}
 
@@ -112,7 +111,7 @@ pub fn init() {
 	let mut map_size: usize;
 
 	let available_memory = align_down!(
-		total_memory_size() - kernel_end_address().as_usize() - reserved_space,
+		total_memory_size() - environment::get_image_size() - reserved_space,
 		LargePageSize::SIZE
 	);
 

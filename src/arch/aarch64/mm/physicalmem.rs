@@ -1,7 +1,7 @@
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::arch::aarch64::kernel::get_limit;
+use crate::arch::aarch64::kernel::{get_boot_info_address, get_limit, get_ram_address};
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::environment::is_uhyve;
@@ -12,25 +12,39 @@ use crate::synch::spinlock::SpinlockIrqSave;
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
-const RAM_START: usize = 0x80000;
-
 fn detect_from_limits() -> Result<(), ()> {
 	let limit = get_limit();
 	if limit == 0 {
 		return Err(());
 	}
 
+	let boot_info = align_down!(get_boot_info_address().as_usize(), BasePageSize::SIZE);
+
+	let entry = FreeListEntry {
+		start: get_ram_address().as_usize(),
+		end: boot_info,
+	};
+	let mut total: usize = boot_info - get_ram_address().as_usize();
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+
+	let entry = FreeListEntry {
+		start: boot_info + BasePageSize::SIZE,
+		end: mm::kernel_start_address().as_usize() - crate::KERNEL_STACK_SIZE,
+	};
+	total = mm::kernel_start_address().as_usize()
+		- crate::KERNEL_STACK_SIZE
+		- boot_info
+		- BasePageSize::SIZE;
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+
 	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),
 		end: limit,
 	};
+	total = limit - mm::kernel_end_address().as_usize();
 	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 
-	if is_uhyve() {
-		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
-	} else {
-		TOTAL_MEMORY.store(limit - RAM_START, Ordering::SeqCst);
-	}
+	TOTAL_MEMORY.store(total, Ordering::SeqCst);
 
 	Ok(())
 }
