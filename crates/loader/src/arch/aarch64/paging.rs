@@ -1,5 +1,14 @@
 use core::marker::PhantomData;
 
+/// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
+pub const PAGE_BITS: usize = 12;
+
+/// Number of bits of the index in each table (L0Table, L1Table, L2Table, L3Table).
+pub const PAGE_MAP_BITS: usize = 9;
+
+/// A mask where PAGE_MAP_BITS are set to calculate a table index.
+pub const PAGE_MAP_MASK: usize = 0x1FF;
+
 /// A generic interface to support all possible page sizes.
 ///
 /// This is defined as a subtrait of Copy to enable #[derive(Clone, Copy)] for Page.

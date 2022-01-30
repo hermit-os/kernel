@@ -11,5 +11,6 @@
     "features": "+a53,+strict-align,-fp-armv8",
     "executables": true,
     "relocation-model": "static",
+    "disable-redzone": true,
     "panic-strategy": "abort"
 }
