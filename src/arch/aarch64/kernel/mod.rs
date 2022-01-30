@@ -20,7 +20,7 @@ use crate::config::*;
 use crate::environment;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
-use core::arch::global_asm;
+use core::arch::{asm, global_asm};
 use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -172,24 +172,24 @@ pub fn boot_processor_init() {
 		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
 		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
-		llvm_asm!("msr pmuserenr_el0, $0" :: "r"(pmuserenr_el0) :: "volatile");
+		asm!("msr pmuserenr_el0, {}", in(reg) pmuserenr_el0, options(nomem, nostack));
 		debug!("pmuserenr_el0");
 
 		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
 		let pmcntenset_el0: u32 = 1 << 31;
-		llvm_asm!("msr pmcntenset_el0, $0" :: "r"(pmcntenset_el0) :: "volatile");
+		asm!("msr pmcntenset_el0, {}", in(reg) pmcntenset_el0, options(nomem, nostack));
 		debug!("pmcntenset_el0");
 
 		// Enable PMCCNTR_EL0 using PMCR_EL0.
-		let mut pmcr_el0: u32 = 0;
-		llvm_asm!("mrs $0, pmcr_el0" : "=r"(pmcr_el0) :: "memory" : "volatile");
+		let mut pmcr_el0: u32;
+		asm!("mrs {}, pmcr_el0", out(reg) pmcr_el0, options(nomem, nostack));
 		debug!(
 			"PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}",
 			pmcr_el0
 		);
 		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;
-		llvm_asm!("msr pmcr_el0, $0" :: "r"(pmcr_el0) :: "volatile");
+		asm!("msr pmcr_el0, {}", in(reg) pmcr_el0, options(nomem, nostack));
 	}
 
 	// Read out PMCCNTR_EL0 in an infinite loop.
@@ -197,7 +197,7 @@ pub fn boot_processor_init() {
 	loop {
 		unsafe {
 			let pmccntr: u64;
-			llvm_asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
+			asm!("mrs {}, pmccntr_el0", out(reg) pmccntr, options(nomem, nostack));
 			println!("Count: {}", pmccntr);
 		}
 	}
