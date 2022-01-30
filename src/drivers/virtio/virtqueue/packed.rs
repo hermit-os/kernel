@@ -2324,19 +2324,12 @@ impl PackedVq {
 		recv: Option<&Vec<MemDescr>>,
 	) -> Result<MemDescr, VirtqError> {
 		// Need to match (send, recv) twice, as the "size" of the control descriptor to be pulled must be known in advance.
-		let len: usize;
-		match (send, recv) {
+		let len: usize = match (send, recv) {
 			(None, None) => return Err(VirtqError::BufferNotSpecified),
-			(None, Some(recv_desc_lst)) => {
-				len = recv_desc_lst.len();
-			}
-			(Some(send_desc_lst), None) => {
-				len = send_desc_lst.len();
-			}
-			(Some(send_desc_lst), Some(recv_desc_lst)) => {
-				len = send_desc_lst.len() + recv_desc_lst.len();
-			}
-		}
+			(None, Some(recv_desc_lst)) => recv_desc_lst.len(),
+			(Some(send_desc_lst), None) => send_desc_lst.len(),
+			(Some(send_desc_lst), Some(recv_desc_lst)) => send_desc_lst.len() + recv_desc_lst.len(),
+		};
 
 		let sz_indrct_lst = match Bytes::new(core::mem::size_of::<Descriptor>() * len) {
 			Some(bytes) => bytes,

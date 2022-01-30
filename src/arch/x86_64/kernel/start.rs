@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::{
 	kernel::{pre_init, scheduler::TaskStacks, BootInfo},
 	KERNEL_STACK_SIZE,

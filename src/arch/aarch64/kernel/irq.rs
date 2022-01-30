@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 const IRQ_FLAG_F: usize = 1 << 6;
 const IRQ_FLAG_I: usize = 1 << 7;
 const IRQ_FLAG_A: usize = 1 << 8;

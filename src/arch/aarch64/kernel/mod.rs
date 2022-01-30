@@ -20,6 +20,7 @@ use crate::config::*;
 use crate::environment;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
+use core::arch::global_asm;
 use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
