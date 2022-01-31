@@ -12,11 +12,7 @@ use crate::synch::spinlock::SpinlockIrqSave;
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
-fn detect_from_uhyve() -> Result<(), ()> {
-	if !is_uhyve() {
-		return Err(());
-	}
-
+fn detect_from_limits() -> Result<(), ()> {
 	let limit = get_limit();
 	if limit == 0 {
 		return Err(());
@@ -35,47 +31,8 @@ fn detect_from_uhyve() -> Result<(), ()> {
 	Ok(())
 }
 
-fn detect_from_qemu() -> Result<(), ()> {
-	let limit = get_limit();
-	if limit == 0 {
-		return Err(());
-	}
-
-	let boot_info = align_down!(get_boot_info_address().as_usize(), BasePageSize::SIZE);
-
-	let entry = FreeListEntry {
-		start: get_ram_address().as_usize(),
-		end: boot_info,
-	};
-	let mut total: usize = boot_info - get_ram_address().as_usize();
-	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
-
-	let entry = FreeListEntry {
-		start: boot_info + BasePageSize::SIZE,
-		end: mm::kernel_start_address().as_usize() - crate::KERNEL_STACK_SIZE,
-	};
-	total = mm::kernel_start_address().as_usize()
-		- crate::KERNEL_STACK_SIZE
-		- boot_info
-		- BasePageSize::SIZE;
-	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
-
-	let entry = FreeListEntry {
-		start: mm::kernel_end_address().as_usize(),
-		end: limit,
-	};
-	total = limit - mm::kernel_end_address().as_usize();
-	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
-
-	TOTAL_MEMORY.store(total, Ordering::SeqCst);
-
-	Ok(())
-}
-
 pub fn init() {
-	detect_from_uhyve()
-		.or_else(|_e| detect_from_qemu())
-		.expect("Unable to determine physical address space!");
+	detect_from_limits().expect("Unable to determine physical address space!");
 }
 
 pub fn total_memory_size() -> usize {

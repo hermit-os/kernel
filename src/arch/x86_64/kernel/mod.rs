@@ -213,6 +213,10 @@ pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
 	kernel_function!(__sys_uhyve_get_mask(mask))
 }
 
+pub fn get_ram_address() -> PhysAddr {
+	PhysAddr(0)
+}
+
 pub fn get_base_address() -> VirtAddr {
 	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).base)) }
 }
