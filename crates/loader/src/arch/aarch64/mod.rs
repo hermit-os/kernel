@@ -70,7 +70,7 @@ pub unsafe fn boot_kernel(
 
 	// Supply the parameters to the HermitCore application.
 	BOOT_INFO.base = virtual_address;
-	BOOT_INFO.limit = RAM_START + 0x50000000 /* 512 MB */;
+	BOOT_INFO.limit = RAM_START + 0x20000000 /* 512 MB */;
 	BOOT_INFO.image_size = mem_size;
 	BOOT_INFO.current_stack_address = virtual_address - KERNEL_STACK_SIZE as u64;
 	BOOT_INFO.uartport = 0x1000;
