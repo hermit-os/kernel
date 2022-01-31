@@ -5,7 +5,7 @@ use core::{intrinsics, ptr};
 
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
-use crate::arch::mm::VirtAddr;
+use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
