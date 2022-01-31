@@ -1,7 +1,6 @@
 use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
-use core::sync::atomic::{self, Ordering};
 use core::{intrinsics, ptr};
 
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
@@ -478,8 +477,8 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 
 	BOOT_INFO = boot_info as *mut BootInfo;
 
-	atomic::fence(Ordering::Acquire);
-	if boot_info.cpu_online == 0 {
+	let cpu_online = intrinsics::atomic_load_acq(&mut (*BOOT_INFO).cpu_online as *mut u32);
+	if cpu_online == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
