@@ -96,8 +96,8 @@ pub fn init() {
 	let npage_3tables = npages / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
 	let npage_2tables = npage_3tables / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
 	let npage_1tables = npage_2tables / (BasePageSize::SIZE / mem::align_of::<usize>()) + 1;
-	let reserved_space =
-		(npage_3tables + npage_2tables + npage_1tables) * BasePageSize::SIZE + 8*LargePageSize::SIZE;
+	let reserved_space = (npage_3tables + npage_2tables + npage_1tables) * BasePageSize::SIZE
+		+ 8 * LargePageSize::SIZE;
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
