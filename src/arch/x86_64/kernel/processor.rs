@@ -7,6 +7,7 @@ use crate::environment;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
+use core::arch::asm;
 use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
 	_xsave,

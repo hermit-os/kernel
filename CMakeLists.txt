@@ -20,8 +20,6 @@ add_custom_target(doc
 # arch
 if("${HERMIT_ARCH}" STREQUAL "aarch64")
 	add_subdirectory(src/arch/aarch64)
-#elseif("${HERMIT_ARCH}" STREQUAL "x86_64")
-#	add_subdirectory(src/arch/x86_64/kernel)
 endif()
 
 set(LWIP_SRC ../lwip/src)

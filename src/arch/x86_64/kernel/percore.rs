@@ -3,6 +3,7 @@ use crate::arch::x86_64::kernel::BOOT_INFO;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 use crate::x86::bits64::task::TaskStateSegment;
 use crate::x86::msr::*;
+use core::arch::asm;
 use core::mem;
 use core::ptr;
 use crossbeam_utils::CachePadded;

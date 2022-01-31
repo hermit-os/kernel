@@ -56,6 +56,7 @@ FROM hermit-toolchain as ci-runner
 RUN set -eux; \
 	apt-get update; \
 	apt-get install -y --no-install-recommends \
+        nasm \
         # For kvm-ok:
 		cpu-checker \
         qemu-system-x86 \

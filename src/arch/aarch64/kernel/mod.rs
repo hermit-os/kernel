@@ -20,6 +20,7 @@ use crate::config::*;
 use crate::environment;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
+use core::arch::{asm, global_asm};
 use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -186,7 +187,7 @@ pub fn boot_processor_init() {
 	loop {
 		unsafe {
 			let pmccntr: u64;
-			llvm_asm!("mrs $0, pmccntr_el0" : "=r"(pmccntr) ::: "volatile");
+			asm!("mrs {}, pmccntr_el0", out(reg) pmccntr, options(nomem, nostack));
 			println!("Count: {}", pmccntr);
 		}
 	}
@@ -222,7 +223,7 @@ fn finish_processor_init() {
 		// Fortunately, the Core IDs are guaranteed to be sequential and match the Local APIC IDs.
 		apic::add_local_apic_id(core_id() as u8);
 
-		// uhyve also boots each processor into entry.asm itself and does not use apic::boot_application_processors.
+		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
 		apic::init_next_processor_variables(core_id() + 1);
 	}*/

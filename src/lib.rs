@@ -10,7 +10,6 @@
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
-#![feature(asm)]
 #![feature(asm_const)]
 #![feature(asm_sym)]
 #![feature(const_btree_new)]
@@ -29,8 +28,6 @@
 #![feature(alloc_error_handler)]
 #![feature(vec_into_raw_parts)]
 #![feature(drain_filter)]
-#![feature(llvm_asm)]
-#![feature(global_asm)]
 #![no_std]
 #![cfg_attr(
 	any(target_os = "none", target_os = "hermit"),

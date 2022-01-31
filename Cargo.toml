@@ -51,30 +51,32 @@ harness = false
 default = ["pci", "acpi", "fsgsbase", "smp"]
 vga = []
 newlib = []
-pci = []
+pci = ["pci-ids"]
 acpi = []
-smp = []
+smp = ["include-transformed"]
 fsgsbase = []
 
 [dependencies]
 bitflags = "1.3"
 crossbeam-utils = { version = "0.8", default-features = false }
+include-transformed = { version = "0.2", optional = true }
 log = { version = "0.4", default-features = false }
 num = { version = "0.4", default-features = false }
 num-derive = "0.3"
 num-traits = { version = "0.2", default-features = false }
+pci-ids = { version = "0.2", optional = true }
 scopeguard = { version = "1.1", default-features = false }
-qemu-exit = "2.0"
+qemu-exit = "3.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 multiboot = "0.7"
-x86 = { version = "0.43", default-features = false }
+x86 = { version = "0.45", default-features = false }
 
 [dev-dependencies]
 float-cmp = "0.9"
 num-traits = { version = "0.2", default-features = false }
-x86 = { version = "0.43", default-features = false }
+x86 = { version = "0.45", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies.aarch64]
-version = "0.0.6"
+version = "0.0.7"
 default-features = false

@@ -1,4 +1,4 @@
-use core::{mem, ptr};
+use core::{arch::asm, mem, ptr};
 
 use crate::percore;
 use crate::set_current_kernel_stack;

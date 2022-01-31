@@ -2,8 +2,6 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-#[cfg(all(any(target_os = "none", target_os = "hermit"), feature = "smp"))]
-use crate::arch::x86_64::kernel::smp_boot_code::SMP_BOOT_CODE;
 use crate::arch::x86_64::kernel::IRQ_COUNTERS;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
@@ -727,7 +725,7 @@ pub fn init_x2apic() {
 	}
 }
 
-/// Initialize the required entry.asm variables for the next CPU to be booted.
+/// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
@@ -764,12 +762,16 @@ extern "C" {
 /// This is partly confirmed by https://wiki.osdev.org/Symmetric_Multiprocessing
 #[cfg(all(any(target_os = "none", target_os = "hermit"), feature = "smp"))]
 pub fn boot_application_processors() {
+	use include_transformed::include_nasm_bin;
+
+	let smp_boot_code = include_nasm_bin!("boot.asm");
+
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
-		SMP_BOOT_CODE.len() < BasePageSize::SIZE,
+		smp_boot_code.len() < BasePageSize::SIZE,
 		"SMP Boot Code is larger than a page"
 	);
-	debug!("SMP boot code is {} bytes long", SMP_BOOT_CODE.len());
+	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 
 	// Identity-map the boot code page and copy over the code.
 	debug!(
@@ -786,9 +788,9 @@ pub fn boot_application_processors() {
 	);
 	unsafe {
 		ptr::copy_nonoverlapping(
-			&SMP_BOOT_CODE as *const u8,
+			smp_boot_code.as_ptr(),
 			SMP_BOOT_CODE_ADDRESS.as_mut_ptr(),
-			SMP_BOOT_CODE.len(),
+			smp_boot_code.len(),
 		);
 	}
 

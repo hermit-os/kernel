@@ -358,14 +358,12 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 				// It is usually the byte prefix, indicating that the actual data is the single byte following the opcode.
 				// However, if the data is a zero or one byte, this may also be indicated by the opcode.
 				let op = aml[i + 7];
-				let slp_typa;
-
-				match op {
-					AML_ZEROOP => slp_typa = 0,
-					AML_ONEOP => slp_typa = 1,
-					AML_BYTEPREFIX => slp_typa = aml[i + 8],
+				let slp_typa = match op {
+					AML_ZEROOP => 0,
+					AML_ONEOP => 1,
+					AML_BYTEPREFIX => aml[i + 8],
 					_ => return,
-				}
+				};
 
 				// All assumptions are correct, so slp_typa is supposed to contain valid information.
 				// Now we have all information we need for powering off through ACPI.

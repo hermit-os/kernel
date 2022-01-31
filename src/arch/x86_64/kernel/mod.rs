@@ -25,16 +25,12 @@ pub mod irq;
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
-#[cfg(feature = "pci")]
-mod pci_ids;
 pub mod percore;
 pub mod pic;
 pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-#[cfg(feature = "smp")]
-mod smp_boot_code;
 #[cfg(not(test))]
 mod start;
 pub mod switch;
@@ -437,7 +433,7 @@ fn finish_processor_init() {
 		// Fortunately, the Local APIC IDs of uhyve are sequential and therefore match the Core IDs.
 		apic::add_local_apic_id(core_id() as u8);
 
-		// uhyve also boots each processor into entry.asm itself and does not use apic::boot_application_processors.
+		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
 		apic::init_next_processor_variables(core_id() + 1);
 	}
