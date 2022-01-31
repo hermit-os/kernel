@@ -478,7 +478,7 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 
 	BOOT_INFO = boot_info as *mut BootInfo;
 
-	atomic::fence(Ordering::SeqCst);
+	atomic::fence(Ordering::Acquire);
 	if boot_info.cpu_online == 0 {
 		crate::boot_processor_main()
 	} else {
