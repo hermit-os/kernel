@@ -19,11 +19,13 @@ const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
 const TASK_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x8000_0000_0000);
 
 pub fn init() {
-	let entry = FreeListEntry {
-		start: 0x2000,
-		end: get_ram_address().as_usize(),
-	};
-	KERNEL_FREE_LIST.lock().list.push_back(entry);
+	if get_ram_address() > PhysAddr(0x2000) {
+		let entry = FreeListEntry {
+			start: 0x2000,
+			end: get_ram_address().as_usize(),
+		};
+		KERNEL_FREE_LIST.lock().list.push_back(entry);
+	}
 
 	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),

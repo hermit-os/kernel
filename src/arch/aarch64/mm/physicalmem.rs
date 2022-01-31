@@ -12,7 +12,30 @@ use crate::synch::spinlock::SpinlockIrqSave;
 static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
-fn detect_from_limits() -> Result<(), ()> {
+fn detect_from_uhyve() -> Result<(), ()> {
+	if !is_uhyve() {
+		return Err(());
+	}
+
+	let limit = get_limit();
+	if limit == 0 {
+		return Err(());
+	}
+
+	let entry = FreeListEntry {
+		start: mm::kernel_end_address().as_usize(),
+		end: limit,
+	};
+	TOTAL_MEMORY.store(
+		limit - mm::kernel_end_address().as_usize(),
+		Ordering::SeqCst,
+	);
+	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+
+	Ok(())
+}
+
+fn detect_from_qemu() -> Result<(), ()> {
 	let limit = get_limit();
 	if limit == 0 {
 		return Err(());
@@ -50,7 +73,9 @@ fn detect_from_limits() -> Result<(), ()> {
 }
 
 pub fn init() {
-	detect_from_limits().expect("Unable to determine physical address space!");
+	detect_from_uhyve()
+		.or_else(|_e| detect_from_qemu())
+		.expect("Unable to determine physical address space!");
 }
 
 pub fn total_memory_size() -> usize {
