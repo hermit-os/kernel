@@ -99,10 +99,14 @@ pub fn init() {
 	let reserved_space =
 		(npage_3tables + npage_2tables + npage_1tables) * BasePageSize::SIZE + LargePageSize::SIZE;
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
+	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
 	//info!("reserved space {} KB", reserved_space >> 10);
 
-	if total_memory_size() < kernel_end_address().as_usize() + reserved_space + LargePageSize::SIZE
+	if total_memory_size()
+		< kernel_end_address().as_usize() - environment::get_ram_address().as_usize()
+			+ reserved_space
+			+ LargePageSize::SIZE
 	{
 		panic!("No enough memory available!");
 	}
@@ -111,7 +115,9 @@ pub fn init() {
 	let mut map_size: usize;
 
 	let available_memory = align_down!(
-		total_memory_size() - kernel_end_address().as_usize() - reserved_space,
+		total_memory_size()
+			- (kernel_end_address().as_usize() - environment::get_ram_address().as_usize())
+			- reserved_space,
 		LargePageSize::SIZE
 	);
 
@@ -179,9 +185,14 @@ pub fn init() {
 			0
 		};
 
-		if counter == 0 {
+		if counter == 0 && has_2mib_pages {
 			// fall back to large pages
 			counter = map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE);
+		}
+
+		if counter == 0 {
+			// fall back to normal pages, but map at least the size of a large page
+			counter = map_heap::<BasePageSize>(virt_addr, LargePageSize::SIZE);
 		}
 
 		unsafe {
@@ -204,8 +215,14 @@ pub fn init() {
 		map_addr += counter;
 	}
 
-	if map_size > LargePageSize::SIZE {
+	if has_2mib_pages && map_size > LargePageSize::SIZE {
 		let counter = map_heap::<LargePageSize>(map_addr, map_size);
+		map_size -= counter;
+		map_addr += counter;
+	}
+
+	if map_size > BasePageSize::SIZE {
+		let counter = map_heap::<BasePageSize>(map_addr, map_size);
 		map_size -= counter;
 		map_addr += counter;
 	}

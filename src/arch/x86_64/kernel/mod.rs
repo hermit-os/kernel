@@ -5,7 +5,7 @@ use core::{intrinsics, ptr};
 
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
-use crate::arch::mm::VirtAddr;
+use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
@@ -211,6 +211,10 @@ extern "C" fn __sys_uhyve_get_mask(mask: *mut u8) {
 #[cfg(feature = "newlib")]
 pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
 	kernel_function!(__sys_uhyve_get_mask(mask))
+}
+
+pub fn get_ram_address() -> PhysAddr {
+	PhysAddr(0)
 }
 
 pub fn get_base_address() -> VirtAddr {

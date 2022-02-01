@@ -936,6 +936,11 @@ pub fn supports_1gib_pages() -> bool {
 }
 
 #[inline]
+pub fn supports_2mib_pages() -> bool {
+	true
+}
+
+#[inline]
 pub fn supports_avx() -> bool {
 	unsafe { SUPPORTS_AVX }
 }

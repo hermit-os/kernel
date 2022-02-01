@@ -242,7 +242,7 @@ impl<S: PageSize> Page<S> {
 	/// Flushes this page from the TLB of this CPU.
 	fn flush_from_tlb(self) {
 		unsafe {
-			tlb::flush(self.virtual_address.0.try_into().unwrap());
+			tlb::flush(self.virtual_address.as_usize());
 		}
 	}
 

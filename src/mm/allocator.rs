@@ -56,9 +56,9 @@ impl Heap {
 	/// This function must be called at most once and must only be used on an
 	/// empty heap.
 	pub unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
+		self.holes = HoleList::new(heap_bottom, heap_size);
 		self.bottom = heap_bottom;
 		self.size = heap_size;
-		self.holes = HoleList::new(heap_bottom, heap_size);
 	}
 
 	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid

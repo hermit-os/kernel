@@ -1,25 +1,25 @@
 use core::arch::asm;
 use core::marker::PhantomData;
-use core::{fmt, ptr, usize};
+use core::{fmt, mem, ptr, usize};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
+use crate::arch::aarch64::kernel::{
+	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve,
+};
 use crate::arch::aarch64::mm::physicalmem;
 use crate::arch::aarch64::mm::virtualmem;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::kernel::get_current_stack_address;
 use crate::mm;
 use crate::scheduler;
-
-extern "C" {
-	#[linkage = "extern_weak"]
-	static runtime_osinit: *const u8;
-}
+use crate::KERNEL_STACK_SIZE;
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.
 ///
 /// See entry.S and ARM Cortex-A Series Programmer's Guide for ARMv8-A, Version 1.0, PDF page 172
-const L0TABLE_ADDRESS: *mut PageTable<L0Table> = 0x0000_FFFF_FFFF_F000 as *mut PageTable<L0Table>;
+const L0TABLE_ADDRESS: VirtAddr = VirtAddr(0x0000_FFFF_FFFF_F000u64);
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -70,6 +70,9 @@ bitflags! {
 
 		/// Set if code execution shall be disabled for memory referenced by this entry in unprivileged mode.
 		const UNPRIVILEGED_EXECUTE_NEVER = 1 << 54;
+
+		/// Self-reference to the Level 0 page table
+		const SELF = 1 << 55;
 	}
 }
 
@@ -384,7 +387,12 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
+		if flags == PageTableEntryFlags::BLANK {
+			// in this case we unmap the pages
+			self.entries[index].set(physical_address, flags);
+		} else {
+			self.entries[index].set(physical_address, S::MAP_EXTRA_FLAG | flags);
+		}
 
 		if flush {
 			page.flush_from_tlb();
@@ -538,7 +546,9 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.get_page_table_entry(page)
 }
 
@@ -546,7 +556,9 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	let address = root_pagetable
 		.get_page_table_entry(page)
 		.expect("Entry not present")
@@ -558,29 +570,8 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
-	if virtual_address < mm::kernel_start_address() {
-		// Parts of the memory below the kernel image are identity-mapped.
-		// However, this range should never be used in a virtual_to_physical call.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too low",
-			virtual_address
-		);
-	} else if virtual_address < mm::kernel_end_address() {
-		// The kernel image is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_start() {
-		// The kernel memory is mapped in 4 KiB pages.
-		get_physical_address::<BasePageSize>(virtual_address)
-	} else if virtual_address < virtualmem::task_heap_end() {
-		// The application memory is mapped in 2 MiB pages.
-		get_physical_address::<LargePageSize>(virtual_address)
-	} else {
-		// This range is currently unused by HermitCore.
-		panic!(
-			"Trying to get the physical address of {:#X}, which is too high",
-			virtual_address
-		);
-	}
+	// Currently, we use onyl 4K pages
+	get_physical_address::<BasePageSize>(virtual_address)
 }
 
 #[no_mangle]
@@ -602,15 +593,65 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *L0TABLE_ADDRESS };
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
-pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {}
+pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
+	trace!(
+		"Unmapping virtual address {:#X} ({} pages)",
+		virtual_address,
+		count
+	);
+
+	let range = get_page_range::<S>(virtual_address, count);
+	let root_pagetable = unsafe {
+		&mut *mem::transmute::<*mut u64, *mut PageTable<L0Table>>(L0TABLE_ADDRESS.as_mut_ptr())
+	};
+	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
+}
 
 #[inline]
 pub fn get_application_page_size() -> usize {
-	LargePageSize::SIZE
+	BasePageSize::SIZE
 }
 
-pub fn init() {}
+pub unsafe fn init() {
+	let aa64mmfr0: u64;
+
+	let ram_start = get_ram_address();
+	info!("RAM starts at physical address 0x{:x}", ram_start);
+
+	// determine physical address size
+	asm!(
+		"mrs {}, id_aa64mmfr0_el1",
+		out(reg) aa64mmfr0,
+		options(nostack),
+	);
+
+	let pa_range: u64 = match aa64mmfr0 & 0b1111 {
+		0b0000 => 32,
+		0b0001 => 36,
+		0b0010 => 40,
+		0b0011 => 42,
+		0b0100 => 44,
+		0b0101 => 48,
+		0b0110 => 52,
+		_ => panic!("Invalid physical address range"),
+	};
+	info!("Physical address range: {}GB", 1 << (pa_range - 30));
+
+	let tgran16: u64 = (aa64mmfr0 >> 20) & 0b1111;
+	let tgran64: u64 = (aa64mmfr0 >> 24) & 0b1111;
+	let tgran4: u64 = (aa64mmfr0 >> 28) & 0b1111;
+
+	info!("Support of 4KB pages: {}", tgran4 == 0);
+	info!("Support of 16KB pages: {}", tgran16 == 0b0001);
+	info!("Support of 64KB pages: {}", tgran64 == 0);
+
+	assert!(tgran4 == 0);
+
+	// page tables are already initialized, we have just to remove obsolete entries
+}

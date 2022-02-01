@@ -342,6 +342,8 @@ fn boot_processor_main() -> ! {
 		environment::get_tls_start(),
 		environment::get_tls_memsz()
 	);
+
+	arch::boot_processor_init();
 	#[cfg(target_arch = "aarch64")]
 	{
 		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
@@ -357,7 +359,6 @@ fn boot_processor_main() -> ! {
 
 		loop {} /* Compiles up to here - loop prevents linker errors */
 	}
-	arch::boot_processor_init();
 	scheduler::add_current_core();
 
 	if environment::is_single_kernel() && !environment::is_uhyve() {
