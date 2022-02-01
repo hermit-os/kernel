@@ -5,7 +5,7 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
     # Manually sync this with rust-toolchain.toml!
-    RUST_VERSION=nightly-2021-12-04 \
+    RUST_VERSION=nightly-2022-01-30 \
     RUST_COMPONENTS="clippy llvm-tools-preview rustfmt rust-src"
 
 RUN set -eux; \
