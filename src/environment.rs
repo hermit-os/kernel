@@ -14,7 +14,6 @@ pub use crate::arch::aarch64::kernel::{
 	get_tls_filesz, get_tls_memsz, get_tls_start, is_single_kernel, is_uhyve,
 };
 
-use crate::util;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::{slice, str};
@@ -37,7 +36,7 @@ unsafe fn parse_command_line() {
 	let cmdline_str = str::from_utf8_unchecked(slice);
 
 	// Split at spaces, but not while in quotes
-	let tokens = util::tokenize(cmdline_str, ' ');
+	let tokens = shell_words::split(cmdline_str).unwrap();
 	debug!("Got cmdline tokens as {:?}", tokens);
 
 	let mut tokeniter = tokens.into_iter();

@@ -98,7 +98,6 @@ mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
-mod util;
 
 #[doc(hidden)]
 pub fn _print(args: ::core::fmt::Arguments<'_>) {
