@@ -2,11 +2,12 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::{isize, slice, str};
 
+use cstr_core::CStr;
+
 use crate::arch;
 use crate::console::CONSOLE;
 use crate::environment;
 use crate::errno::*;
-use crate::ffi::CStr;
 use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
 
 #[cfg(all(not(feature = "pci"), not(target_arch = "aarch64")))]

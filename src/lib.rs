@@ -90,7 +90,6 @@ mod console;
 mod drivers;
 pub mod environment;
 mod errno;
-mod ffi;
 mod kernel_message_buffer;
 mod mm;
 #[cfg(any(target_os = "none", target_os = "hermit"))]
