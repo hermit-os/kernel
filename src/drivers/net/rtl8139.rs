@@ -4,6 +4,8 @@
 
 use core::mem;
 
+use alloc::boxed::Box;
+
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::increment_irq_counter;
@@ -203,9 +205,9 @@ pub struct RTL8139Driver {
 	mac: [u8; 6],
 	tx_in_use: [bool; NO_TX_BUFFERS],
 	tx_counter: usize,
-	rxbuffer: VirtAddr,
+	rxbuffer: Box<[u8]>,
 	rxpos: usize,
-	txbuffer: VirtAddr,
+	txbuffer: Box<[u8]>,
 }
 
 impl NetworkInterface for RTL8139Driver {
@@ -229,7 +231,10 @@ impl NetworkInterface for RTL8139Driver {
 			self.tx_in_use[id] = true;
 			self.tx_counter += 1;
 
-			Ok(((self.txbuffer.as_usize() + id * TX_BUF_LEN) as *mut u8, id))
+			Ok((
+				self.txbuffer[id * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
+				id,
+			))
 		}
 	}
 
@@ -253,7 +258,7 @@ impl NetworkInterface for RTL8139Driver {
 		let cmd = unsafe { inb(self.iobase + CR as u16) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
-			let header: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
+			let header = self.rx_peek_u16();
 
 			if header & ISR_ROK == ISR_ROK {
 				return true;
@@ -267,23 +272,17 @@ impl NetworkInterface for RTL8139Driver {
 		let cmd = unsafe { inb(self.iobase + CR as u16) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
-			let header: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
-			self.rxpos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+			let header = self.rx_peek_u16();
+			self.advance_rxpos(mem::size_of::<u16>());
 
 			if header & ISR_ROK == ISR_ROK {
-				let length: u16 =
-					unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) } - 4; // copy packet (but not the CRC)
+				let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
+				let buf = &self.rxbuffer[self.rxpos + mem::size_of::<u16>()..][..length.into()];
+				// SAFETY: This is a blatant lie and very unsound.
+				// The API must be fixed or the buffer may never touched again.
+				let buf = unsafe { mem::transmute(buf) };
 
-				Ok((
-					unsafe {
-						core::slice::from_raw_parts(
-							(self.rxbuffer.as_usize() + self.rxpos + mem::size_of::<u16>())
-								as *const u8,
-							length as usize,
-						)
-					},
-					self.rxpos,
-				))
+				Ok((buf, self.rxpos))
 			} else {
 				error!(
 					"RTL8192: invalid header {:#x}, rx_pos {}\n",
@@ -303,8 +302,8 @@ impl NetworkInterface for RTL8139Driver {
 			warn!("Invalid handle {} != {}", self.rxpos, handle)
 		}
 
-		let length: u16 = unsafe { *((self.rxbuffer.as_usize() + self.rxpos) as *const u16) };
-		self.rxpos = (self.rxpos + length as usize + mem::size_of::<u16>()) % RX_BUF_LEN;
+		let length = self.rx_peek_u16();
+		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
 
 		// packets are dword aligned
 		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
@@ -367,6 +366,19 @@ impl NetworkInterface for RTL8139Driver {
 }
 
 impl RTL8139Driver {
+	fn rx_peek_u16(&self) -> u16 {
+		u16::from_ne_bytes(
+			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
+				.try_into()
+				.unwrap(),
+		)
+	}
+
+	fn advance_rxpos(&mut self, count: usize) {
+		self.rxpos += count;
+		self.rxpos %= RX_BUF_LEN;
+	}
+
 	fn tx_handler(&mut self) {
 		for i in 0..self.tx_in_use.len() {
 			if self.tx_in_use[i] {
@@ -397,9 +409,6 @@ impl Drop for RTL8139Driver {
 		unsafe {
 			outb(self.iobase + CR, CR_RST);
 		}
-
-		crate::mm::deallocate(self.rxbuffer, RX_BUF_LEN);
-		crate::mm::deallocate(self.txbuffer, NO_TX_BUFFERS * TX_BUF_LEN);
 	}
 }
 
@@ -495,50 +504,49 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		outl(iobase + TCR, TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
-	let rxbuffer = crate::mm::allocate(RX_BUF_LEN, true);
-	let txbuffer = crate::mm::allocate(NO_TX_BUFFERS * TX_BUF_LEN, true);
-	if txbuffer.is_zero() || rxbuffer.is_zero() {
+	let rxbuffer = Box::<[u8]>::try_new_zeroed_slice(RX_BUF_LEN).map_err(|_| {
 		error!("Unable to allocate buffers for RTL8139");
-		return Err(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown));
-	}
+		DriverError::InitRTL8139DevFail(RTL8139Error::Unknown)
+	})?;
+	// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
+	let rxbuffer = unsafe { rxbuffer.assume_init() };
+
+	let txbuffer = Box::<[u8]>::try_new_zeroed_slice(NO_TX_BUFFERS * TX_BUF_LEN).map_err(|_| {
+		error!("Unable to allocate buffers for RTL8139");
+		DriverError::InitRTL8139DevFail(RTL8139Error::Unknown)
+	})?;
+	// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
+	let txbuffer = unsafe { txbuffer.assume_init() };
 
 	debug!(
-		"Allocate TxBuffer at {:#x} and RxBuffer at {:#x}",
+		"Allocate TxBuffer at {:p} and RxBuffer at {:p}",
 		txbuffer, rxbuffer
 	);
 
+	let phys_addr = |p| {
+		virt_to_phys(VirtAddr::from_usize(p as _))
+			.as_u64()
+			.try_into()
+			.unwrap()
+	};
+
 	unsafe {
 		// register the receive buffer
-		outl(
-			iobase + RBSTART,
-			virt_to_phys(rxbuffer).as_u64().try_into().unwrap(),
-		);
+		outl(iobase + RBSTART, phys_addr(rxbuffer.as_ptr()));
 
 		// set each of the transmitter start address descriptors
-		outl(
-			iobase + TSAD0,
-			virt_to_phys(txbuffer).as_u64().try_into().unwrap(),
-		);
+		outl(iobase + TSAD0, phys_addr(txbuffer[..TX_BUF_LEN].as_ptr()));
 		outl(
 			iobase + TSAD1,
-			virt_to_phys(txbuffer + TX_BUF_LEN)
-				.as_u64()
-				.try_into()
-				.unwrap(),
+			phys_addr(txbuffer[TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
 		);
 		outl(
 			iobase + TSAD2,
-			virt_to_phys(txbuffer + 2 * TX_BUF_LEN)
-				.as_u64()
-				.try_into()
-				.unwrap(),
+			phys_addr(txbuffer[2 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
 		);
 		outl(
 			iobase + TSAD3,
-			virt_to_phys(txbuffer + 3 * TX_BUF_LEN)
-				.as_u64()
-				.try_into()
-				.unwrap(),
+			phys_addr(txbuffer[3 * TX_BUF_LEN..][..TX_BUF_LEN].as_ptr()),
 		);
 
 		// Enable all known interrupts by setting the interrupt mask.
