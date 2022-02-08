@@ -191,6 +191,7 @@ impl Filesystem {
 	}
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub enum FileError {
 	ENOENT,
