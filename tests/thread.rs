@@ -8,11 +8,9 @@
 
 extern crate hermit;
 
-#[macro_use]
 use common::*;
 mod common;
 
-#[macro_use]
 use alloc::vec;
 use hermit::{sys_join, sys_spawn2, sys_usleep, USER_STACK_SIZE};
 
