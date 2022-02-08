@@ -20,7 +20,7 @@ pub use self::tasks::*;
 pub use self::timer::*;
 
 mod condvar;
-pub mod fs;
+pub(crate) mod fs;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
@@ -41,7 +41,7 @@ pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
 static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
-pub fn init() {
+pub(crate) fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
@@ -78,7 +78,7 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 	__sys_free(ptr, size, align)
 }
 
-pub fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
+pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	unsafe { SYS.get_application_parameters() }
 }
 
@@ -166,7 +166,7 @@ pub extern "C" fn sys_set_network_polling_mode(value: bool) {
 	kernel_function!(set_polling_mode(value));
 }
 
-pub extern "C" fn __sys_shutdown(arg: i32) -> ! {
+pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 

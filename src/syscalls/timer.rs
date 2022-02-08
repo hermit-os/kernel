@@ -23,11 +23,11 @@ pub struct timeval {
 	pub tv_usec: i64,
 }
 
-pub const CLOCK_REALTIME: u64 = 1;
-pub const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
-pub const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
-pub const CLOCK_MONOTONIC: u64 = 4;
-pub const TIMER_ABSTIME: i32 = 4;
+pub(crate) const CLOCK_REALTIME: u64 = 1;
+pub(crate) const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
+pub(crate) const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
+pub(crate) const CLOCK_MONOTONIC: u64 = 4;
+pub(crate) const TIMER_ABSTIME: i32 = 4;
 
 fn microseconds_to_timespec(microseconds: u64, result: &mut timespec) {
 	result.tv_sec = (microseconds / 1_000_000) as i64;

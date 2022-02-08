@@ -62,7 +62,7 @@ pub extern "C" fn sys_srand(seed: u32) {
 	kernel_function!(__sys_srand(seed))
 }
 
-pub fn random_init() {
+pub(crate) fn random_init() {
 	let seed: u32 = arch::processor::get_timestamp() as u32;
 
 	*PARK_MILLER_LEHMER_SEED.lock() = seed;
