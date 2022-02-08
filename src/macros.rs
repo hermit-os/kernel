@@ -1,14 +1,12 @@
-#[macro_export]
 macro_rules! align_down {
 	($value:expr, $alignment:expr) => {
 		($value) & !($alignment - 1)
 	};
 }
 
-#[macro_export]
 macro_rules! align_up {
 	($value:expr, $alignment:expr) => {
-		$crate::align_down!($value + ($alignment - 1), $alignment)
+		align_down!($value + ($alignment - 1), $alignment)
 	};
 }
 
@@ -24,8 +22,8 @@ macro_rules! print {
 /// Print formatted text to our console, followed by a newline.
 #[macro_export]
 macro_rules! println {
-	() => ($crate::print!("\n"));
-	($($arg:tt)+) => ($crate::print!("{}\n", ::core::format_args!($($arg)+)));
+	() => (print!("\n"));
+	($($arg:tt)+) => (print!("{}\n", ::core::format_args!($($arg)+)));
 }
 
 /// Runs `f` on the kernel stack.
@@ -43,7 +41,6 @@ macro_rules! println {
 /// // instead of
 /// let ret = f(arg);
 /// ```
-#[macro_export]
 macro_rules! kernel_function {
 	($f:ident()) => {
 		$crate::arch::switch::kernel_function0($f)
