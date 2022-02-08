@@ -130,7 +130,7 @@ impl Filesystem {
 			);
 		}
 
-		Err(FileError::ENOENT())
+		Err(FileError::ENOENT)
 	}
 
 	/// Tries to open file at given path (/MOUNTPOINT/internal-path).
@@ -193,8 +193,8 @@ impl Filesystem {
 
 #[derive(Debug)]
 pub enum FileError {
-	ENOENT(),
-	ENOSYS(),
+	ENOENT,
+	ENOSYS,
 }
 
 pub trait PosixFileSystem {

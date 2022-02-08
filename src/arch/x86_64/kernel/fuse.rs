@@ -38,13 +38,13 @@ impl PosixFileSystem for Fuse {
 
 			if file.fuse_nid == None {
 				warn!("Fuse lookup seems to have failed!");
-				return Err(FileError::ENOENT());
+				return Err(FileError::ENOENT);
 			}
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
 			let (cmd, rsp) = create_open(file.fuse_nid.unwrap(), perms.raw);
 			let rsp = get_filesystem_driver()
-				.ok_or(FileError::ENOSYS())?
+				.ok_or(FileError::ENOSYS)?
 				.lock()
 				.send_command(cmd, Some(rsp))
 				.unwrap();
@@ -54,7 +54,7 @@ impl PosixFileSystem for Fuse {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
 			let (cmd, rsp) = create_create(path, perms.raw, perms.mode);
 			let rsp = get_filesystem_driver()
-				.ok_or(FileError::ENOSYS())?
+				.ok_or(FileError::ENOSYS)?
 				.lock()
 				.send_command(cmd, Some(rsp))
 				.unwrap();
@@ -70,7 +70,7 @@ impl PosixFileSystem for Fuse {
 	fn unlink(&self, path: &str) -> core::result::Result<(), FileError> {
 		let (cmd, rsp) = create_unlink(path);
 		let rsp = get_filesystem_driver()
-			.ok_or(FileError::ENOSYS())?
+			.ok_or(FileError::ENOSYS)?
 			.lock()
 			.send_command(cmd, Some(rsp));
 		trace!("unlink answer {:?}", rsp);
@@ -119,7 +119,7 @@ impl PosixFile for FuseFile {
 	fn close(&mut self) -> Result<(), FileError> {
 		let (cmd, rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
 		get_filesystem_driver()
-			.ok_or(FileError::ENOSYS())?
+			.ok_or(FileError::ENOSYS)?
 			.lock()
 			.send_command(cmd, Some(rsp));
 
@@ -135,7 +135,7 @@ impl PosixFile for FuseFile {
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_read(fh, len, self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(FileError::ENOSYS())?
+				.ok_or(FileError::ENOSYS)?
 				.lock()
 				.send_command(cmd, Some(rsp));
 			let rsp = rsp.unwrap();
@@ -148,7 +148,7 @@ impl PosixFile for FuseFile {
 			Ok(vec)
 		} else {
 			warn!("File not open, cannot read!");
-			Err(FileError::ENOENT())
+			Err(FileError::ENOENT)
 		}
 	}
 
@@ -166,7 +166,7 @@ impl PosixFile for FuseFile {
 		if let Some(fh) = self.fuse_fh {
 			let (cmd, rsp) = create_write(fh, &buf[..len], self.offset as u64);
 			let rsp = get_filesystem_driver()
-				.ok_or(FileError::ENOSYS())?
+				.ok_or(FileError::ENOSYS)?
 				.lock()
 				.send_command(cmd, Some(rsp));
 			trace!("write response: {:?}", rsp);
@@ -178,7 +178,7 @@ impl PosixFile for FuseFile {
 			Ok(len as u64)
 		} else {
 			warn!("File not open, cannot read!");
-			Err(FileError::ENOENT())
+			Err(FileError::ENOENT)
 		}
 	}
 
