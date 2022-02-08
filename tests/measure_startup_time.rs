@@ -3,7 +3,6 @@
 
 extern crate hermit;
 
-#[macro_use]
 use common::*;
 
 mod common;
