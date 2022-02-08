@@ -71,16 +71,16 @@ pub enum PciClassCode {
 /// Network Controller Sub Classes
 #[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq)]
 pub enum PciNetworkControllerSubclass {
-	EthernetController = 0x00,
-	TokenRingController = 0x01,
-	FDDIController = 0x02,
-	ATMController = 0x03,
-	ISDNController = 0x04,
-	WorldFipController = 0x05,
-	PICMGController = 0x06,
-	InfinibandController = 0x07,
-	FabricController = 0x08,
-	NetworkController = 0x80,
+	Ethernet = 0x00,
+	TokenRing = 0x01,
+	FDDI = 0x02,
+	ATM = 0x03,
+	ISDN = 0x04,
+	WorldFip = 0x05,
+	PICMG = 0x06,
+	Infiniband = 0x07,
+	Fabric = 0x08,
+	Network = 0x80,
 }
 
 #[derive(Clone, Debug)]
