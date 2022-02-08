@@ -8,6 +8,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
+#![allow(dead_code)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
 #![feature(asm_const)]
