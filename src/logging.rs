@@ -40,7 +40,6 @@ pub unsafe fn init() {
 	set_max_level(max_level);
 }
 
-#[macro_export]
 macro_rules! infoheader {
 	// This should work on paper, but it's currently not supported :(
 	// Refer to https://github.com/rust-lang/rust/issues/46569
@@ -54,13 +53,11 @@ macro_rules! infoheader {
 	}};
 }
 
-#[macro_export]
 macro_rules! infoentry {
-	($str:expr, $rhs:expr) => ($crate::infoentry!($str, "{}", $rhs));
+	($str:expr, $rhs:expr) => (infoentry!($str, "{}", $rhs));
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));
 }
 
-#[macro_export]
 macro_rules! infofooter {
 	() => {{
 		::log::info!("{:=^70}", '=');

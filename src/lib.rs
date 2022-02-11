@@ -8,6 +8,7 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
+#![allow(dead_code)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
 #![feature(asm_const)]
@@ -73,8 +74,9 @@ use mm::allocator::LockedHeap;
 #[cfg(target_arch = "aarch64")]
 use qemu_exit::QEMUExit;
 
-pub use crate::arch::*;
-pub use crate::config::*;
+pub(crate) use crate::arch::*;
+pub use crate::config::USER_STACK_SIZE;
+pub(crate) use crate::config::*;
 pub use crate::syscalls::*;
 
 #[macro_use]
@@ -141,7 +143,7 @@ static ALLOCATOR: LockedHeap = LockedHeap::empty();
 /// `size` and `align` do not meet this allocator's size or alignment constraints.
 ///
 #[cfg(any(target_os = "none", target_os = "hermit"))]
-pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
+pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let layout_res = Layout::from_size_align(size, align);
 	if layout_res.is_err() || size == 0 {
 		warn!(
@@ -183,7 +185,7 @@ pub extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 /// Returns null if the new layout does not meet the size and alignment constraints of the
 /// allocator, or if reallocation otherwise fails.
 #[cfg(any(target_os = "none", target_os = "hermit"))]
-pub extern "C" fn __sys_realloc(
+pub(crate) extern "C" fn __sys_realloc(
 	ptr: *mut u8,
 	size: usize,
 	align: usize,
@@ -228,7 +230,7 @@ pub extern "C" fn __sys_realloc(
 /// # Errors
 /// May panic if debug assertions are enabled and invalid parameters `size` or `align` where passed.
 #[cfg(any(target_os = "none", target_os = "hermit"))]
-pub extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
+pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	unsafe {
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 {

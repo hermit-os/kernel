@@ -108,7 +108,7 @@ pub extern "C" fn sys_sbrk(incr: isize) -> usize {
 	kernel_function!(__sys_sbrk(incr))
 }
 
-pub extern "C" fn __sys_usleep(usecs: u64) {
+pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
 	if usecs >= 10_000 {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
