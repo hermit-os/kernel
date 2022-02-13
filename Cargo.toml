@@ -51,7 +51,7 @@ harness = false
 default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp"]
 vga = []
 newlib = []
-pci = []
+pci = ["num-derive"]
 acpi = []
 smp = ["include-transformed"]
 fsgsbase = []
@@ -62,7 +62,7 @@ crossbeam-utils = { version = "0.8", default-features = false }
 include-transformed = { version = "0.2", optional = true }
 log = { version = "0.4", default-features = false }
 num = { version = "0.4", default-features = false }
-num-derive = "0.3"
+num-derive = { version = "0.3", optional = true }
 num-traits = { version = "0.2", default-features = false }
 once_cell = { version = "1.10", default-features = false, features = ["alloc"] }
 pci-ids = { version = "0.2", optional = true }
