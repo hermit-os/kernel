@@ -705,6 +705,7 @@ impl VirtioNetDriver {
 
 	/// Returns the links status.
 	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
+	#[cfg(feature = "pci")]
 	pub fn is_link_up(&self) -> bool {
 		if self
 			.dev_cfg
