@@ -1,5 +1,5 @@
 [toolchain]
-channel = "nightly-2022-02-10"
+channel = "nightly-2022-02-12"
 components = [
     "clippy",
     "llvm-tools-preview",
