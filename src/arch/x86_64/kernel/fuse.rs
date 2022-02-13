@@ -198,6 +198,7 @@ impl PosixFile for FuseFile {
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 #[allow(non_camel_case_types)]
+#[allow(dead_code)]
 pub enum Opcode {
 	FUSE_LOOKUP = 1,
 	FUSE_FORGET = 2, // no reply
