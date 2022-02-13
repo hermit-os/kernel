@@ -35,7 +35,6 @@
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
 use crate::synch::spinlock::Spinlock;
-use alloc::borrow::ToOwned;
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -157,11 +156,14 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
+	#[cfg(feature = "pci")]
 	pub fn mount(
 		&mut self,
 		mntpath: &str,
 		mntobj: Box<dyn PosixFileSystem + Send>,
 	) -> Result<(), ()> {
+		use alloc::borrow::ToOwned;
+
 		info!("Mounting {}", mntpath);
 		if mntpath.contains('/') {
 			warn!(
