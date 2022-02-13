@@ -535,7 +535,6 @@ pub mod error {
 		NoBar(u16),
 		NoCapPtr(u16),
 		BadCapPtr(u16),
-		NoBarForCap(u16),
 		NoVirtioCaps(u16),
 	}
 }
