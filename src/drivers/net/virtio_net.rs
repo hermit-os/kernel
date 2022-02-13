@@ -683,6 +683,7 @@ impl VirtioNetDriver {
 		self.dev_cfg.dev_id
 	}
 
+	#[cfg(feature = "pci")]
 	pub fn set_failed(&mut self) {
 		self.com_cfg.set_failed();
 	}
