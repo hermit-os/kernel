@@ -89,18 +89,21 @@ pub const NO_PRIORITIES: usize = 31;
 pub struct TaskHandle {
 	id: TaskId,
 	priority: Priority,
+	#[cfg(feature = "smp")]
 	core_id: CoreId,
 }
 
 impl TaskHandle {
-	pub fn new(id: TaskId, priority: Priority, core_id: CoreId) -> Self {
+	pub fn new(id: TaskId, priority: Priority, #[cfg(feature = "smp")] core_id: CoreId) -> Self {
 		Self {
 			id,
 			priority,
+			#[cfg(feature = "smp")]
 			core_id,
 		}
 	}
 
+	#[cfg(feature = "smp")]
 	pub fn get_core_id(&self) -> CoreId {
 		self.core_id
 	}

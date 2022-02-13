@@ -268,6 +268,7 @@ impl PerCoreScheduler {
 			TaskHandle::new(
 				current_task_borrowed.id,
 				current_task_borrowed.prio,
+				#[cfg(feature = "smp")]
 				current_task_borrowed.core_id,
 			)
 		})
