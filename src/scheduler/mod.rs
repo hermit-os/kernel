@@ -223,6 +223,7 @@ impl PerCoreScheduler {
 
 	/// Returns `true` if a reschedule is required
 	#[inline]
+	#[cfg(feature = "smp")]
 	pub fn is_scheduling(&self) -> bool {
 		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
 	}
