@@ -157,6 +157,7 @@ impl PerCoreScheduler {
 		panic!("exit failed!")
 	}
 
+	#[cfg(feature = "newlib")]
 	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -217,6 +218,7 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	#[cfg(feature = "newlib")]
 	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		irqsave(|| self.clone_impl(func, arg))
 	}

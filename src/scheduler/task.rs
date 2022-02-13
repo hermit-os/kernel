@@ -426,6 +426,7 @@ impl Task {
 		}
 	}
 
+	#[cfg(feature = "newlib")]
 	pub fn new_like(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
 		debug!(
 			"Creating task {} on core {} like task {}",
