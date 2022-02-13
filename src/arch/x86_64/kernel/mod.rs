@@ -129,6 +129,7 @@ static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 /// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
+#[cfg(feature = "newlib")]
 pub fn has_ipdevice() -> bool {
 	let ip = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) };
 
