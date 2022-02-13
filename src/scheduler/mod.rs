@@ -8,11 +8,9 @@ use crossbeam_utils::Backoff;
 
 use crate::arch;
 use crate::arch::irq;
-use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
-use crate::config::*;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
@@ -295,13 +293,6 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_prio(&self) -> Priority {
 		irqsave(|| self.current_task.borrow().prio)
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	#[inline]
-	pub fn get_current_kernel_stack(&self) -> VirtAddr {
-		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE
-			- TaskStacks::MARKER_SIZE
 	}
 
 	#[cfg(target_arch = "x86_64")]
