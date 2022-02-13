@@ -323,6 +323,7 @@ impl PriorityTaskQueue {
 	}
 
 	/// Returns the highest priority of all available task
+	#[cfg(feature = "smp")]
 	pub fn get_highest_priority(&self) -> Priority {
 		if let Some(i) = msb(self.prio_bitmap) {
 			Priority::from(i.try_into().unwrap())
