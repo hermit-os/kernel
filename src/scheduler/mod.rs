@@ -297,16 +297,6 @@ impl PerCoreScheduler {
 		irqsave(|| self.current_task.borrow().prio)
 	}
 
-	#[inline]
-	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
-		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason)
-	}
-
-	#[inline]
-	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
-		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason = reason);
-	}
-
 	#[cfg(target_arch = "x86_64")]
 	#[inline]
 	pub fn get_current_kernel_stack(&self) -> VirtAddr {

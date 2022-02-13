@@ -35,13 +35,6 @@ pub enum TaskStatus {
 	Idle,
 }
 
-/// Reason why wakeup() has been called on a task.
-#[derive(Clone, Copy, PartialEq)]
-pub enum WakeupReason {
-	Custom,
-	Timer,
-}
-
 /// Unique identifier for a task (i.e. `pid`).
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug, Clone, Copy)]
 pub struct TaskId(u32);
@@ -365,8 +358,6 @@ pub struct Task {
 	pub prev: Option<Rc<RefCell<Task>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<TaskTLS>,
-	/// Reason why wakeup() has been called the last time
-	pub last_wakeup_reason: WakeupReason,
 	/// lwIP error code for this task
 	#[cfg(feature = "newlib")]
 	pub lwip_errno: i32,
@@ -399,7 +390,6 @@ impl Task {
 			next: None,
 			prev: None,
 			tls: None,
-			last_wakeup_reason: WakeupReason::Custom,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}
@@ -420,7 +410,6 @@ impl Task {
 			next: None,
 			prev: None,
 			tls: None,
-			last_wakeup_reason: WakeupReason::Custom,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}
@@ -445,7 +434,6 @@ impl Task {
 			next: None,
 			prev: None,
 			tls: None,
-			last_wakeup_reason: task.last_wakeup_reason,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}
@@ -480,7 +468,7 @@ impl BlockedTaskQueue {
 		}
 	}
 
-	fn wakeup_task(task: Rc<RefCell<Task>>, reason: WakeupReason) {
+	fn wakeup_task(task: Rc<RefCell<Task>>) {
 		{
 			let mut borrowed = task.borrow_mut();
 			debug!(
@@ -502,7 +490,6 @@ impl BlockedTaskQueue {
 				borrowed.id
 			);
 			borrowed.status = TaskStatus::Ready;
-			borrowed.last_wakeup_reason = reason;
 		}
 
 		// Add the task to the ready queue.
@@ -563,7 +550,7 @@ impl BlockedTaskQueue {
 		while let Some(node) = cursor.current() {
 			if node.task.borrow().id == task.get_id() {
 				// Remove it from the list of blocked tasks and wake it up.
-				Self::wakeup_task(node.task.clone(), WakeupReason::Custom);
+				Self::wakeup_task(node.task.clone());
 				cursor.remove_current();
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
@@ -607,7 +594,7 @@ impl BlockedTaskQueue {
 			}
 
 			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			Self::wakeup_task(node.task.clone(), WakeupReason::Timer);
+			Self::wakeup_task(node.task.clone());
 			cursor.remove_current();
 		}
 	}
