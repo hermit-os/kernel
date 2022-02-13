@@ -678,6 +678,7 @@ impl NetworkInterface for VirtioNetDriver {
 
 // Backend-independent interface for Virtio network driver
 impl VirtioNetDriver {
+	#[cfg(feature = "pci")]
 	pub fn get_dev_id(&self) -> u16 {
 		self.dev_cfg.dev_id
 	}
