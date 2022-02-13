@@ -192,6 +192,7 @@ impl Filesystem {
 #[derive(Debug)]
 pub enum FileError {
 	ENOENT,
+	#[cfg(feature = "pci")]
 	ENOSYS,
 }
 
