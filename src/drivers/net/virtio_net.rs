@@ -688,6 +688,7 @@ impl VirtioNetDriver {
 
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise returns zero.
+	#[cfg(not(feature = "pci"))]
 	pub fn dev_status(&self) -> u16 {
 		if self
 			.dev_cfg
