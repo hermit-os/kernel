@@ -448,16 +448,6 @@ pub fn write_config(bus: u8, device: u8, register: u32, data: u32) {
 	}
 }
 
-pub fn get_adapter(vendor_id: u16, device_id: u16) -> Option<PciAdapter> {
-	for adapter in unsafe { PCI_ADAPTERS.iter() } {
-		if adapter.vendor_id == vendor_id && adapter.device_id == device_id {
-			return Some(adapter.clone());
-		}
-	}
-
-	None
-}
-
 pub fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 
