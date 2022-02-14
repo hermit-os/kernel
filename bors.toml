@@ -3,6 +3,7 @@ status = [
   "x86 tests (macos-latest)",
   "x86 tests (windows-latest)",
   "aarch64 tests (ubuntu-latest)",
+  "Doc",
   "Format",
   "Clippy",
   "ci/gitlab/git.rwth-aachen.de",
