@@ -67,7 +67,7 @@ impl Filesystem {
 	/// Returns next free file-descriptor. We map index in files BTreeMap as fd's.
 	/// Done determining the current biggest stored index.
 	/// This is efficient, since BTreeMap's iter() calculates min and max key directly.
-	/// see https://github.com/rust-lang/rust/issues/62924
+	/// see <https://github.com/rust-lang/rust/issues/62924>
 	fn assign_new_fd(&self) -> u64 {
 		// BTreeMap has efficient max/min index calculation. One way to access these is the following iter.
 		// Add 1 to get next never-assigned fd num

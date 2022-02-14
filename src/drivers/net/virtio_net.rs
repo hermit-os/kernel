@@ -1609,7 +1609,7 @@ pub mod constants {
 		/// Checks if a given set of features is compatible and adheres to the
 		/// specfification v1.1. - 5.1.3.1
 		/// Upon an error returns the incompatible set of features by the
-		/// [FeatReqNotMet](self::error::VirtioNetError) errror value, which
+		/// [FeatReqNotMet](super::error::VirtioNetError) errror value, which
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.
@@ -1762,7 +1762,7 @@ pub mod constants {
 
 		/// Sets features contained in feats to true.
 		///
-		/// WARN: Features should be checked before using this function via the [`check_features`] function.
+		/// WARN: Features should be checked before using this function via the [`FeatureSet::check_features`] function.
 		pub fn set_features(&mut self, feats: &[Features]) {
 			for feat in feats {
 				self.0 |= *feat;

@@ -315,7 +315,7 @@ fn deallocate(mut hole: &mut Hole, addr: usize, mut size: usize) {
 /// function forces a move.
 ///
 /// for more information, see section “id Forces References To Move” in:
-/// https://bluss.github.io/rust/fun/2015/10/11/stuff-the-identity-function-does/
+/// <https://bluss.github.io/rust/fun/2015/10/11/stuff-the-identity-function-does/>
 fn move_helper<T>(x: T) -> T {
 	x
 }

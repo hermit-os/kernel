@@ -12,7 +12,7 @@ macro_rules! align_up {
 
 /// Print formatted text to our console.
 ///
-/// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
+/// From <http://blog.phil-opp.com/rust-os/printing-to-screen.html>, but tweaked
 /// for HermitCore.
 #[macro_export]
 macro_rules! print {

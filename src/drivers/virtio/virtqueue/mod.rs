@@ -421,7 +421,7 @@ impl Virtq {
 	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
 	/// descriptors, the queue will merge the send and recv structure as follows:
-	/// ```
+	/// ```text
 	/// //+++++++++++++++++++++++
 	/// //+        Queue        +
 	/// //+++++++++++++++++++++++
@@ -484,7 +484,7 @@ impl Virtq {
 	/// * `(Indirect, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
 	///    * Calley is not allowed to mix `Indirect` and `Direct` descriptors. Furthermore if the calley decides to use `Indirect`
 	/// descriptors, the queue will merge the send and recv structure as follows:
-	/// ```
+	/// ```text
 	/// //+++++++++++++++++++++++
 	/// //+        Queue        +
 	/// //+++++++++++++++++++++++
@@ -624,7 +624,7 @@ impl Transfer {
 	///   * send buffer: 50 bytes, 60 bytes
 	///   * receive buffer: 10 bytes
 	/// * The return tuple will be:
-	///  * (Some(vec[50, 60]), Some(vec[10]))
+	///  * `(Some(vec[50, 60]), Some(vec[10]))`
 	///  * Where 50 refers to a slice of u8 of length 50.
 	/// The other numbers follow the same principle.
 	pub fn as_slices(&self) -> Result<(Option<Vec<&[u8]>>, Option<Vec<&[u8]>>), VirtqError> {
@@ -690,7 +690,7 @@ impl Transfer {
 	///   * send buffer: 50 bytes, 60 bytes
 	///   * receive buffer: 10 bytes
 	/// * The return tuple will be:
-	///  * (Some(vec[50, 60]), Some(vec[10]))
+	///  * `(Some(vec[50, 60]), Some(vec[10]))`
 	///  * Where 50 refers to a slice of u8 of length 50.
 	/// The other numbers follow the same principle.
 	pub fn as_slices_mut(
@@ -2568,7 +2568,7 @@ pub mod error {
 		General,
 		/// Indirect is mixed with Direct descriptors, which is not allowed
 		/// according to the specification.
-		/// See [Buffer](Buffer) and [BuffSpec](BuffSpec) for details
+		/// See [Buffer](super::Buffer) and [BuffSpec](super::BuffSpec) for details
 		BufferInWithDirect,
 		/// Call to create a BufferToken or TransferToken without
 		/// any buffers to be inserted
