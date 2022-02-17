@@ -16,10 +16,10 @@ use crossbeam_utils::{Backoff, CachePadded};
 /// This structure behaves a lot like a normal Mutex. There are some differences:
 ///
 /// - By using busy waiting, it can be used outside the runtime.
-/// - It is a so called ticket lock (https://en.wikipedia.org/wiki/Ticket_lock)
+/// - It is a so called ticket lock (<https://en.wikipedia.org/wiki/Ticket_lock>)
 ///   and completely fair.
 ///
-/// The interface is derived from https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html.
+/// The interface is derived from <https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html>.
 ///
 /// # Simple examples
 ///
@@ -153,10 +153,10 @@ impl<'a, T: ?Sized> Drop for SpinlockGuard<'a, T> {
 ///
 /// - Interrupts save lock => Interrupts will be disabled
 /// - By using busy waiting, it can be used outside the runtime.
-/// - It is a so called ticket lock (https://en.wikipedia.org/wiki/Ticket_lock)
+/// - It is a so called ticket lock (<https://en.wikipedia.org/wiki/Ticket_lock>)
 ///   and completely fair.
 ///
-/// The interface is derived from https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html.
+/// The interface is derived from <https://mvdnes.github.io/rust-docs/spin-rs/spin/index.html>.
 ///
 /// # Simple examples
 ///

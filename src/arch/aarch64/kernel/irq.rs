@@ -17,7 +17,7 @@ pub fn enable() {
 }
 
 /// Enable Interrupts and wait for the next interrupt (HLT instruction)
-/// According to https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html, this exact sequence of assembly
+/// According to <https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html>, this exact sequence of assembly
 /// instructions is guaranteed to be atomic.
 /// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
 #[inline]
