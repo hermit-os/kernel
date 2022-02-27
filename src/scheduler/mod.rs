@@ -20,8 +20,8 @@ pub mod task;
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
-/// Map between Task ID and Task Control Block
-static TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
+/// Map between Task ID and TaskHandle + Queue of waiting tasks
+static TASKS: SpinlockIrqSave<BTreeMap<TaskId, (TaskHandle, VecDeque<TaskHandle>)>> =
 	SpinlockIrqSave::new(BTreeMap::new());
 
 /// Unique identifier for a core.
@@ -95,7 +95,13 @@ impl PerCoreScheduler {
 		let wakeup = {
 			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(
+				tid,
+				(
+					TaskHandle::new(tid, prio, core_id),
+					VecDeque::with_capacity(1),
+				),
+			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "smp")]
@@ -189,7 +195,13 @@ impl PerCoreScheduler {
 		let wakeup = {
 			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS.lock().insert(
+				tid,
+				(
+					TaskHandle::new(tid, current_task_borrowed.prio, core_id),
+					VecDeque::with_capacity(1),
+				),
+			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			#[cfg(feature = "smp")]
 			if core_id != core_scheduler().core_id {
@@ -313,6 +325,45 @@ impl PerCoreScheduler {
 			.as_u64();
 	}
 
+	pub fn set_current_task_priority(&mut self, prio: Priority) {
+		irqsave(|| {
+			info!("Change priority of the current task");
+			self.current_task.borrow_mut().prio = prio;
+		});
+	}
+
+	pub fn set_priority(&mut self, id: TaskId, prio: Priority) -> Result<(), ()> {
+		info!("Chabge priority of task {} to priority {}", id, prio);
+
+		irqsave(|| {
+			let task = get_task_handle(id).ok_or(())?;
+
+			#[cfg(feature = "smp")]
+			if task.get_core_id() == self.core_id {
+				if self.current_task.borrow().id == task.get_id() {
+					self.current_task.borrow_mut().prio = prio;
+				} else {
+					self.ready_queue
+						.set_priority(task, prio)
+						.expect("Do not find valid task in ready queue");
+				}
+			} else {
+				warn!("Have to change the priority on another core");
+			}
+
+			#[cfg(not(feature = "smp"))]
+			if self.current_task.borrow().id == task.get_id() {
+				self.current_task.borrow_mut().prio = prio;
+			} else {
+				self.ready_queue
+					.set_priority(task, prio)
+					.expect("Do not find valid task in ready queue");
+			}
+
+			Ok(())
+		})
+	}
+
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
 	pub fn fpu_switch(&mut self) {
@@ -340,7 +391,7 @@ impl PerCoreScheduler {
 			debug!("Cleaning up task {}", borrowed.id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			if let Some(mut queue) = TASKS.lock().remove(&borrowed.id) {
+			if let Some((_, mut queue)) = TASKS.lock().remove(&borrowed.id) {
 				while let Some(task) = queue.pop_front() {
 					result = true;
 					self.custom_wakeup(task);
@@ -528,7 +579,13 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+	TASKS.lock().insert(
+		tid,
+		(
+			TaskHandle::new(tid, IDLE_PRIO, core_id),
+			VecDeque::with_capacity(1),
+		),
+	);
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
@@ -580,7 +637,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	{
 		let mut guard = TASKS.lock();
 		match guard.get_mut(&id) {
-			Some(queue) => {
+			Some((_, queue)) => {
 				queue.push_back(core_scheduler.get_current_task_handle());
 				core_scheduler.block_current_task(None);
 			}
@@ -594,4 +651,13 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	core_scheduler.scheduler();
 
 	Ok(())
+}
+
+fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
+	let guard = TASKS.lock();
+
+	match guard.get(&id) {
+		Some((task, _)) => Some(*task),
+		_ => None,
+	}
 }

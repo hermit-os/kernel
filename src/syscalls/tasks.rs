@@ -31,6 +31,7 @@ pub extern "C" fn sys_getpid() -> Tid {
 	kernel_function!(__sys_getpid())
 }
 
+#[cfg(feature = "newlib")]
 extern "C" fn __sys_getprio(id: *const Tid) -> i32 {
 	let task = core_scheduler().get_current_task_handle();
 
@@ -41,11 +42,13 @@ extern "C" fn __sys_getprio(id: *const Tid) -> i32 {
 	}
 }
 
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_getprio(id: *const Tid) -> i32 {
 	kernel_function!(__sys_getprio(id))
 }
 
+#[cfg(feature = "newlib")]
 #[no_mangle]
 pub extern "C" fn sys_setprio(_id: *const Tid, _prio: i32) -> i32 {
 	-ENOSYS
@@ -281,8 +284,9 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 	kernel_function!(__sys_join(id))
 }
 
-/// Mapping between TaskID and TaskHandle
-static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
+/// Mapping between blocked tasks and their TaskHandle
+static BLOCKED_TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> =
+	SpinlockIrqSave::new(BTreeMap::new());
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
 	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
@@ -290,7 +294,7 @@ extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
 
-	TASKS.lock().insert(tid, handle);
+	BLOCKED_TASKS.lock().insert(tid, handle);
 	core_scheduler.block_current_task(wakeup_time);
 }
 
@@ -309,7 +313,7 @@ pub extern "C" fn sys_block_current_task_with_timeout(timeout: u64) {
 extern "C" fn __sys_wakeup_task(id: Tid) {
 	let task_id = TaskId::from(id);
 
-	if let Some(handle) = TASKS.lock().remove(&task_id) {
+	if let Some(handle) = BLOCKED_TASKS.lock().remove(&task_id) {
 		core_scheduler().custom_wakeup(handle);
 	}
 }
@@ -328,4 +332,34 @@ extern "C" fn __sys_get_priority() -> u8 {
 #[no_mangle]
 pub extern "C" fn sys_get_priority() -> u8 {
 	kernel_function!(__sys_get_priority())
+}
+
+extern "C" fn __sys_set_priority(id: Tid, prio: u8) {
+	if prio > 0 {
+		core_scheduler()
+			.set_priority(TaskId::from(id), Priority::from(prio))
+			.expect("Unable to set priority");
+	} else {
+		panic!("Invalid priority {}", prio);
+	}
+}
+
+/// Set priority of the thread with the identifier `id`
+#[no_mangle]
+pub extern "C" fn sys_set_priority(id: Tid, prio: u8) {
+	kernel_function!(__sys_set_priority(id, prio))
+}
+
+extern "C" fn __sys_set_current_task_priority(prio: u8) {
+	if prio > 0 {
+		core_scheduler().set_current_task_priority(Priority::from(prio));
+	} else {
+		panic!("Invalid priority {}", prio);
+	}
+}
+
+/// Set priority of the current thread
+#[no_mangle]
+pub extern "C" fn sys_set_current_task_priority(prio: u8) {
+	kernel_function!(__sys_set_current_task_priority(prio))
 }
