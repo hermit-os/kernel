@@ -335,7 +335,7 @@ impl PriorityTaskQueue {
 	/// Change priority of specifc task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
 		let i = handle.get_priority().into() as usize;
-		let pos = self.queues[i].head.as_mut().ok_or(())?;
+		let mut pos = self.queues[i].head.as_mut().ok_or(())?;
 
 		loop {
 			if handle.id == pos.borrow().id {
@@ -353,8 +353,6 @@ impl PriorityTaskQueue {
 					if let Some(next) = borrow.next.as_mut() {
 						next.borrow_mut().prev = new;
 					}
-
-					drop(pos);
 
 					if borrow.prev.as_mut().is_none() {
 						// Ok, the task is head of the list
@@ -376,8 +374,8 @@ impl PriorityTaskQueue {
 				return Ok(());
 			}
 
-			let mut pos_borrowed = pos.borrow_mut();
-			let pos = pos_borrowed.next.as_mut().ok_or(())?;
+			let ptr = pos.as_ptr();
+			pos = unsafe { (*ptr).next.as_mut().ok_or(())? };
 		}
 	}
 }
