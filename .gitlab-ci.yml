@@ -43,8 +43,8 @@ build:demo:
     - if [ -d "libhermit-rs" ]; then rm -rf libhermit-rs; fi
     - mkdir libhermit-rs
     - shopt -s dotglob nullglob && mv $HOME/tmp_libhermit-rs/* libhermit-rs/.
-    - cargo build -p rusty_demo
-    - cargo build -p rusty_demo --release
+    - cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --package rusty_demo
+    - cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --package rusty_demo --release
   artifacts:
     paths:
       - rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo

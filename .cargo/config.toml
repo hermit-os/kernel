@@ -1,13 +1,5 @@
-[unstable]
-# Keep in sync with CI!
-build-std = ["core", "alloc"]
-build-std-features = ["compiler-builtins-mem"]
-
-[build]
-target = "targets/x86_64-unknown-none-hermitkernel.json"
-rustflags = [
-  "-Zmutable-noalias=no"
-]
+[alias]
+xtask = "run --package xtask --"
 
 [target.x86_64-unknown-none-hermitkernel]
 runner = "tests/hermit_test_runner.py"

@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - name: Generate documentation
-        run: cargo doc
+        run: cargo doc -Z build-std=core,alloc --package rusty-hermit
       - name: Generate index.html
         run: |
           cat > target/x86_64-unknown-none-hermitkernel/doc/index.html <<EOL

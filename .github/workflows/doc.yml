@@ -27,5 +27,5 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
         run: |
-          cargo doc --no-deps --document-private-items --target targets/x86_64-unknown-none-hermitkernel.json
-          cargo doc --no-deps --document-private-items --target targets/aarch64-unknown-none-hermitkernel.json
+          cargo doc -Z build-std=core,alloc --package rusty-hermit --no-deps --document-private-items --target targets/x86_64-unknown-none-hermitkernel.json
+          cargo doc -Z build-std=core,alloc --package rusty-hermit --no-deps --document-private-items --target targets/aarch64-unknown-none-hermitkernel.json

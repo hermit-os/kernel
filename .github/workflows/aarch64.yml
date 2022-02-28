@@ -23,8 +23,6 @@ jobs:
       matrix:
         os: [ubuntu-latest]
     steps:
-      - name: Install cargo-binutils
-        run: cargo install cargo-binutils
       - name: Checkout rusty-hermit
         uses: actions/checkout@v3
         with:
@@ -41,9 +39,9 @@ jobs:
         run: rustup show
       - name: Build minimal kernel
         working-directory: libhermit-rs
-        run: cargo build --no-default-features --target targets/aarch64-unknown-none-hermitkernel.json -Z build-std=core,alloc
+        run: cargo xtask build --arch aarch64 --no-default-features
       - name: Build dev profile
-        run: cargo build --target aarch64-unknown-hermit -p hello_world
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target aarch64-unknown-hermit --package hello_world
       - name: Build loader
         run: make arch=aarch64
         working-directory: loader

@@ -10,6 +10,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
 
 jobs:
   clippy:
@@ -24,4 +25,4 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - name: Clippy
-        run: cargo clippy -- -D warnings
+        run: cargo xtask clippy
