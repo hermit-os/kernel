@@ -156,7 +156,7 @@ impl flags::Clippy {
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
-		for target in [Target::X86_64] {
+		for target in [Target::X86_64, Target::Riscv64] {
 			target.install()?;
 			let triple = target.triple();
 			cmd!(sh, "cargo clippy --target={triple}").run()?;

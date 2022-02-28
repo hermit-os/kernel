@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![warn(rust_2018_idioms)]
+#![cfg_attr(target_arch = "riscv64", allow(unstable_name_collisions))]
 #![allow(clippy::missing_safety_doc)]
 
 #[macro_use]

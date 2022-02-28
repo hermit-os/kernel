@@ -43,7 +43,7 @@ jobs:
     name: Run
     strategy:
       matrix:
-        target: [x86_64, x86_64-uefi, x86_64-fc, aarch64]
+        target: [x86_64, x86_64-uefi, x86_64-fc, aarch64, riscv64]
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
@@ -51,7 +51,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 qemu-system-arm nasm
+          sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc nasm
       - name: Install QEMU, NASM (macos)
         if: matrix.os == 'macos-latest'
         run: |
@@ -96,6 +96,17 @@ jobs:
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/debug/rusty-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
+      - name: Run loader (riscv64)
+        if: matrix.target == 'riscv64'
+        run: |
+          qemu-system-riscv64 \
+            -machine virt \
+            -cpu rv64 \
+            -smp 1 \
+            -m 32M \
+            -display none -serial stdio \
+            -kernel target/riscv64/debug/rusty-loader \
+            -initrd data/riscv64/hello_world
       - name: Build (release)
         run: cargo xtask build --target ${{ matrix.target }} --release
       - name: Run loader (release, x86_64)
@@ -123,3 +134,14 @@ jobs:
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/release/rusty-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
+      - name: Run loader (release, riscv64)
+        if: matrix.target == 'riscv64'
+        run: |
+          qemu-system-riscv64 \
+            -machine virt \
+            -cpu rv64 \
+            -smp 1 \
+            -m 32M \
+            -display none -serial stdio \
+            -kernel target/riscv64/release/rusty-loader \
+            -initrd data/riscv64/hello_world
