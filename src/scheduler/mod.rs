@@ -642,10 +642,5 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 }
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
-	let guard = TASKS.lock();
-
-	match guard.get(&id) {
-		Some((task, _)) => Some(*task),
-		_ => None,
-	}
+	TASKS.lock().get(&id).map(|(task_handle, _)| *task_handle)
 }
