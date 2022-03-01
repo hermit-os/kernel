@@ -337,8 +337,12 @@ impl PerCoreScheduler {
 
 		irqsave(|| {
 			let task = get_task_handle(id).ok_or(())?;
+			#[cfg(feature = "smp")]
+			let other_core = task.get_core_id() != self.core_id;
+			#[cfg(not(feature = "smp"))]
+			let other_core = false;
 
-			if cfg!(feature = "smp") && task.get_core_id() != self.core_id {
+			if other_core {
 				warn!("Have to change the priority on another core");
 			} else if self.current_task.borrow().id == task.get_id() {
 				self.current_task.borrow_mut().prio = prio;
