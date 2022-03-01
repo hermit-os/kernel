@@ -20,9 +20,11 @@ pub mod task;
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
-/// Map between Task ID and TaskHandle + Queue of waiting tasks
-static TASKS: SpinlockIrqSave<BTreeMap<TaskId, (TaskHandle, VecDeque<TaskHandle>)>> =
+/// Map between Task ID and Queue of waiting tasks
+static WAITING_TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	SpinlockIrqSave::new(BTreeMap::new());
+/// Map between Task ID and TaskHandle
+static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -95,13 +97,10 @@ impl PerCoreScheduler {
 		let wakeup = {
 			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
-			TASKS.lock().insert(
-				tid,
-				(
-					TaskHandle::new(tid, prio, core_id),
-					VecDeque::with_capacity(1),
-				),
-			);
+			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+			TASKS
+				.lock()
+				.insert(tid, TaskHandle::new(tid, prio, core_id));
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "smp")]
@@ -195,12 +194,10 @@ impl PerCoreScheduler {
 		let wakeup = {
 			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
+			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			TASKS.lock().insert(
 				tid,
-				(
-					TaskHandle::new(tid, current_task_borrowed.prio, core_id),
-					VecDeque::with_capacity(1),
-				),
+				TaskHandle::new(tid, current_task_borrowed.prio, core_id),
 			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			#[cfg(feature = "smp")]
@@ -383,7 +380,7 @@ impl PerCoreScheduler {
 			debug!("Cleaning up task {}", borrowed.id);
 
 			// wakeup tasks, which are waiting for task with the identifier id
-			if let Some((_, mut queue)) = TASKS.lock().remove(&borrowed.id) {
+			if let Some(mut queue) = WAITING_TASKS.lock().remove(&borrowed.id) {
 				while let Some(task) = queue.pop_front() {
 					result = true;
 					self.custom_wakeup(task);
@@ -571,13 +568,10 @@ pub fn add_current_core() {
 	let idle_task = Rc::new(RefCell::new(Task::new_idle(tid, core_id)));
 
 	// Add the ID -> Task mapping.
-	TASKS.lock().insert(
-		tid,
-		(
-			TaskHandle::new(tid, IDLE_PRIO, core_id),
-			VecDeque::with_capacity(1),
-		),
-	);
+	WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
+	TASKS
+		.lock()
+		.insert(tid, TaskHandle::new(tid, IDLE_PRIO, core_id));
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
@@ -627,9 +621,8 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 	);
 
 	{
-		let mut guard = TASKS.lock();
-		match guard.get_mut(&id) {
-			Some((_, queue)) => {
+		match WAITING_TASKS.lock().get_mut(&id) {
+			Some(queue) => {
 				queue.push_back(core_scheduler.get_current_task_handle());
 				core_scheduler.block_current_task(None);
 			}
@@ -646,5 +639,5 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 }
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
-	TASKS.lock().get(&id).map(|(task_handle, _)| *task_handle)
+	TASKS.lock().get(&id).map(|task_handle| *task_handle)
 }
