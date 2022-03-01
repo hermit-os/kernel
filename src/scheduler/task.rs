@@ -341,6 +341,7 @@ impl PriorityTaskQueue {
 			if handle.id == pos.borrow().id {
 				let task = pos.clone();
 
+				// Extract found task from queue and set new priority
 				{
 					let mut borrow = task.borrow_mut();
 
