@@ -639,5 +639,5 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 }
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
-	TASKS.lock().get(&id).map(|task_handle| *task_handle)
+	TASKS.lock().get(&id).copied()
 }
