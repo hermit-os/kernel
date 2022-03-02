@@ -26,14 +26,14 @@ jobs:
       - name: Install cargo-binutils
         run: cargo install cargo-binutils
       - name: Checkout rusty-hermit
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: hermitcore/rusty-hermit
           submodules: true
       - name: Remove libhermit-rs submodule
         run: git rm -r libhermit-rs
       - name: Checkout libhermit-rs
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           path: libhermit-rs
       - name: Rustup (apply rust-toolchain.toml)
