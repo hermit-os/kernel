@@ -37,6 +37,7 @@ build:demo:
     - if [ -d "$HOME/tmp_libhermit-rs/target" ]; then rm -rf $HOME/tmp_libhermit-rs/target; fi
     - git clone https://github.com/hermitcore/rusty-hermit.git
     - cd rusty-hermit
+    - git checkout 04ca4407fd6823972a6950e3d59a157208be4f00
     - echo "rusty-hermit at commit $(git rev-parse HEAD)"
     # Ensure that libhermit-rs is empty - This shouldn't be necessary since we don't initialize the submodules
     # But let's do it anyway to be safe
