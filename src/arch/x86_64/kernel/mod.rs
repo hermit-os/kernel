@@ -475,11 +475,15 @@ pub fn print_statistics() {
 unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	assert_eq!(boot_info.magic_number, BOOTINFO_MAGIC_NUMBER);
 	// Enable caching
-	let mut cr0 = cr0();
-	cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
-	cr0_write(cr0);
+	unsafe {
+		let mut cr0 = cr0();
+		cr0.remove(Cr0::CR0_CACHE_DISABLE | Cr0::CR0_NOT_WRITE_THROUGH);
+		cr0_write(cr0);
+	}
 
-	BOOT_INFO = boot_info as *mut BootInfo;
+	unsafe {
+		BOOT_INFO = boot_info as *mut BootInfo;
+	}
 
 	if boot_info.cpu_online == 0 {
 		crate::boot_processor_main()

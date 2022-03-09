@@ -32,8 +32,8 @@ unsafe fn parse_command_line() {
 
 	// Convert the command-line into a Rust string slice.
 	let cmdline = get_cmdline().as_ptr::<u8>();
-	let slice = slice::from_raw_parts(cmdline, cmdsize);
-	let cmdline_str = str::from_utf8_unchecked(slice);
+	let slice = unsafe { slice::from_raw_parts(cmdline, cmdsize) };
+	let cmdline_str = unsafe { str::from_utf8_unchecked(slice) };
 
 	// Split at spaces, but not while in quotes
 	let tokens = shell_words::split(cmdline_str).unwrap();
@@ -44,39 +44,43 @@ unsafe fn parse_command_line() {
 		match token.as_str() {
 			"-freq" => {
 				let mhz_str = tokeniter.next().expect("Invalid -freq command line");
-				COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().ok();
+				unsafe {
+					COMMAND_LINE_CPU_FREQUENCY = mhz_str.parse().ok();
+				}
 			}
-			"-ip" => {
+			"-ip" => unsafe {
 				COMMAND_LINE_ENVIRONMENT.push(format!(
 					"HERMIT_IP={}",
 					tokeniter.next().expect("Invalid -ip command line")
 				));
-			}
-			"-mask" => {
+			},
+			"-mask" => unsafe {
 				COMMAND_LINE_ENVIRONMENT.push(format!(
 					"HERMIT_MASK={}",
 					tokeniter.next().expect("Invalid -mask command line")
 				));
-			}
-			"-gateway" => {
+			},
+			"-gateway" => unsafe {
 				COMMAND_LINE_ENVIRONMENT.push(format!(
 					"HERMIT_GATEWAY={}",
 					tokeniter.next().expect("Invalid -gateway command line")
 				));
-			}
-			"-proxy" => {
+			},
+			"-proxy" => unsafe {
 				IS_PROXY = true;
-			}
+			},
 			"--" => {
 				// Collect remaining arguments as applications argv
 				//ToDo -> we know the length here, so we could (should convert this into a safe
 				// rust type (at least for rust applications)
-				COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
+				unsafe {
+					COMMAND_LINE_APPLICATION = Some(tokeniter.collect());
+				}
 				break;
 			}
-			_ if COMMAND_LINE_PATH.is_none() => {
+			_ if unsafe { COMMAND_LINE_PATH.is_none() } => {
 				// Qemu passes in the kernel path (rusty-loader) as first argument
-				COMMAND_LINE_PATH = Some(token)
+				unsafe { COMMAND_LINE_PATH = Some(token) }
 			}
 			_ => {
 				warn!("Unknown cmdline option: {} [{}]", token, cmdline_str);

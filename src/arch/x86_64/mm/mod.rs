@@ -24,8 +24,10 @@ impl multiboot::information::MemoryManagement for MultibootMemory {
 		p: multiboot::information::PAddr,
 		sz: usize,
 	) -> Option<&'static [u8]> {
-		let ptr = mem::transmute(p);
-		Some(slice::from_raw_parts(ptr, sz))
+		unsafe {
+			let ptr = mem::transmute(p);
+			Some(slice::from_raw_parts(ptr, sz))
+		}
 	}
 
 	unsafe fn allocate(

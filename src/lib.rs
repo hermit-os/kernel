@@ -5,6 +5,7 @@
  */
 
 #![warn(rust_2018_idioms)]
+#![warn(unsafe_op_in_unsafe_fn)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
