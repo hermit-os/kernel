@@ -453,7 +453,7 @@ pub fn poweroff() {
 			);
 			outw(pm1a_cnt_blk, bits);
 		} else {
-			debug!("ACPI Power Off is not available");
+			warn!("ACPI Power Off is not available");
 		}
 	}
 }
