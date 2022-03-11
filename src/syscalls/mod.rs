@@ -41,6 +41,17 @@ pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
 static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
+/// Shuts down the machine.
+///
+/// This does not require the syscall interface to be initialized.
+pub(crate) fn shutdown(arg: i32) -> ! {
+	if environment::is_uhyve() {
+		interfaces::Uhyve.shutdown(arg)
+	} else {
+		interfaces::Generic.shutdown(arg)
+	}
+}
+
 pub(crate) fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
