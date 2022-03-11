@@ -20,7 +20,6 @@
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
 #![feature(new_uninit)]
-#![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]

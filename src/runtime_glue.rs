@@ -1,34 +1,19 @@
 //! Minor functions that Rust really expects to be defined by the compiler,
 //! but which we need to provide manually because we're on bare metal.
 
-use crate::arch::kernel::processor::run_on_hypervisor;
-use crate::{__sys_shutdown, arch};
 use alloc::alloc::Layout;
 use core::panic::PanicInfo;
 
-// see https://users.rust-lang.org/t/psa-breaking-change-panic-fmt-language-item-removed-in-favor-of-panic-implementation/17875
+use crate::arch::percore;
+use crate::syscalls;
+
 #[cfg(any(target_os = "none", target_os = "hermit"))]
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-	print!("[{}][!!!PANIC!!!] ", arch::percore::core_id());
+	let core_id = percore::core_id();
+	println!("[{core_id}][PANIC] {info}");
 
-	if let Some(location) = info.location() {
-		print!("{}:{}: ", location.file(), location.line());
-	}
-
-	if let Some(message) = info.message() {
-		print!("{}", message);
-	}
-
-	println!();
-
-	if run_on_hypervisor() {
-		__sys_shutdown(1);
-	}
-
-	loop {
-		arch::processor::halt();
-	}
+	syscalls::shutdown(1)
 }
 
 #[alloc_error_handler]
