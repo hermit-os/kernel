@@ -33,15 +33,8 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 
 #[alloc_error_handler]
 fn rust_oom(layout: Layout) -> ! {
-	println!(
-		"[{}][!!!OOM!!!] Memory allocation of {} bytes failed",
-		arch::percore::core_id(),
-		layout.size()
-	);
-
-	loop {
-		arch::processor::halt();
-	}
+	let size = layout.size();
+	panic!("memory allocation of {size} bytes failed")
 }
 
 #[cfg(target_os = "hermit")]
