@@ -58,7 +58,7 @@ struct AcpiRsdp {
 
 impl AcpiRsdp {
 	fn oem_id(&self) -> &str {
-		unsafe { str::from_utf8_unchecked(&self.oem_id) }
+		str::from_utf8(&self.oem_id).unwrap()
 	}
 }
 
@@ -78,7 +78,7 @@ struct AcpiSdtHeader {
 
 impl AcpiSdtHeader {
 	fn signature(&self) -> &str {
-		unsafe { str::from_utf8_unchecked(&self.signature) }
+		str::from_utf8(&self.signature).unwrap()
 	}
 }
 
