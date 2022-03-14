@@ -1,7 +1,9 @@
+use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::x86::io::*;
+use core::convert::Infallible;
 use core::{mem, ptr, slice, str};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
@@ -443,7 +445,7 @@ pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
 	unsafe { MADT.as_ref() }
 }
 
-pub fn poweroff() {
+pub fn poweroff() -> Result<Infallible, ()> {
 	unsafe {
 		if let (Some(pm1a_cnt_blk), Some(slp_typa)) = (PM1A_CNT_BLK, SLP_TYPA) {
 			let bits = (u16::from(slp_typa) << 10) | SLP_EN;
@@ -452,8 +454,12 @@ pub fn poweroff() {
 				pm1a_cnt_blk, bits
 			);
 			outw(pm1a_cnt_blk, bits);
+			loop {
+				processor::halt();
+			}
 		} else {
 			warn!("ACPI Power Off is not available");
+			Err(())
 		}
 	}
 }

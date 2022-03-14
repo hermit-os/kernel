@@ -12,6 +12,7 @@ use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
 	_xsave,
 };
+use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::{fmt, u32};
 use qemu_exit::QEMUExit;
@@ -975,12 +976,26 @@ pub fn halt() {
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
-	#[cfg(feature = "acpi")]
-	acpi::poweroff();
+	let acpi_result: Result<Infallible, ()> = {
+		#[cfg(feature = "acpi")]
+		{
+			acpi::poweroff()
+		}
 
-	// assume that we running on Qemu
-	let exit_handler = qemu_exit::X86::new(0xf4, 3);
-	exit_handler.exit_success()
+		#[cfg(not(feature = "acpi"))]
+		{
+			Err(())
+		}
+	};
+
+	match acpi_result {
+		Ok(_never) => unreachable!(),
+		Err(()) => {
+			// Try QEMU's debug exit
+			let exit_handler = qemu_exit::X86::new(0xf4, 3);
+			exit_handler.exit_success()
+		}
+	}
 }
 
 pub fn get_timer_ticks() -> u64 {
