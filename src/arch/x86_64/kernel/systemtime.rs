@@ -1,7 +1,7 @@
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::kernel::BOOT_INFO;
-use crate::environment;
+use crate::env;
 use core::hint::spin_loop;
 use x86::io::*;
 
@@ -220,7 +220,7 @@ pub fn get_boot_time() -> u64 {
 pub fn init() {
 	let mut microseconds_offset = get_boot_time();
 
-	if microseconds_offset == 0 && !environment::is_uhyve() {
+	if microseconds_offset == 0 && !env::is_uhyve() {
 		// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();

@@ -3,7 +3,7 @@
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{idt, irq, pic, pit, BOOT_INFO};
-use crate::environment;
+use crate::env;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
 use crate::x86::msr::*;
@@ -254,7 +254,7 @@ impl CpuFrequency {
 	}
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
-		let mhz = environment::get_command_line_cpu_frequency().ok_or(())?;
+		let mhz = env::get_command_line_cpu_frequency().ok_or(())?;
 		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
 	}
 
@@ -315,7 +315,7 @@ impl CpuFrequency {
 
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		fn detect_from_uhyve() -> Result<u16, ()> {
-			if environment::is_uhyve() {
+			if env::is_uhyve() {
 				unsafe {
 					let cpu_freq = core::ptr::read_volatile(&(*BOOT_INFO).cpu_freq);
 					if cpu_freq > (u16::MAX as u32) {
@@ -351,7 +351,7 @@ impl CpuFrequency {
 	#[cfg(any(target_os = "none", target_os = "hermit"))]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
-		if environment::is_uhyve() {
+		if env::is_uhyve() {
 			return Err(());
 		}
 
@@ -609,7 +609,7 @@ impl fmt::Display for CpuFeaturePrinter {
 }
 
 pub fn run_on_hypervisor() -> bool {
-	if environment::is_uhyve() {
+	if env::is_uhyve() {
 		true
 	} else {
 		unsafe { RUN_ON_HYPERVISOR }
