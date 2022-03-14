@@ -76,6 +76,10 @@ pub use crate::config::USER_STACK_SIZE;
 pub(crate) use crate::config::*;
 pub use crate::syscalls::*;
 
+// Used for integration test status.
+#[doc(hidden)]
+pub use arch::kernel::is_uhyve as _is_uhyve;
+
 #[macro_use]
 mod macros;
 
@@ -87,7 +91,7 @@ mod collections;
 mod config;
 mod console;
 mod drivers;
-pub mod environment;
+mod environment;
 mod errno;
 mod kernel_message_buffer;
 mod mm;
