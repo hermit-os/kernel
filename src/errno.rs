@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 /// Operation not permitted
 pub const EPERM: i32 = 1;
 
