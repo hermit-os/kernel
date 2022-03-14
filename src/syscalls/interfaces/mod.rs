@@ -90,12 +90,11 @@ pub trait SyscallInterface: Send + Sync {
 		let name = Box::leak(Box::new("{name}\0")).as_ptr();
 		argv.push(name);
 
-		if let Some(args) = env::get_command_line_argv() {
-			debug!("Setting argv as: {:?}", args);
-			for a in args {
-				let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
-				argv.push(ptr);
-			}
+		let args = env::get_command_line_argv();
+		debug!("Setting argv as: {:?}", args);
+		for arg in args {
+			let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
+			argv.push(ptr);
 		}
 
 		let mut envv = Vec::new();
