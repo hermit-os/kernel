@@ -72,7 +72,6 @@ use mm::allocator::LockedHeap;
 use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
-pub use crate::config::USER_STACK_SIZE;
 pub(crate) use crate::config::*;
 pub use crate::syscalls::*;
 
