@@ -110,16 +110,16 @@ impl Default for Cli {
 }
 
 /// CPU Frequency in MHz if given through the -freq command-line parameter.
-pub fn get_command_line_cpu_frequency() -> Option<u16> {
+pub fn freq() -> Option<u16> {
 	ENV.get().unwrap().cli.freq
 }
 
-pub fn get_command_line_envv() -> &'static [String] {
+pub fn vars() -> &'static [String] {
 	ENV.get().unwrap().cli.env_vars.as_slice()
 }
 
 /// Returns the cmdline argument passed in after "--"
-pub fn get_command_line_argv() -> &'static [String] {
+pub fn args() -> &'static [String] {
 	ENV.get().unwrap().cli.args.as_slice()
 }
 
