@@ -200,7 +200,7 @@ pub fn test_case_runner(tests: &[&dyn Testable]) {
 
 pub fn exit(failure: bool) -> ! {
 	// temporarily make this public. FIXME: we could also pass an argument to main indicating uhyve or qemu
-	if hermit::environment::is_uhyve() {
+	if hermit::_is_uhyve() {
 		match failure {
 			//ToDo: Add uhyve exit code enum
 			true => hermit::sys_exit(1),
