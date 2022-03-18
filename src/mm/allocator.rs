@@ -56,7 +56,7 @@ impl Heap {
 	/// This function must be called at most once and must only be used on an
 	/// empty heap.
 	pub unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
-		self.holes = HoleList::new(heap_bottom, heap_size);
+		self.holes = unsafe { HoleList::new(heap_bottom, heap_size) };
 		self.bottom = heap_bottom;
 		self.size = heap_size;
 	}
@@ -71,7 +71,7 @@ impl Heap {
 			index: 0,
 			bottom: heap_bottom,
 			size: heap_size,
-			holes: HoleList::new(heap_bottom, heap_size),
+			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
 		}
 	}
 
@@ -140,7 +140,7 @@ impl Heap {
 			)
 			.unwrap();
 
-			self.holes.deallocate(ptr, layout);
+			unsafe { self.holes.deallocate(ptr, layout) };
 		}
 	}
 
@@ -167,8 +167,10 @@ impl Heap {
 	pub unsafe fn extend(&mut self, by: usize) {
 		let top = self.top();
 		let layout = Layout::from_size_align(by, 1).unwrap();
-		self.holes
-			.deallocate(NonNull::new_unchecked(top as *mut u8), layout);
+		unsafe {
+			self.holes
+				.deallocate(NonNull::new_unchecked(top as *mut u8), layout);
+		}
 		self.size += by;
 	}
 }
@@ -191,7 +193,7 @@ impl LockedHeap {
 			index: 0,
 			bottom: heap_bottom,
 			size: heap_size,
-			holes: HoleList::new(heap_bottom, heap_size),
+			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
 		}))
 	}
 }
@@ -212,20 +214,24 @@ unsafe impl GlobalAlloc for LockedHeap {
 			.lock()
 			.allocate_first_fit(layout)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |(mut mem, _)| mem.as_mut())
+			.map_or(ptr::null_mut() as *mut u8, |(mut mem, _)| unsafe {
+				mem.as_mut()
+			})
 	}
 
 	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-		let ptr = self.alloc(layout);
+		let ptr = unsafe { self.alloc(layout) };
 		if !ptr.is_null() {
-			ptr::write_bytes(ptr, 0, layout.size());
+			unsafe { ptr::write_bytes(ptr, 0, layout.size()) };
 		}
 		ptr
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-		self.0
-			.lock()
-			.deallocate(NonNull::new_unchecked(ptr), layout)
+		unsafe {
+			self.0
+				.lock()
+				.deallocate(NonNull::new_unchecked(ptr), layout)
+		}
 	}
 }

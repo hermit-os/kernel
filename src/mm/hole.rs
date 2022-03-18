@@ -29,10 +29,12 @@ impl HoleList {
 		assert_eq!(size_of::<Hole>(), Self::min_size());
 
 		let ptr = hole_addr as *mut Hole;
-		ptr.write(Hole::new(hole_size, None));
+		unsafe {
+			ptr.write(Hole::new(hole_size, None));
+		}
 
 		HoleList {
-			first: Hole::new(0, Some(&mut *ptr)),
+			first: Hole::new(0, Some(unsafe { &mut *ptr })),
 		}
 	}
 

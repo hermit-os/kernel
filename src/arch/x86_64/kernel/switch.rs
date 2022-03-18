@@ -107,22 +107,24 @@ pub unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usiz
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
 
-	asm!(
-		save_context!(),
-		// Store the old `rsp` behind `old_stack`
-		"mov [rdi], rsp",
-		// Set `rsp` to `new_stack`
-		"mov rsp, rsi",
-		// Set task switched flag
-		"mov rax, cr0",
-		"or rax, 8",
-		"mov cr0, rax",
-		// Set stack pointer in TSS
-		"call {set_current_kernel_stack}",
-		restore_context!(),
-		set_current_kernel_stack = sym set_current_kernel_stack,
-		options(noreturn)
-	);
+	unsafe {
+		asm!(
+			save_context!(),
+			// Store the old `rsp` behind `old_stack`
+			"mov [rdi], rsp",
+			// Set `rsp` to `new_stack`
+			"mov rsp, rsi",
+			// Set task switched flag
+			"mov rax, cr0",
+			"or rax, 8",
+			"mov cr0, rax",
+			// Set stack pointer in TSS
+			"call {set_current_kernel_stack}",
+			restore_context!(),
+			set_current_kernel_stack = sym set_current_kernel_stack,
+			options(noreturn)
+		);
+	}
 }
 
 /// Performa a context switch to an idle task or a task, which already is owner
@@ -132,19 +134,21 @@ pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack:
 	// `old_stack` is in `rdi` register
 	// `new_stack` is in `rsi` register
 
-	asm!(
-		save_context!(),
-		// Store the old `rsp` behind `old_stack`
-		"mov [rdi], rsp",
-		// Set `rsp` to `new_stack`
-		"mov rsp, rsi",
-		// Don't set task switched flag, as we switch to fpu owner.
-		// Set stack pointer in TSS
-		"call {set_current_kernel_stack}",
-		restore_context!(),
-		set_current_kernel_stack = sym set_current_kernel_stack,
-		options(noreturn),
-	);
+	unsafe {
+		asm!(
+			save_context!(),
+			// Store the old `rsp` behind `old_stack`
+			"mov [rdi], rsp",
+			// Set `rsp` to `new_stack`
+			"mov rsp, rsi",
+			// Don't set task switched flag, as we switch to fpu owner.
+			// Set stack pointer in TSS
+			"call {set_current_kernel_stack}",
+			restore_context!(),
+			set_current_kernel_stack = sym set_current_kernel_stack,
+			options(noreturn),
+		);
+	}
 }
 
 macro_rules! kernel_function_impl {
