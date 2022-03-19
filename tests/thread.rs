@@ -12,8 +12,9 @@ use common::*;
 mod common;
 
 use alloc::vec;
-use hermit::{sys_join, sys_spawn2, sys_usleep, USER_STACK_SIZE};
+use hermit::{sys_join, sys_spawn2, sys_usleep};
 
+const USER_STACK_SIZE: usize = 1_048_576;
 const NORMAL_PRIO: u8 = 2;
 
 extern "C" fn thread_func(i: usize) {

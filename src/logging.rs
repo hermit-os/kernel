@@ -25,7 +25,9 @@ impl log::Log for KernelLogger {
 }
 
 pub unsafe fn init() {
-	set_logger_racy(&KernelLogger).expect("Can't initialize logger");
+	unsafe {
+		set_logger_racy(&KernelLogger).expect("Can't initialize logger");
+	}
 	// Determines LevelFilter at compile time
 	let log_level: Option<&'static str> = option_env!("HERMIT_LOG_LEVEL_FILTER");
 	let max_level: LevelFilter = match log_level {

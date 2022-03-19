@@ -5,6 +5,7 @@
  */
 
 #![warn(rust_2018_idioms)]
+#![warn(unsafe_op_in_unsafe_fn)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
@@ -20,7 +21,6 @@
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
 #![feature(new_uninit)]
-#![feature(panic_info_message)]
 #![feature(specialization)]
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
@@ -72,9 +72,12 @@ use mm::allocator::LockedHeap;
 use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
-pub use crate::config::USER_STACK_SIZE;
 pub(crate) use crate::config::*;
 pub use crate::syscalls::*;
+
+// Used for integration test status.
+#[doc(hidden)]
+pub use arch::kernel::is_uhyve as _is_uhyve;
 
 #[macro_use]
 mod macros;
@@ -87,8 +90,8 @@ mod collections;
 mod config;
 mod console;
 mod drivers;
-pub mod environment;
-pub mod errno;
+mod environment;
+mod errno;
 mod kernel_message_buffer;
 mod mm;
 #[cfg(any(target_os = "none", target_os = "hermit"))]

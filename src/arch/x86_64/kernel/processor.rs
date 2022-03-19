@@ -12,6 +12,7 @@ use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
 	_xsave,
 };
+use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::{fmt, u32};
 use qemu_exit::QEMUExit;
@@ -424,18 +425,20 @@ impl CpuFrequency {
 
 	unsafe fn detect(&mut self) {
 		let cpuid = CpuId::new();
-		self.detect_from_cpuid(&cpuid)
-			.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
-			.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
-			.or_else(|_e| self.detect_from_hypervisor())
-			.or_else(|_e| self.detect_from_cmdline())
-			.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
-			.or_else(|_e| self.measure_frequency())
-			.or_else(|_e| {
-				warn!("Could not determine the processor frequency! Guess a frequncy of 2Ghz!");
-				self.set_detected_cpu_frequency(2000, CpuFrequencySources::Visionary)
-			})
-			.unwrap();
+		unsafe {
+			self.detect_from_cpuid(&cpuid)
+				.or_else(|_e| self.detect_from_cpuid_tsc_info(&cpuid))
+				.or_else(|_e| self.detect_from_cpuid_hypervisor_info(&cpuid))
+				.or_else(|_e| self.detect_from_hypervisor())
+				.or_else(|_e| self.detect_from_cmdline())
+				.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
+				.or_else(|_e| self.measure_frequency())
+				.or_else(|_e| {
+					warn!("Could not determine the processor frequency! Guess a frequncy of 2Ghz!");
+					self.set_detected_cpu_frequency(2000, CpuFrequencySources::Visionary)
+				})
+				.unwrap();
+		}
 	}
 
 	fn get(&self) -> u16 {
@@ -975,12 +978,26 @@ pub fn halt() {
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
-	#[cfg(feature = "acpi")]
-	acpi::poweroff();
+	let acpi_result: Result<Infallible, ()> = {
+		#[cfg(feature = "acpi")]
+		{
+			acpi::poweroff()
+		}
 
-	// assume that we running on Qemu
-	let exit_handler = qemu_exit::X86::new(0xf4, 3);
-	exit_handler.exit_success()
+		#[cfg(not(feature = "acpi"))]
+		{
+			Err(())
+		}
+	};
+
+	match acpi_result {
+		Ok(_never) => unreachable!(),
+		Err(()) => {
+			// Try QEMU's debug exit
+			let exit_handler = qemu_exit::X86::new(0xf4, 3);
+			exit_handler.exit_success()
+		}
+	}
 }
 
 pub fn get_timer_ticks() -> u64 {
@@ -1041,17 +1058,21 @@ pub fn get_timestamp() -> u64 {
 }
 
 unsafe fn get_timestamp_rdtsc() -> u64 {
-	_mm_lfence();
-	let value = _rdtsc();
-	_mm_lfence();
-	value
+	unsafe {
+		_mm_lfence();
+		let value = _rdtsc();
+		_mm_lfence();
+		value
+	}
 }
 
 unsafe fn get_timestamp_rdtscp() -> u64 {
-	let mut aux: u32 = 0;
-	let value = __rdtscp(&mut aux);
-	_mm_lfence();
-	value
+	unsafe {
+		let mut aux: u32 = 0;
+		let value = __rdtscp(&mut aux);
+		_mm_lfence();
+		value
+	}
 }
 
 /// Delay execution by the given number of microseconds using busy-waiting.
