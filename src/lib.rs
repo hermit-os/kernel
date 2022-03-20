@@ -91,7 +91,7 @@ mod config;
 mod console;
 mod drivers;
 mod environment;
-mod errno;
+pub mod errno;
 mod kernel_message_buffer;
 mod mm;
 #[cfg(any(target_os = "none", target_os = "hermit"))]
