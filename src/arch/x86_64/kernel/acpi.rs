@@ -60,10 +60,6 @@ impl AcpiRsdp {
 	fn oem_id(&self) -> &str {
 		unsafe { str::from_utf8_unchecked(&self.oem_id) }
 	}
-
-	fn signature(&self) -> &str {
-		unsafe { str::from_utf8_unchecked(&self.signature) }
-	}
 }
 
 /// The header of (almost) every ACPI table.
@@ -266,7 +262,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 
 		// Verify the signature to find out if this is really an ACPI RSDP.
 		let rsdp = unsafe { &*(current_address as *const AcpiRsdp) };
-		if rsdp.signature() != "RSD PTR " {
+		if &rsdp.signature != b"RSD PTR " {
 			continue;
 		}
 
