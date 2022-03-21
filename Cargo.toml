@@ -78,6 +78,7 @@ qemu-exit = "3.0"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 multiboot = "0.7"
+time = { version = "0.3", default-features = false }
 x86 = { version = "0.47", default-features = false }
 
 [dev-dependencies]
