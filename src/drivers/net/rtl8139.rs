@@ -486,13 +486,11 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		// unlock config register
 		outb(iobase + CR9346, 0);
 
-		/*
-		 * configure receive buffer
-		 * AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
-		 * AM - Accept Multicast: Accept multicast packets.
-		 * APM - Accept Physical Match: Accept packets send to NIC's MAC address.
-		 * AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
-		 */
+		// configure receive buffer
+		// AB - Accept Broadcast: Accept broadcast packets sent to mac ff:ff:ff:ff:ff:ff
+		// AM - Accept Multicast: Accept multicast packets.
+		// APM - Accept Physical Match: Accept packets send to NIC's MAC address.
+		// AAP - Accept All Packets. Accept all packets (run in promiscuous mode).
 		outl(
 			iobase + RCR,
 			RCR_MXDMA2 | RCR_MXDMA1 | RCR_MXDMA0 | RCR_AB | RCR_AM | RCR_APM | RCR_AAP,

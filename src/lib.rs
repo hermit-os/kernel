@@ -1,8 +1,6 @@
-/*
- * First version is derived and adapted for HermitCore from
- * Philipp Oppermann's excellent series of blog posts (http://blog.phil-opp.com/)
- * and Eric Kidd's toy OS (https://github.com/emk/toyos-rs).
- */
+//! First version is derived and adapted for HermitCore from
+//! Philipp Oppermann's excellent series of blog posts (<http://blog.phil-opp.com/>)
+//! and Eric Kidd's toy OS (<https://github.com/emk/toyos-rs>).
 
 #![warn(rust_2018_idioms)]
 #![warn(unsafe_op_in_unsafe_fn)]
@@ -357,7 +355,8 @@ fn boot_processor_main() -> ! {
 			exit_handler.exit_success();
 		}
 
-		loop {} /* Compiles up to here - loop prevents linker errors */
+		// Compiles up to here - loop prevents linker errors
+		loop {}
 	}
 	scheduler::add_current_core();
 

@@ -17,15 +17,15 @@ use self::consts::*;
 
 #[allow(dead_code)]
 pub mod consts {
-	/* Common configuration */
+	/// Common configuration
 	pub const VIRTIO_PCI_CAP_COMMON_CFG: u32 = 1;
-	/* Notifications */
+	/// Notifications
 	pub const VIRTIO_PCI_CAP_NOTIFY_CFG: u32 = 2;
-	/* ISR Status */
+	/// ISR Status
 	pub const VIRTIO_PCI_CAP_ISR_CFG: u32 = 3;
-	/* Device specific configuration */
+	/// Device specific configuration
 	pub const VIRTIO_PCI_CAP_DEVICE_CFG: u32 = 4;
-	/* PCI configuration access */
+	/// PCI configuration access
 	pub const VIRTIO_PCI_CAP_PCI_CFG: u32 = 5;
 
 	pub const VIRTIO_F_RING_INDIRECT_DESC: u64 = 1 << 28;
@@ -660,14 +660,29 @@ struct virtq_used_elem {
 #[repr(C)]
 #[derive(Debug)]
 struct virtio_pci_cap {
-	cap_vndr: u8,     /* Generic PCI field: PCI_CAP_ID_VNDR */
-	cap_next: u8,     /* Generic PCI field: next ptr. */
-	cap_len: u8,      /* Generic PCI field: capability length */
-	cfg_type: u8,     /* Identifies the structure. */
-	bar: u8,          /* Where to find it. */
-	padding: [u8; 3], /* Pad to full dword. */
-	offset: u32,      /* Offset within bar. */
-	length: u32,      /* Length of the structure, in bytes. */
+	/// Generic PCI field: PCI_CAP_ID_VNDR
+	cap_vndr: u8,
+
+	/// Generic PCI field: next ptr.
+	cap_next: u8,
+
+	/// Generic PCI field: capability length
+	cap_len: u8,
+
+	/// Identifies the structure.
+	cfg_type: u8,
+
+	/// Where to find it.
+	bar: u8,
+
+	/// Pad to full dword.
+	padding: [u8; 3],
+
+	/// Offset within bar.
+	offset: u32,
+
+	/// Length of the structure, in bytes.
+	length: u32,
 }
 
 /// 4.1.4.4 Notification structure layout
@@ -676,33 +691,64 @@ struct virtio_pci_cap {
 #[repr(C)]
 #[derive(Debug)]
 pub struct virtio_pci_notify_cap {
-	/* About the whole device. */
+	// About the whole device.
 	cap: virtio_pci_cap,
-	notify_off_multiplier: u32, /* Multiplier for queue_notify_off. */
+	/// Multiplier for queue_notify_off.
+	notify_off_multiplier: u32,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub struct virtio_pci_common_cfg {
-	/* About the whole device. */
-	pub device_feature_select: u32, /* read-write */
-	pub device_feature: u32,        /* read-only for driver */
-	pub driver_feature_select: u32, /* read-write */
-	pub driver_feature: u32,        /* read-write */
-	pub msix_config: u16,           /* read-write */
-	pub num_queues: u16,            /* read-only for driver */
-	pub device_status: u8,          /* read-write */
-	pub config_generation: u8,      /* read-only for driver */
+	// About the whole device:
+	/// read-write
+	pub device_feature_select: u32,
 
-	/* About a specific virtqueue. */
-	pub queue_select: u16,      /* read-write */
-	pub queue_size: u16,        /* read-write, power of 2, or 0. */
-	pub queue_msix_vector: u16, /* read-write */
-	pub queue_enable: u16,      /* read-write */
-	pub queue_notify_off: u16,  /* read-only for driver */
-	pub queue_desc: u64,        /* read-write */
-	pub queue_avail: u64,       /* read-write */
-	pub queue_used: u64,        /* read-write */
+	/// read-only for driver
+	pub device_feature: u32,
+
+	/// read-write
+	pub driver_feature_select: u32,
+
+	/// read-write
+	pub driver_feature: u32,
+
+	/// read-write
+	pub msix_config: u16,
+
+	/// read-only for driver
+	pub num_queues: u16,
+
+	/// read-write
+	pub device_status: u8,
+
+	/// read-only for driver
+	pub config_generation: u8,
+
+	// About a specific virtqueue:
+	/// read-write
+	pub queue_select: u16,
+
+	/// read-write, power of 2, or 0.
+	pub queue_size: u16,
+
+	/// read-write
+	pub queue_msix_vector: u16,
+
+	/// read-write
+	pub queue_enable: u16,
+
+	/// read-only for driver
+	pub queue_notify_off: u16,
+
+	/// read-write
+	pub queue_desc: u64,
+
+	/// read-write
+	pub queue_avail: u64,
+
+	/// read-write
+	pub queue_used: u64,
 }
 
 #[derive(Debug)]

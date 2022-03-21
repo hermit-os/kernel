@@ -34,7 +34,7 @@ impl fmt::Debug for virtio_fs_config_tag {
 #[repr(C)]
 struct virtio_fs_config {
 	tag: virtio_fs_config_tag,
-	/* Number of request queues */
+	/// Number of request queues
 	num_request_queues: u32,
 }
 

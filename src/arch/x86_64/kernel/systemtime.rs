@@ -176,10 +176,9 @@ impl Drop for Rtc {
 	}
 }
 
-/**
- * Returns a (year, month, day, hour, minute, second) tuple from the given time in microseconds since the epoch.
- * Inspired from <https://howardhinnant.github.io/date_algorithms.html#civil_from_days>
- */
+/// Returns a (year, month, day, hour, minute, second) tuple from the given time in microseconds since the epoch.
+///
+/// Inspired from <https://howardhinnant.github.io/date_algorithms.html#civil_from_days>
 fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8, u8) {
 	let seconds_since_epoch = microseconds_since_epoch / 1_000_000;
 	let second = (seconds_since_epoch % 60) as u8;

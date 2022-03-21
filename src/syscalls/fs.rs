@@ -1,3 +1,38 @@
+/// Design:
+/// - want to support different backends. One of them virtiofs.
+/// - want to support multiple mounted filesystems at once.
+/// - for simplicity: no overlays. All 'folders' in / are mountpoints!
+/// - manage all files in a global map. Do not hand out references, let syscalls operate by passing in closures (fd_op())
+///
+/// - we internally treat all file systems as posix filesystems.
+/// - Have two traits. One representing a filesystem, another a file: PosixFileSystem and PosixFile
+/// - filesystem.open creates new file
+/// - trait methods like open return Result<....>, so we can catch errors on eg open() and NOT permanently assign an fd to it!
+///
+/// - have a FUSE filesystem, which implements both PosixFileSystem and PosixFile
+/// - fuse can have various FuseInterface backends. These only have to provide fuse command send/receive capabilities.
+/// - virtiofs implements FuseInterface and sends commands via virtio queues.
+///
+/// - fd management is only relevant for "user" facing code. We don't care how fuse etc. manages nodes internally.
+/// - But we still want to have a list of open files and mounted filesystems (here in fs.rs).
+///
+/// Open Questions:
+/// - what is the maximum number of open files I want to support? if small, could have static allocation, no need for hashmap?
+/// - create Stdin/out virtual files, assign fd's 0-2. Instantiate them on program start. currently fd 0-2 are hardcoded exceptions.
+/// - optimize callchain? how does LTO work here?:
+///     - app calls rust.open (which is stdlib hermit/fs.rs) [https://github.com/rust-lang/rust/blob/master/src/libstd/sys/hermit/fs.rs#L267]
+///     - abi::open() (hermit-sys crate)
+///     - [KERNEL BORDER] (uses C-interface. needed? Could just be alternative to native rust?)
+///     - hermit-lib/....rs/sys_open()
+///     - SyscallInterface.open (via &'static dyn ref)
+///     - Filesystem::open()
+///     - Fuse::open()
+///     - VirtiofsDriver::send_command(...)
+///     - [HYPERVISOR BORDER] (via virtio)
+///     - virtiofsd receives fuse command and sends reply
+///
+/// TODO:
+/// - FileDescriptor newtype
 use crate::environment::is_uhyve;
 use crate::synch::spinlock::Spinlock;
 use alloc::borrow::ToOwned;
@@ -6,44 +41,6 @@ use alloc::collections::BTreeMap;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Deref;
-
-/*
-Design:
-- want to support different backends. One of them virtiofs.
-- want to support multiple mounted filesystems at once.
-- for simplicity: no overlays. All 'folders' in / are mountpoints!
-- manage all files in a global map. Do not hand out references, let syscalls operate by passing in closures (fd_op())
-
-- we internally treat all file systems as posix filesystems.
-- Have two traits. One representing a filesystem, another a file: PosixFileSystem and PosixFile
-- filesystem.open creates new file
-- trait methods like open return Result<....>, so we can catch errors on eg open() and NOT permanently assign an fd to it!
-
-- have a FUSE filesystem, which implements both PosixFileSystem and PosixFile
-- fuse can have various FuseInterface backends. These only have to provide fuse command send/receive capabilities.
-- virtiofs implements FuseInterface and sends commands via virtio queues.
-
-- fd management is only relevant for "user" facing code. We don't care how fuse etc. manages nodes internally.
-- But we still want to have a list of open files and mounted filesystems (here in fs.rs).
-
-Open Questions:
-- what is the maximum number of open files I want to support? if small, could have static allocation, no need for hashmap?
-- create Stdin/out virtual files, assign fd's 0-2. Instantiate them on program start. currently fd 0-2 are hardcoded exceptions.
-- optimize callchain? how does LTO work here?:
-	- app calls rust.open (which is stdlib hermit/fs.rs) [https://github.com/rust-lang/rust/blob/master/src/libstd/sys/hermit/fs.rs#L267]
-	- abi::open() (hermit-sys crate)
-	- [KERNEL BORDER] (uses C-interface. needed? Could just be alternative to native rust?)
-	- hermit-lib/....rs/sys_open()
-	- SyscallInterface.open (via &'static dyn ref)
-	- Filesystem::open()
-	- Fuse::open()
-	- VirtiofsDriver::send_command(...)
-	- [HYPERVISOR BORDER] (via virtio)
-	- virtiofsd receives fuse command and sends reply
-
-TODO:
-- FileDescriptor newtype
-*/
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
 pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
