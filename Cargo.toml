@@ -31,12 +31,6 @@ exclude = [
 	".gitignore",
 ]
 
-[package.metadata.docs.rs]
-targets = [
-	"x86_64-unknown-none-hermitkernel",
-	"aarch64-unknown-none-hermitkernel",
-]
-
 [lib]
 crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
 name = "hermit"
