@@ -314,7 +314,7 @@ impl IsrStatus {
 		let ptr = &mut registers.interrupt_status as *mut _;
 		let raw: &'static mut IsrStatusRaw = unsafe { &mut *(ptr as *mut IsrStatusRaw) };
 
-		IsrStatus { raw: raw }
+		IsrStatus { raw }
 	}
 
 	pub fn is_interrupt(&self) -> bool {
