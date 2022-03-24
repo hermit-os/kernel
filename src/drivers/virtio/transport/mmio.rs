@@ -136,8 +136,8 @@ impl ComCfg {
 		self.com_cfg.get_max_queue_size(sel)
 	}
 
-	pub fn is_queue_ready(&mut self, sel: u32) -> bool {
-		self.com_cfg.is_queue_ready(sel)
+	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
+		self.com_cfg.get_queue_ready(sel)
 	}
 
 	/// Returns the device status field.
@@ -508,7 +508,7 @@ impl MmioRegisterLayout {
 		}
 	}
 
-	pub fn is_queue_ready(&mut self, sel: u32) -> bool {
+	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
 		unsafe {
 			write_volatile(&mut self.queue_sel, sel);
 			read_volatile(&self.queue_ready) != 0
