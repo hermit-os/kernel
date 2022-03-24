@@ -14,7 +14,7 @@ use crate::arch::mm::virtualmem::kernel_heap_end;
 #[cfg(feature = "pci")]
 use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
-use crate::environment;
+use crate::env;
 use core::mem;
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
@@ -75,9 +75,9 @@ fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
-		KERNEL_START_ADDRESS = environment::get_base_address().align_down_to_large_page();
-		KERNEL_END_ADDRESS = (environment::get_base_address() + environment::get_image_size())
-			.align_up_to_large_page();
+		KERNEL_START_ADDRESS = env::get_base_address().align_down_to_large_page();
+		KERNEL_END_ADDRESS =
+			(env::get_base_address() + env::get_image_size()).align_up_to_large_page();
 	}
 
 	arch::mm::init();
@@ -104,7 +104,7 @@ pub fn init() {
 	//info!("reserved space {} KB", reserved_space >> 10);
 
 	if total_memory_size()
-		< kernel_end_address().as_usize() - environment::get_ram_address().as_usize()
+		< kernel_end_address().as_usize() - env::get_ram_address().as_usize()
 			+ reserved_space
 			+ LargePageSize::SIZE
 	{
@@ -116,7 +116,7 @@ pub fn init() {
 
 	let available_memory = align_down!(
 		total_memory_size()
-			- (kernel_end_address().as_usize() - environment::get_ram_address().as_usize())
+			- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
 			- reserved_space,
 		LargePageSize::SIZE
 	);

@@ -41,7 +41,7 @@ jobs:
         run: rustup show
       - name: Build minimal kernel
         working-directory: libhermit-rs
-        run: cargo build --no-default-features --target aarch64-unknown-none-hermitkernel -Z build-std=core,alloc
+        run: cargo build --no-default-features --target targets/aarch64-unknown-none-hermitkernel.json -Z build-std=core,alloc
       - name: Build dev profile
         run: cargo build --target aarch64-unknown-hermit -p hello_world
       - name: Build loader

@@ -1,4 +1,4 @@
-use crate::environment;
+use crate::env;
 
 extern "C" {
 	static mut boot_gtod: u64;

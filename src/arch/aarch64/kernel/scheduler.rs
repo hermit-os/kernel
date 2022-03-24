@@ -4,7 +4,7 @@ use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::environment;
+use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 use alloc::rc::Rc;

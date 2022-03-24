@@ -1,8 +1,9 @@
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::kernel::BOOT_INFO;
-use crate::environment;
+use crate::env;
 use core::hint::spin_loop;
+use time::OffsetDateTime;
 use x86::io::*;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
@@ -176,43 +177,6 @@ impl Drop for Rtc {
 	}
 }
 
-/**
- * Returns a (year, month, day, hour, minute, second) tuple from the given time in microseconds since the epoch.
- * Inspired from <https://howardhinnant.github.io/date_algorithms.html#civil_from_days>
- */
-fn date_from_microseconds(microseconds_since_epoch: u64) -> (u16, u8, u8, u8, u8, u8) {
-	let seconds_since_epoch = microseconds_since_epoch / 1_000_000;
-	let second = (seconds_since_epoch % 60) as u8;
-	let minutes_since_epoch = seconds_since_epoch / 60;
-	let minute = (minutes_since_epoch % 60) as u8;
-	let hours_since_epoch = minutes_since_epoch / 60;
-	let hour = (hours_since_epoch % 24) as u8;
-	let days_since_epoch = hours_since_epoch / 24;
-
-	let days = days_since_epoch + 719_468;
-	let era = days / 146_097;
-	let day_of_era = days % 146_097;
-	let year_of_era =
-		(day_of_era - day_of_era / 1460 + day_of_era / 36524 - day_of_era / 146_096) / 365;
-	let mut year = (year_of_era + era * 400) as u16;
-	let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-	let internal_month = (5 * day_of_year + 2) / 153;
-	let day = (day_of_year - (153 * internal_month + 2) / 5 + 1) as u8;
-
-	let mut month = internal_month as u8;
-	if internal_month < 10 {
-		month += 3;
-	} else {
-		month -= 9;
-	}
-
-	if month <= 2 {
-		year += 1;
-	}
-
-	(year, month, day, hour, minute, second)
-}
-
 pub fn get_boot_time() -> u64 {
 	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).boot_gtod) }
 }
@@ -220,7 +184,7 @@ pub fn get_boot_time() -> u64 {
 pub fn init() {
 	let mut microseconds_offset = get_boot_time();
 
-	if microseconds_offset == 0 && !environment::is_uhyve() {
+	if microseconds_offset == 0 && !env::is_uhyve() {
 		// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
@@ -228,9 +192,8 @@ pub fn init() {
 		unsafe { core::ptr::write_volatile(&mut (*BOOT_INFO).boot_gtod, microseconds_offset) }
 	}
 
-	let (year, month, day, hour, minute, second) = date_from_microseconds(microseconds_offset);
-	info!(
-		"HermitCore-rs booted on {:04}-{:02}-{:02} at {:02}:{:02}:{:02}",
-		year, month, day, hour, minute, second
-	);
+	let timestamp = microseconds_offset / 1_000_000;
+	let date_time = OffsetDateTime::from_unix_timestamp(timestamp.try_into().unwrap()).unwrap();
+
+	info!("HermitCore-rs booted on {date_time}");
 }

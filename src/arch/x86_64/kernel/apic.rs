@@ -8,7 +8,7 @@ use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::config::*;
-use crate::environment;
+use crate::env;
 use crate::mm;
 use crate::scheduler;
 use crate::scheduler::CoreId;
@@ -471,7 +471,7 @@ fn default_apic() -> PhysAddr {
 }
 
 fn detect_from_uhyve() -> Result<PhysAddr, ()> {
-	if environment::is_uhyve() {
+	if env::is_uhyve() {
 		let default_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {

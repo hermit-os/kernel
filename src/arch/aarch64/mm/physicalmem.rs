@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use crate::arch::aarch64::kernel::{get_boot_info_address, get_limit, get_ram_address};
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::environment::is_uhyve;
+use crate::env::is_uhyve;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::SpinlockIrqSave;

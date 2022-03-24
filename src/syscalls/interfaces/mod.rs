@@ -6,7 +6,7 @@ use cstr_core::CStr;
 
 use crate::arch;
 use crate::console::CONSOLE;
-use crate::environment;
+use crate::env;
 use crate::errno::*;
 use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
 
@@ -90,17 +90,16 @@ pub trait SyscallInterface: Send + Sync {
 		let name = Box::leak(Box::new("{name}\0")).as_ptr();
 		argv.push(name);
 
-		if let Some(args) = environment::get_command_line_argv() {
-			debug!("Setting argv as: {:?}", args);
-			for a in args {
-				let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
-				argv.push(ptr);
-			}
+		let args = env::args();
+		debug!("Setting argv as: {:?}", args);
+		for arg in args {
+			let ptr = Box::leak(format!("{arg}\0").into_boxed_str()).as_ptr();
+			argv.push(ptr);
 		}
 
 		let mut envv = Vec::new();
 
-		let envs = environment::get_command_line_envv();
+		let envs = env::vars();
 		debug!("Setting envv as: {:?}", envs);
 		for a in envs {
 			let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
