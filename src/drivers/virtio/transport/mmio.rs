@@ -26,7 +26,7 @@ use crate::drivers::net::network_irqhandler;
 // one MUST adjust the associated From<u32>
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case!
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(u32)]
 pub enum DevId {
