@@ -1,3 +1,5 @@
+use num_derive::{FromPrimitive, ToPrimitive};
+
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
