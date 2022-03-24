@@ -58,9 +58,8 @@ impl NetDevCfgRaw {
 			loop {
 				let before = read_volatile(&self.config_generation);
 				_mm_mfence();
-				for i in 0..6 {
-					mac[i] = read_volatile(&self.mac[i]);
-				}
+				let mut src = self.mac.iter();
+				mac.fill_with(|| read_volatile(src.next().unwrap()));
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 
