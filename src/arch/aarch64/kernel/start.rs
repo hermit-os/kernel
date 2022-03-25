@@ -10,9 +10,7 @@ extern "C" {
 	static vector_table: u8;
 }
 
-/*
- * TCR flags
- */
+// TCR flags
 const TCR_IRGN_WBWA: u64 = ((1) << 8) | ((1) << 24);
 const TCR_ORGN_WBWA: u64 = ((1) << 10) | ((1) << 26);
 const TCR_SHARED: u64 = ((3) << 12) | ((3) << 28);
@@ -27,9 +25,7 @@ const TCR_FLAGS: u64 = TCR_IRGN_WBWA | TCR_ORGN_WBWA | TCR_SHARED;
 /// Number of virtual address bits for 4KB page
 const VA_BITS: u64 = 48;
 
-/*
- * Memory types available.
- */
+// Available memory types
 #[allow(non_upper_case_globals)]
 const MT_DEVICE_nGnRnE: u64 = 0;
 #[allow(non_upper_case_globals)]
@@ -47,10 +43,10 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 #[naked]
 pub unsafe extern "C" fn _start() -> ! {
 	asm!(
-		/* determine stack address */
+		// determine stack address
 		"mov x1, x0",
 		"add x1, x1, {current_stack_address_offset}",
-		"ldr x2, [x1]",   /* Previous version subtracted 0x10 from End, so I'm doing this too. Not sure why though. COMMENT from SL: This is a habit of mine. I always start 0x10 bytes before the end of the stack. */
+		"ldr x2, [x1]",
 		"mov x3, {stack_top_offset}",
 		"add x2, x2, x3",
 		"mov sp, x2",
@@ -69,7 +65,7 @@ pub unsafe extern "C" fn _start() -> ! {
 unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	BOOT_INFO = boot_info as *mut BootInfo;
 
-	/* set exception table */
+	// set exception table
 	asm!(
 		"adrp x4, {vector_table}",
 		"add  x4, x4, #:lo12:{vector_table}",
@@ -79,7 +75,7 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 		options(nostack, nomem),
 	);
 
-	/* Memory barrier */
+	// Memory barrier
 	asm!("dsb sy", options(nostack),);
 
 	if boot_info.cpu_online == 0 {
