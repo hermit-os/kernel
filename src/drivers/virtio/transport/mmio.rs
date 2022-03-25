@@ -26,7 +26,7 @@ use crate::drivers::net::network_irqhandler;
 // one MUST adjust the associated From<u32>
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case!
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 #[repr(u32)]
 pub enum DevId {
@@ -136,8 +136,8 @@ impl ComCfg {
 		self.com_cfg.get_max_queue_size(sel)
 	}
 
-	pub fn is_queue_ready(&mut self, sel: u32) -> bool {
-		self.com_cfg.is_queue_ready(sel)
+	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
+		self.com_cfg.get_queue_ready(sel)
 	}
 
 	/// Returns the device status field.
@@ -314,7 +314,7 @@ impl IsrStatus {
 		let ptr = &mut registers.interrupt_status as *mut _;
 		let raw: &'static mut IsrStatusRaw = unsafe { &mut *(ptr as *mut IsrStatusRaw) };
 
-		IsrStatus { raw: raw }
+		IsrStatus { raw }
 	}
 
 	pub fn is_interrupt(&self) -> bool {
@@ -508,7 +508,7 @@ impl MmioRegisterLayout {
 		}
 	}
 
-	pub fn is_queue_ready(&mut self, sel: u32) -> bool {
+	pub fn get_queue_ready(&mut self, sel: u32) -> bool {
 		unsafe {
 			write_volatile(&mut self.queue_sel, sel);
 			read_volatile(&self.queue_ready) != 0

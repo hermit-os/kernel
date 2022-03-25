@@ -12,7 +12,7 @@ use crate::arch::kernel::percore::increment_irq_counter;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::{netwakeup, network_irqhandler, NetworkInterface};
+use crate::drivers::net::{network_irqhandler, NetworkInterface};
 use crate::x86::io::*;
 
 /// size of the receive buffer
@@ -351,7 +351,7 @@ impl NetworkInterface for RTL8139Driver {
 		if ret {
 			// handle incoming packets
 			#[cfg(not(feature = "newlib"))]
-			netwakeup();
+			crate::drivers::net::netwakeup();
 		}
 
 		unsafe {

@@ -46,8 +46,6 @@ extern crate alloc;
 extern crate bitflags;
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate num_derive;
 #[cfg(not(any(target_os = "none", target_os = "hermit")))]
 #[macro_use]
 extern crate std;

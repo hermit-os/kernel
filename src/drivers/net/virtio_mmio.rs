@@ -58,9 +58,8 @@ impl NetDevCfgRaw {
 			loop {
 				let before = read_volatile(&self.config_generation);
 				_mm_mfence();
-				for i in 0..6 {
-					mac[i] = read_volatile(&self.mac[i]);
-				}
+				let mut src = self.mac.iter();
+				mac.fill_with(|| read_volatile(src.next().unwrap()));
 				_mm_mfence();
 				let after = read_volatile(&self.config_generation);
 
@@ -117,17 +116,17 @@ impl VirtioNetDriver {
 			unsafe { &*(((registers as *const _ as usize) + 0xFC) as *const NetDevCfgRaw) };
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
-			dev_id: dev_id,
+			dev_id,
 			features: FeatureSet::new(0),
 		};
 		let isr_stat = IsrStatus::new(registers);
 		let notif_cfg = NotifCfg::new(registers);
 
 		Ok(VirtioNetDriver {
-			dev_cfg: dev_cfg,
+			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
-			isr_stat: isr_stat,
-			notif_cfg: notif_cfg,
+			isr_stat,
+			notif_cfg,
 			ctrl_vq: CtrlQueue::new(None),
 			recv_vqs: RxQueues::new(
 				Vec::<Rc<Virtq>>::new(),
@@ -141,7 +140,7 @@ impl VirtioNetDriver {
 				false,
 			),
 			num_vqs: 0,
-			irq: irq,
+			irq,
 		})
 	}
 

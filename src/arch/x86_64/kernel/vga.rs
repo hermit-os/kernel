@@ -25,8 +25,8 @@ struct VgaCharacter {
 impl VgaCharacter {
 	const fn new(character: u8, attribute: u8) -> Self {
 		Self {
-			character: character,
-			attribute: attribute,
+			character,
+			attribute,
 		}
 	}
 }

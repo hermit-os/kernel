@@ -11,10 +11,10 @@ use crate::synch::spinlock::SpinlockIrqSave;
 use alloc::vec::Vec;
 use core::str;
 
-pub const MAGIC_VALUE: u32 = 0x74726976 as u32;
+pub const MAGIC_VALUE: u32 = 0x74726976;
 
-pub const MMIO_START: usize = 0x00000000c0000000 as usize;
-pub const MMIO_END: usize = 0x00000000c0000fff as usize;
+pub const MMIO_START: usize = 0x00000000c0000000;
+pub const MMIO_END: usize = 0x00000000c0000fff;
 const IRQ_NUMBER: u32 = 12;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
