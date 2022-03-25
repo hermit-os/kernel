@@ -59,10 +59,10 @@ test:integration:
     - python3 --version
     - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast -Z build-std=core,alloc 
         -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi 
-        --target x86_64-unknown-none-hermitkernel -- --veryverbose
+        --target targets/x86_64-unknown-none-hermitkernel.json -- --veryverbose
     - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast -Z build-std=core,alloc 
         -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi 
-        --target x86_64-unknown-none-hermitkernel -- --num_cores 2
+        --target targets/x86_64-unknown-none-hermitkernel.json -- --num_cores 2
         --veryverbose
   tags:
     - privileged

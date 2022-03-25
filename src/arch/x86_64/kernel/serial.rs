@@ -1,4 +1,4 @@
-use crate::environment;
+use crate::env;
 use crate::x86::io::*;
 use core::hint::spin_loop;
 
@@ -35,7 +35,7 @@ impl SerialPort {
 
 	fn is_transmitting(&self) -> bool {
 		// The virtual serial port in uhyve is never blocked.
-		if environment::is_uhyve() {
+		if env::is_uhyve() {
 			return false;
 		}
 
@@ -67,7 +67,7 @@ impl SerialPort {
 
 	pub fn init(&self, baudrate: u32) {
 		// The virtual serial port is always initialized in uhyve.
-		if !environment::is_uhyve() && self.port_address != 0 {
+		if !env::is_uhyve() && self.port_address != 0 {
 			// Disable port interrupt.
 			self.write_to_register(UART_IER, 0);
 

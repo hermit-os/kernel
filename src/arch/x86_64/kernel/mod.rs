@@ -9,7 +9,7 @@ use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
-use crate::environment;
+use crate::env;
 use crate::kernel_message_buffer;
 use crate::scheduler::CoreId;
 
@@ -289,7 +289,7 @@ pub fn message_output_init() {
 		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
 	}
 
-	if environment::is_single_kernel() {
+	if env::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
 		unsafe {
@@ -335,7 +335,7 @@ fn test_output() {
 
 #[cfg(any(target_os = "none", target_os = "hermit"))]
 pub fn output_message_byte(byte: u8) {
-	if environment::is_single_kernel() {
+	if env::is_single_kernel() {
 		// Output messages to the serial port and VGA screen in unikernel mode.
 		unsafe {
 			COM1.write_byte(byte);
@@ -364,14 +364,14 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && environment::is_single_kernel() && !environment::is_uhyve() {
+	if cfg!(feature = "vga") && env::is_single_kernel() && !env::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
 
 	crate::mm::init();
 	crate::mm::print_information();
-	environment::init();
+	env::init();
 	gdt::init();
 	gdt::add_current_core();
 	idt::install();
@@ -385,14 +385,14 @@ pub fn boot_processor_init() {
 	irq::install();
 	systemtime::init();
 
-	if environment::is_single_kernel() {
+	if env::is_single_kernel() {
 		if is_uhyve_with_pci() || !is_uhyve() {
 			#[cfg(feature = "pci")]
 			pci::init();
 			#[cfg(feature = "pci")]
 			pci::print_information();
 		}
-		if !environment::is_uhyve() {
+		if !env::is_uhyve() {
 			#[cfg(feature = "acpi")]
 			acpi::init();
 		}
@@ -430,7 +430,7 @@ pub fn application_processor_init() {
 }
 
 fn finish_processor_init() {
-	if environment::is_uhyve() {
+	if env::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.

@@ -33,7 +33,7 @@
 ///
 /// TODO:
 /// - FileDescriptor newtype
-use crate::environment::is_uhyve;
+use crate::env::is_uhyve;
 use crate::synch::spinlock::Spinlock;
 use alloc::borrow::ToOwned;
 use alloc::boxed::Box;

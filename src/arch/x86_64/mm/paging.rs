@@ -13,7 +13,7 @@ use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::physicalmem;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
-use crate::environment;
+use crate::env;
 use crate::mm;
 use crate::scheduler;
 
@@ -769,9 +769,9 @@ pub fn init_page_tables() {
 			identity_map(PhysAddr(memory_map_address), PhysAddr(memory_map_address));
 		}
 
-		let cmdsize = environment::get_cmdsize();
+		let cmdsize = env::get_cmdsize();
 		if cmdsize > 0 {
-			let cmdline = environment::get_cmdline();
+			let cmdline = env::get_cmdline();
 			info!("Found cmdline at {:#x} (size {})", cmdline, cmdsize);
 			identity_map(
 				PhysAddr(cmdline.as_u64()),

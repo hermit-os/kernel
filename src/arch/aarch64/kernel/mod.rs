@@ -17,7 +17,7 @@ pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
-use crate::environment;
+use crate::env;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
 use core::arch::{asm, global_asm};
@@ -118,7 +118,7 @@ pub fn message_output_init() {
 		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
 	}
 
-	if environment::is_single_kernel() {
+	if env::is_single_kernel() {
 		// We can only initialize the serial port here, because VGA requires processor
 		// configuration first.
 		unsafe {
@@ -128,7 +128,7 @@ pub fn message_output_init() {
 }
 
 pub fn output_message_byte(byte: u8) {
-	if environment::is_single_kernel() {
+	if env::is_single_kernel() {
 		// Output messages to the serial port.
 		unsafe {
 			COM1.write_byte(byte);
@@ -158,12 +158,12 @@ pub fn boot_processor_init() {
 
 	::mm::init();
 	::mm::print_information();
-	environment::init();
+	env::init();
 	gdt::init();
 	gdt::add_current_core();
 	idt::install();
 
-	if !environment::is_uhyve() {
+	if !env::is_uhyve() {
 		pic::init();
 	}
 
@@ -173,7 +173,7 @@ pub fn boot_processor_init() {
 	processor::print_information();
 	systemtime::init();
 
-	if environment::is_single_kernel() && !environment::is_uhyve() {
+	if env::is_single_kernel() && !env::is_uhyve() {
 		pci::init();
 		pci::print_information();
 		acpi::init();
@@ -216,7 +216,7 @@ pub fn application_processor_init() {
 fn finish_processor_init() {
 	debug!("Initialized Processor");
 
-	/*if environment::is_uhyve() {
+	/*if env::is_uhyve() {
 		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
 		// their APIC IDs in advance.
 		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.

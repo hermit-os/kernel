@@ -88,7 +88,7 @@ mod collections;
 mod config;
 mod console;
 mod drivers;
-mod environment;
+mod env;
 pub mod errno;
 mod kernel_message_buffer;
 mod mm;
@@ -279,10 +279,10 @@ extern "C" fn initd(_arg: usize) {
 		}
 	}
 
-	if environment::is_uhyve() {
+	if env::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-	} else if !environment::is_single_kernel() {
+	} else if !env::is_single_kernel() {
 		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
 		info!("HermitCore is running side-by-side to Linux!");
 	} else {
@@ -331,21 +331,21 @@ fn boot_processor_main() -> ! {
 	}
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	info!("Kernel starts at {:#x}", environment::get_base_address());
+	info!("Kernel starts at {:#x}", env::get_base_address());
 	info!("BSS starts at {:#x}", unsafe {
 		&__bss_start as *const usize as usize
 	});
 	info!(
 		"TLS starts at {:#x} (size {} Bytes)",
-		environment::get_tls_start(),
-		environment::get_tls_memsz()
+		env::get_tls_start(),
+		env::get_tls_memsz()
 	);
 
 	arch::boot_processor_init();
 	#[cfg(target_arch = "aarch64")]
 	{
 		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
-		if environment::is_uhyve() {
+		if env::is_uhyve() {
 			syscalls::init();
 			syscalls::__sys_shutdown(0);
 		} else {
@@ -360,7 +360,7 @@ fn boot_processor_main() -> ! {
 	}
 	scheduler::add_current_core();
 
-	if environment::is_single_kernel() && !environment::is_uhyve() {
+	if env::is_single_kernel() && !env::is_uhyve() {
 		arch::boot_application_processors();
 	}
 
