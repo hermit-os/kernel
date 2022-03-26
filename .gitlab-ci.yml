@@ -37,14 +37,15 @@ build:demo:
     - if [ -d "$HOME/tmp_libhermit-rs/target" ]; then rm -rf $HOME/tmp_libhermit-rs/target; fi
     - git clone https://github.com/hermitcore/rusty-hermit.git
     - cd rusty-hermit
+    - git checkout 04ca4407fd6823972a6950e3d59a157208be4f00
     - echo "rusty-hermit at commit $(git rev-parse HEAD)"
     # Ensure that libhermit-rs is empty - This shouldn't be necessary since we don't initialize the submodules
     # But let's do it anyway to be safe
     - if [ -d "libhermit-rs" ]; then rm -rf libhermit-rs; fi
     - mkdir libhermit-rs
     - shopt -s dotglob nullglob && mv $HOME/tmp_libhermit-rs/* libhermit-rs/.
-    - cargo build -p rusty_demo
-    - cargo build -p rusty_demo --release
+    - cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --package rusty_demo
+    - cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --package rusty_demo --release
   artifacts:
     paths:
       - rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo
