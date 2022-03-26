@@ -150,6 +150,10 @@ impl flags::Build {
 			"memmove",
 			"memset",
 			"runtime_entry",
+			// lwIP functions (C runtime)
+			"init_lwip",
+			"lwip_read",
+			"lwip_write",
 		]
 		.into_iter();
 
