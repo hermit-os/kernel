@@ -145,10 +145,6 @@ impl flags::Build {
 			"_start",
 			"__bss_start",
 			"__rg_oom",
-			"memcmp",
-			"memcpy",
-			"memmove",
-			"memset",
 			"runtime_entry",
 		]
 		.into_iter();
