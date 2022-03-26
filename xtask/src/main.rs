@@ -225,9 +225,13 @@ impl flags::Clippy {
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/libhermit-rs/issues/381
 		for target in ["x86_64"] {
-			cmd!(sh, "cargo clippy")
-				.args(KERNEL_CARGO_ARGS)
-				.arg(target_arg(target)?)
+			let target_arg = target_arg(target)?;
+			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}").run()?;
+			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}")
+				.arg("--no-default-features")
+				.run()?;
+			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}")
+				.arg("--all-features")
 				.run()?;
 		}
 
