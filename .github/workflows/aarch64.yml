@@ -28,7 +28,6 @@ jobs:
         with:
           repository: hermitcore/rusty-hermit
           submodules: true
-          ref: 04ca4407fd6823972a6950e3d59a157208be4f00
       - name: Remove libhermit-rs submodule
         run: git rm -r libhermit-rs
       - name: Checkout libhermit-rs
