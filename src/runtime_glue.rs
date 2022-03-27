@@ -21,10 +21,3 @@ fn rust_oom(layout: Layout) -> ! {
 	let size = layout.size();
 	panic!("memory allocation of {size} bytes failed")
 }
-
-#[cfg(target_os = "hermit")]
-#[no_mangle]
-pub unsafe extern "C" fn __rg_oom(size: usize, align: usize) -> ! {
-	let layout = Layout::from_size_align_unchecked(size, align);
-	rust_oom(layout)
-}
