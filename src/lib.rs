@@ -13,7 +13,6 @@
 #![feature(asm_const)]
 #![feature(asm_sym)]
 #![feature(const_btree_new)]
-#![feature(const_fn_trait_bound)]
 #![feature(const_mut_refs)]
 #![feature(const_ptr_offset_from)]
 #![feature(linked_list_cursors)]
