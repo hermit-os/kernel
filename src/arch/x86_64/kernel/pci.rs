@@ -380,8 +380,10 @@ impl fmt::Display for PciBar {
 
 impl fmt::Display for PciAdapter {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		#[cfg(feature = "pci-ids")]
 		use pci_ids::{Class, Device, FromId, Subclass};
 
+		#[cfg(feature = "pci-ids")]
 		let class_name = Class::from_id(self.class_id).map_or("Unknown Class", |class| {
 			class
 				.subclasses()
@@ -390,9 +392,13 @@ impl fmt::Display for PciAdapter {
 				.unwrap_or_else(|| class.name())
 		});
 
+		#[cfg(feature = "pci-ids")]
 		let (vendor_name, device_name) = Device::from_vid_pid(self.vendor_id, self.device_id)
 			.map(|device| (device.vendor().name(), device.name()))
 			.unwrap_or(("Unknown Vendor", "Unknown Device"));
+
+		#[cfg(not(feature = "pci-ids"))]
+		let (class_name, vendor_name, device_name) = ("Unknown Class", "Unknown Vendor", "Unknown Device");
 
 		// Output detailed readable information about this device.
 		write!(
