@@ -29,14 +29,14 @@ static mut COM1: SerialPort = SerialPort::new(0x800);
 static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
 
 /// Kernel header to announce machine features
-#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+#[cfg(not(target_os = "none"))]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
-#[cfg(all(any(target_os = "none", target_os = "hermit"), not(feature = "newlib")))]
+#[cfg(all(target_os = "none", not(feature = "newlib")))]
 #[link_section = ".data"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 
-#[cfg(all(any(target_os = "none", target_os = "hermit"), feature = "newlib"))]
+#[cfg(all(target_os = "none", feature = "newlib"))]
 #[link_section = ".mboot"]
 static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
 

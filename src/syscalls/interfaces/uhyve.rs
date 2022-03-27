@@ -226,7 +226,7 @@ impl SyscallInterface for Uhyve {
 	///
 	/// ToDo: Add Safety section under which circumctances this is safe/unsafe to use
 	/// ToDo: Add an Errors section - What happens when e.g. malloc fails, how is that handled (currently it isn't)
-	#[cfg(any(target_os = "none", target_os = "hermit"))]
+	#[cfg(target_os = "none")]
 	fn get_application_parameters(&self) -> (i32, *const *const u8, *const *const u8) {
 		// determine the number of arguments and environment variables
 		let mut syscmdsize = SysCmdsize::new();

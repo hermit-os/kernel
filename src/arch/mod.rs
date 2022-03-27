@@ -44,11 +44,7 @@ pub use crate::arch::x86_64::*;
 
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::apic::{set_oneshot_timer, wakeup_core};
-#[cfg(all(
-	target_arch = "x86_64",
-	any(target_os = "none", target_os = "hermit"),
-	feature = "smp"
-))]
+#[cfg(all(target_arch = "x86_64", target_os = "none", feature = "smp"))]
 pub use crate::arch::x86_64::kernel::application_processor_init;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
@@ -64,7 +60,7 @@ pub use crate::arch::x86_64::kernel::scheduler;
 pub use crate::arch::x86_64::kernel::switch;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
-#[cfg(all(target_arch = "x86_64", any(target_os = "none", target_os = "hermit")))]
+#[cfg(all(target_arch = "x86_64", target_os = "none"))]
 pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processor_init};
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::{

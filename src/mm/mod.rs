@@ -71,7 +71,7 @@ fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
 	i
 }
 
-#[cfg(any(target_os = "none", target_os = "hermit"))]
+#[cfg(target_os = "none")]
 pub fn init() {
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {

@@ -7,7 +7,7 @@ use core::panic::PanicInfo;
 use crate::arch::percore;
 use crate::syscalls;
 
-#[cfg(any(target_os = "none", target_os = "hermit"))]
+#[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
 	let core_id = percore::core_id();
