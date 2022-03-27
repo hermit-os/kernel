@@ -36,7 +36,6 @@ RUN set -eux; \
 # Build dependencies with stable toolchain channel
 FROM rust:bullseye as stable-deps
 RUN set -eux; \
-    cargo install cargo-download; \
     cargo install --git https://github.com/hermitcore/uhyve.git --locked uhyve;
 
 # Build dependencies with libhermit-rs' toolchain channel
@@ -61,6 +60,5 @@ RUN set -eux; \
         qemu-system-x86 \
     ; \
 	rm -rf /var/lib/apt/lists/*;
-COPY --from=stable-deps $CARGO_HOME/bin/cargo-download $CARGO_HOME/bin/cargo-download
 COPY --from=stable-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
 COPY --from=hermit-deps rusty-loader/target/x86_64-unknown-hermit-loader/release/rusty-loader /usr/local/bin/rusty-loader
