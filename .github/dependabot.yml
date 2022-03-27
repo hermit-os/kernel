@@ -6,9 +6,9 @@ updates:
   - package-ecosystem: "cargo"
     # Look `Cargo.toml` in the repository root
     directory: "/"
-    # Check for updates every day (weekdays)
+    # Check for updates every week
     schedule:
-      interval: "daily"
+      interval: "weekly"
       timezone: "Europe/Berlin"
     # Automatic rebases cancel pending bors merges
     rebase-strategy: "disabled"
@@ -16,9 +16,9 @@ updates:
   - package-ecosystem: "github-actions"
     # Set to `/` to check the Actions used in `.github/workflows`
     directory: "/"
-    # Check for updates every day (weekdays)
+    # Check for updates every week
     schedule:
-      interval: "daily"
+      interval: "weekly"
       timezone: "Europe/Berlin"
     # Automatic rebases cancel pending bors merges
     rebase-strategy: "disabled"
