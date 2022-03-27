@@ -11,13 +11,6 @@
     "max-atomic-width": 128,
     "panic-strategy": "abort",
     "position-independent-executables": true,
-    "pre-link-args": {
-        "ld.lld": [
-            "--build-id",
-            "--hash-style=gnu",
-            "--Bstatic"
-        ]
-    },
     "static-position-independent-executables": true,
     "target-pointer-width": "64"
 }
