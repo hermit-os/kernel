@@ -5,7 +5,7 @@
 // To avoid false sharing, our version allocate as smallest block 64 byte (= cache line).
 // In addition, for pre
 
-#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+#[cfg(not(target_os = "none"))]
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -42,7 +42,7 @@ mod tests {
 		heap
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn empty() {
 		let mut heap = Heap::empty();
@@ -55,7 +55,7 @@ mod tests {
 		assert!(addr.is_err());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn oom() {
 		let mut heap = new_heap();
@@ -64,7 +64,7 @@ mod tests {
 		assert!(addr.is_err());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_double_usize() {
 		let mut heap = new_heap();
@@ -86,7 +86,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_and_free_double_usize() {
 		let mut heap = new_heap();
@@ -102,7 +102,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_right_before() {
 		let mut heap = new_heap();
@@ -129,7 +129,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_right_behind() {
 		let mut heap = new_heap();
@@ -151,7 +151,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_middle() {
 		let mut heap = new_heap();
@@ -178,7 +178,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn reallocate_double_usize() {
 		let mut heap = new_heap();
@@ -198,7 +198,7 @@ mod tests {
 		assert_eq!(x, y);
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_usize() {
 		let mut heap = new_heap();
@@ -208,7 +208,7 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_usize_in_bigger_block() {
 		let mut heap = new_heap();
@@ -233,7 +233,7 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	// see https://github.com/phil-opp/blog_os/issues/160
 	fn align_from_small_to_big() {
@@ -248,7 +248,7 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout_2.clone()).is_ok());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_empty_heap() {
 		let mut heap = new_max_heap();
@@ -262,7 +262,7 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_full_heap() {
 		let mut heap = new_max_heap();
@@ -277,7 +277,7 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(any(target_os = "none", target_os = "hermit")))]
+	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_fragmented_heap() {
 		let mut heap = new_max_heap();
