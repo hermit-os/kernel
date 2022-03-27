@@ -138,7 +138,6 @@ impl flags::Build {
 		let explicit_exports = [
 			"_start",
 			"__bss_start",
-			"__rg_oom",
 			"runtime_entry",
 			// lwIP functions (C runtime)
 			"init_lwip",
