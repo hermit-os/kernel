@@ -7,7 +7,7 @@
     "features": "+strict-align,-neon,-fp-armv8",
     "linker": "rust-lld",
     "linker-flavor": "ld.lld",
-    "llvm-target": "aarch64-unknown-hermit",
+    "llvm-target": "aarch64-unknown-none-elf",
     "max-atomic-width": 128,
     "panic-strategy": "abort",
     "position-independent-executables": true,
