@@ -41,7 +41,7 @@ extern "C" fn __sys_destroy_queue(ptr: usize) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_destroy_queue(ptr: usize) -> i32 {
+pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 	kernel_function!(__sys_destroy_queue(ptr))
 }
 
@@ -82,7 +82,7 @@ extern "C" fn __sys_notify(ptr: usize, count: i32) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_notify(ptr: usize, count: i32) -> i32 {
+pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 	kernel_function!(__sys_notify(ptr, count))
 }
 
@@ -105,7 +105,7 @@ extern "C" fn __sys_init_queue(ptr: usize) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_init_queue(ptr: usize) -> i32 {
+pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 	kernel_function!(__sys_init_queue(ptr))
 }
 
@@ -137,7 +137,7 @@ extern "C" fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
+pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	kernel_function!(__sys_add_queue(ptr, timeout_ns))
 }
 
@@ -163,6 +163,6 @@ extern "C" fn __sys_wait(ptr: usize) -> i32 {
 }
 
 #[no_mangle]
-pub unsafe fn sys_wait(ptr: usize) -> i32 {
+pub unsafe extern "C" fn sys_wait(ptr: usize) -> i32 {
 	kernel_function!(__sys_wait(ptr))
 }
