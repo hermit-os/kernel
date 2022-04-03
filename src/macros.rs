@@ -54,6 +54,18 @@ macro_rules! dbg {
     };
 }
 
+macro_rules! try_sys {
+	($expr:expr $(,)?) => {
+		match $expr {
+			::core::result::Result::Ok(val) => val,
+			::core::result::Result::Err(err) => {
+				error!("{err}");
+				return -1;
+			}
+		}
+	};
+}
+
 /// Runs `f` on the kernel stack.
 ///
 /// All arguments and return values have to fit into registers:
