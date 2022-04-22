@@ -135,42 +135,6 @@ pub fn has_ipdevice() -> bool {
 	!(ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
 }
 
-#[cfg(not(feature = "newlib"))]
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_uhyve_get_ip() -> [u8; 4] {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) }
-}
-
-#[no_mangle]
-#[cfg(not(feature = "newlib"))]
-pub fn sys_uhyve_get_ip() -> [u8; 4] {
-	kernel_function!(__sys_uhyve_get_ip())
-}
-
-#[cfg(not(feature = "newlib"))]
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_uhyve_get_gateway() -> [u8; 4] {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcgateway) }
-}
-
-#[no_mangle]
-#[cfg(not(feature = "newlib"))]
-pub fn sys_uhyve_get_gateway() -> [u8; 4] {
-	kernel_function!(__sys_uhyve_get_gateway())
-}
-
-#[cfg(not(feature = "newlib"))]
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_uhyve_get_mask() -> [u8; 4] {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcmask) }
-}
-
-#[no_mangle]
-#[cfg(not(feature = "newlib"))]
-pub fn sys_uhyve_get_mask() -> [u8; 4] {
-	kernel_function!(__sys_uhyve_get_mask())
-}
-
 #[cfg(feature = "newlib")]
 extern "C" fn __sys_uhyve_get_ip(ip: *mut u8) {
 	unsafe {
