@@ -95,8 +95,8 @@ extern "C" fn __sys_sbrk(incr: isize) -> usize {
 		old_end = SBRK_COUNTER.fetch_add(incr as usize, Ordering::SeqCst);
 		assert!(task_heap_end.as_usize() >= old_end + incr as usize);
 	} else {
-		old_end = SBRK_COUNTER.fetch_sub(incr.abs() as usize, Ordering::SeqCst);
-		assert!(task_heap_start.as_usize() < old_end - incr.abs() as usize);
+		old_end = SBRK_COUNTER.fetch_sub(incr.unsigned_abs(), Ordering::SeqCst);
+		assert!(task_heap_start.as_usize() < old_end - incr.unsigned_abs());
 	}
 
 	old_end
