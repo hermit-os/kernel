@@ -3,7 +3,6 @@ pub mod physicalmem;
 pub mod virtualmem;
 
 pub use self::paging::init_page_tables;
-use core::mem;
 use core::slice;
 
 pub use x86::bits64::paging::PAddr as PhysAddr;
@@ -24,10 +23,7 @@ impl multiboot::information::MemoryManagement for MultibootMemory {
 		p: multiboot::information::PAddr,
 		sz: usize,
 	) -> Option<&'static [u8]> {
-		unsafe {
-			let ptr = mem::transmute(p);
-			Some(slice::from_raw_parts(ptr, sz))
-		}
+		unsafe { Some(slice::from_raw_parts(p as _, sz)) }
 	}
 
 	unsafe fn allocate(
