@@ -19,11 +19,6 @@ const RUSTFLAGS: &[&str] = &[
 	"-Zmutable-noalias=no",
 ];
 
-const KERNEL_CARGO_ARGS: &[&str] = &[
-	"-Zbuild-std=core,alloc",
-	"-Zbuild-std-features=compiler-builtins-mem",
-];
-
 fn main() -> Result<()> {
 	flags::Xtask::from_env()?.run()
 }
@@ -48,8 +43,7 @@ impl flags::Build {
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(KERNEL_CARGO_ARGS)
-			.arg(target_arg(&self.arch)?)
+			.args(target_args(&self.arch)?)
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
@@ -226,12 +220,12 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/libhermit-rs/issues/381
 		#[allow(clippy::single_element_loop)]
 		for target in ["x86_64"] {
-			let target_arg = target_arg(target)?;
-			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}").run()?;
-			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}")
+			let target_arg = target_args(target)?;
+			cmd!(sh, "cargo clippy {target_arg...}").run()?;
+			cmd!(sh, "cargo clippy {target_arg...}")
 				.arg("--no-default-features")
 				.run()?;
-			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}")
+			cmd!(sh, "cargo clippy {target_arg...}")
 				.arg("--all-features")
 				.run()?;
 		}
@@ -244,15 +238,22 @@ impl flags::Clippy {
 
 fn target(arch: &str) -> Result<&'static str> {
 	match arch {
-		"x86_64" => Ok("x86_64-unknown-none-hermitkernel"),
+		"x86_64" => Ok("x86_64-unknown-none"),
 		"aarch64" => Ok("aarch64-unknown-none-hermitkernel"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
 
-fn target_arg(arch: &str) -> Result<String> {
-	let target = target(arch)?;
-	Ok(format!("--target=targets/{target}.json"))
+fn target_args(arch: &str) -> Result<&'static [&'static str]> {
+	match arch {
+		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
+		"aarch64" => Ok(&[
+			"--target=targets/aarch64-unknown-none-hermitkernel.json",
+			"-Zbuild-std=core,alloc",
+			"-Zbuild-std-features=compiler-builtins-mem",
+		]),
+		arch => Err(anyhow!("Unsupported arch: {arch}")),
+	}
 }
 
 fn binutil(name: &str) -> Result<PathBuf> {

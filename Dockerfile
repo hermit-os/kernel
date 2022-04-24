@@ -6,7 +6,8 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH \
     # Manually sync this with rust-toolchain.toml!
     RUST_VERSION=nightly-2022-04-24 \
-    RUST_COMPONENTS="clippy llvm-tools-preview rustfmt rust-src"
+    RUST_COMPONENTS="clippy llvm-tools-preview rustfmt rust-src" \
+    RUST_TARGETS="x86_64-unknown-none"
 
 RUN set -eux; \
     dpkgArch="$(dpkg --print-architecture)"; \
@@ -26,6 +27,7 @@ RUN set -eux; \
         --default-toolchain $RUST_VERSION \
         --default-host ${rustArch} \
         --component $RUST_COMPONENTS \
+        --target $RUST_TARGETS \
     ; \
     rm rustup-init; \
     chmod -R a+w $RUSTUP_HOME $CARGO_HOME; \
