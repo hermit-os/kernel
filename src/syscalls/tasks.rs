@@ -251,7 +251,7 @@ pub extern "C" fn sys_spawn2(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_spawn(
+pub unsafe extern "C" fn sys_spawn(
 	id: *mut Tid,
 	func: extern "C" fn(usize),
 	arg: usize,
