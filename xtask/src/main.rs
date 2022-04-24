@@ -224,6 +224,7 @@ impl flags::Clippy {
 
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/libhermit-rs/issues/381
+		#[allow(clippy::single_element_loop)]
 		for target in ["x86_64"] {
 			let target_arg = target_arg(target)?;
 			cmd!(sh, "cargo clippy {KERNEL_CARGO_ARGS...} {target_arg}").run()?;
