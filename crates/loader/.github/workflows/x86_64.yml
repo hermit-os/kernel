@@ -21,17 +21,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         rust: [nightly]
         include:
           - os: macOS-latest
             rust: 'nightly'
             components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-apple-darwin'
-          - os: windows-latest
-            rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
-            targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
             components: 'rust-src, llvm-tools-preview'
