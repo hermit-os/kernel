@@ -154,7 +154,7 @@ pub unsafe extern "C" fn switch_to_fpu_owner(_old_stack: *mut usize, _new_stack:
 macro_rules! kernel_function_impl {
 	($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
 		/// Executes `f` on the kernel stack.
-		pub fn $kernel_function<R, $($A),*>(f: extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+		pub fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
 			unsafe {
 				assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
 
