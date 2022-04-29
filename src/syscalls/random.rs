@@ -11,13 +11,19 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-extern "C" fn __sys_rand32(value: &mut u32) -> i32 {
-	*value = try_sys!(arch::processor::generate_random_number32().ok_or("sys_rand32 failed"));
+unsafe extern "C" fn __sys_rand32(value: *mut u32) -> i32 {
+	let rand = try_sys!(arch::processor::generate_random_number32().ok_or("sys_rand32 failed"));
+	unsafe {
+		value.write(rand);
+	}
 	0
 }
 
-extern "C" fn __sys_rand64(value: &mut u64) -> i32 {
-	*value = try_sys!(arch::processor::generate_random_number64().ok_or("sys_rand64 failed"));
+unsafe extern "C" fn __sys_rand64(value: *mut u64) -> i32 {
+	let rand = try_sys!(arch::processor::generate_random_number64().ok_or("sys_rand64 failed"));
+	unsafe {
+		value.write(rand);
+	}
 	0
 }
 
@@ -30,7 +36,7 @@ extern "C" fn __sys_rand() -> u32 {
 /// the function returns `None`.
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub extern "C" fn sys_secure_rand32(value: &mut u32) -> i32 {
+pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 	kernel_function!(__sys_rand32(value))
 }
 
@@ -39,7 +45,7 @@ pub extern "C" fn sys_secure_rand32(value: &mut u32) -> i32 {
 /// the function returns `None`.
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
-pub extern "C" fn sys_secure_rand64(value: &mut u64) -> i32 {
+pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
 	kernel_function!(__sys_rand64(value))
 }
 
