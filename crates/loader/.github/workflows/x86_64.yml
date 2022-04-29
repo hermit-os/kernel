@@ -10,6 +10,10 @@ on:
   schedule:
     - cron: '0 0 * * 6'
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Test x86_64
@@ -17,17 +21,13 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         rust: [nightly]
         include:
           - os: macOS-latest
             rust: 'nightly'
             components: 'rust-src, llvm-tools-preview'
             targets: 'x86_64-apple-darwin'
-          - os: windows-latest
-            rust: 'nightly'
-            components: 'rust-src, llvm-tools-preview'
-            targets: 'x86_64-pc-windows-msvc'
           - os: ubuntu-latest
             rust: 'nightly'
             components: 'rust-src, llvm-tools-preview'
@@ -42,42 +42,29 @@ jobs:
     - uses: actions/checkout@v2
       with:
           lfs: true
-    - name: Check Cargo availability
-      run: cargo --version
-    - name: Install qemu/nasm (apt)
-      run: sudo apt-get update --fix-missing && sudo apt-get install qemu-system-x86 nasm
+    - name: Install QEMU, NASM (ubuntu)
       if: ${{ matrix.os == 'ubuntu-latest' }}
-    - name: Install qemu/nasm (macos)
       run: |
-          brew install qemu nasm
-      if: ${{ matrix.os == 'macOS-latest' }}
-    - name: Install nasm (windows)
-      uses: crazy-max/ghaction-chocolatey@v1
-      with:
-          args: install nasm
-      if: ${{ matrix.os == 'windows-latest' }}
-    - name: Install qemu (windows)
-      uses: crazy-max/ghaction-chocolatey@v1
-      with:
-        args: install qemu
-      if: ${{ matrix.os == 'windows-latest' }}
-    - name: Set path to qemu/nasm (Windows)
+        sudo apt-get update
+        sudo apt-get install qemu-system-x86 nasm
+    - name: Install QEMU, NASM (macos)
+      if: ${{ matrix.os == 'macos-latest' }}
       run: |
-          echo "C:\Program Files\qemu" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "C:\Program Files\nasm" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        brew update
+        brew install qemu nasm
+    - name: Install QEMU, NASM, GNU make (windows)
       if: ${{ matrix.os == 'windows-latest' }}
-    - name: Build loader (unix)
+      run: |
+        choco install qemu nasm make
+        echo "C:\Program Files\qemu" >> $GITHUB_PATH
+        echo "C:\Program Files\NASM" >> $GITHUB_PATH
+    - name: Build
       run: make
-    # Workaround since makefile doesn't work when using powershell
-    - name: Build loader (windows)
-      run: |
-          cargo build -Z build-std=core,alloc --target x86_64-unknown-hermit-loader.json
-          $VAR_RUSTC_SYSROOT = (rustc --print sysroot)
-          echo "Sysroot - $VAR_RUSTC_SYSROOT"
-          $LLVM_OBJCOPY = ((Get-ChildItem -Path $VAR_RUSTC_SYSROOT -Include llvm-objcopy.exe -File -Recurse -ErrorAction SilentlyContinue)).Fullname
-          echo "LLVM Objcopy - $LLVM_OBJCOPY"
-          Invoke-Expression "$LLVM_OBJCOPY --strip-debug -O elf32-i386 target/x86_64-unknown-hermit-loader/debug/rusty-loader"
-      if: ${{ matrix.os == 'windows-latest' }}
     - name: Test loader
-      run:
-        qemu-system-x86_64 -display none -smp 1 -m 64M -serial stdio -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader -initrd data/x86_64/hello_world -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand
+      run: |
+        qemu-system-x86_64 -smp 1 \
+          -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
+          -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+          -display none -m 64M -serial stdio \
+          -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader \
+          -initrd data/x86_64/hello_world
