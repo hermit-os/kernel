@@ -1,8 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use core::ffi::CStr;
 use core::{isize, slice, str};
-
-use cstr_core::CStr;
 
 use crate::arch;
 use crate::console::CONSOLE;
