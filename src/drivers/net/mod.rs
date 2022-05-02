@@ -15,7 +15,6 @@ use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
 #[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 use crate::synch::semaphore::Semaphore;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {
@@ -47,7 +46,10 @@ pub trait NetworkInterface {
 static NET_SEM: Semaphore = Semaphore::new(0);
 
 /// set driver in polling mode and threads will not be blocked
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 pub extern "C" fn set_polling_mode(value: bool) {
+	use crate::synch::spinlock::SpinlockIrqSave;
+
 	static THREADS_IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
 
 	let mut guard = THREADS_IN_POLLING_MODE.lock();
