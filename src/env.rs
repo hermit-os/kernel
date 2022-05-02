@@ -38,6 +38,7 @@ impl Default for Env {
 
 #[derive(Debug)]
 struct Cli {
+	#[allow(dead_code)]
 	image_path: Option<String>,
 	freq: Option<u16>,
 	env_vars: Vec<String>,
