@@ -13,7 +13,8 @@ use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
-use crate::synch::semaphore::*;
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
+use crate::synch::semaphore::Semaphore;
 use crate::synch::spinlock::SpinlockIrqSave;
 
 /// A trait for accessing the network interface
@@ -42,6 +43,7 @@ pub trait NetworkInterface {
 	fn handle_interrupt(&mut self) -> bool;
 }
 
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 static NET_SEM: Semaphore = Semaphore::new(0);
 
 /// set driver in polling mode and threads will not be blocked
@@ -71,10 +73,12 @@ pub extern "C" fn set_polling_mode(value: bool) {
 	}
 }
 
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 pub extern "C" fn netwait() {
 	NET_SEM.acquire(None);
 }
 
+#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 pub fn netwakeup() {
 	NET_SEM.release();
 }
