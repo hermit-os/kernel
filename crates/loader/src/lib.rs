@@ -26,9 +26,6 @@ mod runtime_glue;
 
 use core::ptr;
 
-#[global_allocator]
-static ALLOCATOR: allocator::Allocator = allocator::Allocator;
-
 // FUNCTIONS
 pub unsafe fn sections_init() {
 	extern "C" {
