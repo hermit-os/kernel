@@ -9,3 +9,10 @@ fn panic(info: &PanicInfo<'_>) -> ! {
 
 	loop {}
 }
+
+#[cfg(not(test))]
+#[alloc_error_handler]
+fn rust_oom(layout: core::alloc::Layout) -> ! {
+	let size = layout.size();
+	panic!("memory allocation of {size} bytes failed")
+}
