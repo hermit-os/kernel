@@ -10,7 +10,7 @@ $ rustup component add llvm-tools-preview
 
 You also need `nasm` and `ar` installed on your machine.
 
-Afterwards, the loader can be build as follows:
+Afterwards, the loader can be built as follows:
 
 ```bash
 $ make
