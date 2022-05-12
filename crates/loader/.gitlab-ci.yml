@@ -32,10 +32,10 @@ build:loader:
   stage: build
   image: ${CI_REGISTRY_IMAGE}
   script:
-    - make release=1
+    - cargo xtask build --arch x86_64 --release
   artifacts:
     paths:
-      - target/x86_64-unknown-hermit-loader/release/rusty-loader
+      - target/x86_64/release/rusty-loader
 
 .deploy:loader: &loader
    stage: deploy
@@ -51,7 +51,7 @@ build:loader:
        cat << END > ${DOCKER_FILE}
        FROM alpine:3.14
        RUN apk add --no-cache qemu-system-x86_64 qemu-modules
-       ADD target/x86_64-unknown-hermit-loader/release/rusty-loader /hermit/
+       ADD target/x86_64/release/rusty-loader /hermit/
        END
      - docker build -f ${DOCKER_FILE} -t ${DOCKER_IMAGE}/loader:latest .
      - docker push ${DOCKER_IMAGE}/loader:latest

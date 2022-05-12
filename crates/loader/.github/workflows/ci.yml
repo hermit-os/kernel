@@ -25,7 +25,7 @@ jobs:
           sudo apt-get install nasm
       - uses: actions/checkout@v3
       - name: Clippy
-        run: cargo clippy
+        run: cargo xtask clippy
         env:
           RUSTFLAGS: -Dwarnings
   
@@ -55,18 +55,20 @@ jobs:
         run: |
           brew update
           brew install qemu nasm
-      - name: Install QEMU, NASM, GNU make (windows)
+      - name: Install QEMU, NASM (windows)
         if: matrix.os == 'windows-latest'
         run: |
           choco install qemu --version 2021.12.15
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
-          choco install nasm make
+          choco install nasm
           echo "C:\Program Files\NASM" >> $GITHUB_PATH
       - uses: actions/checkout@v3
         with:
             lfs: true
       - name: Build
-        run: make arch=${{ matrix.arch }}
+        run: cargo xtask build --arch ${{ matrix.arch }}
+        env:
+          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.arch }}/hello_world
       - name: Run loader (x86_64)
         if: matrix.arch == 'x86_64'
         run: |
@@ -75,7 +77,7 @@ jobs:
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64-unknown-hermit-loader/debug/rusty-loader \
+            -kernel target/x86_64/debug/rusty-loader \
             -initrd data/x86_64/hello_world
       - name: Run loader (aarch64)
         if: matrix.arch == 'aarch64'
@@ -83,9 +85,11 @@ jobs:
           qemu-system-aarch64 \
             -machine virt,gic-version=max -cpu max -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
-            -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader
+            -kernel target/aarch64/debug/rusty-loader
       - name: Build (release)
-        run: make arch=${{ matrix.arch }} release=1
+        run: cargo xtask build --arch ${{ matrix.arch }} --release
+        env:
+          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.arch }}/hello_world
       - name: Run loader (release, x86_64)
         if: matrix.arch == 'x86_64'
         run: |
@@ -94,7 +98,7 @@ jobs:
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64-unknown-hermit-loader/release/rusty-loader \
+            -kernel target/x86_64/release/rusty-loader \
             -initrd data/x86_64/hello_world
       - name: Run loader (release, aarch64)
         if: matrix.arch == 'aarch64'
@@ -102,7 +106,7 @@ jobs:
           qemu-system-aarch64 \
             -machine virt,gic-version=max -cpu max -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
-            -kernel target/aarch64-unknown-hermit-loader/release/rusty-loader
+            -kernel target/aarch64/release/rusty-loader
     
 
 
