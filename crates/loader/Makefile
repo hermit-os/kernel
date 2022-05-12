@@ -42,5 +42,5 @@ docs:
 loader:
 	@echo Build loader
 	echo "hermit app: $(HERMIT_APP)"
-	cargo build $(opt) -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target $(target)-loader.json
+	cargo build $(opt) -Z build-std=core,alloc -Z build-std-features=compiler-builtins-mem --target targets/$(target)-loader.json
 	$(CONVERT)
