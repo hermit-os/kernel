@@ -21,10 +21,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - name: Generate documentation
-        run: cargo doc -Zbuild-std=core,alloc --target targets/x86_64-unknown-none-hermitkernel.json --package rusty-hermit
+        run: cargo doc -Zbuild-std=core,alloc --target x86_64-unknown-none --package rusty-hermit
       - name: Generate index.html
         run: |
-          cat > target/x86_64-unknown-none-hermitkernel/doc/index.html <<EOL
+          cat > target/x86_64-unknown-none/doc/index.html <<EOL
           <!doctype html>
           <html>
             <head>
@@ -41,6 +41,6 @@ jobs:
         uses: crazy-max/ghaction-github-pages@v2
         with:
           target_branch: gh-pages
-          build_dir: target/x86_64-unknown-none-hermitkernel/doc
+          build_dir: target/x86_64-unknown-none/doc
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
