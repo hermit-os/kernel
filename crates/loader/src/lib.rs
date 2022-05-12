@@ -18,16 +18,13 @@ extern crate bitflags;
 #[macro_use]
 pub mod macros;
 
+pub mod allocator;
 pub mod arch;
 pub mod console;
 pub mod kernel;
-pub mod mm;
 mod runtime_glue;
 
 use core::ptr;
-
-#[global_allocator]
-static ALLOCATOR: mm::allocator::Allocator = mm::allocator::Allocator;
 
 // FUNCTIONS
 pub unsafe fn sections_init() {

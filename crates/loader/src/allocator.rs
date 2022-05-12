@@ -10,6 +10,9 @@
 use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
 
+#[global_allocator]
+static ALLOCATOR: Allocator = Allocator;
+
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 2 * 1024 * 1024;
 
