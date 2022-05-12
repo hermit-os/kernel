@@ -21,5 +21,6 @@ aarch64 = "0.0.7"
 opt-level = 1  # `opt-level = 0` makes bootloader to large for bootstrapping
 
 [profile.release]
+strip = "debuginfo"
 lto = true
 codegen-units = 1

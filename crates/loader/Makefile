@@ -25,7 +25,7 @@ endif
 SYSROOT := $(shell rustc --print sysroot)
 OBJCOPY := $(shell find $(SYSROOT) -name llvm-objcopy -o -name llvm-objcopy.exe)
 ifeq ($(arch), x86_64)
-CONVERT := $(OBJCOPY) --strip-debug -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
+CONVERT := $(OBJCOPY) -O elf32-i386 target/$(target)-loader/$(rdir)/rusty-loader
 endif
 
 .PHONY: all loader clean docs
