@@ -1,9 +1,12 @@
 status = [
   "Clippy",
-  "Test aarch64 (nightly)",
-  "Test x86_64 (ubuntu-latest, nightly)",
-  "Test x86_64 (macOS-latest, nightly)",
-  "Format check (ubuntu-latest, nightly)",
+  "Format",
+  "Integration Test (ubuntu-latest, x86_64)",
+  "Integration Test (ubuntu-latest, aarch64)",
+  "Integration Test (macos-latest, x86_64)",
+  "Integration Test (macos-latest, aarch64)",
+  "Integration Test (windows-latest, x86_64)",
+  "Integration Test (windows-latest, aarch64)",
 ]
 delete_merged_branches = true
 timeout_sec = 7200
