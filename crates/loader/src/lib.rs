@@ -18,13 +18,22 @@ extern crate bitflags;
 #[macro_use]
 pub mod macros;
 
-pub mod allocator;
 pub mod arch;
 pub mod console;
 pub mod kernel;
 mod runtime_glue;
 
 use core::ptr;
+
+use static_alloc::Bump;
+
+/// A simple bump memory allocator using static storage.
+///
+/// This allocator is used for bootstrapping.
+/// It manages a slice of uninitialized memory and cannot deallocate.
+/// The kernel will setup a proper memory allocator later.
+#[global_allocator]
+static ALLOCATOR: Bump<[u8; 2 * 1024 * 1024]> = Bump::uninit();
 
 // FUNCTIONS
 pub unsafe fn sections_init() {
