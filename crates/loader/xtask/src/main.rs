@@ -42,10 +42,10 @@ impl flags::Build {
 			.args(self.profile_args())
 			.run()?;
 
-		eprintln!("Converting binary");
-		self.convert_binary()?;
+		eprintln!("Converting object");
+		self.convert_object()?;
 
-		eprintln!("Loader available at {}", self.dist_binary().display());
+		eprintln!("Loader available at {}", self.dist_object().display());
 		Ok(())
 	}
 
@@ -81,18 +81,18 @@ impl flags::Build {
 		}
 	}
 
-	fn convert_binary(&self) -> Result<()> {
+	fn convert_object(&self) -> Result<()> {
 		let sh = sh()?;
 
-		let input = self.build_binary();
-		let output = self.dist_binary();
+		let input = self.build_object();
+		let output = self.dist_object();
 		sh.create_dir(output.parent().unwrap())?;
 		sh.copy_file(&input, &output)?;
 
 		let objcopy = binutil("objcopy")?;
 
 		if self.arch == "x86_64" {
-			cmd!(sh, "{objcopy} -O elf32-i386 {output}").run()?;
+			cmd!(sh, "{objcopy} --output-target elf32-i386 {output}").run()?;
 		}
 
 		Ok(())
@@ -130,16 +130,16 @@ impl flags::Build {
 		out_dir
 	}
 
-	fn build_binary(&self) -> PathBuf {
-		let mut build_binary = self.out_dir();
-		build_binary.push("rusty-loader");
-		build_binary
+	fn build_object(&self) -> PathBuf {
+		let mut build_object = self.out_dir();
+		build_object.push("rusty-loader");
+		build_object
 	}
 
-	fn dist_binary(&self) -> PathBuf {
-		let mut dist_binary = self.dist_dir();
-		dist_binary.push("rusty-loader");
-		dist_binary
+	fn dist_object(&self) -> PathBuf {
+		let mut dist_object = self.dist_dir();
+		dist_object.push("rusty-loader");
+		dist_object
 	}
 }
 
