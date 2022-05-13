@@ -1,0 +1,24 @@
+# https://docs.github.com/en/code-security/supply-chain-security/keeping-your-dependencies-updated-automatically/configuration-options-for-dependency-updates
+
+version: 2
+updates:
+  # Enable version updates for Cargo
+  - package-ecosystem: "cargo"
+    # Look `Cargo.toml` in the repository root
+    directory: "/"
+    # Check for updates every week
+    schedule:
+      interval: "weekly"
+      timezone: "Europe/Berlin"
+    # Automatic rebases cancel pending bors merges
+    rebase-strategy: "disabled"
+  # Enable version updates for Github Actions
+  - package-ecosystem: "github-actions"
+    # Set to `/` to check the Actions used in `.github/workflows`
+    directory: "/"
+    # Check for updates every week
+    schedule:
+      interval: "weekly"
+      timezone: "Europe/Berlin"
+    # Automatic rebases cancel pending bors merges
+    rebase-strategy: "disabled"
