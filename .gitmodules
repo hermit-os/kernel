@@ -1,0 +1,3 @@
+[submodule "rusty-loader"]
+	path = rusty-loader
+	url = https://github.com/hermitcore/rusty-loader.git

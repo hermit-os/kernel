@@ -88,3 +88,6 @@ default-features = false
 members = [
 	"xtask",
 ]
+exclude = [
+	"rusty-loader",
+]
