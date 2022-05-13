@@ -614,6 +614,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	root_pagetable.get_page_table_entry(page)
 }
 
+#[allow(dead_code)]
 pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr {
 	trace!("Getting physical address for {:#X}", virtual_address);
 
