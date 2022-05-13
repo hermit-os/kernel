@@ -92,7 +92,7 @@ impl flags::Build {
 		let objcopy = binutil("objcopy")?;
 
 		if self.arch == "x86_64" {
-			cmd!(sh, "{objcopy} -O elf32-i386 {output}").run()?;
+			cmd!(sh, "{objcopy} --output-target elf32-i386 {output}").run()?;
 		}
 
 		Ok(())
