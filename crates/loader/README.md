@@ -13,10 +13,10 @@ You also need `nasm` and `ar` installed on your machine.
 Afterwards, the loader can be built as follows:
 
 ```bash
-$ make
+$ cargo xtask build --arch x86_64
 ```
 
-Afterwards, the loader is stored in `target/x86_64-unknown-hermit-loader/debug/` as `rusty-loader`.
+Afterwards, the loader is stored in `target/x86_64/debug/` as `rusty-loader`.
 As final step the unikernel application `app` can be booted with following command:
 
 ```bash

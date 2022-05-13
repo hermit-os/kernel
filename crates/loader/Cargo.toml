@@ -25,3 +25,8 @@ opt-level = 1  # `opt-level = 0` makes bootloader to large for bootstrapping
 strip = "debuginfo"
 lto = true
 codegen-units = 1
+
+[workspace]
+members = [
+	"xtask",
+]
