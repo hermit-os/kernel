@@ -19,7 +19,7 @@ macro_rules! print {
 	($($arg:tt)+) => ({
 		use core::fmt::Write;
 
-		let mut console = crate::console::Console {};
+		let mut console = $crate::console::Console {};
 		console.write_fmt(format_args!($($arg)+)).unwrap();
 	});
 }
