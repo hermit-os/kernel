@@ -159,6 +159,7 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		.deallocate(physical_address.as_usize(), size);
 }
 
+#[cfg(not(feature = "pci"))]
 pub fn reserve(physical_address: PhysAddr, size: usize) {
 	assert_eq!(
 		physical_address % BasePageSize::SIZE,

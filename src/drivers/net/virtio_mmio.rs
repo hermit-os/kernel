@@ -165,7 +165,7 @@ impl VirtioNetDriver {
 			match drv.init_dev() {
 				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
 				_ => {
-					//drv.print_information();
+					drv.print_information();
 					Ok(drv)
 				}
 			}

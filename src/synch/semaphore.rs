@@ -1,5 +1,5 @@
 use crate::arch::percore::*;
-use crate::scheduler::task::{TaskHandlePriorityQueue, WakeupReason};
+use crate::scheduler::task::TaskHandlePriorityQueue;
 use crate::synch::spinlock::SpinlockIrqSave;
 use crossbeam_utils::Backoff;
 
@@ -68,9 +68,7 @@ impl Semaphore {
 	/// least 1.
 	pub fn acquire(&self, time: Option<u64>) -> bool {
 		let backoff = Backoff::new();
-		// Reset last_wakeup_reason.
 		let core_scheduler = core_scheduler();
-		core_scheduler.set_current_task_wakeup_reason(WakeupReason::Custom);
 
 		let wakeup_time = time.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
 

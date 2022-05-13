@@ -35,6 +35,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 	))
 }
 
+#[cfg(not(feature = "newlib"))]
 pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, AllocError> {
 	assert!(size > 0);
 	assert!(alignment > 0);

@@ -32,7 +32,6 @@ pub mod error {
                     PciError::NoBar(id ) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: No BAR's found.", id), 
                     PciError::NoCapPtr(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: No Capabilities pointer found.", id),
                     PciError::BadCapPtr(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: Malformed Capabilities pointer.", id),
-                    PciError::NoBarForCap(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: Bar indicated by capability not found.", id),
                     PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: {:#x}. Reason: No Virtio capabilities were found.", id),
                 },
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {:#x} not supported.", id),

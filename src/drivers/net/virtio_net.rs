@@ -678,16 +678,19 @@ impl NetworkInterface for VirtioNetDriver {
 
 // Backend-independent interface for Virtio network driver
 impl VirtioNetDriver {
+	#[cfg(feature = "pci")]
 	pub fn get_dev_id(&self) -> u16 {
 		self.dev_cfg.dev_id
 	}
 
+	#[cfg(feature = "pci")]
 	pub fn set_failed(&mut self) {
 		self.com_cfg.set_failed();
 	}
 
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
 	/// has been negotiated. Otherwise returns zero.
+	#[cfg(not(feature = "pci"))]
 	pub fn dev_status(&self) -> u16 {
 		if self
 			.dev_cfg
@@ -702,6 +705,7 @@ impl VirtioNetDriver {
 
 	/// Returns the links status.
 	/// If feature VIRTIO_NET_F_STATUS has not been negotiated, then we assume the link is up!
+	#[cfg(feature = "pci")]
 	pub fn is_link_up(&self) -> bool {
 		if self
 			.dev_cfg

@@ -8,11 +8,9 @@ use crossbeam_utils::Backoff;
 
 use crate::arch;
 use crate::arch::irq;
-use crate::arch::mm::VirtAddr;
 use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::collections::irqsave;
-use crate::config::*;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 use crate::synch::spinlock::*;
@@ -157,6 +155,7 @@ impl PerCoreScheduler {
 		panic!("exit failed!")
 	}
 
+	#[cfg(feature = "newlib")]
 	fn clone_impl(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		static NEXT_CORE_ID: AtomicU32 = AtomicU32::new(1);
 
@@ -217,12 +216,14 @@ impl PerCoreScheduler {
 		tid
 	}
 
+	#[cfg(feature = "newlib")]
 	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
 		irqsave(|| self.clone_impl(func, arg))
 	}
 
 	/// Returns `true` if a reschedule is required
 	#[inline]
+	#[cfg(feature = "smp")]
 	pub fn is_scheduling(&self) -> bool {
 		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
 	}
@@ -268,6 +269,7 @@ impl PerCoreScheduler {
 			TaskHandle::new(
 				current_task_borrowed.id,
 				current_task_borrowed.prio,
+				#[cfg(feature = "smp")]
 				current_task_borrowed.core_id,
 			)
 		})
@@ -293,23 +295,6 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn get_current_task_prio(&self) -> Priority {
 		irqsave(|| self.current_task.borrow().prio)
-	}
-
-	#[inline]
-	pub fn get_current_task_wakeup_reason(&self) -> WakeupReason {
-		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason)
-	}
-
-	#[inline]
-	pub fn set_current_task_wakeup_reason(&mut self, reason: WakeupReason) {
-		irqsave(|| self.current_task.borrow_mut().last_wakeup_reason = reason);
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	#[inline]
-	pub fn get_current_kernel_stack(&self) -> VirtAddr {
-		self.current_task.borrow().stacks.get_kernel_stack() + DEFAULT_STACK_SIZE
-			- TaskStacks::MARKER_SIZE
 	}
 
 	#[cfg(target_arch = "x86_64")]

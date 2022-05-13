@@ -81,6 +81,7 @@ impl FreeList {
 		Err(AllocError)
 	}
 
+	#[cfg(not(feature = "pci"))]
 	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), AllocError> {
 		trace!(
 			"Try to reserve {} bytes at {:#X} from Free List {:#X}",
