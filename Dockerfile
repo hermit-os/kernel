@@ -49,7 +49,8 @@ RUN set -eux; \
     ; \
     rm -rf /var/lib/apt/lists/*; \
     git clone https://github.com/hermitcore/rusty-loader.git; \
-    make -C rusty-loader release=1;
+    cd rusty-loader; \
+    cargo xtask build --arch x86_64 --release;
 
 # Install dependencies
 FROM hermit-toolchain as ci-runner
@@ -63,4 +64,4 @@ RUN set -eux; \
     ; \
     rm -rf /var/lib/apt/lists/*;
 COPY --from=stable-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
-COPY --from=hermit-deps rusty-loader/target/x86_64-unknown-hermit-loader/release/rusty-loader /usr/local/bin/rusty-loader
+COPY --from=hermit-deps rusty-loader/target/x86_64/release/rusty-loader /usr/local/bin/rusty-loader
