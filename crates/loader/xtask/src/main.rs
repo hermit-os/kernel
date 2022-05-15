@@ -59,6 +59,7 @@ impl flags::Build {
 		let mut rustflags = outer_rustflags.map(|s| vec![s]).unwrap_or_default();
 		let arch = self.arch.as_str();
 		rustflags.push(format!("-Clink-arg=-Tsrc/arch/{arch}/link.ld"));
+		rustflags.push("-Crelocation-model=static".to_string());
 		Ok(rustflags.join("\x1f"))
 	}
 
@@ -172,7 +173,7 @@ impl flags::Clippy {
 
 fn target(arch: &str) -> Result<&'static str> {
 	match arch {
-		"x86_64" => Ok("x86_64-unknown-hermit-loader"),
+		"x86_64" => Ok("x86_64-unknown-none"),
 		"aarch64" => Ok("aarch64-unknown-hermit-loader"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
@@ -180,11 +181,7 @@ fn target(arch: &str) -> Result<&'static str> {
 
 fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 	match arch {
-		"x86_64" => Ok(&[
-			"--target=targets/x86_64-unknown-hermit-loader.json",
-			"-Zbuild-std=core,alloc",
-			"-Zbuild-std-features=compiler-builtins-mem",
-		]),
+		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
 		"aarch64" => Ok(&[
 			"--target=targets/aarch64-unknown-hermit-loader.json",
 			"-Zbuild-std=core,alloc",
