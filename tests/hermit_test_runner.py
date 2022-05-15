@@ -88,7 +88,7 @@ class QemuTestRunner(TestRunner):
     def __init__(self,
                  test_exe_path: str,
                  timeout_seconds: int,
-                 bootloader_path: str = '../loader/target/x86_64-unknown-hermit-loader/debug/rusty-loader',
+                 bootloader_path: str = '../loader/target/x86_64/debug/rusty-loader',
                  num_cores=1,
                  memory_in_megabyte=512,
                  gdb_enabled=False):
