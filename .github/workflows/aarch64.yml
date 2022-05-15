@@ -46,7 +46,7 @@ jobs:
       - name: Build dev profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target aarch64-unknown-hermit --package hello_world
       - name: Build loader
-        run: make arch=aarch64
+        run: cargo xtask build --arch aarch64
         working-directory: loader
         env:
           HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
@@ -55,6 +55,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-aarch64
       - name: Test kernel
-        run: qemu-system-aarch64 -semihosting -display none -serial stdio -kernel target/aarch64-unknown-hermit-loader/debug/rusty-loader -machine virt,gic-version=max -m 512M -cpu max -smp 1
+        run: qemu-system-aarch64 -semihosting -display none -serial stdio -kernel target/aarch64/debug/rusty-loader -machine virt,gic-version=max -m 512M -cpu max -smp 1
         working-directory: loader
         
