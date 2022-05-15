@@ -81,6 +81,7 @@ macro_rules! try_sys {
 /// // instead of
 /// let ret = f(arg);
 /// ```
+#[allow(unused_macro_rules)]
 macro_rules! kernel_function {
 	($f:ident()) => {
 		$crate::arch::switch::kernel_function0($f)
