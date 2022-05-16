@@ -1,23 +1,23 @@
 # rusty-loader
 
 **rusty-loader** is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [Qemu](https://www.qemu.org).
-To build the loader the llvm-tools and the source code of Rust's runtime are required and can be installed with following command:
 
-```bash
-$ rustup component add rust-src
-$ rustup component add llvm-tools-preview
-```
+## Requirements
 
-You also need `nasm` and `ar` installed on your machine.
+* [`rustup`](https://www.rust-lang.org/tools/install)
+* [NASM](https://nasm.us/) (only for x86_64)
 
-Afterwards, the loader can be built as follows:
+## Building
 
 ```bash
 $ cargo xtask build --arch x86_64
 ```
 
-Afterwards, the loader is stored in `target/x86_64/debug/` as `rusty-loader`.
-As final step the unikernel application `app` can be booted with following command:
+Afterwards, the loader is located at `target/x86_64/debug/rusty-loader`.
+
+## Running
+
+Boot a hermit application:
 
 ```bash
 qemu-system-x86_64 -smp 1 \
