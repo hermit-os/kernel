@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "rusty-hermit"
-version = "0.3.54"
+version = "0.4.0"
 dependencies = [
  "aarch64",
  "bitflags",
