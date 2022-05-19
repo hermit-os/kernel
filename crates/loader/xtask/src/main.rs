@@ -72,6 +72,13 @@ impl flags::Build {
 			arch => bail!("Unsupported arch: {arch}"),
 		};
 
+		// TODO: Use cargo's `opt-level = 0` instead of this:
+		// https://github.com/hermitcore/rusty-loader/issues/45
+		if self.profile() == "x86_64-dev" {
+			rustflags.push("-Cdebug-assertions=y");
+			rustflags.push("-Clto=n");
+		}
+
 		Ok(rustflags.join("\x1f"))
 	}
 
@@ -88,10 +95,7 @@ impl flags::Build {
 	}
 
 	fn profile_args(&self) -> Vec<&str> {
-		match self.profile.as_deref() {
-			Some(profile) => vec!["--profile", profile],
-			None => vec![],
-		}
+		vec!["--profile", self.profile()]
 	}
 
 	fn convert_object(&self) -> Result<()> {
@@ -112,9 +116,17 @@ impl flags::Build {
 	}
 
 	fn profile(&self) -> &str {
-		self.profile
-			.as_deref()
-			.unwrap_or(if self.release { "release" } else { "dev" })
+		let profile =
+			self.profile
+				.as_deref()
+				.unwrap_or(if self.release { "release" } else { "dev" });
+
+		// TODO: Use cargo's `opt-level = 0` instead of this:
+		// https://github.com/hermitcore/rusty-loader/issues/45
+		match profile {
+			"dev" if self.arch == "x86_64" => "x86_64-dev",
+			profile => profile,
+		}
 	}
 
 	fn target_dir(&self) -> &Path {
@@ -137,7 +149,7 @@ impl flags::Build {
 		let mut out_dir = self.target_dir().to_path_buf();
 		out_dir.push(&self.arch);
 		out_dir.push(match self.profile() {
-			"dev" => "debug",
+			"dev" | "x86_64-dev" => "debug",
 			profile => profile,
 		});
 		out_dir
