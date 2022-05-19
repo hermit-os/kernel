@@ -9,7 +9,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use xshell::{cmd, Shell};
 
 fn main() -> Result<()> {
@@ -56,10 +56,22 @@ impl flags::Build {
 			Err(err) => return Err(err.into()),
 		};
 
-		let mut rustflags = outer_rustflags.map(|s| vec![s]).unwrap_or_default();
-		let arch = self.arch.as_str();
-		rustflags.push(format!("-Clink-arg=-Tsrc/arch/{arch}/link.ld"));
-		rustflags.push("-Crelocation-model=static".to_string());
+		let mut rustflags = outer_rustflags
+			.as_ref()
+			.map(|s| vec![s.as_str()])
+			.unwrap_or_default();
+
+		match self.arch.as_str() {
+			"x86_64" => {
+				rustflags.push("-Clink-arg=-Tsrc/arch/x86_64/link.ld");
+				rustflags.push("-Crelocation-model=static");
+			}
+			"aarch64" => {
+				rustflags.push("-Clink-arg=-Tsrc/arch/aarch64/link.ld");
+			}
+			arch => bail!("Unsupported arch: {arch}"),
+		};
+
 		Ok(rustflags.join("\x1f"))
 	}
 
