@@ -66,6 +66,7 @@ impl flags::Build {
 				rustflags.push("-Clink-arg=-Tsrc/arch/x86_64/link.ld");
 				rustflags.push("-Crelocation-model=static");
 			}
+			"x86_64-uefi" => {}
 			"aarch64" => {
 				rustflags.push("-Clink-arg=-Tsrc/arch/aarch64/link.ld");
 			}
@@ -162,8 +163,7 @@ impl flags::Clippy {
 
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/rusty-loader/issues/78
-		#[allow(clippy::single_element_loop)]
-		for target in ["x86_64"] {
+		for target in ["x86_64", "x86_64-uefi"] {
 			let target_arg = target_args(target)?;
 			let hermit_app = {
 				let mut hermit_app = project_root().to_path_buf();
@@ -186,6 +186,7 @@ impl flags::Clippy {
 fn target(arch: &str) -> Result<&'static str> {
 	match arch {
 		"x86_64" => Ok("x86_64-unknown-none"),
+		"x86_64-uefi" => Ok("x86_64-unknown-uefi"),
 		"aarch64" => Ok("aarch64-unknown-hermit-loader"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
@@ -194,6 +195,11 @@ fn target(arch: &str) -> Result<&'static str> {
 fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 	match arch {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
+		"x86_64-uefi" => Ok(&[
+			"--target=x86_64-unknown-uefi",
+			"-Zbuild-std=core,alloc",
+			"-Zbuild-std-features=compiler-builtins-mem",
+		]),
 		"aarch64" => Ok(&[
 			"--target=targets/aarch64-unknown-hermit-loader.json",
 			"-Zbuild-std=core,alloc",
