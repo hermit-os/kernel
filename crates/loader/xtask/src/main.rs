@@ -88,10 +88,7 @@ impl flags::Build {
 	}
 
 	fn profile_args(&self) -> Vec<&str> {
-		match self.profile.as_deref() {
-			Some(profile) => vec!["--profile", profile],
-			None => vec![],
-		}
+		vec!["--profile", self.profile()]
 	}
 
 	fn convert_object(&self) -> Result<()> {
