@@ -7,7 +7,7 @@
 #[macro_use]
 extern crate rusty_loader;
 
-use rusty_loader::{arch, sections_init, kernel};
+use rusty_loader::{arch, init_bss, kernel};
 
 extern "C" {
 	static kernel_end: u8;
@@ -18,7 +18,7 @@ extern "C" {
 /// (called from entry.asm or entry.rs)
 #[no_mangle]
 pub unsafe extern "C" fn loader_main() -> ! {
-	sections_init();
+	init_bss();
 	arch::message_output_init();
 
 	loaderlog!(
