@@ -4,8 +4,10 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
-use rusty_loader::arch;
-use rusty_loader::*;
+#[macro_use]
+extern crate rusty_loader;
+
+use rusty_loader::{arch, sections_init, kernel};
 
 extern "C" {
 	static kernel_end: u8;
