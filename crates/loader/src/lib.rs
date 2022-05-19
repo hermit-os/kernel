@@ -6,7 +6,6 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
-// EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
 
@@ -14,7 +13,6 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-// MODULES
 #[macro_use]
 pub mod macros;
 
@@ -35,7 +33,6 @@ use static_alloc::Bump;
 #[global_allocator]
 static ALLOCATOR: Bump<[u8; 2 * 1024 * 1024]> = Bump::uninit();
 
-// FUNCTIONS
 pub unsafe fn sections_init() {
 	extern "C" {
 		static bss_end: u8;
