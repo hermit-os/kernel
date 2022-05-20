@@ -38,7 +38,6 @@ impl flags::Build {
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
 			.args(target_args(&self.arch)?)
 			.args(self.target_dir_args())
-			.args(self.release_args())
 			.args(self.profile_args())
 			.run()?;
 
@@ -84,14 +83,6 @@ impl flags::Build {
 
 	fn target_dir_args(&self) -> Vec<OsString> {
 		vec!["--target-dir".into(), self.target_dir().into()]
-	}
-
-	fn release_args(&self) -> &[&str] {
-		if self.release {
-			&["--release"]
-		} else {
-			&[]
-		}
 	}
 
 	fn profile_args(&self) -> Vec<&str> {
