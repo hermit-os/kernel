@@ -191,7 +191,7 @@ fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
 		"x86_64-uefi" => Ok(&[
 			"--target=x86_64-unknown-uefi",
-			"-Zbuild-std=core,alloc",
+			"-Zbuild-std=core,alloc,compiler_builtins",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),
 		"aarch64" => Ok(&[
