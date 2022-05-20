@@ -4,8 +4,10 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
-use rusty_loader::arch;
-use rusty_loader::*;
+#[macro_use]
+extern crate rusty_loader;
+
+use rusty_loader::{arch, init_bss, kernel};
 
 extern "C" {
 	static kernel_end: u8;
@@ -16,7 +18,7 @@ extern "C" {
 /// (called from entry.asm or entry.rs)
 #[no_mangle]
 pub unsafe extern "C" fn loader_main() -> ! {
-	sections_init();
+	init_bss();
 	arch::message_output_init();
 
 	loaderlog!(

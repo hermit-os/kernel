@@ -6,7 +6,6 @@
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
 
-// EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
 
@@ -14,7 +13,6 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-// MODULES
 #[macro_use]
 pub mod macros;
 
@@ -23,7 +21,7 @@ pub mod console;
 pub mod kernel;
 mod runtime_glue;
 
-use core::ptr;
+use core::{mem::MaybeUninit, ptr::addr_of_mut, slice};
 
 use static_alloc::Bump;
 
@@ -35,17 +33,15 @@ use static_alloc::Bump;
 #[global_allocator]
 static ALLOCATOR: Bump<[u8; 2 * 1024 * 1024]> = Bump::uninit();
 
-// FUNCTIONS
-pub unsafe fn sections_init() {
+pub unsafe fn init_bss() {
 	extern "C" {
-		static bss_end: u8;
-		static mut bss_start: u8;
+		static mut bss_start: MaybeUninit<u8>;
+		static mut bss_end: MaybeUninit<u8>;
 	}
 
-	// Initialize .bss section
-	ptr::write_bytes(
-		&mut bss_start as *mut u8,
-		0,
-		&bss_end as *const u8 as usize - &bss_start as *const u8 as usize,
-	);
+	let start_ptr = addr_of_mut!(bss_start);
+	let end_ptr = addr_of_mut!(bss_end);
+	let len = end_ptr.offset_from(start_ptr).try_into().unwrap();
+	let slice = slice::from_raw_parts_mut(start_ptr, len);
+	slice.fill(MaybeUninit::new(0));
 }
