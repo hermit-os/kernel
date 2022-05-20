@@ -1,7 +1,6 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
 mod flags;
-mod rustc;
 
 use std::{
 	env::{self, VarError},
@@ -10,6 +9,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Result};
+use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
 
 fn main() -> Result<()> {
@@ -219,8 +219,11 @@ fn binutil(name: &str) -> Result<PathBuf> {
 	let exe_suffix = env::consts::EXE_SUFFIX;
 	let exe = format!("llvm-{name}{exe_suffix}");
 
-	let mut path = rustc::rustlib()?;
-	path.push(exe);
+	let path = LlvmTools::new()
+		.map_err(|err| anyhow!("{err:?}"))?
+		.tool(&exe)
+		.ok_or_else(|| anyhow!("could not find {exe}"))?;
+
 	Ok(path)
 }
 
