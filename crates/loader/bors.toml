@@ -4,7 +4,6 @@ status = [
   "Integration Test (ubuntu-latest, x86_64)",
   "Integration Test (ubuntu-latest, aarch64)",
   "Integration Test (macos-latest, x86_64)",
-  "Integration Test (macos-latest, aarch64)",
   "Integration Test (windows-latest, x86_64)",
   "Integration Test (windows-latest, aarch64)",
 ]
