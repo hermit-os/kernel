@@ -7,7 +7,6 @@ pub use crate::arch::bootinfo::*;
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
 use core::arch::asm;
-use goblin::elf;
 
 extern "C" {
 	static kernel_end: u8;
@@ -19,7 +18,7 @@ extern "C" {
 	static mut L0mib_pgtable: u64;
 }
 
-pub const ELF_ARCH: u16 = elf::header::EM_AARCH64;
+pub const ELF_ARCH: u16 = goblin::elf::header::EM_AARCH64;
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
