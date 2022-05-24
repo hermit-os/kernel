@@ -7,7 +7,7 @@ pub use self::bootinfo::*;
 use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::serial::SerialPort;
 use core::ptr::{copy, write_bytes};
-use core::{mem, slice};
+use core::{cmp, mem, slice};
 use goblin::elf;
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 
@@ -99,8 +99,11 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let elf_len = end_address - start_address;
 	loaderlog!("Module length: {:#x}", elf_len);
 
+	let free_memory_address = align_up!(end_address, LargePageSize::SIZE);
+	// TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/96
+	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
-	physicalmem::init(align_up!(end_address, LargePageSize::SIZE));
+	physicalmem::init(free_memory_address);
 
 	// Identity-map the ELF header of the first module.
 	assert!(
