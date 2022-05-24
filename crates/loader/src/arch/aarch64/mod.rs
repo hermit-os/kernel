@@ -19,6 +19,7 @@ extern "C" {
 }
 
 pub const ELF_ARCH: u16 = goblin::elf::header::EM_AARCH64;
+pub const R_RELATIVE: u32 = goblin::elf::reloc::R_AARCH64_RELATIVE;
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;

@@ -17,6 +17,7 @@ extern "C" {
 
 // CONSTANTS
 pub const ELF_ARCH: u16 = goblin::elf::header::EM_X86_64;
+pub const R_RELATIVE: u32 = goblin::elf::reloc::R_X86_64_RELATIVE;
 
 const KERNEL_STACK_SIZE: u64 = 32_768;
 const SERIAL_PORT_ADDRESS: u16 = 0x3F8;

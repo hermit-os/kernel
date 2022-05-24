@@ -2,12 +2,10 @@
 #![cfg_attr(target_arch = "aarch64", feature(asm_const))]
 #![allow(incomplete_features)]
 #![feature(specialization)]
+#![feature(maybe_uninit_write_slice)]
 #![no_std]
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
-
-#[macro_use]
-extern crate alloc;
 
 #[macro_use]
 pub mod macros;
