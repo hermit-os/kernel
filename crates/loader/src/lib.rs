@@ -45,3 +45,11 @@ pub unsafe fn init_bss() {
 	let slice = slice::from_raw_parts_mut(start_ptr, len);
 	slice.fill(MaybeUninit::new(0));
 }
+
+#[doc(hidden)]
+pub fn _print(args: ::core::fmt::Arguments<'_>) {
+	use core::fmt::Write;
+	unsafe {
+		crate::console::CONSOLE.write_fmt(args).unwrap();
+	}
+}

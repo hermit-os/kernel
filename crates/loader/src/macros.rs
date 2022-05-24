@@ -16,24 +16,28 @@ macro_rules! align_up {
 /// for HermitCore.
 #[macro_export]
 macro_rules! print {
-	($($arg:tt)+) => ({
-		use core::fmt::Write;
-
-		let mut console = $crate::console::Console {};
-		console.write_fmt(format_args!($($arg)+)).unwrap();
-	});
+    ($($arg:tt)*) => {{
+        $crate::_print(::core::format_args!($($arg)*));
+    }};
 }
 
 /// Print formatted text to our console, followed by a newline.
 #[macro_export]
 macro_rules! println {
-	($($arg:tt)+) => (print!("{}\n", format_args!($($arg)+)));
+    () => {
+        $crate::print!("\n")
+    };
+    ($($arg:tt)*) => {{
+        print!("{}\n", ::core::format_args!($($arg)*))
+    }};
 }
 
 /// Print formatted loader log messages to our console, followed by a newline.
 #[macro_export]
 macro_rules! loaderlog {
-	($($arg:tt)+) => (println!("[LOADER] {}", format_args!($($arg)+)));
+    ($($arg:tt)*) => {{
+        print!("[LOADER] {}\n", ::core::format_args!($($arg)*))
+    }};
 }
 
 /// Prints and returns the value of a given expression for quick and dirty
