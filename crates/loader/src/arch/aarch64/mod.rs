@@ -52,7 +52,7 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	include_bytes!(env!("HERMIT_APP"))
+	align_data::include_aligned!(goblin::elf64::header::Header, env!("HERMIT_APP"))
 }
 
 pub unsafe fn boot_kernel(
