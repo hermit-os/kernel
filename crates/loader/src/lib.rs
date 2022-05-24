@@ -9,10 +9,6 @@
 #[macro_use]
 extern crate alloc;
 
-#[cfg(target_arch = "x86_64")]
-#[macro_use]
-extern crate bitflags;
-
 #[macro_use]
 pub mod macros;
 
@@ -44,4 +40,12 @@ pub unsafe fn init_bss() {
 	let len = end_ptr.offset_from(start_ptr).try_into().unwrap();
 	let slice = slice::from_raw_parts_mut(start_ptr, len);
 	slice.fill(MaybeUninit::new(0));
+}
+
+#[doc(hidden)]
+pub fn _print(args: ::core::fmt::Arguments<'_>) {
+	use core::fmt::Write;
+	unsafe {
+		crate::console::CONSOLE.write_fmt(args).unwrap();
+	}
 }
