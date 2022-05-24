@@ -15,7 +15,7 @@ const PAGE_MAP_BITS: usize = 9;
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
 const PAGE_MAP_MASK: usize = 0x1FF;
 
-bitflags! {
+bitflags::bitflags! {
 	/// Possible flags for an entry in either table (PML4, PDPT, PDT, PGT)
 	///
 	/// See Intel Vol. 3A, Tables 4-14 through 4-19
