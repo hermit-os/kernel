@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use goblin::archive::Archive;
+use goblin::{archive::Archive, elf64::header};
 use xshell::{cmd, Shell};
 
 const RUSTFLAGS: &[&str] = &[
@@ -55,6 +55,9 @@ impl flags::Build {
 		let dist_archive = self.dist_archive();
 		sh.create_dir(dist_archive.parent().unwrap())?;
 		sh.copy_file(&build_archive, &dist_archive)?;
+
+		eprintln!("Setting OSABI");
+		self.set_osabi()?;
 
 		eprintln!("Exporting symbols");
 		self.export_syms()?;
@@ -116,6 +119,26 @@ impl flags::Build {
 			Some(profile) => vec!["--profile", profile],
 			None => vec![],
 		}
+	}
+
+	fn set_osabi(&self) -> Result<()> {
+		let sh = sh()?;
+		let archive_path = self.dist_archive();
+		let mut archive_bytes = sh.read_binary_file(&archive_path)?;
+		let archive = Archive::parse(&archive_bytes)?;
+
+		let file_offsets = (0..archive.len())
+			.map(|i| archive.get_at(i).unwrap().offset)
+			.collect::<Vec<_>>();
+
+		for file_offset in file_offsets {
+			let file_offset = usize::try_from(file_offset).unwrap();
+			archive_bytes[file_offset + header::EI_OSABI] = header::ELFOSABI_STANDALONE;
+		}
+
+		sh.write_file(&archive_path, archive_bytes)?;
+
+		Ok(())
 	}
 
 	fn export_syms(&self) -> Result<()> {
