@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use goblin::archive::Archive;
+use goblin::{archive::Archive, elf64::header};
 use xshell::{cmd, Shell};
 
 const RUSTFLAGS: &[&str] = &[
@@ -50,6 +50,14 @@ impl flags::Build {
 			.args(self.release_args())
 			.args(self.profile_args())
 			.run()?;
+
+		let build_archive = self.build_archive();
+		let dist_archive = self.dist_archive();
+		sh.create_dir(dist_archive.parent().unwrap())?;
+		sh.copy_file(&build_archive, &dist_archive)?;
+
+		eprintln!("Setting OSABI");
+		self.set_osabi()?;
 
 		eprintln!("Exporting symbols");
 		self.export_syms()?;
@@ -113,49 +121,69 @@ impl flags::Build {
 		}
 	}
 
-	fn export_syms(&self) -> Result<()> {
+	fn set_osabi(&self) -> Result<()> {
 		let sh = sh()?;
-
-		let input = self.build_archive();
-		let output = self.dist_archive();
-		sh.create_dir(output.parent().unwrap())?;
-		sh.copy_file(&input, &output)?;
-
-		let objcopy = binutil("objcopy")?;
-
-		cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {output}").run()?;
-
-		let archive_bytes = sh.read_binary_file(&input)?;
+		let archive_path = self.dist_archive();
+		let mut archive_bytes = sh.read_binary_file(&archive_path)?;
 		let archive = Archive::parse(&archive_bytes)?;
 
-		let sys_fns = archive
-			.summarize()
-			.into_iter()
-			.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
-			.flat_map(|(_, _, symbols)| symbols)
-			.filter(|symbol| symbol.starts_with("sys_"));
+		let file_offsets = (0..archive.len())
+			.map(|i| archive.get_at(i).unwrap().offset)
+			.collect::<Vec<_>>();
 
-		let explicit_exports = [
-			"_start",
-			"__bss_start",
-			"runtime_entry",
-			// lwIP functions (C runtime)
-			"init_lwip",
-			"lwip_read",
-			"lwip_write",
-		]
-		.into_iter();
+		for file_offset in file_offsets {
+			let file_offset = usize::try_from(file_offset).unwrap();
+			archive_bytes[file_offset + header::EI_OSABI] = header::ELFOSABI_STANDALONE;
+		}
 
-		let symbol_redefinitions = explicit_exports
-			.chain(sys_fns)
-			.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
-			.collect::<String>();
+		sh.write_file(&archive_path, archive_bytes)?;
 
-		let exported_syms = self.exported_syms();
+		Ok(())
+	}
 
-		sh.write_file(&exported_syms, &symbol_redefinitions)?;
+	fn export_syms(&self) -> Result<()> {
+		let sh = sh()?;
+		let archive_path = self.dist_archive();
+		let archive_bytes = sh.read_binary_file(&archive_path)?;
+		let archive = Archive::parse(&archive_bytes)?;
 
-		cmd!(sh, "{objcopy} --redefine-syms={exported_syms} {output}").run()?;
+		let symbol_redefinitions = {
+			let sys_fns = archive
+				.summarize()
+				.into_iter()
+				.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
+				.flat_map(|(_, _, symbols)| symbols)
+				.filter(|symbol| symbol.starts_with("sys_"));
+
+			let explicit_exports = [
+				"_start",
+				"__bss_start",
+				"runtime_entry",
+				// lwIP functions (C runtime)
+				"init_lwip",
+				"lwip_read",
+				"lwip_write",
+			]
+			.into_iter();
+
+			explicit_exports
+				.chain(sys_fns)
+				.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
+				.collect::<String>()
+		};
+
+		let redefine_syms_path = self.redefine_syms_path();
+		sh.write_file(&redefine_syms_path, &symbol_redefinitions)?;
+
+		let objcopy = binutil("objcopy")?;
+		cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {archive_path}").run()?;
+		cmd!(
+			sh,
+			"{objcopy} --redefine-syms={redefine_syms_path} {archive_path}"
+		)
+		.run()?;
+
+		sh.remove_path(&redefine_syms_path)?;
 
 		Ok(())
 	}
@@ -204,7 +232,7 @@ impl flags::Build {
 		dist_archive
 	}
 
-	fn exported_syms(&self) -> PathBuf {
+	fn redefine_syms_path(&self) -> PathBuf {
 		let mut redefine_syms_path = self.dist_dir();
 		redefine_syms_path.push("exported-syms");
 		redefine_syms_path
