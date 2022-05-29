@@ -1,7 +1,6 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
 mod flags;
-mod rustc;
 
 use std::{
 	env::{self, VarError},
@@ -11,6 +10,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use goblin::{archive::Archive, elf64::header};
+use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
 
 const RUSTFLAGS: &[&str] = &[
@@ -47,7 +47,6 @@ impl flags::Build {
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
-			.args(self.release_args())
 			.args(self.profile_args())
 			.run()?;
 
@@ -106,19 +105,8 @@ impl flags::Build {
 		}
 	}
 
-	fn release_args(&self) -> &[&str] {
-		if self.release {
-			&["--release"]
-		} else {
-			&[]
-		}
-	}
-
 	fn profile_args(&self) -> Vec<&str> {
-		match self.profile.as_deref() {
-			Some(profile) => vec!["--profile", profile],
-			None => vec![],
-		}
+		vec!["--profile", self.profile()]
 	}
 
 	fn set_osabi(&self) -> Result<()> {
@@ -287,8 +275,11 @@ fn binutil(name: &str) -> Result<PathBuf> {
 	let exe_suffix = env::consts::EXE_SUFFIX;
 	let exe = format!("llvm-{name}{exe_suffix}");
 
-	let mut path = rustc::rustlib()?;
-	path.push(exe);
+	let path = LlvmTools::new()
+		.map_err(|err| anyhow!("{err:?}"))?
+		.tool(&exe)
+		.ok_or_else(|| anyhow!("could not find {exe}"))?;
+
 	Ok(path)
 }
 
