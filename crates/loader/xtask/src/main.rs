@@ -41,8 +41,15 @@ impl flags::Build {
 			.args(self.profile_args())
 			.run()?;
 
-		eprintln!("Converting object");
-		self.convert_object()?;
+		let build_object = self.build_object();
+		let dist_object = self.dist_object();
+		sh.create_dir(dist_object.parent().unwrap())?;
+		sh.copy_file(&build_object, &dist_object)?;
+
+		if self.arch == "x86_64" {
+			eprintln!("Converting object to elf32-i386");
+			self.convert_to_elf32_i386()?;
+		}
 
 		eprintln!("Loader available at {}", self.dist_object().display());
 		Ok(())
@@ -89,20 +96,11 @@ impl flags::Build {
 		vec!["--profile", self.profile()]
 	}
 
-	fn convert_object(&self) -> Result<()> {
+	fn convert_to_elf32_i386(&self) -> Result<()> {
 		let sh = sh()?;
-
-		let input = self.build_object();
-		let output = self.dist_object();
-		sh.create_dir(output.parent().unwrap())?;
-		sh.copy_file(&input, &output)?;
-
 		let objcopy = binutil("objcopy")?;
-
-		if self.arch == "x86_64" {
-			cmd!(sh, "{objcopy} --output-target elf32-i386 {output}").run()?;
-		}
-
+		let object = self.dist_object();
+		cmd!(sh, "{objcopy} --output-target elf32-i386 {object}").run()?;
 		Ok(())
 	}
 
