@@ -4,7 +4,7 @@ mod flags;
 
 use std::{
 	env::{self, VarError},
-	ffi::OsString,
+	ffi::OsStr,
 	path::{Path, PathBuf},
 };
 
@@ -88,12 +88,12 @@ impl flags::Build {
 		Ok(rustflags.join("\x1f"))
 	}
 
-	fn target_dir_args(&self) -> Vec<OsString> {
-		vec!["--target-dir".into(), self.target_dir().into()]
+	fn target_dir_args(&self) -> [&OsStr; 2] {
+		["--target-dir".as_ref(), self.target_dir().as_ref()]
 	}
 
-	fn profile_args(&self) -> Vec<&str> {
-		vec!["--profile", self.profile()]
+	fn profile_args(&self) -> [&str; 2] {
+		["--profile", self.profile()]
 	}
 
 	fn convert_to_elf32_i386(&self) -> Result<()> {
