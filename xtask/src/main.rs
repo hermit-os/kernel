@@ -4,7 +4,7 @@ mod flags;
 
 use std::{
 	env::{self, VarError},
-	ffi::OsString,
+	ffi::OsStr,
 	path::{Path, PathBuf},
 };
 
@@ -83,8 +83,8 @@ impl flags::Build {
 		Ok(rustflags.join("\x1f"))
 	}
 
-	fn target_dir_args(&self) -> Vec<OsString> {
-		vec!["--target-dir".into(), self.target_dir().into()]
+	fn target_dir_args(&self) -> [&OsStr; 2] {
+		["--target-dir".as_ref(), self.target_dir().as_ref()]
 	}
 
 	fn no_default_features_args(&self) -> &[&str] {
@@ -95,18 +95,14 @@ impl flags::Build {
 		}
 	}
 
-	fn features_args(&self) -> Vec<&str> {
-		if self.features.is_empty() {
-			vec![]
-		} else {
-			let mut features = vec!["--features"];
-			features.extend(self.features.iter().map(String::as_str));
-			features
-		}
+	fn features_args(&self) -> impl Iterator<Item = &str> {
+		self.features
+			.iter()
+			.flat_map(|feature| ["--features", feature.as_str()])
 	}
 
-	fn profile_args(&self) -> Vec<&str> {
-		vec!["--profile", self.profile()]
+	fn profile_args(&self) -> [&str; 2] {
+		["--profile", self.profile()]
 	}
 
 	fn set_osabi(&self) -> Result<()> {
