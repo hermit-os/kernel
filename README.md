@@ -8,6 +8,11 @@
 
 _libhermit-rs_ is the kernel of the [RustyHermit](https://github.com/hermitcore/rusty-hermit) unikernel project.
 
+## Requirements
+
+* [`rustup`](https://www.rust-lang.org/tools/install)
+* [NASM](https://nasm.us/) (only for SMP on x86_64)
+
 ## Building the kernel
 
 Usually the kernel will be linked as static library to your applications.
@@ -18,23 +23,11 @@ Usually the kernel will be linked as static library to your applications.
 
 ### Standalone static library build
 
-If this does not fit your needs and you want to build the kernel as static library to link afterwards, you need the following:
-
-The Rust **nightly** toolchain ([official webpage](https://www.rust-lang.org/)), the source code of the Rust runtime, and llvm-tools:
-
-```sh
-rustup toolchain install nightly
-rustup component add rust-src llvm-tools-preview
-```
-
-You can then build `libhermit-rs` with the following command
-
 ```sh
 cargo xtask build --arch x86_64
 ```
 
-The resulting library then can be found in `target/x86_64/debug/libhermit.a`
-
+On completion, the script will print the path of `libhermit.a`.
 
 ### Control the kernel messages verbosity
 
