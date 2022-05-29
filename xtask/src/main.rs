@@ -47,7 +47,6 @@ impl flags::Build {
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
-			.args(self.release_args())
 			.args(self.profile_args())
 			.run()?;
 
@@ -106,19 +105,8 @@ impl flags::Build {
 		}
 	}
 
-	fn release_args(&self) -> &[&str] {
-		if self.release {
-			&["--release"]
-		} else {
-			&[]
-		}
-	}
-
 	fn profile_args(&self) -> Vec<&str> {
-		match self.profile.as_deref() {
-			Some(profile) => vec!["--profile", profile],
-			None => vec![],
-		}
+		vec!["--profile", self.profile()]
 	}
 
 	fn set_osabi(&self) -> Result<()> {
