@@ -43,10 +43,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         arch: [x86_64, aarch64]
-        exclude:
-          # TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/99
-          - os: macos-latest
-            arch: aarch64
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install QEMU, NASM (ubuntu)
