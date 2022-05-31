@@ -9,7 +9,6 @@ edition = "2021"
 [dependencies]
 goblin = { version = "0.5", default-features = false, features = ["elf64"] }
 plain = "0.2"
-static-alloc = "0.2"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 bitflags = "1.3"
