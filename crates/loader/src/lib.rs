@@ -1,4 +1,3 @@
-#![feature(alloc_error_handler)]
 #![cfg_attr(target_arch = "aarch64", feature(asm_const))]
 #![allow(incomplete_features)]
 #![feature(specialization)]
