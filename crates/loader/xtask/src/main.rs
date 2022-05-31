@@ -197,7 +197,7 @@ fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
 		"aarch64" => Ok(&[
 			"--target=targets/aarch64-unknown-hermit-loader.json",
-			"-Zbuild-std=core,alloc",
+			"-Zbuild-std=core",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
