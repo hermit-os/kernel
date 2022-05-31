@@ -24,15 +24,6 @@ align-data = "0.1"
 cc = "1.0"
 nasm-rs = "0.2"
 
-# TODO: Use cargo's `opt-level = 0` instead of this:
-# https://github.com/hermitcore/rusty-loader/issues/45
-[profile.x86_64-dev]
-inherits = "dev"
-
-[profile.x86_64-dev.package]
-goblin = { opt-level = 1 }
-rusty-loader = { opt-level = 1 }
-
 [profile.release]
 strip = "debuginfo"
 lto = true
