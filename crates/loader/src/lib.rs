@@ -1,4 +1,3 @@
-#![feature(alloc_error_handler)]
 #![cfg_attr(target_arch = "aarch64", feature(asm_const))]
 #![allow(incomplete_features)]
 #![feature(specialization)]
@@ -16,16 +15,6 @@ pub mod kernel;
 mod runtime_glue;
 
 use core::{mem::MaybeUninit, ptr::addr_of_mut, slice};
-
-use static_alloc::Bump;
-
-/// A simple bump memory allocator using static storage.
-///
-/// This allocator is used for bootstrapping.
-/// It manages a slice of uninitialized memory and cannot deallocate.
-/// The kernel will setup a proper memory allocator later.
-#[global_allocator]
-static ALLOCATOR: Bump<[u8; 2 * 1024 * 1024]> = Bump::uninit();
 
 pub unsafe fn init_bss() {
 	extern "C" {

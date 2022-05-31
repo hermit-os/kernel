@@ -9,7 +9,6 @@ edition = "2021"
 [dependencies]
 goblin = { version = "0.5", default-features = false, features = ["elf64"] }
 plain = "0.2"
-static-alloc = "0.2"
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 bitflags = "1.3"
@@ -23,15 +22,6 @@ align-data = "0.1"
 [build-dependencies]
 cc = "1.0"
 nasm-rs = "0.2"
-
-# TODO: Use cargo's `opt-level = 0` instead of this:
-# https://github.com/hermitcore/rusty-loader/issues/45
-[profile.x86_64-dev]
-inherits = "dev"
-
-[profile.x86_64-dev.package]
-goblin = { opt-level = 1 }
-rusty-loader = { opt-level = 1 }
 
 [profile.release]
 strip = "debuginfo"
