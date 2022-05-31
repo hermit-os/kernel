@@ -8,7 +8,6 @@ use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTab
 use crate::arch::x86_64::serial::SerialPort;
 use core::ptr::{copy, write_bytes};
 use core::{cmp, mem, slice};
-use goblin::elf;
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 
 extern "C" {
@@ -17,7 +16,8 @@ extern "C" {
 }
 
 // CONSTANTS
-pub const ELF_ARCH: u16 = elf::header::EM_X86_64;
+pub const ELF_ARCH: u16 = goblin::elf::header::EM_X86_64;
+pub const R_RELATIVE: u32 = goblin::elf::reloc::R_X86_64_RELATIVE;
 
 const KERNEL_STACK_SIZE: u64 = 32_768;
 const SERIAL_PORT_ADDRESS: u16 = 0x3F8;

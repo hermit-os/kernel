@@ -7,7 +7,6 @@ pub use crate::arch::bootinfo::*;
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
 use core::arch::asm;
-use goblin::elf;
 
 extern "C" {
 	static kernel_end: u8;
@@ -19,7 +18,8 @@ extern "C" {
 	static mut L0mib_pgtable: u64;
 }
 
-pub const ELF_ARCH: u16 = elf::header::EM_AARCH64;
+pub const ELF_ARCH: u16 = goblin::elf::header::EM_AARCH64;
+pub const R_RELATIVE: u32 = goblin::elf::reloc::R_AARCH64_RELATIVE;
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
@@ -53,7 +53,7 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	include_bytes!(env!("HERMIT_APP"))
+	align_data::include_aligned!(goblin::elf64::header::Header, env!("HERMIT_APP"))
 }
 
 pub unsafe fn boot_kernel(

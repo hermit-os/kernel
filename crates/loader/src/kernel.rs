@@ -1,172 +1,242 @@
-use crate::arch::{self, get_memory, BOOT_INFO};
-use core::ptr::{copy_nonoverlapping, write_bytes};
-use goblin::{
-	container::{Container, Ctx, Endian},
-	elf::{header, program_header, reloc, Dynamic, Elf, Header, ProgramHeader, RelocSection},
-	error::{Error as GoblinError, Result as GoblinResult},
+//! Parsing and loading kernel objects from ELF files.
+#![deny(unsafe_code)]
+
+use crate::arch::{self, BootInfo};
+
+use core::mem::{self, MaybeUninit};
+
+use goblin::elf64::{
+	dynamic::{self, Dyn, DynamicInfo},
+	header::{self, Header},
+	program_header::{self, ProgramHeader},
+	reloc::{self, Rela},
 };
+use plain::Plain;
 
-fn parse_ctx(header: &Header) -> GoblinResult<Ctx> {
-	let is_lsb = header.e_ident[header::EI_DATA] == header::ELFDATA2LSB;
-	let endianness = Endian::from(is_lsb);
-	let class = header.e_ident[header::EI_CLASS];
-	if class != header::ELFCLASS64 && class != header::ELFCLASS32 {
-		return Err(GoblinError::Malformed(format!(
-			"Unknown values in ELF ident header: class: {} endianness: {}",
-			class,
-			header.e_ident[header::EI_DATA]
-		)));
-	}
-	let is_64 = class == header::ELFCLASS64;
-	let container = if is_64 {
-		Container::Big
-	} else {
-		Container::Little
-	};
-	let ctx = Ctx::new(container, endianness);
+/// A parsed kernel object ready for loading.
+pub struct Object<'a> {
+	/// The raw bytes of the parsed ELF file.
+	elf: &'a [u8],
 
-	Ok(ctx)
+	/// The ELF file header at the beginning of [`Self::elf`].
+	header: &'a Header,
+
+	/// The kernel's program headers.
+	///
+	/// Loadable program segments will be copied for execution.
+	///
+	/// The thread-local storage segment will be used for creating [`TlsInfo`] for the kernel.
+	phs: &'a [ProgramHeader],
+
+	/// Relocations with an explicit addend.
+	relas: &'a [Rela],
 }
 
-pub fn parse(bytes: &[u8]) -> GoblinResult<Elf<'_>> {
-	let header = Elf::parse_header(bytes)?;
-	let mut elf = Elf::lazy_parse(header)?;
-	let ctx = parse_ctx(&header)?;
+impl<'a> Object<'a> {
+	/// Parses raw bytes of an ELF file into a loadable kernel object.
+	pub fn parse(elf: &[u8]) -> Object<'_> {
+		{
+			let range = elf.as_ptr_range();
+			let len = elf.len();
+			loaderlog!("Parsing kernel from ELF at {range:?} ({len} B)");
+		}
 
-	elf.program_headers =
-		ProgramHeader::parse(bytes, header.e_phoff as usize, header.e_phnum as usize, ctx)?;
+		let header = plain::from_bytes::<Header>(elf).unwrap();
 
-	elf.dynamic = Dynamic::parse(bytes, &elf.program_headers, ctx)?;
-	if let Some(dynamic) = &elf.dynamic {
-		let dyn_info = &dynamic.info;
-		elf.dynrelas = RelocSection::parse(bytes, dyn_info.rela, dyn_info.relasz, true, ctx)?;
-	}
+		// General compatibility checks
+		{
+			let class = header.e_ident[header::EI_CLASS];
+			assert_eq!(header::ELFCLASS64, class, "kernel ist not a 64-bit object");
+			let data_encoding = header.e_ident[header::EI_DATA];
+			assert_eq!(
+				header::ELFDATA2LSB,
+				data_encoding,
+				"kernel object is not little endian"
+			);
 
-	Ok(elf)
-}
+			assert!(
+				matches!(header.e_type, header::ET_DYN | header::ET_EXEC),
+				"kernel has unsupported ELF type"
+			);
 
-pub fn check_kernel_elf_file(elf: &Elf<'_>) -> u64 {
-	if !elf.libraries.is_empty() {
-		panic!(
-			"Error: file depends on following libraries: {:?}",
-			elf.libraries
+			assert_eq!(
+				arch::ELF_ARCH,
+				header.e_machine,
+				"kernel is not compiled for the correct architecture"
+			);
+		}
+
+		let phs = {
+			let start = header.e_phoff as usize;
+			let len = header.e_phnum as usize;
+			ProgramHeader::slice_from_bytes_len(&elf[start..], len).unwrap()
+		};
+
+		let dyns = phs
+			.iter()
+			.find(|program_header| program_header.p_type == program_header::PT_DYNAMIC)
+			.map(|ph| {
+				let start = ph.p_offset as usize;
+				let len = (ph.p_filesz as usize) / dynamic::SIZEOF_DYN;
+				Dyn::slice_from_bytes_len(&elf[start..], len).unwrap()
+			})
+			.unwrap_or_default();
+
+		assert!(
+			!dyns.iter().any(|d| d.d_tag == dynamic::DT_NEEDED),
+			"kernel was linked against dynamic libraries"
 		);
-	}
 
-	// Verify that this module is a HermitCore ELF executable.
-	assert!(elf.header.e_machine == arch::ELF_ARCH);
-	loaderlog!("This is a supported HermitCore Application");
+		let dynamic_info = DynamicInfo::new(dyns, phs);
+		assert_eq!(0, dynamic_info.relcount);
 
-	// Get all necessary information about the ELF executable.
-	let mut file_size: u64 = 0;
-	let mut mem_size: u64 = 0;
-	let mut start_addr: u64 = u64::MAX;
+		let relas = {
+			let start = dynamic_info.rela;
+			let len = dynamic_info.relacount;
+			Rela::slice_from_bytes_len(&elf[start..], len).unwrap()
+		};
 
-	for program_header in &elf.program_headers {
-		if program_header.p_type == program_header::PT_LOAD {
-			if start_addr == u64::MAX {
-				start_addr = program_header.p_vaddr;
-			}
+		assert!(relas
+			.iter()
+			.all(|rela| reloc::r_type(rela.r_info) == arch::R_RELATIVE));
 
-			file_size += program_header.p_filesz;
-			mem_size = program_header.p_vaddr + program_header.p_memsz - start_addr;
+		Object {
+			elf,
+			header,
+			phs,
+			relas,
 		}
 	}
 
-	// Verify the information.
-	assert!(file_size > 0);
-	assert!(mem_size > 0);
-	loaderlog!("Found entry point: {:#x}", elf.entry);
-	loaderlog!("File Size: {} Bytes", file_size);
-	loaderlog!("Mem Size:  {} Bytes", mem_size);
+	/// Required memory size for loading.
+	///
+	/// Returns the minimum size of a block of memory for successfully loading the object.
+	pub fn mem_size(&self) -> usize {
+		let first_ph = self
+			.phs
+			.iter()
+			.find(|ph| ph.p_type == program_header::PT_LOAD)
+			.unwrap();
+		let start_addr = first_ph.p_vaddr;
 
-	mem_size
+		let last_ph = self
+			.phs
+			.iter()
+			.rev()
+			.find(|ph| ph.p_type == program_header::PT_LOAD)
+			.unwrap();
+		let end_addr = last_ph.p_vaddr + last_ph.p_memsz;
+
+		let mem_size = end_addr - start_addr;
+		mem_size.try_into().unwrap()
+	}
+
+	/// Loads the kernel into the provided memory.
+	pub fn load_kernel(&self, memory: &mut [MaybeUninit<u8>]) -> LoadInfo {
+		loaderlog!("Loading kernel to {memory:p}");
+
+		assert!(memory.len() >= self.mem_size());
+
+		let load_start_addr = self
+			.phs
+			.iter()
+			.find(|ph| ph.p_type == program_header::PT_LOAD)
+			.unwrap()
+			.p_vaddr;
+
+		// Load program segments
+		// Contains TLS initialization image
+		self.phs
+			.iter()
+			.filter(|ph| ph.p_type == program_header::PT_LOAD)
+			.for_each(|ph| {
+				let ph_memory = {
+					let mem_start = (ph.p_vaddr - load_start_addr) as usize;
+					let mem_len = ph.p_memsz as usize;
+					&mut memory[mem_start..][..mem_len]
+				};
+				let file_len = ph.p_filesz as usize;
+				let ph_file = &self.elf[ph.p_offset as usize..][..file_len];
+				MaybeUninit::write_slice(&mut ph_memory[..file_len], ph_file);
+				for byte in &mut ph_memory[file_len..] {
+					byte.write(0);
+				}
+			});
+
+		// Perform relocations
+		self.relas.iter().for_each(|rela| {
+			let kernel_addr = memory.as_ptr() as i64;
+			match reloc::r_type(rela.r_info) {
+				arch::R_RELATIVE => {
+					let relocated = kernel_addr + rela.r_addend;
+					MaybeUninit::write_slice(
+						&mut memory[rela.r_offset as usize..][..mem::size_of_val(&relocated)],
+						&relocated.to_ne_bytes(),
+					);
+				}
+				_ => unreachable!(),
+			}
+		});
+
+		let tls_info = self
+			.phs
+			.iter()
+			.find(|ph| ph.p_type == program_header::PT_TLS)
+			.map(|ph| TlsInfo::new(self.header, ph, memory.as_ptr() as u64));
+
+		let entry_point = {
+			let mut entry_point = self.header.e_entry;
+			if self.header.e_type == header::ET_DYN {
+				entry_point += memory.as_ptr() as u64;
+			}
+			entry_point
+		};
+
+		let elf_location = (self.header.e_type == header::ET_EXEC).then_some(load_start_addr);
+
+		LoadInfo {
+			elf_location,
+			entry_point,
+			tls_info,
+		}
+	}
 }
 
-pub unsafe fn load_kernel(elf: &Elf<'_>, elf_start: u64, mem_size: u64) -> (Option<u64>, u64, u64) {
-	loaderlog!("start {:#x}, size {:#x}", elf_start, mem_size);
-	if !elf.libraries.is_empty() {
-		panic!(
-			"Error: file depends on following libraries: {:?}",
-			elf.libraries
-		);
-	}
+pub struct LoadInfo {
+	pub elf_location: Option<u64>,
+	pub entry_point: u64,
+	pub tls_info: Option<TlsInfo>,
+}
 
-	// Verify that this module is a HermitCore ELF executable.
-	assert!(elf.header.e_machine == arch::ELF_ARCH);
+pub struct TlsInfo {
+	start: u64,
+	filesz: u64,
+	memsz: u64,
+	align: u64,
+}
 
-	if elf.header.e_ident[7] != 0xFF {
-		loaderlog!("Unsupported OS ABI {:#x}", elf.header.e_ident[7]);
-	}
-
-	let address = get_memory(mem_size);
-	loaderlog!("Load HermitCore Application at {:#x}", address);
-
-	let mut p_vaddr: u64 = u64::MAX;
-
-	// load application
-	for program_header in &elf.program_headers {
-		if program_header.p_type == program_header::PT_LOAD {
-			if p_vaddr == u64::MAX {
-				p_vaddr = program_header.p_vaddr;
-			}
-
-			// relative position to the kernel location
-			let pos = program_header.p_vaddr - p_vaddr;
-
-			copy_nonoverlapping(
-				(elf_start + program_header.p_offset) as *const u8,
-				(address + pos) as *mut u8,
-				program_header.p_filesz.try_into().unwrap(),
-			);
-			write_bytes(
-				(address + pos + program_header.p_filesz) as *mut u8,
-				0,
-				(program_header.p_memsz - program_header.p_filesz)
-					.try_into()
-					.unwrap(),
-			);
-		} else if program_header.p_type == program_header::PT_TLS {
-			if elf.header.e_type == header::ET_DYN {
-				BOOT_INFO.tls_start = address + program_header.p_vaddr;
-			} else {
-				BOOT_INFO.tls_start = program_header.p_vaddr;
-			}
-			BOOT_INFO.tls_filesz = program_header.p_filesz;
-			BOOT_INFO.tls_memsz = program_header.p_memsz;
-			BOOT_INFO.tls_align = program_header.p_align;
-
-			loaderlog!(
-				"Found TLS starts at {:#x} (size {} Bytes)",
-				BOOT_INFO.tls_start,
-				BOOT_INFO.tls_memsz
-			);
+impl TlsInfo {
+	fn new(header: &Header, ph: &ProgramHeader, start_addr: u64) -> Self {
+		let mut tls_start = ph.p_vaddr;
+		if header.e_type == header::ET_DYN {
+			tls_start += start_addr;
 		}
+		let tls_info = TlsInfo {
+			start: tls_start,
+			filesz: ph.p_filesz,
+			memsz: ph.p_memsz,
+			align: ph.p_align,
+		};
+		let range = tls_info.start as *const ()..(tls_info.start + tls_info.memsz) as *const ();
+		let len = tls_info.memsz;
+		loaderlog!("TLS is at {range:?} ({len} B)",);
+		tls_info
 	}
 
-	// relocate entries (strings, copy-data, etc.) without an addend
-	for rel in &elf.dynrels {
-		loaderlog!("Unsupported relocation type {}", rel.r_type);
-	}
-
-	// relocate entries (strings, copy-data, etc.) with an addend
-	for rela in &elf.dynrelas {
-		match rela.r_type {
-			reloc::R_X86_64_RELATIVE | reloc::R_AARCH64_RELATIVE => {
-				let offset = (address + rela.r_offset) as *mut u64;
-				*offset = (address as i64 + rela.r_addend.unwrap_or(0))
-					.try_into()
-					.unwrap();
-			}
-			_ => {
-				loaderlog!("Unsupported relocation type {}", rela.r_type);
-			}
-		}
-	}
-
-	if elf.header.e_type == header::ET_DYN {
-		(None, address, elf.entry + address)
-	} else {
-		(Some(p_vaddr), address, elf.entry)
+	pub fn insert_into(&self, boot_info: &mut BootInfo) {
+		boot_info.tls_start = self.start;
+		boot_info.tls_filesz = self.filesz;
+		boot_info.tls_memsz = self.memsz;
+		boot_info.tls_align = self.align;
 	}
 }
