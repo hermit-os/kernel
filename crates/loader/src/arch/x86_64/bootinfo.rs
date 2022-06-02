@@ -1,5 +1,6 @@
-use crate::arch::x86_64::SERIAL_PORT_ADDRESS;
 use core::fmt;
+
+use super::SERIAL_IO_PORT;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -56,7 +57,7 @@ impl BootInfo {
 			cpu_online: 0,
 			possible_cpus: 0,
 			current_boot_id: 0,
-			uartport: SERIAL_PORT_ADDRESS,
+			uartport: SERIAL_IO_PORT,
 			single_kernel: 1,
 			uhyve: 0,
 			hcip: [255, 255, 255, 255],
