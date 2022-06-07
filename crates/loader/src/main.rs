@@ -1,19 +1,32 @@
-#![no_std] // don't link the Rust standard library
-#![cfg_attr(not(test), no_main)] // disable all Rust-level entry points
-#![cfg_attr(test, allow(dead_code, unused_macros, unused_imports))]
+#![no_std]
+#![no_main]
+#![feature(asm_const)]
+#![feature(maybe_uninit_write_slice)]
+#![feature(specialization)]
 #![warn(rust_2018_idioms)]
+#![allow(incomplete_features)]
 #![allow(clippy::missing_safety_doc)]
 
 #[macro_use]
-extern crate rusty_loader;
+mod macros;
 
-use core::{mem::MaybeUninit, slice};
+mod arch;
+mod console;
+mod kernel;
+mod runtime_glue;
 
-use rusty_loader::{
-	arch::{self, BOOT_INFO},
-	init_bss,
-	kernel::{LoadInfo, Object},
+use core::{
+	fmt::{self, Write},
+	mem::MaybeUninit,
+	ptr::addr_of_mut,
+	slice,
 };
+
+// Workaround for https://github.com/hermitcore/rusty-loader/issues/117
+use rusty_loader as _;
+
+use arch::BOOT_INFO;
+use kernel::{LoadInfo, Object};
 
 extern "C" {
 	static kernel_end: u8;
@@ -23,7 +36,7 @@ extern "C" {
 /// Entry Point of the HermitCore Loader
 /// (called from entry.asm or entry.rs)
 #[no_mangle]
-pub unsafe extern "C" fn loader_main() -> ! {
+unsafe extern "C" fn loader_main() -> ! {
 	init_bss();
 	arch::message_output_init();
 
@@ -57,4 +70,24 @@ pub unsafe extern "C" fn loader_main() -> ! {
 		memory.len() as u64,
 		entry_point,
 	)
+}
+
+unsafe fn init_bss() {
+	extern "C" {
+		static mut bss_start: MaybeUninit<u8>;
+		static mut bss_end: MaybeUninit<u8>;
+	}
+
+	let start_ptr = addr_of_mut!(bss_start);
+	let end_ptr = addr_of_mut!(bss_end);
+	let len = end_ptr.offset_from(start_ptr).try_into().unwrap();
+	let slice = slice::from_raw_parts_mut(start_ptr, len);
+	slice.fill(MaybeUninit::new(0));
+}
+
+#[doc(hidden)]
+fn _print(args: fmt::Arguments<'_>) {
+	unsafe {
+		console::CONSOLE.write_fmt(args).unwrap();
+	}
 }
