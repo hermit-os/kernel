@@ -90,9 +90,9 @@ dependencies = [
 
 [[package]]
 name = "goblin"
-version = "0.5.1"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c955ab4e0ad8c843ea653a3d143048b87490d9be56bd7132a435c2407846ac8f"
+checksum = "cfeb764aa29a0774d290c2df134a37ab2e3c1ba59009162626658aabefda321a"
 dependencies = [
  "log",
  "plain",
@@ -549,9 +549,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "x86"
-version = "0.48.0"
+version = "0.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1af891e1d20843ec044591266212bb7db80f88017030c57ccea76852b49ecae3"
+checksum = "ae0df8874628b15fdefccbd5c6b06766ec9ec2d6cd30d6d2f82245343358c50a"
 dependencies = [
  "bit_field",
  "bitflags",
