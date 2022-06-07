@@ -22,6 +22,9 @@ use core::{
 	slice,
 };
 
+// Workaround for https://github.com/hermitcore/rusty-loader/issues/117
+use rusty_loader as _;
+
 use arch::BOOT_INFO;
 use kernel::{LoadInfo, Object};
 
