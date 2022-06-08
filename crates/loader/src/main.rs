@@ -86,7 +86,8 @@ unsafe fn init_bss() {
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
-	loaderlog!("{info}");
+	// We can't use `println!` or related macros, because `_print` unwraps a result and might panic again
+	writeln!(unsafe { &mut console::CONSOLE }, "[LOADER] {info}").ok();
 
 	loop {}
 }
