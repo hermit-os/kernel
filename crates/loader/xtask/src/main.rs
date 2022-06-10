@@ -157,7 +157,10 @@ impl flags::Clippy {
 
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/rusty-loader/issues/78
-		for target in ["x86_64", "x86_64-uefi"] {
+		// TODO: Enable clippy for x86_64-uefi
+		// https://github.com/hermitcore/rusty-loader/issues/122
+		#[allow(clippy::single_element_loop)]
+		for target in ["x86_64"] {
 			let target_arg = target_args(target)?;
 			let hermit_app = {
 				let mut hermit_app = project_root().to_path_buf();
