@@ -42,10 +42,6 @@ pub struct Semaphore {
 	state: SpinlockIrqSave<SemaphoreState>,
 }
 
-// Same unsafe impls as `Semaphore`
-unsafe impl Sync for Semaphore {}
-unsafe impl Send for Semaphore {}
-
 impl Semaphore {
 	/// Creates a new semaphore with the initial count specified.
 	///

@@ -86,7 +86,3 @@ impl RecursiveMutex {
 		}
 	}
 }
-
-// Same unsafe impls as `RecursiveMutex`
-unsafe impl Sync for RecursiveMutex {}
-unsafe impl Send for RecursiveMutex {}
