@@ -13,7 +13,6 @@ mod macros;
 mod arch;
 mod console;
 mod kernel;
-mod runtime_glue;
 
 use core::{
 	fmt::{self, Write},
@@ -83,6 +82,14 @@ unsafe fn init_bss() {
 	let len = end_ptr.offset_from(start_ptr).try_into().unwrap();
 	let slice = slice::from_raw_parts_mut(start_ptr, len);
 	slice.fill(MaybeUninit::new(0));
+}
+
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+	// We can't use `println!` or related macros, because `_print` unwraps a result and might panic again
+	writeln!(unsafe { &mut console::CONSOLE }, "[LOADER] {info}").ok();
+
+	loop {}
 }
 
 #[doc(hidden)]
