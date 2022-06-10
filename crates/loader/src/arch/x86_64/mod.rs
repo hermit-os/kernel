@@ -1,14 +1,16 @@
 pub mod bootinfo;
 pub mod paging;
 pub mod physicalmem;
-pub mod serial;
 
 pub use self::bootinfo::*;
-use crate::arch::x86_64::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
-use crate::arch::x86_64::serial::SerialPort;
+
 use core::ptr::{copy, write_bytes};
 use core::{cmp, mem, slice};
+
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
+use uart_16550::SerialPort;
+
+use paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 
 extern "C" {
 	static mb_info: usize;
@@ -20,11 +22,10 @@ pub const ELF_ARCH: u16 = goblin::elf::header::EM_X86_64;
 pub const R_RELATIVE: u32 = goblin::elf::reloc::R_X86_64_RELATIVE;
 
 const KERNEL_STACK_SIZE: u64 = 32_768;
-const SERIAL_PORT_ADDRESS: u16 = 0x3F8;
-const SERIAL_PORT_BAUDRATE: u32 = 115200;
+const SERIAL_IO_PORT: u16 = 0x3F8;
 
 // VARIABLES
-static COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
+static mut COM1: SerialPort = unsafe { SerialPort::new(SERIAL_IO_PORT) };
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 
 struct Mem;
@@ -50,11 +51,11 @@ impl MemoryManagement for Mem {
 
 // FUNCTIONS
 pub fn message_output_init() {
-	COM1.init(SERIAL_PORT_BAUDRATE);
+	unsafe { COM1.init() };
 }
 
 pub fn output_message_byte(byte: u8) {
-	COM1.write_byte(byte);
+	unsafe { COM1.send(byte) };
 }
 
 pub unsafe fn find_kernel() -> &'static [u8] {
