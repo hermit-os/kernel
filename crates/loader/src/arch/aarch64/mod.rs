@@ -1,12 +1,13 @@
-pub mod bootinfo;
 pub mod entry;
 pub mod paging;
 pub mod serial;
 
-pub use crate::arch::bootinfo::*;
+use core::arch::asm;
+
+use hermit_entry::{BootInfo, Entry, RawBootInfo, TlsInfo};
+
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
-use core::arch::asm;
 
 extern "C" {
 	static kernel_end: u8;
@@ -35,7 +36,6 @@ const PT_MEM_CD: u64 = 0x70F;
 const PT_SELF: u64 = 1 << 55;
 
 // VARIABLES
-pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 pub fn message_output_init() {
@@ -57,27 +57,12 @@ pub fn find_kernel() -> &'static [u8] {
 }
 
 pub unsafe fn boot_kernel(
+	tls_info: TlsInfo,
 	_elf_address: Option<u64>,
 	virtual_address: u64,
 	mem_size: u64,
 	entry_point: u64,
 ) -> ! {
-	// Jump to the kernel entry point and provide the Multiboot information to it.
-	loaderlog!(
-		"Jumping to HermitCore Application Entry Point at {:#x}",
-		entry_point
-	);
-
-	// Supply the parameters to the HermitCore application.
-	BOOT_INFO.base = virtual_address;
-	BOOT_INFO.limit = RAM_START + 0x20000000 /* 512 MB */;
-	BOOT_INFO.image_size = mem_size;
-	BOOT_INFO.current_stack_address = virtual_address - KERNEL_STACK_SIZE as u64;
-	BOOT_INFO.uartport = 0x1000;
-	//loaderlog!("BOOT_INFO:");
-	//loaderlog!("==========");
-	//loaderlog!("{:?}", BOOT_INFO);
-
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512);
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
@@ -119,8 +104,7 @@ pub unsafe fn boot_kernel(
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
 
-	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =
-		core::mem::transmute(entry_point);
+	let func: Entry = core::mem::transmute(entry_point);
 	COM1.set_port(0x1000);
 
 	// Load TTBRx
@@ -144,8 +128,27 @@ pub unsafe fn boot_kernel(
 			options(nostack),
 	);
 
+	pub static mut BOOT_INFO: RawBootInfo = RawBootInfo::INVALID;
+	BOOT_INFO = BootInfo {
+		base: virtual_address,
+		limit: RAM_START + 0x20000000, // 512 MB
+		image_size: mem_size,
+		tls_info,
+		current_stack_address: virtual_address - KERNEL_STACK_SIZE as u64,
+		uartport: 0x1000,
+		ram_start: RAM_START,
+		..Default::default()
+	}
+	.into();
+
+	// Jump to the kernel entry point and provide the Multiboot information to it.
+	loaderlog!(
+		"Jumping to HermitCore Application Entry Point at {:#x}",
+		entry_point
+	);
+
 	/* Memory barrier */
 	asm!("dsb sy", options(nostack));
 
-	func(&mut BOOT_INFO)
+	func(&BOOT_INFO)
 }

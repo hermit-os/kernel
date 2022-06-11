@@ -1,7 +1,7 @@
 //! Parsing and loading kernel objects from ELF files.
 #![deny(unsafe_code)]
 
-use crate::arch::{self, BootInfo};
+use crate::arch;
 
 use core::mem::{self, MaybeUninit};
 
@@ -11,6 +11,7 @@ use goblin::elf64::{
 	program_header::{self, ProgramHeader},
 	reloc::{self, Rela},
 };
+use hermit_entry::TlsInfo;
 use plain::Plain;
 
 /// A parsed kernel object ready for loading.
@@ -182,7 +183,8 @@ impl<'a> Object<'a> {
 			.phs
 			.iter()
 			.find(|ph| ph.p_type == program_header::PT_TLS)
-			.map(|ph| TlsInfo::new(self.header, ph, memory.as_ptr() as u64));
+			.map(|ph| parse_tls_info(self.header, ph, memory.as_ptr() as u64))
+			.unwrap_or_default();
 
 		let entry_point = {
 			let mut entry_point = self.header.e_entry;
@@ -205,38 +207,22 @@ impl<'a> Object<'a> {
 pub struct LoadInfo {
 	pub elf_location: Option<u64>,
 	pub entry_point: u64,
-	pub tls_info: Option<TlsInfo>,
+	pub tls_info: TlsInfo,
 }
 
-pub struct TlsInfo {
-	start: u64,
-	filesz: u64,
-	memsz: u64,
-	align: u64,
-}
-
-impl TlsInfo {
-	fn new(header: &Header, ph: &ProgramHeader, start_addr: u64) -> Self {
-		let mut tls_start = ph.p_vaddr;
-		if header.e_type == header::ET_DYN {
-			tls_start += start_addr;
-		}
-		let tls_info = TlsInfo {
-			start: tls_start,
-			filesz: ph.p_filesz,
-			memsz: ph.p_memsz,
-			align: ph.p_align,
-		};
-		let range = tls_info.start as *const ()..(tls_info.start + tls_info.memsz) as *const ();
-		let len = tls_info.memsz;
-		loaderlog!("TLS is at {range:?} ({len} B)",);
-		tls_info
+fn parse_tls_info(header: &Header, ph: &ProgramHeader, start_addr: u64) -> TlsInfo {
+	let mut tls_start = ph.p_vaddr;
+	if header.e_type == header::ET_DYN {
+		tls_start += start_addr;
 	}
-
-	pub fn insert_into(&self, boot_info: &mut BootInfo) {
-		boot_info.tls_start = self.start;
-		boot_info.tls_filesz = self.filesz;
-		boot_info.tls_memsz = self.memsz;
-		boot_info.tls_align = self.align;
-	}
+	let tls_info = TlsInfo {
+		start: tls_start,
+		filesz: ph.p_filesz,
+		memsz: ph.p_memsz,
+		align: ph.p_align,
+	};
+	let range = tls_info.start as *const ()..(tls_info.start + tls_info.memsz) as *const ();
+	let len = tls_info.memsz;
+	loaderlog!("TLS is at {range:?} ({len} B)",);
+	tls_info
 }

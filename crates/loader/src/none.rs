@@ -1,4 +1,4 @@
-use crate::arch::{self, BOOT_INFO};
+use crate::arch;
 use crate::console;
 use crate::kernel::{LoadInfo, Object};
 
@@ -36,11 +36,8 @@ unsafe extern "C" fn loader_main() -> ! {
 		tls_info,
 	} = kernel.load_kernel(memory);
 
-	if let Some(tls_info) = tls_info {
-		tls_info.insert_into(&mut BOOT_INFO);
-	}
-
 	arch::boot_kernel(
+		tls_info,
 		elf_location,
 		memory.as_ptr() as u64,
 		memory.len() as u64,
