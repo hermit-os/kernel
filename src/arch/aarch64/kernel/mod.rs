@@ -1,4 +1,3 @@
-mod bootinfo;
 pub mod irq;
 pub mod pci;
 pub mod percore;
@@ -10,104 +9,106 @@ pub mod stubs;
 pub mod switch;
 pub mod systemtime;
 
-use crate::arch::aarch64::kernel::bootinfo::BootInfo;
-use crate::arch::aarch64::kernel::percore::*;
-use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
+
+use core::arch::{asm, global_asm};
+use core::ptr;
+
+use hermit_entry::{BootInfo, RawBootInfo};
+
+use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;
 use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
-use core::arch::{asm, global_asm};
-use core::ptr;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 static mut COM1: SerialPort = SerialPort::new(0x800);
 static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
 
-/// Kernel header to announce machine features
-#[cfg(not(target_os = "none"))]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
-
-#[cfg(all(target_os = "none", not(feature = "newlib")))]
-#[link_section = ".data"]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
-
-#[cfg(all(target_os = "none", feature = "newlib"))]
-#[link_section = ".mboot"]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
-
-// FUNCTIONS
-
 global_asm!(include_str!("start.s"));
 
+/// Kernel header to announce machine features
+#[cfg_attr(
+	all(target_os = "none", not(feature = "newlib")),
+	link_section = ".data"
+)]
+#[cfg_attr(all(target_os = "none", feature = "newlib"), link_section = ".mboot")]
+static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
+static mut BOOT_INFO: Option<BootInfo> = None;
+
+pub fn boot_info() -> &'static BootInfo {
+	unsafe { BOOT_INFO.as_ref().unwrap() }
+}
+
+pub fn raw_boot_info() -> &'static RawBootInfo {
+	unsafe { RAW_BOOT_INFO.unwrap() }
+}
+
 pub fn get_boot_info_address() -> VirtAddr {
-	VirtAddr(unsafe { BOOT_INFO as u64 })
+	VirtAddr(raw_boot_info() as *const _ as u64)
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	unsafe { PhysAddr(core::ptr::read_volatile(&(*BOOT_INFO).ram_start)) }
+	PhysAddr(boot_info().ram_start)
 }
 
 pub fn get_image_size() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
+	boot_info().image_size as usize
 }
 
 pub fn get_limit() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).limit) as usize }
+	boot_info().limit as usize
 }
 
 pub fn get_processor_count() -> u32 {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cpu_online) }
+	raw_boot_info().load_cpu_online()
 }
 
 pub fn get_base_address() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).base)) }
-}
-
-pub fn get_tls_start() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).tls_start)) }
+	VirtAddr(boot_info().base)
 }
 
 pub fn get_current_stack_address() -> VirtAddr {
-	unsafe {
-		VirtAddr(core::ptr::read_volatile(
-			&(*BOOT_INFO).current_stack_address,
-		))
-	}
+	VirtAddr(raw_boot_info().load_current_stack_address())
+}
+
+pub fn get_tls_start() -> VirtAddr {
+	VirtAddr(boot_info().tls_info.start)
 }
 
 pub fn get_tls_filesz() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_filesz) as usize }
+	boot_info().tls_info.filesz as usize
 }
 
 pub fn get_tls_memsz() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
+	boot_info().tls_info.memsz as usize
 }
 
 pub fn get_tls_align() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_align) as usize }
+	boot_info().tls_info.align as usize
 }
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) != 0 }
+	boot_info().uhyve != 0
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).single_kernel) != 0 }
+	boot_info().single_kernel != 0
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdsize) as usize }
+	boot_info().cmdsize as usize
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	VirtAddr(unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdline) })
+	VirtAddr(boot_info().cmdline)
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -115,7 +116,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
+		COM1.port_address = boot_info().uartport;
 	}
 
 	if env::is_single_kernel() {

@@ -1,8 +1,10 @@
 use core::arch::asm;
 
+use hermit_entry::{BootInfo, RawBootInfo};
+
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::kernel::{
-	get_processor_count, scheduler::TaskStacks, BootInfo, BOOT_INFO,
+	get_processor_count, scheduler::TaskStacks, BOOT_INFO, RAW_BOOT_INFO,
 };
 use crate::KERNEL_STACK_SIZE;
 
@@ -53,7 +55,7 @@ pub unsafe extern "C" fn _start() -> ! {
 		"adrp x4, {pre_init}",
 		"add  x4, x4, #:lo12:{pre_init}",
 		"br x4",
-		current_stack_address_offset = const BootInfo::current_stack_address_offset(),
+		current_stack_address_offset = const RawBootInfo::current_stack_address_offset(),
 		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 		pre_init = sym pre_init,
 		options(noreturn),
@@ -62,8 +64,12 @@ pub unsafe extern "C" fn _start() -> ! {
 
 #[inline(never)]
 #[no_mangle]
-unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
-	BOOT_INFO = boot_info as *mut BootInfo;
+unsafe fn pre_init(boot_info: *const RawBootInfo) -> ! {
+	let boot_info = unsafe { RawBootInfo::try_from_ptr(boot_info).unwrap() };
+	unsafe {
+		RAW_BOOT_INFO = Some(boot_info);
+		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
+	}
 
 	// set exception table
 	asm!(
@@ -78,7 +84,7 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 	// Memory barrier
 	asm!("dsb sy", options(nostack),);
 
-	if boot_info.cpu_online == 0 {
+	if boot_info.load_cpu_online() == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]

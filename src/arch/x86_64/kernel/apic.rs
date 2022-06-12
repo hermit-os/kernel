@@ -2,7 +2,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-use crate::arch::x86_64::kernel::IRQ_COUNTERS;
+use crate::arch::x86_64::kernel::{raw_boot_info, IRQ_COUNTERS};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
@@ -17,7 +17,7 @@ use crate::x86::controlregs::*;
 use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch::x86_64::kernel::{idt, irq, percore::*, processor, BOOT_INFO};
+use arch::x86_64::kernel::{idt, irq, percore::*, processor};
 #[cfg(any(feature = "pci", feature = "smp"))]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
@@ -737,19 +737,16 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	unsafe {
 		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
 		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
-
-		core::ptr::write_volatile(&mut (*BOOT_INFO).current_stack_address, stack.as_u64());
-		core::ptr::write_volatile(
-			&mut (*BOOT_INFO).current_percore_address,
-			Box::into_raw(boxed_percore) as u64,
-		);
-
-		trace!(
-			"Initialize per core data at {:#x} (size {} bytes)",
-			core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address),
-			mem::size_of::<PerCoreVariables>()
-		);
 	}
+
+	raw_boot_info().store_current_stack_address(stack.as_u64());
+	raw_boot_info().store_current_percore_address(Box::into_raw(boxed_percore) as u64);
+
+	trace!(
+		"Initialize per core data at {:#x} (size {} bytes)",
+		raw_boot_info().load_current_percore_address(),
+		mem::size_of::<PerCoreVariables>()
+	);
 }
 
 extern "C" {
@@ -804,7 +801,8 @@ pub fn boot_application_processors() {
 			_start as usize
 		);
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) = _start as usize;
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) = BOOT_INFO as u64;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) =
+			raw_boot_info() as *const _ as u64;
 	}
 
 	// Now wake up each application processor.
