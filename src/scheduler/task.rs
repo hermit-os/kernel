@@ -331,6 +331,54 @@ impl PriorityTaskQueue {
 			IDLE_PRIO
 		}
 	}
+
+	/// Change priority of specifc task
+	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
+		let i = handle.get_priority().into() as usize;
+		let mut pos = self.queues[i].head.as_mut().ok_or(())?;
+
+		loop {
+			if handle.id == pos.borrow().id {
+				let task = pos.clone();
+
+				// Extract found task from queue and set new priority
+				{
+					let mut borrow = task.borrow_mut();
+
+					let new = borrow.next.as_ref().cloned();
+					if let Some(prev) = borrow.prev.as_mut() {
+						prev.borrow_mut().next = new;
+					}
+
+					let new = borrow.prev.as_ref().cloned();
+					if let Some(next) = borrow.next.as_mut() {
+						next.borrow_mut().prev = new;
+					}
+
+					if borrow.prev.as_mut().is_none() {
+						// Ok, the task is head of the list
+						self.queues[i].head = borrow.next.as_ref().cloned();
+					}
+
+					if borrow.next.as_mut().is_none() {
+						// Ok, the task is tail of the list
+						self.queues[i].tail = borrow.prev.as_ref().cloned();
+					}
+
+					borrow.prio = prio;
+					borrow.next = None;
+					borrow.prev = None;
+				}
+
+				self.push(task);
+
+				return Ok(());
+			}
+
+			let ptr = pos.as_ptr();
+			pos = unsafe { (*ptr).next.as_mut().ok_or(())? };
+		}
+	}
 }
 
 /// A task control block, which identifies either a process or a thread
