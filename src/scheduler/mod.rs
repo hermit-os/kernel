@@ -98,9 +98,15 @@ impl PerCoreScheduler {
 			#[cfg(feature = "smp")]
 			let mut input_locked = get_scheduler(core_id).input.lock();
 			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
-			TASKS
-				.lock()
-				.insert(tid, TaskHandle::new(tid, prio, #[cfg(feature = "smp")] core_id));
+			TASKS.lock().insert(
+				tid,
+				TaskHandle::new(
+					tid,
+					prio,
+					#[cfg(feature = "smp")]
+					core_id,
+				),
+			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "smp")]
@@ -569,9 +575,15 @@ pub fn add_current_core() {
 
 	// Add the ID -> Task mapping.
 	WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
-	TASKS
-		.lock()
-		.insert(tid, TaskHandle::new(tid, IDLE_PRIO, #[cfg(feature = "smp")] core_id));
+	TASKS.lock().insert(
+		tid,
+		TaskHandle::new(
+			tid,
+			IDLE_PRIO,
+			#[cfg(feature = "smp")]
+			core_id,
+		),
+	);
 	// Initialize a scheduler for this core.
 	debug!(
 		"Initializing scheduler for core {} with idle task {}",
