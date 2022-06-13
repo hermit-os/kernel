@@ -181,7 +181,7 @@ fn target(arch: &str) -> Result<&'static str> {
 	match arch {
 		"x86_64" => Ok("x86_64-unknown-none"),
 		"x86_64-uefi" => Ok("x86_64-unknown-uefi"),
-		"aarch64" => Ok("aarch64-unknown-hermit-loader"),
+		"aarch64" => Ok("aarch64-unknown-none-softfloat"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
@@ -194,11 +194,7 @@ fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 			"-Zbuild-std=core,alloc",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),
-		"aarch64" => Ok(&[
-			"--target=targets/aarch64-unknown-hermit-loader.json",
-			"-Zbuild-std=core",
-			"-Zbuild-std-features=compiler-builtins-mem",
-		]),
+		"aarch64" => Ok(&["--target=aarch64-unknown-none-softfloat"]),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
