@@ -8,7 +8,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use goblin::{archive::Archive, elf64::header};
 use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
@@ -71,15 +71,25 @@ impl flags::Build {
 			Err(VarError::NotPresent) => None,
 			Err(err) => return Err(err.into()),
 		};
-
 		let mut rustflags = outer_rustflags
 			.as_deref()
 			.map(|s| vec![s])
 			.unwrap_or_default();
+
 		rustflags.extend(RUSTFLAGS);
+
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
 		}
+
+		match self.arch.as_str() {
+			"x86_64" => {}
+			"aarch64" => {
+				rustflags.push("-Crelocation-model=pic");
+			}
+			arch => bail!("Unsupported arch: {arch}"),
+		}
+
 		Ok(rustflags.join("\x1f"))
 	}
 
