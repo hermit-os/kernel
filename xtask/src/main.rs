@@ -260,7 +260,7 @@ impl flags::Clippy {
 fn target(arch: &str) -> Result<&'static str> {
 	match arch {
 		"x86_64" => Ok("x86_64-unknown-none"),
-		"aarch64" => Ok("aarch64-unknown-none-hermitkernel"),
+		"aarch64" => Ok("aarch64-unknown-none-softfloat"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
@@ -268,8 +268,10 @@ fn target(arch: &str) -> Result<&'static str> {
 fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 	match arch {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
+		// We can't use prebuilt std for aarch64 because it is built with
+		// relocation-model=static and we need relocation-model=pic
 		"aarch64" => Ok(&[
-			"--target=targets/aarch64-unknown-none-hermitkernel.json",
+			"--target=aarch64-unknown-none-softfloat",
 			"-Zbuild-std=core,alloc",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),
