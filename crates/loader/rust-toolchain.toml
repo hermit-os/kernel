@@ -6,4 +6,7 @@ components = [
     "rustfmt",
     "rust-src",
 ]
-targets = [ "x86_64-unknown-none" ]
+targets = [
+    "x86_64-unknown-none",
+    "aarch64-unknown-none-softfloat",
+]
