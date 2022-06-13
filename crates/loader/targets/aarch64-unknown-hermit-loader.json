@@ -1,16 +1,13 @@
 {
-    "llvm-target": "aarch64-unknown-none",
-    "linker-flavor": "ld.lld",
-    "linker": "rust-lld",
-    "target-endian": "little",
-    "target-pointer-width": "64",
-    "target-c-int-width": "32",
-    "os": "none",
     "arch": "aarch64",
     "data-layout": "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
-    "features": "+a53,+strict-align,-fp-armv8",
-    "executables": true,
-    "relocation-model": "static",
     "disable-redzone": true,
-    "panic-strategy": "abort"
+    "executables": true,
+    "features": "+a53,+strict-align,-fp-armv8",
+    "linker": "rust-lld",
+    "linker-flavor": "ld.lld",
+    "llvm-target": "aarch64-unknown-none",
+    "panic-strategy": "abort",
+    "relocation-model": "static",
+    "target-pointer-width": "64"
 }
