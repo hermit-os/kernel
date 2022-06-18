@@ -130,23 +130,23 @@ impl flags::Build {
 		out_dir
 	}
 
-	fn object_name(&self) -> &'static Path {
-		if self.arch.ends_with("uefi") {
-			Path::new("rusty-loader.efi")
-		} else {
-			Path::new("rusty-loader")
-		}
-	}
-
 	fn build_object(&self) -> PathBuf {
 		let mut build_object = self.out_dir();
-		build_object.push(self.object_name());
+		let name = match self.arch.as_str() {
+			"x86_64-uefi" => "rusty-loader.efi",
+			_ => "rusty-loader",
+		};
+		build_object.push(name);
 		build_object
 	}
 
 	fn dist_object(&self) -> PathBuf {
 		let mut dist_object = self.dist_dir();
-		dist_object.push(self.object_name());
+		let name = match self.arch.as_str() {
+			"x86_64-uefi" => "BootX64.efi",
+			_ => "rusty-loader",
+		};
+		dist_object.push(name);
 		dist_object
 	}
 }
