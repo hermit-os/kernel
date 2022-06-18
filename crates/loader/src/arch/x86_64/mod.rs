@@ -4,14 +4,18 @@ pub mod physicalmem;
 
 pub use self::bootinfo::*;
 
+#[cfg(target_os = "none")]
 use core::ptr::{copy, write_bytes};
+#[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
+#[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
 
 use paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 
+#[cfg(target_os = "none")]
 extern "C" {
 	static mb_info: usize;
 	static kernel_end: u8;
@@ -28,9 +32,12 @@ const SERIAL_IO_PORT: u16 = 0x3F8;
 static mut COM1: SerialPort = unsafe { SerialPort::new(SERIAL_IO_PORT) };
 pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 
+#[cfg(target_os = "none")]
 struct Mem;
+#[cfg(target_os = "none")]
 static mut MEM: Mem = Mem;
 
+#[cfg(target_os = "none")]
 impl MemoryManagement for Mem {
 	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
 		let ptr = mem::transmute(p);
@@ -58,6 +65,22 @@ pub fn output_message_byte(byte: u8) {
 	unsafe { COM1.send(byte) };
 }
 
+#[cfg(target_os = "uefi")]
+pub unsafe fn find_kernel() -> &'static [u8] {
+	&[1, 2, 3]
+}
+
+#[cfg(target_os = "uefi")]
+pub unsafe fn boot_kernel(
+	_elf_address: Option<u64>,
+	_virtual_address: u64,
+	_mem_size: u64,
+	_entry_point: u64,
+) -> ! {
+	loop {}
+}
+
+#[cfg(target_os = "none")]
 pub unsafe fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
@@ -145,6 +168,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	slice::from_raw_parts(elf_start as *const u8, elf_len)
 }
 
+#[cfg(target_os = "none")]
 pub unsafe fn boot_kernel(
 	elf_address: Option<u64>,
 	virtual_address: u64,
