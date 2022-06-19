@@ -1,5 +1,6 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
+mod arch;
 mod flags;
 
 use std::{
@@ -8,9 +9,11 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
+
+use crate::arch::Arch;
 
 fn main() -> Result<()> {
 	flags::Xtask::from_env()?.run()
@@ -36,7 +39,7 @@ impl flags::Build {
 		eprintln!("Building loader");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(target_args(&self.arch)?)
+			.args(self.arch.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.profile_args())
 			.run()?;
@@ -46,7 +49,7 @@ impl flags::Build {
 		sh.create_dir(dist_object.parent().unwrap())?;
 		sh.copy_file(&build_object, &dist_object)?;
 
-		if self.arch == "x86_64" {
+		if self.arch == Arch::X86_64 {
 			eprintln!("Converting object to elf32-i386");
 			self.convert_to_elf32_i386()?;
 		}
@@ -67,17 +70,7 @@ impl flags::Build {
 			.map(|s| vec![s.as_str()])
 			.unwrap_or_default();
 
-		match self.arch.as_str() {
-			"x86_64" => {
-				rustflags.push("-Clink-arg=-Tsrc/arch/x86_64/link.ld");
-				rustflags.push("-Crelocation-model=static");
-			}
-			"x86_64-uefi" => {}
-			"aarch64" => {
-				rustflags.push("-Clink-arg=-Tsrc/arch/aarch64/link.ld");
-			}
-			arch => bail!("Unsupported arch: {arch}"),
-		};
+		rustflags.extend(self.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
 	}
@@ -112,7 +105,7 @@ impl flags::Build {
 
 	fn out_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(target(&self.arch).unwrap());
+		out_dir.push(self.arch.triple());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -122,7 +115,7 @@ impl flags::Build {
 
 	fn dist_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(&self.arch);
+		out_dir.push(self.arch.name());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -132,21 +125,13 @@ impl flags::Build {
 
 	fn build_object(&self) -> PathBuf {
 		let mut build_object = self.out_dir();
-		let name = match self.arch.as_str() {
-			"x86_64-uefi" => "rusty-loader.efi",
-			_ => "rusty-loader",
-		};
-		build_object.push(name);
+		build_object.push(self.arch.build_name());
 		build_object
 	}
 
 	fn dist_object(&self) -> PathBuf {
 		let mut dist_object = self.dist_dir();
-		let name = match self.arch.as_str() {
-			"x86_64-uefi" => "BootX64.efi",
-			_ => "rusty-loader",
-		};
-		dist_object.push(name);
+		dist_object.push(self.arch.dist_name());
 		dist_object
 	}
 }
@@ -160,17 +145,10 @@ impl flags::Clippy {
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
-		for target in ["x86_64"] {
-			let target_arg = target_args(target)?;
-			let hermit_app = {
-				let mut hermit_app = project_root().to_path_buf();
-				hermit_app.push("data");
-				hermit_app.push(target);
-				hermit_app.push("hello_world");
-				hermit_app
-			};
-			cmd!(sh, "cargo clippy {target_arg...}")
-				.env("HERMIT_APP", &hermit_app)
+		for arch in [Arch::X86_64] {
+			let target_args = arch.cargo_args();
+			cmd!(sh, "cargo clippy {target_args...}")
+				.env("HERMIT_APP", hermit_app(arch))
 				.run()?;
 		}
 
@@ -180,26 +158,12 @@ impl flags::Clippy {
 	}
 }
 
-fn target(arch: &str) -> Result<&'static str> {
-	match arch {
-		"x86_64" => Ok("x86_64-unknown-none"),
-		"x86_64-uefi" => Ok("x86_64-unknown-uefi"),
-		"aarch64" => Ok("aarch64-unknown-none-softfloat"),
-		arch => Err(anyhow!("Unsupported arch: {arch}")),
-	}
-}
-
-fn target_args(arch: &str) -> Result<&'static [&'static str]> {
-	match arch {
-		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
-		"x86_64-uefi" => Ok(&[
-			"--target=x86_64-unknown-uefi",
-			"-Zbuild-std=core,alloc,compiler_builtins",
-			"-Zbuild-std-features=compiler-builtins-mem",
-		]),
-		"aarch64" => Ok(&["--target=aarch64-unknown-none-softfloat"]),
-		arch => Err(anyhow!("Unsupported arch: {arch}")),
-	}
+fn hermit_app(arch: Arch) -> PathBuf {
+	let mut hermit_app = project_root().to_path_buf();
+	hermit_app.push("data");
+	hermit_app.push(arch.name());
+	hermit_app.push("hello_world");
+	hermit_app
 }
 
 fn binutil(name: &str) -> Result<PathBuf> {
