@@ -46,6 +46,11 @@ impl flags::Build {
 
 		let build_object = self.build_object();
 		let dist_object = self.dist_object();
+		eprintln!(
+			"Copying {} to {}",
+			build_object.display(),
+			dist_object.display()
+		);
 		sh.create_dir(dist_object.parent().unwrap())?;
 		sh.copy_file(&build_object, &dist_object)?;
 
