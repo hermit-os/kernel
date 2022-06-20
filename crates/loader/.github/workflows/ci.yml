@@ -107,6 +107,3 @@ jobs:
             -machine virt,gic-version=max -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/release/rusty-loader
-    
-
-
