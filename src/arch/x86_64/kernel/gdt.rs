@@ -1,5 +1,4 @@
 use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::kernel::BOOT_INFO;
 use crate::config::*;
 use crate::x86::bits64::segmentation::*;
 use crate::x86::bits64::task::*;
@@ -10,6 +9,7 @@ use crate::x86::Ring;
 use alloc::boxed::Box;
 use core::mem;
 
+use super::raw_boot_info;
 use super::scheduler::TaskStacks;
 
 pub const GDT_NULL: u16 = 0;
@@ -87,8 +87,7 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).current_stack_address) }
-		+ KERNEL_STACK_SIZE as u64
+	boxed_tss.rsp[0] = raw_boot_info().load_current_stack_address() + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
 	set_kernel_stack(boxed_tss.rsp[0] as u64);
 

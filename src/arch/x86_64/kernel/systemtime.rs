@@ -1,10 +1,11 @@
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::kernel::BOOT_INFO;
 use crate::env;
 use core::hint::spin_loop;
 use time::OffsetDateTime;
 use x86::io::*;
+
+use super::raw_boot_info;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16 = 0x71;
@@ -178,7 +179,7 @@ impl Drop for Rtc {
 }
 
 pub fn get_boot_time() -> u64 {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).boot_gtod) }
+	raw_boot_info().load_boot_time()
 }
 
 pub fn init() {
@@ -189,7 +190,7 @@ pub fn init() {
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
 		microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
-		unsafe { core::ptr::write_volatile(&mut (*BOOT_INFO).boot_gtod, microseconds_offset) }
+		raw_boot_info().store_boot_time(microseconds_offset);
 	}
 
 	let timestamp = microseconds_offset / 1_000_000;

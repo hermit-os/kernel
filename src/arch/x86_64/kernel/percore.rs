@@ -1,5 +1,4 @@
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-use crate::arch::x86_64::kernel::BOOT_INFO;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 use crate::x86::bits64::task::TaskStateSegment;
 use crate::x86::msr::*;
@@ -7,6 +6,8 @@ use core::arch::asm;
 use core::mem;
 use core::ptr;
 use crossbeam_utils::CachePadded;
+
+use super::raw_boot_info;
 
 pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
 
@@ -192,9 +193,9 @@ pub fn increment_irq_counter(irq_no: usize) {
 }
 
 pub fn init() {
+	// Store the address to the PerCoreVariables structure allocated for this core in GS.
+	let address = raw_boot_info().load_current_percore_address();
 	unsafe {
-		// Store the address to the PerCoreVariables structure allocated for this core in GS.
-		let address = core::ptr::read_volatile(&(*BOOT_INFO).current_percore_address);
 		if address == 0 {
 			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
 		} else {

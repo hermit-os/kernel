@@ -2,7 +2,7 @@
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{idt, irq, pic, pit, BOOT_INFO};
+use crate::arch::x86_64::kernel::{boot_info, idt, irq, pic, pit};
 use crate::env;
 use crate::x86::controlregs::*;
 use crate::x86::cpuid::*;
@@ -316,13 +316,11 @@ impl CpuFrequency {
 	fn detect_from_hypervisor(&mut self) -> Result<(), ()> {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			if env::is_uhyve() {
-				unsafe {
-					let cpu_freq = core::ptr::read_volatile(&(*BOOT_INFO).cpu_freq);
-					if cpu_freq > (u16::MAX as u32) {
-						return Err(());
-					}
-					Ok(cpu_freq as u16)
+				let cpu_freq = boot_info().cpu_freq;
+				if cpu_freq > (u16::MAX as u32) {
+					return Err(());
 				}
+				Ok(cpu_freq as u16)
 			} else {
 				Err(())
 			}

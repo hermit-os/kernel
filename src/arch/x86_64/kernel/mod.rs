@@ -1,8 +1,8 @@
 use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
-use core::{intrinsics, ptr};
 
+use hermit_entry::{BootInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -42,104 +42,38 @@ const SERIAL_PORT_BAUDRATE: u32 = 115_200;
 
 /// Map between Core ID and per-core scheduler
 static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
-const BOOTINFO_MAGIC_NUMBER: u32 = 0xC0DE_CAFEu32;
-
-#[repr(C)]
-pub struct BootInfo {
-	magic_number: u32,
-	version: u32,
-	base: u64,
-	limit: u64,
-	image_size: u64,
-	tls_start: u64,
-	tls_filesz: u64,
-	tls_memsz: u64,
-	current_stack_address: u64,
-	current_percore_address: u64,
-	host_logical_addr: u64,
-	boot_gtod: u64,
-	mb_info: u64,
-	cmdline: u64,
-	cmdsize: u64,
-	cpu_freq: u32,
-	boot_processor: u32,
-	cpu_online: u32,
-	possible_cpus: u32,
-	current_boot_id: u32,
-	uartport: u16,
-	single_kernel: u8,
-	uhyve: u8,
-	hcip: [u8; 4],
-	hcgateway: [u8; 4],
-	hcmask: [u8; 4],
-	tls_align: u64,
-}
-
-impl BootInfo {
-	const LAYOUT: Self = Self {
-		magic_number: 0,
-		version: 0,
-		base: 0,
-		limit: 0,
-		image_size: 0,
-		tls_start: 0,
-		tls_filesz: 0,
-		tls_memsz: 0,
-		current_stack_address: 0,
-		current_percore_address: 0,
-		host_logical_addr: 0,
-		boot_gtod: 0,
-		mb_info: 0,
-		cmdline: 0,
-		cmdsize: 0,
-		cpu_freq: 0,
-		boot_processor: 0,
-		cpu_online: 0,
-		possible_cpus: 0,
-		current_boot_id: 0,
-		uartport: 0,
-		single_kernel: 0,
-		uhyve: 0,
-		hcip: [0; 4],
-		hcgateway: [0; 4],
-		hcmask: [0; 4],
-		tls_align: 0,
-	};
-
-	pub const fn current_stack_address_offset() -> isize {
-		let layout = Self::LAYOUT;
-		let start = ptr::addr_of!(layout);
-		let stack = ptr::addr_of!(layout.current_stack_address);
-		unsafe { stack.cast::<u8>().offset_from(start.cast()) }
-	}
-}
 
 /// Kernel header to announce machine features
-#[cfg(not(target_os = "none"))]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+#[cfg_attr(
+	all(target_os = "none", not(feature = "newlib")),
+	link_section = ".data"
+)]
+#[cfg_attr(all(target_os = "none", feature = "newlib"), link_section = ".mboot")]
+static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
+static mut BOOT_INFO: Option<BootInfo> = None;
 
-#[cfg(all(target_os = "none", not(feature = "newlib")))]
-#[link_section = ".data"]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+pub fn boot_info() -> &'static BootInfo {
+	unsafe { BOOT_INFO.as_ref().unwrap() }
+}
 
-#[cfg(all(target_os = "none", feature = "newlib"))]
-#[link_section = ".mboot"]
-static mut BOOT_INFO: *mut BootInfo = ptr::null_mut();
+pub fn raw_boot_info() -> &'static RawBootInfo {
+	unsafe { RAW_BOOT_INFO.unwrap() }
+}
 
 /// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 #[cfg(feature = "newlib")]
 pub fn has_ipdevice() -> bool {
-	let ip = unsafe { core::ptr::read_volatile(&(*BOOT_INFO).hcip) };
+	let ip = boot_info().net_info.ip;
 
 	!(ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
 }
 
 #[cfg(feature = "newlib")]
 extern "C" fn __sys_uhyve_get_ip(ip: *mut u8) {
+	let data = boot_info().net_info.ip;
 	unsafe {
-		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcip);
 		slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
 	}
 }
@@ -152,8 +86,8 @@ pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
 
 #[cfg(feature = "newlib")]
 extern "C" fn __sys_uhyve_get_gateway(gw: *mut u8) {
+	let data = boot_info().net_info.gateway;
 	unsafe {
-		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcgateway);
 		slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
 	}
 }
@@ -166,8 +100,8 @@ pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
 
 #[cfg(feature = "newlib")]
 extern "C" fn __sys_uhyve_get_mask(mask: *mut u8) {
+	let data = boot_info().net_info.mask;
 	unsafe {
-		let data = core::ptr::read_volatile(&(*BOOT_INFO).hcmask);
 		slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);
 	}
 }
@@ -183,40 +117,40 @@ pub fn get_ram_address() -> PhysAddr {
 }
 
 pub fn get_base_address() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).base)) }
+	VirtAddr(boot_info().base)
 }
 
 pub fn get_image_size() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).image_size) as usize }
+	boot_info().image_size as usize
 }
 
 pub fn get_limit() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).limit) as usize }
+	boot_info().limit as usize
 }
 
 pub fn get_tls_start() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).tls_start)) }
+	VirtAddr(boot_info().tls_info.start)
 }
 
 pub fn get_tls_filesz() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_filesz) as usize }
+	boot_info().tls_info.filesz as usize
 }
 
 pub fn get_tls_memsz() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_memsz) as usize }
+	boot_info().tls_info.memsz as usize
 }
 
 pub fn get_tls_align() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).tls_align) as usize }
+	boot_info().tls_info.align as usize
 }
 
 pub fn get_mbinfo() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).mb_info)) }
+	VirtAddr(boot_info().mb_info)
 }
 
 #[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cpu_online) as u32 }
+	raw_boot_info().load_cpu_online()
 }
 
 #[cfg(not(feature = "smp"))]
@@ -226,24 +160,24 @@ pub fn get_processor_count() -> u32 {
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) & 0x1 == 0x1 }
+	boot_info().uhyve & 0b1 == 0b1
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).uhyve) & 0x3 == 0x3 }
+	boot_info().uhyve & 0b11 == 0b11
 }
 
 /// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
 pub fn is_single_kernel() -> bool {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).single_kernel) != 0 }
+	boot_info().single_kernel != 0
 }
 
 pub fn get_cmdsize() -> usize {
-	unsafe { core::ptr::read_volatile(&(*BOOT_INFO).cmdsize) as usize }
+	boot_info().cmdsize as usize
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	unsafe { VirtAddr(core::ptr::read_volatile(&(*BOOT_INFO).cmdline)) }
+	VirtAddr(boot_info().cmdline)
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -251,7 +185,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = core::ptr::read_volatile(&(*BOOT_INFO).uartport);
+		COM1.port_address = boot_info().uartport;
 	}
 
 	if env::is_single_kernel() {
@@ -406,9 +340,7 @@ fn finish_processor_init() {
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	unsafe {
-		let _ = intrinsics::atomic_xadd(&mut (*BOOT_INFO).cpu_online as *mut u32, 1);
-	}
+	raw_boot_info().increment_cpu_online();
 }
 
 pub fn print_statistics() {
@@ -434,8 +366,7 @@ pub fn print_statistics() {
 #[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
-	assert_eq!(boot_info.magic_number, BOOTINFO_MAGIC_NUMBER);
+unsafe fn pre_init(boot_info: *const RawBootInfo) -> ! {
 	// Enable caching
 	unsafe {
 		let mut cr0 = cr0();
@@ -443,11 +374,13 @@ unsafe fn pre_init(boot_info: &'static mut BootInfo) -> ! {
 		cr0_write(cr0);
 	}
 
+	let boot_info = unsafe { RawBootInfo::try_from_ptr(boot_info).unwrap() };
 	unsafe {
-		BOOT_INFO = boot_info as *mut BootInfo;
+		RAW_BOOT_INFO = Some(boot_info);
+		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
 	}
 
-	if boot_info.cpu_online == 0 {
+	if boot_info.load_cpu_online() == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
