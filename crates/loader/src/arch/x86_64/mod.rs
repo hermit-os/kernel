@@ -1,14 +1,12 @@
-pub mod bootinfo;
 pub mod paging;
 pub mod physicalmem;
-
-pub use self::bootinfo::*;
 
 #[cfg(target_os = "none")]
 use core::ptr::{copy, write_bytes};
 #[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
+use hermit_entry::{BootInfo, Entry, RawBootInfo, TlsInfo};
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
@@ -30,7 +28,6 @@ const SERIAL_IO_PORT: u16 = 0x3F8;
 
 // VARIABLES
 static mut COM1: SerialPort = unsafe { SerialPort::new(SERIAL_IO_PORT) };
-pub static mut BOOT_INFO: BootInfo = BootInfo::new();
 
 #[cfg(target_os = "none")]
 struct Mem;
@@ -170,6 +167,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 
 #[cfg(target_os = "none")]
 pub unsafe fn boot_kernel(
+	tls_info: TlsInfo,
 	elf_address: Option<u64>,
 	virtual_address: u64,
 	mem_size: u64,
@@ -193,23 +191,25 @@ pub unsafe fn boot_kernel(
 		None => virtual_address,
 	};
 
-	// Supply the parameters to the HermitCore application.
-	BOOT_INFO.base = new_addr;
-	BOOT_INFO.image_size = mem_size;
-	BOOT_INFO.mb_info = mb_info as u64;
-
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
-	if let Some(cmdline) = multiboot.command_line() {
-		let address = cmdline.as_ptr();
+	let (cmdline, cmdsize) = multiboot
+		.command_line()
+		.map(|cmdline| {
+			let address = cmdline.as_ptr();
 
-		// Identity-map the command line.
-		let page_address = align_down!(address as usize, BasePageSize::SIZE);
-		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+			// Identity-map the command line.
+			let page_address = align_down!(address as usize, BasePageSize::SIZE);
+			paging::map::<BasePageSize>(
+				page_address,
+				page_address,
+				1,
+				PageTableEntryFlags::empty(),
+			);
 
-		//let cmdline = multiboot.command_line().unwrap();
-		BOOT_INFO.cmdline = address as u64;
-		BOOT_INFO.cmdsize = cmdline.len() as u64;
-	}
+			//let cmdline = multiboot.command_line().unwrap();
+			(address as u64, cmdline.len() as u64)
+		})
+		.unwrap_or_default();
 
 	// determine boot stack address
 	let mut new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
@@ -221,14 +221,12 @@ pub unsafe fn boot_kernel(
 		);
 	}
 
-	if new_stack + KERNEL_STACK_SIZE as usize > BOOT_INFO.cmdline as usize {
-		new_stack = align_up!(
-			(BOOT_INFO.cmdline + BOOT_INFO.cmdsize) as usize,
-			BasePageSize::SIZE
-		);
+	if new_stack + KERNEL_STACK_SIZE as usize > cmdline as usize {
+		new_stack = align_up!((cmdline + cmdsize) as usize, BasePageSize::SIZE);
 	}
 
-	BOOT_INFO.current_stack_address = new_stack.try_into().unwrap();
+	let current_stack_address = new_stack.try_into().unwrap();
+	loaderlog!("Use stack address {:#x}", current_stack_address);
 
 	// map stack in the address space
 	paging::map::<BasePageSize>(
@@ -245,19 +243,26 @@ pub unsafe fn boot_kernel(
 		KERNEL_STACK_SIZE.try_into().unwrap(),
 	);
 
+	static mut BOOT_INFO: RawBootInfo = RawBootInfo::INVALID;
+	BOOT_INFO = BootInfo {
+		base: new_addr,
+		image_size: mem_size,
+		tls_info,
+		current_stack_address,
+		uartport: SERIAL_IO_PORT,
+		mb_info: mb_info as u64,
+		..Default::default()
+	}
+	.into();
 	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
-	//loaderlog!("BootInfo {:?}", BOOT_INFO);
-	loaderlog!("Use stack address {:#x}", BOOT_INFO.current_stack_address);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!(
 		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);
-	let func: extern "C" fn(boot_info: &'static mut BootInfo) -> ! =
-		core::mem::transmute(entry_point);
-
-	func(&mut BOOT_INFO);
+	let func: Entry = core::mem::transmute(entry_point);
+	func(&BOOT_INFO);
 
 	// we never reach this point
 }
