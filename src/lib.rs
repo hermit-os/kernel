@@ -32,6 +32,9 @@
 )]
 #![cfg_attr(target_os = "none", cfg_attr(test, no_main))]
 
+#[cfg(all(feature = "newlib", feature = "pci"))]
+compile_error!("feature \"newlib\" and feature \"pci\" cannot be enabled at the same time");
+
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
