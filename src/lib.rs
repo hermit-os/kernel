@@ -254,12 +254,15 @@ extern "C" fn initd(_arg: usize) {
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
+		#[cfg(feature = "newlib")]
+		fn init_rtl8139_netif(freq: u32) -> i32;
 	}
 
 	// initialize LwIP library for newlib-based applications
 	#[cfg(feature = "newlib")]
 	unsafe {
 		init_lwip();
+		init_rtl8139_netif(processor::get_frequency() as u32);
 	}
 
 	if env::is_uhyve() {
@@ -273,6 +276,7 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize Drivers
+	#[cfg(not(feature = "newlib"))]
 	arch::init_drivers();
 
 	syscalls::init();

@@ -124,6 +124,11 @@ impl flags::Build {
 			"init_lwip",
 			"lwip_read",
 			"lwip_write",
+			// lwIP rtl8139 driver
+			"init_rtl8139_netif",
+			"irq_install_handler",
+			"virt_to_phys",
+			"eoi",
 		]
 		.into_iter();
 
@@ -193,8 +198,15 @@ impl flags::Clippy {
 				.arg("--no-default-features")
 				.run()?;
 			cmd!(sh, "cargo clippy {target_args...}")
-				.arg("--all-features")
+				.arg("--no-default-features")
+				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
+			// TODO: Enable clippy for newlib
+			// https://github.com/hermitcore/libhermit-rs/issues/470
+			// cmd!(sh, "cargo clippy {target_args...}")
+			// 	.arg("--no-default-features")
+			// 	.arg("--features=acpi,fsgsbase,newlib,smp,vga")
+			// 	.run()?;
 		}
 
 		cmd!(sh, "cargo clippy --package xtask").run()?;
