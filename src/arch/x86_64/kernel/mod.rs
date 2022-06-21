@@ -64,13 +64,6 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 #[cfg(feature = "newlib")]
-pub fn has_ipdevice() -> bool {
-	let ip = boot_info().net_info.ip;
-
-	!(ip[0] == 255 && ip[1] == 255 && ip[2] == 255 && ip[3] == 255)
-}
-
-#[cfg(feature = "newlib")]
 extern "C" fn __sys_uhyve_get_ip(ip: *mut u8) {
 	let data = boot_info().net_info.ip;
 	unsafe {

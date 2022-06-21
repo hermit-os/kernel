@@ -246,12 +246,6 @@ extern "C" {
 	static mut __bss_start: usize;
 }
 
-/// Helper function to check if uhyve provide an IP device
-#[cfg(feature = "newlib")]
-fn has_ipdevice() -> bool {
-	arch::x86_64::kernel::has_ipdevice()
-}
-
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
@@ -265,9 +259,7 @@ extern "C" fn initd(_arg: usize) {
 	// initialize LwIP library for newlib-based applications
 	#[cfg(feature = "newlib")]
 	unsafe {
-		if has_ipdevice() {
-			init_lwip();
-		}
+		init_lwip();
 	}
 
 	if env::is_uhyve() {
