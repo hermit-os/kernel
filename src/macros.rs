@@ -82,6 +82,7 @@ macro_rules! try_sys {
 /// let ret = f(arg);
 /// ```
 #[allow(unused_macro_rules)]
+#[cfg(all(target_arch = "x86_64", not(feature = "newlib")))]
 macro_rules! kernel_function {
 	($f:ident()) => {
 		$crate::arch::switch::kernel_function0($f)
@@ -112,7 +113,12 @@ macro_rules! kernel_function {
 	};
 }
 
-#[cfg(target_arch = "aarch64")]
+// TODO: Properly switch kernel stack with newlib
+// https://github.com/hermitcore/libhermit-rs/issues/471
+#[cfg(any(
+	target_arch = "aarch64",
+	all(target_arch = "x86_64", feature = "newlib")
+))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		$f($($x)*)
