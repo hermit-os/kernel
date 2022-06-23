@@ -8,7 +8,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use goblin::{archive::Archive, elf64::header};
 use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
@@ -71,15 +71,25 @@ impl flags::Build {
 			Err(VarError::NotPresent) => None,
 			Err(err) => return Err(err.into()),
 		};
-
 		let mut rustflags = outer_rustflags
 			.as_deref()
 			.map(|s| vec![s])
 			.unwrap_or_default();
+
 		rustflags.extend(RUSTFLAGS);
+
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
 		}
+
+		match self.arch.as_str() {
+			"x86_64" => {}
+			"aarch64" => {
+				rustflags.push("-Crelocation-model=pic");
+			}
+			arch => bail!("Unsupported arch: {arch}"),
+		}
+
 		Ok(rustflags.join("\x1f"))
 	}
 
@@ -250,7 +260,7 @@ impl flags::Clippy {
 fn target(arch: &str) -> Result<&'static str> {
 	match arch {
 		"x86_64" => Ok("x86_64-unknown-none"),
-		"aarch64" => Ok("aarch64-unknown-none-hermitkernel"),
+		"aarch64" => Ok("aarch64-unknown-none-softfloat"),
 		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
@@ -258,8 +268,10 @@ fn target(arch: &str) -> Result<&'static str> {
 fn target_args(arch: &str) -> Result<&'static [&'static str]> {
 	match arch {
 		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
+		// We can't use prebuilt std for aarch64 because it is built with
+		// relocation-model=static and we need relocation-model=pic
 		"aarch64" => Ok(&[
-			"--target=targets/aarch64-unknown-none-hermitkernel.json",
+			"--target=aarch64-unknown-none-softfloat",
 			"-Zbuild-std=core,alloc",
 			"-Zbuild-std-features=compiler-builtins-mem",
 		]),
