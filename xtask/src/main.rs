@@ -52,6 +52,11 @@ impl flags::Build {
 
 		let build_archive = self.build_archive();
 		let dist_archive = self.dist_archive();
+		eprintln!(
+			"Copying {} to {}",
+			build_archive.display(),
+			dist_archive.display()
+		);
 		sh.create_dir(dist_archive.parent().unwrap())?;
 		sh.copy_file(&build_archive, &dist_archive)?;
 
