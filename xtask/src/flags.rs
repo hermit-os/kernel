@@ -1,5 +1,7 @@
 use std::path::PathBuf;
 
+use crate::arch::Arch;
+
 xflags::xflags! {
 	src "./src/flags.rs"
 
@@ -14,7 +16,7 @@ xflags::xflags! {
 		cmd build
 		{
 			/// Build for the architecture.
-			required --arch arch: String
+			required --arch arch: Arch
 			/// Directory for all generated artifacts.
 			optional --target-dir target_dir: PathBuf
 			/// Do not activate the `default` feature.
@@ -56,7 +58,7 @@ pub struct Help {
 
 #[derive(Debug)]
 pub struct Build {
-	pub arch: String,
+	pub arch: Arch,
 	pub target_dir: Option<PathBuf>,
 	pub no_default_features: bool,
 	pub features: Vec<String>,

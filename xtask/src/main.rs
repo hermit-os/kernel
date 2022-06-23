@@ -1,5 +1,6 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
+mod arch;
 mod flags;
 
 use std::{
@@ -8,16 +9,11 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
+use arch::Arch;
 use goblin::{archive::Archive, elf64::header};
 use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
-
-const RUSTFLAGS: &[&str] = &[
-	// TODO: Re-enable mutable-noalias
-	// https://github.com/hermitcore/libhermit-rs/issues/200
-	"-Zmutable-noalias=no",
-];
 
 fn main() -> Result<()> {
 	flags::Xtask::from_env()?.run()
@@ -43,7 +39,7 @@ impl flags::Build {
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(target_args(&self.arch)?)
+			.args(self.arch.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
@@ -81,19 +77,15 @@ impl flags::Build {
 			.map(|s| vec![s])
 			.unwrap_or_default();
 
-		rustflags.extend(RUSTFLAGS);
+		// TODO: Re-enable mutable-noalias
+		// https://github.com/hermitcore/libhermit-rs/issues/200
+		rustflags.push("-Zmutable-noalias=no");
 
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
 		}
 
-		match self.arch.as_str() {
-			"x86_64" => {}
-			"aarch64" => {
-				rustflags.push("-Crelocation-model=pic");
-			}
-			arch => bail!("Unsupported arch: {arch}"),
-		}
+		rustflags.extend(self.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
 	}
@@ -201,7 +193,7 @@ impl flags::Build {
 
 	fn out_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(target(&self.arch).unwrap());
+		out_dir.push(self.arch.triple());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -211,7 +203,7 @@ impl flags::Build {
 
 	fn dist_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(&self.arch);
+		out_dir.push(self.arch.name());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -245,13 +237,13 @@ impl flags::Clippy {
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/libhermit-rs/issues/381
 		#[allow(clippy::single_element_loop)]
-		for target in ["x86_64"] {
-			let target_arg = target_args(target)?;
-			cmd!(sh, "cargo clippy {target_arg...}").run()?;
-			cmd!(sh, "cargo clippy {target_arg...}")
+		for target in [Arch::X86_64] {
+			let target_args = target.cargo_args();
+			cmd!(sh, "cargo clippy {target_args...}").run()?;
+			cmd!(sh, "cargo clippy {target_args...}")
 				.arg("--no-default-features")
 				.run()?;
-			cmd!(sh, "cargo clippy {target_arg...}")
+			cmd!(sh, "cargo clippy {target_args...}")
 				.arg("--all-features")
 				.run()?;
 		}
@@ -259,28 +251,6 @@ impl flags::Clippy {
 		cmd!(sh, "cargo clippy --package xtask").run()?;
 
 		Ok(())
-	}
-}
-
-fn target(arch: &str) -> Result<&'static str> {
-	match arch {
-		"x86_64" => Ok("x86_64-unknown-none"),
-		"aarch64" => Ok("aarch64-unknown-none-softfloat"),
-		arch => Err(anyhow!("Unsupported arch: {arch}")),
-	}
-}
-
-fn target_args(arch: &str) -> Result<&'static [&'static str]> {
-	match arch {
-		"x86_64" => Ok(&["--target=x86_64-unknown-none"]),
-		// We can't use prebuilt std for aarch64 because it is built with
-		// relocation-model=static and we need relocation-model=pic
-		"aarch64" => Ok(&[
-			"--target=aarch64-unknown-none-softfloat",
-			"-Zbuild-std=core,alloc",
-			"-Zbuild-std-features=compiler-builtins-mem",
-		]),
-		arch => Err(anyhow!("Unsupported arch: {arch}")),
 	}
 }
 
