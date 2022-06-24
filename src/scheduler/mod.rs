@@ -330,13 +330,13 @@ impl PerCoreScheduler {
 
 	pub fn set_current_task_priority(&mut self, prio: Priority) {
 		irqsave(|| {
-			info!("Change priority of the current task");
+			trace!("Change priority of the current task");
 			self.current_task.borrow_mut().prio = prio;
 		});
 	}
 
 	pub fn set_priority(&mut self, id: TaskId, prio: Priority) -> Result<(), ()> {
-		info!("Chabge priority of task {} to priority {}", id, prio);
+		trace!("Change priority of task {} to priority {}", id, prio);
 
 		irqsave(|| {
 			let task = get_task_handle(id).ok_or(())?;
