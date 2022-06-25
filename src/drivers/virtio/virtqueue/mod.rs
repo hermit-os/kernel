@@ -35,7 +35,7 @@ use core::ops::{BitAnd, Deref, DerefMut};
 /// smaller-equal to `min(u16::MAX , T::MAX)`.
 ///
 /// Currently implements `From<u16>` and `From<u32>`.
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub struct VqIndex(u16);
 
 impl From<u16> for VqIndex {
@@ -64,7 +64,7 @@ impl From<u32> for VqIndex {
 /// smaller-equal to `min(u16::MAX , T::MAX)`.
 ///
 /// Currently implements `From<u16>` and `From<u32>`.
-#[derive(Copy, Clone, Debug, PartialOrd, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialOrd, PartialEq, Eq)]
 pub struct VqSize(u16);
 
 impl From<u16> for VqSize {
