@@ -54,6 +54,12 @@ impl<'a> Object<'a> {
 				data_encoding,
 				"kernel object is not little endian"
 			);
+			let os_abi = header.e_ident[header::EI_OSABI];
+			assert_eq!(
+				header::ELFOSABI_STANDALONE,
+				os_abi,
+				"kernel is not a hermit application"
+			);
 
 			assert!(
 				matches!(header.e_type, header::ET_DYN | header::ET_EXEC),
