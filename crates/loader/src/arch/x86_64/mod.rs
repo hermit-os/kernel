@@ -37,7 +37,7 @@ static mut MEM: Mem = Mem;
 #[cfg(target_os = "none")]
 impl MemoryManagement for Mem {
 	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
-		let ptr = mem::transmute(p);
+		let ptr = p as *const u8;
 		Some(slice::from_raw_parts(ptr, sz))
 	}
 
