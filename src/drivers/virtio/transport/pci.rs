@@ -88,7 +88,7 @@ impl From<u16> for DevId {
 // implementation, in order catch all cases correctly,
 // as this function uses the catch-all "_" case!
 #[allow(dead_code, non_camel_case_types, clippy::upper_case_acronyms)]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CfgType {
 	INVALID = 0,
