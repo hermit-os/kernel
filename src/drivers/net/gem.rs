@@ -445,6 +445,7 @@ impl Drop for GEMDriver {
 	}
 }
 
+/// Inits the driver. Passing u32::MAX as phy_addr will trigger a search for the actual PHY address
 pub fn init_device(
 	gem_base: VirtAddr,
 	irq: u32,
@@ -532,24 +533,26 @@ pub fn init_device(
 		(*gem).network_control.modify(NetworkControl::MDEN::SET);
 
 		// PHY Initialization
-
-		// Detect PHY
-		// let mut phy_addr: u32 = 0;
-		// for i in 0..32 {
-		// 	match phy_read(gem, i, PhyReg::Control){
-		// 		0xFFFF => (), //Invalid
-		// 		0x0 => (), //Invalid
-		// 		_ => {
-		// 			phy_addr = i;
-		// 			debug!("PHY found with address {}", phy_addr);
-		// 			break;
-		// 		}
-		// 	}
-		// 	if i == 31 {
-		// 		error!("No PHY found");
-		// 		return Err(DriverError::InitGEMDevFail(GEMError::NoPhyFound));
-		// 	}
-		// }
+		let mut phy_addr = phy_addr;
+		if phy_addr == u32::MAX {
+			// Detect PHY
+			warn! {"No PHY address provided. Trying to find PHY ..."}
+			for i in 0..32 {
+				match phy_read(gem, i, PhyReg::Control) {
+					0xFFFF => (), //Invalid
+					0x0 => (),    //Invalid
+					_ => {
+						phy_addr = i;
+						warn!("PHY found with address {}", phy_addr);
+						break;
+					}
+				}
+				if i == 31 {
+					error!("No PHY found");
+					return Err(DriverError::InitGEMDevFail(GEMError::NoPhyFound));
+				}
+			}
+		}
 
 		// Clause 28 auto-negotiation https://opencores.org/websvn/filedetails?repname=1000base-x&path=%2F1000base-x%2Ftrunk%2Fdoc%2F802.3-2008_section2.pdf&bcsi_scan_91c2e97ef32f18a3=V1Ygi7liGXdis80J3CYk1MUlxZsSAAAACY4+BA%3D%3D+
 		// This is PHY specific and may not work on all PHYs

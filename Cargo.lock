@@ -42,12 +42,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
-name = "byteorder"
-version = "1.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -91,6 +85,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fdt"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b643857cf70949306b81d7e92cb9d47add673868edac9863c4a49c42feaf3f1e"
+
+[[package]]
 name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -119,14 +119,6 @@ dependencies = [
  "log",
  "plain",
  "scroll",
-]
-
-[[package]]
-name = "hermit-dtb"
-version = "0.1.0"
-source = "git+https://github.com/hermitcore/dtb.git?branch=master#9d8030fd37a48e95f69e9014e78d0c0049dcc0c6"
-dependencies = [
- "byteorder",
 ]
 
 [[package]]
@@ -489,8 +481,8 @@ dependencies = [
  "aarch64",
  "bitflags",
  "crossbeam-utils",
+ "fdt",
  "float-cmp",
- "hermit-dtb",
  "include-transformed",
  "log",
  "multiboot",

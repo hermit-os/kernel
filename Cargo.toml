@@ -94,8 +94,8 @@ version = "0.8.0"
 [target.'cfg(target_arch = "riscv64")'.dependencies.trapframe]
 version = "0.8.0"
 
-[target.'cfg(target_arch = "riscv64")'.dependencies]
-hermit-dtb = {git = "https://github.com/hermitcore/dtb.git", branch = "master"}
+[target.'cfg(target_arch = "riscv64")'.dependencies.fdt]
+version = "0.1"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies.tock-registers]
 version = "0.7.0"
