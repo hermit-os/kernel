@@ -423,15 +423,6 @@ dependencies = [
 
 [[package]]
 name = "raw-cpuid"
-version = "9.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1733f6f80c9c24268736a501cd00d41a9849b4faa7a9f9334c096e5d10553206"
-dependencies = [
- "bitflags",
-]
-
-[[package]]
-name = "raw-cpuid"
 version = "10.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "738bc47119e3eeccc7e94c4a506901aea5e7b4944ecd0829cbebf4af04ceda12"
@@ -582,10 +573,11 @@ checksum = "4ee8fba06c1f4d0b396ef61a54530bb6b28f0dc61c38bc8bc5a5a48161e6282e"
 
 [[package]]
 name = "trapframe"
-version = "0.8.0"
-source = "git+https://github.com/simonschoening/trapframe-rs.git#98e384be2bbaa717829f3d5f1763aa057a93466d"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f287ee70169f5bfddba441baf901b620e3655f16fa7815f48a7e100ec6d86a8f"
 dependencies = [
- "raw-cpuid 9.1.1",
+ "raw-cpuid",
  "x86_64",
 ]
 
@@ -643,7 +635,7 @@ checksum = "ae0df8874628b15fdefccbd5c6b06766ec9ec2d6cd30d6d2f82245343358c50a"
 dependencies = [
  "bit_field",
  "bitflags",
- "raw-cpuid 10.3.0",
+ "raw-cpuid",
 ]
 
 [[package]]
