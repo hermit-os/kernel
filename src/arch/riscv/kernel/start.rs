@@ -1,7 +1,8 @@
-use core::arch::asm;
-
+#[cfg(not(feature = "smp"))]
+use crate::arch::riscv::kernel::processor;
 use crate::arch::riscv::kernel::{BootInfo, BOOTINFO_MAGIC_NUMBER, BOOT_INFO};
 use crate::KERNEL_STACK_SIZE;
+use core::arch::asm;
 
 //static mut BOOT_STACK: [u8; KERNEL_STACK_SIZE] = [0; KERNEL_STACK_SIZE];
 
