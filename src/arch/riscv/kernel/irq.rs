@@ -171,7 +171,7 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	trace!("sepc: {:x}", sepc);
 	trace!("SSTATUS FS: {:?}", sstatus::read().fs());
 	trace!("FCSR: {:x?}", fcsr::read());
-	//loop{}
+
 	match scause.cause() {
 		Trap::Interrupt(I::SupervisorExternal) => external_handler(),
 		#[cfg(feature = "smp")]
