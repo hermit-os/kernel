@@ -337,7 +337,7 @@ impl NetworkInterface for RTL8139Driver {
 		match self.box_map.remove_entry(&self.rxpos) {
 			Some((_, raw)) => {
 				// release temporay created boxed slice
-				let buffer: Box<[u8]> =
+				let _buffer: Box<[u8]> =
 					unsafe { Box::from_raw(slice::from_raw_parts_mut(raw.ptr, raw.len)) };
 			}
 			None => {}
