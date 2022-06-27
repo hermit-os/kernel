@@ -2,9 +2,10 @@
 
 #![allow(dead_code)]
 
-use core::mem;
-
 use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use core::mem;
+use core::slice;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
@@ -194,6 +195,12 @@ pub enum RTL8139Error {
 	Unknown,
 }
 
+#[derive(Copy, Clone, Debug)]
+struct RawSlice<T> {
+	pub ptr: *mut T,
+	pub len: usize,
+}
+
 /// RealTek RTL8139 network driver struct.
 ///
 /// Struct allows to control device queues as also
@@ -208,6 +215,7 @@ pub struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
+	box_map: BTreeMap<usize, RawSlice<u8>>,
 }
 
 impl NetworkInterface for RTL8139Driver {
@@ -277,7 +285,31 @@ impl NetworkInterface for RTL8139Driver {
 
 			if header & ISR_ROK == ISR_ROK {
 				let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
-				let buf = &self.rxbuffer[self.rxpos + mem::size_of::<u16>()..][..length.into()];
+				let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+
+				// do we reach the end of the receive buffers?
+				// in this case, we have to copy the data in boxed slice
+				let buf = if pos + length as usize > RX_BUF_LEN {
+					let mut msg: Box<[u8]> = vec![0; length as usize].into_boxed_slice();
+					let limit = RX_BUF_LEN - pos;
+
+					msg[0..limit].copy_from_slice(&self.rxbuffer[pos..RX_BUF_LEN]);
+					msg[limit..].copy_from_slice(&self.rxbuffer[0..length as usize - limit]);
+
+					// buffer address to release box in `rx_buffer_consumed`
+					let raw_msg = Box::leak(msg);
+					self.box_map.insert(
+						self.rxpos,
+						RawSlice {
+							ptr: raw_msg.as_mut_ptr(),
+							len: length as usize,
+						},
+					);
+
+					raw_msg
+				} else {
+					&self.rxbuffer[pos..][..length.into()]
+				};
 				// SAFETY: This is a blatant lie and very unsound.
 				// The API must be fixed or the buffer may never touched again.
 				let buf = unsafe { mem::transmute(buf) };
@@ -302,13 +334,31 @@ impl NetworkInterface for RTL8139Driver {
 			warn!("Invalid handle {} != {}", self.rxpos, handle)
 		}
 
+		match self.box_map.remove_entry(&self.rxpos) {
+			Some((_, raw)) => {
+				// release temporay created boxed slice
+				let buffer: Box<[u8]> =
+					unsafe { Box::from_raw(slice::from_raw_parts_mut(raw.ptr, raw.len)) };
+			}
+			None => {}
+		}
+
 		let length = self.rx_peek_u16();
 		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
 
 		// packets are dword aligned
 		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
-		unsafe {
-			outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+		if self.rxpos >= 0x10 {
+			unsafe {
+				outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+			}
+		} else {
+			unsafe {
+				outw(
+					self.iobase + CAPR,
+					(RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap(),
+				);
+			}
 		}
 	}
 
@@ -587,5 +637,6 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		rxbuffer,
 		rxpos: 0,
 		txbuffer,
+		box_map: BTreeMap::new(),
 	})
 }
