@@ -295,11 +295,11 @@ impl NetworkInterface for RTL8139Driver {
 						btree_map::Entry::Occupied(_) => unreachable!(),
 					}
 				} else {
-					self.rxbuffer[pos..].as_ptr() as *const u8
+					&self.rxbuffer[pos..][..length.into()]
 				};
 				// SAFETY: This is a blatant lie and very unsound.
 				// The API must be fixed or the buffer may never touched again.
-				let buf = unsafe { slice::from_raw_parts(buf, length.into()) };
+				let buf = unsafe { mem::transmute(buf) };
 
 				Ok((buf, self.rxpos))
 			} else {
