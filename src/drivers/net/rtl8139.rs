@@ -3,9 +3,8 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{btree_map, BTreeMap};
 use core::mem;
-use core::slice;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
@@ -291,16 +290,16 @@ impl NetworkInterface for RTL8139Driver {
 					msg[limit..].copy_from_slice(&self.rxbuffer[0..length as usize - limit]);
 
 					// buffer address to release box in `rx_buffer_consumed`
-					let msg_ptr = msg.as_ptr() as *const u8;
-					self.box_map.insert(self.rxpos, msg);
-
-					msg_ptr
+					match self.box_map.entry(self.rxpos) {
+						btree_map::Entry::Vacant(entry) => entry.insert(msg),
+						btree_map::Entry::Occupied(_) => unreachable!(),
+					}
 				} else {
-					self.rxbuffer[pos..].as_ptr() as *const u8
+					&self.rxbuffer[pos..][..length.into()]
 				};
 				// SAFETY: This is a blatant lie and very unsound.
 				// The API must be fixed or the buffer may never touched again.
-				let buf = unsafe { slice::from_raw_parts(buf, length.into()) };
+				let buf = unsafe { mem::transmute(buf) };
 
 				Ok((buf, self.rxpos))
 			} else {
@@ -322,8 +321,7 @@ impl NetworkInterface for RTL8139Driver {
 			warn!("Invalid handle {} != {}", self.rxpos, handle)
 		}
 
-		// remove boxed packet
-		let _ = self.box_map.remove_entry(&self.rxpos);
+		drop(self.box_map.remove(&self.rxpos));
 
 		let length = self.rx_peek_u16();
 		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
