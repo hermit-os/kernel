@@ -3,9 +3,8 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
+use alloc::collections::{btree_map, BTreeMap};
 use core::mem;
-use core::slice;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
@@ -195,12 +194,6 @@ pub enum RTL8139Error {
 	Unknown,
 }
 
-#[derive(Copy, Clone, Debug)]
-struct RawSlice<T> {
-	pub ptr: *mut T,
-	pub len: usize,
-}
-
 /// RealTek RTL8139 network driver struct.
 ///
 /// Struct allows to control device queues as also
@@ -215,7 +208,7 @@ pub struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
-	box_map: BTreeMap<usize, RawSlice<u8>>,
+	box_map: BTreeMap<usize, Box<[u8]>>,
 }
 
 impl NetworkInterface for RTL8139Driver {
@@ -297,16 +290,10 @@ impl NetworkInterface for RTL8139Driver {
 					msg[limit..].copy_from_slice(&self.rxbuffer[0..length as usize - limit]);
 
 					// buffer address to release box in `rx_buffer_consumed`
-					let raw_msg = Box::leak(msg);
-					self.box_map.insert(
-						self.rxpos,
-						RawSlice {
-							ptr: raw_msg.as_mut_ptr(),
-							len: length as usize,
-						},
-					);
-
-					raw_msg
+					match self.box_map.entry(self.rxpos) {
+						btree_map::Entry::Vacant(entry) => entry.insert(msg),
+						btree_map::Entry::Occupied(_) => unreachable!(),
+					}
 				} else {
 					&self.rxbuffer[pos..][..length.into()]
 				};
@@ -334,14 +321,7 @@ impl NetworkInterface for RTL8139Driver {
 			warn!("Invalid handle {} != {}", self.rxpos, handle)
 		}
 
-		match self.box_map.remove_entry(&self.rxpos) {
-			Some((_, raw)) => {
-				// release temporay created boxed slice
-				let _buffer: Box<[u8]> =
-					unsafe { Box::from_raw(slice::from_raw_parts_mut(raw.ptr, raw.len)) };
-			}
-			None => {}
-		}
+		drop(self.box_map.remove(&self.rxpos));
 
 		let length = self.rx_peek_u16();
 		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
