@@ -283,11 +283,9 @@ impl NetworkInterface for RTL8139Driver {
 				// do we reach the end of the receive buffers?
 				// in this case, we have to copy the data in boxed slice
 				let buf = if pos + length as usize > RX_BUF_LEN {
-					let mut msg: Box<[u8]> = vec![0; length as usize].into_boxed_slice();
-					let limit = RX_BUF_LEN - pos;
-
-					msg[0..limit].copy_from_slice(&self.rxbuffer[pos..RX_BUF_LEN]);
-					msg[limit..].copy_from_slice(&self.rxbuffer[0..length as usize - limit]);
+					let first = &self.rxbuffer[pos..RX_BUF_LEN];
+					let second = &self.rxbuffer[..length as usize - first.len()];
+					let msg = [first, second].concat().into_boxed_slice();
 
 					// buffer address to release box in `rx_buffer_consumed`
 					match self.box_map.entry(self.rxpos) {
