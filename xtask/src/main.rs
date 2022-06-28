@@ -133,48 +133,24 @@ impl flags::Build {
 	}
 
 	fn export_syms(&self) -> Result<()> {
-		let sh = sh()?;
-		let archive_path = self.dist_archive();
-		let archive_bytes = sh.read_binary_file(&archive_path)?;
-		let archive = Archive::parse(&archive_bytes)?;
+		let archive = self.dist_archive();
 
-		let symbol_redefinitions = {
-			let sys_fns = archive
-				.summarize()
-				.into_iter()
-				.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
-				.flat_map(|(_, _, symbols)| symbols)
-				.filter(|symbol| symbol.starts_with("sys_"));
+		let syscall_symbols = syscall_symbols(&archive)?;
+		let explicit_exports = [
+			"_start",
+			"__bss_start",
+			"runtime_entry",
+			// lwIP functions (C runtime)
+			"init_lwip",
+			"lwip_read",
+			"lwip_write",
+		]
+		.into_iter();
 
-			let explicit_exports = [
-				"_start",
-				"__bss_start",
-				"runtime_entry",
-				// lwIP functions (C runtime)
-				"init_lwip",
-				"lwip_read",
-				"lwip_write",
-			]
-			.into_iter();
+		let symbol_redefinitions =
+			explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
 
-			explicit_exports
-				.chain(sys_fns)
-				.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
-				.collect::<String>()
-		};
-
-		let redefine_syms_path = self.redefine_syms_path();
-		sh.write_file(&redefine_syms_path, &symbol_redefinitions)?;
-
-		let objcopy = binutil("objcopy")?;
-		cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {archive_path}").run()?;
-		cmd!(
-			sh,
-			"{objcopy} --redefine-syms={redefine_syms_path} {archive_path}"
-		)
-		.run()?;
-
-		sh.remove_path(&redefine_syms_path)?;
+		retain_symbols(&archive, symbol_redefinitions)?;
 
 		Ok(())
 	}
@@ -222,12 +198,6 @@ impl flags::Build {
 		dist_archive.push("libhermit.a");
 		dist_archive
 	}
-
-	fn redefine_syms_path(&self) -> PathBuf {
-		let mut redefine_syms_path = self.dist_dir();
-		redefine_syms_path.push("exported-syms");
-		redefine_syms_path
-	}
 }
 
 impl flags::Clippy {
@@ -252,6 +222,42 @@ impl flags::Clippy {
 
 		Ok(())
 	}
+}
+
+fn syscall_symbols(archive: &Path) -> Result<Vec<String>> {
+	let sh = sh()?;
+
+	let archive_bytes = sh.read_binary_file(archive)?;
+	let archive = Archive::parse(&archive_bytes)?;
+	let symbols = archive
+		.summarize()
+		.into_iter()
+		.filter(|(member_name, _, _)| member_name.starts_with("hermit-"))
+		.flat_map(|(_, _, symbols)| symbols)
+		.filter(|symbol| symbol.starts_with("sys_"))
+		.map(String::from)
+		.collect();
+
+	Ok(symbols)
+}
+
+fn retain_symbols<'a>(archive: &Path, symbols: impl Iterator<Item = &'a str>) -> Result<()> {
+	let sh = sh()?;
+
+	let symbol_renames = symbols
+		.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
+		.collect::<String>();
+
+	let rename_path = archive.with_extension("redefine-syms");
+	sh.write_file(&rename_path, &symbol_renames)?;
+
+	let objcopy = binutil("objcopy")?;
+	cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {archive}").run()?;
+	cmd!(sh, "{objcopy} --redefine-syms={rename_path} {archive}").run()?;
+
+	sh.remove_path(&rename_path)?;
+
+	Ok(())
 }
 
 fn binutil(name: &str) -> Result<PathBuf> {
