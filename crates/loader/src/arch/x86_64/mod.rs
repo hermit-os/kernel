@@ -249,6 +249,8 @@ pub unsafe fn boot_kernel(
 		image_size: mem_size,
 		tls_info,
 		current_stack_address,
+		cmdline,
+		cmdsize,
 		uartport: SERIAL_IO_PORT,
 		mb_info: mb_info as u64,
 		..Default::default()
