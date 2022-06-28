@@ -2,9 +2,9 @@
 
 #![allow(dead_code)]
 
-use core::mem;
-
 use alloc::boxed::Box;
+use alloc::collections::{btree_map, BTreeMap};
+use core::mem;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
@@ -208,6 +208,7 @@ pub struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
+	box_map: BTreeMap<usize, Box<[u8]>>,
 }
 
 impl NetworkInterface for RTL8139Driver {
@@ -277,7 +278,23 @@ impl NetworkInterface for RTL8139Driver {
 
 			if header & ISR_ROK == ISR_ROK {
 				let length = self.rx_peek_u16() - 4; // copy packet (but not the CRC)
-				let buf = &self.rxbuffer[self.rxpos + mem::size_of::<u16>()..][..length.into()];
+				let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
+
+				// do we reach the end of the receive buffers?
+				// in this case, we have to copy the data in boxed slice
+				let buf = if pos + length as usize > RX_BUF_LEN {
+					let first = &self.rxbuffer[pos..RX_BUF_LEN];
+					let second = &self.rxbuffer[..length as usize - first.len()];
+					let msg = [first, second].concat().into_boxed_slice();
+
+					// buffer address to release box in `rx_buffer_consumed`
+					match self.box_map.entry(self.rxpos) {
+						btree_map::Entry::Vacant(entry) => entry.insert(msg),
+						btree_map::Entry::Occupied(_) => unreachable!(),
+					}
+				} else {
+					&self.rxbuffer[pos..][..length.into()]
+				};
 				// SAFETY: This is a blatant lie and very unsound.
 				// The API must be fixed or the buffer may never touched again.
 				let buf = unsafe { mem::transmute(buf) };
@@ -302,13 +319,24 @@ impl NetworkInterface for RTL8139Driver {
 			warn!("Invalid handle {} != {}", self.rxpos, handle)
 		}
 
+		drop(self.box_map.remove(&self.rxpos));
+
 		let length = self.rx_peek_u16();
 		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
 
 		// packets are dword aligned
 		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
-		unsafe {
-			outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+		if self.rxpos >= 0x10 {
+			unsafe {
+				outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+			}
+		} else {
+			unsafe {
+				outw(
+					self.iobase + CAPR,
+					(RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap(),
+				);
+			}
 		}
 	}
 
@@ -587,5 +615,6 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		rxbuffer,
 		rxpos: 0,
 		txbuffer,
+		box_map: BTreeMap::new(),
 	})
 }
