@@ -1,6 +1,7 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
 mod arch;
+mod archive;
 mod flags;
 
 use std::{
@@ -9,10 +10,9 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use arch::Arch;
-use goblin::{archive::Archive, elf64::header};
-use llvm_tools::LlvmTools;
+use archive::Archive;
 use xshell::{cmd, Shell};
 
 fn main() -> Result<()> {
@@ -50,19 +50,19 @@ impl flags::Build {
 		let dist_archive = self.dist_archive();
 		eprintln!(
 			"Copying {} to {}",
-			build_archive.display(),
-			dist_archive.display()
+			build_archive.as_ref().display(),
+			dist_archive.as_ref().display()
 		);
-		sh.create_dir(dist_archive.parent().unwrap())?;
+		sh.create_dir(dist_archive.as_ref().parent().unwrap())?;
 		sh.copy_file(&build_archive, &dist_archive)?;
-
-		eprintln!("Setting OSABI");
-		self.set_osabi()?;
 
 		eprintln!("Exporting symbols");
 		self.export_syms()?;
 
-		eprintln!("Kernel available at {}", self.dist_archive().display());
+		eprintln!("Setting OSABI");
+		dist_archive.set_osabi()?;
+
+		eprintln!("Kernel available at {}", dist_archive.as_ref().display());
 		Ok(())
 	}
 
@@ -112,69 +112,24 @@ impl flags::Build {
 		["--profile", self.profile()]
 	}
 
-	fn set_osabi(&self) -> Result<()> {
-		let sh = sh()?;
-		let archive_path = self.dist_archive();
-		let mut archive_bytes = sh.read_binary_file(&archive_path)?;
-		let archive = Archive::parse(&archive_bytes)?;
-
-		let file_offsets = (0..archive.len())
-			.map(|i| archive.get_at(i).unwrap().offset)
-			.collect::<Vec<_>>();
-
-		for file_offset in file_offsets {
-			let file_offset = usize::try_from(file_offset).unwrap();
-			archive_bytes[file_offset + header::EI_OSABI] = header::ELFOSABI_STANDALONE;
-		}
-
-		sh.write_file(&archive_path, archive_bytes)?;
-
-		Ok(())
-	}
-
 	fn export_syms(&self) -> Result<()> {
-		let sh = sh()?;
-		let archive_path = self.dist_archive();
-		let archive_bytes = sh.read_binary_file(&archive_path)?;
-		let archive = Archive::parse(&archive_bytes)?;
+		let archive = self.dist_archive();
 
-		let symbol_redefinitions = {
-			let sys_fns = archive
-				.summarize()
-				.into_iter()
-				.filter(|(member_name, _, _)| member_name.starts_with("hermit"))
-				.flat_map(|(_, _, symbols)| symbols)
-				.filter(|symbol| symbol.starts_with("sys_"));
+		let syscall_symbols = archive.syscall_symbols()?;
+		let explicit_exports = [
+			"_start",
+			"__bss_start",
+			"runtime_entry",
+			// lwIP functions (C runtime)
+			"init_lwip",
+			"lwip_read",
+			"lwip_write",
+		]
+		.into_iter();
 
-			let explicit_exports = [
-				"_start",
-				"__bss_start",
-				"runtime_entry",
-				// lwIP functions (C runtime)
-				"init_lwip",
-				"lwip_read",
-				"lwip_write",
-			]
-			.into_iter();
+		let symbols = explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
 
-			explicit_exports
-				.chain(sys_fns)
-				.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
-				.collect::<String>()
-		};
-
-		let redefine_syms_path = self.redefine_syms_path();
-		sh.write_file(&redefine_syms_path, &symbol_redefinitions)?;
-
-		let objcopy = binutil("objcopy")?;
-		cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {archive_path}").run()?;
-		cmd!(
-			sh,
-			"{objcopy} --redefine-syms={redefine_syms_path} {archive_path}"
-		)
-		.run()?;
-
-		sh.remove_path(&redefine_syms_path)?;
+		archive.retain_symbols(symbols)?;
 
 		Ok(())
 	}
@@ -211,22 +166,16 @@ impl flags::Build {
 		out_dir
 	}
 
-	fn build_archive(&self) -> PathBuf {
+	fn build_archive(&self) -> Archive {
 		let mut built_archive = self.out_dir();
 		built_archive.push("libhermit.a");
-		built_archive
+		built_archive.into()
 	}
 
-	fn dist_archive(&self) -> PathBuf {
+	fn dist_archive(&self) -> Archive {
 		let mut dist_archive = self.dist_dir();
 		dist_archive.push("libhermit.a");
-		dist_archive
-	}
-
-	fn redefine_syms_path(&self) -> PathBuf {
-		let mut redefine_syms_path = self.dist_dir();
-		redefine_syms_path.push("exported-syms");
-		redefine_syms_path
+		dist_archive.into()
 	}
 }
 
@@ -254,24 +203,9 @@ impl flags::Clippy {
 	}
 }
 
-fn binutil(name: &str) -> Result<PathBuf> {
-	let exe_suffix = env::consts::EXE_SUFFIX;
-	let exe = format!("llvm-{name}{exe_suffix}");
-
-	let path = LlvmTools::new()
-		.map_err(|err| anyhow!("{err:?}"))?
-		.tool(&exe)
-		.ok_or_else(|| anyhow!("could not find {exe}"))?;
-
-	Ok(path)
-}
-
 fn sh() -> Result<Shell> {
 	let sh = Shell::new()?;
-	sh.change_dir(project_root());
+	let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+	sh.change_dir(project_root);
 	Ok(sh)
-}
-
-fn project_root() -> &'static Path {
-	Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
