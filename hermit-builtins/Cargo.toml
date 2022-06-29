@@ -1,0 +1,10 @@
+[package]
+name = "hermit-builtins"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+mem-builtins = { package = "compiler_builtins", version = "0.1", features = ["mem"] }
