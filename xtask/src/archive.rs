@@ -44,16 +44,17 @@ impl Archive {
 	pub fn retain_symbols<'a>(&self, symbols: impl Iterator<Item = &'a str>) -> Result<()> {
 		let sh = crate::sh()?;
 		let archive = self.as_ref();
+		let prefix = archive.file_stem().unwrap().to_str().unwrap();
 
 		let symbol_renames = symbols
-			.map(|symbol| format!("hermit_{symbol} {symbol}\n"))
+			.map(|symbol| format!("{prefix}_{symbol} {symbol}\n"))
 			.collect::<String>();
 
 		let rename_path = archive.with_extension("redefine-syms");
 		sh.write_file(&rename_path, &symbol_renames)?;
 
 		let objcopy = binutil("objcopy")?;
-		cmd!(sh, "{objcopy} --prefix-symbols=hermit_ {archive}").run()?;
+		cmd!(sh, "{objcopy} --prefix-symbols={prefix}_ {archive}").run()?;
 		cmd!(sh, "{objcopy} --redefine-syms={rename_path} {archive}").run()?;
 
 		sh.remove_path(&rename_path)?;
