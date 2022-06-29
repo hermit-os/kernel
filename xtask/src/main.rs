@@ -151,19 +151,9 @@ impl flags::Build {
 			.unwrap_or_else(|| Path::new("target"))
 	}
 
-	fn out_dir(&self) -> PathBuf {
+	fn out_dir(&self, triple: impl AsRef<Path>) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(self.arch.triple());
-		out_dir.push(match self.profile() {
-			"dev" => "debug",
-			profile => profile,
-		});
-		out_dir
-	}
-
-	fn dist_dir(&self) -> PathBuf {
-		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(self.arch.name());
+		out_dir.push(triple);
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -172,13 +162,13 @@ impl flags::Build {
 	}
 
 	fn build_archive(&self) -> Archive {
-		let mut built_archive = self.out_dir();
+		let mut built_archive = self.out_dir(self.arch.triple());
 		built_archive.push("libhermit.a");
 		built_archive.into()
 	}
 
 	fn dist_archive(&self) -> Archive {
-		let mut dist_archive = self.dist_dir();
+		let mut dist_archive = self.out_dir(self.arch.name());
 		dist_archive.push("libhermit.a");
 		dist_archive.into()
 	}
