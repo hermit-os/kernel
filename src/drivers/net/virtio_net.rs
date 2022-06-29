@@ -1550,7 +1550,7 @@ pub mod constants {
 	/// wrapping a u64.
 	///
 	/// The main functionality of this type are functions implemented on it.
-	#[derive(Debug, Copy, Clone, PartialOrd, PartialEq)]
+	#[derive(Debug, Copy, Clone, PartialOrd, PartialEq, Eq)]
 	pub struct FeatureSet(u64);
 
 	impl BitOr for FeatureSet {

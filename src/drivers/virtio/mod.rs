@@ -60,7 +60,7 @@ pub mod features {
 	/// Virtio's feature bits inside an enum.
 	/// See Virtio specification v1.1. - 6
 	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Clone, Copy, Debug, PartialEq)]
+	#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 	#[repr(u64)]
 	pub enum Features {
 		VIRTIO_F_RING_INDIRECT_DESC = 1 << 28,

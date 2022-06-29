@@ -1,6 +1,6 @@
 [toolchain]
 # Manually sync this with Dockerfile!
-channel = "nightly-2022-05-15"
+channel = "nightly-2022-06-29"
 components = [
     "clippy",
     "llvm-tools-preview",
