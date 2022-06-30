@@ -32,6 +32,9 @@
 )]
 #![cfg_attr(target_os = "none", cfg_attr(test, no_main))]
 
+#[cfg(all(feature = "newlib", feature = "pci"))]
+compile_error!("feature \"newlib\" and feature \"pci\" cannot be enabled at the same time");
+
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
@@ -246,12 +249,6 @@ extern "C" {
 	static mut __bss_start: usize;
 }
 
-/// Helper function to check if uhyve provide an IP device
-#[cfg(feature = "newlib")]
-fn has_ipdevice() -> bool {
-	arch::x86_64::kernel::has_ipdevice()
-}
-
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
@@ -260,14 +257,15 @@ extern "C" fn initd(_arg: usize) {
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
+		#[cfg(feature = "newlib")]
+		fn init_rtl8139_netif(freq: u32) -> i32;
 	}
 
 	// initialize LwIP library for newlib-based applications
 	#[cfg(feature = "newlib")]
 	unsafe {
-		if has_ipdevice() {
-			init_lwip();
-		}
+		init_lwip();
+		init_rtl8139_netif(processor::get_frequency() as u32);
 	}
 
 	if env::is_uhyve() {
@@ -281,6 +279,7 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize Drivers
+	#[cfg(not(feature = "newlib"))]
 	arch::init_drivers();
 
 	syscalls::init();
