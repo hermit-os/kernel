@@ -277,7 +277,7 @@ impl SplitVq {
 	}
 
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
@@ -295,7 +295,7 @@ impl SplitVq {
 	/// updated notification flags before finishing transfers!
 	///
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
@@ -317,7 +317,7 @@ impl SplitVq {
 		let (pin_tkn, next_off, next_wrap) = self.ring.borrow_mut().push(tkn);
 
 		if notif {
-			// TODO: Check wheter the splitvirtquue has notifications for specific descriptors
+			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
 			// I believe it does not.
 			unimplemented!();
 		}
@@ -348,8 +348,8 @@ impl SplitVq {
 	}
 
 	/// The packed virtqueue handles early dropped transfers by moving the respective tokens into
-	/// an vector. Here they will remain until they are finished. In order to ensure this the queue
-	/// will check theses descriptors from time to time during its poll function.
+	/// a vector. Here they will remain until they are finished. In order to ensure this the queue
+	/// will check these descriptors from time to time during its poll function.
 	///
 	/// Also see `Virtq.early_drop()` documentation
 	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
@@ -359,7 +359,7 @@ impl SplitVq {
 				unreachable!("Early dropped transfers are not allowed to be state == Ready")
 			}
 			TransferState::Processing => {
-				// Keep token until state is finished. This needs to be checked/cleaned up later
+				// Keep token until state is finished. This needs to be checked/cleaned up later.
 				self.dropped.borrow_mut().push(tkn);
 			}
 		}
@@ -1547,7 +1547,7 @@ impl SplitVq {
 				}
 				Ok(ctrl_desc)
 			}
-			// Only sending descritpors
+			// Only sending descriptors
 			(Some(send_desc_lst), None) => {
 				for desc in send_desc_lst {
 					desc_slice[crtl_desc_iter] = if desc_lst_len > 1 {

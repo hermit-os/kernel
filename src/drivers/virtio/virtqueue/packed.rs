@@ -719,7 +719,7 @@ impl<'a> ReadCtrl<'a> {
 	}
 }
 
-/// Convenient struct that allows to convinently write descritpros into the queue.
+/// Convenient struct that allows to conveniently write descriptors into the queue.
 /// The struct takes care of updating the state of the queue correctly and to write
 /// the correct flags.
 struct WriteCtrl<'a> {
@@ -768,7 +768,7 @@ impl<'a> WriteCtrl<'a> {
 	/// * Flags for avail and used will be set by the queue itself.
 	///   * -> Only set different flags here.
 	fn write_desc(&mut self, mem_desc: &MemDescr, flags: u16) {
-		// This also sets the buff_id for the WriteCtrl stuct to the ID of the first
+		// This also sets the buff_id for the WriteCtrl struct to the ID of the first
 		// descriptor.
 		if self.start == self.position {
 			let desc_ref = &mut self.desc_ring.ring[self.position];
@@ -797,7 +797,7 @@ impl<'a> WriteCtrl<'a> {
 	}
 
 	fn make_avail(&mut self, raw_tkn: *mut TransferToken) {
-		// We fail if one wants to make a buffer availbale without inserting one element!
+		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
 		// We also fail if buff_id is not set!
 		assert!(self.buff_id != 0);
@@ -993,11 +993,11 @@ pub struct PackedVq {
 	/// be used
 	size: VqSize,
 	/// The virtqueues index. This identifies the virtqueue to the
-	/// device and is unique on a per device basis
+	/// device and is unique on a per device basis.
 	index: VqIndex,
-	/// Holds all erly dropped `TransferToken`
+	/// Holds all early dropped `TransferToken`
 	/// If `TransferToken.state == TransferState::Finished`
-	/// the Token can be safely dropped
+	/// the Token can be safely dropped.
 	dropped: RefCell<Vec<Pinned<TransferToken>>>,
 }
 
@@ -1033,7 +1033,7 @@ impl PackedVq {
 	}
 
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
@@ -1090,7 +1090,7 @@ impl PackedVq {
 	/// updated notification flags before finishing transfers!
 	///
 	/// Dispatches a batch of transfer token. The buffers of the respective transfers are provided to the queue in
-	/// sequence. After the last buffer has been writen, the queue marks the first buffer as available and triggers
+	/// sequence. After the last buffer has been written, the queue marks the first buffer as available and triggers
 	/// a device notification if wanted by the device.
 	///
 	/// Tokens to get a reference to the provided await_queue, where they will be placed upon finish.
@@ -1185,9 +1185,9 @@ impl PackedVq {
 
 	/// The packed virtqueue handles early dropped transfers by moving the respective tokens into
 	/// an vector. Here they will remain until they are finished. In order to ensure this the queue
-	/// will check theses descriptors from time to time during its poll function.
+	/// will check these descriptors from time to time during its poll function.
 	///
-	/// Also see `Virtq.early_drop()` documentation
+	/// Also see `Virtq.early_drop()` documentation.
 	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
 		match tkn.state {
 			TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
@@ -1218,7 +1218,7 @@ impl PackedVq {
 		// This steems from the fact, that the packedVq ReadCtrl currently is not
 		// able to derive other finished transfer from a used-buffer notification.
 		// In order to allow this, the queue MUST track the sequence in which
-		// TransferTokens are inserted into the queue. Furthermore the Queu should
+		// TransferTokens are inserted into the queue. Furthermore the Queue should
 		// carry a feature u64 in order to check which features are used currently
 		// and adjust its ReadCtrl accordingly.
 		if feats & Features::VIRTIO_F_IN_ORDER == Features::VIRTIO_F_IN_ORDER {
@@ -2368,7 +2368,7 @@ impl PackedVq {
 				}
 				Ok(ctrl_desc)
 			}
-			// Only sending descritpors
+			// Only sending descriptors
 			(Some(send_desc_lst), None) => {
 				for desc in send_desc_lst {
 					desc_slice[crtl_desc_iter] = Descriptor::new(

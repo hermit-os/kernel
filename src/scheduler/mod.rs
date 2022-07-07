@@ -431,7 +431,7 @@ impl PerCoreScheduler {
 			// do housekeeping
 			let wakeup_tasks = self.cleanup_tasks();
 
-			// Reenable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
+			// Re-enable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
 			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
 			if !wakeup_tasks {
 				if backoff.is_completed() {

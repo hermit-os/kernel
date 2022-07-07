@@ -249,7 +249,7 @@ impl<S: PageSize> Page<S> {
 	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
 	///
 	/// Most x86-64 supports only 48-bit for virtual memory addresses.
-	/// Currently, we supports only the lower half of the canoncial address space.
+	/// Currently, we supports only the lower half of the canonical address space.
 	/// As a consequence, the address space is divided into the two valid regions 0x8000_0000_0000
 	/// and 0x0000_8000_0000_0000.
 	///
@@ -738,7 +738,7 @@ pub fn init_page_tables() {
 
 		ptr::write_bytes(start as *mut u8, 0u8, size);
 
-		//TODO: clearing the memory befor kernel_start_address()
+		//TODO: clearing the memory before kernel_start_address()
 
 		// flush tlb
 		controlregs::cr3_write(pml4);

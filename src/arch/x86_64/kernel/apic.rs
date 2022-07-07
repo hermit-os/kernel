@@ -654,7 +654,7 @@ fn calibrate_timer() {
 	processor::udelay(microseconds);
 
 	// Save the difference of the initial value and current value as the result of the calibration
-	// and reenable interrupts.
+	// and re-enable interrupts.
 	unsafe {
 		CALIBRATED_COUNTER_VALUE =
 			(u64::from(u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT))) / microseconds;

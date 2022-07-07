@@ -332,7 +332,7 @@ impl PriorityTaskQueue {
 		}
 	}
 
-	/// Change priority of specifc task
+	/// Change priority of specific task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
 		let i = handle.get_priority().into() as usize;
 		let mut pos = self.queues[i].head.as_mut().ok_or(())?;

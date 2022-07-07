@@ -566,7 +566,7 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr 
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
-	// Currently, we use onyl 4K pages
+	// Currently, we use only 4K pages.
 	get_physical_address::<BasePageSize>(virtual_address)
 }
 
