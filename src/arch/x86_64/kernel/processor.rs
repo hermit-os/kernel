@@ -432,7 +432,9 @@ impl CpuFrequency {
 				.or_else(|_e| self.detect_from_cpuid_brand_string(&cpuid))
 				.or_else(|_e| self.measure_frequency())
 				.or_else(|_e| {
-					warn!("Could not determine the processor frequency! Guess a frequency of 2Ghz!");
+					warn!(
+						"Could not determine the processor frequency! Guess a frequency of 2Ghz!"
+					);
 					self.set_detected_cpu_frequency(2000, CpuFrequencySources::Visionary)
 				})
 				.unwrap();
