@@ -217,7 +217,7 @@ impl RxQueues {
 				.features
 				.is_feature(Features::VIRTIO_NET_F_GUEST_UFO)
 		{
-			// Receive Buffers must be at least 65562 bytes large with theses features set.
+			// Receive Buffers must be at least 65562 bytes large with these features set.
 			// See Virtio specification v1.1 - 5.1.6.3.1
 
 			// Currently we choose indirect descriptors if possible in order to allow
@@ -748,18 +748,18 @@ impl VirtioNetDriver {
 	}
 
 	pub fn disable_interrupts(&self) {
-		// Für send und receive queues?
-		// Nur für receive? Weil send eh ausgeschaltet ist?
+		// For send and receive queues?
+		// Only for receive? Because send is off anyway?
 		self.recv_vqs.disable_notifs();
 	}
 
 	pub fn enable_interrupts(&self) {
-		// Für send und receive queues?
-		// Nur für receive? Weil send eh ausgeschaltet ist?
+		// For send and receive queues?
+		// Only for receive? Because send is off anyway?
 		self.recv_vqs.enable_notifs();
 	}
 
-	/// Initiallizes the device in adherence to specification. Returns Some(VirtioNetError)
+	/// Initializes the device in adherence to specification. Returns Some(VirtioNetError)
 	/// upon failure and None in case everything worked as expected.
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
@@ -795,7 +795,7 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_F_RING_PACKED);
 
 		// Currently the driver does NOT support the features below.
-		// In order to provide functionality for theses, the driver
+		// In order to provide functionality for these, the driver
 		// needs to take care of calculating checksum in
 		// RxQueues.post_processing()
 		// feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
@@ -1221,7 +1221,7 @@ pub mod constants {
 	/// See Virtio specification v1.1. - 6
 	//
 	// WARN: In case the enum is changed, the static function of features `into_features(feat: u64) ->
-	// Option<Vec<Features>>` must also be adjusted to return a corret vector of features.
+	// Option<Vec<Features>>` must also be adjusted to return a correct vector of features.
 	#[allow(dead_code, non_camel_case_types)]
 	#[derive(Copy, Clone, Debug)]
 	#[repr(u64)]
@@ -1613,7 +1613,7 @@ pub mod constants {
 		/// Checks if a given set of features is compatible and adheres to the
 		/// specfification v1.1. - 5.1.3.1
 		/// Upon an error returns the incompatible set of features by the
-		/// [FeatReqNotMet](super::error::VirtioNetError) errror value, which
+		/// [FeatReqNotMet](super::error::VirtioNetError) error value, which
 		/// wraps the u64 indicating the feature set.
 		///
 		/// INFO: Iterates twice over the vector of features.

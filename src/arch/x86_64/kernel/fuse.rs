@@ -188,7 +188,7 @@ impl PosixFile for FuseFile {
 		match whence {
 			SeekWhence::Set => self.offset = offset as usize,
 			SeekWhence::Cur => self.offset = (self.offset as isize + offset) as usize,
-			SeekWhence::End => unimplemented!("Cant seek from end yet!"),
+			SeekWhence::End => unimplemented!("Can't seek from end yet!"),
 		}
 
 		Ok(self.offset)

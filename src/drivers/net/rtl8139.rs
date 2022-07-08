@@ -113,7 +113,7 @@ const RCR_MRINT: u32 = 0x20000; // Multiple Early interrupt, (enable to make int
 const RCR_RER8: u32 = 0x10000; // Receive Error Packets larger than 8 bytes
 const RCR_RXFTH2: u32 = 0x8000; // Rx Fifo threshold 0
 const RCR_RXFTH1: u32 = 0x4000; // Rx Fifo threshold 1 (set to 110 and it will send to system when 1024bytes have been gathered)
-const RCR_RXFTH0: u32 = 0x2000; // Rx Fifo threshold 2 (set all these to 1, and it wont FIFO till the full packet is ready)
+const RCR_RXFTH0: u32 = 0x2000; // Rx Fifo threshold 2 (set all these to 1, and it won't FIFO till the full packet is ready)
 const RCR_RBLEN1: u32 = 0x1000; // Rx Buffer length 0
 const RCR_RBLEN0: u32 = 0x800; // Rx Buffer length 1 (C mode, 11 = 64kb, 10 = 32k, 01 = 16k, 00 = 8k)
 const RCR_MXDMA2: u32 = 0x400; // Max DMA burst size 0

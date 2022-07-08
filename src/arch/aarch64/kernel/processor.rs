@@ -141,7 +141,7 @@ pub fn configure() {
 			options(nostack, nomem),
 		);
 		debug!(
-			"PMCR_EL0 (has RES1 bits and therefore musn't be zero): {:#X}",
+			"PMCR_EL0 (has RES1 bits and therefore mustn't be zero): {:#X}",
 			pmcr_el0
 		);
 		pmcr_el0 |= 1 << 0 | 1 << 2 | 1 << 6;

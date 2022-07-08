@@ -414,7 +414,7 @@ impl Virtq {
 	/// **Details on Usage:**
 	/// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
 	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
-	/// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
+	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
 	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
 	/// many elements in the queue.
 	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
@@ -477,7 +477,7 @@ impl Virtq {
 	/// **Details on Usage:**
 	/// * `(Single, _ )` or `(_ , Single)` -> Results in one descriptor in the queue, hence Consumes one element.
 	/// * `(Multiple, _ )` or `(_ , Multiple)` -> Results in a list of descriptors in the queue. Consumes `Multiple.len()` elements.
-	/// * `(Singe, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
+	/// * `(Single, Single)` -> Results in a descriptor list of two chained descriptors, hence Consumes two elements in the queue
 	/// * `(Single, Multiple)` or `(Multiple, Single)` -> Results in a descripotr list of `1 + Multiple.len(). Consumes equally
 	/// many elements in the queue.
 	/// * `(Indirect, _ )` or `(_, Indirect)` -> Resulsts in one descriptor in the queue, hence Consumes one element.
