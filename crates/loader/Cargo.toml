@@ -1,6 +1,6 @@
 [package]
 name = "rusty-loader"
-version = "0.2.6"
+version = "0.3.0"
 authors = ["Stefan Lankes <slankes@eonerc.rwth-aachen.de>", "Colin Finck <colin.finck@rwth-aachen.de>"]
 license = "MIT/Apache-2.0"
 readme = "README.md"
