@@ -38,7 +38,7 @@ RUN set -eux; \
 # Build dependencies with stable toolchain channel
 FROM rust:bullseye as stable-deps
 RUN set -eux; \
-    cargo install --git https://github.com/hermitcore/uhyve.git --locked uhyve;
+    cargo install uhyve;
 
 # Build dependencies with libhermit-rs' toolchain channel
 FROM hermit-toolchain as hermit-deps
