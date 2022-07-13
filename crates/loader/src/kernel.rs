@@ -3,7 +3,10 @@
 
 use crate::arch;
 
-use core::mem::{self, MaybeUninit};
+use core::{
+	mem::{self, MaybeUninit},
+	str,
+};
 
 use goblin::elf64::{
 	dynamic::{self, Dyn, DynamicInfo},
@@ -33,6 +36,41 @@ pub struct Object<'a> {
 	relas: &'a [Rela],
 }
 
+struct NoteIterator<'a> {
+	bytes: &'a [u8],
+	align: usize,
+}
+
+#[derive(Debug)]
+struct Note<'a> {
+	ty: u32,
+	name: &'a str,
+	desc: &'a [u8],
+}
+
+impl<'a> Iterator for NoteIterator<'a> {
+	type Item = Note<'a>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		let header = crate::nhdr_from_bytes(self.bytes)?;
+		let mut offset = mem::size_of_val(header);
+		let name = str::from_utf8(&self.bytes[offset..][..header.n_namesz as usize - 1]).unwrap();
+		offset = align_up!(offset + header.n_namesz as usize, self.align);
+		let desc = &self.bytes[offset..][..header.n_descsz as usize];
+		offset = align_up!(offset + header.n_descsz as usize, self.align);
+		self.bytes = &self.bytes[offset..];
+		Some(Note {
+			ty: header.n_type,
+			name,
+			desc,
+		})
+	}
+}
+
+fn iter_notes(bytes: &[u8], align: usize) -> NoteIterator<'_> {
+	NoteIterator { bytes, align }
+}
+
 impl<'a> Object<'a> {
 	/// Parses raw bytes of an ELF file into a loadable kernel object.
 	pub fn parse(elf: &[u8]) -> Object<'_> {
@@ -43,6 +81,12 @@ impl<'a> Object<'a> {
 		}
 
 		let header = plain::from_bytes::<Header>(elf).unwrap();
+
+		let phs = {
+			let start = header.e_phoff as usize;
+			let len = header.e_phnum as usize;
+			ProgramHeader::slice_from_bytes_len(&elf[start..], len).unwrap()
+		};
 
 		// General compatibility checks
 		{
@@ -61,6 +105,22 @@ impl<'a> Object<'a> {
 				"kernel is not a hermit application"
 			);
 
+			let note_section = phs
+				.iter()
+				.find(|ph| ph.p_type == program_header::PT_NOTE)
+				.unwrap();
+			let mut note_iter = iter_notes(
+				&elf[note_section.p_offset as usize..][..note_section.p_filesz as usize],
+				note_section.p_align as usize,
+			);
+			if let Some(note) = note_iter.find(|note| {
+				note.name == "HERMIT" && note.ty == hermit_entry::NT_HERMIT_ENTRY_VERSION
+			}) {
+				assert_eq!(1, note.desc[0], "hermit entry version does not match");
+			} else {
+				println!("Warning: Kernel does not specify hermit entry version!");
+			}
+
 			assert!(
 				matches!(header.e_type, header::ET_DYN | header::ET_EXEC),
 				"kernel has unsupported ELF type"
@@ -72,12 +132,6 @@ impl<'a> Object<'a> {
 				"kernel is not compiled for the correct architecture"
 			);
 		}
-
-		let phs = {
-			let start = header.e_phoff as usize;
-			let len = header.e_phnum as usize;
-			ProgramHeader::slice_from_bytes_len(&elf[start..], len).unwrap()
-		};
 
 		let dyns = phs
 			.iter()
