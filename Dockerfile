@@ -40,18 +40,6 @@ FROM rust:bullseye as stable-deps
 RUN set -eux; \
     cargo install uhyve;
 
-# Build dependencies with libhermit-rs' toolchain channel
-FROM hermit-toolchain as hermit-deps
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends \
-        nasm \
-    ; \
-    rm -rf /var/lib/apt/lists/*; \
-    git clone https://github.com/hermitcore/rusty-loader.git; \
-    cd rusty-loader; \
-    cargo xtask build --arch x86_64 --release;
-
 # Install dependencies
 FROM hermit-toolchain as ci-runner
 RUN set -eux; \
@@ -63,5 +51,6 @@ RUN set -eux; \
         qemu-system-x86 \
     ; \
     rm -rf /var/lib/apt/lists/*;
+RUN set -eux; \
+    wget -P /usr/local/bin "https://github.com/hermitcore/rusty-loader/releases/download/v0.3.0/rusty-loader-x86_64";
 COPY --from=stable-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
-COPY --from=hermit-deps rusty-loader/target/x86_64/release/rusty-loader /usr/local/bin/rusty-loader
