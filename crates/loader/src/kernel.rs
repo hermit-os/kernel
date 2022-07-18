@@ -8,11 +8,14 @@ use core::{
 	str,
 };
 
-use goblin::elf64::{
-	dynamic::{self, Dyn, DynamicInfo},
-	header::{self, Header},
-	program_header::{self, ProgramHeader},
-	reloc::{self, Rela},
+use goblin::{
+	elf::note::Nhdr32,
+	elf64::{
+		dynamic::{self, Dyn, DynamicInfo},
+		header::{self, Header},
+		program_header::{self, ProgramHeader},
+		reloc::{self, Rela},
+	},
 };
 use hermit_entry::TlsInfo;
 use plain::Plain;
@@ -52,7 +55,7 @@ impl<'a> Iterator for NoteIterator<'a> {
 	type Item = Note<'a>;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		let header = crate::nhdr_from_bytes(self.bytes)?;
+		let header = Nhdr32::from_bytes(self.bytes).ok()?;
 		let mut offset = mem::size_of_val(header);
 		let name = str::from_utf8(&self.bytes[offset..][..header.n_namesz as usize - 1]).unwrap();
 		offset = align_up!(offset + header.n_namesz as usize, self.align);
