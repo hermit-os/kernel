@@ -30,20 +30,3 @@ fn _print(args: fmt::Arguments<'_>) {
 		console::CONSOLE.write_fmt(args).unwrap();
 	}
 }
-
-// TODO: Migrate to upstream plain implementation
-// https://github.com/m4b/goblin/pull/317
-fn nhdr_from_bytes(bytes: &[u8]) -> Option<&goblin::elf::note::Nhdr32> {
-	if bytes
-		.as_ptr()
-		.align_offset(core::mem::align_of::<goblin::elf::note::Nhdr32>())
-		!= 0
-	{
-		return None;
-	}
-	if bytes.len() < core::mem::size_of::<goblin::elf::note::Nhdr32>() {
-		return None;
-	}
-	// SAFETY: We just checked alignment and size
-	Some(unsafe { &*(bytes.as_ptr() as *const goblin::elf::note::Nhdr32) })
-}
