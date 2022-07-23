@@ -1,6 +1,7 @@
 use crate::arch::percore::*;
 use crate::scheduler::task::TaskHandlePriorityQueue;
 use crate::synch::spinlock::SpinlockIrqSave;
+#[cfg(feature = "smp")]
 use crossbeam_utils::Backoff;
 
 struct SemaphoreState {
@@ -63,6 +64,7 @@ impl Semaphore {
 	/// This method will block until the internal count of the semaphore is at
 	/// least 1.
 	pub fn acquire(&self, time: Option<u64>) -> bool {
+		#[cfg(feature = "smp")]
 		let backoff = Backoff::new();
 		let core_scheduler = core_scheduler();
 
@@ -87,6 +89,7 @@ impl Semaphore {
 				}
 			}
 
+			#[cfg(feature = "smp")]
 			if backoff.is_completed() {
 				// We couldn't acquire the semaphore.
 				// Block the current task and add it to the wakeup queue.
@@ -100,6 +103,19 @@ impl Semaphore {
 			} else {
 				drop(locked_state);
 				backoff.snooze();
+			}
+
+			#[cfg(not(feature = "smp"))]
+			{
+				// We couldn't acquire the semaphore.
+				// Block the current task and add it to the wakeup queue.
+				core_scheduler.block_current_task(wakeup_time);
+				locked_state
+					.queue
+					.push(core_scheduler.get_current_task_handle());
+				drop(locked_state);
+				// Switch to the next task.
+				core_scheduler.reschedule();
 			}
 		}
 	}
