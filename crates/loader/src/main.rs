@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![feature(asm_const)]
 #![feature(maybe_uninit_write_slice)]
 #![feature(specialization)]
 #![warn(rust_2018_idioms)]

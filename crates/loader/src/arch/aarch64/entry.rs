@@ -58,11 +58,7 @@ unsafe fn pre_init() -> ! {
 	loaderlog!("Enter startup code");
 
 	/* disable interrupts */
-	asm!(
-		"msr daifset, {mask}",
-		mask = const 0b111,
-		options(nostack),
-	);
+	asm!("msr daifset, 0b111", options(nostack),);
 
 	/* reset thread id registers */
 	asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack),);
@@ -76,10 +72,9 @@ unsafe fn pre_init() -> ! {
 	 */
 	asm!("dsb sy",
 		"mrs x2, sctlr_el1",
-		"bic x2, x2, {one}",
+		"bic x2, x2, 0x1",
 		"msr sctlr_el1, x2",
 		"isb",
-		one = const 0x1,
 		out("x2") _,
 		options(nostack),
 	);
