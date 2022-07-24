@@ -637,8 +637,8 @@ pub fn init_local_apic() {
 pub(crate) fn assign_irq_to_core(irq: u8, core_id: CoreId) {
 	info!("Assign interrupt {} to core {}", irq, core_id);
 	irqsave(|| {
-        ioapic_inton(irq, core_id.try_into().unwrap()).unwrap();
-    });
+		ioapic_inton(irq, core_id.try_into().unwrap()).unwrap();
+	});
 }
 
 fn calibrate_timer() {
