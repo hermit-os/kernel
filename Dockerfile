@@ -51,6 +51,5 @@ RUN set -eux; \
         qemu-system-x86 \
     ; \
     rm -rf /var/lib/apt/lists/*;
-RUN set -eux; \
-    wget -P /usr/local/bin "https://github.com/hermitcore/rusty-loader/releases/download/v0.3.0/rusty-loader-x86_64";
+ADD https://github.com/hermitcore/rusty-loader/releases/download/v0.3.0/rusty-loader-x86_64 /usr/local/bin/
 COPY --from=stable-deps $CARGO_HOME/bin/uhyve $CARGO_HOME/bin/uhyve
