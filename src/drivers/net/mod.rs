@@ -40,6 +40,8 @@ pub trait NetworkInterface {
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
 	fn handle_interrupt(&mut self) -> bool;
+	/// handle interrupt on the same core, where the current task is running
+	fn assign_task_to_nic(&self);
 }
 
 #[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]

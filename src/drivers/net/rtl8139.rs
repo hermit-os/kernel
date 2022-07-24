@@ -8,10 +8,11 @@ use core::mem;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
-use crate::arch::kernel::percore::increment_irq_counter;
+use crate::arch::kernel::percore::{core_id, increment_irq_counter};
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
+use crate::drivers::net::apic::assign_irq_to_core;
 use crate::drivers::net::{network_irqhandler, NetworkInterface};
 use crate::x86::io::*;
 
@@ -215,6 +216,10 @@ impl NetworkInterface for RTL8139Driver {
 	/// Returns the MAC address of the network interface
 	fn get_mac_address(&self) -> [u8; 6] {
 		self.mac
+	}
+
+	fn assign_task_to_nic(&self) {
+		assign_irq_to_core(self.irq, core_id());
 	}
 
 	/// Returns the current MTU of the device.

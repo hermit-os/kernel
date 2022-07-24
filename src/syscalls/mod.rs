@@ -103,6 +103,17 @@ pub fn sys_get_mac_address() -> Result<[u8; 6], ()> {
 	kernel_function!(__sys_get_mac_address())
 }
 
+extern "C" fn __sys_assign_task_to_nic() {
+	unsafe {
+		SYS.assign_task_to_nic();
+	}
+}
+
+#[no_mangle]
+fn sys_assign_task_to_nic() {
+	kernel_function!(__sys_assign_task_to_nic());
+}
+
 #[allow(improper_ctypes_definitions)]
 extern "C" fn __sys_get_mtu() -> Result<u16, ()> {
 	unsafe { SYS.get_mtu() }
