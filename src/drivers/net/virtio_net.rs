@@ -4,7 +4,7 @@
 
 #[cfg(not(feature = "newlib"))]
 use super::netwakeup;
-use crate::arch::kernel::percore::increment_irq_counter;
+use crate::arch::kernel::percore::{core_id, increment_irq_counter};
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkInterface;
 
@@ -16,6 +16,7 @@ use core::mem;
 use core::result::Result;
 use core::{cell::RefCell, cmp::Ordering};
 
+use crate::drivers::net::apic::assign_irq_to_core;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
 #[cfg(feature = "pci")]
@@ -513,6 +514,10 @@ impl NetworkInterface for VirtioNetDriver {
 		} else {
 			unreachable!("Currently VIRTIO_NET_F_MAC must be negotiated!")
 		}
+	}
+
+	fn assign_task_to_nic(&self) {
+		assign_irq_to_core(self.irq, core_id());
 	}
 
 	/// Returns the current MTU of the device.
