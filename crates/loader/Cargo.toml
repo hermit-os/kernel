@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 goblin = { version = "0.5", default-features = false, features = ["elf64"] }
-hermit-entry = { version = "0.2", features = ["loader"] }
+hermit-entry = { version = "0.3", features = ["loader"] }
 plain = "0.2"
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]

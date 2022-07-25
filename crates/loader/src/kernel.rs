@@ -119,7 +119,11 @@ impl<'a> Object<'a> {
 			if let Some(note) = note_iter.find(|note| {
 				note.name == "HERMIT" && note.ty == hermit_entry::NT_HERMIT_ENTRY_VERSION
 			}) {
-				assert_eq!(1, note.desc[0], "hermit entry version does not match");
+				assert_eq!(
+					hermit_entry::HERMIT_ENTRY_VERSION,
+					note.desc[0],
+					"hermit entry version does not match"
+				);
 			} else {
 				println!("Warning: Kernel does not specify hermit entry version!");
 			}
