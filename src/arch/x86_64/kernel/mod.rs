@@ -359,7 +359,7 @@ pub fn print_statistics() {
 #[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe fn pre_init(boot_info: *const RawBootInfo) -> ! {
+unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
 	// Enable caching
 	unsafe {
 		let mut cr0 = cr0();
@@ -367,7 +367,6 @@ unsafe fn pre_init(boot_info: *const RawBootInfo) -> ! {
 		cr0_write(cr0);
 	}
 
-	let boot_info = unsafe { RawBootInfo::try_from_ptr(boot_info).unwrap() };
 	unsafe {
 		RAW_BOOT_INFO = Some(boot_info);
 		BOOT_INFO = Some(BootInfo::copy_from(boot_info));

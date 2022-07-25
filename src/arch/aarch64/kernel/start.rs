@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use hermit_entry::{BootInfo, RawBootInfo};
+use hermit_entry::{BootInfo, Entry, RawBootInfo};
 
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::kernel::{
@@ -43,7 +43,11 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start() -> ! {
+pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo) -> ! {
+	// validate signatures
+	const _START: Entry = _start;
+	const _PRE_INIT: Entry = pre_init;
+
 	asm!(
 		// determine stack address
 		"mov x1, x0",
@@ -64,8 +68,7 @@ pub unsafe extern "C" fn _start() -> ! {
 
 #[inline(never)]
 #[no_mangle]
-unsafe fn pre_init(boot_info: *const RawBootInfo) -> ! {
-	let boot_info = unsafe { RawBootInfo::try_from_ptr(boot_info).unwrap() };
+unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
 	unsafe {
 		RAW_BOOT_INFO = Some(boot_info);
 		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
