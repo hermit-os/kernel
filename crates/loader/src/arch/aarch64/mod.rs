@@ -156,5 +156,5 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	/* Memory barrier */
 	asm!("dsb sy", options(nostack));
 
-	func(BOOT_INFO.as_ref().unwrap())
+	func(BOOT_INFO.as_ref().unwrap(), 0)
 }

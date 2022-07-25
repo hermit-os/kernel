@@ -249,7 +249,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point
 	);
 	let func: Entry = core::mem::transmute(entry_point);
-	func(BOOT_INFO.as_ref().unwrap());
+	func(BOOT_INFO.as_ref().unwrap(), 0);
 
 	// we never reach this point
 }
