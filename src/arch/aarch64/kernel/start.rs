@@ -46,7 +46,7 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo) -> ! {
+pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
 	// validate signatures
 	const _START: Entry = _start;
 	const _PRE_INIT: Entry = pre_init;
@@ -71,7 +71,7 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo) -> ! {
 
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
+unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
 	unsafe {
 		RAW_BOOT_INFO = Some(boot_info);
 		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
@@ -90,7 +90,7 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
 	// Memory barrier
 	asm!("dsb sy", options(nostack),);
 
-	if boot_info.load_cpu_online() == 0 {
+	if cpu_id == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]

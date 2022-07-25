@@ -24,6 +24,7 @@ _start:
 ; PARAMETERS
 align 8
 	entry_point dq 0xDEADC0DE
+	cpu_id dd 0xC0DECAFE
 	boot_info dq 0xBEEFBEEF
 	pml4 dd 0xDEADBEEF
 	pad dd 0;
@@ -145,5 +146,6 @@ ALIGN 8
 start64:
     ; forward address to boot info
     mov rdi, qword [boot_info]
+    mov esi, dword [cpu_id]
     ; Jump to _start
     jmp qword [entry_point]

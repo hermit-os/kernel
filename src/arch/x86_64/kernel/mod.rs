@@ -1,6 +1,7 @@
 use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
@@ -143,7 +144,7 @@ pub fn get_possible_cpus() -> u32 {
 
 #[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
-	raw_boot_info().load_cpu_online()
+	CPU_ONLINE.load(Ordering::Acquire)
 }
 
 #[cfg(not(feature = "smp"))]
@@ -338,7 +339,7 @@ fn finish_processor_init() {
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
-	raw_boot_info().increment_cpu_online();
+	CPU_ONLINE.fetch_add(1, Ordering::Release);
 }
 
 pub fn print_statistics() {
@@ -361,10 +362,15 @@ pub fn print_statistics() {
 	}
 }
 
+/// `CPU_ONLINE` is the count of CPUs that finished initialization.
+///
+/// It also synchronizes initialization of CPU cores.
+pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+
 #[cfg(target_os = "none")]
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
+unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
 	// Enable caching
 	unsafe {
 		let mut cr0 = cr0();
@@ -377,7 +383,7 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
 		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
 	}
 
-	if boot_info.load_cpu_online() == 0 {
+	if cpu_id == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]
