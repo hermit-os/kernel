@@ -92,6 +92,8 @@ mod scheduler;
 mod synch;
 mod syscalls;
 
+hermit_entry::define_entry_version!();
+
 #[doc(hidden)]
 pub fn _print(args: ::core::fmt::Arguments<'_>) {
 	use core::fmt::Write;
