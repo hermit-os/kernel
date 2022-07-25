@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use hermit_entry::RawBootInfo;
+use hermit_entry::{Entry, RawBootInfo};
 
 use crate::{
 	kernel::{pre_init, scheduler::TaskStacks},
@@ -9,11 +9,12 @@ use crate::{
 
 #[no_mangle]
 #[naked]
-pub extern "C" fn _start(_boot_info: *const RawBootInfo) -> ! {
+pub unsafe extern "C" fn _start(_boot_info: &'static RawBootInfo) -> ! {
 	// boot_info is in the `rdi` register
 
-	// validate signature
-	const _F: unsafe fn(*const RawBootInfo) -> ! = pre_init;
+	// validate signatures
+	const _START: Entry = _start;
+	const _PRE_INIT: Entry = pre_init;
 
 	unsafe {
 		asm!(
