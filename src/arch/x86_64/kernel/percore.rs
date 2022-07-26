@@ -5,9 +5,8 @@ use crate::x86::msr::*;
 use core::arch::asm;
 use core::mem;
 use core::ptr;
+use core::sync::atomic::{AtomicU64, Ordering};
 use crossbeam_utils::CachePadded;
-
-use super::raw_boot_info;
 
 pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
 
@@ -192,9 +191,11 @@ pub fn increment_irq_counter(irq_no: usize) {
 	}
 }
 
+pub static CURRENT_PERCORE_ADDRESS: AtomicU64 = AtomicU64::new(0);
+
 pub fn init() {
 	// Store the address to the PerCoreVariables structure allocated for this core in GS.
-	let address = raw_boot_info().load_current_percore_address();
+	let address = CURRENT_PERCORE_ADDRESS.load(Ordering::Acquire);
 	unsafe {
 		if address == 0 {
 			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
