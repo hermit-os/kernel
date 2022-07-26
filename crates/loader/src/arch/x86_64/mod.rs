@@ -6,7 +6,7 @@ use core::ptr::{copy, write_bytes};
 #[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
-use hermit_entry::{BootInfo, Entry, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfoBuilder, Entry, RawBootInfo, TlsInfo};
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
@@ -243,8 +243,8 @@ pub unsafe fn boot_kernel(
 		KERNEL_STACK_SIZE.try_into().unwrap(),
 	);
 
-	static mut BOOT_INFO: RawBootInfo = RawBootInfo::INVALID;
-	BOOT_INFO = BootInfo {
+	static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
+	BOOT_INFO = BootInfoBuilder {
 		base: new_addr,
 		image_size: mem_size,
 		tls_info,
