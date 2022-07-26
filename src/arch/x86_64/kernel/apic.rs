@@ -770,6 +770,8 @@ extern "C" {
 /// This is partly confirmed by <https://wiki.osdev.org/Symmetric_Multiprocessing>
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
+	use core::hint;
+
 	use include_transformed::include_nasm_bin;
 
 	let smp_boot_code = include_nasm_bin!("boot.asm");
@@ -861,7 +863,7 @@ pub fn boot_application_processors() {
 			// Wait until the application processor has finished initializing.
 			// It will indicate this by counting up cpu_online.
 			while current_processor_count == arch::get_processor_count() {
-				processor::udelay(1000);
+				hint::spin_loop();
 			}
 		}
 	}
