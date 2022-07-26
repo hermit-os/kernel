@@ -10,7 +10,6 @@ use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
 use crate::env;
-use crate::kernel_message_buffer;
 use crate::scheduler::CoreId;
 
 #[cfg(feature = "acpi")]
@@ -172,11 +171,6 @@ pub fn is_uhyve_with_pci() -> bool {
 	boot_info().uhyve & 0b11 == 0b11
 }
 
-/// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
-pub fn is_single_kernel() -> bool {
-	boot_info().single_kernel != 0
-}
-
 pub fn get_cmdsize() -> usize {
 	boot_info().cmdsize as usize
 }
@@ -193,12 +187,10 @@ pub fn message_output_init() {
 		COM1.port_address = boot_info().uartport;
 	}
 
-	if env::is_single_kernel() {
-		// We can only initialize the serial port here, because VGA requires processor
-		// configuration first.
-		unsafe {
-			COM1.init(SERIAL_PORT_BAUDRATE);
-		}
+	// We can only initialize the serial port here, because VGA requires processor
+	// configuration first.
+	unsafe {
+		COM1.init(SERIAL_PORT_BAUDRATE);
 	}
 }
 
@@ -236,20 +228,15 @@ fn test_output() {
 
 #[cfg(target_os = "none")]
 pub fn output_message_byte(byte: u8) {
-	if env::is_single_kernel() {
-		// Output messages to the serial port and VGA screen in unikernel mode.
-		unsafe {
-			COM1.write_byte(byte);
-		}
-
-		// vga::write_byte() checks if VGA support has been initialized,
-		// so we don't need any additional if clause around it.
-		#[cfg(feature = "vga")]
-		vga::write_byte(byte);
-	} else {
-		// Output messages to the kernel message buffer in multi-kernel mode.
-		kernel_message_buffer::write_byte(byte);
+	// Output messages to the serial port and VGA screen in unikernel mode.
+	unsafe {
+		COM1.write_byte(byte);
 	}
+
+	// vga::write_byte() checks if VGA support has been initialized,
+	// so we don't need any additional if clause around it.
+	#[cfg(feature = "vga")]
+	vga::write_byte(byte);
 }
 
 //#[cfg(target_os = "none")]
@@ -265,7 +252,7 @@ pub fn boot_processor_init() {
 	processor::detect_features();
 	processor::configure();
 
-	if cfg!(feature = "vga") && env::is_single_kernel() && !env::is_uhyve() {
+	if cfg!(feature = "vga") && !env::is_uhyve() {
 		#[cfg(feature = "vga")]
 		vga::init();
 	}
@@ -286,17 +273,15 @@ pub fn boot_processor_init() {
 	irq::install();
 	systemtime::init();
 
-	if env::is_single_kernel() {
-		if is_uhyve_with_pci() || !is_uhyve() {
-			#[cfg(feature = "pci")]
-			pci::init();
-			#[cfg(feature = "pci")]
-			pci::print_information();
-		}
-		if !env::is_uhyve() {
-			#[cfg(feature = "acpi")]
-			acpi::init();
-		}
+	if is_uhyve_with_pci() || !is_uhyve() {
+		#[cfg(feature = "pci")]
+		pci::init();
+		#[cfg(feature = "pci")]
+		pci::print_information();
+	}
+	if !env::is_uhyve() {
+		#[cfg(feature = "acpi")]
+		acpi::init();
 	}
 
 	apic::init();

@@ -1,6 +1,4 @@
-//! Determining and providing information about the environment (unikernel
-//! vs. multi-kernel, hypervisor, etc.) as well as central parsing of the
-//! command-line parameters.
+//! Central parsing of the command-line parameters.
 
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{slice, str};
@@ -9,31 +7,13 @@ use once_cell::race::OnceBox;
 
 pub use crate::arch::kernel::{
 	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address, get_tls_align,
-	get_tls_filesz, get_tls_memsz, get_tls_start, is_single_kernel, is_uhyve,
+	get_tls_filesz, get_tls_memsz, get_tls_start, is_uhyve,
 };
 
-static ENV: OnceBox<Env> = OnceBox::new();
+static CLI: OnceBox<Cli> = OnceBox::new();
 
 pub fn init() {
-	ENV.set(Box::new(Env::default())).unwrap();
-}
-
-#[derive(Debug)]
-struct Env {
-	cli: Cli,
-	is_proxy: bool,
-}
-
-impl Default for Env {
-	fn default() -> Self {
-		let cli = Cli::default();
-
-		// Uhyve or baremetal implies unikernel mode and no communication with "proxy".
-		// Else we are running side-by-side to Linux, which implies communication with "proxy".
-		let is_proxy = !is_uhyve() && !is_single_kernel();
-
-		Self { cli, is_proxy }
-	}
+	CLI.set(Box::new(Cli::default())).unwrap();
 }
 
 #[derive(Debug)]
@@ -112,19 +92,14 @@ impl Default for Cli {
 
 /// CPU Frequency in MHz if given through the -freq command-line parameter.
 pub fn freq() -> Option<u16> {
-	ENV.get().unwrap().cli.freq
+	CLI.get().unwrap().freq
 }
 
 pub fn vars() -> &'static [String] {
-	ENV.get().unwrap().cli.env_vars.as_slice()
+	CLI.get().unwrap().env_vars.as_slice()
 }
 
 /// Returns the cmdline argument passed in after "--"
 pub fn args() -> &'static [String] {
-	ENV.get().unwrap().cli.args.as_slice()
-}
-
-/// Whether HermitCore shall communicate with the "proxy" application over a network interface.
-pub fn is_proxy() -> bool {
-	ENV.get().unwrap().is_proxy
+	CLI.get().unwrap().args.as_slice()
 }

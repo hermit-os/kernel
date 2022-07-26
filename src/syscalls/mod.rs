@@ -56,9 +56,7 @@ pub(crate) fn init() {
 	unsafe {
 		// We know that HermitCore has successfully initialized a network interface.
 		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		if env::is_proxy() {
-			panic!("Currently, we don't support the proxy mode!");
-		} else if env::is_uhyve() {
+		if env::is_uhyve() {
 			SYS = &interfaces::Uhyve;
 		}
 
