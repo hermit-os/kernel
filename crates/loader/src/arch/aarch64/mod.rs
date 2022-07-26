@@ -4,7 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
-use hermit_entry::{BootInfo, Entry, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfoBuilder, Entry, RawBootInfo, TlsInfo};
 
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
@@ -128,8 +128,8 @@ pub unsafe fn boot_kernel(
 			options(nostack),
 	);
 
-	pub static mut BOOT_INFO: RawBootInfo = RawBootInfo::INVALID;
-	BOOT_INFO = BootInfo {
+	pub static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
+	BOOT_INFO = BootInfoBuilder {
 		base: virtual_address,
 		limit: RAM_START + 0x20000000, // 512 MB
 		image_size: mem_size,
