@@ -1,11 +1,11 @@
+use crate::arch::x86_64::kernel::boot_info;
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use crate::env;
 use core::hint::spin_loop;
+use core::num::NonZeroU64;
 use time::OffsetDateTime;
 use x86::io::*;
-
-use super::raw_boot_info;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16 = 0x71;
@@ -178,22 +178,27 @@ impl Drop for Rtc {
 	}
 }
 
+static mut BOOT_TIME: Option<NonZeroU64> = None;
+
 pub fn get_boot_time() -> u64 {
-	raw_boot_info().load_boot_time()
+	unsafe { BOOT_TIME.unwrap().get() }
 }
 
 pub fn init() {
-	let mut microseconds_offset = get_boot_time();
-
-	if microseconds_offset == 0 && !env::is_uhyve() {
+	let boot_time = if env::is_uhyve() {
+		boot_info().boot_gtod
+	} else {
 		// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 		let rtc = Rtc::new();
-		microseconds_offset = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
-		raw_boot_info().store_boot_time(microseconds_offset);
+		rtc.get_microseconds_since_epoch() - processor::get_timer_ticks()
+	};
+
+	unsafe {
+		BOOT_TIME = Some(boot_time.try_into().unwrap());
 	}
 
-	let timestamp = microseconds_offset / 1_000_000;
+	let timestamp = boot_time / 1_000_000;
 	let date_time = OffsetDateTime::from_unix_timestamp(timestamp.try_into().unwrap()).unwrap();
 
 	info!("HermitCore-rs booted on {date_time}");
