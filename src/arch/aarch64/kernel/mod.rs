@@ -65,6 +65,11 @@ pub fn get_limit() -> usize {
 	boot_info().limit as usize
 }
 
+#[cfg(feature = "smp")]
+pub fn get_possible_cpus() -> u32 {
+	todo!()
+}
+
 pub fn get_processor_count() -> u32 {
 	raw_boot_info().load_cpu_online()
 }

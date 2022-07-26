@@ -242,6 +242,11 @@ pub fn add_local_apic_id(id: u8) {
 	}
 }
 
+#[cfg(feature = "smp")]
+pub fn local_apic_id_count() -> u32 {
+	unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().len() as u32 }
+}
+
 #[cfg(not(feature = "acpi"))]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// dummy implementation if acpi support is disabled

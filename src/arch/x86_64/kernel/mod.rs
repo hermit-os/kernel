@@ -142,6 +142,18 @@ pub fn get_mbinfo() -> VirtAddr {
 }
 
 #[cfg(feature = "smp")]
+pub fn get_possible_cpus() -> u32 {
+	use core::cmp;
+
+	if env::is_uhyve() {
+		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
+		cmp::max(boot_info().possible_cpus, get_processor_count())
+	} else {
+		apic::local_apic_id_count()
+	}
+}
+
+#[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
 	raw_boot_info().load_cpu_online()
 }
