@@ -23,6 +23,7 @@ use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::ptr;
+use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 use crossbeam_utils::CachePadded;
 
@@ -747,13 +748,16 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	}
 
 	raw_boot_info().store_current_stack_address(stack.as_u64());
-	raw_boot_info().store_current_percore_address(Box::into_raw(boxed_percore) as u64);
+
+	let current_percore = Box::leak(boxed_percore);
 
 	trace!(
-		"Initialize per core data at {:#x} (size {} bytes)",
-		raw_boot_info().load_current_percore_address(),
-		mem::size_of::<PerCoreVariables>()
+		"Initialize per core data at {:p} (size {} bytes)",
+		current_percore,
+		mem::size_of_val(current_percore)
 	);
+
+	CURRENT_PERCORE_ADDRESS.store(current_percore as *mut _ as u64, Ordering::Release);
 }
 
 extern "C" {
