@@ -102,11 +102,9 @@ impl<'a> Object<'a> {
 				"kernel object is not little endian"
 			);
 			let os_abi = header.e_ident[header::EI_OSABI];
-			assert_eq!(
-				header::ELFOSABI_STANDALONE,
-				os_abi,
-				"kernel is not a hermit application"
-			);
+			if os_abi != header::ELFOSABI_STANDALONE {
+				println!("Warning: kernel is not a hermit application");
+			}
 
 			let note_section = phs
 				.iter()
