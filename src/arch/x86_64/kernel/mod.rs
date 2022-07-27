@@ -30,7 +30,7 @@ pub mod pit;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
-#[cfg(not(test))]
+#[cfg(target_os = "none")]
 mod start;
 pub mod switch;
 pub mod systemtime;

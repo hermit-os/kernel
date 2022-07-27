@@ -81,8 +81,7 @@ jobs:
       - name: Integration tests (ubuntu)
         working-directory: libhermit-rs
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        run: cargo test --tests --no-fail-fast -- --bootloader_path=rusty-loader-x86_64
-        continue-on-error: true
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=../rusty-loader-x86_64
       - name: Build release profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --release
       - name: Test release profile
