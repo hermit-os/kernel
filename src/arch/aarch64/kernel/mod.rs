@@ -22,7 +22,6 @@ use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;
-use crate::kernel_message_buffer;
 use crate::synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
@@ -103,11 +102,6 @@ pub fn is_uhyve() -> bool {
 	boot_info().uhyve != 0
 }
 
-/// Whether HermitCore is running alone (true) or side-by-side to Linux in Multi-Kernel mode (false).
-pub fn is_single_kernel() -> bool {
-	boot_info().single_kernel != 0
-}
-
 pub fn get_cmdsize() -> usize {
 	boot_info().cmdsize as usize
 }
@@ -124,24 +118,17 @@ pub fn message_output_init() {
 		COM1.port_address = boot_info().uartport;
 	}
 
-	if env::is_single_kernel() {
-		// We can only initialize the serial port here, because VGA requires processor
-		// configuration first.
-		unsafe {
-			COM1.init(SERIAL_PORT_BAUDRATE);
-		}
+	// We can only initialize the serial port here, because VGA requires processor
+	// configuration first.
+	unsafe {
+		COM1.init(SERIAL_PORT_BAUDRATE);
 	}
 }
 
 pub fn output_message_byte(byte: u8) {
-	if env::is_single_kernel() {
-		// Output messages to the serial port.
-		unsafe {
-			COM1.write_byte(byte);
-		}
-	} else {
-		// Output messages to the kernel message buffer in multi-kernel mode.
-		kernel_message_buffer::write_byte(byte);
+	// Output messages to the serial port.
+	unsafe {
+		COM1.write_byte(byte);
 	}
 }
 
@@ -179,7 +166,7 @@ pub fn boot_processor_init() {
 	processor::print_information();
 	systemtime::init();
 
-	if env::is_single_kernel() && !env::is_uhyve() {
+	if !env::is_uhyve() {
 		pci::init();
 		pci::print_information();
 		acpi::init();

@@ -765,10 +765,6 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	CURRENT_PERCORE_ADDRESS.store(current_percore as *mut _ as u64, Ordering::Release);
 }
 
-extern "C" {
-	fn _start();
-}
-
 /// Boot all Application Processors
 /// This algorithm is derived from Intel MultiProcessor Specification 1.4, B.4, but testing has shown
 /// that a second STARTUP IPI and setting the BIOS Reset Vector are no longer necessary.
@@ -776,6 +772,8 @@ extern "C" {
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn boot_application_processors() {
 	use include_transformed::include_nasm_bin;
+
+	use super::start;
 
 	let smp_boot_code = include_nasm_bin!("boot.asm");
 
@@ -813,10 +811,11 @@ pub fn boot_application_processors() {
 			cr3().try_into().unwrap();
 		// Set entry point
 		debug!(
-			"Set entry point for application processor to {:#x}",
-			_start as usize
+			"Set entry point for application processor to {:p}",
+			start::_start as *const ()
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) = _start as usize;
+		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) =
+			start::_start as usize;
 		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) =
 			raw_boot_info() as *const _ as u64;
 	}

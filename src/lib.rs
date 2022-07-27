@@ -84,7 +84,6 @@ mod console;
 mod drivers;
 mod env;
 pub mod errno;
-mod kernel_message_buffer;
 mod mm;
 #[cfg(target_os = "none")]
 mod runtime_glue;
@@ -273,9 +272,6 @@ extern "C" fn initd(_arg: usize) {
 	if env::is_uhyve() {
 		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
 		info!("HermitCore is running on uhyve!");
-	} else if !env::is_single_kernel() {
-		// Initialize the mmnif interface using static IPs in the range 192.168.28.x.
-		info!("HermitCore is running side-by-side to Linux!");
 	} else {
 		info!("HermitCore is running on common system!");
 	}
@@ -352,7 +348,7 @@ fn boot_processor_main() -> ! {
 	}
 	scheduler::add_current_core();
 
-	if env::is_single_kernel() && !env::is_uhyve() {
+	if !env::is_uhyve() {
 		arch::boot_application_processors();
 	}
 
