@@ -1,8 +1,6 @@
 status = [
-  "x86 tests (ubuntu-latest)",
-  "x86 tests (macos-latest)",
-  "x86 tests (windows-latest)",
-  "aarch64 tests (ubuntu-latest)",
+  "x86 tests",
+  "aarch64 tests",
   "Check docs",
   "Clippy",
   "Format",

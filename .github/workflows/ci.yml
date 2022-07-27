@@ -53,28 +53,12 @@ jobs:
 
   test-x86:
     name: x86 tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ubuntu-latest
     steps:
-      - name: Install QEMU, NASM (ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Install QEMU, NASM
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm
-      - name: Install QEMU, NASM (macos)
-        if: ${{ matrix.os == 'macos-latest' }}
-        run: |
-          brew update
-          brew install qemu nasm
-      - name: Install QEMU, NASM (windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        run: |
-          choco install qemu --version 2021.12.15
-          echo "C:\Program Files\qemu" >> $GITHUB_PATH
-          choco install nasm
-          echo "C:\Program Files\NASM" >> $GITHUB_PATH
       - name: Checkout rusty-hermit
         uses: actions/checkout@v3
         with:
@@ -91,8 +75,7 @@ jobs:
         run: cargo xtask build --arch x86_64 --no-default-features
       - name: Build dev profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit
-      - name: Unittests on host (ubuntu)
-        if: ${{ matrix.os == 'ubuntu-latest' }}
+      - name: Unittests on host
         working-directory: libhermit-rs
         run: cargo test --lib --target x86_64-unknown-linux-gnu
         env:
@@ -109,9 +92,8 @@ jobs:
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/debug/rusty_demo
-      - name: Integration tests (ubuntu)
+      - name: Integration tests
         working-directory: libhermit-rs
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=../rusty-loader-x86_64
       - name: Build release profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --release
@@ -123,11 +105,9 @@ jobs:
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/rusty_demo
       - name: Build minimal profile
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --no-default-features --release --package hello_world
       - name: Test minimal profile
         id: minimal
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
           echo "FREQ = $FREQ"
@@ -145,10 +125,7 @@ jobs:
   
   test-aarch64:
     name: aarch64 tests
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout rusty-hermit
         uses: actions/checkout@v3
