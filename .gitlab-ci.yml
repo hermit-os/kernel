@@ -55,11 +55,11 @@ test:integration:
     - lscpu
     - kvm-ok
     - python3 --version
-    - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast -Z build-std=core,alloc 
-        -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi 
+    - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast
+        --no-default-features --features=pci,acpi 
         --target x86_64-unknown-none -- --veryverbose
-    - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast -Z build-std=core,alloc 
-        -Z build-std-features=compiler-builtins-mem --no-default-features --features=pci,acpi 
+    - HERMIT_LOG_LEVEL_FILTER=Debug cargo test --test '*' --no-fail-fast
+        --no-default-features --features=pci,acpi 
         --target x86_64-unknown-none -- --num_cores 2
         --veryverbose
   tags:

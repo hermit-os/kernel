@@ -26,9 +26,10 @@ jobs:
       - uses: actions/checkout@v3
       - name: Rustup (apply rust-toolchain.toml)
         run: rustup show
+      - run: rustup target add aarch64-unknown-none-softfloat
       - name: Doc
         env:
           RUSTDOCFLAGS: -D warnings
         run: |
-          cargo doc -Z build-std=core,alloc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
-          cargo doc -Z build-std=core,alloc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat
+          cargo doc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
+          cargo doc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat
