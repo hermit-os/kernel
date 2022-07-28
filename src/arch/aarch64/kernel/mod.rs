@@ -15,7 +15,7 @@ pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use core::arch::{asm, global_asm};
 use core::ptr;
 
-use hermit_entry::{BootInfo, RawBootInfo};
+use hermit_entry::{BootInfo, PlatformInfo, RawBootInfo};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -53,15 +53,54 @@ pub fn get_boot_info_address() -> VirtAddr {
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(boot_info().ram_start)
+	PhysAddr(boot_info().phys_addr_range.start)
+}
+
+pub fn get_base_address() -> VirtAddr {
+	VirtAddr(boot_info().kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	boot_info().image_size as usize
+	let range = &boot_info().kernel_image_addr_range;
+	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	boot_info().limit as usize
+	boot_info().phys_addr_range.end as usize
+}
+
+pub fn get_tls_start() -> VirtAddr {
+	VirtAddr(
+		boot_info()
+			.tls_info
+			.as_ref()
+			.map(|tls_info| tls_info.start)
+			.unwrap_or_default(),
+	)
+}
+
+pub fn get_tls_filesz() -> usize {
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.filesz)
+		.unwrap_or_default() as usize
+}
+
+pub fn get_tls_memsz() -> usize {
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.memsz)
+		.unwrap_or_default() as usize
+}
+
+pub fn get_tls_align() -> usize {
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.align)
+		.unwrap_or_default() as usize
 }
 
 #[cfg(feature = "smp")]
@@ -73,41 +112,21 @@ pub fn get_processor_count() -> u32 {
 	raw_boot_info().load_cpu_online()
 }
 
-pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().base)
-}
-
 pub fn get_current_stack_address() -> VirtAddr {
 	VirtAddr(raw_boot_info().load_current_stack_address())
 }
 
-pub fn get_tls_start() -> VirtAddr {
-	VirtAddr(boot_info().tls_info.start)
-}
-
-pub fn get_tls_filesz() -> usize {
-	boot_info().tls_info.filesz as usize
-}
-
-pub fn get_tls_memsz() -> usize {
-	boot_info().tls_info.memsz as usize
-}
-
-pub fn get_tls_align() -> usize {
-	boot_info().tls_info.align as usize
-}
-
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	boot_info().uhyve != 0
+	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
 pub fn get_cmdsize() -> usize {
-	boot_info().cmdsize as usize
+	todo!()
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	VirtAddr(boot_info().cmdline)
+	todo!()
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -115,7 +134,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = boot_info().uartport;
+		COM1.port_address = boot_info().uartport.unwrap_or_default();
 	}
 
 	// We can only initialize the serial port here, because VGA requires processor

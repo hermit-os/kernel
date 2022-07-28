@@ -2,7 +2,7 @@ use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
 
-use hermit_entry::{BootInfo, RawBootInfo};
+use hermit_entry::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -63,50 +63,73 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(0)
+	PhysAddr(boot_info().phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().base)
+	VirtAddr(boot_info().kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	boot_info().image_size as usize
+	let range = &boot_info().kernel_image_addr_range;
+	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	boot_info().limit as usize
+	boot_info().phys_addr_range.end as usize
 }
 
 pub fn get_tls_start() -> VirtAddr {
-	VirtAddr(boot_info().tls_info.start)
+	VirtAddr(
+		boot_info()
+			.tls_info
+			.as_ref()
+			.map(|tls_info| tls_info.start)
+			.unwrap_or_default(),
+	)
 }
 
 pub fn get_tls_filesz() -> usize {
-	boot_info().tls_info.filesz as usize
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.filesz)
+		.unwrap_or_default() as usize
 }
 
 pub fn get_tls_memsz() -> usize {
-	boot_info().tls_info.memsz as usize
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.memsz)
+		.unwrap_or_default() as usize
 }
 
 pub fn get_tls_align() -> usize {
-	boot_info().tls_info.align as usize
+	boot_info()
+		.tls_info
+		.as_ref()
+		.map(|tls_info| tls_info.align)
+		.unwrap_or_default() as usize
 }
 
 pub fn get_mbinfo() -> VirtAddr {
-	VirtAddr(boot_info().mb_info)
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot {
+			multiboot_info_ptr, ..
+		} => VirtAddr(multiboot_info_ptr),
+		PlatformInfo::Uhyve { .. } => VirtAddr(0),
+	}
 }
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
 
-	if env::is_uhyve() {
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { .. } => apic::local_apic_id_count(),
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
-		cmp::max(boot_info().possible_cpus, get_processor_count())
-	} else {
-		apic::local_apic_id_count()
+		PlatformInfo::Uhyve { cpu_count, .. } => cmp::max(cpu_count, get_processor_count()),
 	}
 }
 
@@ -122,19 +145,34 @@ pub fn get_processor_count() -> u32 {
 
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
-	boot_info().uhyve & 0b1 == 0b1
+	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
 pub fn is_uhyve_with_pci() -> bool {
-	boot_info().uhyve & 0b11 == 0b11
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { .. } => false,
+		PlatformInfo::Uhyve { pci, .. } => pci,
+	}
 }
 
 pub fn get_cmdsize() -> usize {
-	boot_info().cmdsize as usize
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { command_line, .. } => command_line
+			.map(|command_line| command_line.len())
+			.unwrap_or_default(),
+		PlatformInfo::Uhyve { .. } => 0,
+	}
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	VirtAddr(boot_info().cmdline)
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { command_line, .. } => VirtAddr(
+			command_line
+				.map(|command_line| command_line.as_ptr() as u64)
+				.unwrap_or_default(),
+		),
+		PlatformInfo::Uhyve { .. } => VirtAddr(0),
+	}
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -142,7 +180,7 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = boot_info().uartport;
+		COM1.port_address = boot_info().uartport.unwrap_or_default();
 	}
 
 	// We can only initialize the serial port here, because VGA requires processor
