@@ -1,0 +1,194 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - staging
+      - trying
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -Dwarnings
+  RUSTDOCFLAGS: -Dwarnings
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install nasm
+      - run: cargo xtask clippy
+
+  format:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: cargo fmt -- --check
+
+  check-docs:
+    name: Check docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install nasm
+      - uses: actions/checkout@v3
+      - run: rustup target add aarch64-unknown-none-softfloat
+      - name: Check docs
+        run: |
+          cargo doc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
+          cargo doc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install nasm
+      - uses: actions/checkout@v3
+      - name: Build minimal kernel
+        run: |
+          cargo xtask build --arch x86_64 --no-default-features
+          cargo xtask build --arch aarch64 --no-default-features
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Unit tests
+        run: cargo test --lib --target x86_64-unknown-linux-gnu
+        env:
+          RUSTFLAGS: -Awarnings
+      - name: Download loader
+        uses: dsaltares/fetch-gh-release-asset@1.0.0
+        with:
+          repo: hermitcore/rusty-loader
+          file: rusty-loader-x86_64
+      - name: Integration tests
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=../rusty-loader-x86_64
+        env:
+          RUSTFLAGS: -Awarnings
+        continue-on-error: true
+
+  run-x86_64:
+    name: Run RustyHermit (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install QEMU, NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install qemu-system-x86 nasm
+      - name: Checkout rusty-hermit
+        uses: actions/checkout@v3
+        with:
+          repository: hermitcore/rusty-hermit
+          submodules: true
+      - name: Remove libhermit-rs submodule
+        run: git rm -r libhermit-rs
+      - name: Checkout libhermit-rs
+        uses: actions/checkout@v3
+        with:
+          path: libhermit-rs
+      - name: Build dev profile
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit
+      - name: Download loader
+        uses: dsaltares/fetch-gh-release-asset@1.0.0
+        with:
+          repo: hermitcore/rusty-loader
+          file: rusty-loader-x86_64
+      - name: Test dev profile
+        run: |
+          qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
+            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/debug/rusty_demo
+      - name: Build release profile
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --release
+      - name: Test release profile
+        run: |
+          qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
+            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/release/rusty_demo
+      - name: Build minimal profile
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --no-default-features --release --package hello_world
+      - name: Test minimal profile
+        id: minimal
+        run: |
+          FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
+          echo "FREQ = $FREQ"
+          qemu-system-x86_64 \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on \
+            -global virtio-mmio.force-legacy=on -nodefaults -no-user-config \
+            -display none -smp 1 -m 64M -serial stdio \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/release/hello_world \
+            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -append "-freq $FREQ" \
+            || qemu_status=$?
+          test $qemu_status -eq 3
+  
+  run-aarch64:
+    name: Run RustyHermit (aarch64)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout rusty-hermit
+        uses: actions/checkout@v3
+        with:
+          repository: hermitcore/rusty-hermit
+          submodules: true
+      - name: Remove libhermit-rs submodule
+        run: git rm -r libhermit-rs
+      - name: Checkout libhermit-rs
+        uses: actions/checkout@v3
+        with:
+          path: libhermit-rs
+      - name: Checkout loader
+        uses: actions/checkout@v3
+        with:
+          repository: hermitcore/rusty-loader
+          path: loader
+      - name: Checkout loader release
+        run: |
+          # Get new tags from remote
+          git fetch --tags
+
+          # Get latest tag name
+          latestTag=$(git describe --tags `git rev-list --tags --max-count=1`)
+
+          # Checkout latest tag
+          git checkout $latestTag
+        working-directory: loader
+      - name: Build dev profile
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target aarch64-unknown-hermit --package hello_world
+      - name: Build loader
+        run: cargo xtask build --arch aarch64
+        working-directory: loader
+        env:
+          HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install qemu-system-aarch64
+      - name: Test kernel
+        run: qemu-system-aarch64 -semihosting -display none -serial stdio -kernel target/aarch64/debug/rusty-loader -machine virt,gic-version=max -m 512M -cpu max -smp 1
+        working-directory: loader
+        

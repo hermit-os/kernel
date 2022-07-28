@@ -1,11 +1,11 @@
 status = [
-  "x86 tests (ubuntu-latest)",
-  "x86 tests (macos-latest)",
-  "x86 tests (windows-latest)",
-  "aarch64 tests (ubuntu-latest)",
-  "Doc",
-  "Format",
+  "Build",
+  "Check docs",
   "Clippy",
+  "Format",
+  "Run RustyHermit (aarch64)",
+  "Run RustyHermit (x86_64)",
+  "Test",
   "ci/gitlab/git.rwth-aachen.de",
 ]
 delete_merged_branches = true
