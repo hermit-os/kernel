@@ -1,5 +1,5 @@
 [package]
-name = "rusty-hermit"
+name = "libhermit-rs"
 version = "0.4.3"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
@@ -16,7 +16,7 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
-repository = "https://github.com/hermitcore/rusty-hermit"
+repository = "https://github.com/hermitcore/libhermit-rs"
 documentation = "https://hermitcore.github.io/libhermit-rs/hermit/"
 edition = "2021"
 description = "A Rust-based library operating system"

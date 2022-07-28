@@ -136,6 +136,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "349d5a591cd28b49e1d1037471617a32ddcda5731b99419008085f72d5a53836"
 
 [[package]]
+name = "libhermit-rs"
+version = "0.4.3"
+dependencies = [
+ "aarch64",
+ "bitflags",
+ "crossbeam-utils",
+ "float-cmp",
+ "hermit-entry",
+ "include-transformed",
+ "log",
+ "multiboot",
+ "num",
+ "num-derive",
+ "num-traits",
+ "once_cell",
+ "pci-ids",
+ "qemu-exit",
+ "scopeguard",
+ "shell-words",
+ "time",
+ "x86",
+]
+
+[[package]]
 name = "llvm-tools"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -427,30 +451,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "rusty-hermit"
-version = "0.4.3"
-dependencies = [
- "aarch64",
- "bitflags",
- "crossbeam-utils",
- "float-cmp",
- "hermit-entry",
- "include-transformed",
- "log",
- "multiboot",
- "num",
- "num-derive",
- "num-traits",
- "once_cell",
- "pci-ids",
- "qemu-exit",
- "scopeguard",
- "shell-words",
- "time",
- "x86",
 ]
 
 [[package]]
