@@ -1,9 +1,9 @@
 use crate::arch::x86_64::kernel::boot_info;
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
-use crate::env;
 use core::hint::spin_loop;
 use core::num::NonZeroU64;
+use hermit_entry::PlatformInfo;
 use time::OffsetDateTime;
 use x86::io::*;
 
@@ -185,13 +185,14 @@ pub fn get_boot_time() -> u64 {
 }
 
 pub fn init() {
-	let boot_time = if env::is_uhyve() {
-		boot_info().boot_gtod
-	} else {
-		// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
-		// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
-		let rtc = Rtc::new();
-		rtc.get_microseconds_since_epoch() - processor::get_timer_ticks()
+	let boot_time = match boot_info().platform_info {
+		PlatformInfo::Multiboot { .. } => {
+			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
+			// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
+			let rtc = Rtc::new();
+			rtc.get_microseconds_since_epoch() - processor::get_timer_ticks()
+		}
+		PlatformInfo::Uhyve { boot_time, .. } => boot_time,
 	};
 
 	unsafe {
