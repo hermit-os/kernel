@@ -248,8 +248,7 @@ impl<'a> Object<'a> {
 			.phs
 			.iter()
 			.find(|ph| ph.p_type == program_header::PT_TLS)
-			.map(|ph| parse_tls_info(self.header, ph, memory.as_ptr() as u64))
-			.unwrap_or_default();
+			.map(|ph| parse_tls_info(self.header, ph, memory.as_ptr() as u64));
 
 		let entry_point = {
 			let mut entry_point = self.header.e_entry;
@@ -272,7 +271,7 @@ impl<'a> Object<'a> {
 pub struct LoadInfo {
 	pub elf_location: Option<u64>,
 	pub entry_point: u64,
-	pub tls_info: TlsInfo,
+	pub tls_info: Option<TlsInfo>,
 }
 
 fn parse_tls_info(header: &Header, ph: &ProgramHeader, start_addr: u64) -> TlsInfo {
