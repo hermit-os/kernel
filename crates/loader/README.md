@@ -1,6 +1,6 @@
-# rusty-loader
+# RustyLoader
 
-**rusty-loader** is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [Qemu](https://www.qemu.org).
+**RustyLoader** is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [Qemu](https://www.qemu.org).
 
 ## Requirements
 
