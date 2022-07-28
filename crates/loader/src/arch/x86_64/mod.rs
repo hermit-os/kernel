@@ -6,7 +6,7 @@ use core::ptr::{copy, write_bytes};
 #[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
-use hermit_entry::{BootInfoBuilder, Entry, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, TlsInfo};
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
@@ -167,7 +167,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 
 #[cfg(target_os = "none")]
 pub unsafe fn boot_kernel(
-	tls_info: TlsInfo,
+	tls_info: Option<TlsInfo>,
 	elf_address: Option<u64>,
 	virtual_address: u64,
 	mem_size: u64,
@@ -192,24 +192,16 @@ pub unsafe fn boot_kernel(
 	};
 
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
-	let (cmdline, cmdsize) = multiboot
-		.command_line()
-		.map(|cmdline| {
-			let address = cmdline.as_ptr();
 
-			// Identity-map the command line.
-			let page_address = align_down!(address as usize, BasePageSize::SIZE);
-			paging::map::<BasePageSize>(
-				page_address,
-				page_address,
-				1,
-				PageTableEntryFlags::empty(),
-			);
+	let command_line = multiboot.command_line().map(|command_line| {
+		let address = command_line.as_ptr();
 
-			//let cmdline = multiboot.command_line().unwrap();
-			(address as u64, cmdline.len() as u64)
-		})
-		.unwrap_or_default();
+		// Identity-map the command line.
+		let page_address = align_down!(address as usize, BasePageSize::SIZE);
+		paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::empty());
+
+		command_line
+	});
 
 	// determine boot stack address
 	let mut new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
@@ -221,8 +213,12 @@ pub unsafe fn boot_kernel(
 		);
 	}
 
-	if new_stack + KERNEL_STACK_SIZE as usize > cmdline as usize {
-		new_stack = align_up!((cmdline + cmdsize) as usize, BasePageSize::SIZE);
+	if let Some(command_line) = command_line {
+		let cmdline = command_line.as_ptr() as usize;
+		let cmdsize = command_line.len();
+		if new_stack + KERNEL_STACK_SIZE as usize > cmdline {
+			new_stack = align_up!((cmdline + cmdsize), BasePageSize::SIZE);
+		}
 	}
 
 	let current_stack_address = new_stack.try_into().unwrap();
@@ -244,18 +240,23 @@ pub unsafe fn boot_kernel(
 	);
 
 	static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
-	BOOT_INFO = BootInfoBuilder {
-		base: new_addr,
-		image_size: mem_size,
-		tls_info,
-		current_stack_address,
-		cmdline,
-		cmdsize,
-		uartport: SERIAL_IO_PORT,
-		mb_info: mb_info as u64,
-		..Default::default()
-	}
-	.into();
+
+	BOOT_INFO = {
+		let boot_info = BootInfo {
+			phys_addr_range: 0..0,
+			kernel_image_addr_range: new_addr..new_addr + mem_size,
+			tls_info,
+			uartport: Some(SERIAL_IO_PORT),
+			platform_info: PlatformInfo::Multiboot {
+				command_line,
+				multiboot_info_ptr: mb_info as u64,
+			},
+		};
+		let raw_boot_info = RawBootInfo::from(boot_info);
+		raw_boot_info.store_current_stack_address(current_stack_address);
+		raw_boot_info
+	};
+
 	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.

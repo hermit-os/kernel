@@ -4,7 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
-use hermit_entry::{BootInfoBuilder, Entry, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, TlsInfo};
 
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
@@ -57,7 +57,7 @@ pub fn find_kernel() -> &'static [u8] {
 }
 
 pub unsafe fn boot_kernel(
-	tls_info: TlsInfo,
+	tls_info: Option<TlsInfo>,
 	_elf_address: Option<u64>,
 	virtual_address: u64,
 	mem_size: u64,
@@ -129,17 +129,18 @@ pub unsafe fn boot_kernel(
 	);
 
 	pub static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
-	BOOT_INFO = BootInfoBuilder {
-		base: virtual_address,
-		limit: RAM_START + 0x20000000, // 512 MB
-		image_size: mem_size,
-		tls_info,
-		current_stack_address: virtual_address - KERNEL_STACK_SIZE as u64,
-		uartport: 0x1000,
-		ram_start: RAM_START,
-		..Default::default()
-	}
-	.into();
+	BOOT_INFO = {
+		let boot_info = BootInfo {
+			phys_addr_range: RAM_START..RAM_START + 0x20000000, // 512 MB
+			kernel_image_addr_range: virtual_address..virtual_address + mem_size,
+			tls_info,
+			uartport: Some(0x1000),
+			platform_info: PlatformInfo::LinuxBoot,
+		};
+		let raw_boot_info = RawBootInfo::from(boot_info);
+		raw_boot_info.store_current_stack_address(virtual_address - KERNEL_STACK_SIZE as u64);
+		raw_boot_info
+	};
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	loaderlog!(
