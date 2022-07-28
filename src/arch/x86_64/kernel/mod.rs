@@ -62,48 +62,6 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 /// Serial port to print kernel messages
 static mut COM1: SerialPort = SerialPort::new(0x3f8);
 
-#[cfg(feature = "newlib")]
-extern "C" fn __sys_uhyve_get_ip(ip: *mut u8) {
-	let data = boot_info().net_info.ip;
-	unsafe {
-		slice::from_raw_parts_mut(ip, 4).copy_from_slice(&data);
-	}
-}
-
-#[no_mangle]
-#[cfg(feature = "newlib")]
-pub unsafe extern "C" fn sys_uhyve_get_ip(ip: *mut u8) {
-	kernel_function!(__sys_uhyve_get_ip(ip))
-}
-
-#[cfg(feature = "newlib")]
-extern "C" fn __sys_uhyve_get_gateway(gw: *mut u8) {
-	let data = boot_info().net_info.gateway;
-	unsafe {
-		slice::from_raw_parts_mut(gw, 4).copy_from_slice(&data);
-	}
-}
-
-#[no_mangle]
-#[cfg(feature = "newlib")]
-pub unsafe extern "C" fn sys_uhyve_get_gateway(gw: *mut u8) {
-	kernel_function!(__sys_uhyve_get_gateway(gw))
-}
-
-#[cfg(feature = "newlib")]
-extern "C" fn __sys_uhyve_get_mask(mask: *mut u8) {
-	let data = boot_info().net_info.mask;
-	unsafe {
-		slice::from_raw_parts_mut(mask, 4).copy_from_slice(&data);
-	}
-}
-
-#[no_mangle]
-#[cfg(feature = "newlib")]
-pub unsafe extern "C" fn sys_uhyve_get_mask(mask: *mut u8) {
-	kernel_function!(__sys_uhyve_get_mask(mask))
-}
-
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr(0)
 }
