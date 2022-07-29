@@ -6,7 +6,7 @@ use core::ptr::{copy, write_bytes};
 #[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
-use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
@@ -246,10 +246,10 @@ pub unsafe fn boot_kernel(
 			phys_addr_range: 0..0,
 			kernel_image_addr_range: new_addr..new_addr + mem_size,
 			tls_info,
-			uartport: Some(SERIAL_IO_PORT),
+			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
 			platform_info: PlatformInfo::Multiboot {
 				command_line,
-				multiboot_info_ptr: mb_info as u64,
+				multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
 			},
 		};
 		let raw_boot_info = RawBootInfo::from(boot_info);

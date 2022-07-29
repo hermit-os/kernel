@@ -4,7 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
-use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, TlsInfo};
+use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
 
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
@@ -134,7 +134,7 @@ pub unsafe fn boot_kernel(
 			phys_addr_range: RAM_START..RAM_START + 0x20000000, // 512 MB
 			kernel_image_addr_range: virtual_address..virtual_address + mem_size,
 			tls_info,
-			uartport: Some(0x1000),
+			serial_port_base: SerialPortBase::new(0x1000),
 			platform_info: PlatformInfo::LinuxBoot,
 		};
 		let raw_boot_info = RawBootInfo::from(boot_info);
