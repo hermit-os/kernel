@@ -190,17 +190,15 @@ pub fn init() {
 			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 			// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
 			let rtc = Rtc::new();
-			rtc.get_microseconds_since_epoch() - processor::get_timer_ticks()
+			let micros = rtc.get_microseconds_since_epoch() - processor::get_timer_ticks();
+			OffsetDateTime::from_unix_timestamp_nanos(micros as i128 * 1000).unwrap()
 		}
 		PlatformInfo::Uhyve { boot_time, .. } => boot_time,
 	};
+	info!("HermitCore-rs booted on {boot_time}");
 
+	let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
 	unsafe {
-		BOOT_TIME = Some(boot_time.try_into().unwrap());
+		BOOT_TIME = Some(micros.try_into().unwrap());
 	}
-
-	let timestamp = boot_time / 1_000_000;
-	let date_time = OffsetDateTime::from_unix_timestamp(timestamp.try_into().unwrap()).unwrap();
-
-	info!("HermitCore-rs booted on {date_time}");
 }
