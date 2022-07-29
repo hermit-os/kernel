@@ -116,8 +116,9 @@ pub fn get_tls_align() -> usize {
 pub fn get_mbinfo() -> VirtAddr {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot {
-			multiboot_info_ptr, ..
-		} => VirtAddr(multiboot_info_ptr),
+			multiboot_info_addr,
+			..
+		} => VirtAddr(multiboot_info_addr.get()),
 		PlatformInfo::Uhyve { .. } => VirtAddr(0),
 	}
 }
@@ -129,7 +130,10 @@ pub fn get_possible_cpus() -> u32 {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => apic::local_apic_id_count(),
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
-		PlatformInfo::Uhyve { cpu_count, .. } => cmp::max(cpu_count, get_processor_count()),
+		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
+			u32::try_from(num_cpus.get()).unwrap(),
+			get_processor_count(),
+		),
 	}
 }
 
@@ -151,7 +155,7 @@ pub fn is_uhyve() -> bool {
 pub fn is_uhyve_with_pci() -> bool {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => false,
-		PlatformInfo::Uhyve { pci, .. } => pci,
+		PlatformInfo::Uhyve { has_pci, .. } => has_pci,
 	}
 }
 
@@ -180,7 +184,10 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = boot_info().uartport.unwrap_or_default();
+		COM1.port_address = boot_info()
+			.serial_port_base
+			.map(|uartport| uartport.get())
+			.unwrap_or_default();
 	}
 
 	// We can only initialize the serial port here, because VGA requires processor

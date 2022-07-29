@@ -318,7 +318,7 @@ impl CpuFrequency {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			match boot_info().platform_info {
 				PlatformInfo::Multiboot { .. } => Err(()),
-				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(cpu_freq),
+				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(cpu_freq / 1000).unwrap()),
 			}
 		}
 		// future implementations could add support for different hypervisors

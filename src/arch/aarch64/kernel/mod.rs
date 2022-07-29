@@ -134,7 +134,12 @@ pub fn message_output_init() {
 	percore::init();
 
 	unsafe {
-		COM1.port_address = boot_info().uartport.unwrap_or_default();
+		COM1.port_address = boot_info()
+			.serial_port_base
+			.map(|uartport| uartport.get())
+			.unwrap_or_default()
+			.try_into()
+			.unwrap();
 	}
 
 	// We can only initialize the serial port here, because VGA requires processor
