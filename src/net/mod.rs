@@ -103,7 +103,7 @@ pub(crate) fn init() {
 
 	let mut guard = NIC.lock();
 
-	*guard = NetworkInterface::<HermitNet>::new();
+	*guard = NetworkInterface::<HermitNet>::create();
 
 	if let NetworkState::Initialized(nic) = guard.deref_mut() {
 		nic.poll_common(now());

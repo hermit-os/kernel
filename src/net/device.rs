@@ -73,7 +73,7 @@ macro_rules! parse_hermit_var_or {
 
 impl NetworkInterface<HermitNet> {
 	#[cfg(feature = "dhcpv4")]
-	pub(crate) fn new() -> NetworkState {
+	pub(crate) fn create() -> NetworkState {
 		let mtu = match unsafe { SYS.get_mtu() } {
 			Ok(mtu) => mtu,
 			Err(_) => {
@@ -117,7 +117,7 @@ impl NetworkInterface<HermitNet> {
 	}
 
 	#[cfg(not(feature = "dhcpv4"))]
-	pub(crate) fn new() -> NetworkState {
+	pub(crate) fn create() -> NetworkState {
 		let mtu = match unsafe { SYS.get_mtu() } {
 			Ok(mtu) => mtu,
 			Err(_) => {
