@@ -85,6 +85,8 @@ mod drivers;
 mod env;
 pub mod errno;
 mod mm;
+#[cfg(feature = "tcp")]
+mod net;
 #[cfg(target_os = "none")]
 mod runtime_glue;
 mod scheduler;
@@ -279,6 +281,8 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	#[cfg(not(feature = "newlib"))]
 	arch::init_drivers();
+	#[cfg(feature = "tcp")]
+	crate::net::init();
 
 	syscalls::init();
 
