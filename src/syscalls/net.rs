@@ -134,5 +134,5 @@ pub fn sys_tcp_listener_accept(port: u16) -> Result<(Handle, IpAddress, u16), ()
 	let socket = AsyncSocket::new();
 	let (addr, port) = block_on(socket.accept(port), None)?.map_err(|_| ())?;
 
-	Ok((socket.into_inner(), addr, port))
+	Ok((socket.inner(), addr, port))
 }

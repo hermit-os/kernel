@@ -263,7 +263,7 @@ impl phy::TxToken for TxToken {
 			}
 			Err(e) => {
 				unsafe {
-					SYS.free_tx_buffer(handle);
+					let _ = 	SYS.free_tx_buffer(handle);
 				}
 				Err(e)
 			}
