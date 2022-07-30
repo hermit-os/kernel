@@ -127,13 +127,6 @@ pub trait SyscallInterface: Send + Sync {
 		Err(())
 	}
 
-	fn assign_task_to_nic(&self) {
-		#[cfg(not(target_arch = "aarch64"))]
-		if let Some(driver) = get_network_driver() {
-			driver.lock().assign_task_to_nic();
-		}
-	}
-
 	fn get_mtu(&self) -> Result<u16, ()> {
 		#[cfg(not(target_arch = "aarch64"))]
 		match get_network_driver() {
@@ -187,7 +180,7 @@ pub trait SyscallInterface: Send + Sync {
 		Err(())
 	}
 
-	fn receive_rx_buffer(&self) -> Result<(&'static [u8], usize), ()> {
+	fn receive_rx_buffer(&self) -> Result<(&'static mut [u8], usize), ()> {
 		#[cfg(not(target_arch = "aarch64"))]
 		match get_network_driver() {
 			Some(driver) => driver.lock().receive_rx_buffer(),
