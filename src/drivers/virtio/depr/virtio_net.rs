@@ -3,8 +3,6 @@
 use crate::arch::kernel::pci;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::VirtAddr;
-#[cfg(not(feature = "newlib"))]
-use crate::drivers::net::netwakeup;
 use crate::drivers::virtio::depr::virtio::{
 	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
 };
@@ -356,10 +354,8 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn handle_interrupt(&mut self) -> bool {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			// handle incoming packets
-			#[cfg(not(feature = "newlib"))]
-			netwakeup();
-
+			#[cfg(feature = "tcp")]
+			crate::net::network_poll();
 			return true;
 		}
 

@@ -13,8 +13,6 @@ use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::*;
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-use crate::synch::semaphore::Semaphore;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {
@@ -33,28 +31,23 @@ pub trait NetworkInterface {
 	/// Check if a packet is available
 	fn has_packet(&self) -> bool;
 	/// Get RX buffer with an received packet
-	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()>;
+	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()>;
 	/// Tells driver, that buffer is consumed and can be deallocated
 	fn rx_buffer_consumed(&mut self, trf_handle: usize);
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
 	fn handle_interrupt(&mut self) -> bool;
-	/// handle interrupt on the same core, where the current task is running
-	fn assign_task_to_nic(&self);
 }
-
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-static NET_SEM: Semaphore = Semaphore::new(0);
 
 /// set driver in polling mode and threads will not be blocked
 #[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
 pub extern "C" fn set_polling_mode(value: bool) {
 	use crate::synch::spinlock::SpinlockIrqSave;
 
-	static THREADS_IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
+	static TASK_IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
 
-	let mut guard = THREADS_IN_POLLING_MODE.lock();
+	let mut guard = TASK_IN_POLLING_MODE.lock();
 
 	if value {
 		*guard += 1;
@@ -75,16 +68,6 @@ pub extern "C" fn set_polling_mode(value: bool) {
 			}
 		}
 	}
-}
-
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-pub extern "C" fn netwait() {
-	NET_SEM.acquire(None);
-}
-
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-pub fn netwakeup() {
-	NET_SEM.release();
 }
 
 #[cfg(target_arch = "x86_64")]

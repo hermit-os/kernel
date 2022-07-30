@@ -8,11 +8,10 @@ use core::mem;
 
 use crate::arch::kernel::irq::*;
 use crate::arch::kernel::pci;
-use crate::arch::kernel::percore::{core_id, increment_irq_counter};
+use crate::arch::kernel::percore::increment_irq_counter;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::apic::assign_irq_to_core;
 use crate::drivers::net::{network_irqhandler, NetworkInterface};
 use crate::x86::io::*;
 
@@ -218,10 +217,6 @@ impl NetworkInterface for RTL8139Driver {
 		self.mac
 	}
 
-	fn assign_task_to_nic(&self) {
-		assign_irq_to_core(self.irq, core_id());
-	}
-
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16 {
 		self.mtu
@@ -274,7 +269,7 @@ impl NetworkInterface for RTL8139Driver {
 		false
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
+	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()> {
 		let cmd = unsafe { inb(self.iobase + CR as u16) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
@@ -298,7 +293,7 @@ impl NetworkInterface for RTL8139Driver {
 						btree_map::Entry::Occupied(_) => unreachable!(),
 					}
 				} else {
-					&self.rxbuffer[pos..][..length.into()]
+					&mut self.rxbuffer[pos..][..length.into()]
 				};
 				// SAFETY: This is a blatant lie and very unsound.
 				// The API must be fixed or the buffer may never touched again.
@@ -383,8 +378,8 @@ impl NetworkInterface for RTL8139Driver {
 		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
 		if ret {
 			// handle incoming packets
-			#[cfg(not(feature = "newlib"))]
-			crate::drivers::net::netwakeup();
+			#[cfg(feature = "tcp")]
+			crate::net::network_poll();
 		}
 
 		unsafe {
