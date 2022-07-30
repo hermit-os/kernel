@@ -1,3 +1,5 @@
+#![allow(clippy::unused_macros)]
+
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::slice;
