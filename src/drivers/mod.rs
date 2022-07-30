@@ -1,10 +1,5 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
-//!
-//! The module contains ...
 
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-// UNCOMMENTED FOR CORRECT USE STATEMENT; IS THIS CORRECT?
-// !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 #[cfg(not(target_arch = "aarch64"))]
 pub mod net;
 
