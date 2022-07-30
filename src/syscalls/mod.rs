@@ -1,7 +1,5 @@
 #![allow(clippy::result_unit_err)]
 
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-use crate::drivers::net::*;
 use crate::env;
 #[cfg(feature = "newlib")]
 use crate::synch::spinlock::SpinlockIrqSave;
@@ -24,6 +22,8 @@ pub(crate) mod fs;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
+#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+mod net;
 mod processor;
 mod random;
 mod recmutex;
@@ -39,7 +39,7 @@ const LWIP_FD_BIT: i32 = 1 << 30;
 #[cfg(feature = "newlib")]
 pub static LWIP_LOCK: SpinlockIrqSave<()> = SpinlockIrqSave::new(());
 
-static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
+pub(crate) static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
 
 /// Shuts down the machine.
 ///
@@ -89,101 +89,6 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
 	unsafe { SYS.get_application_parameters() }
-}
-
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_get_mac_address() -> Result<[u8; 6], ()> {
-	unsafe { SYS.get_mac_address() }
-}
-
-#[no_mangle]
-pub fn sys_get_mac_address() -> Result<[u8; 6], ()> {
-	kernel_function!(__sys_get_mac_address())
-}
-
-extern "C" fn __sys_assign_task_to_nic() {
-	unsafe {
-		SYS.assign_task_to_nic();
-	}
-}
-
-#[no_mangle]
-fn sys_assign_task_to_nic() {
-	kernel_function!(__sys_assign_task_to_nic());
-}
-
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_get_mtu() -> Result<u16, ()> {
-	unsafe { SYS.get_mtu() }
-}
-
-#[no_mangle]
-pub fn sys_get_mtu() -> Result<u16, ()> {
-	kernel_function!(__sys_get_mtu())
-}
-
-extern "C" fn __sys_get_tx_buffer(len: usize, ret: &mut Result<(*mut u8, usize), ()>) {
-	*ret = unsafe { SYS.get_tx_buffer(len) };
-}
-
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_free_tx_buffer(handle: usize) -> Result<(), ()> {
-	unsafe { SYS.free_tx_buffer(handle) }
-}
-
-#[no_mangle]
-pub fn sys_free_tx_buffer(handle: usize) -> Result<(), ()> {
-	kernel_function!(__sys_free_tx_buffer(handle))
-}
-
-#[no_mangle]
-pub fn sys_get_tx_buffer(len: usize) -> Result<(*mut u8, usize), ()> {
-	let mut ret = Err(());
-	kernel_function!(__sys_get_tx_buffer(len, &mut ret));
-	ret
-}
-
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
-	unsafe { SYS.send_tx_buffer(handle, len) }
-}
-
-#[no_mangle]
-pub fn sys_send_tx_buffer(handle: usize, len: usize) -> Result<(), ()> {
-	kernel_function!(__sys_send_tx_buffer(handle, len))
-}
-
-extern "C" fn __sys_receive_rx_buffer(ret: &mut Result<(&'static [u8], usize), ()>) {
-	*ret = unsafe { SYS.receive_rx_buffer() };
-}
-
-#[no_mangle]
-pub fn sys_receive_rx_buffer() -> Result<(&'static [u8], usize), ()> {
-	let mut ret = Err(());
-	kernel_function!(__sys_receive_rx_buffer(&mut ret));
-	ret
-}
-
-#[allow(improper_ctypes_definitions)]
-extern "C" fn __sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
-	unsafe { SYS.rx_buffer_consumed(handle) }
-}
-
-#[no_mangle]
-pub fn sys_rx_buffer_consumed(handle: usize) -> Result<(), ()> {
-	kernel_function!(__sys_rx_buffer_consumed(handle))
-}
-
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-#[no_mangle]
-pub extern "C" fn sys_netwait() {
-	kernel_function!(netwait());
-}
-
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-#[no_mangle]
-pub extern "C" fn sys_set_network_polling_mode(value: bool) {
-	kernel_function!(set_polling_mode(value));
 }
 
 pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
