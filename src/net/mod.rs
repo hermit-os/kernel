@@ -185,7 +185,7 @@ impl AsyncSocket {
 		Self(handle)
 	}
 
-	pub(crate) fn into_inner(&self) -> Handle {
+	pub(crate) fn inner(&self) -> Handle {
 		self.0
 	}
 
