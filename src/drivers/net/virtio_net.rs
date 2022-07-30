@@ -2,9 +2,7 @@
 //!
 //! The module contains ...
 
-#[cfg(not(feature = "newlib"))]
-use super::netwakeup;
-use crate::arch::kernel::percore::{core_id, increment_irq_counter};
+use crate::arch::kernel::percore::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::NetworkInterface;
 
@@ -16,7 +14,6 @@ use core::mem;
 use core::result::Result;
 use core::{cell::RefCell, cmp::Ordering};
 
-use crate::drivers::net::apic::assign_irq_to_core;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
 #[cfg(feature = "pci")]
@@ -516,10 +513,6 @@ impl NetworkInterface for VirtioNetDriver {
 		}
 	}
 
-	fn assign_task_to_nic(&self) {
-		assign_irq_to_core(self.irq, core_id());
-	}
-
 	/// Returns the current MTU of the device.
 	/// Currently, if VIRTIO_NET_F_MAC is not set
 	//  MTU is set static to 1500 bytes.
@@ -581,7 +574,7 @@ impl NetworkInterface for VirtioNetDriver {
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<(&'static [u8], usize), ()> {
+	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()> {
 		match self.recv_vqs.get_next() {
 			Some(transfer) => {
 				let transfer = match RxQueues::post_processing(transfer) {
@@ -602,7 +595,7 @@ impl NetworkInterface for VirtioNetDriver {
 					// As long as we keep the Transfer in a raw reference this reference is static,
 					// so this is fine.
 					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
-					let ref_data: &'static [u8] = unsafe { &*(recv_ref) };
+					let ref_data: &'static mut [u8] = unsafe { &mut *(recv_ref) };
 					let raw_transfer = Box::into_raw(Box::new(transfer));
 
 					Ok((ref_data, raw_transfer as usize))
@@ -611,8 +604,8 @@ impl NetworkInterface for VirtioNetDriver {
 					let payload_ptr =
 						(&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
 
-					let ref_data: &'static [u8] = unsafe {
-						core::slice::from_raw_parts(
+					let ref_data: &'static mut [u8] = unsafe {
+						core::slice::from_raw_parts_mut(
 							payload_ptr,
 							packet.len() - mem::size_of::<VirtioNetHdr>(),
 						)
@@ -663,10 +656,8 @@ impl NetworkInterface for VirtioNetDriver {
 		increment_irq_counter((32 + self.irq).into());
 
 		let result = if self.isr_stat.is_interrupt() {
-			// handle incoming packets
-			#[cfg(not(feature = "newlib"))]
-			netwakeup();
-
+			#[cfg(feature = "tcp")]
+			crate::net::network_poll();
 			true
 		} else if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
