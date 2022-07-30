@@ -1,6 +1,7 @@
 mod device;
 pub(crate) mod executor;
 
+use alloc::boxed::Box;
 use core::ops::DerefMut;
 use core::str::FromStr;
 use core::task::Poll;
@@ -30,7 +31,7 @@ use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 pub(crate) enum NetworkState {
 	Missing,
 	InitializationFailed,
-	Initialized(NetworkInterface<HermitNet>),
+	Initialized(Box<NetworkInterface<HermitNet>>),
 }
 
 impl NetworkState {

@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::slice;
 
@@ -112,7 +113,7 @@ impl NetworkInterface<HermitNet> {
 
 		let dhcp_handle = iface.add_socket(dhcp);
 
-		NetworkState::Initialized(Self { iface, dhcp_handle })
+		NetworkState::Initialized(Box::new(Self { iface, dhcp_handle }))
 	}
 
 	#[cfg(not(feature = "dhcpv4"))]
@@ -180,7 +181,7 @@ impl NetworkInterface<HermitNet> {
 			.routes(routes)
 			.finalize();
 
-		NetworkState::Initialized(Self { iface })
+		NetworkState::Initialized(Box::new(Self { iface }))
 	}
 }
 
@@ -263,7 +264,7 @@ impl phy::TxToken for TxToken {
 			}
 			Err(e) => {
 				unsafe {
-					let _ = 	SYS.free_tx_buffer(handle);
+					let _ = SYS.free_tx_buffer(handle);
 				}
 				Err(e)
 			}
