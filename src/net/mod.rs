@@ -87,8 +87,8 @@ async fn network_run() {
 
 #[inline]
 pub(crate) fn network_poll() {
-	match NIC.lock().deref_mut() {
-		NetworkState::Initialized(nic) => {
+	if let Ok(mut guard) = NIC.try_lock() {
+		if let NetworkState::Initialized(nic) = guard.deref_mut() {
 			let time = now();
 			nic.poll_common(time);
 			if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
@@ -96,7 +96,6 @@ pub(crate) fn network_poll() {
 				crate::core_scheduler().add_network_timer(wakeup_time);
 			}
 		}
-		_ => {}
 	}
 }
 
