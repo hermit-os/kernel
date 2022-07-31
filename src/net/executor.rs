@@ -12,10 +12,9 @@ use futures_lite::pin;
 use smoltcp::time::Duration;
 
 use crate::core_scheduler;
-use crate::drivers::net::set_polling_mode;
 use crate::net::network_delay;
 use crate::scheduler::task::TaskHandle;
-use crate::synch::spinlock::Spinlock;
+use crate::synch::spinlock::{Spinlock, SpinlockIrqSave};
 
 static QUEUE: Spinlock<Vec<Runnable>> = Spinlock::new(Vec::new());
 
@@ -129,6 +128,33 @@ where
 				core_scheduler.reschedule();
 				// Polling mode => no NIC interrupts => NIC thread should not run
 				set_polling_mode(true);
+			}
+		}
+	}
+}
+
+/// set driver in polling mode and threads will not be blocked
+fn set_polling_mode(value: bool) {
+	static IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
+
+	let mut guard = IN_POLLING_MODE.lock();
+
+	if value {
+		*guard += 1;
+
+		if *guard == 1 {
+			#[cfg(feature = "pci")]
+			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+				driver.lock().set_polling_mode(value)
+			}
+		}
+	} else {
+		*guard -= 1;
+
+		if *guard == 0 {
+			#[cfg(feature = "pci")]
+			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+				driver.lock().set_polling_mode(value)
 			}
 		}
 	}

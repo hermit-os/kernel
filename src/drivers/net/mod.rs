@@ -40,36 +40,6 @@ pub trait NetworkInterface {
 	fn handle_interrupt(&mut self) -> bool;
 }
 
-/// set driver in polling mode and threads will not be blocked
-#[cfg(all(not(feature = "newlib"), target_arch = "x86_64"))]
-pub extern "C" fn set_polling_mode(value: bool) {
-	use crate::synch::spinlock::SpinlockIrqSave;
-
-	static TASK_IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
-
-	let mut guard = TASK_IN_POLLING_MODE.lock();
-
-	if value {
-		*guard += 1;
-
-		if *guard == 1 {
-			#[cfg(feature = "pci")]
-			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-				driver.lock().set_polling_mode(value)
-			}
-		}
-	} else {
-		*guard -= 1;
-
-		if *guard == 0 {
-			#[cfg(feature = "pci")]
-			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-				driver.lock().set_polling_mode(value)
-			}
-		}
-	}
-}
-
 #[cfg(target_arch = "x86_64")]
 pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
 	debug!("Receive network interrupt");
