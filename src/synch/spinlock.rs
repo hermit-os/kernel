@@ -257,7 +257,7 @@ impl<T> SpinlockIrqSave<T> {
 impl<T: ?Sized> SpinlockIrqSave<T> {
 	#[cfg(not(feature = "smp"))]
 	pub fn try_lock(&self) -> Result<SpinlockIrqSaveGuard<'_, T>, ()> {
-		let irq = unsafe { irq::nested_disable() };
+		let irq = irq::nested_disable();
 		if irq {
 			Ok(SpinlockIrqSaveGuard {
 				irq,
