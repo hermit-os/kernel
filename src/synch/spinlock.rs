@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::arch::irq;
 use core::cell::UnsafeCell;
 #[cfg(feature = "smp")]
