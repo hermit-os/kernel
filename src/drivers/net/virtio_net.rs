@@ -656,8 +656,6 @@ impl NetworkInterface for VirtioNetDriver {
 		increment_irq_counter((32 + self.irq).into());
 
 		let result = if self.isr_stat.is_interrupt() {
-			#[cfg(feature = "tcp")]
-			crate::net::network_poll();
 			true
 		} else if self.isr_stat.is_cfg_change() {
 			info!("Configuration changes are not possible! Aborting");
