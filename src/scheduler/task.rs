@@ -9,7 +9,6 @@ use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::fmt;
 use core::num::NonZeroU64;
-use core::ops::DerefMut;
 
 /// Returns the most significant bit.
 ///
