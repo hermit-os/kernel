@@ -64,7 +64,7 @@ fn start_endpoint() -> u16 {
 }
 
 #[inline]
-fn now() -> Instant {
+pub(crate) fn now() -> Instant {
 	let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
 	Instant::from_micros_const(microseconds.try_into().unwrap())
 }
@@ -86,27 +86,36 @@ async fn network_run() {
 }
 
 #[inline]
-pub(crate) fn network_delay(timestamp: Instant) -> Option<Duration> {
-	NIC.lock().as_nic_mut().unwrap().poll_delay(timestamp)
-}
-
-#[inline]
 pub(crate) fn network_poll() {
-	NIC.lock().as_nic_mut().unwrap().poll_common(now());
+	if let Ok(mut guard) = NIC.try_lock() {
+		if let NetworkState::Initialized(nic) = guard.deref_mut() {
+			let time = now();
+			nic.poll_common(time);
+			if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
+				let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
+				crate::core_scheduler().add_network_timer(wakeup_time);
+			}
+		}
+	}
 }
 
 pub(crate) fn init() {
 	info!("Try to nitialize network!");
 
 	// initialize variable, which contains the next local endpoint
-	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::SeqCst);
+	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::Relaxed);
 
 	let mut guard = NIC.lock();
 
 	*guard = NetworkInterface::<HermitNet>::create();
 
 	if let NetworkState::Initialized(nic) = guard.deref_mut() {
-		nic.poll_common(now());
+		let time = now();
+		nic.poll_common(time);
+		if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
+			let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
+			crate::core_scheduler().add_network_timer(wakeup_time);
+		}
 
 		spawn(network_run()).detach();
 	}
