@@ -376,11 +376,6 @@ impl NetworkInterface for RTL8139Driver {
 		}
 
 		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
-		if ret {
-			// handle incoming packets
-			#[cfg(feature = "tcp")]
-			crate::net::network_poll();
-		}
 
 		unsafe {
 			outw(

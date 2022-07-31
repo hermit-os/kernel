@@ -76,7 +76,7 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 	apic::eoi();
 
 	#[cfg(feature = "pci")]
-	let check_scheduler = match pci::get_network_driver() {
+	let has_packet = match pci::get_network_driver() {
 		Some(driver) => driver.lock().handle_interrupt(),
 		_ => {
 			debug!("Unable to handle interrupt!");
@@ -84,7 +84,7 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 		}
 	};
 	#[cfg(not(feature = "pci"))]
-	let check_scheduler = match mmio::get_network_driver() {
+	let has_packet = match mmio::get_network_driver() {
 		Some(driver) => driver.lock().handle_interrupt(),
 		_ => {
 			debug!("Unable to handle interrupt!");
@@ -92,7 +92,11 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 		}
 	};
 
-	if check_scheduler {
+	if has_packet {
+		// handle incoming packets
+		#[cfg(feature = "tcp")]
+		crate::net::network_poll();
+
 		core_scheduler().scheduler();
 	}
 }

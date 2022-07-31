@@ -354,8 +354,6 @@ impl<'a> VirtioNetDriver<'a> {
 	pub fn handle_interrupt(&mut self) -> bool {
 		let isr_status = *(self.isr_cfg);
 		if (isr_status & 0x1) == 0x1 {
-			#[cfg(feature = "tcp")]
-			crate::net::network_poll();
 			return true;
 		}
 
