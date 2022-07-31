@@ -1,8 +1,7 @@
-#![allow(unused_macros)]
-
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::slice;
+use core::str::FromStr;
 
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes};
 #[cfg(feature = "trace")]
@@ -29,48 +28,6 @@ impl HermitNet {
 	pub(crate) const fn new(mtu: u16) -> Self {
 		Self { mtu }
 	}
-}
-
-/// Returns the value of the specified environment variable.
-///
-/// The value is fetched from the current runtime environment and, if not
-/// present, falls back to the same environment variable set at compile time
-/// (might not be present as well).
-///
-/// # Panics
-///
-/// Panics when environment variable is not valid unicode.
-macro_rules! hermit_var {
-	($name:expr) => {{
-		use std::borrow::Cow;
-		use std::env::{self, VarError};
-
-		match env::var($name) {
-			Ok(val) => Some(Cow::Owned(val)),
-			Err(VarError::NotPresent) => option_env!($name).map(Cow::Borrowed),
-			Err(VarError::NotUnicode(s)) => {
-				panic!("couldn't interpret {}: {}", $name, VarError::NotUnicode(s))
-			}
-		}
-	}};
-}
-
-/// Tries to parse the specified environment variable with a default value.
-///
-/// Parses according to [`hermit_var`] or returns the specified default value.
-///
-/// # Panics
-///
-/// Panics when environment variable is not valid unicode or cannot be parsed.
-macro_rules! parse_hermit_var_or {
-	($name:expr, $default:expr) => {{
-		hermit_var!($name)
-			.map(|ip| {
-				ip.parse()
-					.unwrap_or_else(|err| panic!("{err}: {}: {ip}", $name))
-			})
-			.unwrap_or($default)
-	}};
 }
 
 impl NetworkInterface<HermitNet> {
@@ -139,41 +96,46 @@ impl NetworkInterface<HermitNet> {
 			}
 		};
 
-		let myip = parse_hermit_var_or!("HERMIT_IP", Ipv4Addr::new(10, 0, 5, 3));
-		let myip = myip.octets();
-		let mygw = parse_hermit_var_or!("HERMIT_GATEWAY", Ipv4Addr::new(10, 0, 5, 1));
-		let mygw = mygw.octets();
-		let mymask = parse_hermit_var_or!("HERMIT_MASK", Ipv4Addr::new(255, 255, 255, 0));
-		let mymask = mymask.octets();
+		let myip =
+			Ipv4Address::from_str(core::option_env!("HERMIT_IP").unwrap_or("10.0.5.3")).unwrap();
+		let mygw = Ipv4Address::from_str(core::option_env!("HERMIT_GATEWAY").unwrap_or("10.0.5.1"))
+			.unwrap();
+		let mymask =
+			Ipv4Address::from_str(core::option_env!("HERMIT_MASK").unwrap_or("255.255.255.0"))
+				.unwrap();
 
 		// calculate the netmask length
 		// => count the number of contiguous 1 bits,
 		// starting at the most significant bit in the first octet
-		let mut prefix_len = (!mymask[0]).trailing_zeros();
+		let mut prefix_len = (!mymask.as_bytes()[0]).trailing_zeros();
 		if prefix_len == 8 {
-			prefix_len += (!mymask[1]).trailing_zeros();
+			prefix_len += (!mymask.as_bytes()[1]).trailing_zeros();
 		}
 		if prefix_len == 16 {
-			prefix_len += (!mymask[2]).trailing_zeros();
+			prefix_len += (!mymask.as_bytes()[2]).trailing_zeros();
 		}
 		if prefix_len == 24 {
-			prefix_len += (!mymask[3]).trailing_zeros();
+			prefix_len += (!mymask.as_bytes()[3]).trailing_zeros();
 		}
 
 		let neighbor_cache = NeighborCache::new(BTreeMap::new());
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
 		let ip_addrs = [IpCidr::new(
-			IpAddress::v4(myip[0], myip[1], myip[2], myip[3]),
+			IpAddress::v4(
+				myip.as_bytes()[0],
+				myip.as_bytes()[1],
+				myip.as_bytes()[2],
+				myip.as_bytes()[3],
+			),
 			prefix_len.try_into().unwrap(),
 		)];
-		let default_v4_gw = Ipv4Address::new(mygw[0], mygw[1], mygw[2], mygw[3]);
-		let routes = Routes::new(BTreeMap::new());
-		routes.add_default_ipv4_route(default_v4_gw).unwrap();
+		let mut routes = Routes::new(BTreeMap::new());
+		routes.add_default_ipv4_route(mygw).unwrap();
 
 		info!("MAC address {}", hardware_addr);
 		info!("Configure network interface with address {}", ip_addrs[0]);
-		info!("Configure gateway with address {}", default_v4_gw);
+		info!("Configure gateway with address {}", mygw);
 		info!("MTU: {} bytes", mtu);
 
 		let iface = InterfaceBuilder::new(device, vec![])
