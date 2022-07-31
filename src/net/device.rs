@@ -1,4 +1,4 @@
-#![allow(clippy::unused_macros)]
+#![allow(unused_macros)]
 
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
