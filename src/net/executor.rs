@@ -9,14 +9,22 @@ use core::{
 	task::{Context, Poll},
 };
 use futures_lite::pin;
-use smoltcp::time::Duration;
+use smoltcp::time::{Duration, Instant};
 
 use crate::core_scheduler;
-use crate::net::network_delay;
 use crate::scheduler::task::TaskHandle;
 use crate::synch::spinlock::{Spinlock, SpinlockIrqSave};
 
 static QUEUE: Spinlock<Vec<Runnable>> = Spinlock::new(Vec::new());
+
+#[inline]
+fn network_delay(timestamp: Instant) -> Option<Duration> {
+	crate::net::NIC
+		.lock()
+		.as_nic_mut()
+		.unwrap()
+		.poll_delay(timestamp)
+}
 
 fn run_executor_once() {
 	let mut guard = QUEUE.lock();
@@ -100,6 +108,11 @@ where
 		run_executor_once();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
+			if let Some(delay) = network_delay(crate::net::now()).map(|d| d.total_micros()) {
+				let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
+				core_scheduler().add_network_timer(wakeup_time);
+			}
+
 			// allow interrupts => NIC thread is able to run
 			set_polling_mode(false);
 			return Ok(t);
@@ -107,6 +120,11 @@ where
 
 		if let Some(duration) = timeout {
 			if crate::net::now() >= start + duration {
+				if let Some(delay) = network_delay(crate::net::now()).map(|d| d.total_micros()) {
+					let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
+					core_scheduler().add_network_timer(wakeup_time);
+				}
+
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
 				return Err(());
@@ -114,13 +132,12 @@ where
 		}
 
 		let now = crate::net::now();
-		let delay = network_delay(now).map(|d| d.total_millis());
-		if delay.unwrap_or(10_000) > 100 {
+		let delay = network_delay(now).map(|d| d.total_micros());
+		if delay.unwrap_or(10_000_000) > 100_000 {
 			let unparked = task_notify.unparked.swap(false, Ordering::AcqRel);
 			if !unparked {
 				let core_scheduler = core_scheduler();
-				let wakeup_time =
-					delay.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
+				let wakeup_time = delay.map(|us| crate::arch::processor::get_timer_ticks() + us);
 				core_scheduler.block_current_task(wakeup_time);
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);

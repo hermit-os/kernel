@@ -276,6 +276,12 @@ impl PerCoreScheduler {
 		});
 	}
 
+	#[cfg(feature = "tcp")]
+	#[inline]
+	pub fn add_network_timer(&mut self, wakeup_time: u64) {
+		irqsave(|| self.blocked_tasks.add_network_timer(wakeup_time));
+	}
+
 	#[inline]
 	pub fn get_current_task_handle(&self) -> TaskHandle {
 		irqsave(|| {
