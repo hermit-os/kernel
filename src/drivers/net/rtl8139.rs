@@ -226,7 +226,7 @@ impl NetworkInterface for RTL8139Driver {
 		let id = self.tx_counter % NO_TX_BUFFERS;
 
 		if self.tx_in_use[id] || len > TX_BUF_LEN {
-			error!("Unable to get TX buffer");
+			trace!("Unable to get TX buffer");
 			Err(())
 		} else {
 			self.tx_in_use[id] = true;
@@ -368,11 +368,11 @@ impl NetworkInterface for RTL8139Driver {
 		}
 
 		if (isr_contents & ISR_TER) == ISR_TER {
-			error!("RTL88139r: TX error detected!\n");
+			trace!("RTL88139r: TX error detected!\n");
 		}
 
 		if (isr_contents & ISR_RXOVW) == ISR_RXOVW {
-			error!("RTL88139: RX overflow detected!\n");
+			trace!("RTL88139: RX overflow detected!\n");
 		}
 
 		let ret = (isr_contents & ISR_ROK) == ISR_ROK;
