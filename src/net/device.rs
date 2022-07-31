@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use core::slice;
+#[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
 use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes};
