@@ -105,7 +105,7 @@ impl<T: ?Sized> Spinlock<T> {
 			})
 			.map(|ticket| SpinlockGuard {
 				dequeue: &self.dequeue,
-				ticket,
+				ticket: ticket + 1,
 				data: unsafe { &mut *self.data.get() },
 			})
 			.map_err(|_| {})
