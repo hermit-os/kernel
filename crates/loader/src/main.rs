@@ -13,6 +13,7 @@ mod macros;
 mod arch;
 mod console;
 mod kernel;
+mod log;
 #[cfg(target_os = "none")]
 mod none;
 #[cfg(target_os = "uefi")]

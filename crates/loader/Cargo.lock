@@ -166,6 +166,7 @@ dependencies = [
  "cc",
  "goblin",
  "hermit-entry",
+ "log",
  "multiboot",
  "nasm-rs",
  "plain",

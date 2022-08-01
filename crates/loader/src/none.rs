@@ -4,6 +4,8 @@ use crate::kernel::{LoadInfo, Object};
 
 use core::{fmt::Write, mem::MaybeUninit, ptr::addr_of_mut, slice};
 
+use log::info;
+
 extern "C" {
 	static kernel_end: u8;
 	static kernel_start: u8;
@@ -15,11 +17,11 @@ extern "C" {
 unsafe extern "C" fn loader_main() -> ! {
 	init_bss();
 	arch::message_output_init();
+	crate::log::init();
 
-	loaderlog!(
+	info!(
 		"Loader: [{:#x} - {:#x}]",
-		&kernel_start as *const u8 as usize,
-		&kernel_end as *const u8 as usize
+		&kernel_start as *const u8 as usize, &kernel_end as *const u8 as usize
 	);
 
 	let kernel = Object::parse(arch::find_kernel());

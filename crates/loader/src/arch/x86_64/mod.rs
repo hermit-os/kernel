@@ -7,6 +7,7 @@ use core::ptr::{copy, write_bytes};
 use core::{cmp, mem, slice};
 
 use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
+use log::info;
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
@@ -81,7 +82,7 @@ pub unsafe fn boot_kernel(
 pub unsafe fn find_kernel() -> &'static [u8] {
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
-	loaderlog!("Found Multiboot information at {:#x}", mb_info);
+	info!("Found Multiboot information at {:#x}", mb_info);
 	let page_address = align_down!(mb_info, BasePageSize::SIZE);
 	paging::map::<BasePageSize>(page_address, page_address, 1, PageTableEntryFlags::WRITABLE);
 
@@ -115,10 +116,10 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		}
 	}
 
-	loaderlog!("Found module: [{:#x} - {:#x}]", start_address, end_address);
+	info!("Found module: [{:#x} - {:#x}]", start_address, end_address);
 	let elf_start = start_address;
 	let elf_len = end_address - start_address;
-	loaderlog!("Module length: {:#x}", elf_len);
+	info!("Module length: {:#x}", elf_len);
 
 	let free_memory_address = align_up!(end_address, LargePageSize::SIZE);
 	// TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/96
@@ -132,11 +133,11 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		"Could not find a single module in the Multiboot information"
 	);
 	assert!(start_address > 0);
-	loaderlog!("Found an ELF module at {:#x}", start_address);
+	info!("Found an ELF module at {:#x}", start_address);
 	let page_address = align_down!(start_address, BasePageSize::SIZE);
 	let counter =
 		(align_up!(start_address, LargePageSize::SIZE) - page_address) / BasePageSize::SIZE;
-	loaderlog!(
+	info!(
 		"Map {} pages at {:#x} (page size {} KByte)",
 		counter,
 		page_address,
@@ -153,7 +154,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let address = align_up!(start_address, LargePageSize::SIZE);
 	let counter = (align_up!(end_address, LargePageSize::SIZE) - address) / LargePageSize::SIZE;
 	if counter > 0 {
-		loaderlog!(
+		info!(
 			"Map {} pages at {:#x} (page size {} KByte)",
 			counter,
 			address,
@@ -176,7 +177,7 @@ pub unsafe fn boot_kernel(
 	let new_addr = match elf_address {
 		Some(addr) => {
 			if virtual_address != addr {
-				loaderlog!("Copy kernel from {:#x} to {:#x}", virtual_address, addr);
+				info!("Copy kernel from {:#x} to {:#x}", virtual_address, addr);
 
 				// copy app to the new start address
 				copy(
@@ -222,7 +223,7 @@ pub unsafe fn boot_kernel(
 	}
 
 	let current_stack_address = new_stack.try_into().unwrap();
-	loaderlog!("Use stack address {:#x}", current_stack_address);
+	info!("Use stack address {:#x}", current_stack_address);
 
 	// map stack in the address space
 	paging::map::<BasePageSize>(
@@ -257,10 +258,10 @@ pub unsafe fn boot_kernel(
 		raw_boot_info
 	};
 
-	loaderlog!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
+	info!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
-	loaderlog!(
+	info!(
 		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);

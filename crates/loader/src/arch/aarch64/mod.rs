@@ -5,6 +5,7 @@ pub mod serial;
 use core::arch::asm;
 
 use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
+use log::info;
 
 use crate::arch::paging::*;
 use crate::arch::serial::SerialPort;
@@ -143,7 +144,7 @@ pub unsafe fn boot_kernel(
 	};
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
-	loaderlog!(
+	info!(
 		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);
