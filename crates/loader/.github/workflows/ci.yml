@@ -79,6 +79,13 @@ jobs:
             -display none -serial stdio \
             -kernel target/x86_64/debug/rusty-loader \
             -initrd data/x86_64/hello_world
+          qemu-system-x86_64 \
+            -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
+            -smp 1 -m 64M \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -display none -serial stdio \
+            -kernel target/x86_64/debug/rusty-loader \
+            -initrd data/x86_64/hello_c
       - name: Run loader (aarch64)
         if: matrix.arch == 'aarch64'
         run: |
@@ -100,6 +107,13 @@ jobs:
             -display none -serial stdio \
             -kernel target/x86_64/release/rusty-loader \
             -initrd data/x86_64/hello_world
+          qemu-system-x86_64 \
+            -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
+            -smp 1 -m 64M \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
+            -display none -serial stdio \
+            -kernel target/x86_64/release/rusty-loader \
+            -initrd data/x86_64/hello_c
       - name: Run loader (release, aarch64)
         if: matrix.arch == 'aarch64'
         run: |
