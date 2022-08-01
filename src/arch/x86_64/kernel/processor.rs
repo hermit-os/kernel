@@ -14,6 +14,7 @@ use core::arch::x86_64::{
 };
 use core::convert::Infallible;
 use core::hint::spin_loop;
+use core::num::NonZeroU32;
 use core::{fmt, u32};
 use hermit_entry::PlatformInfo;
 use qemu_exit::QEMUExit;
@@ -318,7 +319,10 @@ impl CpuFrequency {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			match boot_info().platform_info {
 				PlatformInfo::Multiboot { .. } => Err(()),
-				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(cpu_freq / 1000).unwrap()),
+				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
+					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
+				)
+				.unwrap()),
 			}
 		}
 		// future implementations could add support for different hypervisors

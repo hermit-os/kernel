@@ -53,25 +53,26 @@ pub fn get_boot_info_address() -> VirtAddr {
 }
 
 pub fn get_ram_address() -> PhysAddr {
-	PhysAddr(boot_info().phys_addr_range.start)
+	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
 }
 
 pub fn get_base_address() -> VirtAddr {
-	VirtAddr(boot_info().kernel_image_addr_range.start)
+	VirtAddr(boot_info().load_info.kernel_image_addr_range.start)
 }
 
 pub fn get_image_size() -> usize {
-	let range = &boot_info().kernel_image_addr_range;
+	let range = &boot_info().load_info.kernel_image_addr_range;
 	(range.end - range.start) as usize
 }
 
 pub fn get_limit() -> usize {
-	boot_info().phys_addr_range.end as usize
+	boot_info().hardware_info.phys_addr_range.end as usize
 }
 
 pub fn get_tls_start() -> VirtAddr {
 	VirtAddr(
 		boot_info()
+			.load_info
 			.tls_info
 			.as_ref()
 			.map(|tls_info| tls_info.start)
@@ -81,6 +82,7 @@ pub fn get_tls_start() -> VirtAddr {
 
 pub fn get_tls_filesz() -> usize {
 	boot_info()
+		.load_info
 		.tls_info
 		.as_ref()
 		.map(|tls_info| tls_info.filesz)
@@ -89,6 +91,7 @@ pub fn get_tls_filesz() -> usize {
 
 pub fn get_tls_memsz() -> usize {
 	boot_info()
+		.load_info
 		.tls_info
 		.as_ref()
 		.map(|tls_info| tls_info.memsz)
@@ -97,6 +100,7 @@ pub fn get_tls_memsz() -> usize {
 
 pub fn get_tls_align() -> usize {
 	boot_info()
+		.load_info
 		.tls_info
 		.as_ref()
 		.map(|tls_info| tls_info.align)
@@ -135,6 +139,7 @@ pub fn message_output_init() {
 
 	unsafe {
 		COM1.port_address = boot_info()
+			.hardware_info
 			.serial_port_base
 			.map(|uartport| uartport.get())
 			.unwrap_or_default()
