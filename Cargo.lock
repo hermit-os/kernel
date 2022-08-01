@@ -129,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-entry"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b486a14d71178dea479e5fef5e27afedd3b7b08067e00c02ec4a8fb0acb978a8"
+checksum = "227d6ab4b17cd3577f27dd731503121dddde495cc077cf66263a4c273115a766"
 dependencies = [
  "memoffset",
  "time",
