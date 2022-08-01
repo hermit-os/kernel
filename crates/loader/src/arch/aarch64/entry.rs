@@ -2,6 +2,8 @@
 
 use core::arch::{asm, global_asm};
 
+use log::info;
+
 extern "C" {
 	fn loader_main();
 }
@@ -55,7 +57,7 @@ pub unsafe fn _start_rust() -> ! {
 }
 
 unsafe fn pre_init() -> ! {
-	loaderlog!("Enter startup code");
+	info!("Enter startup code");
 
 	/* disable interrupts */
 	asm!("msr daifset, 0b111", options(nostack),);

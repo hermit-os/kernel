@@ -18,6 +18,7 @@ use goblin::{
 	},
 };
 use hermit_entry::TlsInfo;
+use log::info;
 use plain::Plain;
 
 /// A parsed kernel object ready for loading.
@@ -80,7 +81,7 @@ impl<'a> Object<'a> {
 		{
 			let range = elf.as_ptr_range();
 			let len = elf.len();
-			loaderlog!("Parsing kernel from ELF at {range:?} ({len} B)");
+			info!("Parsing kernel from ELF at {range:?} ({len} B)");
 		}
 
 		let header = plain::from_bytes::<Header>(elf).unwrap();
@@ -199,7 +200,7 @@ impl<'a> Object<'a> {
 
 	/// Loads the kernel into the provided memory.
 	pub fn load_kernel(&self, memory: &mut [MaybeUninit<u8>]) -> LoadInfo {
-		loaderlog!("Loading kernel to {memory:p}");
+		info!("Loading kernel to {memory:p}");
 
 		assert!(memory.len() >= self.mem_size());
 
@@ -287,6 +288,6 @@ fn parse_tls_info(header: &Header, ph: &ProgramHeader, start_addr: u64) -> TlsIn
 	};
 	let range = tls_info.start as *const ()..(tls_info.start + tls_info.memsz) as *const ();
 	let len = tls_info.memsz;
-	loaderlog!("TLS is at {range:?} ({len} B)",);
+	info!("TLS is at {range:?} ({len} B)",);
 	tls_info
 }

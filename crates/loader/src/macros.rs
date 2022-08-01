@@ -32,14 +32,6 @@ macro_rules! println {
     }};
 }
 
-/// Print formatted loader log messages to our console, followed by a newline.
-#[macro_export]
-macro_rules! loaderlog {
-    ($($arg:tt)*) => {{
-        print!("[LOADER] {}\n", ::core::format_args!($($arg)*))
-    }};
-}
-
 /// Prints and returns the value of a given expression for quick and dirty
 /// debugging.
 // Copied from std/macros.rs
