@@ -2,11 +2,13 @@ pub mod paging;
 pub mod physicalmem;
 
 #[cfg(target_os = "none")]
-use core::ptr::{copy, write_bytes};
+use core::ptr::write_bytes;
 #[cfg(target_os = "none")]
 use core::{cmp, mem, slice};
 
-use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
+use hermit_entry::{
+	BootInfo, Entry, HardwareInfo, LoadedKernel, PlatformInfo, RawBootInfo, SerialPortBase,
+};
 use log::info;
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
@@ -21,9 +23,6 @@ extern "C" {
 }
 
 // CONSTANTS
-pub const ELF_ARCH: u16 = goblin::elf::header::EM_X86_64;
-pub const R_RELATIVE: u32 = goblin::elf::reloc::R_X86_64_RELATIVE;
-
 const KERNEL_STACK_SIZE: u64 = 32_768;
 const SERIAL_IO_PORT: u16 = 0x3F8;
 
@@ -167,30 +166,11 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 }
 
 #[cfg(target_os = "none")]
-pub unsafe fn boot_kernel(
-	tls_info: Option<TlsInfo>,
-	elf_address: Option<u64>,
-	virtual_address: u64,
-	mem_size: u64,
-	entry_point: u64,
-) -> ! {
-	let new_addr = match elf_address {
-		Some(addr) => {
-			if virtual_address != addr {
-				info!("Copy kernel from {:#x} to {:#x}", virtual_address, addr);
-
-				// copy app to the new start address
-				copy(
-					virtual_address as *const u8,
-					addr as *mut u8,
-					mem_size.try_into().unwrap(),
-				);
-			}
-
-			addr
-		}
-		None => virtual_address,
-	};
+pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
+	let LoadedKernel {
+		load_info,
+		entry_point,
+	} = kernel_info;
 
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
 
@@ -240,14 +220,15 @@ pub unsafe fn boot_kernel(
 		KERNEL_STACK_SIZE.try_into().unwrap(),
 	);
 
-	static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
+	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
 	BOOT_INFO = {
 		let boot_info = BootInfo {
-			phys_addr_range: 0..0,
-			kernel_image_addr_range: new_addr..new_addr + mem_size,
-			tls_info,
-			serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+			hardware_info: HardwareInfo {
+				phys_addr_range: 0..0,
+				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+			},
+			load_info,
 			platform_info: PlatformInfo::Multiboot {
 				command_line,
 				multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
@@ -255,7 +236,7 @@ pub unsafe fn boot_kernel(
 		};
 		let raw_boot_info = RawBootInfo::from(boot_info);
 		raw_boot_info.store_current_stack_address(current_stack_address);
-		raw_boot_info
+		Some(raw_boot_info)
 	};
 
 	info!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
@@ -266,7 +247,7 @@ pub unsafe fn boot_kernel(
 		entry_point
 	);
 	let func: Entry = core::mem::transmute(entry_point);
-	func(&BOOT_INFO);
+	func(BOOT_INFO.as_ref().unwrap());
 
 	// we never reach this point
 }

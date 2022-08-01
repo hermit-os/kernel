@@ -1,6 +1,7 @@
 use crate::arch;
 use crate::console;
-use crate::kernel::{LoadInfo, Object};
+
+use hermit_entry::KernelObject;
 
 use core::{fmt::Write, mem::MaybeUninit, ptr::addr_of_mut, slice};
 
@@ -24,27 +25,16 @@ unsafe extern "C" fn loader_main() -> ! {
 		&kernel_start as *const u8 as usize, &kernel_end as *const u8 as usize
 	);
 
-	let kernel = Object::parse(arch::find_kernel());
+	let kernel = KernelObject::parse(arch::find_kernel()).unwrap();
 
-	let memory = {
-		let mem_size = kernel.mem_size();
-		let kernel_addr = arch::get_memory(mem_size as u64);
-		slice::from_raw_parts_mut(kernel_addr as *mut MaybeUninit<u8>, mem_size)
-	};
+	let mem_size = kernel.mem_size();
+	let kernel_addr = arch::get_memory(mem_size as u64);
+	let kernel_addr = kernel.start_addr().unwrap_or(kernel_addr);
+	let memory = slice::from_raw_parts_mut(kernel_addr as *mut MaybeUninit<u8>, mem_size);
 
-	let LoadInfo {
-		elf_location,
-		entry_point,
-		tls_info,
-	} = kernel.load_kernel(memory);
+	let kernel_info = kernel.load_kernel(memory, memory.as_ptr() as u64);
 
-	arch::boot_kernel(
-		tls_info,
-		elf_location,
-		memory.as_ptr() as u64,
-		memory.len() as u64,
-		entry_point,
-	)
+	arch::boot_kernel(kernel_info)
 }
 
 unsafe fn init_bss() {

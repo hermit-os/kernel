@@ -4,7 +4,9 @@ pub mod serial;
 
 use core::arch::asm;
 
-use hermit_entry::{BootInfo, Entry, PlatformInfo, RawBootInfo, SerialPortBase, TlsInfo};
+use hermit_entry::{
+	BootInfo, Entry, HardwareInfo, LoadedKernel, PlatformInfo, RawBootInfo, SerialPortBase,
+};
 use log::info;
 
 use crate::arch::paging::*;
@@ -19,9 +21,6 @@ extern "C" {
 	static mut l3_pgtable: u64;
 	static mut L0mib_pgtable: u64;
 }
-
-pub const ELF_ARCH: u16 = goblin::elf::header::EM_AARCH64;
-pub const R_RELATIVE: u32 = goblin::elf::reloc::R_AARCH64_RELATIVE;
 
 /// start address of the RAM at Qemu's virt emulation
 const RAM_START: u64 = 0x40000000;
@@ -57,13 +56,12 @@ pub fn find_kernel() -> &'static [u8] {
 	align_data::include_aligned!(goblin::elf64::header::Header, env!("HERMIT_APP"))
 }
 
-pub unsafe fn boot_kernel(
-	tls_info: Option<TlsInfo>,
-	_elf_address: Option<u64>,
-	virtual_address: u64,
-	mem_size: u64,
-	entry_point: u64,
-) -> ! {
+pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
+	let LoadedKernel {
+		load_info,
+		entry_point,
+	} = kernel_info;
+
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512);
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
@@ -129,18 +127,20 @@ pub unsafe fn boot_kernel(
 			options(nostack),
 	);
 
-	pub static mut BOOT_INFO: RawBootInfo = RawBootInfo::invalid();
+	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
+	pub static mut BOOT_INFO: Option<RawBootInfo> = None;
 	BOOT_INFO = {
 		let boot_info = BootInfo {
-			phys_addr_range: RAM_START..RAM_START + 0x20000000, // 512 MB
-			kernel_image_addr_range: virtual_address..virtual_address + mem_size,
-			tls_info,
-			serial_port_base: SerialPortBase::new(0x1000),
+			hardware_info: HardwareInfo {
+				phys_addr_range: RAM_START..RAM_START + 0x20000000, // 512 MB
+				serial_port_base: SerialPortBase::new(0x1000),
+			},
+			load_info,
 			platform_info: PlatformInfo::LinuxBoot,
 		};
 		let raw_boot_info = RawBootInfo::from(boot_info);
-		raw_boot_info.store_current_stack_address(virtual_address - KERNEL_STACK_SIZE as u64);
-		raw_boot_info
+		raw_boot_info.store_current_stack_address(current_stack_address);
+		Some(raw_boot_info)
 	};
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
@@ -152,5 +152,5 @@ pub unsafe fn boot_kernel(
 	/* Memory barrier */
 	asm!("dsb sy", options(nostack));
 
-	func(&BOOT_INFO)
+	func(BOOT_INFO.as_ref().unwrap())
 }
