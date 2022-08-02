@@ -5,7 +5,9 @@ pub mod serial;
 use core::arch::asm;
 
 use hermit_entry::{
-	BootInfo, Entry, HardwareInfo, LoadedKernel, PlatformInfo, RawBootInfo, SerialPortBase,
+	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
+	elf::LoadedKernel,
+	Entry,
 };
 use log::info;
 

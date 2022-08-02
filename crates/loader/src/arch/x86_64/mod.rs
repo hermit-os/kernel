@@ -7,7 +7,9 @@ use core::ptr::write_bytes;
 use core::{cmp, mem, slice};
 
 use hermit_entry::{
-	BootInfo, Entry, HardwareInfo, LoadedKernel, PlatformInfo, RawBootInfo, SerialPortBase,
+	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
+	elf::LoadedKernel,
+	Entry,
 };
 use log::info;
 #[cfg(target_os = "none")]
