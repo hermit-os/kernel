@@ -3,7 +3,7 @@ use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::processor;
 use core::hint::spin_loop;
 use core::num::NonZeroU64;
-use hermit_entry::PlatformInfo;
+use hermit_entry::boot_info::PlatformInfo;
 use time::OffsetDateTime;
 use x86::io::*;
 

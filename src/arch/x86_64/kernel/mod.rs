@@ -2,7 +2,7 @@ use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
 
-use hermit_entry::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
