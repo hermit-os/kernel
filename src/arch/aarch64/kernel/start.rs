@@ -1,6 +1,9 @@
 use core::arch::asm;
 
-use hermit_entry::{BootInfo, Entry, RawBootInfo};
+use hermit_entry::{
+	boot_info::{BootInfo, RawBootInfo},
+	Entry,
+};
 
 use crate::arch::aarch64::kernel::serial::SerialPort;
 use crate::arch::aarch64::kernel::{

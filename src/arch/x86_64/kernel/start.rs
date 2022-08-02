@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use hermit_entry::{Entry, RawBootInfo};
+use hermit_entry::{boot_info::RawBootInfo, Entry};
 
 use crate::{
 	kernel::{pre_init, scheduler::TaskStacks},

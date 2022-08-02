@@ -16,7 +16,7 @@ use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
 use core::{fmt, u32};
-use hermit_entry::PlatformInfo;
+use hermit_entry::boot_info::PlatformInfo;
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 

@@ -15,7 +15,7 @@ pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use core::arch::{asm, global_asm};
 use core::ptr;
 
-use hermit_entry::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
