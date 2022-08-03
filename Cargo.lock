@@ -136,9 +136,8 @@ dependencies = [
 [[package]]
 name = "hermit-entry"
 version = "0.8.0"
-source = "git+https://github.com/hermitcore/hermit-entry?rev=b871b46487363d3f083cf724749f619803402ec0#b871b46487363d3f083cf724749f619803402ec0"
+source = "git+https://github.com/hermitcore/hermit-entry?rev=a0100d725892715eb6aed5f623e41008cc010060#a0100d725892715eb6aed5f623e41008cc010060"
 dependencies = [
- "memoffset",
  "time",
 ]
 
@@ -231,15 +230,6 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
-
-[[package]]
-name = "memoffset"
-version = "0.6.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
-dependencies = [
- "autocfg",
-]
 
 [[package]]
 name = "minimal-lexical"

@@ -33,13 +33,21 @@ pub unsafe extern "C" fn _start(_boot_info: &'static RawBootInfo, cpu_id: u32) -
 			"pause",
 			"jmp 2b",
 			"3:",
-			// initialize stack pointer
-			"mov rsp, [rdi + {current_stack_address_offset}]",
+
+			// Overwrite RSP if `CURRENT_STACK_ADDRESS != 0`
+			"mov rax, qword ptr [rip + {current_stack_address}@GOTPCREL]",
+			"mov rax, qword ptr [rax]",
+			"test rax, rax",
+			"cmovne rsp, rax",
+
+			// Add top stack offset
 			"add rsp, {stack_top_offset}",
-			"mov rbp, rsp",
-			"call {pre_init}",
+
+			// Jump into Rust code
+			"jmp {pre_init}",
+
 			cpu_online = sym super::CPU_ONLINE,
-			current_stack_address_offset = const RawBootInfo::current_stack_address_offset(),
+			current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 			pre_init = sym pre_init,
 			options(noreturn)

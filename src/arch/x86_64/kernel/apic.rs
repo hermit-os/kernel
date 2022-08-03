@@ -2,7 +2,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-use crate::arch::x86_64::kernel::{raw_boot_info, IRQ_COUNTERS};
+use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
@@ -747,7 +747,7 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
 	}
 
-	raw_boot_info().store_current_stack_address(stack.as_u64());
+	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
 
 	let current_percore = Box::leak(boxed_percore);
 
@@ -770,7 +770,7 @@ pub fn boot_application_processors() {
 
 	use include_transformed::include_nasm_bin;
 
-	use super::start;
+	use super::{raw_boot_info, start};
 
 	let smp_boot_code = include_nasm_bin!("boot.asm");
 

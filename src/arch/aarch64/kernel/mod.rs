@@ -122,10 +122,6 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-pub fn get_current_stack_address() -> VirtAddr {
-	VirtAddr(raw_boot_info().load_current_stack_address())
-}
-
 /// Whether HermitCore is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })

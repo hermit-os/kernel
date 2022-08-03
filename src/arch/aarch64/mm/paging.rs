@@ -10,7 +10,6 @@ use crate::arch::aarch64::kernel::{
 use crate::arch::aarch64::mm::physicalmem;
 use crate::arch::aarch64::mm::virtualmem;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::kernel::get_current_stack_address;
 use crate::mm;
 use crate::scheduler;
 use crate::KERNEL_STACK_SIZE;

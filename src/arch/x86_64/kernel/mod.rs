@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
@@ -56,6 +56,7 @@ pub fn boot_info() -> &'static BootInfo {
 	unsafe { BOOT_INFO.as_ref().unwrap() }
 }
 
+#[cfg(feature = "smp")]
 pub fn raw_boot_info() -> &'static RawBootInfo {
 	unsafe { RAW_BOOT_INFO.unwrap() }
 }
@@ -366,6 +367,8 @@ pub fn print_statistics() {
 ///
 /// It also synchronizes initialization of CPU cores.
 pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+
+pub static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(target_os = "none")]
 #[inline(never)]

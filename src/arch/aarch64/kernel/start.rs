@@ -52,17 +52,13 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) ->
 	const _PRE_INIT: Entry = pre_init;
 
 	asm!(
-		// determine stack address
-		"mov x1, x0",
-		"add x1, x1, {current_stack_address_offset}",
-		"ldr x2, [x1]",
-		"mov x3, {stack_top_offset}",
-		"add x2, x2, x3",
-		"mov sp, x2",
-		"adrp x4, {pre_init}",
-		"add  x4, x4, #:lo12:{pre_init}",
-		"br x4",
-		current_stack_address_offset = const RawBootInfo::current_stack_address_offset(),
+		// Add stack top offset
+		"mov x8, {stack_top_offset}",
+		"add sp, sp, x8",
+
+		// Jump to Rust code
+		"b {pre_init}",
+
 		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 		pre_init = sym pre_init,
 		options(noreturn),
