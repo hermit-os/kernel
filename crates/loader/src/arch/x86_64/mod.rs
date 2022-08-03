@@ -1,6 +1,7 @@
 pub mod paging;
 pub mod physicalmem;
 
+use core::arch::asm;
 #[cfg(target_os = "none")]
 use core::ptr::write_bytes;
 #[cfg(target_os = "none")]
@@ -204,7 +205,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		}
 	}
 
-	let current_stack_address = new_stack.try_into().unwrap();
+	let current_stack_address = new_stack as u64;
 	info!("Use stack address {:#x}", current_stack_address);
 
 	// map stack in the address space
@@ -236,9 +237,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 				multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
 			},
 		};
-		let raw_boot_info = RawBootInfo::from(boot_info);
-		raw_boot_info.store_current_stack_address(current_stack_address);
-		Some(raw_boot_info)
+		Some(RawBootInfo::from(boot_info))
 	};
 
 	info!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
@@ -248,10 +247,27 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		"Jumping to HermitCore Application Entry Point at {:#x}",
 		entry_point
 	);
-	let func: Entry = core::mem::transmute(entry_point);
-	func(BOOT_INFO.as_ref().unwrap(), 0);
 
-	// we never reach this point
+	#[allow(dead_code)]
+	const ENTRY_TYPE_CHECK: Entry = {
+		unsafe extern "C" fn entry_signature(
+			_raw_boot_info: &'static RawBootInfo,
+			_cpu_id: u32,
+		) -> ! {
+			unimplemented!()
+		}
+		entry_signature
+	};
+
+	asm!(
+		"mov rsp, {stack_address}",
+		"jmp {entry}",
+		stack_address = in(reg) current_stack_address,
+		entry = in(reg) entry_point,
+		in("rdi") BOOT_INFO.as_ref().unwrap(),
+		in("rsi") 0,
+		options(noreturn)
+	)
 }
 
 unsafe fn map_memory(address: usize, memory_size: usize) -> usize {

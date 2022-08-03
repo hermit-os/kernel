@@ -69,7 +69,7 @@ dependencies = [
 [[package]]
 name = "hermit-entry"
 version = "0.8.0"
-source = "git+https://github.com/hermitcore/hermit-entry?branch=next#b871b46487363d3f083cf724749f619803402ec0"
+source = "git+https://github.com/hermitcore/hermit-entry?branch=next#a0100d725892715eb6aed5f623e41008cc010060"
 dependencies = [
  "goblin",
  "log",

@@ -107,7 +107,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		*entry = RAM_START + (i * BasePageSize::SIZE) as u64 + PT_MEM;
 	}
 
-	let func: Entry = core::mem::transmute(entry_point);
 	COM1.set_port(0x1000);
 
 	// Load TTBRx
@@ -142,9 +141,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			load_info,
 			platform_info: PlatformInfo::LinuxBoot,
 		};
-		let raw_boot_info = RawBootInfo::from(boot_info);
-		raw_boot_info.store_current_stack_address(current_stack_address);
-		Some(raw_boot_info)
+		Some(RawBootInfo::from(boot_info))
 	};
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
@@ -156,5 +153,24 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	/* Memory barrier */
 	asm!("dsb sy", options(nostack));
 
-	func(BOOT_INFO.as_ref().unwrap(), 0)
+	#[allow(dead_code)]
+	const ENTRY_TYPE_CHECK: Entry = {
+		unsafe extern "C" fn entry_signature(
+			_raw_boot_info: &'static RawBootInfo,
+			_cpu_id: u32,
+		) -> ! {
+			unimplemented!()
+		}
+		entry_signature
+	};
+
+	asm!(
+		"mov sp, {stack_address}",
+		"br {entry}",
+		stack_address = in(reg) current_stack_address,
+		entry = in(reg) entry_point,
+		in("x0") BOOT_INFO.as_ref().unwrap(),
+		in("x1") 0,
+		options(noreturn)
+	);
 }
