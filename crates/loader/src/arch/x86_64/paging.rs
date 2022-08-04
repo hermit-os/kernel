@@ -280,16 +280,16 @@ struct PageTable<L> {
 	level: PhantomData<L>,
 }
 
-/// A trait defining methods every page table has to implement.
-/// This additional trait is necessary to make use of Rust's specialization feature and provide a default
-/// implementation of some methods.
-trait PageTableMethods {
+trait LocallyMappable {
 	fn map_page_in_this_table<S: PageSize>(
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
 		flags: PageTableEntryFlags,
 	) -> bool;
+}
+
+trait Mappable: LocallyMappable {
 	fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
@@ -298,7 +298,7 @@ trait PageTableMethods {
 	) -> bool;
 }
 
-impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
+impl<L: PageTableLevel> LocallyMappable for PageTable<L> {
 	/// Maps a single page in this table to the given physical address.
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
 	///
@@ -324,13 +324,12 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 
 		flush
 	}
+}
 
+impl Mappable for PageTable<PGT> {
 	/// Maps a single page to the given physical address.
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
-	///
-	/// This is the default implementation that just calls the map_page_in_this_table method.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PGT).
-	default fn map_page<S: PageSize>(
+	fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
@@ -340,15 +339,15 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 	}
 }
 
-impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L>
+impl<L: PageTableLevelWithSubtables> Mappable for PageTable<L>
 where
 	L::SubtableLevel: PageTableLevel,
+	PageTable<L::SubtableLevel>: Mappable,
 {
 	/// Maps a single page to the given physical address.
 	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
 	///
 	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
-	/// It overrides the default implementation above.
 	fn map_page<S: PageSize>(
 		&mut self,
 		page: Page<S>,
@@ -386,6 +385,7 @@ where
 impl<L: PageTableLevelWithSubtables> PageTable<L>
 where
 	L::SubtableLevel: PageTableLevel,
+	PageTable<L::SubtableLevel>: Mappable,
 {
 	/// Returns the next subtable for the given page in the page table hierarchy.
 	///
