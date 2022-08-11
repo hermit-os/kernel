@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(specialization)]
 #![warn(rust_2018_idioms)]
-#![allow(incomplete_features)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(target_os = "uefi", feature(abi_efiapi))]
 
