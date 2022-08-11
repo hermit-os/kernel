@@ -1,7 +1,7 @@
 //! See <https://github.com/matklad/cargo-xtask/>.
 
-mod arch;
 mod flags;
+mod target;
 
 use std::{
 	env::{self, VarError},
@@ -13,7 +13,7 @@ use anyhow::{anyhow, Result};
 use llvm_tools::LlvmTools;
 use xshell::{cmd, Shell};
 
-use crate::arch::Arch;
+use crate::target::Target;
 
 fn main() -> Result<()> {
 	flags::Xtask::from_env()?.run()
@@ -39,7 +39,7 @@ impl flags::Build {
 		eprintln!("Building loader");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(self.arch.cargo_args())
+			.args(self.target.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.profile_args())
 			.run()?;
@@ -54,7 +54,7 @@ impl flags::Build {
 		sh.create_dir(dist_object.parent().unwrap())?;
 		sh.copy_file(&build_object, &dist_object)?;
 
-		if self.arch == Arch::X86_64 {
+		if self.target == Target::X86_64 {
 			eprintln!("Converting object to elf32-i386");
 			self.convert_to_elf32_i386()?;
 		}
@@ -75,7 +75,7 @@ impl flags::Build {
 			.map(|s| vec![s.as_str()])
 			.unwrap_or_default();
 
-		rustflags.extend(self.arch.rustflags());
+		rustflags.extend(self.target.rustflags());
 
 		Ok(rustflags.join("\x1f"))
 	}
@@ -110,7 +110,7 @@ impl flags::Build {
 
 	fn out_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(self.arch.triple());
+		out_dir.push(self.target.triple());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -120,7 +120,7 @@ impl flags::Build {
 
 	fn dist_dir(&self) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(self.arch.name());
+		out_dir.push(self.target.name());
 		out_dir.push(match self.profile() {
 			"dev" => "debug",
 			profile => profile,
@@ -130,13 +130,13 @@ impl flags::Build {
 
 	fn build_object(&self) -> PathBuf {
 		let mut build_object = self.out_dir();
-		build_object.push(self.arch.build_name());
+		build_object.push(self.target.build_name());
 		build_object
 	}
 
 	fn dist_object(&self) -> PathBuf {
 		let mut dist_object = self.dist_dir();
-		dist_object.push(self.arch.dist_name());
+		dist_object.push(self.target.dist_name());
 		dist_object
 	}
 }
@@ -150,10 +150,10 @@ impl flags::Clippy {
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
-		for arch in [Arch::X86_64] {
-			let target_args = arch.cargo_args();
+		for target in [Target::X86_64] {
+			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}")
-				.env("HERMIT_APP", hermit_app(arch))
+				.env("HERMIT_APP", hermit_app(target))
 				.run()?;
 		}
 
@@ -163,10 +163,10 @@ impl flags::Clippy {
 	}
 }
 
-fn hermit_app(arch: Arch) -> PathBuf {
+fn hermit_app(target: Target) -> PathBuf {
 	let mut hermit_app = project_root().to_path_buf();
 	hermit_app.push("data");
-	hermit_app.push(arch.name());
+	hermit_app.push(target.name());
 	hermit_app.push("hello_world");
 	hermit_app
 }

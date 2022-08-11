@@ -42,7 +42,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        arch: [x86_64, x86_64-uefi, aarch64]
+        target: [x86_64, x86_64-uefi, aarch64]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install QEMU, NASM (ubuntu)
@@ -66,16 +66,16 @@ jobs:
         with:
             lfs: true
       - name: Use nightly toolchain (aarch64 | UEFI)
-        if: matrix.arch == 'x86_64-uefi' || matrix.arch == 'aarch64'
+        if: matrix.target == 'x86_64-uefi' || matrix.target == 'aarch64'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2022-08-01
       - name: Build
-        run: cargo xtask build --arch ${{ matrix.arch }}
+        run: cargo xtask build --target ${{ matrix.target }}
         env:
-          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.arch }}/hello_world
+          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.target }}/hello_world
       - name: Run loader (x86_64)
-        if: matrix.arch == 'x86_64'
+        if: matrix.target == 'x86_64'
         run: |
           qemu-system-x86_64 \
             -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
@@ -92,18 +92,18 @@ jobs:
             -kernel target/x86_64/debug/rusty-loader \
             -initrd data/x86_64/hello_c
       - name: Run loader (aarch64)
-        if: matrix.arch == 'aarch64'
+        if: matrix.target == 'aarch64'
         run: |
           qemu-system-aarch64 \
             -machine virt,gic-version=max -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/debug/rusty-loader
       - name: Build (release)
-        run: cargo xtask build --arch ${{ matrix.arch }} --release
+        run: cargo xtask build --target ${{ matrix.target }} --release
         env:
-          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.arch }}/hello_world
+          HERMIT_APP: ${{ github.workspace }}/data/${{ matrix.target }}/hello_world
       - name: Run loader (release, x86_64)
-        if: matrix.arch == 'x86_64'
+        if: matrix.target == 'x86_64'
         run: |
           qemu-system-x86_64 \
             -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
@@ -120,7 +120,7 @@ jobs:
             -kernel target/x86_64/release/rusty-loader \
             -initrd data/x86_64/hello_c
       - name: Run loader (release, aarch64)
-        if: matrix.arch == 'aarch64'
+        if: matrix.target == 'aarch64'
         run: |
           qemu-system-aarch64 \
             -machine virt,gic-version=max -cpu cortex-a72 -smp 1 -m 512M \

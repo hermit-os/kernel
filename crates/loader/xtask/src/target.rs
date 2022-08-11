@@ -3,13 +3,13 @@ use std::str::FromStr;
 use anyhow::anyhow;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Arch {
+pub enum Target {
 	X86_64,
 	X86_64Uefi,
 	AArch64,
 }
 
-impl Arch {
+impl Target {
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",
@@ -64,7 +64,7 @@ impl Arch {
 	}
 }
 
-impl FromStr for Arch {
+impl FromStr for Target {
 	type Err = anyhow::Error;
 
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -72,7 +72,7 @@ impl FromStr for Arch {
 			"x86_64" => Ok(Self::X86_64),
 			"x86_64-uefi" => Ok(Self::X86_64Uefi),
 			"aarch64" => Ok(Self::AArch64),
-			s => Err(anyhow!("Unsupported arch: {s}")),
+			s => Err(anyhow!("Unsupported target: {s}")),
 		}
 	}
 }

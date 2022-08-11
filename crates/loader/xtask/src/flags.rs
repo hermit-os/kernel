@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::arch::Arch;
+use crate::target::Target;
 
 xflags::xflags! {
 	src "./src/flags.rs"
@@ -15,8 +15,8 @@ xflags::xflags! {
 		/// Build the kernel.
 		cmd build
 		{
-			/// Build for the architecture.
-			required --arch arch: Arch
+			/// Build for the target.
+			required --target target: Target
 			/// Directory for all generated artifacts.
 			optional --target-dir target_dir: PathBuf
 			/// Build artifacts in release mode, with optimizations.
@@ -52,7 +52,7 @@ pub struct Help {
 
 #[derive(Debug)]
 pub struct Build {
-	pub arch: Arch,
+	pub target: Target,
 	pub target_dir: Option<PathBuf>,
 	pub release: bool,
 	pub profile: Option<String>,
