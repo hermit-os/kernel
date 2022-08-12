@@ -32,7 +32,7 @@ build:loader:
   stage: build
   image: ${CI_REGISTRY_IMAGE}
   script:
-    - cargo xtask build --arch x86_64 --release
+    - cargo xtask build --target x86_64 --release
   artifacts:
     paths:
       - target/x86_64/release/rusty-loader
