@@ -46,23 +46,19 @@ const fn mair(attr: u64, mt: u64) -> u64 {
 /// Entrypoint - Initialize Stack pointer and Exception Table
 #[no_mangle]
 #[naked]
-pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo) -> ! {
+pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
 	// validate signatures
 	const _START: Entry = _start;
 	const _PRE_INIT: Entry = pre_init;
 
 	asm!(
-		// determine stack address
-		"mov x1, x0",
-		"add x1, x1, {current_stack_address_offset}",
-		"ldr x2, [x1]",
-		"mov x3, {stack_top_offset}",
-		"add x2, x2, x3",
-		"mov sp, x2",
-		"adrp x4, {pre_init}",
-		"add  x4, x4, #:lo12:{pre_init}",
-		"br x4",
-		current_stack_address_offset = const RawBootInfo::current_stack_address_offset(),
+		// Add stack top offset
+		"mov x8, {stack_top_offset}",
+		"add sp, sp, x8",
+
+		// Jump to Rust code
+		"b {pre_init}",
+
 		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
 		pre_init = sym pre_init,
 		options(noreturn),
@@ -71,10 +67,10 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo) -> ! {
 
 #[inline(never)]
 #[no_mangle]
-unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
+unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> ! {
 	unsafe {
 		RAW_BOOT_INFO = Some(boot_info);
-		BOOT_INFO = Some(BootInfo::copy_from(boot_info));
+		BOOT_INFO = Some(BootInfo::from(*boot_info));
 	}
 
 	// set exception table
@@ -90,7 +86,7 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo) -> ! {
 	// Memory barrier
 	asm!("dsb sy", options(nostack),);
 
-	if boot_info.load_cpu_online() == 0 {
+	if cpu_id == 0 {
 		crate::boot_processor_main()
 	} else {
 		#[cfg(not(feature = "smp"))]

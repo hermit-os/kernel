@@ -179,8 +179,9 @@ jobs:
         working-directory: loader
       - name: Build dev profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target aarch64-unknown-hermit --package hello_world
+      - run: rustup toolchain install nightly-2022-08-01 --target aarch64-unknown-none-softfloat --component llvm-tools-preview
       - name: Build loader
-        run: cargo xtask build --arch aarch64
+        run: cargo +nightly-2022-08-01 xtask build --target aarch64
         working-directory: loader
         env:
           HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world

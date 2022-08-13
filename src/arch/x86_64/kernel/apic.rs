@@ -2,7 +2,7 @@ use crate::arch;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
-use crate::arch::x86_64::kernel::{raw_boot_info, IRQ_COUNTERS};
+use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
@@ -74,11 +74,13 @@ const SPURIOUS_INTERRUPT_NUMBER: u8 = 127;
 const SMP_BOOT_CODE_ADDRESS: VirtAddr = VirtAddr(0x8000);
 
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_PML4: usize = 0x18;
-#[cfg(feature = "smp")]
 const SMP_BOOT_CODE_OFFSET_ENTRY: usize = 0x08;
 #[cfg(feature = "smp")]
-const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = 0x10;
+const SMP_BOOT_CODE_OFFSET_CPU_ID: usize = SMP_BOOT_CODE_OFFSET_ENTRY + 0x08;
+#[cfg(feature = "smp")]
+const SMP_BOOT_CODE_OFFSET_BOOTINFO: usize = SMP_BOOT_CODE_OFFSET_CPU_ID + 0x04;
+#[cfg(feature = "smp")]
+const SMP_BOOT_CODE_OFFSET_PML4: usize = SMP_BOOT_CODE_OFFSET_BOOTINFO + 0x08;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
@@ -745,7 +747,7 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
 	}
 
-	raw_boot_info().store_current_stack_address(stack.as_u64());
+	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
 
 	let current_percore = Box::leak(boxed_percore);
 
@@ -768,7 +770,7 @@ pub fn boot_application_processors() {
 
 	use include_transformed::include_nasm_bin;
 
-	use super::start;
+	use super::{raw_boot_info, start};
 
 	let smp_boot_code = include_nasm_bin!("boot.asm");
 
@@ -820,14 +822,19 @@ pub fn boot_application_processors() {
 	let core_id = core_id();
 
 	for (core_id_to_boot, &apic_id) in apic_ids.iter().enumerate() {
-		if core_id_to_boot != core_id.try_into().unwrap() {
+		let core_id_to_boot = core_id_to_boot as u32;
+		if core_id_to_boot != core_id {
+			unsafe {
+				*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_CPU_ID).as_mut_ptr()) =
+					core_id_to_boot;
+			}
 			let destination = u64::from(apic_id) << 32;
 
 			debug!(
 				"Waking up CPU {} with Local APIC ID {}",
 				core_id_to_boot, apic_id
 			);
-			init_next_processor_variables(core_id_to_boot.try_into().unwrap());
+			init_next_processor_variables(core_id_to_boot);
 
 			// Save the current number of initialized CPUs.
 			let current_processor_count = arch::get_processor_count();
