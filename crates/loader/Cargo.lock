@@ -161,7 +161,7 @@ checksum = "97477e48b4cf8603ad5f7aaf897467cf42ab4218a38ef76fb14c2d6773a6d6a8"
 
 [[package]]
 name = "rusty-loader"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "aarch64",
  "align-data",
