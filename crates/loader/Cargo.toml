@@ -7,7 +7,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-hermit-entry = { version = "0.8", features = ["loader"] }
+hermit-entry = { version = "0.9", features = ["loader"] }
 log = "0.4"
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
