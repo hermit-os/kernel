@@ -165,7 +165,7 @@ checksum = "04c3b4822ccebfa39c02fc03d1534441b22ead323fa0f48bb7ddd8e6ba076a40"
 
 [[package]]
 name = "libhermit-rs"
-version = "0.4.4"
+version = "0.5.0"
 dependencies = [
  "aarch64",
  "async-task",
