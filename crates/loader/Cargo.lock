@@ -68,9 +68,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-entry"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03a1b7069be6e7c467882a40d0d0f7a849cfba37cfaab783877dbb2952fb05af"
+checksum = "6decc531b731ff869007d027547adc48446591650c065dd04c98bd65d420c3e5"
 dependencies = [
  "goblin",
  "log",
