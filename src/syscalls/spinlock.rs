@@ -39,7 +39,7 @@ extern "C" fn __sys_spinlock_destroy(lock: *mut SpinlockContainer<'_>) -> i32 {
 
 	// Consume the lock into a box, which is then dropped.
 	unsafe {
-		Box::from_raw(lock);
+		drop(Box::from_raw(lock));
 	}
 	0
 }
@@ -114,7 +114,7 @@ extern "C" fn __sys_spinlock_irqsave_destroy(lock: *mut SpinlockIrqSaveContainer
 
 	// Consume the lock into a box, which is then dropped.
 	unsafe {
-		Box::from_raw(lock);
+		drop(Box::from_raw(lock));
 	}
 	0
 }
