@@ -8,11 +8,19 @@
 
 extern crate hermit;
 
+use core::{
+	ptr,
+	sync::atomic::{AtomicU32, Ordering::Relaxed},
+};
+
 use common::*;
 mod common;
 
 use alloc::vec;
-use hermit::{sys_join, sys_spawn2, sys_usleep};
+use hermit::{
+	errno::{EAGAIN, ETIMEDOUT},
+	sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep, timespec,
+};
 
 const USER_STACK_SIZE: usize = 1_048_576;
 const NORMAL_PRIO: u8 = 2;
@@ -38,6 +46,48 @@ pub fn thread_test() {
 	for child in children {
 		sys_join(child);
 	}
+}
+
+extern "C" fn waker_func(futex: usize) {
+	let futex = unsafe { &*(futex as *const AtomicU32) };
+
+	sys_usleep(100_000);
+
+	futex.store(1, Relaxed);
+	let ret = sys_futex_wake(futex as *const AtomicU32 as *mut u32, i32::MAX);
+	assert_eq!(ret, 1);
+}
+
+#[test_case]
+pub fn test_futex() {
+	let futex = AtomicU32::new(0);
+	let futex_ptr = &futex as *const AtomicU32 as *mut u32;
+
+	let ret = sys_futex_wait(futex_ptr, 1, ptr::null(), 0);
+	assert_eq!(ret, -EAGAIN);
+
+	let timeout = timespec {
+		tv_sec: 0,
+		tv_nsec: 100_000_000,
+	};
+	let ret = sys_futex_wait(futex_ptr, 0, &timeout, 1);
+	assert_eq!(ret, -ETIMEDOUT);
+
+	let waker = sys_spawn2(
+		waker_func,
+		futex_ptr as usize,
+		NORMAL_PRIO,
+		USER_STACK_SIZE,
+		-1,
+	);
+	assert!(waker >= 0);
+
+	let ret = sys_futex_wait(futex_ptr, 0, ptr::null(), 0);
+	assert_eq!(ret, 0);
+	assert_eq!(futex.load(Relaxed), 1);
+
+	let ret = sys_join(waker);
+	assert_eq!(ret, 0);
 }
 
 #[test_case]

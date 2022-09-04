@@ -8,6 +8,7 @@ use crate::syscalls::interfaces::SyscallInterface;
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 pub use self::condvar::*;
+pub use self::futex::*;
 pub use self::processor::*;
 pub use self::random::*;
 pub use self::recmutex::*;
@@ -19,6 +20,7 @@ pub use self::timer::*;
 
 mod condvar;
 pub(crate) mod fs;
+mod futex;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
