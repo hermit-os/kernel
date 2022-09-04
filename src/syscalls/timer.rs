@@ -39,6 +39,13 @@ fn microseconds_to_timeval(microseconds: u64, result: &mut timeval) {
 	result.tv_usec = (microseconds % 1_000_000) as i64;
 }
 
+pub(crate) fn timespec_to_microseconds(time: timespec) -> Option<u64> {
+	u64::try_from(time.tv_sec)
+		.ok()
+		.and_then(|secs| secs.checked_mul(1_000_000))
+		.and_then(|millions| millions.checked_add(u64::try_from(time.tv_nsec).ok()? / 1000))
+}
+
 extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),

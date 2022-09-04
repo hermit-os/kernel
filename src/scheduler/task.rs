@@ -140,6 +140,7 @@ impl PartialEq for TaskHandle {
 impl Eq for TaskHandle {}
 
 /// Realize a priority queue for task handles
+#[derive(Default)]
 pub struct TaskHandlePriorityQueue {
 	queues: [Option<VecDeque<TaskHandle>>; NO_PRIORITIES],
 	prio_bitmap: u64,
@@ -156,6 +157,11 @@ impl TaskHandlePriorityQueue {
 			],
 			prio_bitmap: 0,
 		}
+	}
+
+	/// Checks if the queue is empty.
+	pub fn is_empty(&self) -> bool {
+		self.prio_bitmap == 0
 	}
 
 	/// Add a task handle by its priority to the queue
@@ -196,16 +202,19 @@ impl TaskHandlePriorityQueue {
 		None
 	}
 
-	/// Remove a specific task handle from the priority queue.
-	pub fn remove(&mut self, task: TaskHandle) {
+	/// Remove a specific task handle from the priority queue. Returns `true` if
+	/// the handle was in the queue.
+	pub fn remove(&mut self, task: TaskHandle) -> bool {
 		let queue_index = task.priority.into() as usize;
 		//assert!(queue_index < NO_PRIORITIES, "Priority {} is too high", queue_index);
 
+		let mut success = false;
 		if let Some(queue) = &mut self.queues[queue_index] {
 			let mut i = 0;
 			while i != queue.len() {
 				if queue[i].id == task.id {
 					queue.remove(i);
+					success = true;
 				} else {
 					i += 1;
 				}
@@ -215,6 +224,8 @@ impl TaskHandlePriorityQueue {
 				self.prio_bitmap &= !(1 << queue_index as u64);
 			}
 		}
+
+		success
 	}
 }
 
