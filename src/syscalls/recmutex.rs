@@ -29,7 +29,7 @@ extern "C" fn __sys_recmutex_destroy(recmutex: *mut RecursiveMutex) -> i32 {
 	// Consume the pointer to the raw memory into a Box again
 	// and drop the Box to free the associated memory.
 	unsafe {
-		Box::from_raw(recmutex);
+		drop(Box::from_raw(recmutex));
 	}
 
 	0

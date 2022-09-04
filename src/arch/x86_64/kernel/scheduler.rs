@@ -290,7 +290,7 @@ impl TaskTLS {
 	}
 
 	fn thread_ptr(&self) -> &*mut () {
-		&*self.thread_ptr
+		&self.thread_ptr
 	}
 }
 

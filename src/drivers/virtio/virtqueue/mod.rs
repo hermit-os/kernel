@@ -2457,7 +2457,7 @@ impl<T> Drop for Pinned<T> {
 	fn drop(&mut self) {
 		if self._drop_inner {
 			unsafe {
-				Box::from_raw(self.raw_ptr);
+				drop(Box::from_raw(self.raw_ptr));
 			}
 		}
 	}

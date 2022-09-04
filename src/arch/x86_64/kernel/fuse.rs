@@ -36,7 +36,7 @@ impl PosixFileSystem for Fuse {
 			// 2.FUSE_LOOKUP(FUSE_ROOT_ID, “foo”) -> nodeid
 			file.fuse_nid = self.lookup(path);
 
-			if file.fuse_nid == None {
+			if file.fuse_nid.is_none() {
 				warn!("Fuse lookup seems to have failed!");
 				return Err(FileError::ENOENT);
 			}

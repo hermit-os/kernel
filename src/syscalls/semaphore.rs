@@ -28,7 +28,7 @@ extern "C" fn __sys_sem_destroy(sem: *mut Semaphore) -> i32 {
 	// Consume the pointer to the raw memory into a Box again
 	// and drop the Box to free the associated memory.
 	unsafe {
-		Box::from_raw(sem);
+		drop(Box::from_raw(sem));
 	}
 	0
 }

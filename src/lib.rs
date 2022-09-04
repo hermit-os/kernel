@@ -14,8 +14,6 @@
 #![feature(asm_sym)]
 #![feature(const_btree_new)]
 #![feature(const_mut_refs)]
-#![feature(const_ptr_offset_from)]
-#![feature(core_c_str)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
 #![feature(new_uninit)]
