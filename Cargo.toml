@@ -77,7 +77,7 @@ log = { version = "0.4", default-features = false }
 num = { version = "0.4", default-features = false }
 num-derive = { version = "0.3", optional = true }
 num-traits = { version = "0.2", default-features = false }
-once_cell = { version = "1.13", default-features = false, features = ["alloc"] }
+once_cell = { version = "1.14", default-features = false, features = ["alloc"] }
 pci-ids = { version = "0.2", optional = true }
 scopeguard = { version = "1.1", default-features = false }
 shell-words = { version = "1.1", default-features = false }
