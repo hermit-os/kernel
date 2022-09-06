@@ -52,26 +52,38 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 	loop {
 		scheduler.reschedule();
 
-		// Try to remove ourselves from the waiting queue.
 		let mut parking_lot = PARKING_LOT.lock();
-		let mut wakeup = true;
-		if let Entry::Occupied(mut queue) = parking_lot.entry(address.as_mut_ptr().addr()) {
-			// If we are not in the waking queue, this must have been a wakeup.
-			wakeup = !queue.get_mut().remove(handle);
-			if queue.get().is_empty() {
-				queue.remove();
+		if wakeup_time.is_some_and(|&t| t <= get_timer_ticks()) {
+			let mut wakeup = true;
+			// Timeout occurred, try to remove ourselves from the waiting queue.
+			if let Entry::Occupied(mut queue) = parking_lot.entry(address.as_mut_ptr().addr()) {
+				// If we are not in the waking queue, this must have been a wakeup.
+				wakeup = !queue.get_mut().remove(handle);
+				if queue.get().is_empty() {
+					queue.remove();
+				}
 			}
-		};
 
-		if wakeup {
-			return 0;
-		} else if wakeup_time.is_some_and(|&t| t <= get_timer_ticks()) {
-			// If the current time is past the wakeup time, the operation timed out.
-			return -ETIMEDOUT;
+			if wakeup {
+				return 0;
+			} else {
+				return -ETIMEDOUT;
+			}
+		} else {
+			// If we are not in the waking queue, this must have been a wakeup.
+			let wakeup = !parking_lot
+				.get(&address.as_mut_ptr().addr())
+				.is_some_and(|queue| queue.contains(handle));
+
+			if wakeup {
+				return 0;
+			} else {
+				// A spurious wakeup occurred, sleep again.
+				// Tasks do not change core, so the handle in the parking lot is still current.
+				scheduler.block_current_task(wakeup_time);
+			}
 		}
-
-		// A spurious wakeup occurred, sleep again.
-		scheduler.block_current_task(wakeup_time);
+		drop(parking_lot);
 	}
 }
 
