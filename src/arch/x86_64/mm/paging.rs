@@ -17,10 +17,6 @@ use crate::env;
 use crate::mm;
 use crate::scheduler;
 
-/// Uhyve's address of the initial GDT
-#[allow(dead_code)]
-const BOOT_GDT: PhysAddr = PhysAddr(0x1000);
-
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: VirtAddr = VirtAddr(0xFFFF_FFFF_FFFF_F000);
 
