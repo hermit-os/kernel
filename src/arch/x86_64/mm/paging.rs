@@ -48,7 +48,7 @@ bitflags! {
 		const WRITE_THROUGH = 1 << 3;
 
 		/// Set if caching shall be disabled for memory referenced by this entry.
-		const CACHE_DISABLE = 1 << 4;
+		const NO_CACHE = 1 << 4;
 
 		/// Set if software has accessed this entry (for memory access or address translation).
 		const ACCESSED = 1 << 5;
@@ -64,22 +64,18 @@ bitflags! {
 		const GLOBAL = 1 << 8;
 
 		/// Set if code execution shall be disabled for memory referenced by this entry.
-		const EXECUTE_DISABLE = 1 << 63;
+		const NO_EXECUTE = 1 << 63;
 	}
 }
 
 impl PageTableEntryFlags {
-	/// An empty set of flags for unused/zeroed table entries.
-	/// Needed as long as empty() is no const function.
-	const BLANK: PageTableEntryFlags = PageTableEntryFlags { bits: 0 };
-
 	pub fn device(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::CACHE_DISABLE);
+		self.insert(PageTableEntryFlags::NO_CACHE);
 		self
 	}
 
 	pub fn normal(&mut self) -> &mut Self {
-		self.remove(PageTableEntryFlags::CACHE_DISABLE);
+		self.remove(PageTableEntryFlags::NO_CACHE);
 		self
 	}
 
@@ -94,7 +90,7 @@ impl PageTableEntryFlags {
 	}
 
 	pub fn execute_disable(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::EXECUTE_DISABLE);
+		self.insert(PageTableEntryFlags::NO_EXECUTE);
 		self
 	}
 }
@@ -112,7 +108,7 @@ impl PageTableEntry {
 		PhysAddr(
 			self.physical_address_and_flags.as_u64()
 				& !(BasePageSize::SIZE - 1u64)
-				& !(PageTableEntryFlags::EXECUTE_DISABLE).bits(),
+				& !(PageTableEntryFlags::NO_EXECUTE).bits(),
 		)
 	}
 
@@ -197,7 +193,7 @@ pub enum BasePageSize {}
 impl PageSize for BasePageSize {
 	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
+	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::empty();
 }
 
 /// A 2 MiB page mapped in the PD.
@@ -409,7 +405,7 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		let index = page.table_index::<L>();
 		let flush = self.entries[index].is_present();
 
-		if flags == PageTableEntryFlags::BLANK {
+		if flags == PageTableEntryFlags::empty() {
 			// in this case we unmap the pages
 			self.entries[index].set(physical_address, flags);
 		} else {
@@ -545,7 +541,7 @@ where
 	///
 	/// * `range` - The range of pages of size S
 	/// * `physical_address` - First physical address to map these pages to
-	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
+	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
 	///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
 	fn map_pages<S: PageSize>(
 		&mut self,
@@ -647,9 +643,8 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
 
 		if entry & PageTableEntryFlags::HUGE_PAGE.bits() != 0 || i == 0 {
 			let off = virtual_address.as_u64()
-				& !(((!0u64) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
-			let phys =
-				entry & (((!0u64) << page_bits) & !PageTableEntryFlags::EXECUTE_DISABLE.bits());
+				& !(((!0u64) << page_bits) & !PageTableEntryFlags::NO_EXECUTE.bits());
+			let phys = entry & (((!0u64) << page_bits) & !PageTableEntryFlags::NO_EXECUTE.bits());
 
 			return PhysAddr(off | phys);
 		}
@@ -690,7 +685,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
+	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
 }
 
 pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {

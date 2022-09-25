@@ -120,7 +120,7 @@ stublet:
     mov cr3, eax
 
     ; Enable x86-64 Compatibility Mode by setting EFER_LME.
-    ; Also enable early access to EXECUTE_DISABLE-protected memory through EFER_NXE.
+    ; Also enable early access to NO_EXECUTE-protected memory through EFER_NXE.
     mov ecx, MSR_EFER
     rdmsr
     or eax, EFER_LME | EFER_NXE
