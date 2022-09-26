@@ -5,6 +5,8 @@ mod hole;
 mod test;
 
 use crate::arch;
+#[cfg(target_arch = "x86_64")]
+use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{
 	BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags,
 };

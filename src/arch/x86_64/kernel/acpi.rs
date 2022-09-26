@@ -1,5 +1,7 @@
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::paging::{
+	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::x86::io::*;

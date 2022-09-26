@@ -29,67 +29,42 @@ const PAGE_MAP_BITS: usize = 9;
 /// A mask where PAGE_MAP_BITS are set to calculate a table index.
 const PAGE_MAP_MASK: usize = 0x1FF;
 
-bitflags! {
-	/// Possible flags for an entry in either table (PML4, PDPT, PD, PT)
-	///
-	/// See Intel Vol. 3A, Tables 4-14 through 4-19
-	pub struct PageTableEntryFlags: u64 {
-		/// Set if this entry is valid and points to a page or table.
-		const PRESENT = 1 << 0;
+pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 
-		/// Set if memory referenced by this entry shall be writable.
-		const WRITABLE = 1 << 1;
+pub trait PageTableEntryFlagsExt {
+	fn device(&mut self) -> &mut Self;
 
-		/// Set if memory referenced by this entry shall be accessible from user-mode (Ring 3).
-		const USER_ACCESSIBLE = 1 << 2;
+	fn normal(&mut self) -> &mut Self;
 
-		/// Set if Write-Through caching shall be enabled for memory referenced by this entry.
-		/// Otherwise, Write-Back caching is used.
-		const WRITE_THROUGH = 1 << 3;
+	fn read_only(&mut self) -> &mut Self;
 
-		/// Set if caching shall be disabled for memory referenced by this entry.
-		const NO_CACHE = 1 << 4;
+	fn writable(&mut self) -> &mut Self;
 
-		/// Set if software has accessed this entry (for memory access or address translation).
-		const ACCESSED = 1 << 5;
-
-		/// Only for page entries: Set if software has written to the memory referenced by this entry.
-		const DIRTY = 1 << 6;
-
-		/// Only for page entries in PDPT or PDT: Set if this entry references a 1 GiB (PDPT) or 2 MiB (PDT) page.
-		const HUGE_PAGE = 1 << 7;
-
-		/// Only for page entries: Set if this address translation is global for all tasks and does not need to
-		/// be flushed from the TLB when CR3 is reset.
-		const GLOBAL = 1 << 8;
-
-		/// Set if code execution shall be disabled for memory referenced by this entry.
-		const NO_EXECUTE = 1 << 63;
-	}
+	fn execute_disable(&mut self) -> &mut Self;
 }
 
-impl PageTableEntryFlags {
-	pub fn device(&mut self) -> &mut Self {
+impl PageTableEntryFlagsExt for PageTableEntryFlags {
+	fn device(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::NO_CACHE);
 		self
 	}
 
-	pub fn normal(&mut self) -> &mut Self {
+	fn normal(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::NO_CACHE);
 		self
 	}
 
-	pub fn read_only(&mut self) -> &mut Self {
+	fn read_only(&mut self) -> &mut Self {
 		self.remove(PageTableEntryFlags::WRITABLE);
 		self
 	}
 
-	pub fn writable(&mut self) -> &mut Self {
+	fn writable(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::WRITABLE);
 		self
 	}
 
-	pub fn execute_disable(&mut self) -> &mut Self {
+	fn execute_disable(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::NO_EXECUTE);
 		self
 	}
