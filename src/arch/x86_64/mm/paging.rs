@@ -92,18 +92,6 @@ impl PageTableEntry {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 
-	/// Returns `true` if the page is a huge page
-	#[allow(dead_code)]
-	fn is_huge(self) -> bool {
-		(self.physical_address_and_flags & PageTableEntryFlags::HUGE_PAGE.bits()) != 0
-	}
-
-	/// Returns `true` if the page is accessible from the user space
-	#[allow(dead_code)]
-	fn is_user(self) -> bool {
-		(self.physical_address_and_flags & PageTableEntryFlags::USER_ACCESSIBLE.bits()) != 0
-	}
-
 	/// Mark this as a valid (present) entry and set address translation and flags.
 	///
 	/// # Arguments
@@ -551,20 +539,6 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
 	root_pagetable.get_page_table_entry(page)
-}
-
-#[allow(dead_code)]
-pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr {
-	trace!("Getting physical address for {:#X}", virtual_address);
-
-	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	let address = root_pagetable
-		.get_page_table_entry(page)
-		.expect("Entry not present")
-		.address();
-	let offset = virtual_address & (S::SIZE - 1);
-	PhysAddr(address.as_u64() | offset.as_u64())
 }
 
 /// Translate a virtual memory address to a physical one.
