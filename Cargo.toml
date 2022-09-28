@@ -107,7 +107,7 @@ features = [
 multiboot = "0.8"
 time = { version = "0.3", default-features = false }
 x86 = { version = "0.52", default-features = false }
-x86_64 = { version = "0.14", default-features = false }
+x86_64 = "0.14"
 
 [dev-dependencies]
 float-cmp = "0.9"

@@ -5,6 +5,9 @@ use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 use x86::tlb;
+use x86_64::structures::paging::{
+	Mapper, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
+};
 
 #[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::apic;
@@ -600,13 +603,12 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
 
 	let mut current_physical_address = physical_address;
 	let mut send_ipi = false;
 
 	for page in range {
-		send_ipi |= root_pagetable.map_page::<S>(page, current_physical_address, flags);
+		send_ipi |= map_page::<S>(page, current_physical_address, flags);
 		current_physical_address += S::SIZE;
 	}
 
@@ -614,6 +616,75 @@ pub fn map<S: PageSize>(
 		#[cfg(feature = "smp")]
 		apic::ipi_tlb_flush();
 	}
+}
+
+unsafe fn level_4_table() -> &'static mut x86_64::structures::paging::PageTable {
+	unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut x86_64::structures::paging::PageTable) }
+}
+
+unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
+	unsafe { RecursivePageTable::new(level_4_table()).unwrap() }
+}
+
+fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEntryFlags) -> bool {
+	use x86_64::{
+		structures::paging::{Page, PageSize},
+		PhysAddr, VirtAddr,
+	};
+
+	trace!(
+		"Mapping {} to {phys_addr:p} ({}) with {flags:?}",
+		page.address(),
+		S::SIZE
+	);
+
+	let flags = flags
+		| PageTableEntryFlags::PRESENT
+		| PageTableEntryFlags::ACCESSED
+		| PageTableEntryFlags::DIRTY;
+
+	match S::SIZE {
+		Size4KiB::SIZE => {
+			let page =
+				Page::<Size4KiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
+			unsafe {
+				// TODO: Require explicit unmaps
+				if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
+					flush.flush();
+				}
+				recursive_page_table()
+					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+					.unwrap()
+					.flush();
+			}
+		}
+		Size2MiB::SIZE => {
+			let page =
+				Page::<Size2MiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
+			unsafe {
+				recursive_page_table()
+					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+					.unwrap()
+					.flush();
+			}
+		}
+		Size1GiB::SIZE => {
+			let page =
+				Page::<Size1GiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
+			unsafe {
+				recursive_page_table()
+					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+					.unwrap()
+					.flush();
+			}
+		}
+		_ => unreachable!(),
+	}
+
+	true
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
