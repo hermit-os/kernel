@@ -658,9 +658,12 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 		count
 	);
 
-	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::empty());
+	map::<S>(
+		virtual_address,
+		PhysAddr::zero(),
+		count,
+		PageTableEntryFlags::empty(),
+	);
 }
 
 pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
@@ -672,11 +675,15 @@ pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 		last_page.address()
 	);
 
-	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	let range = Page::<BasePageSize>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().read_only().execute_disable();
-	root_pagetable.map_pages(range, PhysAddr(first_page.address().as_u64()), flags);
+	let count = (last_page.address().0 - first_page.address().0) / BasePageSize::SIZE + 1;
+	map::<BasePageSize>(
+		first_page.address(),
+		PhysAddr(first_page.address().0),
+		count as usize,
+		flags,
+	);
 }
 
 #[inline]
