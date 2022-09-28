@@ -4,7 +4,6 @@ use core::ptr;
 use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
-use x86::tlb;
 use x86_64::structures::paging::{
 	Mapper, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
 };
@@ -94,46 +93,6 @@ impl PageTableEntry {
 	fn is_present(self) -> bool {
 		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
-
-	/// Mark this as a valid (present) entry and set address translation and flags.
-	///
-	/// # Arguments
-	///
-	/// * `physical_address` - The physical memory address this entry shall translate to
-	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT and ACCESSED flags are set automatically)
-	fn set(&mut self, physical_address: PhysAddr, flags: PageTableEntryFlags) {
-		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
-			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
-			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
-			assert_eq!(
-				physical_address % LargePageSize::SIZE,
-				0,
-				"Physical address is not on a 2 MiB page boundary (physical_address = {:#X})",
-				physical_address
-			);
-		} else {
-			// Verify that the offset bits for a 4 KiB page are zero.
-			assert_eq!(
-				physical_address % BasePageSize::SIZE,
-				0,
-				"Physical address is not on a 4 KiB page boundary (physical_address = {:#X})",
-				physical_address
-			);
-		}
-
-		// Verify that the physical address does not exceed the CPU's physical address width.
-		assert_eq!(
-			physical_address >> processor::get_physical_address_bits().into(),
-			0,
-			"Physical address exceeds CPU's physical address width (physical_address = {:#X})",
-			physical_address
-		);
-
-		let mut flags_to_set = flags;
-		flags_to_set.insert(PageTableEntryFlags::PRESENT);
-		flags_to_set.insert(PageTableEntryFlags::ACCESSED);
-		self.physical_address_and_flags = PhysAddr(physical_address | flags_to_set.bits());
-	}
 }
 
 /// A generic interface to support all possible page sizes.
@@ -195,13 +154,6 @@ impl<S: PageSize> Page<S> {
 	/// Return the stored virtual address.
 	fn address(self) -> VirtAddr {
 		self.virtual_address
-	}
-
-	/// Flushes this page from the TLB of this CPU.
-	fn flush_from_tlb(self) {
-		unsafe {
-			tlb::flush(self.virtual_address.as_usize());
-		}
 	}
 
 	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
@@ -342,52 +294,9 @@ struct PageTable<L> {
 /// implementation of some methods.
 trait PageTableMethods {
 	fn get_page_table_entry<S: PageSize>(&mut self, page: Page<S>) -> Option<PageTableEntry>;
-	fn map_page_in_this_table<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) -> bool;
-	fn map_page<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) -> bool;
 }
 
 impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
-	/// Maps a single page in this table to the given physical address.
-	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
-	///
-	/// Must only be called if a page of this size is mapped at this page table level!
-	fn map_page_in_this_table<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) -> bool {
-		assert_eq!(L::LEVEL, S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-		let flush = self.entries[index].is_present();
-
-		if flags == PageTableEntryFlags::empty() {
-			// in this case we unmap the pages
-			self.entries[index].set(physical_address, flags);
-		} else {
-			self.entries[index].set(
-				physical_address,
-				PageTableEntryFlags::DIRTY | S::MAP_EXTRA_FLAG | flags,
-			);
-		}
-
-		if flush {
-			page.flush_from_tlb();
-		}
-
-		flush
-	}
-
 	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
 	///
 	/// This is the default implementation called only for PT.
@@ -404,20 +313,6 @@ impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
 		} else {
 			None
 		}
-	}
-
-	/// Maps a single page to the given physical address.
-	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
-	///
-	/// This is the default implementation that just calls the map_page_in_this_table method.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
-	default fn map_page<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) -> bool {
-		self.map_page_in_this_table::<S>(page, physical_address, flags)
 	}
 }
 
@@ -442,44 +337,6 @@ where
 			}
 		} else {
 			None
-		}
-	}
-
-	/// Maps a single page to the given physical address.
-	/// Returns whether an existing entry was updated. You can use this return value to flush TLBs.
-	///
-	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
-	/// It overrides the default implementation above.
-	fn map_page<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) -> bool {
-		assert!(L::LEVEL >= S::MAP_LEVEL);
-
-		if L::LEVEL > S::MAP_LEVEL {
-			let index = page.table_index::<L>();
-
-			// Does the table exist yet?
-			if !self.entries[index].is_present() {
-				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let new_entry = physicalmem::allocate(BasePageSize::SIZE as usize).unwrap();
-				self.entries[index].set(new_entry, PageTableEntryFlags::WRITABLE);
-
-				// Mark all entries as unused in the newly created table.
-				let subtable = self.subtable::<S>(page);
-				for entry in subtable.entries.iter_mut() {
-					entry.physical_address_and_flags = PhysAddr::zero();
-				}
-			}
-
-			let subtable = self.subtable::<S>(page);
-			subtable.map_page::<S>(page, physical_address, flags)
-		} else {
-			// Calling the default implementation from a specialized one is not supported (yet),
-			// so we have to resort to an extra function.
-			self.map_page_in_this_table::<S>(page, physical_address, flags)
 		}
 	}
 }
