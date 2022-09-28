@@ -509,34 +509,6 @@ where
 		let subtable_address = (table_address << PAGE_MAP_BITS) | (index << PAGE_BITS);
 		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
 	}
-
-	/// Maps a continuous range of pages.
-	///
-	/// # Arguments
-	///
-	/// * `range` - The range of pages of size S
-	/// * `physical_address` - First physical address to map these pages to
-	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-	///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
-	fn map_pages<S: PageSize>(
-		&mut self,
-		range: PageIter<S>,
-		physical_address: PhysAddr,
-		flags: PageTableEntryFlags,
-	) {
-		let mut current_physical_address = physical_address;
-		let mut send_ipi = false;
-
-		for page in range {
-			send_ipi |= self.map_page::<S>(page, current_physical_address, flags);
-			current_physical_address += S::SIZE;
-		}
-
-		if send_ipi {
-			#[cfg(feature = "smp")]
-			apic::ipi_tlb_flush();
-		}
-	}
 }
 
 pub extern "x86-interrupt" fn page_fault_handler(
@@ -633,6 +605,13 @@ pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 	virtual_to_physical(virtual_address)
 }
 
+/// Maps a continuous range of pages.
+///
+/// # Arguments
+///
+/// * `physical_address` - First physical address to map these pages to
+/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
+///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
 pub fn map<S: PageSize>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,
@@ -648,7 +627,19 @@ pub fn map<S: PageSize>(
 
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	root_pagetable.map_pages(range, physical_address, flags);
+
+	let mut current_physical_address = physical_address;
+	let mut send_ipi = false;
+
+	for page in range {
+		send_ipi |= root_pagetable.map_page::<S>(page, current_physical_address, flags);
+		current_physical_address += S::SIZE;
+	}
+
+	if send_ipi {
+		#[cfg(feature = "smp")]
+		apic::ipi_tlb_flush();
+	}
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
