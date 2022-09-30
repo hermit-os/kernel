@@ -28,9 +28,6 @@ const PAGE_BITS: usize = 12;
 /// Number of bits of the index in each table (PML4, PDPT, PD, PT).
 const PAGE_MAP_BITS: usize = 9;
 
-/// A mask where PAGE_MAP_BITS are set to calculate a table index.
-const PAGE_MAP_MASK: usize = 0x1FF;
-
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 
 pub trait PageTableEntryFlagsExt {
@@ -87,11 +84,6 @@ impl PageTableEntry {
 				& !(BasePageSize::SIZE - 1u64)
 				& !(PageTableEntryFlags::NO_EXECUTE).bits(),
 		)
-	}
-
-	/// Returns whether this entry is valid (present).
-	fn is_present(self) -> bool {
-		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
 	}
 }
 
@@ -197,12 +189,6 @@ impl<S: PageSize> Page<S> {
 			last,
 		}
 	}
-
-	/// Returns the index of this page in the table given by L.
-	fn table_index<L: PageTableLevel>(self) -> usize {
-		assert!(L::LEVEL >= S::MAP_LEVEL);
-		self.virtual_address.as_usize() >> PAGE_BITS >> (L::LEVEL * PAGE_MAP_BITS) & PAGE_MAP_MASK
-	}
 }
 
 /// An iterator to walk through a range of pages of size S.
@@ -276,87 +262,6 @@ impl PageTableLevelWithSubtables for PD {
 enum PT {}
 impl PageTableLevel for PT {
 	const LEVEL: usize = 0;
-}
-
-/// Representation of any page table (PML4, PDPT, PD, PT) in memory.
-/// Parameter L supplies information for Rust's typing system to distinguish between the different tables.
-#[repr(C)]
-struct PageTable<L> {
-	/// Each page table has 512 entries (can be calculated using PAGE_MAP_BITS).
-	entries: [PageTableEntry; 1 << PAGE_MAP_BITS],
-
-	/// Required by Rust to support the L parameter.
-	level: PhantomData<L>,
-}
-
-/// A trait defining methods every page table has to implement.
-/// This additional trait is necessary to make use of Rust's specialization feature and provide a default
-/// implementation of some methods.
-trait PageTableMethods {
-	fn get_page_table_entry<S: PageSize>(&mut self, page: Page<S>) -> Option<PageTableEntry>;
-}
-
-impl<L: PageTableLevel> PageTableMethods for PageTable<L> {
-	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
-	///
-	/// This is the default implementation called only for PT.
-	/// It is overridden by a specialized implementation for all tables with sub tables (all except PT).
-	default fn get_page_table_entry<S: PageSize>(
-		&mut self,
-		page: Page<S>,
-	) -> Option<PageTableEntry> {
-		assert_eq!(L::LEVEL, S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-
-		if self.entries[index].is_present() {
-			Some(self.entries[index])
-		} else {
-			None
-		}
-	}
-}
-
-impl<L: PageTableLevelWithSubtables> PageTableMethods for PageTable<L>
-where
-	L::SubtableLevel: PageTableLevel,
-{
-	/// Returns the PageTableEntry for the given page if it is present, otherwise returns None.
-	///
-	/// This is the implementation for all tables with subtables (PML4, PDPT, PDT).
-	/// It overrides the default implementation above.
-	fn get_page_table_entry<S: PageSize>(&mut self, page: Page<S>) -> Option<PageTableEntry> {
-		assert!(L::LEVEL >= S::MAP_LEVEL);
-		let index = page.table_index::<L>();
-
-		if self.entries[index].is_present() {
-			if L::LEVEL > S::MAP_LEVEL {
-				let subtable = self.subtable::<S>(page);
-				subtable.get_page_table_entry::<S>(page)
-			} else {
-				Some(self.entries[index])
-			}
-		} else {
-			None
-		}
-	}
-}
-
-impl<L: PageTableLevelWithSubtables> PageTable<L>
-where
-	L::SubtableLevel: PageTableLevel,
-{
-	/// Returns the next subtable for the given page in the page table hierarchy.
-	///
-	/// Must only be called if a page of this size is mapped in a subtable!
-	fn subtable<S: PageSize>(&mut self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
-		assert!(L::LEVEL > S::MAP_LEVEL);
-
-		// Calculate the address of the subtable.
-		let index = page.table_index::<L>();
-		let table_address = self as *mut PageTable<L> as usize;
-		let subtable_address = (table_address << PAGE_MAP_BITS) | (index << PAGE_BITS);
-		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
-	}
 }
 
 pub extern "x86-interrupt" fn page_fault_handler(
