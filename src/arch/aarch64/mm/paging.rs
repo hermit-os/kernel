@@ -119,7 +119,7 @@ impl PageTableEntry {
 	pub fn address(&self) -> PhysAddr {
 		PhysAddr(
 			self.physical_address_and_flags.as_u64()
-				& !(BasePageSize::SIZE as u64 - 1u64)
+				& !(BasePageSize::SIZE - 1u64)
 				& !(u64::MAX << 48),
 		)
 	}
@@ -158,7 +158,7 @@ impl PageTableEntry {
 /// Currently, deriving implementations for these traits only works if all dependent types implement it as well.
 pub trait PageSize: Copy {
 	/// The page size in bytes.
-	const SIZE: usize;
+	const SIZE: u64;
 
 	/// The page table level at which a page of this size is mapped
 	const MAP_LEVEL: usize;
@@ -172,7 +172,7 @@ pub trait PageSize: Copy {
 #[derive(Clone, Copy)]
 pub enum BasePageSize {}
 impl PageSize for BasePageSize {
-	const SIZE: usize = 4096;
+	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 3;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::TABLE_OR_4KIB_PAGE;
 }
@@ -181,7 +181,7 @@ impl PageSize for BasePageSize {
 #[derive(Clone, Copy)]
 pub enum LargePageSize {}
 impl PageSize for LargePageSize {
-	const SIZE: usize = 2 * 1024 * 1024;
+	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 2;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
@@ -190,7 +190,7 @@ impl PageSize for LargePageSize {
 #[derive(Clone, Copy)]
 pub enum HugePageSize {}
 impl PageSize for HugePageSize {
-	const SIZE: usize = 1024 * 1024 * 1024;
+	const SIZE: u64 = 1024 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
@@ -469,7 +469,7 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE)
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE as usize)
 					.expect("Unable to allocate physical memory");
 				self.entries[index].set(
 					physical_address,
@@ -529,7 +529,7 @@ where
 
 		for page in range {
 			self.map_page::<S>(page, current_physical_address, flags);
-			current_physical_address += S::SIZE as u64;
+			current_physical_address += S::SIZE;
 		}
 	}
 }
@@ -537,7 +537,7 @@ where
 #[inline]
 fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE);
+	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE as usize);
 	Page::range(first_page, last_page)
 }
 
@@ -606,7 +606,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 
 #[inline]
 pub fn get_application_page_size() -> usize {
-	BasePageSize::SIZE
+	BasePageSize::SIZE as usize
 }
 
 pub unsafe fn init() {

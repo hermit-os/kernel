@@ -38,7 +38,8 @@ impl MmioDriver {
 pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
-	let virtual_address = crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE).unwrap();
+	let virtual_address =
+		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
 	for current_address in (MMIO_START..MMIO_END).step_by(512) {
@@ -48,22 +49,23 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		);
 		// Have we crossed a page boundary in the last iteration?
 		// info!("before the {}. paging", current_page);
-		if current_address / BasePageSize::SIZE > current_page {
+		if current_address / BasePageSize::SIZE as usize > current_page {
 			let mut flags = PageTableEntryFlags::empty();
 			flags.normal().writable();
 			paging::map::<BasePageSize>(
 				virtual_address,
-				PhysAddr::from(align_down!(current_address, BasePageSize::SIZE)),
+				PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
 				1,
 				flags,
 			);
 
-			current_page = current_address / BasePageSize::SIZE;
+			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
 		// Verify the first register value to find out if this is really an MMIO magic-value.
 		let mmio = unsafe {
-			&mut *((virtual_address.as_usize() | (current_address & (BasePageSize::SIZE - 1)))
+			&mut *((virtual_address.as_usize()
+				| (current_address & (BasePageSize::SIZE as usize - 1)))
 				as *mut MmioRegisterLayout)
 		};
 
@@ -97,8 +99,8 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		info!("Found network card at {:#X}", mmio as *const _ as usize);
 
 		crate::arch::mm::physicalmem::reserve(
-			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE)),
-			BasePageSize::SIZE,
+			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
+			BasePageSize::SIZE as usize,
 		);
 
 		//mmio.print_information();
@@ -107,7 +109,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	crate::arch::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE);
+	crate::arch::mm::virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
 
 	Err("Network card not found!")
 }

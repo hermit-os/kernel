@@ -37,7 +37,7 @@ pub fn init() {
 pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
@@ -64,7 +64,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 		alignment
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE,
+		alignment % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
@@ -100,7 +100,7 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	);
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
@@ -132,7 +132,7 @@ pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	);
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,

@@ -171,7 +171,7 @@ struct RxBuffer {
 
 impl RxBuffer {
 	pub fn new(len: usize) -> Self {
-		let sz = align_up!(len, BasePageSize::SIZE);
+		let sz = align_up!(len, BasePageSize::SIZE as usize);
 		let addr = crate::mm::allocate(sz, true);
 
 		Self { addr, len: sz }
@@ -194,7 +194,10 @@ struct TxBuffer {
 
 impl TxBuffer {
 	pub fn new(len: usize) -> Self {
-		let sz = align_up!(len + mem::size_of::<virtio_net_hdr>(), BasePageSize::SIZE);
+		let sz = align_up!(
+			len + mem::size_of::<virtio_net_hdr>(),
+			BasePageSize::SIZE as usize
+		);
 		let addr = crate::mm::allocate(sz, true);
 
 		Self {

@@ -94,7 +94,7 @@ pub fn total_memory_size() -> usize {
 pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
@@ -121,7 +121,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 		alignment
 	);
 	assert_eq!(
-		alignment % BasePageSize::SIZE,
+		alignment % BasePageSize::SIZE as usize,
 		0,
 		"Alignment {:#X} is not a multiple of {:#X}",
 		alignment,
@@ -147,7 +147,7 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	);
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,
@@ -162,7 +162,7 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 #[cfg(not(feature = "pci"))]
 pub fn reserve(physical_address: PhysAddr, size: usize) {
 	assert_eq!(
-		physical_address % BasePageSize::SIZE,
+		physical_address % BasePageSize::SIZE as usize,
 		0,
 		"Physical address {:#X} is not a multiple of {:#X}",
 		physical_address,
@@ -170,7 +170,7 @@ pub fn reserve(physical_address: PhysAddr, size: usize) {
 	);
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE,
+		size % BasePageSize::SIZE as usize,
 		0,
 		"Size {:#X} is not a multiple of {:#X}",
 		size,

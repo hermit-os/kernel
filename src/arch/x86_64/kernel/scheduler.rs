@@ -84,11 +84,12 @@ impl TaskStacks {
 		let user_stack_size = if size < KERNEL_STACK_SIZE {
 			KERNEL_STACK_SIZE
 		} else {
-			align_up!(size, BasePageSize::SIZE)
+			align_up!(size, BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
-		let virt_addr = crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE)
-			.expect("Failed to allocate Virtual Memory for TaskStacks");
+		let virt_addr =
+			crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
+				.expect("Failed to allocate Virtual Memory for TaskStacks");
 		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
@@ -105,7 +106,7 @@ impl TaskStacks {
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
-			KERNEL_STACK_SIZE / BasePageSize::SIZE,
+			KERNEL_STACK_SIZE / BasePageSize::SIZE as usize,
 			flags,
 		);
 
@@ -113,7 +114,7 @@ impl TaskStacks {
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE,
-			DEFAULT_STACK_SIZE / BasePageSize::SIZE,
+			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
 			flags,
 		);
 
@@ -121,14 +122,16 @@ impl TaskStacks {
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
 			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
-			user_stack_size / BasePageSize::SIZE,
+			user_stack_size / BasePageSize::SIZE as usize,
 			flags,
 		);
 
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE)
+				(virt_addr
+					+ KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
+					+ 3 * BasePageSize::SIZE as usize)
 					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
@@ -214,11 +217,11 @@ impl Drop for TaskStacks {
 
 				crate::arch::mm::paging::unmap::<BasePageSize>(
 					stacks.virt_addr,
-					stacks.total_size / BasePageSize::SIZE + 4,
+					stacks.total_size / BasePageSize::SIZE as usize + 4,
 				);
 				crate::arch::mm::virtualmem::deallocate(
 					stacks.virt_addr,
-					stacks.total_size + 4 * BasePageSize::SIZE,
+					stacks.total_size + 4 * BasePageSize::SIZE as usize,
 				);
 				crate::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
 			}

@@ -289,7 +289,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
-					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 					let record_addr = ioapic_record.address;
 					debug!(
 						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
@@ -321,14 +321,14 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 
 /// Helper function to search Floating Pointer Structure of the Multiprocessing Specification
 fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP, ()> {
-	let virtual_address = virtualmem::allocate(BasePageSize::SIZE).map_err(|_| ())?;
+	let virtual_address = virtualmem::allocate(BasePageSize::SIZE as usize).map_err(|_| ())?;
 
-	for current_address in (start.as_usize()..end.as_usize()).step_by(BasePageSize::SIZE) {
+	for current_address in (start.as_usize()..end.as_usize()).step_by(BasePageSize::SIZE as usize) {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
 			virtual_address,
-			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE)),
+			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
 			1,
 			flags,
 		);
@@ -346,7 +346,7 @@ fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP,
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
-	virtualmem::deallocate(virtual_address, BasePageSize::SIZE);
+	virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
 
 	Err(())
 }
@@ -374,23 +374,26 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		info!("Virtual-Wire mode implemented");
 	}
 
-	let virtual_address = virtualmem::allocate(BasePageSize::SIZE).map_err(|_| ())?;
+	let virtual_address = virtualmem::allocate(BasePageSize::SIZE as usize).map_err(|_| ())?;
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
 	paging::map::<BasePageSize>(
 		virtual_address,
-		PhysAddr::from(align_down!(mp_float.mp_config as usize, BasePageSize::SIZE)),
+		PhysAddr::from(align_down!(
+			mp_float.mp_config as usize,
+			BasePageSize::SIZE as usize
+		)),
 		1,
 		flags,
 	);
 
-	let mut addr: usize =
-		virtual_address.as_usize() | (mp_float.mp_config as usize & (BasePageSize::SIZE - 1));
+	let mut addr: usize = virtual_address.as_usize()
+		| (mp_float.mp_config as usize & (BasePageSize::SIZE as usize - 1));
 	let mp_config: &ApicConfigTable = unsafe { &*(addr as *const ApicConfigTable) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
-		virtualmem::deallocate(virtual_address, BasePageSize::SIZE);
+		virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
 		return Err(());
 	}
 
@@ -399,7 +402,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		let default_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 			debug!(
 				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
 				default_address, IOAPIC_ADDRESS
@@ -430,7 +433,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 					info!("Found IOAPIC at 0x{:x}", ioapic);
 
 					unsafe {
-						IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+						IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 						debug!(
 							"Mapping IOAPIC at {:#X} to virtual address {:#X}",
 							ioapic, IOAPIC_ADDRESS
@@ -464,7 +467,7 @@ fn default_apic() -> PhysAddr {
 	let default_address = PhysAddr(0xFEC0_0000);
 
 	unsafe {
-		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 		debug!(
 			"Mapping IOAPIC at {:#X} to virtual address {:#X}",
 			default_address, IOAPIC_ADDRESS
@@ -483,7 +486,7 @@ fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 		let default_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 			debug!(
 				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
 				default_address, IOAPIC_ADDRESS
@@ -530,7 +533,7 @@ pub fn init() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
 		unsafe {
-			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE).unwrap();
+			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 			debug!(
 				"Mapping Local APIC at {:#X} to virtual address {:#X}",
 				local_apic_physical_address, LOCAL_APIC_ADDRESS
@@ -776,7 +779,7 @@ pub fn boot_application_processors() {
 
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(
-		smp_boot_code.len() < BasePageSize::SIZE,
+		smp_boot_code.len() < BasePageSize::SIZE as usize,
 		"SMP Boot Code is larger than a page"
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
