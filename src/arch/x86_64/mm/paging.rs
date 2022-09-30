@@ -94,14 +94,6 @@ impl PageTableEntry {
 pub trait PageSize: Copy {
 	/// The page size in bytes.
 	const SIZE: u64;
-
-	/// The page table level at which a page of this size is mapped (from 0 for PT through 3 for PML4).
-	/// Implemented as a numeric value to enable numeric comparisons.
-	const MAP_LEVEL: usize;
-
-	/// Any extra flag that needs to be set to map a page of this size.
-	/// For example: PageTableEntryFlags::HUGE_PAGE
-	const MAP_EXTRA_FLAG: PageTableEntryFlags;
 }
 
 /// A 4 KiB page mapped in the PT.
@@ -109,8 +101,6 @@ pub trait PageSize: Copy {
 pub enum BasePageSize {}
 impl PageSize for BasePageSize {
 	const SIZE: u64 = 4096;
-	const MAP_LEVEL: usize = 0;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::empty();
 }
 
 /// A 2 MiB page mapped in the PD.
@@ -118,8 +108,6 @@ impl PageSize for BasePageSize {
 pub enum LargePageSize {}
 impl PageSize for LargePageSize {
 	const SIZE: u64 = 2 * 1024 * 1024;
-	const MAP_LEVEL: usize = 1;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
 
 /// A 1 GiB page mapped in the PDPT.
@@ -127,8 +115,6 @@ impl PageSize for LargePageSize {
 pub enum HugePageSize {}
 impl PageSize for HugePageSize {
 	const SIZE: u64 = 1024 * 1024 * 1024;
-	const MAP_LEVEL: usize = 2;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
 
 /// A memory page of the size given by S.
