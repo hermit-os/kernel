@@ -1,11 +1,10 @@
-use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
 use multiboot::information::Multiboot;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 use x86_64::structures::paging::{
-	Mapper, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
+	Mapper, Page, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
 };
 
 #[cfg(feature = "smp")]
@@ -92,86 +91,6 @@ pub use x86_64::structures::paging::Size1GiB as HugePageSize;
 pub use x86_64::structures::paging::Size2MiB as LargePageSize;
 pub use x86_64::structures::paging::Size4KiB as BasePageSize;
 
-/// A memory page of the size given by S.
-#[derive(Clone, Copy)]
-struct Page<S: PageSize> {
-	/// Virtual memory address of this page.
-	/// This is rounded to a page size boundary on creation.
-	virtual_address: VirtAddr,
-
-	/// Required by Rust to support the S parameter.
-	size: PhantomData<S>,
-}
-
-impl<S: PageSize> Page<S> {
-	/// Return the stored virtual address.
-	fn address(self) -> VirtAddr {
-		self.virtual_address
-	}
-
-	/// Returns whether the given virtual address is a valid one in the x86-64 memory model.
-	///
-	/// Most x86-64 supports only 48-bit for virtual memory addresses.
-	/// Currently, we supports only the lower half of the canonical address space.
-	/// As a consequence, the address space is divided into the two valid regions 0x8000_0000_0000
-	/// and 0x0000_8000_0000_0000.
-	///
-	/// Although we could make this check depend on the actual linear address width from the CPU,
-	/// any extension above 48-bit would require a new page table level, which we don't implement.
-	fn is_valid_address(virtual_address: VirtAddr) -> bool {
-		virtual_address < VirtAddr(0x0000_8000_0000_0000u64)
-			|| virtual_address >= VirtAddr(0x0000_8000_0000_0000u64)
-	}
-
-	/// Returns a Page including the given virtual address.
-	/// That means, the address is rounded down to a page size boundary.
-	fn including_address(virtual_address: VirtAddr) -> Self {
-		assert!(
-			Self::is_valid_address(virtual_address),
-			"Virtual address {:#X} is invalid",
-			virtual_address
-		);
-
-		if S::SIZE == 1024 * 1024 * 1024 {
-			assert!(processor::supports_1gib_pages());
-		}
-
-		Self {
-			virtual_address: align_down!(virtual_address, S::SIZE as usize),
-			size: PhantomData,
-		}
-	}
-
-	/// Returns a PageIter to iterate from the given first Page to the given last Page (inclusive).
-	fn range(first: Self, last: Self) -> PageIter<S> {
-		assert!(first.virtual_address <= last.virtual_address);
-		PageIter {
-			current: first,
-			last,
-		}
-	}
-}
-
-/// An iterator to walk through a range of pages of size S.
-struct PageIter<S: PageSize> {
-	current: Page<S>,
-	last: Page<S>,
-}
-
-impl<S: PageSize> Iterator for PageIter<S> {
-	type Item = Page<S>;
-
-	fn next(&mut self) -> Option<Page<S>> {
-		if self.current.virtual_address <= self.last.virtual_address {
-			let p = self.current;
-			self.current.virtual_address += S::SIZE;
-			Some(p)
-		} else {
-			None
-		}
-	}
-}
-
 pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: irq::ExceptionStackFrame,
 	error_code: u64,
@@ -197,13 +116,6 @@ pub extern "x86-interrupt" fn page_fault_handler(
 	}
 
 	scheduler::abort();
-}
-
-#[inline]
-fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
-	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE);
-	Page::range(first_page, last_page)
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
@@ -276,7 +188,9 @@ pub fn map<S: PageSize>(
 		count
 	);
 
-	let range = get_page_range::<S>(virtual_address, count);
+	let first_page = Page::containing_address(x86_64::VirtAddr::new(virtual_address.0));
+	let last_page = first_page + count as u64;
+	let range = Page::range(first_page, last_page);
 
 	let mut current_physical_address = physical_address;
 	let mut send_ipi = false;
@@ -301,11 +215,11 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 }
 
 fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEntryFlags) -> bool {
-	use x86_64::{structures::paging::Page, PhysAddr, VirtAddr};
+	use x86_64::{PhysAddr, VirtAddr};
 
 	trace!(
-		"Mapping {} to {phys_addr:p} ({}) with {flags:?}",
-		page.address(),
+		"Mapping {:p} to {phys_addr:p} ({}) with {flags:?}",
+		page.start_address(),
 		S::SIZE
 	);
 
@@ -317,7 +231,8 @@ fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEnt
 	match S::SIZE {
 		Size4KiB::SIZE => {
 			let page =
-				Page::<Size4KiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+				Page::<Size4KiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
+					.unwrap();
 			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
 			unsafe {
 				// TODO: Require explicit unmaps
@@ -332,7 +247,8 @@ fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEnt
 		}
 		Size2MiB::SIZE => {
 			let page =
-				Page::<Size2MiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+				Page::<Size2MiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
+					.unwrap();
 			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
 			unsafe {
 				recursive_page_table()
@@ -343,7 +259,8 @@ fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEnt
 		}
 		Size1GiB::SIZE => {
 			let page =
-				Page::<Size1GiB>::from_start_address(VirtAddr::new(page.address().0)).unwrap();
+				Page::<Size1GiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
+					.unwrap();
 			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
 			unsafe {
 				recursive_page_table()
@@ -374,20 +291,24 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 }
 
 pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
-	let first_page = Page::<BasePageSize>::including_address(VirtAddr(start_address.as_u64()));
-	let last_page = Page::<BasePageSize>::including_address(VirtAddr(end_address.as_u64()));
+	let first_page =
+		Page::<BasePageSize>::containing_address(x86_64::VirtAddr::new(start_address.as_u64()));
+	let last_page =
+		Page::<BasePageSize>::containing_address(x86_64::VirtAddr::new(end_address.as_u64()));
 	assert!(
-		last_page.address() < mm::kernel_start_address(),
+		last_page.start_address().as_u64() < mm::kernel_start_address().0,
 		"Address {:#X} to be identity-mapped is not below Kernel start address",
-		last_page.address()
+		last_page.start_address()
 	);
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().read_only().execute_disable();
-	let count = (last_page.address().0 - first_page.address().0) / BasePageSize::SIZE + 1;
+	let count = (last_page.start_address().as_u64() - first_page.start_address().as_u64())
+		/ BasePageSize::SIZE
+		+ 1;
 	map::<BasePageSize>(
-		first_page.address(),
-		PhysAddr(first_page.address().0),
+		VirtAddr(first_page.start_address().as_u64()),
+		PhysAddr(first_page.start_address().as_u64()),
 		count as usize,
 		flags,
 	);
