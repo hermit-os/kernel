@@ -394,11 +394,38 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
+	use x86_64::structures::paging::{
+		mapper::{MappedFrame, Translate, TranslateResult},
+		PageSize,
+	};
+
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
-	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut PageTable<PML4>) };
-	root_pagetable.get_page_table_entry(page)
+	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
+
+	let (frame, flags) = match unsafe { recursive_page_table().translate(virtual_address) } {
+		TranslateResult::Mapped {
+			frame,
+			offset: _,
+			flags,
+		} => (frame, flags),
+		TranslateResult::NotMapped => return None,
+		TranslateResult::InvalidFrameAddress(_) => panic!(),
+	};
+
+	let start_address = match S::SIZE {
+		Size4KiB::SIZE => match frame {
+			MappedFrame::Size4KiB(frame) => frame.start_address(),
+			_ => panic!(),
+		},
+		_ => panic!(),
+	};
+
+	let physical_address_and_flags = PhysAddr(start_address.as_u64() | flags.bits());
+
+	Some(PageTableEntry {
+		physical_address_and_flags,
+	})
 }
 
 /// Translate a virtual memory address to a physical one.
