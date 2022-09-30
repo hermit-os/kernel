@@ -335,35 +335,15 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
-	let mut page_bits: u64 = 39;
+	use x86_64::structures::paging::mapper::Translate;
 
-	// A self-reference enables direct access to all page tables
-	static SELF: [VirtAddr; 4] = {
-		[
-			VirtAddr(0xFFFFFF8000000000u64),
-			VirtAddr(0xFFFFFFFFC0000000u64),
-			VirtAddr(0xFFFFFFFFFFE00000u64),
-			VirtAddr(0xFFFFFFFFFFFFF000u64),
-		]
+	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
+	let phys_addr = unsafe {
+		recursive_page_table()
+			.translate_addr(virtual_address)
+			.unwrap()
 	};
-
-	for i in (0..3).rev() {
-		page_bits -= PAGE_MAP_BITS as u64;
-
-		let vpn = (virtual_address.as_u64() >> page_bits) as isize;
-		let ptr = SELF[i].as_ptr::<u64>();
-		let entry = unsafe { *ptr.offset(vpn) };
-
-		if entry & PageTableEntryFlags::HUGE_PAGE.bits() != 0 || i == 0 {
-			let off = virtual_address.as_u64()
-				& !(((!0u64) << page_bits) & !PageTableEntryFlags::NO_EXECUTE.bits());
-			let phys = entry & (((!0u64) << page_bits) & !PageTableEntryFlags::NO_EXECUTE.bits());
-
-			return PhysAddr(off | phys);
-		}
-	}
-
-	panic!("virtual_to_physical should never reach this point");
+	PhysAddr(phys_addr.as_u64())
 }
 
 #[no_mangle]
