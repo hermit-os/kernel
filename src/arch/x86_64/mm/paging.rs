@@ -197,59 +197,6 @@ impl<S: PageSize> Iterator for PageIter<S> {
 	}
 }
 
-/// An interface to allow for a generic implementation of struct PageTable for all 4 page tables.
-/// Must be implemented by all page tables.
-trait PageTableLevel {
-	/// Numeric page table level (from 0 for PT through 3 for PML4) to enable numeric comparisons.
-	const LEVEL: usize;
-}
-
-/// An interface for page tables with sub page tables (all except PT).
-/// Having both PageTableLevel and PageTableLevelWithSubtables leverages Rust's typing system to provide
-/// a subtable method only for those that have sub page tables.
-///
-/// Kudos to Philipp Oppermann for the trick!
-trait PageTableLevelWithSubtables: PageTableLevel {
-	type SubtableLevel;
-}
-
-/// The Page Map Level 4 (PML4) table, with numeric level 3 and PDPT subtables.
-enum PML4 {}
-impl PageTableLevel for PML4 {
-	const LEVEL: usize = 3;
-}
-
-impl PageTableLevelWithSubtables for PML4 {
-	type SubtableLevel = PDPT;
-}
-
-/// A Page Directory Pointer Table (PDPT), with numeric level 2 and PDT subtables.
-#[allow(clippy::upper_case_acronyms)]
-enum PDPT {}
-impl PageTableLevel for PDPT {
-	const LEVEL: usize = 2;
-}
-
-impl PageTableLevelWithSubtables for PDPT {
-	type SubtableLevel = PD;
-}
-
-/// A Page Directory (PD), with numeric level 1 and PT subtables.
-enum PD {}
-impl PageTableLevel for PD {
-	const LEVEL: usize = 1;
-}
-
-impl PageTableLevelWithSubtables for PD {
-	type SubtableLevel = PT;
-}
-
-/// A Page Table (PT), with numeric level 0 and no subtables.
-enum PT {}
-impl PageTableLevel for PT {
-	const LEVEL: usize = 0;
-}
-
 pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: irq::ExceptionStackFrame,
 	error_code: u64,
