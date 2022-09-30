@@ -87,35 +87,10 @@ impl PageTableEntry {
 	}
 }
 
-/// A generic interface to support all possible page sizes.
-///
-/// This is defined as a subtrait of Copy to enable #[derive(Clone, Copy)] for Page.
-/// Currently, deriving implementations for these traits only works if all dependent types implement it as well.
-pub trait PageSize: Copy {
-	/// The page size in bytes.
-	const SIZE: u64;
-}
-
-/// A 4 KiB page mapped in the PT.
-#[derive(Clone, Copy)]
-pub enum BasePageSize {}
-impl PageSize for BasePageSize {
-	const SIZE: u64 = 4096;
-}
-
-/// A 2 MiB page mapped in the PD.
-#[derive(Clone, Copy)]
-pub enum LargePageSize {}
-impl PageSize for LargePageSize {
-	const SIZE: u64 = 2 * 1024 * 1024;
-}
-
-/// A 1 GiB page mapped in the PDPT.
-#[derive(Clone, Copy)]
-pub enum HugePageSize {}
-impl PageSize for HugePageSize {
-	const SIZE: u64 = 1024 * 1024 * 1024;
-}
+pub use x86_64::structures::paging::PageSize;
+pub use x86_64::structures::paging::Size1GiB as HugePageSize;
+pub use x86_64::structures::paging::Size2MiB as LargePageSize;
+pub use x86_64::structures::paging::Size4KiB as BasePageSize;
 
 /// A memory page of the size given by S.
 #[derive(Clone, Copy)]
@@ -232,10 +207,7 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
-	use x86_64::structures::paging::{
-		mapper::{MappedFrame, Translate, TranslateResult},
-		PageSize,
-	};
+	use x86_64::structures::paging::mapper::{MappedFrame, Translate, TranslateResult};
 
 	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
 
@@ -329,10 +301,7 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 }
 
 fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEntryFlags) -> bool {
-	use x86_64::{
-		structures::paging::{Page, PageSize},
-		PhysAddr, VirtAddr,
-	};
+	use x86_64::{structures::paging::Page, PhysAddr, VirtAddr};
 
 	trace!(
 		"Mapping {} to {phys_addr:p} ({}) with {flags:?}",
