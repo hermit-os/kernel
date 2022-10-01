@@ -62,6 +62,17 @@ impl Archive {
 		Ok(())
 	}
 
+	pub fn append(&self, file: &Self) -> Result<()> {
+		let sh = crate::sh()?;
+		let archive = self.as_ref();
+		let file = file.as_ref();
+
+		let ar = binutil("ar")?;
+		cmd!(sh, "{ar} qL {archive} {file}").run()?;
+
+		Ok(())
+	}
+
 	pub fn set_osabi(&self) -> Result<()> {
 		let sh = crate::sh()?;
 		let archive_path = self.as_ref();

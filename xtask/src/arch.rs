@@ -23,6 +23,20 @@ impl Arch {
 		}
 	}
 
+	pub fn hermit_triple(&self) -> &'static str {
+		match self {
+			Arch::X86_64 => "x86_64-unknown-hermit",
+			Arch::AArch64 => "aarch64-unknown-hermit",
+		}
+	}
+
+	pub fn builtins_cargo_args(&self) -> &'static [&'static str] {
+		match self {
+			Arch::X86_64 => &["--target=x86_64-unknown-hermit", "-Zbuild-std=core"],
+			Arch::AArch64 => &["--target=aarch64-unknown-hermit", "-Zbuild-std=core"],
+		}
+	}
+
 	pub fn cargo_args(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &["--target=x86_64-unknown-none"],

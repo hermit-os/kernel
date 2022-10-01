@@ -120,3 +120,6 @@ default-features = false
 members = [
 	"xtask",
 ]
+exclude = [
+	"hermit-builtins",
+]

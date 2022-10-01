@@ -59,6 +59,20 @@ impl flags::Build {
 		eprintln!("Exporting symbols");
 		self.export_syms()?;
 
+		eprintln!("Building hermit-builtins");
+		cmd!(sh, "cargo build")
+			.arg("--manifest-path=hermit-builtins/Cargo.toml")
+			.args(self.arch.builtins_cargo_args())
+			.args(self.target_dir_args())
+			.args(self.profile_args())
+			.run()?;
+
+		eprintln!("Exporting hermit-builtins symbols");
+		let builtins = self.builtins_archive();
+		builtins.retain_symbols(["memcmp", "memcpy", "memmove", "memset", "strlen"].into_iter())?;
+
+		dist_archive.append(&builtins)?;
+
 		eprintln!("Setting OSABI");
 		dist_archive.set_osabi()?;
 
@@ -159,6 +173,12 @@ impl flags::Build {
 			profile => profile,
 		});
 		out_dir
+	}
+
+	fn builtins_archive(&self) -> Archive {
+		let mut builtins_archive = self.out_dir(self.arch.hermit_triple());
+		builtins_archive.push("libhermit_builtins.a");
+		builtins_archive.into()
 	}
 
 	fn build_archive(&self) -> Archive {
