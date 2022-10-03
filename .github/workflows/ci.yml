@@ -105,7 +105,7 @@ jobs:
         with:
           path: libhermit-rs
       - name: Build dev profile
-        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target x86_64-unknown-hermit
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@1.0.0
         with:
@@ -119,7 +119,7 @@ jobs:
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/debug/rusty_demo
       - name: Build release profile
-        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --release
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target x86_64-unknown-hermit --release
       - name: Test release profile
         run: |
           qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
@@ -128,7 +128,7 @@ jobs:
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/rusty_demo
       - name: Build minimal profile
-        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target x86_64-unknown-hermit --no-default-features --release --package hello_world
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
       - name: Test minimal profile
         id: minimal
         run: |
@@ -178,7 +178,7 @@ jobs:
           git checkout $latestTag
         working-directory: loader
       - name: Build dev profile
-        run: cargo build -Zbuild-std=core,alloc,std,panic_abort -Zbuild-std-features=compiler-builtins-mem --target aarch64-unknown-hermit --package hello_world
+        run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target aarch64-unknown-hermit --package hello_world
       - run: rustup toolchain install nightly-2022-08-01 --target aarch64-unknown-none-softfloat --component llvm-tools-preview
       - name: Build loader
         run: cargo +nightly-2022-08-01 xtask build --target aarch64
