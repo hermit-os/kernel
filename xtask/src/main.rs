@@ -22,10 +22,6 @@ fn main() -> Result<()> {
 impl flags::Xtask {
 	fn run(self) -> Result<()> {
 		match self.subcommand {
-			flags::XtaskCmd::Help(_) => {
-				println!("{}", flags::Xtask::HELP);
-				Ok(())
-			}
 			flags::XtaskCmd::Build(build) => build.run(),
 			flags::XtaskCmd::Clippy(clippy) => clippy.run(),
 		}
