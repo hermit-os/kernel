@@ -7,11 +7,6 @@ xflags::xflags! {
 
 	/// Run custom build command.
 	cmd xtask {
-		default cmd help {
-			/// Print help information.
-			optional -h, --help
-		}
-
 		/// Build the kernel.
 		cmd build
 		{
@@ -46,14 +41,8 @@ pub struct Xtask {
 
 #[derive(Debug)]
 pub enum XtaskCmd {
-	Help(Help),
 	Build(Build),
 	Clippy(Clippy),
-}
-
-#[derive(Debug)]
-pub struct Help {
-	pub help: bool,
 }
 
 #[derive(Debug)]
@@ -71,7 +60,10 @@ pub struct Build {
 pub struct Clippy;
 
 impl Xtask {
-	pub const HELP: &'static str = Self::HELP_;
+	#[allow(dead_code)]
+	pub fn from_env_or_exit() -> Self {
+		Self::from_env_or_exit_()
+	}
 
 	#[allow(dead_code)]
 	pub fn from_env() -> xflags::Result<Self> {
