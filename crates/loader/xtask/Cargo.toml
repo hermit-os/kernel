@@ -6,5 +6,5 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 llvm-tools = "0.1"
-xflags = "0.2"
+xflags = "0.3"
 xshell = "0.2"
