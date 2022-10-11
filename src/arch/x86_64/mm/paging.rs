@@ -71,18 +71,13 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 /// An entry in either table (PML4, PDPT, PD, PT)
 #[derive(Clone, Copy)]
 pub struct PageTableEntry {
-	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
-	physical_address_and_flags: PhysAddr,
+	address: PhysAddr,
 }
 
 impl PageTableEntry {
 	/// Return the stored physical address.
 	pub fn address(self) -> PhysAddr {
-		PhysAddr(
-			self.physical_address_and_flags.as_u64()
-				& !(BasePageSize::SIZE - 1u64)
-				& !(PageTableEntryFlags::NO_EXECUTE).bits(),
-		)
+		self.address
 	}
 }
 
@@ -125,12 +120,8 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 
 	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
 
-	let (frame, flags) = match unsafe { recursive_page_table().translate(virtual_address) } {
-		TranslateResult::Mapped {
-			frame,
-			offset: _,
-			flags,
-		} => (frame, flags),
+	let frame = match unsafe { recursive_page_table().translate(virtual_address) } {
+		TranslateResult::Mapped { frame, .. } => frame,
 		TranslateResult::NotMapped => return None,
 		TranslateResult::InvalidFrameAddress(_) => panic!(),
 	};
@@ -143,11 +134,9 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 		_ => panic!(),
 	};
 
-	let physical_address_and_flags = PhysAddr(start_address.as_u64() | flags.bits());
+	let address = PhysAddr(start_address.as_u64());
 
-	Some(PageTableEntry {
-		physical_address_and_flags,
-	})
+	Some(PageTableEntry { address })
 }
 
 /// Translate a virtual memory address to a physical one.
