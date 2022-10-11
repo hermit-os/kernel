@@ -42,13 +42,6 @@ pub struct PerCoreVariable<T> {
 	data: T,
 }
 
-pub trait PerCoreVariableMethods<T> {
-	unsafe fn get(&self) -> T
-	where
-		T: Copy;
-	unsafe fn set(&self, value: T);
-}
-
 impl<T> PerCoreVariable<T> {
 	pub const fn new(value: T) -> Self {
 		Self { data: value }
@@ -62,25 +55,35 @@ impl<T> PerCoreVariable<T> {
 	}
 }
 
-// Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
-// Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
-// The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
-impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
+impl<T> PerCoreVariable<T> {
 	#[inline]
-	default unsafe fn get(&self) -> T
+	pub unsafe fn get(&self) -> T
 	where
 		T: Copy,
 	{
 		if cfg!(feature = "smp") {
-			let value: u64;
-			unsafe {
-				asm!(
-					"mov {}, gs:[{}]",
-					lateout(reg) value,
-					in(reg) self.offset(),
-					options(pure, readonly, nostack, preserves_flags),
-				);
-				mem::transmute_copy(&value)
+			match mem::size_of::<T>() {
+				8 => unsafe {
+					let value: u64;
+					asm!(
+						"mov {}, gs:[{}]",
+						lateout(reg) value,
+						in(reg) self.offset(),
+						options(pure, readonly, nostack, preserves_flags),
+					);
+					mem::transmute_copy(&value)
+				},
+				4 => unsafe {
+					let value: u32;
+					asm!(
+						"mov {:e}, gs:[{}]",
+						lateout(reg) value,
+						in(reg) self.offset(),
+						options(pure, readonly, nostack, preserves_flags),
+					);
+					mem::transmute_copy(&value)
+				},
+				_ => unreachable!(),
 			}
 		} else {
 			unsafe {
@@ -93,16 +96,28 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 	}
 
 	#[inline]
-	default unsafe fn set(&self, value: T) {
+	pub unsafe fn set(&self, value: T) {
 		if cfg!(feature = "smp") {
-			unsafe {
-				let value = mem::transmute_copy::<_, u64>(&value);
-				asm!(
-					"mov gs:[{}], {}",
-					in(reg) self.offset(),
-					in(reg) value,
-					options(nostack, preserves_flags),
-				);
+			match mem::size_of::<T>() {
+				8 => unsafe {
+					let value = mem::transmute_copy::<_, u64>(&value);
+					asm!(
+						"mov gs:[{}], {}",
+						in(reg) self.offset(),
+						in(reg) value,
+						options(nostack, preserves_flags),
+					);
+				},
+				4 => unsafe {
+					let value = mem::transmute_copy::<_, u32>(&value);
+					asm!(
+						"mov gs:[{}], {:e}",
+						in(reg) self.offset(),
+						in(reg) value,
+						options(nostack, preserves_flags),
+					);
+				},
+				_ => unreachable!(),
 			}
 		} else {
 			unsafe {
@@ -111,41 +126,6 @@ impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T> {
 					.add(self.offset())
 					.cast() = value;
 			}
-		}
-	}
-}
-
-// Define and implement a trait to mark all 32-bit variables used inside PerCoreVariables.
-pub trait Is32BitVariable {}
-impl Is32BitVariable for u32 {}
-
-// For all types implementing the Is32BitVariable trait above, implement the PerCoreVariableMethods
-// trait functions using 32-bit memory moves.
-impl<T: Is32BitVariable> PerCoreVariableMethods<T> for PerCoreVariable<T> {
-	#[inline]
-	unsafe fn get(&self) -> T {
-		unsafe {
-			let value: u32;
-			asm!(
-				"mov {:e}, gs:[{}]",
-				lateout(reg) value,
-				in(reg) self.offset(),
-				options(pure, readonly, nostack, preserves_flags),
-			);
-			mem::transmute_copy(&value)
-		}
-	}
-
-	#[inline]
-	unsafe fn set(&self, value: T) {
-		unsafe {
-			let value = mem::transmute_copy::<_, u32>(&value);
-			asm!(
-				"mov gs:[{}], {:e}",
-				in(reg) self.offset(),
-				in(reg) value,
-				options(nostack, preserves_flags),
-			);
 		}
 	}
 }
