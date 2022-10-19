@@ -27,6 +27,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install nasm
+      - name: Apply rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - run: cargo xtask clippy
 
   format:
@@ -45,7 +48,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - uses: actions/checkout@v3
+      - name: Apply rust-toolchain.toml
+        run: rustup show
       - run: rustup target add aarch64-unknown-none-softfloat
+      - uses: Swatinem/rust-cache@v2
       - name: Check docs
         run: |
           cargo doc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
@@ -60,6 +66,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - uses: actions/checkout@v3
+      - name: Apply rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: Build minimal kernel
         run: |
           cargo xtask build --arch x86_64 --no-default-features
@@ -70,6 +79,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Apply rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: Unit tests
         run: cargo test --lib --target x86_64-unknown-linux-gnu
         env:
@@ -104,6 +116,9 @@ jobs:
         uses: actions/checkout@v3
         with:
           path: libhermit-rs
+      - name: Apply rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target x86_64-unknown-hermit
       - name: Download loader
@@ -177,6 +192,9 @@ jobs:
           # Checkout latest tag
           git checkout $latestTag
         working-directory: loader
+      - name: Apply rust-toolchain.toml
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
         run: cargo build -Zbuild-std=core,alloc,std,panic_abort --target aarch64-unknown-hermit --package hello_world
       - run: rustup toolchain install nightly-2022-08-01 --target aarch64-unknown-none-softfloat --component llvm-tools-preview
