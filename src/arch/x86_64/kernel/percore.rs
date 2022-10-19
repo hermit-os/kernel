@@ -180,7 +180,7 @@ pub fn init() {
 		if address == 0 {
 			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
 		} else {
-			wrmsr(IA32_GS_BASE, address as u64);
+			wrmsr(IA32_GS_BASE, address);
 		}
 	}
 }

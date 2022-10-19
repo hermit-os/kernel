@@ -247,7 +247,7 @@ impl NetworkInterface for RTL8139Driver {
 		// send the packet
 		unsafe {
 			outl(
-				self.iobase + TSD0 as u16 + (4 * id as u16),
+				self.iobase + TSD0 + (4 * id as u16),
 				len.try_into().unwrap(),
 			); //|0x3A0000);
 		}
@@ -256,7 +256,7 @@ impl NetworkInterface for RTL8139Driver {
 	}
 
 	fn has_packet(&self) -> bool {
-		let cmd = unsafe { inb(self.iobase + CR as u16) };
+		let cmd = unsafe { inb(self.iobase + CR) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
 			let header = self.rx_peek_u16();
@@ -270,7 +270,7 @@ impl NetworkInterface for RTL8139Driver {
 	}
 
 	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()> {
-		let cmd = unsafe { inb(self.iobase + CR as u16) };
+		let cmd = unsafe { inb(self.iobase + CR) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
 			let header = self.rx_peek_u16();

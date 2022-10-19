@@ -90,7 +90,7 @@ pub fn add_current_core() {
 	// When switching to another task on this core, this entry is replaced.
 	boxed_tss.rsp[0] = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
-	set_kernel_stack(boxed_tss.rsp[0] as u64);
+	set_kernel_stack(boxed_tss.rsp[0]);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
