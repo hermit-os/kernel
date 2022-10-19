@@ -1,6 +1,6 @@
 [package]
 name = "libhermit-rs"
-version = "0.5.0"
+version = "0.6.0"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>",
