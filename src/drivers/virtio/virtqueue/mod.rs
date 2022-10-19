@@ -585,7 +585,7 @@ pub trait AsSliceU8 {
 /// A warning here: The respective queue implementation is taking care of handling this case and there are no guarantees that the queue
 /// won't be unusable afterwards.
 pub struct Transfer {
-	/// Needs to be Option<Pinned<TransferToken>> in order to prevent deallocation via None
+	/// Needs to be `Option<Pinned<TransferToken>>` in order to prevent deallocation via None
 	// See custom drop function for clarity
 	transfer_tkn: Option<Pinned<TransferToken>>,
 }

@@ -1346,7 +1346,7 @@ pub mod constants {
 	}
 
 	/// PCI masks. For convenience put into an enum and provides
-	/// an Into<u32> method for usage.
+	/// an `Into<u32>` method for usage.
 	#[allow(dead_code, non_camel_case_types)]
 	#[repr(u32)]
 	pub enum Masks {
