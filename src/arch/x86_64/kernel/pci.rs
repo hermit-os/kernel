@@ -117,6 +117,7 @@ pub struct MemoryBar {
 	pub prefetchable: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum PciDriver<'a> {
 	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
 	VirtioNet(SpinlockIrqSave<VirtioNetDriver>),
