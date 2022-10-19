@@ -610,9 +610,9 @@ fn ioapic_intoff(irq: u32, apicid: u32) -> Result<(), ()> {
 		return Err(());
 	}
 
-	let off = (irq * 2) as u32;
-	let ioredirect_upper: u32 = (apicid as u32) << 24;
-	let ioredirect_lower: u32 = ((0x20 + irq) as u32) | (1 << 16); // turn it off (start masking)
+	let off = irq * 2;
+	let ioredirect_upper: u32 = apicid << 24;
+	let ioredirect_lower: u32 = (0x20 + irq) | (1 << 16); // turn it off (start masking)
 
 	ioapic_write(IOAPIC_REG_TABLE + off, ioredirect_lower);
 	ioapic_write(IOAPIC_REG_TABLE + 1 + off, ioredirect_upper);

@@ -964,7 +964,7 @@ impl DevNotif {
 				let desc_event_off = self.raw.event & !(1 << 15);
 				let desc_event_wrap = (self.raw.event >> 15) as u8;
 
-				desc_event_off == next_off as u16 && desc_event_wrap == next_wrap as u8
+				desc_event_off == next_off as u16 && desc_event_wrap == next_wrap
 			} else {
 				false
 			}

@@ -155,7 +155,7 @@ impl PosixFile for FuseFile {
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError> {
 		debug!("fuse write!");
 		let mut len = buf.len();
-		if len as usize > MAX_WRITE_LEN {
+		if len > MAX_WRITE_LEN {
 			debug!(
 				"Writing longer than max_write_len: {} > {}",
 				buf.len(),

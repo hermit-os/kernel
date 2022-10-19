@@ -58,7 +58,7 @@ pub(crate) struct NetworkInterface<T: for<'a> Device<'a>> {
 }
 
 fn start_endpoint() -> u16 {
-	((unsafe { core::arch::x86_64::_rdtsc() as u64 }) % (u16::MAX as u64))
+	((unsafe { core::arch::x86_64::_rdtsc() }) % (u16::MAX as u64))
 		.try_into()
 		.unwrap()
 }

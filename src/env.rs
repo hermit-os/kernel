@@ -13,7 +13,7 @@ pub use crate::arch::kernel::{
 static CLI: OnceBox<Cli> = OnceBox::new();
 
 pub fn init() {
-	CLI.set(Box::new(Cli::default())).unwrap();
+	CLI.set(Box::default()).unwrap();
 }
 
 #[derive(Debug)]

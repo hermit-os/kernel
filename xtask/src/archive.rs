@@ -77,7 +77,7 @@ impl Archive {
 		let sh = crate::sh()?;
 		let archive_path = self.as_ref();
 
-		let mut archive_bytes = sh.read_binary_file(&archive_path)?;
+		let mut archive_bytes = sh.read_binary_file(archive_path)?;
 		let archive = GoblinArchive::parse(&archive_bytes)?;
 
 		let file_offsets = (0..archive.len())
@@ -89,7 +89,7 @@ impl Archive {
 			archive_bytes[file_offset + header::EI_OSABI] = header::ELFOSABI_STANDALONE;
 		}
 
-		sh.write_file(&archive_path, archive_bytes)?;
+		sh.write_file(archive_path, archive_bytes)?;
 
 		Ok(())
 	}

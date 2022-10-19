@@ -117,6 +117,7 @@ pub struct MemoryBar {
 	pub prefetchable: bool,
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum PciDriver<'a> {
 	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
 	VirtioNet(SpinlockIrqSave<VirtioNetDriver>),
@@ -163,7 +164,7 @@ fn parse_bars(bus: u8, device: u8, vendor_id: u16, device_id: u16) -> Vec<PciBar
 	let mut bar_idxs = 0..6;
 	let mut bars = Vec::new();
 	while let Some(i) = bar_idxs.next() {
-		let register = PCI_BAR0_REGISTER + ((i as u32) << 2);
+		let register = PCI_BAR0_REGISTER + (i << 2);
 		let barword = read_config(bus, device, register);
 		debug!(
 			"Found bar{} @{:x}:{:x} as {:#x}",
@@ -369,7 +370,7 @@ impl PciAdapter {
 impl fmt::Display for PciBar {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let (typ, addr, size) = match self {
-			PciBar::IO(io_bar) => ("IOBar", io_bar.addr as usize, io_bar.size as usize),
+			PciBar::IO(io_bar) => ("IOBar", io_bar.addr as usize, io_bar.size),
 			PciBar::Memory(mem_bar) => ("MemoryBar", mem_bar.addr, mem_bar.size),
 		};
 		write!(f, "{}: {:#x} (size {:#x})", typ, addr, size)?;

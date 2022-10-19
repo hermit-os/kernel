@@ -342,6 +342,7 @@ impl PageTableLevelWithSubtables for PML4 {
 }
 
 /// A Page Directory Pointer Table (PDPT), with numeric level 2 and PDT subtables.
+#[allow(clippy::upper_case_acronyms)]
 enum PDPT {}
 impl PageTableLevel for PDPT {
 	const LEVEL: usize = 2;
