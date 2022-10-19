@@ -53,7 +53,7 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 		scheduler.reschedule();
 
 		let mut parking_lot = PARKING_LOT.lock();
-		if wakeup_time.is_some_and(|&t| t <= get_timer_ticks()) {
+		if wakeup_time.is_some_and(|t| t <= get_timer_ticks()) {
 			let mut wakeup = true;
 			// Timeout occurred, try to remove ourselves from the waiting queue.
 			if let Entry::Occupied(mut queue) = parking_lot.entry(address.as_mut_ptr().addr()) {

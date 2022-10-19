@@ -168,6 +168,7 @@ impl TaskHandlePriorityQueue {
 	/// was found.
 	pub fn contains(&self, task: TaskHandle) -> bool {
 		self.queues[task.priority.into() as usize]
+			.as_ref()
 			.is_some_and(|queue| queue.iter().any(|queued| queued.id == task.id))
 	}
 
