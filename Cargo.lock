@@ -24,9 +24,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.65"
+version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
+checksum = "216261ddc8289130e551ddcd5ce8a064710c0d064a4d2895c67151c92b5443f6"
 
 [[package]]
 name = "async-task"
@@ -129,9 +129,9 @@ dependencies = [
 
 [[package]]
 name = "goblin"
-version = "0.5.4"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7666983ed0dd8d21a6f6576ee00053ca0926fb281a5522577a4dbd0f1b54143"
+checksum = "572564d6cba7d09775202c8e7eebc4d534d5ae36578ab402fb21e182a0ac9505"
 dependencies = [
  "log",
  "plain",
@@ -582,13 +582,20 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.15"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d634a985c4d4238ec39cacaed2e7ae552fbd3c476b552c1deac3021b7d7eaf0c"
+checksum = "0fab5c8b9980850e06d92ddbe3ab839c062c801f3927c0fb8abd6fc8e918fbca"
 dependencies = [
  "libc",
  "num_threads",
+ "time-core",
 ]
+
+[[package]]
+name = "time-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
 
 [[package]]
 name = "tock-registers"
@@ -638,9 +645,9 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "x86"
-version = "0.51.0"
+version = "0.52.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa7477e4af519a58818c1f0ab4b149d0ce3304e625be8fe56c8484cac50b0532"
+checksum = "2781db97787217ad2a2845c396a5efe286f87467a5810836db6d74926e94a385"
 dependencies = [
  "bit_field",
  "bitflags",
@@ -649,18 +656,18 @@ dependencies = [
 
 [[package]]
 name = "xflags"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbf19f5031a1a812e96fede16f8161218883079946cea87619d3613db1efd268"
+checksum = "c4554b580522d0ca238369c16b8f6ce34524d61dafe7244993754bbd05f2c2ea"
 dependencies = [
  "xflags-macros",
 ]
 
 [[package]]
 name = "xflags-macros"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2afbd7f2039bb6cad2dd45f0c5dff49c0d4e26118398768b7a605524d4251809"
+checksum = "f58e7b3ca8977093aae6b87b6a7730216fc4c53a6530bab5c43a783cd810c1a8"
 
 [[package]]
 name = "xshell"
