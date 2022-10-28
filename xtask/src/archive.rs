@@ -100,7 +100,14 @@ fn binutil(name: &str) -> Result<PathBuf> {
 	let exe = format!("llvm-{name}{exe_suffix}");
 
 	let path = LlvmTools::new()
-		.map_err(|err| anyhow!("{err:?}"))?
+		.map_err(|err| match err {
+			llvm_tools::Error::NotFound => anyhow!(
+				"Could not find llvm-tools component\n\
+				\n\
+				Maybe the rustup component `llvm-tools-preview` is missing? Install it through: `rustup component add llvm-tools-preview`"
+			),
+			err => anyhow!("{err:?}"),
+		})?
 		.tool(&exe)
 		.ok_or_else(|| anyhow!("could not find {exe}"))?;
 
