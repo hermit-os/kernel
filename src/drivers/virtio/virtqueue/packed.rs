@@ -106,7 +106,7 @@ impl DescriptorRing {
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = align_up!(
 			size * core::mem::size_of::<Descriptor>(),
-			BasePageSize::SIZE
+			BasePageSize::SIZE as usize
 		);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
 
@@ -1246,7 +1246,10 @@ impl PackedVq {
 
 		let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(core::mem::size_of::<EventSuppr>(), BasePageSize::SIZE);
+		let _mem_len = align_up!(
+			core::mem::size_of::<EventSuppr>(),
+			BasePageSize::SIZE as usize
+		);
 
 		let drv_event_ptr =
 			(crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;

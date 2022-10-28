@@ -2269,7 +2269,7 @@ impl MemPool {
 		let len = bytes.0;
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(len, BasePageSize::SIZE);
+		let _mem_len = align_up!(len, BasePageSize::SIZE as usize);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
 		// Assert descriptor does not cross a page barrier
@@ -2304,7 +2304,7 @@ impl MemPool {
 		let len = bytes.0;
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(len, BasePageSize::SIZE);
+		let _mem_len = align_up!(len, BasePageSize::SIZE as usize);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
 		// Assert descriptor does not cross a page barrier

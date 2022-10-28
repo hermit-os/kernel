@@ -98,8 +98,8 @@ impl<'a> AcpiTable<'a> {
 		// Allocate two 4 KiB pages for the table and map it.
 		// This guarantees that we can access at least the "length" field of the table header when its physical address
 		// crosses a page boundary.
-		let mut allocated_length = 2 * BasePageSize::SIZE;
-		let mut count = allocated_length / BasePageSize::SIZE;
+		let mut allocated_length = 2 * BasePageSize::SIZE as usize;
+		let mut count = allocated_length / BasePageSize::SIZE as usize;
 
 		let physical_map_address = physical_address.align_down_to_base_page();
 		let offset: usize = (physical_address - physical_map_address).into();
@@ -114,8 +114,8 @@ impl<'a> AcpiTable<'a> {
 		if table_length > allocated_length - offset {
 			virtualmem::deallocate(virtual_address, allocated_length);
 
-			allocated_length = align_up!(table_length + offset, BasePageSize::SIZE);
-			count = allocated_length / BasePageSize::SIZE;
+			allocated_length = align_up!(table_length + offset, BasePageSize::SIZE as usize);
+			count = allocated_length / BasePageSize::SIZE as usize;
 
 			virtual_address = virtualmem::allocate(allocated_length).unwrap();
 			paging::map::<BasePageSize>(virtual_address, physical_map_address, count, flags);
@@ -251,13 +251,13 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 	// Look for the ACPI RSDP in all possible 16-byte aligned addresses within this range.
 	for current_address in (start_address.as_usize()..end_address.as_usize()).step_by(16) {
 		// Have we crossed a page boundary in the last iteration?
-		if current_address / BasePageSize::SIZE > current_page {
+		if current_address / BasePageSize::SIZE as usize > current_page {
 			// Identity-map this possible page of the RSDP.
 			paging::identity_map(
 				PhysAddr::from(current_address),
 				PhysAddr::from(current_address),
 			);
-			current_page = current_address / BasePageSize::SIZE;
+			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
 		// Verify the signature to find out if this is really an ACPI RSDP.

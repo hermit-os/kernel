@@ -115,7 +115,7 @@ impl PageTableEntry {
 	pub fn address(self) -> PhysAddr {
 		PhysAddr(
 			self.physical_address_and_flags.as_u64()
-				& !(BasePageSize::SIZE as u64 - 1u64)
+				& !(BasePageSize::SIZE - 1u64)
 				& !(PageTableEntryFlags::EXECUTE_DISABLE).bits(),
 		)
 	}
@@ -184,7 +184,7 @@ impl PageTableEntry {
 /// Currently, deriving implementations for these traits only works if all dependent types implement it as well.
 pub trait PageSize: Copy {
 	/// The page size in bytes.
-	const SIZE: usize;
+	const SIZE: u64;
 
 	/// The page table level at which a page of this size is mapped (from 0 for PT through 3 for PML4).
 	/// Implemented as a numeric value to enable numeric comparisons.
@@ -199,7 +199,7 @@ pub trait PageSize: Copy {
 #[derive(Clone, Copy)]
 pub enum BasePageSize {}
 impl PageSize for BasePageSize {
-	const SIZE: usize = 4096;
+	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
@@ -208,7 +208,7 @@ impl PageSize for BasePageSize {
 #[derive(Clone, Copy)]
 pub enum LargePageSize {}
 impl PageSize for LargePageSize {
-	const SIZE: usize = 2 * 1024 * 1024;
+	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
@@ -217,7 +217,7 @@ impl PageSize for LargePageSize {
 #[derive(Clone, Copy)]
 pub enum HugePageSize {}
 impl PageSize for HugePageSize {
-	const SIZE: usize = 1024 * 1024 * 1024;
+	const SIZE: u64 = 1024 * 1024 * 1024;
 	const MAP_LEVEL: usize = 2;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
@@ -274,7 +274,7 @@ impl<S: PageSize> Page<S> {
 		}
 
 		Self {
-			virtual_address: align_down!(virtual_address, S::SIZE),
+			virtual_address: align_down!(virtual_address, S::SIZE as usize),
 			size: PhantomData,
 		}
 	}
@@ -506,7 +506,7 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let new_entry = physicalmem::allocate(BasePageSize::SIZE).unwrap();
+				let new_entry = physicalmem::allocate(BasePageSize::SIZE as usize).unwrap();
 				self.entries[index].set(new_entry, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
@@ -562,7 +562,7 @@ where
 
 		for page in range {
 			send_ipi |= self.map_page::<S>(page, current_physical_address, flags);
-			current_physical_address += S::SIZE as u64;
+			current_physical_address += S::SIZE;
 		}
 
 		if send_ipi {
@@ -602,8 +602,7 @@ pub extern "x86-interrupt" fn page_fault_handler(
 #[inline]
 fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page =
-		Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE as u64);
+	let last_page = Page::<S>::including_address(virtual_address + (count as u64 - 1) * S::SIZE);
 	Page::range(first_page, last_page)
 }
 
@@ -716,7 +715,7 @@ pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 
 #[inline]
 pub fn get_application_page_size() -> usize {
-	LargePageSize::SIZE
+	LargePageSize::SIZE as usize
 }
 
 pub fn init() {}
@@ -726,7 +725,7 @@ pub fn init_page_tables() {
 
 	unsafe {
 		let pml4 = controlregs::cr3();
-		let pde = pml4 + 2 * BasePageSize::SIZE as u64;
+		let pde = pml4 + 2 * BasePageSize::SIZE;
 
 		debug!("Found PML4 at {:#x}", pml4);
 
