@@ -1,4 +1,3 @@
-use multiboot::information::Multiboot;
 use x86_64::instructions::tlb;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
@@ -6,9 +5,8 @@ use x86_64::structures::paging::{
 
 #[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::get_mbinfo;
 use crate::arch::x86_64::mm::physicalmem;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::env;
 use crate::mm;
 
@@ -240,6 +238,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	);
 }
 
+#[cfg(feature = "acpi")]
 pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
 	let first_page =
 		Page::<BasePageSize>::containing_address(x86_64::VirtAddr::new(start_address.as_u64()));
@@ -272,8 +271,6 @@ pub fn get_application_page_size() -> usize {
 pub fn init() {}
 
 pub fn init_page_tables() {
-	debug!("Create new view to the kernel space");
-
 	if env::is_uhyve() {
 		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
 		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
@@ -295,34 +292,5 @@ pub fn init_page_tables() {
 		}
 
 		tlb::flush_all();
-	} else {
-		unsafe {
-			// Identity-map the supplied Multiboot information and command line.
-			let mb_info = get_mbinfo();
-			if !mb_info.is_zero() {
-				info!("Found Multiboot info at {:#x}", mb_info);
-				identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
-
-				// Map the "Memory Map" information too.
-				let mb = Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap();
-				let memory_map_address = mb
-					.memory_regions()
-					.expect("Could not find a memory map in the Multiboot information")
-					.next()
-					.expect("Could not first map address")
-					.base_address();
-				identity_map(PhysAddr(memory_map_address), PhysAddr(memory_map_address));
-			}
-
-			let cmdsize = env::get_cmdsize();
-			if cmdsize > 0 {
-				let cmdline = env::get_cmdline();
-				info!("Found cmdline at {:#x} (size {})", cmdline, cmdsize);
-				identity_map(
-					PhysAddr(cmdline.as_u64()),
-					PhysAddr(cmdline.as_u64()) + cmdsize - 1u64,
-				);
-			}
-		}
 	}
 }
