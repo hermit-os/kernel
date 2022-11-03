@@ -129,29 +129,64 @@ pub fn map<S: PageSize>(
 	count: usize,
 	flags: PageTableEntryFlags,
 ) {
-	trace!(
-		"Mapping physical address {:#X} to virtual address {:#X} ({} pages)",
-		physical_address,
-		virtual_address,
-		count
-	);
+	let pages = {
+		let start = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.0));
+		let end = start + count as u64;
+		Page::range(start, end)
+	};
 
-	let first_page = Page::containing_address(x86_64::VirtAddr::new(virtual_address.0));
-	let last_page = first_page + count as u64;
-	let range = Page::range(first_page, last_page);
+	let frames = {
+		let start = PhysFrame::<S>::containing_address(x86_64::PhysAddr::new(physical_address.0));
+		let end = start + count as u64;
+		PhysFrame::range(start, end)
+	};
 
-	let mut current_physical_address = physical_address;
-	let mut send_ipi = false;
+	let flags = flags | PageTableEntryFlags::PRESENT;
 
-	for page in range {
-		send_ipi |= map_page::<S>(page, current_physical_address, flags);
-		current_physical_address += S::SIZE;
+	trace!("Mapping {pages:?} to {frames:?} with {flags:?}");
+
+	for (page, frame) in pages.zip(frames) {
+		match S::SIZE {
+			Size4KiB::SIZE => {
+				let page = Page::<Size4KiB>::from_start_address(page.start_address()).unwrap();
+				let frame = PhysFrame::from_start_address(frame.start_address()).unwrap();
+				unsafe {
+					// TODO: Require explicit unmaps
+					if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
+						flush.flush();
+					}
+					recursive_page_table()
+						.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+						.unwrap()
+						.flush();
+				}
+			}
+			Size2MiB::SIZE => {
+				let page = Page::<Size2MiB>::from_start_address(page.start_address()).unwrap();
+				let frame = PhysFrame::from_start_address(frame.start_address()).unwrap();
+				unsafe {
+					recursive_page_table()
+						.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+						.unwrap()
+						.flush();
+				}
+			}
+			Size1GiB::SIZE => {
+				let page = Page::<Size1GiB>::from_start_address(page.start_address()).unwrap();
+				let frame = PhysFrame::from_start_address(frame.start_address()).unwrap();
+				unsafe {
+					recursive_page_table()
+						.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
+						.unwrap()
+						.flush();
+				}
+			}
+			_ => unreachable!(),
+		}
 	}
 
-	if send_ipi {
-		#[cfg(feature = "smp")]
-		apic::ipi_tlb_flush();
-	}
+	#[cfg(feature = "smp")]
+	apic::ipi_tlb_flush();
 }
 
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
@@ -161,64 +196,6 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 		let level_4_table = &mut *(level_4_table_ptr);
 		RecursivePageTable::new(level_4_table).unwrap()
 	}
-}
-
-fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEntryFlags) -> bool {
-	use x86_64::{PhysAddr, VirtAddr};
-
-	trace!(
-		"Mapping {:p} to {phys_addr:p} ({}) with {flags:?}",
-		page.start_address(),
-		S::SIZE
-	);
-
-	let flags = flags | PageTableEntryFlags::PRESENT;
-
-	match S::SIZE {
-		Size4KiB::SIZE => {
-			let page =
-				Page::<Size4KiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
-					.unwrap();
-			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
-			unsafe {
-				// TODO: Require explicit unmaps
-				if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
-					flush.flush();
-				}
-				recursive_page_table()
-					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
-					.unwrap()
-					.flush();
-			}
-		}
-		Size2MiB::SIZE => {
-			let page =
-				Page::<Size2MiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
-					.unwrap();
-			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
-			unsafe {
-				recursive_page_table()
-					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
-					.unwrap()
-					.flush();
-			}
-		}
-		Size1GiB::SIZE => {
-			let page =
-				Page::<Size1GiB>::from_start_address(VirtAddr::new(page.start_address().as_u64()))
-					.unwrap();
-			let frame = PhysFrame::from_start_address(PhysAddr::new(phys_addr.0)).unwrap();
-			unsafe {
-				recursive_page_table()
-					.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
-					.unwrap()
-					.flush();
-			}
-		}
-		_ => unreachable!(),
-	}
-
-	true
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
