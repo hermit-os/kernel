@@ -2,7 +2,6 @@ use core::mem;
 use core::ptr;
 use multiboot::information::Multiboot;
 use x86::controlregs;
-use x86::irq::PageFaultError;
 use x86_64::structures::paging::{
 	Mapper, Page, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
 };
@@ -10,13 +9,10 @@ use x86_64::structures::paging::{
 #[cfg(feature = "smp")]
 use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::get_mbinfo;
-use crate::arch::x86_64::kernel::irq;
-use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::physicalmem;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
 use crate::env;
 use crate::mm;
-use crate::scheduler;
 
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: VirtAddr = VirtAddr(0xFFFF_FFFF_FFFF_F000);
@@ -85,33 +81,6 @@ pub use x86_64::structures::paging::PageSize;
 pub use x86_64::structures::paging::Size1GiB as HugePageSize;
 pub use x86_64::structures::paging::Size2MiB as LargePageSize;
 pub use x86_64::structures::paging::Size4KiB as BasePageSize;
-
-pub extern "x86-interrupt" fn page_fault_handler(
-	stack_frame: irq::ExceptionStackFrame,
-	error_code: u64,
-) {
-	let virtual_address = unsafe { controlregs::cr2() };
-
-	// Anything else is an error!
-	let pferror = PageFaultError::from_bits_truncate(error_code as u32);
-	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
-	error!(
-		"virtual_address = {:#X}, page fault error = {}",
-		virtual_address, pferror
-	);
-	error!(
-		"fs = {:#X}, gs = {:#X}",
-		processor::readfs(),
-		processor::readgs()
-	);
-
-	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-	unsafe {
-		controlregs::cr2_write(0);
-	}
-
-	scheduler::abort();
-}
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
 	use x86_64::structures::paging::mapper::{MappedFrame, Translate, TranslateResult};

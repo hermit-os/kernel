@@ -2,7 +2,6 @@ use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::processor;
-use crate::arch::x86_64::mm::paging;
 use crate::scheduler;
 use crate::synch::spinlock::SpinlockIrqSave;
 
@@ -12,7 +11,9 @@ use alloc::string::String;
 use core::arch::asm;
 use core::fmt;
 use x86::bits64::rflags::{self, RFlags};
+use x86::controlregs;
 use x86::irq;
+use x86::irq::PageFaultError;
 
 static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 
@@ -134,7 +135,7 @@ pub fn install() {
 	idt::set_gate(11, segment_not_present_exception as usize, 0);
 	idt::set_gate(12, stack_segment_fault_exception as usize, 0);
 	idt::set_gate(13, general_protection_exception as usize, 0);
-	idt::set_gate(14, paging::page_fault_handler as usize, 0);
+	idt::set_gate(14, page_fault_handler as usize, 0);
 	idt::set_gate(15, reserved_exception as usize, 0);
 	idt::set_gate(16, floating_point_exception as usize, 0);
 	idt::set_gate(17, alignment_check_exception as usize, 0);
@@ -449,6 +450,33 @@ extern "x86-interrupt" fn general_protection_exception(
 		processor::readfs(),
 		processor::readgs()
 	);
+	scheduler::abort();
+}
+
+pub extern "x86-interrupt" fn page_fault_handler(
+	stack_frame: ExceptionStackFrame,
+	error_code: u64,
+) {
+	let virtual_address = unsafe { controlregs::cr2() };
+
+	// Anything else is an error!
+	let pferror = PageFaultError::from_bits_truncate(error_code as u32);
+	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
+	error!(
+		"virtual_address = {:#X}, page fault error = {}",
+		virtual_address, pferror
+	);
+	error!(
+		"fs = {:#X}, gs = {:#X}",
+		processor::readfs(),
+		processor::readgs()
+	);
+
+	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
+	unsafe {
+		controlregs::cr2_write(0);
+	}
+
 	scheduler::abort();
 }
 
