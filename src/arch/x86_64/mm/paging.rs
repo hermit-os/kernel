@@ -239,28 +239,27 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 }
 
 #[cfg(feature = "acpi")]
-pub fn identity_map(start_address: PhysAddr, end_address: PhysAddr) {
-	let first_page =
-		Page::<BasePageSize>::containing_address(x86_64::VirtAddr::new(start_address.as_u64()));
-	let last_page =
-		Page::<BasePageSize>::containing_address(x86_64::VirtAddr::new(end_address.as_u64()));
+pub fn identity_map<S>(frame: PhysFrame<S>)
+where
+	S: PageSize + core::fmt::Debug,
+	RecursivePageTable<'static>: Mapper<S>,
+{
 	assert!(
-		last_page.start_address().as_u64() < mm::kernel_start_address().0,
+		frame.start_address().as_u64() < mm::kernel_start_address().0,
 		"Address {:#X} to be identity-mapped is not below Kernel start address",
-		last_page.start_address()
+		frame.start_address()
 	);
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.normal().read_only().execute_disable();
-	let count = (last_page.start_address().as_u64() - first_page.start_address().as_u64())
-		/ BasePageSize::SIZE
-		+ 1;
-	map::<BasePageSize>(
-		VirtAddr(first_page.start_address().as_u64()),
-		PhysAddr(first_page.start_address().as_u64()),
-		count as usize,
-		flags,
-	);
+	unsafe {
+		recursive_page_table()
+			.identity_map(
+				frame,
+				PageTableEntryFlags::PRESENT | PageTableEntryFlags::NO_EXECUTE,
+				&mut physicalmem::FrameAlloc,
+			)
+			.unwrap()
+			.flush();
+	}
 }
 
 #[inline]

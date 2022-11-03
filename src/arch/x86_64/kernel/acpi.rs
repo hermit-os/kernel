@@ -1,3 +1,5 @@
+use x86_64::structures::paging::PhysFrame;
+
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
@@ -255,10 +257,10 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 		// Have we crossed a page boundary in the last iteration?
 		if current_address / BasePageSize::SIZE as usize > current_page {
 			// Identity-map this possible page of the RSDP.
-			paging::identity_map(
-				PhysAddr::from(current_address),
-				PhysAddr::from(current_address),
-			);
+			let frame = PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(
+				current_address as u64,
+			));
+			paging::identity_map(frame);
 			current_page = current_address / BasePageSize::SIZE as usize;
 		}
 
@@ -304,7 +306,9 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
 	// Get the address of the EBDA.
-	paging::identity_map(EBDA_PTR_LOCATION, EBDA_PTR_LOCATION);
+	let frame =
+		PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(EBDA_PTR_LOCATION.0));
+	paging::identity_map(frame);
 	let ebda_ptr_location: &u16 =
 		unsafe { &*(VirtAddr::from(EBDA_PTR_LOCATION.as_u64()).as_ptr()) };
 	let ebda_address = PhysAddr((*ebda_ptr_location as u64) << 4);
