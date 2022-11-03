@@ -1,3 +1,5 @@
+use core::ptr;
+
 use x86_64::instructions::tlb;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
@@ -9,9 +11,6 @@ use crate::arch::x86_64::mm::physicalmem;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::env;
 use crate::mm;
-
-/// Pointer to the root page table (PML4)
-const PML4_ADDRESS: VirtAddr = VirtAddr(0xFFFF_FFFF_FFFF_F000);
 
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 
@@ -154,12 +153,13 @@ pub fn map<S: PageSize>(
 	}
 }
 
-unsafe fn level_4_table() -> &'static mut x86_64::structures::paging::PageTable {
-	unsafe { &mut *(PML4_ADDRESS.as_mut_ptr() as *mut x86_64::structures::paging::PageTable) }
-}
-
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
-	unsafe { RecursivePageTable::new(level_4_table()).unwrap() }
+	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
+	let level_4_table_ptr = ptr::from_exposed_addr_mut(level_4_table_addr);
+	unsafe {
+		let level_4_table = &mut *(level_4_table_ptr);
+		RecursivePageTable::new(level_4_table).unwrap()
+	}
 }
 
 fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEntryFlags) -> bool {
