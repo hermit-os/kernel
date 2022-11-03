@@ -282,51 +282,55 @@ pub fn init() {}
 pub fn init_page_tables() {
 	debug!("Create new view to the kernel space");
 
-	unsafe {
-		let pml4 = controlregs::cr3();
-		let pde = pml4 + 2 * BasePageSize::SIZE;
+	if env::is_uhyve() {
+		unsafe {
+			let pml4 = controlregs::cr3();
+			let pde = pml4 + 2 * BasePageSize::SIZE;
 
-		debug!("Found PML4 at {:#x}", pml4);
+			debug!("Found PML4 at {:#x}", pml4);
 
-		// make sure that only the required areas are mapped
-		let start = pde
-			+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
-				* mem::size_of::<u64>()) as u64;
-		let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
-			* mem::size_of::<u64>();
+			// make sure that only the required areas are mapped
+			let start = pde
+				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
+					* mem::size_of::<u64>()) as u64;
+			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
+				* mem::size_of::<u64>();
 
-		ptr::write_bytes(start as *mut u8, 0u8, size);
+			ptr::write_bytes(start as *mut u8, 0u8, size);
 
-		//TODO: clearing the memory before kernel_start_address()
+			//TODO: clearing the memory before kernel_start_address()
 
-		// flush tlb
-		controlregs::cr3_write(pml4);
-
-		// Identity-map the supplied Multiboot information and command line.
-		let mb_info = get_mbinfo();
-		if !mb_info.is_zero() {
-			info!("Found Multiboot info at {:#x}", mb_info);
-			identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
-
-			// Map the "Memory Map" information too.
-			let mb = Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap();
-			let memory_map_address = mb
-				.memory_regions()
-				.expect("Could not find a memory map in the Multiboot information")
-				.next()
-				.expect("Could not first map address")
-				.base_address();
-			identity_map(PhysAddr(memory_map_address), PhysAddr(memory_map_address));
+			// flush tlb
+			controlregs::cr3_write(pml4);
 		}
+	} else {
+		unsafe {
+			// Identity-map the supplied Multiboot information and command line.
+			let mb_info = get_mbinfo();
+			if !mb_info.is_zero() {
+				info!("Found Multiboot info at {:#x}", mb_info);
+				identity_map(PhysAddr(mb_info.as_u64()), PhysAddr(mb_info.as_u64()));
 
-		let cmdsize = env::get_cmdsize();
-		if cmdsize > 0 {
-			let cmdline = env::get_cmdline();
-			info!("Found cmdline at {:#x} (size {})", cmdline, cmdsize);
-			identity_map(
-				PhysAddr(cmdline.as_u64()),
-				PhysAddr(cmdline.as_u64()) + cmdsize - 1u64,
-			);
+				// Map the "Memory Map" information too.
+				let mb = Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap();
+				let memory_map_address = mb
+					.memory_regions()
+					.expect("Could not find a memory map in the Multiboot information")
+					.next()
+					.expect("Could not first map address")
+					.base_address();
+				identity_map(PhysAddr(memory_map_address), PhysAddr(memory_map_address));
+			}
+
+			let cmdsize = env::get_cmdsize();
+			if cmdsize > 0 {
+				let cmdline = env::get_cmdline();
+				info!("Found cmdline at {:#x} (size {})", cmdline, cmdsize);
+				identity_map(
+					PhysAddr(cmdline.as_u64()),
+					PhysAddr(cmdline.as_u64()) + cmdsize - 1u64,
+				);
+			}
 		}
 	}
 }
