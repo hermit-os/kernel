@@ -1,9 +1,7 @@
-use core::mem;
-use core::ptr;
 use multiboot::information::Multiboot;
-use x86::controlregs;
+use x86_64::instructions::tlb;
 use x86_64::structures::paging::{
-	Mapper, Page, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
+	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size1GiB, Size2MiB, Size4KiB,
 };
 
 #[cfg(feature = "smp")]
@@ -16,12 +14,6 @@ use crate::mm;
 
 /// Pointer to the root page table (PML4)
 const PML4_ADDRESS: VirtAddr = VirtAddr(0xFFFF_FFFF_FFFF_F000);
-
-/// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
-const PAGE_BITS: usize = 12;
-
-/// Number of bits of the index in each table (PML4, PDPT, PD, PT).
-const PAGE_MAP_BITS: usize = 9;
 
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 
@@ -283,26 +275,26 @@ pub fn init_page_tables() {
 	debug!("Create new view to the kernel space");
 
 	if env::is_uhyve() {
-		unsafe {
-			let pml4 = controlregs::cr3();
-			let pde = pml4 + 2 * BasePageSize::SIZE;
+		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
+		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
+		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
+		// See https://github.com/hermitcore/uhyve/issues/426
+		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
+		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
+		let end_page = Page::from_page_table_indices_2mib(
+			start_page.p4_index(),
+			start_page.p3_index(),
+			PageTableIndex::new(511),
+		);
+		let page_range = Page::range_inclusive(start_page, end_page);
 
-			debug!("Found PML4 at {:#x}", pml4);
-
-			// make sure that only the required areas are mapped
-			let start = pde
-				+ ((mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS))
-					* mem::size_of::<u64>()) as u64;
-			let size = (512 - (mm::kernel_end_address().as_usize() >> (PAGE_MAP_BITS + PAGE_BITS)))
-				* mem::size_of::<u64>();
-
-			ptr::write_bytes(start as *mut u8, 0u8, size);
-
-			//TODO: clearing the memory before kernel_start_address()
-
-			// flush tlb
-			controlregs::cr3_write(pml4);
+		let mut page_table = unsafe { recursive_page_table() };
+		for page in page_range {
+			let (_frame, flush) = page_table.unmap(page).unwrap();
+			flush.ignore();
 		}
+
+		tlb::flush_all();
 	} else {
 		unsafe {
 			// Identity-map the supplied Multiboot information and command line.
