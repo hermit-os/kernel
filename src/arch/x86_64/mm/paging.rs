@@ -121,7 +121,7 @@ pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
 ///
 /// * `physical_address` - First physical address to map these pages to
 /// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
-///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
+///             The PRESENT flags is set automatically.
 pub fn map<S: PageSize>(
 	virtual_address: VirtAddr,
 	physical_address: PhysAddr,
@@ -171,10 +171,7 @@ fn map_page<S: PageSize>(page: Page<S>, phys_addr: PhysAddr, flags: PageTableEnt
 		S::SIZE
 	);
 
-	let flags = flags
-		| PageTableEntryFlags::PRESENT
-		| PageTableEntryFlags::ACCESSED
-		| PageTableEntryFlags::DIRTY;
+	let flags = flags | PageTableEntryFlags::PRESENT;
 
 	match S::SIZE {
 		Size4KiB::SIZE => {
