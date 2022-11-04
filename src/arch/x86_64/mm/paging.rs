@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use core::ptr;
 
 use x86_64::instructions::tlb;
@@ -198,7 +199,11 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	}
 }
 
-pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
+pub fn unmap<S>(virtual_address: VirtAddr, count: usize)
+where
+	S: PageSize + Debug,
+	RecursivePageTable<'static>: Mapper<S>,
+{
 	trace!(
 		"Unmapping virtual address {:#X} ({} pages)",
 		virtual_address,
@@ -210,22 +215,15 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	let range = Page::range(first_page, last_page);
 
 	for page in range {
-		match S::SIZE {
-			Size4KiB::SIZE => {
-				let page = Page::<Size4KiB>::from_start_address(page.start_address()).unwrap();
-				unsafe {
-					match recursive_page_table().unmap(page) {
-						Ok((_frame, flush)) => flush.flush(),
-						// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
-						// We should handle this case there instead of here.
-						Err(UnmapError::PageNotMapped) => {
-							debug!("Tried to unmap {page:?}, which was not mapped.")
-						}
-						Err(err) => panic!("{err:?}"),
-					}
-				}
+		let mut page_table = unsafe { recursive_page_table() };
+		match page_table.unmap(page) {
+			Ok((_frame, flush)) => flush.flush(),
+			// FIXME: Some sentinel pages around stacks are supposed to be unmapped.
+			// We should handle this case there instead of here.
+			Err(UnmapError::PageNotMapped) => {
+				debug!("Tried to unmap {page:?}, which was not mapped.")
 			}
-			_ => unimplemented!(),
+			Err(err) => panic!("{err:?}"),
 		}
 	}
 }
@@ -233,7 +231,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 #[cfg(feature = "acpi")]
 pub fn identity_map<S>(frame: PhysFrame<S>)
 where
-	S: PageSize + core::fmt::Debug,
+	S: PageSize + Debug,
 	RecursivePageTable<'static>: Mapper<S>,
 {
 	assert!(
