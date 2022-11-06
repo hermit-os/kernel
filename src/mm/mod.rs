@@ -217,7 +217,7 @@ pub fn init() {
 
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
-		&& (map_addr.as_usize() & !(HugePageSize::SIZE as usize - 1)) == 0
+		&& align_down!(map_addr.as_usize(), HugePageSize::SIZE as usize) == 0
 	{
 		let size = align_down!(map_size, HugePageSize::SIZE as usize);
 		map_heap::<HugePageSize>(map_addr, size);
