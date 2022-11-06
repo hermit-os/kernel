@@ -51,26 +51,24 @@ pub fn task_heap_end() -> VirtAddr {
 	unsafe { HEAP_END_ADDRESS }
 }
 
-fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
-	let mut i: usize = 0;
-	let mut flags = PageTableEntryFlags::empty();
+fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) {
+	assert_eq!(align_down!(size, S::SIZE as usize), size);
 
-	flags.normal().writable().execute_disable();
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		flags
+	};
 
-	while i < align_down!(size, S::SIZE as usize) {
-		match arch::mm::physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize) {
-			Ok(phys_addr) => {
-				arch::mm::paging::map::<S>(virt_addr + i, phys_addr, 1, flags);
-				i += S::SIZE as usize;
-			}
-			Err(_) => {
-				error!("Unable to allocate page frame of size {:#x}", S::SIZE);
-				return i;
-			}
-		}
+	let virt_addrs = (virt_addr.as_usize()..virt_addr.as_usize() + size)
+		.step_by(S::SIZE as usize)
+		.map(VirtAddr::from_usize);
+
+	for virt_addr in virt_addrs {
+		let phys_addr =
+			arch::mm::physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize).unwrap();
+		arch::mm::paging::map::<S>(virt_addr, phys_addr, 1, flags);
 	}
-
-	i
 }
 
 #[cfg(target_os = "none")]
@@ -188,19 +186,22 @@ pub fn init() {
 
 		// try to map a huge page
 		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
-			map_heap::<HugePageSize>(virt_addr, HugePageSize::SIZE as usize)
+			map_heap::<HugePageSize>(virt_addr, HugePageSize::SIZE as usize);
+			HugePageSize::SIZE as usize
 		} else {
 			0
 		};
 
 		if counter == 0 && has_2mib_pages {
 			// fall back to large pages
-			counter = map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			counter = LargePageSize::SIZE as usize;
 		}
 
 		if counter == 0 {
 			// fall back to normal pages, but map at least the size of a large page
-			counter = map_heap::<BasePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			map_heap::<BasePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			counter = LargePageSize::SIZE as usize;
 		}
 
 		unsafe {
@@ -218,21 +219,24 @@ pub fn init() {
 		&& map_size > HugePageSize::SIZE as usize
 		&& (map_addr.as_usize() & !(HugePageSize::SIZE as usize - 1)) == 0
 	{
-		let counter = map_heap::<HugePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, HugePageSize::SIZE as usize);
+		map_heap::<HugePageSize>(map_addr, size);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	if has_2mib_pages && map_size > LargePageSize::SIZE as usize {
-		let counter = map_heap::<LargePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, LargePageSize::SIZE as usize);
+		map_heap::<LargePageSize>(map_addr, size);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	if map_size > BasePageSize::SIZE as usize {
-		let counter = map_heap::<BasePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, BasePageSize::SIZE as usize);
+		map_heap::<BasePageSize>(map_addr, size);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	unsafe {
