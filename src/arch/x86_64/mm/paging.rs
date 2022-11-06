@@ -4,7 +4,7 @@ use core::ptr;
 use x86_64::instructions::tlb;
 use x86_64::structures::paging::mapper::UnmapError;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Size4KiB,
+	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
 };
 
 #[cfg(feature = "smp")]
@@ -55,49 +55,10 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	}
 }
 
-/// An entry in either table (PML4, PDPT, PD, PT)
-#[derive(Clone, Copy)]
-pub struct PageTableEntry {
-	address: PhysAddr,
-}
-
-impl PageTableEntry {
-	/// Return the stored physical address.
-	pub fn address(self) -> PhysAddr {
-		self.address
-	}
-}
-
 pub use x86_64::structures::paging::PageSize;
 pub use x86_64::structures::paging::Size1GiB as HugePageSize;
 pub use x86_64::structures::paging::Size2MiB as LargePageSize;
 pub use x86_64::structures::paging::Size4KiB as BasePageSize;
-
-pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
-	use x86_64::structures::paging::mapper::{MappedFrame, Translate, TranslateResult};
-
-	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
-
-	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
-
-	let frame = match unsafe { recursive_page_table().translate(virtual_address) } {
-		TranslateResult::Mapped { frame, .. } => frame,
-		TranslateResult::NotMapped => return None,
-		TranslateResult::InvalidFrameAddress(_) => panic!(),
-	};
-
-	let start_address = match S::SIZE {
-		Size4KiB::SIZE => match frame {
-			MappedFrame::Size4KiB(frame) => frame.start_address(),
-			_ => panic!(),
-		},
-		_ => panic!(),
-	};
-
-	let address = PhysAddr(start_address.as_u64());
-
-	Some(PageTableEntry { address })
-}
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {

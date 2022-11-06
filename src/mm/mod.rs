@@ -258,13 +258,13 @@ pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE as usize);
 
-	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
+	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
-		arch::mm::physicalmem::deallocate(entry.address(), size);
+		arch::mm::physicalmem::deallocate(phys_addr, size);
 	} else {
 		panic!(
 			"No page table entry for virtual address {:#X}",
@@ -308,7 +308,7 @@ pub fn map(
 pub fn unmap(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE as usize);
 
-	if arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address).is_some() {
+	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
