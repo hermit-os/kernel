@@ -592,6 +592,21 @@ pub fn map<S: PageSize>(
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
+pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) {
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		flags
+	};
+
+	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
+
+	for virt_addr in virt_addrs {
+		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize).unwrap();
+		map::<S>(virt_addr, phys_addr, 1, flags);
+	}
+}
+
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!(
 		"Unmapping virtual address {:#X} ({} pages)",
