@@ -7,8 +7,6 @@ use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
 };
 
-#[cfg(feature = "smp")]
-use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::mm::physicalmem;
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::env;
@@ -122,7 +120,7 @@ pub fn map<S>(
 	}
 
 	#[cfg(feature = "smp")]
-	apic::ipi_tlb_flush();
+	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
 }
 
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize)
