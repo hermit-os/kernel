@@ -100,21 +100,19 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 }
 
 /// Translate a virtual memory address to a physical one.
-pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
+pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	use x86_64::structures::paging::mapper::Translate;
 
 	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
-	let phys_addr = unsafe {
-		recursive_page_table()
-			.translate_addr(virtual_address)
-			.unwrap()
-	};
-	PhysAddr(phys_addr.as_u64())
+	let page_table = unsafe { recursive_page_table() };
+	page_table
+		.translate_addr(virtual_address)
+		.map(|addr| PhysAddr(addr.as_u64()))
 }
 
 #[no_mangle]
 pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
-	virtual_to_physical(virtual_address)
+	virtual_to_physical(virtual_address).unwrap()
 }
 
 /// Maps a continuous range of pages.

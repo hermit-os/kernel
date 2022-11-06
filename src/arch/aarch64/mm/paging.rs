@@ -549,29 +549,26 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	root_pagetable.get_page_table_entry(page)
 }
 
-pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr {
+pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
-	let address = root_pagetable
-		.get_page_table_entry(page)
-		.expect("Entry not present")
-		.address();
+	let address = root_pagetable.get_page_table_entry(page)?.address();
 	let offset = virtual_address & (S::SIZE - 1);
-	PhysAddr(address.as_u64() | offset.as_u64())
+	Some(PhysAddr(address.as_u64() | offset.as_u64()))
 }
 
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
-pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
+pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	// Currently, we use only 4K pages.
 	get_physical_address::<BasePageSize>(virtual_address)
 }
 
 #[no_mangle]
 pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
-	virtual_to_physical(virtual_address)
+	virtual_to_physical(virtual_address).unwrap()
 }
 
 pub fn map<S: PageSize>(

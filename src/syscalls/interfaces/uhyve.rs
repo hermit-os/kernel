@@ -34,7 +34,7 @@ extern "C" {
 #[cfg(target_arch = "x86_64")]
 fn uhyve_send<T>(port: u16, data: &mut T) {
 	let ptr = VirtAddr(data as *mut _ as u64);
-	let physical_address = paging::virtual_to_physical(ptr);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
 		outl(port, physical_address.as_u64() as u32);
@@ -48,7 +48,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
 	let ptr = VirtAddr(data as *mut _ as u64);
-	let physical_address = paging::virtual_to_physical(ptr);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
 		asm!(
@@ -90,8 +90,8 @@ struct SysCmdval {
 impl SysCmdval {
 	fn new(argv: VirtAddr, envp: VirtAddr) -> SysCmdval {
 		SysCmdval {
-			argv: paging::virtual_to_physical(argv),
-			envp: paging::virtual_to_physical(envp),
+			argv: paging::virtual_to_physical(argv).unwrap(),
+			envp: paging::virtual_to_physical(envp).unwrap(),
 		}
 	}
 }
@@ -116,7 +116,7 @@ struct SysUnlink {
 impl SysUnlink {
 	fn new(name: VirtAddr) -> SysUnlink {
 		SysUnlink {
-			name: paging::virtual_to_physical(name),
+			name: paging::virtual_to_physical(name).unwrap(),
 			ret: -1,
 		}
 	}
@@ -133,7 +133,7 @@ struct SysOpen {
 impl SysOpen {
 	fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
 		SysOpen {
-			name: paging::virtual_to_physical(name),
+			name: paging::virtual_to_physical(name).unwrap(),
 			flags,
 			mode,
 			ret: -1,
@@ -240,8 +240,11 @@ impl SyscallInterface for Uhyve {
 				syscmdsize.argsz[i] as usize * mem::size_of::<u8>(),
 				1,
 			));
-			argv_phy
-				.push(paging::virtual_to_physical(VirtAddr(argv[i] as u64)).as_u64() as *const u8);
+			argv_phy.push(
+				paging::virtual_to_physical(VirtAddr(argv[i] as u64))
+					.unwrap()
+					.as_u64() as *const u8,
+			);
 		}
 
 		// create array to receive the environment
@@ -252,8 +255,11 @@ impl SyscallInterface for Uhyve {
 				syscmdsize.envsz[i] as usize * mem::size_of::<u8>(),
 				1,
 			));
-			env_phy
-				.push(paging::virtual_to_physical(VirtAddr(env[i] as u64)).as_u64() as *const u8);
+			env_phy.push(
+				paging::virtual_to_physical(VirtAddr(env[i] as u64))
+					.unwrap()
+					.as_u64() as *const u8,
+			);
 		}
 
 		// ask uhyve for the environment
