@@ -51,18 +51,14 @@ pub fn task_heap_end() -> VirtAddr {
 	unsafe { HEAP_END_ADDRESS }
 }
 
-fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) {
-	assert_eq!(align_down!(size, S::SIZE as usize), size);
-
+fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) {
 	let flags = {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 		flags
 	};
 
-	let virt_addrs = (virt_addr.as_usize()..virt_addr.as_usize() + size)
-		.step_by(S::SIZE as usize)
-		.map(VirtAddr::from_usize);
+	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
 
 	for virt_addr in virt_addrs {
 		let phys_addr =
@@ -186,7 +182,7 @@ pub fn init() {
 
 		// try to map a huge page
 		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
-			map_heap::<HugePageSize>(virt_addr, HugePageSize::SIZE as usize);
+			map_heap::<HugePageSize>(virt_addr, 1);
 			HugePageSize::SIZE as usize
 		} else {
 			0
@@ -194,13 +190,16 @@ pub fn init() {
 
 		if counter == 0 && has_2mib_pages {
 			// fall back to large pages
-			map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			map_heap::<LargePageSize>(virt_addr, 1);
 			counter = LargePageSize::SIZE as usize;
 		}
 
 		if counter == 0 {
 			// fall back to normal pages, but map at least the size of a large page
-			map_heap::<BasePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			map_heap::<BasePageSize>(
+				virt_addr,
+				LargePageSize::SIZE as usize / BasePageSize::SIZE as usize,
+			);
 			counter = LargePageSize::SIZE as usize;
 		}
 
@@ -220,21 +219,21 @@ pub fn init() {
 		&& align_down!(map_addr.as_usize(), HugePageSize::SIZE as usize) == 0
 	{
 		let size = align_down!(map_size, HugePageSize::SIZE as usize);
-		map_heap::<HugePageSize>(map_addr, size);
+		map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
 	}
 
 	if has_2mib_pages && map_size > LargePageSize::SIZE as usize {
 		let size = align_down!(map_size, LargePageSize::SIZE as usize);
-		map_heap::<LargePageSize>(map_addr, size);
+		map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
 	}
 
 	if map_size > BasePageSize::SIZE as usize {
 		let size = align_down!(map_size, BasePageSize::SIZE as usize);
-		map_heap::<BasePageSize>(map_addr, size);
+		map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
 	}
