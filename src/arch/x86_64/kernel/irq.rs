@@ -92,9 +92,11 @@ pub fn disable() {
 #[inline]
 pub fn nested_disable() -> bool {
 	cfg!(target_os = "none") && {
-		let ret = rflags::read().contains(RFlags::FLAGS_IF);
-		disable();
-		ret
+		let enabled = rflags::read().contains(RFlags::FLAGS_IF);
+		if enabled {
+			disable();
+		}
+		enabled
 	}
 }
 
