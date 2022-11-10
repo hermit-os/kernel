@@ -15,6 +15,8 @@ use smoltcp::time::Instant;
 use smoltcp::wire::IpAddress;
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address};
 
+#[cfg(not(feature = "dhcpv4"))]
+use crate::env;
 use crate::net::{NetworkInterface, NetworkState};
 use crate::syscalls::SYS;
 
@@ -29,6 +31,33 @@ impl HermitNet {
 	pub(crate) const fn new(mtu: u16) -> Self {
 		Self { mtu }
 	}
+}
+
+/// Returns the value of the specified environment variable.
+///
+/// The value is fetched from the current runtime environment and, if not
+/// present, falls back to the same environment variable set at compile time
+/// (might not be present as well).
+#[cfg(not(feature = "dhcpv4"))]
+macro_rules! hermit_var {
+	($name:expr) => {{
+		use alloc::borrow::Cow;
+
+		match env::var($name) {
+			Some(val) => Some(Cow::from(val)),
+			None => option_env!($name).map(Cow::Borrowed),
+		}
+	}};
+}
+
+/// Tries to fetch the specified environment variable with a default value.
+///
+/// Fetches according to [`hermit_var`] or returns the specified default value.
+#[cfg(not(feature = "dhcpv4"))]
+macro_rules! hermit_var_or {
+	($name:expr, $default:expr) => {{
+		hermit_var!($name).as_deref().unwrap_or($default)
+	}};
 }
 
 impl NetworkInterface<HermitNet> {
@@ -97,13 +126,9 @@ impl NetworkInterface<HermitNet> {
 			}
 		};
 
-		let myip =
-			Ipv4Address::from_str(core::option_env!("HERMIT_IP").unwrap_or("10.0.5.3")).unwrap();
-		let mygw = Ipv4Address::from_str(core::option_env!("HERMIT_GATEWAY").unwrap_or("10.0.5.1"))
-			.unwrap();
-		let mymask =
-			Ipv4Address::from_str(core::option_env!("HERMIT_MASK").unwrap_or("255.255.255.0"))
-				.unwrap();
+		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
+		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
+		let mymask = Ipv4Address::from_str(hermit_var_or!("HERMIT_MASK", "255.255.255.0")).unwrap();
 
 		// calculate the netmask length
 		// => count the number of contiguous 1 bits,
