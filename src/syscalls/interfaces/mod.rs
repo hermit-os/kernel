@@ -100,8 +100,8 @@ pub trait SyscallInterface: Send + Sync {
 
 		let envs = env::vars();
 		debug!("Setting envv as: {:?}", envs);
-		for a in envs {
-			let ptr = Box::leak(format!("{}\0", a).into_boxed_str()).as_ptr();
+		for (key, value) in envs {
+			let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
 			envv.push(ptr);
 		}
 		envv.push(core::ptr::null::<u8>());

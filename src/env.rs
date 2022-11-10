@@ -1,7 +1,9 @@
 //! Central parsing of the command-line parameters.
 
+use ahash::RandomState;
 use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{slice, str};
+use hashbrown::{hash_map::Iter, HashMap};
 
 use once_cell::race::OnceBox;
 
@@ -21,7 +23,7 @@ struct Cli {
 	#[allow(dead_code)]
 	image_path: Option<String>,
 	freq: Option<u16>,
-	env_vars: Vec<String>,
+	env_vars: HashMap<String, String, RandomState>,
 	args: Vec<String>,
 }
 
@@ -41,7 +43,9 @@ impl Default for Cli {
 	fn default() -> Self {
 		let mut image_path = None;
 		let mut freq = None;
-		let mut env_vars = Vec::new();
+		let mut env_vars = HashMap::<String, String, RandomState>::with_hasher(
+			RandomState::with_seeds(0, 0, 0, 0),
+		);
 		let mut args = Vec::new();
 
 		let words = shell_words::split(get_cmdline_str()).unwrap();
@@ -61,15 +65,15 @@ impl Default for Cli {
 				}
 				"-ip" => {
 					let ip = expect_arg(words.next(), word.as_str());
-					env_vars.push(format!("HERMIT_IP={ip}"));
+					env_vars.insert(String::from("HERMIT_IP"), ip);
 				}
 				"-mask" => {
 					let mask = expect_arg(words.next(), word.as_str());
-					env_vars.push(format!("HERMIT_MASK={mask}"));
+					env_vars.insert(String::from("HERMIT_MASK"), mask);
 				}
 				"-gateway" => {
 					let gateway = expect_arg(words.next(), word.as_str());
-					env_vars.push(format!("HERMIT_GATEWAY={gateway}"));
+					env_vars.insert(String::from("HERMIT_GATEWAY"), gateway);
 				}
 				"--" => args.extend(&mut words),
 				_ if image_path.is_none() => image_path = Some(word),
@@ -95,8 +99,13 @@ pub fn freq() -> Option<u16> {
 	CLI.get().unwrap().freq
 }
 
-pub fn vars() -> &'static [String] {
-	CLI.get().unwrap().env_vars.as_slice()
+#[cfg(all(feature = "tcp", not(feature = "dhcpv4")))]
+pub fn var(key: &str) -> Option<&String> {
+	CLI.get().unwrap().env_vars.get(key)
+}
+
+pub fn vars() -> Iter<'static, String, String> {
+	CLI.get().unwrap().env_vars.iter()
 }
 
 /// Returns the cmdline argument passed in after "--"
