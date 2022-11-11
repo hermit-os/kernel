@@ -87,7 +87,7 @@ async fn network_run() {
 
 #[inline]
 pub(crate) fn network_poll() {
-	if let Ok(mut guard) = NIC.try_lock() {
+	if let Some(mut guard) = NIC.try_lock() {
 		if let NetworkState::Initialized(nic) = guard.deref_mut() {
 			let time = now();
 			nic.poll_common(time);
