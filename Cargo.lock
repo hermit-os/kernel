@@ -117,6 +117,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "generic_once_cell"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e75ad6783e1fcc13a2ea5af60711f631506b155fdecaaeb6d59ce087a36d850"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -191,6 +200,7 @@ dependencies = [
  "crossbeam-utils",
  "float-cmp",
  "futures-lite",
+ "generic_once_cell",
  "hashbrown",
  "hermit-entry",
  "include-transformed",
@@ -200,7 +210,6 @@ dependencies = [
  "num",
  "num-derive",
  "num-traits",
- "once_cell",
  "pci-ids",
  "qemu-exit",
  "scopeguard",

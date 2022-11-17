@@ -1,24 +1,24 @@
 //! Central parsing of the command-line parameters.
 
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::{slice, str};
 
 use ahash::RandomState;
+use generic_once_cell::OnceCell;
 use hashbrown::hash_map::Iter;
 use hashbrown::HashMap;
-use once_cell::race::OnceBox;
 
 pub use crate::arch::kernel::{
 	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address, get_tls_align,
 	get_tls_filesz, get_tls_memsz, get_tls_start, is_uhyve,
 };
+use crate::synch::spinlock::RawTicketMutex;
 
-static CLI: OnceBox<Cli> = OnceBox::new();
+static CLI: OnceCell<RawTicketMutex, Cli> = OnceCell::new();
 
 pub fn init() {
-	CLI.set(Box::default()).unwrap();
+	CLI.set(Cli::default()).unwrap();
 }
 
 #[derive(Debug)]
