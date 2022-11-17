@@ -29,7 +29,12 @@ $ qemu-system-x86_64 \
     -initrd <APP>
 ```
 
-Please read the README of [RustyHermit](https://github.com/hermitcore/libhermit-rs) for more information.
+Arguments can be provided like this:
+
+```
+$ qemu-system-x86_64 ... \
+    -append "[KERNEL_ARGS] [--] [APP_ARGS]"
+```
 
 ## License
 
