@@ -19,13 +19,14 @@ Afterwards, the loader is located at `target/x86_64/debug/rusty-loader`.
 
 Boot a hermit application:
 
-```bash
-qemu-system-x86_64 -smp 1 \
-    -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+```
+$ qemu-system-x86_64 \
+    -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
+    -smp 1 -m 64M \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-    -display none -m 64M -serial stdio -enable-kvm \
-    -kernel path_to_loader/rusty-loader \
-    -initrd path_to_app/app
+    -display none -serial stdio \
+    -kernel <LOADER> \
+    -initrd <APP>
 ```
 
 It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
