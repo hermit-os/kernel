@@ -54,6 +54,41 @@ $ qemu-system-x86_64 ... \
 
 Depending on the virtualized processor, the processor frequency has to be passed as kernel argument (`-freq`, in MHz).
 
+### Network support
+
+To enable an ethernet device, we have to set up a tap device on the host system.
+The following commands establish the tap device `tap10` on Linux:
+
+```
+# ip tuntap add tap10 mode tap
+# ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap10
+# ip link set dev tap10 up
+# echo 1 > /proc/sys/net/ipv4/conf/tap10/proxy_arp
+```
+
+You need to enable the `tcp` feature of the kernel.
+
+The network configuration can be set via environment variables during compile time.
+By default, it is:
+
+```
+HERMIT_IP="10.0.5.3"
+HERMIT_GATEWAY="10.0.5.1"
+HERMIT_MASK="255.255.255.0"
+```
+
+Currently, Hermit only supports [virtio]:
+
+[virtio]: https://www.redhat.com/en/blog/introduction-virtio-networking-and-vhost-net
+
+```
+$ qemu-system-x86_64 ... \
+    -netdev tap,id=net0,ifname=tap10,script=no,downscript=no,vhost=on \
+    -device virtio-net-pci,netdev=net0,disable-legacy=on
+```
+
+You can now access the files in SHARED_DIRECTORY under the virtiofs tag like `/myfs/testfile`.
+
 ## License
 
 Licensed under either of
