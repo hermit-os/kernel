@@ -36,6 +36,24 @@ $ qemu-system-x86_64 ... \
     -append "[KERNEL_ARGS] [--] [APP_ARGS]"
 ```
 
+### Using QEMU as microvm
+
+QEMU provides the [microvm virtual platform], which is a minimalist machine type without PCI nor ACPI support.
+Microvms have smaller memory footprint and a faster boot time.
+
+[microvm virtual platform]: https://qemu.readthedocs.io/en/latest/system/i386/microvm.html
+
+To use this VM type, PCI and ACPI support have to be disabled for your app (using `no-default-features`).
+
+```
+$ qemu-system-x86_64 ... \
+    -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,auto-kernel-cmdline=off \
+    -nodefaults -no-user-config \
+    -append "-freq 2800"
+```
+
+Depending on the virtualized processor, the processor frequency has to be passed as kernel argument (`-freq`, in MHz).
+
 ## License
 
 Licensed under either of
