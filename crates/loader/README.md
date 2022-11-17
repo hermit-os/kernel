@@ -29,8 +29,6 @@ $ qemu-system-x86_64 \
     -initrd <APP>
 ```
 
-It is important to enable the processor features _fsgsbase_ and _rdtscp_ because it is a prerequisite to boot RustyHermit.
-
 Please read the README of [RustyHermit](https://github.com/hermitcore/libhermit-rs) for more information.
 
 ## License
