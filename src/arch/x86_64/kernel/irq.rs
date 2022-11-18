@@ -6,7 +6,7 @@ use hermit_sync::InterruptTicketMutex;
 use x86::controlregs;
 use x86::irq::PageFaultError;
 
-use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, idt, processor};
 use crate::scheduler;
 
