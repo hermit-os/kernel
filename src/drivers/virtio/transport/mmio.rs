@@ -3,21 +3,19 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use crate::arch::mm::PhysAddr;
 use core::convert::TryInto;
 use core::ptr::{read_volatile, write_volatile};
 use core::result::Result;
-use core::sync::atomic::fence;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{fence, Ordering};
 use core::u8;
 
+use crate::arch::mm::PhysAddr;
+use crate::arch::x86_64::kernel::irq::*;
 use crate::drivers::error::DriverError;
+use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
-
-use crate::arch::x86_64::kernel::irq::*;
-use crate::drivers::net::network_irqhandler;
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5

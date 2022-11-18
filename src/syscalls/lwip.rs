@@ -1,7 +1,6 @@
-use crate::arch;
 use crate::arch::percore::*;
-use crate::console;
 use crate::synch::spinlock::SpinlockIrqSaveGuard;
+use crate::{arch, console};
 
 /// Enables lwIP's printf to print a whole string without being interrupted by
 /// a message from the kernel.

@@ -8,12 +8,12 @@
 #[cfg(not(target_os = "none"))]
 #[cfg(test)]
 mod tests {
-	use super::*;
 	use alloc::alloc::alloc;
 	use core::alloc::Layout;
 	use std::mem::{align_of, size_of};
 	use std::prelude::v1::*;
 
+	use super::*;
 	use crate::mm::allocator::*;
 	use crate::mm::hole::*;
 	use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;

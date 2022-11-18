@@ -1,6 +1,7 @@
+use alloc::boxed::Box;
+
 use crate::errno::*;
 use crate::synch::recmutex::RecursiveMutex;
-use alloc::boxed::Box;
 
 extern "C" fn __sys_recmutex_init(recmutex: *mut *mut RecursiveMutex) -> i32 {
 	if recmutex.is_null() {

@@ -1,14 +1,14 @@
+use core::convert::Infallible;
+use core::{mem, ptr, slice, str};
+
 use x86_64::structures::paging::PhysFrame;
 
 use crate::arch::x86_64::kernel::processor;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::{paging, virtualmem};
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use crate::x86::io::*;
-use core::convert::Infallible;
-use core::{mem, ptr, slice, str};
 
 /// Memory at this physical address is supposed to contain a pointer to the Extended BIOS Data Area (EBDA).
 const EBDA_PTR_LOCATION: PhysAddr = PhysAddr(0x0000_040E);

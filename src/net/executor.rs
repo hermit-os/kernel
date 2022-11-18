@@ -1,13 +1,11 @@
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use alloc::vec::Vec;
+use core::future::Future;
+use core::sync::atomic::{AtomicBool, Ordering};
+use core::task::{Context, Poll};
+
 use async_task::{Runnable, Task};
-use core::sync::atomic::Ordering;
-use core::{
-	future::Future,
-	sync::atomic::AtomicBool,
-	task::{Context, Poll},
-};
 use futures_lite::pin;
 use smoltcp::time::{Duration, Instant};
 

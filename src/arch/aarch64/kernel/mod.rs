@@ -9,9 +9,6 @@ pub mod stubs;
 pub mod switch;
 pub mod systemtime;
 
-pub use crate::arch::aarch64::kernel::stubs::*;
-pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
-
 use core::arch::{asm, global_asm};
 use core::ptr;
 
@@ -19,6 +16,8 @@ use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
+pub use crate::arch::aarch64::kernel::stubs::*;
+pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;

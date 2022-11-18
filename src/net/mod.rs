@@ -4,6 +4,7 @@ pub(crate) mod executor;
 use alloc::boxed::Box;
 use core::ops::DerefMut;
 use core::str::FromStr;
+use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use futures_lite::future;
@@ -20,13 +21,10 @@ use smoltcp::wire::IpAddress;
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 use smoltcp::Error;
 
-use core::sync::atomic::{AtomicU16, Ordering};
-
-use crate::arch;
 use crate::net::device::HermitNet;
 use crate::net::executor::spawn;
 use crate::synch::spinlock::SpinlockIrqSave;
-use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
+use crate::{arch, DEFAULT_KEEP_ALIVE_INTERVAL};
 
 pub(crate) enum NetworkState {
 	Missing,

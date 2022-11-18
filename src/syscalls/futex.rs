@@ -1,10 +1,8 @@
 use core::sync::atomic::AtomicU32;
 
-use crate::{
-	errno::EINVAL,
-	synch::futex::{self as synch, Flags},
-	timespec, timespec_to_microseconds,
-};
+use crate::errno::EINVAL;
+use crate::synch::futex::{self as synch, Flags};
+use crate::{timespec, timespec_to_microseconds};
 
 /// Like `synch::futex_wait`, but does extra sanity checks and takes a `timespec`.
 ///

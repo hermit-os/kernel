@@ -3,16 +3,13 @@ use core::ptr;
 
 use x86_64::instructions::tlb;
 use x86_64::structures::paging::mapper::UnmapError;
+pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
 };
 
-use crate::arch::x86_64::mm::physicalmem;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::env;
-use crate::mm;
-
-pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
+use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
+use crate::{env, mm};
 
 pub trait PageTableEntryFlagsExt {
 	fn device(&mut self) -> &mut Self;
@@ -53,10 +50,9 @@ impl PageTableEntryFlagsExt for PageTableEntryFlags {
 	}
 }
 
-pub use x86_64::structures::paging::PageSize;
-pub use x86_64::structures::paging::Size1GiB as HugePageSize;
-pub use x86_64::structures::paging::Size2MiB as LargePageSize;
-pub use x86_64::structures::paging::Size4KiB as BasePageSize;
+pub use x86_64::structures::paging::{
+	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
+};
 
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
@@ -238,11 +234,8 @@ pub fn init_page_tables() {
 
 #[allow(dead_code)]
 unsafe fn disect(virt_addr: x86_64::VirtAddr) {
-	use x86_64::structures::paging::{
-		mapper::{MappedFrame, TranslateResult},
-		Translate,
-	};
-	use x86_64::structures::paging::{Size1GiB, Size4KiB};
+	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
+	use x86_64::structures::paging::{Size1GiB, Size4KiB, Translate};
 
 	let recursive_page_table = unsafe { recursive_page_table() };
 

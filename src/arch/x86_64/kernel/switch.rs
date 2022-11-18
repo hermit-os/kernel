@@ -1,7 +1,7 @@
-use core::{arch::asm, mem, ptr};
+use core::arch::asm;
+use core::{mem, ptr};
 
-use crate::percore;
-use crate::set_current_kernel_stack;
+use crate::{percore, set_current_kernel_stack};
 
 #[cfg(feature = "fsgsbase")]
 macro_rules! push_fs {

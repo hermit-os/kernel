@@ -1,3 +1,9 @@
+use alloc::boxed::Box;
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::ops::Deref;
+
 /// Design:
 /// - want to support different backends. One of them virtiofs.
 /// - want to support multiple mounted filesystems at once.
@@ -35,11 +41,6 @@
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
 use crate::synch::spinlock::Spinlock;
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::ops::Deref;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
 pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());

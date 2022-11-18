@@ -1,19 +1,17 @@
 #![allow(clippy::vec_box)]
 
-use crate::arch::kernel::pci::{self, PciAdapter};
-
-use crate::arch::mm::paging;
-use crate::arch::mm::VirtAddr;
-use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use core::hint::spin_loop;
+use core::ptr;
 use core::sync::atomic::{fence, Ordering};
-use core::{cell::RefCell, ptr};
 
 use self::consts::*;
+use crate::arch::kernel::pci::{self, PciAdapter};
+use crate::arch::mm::{paging, VirtAddr};
+use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 
 #[allow(dead_code)]
 pub mod consts {

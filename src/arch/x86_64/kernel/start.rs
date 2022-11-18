@@ -1,11 +1,11 @@
 use core::arch::asm;
 
-use hermit_entry::{boot_info::RawBootInfo, Entry};
+use hermit_entry::boot_info::RawBootInfo;
+use hermit_entry::Entry;
 
-use crate::{
-	kernel::{pre_init, scheduler::TaskStacks},
-	KERNEL_STACK_SIZE,
-};
+use crate::kernel::pre_init;
+use crate::kernel::scheduler::TaskStacks;
+use crate::KERNEL_STACK_SIZE;
 
 #[no_mangle]
 #[naked]

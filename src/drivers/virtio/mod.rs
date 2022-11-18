@@ -8,10 +8,11 @@ pub mod transport;
 pub mod virtqueue;
 
 pub mod error {
+	use core::fmt;
+
 	#[cfg(feature = "pci")]
 	use crate::arch::x86_64::kernel::pci::error::PciError;
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
-	use core::fmt;
 
 	#[derive(Debug)]
 	pub enum VirtioError {

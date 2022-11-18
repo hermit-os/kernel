@@ -1,6 +1,7 @@
+use alloc::boxed::Box;
+
 use crate::errno::*;
 use crate::synch::spinlock::*;
-use alloc::boxed::Box;
 
 pub struct SpinlockContainer<'a> {
 	lock: Spinlock<()>,

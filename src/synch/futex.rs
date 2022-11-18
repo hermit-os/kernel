@@ -1,14 +1,15 @@
-use ahash::RandomState;
-use core::sync::atomic::{AtomicU32, Ordering::SeqCst};
-use hashbrown::{hash_map::Entry, HashMap};
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering::SeqCst;
 
-use crate::{
-	arch::kernel::{percore::core_scheduler, processor::get_timer_ticks},
-	errno::{EAGAIN, EINVAL, ETIMEDOUT},
-	scheduler::task::TaskHandlePriorityQueue,
-};
+use ahash::RandomState;
+use hashbrown::hash_map::Entry;
+use hashbrown::HashMap;
 
 use super::spinlock::SpinlockIrqSave;
+use crate::arch::kernel::percore::core_scheduler;
+use crate::arch::kernel::processor::get_timer_ticks;
+use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
+use crate::scheduler::task::TaskHandlePriorityQueue;
 
 // TODO: Replace with a concurrent hashmap.
 static PARKING_LOT: SpinlockIrqSave<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =

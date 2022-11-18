@@ -1,12 +1,13 @@
+use core::arch::asm;
+use core::sync::atomic::{AtomicU64, Ordering};
+use core::{mem, ptr};
+
+use crossbeam_utils::CachePadded;
+
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 use crate::x86::bits64::task::TaskStateSegment;
 use crate::x86::msr::*;
-use core::arch::asm;
-use core::mem;
-use core::ptr;
-use core::sync::atomic::{AtomicU64, Ordering};
-use crossbeam_utils::CachePadded;
 
 pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
 

@@ -1,9 +1,10 @@
+use core::sync::atomic::{AtomicBool, Ordering};
+
 use crate::arch::x86_64::kernel::gdt;
 use crate::x86::bits64::paging::VAddr;
 use crate::x86::dtables::{self, DescriptorTablePointer};
 use crate::x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
 use crate::x86::Ring;
-use core::sync::atomic::{AtomicBool, Ordering};
 
 /// An interrupt gate descriptor.
 ///

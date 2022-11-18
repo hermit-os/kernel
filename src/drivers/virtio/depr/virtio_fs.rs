@@ -1,13 +1,14 @@
-use crate::arch::x86_64::kernel::fuse::{self, FuseInterface};
-use crate::arch::x86_64::kernel::pci;
-use crate::drivers::virtio::depr::virtio::{
-	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
-};
-use crate::syscalls::fs;
-
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::{fmt, str, u32, u8};
+
+use crate::arch::x86_64::kernel::fuse::{self, FuseInterface};
+use crate::arch::x86_64::kernel::pci;
+use crate::drivers::virtio::depr::virtio::consts::*;
+use crate::drivers::virtio::depr::virtio::{
+	self, virtio_pci_common_cfg, VirtioNotification, Virtq,
+};
+use crate::syscalls::fs;
 
 /// Filesystem name (UTF-8, not NUL-terminated, padded with NULs)
 #[allow(non_camel_case_types)]

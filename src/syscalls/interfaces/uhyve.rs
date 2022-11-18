@@ -1,12 +1,12 @@
-use alloc::{boxed::Box, vec::Vec};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::mem;
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
 use crate::arch;
-use crate::arch::mm::paging;
-use crate::arch::mm::{PhysAddr, VirtAddr};
+use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(feature = "newlib")]
 use crate::syscalls::lwip::sys_lwip_get_errno;

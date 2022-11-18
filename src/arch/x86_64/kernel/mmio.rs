@@ -1,17 +1,16 @@
-use crate::collections::irqsave;
+use alloc::vec::Vec;
+use core::str;
 
-use crate::arch::x86_64::mm::paging;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
-use crate::arch::x86_64::mm::PhysAddr;
+use crate::arch::x86_64::mm::{paging, PhysAddr};
+use crate::collections::irqsave;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioDriver};
 use crate::synch::spinlock::SpinlockIrqSave;
-use alloc::vec::Vec;
-use core::str;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 

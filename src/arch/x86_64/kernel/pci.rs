@@ -1,3 +1,6 @@
+use alloc::vec::Vec;
+use core::{fmt, u32, u8};
+
 use num_derive::{FromPrimitive, ToPrimitive};
 
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
@@ -10,8 +13,6 @@ use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 use crate::synch::spinlock::SpinlockIrqSave;
 use crate::x86::io::*;
-use alloc::vec::Vec;
-use core::{fmt, u32, u8};
 
 // TODO: should these be pub? currently needed since used in virtio.rs maybe use getter methods to be more flexible.
 pub const PCI_MAX_BUS_NUMBER: u8 = 32;
