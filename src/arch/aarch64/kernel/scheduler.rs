@@ -1,15 +1,15 @@
 //! Architecture dependent interface to initialize a task
 
+use alloc::rc::Rc;
+use core::cell::RefCell;
+use core::{mem, ptr};
+
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::env;
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::{DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
-use alloc::rc::Rc;
-use core::cell::RefCell;
-use core::{mem, ptr};
+use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 extern "C" {
 	static tls_start: u8;

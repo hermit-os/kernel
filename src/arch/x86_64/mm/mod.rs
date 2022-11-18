@@ -2,11 +2,11 @@ pub mod paging;
 pub mod physicalmem;
 pub mod virtualmem;
 
-pub use self::paging::init_page_tables;
 use core::slice;
 
-pub use x86::bits64::paging::PAddr as PhysAddr;
-pub use x86::bits64::paging::VAddr as VirtAddr;
+pub use x86::bits64::paging::{PAddr as PhysAddr, VAddr as VirtAddr};
+
+pub use self::paging::init_page_tables;
 
 /// Memory translation, allocation and deallocation for MultibootInformation
 struct MultibootMemory;

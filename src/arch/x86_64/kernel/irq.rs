@@ -1,19 +1,17 @@
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::idt;
-use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::kernel::processor;
-use crate::scheduler;
-use crate::synch::spinlock::SpinlockIrqSave;
-
-use crate::alloc::string::ToString;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
 use core::arch::asm;
 use core::fmt;
+
 use x86::bits64::rflags::{self, RFlags};
-use x86::controlregs;
-use x86::irq;
 use x86::irq::PageFaultError;
+use x86::{controlregs, irq};
+
+use crate::alloc::string::ToString;
+use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::{apic, idt, processor};
+use crate::scheduler;
+use crate::synch::spinlock::SpinlockIrqSave;
 
 static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
 

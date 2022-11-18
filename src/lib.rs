@@ -56,19 +56,17 @@ use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::sync::atomic::{AtomicU32, Ordering};
 
+// Used for integration test status.
+#[doc(hidden)]
+pub use arch::kernel::is_uhyve as _is_uhyve;
 use arch::percore::*;
 use mm::allocator::LockedHeap;
-
 #[cfg(target_arch = "aarch64")]
 use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
 pub use crate::syscalls::*;
-
-// Used for integration test status.
-#[doc(hidden)]
-pub use arch::kernel::is_uhyve as _is_uhyve;
 
 #[macro_use]
 mod macros;

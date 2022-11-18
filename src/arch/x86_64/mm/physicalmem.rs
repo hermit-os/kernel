@@ -1,12 +1,12 @@
-use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
+
+use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::MEM;
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 use crate::synch::spinlock::*;

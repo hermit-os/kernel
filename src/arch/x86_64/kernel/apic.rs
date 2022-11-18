@@ -1,25 +1,5 @@
-use crate::arch;
-#[cfg(feature = "acpi")]
-use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::irq::IrqStatistics;
-use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
-use crate::arch::x86_64::mm::paging::{
-	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
-};
-use crate::arch::x86_64::mm::{paging, virtualmem};
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::collections::irqsave;
-use crate::config::*;
-use crate::env;
-use crate::mm;
-use crate::scheduler;
-use crate::scheduler::CoreId;
-#[cfg(feature = "smp")]
-use crate::x86::controlregs::*;
-use crate::x86::msr::*;
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use arch::x86_64::kernel::{idt, irq, percore::*, processor};
 #[cfg(any(feature = "pci", feature = "smp"))]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
@@ -27,7 +7,26 @@ use core::hint::spin_loop;
 use core::ptr;
 use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
+
+use arch::x86_64::kernel::percore::*;
+use arch::x86_64::kernel::{idt, irq, processor};
 use crossbeam_utils::CachePadded;
+
+#[cfg(feature = "acpi")]
+use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::irq::IrqStatistics;
+use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
+use crate::arch::x86_64::mm::paging::{
+	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+};
+use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
+use crate::collections::irqsave;
+use crate::config::*;
+use crate::scheduler::CoreId;
+#[cfg(feature = "smp")]
+use crate::x86::controlregs::*;
+use crate::x86::msr::*;
+use crate::{arch, env, mm, scheduler};
 
 const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
 const MP_CONFIG_SIGNATURE: u32 = 0x504d4350;

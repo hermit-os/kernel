@@ -1,12 +1,5 @@
 #![allow(clippy::result_unit_err)]
 
-use crate::env;
-#[cfg(feature = "newlib")]
-use crate::synch::spinlock::SpinlockIrqSave;
-use crate::syscalls::interfaces::SyscallInterface;
-#[cfg(target_os = "none")]
-use crate::{__sys_free, __sys_malloc, __sys_realloc};
-
 pub use self::condvar::*;
 pub use self::futex::*;
 pub use self::processor::*;
@@ -17,6 +10,12 @@ pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
+use crate::env;
+#[cfg(feature = "newlib")]
+use crate::synch::spinlock::SpinlockIrqSave;
+use crate::syscalls::interfaces::SyscallInterface;
+#[cfg(target_os = "none")]
+use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 mod condvar;
 pub(crate) mod fs;

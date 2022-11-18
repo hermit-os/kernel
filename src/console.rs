@@ -1,6 +1,7 @@
+use core::fmt;
+
 use crate::arch;
 use crate::synch::spinlock::SpinlockIrqSave;
-use core::fmt;
 
 pub struct Console(());
 

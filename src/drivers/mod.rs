@@ -11,10 +11,11 @@ pub mod virtio;
 /// passed on to higher layers.
 #[cfg(not(target_arch = "aarch64"))]
 pub mod error {
+	use core::fmt;
+
 	#[cfg(feature = "pci")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	use crate::drivers::virtio::error::VirtioError;
-	use core::fmt;
 
 	#[derive(Debug)]
 	pub enum DriverError {

@@ -2,6 +2,14 @@
 //! See Virito specification v1.1. - 2.7
 #![allow(dead_code)]
 
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::rc::Rc;
+use alloc::vec::Vec;
+use core::cell::RefCell;
+use core::ptr;
+use core::sync::atomic::{fence, Ordering};
+
 use self::error::VqPackedError;
 use super::super::features::Features;
 #[cfg(not(feature = "pci"))]
@@ -15,12 +23,6 @@ use super::{
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
-use alloc::boxed::Box;
-use alloc::collections::VecDeque;
-use alloc::rc::Rc;
-use alloc::vec::Vec;
-use core::sync::atomic::{fence, Ordering};
-use core::{cell::RefCell, ptr};
 
 /// A newtype of bool used for convenience in context with
 /// packed queues wrap counter.

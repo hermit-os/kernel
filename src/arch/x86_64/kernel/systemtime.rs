@@ -1,11 +1,11 @@
-use crate::arch::x86_64::kernel::boot_info;
-use crate::arch::x86_64::kernel::irq;
-use crate::arch::x86_64::kernel::processor;
 use core::hint::spin_loop;
 use core::num::NonZeroU64;
+
 use hermit_entry::boot_info::PlatformInfo;
 use time::OffsetDateTime;
 use x86::io::*;
+
+use crate::arch::x86_64::kernel::{boot_info, irq, processor};
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16 = 0x71;

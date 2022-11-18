@@ -1,15 +1,16 @@
 #![allow(dead_code)]
 
-use crate::arch::kernel::pci;
-use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::VirtAddr;
-use crate::drivers::virtio::depr::virtio::{
-	self, consts::*, virtio_pci_common_cfg, VirtioNotification, Virtq,
-};
-
 use alloc::vec::Vec;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
+
+use crate::arch::kernel::pci;
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::VirtAddr;
+use crate::drivers::virtio::depr::virtio::consts::*;
+use crate::drivers::virtio::depr::virtio::{
+	self, virtio_pci_common_cfg, VirtioNotification, Virtq,
+};
 
 const VIRTIO_NET_F_CSUM: u64 = 0;
 const VIRTIO_NET_F_GUEST_CSUM: u64 = 1;

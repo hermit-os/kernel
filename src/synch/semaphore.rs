@@ -1,8 +1,9 @@
+#[cfg(feature = "smp")]
+use crossbeam_utils::Backoff;
+
 use crate::arch::percore::*;
 use crate::scheduler::task::TaskHandlePriorityQueue;
 use crate::synch::spinlock::SpinlockIrqSave;
-#[cfg(feature = "smp")]
-use crossbeam_utils::Backoff;
 
 struct SemaphoreState {
 	/// Resource available count

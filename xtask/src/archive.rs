@@ -1,10 +1,9 @@
-use std::{
-	env,
-	path::{Path, PathBuf},
-};
+use std::env;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use goblin::{archive::Archive as GoblinArchive, elf64::header};
+use goblin::archive::Archive as GoblinArchive;
+use goblin::elf64::header;
 use llvm_tools::LlvmTools;
 use xshell::cmd;
 

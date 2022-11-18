@@ -1,5 +1,6 @@
-use crate::scheduler::{CoreId, PerCoreScheduler};
 use core::ptr;
+
+use crate::scheduler::{CoreId, PerCoreScheduler};
 
 #[no_mangle]
 pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);

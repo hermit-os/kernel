@@ -1,6 +1,7 @@
+use alloc::boxed::Box;
+
 use crate::errno::*;
 use crate::synch::semaphore::Semaphore;
-use alloc::boxed::Box;
 
 extern "C" fn __sys_sem_init(sem: *mut *mut Semaphore, value: u32) -> i32 {
 	if sem.is_null() {

@@ -4,7 +4,6 @@ use core::isize;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use crate::arch;
 use crate::arch::get_processor_count;
 use crate::arch::percore::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
@@ -12,11 +11,10 @@ use crate::config::USER_STACK_SIZE;
 use crate::errno::*;
 #[cfg(feature = "newlib")]
 use crate::mm::{task_heap_end, task_heap_start};
-use crate::scheduler;
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
 use crate::synch::spinlock::SpinlockIrqSave;
-use crate::syscalls;
 use crate::syscalls::timer::timespec;
+use crate::{arch, scheduler, syscalls};
 
 #[cfg(feature = "newlib")]
 pub type SignalHandler = extern "C" fn(i32);

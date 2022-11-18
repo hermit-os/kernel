@@ -1,6 +1,7 @@
-use crate::synch::spinlock::SpinlockIrqSave;
 use alloc::rc::Rc;
 use core::cell::RefCell;
+
+use crate::synch::spinlock::SpinlockIrqSave;
 
 // Currently, onbly a dummy implementation
 pub struct VirtioNetDriver;

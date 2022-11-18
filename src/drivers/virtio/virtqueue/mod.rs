@@ -13,23 +13,22 @@
 pub mod packed;
 pub mod split;
 
-use crate::arch::mm::paging::{BasePageSize, PageSize};
-use crate::arch::mm::{paging, VirtAddr};
-
-use self::error::{BufferError, VirtqError};
-use self::packed::PackedVq;
-use self::split::SplitVq;
-
-#[cfg(not(feature = "pci"))]
-use super::transport::mmio::{ComCfg, NotifCfg};
-#[cfg(feature = "pci")]
-use super::transport::pci::{ComCfg, NotifCfg};
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ops::{BitAnd, Deref, DerefMut};
+
+use self::error::{BufferError, VirtqError};
+use self::packed::PackedVq;
+use self::split::SplitVq;
+#[cfg(not(feature = "pci"))]
+use super::transport::mmio::{ComCfg, NotifCfg};
+#[cfg(feature = "pci")]
+use super::transport::pci::{ComCfg, NotifCfg};
+use crate::arch::mm::paging::{BasePageSize, PageSize};
+use crate::arch::mm::{paging, VirtAddr};
 
 /// A u16 newtype. If instantiated via ``VqIndex::from(T)``, the newtype is ensured to be
 /// smaller-equal to `min(u16::MAX , T::MAX)`.

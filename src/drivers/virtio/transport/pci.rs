@@ -3,25 +3,23 @@
 //! The module contains ...
 #![allow(dead_code)]
 
-use crate::arch::kernel::pci as kernel_pci;
-use crate::arch::kernel::pci::error::PciError;
-use crate::arch::kernel::pci::{PciAdapter, PciDriver};
-use crate::arch::mm::PhysAddr;
-use crate::synch::spinlock::SpinlockIrqSave;
 use alloc::vec::Vec;
 use core::mem;
 use core::result::Result;
 
+use crate::arch::kernel::pci as kernel_pci;
+use crate::arch::kernel::pci::error::PciError;
+use crate::arch::kernel::pci::{PciAdapter, PciDriver};
+use crate::arch::mm::PhysAddr;
+use crate::arch::x86_64::kernel::irq::*;
 use crate::drivers::error::DriverError;
+use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-use crate::drivers::virtio::device;
-use crate::drivers::virtio::env;
+use crate::drivers::virtio::depr::virtio_fs;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
-
-use crate::arch::x86_64::kernel::irq::*;
-use crate::drivers::net::network_irqhandler;
-use crate::drivers::virtio::depr::virtio_fs;
+use crate::drivers::virtio::{device, env};
+use crate::synch::spinlock::SpinlockIrqSave;
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5

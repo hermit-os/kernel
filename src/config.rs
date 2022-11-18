@@ -15,6 +15,7 @@ pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
 
 pub(crate) const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = {
 	use core::ptr;
+
 	use crossbeam_utils::CachePadded;
 
 	let array = [CachePadded::new(0_u8); 2];

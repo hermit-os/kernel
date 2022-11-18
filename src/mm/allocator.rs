@@ -7,15 +7,15 @@
 
 #![allow(dead_code)]
 
+use core::alloc::{AllocError, GlobalAlloc, Layout};
+use core::ops::Deref;
+use core::ptr::NonNull;
+use core::{cmp, mem, ptr};
+
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::synch::spinlock::*;
 use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
-use core::alloc::{AllocError, GlobalAlloc, Layout};
-use core::cmp;
-use core::ops::Deref;
-use core::ptr::NonNull;
-use core::{mem, ptr};
 
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;

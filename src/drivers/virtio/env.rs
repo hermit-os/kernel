@@ -178,14 +178,15 @@ pub mod memory {
 /// are not changed on little endian machines.
 #[cfg(feature = "pci")]
 pub mod pci {
+	use alloc::vec::Vec;
+	use core::result::Result;
+
 	use crate::arch::x86_64::kernel::pci;
 	use crate::arch::x86_64::kernel::pci::error::PciError;
 	use crate::arch::x86_64::kernel::pci::{PciAdapter, PciBar};
 	use crate::arch::x86_64::mm::PhysAddr;
 	use crate::drivers::virtio::env::memory::VirtMemAddr;
 	use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-	use alloc::vec::Vec;
-	use core::result::Result;
 
 	/// Wrapper function to read the configuration space of a PCI
 	/// device at the given register. Returns the registers value.

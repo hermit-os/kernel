@@ -4,7 +4,8 @@ mod hole;
 #[cfg(test)]
 mod test;
 
-use crate::arch;
+use core::mem;
+
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{
@@ -16,8 +17,7 @@ use crate::arch::mm::virtualmem::kernel_heap_end;
 #[cfg(feature = "pci")]
 use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
-use crate::env;
-use core::mem;
+use crate::{arch, env};
 
 /// Physical and virtual address of the first 2 MiB page that maps the kernel.
 /// Can be easily accessed through kernel_start_address()

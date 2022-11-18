@@ -1,10 +1,13 @@
 //! Central parsing of the command-line parameters.
 
-use ahash::RandomState;
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::{slice, str};
-use hashbrown::{hash_map::Iter, HashMap};
 
+use ahash::RandomState;
+use hashbrown::hash_map::Iter;
+use hashbrown::HashMap;
 use once_cell::race::OnceBox;
 
 pub use crate::arch::kernel::{

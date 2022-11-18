@@ -1,12 +1,5 @@
 #![allow(dead_code)]
 
-#[cfg(feature = "acpi")]
-use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{boot_info, idt, irq, pic, pit};
-use crate::env;
-use crate::x86::controlregs::*;
-use crate::x86::cpuid::*;
-use crate::x86::msr::*;
 use core::arch::asm;
 use core::arch::x86_64::{
 	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
@@ -16,9 +9,18 @@ use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
 use core::{fmt, u32};
+
 use hermit_entry::boot_info::PlatformInfo;
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
+
+#[cfg(feature = "acpi")]
+use crate::arch::x86_64::kernel::acpi;
+use crate::arch::x86_64::kernel::{boot_info, idt, irq, pic, pit};
+use crate::env;
+use crate::x86::controlregs::*;
+use crate::x86::cpuid::*;
+use crate::x86::msr::*;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;

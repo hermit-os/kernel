@@ -1,12 +1,11 @@
 //! Architecture dependent interface to initialize a task
 
 use alloc::boxed::Box;
-use core::{arch::asm, mem, ptr, slice};
+use core::arch::asm;
+use core::{mem, ptr, slice};
 
-use crate::arch::x86_64::kernel::apic;
-use crate::arch::x86_64::kernel::idt;
-use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::{apic, idt, irq};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };

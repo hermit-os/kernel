@@ -3,16 +3,11 @@ use core::marker::PhantomData;
 use core::{fmt, mem, ptr, usize};
 
 use crate::arch::aarch64::kernel::percore::*;
-use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::kernel::{
-	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve,
+	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve, processor,
 };
-use crate::arch::aarch64::mm::physicalmem;
-use crate::arch::aarch64::mm::virtualmem;
-use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::mm;
-use crate::scheduler;
-use crate::KERNEL_STACK_SIZE;
+use crate::arch::aarch64::mm::{physicalmem, virtualmem, PhysAddr, VirtAddr};
+use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
 /// Setting the upper bits to zero tells the MMU to use TTBR0 for the base address for the first table.

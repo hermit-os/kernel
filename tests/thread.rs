@@ -8,19 +8,17 @@
 
 extern crate hermit;
 
-use core::{
-	ptr,
-	sync::atomic::{AtomicU32, Ordering::Relaxed},
-};
+use core::ptr;
+use core::sync::atomic::AtomicU32;
+use core::sync::atomic::Ordering::Relaxed;
 
 use common::*;
 mod common;
 
 use alloc::vec;
-use hermit::{
-	errno::{EAGAIN, ETIMEDOUT},
-	sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep, timespec,
-};
+
+use hermit::errno::{EAGAIN, ETIMEDOUT};
+use hermit::{sys_futex_wait, sys_futex_wake, sys_join, sys_spawn2, sys_usleep, timespec};
 
 const USER_STACK_SIZE: usize = 1_048_576;
 const NORMAL_PRIO: u8 = 2;

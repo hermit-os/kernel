@@ -1,14 +1,11 @@
 use core::arch::asm;
 
-use hermit_entry::{
-	boot_info::{BootInfo, RawBootInfo},
-	Entry,
-};
+use hermit_entry::boot_info::{BootInfo, RawBootInfo};
+use hermit_entry::Entry;
 
+use crate::arch::aarch64::kernel::scheduler::TaskStacks;
 use crate::arch::aarch64::kernel::serial::SerialPort;
-use crate::arch::aarch64::kernel::{
-	get_processor_count, scheduler::TaskStacks, BOOT_INFO, RAW_BOOT_INFO,
-};
+use crate::arch::aarch64::kernel::{get_processor_count, BOOT_INFO, RAW_BOOT_INFO};
 use crate::KERNEL_STACK_SIZE;
 
 extern "C" {

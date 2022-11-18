@@ -3,12 +3,6 @@ use alloc::vec::Vec;
 use core::ffi::CStr;
 use core::{isize, slice, str};
 
-use crate::arch;
-use crate::console::CONSOLE;
-use crate::env;
-use crate::errno::*;
-use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
-
 #[cfg(all(not(feature = "pci"), not(target_arch = "aarch64")))]
 use arch::kernel::mmio::get_network_driver;
 #[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
@@ -16,6 +10,10 @@ use arch::kernel::pci::get_network_driver;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
+use crate::console::CONSOLE;
+use crate::errno::*;
+use crate::syscalls::fs::{self, FilePerms, PosixFile, SeekWhence};
+use crate::{arch, env};
 
 mod generic;
 mod uhyve;

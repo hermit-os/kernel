@@ -1,8 +1,3 @@
-use crate::arch;
-use crate::arch::mm::VirtAddr;
-use crate::arch::percore::*;
-use crate::arch::scheduler::{TaskStacks, TaskTLS};
-use crate::scheduler::CoreId;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
@@ -11,6 +6,12 @@ use core::fmt;
 use core::num::NonZeroU64;
 #[cfg(feature = "tcp")]
 use core::ops::DerefMut;
+
+use crate::arch;
+use crate::arch::mm::VirtAddr;
+use crate::arch::percore::*;
+use crate::arch::scheduler::{TaskStacks, TaskTLS};
+use crate::scheduler::CoreId;
 
 /// Returns the most significant bit.
 ///

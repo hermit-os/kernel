@@ -1,10 +1,10 @@
-use crate::net::executor::block_on;
-use crate::net::{AsyncSocket, Handle};
-use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
-
 use smoltcp::socket::TcpSocket;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
+
+use crate::net::executor::block_on;
+use crate::net::{AsyncSocket, Handle};
+use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
 #[no_mangle]
 pub fn sys_tcp_stream_connect(ip: &[u8], port: u16, timeout: Option<u64>) -> Result<Handle, ()> {

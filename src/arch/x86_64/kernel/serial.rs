@@ -1,6 +1,7 @@
+use core::hint::spin_loop;
+
 use crate::env;
 use crate::x86::io::*;
-use core::hint::spin_loop;
 
 const UART_TX: u16 = 0;
 const UART_IER: u16 = 1;

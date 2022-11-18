@@ -1,5 +1,6 @@
 use alloc::collections::linked_list::LinkedList;
-use core::{alloc::AllocError, cmp::Ordering};
+use core::alloc::AllocError;
+use core::cmp::Ordering;
 
 pub struct FreeListEntry {
 	pub start: usize,

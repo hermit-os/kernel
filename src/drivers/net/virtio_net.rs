@@ -2,22 +2,24 @@
 //!
 //! The module contains ...
 
-use crate::arch::kernel::percore::increment_irq_counter;
-use crate::config::VIRTIO_MAX_QUEUE_SIZE;
-use crate::drivers::net::NetworkInterface;
-
 use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
+use core::cell::RefCell;
+use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
-use core::{cell::RefCell, cmp::Ordering};
 
+use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
+use self::error::VirtioNetError;
+use crate::arch::kernel::percore::increment_irq_counter;
+use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
 #[cfg(feature = "pci")]
 use crate::drivers::net::virtio_pci::NetDevCfgRaw;
+use crate::drivers::net::NetworkInterface;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -25,9 +27,6 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
 	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
-
-use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
-use self::error::VirtioNetError;
 
 pub const ETH_HDR: usize = 14usize;
 
@@ -1056,9 +1055,10 @@ impl VirtioNetDriver {
 }
 
 pub mod constants {
-	pub use super::error::VirtioNetError;
 	use alloc::vec::Vec;
 	use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
+
+	pub use super::error::VirtioNetError;
 
 	// Configuration constants
 	pub const MAX_NUM_VQ: u16 = 2;
