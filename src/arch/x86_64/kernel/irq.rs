@@ -3,8 +3,8 @@ use alloc::string::{String, ToString};
 use core::arch::asm;
 
 use hermit_sync::InterruptTicketMutex;
+use x86::controlregs;
 use x86::irq::PageFaultError;
-use x86::{controlregs, irq};
 
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::{apic, idt, processor};
@@ -13,34 +13,8 @@ use crate::scheduler;
 static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 
+pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
-
-/// Enable Interrupts
-#[inline]
-pub fn enable() {
-	unsafe {
-		irq::enable();
-	}
-}
-
-/// Enable Interrupts and wait for the next interrupt (HLT instruction)
-/// According to <https://lists.freebsd.org/pipermail/freebsd-current/2004-June/029369.html>, this exact sequence of assembly
-/// instructions is guaranteed to be atomic.
-/// This is important, because another CPU could call wakeup_core right when we decide to wait for the next interrupt.
-#[inline]
-pub fn enable_and_wait() {
-	unsafe {
-		asm!("sti; hlt", options(nomem, nostack));
-	}
-}
-
-/// Disable Interrupts
-#[inline]
-pub fn disable() {
-	unsafe {
-		irq::disable();
-	}
-}
 
 pub fn install() {
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
