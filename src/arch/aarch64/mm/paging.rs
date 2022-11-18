@@ -517,7 +517,7 @@ where
 	///
 	/// * `range` - The range of pages of size S
 	/// * `physical_address` - First physical address to map these pages to
-	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
+	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or NO_EXECUTE).
 	///             The PRESENT and ACCESSED are already set automatically.
 	fn map_pages<S: PageSize>(
 		&mut self,
@@ -549,29 +549,26 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	root_pagetable.get_page_table_entry(page)
 }
 
-pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> PhysAddr {
+pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	trace!("Getting physical address for {:#X}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
-	let address = root_pagetable
-		.get_page_table_entry(page)
-		.expect("Entry not present")
-		.address();
+	let address = root_pagetable.get_page_table_entry(page)?.address();
 	let offset = virtual_address & (S::SIZE - 1);
-	PhysAddr(address.as_u64() | offset.as_u64())
+	Some(PhysAddr(address.as_u64() | offset.as_u64()))
 }
 
 /// Translate a virtual memory address to a physical one.
 /// Just like get_physical_address, but automatically uses the correct page size for the respective memory address.
-pub fn virtual_to_physical(virtual_address: VirtAddr) -> PhysAddr {
+pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	// Currently, we use only 4K pages.
 	get_physical_address::<BasePageSize>(virtual_address)
 }
 
 #[no_mangle]
 pub extern "C" fn virt_to_phys(virtual_address: VirtAddr) -> PhysAddr {
-	virtual_to_physical(virtual_address)
+	virtual_to_physical(virtual_address).unwrap()
 }
 
 pub fn map<S: PageSize>(
@@ -590,6 +587,21 @@ pub fn map<S: PageSize>(
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
 	root_pagetable.map_pages(range, physical_address, flags);
+}
+
+pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) {
+	let flags = {
+		let mut flags = PageTableEntryFlags::empty();
+		flags.normal().writable().execute_disable();
+		flags
+	};
+
+	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
+
+	for virt_addr in virt_addrs {
+		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize).unwrap();
+		map::<S>(virt_addr, phys_addr, 1, flags);
+	}
 }
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {

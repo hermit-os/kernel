@@ -7,7 +7,9 @@ use crate::arch::x86_64::kernel::apic;
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::irq;
 use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::paging::{
+	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;

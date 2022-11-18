@@ -5,6 +5,8 @@ mod hole;
 mod test;
 
 use crate::arch;
+#[cfg(target_arch = "x86_64")]
+use crate::arch::mm::paging::PageTableEntryFlagsExt;
 use crate::arch::mm::paging::{
 	BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags,
 };
@@ -49,30 +51,10 @@ pub fn task_heap_end() -> VirtAddr {
 	unsafe { HEAP_END_ADDRESS }
 }
 
-fn map_heap<S: PageSize>(virt_addr: VirtAddr, size: usize) -> usize {
-	let mut i: usize = 0;
-	let mut flags = PageTableEntryFlags::empty();
-
-	flags.normal().writable().execute_disable();
-
-	while i < align_down!(size, S::SIZE as usize) {
-		match arch::mm::physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize) {
-			Ok(phys_addr) => {
-				arch::mm::paging::map::<S>(virt_addr + i, phys_addr, 1, flags);
-				i += S::SIZE as usize;
-			}
-			Err(_) => {
-				error!("Unable to allocate page frame of size {:#x}", S::SIZE);
-				return i;
-			}
-		}
-	}
-
-	i
-}
-
 #[cfg(target_os = "none")]
 pub fn init() {
+	use crate::arch::mm::paging;
+
 	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
 	unsafe {
 		KERNEL_START_ADDRESS = env::get_base_address().align_down_to_large_page();
@@ -186,19 +168,25 @@ pub fn init() {
 
 		// try to map a huge page
 		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
-			map_heap::<HugePageSize>(virt_addr, HugePageSize::SIZE as usize)
+			paging::map_heap::<HugePageSize>(virt_addr, 1);
+			HugePageSize::SIZE as usize
 		} else {
 			0
 		};
 
 		if counter == 0 && has_2mib_pages {
 			// fall back to large pages
-			counter = map_heap::<LargePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			paging::map_heap::<LargePageSize>(virt_addr, 1);
+			counter = LargePageSize::SIZE as usize;
 		}
 
 		if counter == 0 {
 			// fall back to normal pages, but map at least the size of a large page
-			counter = map_heap::<BasePageSize>(virt_addr, LargePageSize::SIZE as usize);
+			paging::map_heap::<BasePageSize>(
+				virt_addr,
+				LargePageSize::SIZE as usize / BasePageSize::SIZE as usize,
+			);
+			counter = LargePageSize::SIZE as usize;
 		}
 
 		unsafe {
@@ -214,23 +202,26 @@ pub fn init() {
 
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
-		&& (map_addr.as_usize() & !(HugePageSize::SIZE as usize - 1)) == 0
+		&& align_down!(map_addr.as_usize(), HugePageSize::SIZE as usize) == 0
 	{
-		let counter = map_heap::<HugePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, HugePageSize::SIZE as usize);
+		paging::map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	if has_2mib_pages && map_size > LargePageSize::SIZE as usize {
-		let counter = map_heap::<LargePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, LargePageSize::SIZE as usize);
+		paging::map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	if map_size > BasePageSize::SIZE as usize {
-		let counter = map_heap::<BasePageSize>(map_addr, map_size);
-		map_size -= counter;
-		map_addr += counter;
+		let size = align_down!(map_size, BasePageSize::SIZE as usize);
+		paging::map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize);
+		map_size -= size;
+		map_addr += size;
 	}
 
 	unsafe {
@@ -267,13 +258,13 @@ pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE as usize);
 
-	if let Some(entry) = arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address) {
+	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(
 			virtual_address,
 			size / BasePageSize::SIZE as usize,
 		);
 		arch::mm::virtualmem::deallocate(virtual_address, size);
-		arch::mm::physicalmem::deallocate(entry.address(), size);
+		arch::mm::physicalmem::deallocate(phys_addr, size);
 	} else {
 		panic!(
 			"No page table entry for virtual address {:#X}",
@@ -317,7 +308,7 @@ pub fn map(
 pub fn unmap(virtual_address: VirtAddr, sz: usize) {
 	let size = align_up!(sz, BasePageSize::SIZE as usize);
 
-	if arch::mm::paging::get_page_table_entry::<BasePageSize>(virtual_address).is_some() {
+	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(
 			virtual_address,
 			size / BasePageSize::SIZE as usize,

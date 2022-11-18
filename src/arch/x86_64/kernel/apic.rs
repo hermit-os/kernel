@@ -3,7 +3,9 @@ use crate::arch;
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
 use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::paging::{
+	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+};
 use crate::arch::x86_64::mm::{paging, virtualmem};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::collections::irqsave;

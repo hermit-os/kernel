@@ -1,4 +1,4 @@
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
 use crate::x86::io::*;
 

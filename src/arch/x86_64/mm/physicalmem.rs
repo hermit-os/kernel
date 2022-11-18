@@ -1,3 +1,4 @@
+use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use multiboot::information::{MemoryType, Multiboot};
@@ -108,6 +109,18 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 			.try_into()
 			.unwrap(),
 	))
+}
+
+pub struct FrameAlloc;
+
+unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for FrameAlloc {
+	fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
+		let addr = PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(S::SIZE as usize, Some(S::SIZE as usize))
+			.ok()? as u64;
+		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(addr)).unwrap())
+	}
 }
 
 pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
