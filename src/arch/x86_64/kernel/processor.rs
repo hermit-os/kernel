@@ -13,14 +13,14 @@ use core::{fmt, u32};
 use hermit_entry::boot_info::PlatformInfo;
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
+use x86::controlregs::*;
+use x86::cpuid::*;
+use x86::msr::*;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::{boot_info, idt, irq, pic, pit};
 use crate::env;
-use crate::x86::controlregs::*;
-use crate::x86::cpuid::*;
-use crate::x86::msr::*;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
 const IA32_MISC_ENABLE_SPEEDSTEP_LOCK: u64 = 1 << 20;

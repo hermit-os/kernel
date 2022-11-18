@@ -44,10 +44,6 @@ extern crate log;
 #[cfg(not(target_os = "none"))]
 #[macro_use]
 extern crate std;
-#[cfg(target_arch = "aarch64")]
-extern crate aarch64;
-#[cfg(target_arch = "x86_64")]
-extern crate x86;
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;

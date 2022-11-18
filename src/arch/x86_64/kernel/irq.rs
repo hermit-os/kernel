@@ -1,5 +1,5 @@
 use alloc::collections::BTreeMap;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use core::arch::asm;
 use core::fmt;
 
@@ -7,7 +7,6 @@ use x86::bits64::rflags::{self, RFlags};
 use x86::irq::PageFaultError;
 use x86::{controlregs, irq};
 
-use crate::alloc::string::ToString;
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::{apic, idt, processor};
 use crate::scheduler;

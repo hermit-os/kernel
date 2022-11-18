@@ -1,6 +1,7 @@
+use x86::io::*;
+
 use crate::arch::x86_64::kernel::idt;
 use crate::arch::x86_64::kernel::irq::ExceptionStackFrame;
-use crate::x86::io::*;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;
 const PIC1_DATA_PORT: u16 = 0x21;

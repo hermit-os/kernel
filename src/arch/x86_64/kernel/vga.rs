@@ -1,6 +1,7 @@
+use x86::io::*;
+
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
 use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
-use crate::x86::io::*;
 
 const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
 const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
