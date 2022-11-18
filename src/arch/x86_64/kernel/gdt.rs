@@ -2,16 +2,17 @@ use alloc::boxed::Box;
 use core::mem;
 use core::sync::atomic::Ordering;
 
+use x86::bits64::segmentation::*;
+use x86::bits64::task::*;
+use x86::dtables::{self, DescriptorTablePointer};
+use x86::segmentation::*;
+use x86::task::*;
+use x86::Ring;
+
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::kernel::percore::*;
 use crate::config::*;
-use crate::x86::bits64::segmentation::*;
-use crate::x86::bits64::task::*;
-use crate::x86::dtables::{self, DescriptorTablePointer};
-use crate::x86::segmentation::*;
-use crate::x86::task::*;
-use crate::x86::Ring;
 
 pub const GDT_NULL: u16 = 0;
 pub const GDT_KERNEL_CODE: u16 = 1;

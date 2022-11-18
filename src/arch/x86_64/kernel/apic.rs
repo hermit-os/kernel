@@ -11,6 +11,9 @@ use core::{cmp, fmt, mem, u32};
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::{idt, irq, processor};
 use crossbeam_utils::CachePadded;
+#[cfg(feature = "smp")]
+use x86::controlregs::*;
+use x86::msr::*;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -23,9 +26,6 @@ use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
 use crate::collections::irqsave;
 use crate::config::*;
 use crate::scheduler::CoreId;
-#[cfg(feature = "smp")]
-use crate::x86::controlregs::*;
-use crate::x86::msr::*;
 use crate::{arch, env, mm, scheduler};
 
 const MP_FLT_SIGNATURE: u32 = 0x5f504d5f;
