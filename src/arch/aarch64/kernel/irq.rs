@@ -43,43 +43,6 @@ pub fn disable() {
 	}
 }
 
-/// Disable IRQs (nested)
-///
-/// Disable IRQs when unsure if IRQs were enabled at all.
-/// This function together with nested_enable can be used
-/// in situations when interrupts shouldn't be activated if they
-/// were not activated before calling this function.
-#[inline]
-pub fn nested_disable() -> bool {
-	let flags: usize;
-	unsafe {
-		asm!(
-			"mrs {}, daif",
-			out(reg) flags,
-			options(nostack, nomem),
-		);
-	}
-
-	let mut was_enabled = true;
-	if flags & (IRQ_FLAG_A | IRQ_FLAG_I | IRQ_FLAG_F) > 0 {
-		was_enabled = false;
-	}
-
-	disable();
-	was_enabled
-}
-
-/// Enable IRQs (nested)
-///
-/// Can be used in conjunction with nested_disable() to only enable
-/// interrupts again if they were enabled before.
-#[inline]
-pub fn nested_enable(was_enabled: bool) {
-	if was_enabled {
-		enable();
-	}
-}
-
 #[no_mangle]
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	info!("Install handler for interrupt {}", irq_number);
