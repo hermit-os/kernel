@@ -74,7 +74,6 @@ hashbrown = { version = "0.13", default-features = false }
 hermit-entry = { version = "0.9", features = ["kernel"] }
 hermit-sync = "0.1.0"
 include-transformed = { version = "0.2", optional = true }
-lock_api = "0.4"
 log = { version = "0.4", default-features = false }
 num = { version = "0.4", default-features = false }
 num-derive = { version = "0.3", optional = true }

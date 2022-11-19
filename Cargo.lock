@@ -227,7 +227,6 @@ dependencies = [
  "hermit-entry",
  "hermit-sync",
  "include-transformed",
- "lock_api",
  "log",
  "multiboot",
  "num",
