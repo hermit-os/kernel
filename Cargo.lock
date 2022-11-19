@@ -12,6 +12,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aarch64-cpu"
+version = "9.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3aceb88e55ba626a5479279268d009a92d9d00eacce0de1b8c236c7ad31b7225"
+dependencies = [
+ "tock-registers 0.8.1",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -70,7 +79,7 @@ version = "7.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bdecfbb28672ad3664e71ae05a398a52df430d86d660691501b28968cc4467e6"
 dependencies = [
- "tock-registers",
+ "tock-registers 0.7.0",
 ]
 
 [[package]]
@@ -117,6 +126,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "generic_once_cell"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e75ad6783e1fcc13a2ea5af60711f631506b155fdecaaeb6d59ce087a36d850"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -151,6 +169,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6decc531b731ff869007d027547adc48446591650c065dd04c98bd65d420c3e5"
 dependencies = [
  "time",
+]
+
+[[package]]
+name = "hermit-sync"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c9b3a836d168ff283be2421bb51b8dd8197f9f44a5be14a346c879d7e62fe2b"
+dependencies = [
+ "aarch64-cpu",
+ "crossbeam-utils",
+ "generic_once_cell",
+ "lock_api",
+ "tock-registers 0.8.1",
+ "x86_64",
 ]
 
 [[package]]
@@ -193,6 +225,7 @@ dependencies = [
  "futures-lite",
  "hashbrown",
  "hermit-entry",
+ "hermit-sync",
  "include-transformed",
  "lock_api",
  "log",
@@ -609,6 +642,12 @@ name = "tock-registers"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ee8fba06c1f4d0b396ef61a54530bb6b28f0dc61c38bc8bc5a5a48161e6282e"
+
+[[package]]
+name = "tock-registers"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "696941a0aee7e276a165a978b37918fd5d22c55c3d6bda197813070ca9c0f21c"
 
 [[package]]
 name = "unicode-ident"
