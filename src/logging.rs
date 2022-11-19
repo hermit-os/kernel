@@ -1,4 +1,4 @@
-use log::{set_max_level, LevelFilter, Metadata, Record};
+use log::{LevelFilter, Metadata, Record};
 
 /// Data structure to filter kernel messages
 struct KernelLogger;
@@ -37,7 +37,7 @@ pub unsafe fn init() {
 		Some("Info") => LevelFilter::Info,
 		_ => LevelFilter::Info,
 	};
-	set_max_level(max_level);
+	log::set_max_level(max_level);
 }
 
 macro_rules! infoheader {
