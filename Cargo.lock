@@ -232,7 +232,6 @@ dependencies = [
  "num",
  "num-derive",
  "num-traits",
- "once_cell",
  "pci-ids",
  "qemu-exit",
  "scopeguard",
