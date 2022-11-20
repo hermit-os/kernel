@@ -213,6 +213,11 @@ impl flags::Clippy {
 			// 	.run()?;
 		}
 
+		cmd!(sh, "cargo clippy")
+			.arg("--manifest-path=hermit-builtins/Cargo.toml")
+			.arg("--target=x86_64-unknown-none")
+			.run()?;
+
 		cmd!(sh, "cargo clippy --package xtask").run()?;
 
 		Ok(())
