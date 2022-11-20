@@ -1,16 +1,17 @@
 use alloc::boxed::Box;
 
+use hermit_sync::{InterruptTicketMutex, InterruptTicketMutexGuard, TicketMutex, TicketMutexGuard};
+
 use crate::errno::*;
-use crate::synch::spinlock::*;
 
 pub struct SpinlockContainer<'a> {
-	lock: Spinlock<()>,
-	guard: Option<SpinlockGuard<'a, ()>>,
+	lock: TicketMutex<()>,
+	guard: Option<TicketMutexGuard<'a, ()>>,
 }
 
 pub struct SpinlockIrqSaveContainer<'a> {
-	lock: SpinlockIrqSave<()>,
-	guard: Option<SpinlockIrqSaveGuard<'a, ()>>,
+	lock: InterruptTicketMutex<()>,
+	guard: Option<InterruptTicketMutexGuard<'a, ()>>,
 }
 
 extern "C" fn __sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 {
@@ -19,7 +20,7 @@ extern "C" fn __sys_spinlock_init(lock: *mut *mut SpinlockContainer<'_>) -> i32 
 	}
 
 	let boxed_container = Box::new(SpinlockContainer {
-		lock: Spinlock::new(()),
+		lock: TicketMutex::new(()),
 		guard: None,
 	});
 	unsafe {
@@ -94,7 +95,7 @@ extern "C" fn __sys_spinlock_irqsave_init(lock: *mut *mut SpinlockIrqSaveContain
 	}
 
 	let boxed_container = Box::new(SpinlockIrqSaveContainer {
-		lock: SpinlockIrqSave::new(()),
+		lock: InterruptTicketMutex::new(()),
 		guard: None,
 	});
 	unsafe {

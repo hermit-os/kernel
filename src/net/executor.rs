@@ -7,13 +7,13 @@ use core::task::{Context, Poll};
 
 use async_task::{Runnable, Task};
 use futures_lite::pin;
+use hermit_sync::{InterruptTicketMutex, TicketMutex};
 use smoltcp::time::{Duration, Instant};
 
 use crate::core_scheduler;
 use crate::scheduler::task::TaskHandle;
-use crate::synch::spinlock::{Spinlock, SpinlockIrqSave};
 
-static QUEUE: Spinlock<Vec<Runnable>> = Spinlock::new(Vec::new());
+static QUEUE: TicketMutex<Vec<Runnable>> = TicketMutex::new(Vec::new());
 
 #[inline]
 fn network_delay(timestamp: Instant) -> Option<Duration> {
@@ -150,7 +150,7 @@ where
 
 /// set driver in polling mode and threads will not be blocked
 fn set_polling_mode(value: bool) {
-	static IN_POLLING_MODE: SpinlockIrqSave<usize> = SpinlockIrqSave::new(0);
+	static IN_POLLING_MODE: InterruptTicketMutex<usize> = InterruptTicketMutex::new(0);
 
 	let mut guard = IN_POLLING_MODE.lock();
 

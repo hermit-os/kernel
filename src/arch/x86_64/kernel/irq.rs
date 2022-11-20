@@ -3,15 +3,16 @@ use alloc::string::{String, ToString};
 use core::arch::asm;
 use core::fmt;
 
+use hermit_sync::InterruptTicketMutex;
 use x86::irq::PageFaultError;
 use x86::{controlregs, irq};
 
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::{apic, idt, processor};
 use crate::scheduler;
-use crate::synch::spinlock::SpinlockIrqSave;
 
-static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
+static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs

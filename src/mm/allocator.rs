@@ -12,9 +12,10 @@ use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{cmp, mem, ptr};
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
-use crate::synch::spinlock::*;
 use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
 /// Size of the preallocated space for the Bootstrap Allocator.
@@ -175,12 +176,12 @@ impl Heap {
 	}
 }
 
-pub struct LockedHeap(SpinlockIrqSave<Heap>);
+pub struct LockedHeap(InterruptTicketMutex<Heap>);
 
 impl LockedHeap {
 	/// Creates an empty heap. All allocate calls will return `None`.
 	pub const fn empty() -> LockedHeap {
-		LockedHeap(SpinlockIrqSave::new(Heap::empty()))
+		LockedHeap(InterruptTicketMutex::new(Heap::empty()))
 	}
 
 	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
@@ -188,7 +189,7 @@ impl LockedHeap {
 	/// anything else. This function is unsafe because it can cause undefined behavior if the
 	/// given address is invalid.
 	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedHeap {
-		LockedHeap(SpinlockIrqSave::new(Heap {
+		LockedHeap(InterruptTicketMutex::new(Heap {
 			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
 			index: 0,
 			bottom: heap_bottom,
@@ -199,9 +200,9 @@ impl LockedHeap {
 }
 
 impl Deref for LockedHeap {
-	type Target = SpinlockIrqSave<Heap>;
+	type Target = InterruptTicketMutex<Heap>;
 
-	fn deref(&self) -> &SpinlockIrqSave<Heap> {
+	fn deref(&self) -> &InterruptTicketMutex<Heap> {
 		&self.0
 	}
 }

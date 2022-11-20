@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::{fmt, u32, u8};
 
-use hermit_sync::without_interrupts;
+use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use num_derive::{FromPrimitive, ToPrimitive};
 use x86::io::*;
 
@@ -12,7 +12,6 @@ use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::depr::virtio_fs::VirtioFsDriver;
 use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 // TODO: should these be pub? currently needed since used in virtio.rs maybe use getter methods to be more flexible.
 pub const PCI_MAX_BUS_NUMBER: u8 = 32;
@@ -120,13 +119,13 @@ pub struct MemoryBar {
 
 #[allow(clippy::large_enum_variant)]
 pub enum PciDriver<'a> {
-	VirtioFs(SpinlockIrqSave<VirtioFsDriver<'a>>),
-	VirtioNet(SpinlockIrqSave<VirtioNetDriver>),
-	RTL8139Net(SpinlockIrqSave<RTL8139Driver>),
+	VirtioFs(InterruptTicketMutex<VirtioFsDriver<'a>>),
+	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
+	RTL8139Net(InterruptTicketMutex<RTL8139Driver>),
 }
 
 impl<'a> PciDriver<'a> {
-	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<dyn NetworkInterface>> {
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<dyn NetworkInterface>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
 			Self::RTL8139Net(drv) => Some(drv),
@@ -134,7 +133,7 @@ impl<'a> PciDriver<'a> {
 		}
 	}
 
-	fn get_filesystem_driver(&self) -> Option<&SpinlockIrqSave<VirtioFsDriver<'a>>> {
+	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver<'a>>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
 			_ => None,
@@ -148,11 +147,11 @@ pub fn register_driver(drv: PciDriver<'static>) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<dyn NetworkInterface>> {
+pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkInterface>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
-pub fn get_filesystem_driver() -> Option<&'static SpinlockIrqSave<VirtioFsDriver<'static>>> {
+pub fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver<'static>>> {
 	unsafe {
 		PCI_DRIVERS
 			.iter()
@@ -490,7 +489,7 @@ pub fn init_drivers() {
 
 			if let Ok(VirtioDriver::Network(drv)) = pci_virtio::init_device(adapter) {
 				nic_available = true;
-				register_driver(PciDriver::VirtioNet(SpinlockIrqSave::new(drv)))
+				register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 			}
 		}
 
@@ -508,7 +507,7 @@ pub fn init_drivers() {
 				);
 
 				if let Ok(drv) = rtl8139::init_device(adapter) {
-					register_driver(PciDriver::RTL8139Net(SpinlockIrqSave::new(drv)))
+					register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
 				}
 			}
 		}

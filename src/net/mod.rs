@@ -8,6 +8,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use futures_lite::future;
+use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{self, SocketHandle};
 use smoltcp::phy::Device;
 #[cfg(feature = "trace")]
@@ -23,7 +24,6 @@ use smoltcp::Error;
 
 use crate::net::device::HermitNet;
 use crate::net::executor::spawn;
-use crate::synch::spinlock::SpinlockIrqSave;
 use crate::{arch, DEFAULT_KEEP_ALIVE_INTERVAL};
 
 pub(crate) enum NetworkState {
@@ -44,7 +44,8 @@ impl NetworkState {
 pub(crate) type Handle = SocketHandle;
 
 static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(0);
-pub(crate) static NIC: SpinlockIrqSave<NetworkState> = SpinlockIrqSave::new(NetworkState::Missing);
+pub(crate) static NIC: InterruptTicketMutex<NetworkState> =
+	InterruptTicketMutex::new(NetworkState::Missing);
 
 pub(crate) struct NetworkInterface<T: for<'a> Device<'a>> {
 	#[cfg(feature = "trace")]

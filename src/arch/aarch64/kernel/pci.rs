@@ -1,7 +1,7 @@
 use alloc::rc::Rc;
 use core::cell::RefCell;
 
-use crate::synch::spinlock::SpinlockIrqSave;
+use hermit_sync::InterruptTicketMutex;
 
 // Currently, onbly a dummy implementation
 pub struct VirtioNetDriver;
@@ -40,6 +40,6 @@ impl VirtioNetDriver {
 	pub fn rx_buffer_consumed(&mut self) {}
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<VirtioNetDriver>> {
+pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
 	None
 }

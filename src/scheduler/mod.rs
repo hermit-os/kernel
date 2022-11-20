@@ -6,7 +6,7 @@ use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
-use hermit_sync::without_interrupts;
+use hermit_sync::{without_interrupts, *};
 
 use crate::arch;
 use crate::arch::irq;
@@ -14,7 +14,6 @@ use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
-use crate::synch::spinlock::*;
 
 pub mod task;
 
@@ -22,10 +21,11 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
 /// Map between Task ID and Queue of waiting tasks
-static WAITING_TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
-	SpinlockIrqSave::new(BTreeMap::new());
+static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 /// Map between Task ID and TaskHandle
-static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
+static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -71,7 +71,7 @@ pub struct PerCoreScheduler {
 	blocked_tasks: BlockedTaskQueue,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
-	input: SpinlockIrqSave<SchedulerInput>,
+	input: InterruptTicketMutex<SchedulerInput>,
 }
 
 impl PerCoreScheduler {
@@ -606,7 +606,7 @@ pub fn add_current_core() {
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
 		#[cfg(feature = "smp")]
-		input: SpinlockIrqSave::new(SchedulerInput::new()),
+		input: InterruptTicketMutex::new(SchedulerInput::new()),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);

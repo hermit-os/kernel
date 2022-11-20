@@ -1,7 +1,8 @@
-use crate::arch;
-use crate::synch::spinlock::Spinlock;
+use hermit_sync::TicketMutex;
 
-static PARK_MILLER_LEHMER_SEED: Spinlock<u32> = Spinlock::new(0);
+use crate::arch;
+
+static PARK_MILLER_LEHMER_SEED: TicketMutex<u32> = TicketMutex::new(0);
 const RAND_MAX: u64 = 2_147_483_647;
 
 fn generate_park_miller_lehmer_random_number() -> u32 {

@@ -4,6 +4,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
+use hermit_sync::TicketMutex;
+
 /// Design:
 /// - want to support different backends. One of them virtiofs.
 /// - want to support multiple mounted filesystems at once.
@@ -40,10 +42,9 @@ use core::ops::Deref;
 /// TODO:
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
-use crate::synch::spinlock::Spinlock;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
-pub static FILESYSTEM: Spinlock<Filesystem> = Spinlock::new(Filesystem::new());
+pub static FILESYSTEM: TicketMutex<Filesystem> = TicketMutex::new(Filesystem::new());
 
 pub struct Filesystem {
 	// Keep track of mount-points
