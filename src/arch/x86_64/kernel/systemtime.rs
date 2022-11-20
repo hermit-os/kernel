@@ -2,11 +2,11 @@ use core::hint::spin_loop;
 use core::num::NonZeroU64;
 
 use hermit_entry::boot_info::PlatformInfo;
+use hermit_sync::without_interrupts;
 use time::OffsetDateTime;
 use x86::io::*;
 
 use crate::arch::x86_64::kernel::{boot_info, processor};
-use crate::collections::irqsave;
 
 const CMOS_COMMAND_PORT: u16 = 0x70;
 const CMOS_DATA_PORT: u16 = 0x71;
@@ -182,7 +182,7 @@ pub fn init() {
 		PlatformInfo::Multiboot { .. } => {
 			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 			// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
-			let current_time = irqsave(|| Rtc::new().get_microseconds_since_epoch());
+			let current_time = without_interrupts(|| Rtc::new().get_microseconds_since_epoch());
 			let boot_time = current_time - processor::get_timer_ticks();
 			OffsetDateTime::from_unix_timestamp_nanos(boot_time as i128 * 1000).unwrap()
 		}

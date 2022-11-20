@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 use core::{fmt, u32, u8};
 
+use hermit_sync::without_interrupts;
 use num_derive::{FromPrimitive, ToPrimitive};
 use x86::io::*;
 
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
-use crate::collections::irqsave;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
@@ -477,7 +477,7 @@ pub fn init_drivers() {
 	let mut nic_available = false;
 
 	// virtio: 4.1.2 PCI Device Discovery
-	irqsave(|| {
+	without_interrupts(|| {
 		for adapter in unsafe {
 			PCI_ADAPTERS
 				.iter()

@@ -1,11 +1,12 @@
 use alloc::vec::Vec;
 use core::str;
 
+use hermit_sync::without_interrupts;
+
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, PhysAddr};
-use crate::collections::irqsave;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
@@ -127,7 +128,7 @@ pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<dyn NetworkInterf
 
 pub fn init_drivers() {
 	// virtio: MMIO Device Discovery
-	irqsave(|| {
+	without_interrupts(|| {
 		if let Ok(mmio) = detect_network() {
 			warn!(
 				"Found MMIO device, but we guess the interrupt number {}!",

@@ -11,6 +11,7 @@ use core::{cmp, fmt, mem, u32};
 use arch::x86_64::kernel::percore::*;
 use arch::x86_64::kernel::{idt, irq, processor};
 use crossbeam_utils::CachePadded;
+use hermit_sync::without_interrupts;
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
@@ -23,7 +24,6 @@ use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, virtualmem, PhysAddr, VirtAddr};
-use crate::collections::irqsave;
 use crate::config::*;
 use crate::scheduler::CoreId;
 use crate::{arch, env, mm, scheduler};
@@ -719,7 +719,7 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 }
 
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
-	irqsave(|| {
+	without_interrupts(|| {
 		__set_oneshot_timer(wakeup_time);
 	});
 }
@@ -889,7 +889,7 @@ pub fn ipi_tlb_flush() {
 		}
 
 		// Send an IPI with our TLB Flush interrupt number to all other CPUs.
-		irqsave(|| {
+		without_interrupts(|| {
 			for (core_id_to_interrupt, &apic_id) in apic_ids.iter().enumerate() {
 				if core_id_to_interrupt != core_id.try_into().unwrap() {
 					let destination = u64::from(apic_id) << 32;
@@ -910,7 +910,7 @@ pub fn ipi_tlb_flush() {
 pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(feature = "smp")]
 	if core_id_to_wakeup != core_id() {
-		irqsave(|| {
+		without_interrupts(|| {
 			let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
 			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
 			let destination = u64::from(local_apic_id) << 32;
