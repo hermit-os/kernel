@@ -78,6 +78,10 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
+      - name: Install QEMU, NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install qemu-system-x86 nasm
       - uses: actions/checkout@v3
       - name: Apply rust-toolchain.toml
         run: rustup show
@@ -92,10 +96,9 @@ jobs:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
       - name: Integration tests
-        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=../rusty-loader-x86_64
+        run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=rusty-loader-x86_64
         env:
-          RUSTFLAGS: -Awarnings
-        continue-on-error: true
+          RUSTFLAGS:
 
   run-x86_64:
     name: Run RustyHermit (x86_64)
