@@ -569,8 +569,8 @@ fn get_tid() -> TaskId {
 }
 
 #[inline]
-pub fn abort() {
-	core_scheduler().exit(-1);
+pub fn abort() -> ! {
+	core_scheduler().exit(-1)
 }
 
 /// Add a per-core scheduler for the current core.
