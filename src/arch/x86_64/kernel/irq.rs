@@ -4,7 +4,7 @@ use core::arch::asm;
 
 use hermit_sync::InterruptTicketMutex;
 use x86::controlregs;
-use x86::irq::PageFaultError;
+use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, idt, processor};
@@ -362,16 +362,15 @@ extern "x86-interrupt" fn general_protection_exception(
 
 pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
-	error_code: u64,
+	error_code: PageFaultErrorCode,
 ) {
 	let virtual_address = unsafe { controlregs::cr2() };
 
 	// Anything else is an error!
-	let pferror = PageFaultError::from_bits_truncate(error_code as u32);
 	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
 	error!(
-		"virtual_address = {:#X}, page fault error = {}",
-		virtual_address, pferror
+		"virtual_address = {:#X}, page fault error = {:?}",
+		virtual_address, error_code
 	);
 	error!(
 		"fs = {:#X}, gs = {:#X}",
