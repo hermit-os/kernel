@@ -3,7 +3,7 @@ use alloc::string::{String, ToString};
 use core::arch::asm;
 
 use hermit_sync::InterruptTicketMutex;
-use x86::controlregs;
+use x86_64::registers::control::Cr2;
 use x86_64::structures::idt::PageFaultErrorCode;
 
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
@@ -364,25 +364,12 @@ pub extern "x86-interrupt" fn page_fault_handler(
 	stack_frame: ExceptionStackFrame,
 	error_code: PageFaultErrorCode,
 ) {
-	let virtual_address = unsafe { controlregs::cr2() };
-
-	// Anything else is an error!
-	error!("Page Fault (#PF) Exception: {:#?}", stack_frame);
-	error!(
-		"virtual_address = {:#X}, page fault error = {:?}",
-		virtual_address, error_code
-	);
-	error!(
-		"fs = {:#X}, gs = {:#X}",
-		processor::readfs(),
-		processor::readgs()
-	);
-
-	// clear cr2 to signalize that the pagefault is solved by the pagefault handler
-	unsafe {
-		controlregs::cr2_write(0);
-	}
-
+	error!("Page fault (#PF)!");
+	error!("page_fault_linear_address = {:p}", Cr2::read());
+	error!("error_code = {error_code:?}");
+	error!("fs = {:#X}", processor::readfs());
+	error!("gs = {:#X}", processor::readgs());
+	error!("stack_frame = {stack_frame:#?}");
 	scheduler::abort();
 }
 
