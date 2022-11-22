@@ -304,12 +304,12 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: Exception
 extern "x86-interrupt" fn double_fault_exception(
 	stack_frame: ExceptionStackFrame,
 	error_code: u64,
-) {
+) -> ! {
 	error!(
 		"Double Fault (#DF) Exception: {:#?}, error {:#X}",
 		stack_frame, error_code
 	);
-	scheduler::abort();
+	scheduler::abort()
 }
 
 extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: ExceptionStackFrame) {
@@ -320,12 +320,15 @@ extern "x86-interrupt" fn coprocessor_segment_overrun_exception(stack_frame: Exc
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn invalid_tss_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn invalid_tss_exception(stack_frame: ExceptionStackFrame, _code: u64) {
 	error!("Invalid TSS (#TS) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn segment_not_present_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn segment_not_present_exception(
+	stack_frame: ExceptionStackFrame,
+	_code: u64,
+) {
 	error!("Segment Not Present (#NP) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
@@ -389,14 +392,14 @@ extern "x86-interrupt" fn floating_point_exception(stack_frame: ExceptionStackFr
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn alignment_check_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn alignment_check_exception(stack_frame: ExceptionStackFrame, _code: u64) {
 	error!("Alignment Check (#AC) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn machine_check_exception(stack_frame: ExceptionStackFrame) {
+extern "x86-interrupt" fn machine_check_exception(stack_frame: ExceptionStackFrame) -> ! {
 	error!("Machine Check (#MC) Exception: {:#?}", stack_frame);
-	scheduler::abort();
+	scheduler::abort()
 }
 
 extern "x86-interrupt" fn simd_floating_point_exception(stack_frame: ExceptionStackFrame) {
