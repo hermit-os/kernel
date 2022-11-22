@@ -91,6 +91,7 @@ impl IdtEntry {
 pub const IDT_ENTRIES: usize = 256;
 
 #[repr(align(4096))]
+#[repr(C)]
 struct IdtArray {
 	entries: [IdtEntry; IDT_ENTRIES],
 }
