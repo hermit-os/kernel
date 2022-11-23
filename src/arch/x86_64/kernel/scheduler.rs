@@ -8,7 +8,7 @@ use x86_64::structures::idt::InterruptDescriptorTable;
 
 use super::idt::IDT;
 use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::kernel::{apic, irq};
+use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
@@ -373,7 +373,7 @@ impl TaskFrame for Task {
 	}
 }
 
-extern "x86-interrupt" fn timer_handler(_stack_frame: irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER.into());
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
@@ -383,5 +383,5 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: irq::ExceptionStackFrame) 
 pub fn install_timer_handler() {
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
 	idt[apic::TIMER_INTERRUPT_NUMBER as usize].set_handler_fn(timer_handler);
-	irq::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
+	interrupts::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
 }

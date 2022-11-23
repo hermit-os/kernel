@@ -9,7 +9,7 @@ use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 
 use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::{irq, processor};
+use arch::x86_64::kernel::{interrupts, processor};
 use crossbeam_utils::CachePadded;
 use hermit_sync::without_interrupts;
 #[cfg(feature = "smp")]
@@ -20,7 +20,7 @@ use x86_64::structures::idt::InterruptDescriptorTable;
 use super::idt::IDT;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::irq::IrqStatistics;
+use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
@@ -206,7 +206,7 @@ impl fmt::Display for IoApicRecord {
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
 	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
 	unsafe {
@@ -215,7 +215,7 @@ extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: irq::ExceptionStackFra
 	eoi();
 }
 
-extern "x86-interrupt" fn error_interrupt_handler(stack_frame: irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn error_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	error!("APIC LVT Error Interrupt");
 	error!("ESR: {:#X}", local_apic_read(IA32_X2APIC_ESR));
 	error!("{:#?}", stack_frame);
@@ -223,13 +223,13 @@ extern "x86-interrupt" fn error_interrupt_handler(stack_frame: irq::ExceptionSta
 	scheduler::abort();
 }
 
-extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: interrupts::ExceptionStackFrame) {
 	error!("Spurious Interrupt: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
 #[cfg(feature = "smp")]
-extern "x86-interrupt" fn wakeup_handler(_stack_frame: irq::ExceptionStackFrame) {
+extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
 	let core_scheduler = core_scheduler();
@@ -555,9 +555,9 @@ pub fn init() {
 	#[cfg(feature = "smp")]
 	{
 		idt[TLB_FLUSH_INTERRUPT_NUMBER as usize].set_handler_fn(tlb_flush_handler);
-		irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
+		interrupts::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
 		idt[WAKEUP_INTERRUPT_NUMBER as usize].set_handler_fn(wakeup_handler);
-		irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+		interrupts::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
 	}
 
 	// Initialize interrupt handling over APIC.

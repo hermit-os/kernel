@@ -19,7 +19,7 @@ use x86::msr::*;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{boot_info, irq, pic, pit};
+use crate::arch::x86_64::kernel::{boot_info, interrupts, pic, pit};
 use crate::env;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -333,7 +333,7 @@ impl CpuFrequency {
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
-		_stack_frame: irq::ExceptionStackFrame,
+		_stack_frame: interrupts::ExceptionStackFrame,
 	) {
 		unsafe {
 			MEASUREMENT_TIMER_TICKS += 1;
@@ -371,7 +371,7 @@ impl CpuFrequency {
 		pit::init(measurement_frequency);
 
 		// we need a timer interrupt to meature the frequency
-		irq::enable();
+		interrupts::enable();
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
@@ -393,7 +393,7 @@ impl CpuFrequency {
 			spin_loop();
 		}
 		.ok_or_else(|| {
-			irq::disable();
+			interrupts::disable();
 			pit::deinit();
 		})?;
 
@@ -412,7 +412,7 @@ impl CpuFrequency {
 		let end = get_timestamp();
 
 		// we don't longer need a timer interrupt
-		irq::disable();
+		interrupts::disable();
 
 		// Deinitialize the PIT again.
 		// Now we can calculate our CPU frequency and implement a constant frequency tick counter

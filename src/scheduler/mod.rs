@@ -9,7 +9,7 @@ use crossbeam_utils::Backoff;
 use hermit_sync::{without_interrupts, *};
 
 use crate::arch;
-use crate::arch::irq;
+use crate::arch::interrupts;
 use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
@@ -430,7 +430,7 @@ impl PerCoreScheduler {
 		let backoff = Backoff::new();
 
 		loop {
-			irq::disable();
+			interrupts::disable();
 			if !self.scheduler() {
 				backoff.reset()
 			}
@@ -442,13 +442,13 @@ impl PerCoreScheduler {
 			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
 			if !wakeup_tasks {
 				if backoff.is_completed() {
-					irq::enable_and_wait();
+					interrupts::enable_and_wait();
 				} else {
-					irq::enable();
+					interrupts::enable();
 					backoff.snooze();
 				}
 			} else {
-				irq::enable();
+				interrupts::enable();
 			}
 		}
 	}

@@ -7,7 +7,7 @@ use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
-use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
+use crate::arch::x86_64::kernel::interrupts::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
 use crate::env;
@@ -20,7 +20,7 @@ pub mod apic;
 pub mod fuse;
 pub mod gdt;
 pub mod idt;
-pub mod irq;
+pub mod interrupts;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
 #[cfg(feature = "pci")]
@@ -280,7 +280,7 @@ pub fn boot_processor_init() {
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
-	irq::install();
+	interrupts::install();
 	systemtime::init();
 
 	if is_uhyve_with_pci() || !is_uhyve() {
@@ -297,7 +297,7 @@ pub fn boot_processor_init() {
 	apic::init();
 	scheduler::install_timer_handler();
 	finish_processor_init();
-	irq::enable();
+	interrupts::enable();
 }
 
 /// Boots all available Application Processors on bare-metal or QEMU.
@@ -321,7 +321,7 @@ pub fn application_processor_init() {
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
-	irq::enable();
+	interrupts::enable();
 	finish_processor_init();
 }
 

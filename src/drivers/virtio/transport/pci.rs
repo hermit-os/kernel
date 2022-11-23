@@ -13,7 +13,7 @@ use crate::arch::kernel::pci as kernel_pci;
 use crate::arch::kernel::pci::error::PciError;
 use crate::arch::kernel::pci::{PciAdapter, PciDriver};
 use crate::arch::mm::PhysAddr;
-use crate::arch::x86_64::kernel::irq::*;
+use crate::arch::x86_64::kernel::interrupts::*;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;

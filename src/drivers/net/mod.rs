@@ -7,7 +7,7 @@ pub mod virtio_net;
 pub mod virtio_pci;
 
 use crate::arch::kernel::apic;
-use crate::arch::kernel::irq::ExceptionStackFrame;
+use crate::arch::kernel::interrupts::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]

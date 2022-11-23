@@ -7,7 +7,7 @@ pub mod x86_64;
 
 // Export our platform-specific modules.
 #[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::kernel::irq;
+pub use crate::arch::aarch64::kernel::interrupts;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::percore;
 #[cfg(target_arch = "aarch64")]
@@ -36,7 +36,7 @@ pub use crate::arch::x86_64::kernel::application_processor_init;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch = "x86_64")]
-pub use crate::arch::x86_64::kernel::irq;
+pub use crate::arch::x86_64::kernel::interrupts;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::percore;
 #[cfg(target_arch = "x86_64")]
