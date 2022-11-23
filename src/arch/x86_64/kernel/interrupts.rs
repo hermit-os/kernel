@@ -9,7 +9,7 @@ use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
 
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
-use crate::scheduler;
+use crate::scheduler::{self, CoreId};
 
 static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
 	InterruptTicketMutex::new(BTreeMap::new());
@@ -267,6 +267,9 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 	scheduler::abort();
 }
 
+/// Map between Core ID and per-core scheduler
+pub static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
+
 #[derive(Clone, Copy)]
 #[repr(align(64))]
 pub struct IrqStatistics {
@@ -280,5 +283,25 @@ impl IrqStatistics {
 
 	pub fn inc(&mut self, pos: usize) {
 		self.counters[pos] += 1;
+	}
+}
+
+pub fn print_statistics() {
+	info!("Number of interrupts");
+	unsafe {
+		for (core_id, irg_statistics) in IRQ_COUNTERS.iter() {
+			for (i, counter) in irg_statistics.counters.iter().enumerate() {
+				if *counter > 0 {
+					match get_irq_name(i.try_into().unwrap()) {
+						Some(name) => {
+							info!("[{}][{}]: {}", core_id, name, *counter);
+						}
+						_ => {
+							info!("[{}][{}]: {}", core_id, i, *counter);
+						}
+					}
+				}
+			}
+		}
 	}
 }

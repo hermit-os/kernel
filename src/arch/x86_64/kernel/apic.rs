@@ -17,11 +17,11 @@ use x86::controlregs::*;
 use x86::msr::*;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::IDT;
+use super::interrupts::{IDT, IRQ_COUNTERS};
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
-use crate::arch::x86_64::kernel::{CURRENT_STACK_ADDRESS, IRQ_COUNTERS};
+use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
