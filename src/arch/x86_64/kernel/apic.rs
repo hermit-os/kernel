@@ -9,13 +9,15 @@ use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 
 use arch::x86_64::kernel::percore::*;
-use arch::x86_64::kernel::{idt, irq, processor};
+use arch::x86_64::kernel::{irq, processor};
 use crossbeam_utils::CachePadded;
 use hermit_sync::without_interrupts;
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
+use x86_64::structures::idt::InterruptDescriptorTable;
 
+use super::idt::IDT;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::irq::IrqStatistics;
@@ -547,20 +549,16 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
+	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	idt[ERROR_INTERRUPT_NUMBER as usize].set_handler_fn(error_interrupt_handler);
+	idt[SPURIOUS_INTERRUPT_NUMBER as usize].set_handler_fn(spurious_interrupt_handler);
 	#[cfg(feature = "smp")]
-	idt::set_gate(TLB_FLUSH_INTERRUPT_NUMBER, tlb_flush_handler as usize, 0);
-	#[cfg(feature = "smp")]
-	irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
-	idt::set_gate(ERROR_INTERRUPT_NUMBER, error_interrupt_handler as usize, 0);
-	idt::set_gate(
-		SPURIOUS_INTERRUPT_NUMBER,
-		spurious_interrupt_handler as usize,
-		0,
-	);
-	#[cfg(feature = "smp")]
-	idt::set_gate(WAKEUP_INTERRUPT_NUMBER, wakeup_handler as usize, 0);
-	#[cfg(feature = "smp")]
-	irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+	{
+		idt[TLB_FLUSH_INTERRUPT_NUMBER as usize].set_handler_fn(tlb_flush_handler);
+		irq::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
+		idt[WAKEUP_INTERRUPT_NUMBER as usize].set_handler_fn(wakeup_handler);
+		irq::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+	}
 
 	// Initialize interrupt handling over APIC.
 	// All interrupts of the PIC have already been masked, so it doesn't need to be disabled again.

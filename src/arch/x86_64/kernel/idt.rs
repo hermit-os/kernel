@@ -1,11 +1,7 @@
 use core::sync::atomic::{AtomicBool, Ordering};
 
-use x86::bits64::paging::VAddr;
 use x86::dtables::{self, DescriptorTablePointer};
-use x86::segmentation::{SegmentSelector, SystemDescriptorTypes64};
-use x86::Ring;
-
-use crate::arch::x86_64::kernel::gdt;
+use x86::segmentation::SegmentSelector;
 
 /// An interrupt gate descriptor.
 ///
@@ -28,21 +24,6 @@ struct IdtEntry {
 	pub reserved1: u16,
 }
 
-enum Type {
-	InterruptGate,
-	#[allow(dead_code)]
-	TrapGate,
-}
-
-impl Type {
-	pub fn pack(self) -> u8 {
-		match self {
-			Type::InterruptGate => SystemDescriptorTypes64::InterruptGate as u8,
-			Type::TrapGate => SystemDescriptorTypes64::TrapGate as u8,
-		}
-	}
-}
-
 impl IdtEntry {
 	/// A "missing" IdtEntry.
 	///
@@ -53,35 +34,11 @@ impl IdtEntry {
 		base_lo: 0,
 		selector: SegmentSelector::from_raw(0),
 		ist_index: 0,
-		flags: 0,
+		// InterruptGate
+		flags: 0b1110,
 		base_hi: 0,
 		reserved1: 0,
 	};
-
-	/// Create a new IdtEntry pointing at `handler`, which must be a function
-	/// with interrupt calling conventions.  (This must be currently defined in
-	/// assembly language.)  The `gdt_code_selector` value must be the offset of
-	/// code segment entry in the GDT.
-	///
-	/// The "Present" flag set, which is the most common case.  If you need
-	/// something else, you can construct it manually.
-	pub fn new(
-		handler: VAddr,
-		gdt_code_selector: SegmentSelector,
-		dpl: Ring,
-		ty: Type,
-		ist_index: u8,
-	) -> IdtEntry {
-		assert!(ist_index < 0b1000);
-		IdtEntry {
-			base_lo: ((handler.as_usize() as u64) & 0xFFFF) as u16,
-			base_hi: handler.as_usize() as u64 >> 16,
-			selector: gdt_code_selector,
-			ist_index,
-			flags: dpl as u8 | ty.pack() | (1 << 7),
-			reserved1: 0,
-		}
-	}
 }
 
 /// Declare an IDT of 256 entries.
@@ -92,7 +49,7 @@ pub const IDT_ENTRIES: usize = 256;
 
 #[repr(align(4096))]
 #[repr(C)]
-struct IdtArray {
+pub struct IdtArray {
 	entries: [IdtEntry; IDT_ENTRIES],
 }
 
@@ -104,7 +61,7 @@ impl IdtArray {
 	}
 }
 
-static mut IDT: IdtArray = IdtArray::new();
+pub static mut IDT: IdtArray = IdtArray::new();
 static mut IDTP: DescriptorTablePointer<IdtEntry> = DescriptorTablePointer {
 	base: 0 as *const IdtEntry,
 	limit: 0,
@@ -125,29 +82,5 @@ pub fn install() {
 		};
 
 		dtables::lidt(&IDTP);
-	}
-}
-
-/// Set an entry in the IDT.
-///
-/// # Arguments
-///
-/// * `index`     - 8-bit index of the interrupt gate to set.
-/// * `handler`   - Handler function to call for this interrupt/exception.
-/// * `ist_index` - Index of the Interrupt Stack Table (IST) to switch to.
-///                 A zero value means that the stack won't be switched, a value of 1 refers to the first IST entry, etc.
-#[allow(clippy::only_used_in_recursion)]
-pub fn set_gate(index: u8, handler: usize, ist_index: u8) {
-	let sel = SegmentSelector::new(gdt::GDT_KERNEL_CODE, Ring::Ring0);
-	let entry = IdtEntry::new(
-		VAddr::from_usize(handler),
-		sel,
-		Ring::Ring0,
-		Type::InterruptGate,
-		ist_index,
-	);
-
-	unsafe {
-		IDT.entries[index as usize] = entry;
 	}
 }
