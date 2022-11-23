@@ -352,7 +352,7 @@ impl CpuFrequency {
 	fn measure_frequency(&mut self) -> Result<(), ()> {
 		use x86_64::structures::idt::InterruptDescriptorTable;
 
-		use crate::arch::x86_64::kernel::idt::IDT;
+		use crate::arch::x86_64::kernel::interrupts::IDT;
 
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if env::is_uhyve() {

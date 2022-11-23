@@ -6,7 +6,7 @@ use core::{mem, ptr, slice};
 
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::idt::IDT;
+use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{

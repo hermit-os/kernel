@@ -19,7 +19,6 @@ pub mod apic;
 #[cfg(feature = "pci")]
 pub mod fuse;
 pub mod gdt;
-pub mod idt;
 pub mod interrupts;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
@@ -272,7 +271,7 @@ pub fn boot_processor_init() {
 	env::init();
 	gdt::init();
 	gdt::add_current_core();
-	idt::install();
+	interrupts::load_idt();
 	pic::init();
 
 	processor::detect_frequency();
@@ -315,7 +314,7 @@ pub fn application_processor_init() {
 	percore::init();
 	processor::configure();
 	gdt::add_current_core();
-	idt::install();
+	interrupts::load_idt();
 	apic::init_x2apic();
 	apic::init_local_apic();
 	unsafe {

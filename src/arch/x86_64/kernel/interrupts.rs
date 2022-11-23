@@ -7,7 +7,6 @@ use x86_64::registers::control::Cr2;
 use x86_64::set_general_handler;
 use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
 
-use super::idt::IDT;
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::scheduler;
@@ -17,6 +16,14 @@ static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
 
 pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
+
+pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+
+pub fn load_idt() {
+	unsafe {
+		IDT.load_unsafe();
+	}
+}
 
 pub fn install() {
 	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.

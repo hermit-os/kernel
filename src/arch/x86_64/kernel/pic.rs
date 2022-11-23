@@ -1,7 +1,7 @@
 use x86::io::*;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::idt::IDT;
+use super::interrupts::IDT;
 use crate::arch::x86_64::kernel::interrupts::ExceptionStackFrame;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;

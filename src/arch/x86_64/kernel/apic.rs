@@ -17,7 +17,7 @@ use x86::controlregs::*;
 use x86::msr::*;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::idt::IDT;
+use super::interrupts::IDT;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
