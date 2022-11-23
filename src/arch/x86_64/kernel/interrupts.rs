@@ -1,21 +1,18 @@
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
 use core::arch::asm;
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use hermit_sync::InterruptTicketMutex;
+pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 use x86_64::registers::control::Cr2;
 use x86_64::set_general_handler;
+pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
 
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::scheduler::{self, CoreId};
-
-static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
-	InterruptTicketMutex::new(BTreeMap::new());
-
-pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
-pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 
 pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 
@@ -105,16 +102,6 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	unsafe {
 		idt[(32 + irq_number) as usize].set_handler_addr(x86_64::VirtAddr::new(handler as u64));
 	}
-}
-
-pub fn add_irq_name(irq_number: u32, name: &'static str) {
-	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
-	IRQ_NAMES.lock().insert(32 + irq_number, name.to_string());
-}
-
-pub fn get_irq_name(irq_number: u32) -> Option<String> {
-	let name = IRQ_NAMES.lock().get(&irq_number)?.clone();
-	Some(name)
 }
 
 fn unhandle(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
@@ -265,6 +252,18 @@ extern "x86-interrupt" fn simd_floating_point_exception(stack_frame: ExceptionSt
 extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFrame) {
 	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
 	scheduler::abort();
+}
+
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u32, &'static str, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+
+pub fn add_irq_name(irq_number: u32, name: &'static str) {
+	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	IRQ_NAMES.lock().insert(32 + irq_number, name);
+}
+
+fn get_irq_name(irq_number: u32) -> Option<&'static str> {
+	IRQ_NAMES.lock().get(&irq_number).copied()
 }
 
 /// Map between Core ID and per-core scheduler
