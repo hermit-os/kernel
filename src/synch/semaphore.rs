@@ -1,9 +1,9 @@
 #[cfg(feature = "smp")]
 use crossbeam_utils::Backoff;
+use hermit_sync::InterruptTicketMutex;
 
 use crate::arch::percore::*;
 use crate::scheduler::task::TaskHandlePriorityQueue;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 struct SemaphoreState {
 	/// Resource available count
@@ -41,7 +41,7 @@ struct SemaphoreState {
 /// Interface is derived from https://doc.rust-lang.org/1.7.0/src/std/sync/semaphore.rs.html
 /// ```
 pub struct Semaphore {
-	state: SpinlockIrqSave<SemaphoreState>,
+	state: InterruptTicketMutex<SemaphoreState>,
 }
 
 impl Semaphore {
@@ -52,7 +52,7 @@ impl Semaphore {
 	/// available. It is valid to initialize a semaphore with a negative count.
 	pub const fn new(count: isize) -> Self {
 		Self {
-			state: SpinlockIrqSave::new(SemaphoreState {
+			state: InterruptTicketMutex::new(SemaphoreState {
 				count,
 				queue: TaskHandlePriorityQueue::new(),
 			}),

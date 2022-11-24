@@ -1,10 +1,11 @@
+use hermit_sync::InterruptTicketMutexGuard;
+
 use crate::arch::percore::*;
-use crate::synch::spinlock::SpinlockIrqSaveGuard;
 use crate::{arch, console};
 
 /// Enables lwIP's printf to print a whole string without being interrupted by
 /// a message from the kernel.
-static mut CONSOLE_GUARD: Option<SpinlockIrqSaveGuard<'_, console::Console>> = None;
+static mut CONSOLE_GUARD: Option<InterruptTicketMutexGuard<'_, console::Console>> = None;
 
 extern "C" fn __sys_lwip_get_errno() -> i32 {
 	core_scheduler().get_lwip_errno()

@@ -4,16 +4,16 @@ use core::sync::atomic::Ordering::SeqCst;
 use ahash::RandomState;
 use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
+use hermit_sync::InterruptTicketMutex;
 
-use super::spinlock::SpinlockIrqSave;
 use crate::arch::kernel::percore::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
 use crate::scheduler::task::TaskHandlePriorityQueue;
 
 // TODO: Replace with a concurrent hashmap.
-static PARKING_LOT: SpinlockIrqSave<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =
-	SpinlockIrqSave::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static PARKING_LOT: InterruptTicketMutex<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
 bitflags! {
 	pub struct Flags: u32 {

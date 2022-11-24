@@ -1,12 +1,14 @@
 use core::alloc::AllocError;
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::VirtAddr;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
-use crate::synch::spinlock::*;
 
-static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
+	InterruptTicketMutex::new(FreeList::new());
 
 pub fn init() {
 	let entry = FreeListEntry::new(

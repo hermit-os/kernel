@@ -6,15 +6,14 @@ use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
+use hermit_sync::{without_interrupts, *};
 
 use crate::arch;
 use crate::arch::irq;
 use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
-use crate::collections::irqsave;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
-use crate::synch::spinlock::*;
 
 pub mod task;
 
@@ -22,10 +21,11 @@ static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
 /// Map between Task ID and Queue of waiting tasks
-static WAITING_TASKS: SpinlockIrqSave<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
-	SpinlockIrqSave::new(BTreeMap::new());
+static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 /// Map between Task ID and TaskHandle
-static TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> = SpinlockIrqSave::new(BTreeMap::new());
+static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 
 /// Unique identifier for a core.
 pub type CoreId = u32;
@@ -71,7 +71,7 @@ pub struct PerCoreScheduler {
 	blocked_tasks: BlockedTaskQueue,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
-	input: SpinlockIrqSave<SchedulerInput>,
+	input: InterruptTicketMutex<SchedulerInput>,
 }
 
 impl PerCoreScheduler {
@@ -159,7 +159,7 @@ impl PerCoreScheduler {
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
 		};
 
-		irqsave(closure);
+		without_interrupts(closure);
 
 		self.scheduler();
 
@@ -234,7 +234,7 @@ impl PerCoreScheduler {
 
 	#[cfg(feature = "newlib")]
 	pub fn clone(&self, func: extern "C" fn(usize), arg: usize) -> TaskId {
-		irqsave(|| self.clone_impl(func, arg))
+		without_interrupts(|| self.clone_impl(func, arg))
 	}
 
 	/// Returns `true` if a reschedule is required
@@ -246,18 +246,18 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
-		irqsave(|| self.blocked_tasks.handle_waiting_tasks());
+		without_interrupts(|| self.blocked_tasks.handle_waiting_tasks());
 	}
 
 	#[cfg(not(feature = "smp"))]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
-		irqsave(|| self.blocked_tasks.custom_wakeup(task));
+		without_interrupts(|| self.blocked_tasks.custom_wakeup(task));
 	}
 
 	#[cfg(feature = "smp")]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
-			irqsave(|| self.blocked_tasks.custom_wakeup(task));
+			without_interrupts(|| self.blocked_tasks.custom_wakeup(task));
 		} else {
 			get_scheduler(task.get_core_id())
 				.input
@@ -271,7 +271,7 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn block_current_task(&mut self, wakeup_time: Option<u64>) {
-		irqsave(|| {
+		without_interrupts(|| {
 			self.blocked_tasks
 				.add(self.current_task.clone(), wakeup_time)
 		});
@@ -280,12 +280,12 @@ impl PerCoreScheduler {
 	#[cfg(feature = "tcp")]
 	#[inline]
 	pub fn add_network_timer(&mut self, wakeup_time: u64) {
-		irqsave(|| self.blocked_tasks.add_network_timer(wakeup_time));
+		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time));
 	}
 
 	#[inline]
 	pub fn get_current_task_handle(&self) -> TaskHandle {
-		irqsave(|| {
+		without_interrupts(|| {
 			let current_task_borrowed = self.current_task.borrow();
 
 			TaskHandle::new(
@@ -300,23 +300,23 @@ impl PerCoreScheduler {
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn set_lwip_errno(&self, errno: i32) {
-		irqsave(|| self.current_task.borrow_mut().lwip_errno = errno);
+		without_interrupts(|| self.current_task.borrow_mut().lwip_errno = errno);
 	}
 
 	#[cfg(feature = "newlib")]
 	#[inline]
 	pub fn get_lwip_errno(&self) -> i32 {
-		irqsave(|| self.current_task.borrow().lwip_errno)
+		without_interrupts(|| self.current_task.borrow().lwip_errno)
 	}
 
 	#[inline]
 	pub fn get_current_task_id(&self) -> TaskId {
-		irqsave(|| self.current_task.borrow().id)
+		without_interrupts(|| self.current_task.borrow().id)
 	}
 
 	#[inline]
 	pub fn get_current_task_prio(&self) -> Priority {
-		irqsave(|| self.current_task.borrow().prio)
+		without_interrupts(|| self.current_task.borrow().prio)
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -336,7 +336,7 @@ impl PerCoreScheduler {
 	}
 
 	pub fn set_current_task_priority(&mut self, prio: Priority) {
-		irqsave(|| {
+		without_interrupts(|| {
 			trace!("Change priority of the current task");
 			self.current_task.borrow_mut().prio = prio;
 		});
@@ -345,7 +345,7 @@ impl PerCoreScheduler {
 	pub fn set_priority(&mut self, id: TaskId, prio: Priority) -> Result<(), ()> {
 		trace!("Change priority of task {} to priority {}", id, prio);
 
-		irqsave(|| {
+		without_interrupts(|| {
 			let task = get_task_handle(id).ok_or(())?;
 			#[cfg(feature = "smp")]
 			let other_core = task.get_core_id() != self.core_id;
@@ -420,7 +420,7 @@ impl PerCoreScheduler {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag will be cleared during the reschedule
 	pub fn reschedule(&mut self) {
-		irqsave(|| self.scheduler());
+		without_interrupts(|| self.scheduler());
 	}
 
 	/// Only the idle task should call this function.
@@ -606,7 +606,7 @@ pub fn add_current_core() {
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
 		#[cfg(feature = "smp")]
-		input: SpinlockIrqSave::new(SchedulerInput::new()),
+		input: InterruptTicketMutex::new(SchedulerInput::new()),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);

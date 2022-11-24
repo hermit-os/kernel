@@ -4,6 +4,8 @@ use core::isize;
 use core::sync::atomic::AtomicUsize;
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::arch::get_processor_count;
 use crate::arch::percore::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
@@ -12,7 +14,6 @@ use crate::errno::*;
 #[cfg(feature = "newlib")]
 use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
-use crate::synch::spinlock::SpinlockIrqSave;
 use crate::syscalls::timer::timespec;
 use crate::{arch, scheduler, syscalls};
 
@@ -283,8 +284,8 @@ pub extern "C" fn sys_join(id: Tid) -> i32 {
 }
 
 /// Mapping between blocked tasks and their TaskHandle
-static BLOCKED_TASKS: SpinlockIrqSave<BTreeMap<TaskId, TaskHandle>> =
-	SpinlockIrqSave::new(BTreeMap::new());
+static BLOCKED_TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
 	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);

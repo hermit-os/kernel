@@ -7,6 +7,8 @@ use alloc::vec::Vec;
 use core::mem;
 use core::result::Result;
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::arch::kernel::pci as kernel_pci;
 use crate::arch::kernel::pci::error::PciError;
 use crate::arch::kernel::pci::{PciAdapter, PciDriver};
@@ -19,7 +21,6 @@ use crate::drivers::virtio::depr::virtio_fs;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::{device, env};
-use crate::synch::spinlock::SpinlockIrqSave;
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5
@@ -1258,7 +1259,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 			// TODO: proper error handling on driver creation fail
 			match virtio_fs::create_virtiofs_driver(adapter) {
 				Some(virt_fs_drv) => {
-					kernel_pci::register_driver(PciDriver::VirtioFs(SpinlockIrqSave::new(
+					kernel_pci::register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(
 						virt_fs_drv,
 					)));
 					// initialize file system

@@ -13,6 +13,7 @@ use core::arch::{asm, global_asm};
 use core::ptr;
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_sync::TicketMutex;
 
 use crate::arch::aarch64::kernel::percore::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
@@ -21,12 +22,11 @@ pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::env;
-use crate::synch::spinlock::Spinlock;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 static mut COM1: SerialPort = SerialPort::new(0x800);
-static CPU_ONLINE: Spinlock<u32> = Spinlock::new(0);
+static CPU_ONLINE: TicketMutex<u32> = TicketMutex::new(0);
 
 global_asm!(include_str!("start.s"));
 

@@ -1,7 +1,8 @@
 use core::fmt;
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::arch;
-use crate::synch::spinlock::SpinlockIrqSave;
 
 pub struct Console(());
 
@@ -27,7 +28,7 @@ impl Console {
 	}
 }
 
-pub static CONSOLE: SpinlockIrqSave<Console> = SpinlockIrqSave::new(Console(()));
+pub static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
 
 #[cfg(not(target_os = "none"))]
 #[test]

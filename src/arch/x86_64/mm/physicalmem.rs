@@ -2,6 +2,7 @@ use core::alloc::AllocError;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
+use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
@@ -9,9 +10,9 @@ use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
-use crate::synch::spinlock::*;
 
-static PHYSICAL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList> =
+	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
 fn detect_from_multiboot_info() -> Result<(), ()> {

@@ -1,13 +1,15 @@
 use core::alloc::AllocError;
 
+use hermit_sync::InterruptTicketMutex;
+
 use crate::arch::aarch64::kernel::get_ram_address;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
-use crate::synch::spinlock::SpinlockIrqSave;
 
-static KERNEL_FREE_LIST: SpinlockIrqSave<FreeList> = SpinlockIrqSave::new(FreeList::new());
+static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
+	InterruptTicketMutex::new(FreeList::new());
 
 /// End of the virtual memory address space reserved for kernel memory (4 GiB).
 /// This also marks the start of the virtual memory address space reserved for the task heap.

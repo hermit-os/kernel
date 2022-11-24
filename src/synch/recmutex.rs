@@ -1,6 +1,7 @@
+use hermit_sync::TicketMutex;
+
 use crate::arch::percore::*;
 use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
-use crate::synch::spinlock::Spinlock;
 
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,
@@ -9,13 +10,13 @@ struct RecursiveMutexState {
 }
 
 pub struct RecursiveMutex {
-	state: Spinlock<RecursiveMutexState>,
+	state: TicketMutex<RecursiveMutexState>,
 }
 
 impl RecursiveMutex {
 	pub const fn new() -> Self {
 		Self {
-			state: Spinlock::new(RecursiveMutexState {
+			state: TicketMutex::new(RecursiveMutexState {
 				current_tid: None,
 				count: 0,
 				queue: TaskHandlePriorityQueue::new(),

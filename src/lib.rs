@@ -71,7 +71,6 @@ mod macros;
 mod logging;
 
 mod arch;
-mod collections;
 mod config;
 mod console;
 mod drivers;

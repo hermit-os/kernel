@@ -1,16 +1,16 @@
 use alloc::vec::Vec;
 use core::str;
 
+use hermit_sync::{without_interrupts, InterruptTicketMutex};
+
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
 };
 use crate::arch::x86_64::mm::{paging, PhysAddr};
-use crate::collections::irqsave;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioDriver};
-use crate::synch::spinlock::SpinlockIrqSave;
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
@@ -21,12 +21,12 @@ const IRQ_NUMBER: u32 = 12;
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 
 pub enum MmioDriver {
-	VirtioNet(SpinlockIrqSave<VirtioNetDriver>),
+	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 }
 
 impl MmioDriver {
 	#[allow(unreachable_patterns)]
-	fn get_network_driver(&self) -> Option<&SpinlockIrqSave<dyn NetworkInterface>> {
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<dyn NetworkInterface>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
 			_ => None,
@@ -121,20 +121,20 @@ pub fn register_driver(drv: MmioDriver) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static SpinlockIrqSave<dyn NetworkInterface>> {
+pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkInterface>> {
 	unsafe { MMIO_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
 pub fn init_drivers() {
 	// virtio: MMIO Device Discovery
-	irqsave(|| {
+	without_interrupts(|| {
 		if let Ok(mmio) = detect_network() {
 			warn!(
 				"Found MMIO device, but we guess the interrupt number {}!",
 				IRQ_NUMBER
 			);
 			if let Ok(VirtioDriver::Network(drv)) = mmio_virtio::init_device(mmio, IRQ_NUMBER) {
-				register_driver(MmioDriver::VirtioNet(SpinlockIrqSave::new(drv)))
+				register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 			}
 		} else {
 			warn!("Unable to find mmio device");

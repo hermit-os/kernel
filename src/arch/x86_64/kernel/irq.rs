@@ -3,16 +3,16 @@ use alloc::string::{String, ToString};
 use core::arch::asm;
 use core::fmt;
 
-use x86::bits64::rflags::{self, RFlags};
+use hermit_sync::InterruptTicketMutex;
 use x86::irq::PageFaultError;
 use x86::{controlregs, irq};
 
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::{apic, idt, processor};
 use crate::scheduler;
-use crate::synch::spinlock::SpinlockIrqSave;
 
-static IRQ_NAMES: SpinlockIrqSave<BTreeMap<u32, String>> = SpinlockIrqSave::new(BTreeMap::new());
+static IRQ_NAMES: InterruptTicketMutex<BTreeMap<u32, String>> =
+	InterruptTicketMutex::new(BTreeMap::new());
 
 // Derived from Philipp Oppermann's blog
 // => https://github.com/phil-opp/blog_os/blob/master/src/interrupts/mod.rs
@@ -78,34 +78,6 @@ pub fn enable_and_wait() {
 pub fn disable() {
 	unsafe {
 		irq::disable();
-	}
-}
-
-/// Disable IRQs (nested)
-///
-/// Disable IRQs when unsure if IRQs were enabled at all.
-/// This function together with nested_enable can be used
-/// in situations when interrupts shouldn't be activated if they
-/// were not activated before calling this function.
-#[inline]
-pub fn nested_disable() -> bool {
-	cfg!(target_os = "none") && {
-		let enabled = rflags::read().contains(RFlags::FLAGS_IF);
-		if enabled {
-			disable();
-		}
-		enabled
-	}
-}
-
-/// Enable IRQs (nested)
-///
-/// Can be used in conjunction with nested_disable() to only enable
-/// interrupts again if they were enabled before.
-#[inline]
-pub fn nested_enable(was_enabled: bool) {
-	if was_enabled {
-		enable();
 	}
 }
 
