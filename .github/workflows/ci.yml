@@ -27,8 +27,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - name: Apply rust-toolchain.toml
-        run: rustup show
+      - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo xtask clippy
 
@@ -37,6 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - run: rustup component add rustfmt
       - run: cargo fmt -- --check
 
   check-docs:
