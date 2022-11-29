@@ -4,28 +4,35 @@ use core::ffi::CStr;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use hermit_sync::InterruptTicketMutex;
+#[cfg(target_arch = "x86_64")]
+use x86::io::*;
 
-use crate::arch::mm::VirtAddr;
+use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
-use crate::fd::interfaces::{uhyve_send, SysOpen, SyscallInterface, UHYVE_PORT_OPEN};
 use crate::fd::stdio::*;
 use crate::syscalls::fs::{self, FilePerms};
 
 mod file;
-pub(crate) mod interfaces;
 mod stdio;
 
-pub const STDIN_FILENO: FileDescriptor = 0;
-pub const STDOUT_FILENO: FileDescriptor = 1;
-pub const STDERR_FILENO: FileDescriptor = 2;
+const UHYVE_PORT_WRITE: u16 = 0x400;
+const UHYVE_PORT_OPEN: u16 = 0x440;
+const UHYVE_PORT_CLOSE: u16 = 0x480;
+const UHYVE_PORT_READ: u16 = 0x500;
+const UHYVE_PORT_LSEEK: u16 = 0x580;
+
+const STDIN_FILENO: FileDescriptor = 0;
+const STDOUT_FILENO: FileDescriptor = 1;
+const STDERR_FILENO: FileDescriptor = 2;
 
 pub(crate) type FileDescriptor = i32;
 
-pub(crate) static mut SYS: &'static dyn SyscallInterface = &self::interfaces::Generic;
+/// Mapping between file descriptor and the referenced object
 static OBJECT_MAP: InterruptTicketMutex<BTreeMap<FileDescriptor, Arc<dyn ObjectInterface>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
+/// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
 // TODO: these are defined in hermit-abi. Should we use a constants crate imported in both?
@@ -37,6 +44,113 @@ const O_EXCL: i32 = 0o0200;
 const O_TRUNC: i32 = 0o1000;
 const O_APPEND: i32 = 0o2000;
 const O_DIRECT: i32 = 0o40000;
+
+#[repr(C, packed)]
+struct SysOpen {
+	name: PhysAddr,
+	flags: i32,
+	mode: i32,
+	ret: i32,
+}
+
+impl SysOpen {
+	fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
+		SysOpen {
+			name: paging::virtual_to_physical(name).unwrap(),
+			flags,
+			mode,
+			ret: -1,
+		}
+	}
+}
+
+#[repr(C, packed)]
+struct SysClose {
+	fd: i32,
+	ret: i32,
+}
+
+impl SysClose {
+	fn new(fd: i32) -> SysClose {
+		SysClose { fd, ret: -1 }
+	}
+}
+
+#[repr(C, packed)]
+struct SysRead {
+	fd: i32,
+	buf: *const u8,
+	len: usize,
+	ret: isize,
+}
+
+impl SysRead {
+	fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
+		SysRead {
+			fd,
+			buf,
+			len,
+			ret: -1,
+		}
+	}
+}
+
+#[repr(C, packed)]
+struct SysWrite {
+	fd: i32,
+	buf: *const u8,
+	len: usize,
+}
+
+impl SysWrite {
+	pub fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
+		SysWrite { fd, buf, len }
+	}
+}
+
+#[repr(C, packed)]
+struct SysLseek {
+	pub fd: i32,
+	pub offset: isize,
+	pub whence: i32,
+}
+
+impl SysLseek {
+	fn new(fd: i32, offset: isize, whence: i32) -> SysLseek {
+		SysLseek { fd, offset, whence }
+	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "x86_64")]
+fn uhyve_send<T>(port: u16, data: &mut T) {
+	let ptr = VirtAddr(data as *mut _ as u64);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
+
+	unsafe {
+		outl(port, physical_address.as_u64() as u32);
+	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "aarch64")]
+fn uhyve_send<T>(port: u16, data: &mut T) {
+	use core::arch::asm;
+
+	let ptr = VirtAddr(data as *mut _ as u64);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
+
+	unsafe {
+		asm!(
+			"str x8, [{port}]",
+			port = in(reg) port,
+			in("x8") physical_address.as_u64(),
+			options(nostack),
+		);
+	}
+}
 
 fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	// mode is passed in as hex (0x777). Linux/Fuse expects octal (0o777).
@@ -153,17 +267,6 @@ pub(crate) fn remove_object(fd: FileDescriptor) {
 }
 
 pub(crate) fn init() {
-	unsafe {
-		// We know that HermitCore has successfully initialized a network interface.
-		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		if env::is_uhyve() {
-			SYS = &interfaces::Uhyve;
-		}
-
-		// Perform interface-specific initialization steps.
-		SYS.init();
-	}
-
 	let mut guard = OBJECT_MAP.lock();
 	if env::is_uhyve() {
 		guard

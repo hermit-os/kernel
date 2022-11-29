@@ -7,18 +7,13 @@ use x86::io::*;
 
 use crate::arch;
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
-use crate::fd::interfaces::SyscallInterface;
+use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(feature = "newlib")]
 use crate::syscalls::lwip::sys_lwip_get_errno;
 #[cfg(feature = "newlib")]
 use crate::syscalls::{LWIP_FD_BIT, LWIP_LOCK};
 
-pub(crate) const UHYVE_PORT_WRITE: u16 = 0x400;
-pub(crate) const UHYVE_PORT_OPEN: u16 = 0x440;
-pub(crate) const UHYVE_PORT_CLOSE: u16 = 0x480;
-pub(crate) const UHYVE_PORT_READ: u16 = 0x500;
 pub(crate) const UHYVE_PORT_EXIT: u16 = 0x540;
-pub(crate) const UHYVE_PORT_LSEEK: u16 = 0x580;
 pub(crate) const UHYVE_PORT_CMDSIZE: u16 = 0x740;
 pub(crate) const UHYVE_PORT_CMDVAL: u16 = 0x780;
 pub(crate) const UHYVE_PORT_UNLINK: u16 = 0x840;
@@ -119,82 +114,6 @@ impl SysUnlink {
 			name: paging::virtual_to_physical(name).unwrap(),
 			ret: -1,
 		}
-	}
-}
-
-#[repr(C, packed)]
-pub(crate) struct SysOpen {
-	pub name: PhysAddr,
-	pub flags: i32,
-	pub mode: i32,
-	pub ret: i32,
-}
-
-impl SysOpen {
-	pub fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
-		SysOpen {
-			name: paging::virtual_to_physical(name).unwrap(),
-			flags,
-			mode,
-			ret: -1,
-		}
-	}
-}
-
-#[repr(C, packed)]
-pub(crate) struct SysClose {
-	pub fd: i32,
-	pub ret: i32,
-}
-
-impl SysClose {
-	pub fn new(fd: i32) -> SysClose {
-		SysClose { fd, ret: -1 }
-	}
-}
-
-#[repr(C, packed)]
-pub(crate) struct SysRead {
-	pub fd: i32,
-	pub buf: *const u8,
-	pub len: usize,
-	pub ret: isize,
-}
-
-impl SysRead {
-	pub fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
-		SysRead {
-			fd,
-			buf,
-			len,
-			ret: -1,
-		}
-	}
-}
-
-#[repr(C, packed)]
-pub(crate) struct SysWrite {
-	pub fd: i32,
-	pub buf: *const u8,
-	pub len: usize,
-}
-
-impl SysWrite {
-	pub fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
-		SysWrite { fd, buf, len }
-	}
-}
-
-#[repr(C, packed)]
-pub(crate) struct SysLseek {
-	pub fd: i32,
-	pub offset: isize,
-	pub whence: i32,
-}
-
-impl SysLseek {
-	pub fn new(fd: i32, offset: isize, whence: i32) -> SysLseek {
-		SysLseek { fd, offset, whence }
 	}
 }
 

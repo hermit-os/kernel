@@ -1,8 +1,9 @@
 use core::{isize, slice};
 
 use crate::console::CONSOLE;
-use crate::fd::interfaces::uhyve::*;
-use crate::fd::{ObjectInterface, STDERR_FILENO, STDOUT_FILENO};
+use crate::fd::{
+	uhyve_send, ObjectInterface, SysWrite, STDERR_FILENO, STDOUT_FILENO, UHYVE_PORT_WRITE,
+};
 
 #[derive(Debug)]
 pub struct GenericStdin;

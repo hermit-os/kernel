@@ -1,11 +1,10 @@
 use alloc::boxed::Box;
 use core::{isize, slice, str};
 
-use crate::fd::interfaces::{
-	uhyve_send, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE, UHYVE_PORT_LSEEK,
-	UHYVE_PORT_READ, UHYVE_PORT_WRITE,
+use crate::fd::{
+	uhyve_send, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE,
+	UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
 };
-use crate::fd::ObjectInterface;
 use crate::syscalls::fs::{self, PosixFile, SeekWhence};
 
 const SEEK_SET: i32 = 0;

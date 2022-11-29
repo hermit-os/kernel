@@ -14,14 +14,15 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::fd::interfaces::SyscallInterface;
-use crate::fd::{get_object, remove_object, FileDescriptor, SYS};
+use crate::fd::{get_object, remove_object, FileDescriptor};
+use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 mod condvar;
 pub(crate) mod fs;
 mod futex;
+mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
@@ -41,18 +42,31 @@ const LWIP_FD_BIT: i32 = 1 << 30;
 #[cfg(feature = "newlib")]
 pub static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
 
+pub(crate) static mut SYS: &'static dyn SyscallInterface = &self::interfaces::Generic;
+
 /// Shuts down the machine.
 ///
 /// This does not require the syscall interface to be initialized.
 pub(crate) fn shutdown(arg: i32) -> ! {
 	if env::is_uhyve() {
-		crate::fd::interfaces::Uhyve.shutdown(arg)
+		crate::syscalls::interfaces::Uhyve.shutdown(arg)
 	} else {
-		crate::fd::interfaces::Generic.shutdown(arg)
+		crate::syscalls::interfaces::Generic.shutdown(arg)
 	}
 }
 
 pub(crate) fn init() {
+	unsafe {
+		// We know that HermitCore has successfully initialized a network interface.
+		// Now check if we can load a more specific SyscallInterface to make use of networking.
+		if env::is_uhyve() {
+			SYS = &interfaces::Uhyve;
+		}
+
+		// Perform interface-specific initialization steps.
+		SYS.init();
+	}
+
 	random_init();
 	#[cfg(feature = "newlib")]
 	sbrk_init();
