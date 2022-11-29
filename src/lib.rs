@@ -21,6 +21,7 @@
 #![feature(vec_into_raw_parts)]
 #![feature(drain_filter)]
 #![feature(strict_provenance)]
+#![feature(map_try_insert)]
 #![feature(is_some_and)]
 #![no_std]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
@@ -76,6 +77,7 @@ mod console;
 mod drivers;
 mod env;
 pub mod errno;
+pub(crate) mod fd;
 mod mm;
 #[cfg(feature = "tcp")]
 mod net;
@@ -277,6 +279,7 @@ extern "C" fn initd(_arg: usize) {
 	crate::net::init();
 
 	syscalls::init();
+	fd::init();
 
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]

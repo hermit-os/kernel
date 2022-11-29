@@ -17,8 +17,8 @@ use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address};
 
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
+use crate::fd::SYS;
 use crate::net::{NetworkInterface, NetworkState};
-use crate::syscalls::SYS;
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]

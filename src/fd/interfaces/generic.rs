@@ -1,4 +1,4 @@
-use crate::syscalls::interfaces::SyscallInterface;
+use crate::fd::interfaces::SyscallInterface;
 
 // The generic interface simply uses all default implementations of the
 // SyscallInterface trait.
