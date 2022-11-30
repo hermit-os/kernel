@@ -39,20 +39,22 @@ const EFER_TCE: u64 = 1 << 15;
 // See Intel SDM - Volume 1 - Section 7.3.17.1
 const RDRAND_RETRY_LIMIT: usize = 10;
 
-static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
-static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
+static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
+
 static mut PHYSICAL_ADDRESS_BITS: u8 = 0;
 static mut LINEAR_ADDRESS_BITS: u8 = 0;
-static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
 static mut SUPPORTS_1GIB_PAGES: bool = false;
 static mut SUPPORTS_AVX: bool = false;
 static mut SUPPORTS_RDRAND: bool = false;
 static mut SUPPORTS_TSC_DEADLINE: bool = false;
 static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
-static mut SUPPORTS_FSGS: bool = false;
 static mut RUN_ON_HYPERVISOR: bool = false;
+static mut SUPPORTS_FSGS: bool = false;
 static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
+static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
+
+static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
