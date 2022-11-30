@@ -259,10 +259,8 @@ pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>,
 }
 
 pub(crate) fn remove_object(fd: FileDescriptor) {
-	if fd > 2 {
-		if OBJECT_MAP.lock().remove(&fd).is_none() {
-			debug!("Unable to remove object {}", fd);
-		}
+	if fd > 2 && OBJECT_MAP.lock().remove(&fd).is_none() {
+		debug!("Unable to remove object {}", fd);
 	}
 }
 
