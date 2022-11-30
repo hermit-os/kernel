@@ -12,6 +12,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::{fmt, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
+use hermit_sync::Lazy;
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 use x86::controlregs::*;
@@ -42,18 +43,56 @@ const RDRAND_RETRY_LIMIT: usize = 10;
 
 static MEASUREMENT_TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
 
-static mut PHYSICAL_ADDRESS_BITS: u8 = 0;
-static mut LINEAR_ADDRESS_BITS: u8 = 0;
-static mut SUPPORTS_1GIB_PAGES: bool = false;
-static mut SUPPORTS_AVX: bool = false;
-static mut SUPPORTS_RDRAND: bool = false;
-static mut SUPPORTS_TSC_DEADLINE: bool = false;
-static mut SUPPORTS_X2APIC: bool = false;
-static mut SUPPORTS_XSAVE: bool = false;
-static mut RUN_ON_HYPERVISOR: bool = false;
-static mut SUPPORTS_FSGS: bool = false;
-static mut SUPPORTS_RDTSCP: bool = false;
-static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
+#[derive(Debug)]
+struct Features {
+	physical_address_bits: u8,
+	linear_address_bits: u8,
+	supports_1gib_pages: bool,
+	supports_avx: bool,
+	supports_rdrand: bool,
+	supports_tsc_deadline: bool,
+	supports_x2apic: bool,
+	supports_xsave: bool,
+	run_on_hypervisor: bool,
+	supports_fsgs: bool,
+	supports_rdtscp: bool,
+	cpu_speedstep: CpuSpeedStep,
+}
+
+static FEATURES: Lazy<Features> = Lazy::new(|| {
+	// Detect CPU features
+	let cpuid = CpuId::new();
+	let feature_info = cpuid
+		.get_feature_info()
+		.expect("CPUID Feature Info not available!");
+	let extended_feature_info = cpuid
+		.get_extended_feature_info()
+		.expect("CPUID Extended Feature Info not available!");
+	let processor_capacity_info = cpuid
+		.get_processor_capacity_feature_info()
+		.expect("Processor Capacity Parameters and Extended Feature Identification not available!");
+	let extend_processor_identifiers = cpuid
+		.get_extended_processor_and_feature_identifiers()
+		.expect("Extended Processor and Processor Feature Identifiers not available");
+	Features {
+		physical_address_bits: processor_capacity_info.physical_address_bits(),
+		linear_address_bits: processor_capacity_info.linear_address_bits(),
+		supports_1gib_pages: extend_processor_identifiers.has_1gib_pages(),
+		supports_avx: feature_info.has_avx(),
+		supports_rdrand: feature_info.has_rdrand(),
+		supports_tsc_deadline: feature_info.has_tsc_deadline(),
+		supports_x2apic: feature_info.has_x2apic(),
+		supports_xsave: feature_info.has_xsave(),
+		run_on_hypervisor: feature_info.has_hypervisor(),
+		supports_fsgs: extended_feature_info.has_fsgsbase(),
+		supports_rdtscp: extend_processor_identifiers.has_rdtscp(),
+		cpu_speedstep: {
+			let mut cpu_speedstep = CpuSpeedStep::new();
+			cpu_speedstep.detect_features(&cpuid);
+			cpu_speedstep
+		},
+	}
+});
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
 
@@ -612,13 +651,10 @@ impl fmt::Display for CpuFeaturePrinter {
 }
 
 pub fn run_on_hypervisor() -> bool {
-	if env::is_uhyve() {
-		true
-	} else {
-		unsafe { RUN_ON_HYPERVISOR }
-	}
+	env::is_uhyve() || FEATURES.run_on_hypervisor
 }
 
+#[derive(Debug)]
 struct CpuSpeedStep {
 	eist_available: bool,
 	eist_enabled: bool,
@@ -721,39 +757,7 @@ impl fmt::Display for CpuSpeedStep {
 }
 
 pub fn detect_features() {
-	// Detect CPU features
-	let cpuid = CpuId::new();
-	let feature_info = cpuid
-		.get_feature_info()
-		.expect("CPUID Feature Info not available!");
-	let extended_feature_info = cpuid
-		.get_extended_feature_info()
-		.expect("CPUID Extended Feature Info not available!");
-	let processor_capacity_info = cpuid
-		.get_processor_capacity_feature_info()
-		.expect("Processor Capacity Parameters and Extended Feature Identification not available!");
-	let extend_processor_identifiers = cpuid
-		.get_extended_processor_and_feature_identifiers()
-		.expect("Extended Processor and Processor Feature Identifiers not available");
-
-	unsafe {
-		PHYSICAL_ADDRESS_BITS = processor_capacity_info.physical_address_bits();
-		LINEAR_ADDRESS_BITS = processor_capacity_info.linear_address_bits();
-		SUPPORTS_1GIB_PAGES = extend_processor_identifiers.has_1gib_pages();
-		SUPPORTS_AVX = feature_info.has_avx();
-		SUPPORTS_RDRAND = feature_info.has_rdrand();
-		SUPPORTS_TSC_DEADLINE = feature_info.has_tsc_deadline();
-		SUPPORTS_X2APIC = feature_info.has_x2apic();
-		SUPPORTS_XSAVE = feature_info.has_xsave();
-		RUN_ON_HYPERVISOR = feature_info.has_hypervisor();
-		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
-		SUPPORTS_RDTSCP = extend_processor_identifiers.has_rdtscp();
-		CPU_SPEEDSTEP = {
-			let mut cpu_speedstep = CpuSpeedStep::new();
-			cpu_speedstep.detect_features(&cpuid);
-			cpu_speedstep
-		};
-	}
+	Lazy::force(&FEATURES);
 }
 
 pub fn configure() {
@@ -844,12 +848,10 @@ pub fn configure() {
 	// Initialize the FS register, which is later used for Thread-Local Storage.
 	writefs(0);
 
-	unsafe {
-		//
-		// ENHANCED INTEL SPEEDSTEP CONFIGURATION
-		//
-		CPU_SPEEDSTEP.configure();
-	}
+	//
+	// ENHANCED INTEL SPEEDSTEP CONFIGURATION
+	//
+	FEATURES.cpu_speedstep.configure();
 }
 
 pub fn detect_frequency() {
@@ -870,8 +872,8 @@ pub fn print_information() {
 
 	unsafe {
 		infoentry!("Frequency", CPU_FREQUENCY);
-		infoentry!("SpeedStep Technology", CPU_SPEEDSTEP);
 	}
+	infoentry!("SpeedStep Technology", FEATURES.cpu_speedstep);
 
 	infoentry!("Features", feature_printer);
 	infoentry!(
@@ -898,7 +900,7 @@ fn print_cpu_information() {
 
 pub fn generate_random_number32() -> Option<u32> {
 	unsafe {
-		if SUPPORTS_RDRAND {
+		if FEATURES.supports_rdrand {
 			let mut value: u32 = 0;
 
 			for _ in 0..RDRAND_RETRY_LIMIT {
@@ -913,7 +915,7 @@ pub fn generate_random_number32() -> Option<u32> {
 
 pub fn generate_random_number64() -> Option<u64> {
 	unsafe {
-		if SUPPORTS_RDRAND {
+		if FEATURES.supports_rdrand {
 			let mut value: u64 = 0;
 
 			for _ in 0..RDRAND_RETRY_LIMIT {
@@ -928,17 +930,17 @@ pub fn generate_random_number64() -> Option<u64> {
 
 #[inline]
 pub fn get_linear_address_bits() -> u8 {
-	unsafe { LINEAR_ADDRESS_BITS }
+	FEATURES.linear_address_bits
 }
 
 #[inline]
 pub fn get_physical_address_bits() -> u8 {
-	unsafe { PHYSICAL_ADDRESS_BITS }
+	FEATURES.physical_address_bits
 }
 
 #[inline]
 pub fn supports_1gib_pages() -> bool {
-	unsafe { SUPPORTS_1GIB_PAGES }
+	FEATURES.supports_1gib_pages
 }
 
 #[inline]
@@ -948,27 +950,27 @@ pub fn supports_2mib_pages() -> bool {
 
 #[inline]
 pub fn supports_avx() -> bool {
-	unsafe { SUPPORTS_AVX }
+	FEATURES.supports_avx
 }
 
 #[inline]
 pub fn supports_tsc_deadline() -> bool {
-	unsafe { SUPPORTS_TSC_DEADLINE }
+	FEATURES.supports_tsc_deadline
 }
 
 #[inline]
 pub fn supports_x2apic() -> bool {
-	unsafe { SUPPORTS_X2APIC }
+	FEATURES.supports_x2apic
 }
 
 #[inline]
 pub fn supports_xsave() -> bool {
-	unsafe { SUPPORTS_XSAVE }
+	FEATURES.supports_xsave
 }
 
 #[inline]
 pub fn supports_fsgs() -> bool {
-	unsafe { SUPPORTS_FSGS }
+	FEATURES.supports_fsgs
 }
 
 /// The halt function stops the processor until the next interrupt arrives
@@ -1058,7 +1060,7 @@ pub fn writegs(gs: usize) {
 #[inline]
 pub fn get_timestamp() -> u64 {
 	unsafe {
-		if SUPPORTS_RDTSCP {
+		if FEATURES.supports_rdtscp {
 			get_timestamp_rdtscp()
 		} else {
 			get_timestamp_rdtsc()
