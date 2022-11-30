@@ -52,7 +52,7 @@ static mut SUPPORTS_X2APIC: bool = false;
 static mut SUPPORTS_XSAVE: bool = false;
 static mut RUN_ON_HYPERVISOR: bool = false;
 static mut SUPPORTS_FSGS: bool = false;
-static mut TIMESTAMP_FUNCTION: unsafe fn() -> u64 = get_timestamp_rdtsc;
+static mut SUPPORTS_RDTSCP: bool = false;
 static mut CPU_SPEEDSTEP: CpuSpeedStep = CpuSpeedStep::new();
 
 static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
@@ -747,10 +747,7 @@ pub fn detect_features() {
 		SUPPORTS_XSAVE = feature_info.has_xsave();
 		RUN_ON_HYPERVISOR = feature_info.has_hypervisor();
 		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
-
-		if extend_processor_identifiers.has_rdtscp() {
-			TIMESTAMP_FUNCTION = get_timestamp_rdtscp;
-		}
+		SUPPORTS_RDTSCP = extend_processor_identifiers.has_rdtscp();
 
 		CPU_SPEEDSTEP.detect_features(&cpuid);
 	}
@@ -1057,7 +1054,13 @@ pub fn writegs(gs: usize) {
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	unsafe { TIMESTAMP_FUNCTION() }
+	unsafe {
+		if SUPPORTS_RDTSCP {
+			get_timestamp_rdtscp()
+		} else {
+			get_timestamp_rdtsc()
+		}
+	}
 }
 
 unsafe fn get_timestamp_rdtsc() -> u64 {
