@@ -12,7 +12,11 @@ use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
 
 use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::scheduler::{self, CoreId};
+
+pub const IST_ENTRIES: usize = 3;
+pub const IST_SIZE: usize = BasePageSize::SIZE as usize;
 
 pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 
@@ -23,72 +27,44 @@ pub fn load_idt() {
 }
 
 pub fn install() {
-	// Set gates to the Interrupt Service Routines (ISRs) for all 32 CPU exceptions.
-	// All of them use a dedicated stack per task (IST1) to prevent clobbering the current task stack.
-	// Some critical exceptions also get their own stacks to always execute on a known good stack:
-	//   - Non-Maskable Interrupt Exception (IST2)
-	//   - Double Fault Exception (IST3)
-	//   - Machine Check Exception (IST4)
-	//
-	// Refer to Intel Vol. 3A, 6.14.5 Interrupt Stack Table.
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+
 	unsafe {
-		idt.divide_error
-			.set_handler_fn(divide_error_exception)
+		idt.double_fault
+			.set_handler_fn(double_fault_exception)
 			.set_stack_index(0);
-		idt.debug.set_handler_fn(debug_exception).set_stack_index(0);
 		idt.non_maskable_interrupt
 			.set_handler_fn(nmi_exception)
 			.set_stack_index(1);
-		idt.breakpoint
-			.set_handler_fn(breakpoint_exception)
-			.set_stack_index(0);
-		idt.overflow
-			.set_handler_fn(overflow_exception)
-			.set_stack_index(0);
-		idt.bound_range_exceeded
-			.set_handler_fn(bound_range_exceeded_exception)
-			.set_stack_index(0);
-		idt.invalid_opcode
-			.set_handler_fn(invalid_opcode_exception)
-			.set_stack_index(0);
-		idt.device_not_available
-			.set_handler_fn(device_not_available_exception)
-			.set_stack_index(0);
-		idt.double_fault
-			.set_handler_fn(double_fault_exception)
-			.set_stack_index(2);
-		idt.invalid_tss
-			.set_handler_fn(invalid_tss_exception)
-			.set_stack_index(0);
-		idt.segment_not_present
-			.set_handler_fn(segment_not_present_exception)
-			.set_stack_index(0);
-		idt.stack_segment_fault
-			.set_handler_fn(stack_segment_fault_exception)
-			.set_stack_index(0);
-		idt.general_protection_fault
-			.set_handler_fn(general_protection_exception)
-			.set_stack_index(0);
-		idt.page_fault
-			.set_handler_fn(page_fault_handler)
-			.set_stack_index(0);
-		idt.x87_floating_point
-			.set_handler_fn(floating_point_exception)
-			.set_stack_index(0);
-		idt.alignment_check
-			.set_handler_fn(alignment_check_exception)
-			.set_stack_index(0);
 		idt.machine_check
 			.set_handler_fn(machine_check_exception)
-			.set_stack_index(3);
-		idt.simd_floating_point
-			.set_handler_fn(simd_floating_point_exception)
-			.set_stack_index(0);
-		idt.virtualization
-			.set_handler_fn(virtualization_exception)
-			.set_stack_index(0);
+			.set_stack_index(2);
 	}
+
+	idt.divide_error.set_handler_fn(divide_error_exception);
+	idt.debug.set_handler_fn(debug_exception);
+	idt.breakpoint.set_handler_fn(breakpoint_exception);
+	idt.overflow.set_handler_fn(overflow_exception);
+	idt.bound_range_exceeded
+		.set_handler_fn(bound_range_exceeded_exception);
+	idt.invalid_opcode.set_handler_fn(invalid_opcode_exception);
+	idt.device_not_available
+		.set_handler_fn(device_not_available_exception);
+	idt.invalid_tss.set_handler_fn(invalid_tss_exception);
+	idt.segment_not_present
+		.set_handler_fn(segment_not_present_exception);
+	idt.stack_segment_fault
+		.set_handler_fn(stack_segment_fault_exception);
+	idt.general_protection_fault
+		.set_handler_fn(general_protection_exception);
+	idt.page_fault.set_handler_fn(page_fault_handler);
+	idt.x87_floating_point
+		.set_handler_fn(floating_point_exception);
+	idt.alignment_check
+		.set_handler_fn(alignment_check_exception);
+	idt.simd_floating_point
+		.set_handler_fn(simd_floating_point_exception);
+	idt.virtualization.set_handler_fn(virtualization_exception);
 
 	set_general_handler!(idt, unhandle, 32..64);
 	set_general_handler!(idt, unknown, 64..);
