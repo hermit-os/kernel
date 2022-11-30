@@ -8,6 +8,7 @@ use core::arch::x86_64::{
 use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
+use core::sync::atomic::{AtomicU64, Ordering};
 use core::{fmt, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
@@ -39,7 +40,7 @@ const EFER_TCE: u64 = 1 << 15;
 // See Intel SDM - Volume 1 - Section 7.3.17.1
 const RDRAND_RETRY_LIMIT: usize = 10;
 
-static mut MEASUREMENT_TIMER_TICKS: u64 = 0;
+static MEASUREMENT_TIMER_TICKS: AtomicU64 = AtomicU64::new(0);
 
 static mut PHYSICAL_ADDRESS_BITS: u8 = 0;
 static mut LINEAR_ADDRESS_BITS: u8 = 0;
@@ -337,9 +338,7 @@ impl CpuFrequency {
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
 		_stack_frame: irq::ExceptionStackFrame,
 	) {
-		unsafe {
-			MEASUREMENT_TIMER_TICKS += 1;
-		}
+		MEASUREMENT_TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
 	}
 
@@ -375,13 +374,13 @@ impl CpuFrequency {
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
-		let first_tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
+		let first_tick = MEASUREMENT_TIMER_TICKS.load(Ordering::Relaxed);
 		let start = get_timestamp();
 
 		// Wait until the tick count changes.
 		// As soon as it has done, we are at the start of a new time slice.
 		let start_tick = loop {
-			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
+			let tick = MEASUREMENT_TIMER_TICKS.load(Ordering::Relaxed);
 			if tick != first_tick {
 				break Some(tick);
 			}
@@ -401,7 +400,7 @@ impl CpuFrequency {
 		let start = get_timestamp();
 
 		loop {
-			let tick = unsafe { core::ptr::read_volatile(&MEASUREMENT_TIMER_TICKS) };
+			let tick = MEASUREMENT_TIMER_TICKS.load(Ordering::Relaxed);
 			if tick - start_tick >= tick_count {
 				break;
 			}
