@@ -748,8 +748,11 @@ pub fn detect_features() {
 		RUN_ON_HYPERVISOR = feature_info.has_hypervisor();
 		SUPPORTS_FSGS = extended_feature_info.has_fsgsbase();
 		SUPPORTS_RDTSCP = extend_processor_identifiers.has_rdtscp();
-
-		CPU_SPEEDSTEP.detect_features(&cpuid);
+		CPU_SPEEDSTEP = {
+			let mut cpu_speedstep = CpuSpeedStep::new();
+			cpu_speedstep.detect_features(&cpuid);
+			cpu_speedstep
+		};
 	}
 }
 
