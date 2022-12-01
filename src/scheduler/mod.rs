@@ -162,9 +162,7 @@ impl PerCoreScheduler {
 		without_interrupts(closure);
 
 		self.scheduler();
-
-		// we should never reach this point
-		panic!("exit failed!")
+		unreachable!()
 	}
 
 	#[cfg(feature = "newlib")]
