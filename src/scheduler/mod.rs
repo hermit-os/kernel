@@ -204,7 +204,12 @@ impl PerCoreScheduler {
 			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			TASKS.lock().insert(
 				tid,
-				TaskHandle::new(tid, current_task_borrowed.prio, core_id),
+				TaskHandle::new(
+					tid,
+					current_task_borrowed.prio,
+					#[cfg(feature = "smp")]
+					core_id,
+				),
 			);
 			NO_TASKS.fetch_add(1, Ordering::SeqCst);
 			#[cfg(feature = "smp")]
