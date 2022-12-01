@@ -1,5 +1,6 @@
 status = [
   "Build",
+  "Check",
   "Check docs",
   "Clippy",
   "Format",
