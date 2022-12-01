@@ -112,7 +112,7 @@ pub fn init() {
 	#[cfg(feature = "newlib")]
 	{
 		info!("An application with a C-based runtime is running on top of HermitCore!");
-		let kernel_heap_size = 10 * LargePageSize::SIZE;
+		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
 
 		unsafe {
 			let start = allocate(kernel_heap_size, true);
@@ -125,8 +125,8 @@ pub fn init() {
 
 		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
 		let user_heap_size = align_down!(
-			available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE,
-			LargePageSize::SIZE
+			available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE as usize,
+			LargePageSize::SIZE as usize
 		);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
 
