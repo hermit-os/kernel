@@ -94,7 +94,13 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 	}
 });
 
-static mut CPU_FREQUENCY: CpuFrequency = CpuFrequency::new();
+static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
+	let mut cpu_frequency = CpuFrequency::new();
+	unsafe {
+		cpu_frequency.detect();
+	}
+	cpu_frequency
+});
 
 #[repr(C, align(16))]
 pub struct XSaveLegacyRegion {
@@ -855,9 +861,7 @@ pub fn configure() {
 }
 
 pub fn detect_frequency() {
-	unsafe {
-		CPU_FREQUENCY.detect();
-	}
+	Lazy::force(&CPU_FREQUENCY);
 }
 
 pub fn print_information() {
@@ -870,9 +874,7 @@ pub fn print_information() {
 		infoentry!("Model", brand_string.as_str());
 	}
 
-	unsafe {
-		infoentry!("Frequency", CPU_FREQUENCY);
-	}
+	infoentry!("Frequency", *CPU_FREQUENCY);
 	infoentry!("SpeedStep Technology", FEATURES.cpu_speedstep);
 
 	infoentry!("Features", feature_printer);
@@ -1012,7 +1014,7 @@ pub fn get_timer_ticks() -> u64 {
 }
 
 pub fn get_frequency() -> u16 {
-	unsafe { CPU_FREQUENCY.get() }
+	CPU_FREQUENCY.get()
 }
 
 #[inline]
