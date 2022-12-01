@@ -18,6 +18,25 @@ defaults:
     shell: bash
 
 jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: taiki-e/install-action@cargo-hack
+      - name: Install NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install nasm
+      - uses: actions/checkout@v3
+      - run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: Check each feature
+        run: |
+          cargo hack check --package libhermit-rs --each-feature --no-dev-deps --exclude-features newlib --target x86_64-unknown-none
+          cargo check --package libhermit-rs --no-default-features --features newlib --target x86_64-unknown-none
+        env:
+          RUSTFLAGS:
+
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
