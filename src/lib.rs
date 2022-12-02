@@ -22,7 +22,7 @@
 #![feature(drain_filter)]
 #![feature(strict_provenance)]
 #![feature(is_some_and)]
-#![no_std]
+#![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]
 #![cfg_attr(
