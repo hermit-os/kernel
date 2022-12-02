@@ -7,7 +7,7 @@ use multiboot::information::{MemoryType, Multiboot};
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::x86_64::mm::{PhysAddr, VirtAddr, MEM};
+use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 
@@ -21,7 +21,8 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 		return Err(());
 	}
 
-	let mb = unsafe { Multiboot::from_ptr(mb_info.as_u64(), &mut MEM).unwrap() };
+	let mut mem = MultibootMemory;
+	let mb = unsafe { Multiboot::from_ptr(mb_info.as_u64(), &mut mem).unwrap() };
 	let all_regions = mb
 		.memory_regions()
 		.expect("Could not find a memory map in the Multiboot information");
