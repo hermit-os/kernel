@@ -5,6 +5,11 @@ mod hole;
 mod test;
 
 use core::mem;
+use core::ops::Range;
+
+use hermit_sync::Lazy;
+#[cfg(feature = "newlib")]
+use hermit_sync::OnceCell;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
@@ -19,48 +24,44 @@ use crate::arch::mm::PhysAddr;
 use crate::arch::mm::VirtAddr;
 use crate::{arch, env};
 
-/// Physical and virtual address of the first 2 MiB page that maps the kernel.
-/// Can be easily accessed through kernel_start_address()
-static mut KERNEL_START_ADDRESS: VirtAddr = VirtAddr::zero();
+/// Physical and virtual address range of the 2 MiB pages that map the kernel.
+static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
+	if cfg!(target_os = "none") {
+		// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
+		env::get_base_address().align_down_to_large_page()
+			..(env::get_base_address() + env::get_image_size()).align_up_to_large_page()
+	} else {
+		VirtAddr::zero()..VirtAddr::zero()
+	}
+});
 
-/// Physical and virtual address of the first page after the kernel.
-/// Can be easily accessed through kernel_end_address()
-static mut KERNEL_END_ADDRESS: VirtAddr = VirtAddr::zero();
-
-/// Start address of the user heap
-static mut HEAP_START_ADDRESS: VirtAddr = VirtAddr::zero();
-
-/// End address of the user heap
-static mut HEAP_END_ADDRESS: VirtAddr = VirtAddr::zero();
+#[cfg(feature = "newlib")]
+/// User heap address range.
+static HEAP_ADDR_RANGE: OnceCell<Range<VirtAddr>> = OnceCell::new();
 
 pub fn kernel_start_address() -> VirtAddr {
-	unsafe { KERNEL_START_ADDRESS }
+	KERNEL_ADDR_RANGE.start
 }
 
 pub fn kernel_end_address() -> VirtAddr {
-	unsafe { KERNEL_END_ADDRESS }
+	KERNEL_ADDR_RANGE.end
 }
 
 #[cfg(feature = "newlib")]
 pub fn task_heap_start() -> VirtAddr {
-	unsafe { HEAP_START_ADDRESS }
+	HEAP_ADDR_RANGE.get().unwrap().start
 }
 
 #[cfg(feature = "newlib")]
 pub fn task_heap_end() -> VirtAddr {
-	unsafe { HEAP_END_ADDRESS }
+	HEAP_ADDR_RANGE.get().unwrap().end
 }
 
 #[cfg(target_os = "none")]
 pub fn init() {
 	use crate::arch::mm::paging;
 
-	// Calculate the start and end addresses of the 2 MiB page(s) that map the kernel.
-	unsafe {
-		KERNEL_START_ADDRESS = env::get_base_address().align_down_to_large_page();
-		KERNEL_END_ADDRESS =
-			(env::get_base_address() + env::get_image_size()).align_up_to_large_page();
-	}
+	Lazy::force(&KERNEL_ADDR_RANGE);
 
 	arch::mm::init();
 	arch::mm::init_page_tables();
@@ -108,6 +109,7 @@ pub fn init() {
 
 	// we reserve 10% of the memory for stack allocations
 	let stack_reserve: usize = (available_memory * 10) / 100;
+	let heap_start_addr;
 
 	#[cfg(feature = "newlib")]
 	{
@@ -132,9 +134,7 @@ pub fn init() {
 
 		map_addr = kernel_heap_end();
 		map_size = user_heap_size;
-		unsafe {
-			HEAP_START_ADDRESS = map_addr;
-		}
+		heap_start_addr = map_addr;
 	}
 
 	#[cfg(not(feature = "newlib"))]
@@ -189,8 +189,8 @@ pub fn init() {
 			counter = LargePageSize::SIZE as usize;
 		}
 
+		heap_start_addr = virt_addr;
 		unsafe {
-			HEAP_START_ADDRESS = virt_addr;
 			crate::ALLOCATOR
 				.lock()
 				.init(virt_addr.as_usize(), virt_size);
@@ -224,14 +224,12 @@ pub fn init() {
 		map_addr += size;
 	}
 
-	unsafe {
-		HEAP_END_ADDRESS = map_addr;
+	let heap_end_addr = map_addr;
 
-		info!(
-			"Heap is located at {:#x} -- {:#x} ({} Bytes unmapped)",
-			HEAP_START_ADDRESS, HEAP_END_ADDRESS, map_size
-		);
-	}
+	let heap_addr_range = heap_start_addr..heap_end_addr;
+	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
+	#[cfg(feature = "newlib")]
+	HEAP_ADDR_RANGE.set(heap_addr_range).unwrap();
 }
 
 pub fn print_information() {
