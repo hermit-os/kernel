@@ -11,12 +11,6 @@ pub use self::paging::init_page_tables;
 /// Memory translation, allocation and deallocation for MultibootInformation
 struct MultibootMemory;
 
-impl MultibootMemory {
-	const fn new() -> Self {
-		Self {}
-	}
-}
-
 impl multiboot::information::MemoryManagement for MultibootMemory {
 	unsafe fn paddr_to_slice(
 		&self,
@@ -39,8 +33,6 @@ impl multiboot::information::MemoryManagement for MultibootMemory {
 		}
 	}
 }
-
-static mut MEM: MultibootMemory = MultibootMemory::new();
 
 pub fn init() {
 	paging::init();
