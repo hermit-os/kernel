@@ -1,4 +1,4 @@
-pub mod irq;
+pub mod interrupts;
 pub mod pci;
 pub mod percore;
 pub mod processor;
@@ -190,8 +190,8 @@ pub fn boot_processor_init() {
 		pic::init();
 	}
 
-	irq::install();
-	irq::enable();
+	interrupts::install();
+	interrupts::enable();
 	processor::detect_frequency();
 	processor::print_information();
 	systemtime::init();
@@ -232,7 +232,7 @@ pub fn application_processor_init() {
 	idt::install();
 	apic::init_x2apic();
 	apic::init_local_apic();
-	irq::enable();*/
+	interrupts::enable();*/
 	finish_processor_init();
 }
 

@@ -21,7 +21,7 @@ use x86::msr::*;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::{boot_info, idt, irq, pic, pit};
+use crate::arch::x86_64::kernel::{boot_info, interrupts, pic, pit};
 use crate::env;
 
 const IA32_MISC_ENABLE_ENHANCED_SPEEDSTEP: u64 = 1 << 16;
@@ -381,7 +381,7 @@ impl CpuFrequency {
 	}
 
 	extern "x86-interrupt" fn measure_frequency_timer_handler(
-		_stack_frame: irq::ExceptionStackFrame,
+		_stack_frame: interrupts::ExceptionStackFrame,
 	) {
 		MEASUREMENT_TIMER_TICKS.fetch_add(1, Ordering::Relaxed);
 		pic::eoi(pit::PIT_INTERRUPT_NUMBER);
@@ -396,6 +396,10 @@ impl CpuFrequency {
 
 	#[cfg(target_os = "none")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
+		use x86_64::structures::idt::InterruptDescriptorTable;
+
+		use crate::arch::x86_64::kernel::interrupts::IDT;
+
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if env::is_uhyve() {
 			return Err(());
@@ -407,15 +411,13 @@ impl CpuFrequency {
 
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
-		idt::set_gate(
-			pit::PIT_INTERRUPT_NUMBER,
-			Self::measure_frequency_timer_handler as usize,
-			0,
-		);
+		let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+		idt[pit::PIT_INTERRUPT_NUMBER as usize]
+			.set_handler_fn(Self::measure_frequency_timer_handler);
 		pit::init(measurement_frequency);
 
 		// we need a timer interrupt to meature the frequency
-		irq::enable();
+		interrupts::enable();
 
 		// Determine the current timer tick.
 		// We are probably loading this value in the middle of a time slice.
@@ -437,7 +439,7 @@ impl CpuFrequency {
 			spin_loop();
 		}
 		.ok_or_else(|| {
-			irq::disable();
+			interrupts::disable();
 			pit::deinit();
 		})?;
 
@@ -456,7 +458,7 @@ impl CpuFrequency {
 		let end = get_timestamp();
 
 		// we don't longer need a timer interrupt
-		irq::disable();
+		interrupts::disable();
 
 		// Deinitialize the PIT again.
 		// Now we can calculate our CPU frequency and implement a constant frequency tick counter

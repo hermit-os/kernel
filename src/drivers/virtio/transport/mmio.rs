@@ -10,7 +10,7 @@ use core::sync::atomic::{fence, Ordering};
 use core::u8;
 
 use crate::arch::mm::PhysAddr;
-use crate::arch::x86_64::kernel::irq::*;
+use crate::arch::x86_64::kernel::interrupts::*;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;

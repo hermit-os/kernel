@@ -6,7 +6,7 @@ use crossbeam_utils::CachePadded;
 use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
 
-use crate::arch::x86_64::kernel::irq::IrqStatistics;
+use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));

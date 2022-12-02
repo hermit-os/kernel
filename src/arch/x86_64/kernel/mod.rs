@@ -1,4 +1,3 @@
-use alloc::collections::BTreeMap;
 #[cfg(feature = "newlib")]
 use core::slice;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -7,11 +6,9 @@ use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
-use crate::arch::x86_64::kernel::irq::{get_irq_name, IrqStatistics};
 use crate::arch::x86_64::kernel::percore::*;
 use crate::arch::x86_64::kernel::serial::SerialPort;
 use crate::env;
-use crate::scheduler::CoreId;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -19,8 +16,7 @@ pub mod apic;
 #[cfg(feature = "pci")]
 pub mod fuse;
 pub mod gdt;
-pub mod idt;
-pub mod irq;
+pub mod interrupts;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
 #[cfg(feature = "pci")]
@@ -39,9 +35,6 @@ pub mod systemtime;
 mod vga;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115_200;
-
-/// Map between Core ID and per-core scheduler
-static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
 
 /// Kernel header to announce machine features
 #[cfg_attr(
@@ -272,7 +265,7 @@ pub fn boot_processor_init() {
 	env::init();
 	gdt::init();
 	gdt::add_current_core();
-	idt::install();
+	interrupts::load_idt();
 	pic::init();
 
 	processor::detect_frequency();
@@ -280,7 +273,7 @@ pub fn boot_processor_init() {
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
-	irq::install();
+	interrupts::install();
 	systemtime::init();
 
 	if is_uhyve_with_pci() || !is_uhyve() {
@@ -297,7 +290,7 @@ pub fn boot_processor_init() {
 	apic::init();
 	scheduler::install_timer_handler();
 	finish_processor_init();
-	irq::enable();
+	interrupts::enable();
 }
 
 /// Boots all available Application Processors on bare-metal or QEMU.
@@ -315,13 +308,13 @@ pub fn application_processor_init() {
 	percore::init();
 	processor::configure();
 	gdt::add_current_core();
-	idt::install();
+	interrupts::load_idt();
 	apic::init_x2apic();
 	apic::init_local_apic();
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
-	irq::enable();
+	interrupts::enable();
 	finish_processor_init();
 }
 
@@ -344,23 +337,7 @@ fn finish_processor_init() {
 }
 
 pub fn print_statistics() {
-	info!("Number of interrupts");
-	unsafe {
-		for (core_id, irg_statistics) in IRQ_COUNTERS.iter() {
-			for (i, counter) in irg_statistics.counters.iter().enumerate() {
-				if *counter > 0 {
-					match get_irq_name(i.try_into().unwrap()) {
-						Some(name) => {
-							info!("[{}][{}]: {}", core_id, name, *counter);
-						}
-						_ => {
-							info!("[{}][{}]: {}", core_id, i, *counter);
-						}
-					}
-				}
-			}
-		}
-	}
+	interrupts::print_statistics();
 }
 
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.

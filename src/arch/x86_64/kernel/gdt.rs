@@ -9,6 +9,7 @@ use x86::segmentation::*;
 use x86::task::*;
 use x86::Ring;
 
+use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::kernel::percore::*;
@@ -21,11 +22,6 @@ pub const GDT_FIRST_TSS: u16 = 3;
 
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
 const GDT_ENTRIES: usize = 8192;
-
-/// We use IST1 through IST4.
-/// Each critical exception (NMI, Double Fault, Machine Check) gets a dedicated one while IST1 is shared for all other
-/// interrupts. See also irq.rs.
-const IST_ENTRIES: usize = 4;
 
 static mut GDT: Gdt = Gdt::new();
 static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer {
@@ -96,8 +92,8 @@ pub fn add_current_core() {
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
-		let ist = crate::mm::allocate(KERNEL_STACK_SIZE, true);
-		boxed_tss.ist[i] = ist.as_u64() + KERNEL_STACK_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
+		let ist = crate::mm::allocate(IST_SIZE, true);
+		boxed_tss.ist[i] = ist.as_u64() + IST_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
 	}
 
 	unsafe {

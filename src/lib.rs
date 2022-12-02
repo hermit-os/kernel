@@ -239,11 +239,6 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 	}
 }
 
-#[cfg(target_os = "none")]
-extern "C" {
-	static mut __bss_start: usize;
-}
-
 /// Entry point of a kernel thread, which initialize the libos
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
@@ -316,8 +311,12 @@ fn boot_processor_main() -> ! {
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
 	info!("Kernel starts at {:#x}", env::get_base_address());
-	info!("BSS starts at {:#x}", unsafe {
-		&__bss_start as *const usize as usize
+
+	extern "C" {
+		static mut __bss_start: u8;
+	}
+	info!("BSS starts at {:p}", unsafe {
+		core::ptr::addr_of_mut!(__bss_start)
 	});
 	info!(
 		"TLS starts at {:#x} (size {} Bytes)",

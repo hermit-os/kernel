@@ -8,7 +8,7 @@ use core::mem;
 
 use x86::io::*;
 
-use crate::arch::kernel::irq::*;
+use crate::arch::kernel::interrupts::*;
 use crate::arch::kernel::pci;
 use crate::arch::kernel::percore::increment_irq_counter;
 use crate::arch::mm::paging::virt_to_phys;
