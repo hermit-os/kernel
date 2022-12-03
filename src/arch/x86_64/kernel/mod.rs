@@ -198,11 +198,7 @@ pub fn output_message_byte(byte: u8) {
 #[cfg(not(target_os = "none"))]
 #[test]
 fn test_output() {
-	output_message_byte('t' as u8);
-	output_message_byte('e' as u8);
-	output_message_byte('s' as u8);
-	output_message_byte('t' as u8);
-	output_message_byte('\n' as u8);
+	output_message_buf(b"test message\n");
 }
 
 #[cfg(target_os = "none")]
