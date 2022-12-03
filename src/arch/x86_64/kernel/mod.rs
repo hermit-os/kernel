@@ -197,26 +197,11 @@ pub fn message_output_init() {
 	}
 }
 
-#[cfg(all(not(target_os = "none"), not(target_os = "windows")))]
+#[cfg(not(target_os = "none"))]
 pub fn output_message_byte(byte: u8) {
-	extern "C" {
-		fn write(fd: i32, buf: *const u8, count: usize) -> isize;
-	}
+	use std::io::Write;
 
-	unsafe {
-		let _ = write(2, &byte as *const _, 1);
-	}
-}
-
-#[cfg(target_os = "windows")]
-pub fn output_message_byte(byte: u8) {
-	extern "C" {
-		fn _write(fd: i32, buf: *const u8, count: u32) -> isize;
-	}
-
-	unsafe {
-		let _ = _write(2, &byte as *const _, 1);
-	}
+	std::io::stderr().write_all(&[byte]).unwrap();
 }
 
 #[cfg(not(target_os = "none"))]
