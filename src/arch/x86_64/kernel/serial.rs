@@ -19,10 +19,20 @@ impl SerialPort {
 		}
 	}
 
-	pub fn send(&mut self, data: u8) {
+	pub fn send(&mut self, buf: &[u8]) {
 		match &mut self.0 {
-			Inner::Uhyve(s) => unsafe { s.write(data) },
-			Inner::Uart(s) => s.send(data),
+			Inner::Uhyve(s) => {
+				for &data in buf {
+					unsafe {
+						s.write(data);
+					}
+				}
+			}
+			Inner::Uart(s) => {
+				for &data in buf {
+					s.send(data);
+				}
+			}
 		}
 	}
 }

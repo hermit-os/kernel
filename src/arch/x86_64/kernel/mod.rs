@@ -189,28 +189,23 @@ pub fn message_output_init() {
 }
 
 #[cfg(target_os = "none")]
-pub fn output_message_byte(byte: u8) {
-	// Output messages to the serial port and VGA screen in unikernel mode.
-	COM1.lock().as_mut().unwrap().send(byte);
-
-	// vga::write_byte() checks if VGA support has been initialized,
-	// so we don't need any additional if clause around it.
-	#[cfg(feature = "vga")]
-	vga::write_byte(byte);
-}
-
-//#[cfg(target_os = "none")]
 pub fn output_message_buf(buf: &[u8]) {
-	for byte in buf {
-		output_message_byte(*byte);
+	// Output messages to the serial port and VGA screen in unikernel mode.
+	COM1.lock().as_mut().unwrap().send(buf);
+
+	#[cfg(feature = "vga")]
+	for &byte in buf {
+		// vga::write_byte() checks if VGA support has been initialized,
+		// so we don't need any additional if clause around it.
+		vga::write_byte(byte);
 	}
 }
 
 #[cfg(not(target_os = "none"))]
-pub fn output_message_byte(byte: u8) {
+pub fn output_message_buf(buf: &[u8]) {
 	use std::io::Write;
 
-	std::io::stderr().write_all(&[byte]).unwrap();
+	std::io::stderr().write_all(buf).unwrap();
 }
 
 #[cfg(not(target_os = "none"))]
