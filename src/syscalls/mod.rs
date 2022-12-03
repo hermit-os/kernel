@@ -14,6 +14,7 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
+use crate::fd::{get_object, remove_object, FileDescriptor};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -41,16 +42,16 @@ const LWIP_FD_BIT: i32 = 1 << 30;
 #[cfg(feature = "newlib")]
 pub static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
 
-pub(crate) static mut SYS: &'static dyn SyscallInterface = &interfaces::Generic;
+pub(crate) static mut SYS: &'static dyn SyscallInterface = &self::interfaces::Generic;
 
 /// Shuts down the machine.
 ///
 /// This does not require the syscall interface to be initialized.
 pub(crate) fn shutdown(arg: i32) -> ! {
 	if env::is_uhyve() {
-		interfaces::Uhyve.shutdown(arg)
+		crate::syscalls::interfaces::Uhyve.shutdown(arg)
 	} else {
-		interfaces::Generic.shutdown(arg)
+		crate::syscalls::interfaces::Generic.shutdown(arg)
 	}
 }
 
@@ -114,47 +115,56 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
-extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
-	unsafe { SYS.open(name, flags, mode) }
+extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
+	crate::fd::open(name, flags, mode).map_or_else(|e| e, |v| v)
 }
 
 #[no_mangle]
-pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> i32 {
+pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
 	kernel_function!(__sys_open(name, flags, mode))
 }
 
-extern "C" fn __sys_close(fd: i32) -> i32 {
-	unsafe { SYS.close(fd) }
+extern "C" fn __sys_close(fd: FileDescriptor) -> i32 {
+	let obj = get_object(fd);
+	let result = obj.map_or_else(|e| e, |v| v.close());
+	if result == 0 {
+		remove_object(fd);
+	}
+
+	result
 }
 
 #[no_mangle]
-pub extern "C" fn sys_close(fd: i32) -> i32 {
+pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 	kernel_function!(__sys_close(fd))
 }
 
-extern "C" fn __sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
-	unsafe { SYS.read(fd, buf, len) }
+extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| v.read(buf, len))
 }
 #[no_mangle]
-pub extern "C" fn sys_read(fd: i32, buf: *mut u8, len: usize) -> isize {
+pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	kernel_function!(__sys_read(fd, buf, len))
 }
 
-extern "C" fn __sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
-	unsafe { SYS.write(fd, buf, len) }
+extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| v.write(buf, len))
 }
 
 #[no_mangle]
-pub extern "C" fn sys_write(fd: i32, buf: *const u8, len: usize) -> isize {
+pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	kernel_function!(__sys_write(fd, buf, len))
 }
 
-extern "C" fn __sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
-	unsafe { SYS.lseek(fd, offset, whence) }
+extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| v.lseek(offset, whence))
 }
 
 #[no_mangle]
-pub extern "C" fn sys_lseek(fd: i32, offset: isize, whence: i32) -> isize {
+pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
