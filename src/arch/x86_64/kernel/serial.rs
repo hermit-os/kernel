@@ -1,96 +1,28 @@
-use core::hint::spin_loop;
+use x86_64::instructions::port::Port;
 
-use x86::io::*;
-
-use crate::env;
-
-const UART_TX: u16 = 0;
-const UART_IER: u16 = 1;
-
-const UART_DLL: u16 = 0;
-const UART_DLM: u16 = 1;
-
-const UART_FCR: u16 = 2;
-const UART_FCR_ENABLE_FIFO: u8 = 0x01;
-const UART_FCR_CLEAR_RECEIVER_FIFO: u8 = 0x02;
-const UART_FCR_CLEAR_TRANSMITTER_FIFO: u8 = 0x04;
-
-const UART_LCR: u16 = 3;
-const UART_LCR_WORD_LENGTH_8BITS: u8 = 0x03;
-const UART_LCR_DIVISOR_LATCH_ACCESS: u8 = 0x80;
-
-const UART_LSR: u16 = 5;
-const UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER: u8 = 0x20;
-
-pub struct SerialPort {
-	pub port_address: u16,
+enum Inner {
+	Uart(uart_16550::SerialPort),
+	Uhyve(Port<u8>),
 }
 
+pub struct SerialPort(Inner);
+
 impl SerialPort {
-	pub const fn new(port_address: u16) -> Self {
-		Self { port_address }
-	}
-
-	fn read_from_register(&self, register: u16) -> u8 {
-		unsafe { inb(self.port_address + register) }
-	}
-
-	fn is_transmitting(&self) -> bool {
-		// The virtual serial port in uhyve is never blocked.
-		if env::is_uhyve() {
-			return false;
-		}
-
-		self.read_from_register(UART_LSR) & UART_LSR_EMPTY_TRANSMITTER_HOLDING_REGISTER == 0
-	}
-
-	fn write_to_register(&self, register: u16, byte: u8) {
-		while self.is_transmitting() {
-			spin_loop();
-		}
-
-		unsafe {
-			outb(self.port_address + register, byte);
+	pub unsafe fn new(base: u16) -> Self {
+		if crate::env::is_uhyve() {
+			let serial = Port::new(base);
+			Self(Inner::Uhyve(serial))
+		} else {
+			let mut serial = unsafe { uart_16550::SerialPort::new(base) };
+			serial.init();
+			Self(Inner::Uart(serial))
 		}
 	}
 
-	pub fn write_byte(&self, byte: u8) {
-		if self.port_address == 0 {
-			return;
-		}
-
-		// LF newline characters need to be extended to CRLF over a real serial port.
-		if byte == b'\n' {
-			self.write_to_register(UART_TX, b'\r');
-		}
-
-		self.write_to_register(UART_TX, byte);
-	}
-
-	pub fn init(&self, baudrate: u32) {
-		// The virtual serial port is always initialized in uhyve.
-		if !env::is_uhyve() && self.port_address != 0 {
-			// Disable port interrupt.
-			self.write_to_register(UART_IER, 0);
-
-			// Set 8N1 mode (8 bits, 1 stop bit, no parity).
-			self.write_to_register(UART_LCR, UART_LCR_WORD_LENGTH_8BITS);
-
-			// Set the baudrate.
-			let divisor = (115_200 / baudrate) as u16;
-			let lcr = self.read_from_register(UART_LCR);
-			self.write_to_register(UART_LCR, lcr | UART_LCR_DIVISOR_LATCH_ACCESS);
-			self.write_to_register(UART_DLL, divisor as u8);
-			self.write_to_register(UART_DLM, (divisor >> 8) as u8);
-			self.write_to_register(UART_LCR, lcr);
-
-			// Enable and clear FIFOs.
-			self.write_to_register(
-				UART_FCR,
-				UART_FCR_ENABLE_FIFO
-					| UART_FCR_CLEAR_RECEIVER_FIFO
-					| UART_FCR_CLEAR_TRANSMITTER_FIFO,
-			);
+	pub fn send(&mut self, data: u8) {
+		match &mut self.0 {
+			Inner::Uhyve(s) => unsafe { s.write(data) },
+			Inner::Uart(s) => s.send(data),
 		}
 	}
 }
