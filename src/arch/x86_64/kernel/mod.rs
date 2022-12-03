@@ -188,19 +188,6 @@ pub fn message_output_init() {
 	*COM1.lock() = Some(serial_port);
 }
 
-#[cfg(not(target_os = "none"))]
-pub fn output_message_byte(byte: u8) {
-	use std::io::Write;
-
-	std::io::stderr().write_all(&[byte]).unwrap();
-}
-
-#[cfg(not(target_os = "none"))]
-#[test]
-fn test_output() {
-	output_message_buf(b"test message\n");
-}
-
 #[cfg(target_os = "none")]
 pub fn output_message_byte(byte: u8) {
 	// Output messages to the serial port and VGA screen in unikernel mode.
@@ -217,6 +204,19 @@ pub fn output_message_buf(buf: &[u8]) {
 	for byte in buf {
 		output_message_byte(*byte);
 	}
+}
+
+#[cfg(not(target_os = "none"))]
+pub fn output_message_byte(byte: u8) {
+	use std::io::Write;
+
+	std::io::stderr().write_all(&[byte]).unwrap();
+}
+
+#[cfg(not(target_os = "none"))]
+#[test]
+fn test_output() {
+	output_message_buf(b"test message\n");
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
