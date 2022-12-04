@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
+#[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -19,7 +20,8 @@ pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
-static mut SCHEDULERS: Vec<&PerCoreScheduler> = Vec::new();
+#[cfg(feature = "smp")]
+static mut SCHEDULER_INPUTS: Vec<&InterruptTicketMutex<SchedulerInput>> = Vec::new();
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
@@ -97,7 +99,7 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			#[cfg(feature = "smp")]
-			let mut input_locked = get_scheduler(core_id).input.lock();
+			let mut input_locked = get_scheduler_input(core_id).lock();
 			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			TASKS.lock().insert(
 				tid,
@@ -198,7 +200,7 @@ impl PerCoreScheduler {
 		// Add it to the task lists.
 		let wakeup = {
 			#[cfg(feature = "smp")]
-			let mut input_locked = get_scheduler(core_id).input.lock();
+			let mut input_locked = get_scheduler_input(core_id).lock();
 			WAITING_TASKS.lock().insert(tid, VecDeque::with_capacity(1));
 			TASKS.lock().insert(
 				tid,
@@ -262,8 +264,7 @@ impl PerCoreScheduler {
 		if task.get_core_id() == self.core_id {
 			without_interrupts(|| self.blocked_tasks.custom_wakeup(task));
 		} else {
-			get_scheduler(task.get_core_id())
-				.input
+			get_scheduler_input(task.get_core_id())
 				.lock()
 				.wakeup_tasks
 				.push_back(task);
@@ -614,23 +615,19 @@ pub fn add_current_core() {
 
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
+	#[cfg(feature = "smp")]
 	unsafe {
-		SCHEDULERS.insert(core_id.try_into().unwrap(), scheduler.as_ref().unwrap());
+		SCHEDULER_INPUTS.insert(
+			core_id.try_into().unwrap(),
+			&scheduler.as_ref().unwrap().input,
+		);
 	}
 }
 
 #[inline]
 #[cfg(feature = "smp")]
-fn get_scheduler(core_id: CoreId) -> &'static PerCoreScheduler {
-	// Get the scheduler for the desired core.
-	if let Some(result) = unsafe { SCHEDULERS.get(usize::try_from(core_id).unwrap()) } {
-		result
-	} else {
-		panic!(
-			"Trying to get the scheduler for core {}, but it isn't available",
-			core_id
-		);
-	}
+fn get_scheduler_input(core_id: CoreId) -> &'static InterruptTicketMutex<SchedulerInput> {
+	unsafe { SCHEDULER_INPUTS[usize::try_from(core_id).unwrap()] }
 }
 
 pub fn join(id: TaskId) -> Result<(), ()> {
