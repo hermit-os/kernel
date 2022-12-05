@@ -21,7 +21,7 @@ pub const GDT_KERNEL_DATA: u16 = 2;
 pub const GDT_FIRST_TSS: u16 = 3;
 
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
-const GDT_ENTRIES: usize = 8192;
+const GDT_ENTRIES: usize = 8;
 
 static mut GDT: Gdt = Gdt::new();
 static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer {
