@@ -162,9 +162,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-sync"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c9b3a836d168ff283be2421bb51b8dd8197f9f44a5be14a346c879d7e62fe2b"
+checksum = "ab42d49527a8773b233ceaabe8dde3e59a224673763ec25b21dcf194deeeba78"
 dependencies = [
  "aarch64-cpu",
  "crossbeam-utils",
