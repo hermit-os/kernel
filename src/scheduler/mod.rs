@@ -21,7 +21,8 @@ pub mod task;
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
 #[cfg(feature = "smp")]
-static mut SCHEDULER_INPUTS: Vec<&InterruptTicketMutex<SchedulerInput>> = Vec::new();
+static SCHEDULER_INPUTS: SpinMutex<Vec<&InterruptTicketMutex<SchedulerInput>>> =
+	SpinMutex::new(Vec::new());
 /// Map between Task ID and Queue of waiting tasks
 static WAITING_TASKS: InterruptTicketMutex<BTreeMap<TaskId, VecDeque<TaskHandle>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
@@ -644,18 +645,18 @@ pub fn add_current_core() {
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	#[cfg(feature = "smp")]
-	unsafe {
-		SCHEDULER_INPUTS.insert(
-			core_id.try_into().unwrap(),
-			&scheduler.as_ref().unwrap().input,
-		);
+	{
+		let scheduler = unsafe { scheduler.as_ref().unwrap() };
+		SCHEDULER_INPUTS
+			.lock()
+			.insert(core_id.try_into().unwrap(), &scheduler.input);
 	}
 }
 
 #[inline]
 #[cfg(feature = "smp")]
 fn get_scheduler_input(core_id: CoreId) -> &'static InterruptTicketMutex<SchedulerInput> {
-	unsafe { SCHEDULER_INPUTS[usize::try_from(core_id).unwrap()] }
+	SCHEDULER_INPUTS.lock()[usize::try_from(core_id).unwrap()]
 }
 
 pub fn join(id: TaskId) -> Result<(), ()> {
