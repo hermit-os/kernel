@@ -35,7 +35,7 @@ pub type CoreId = u32;
 #[cfg(feature = "smp")]
 struct SchedulerInput {
 	/// Queue of new tasks
-	new_tasks: VecDeque<Task>,
+	new_tasks: VecDeque<NewTask>,
 	/// Queue of task, which are wakeup by another core
 	wakeup_tasks: VecDeque<TaskHandle>,
 }
@@ -76,6 +76,31 @@ pub struct PerCoreScheduler {
 	input: InterruptTicketMutex<SchedulerInput>,
 }
 
+struct NewTask {
+	tid: TaskId,
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: Priority,
+	core_id: CoreId,
+	stack_size: usize,
+}
+
+impl From<NewTask> for Task {
+	fn from(value: NewTask) -> Self {
+		let NewTask {
+			tid,
+			func,
+			arg,
+			prio,
+			core_id,
+			stack_size,
+		} = value;
+		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stack_size);
+		task.create_stack_frame(func, arg);
+		task
+	}
+}
+
 impl PerCoreScheduler {
 	/// Spawn a new task.
 	pub fn spawn(
@@ -87,10 +112,13 @@ impl PerCoreScheduler {
 	) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
-		let task = {
-			let mut task = Task::new(tid, core_id, TaskStatus::Ready, prio, stack_size);
-			task.create_stack_frame(func, arg);
-			task
+		let new_task = NewTask {
+			tid,
+			func,
+			arg,
+			prio,
+			core_id,
+			stack_size,
 		};
 
 		// Add it to the task lists.
@@ -111,16 +139,16 @@ impl PerCoreScheduler {
 
 			#[cfg(feature = "smp")]
 			if core_id != core_scheduler().core_id {
-				input_locked.new_tasks.push_back(task);
+				input_locked.new_tasks.push_back(new_task);
 				true
 			} else {
-				let task = Rc::new(RefCell::new(task));
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
 				core_scheduler().ready_queue.push(task);
 				false
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
-				let task = Rc::new(RefCell::new(task));
+				let task = Rc::new(RefCell::new(Task::from(new_task)));
 				core_scheduler().ready_queue.push(task);
 				false
 			} else {
@@ -415,8 +443,8 @@ impl PerCoreScheduler {
 			self.blocked_tasks.custom_wakeup(task);
 		}
 
-		while let Some(task) = input_locked.new_tasks.pop_front() {
-			let task = Rc::new(RefCell::new(task));
+		while let Some(new_task) = input_locked.new_tasks.pop_front() {
+			let task = Rc::new(RefCell::new(Task::from(new_task)));
 			self.ready_queue.push(task.clone());
 		}
 	}
