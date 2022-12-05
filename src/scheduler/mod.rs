@@ -35,7 +35,7 @@ pub type CoreId = u32;
 #[cfg(feature = "smp")]
 struct SchedulerInput {
 	/// Queue of new tasks
-	new_tasks: VecDeque<Rc<RefCell<Task>>>,
+	new_tasks: VecDeque<Task>,
 	/// Queue of task, which are wakeup by another core
 	wakeup_tasks: VecDeque<TaskHandle>,
 }
@@ -87,14 +87,11 @@ impl PerCoreScheduler {
 	) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
-		let task = Rc::new(RefCell::new(Task::new(
-			tid,
-			core_id,
-			TaskStatus::Ready,
-			prio,
-			stack_size,
-		)));
-		task.borrow_mut().create_stack_frame(func, arg);
+		let task = {
+			let mut task = Task::new(tid, core_id, TaskStatus::Ready, prio, stack_size);
+			task.create_stack_frame(func, arg);
+			task
+		};
 
 		// Add it to the task lists.
 		let wakeup = {
@@ -117,11 +114,13 @@ impl PerCoreScheduler {
 				input_locked.new_tasks.push_back(task);
 				true
 			} else {
+				let task = Rc::new(RefCell::new(task));
 				core_scheduler().ready_queue.push(task);
 				false
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
+				let task = Rc::new(RefCell::new(task));
 				core_scheduler().ready_queue.push(task);
 				false
 			} else {
@@ -417,6 +416,7 @@ impl PerCoreScheduler {
 		}
 
 		while let Some(task) = input_locked.new_tasks.pop_front() {
+			let task = Rc::new(RefCell::new(task));
 			self.ready_queue.push(task.clone());
 		}
 	}
