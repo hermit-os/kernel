@@ -21,13 +21,9 @@ pub const GDT_KERNEL_DATA: u16 = 2;
 pub const GDT_FIRST_TSS: u16 = 3;
 
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
-const GDT_ENTRIES: usize = 8192;
+const GDT_ENTRIES: usize = 8;
 
 static mut GDT: Gdt = Gdt::new();
-static mut GDTR: DescriptorTablePointer<Descriptor> = DescriptorTablePointer {
-	base: 0 as *const Descriptor,
-	limit: 0,
-};
 
 #[repr(align(4096))]
 struct Gdt {
@@ -62,16 +58,14 @@ pub fn init() {
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
-
-		// Let GDTR point to our newly crafted GDT.
-		GDTR = DescriptorTablePointer::new_from_slice(&(GDT.entries[0..GDT_ENTRIES]));
 	}
 }
 
 pub fn add_current_core() {
 	unsafe {
 		// Load the GDT for the current core.
-		dtables::lgdt(&GDTR);
+		let gdtr = DescriptorTablePointer::new_from_slice(&(GDT.entries[0..GDT_ENTRIES]));
+		dtables::lgdt(&gdtr);
 
 		// Reload the segment descriptors
 		load_cs(SegmentSelector::new(GDT_KERNEL_CODE, Ring::Ring0));
