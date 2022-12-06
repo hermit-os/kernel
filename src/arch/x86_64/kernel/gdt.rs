@@ -1,11 +1,9 @@
 use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
 
-use x86::bits64::segmentation::*;
 use x86::bits64::task::*;
-use x86::segmentation::*;
-use x86::task::*;
-use x86::Ring;
+use x86_64::instructions::tables;
+use x86_64::registers::segmentation::{Segment, CS, DS, ES, SS};
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
@@ -14,14 +12,10 @@ use super::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::kernel::percore::*;
 use crate::config::*;
 
-pub const GDT_KERNEL_CODE: u16 = 1;
-pub const GDT_KERNEL_DATA: u16 = 2;
-pub const GDT_FIRST_TSS: u16 = 3;
-
 pub fn add_current_core() {
 	let gdt = Box::leak(Box::new(GlobalDescriptorTable::new()));
-	gdt.add_entry(Descriptor::kernel_code_segment());
-	gdt.add_entry(Descriptor::kernel_data_segment());
+	let kernel_code_selector = gdt.add_entry(Descriptor::kernel_code_segment());
+	let kernel_data_selector = gdt.add_entry(Descriptor::kernel_data_segment());
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
 	let mut boxed_tss = Box::new(TaskStateSegment::new());
@@ -44,18 +38,18 @@ pub fn add_current_core() {
 		PERCORE.tss.set(tss);
 	}
 	let tss = unsafe { &*(tss as *mut x86_64::structures::tss::TaskStateSegment) };
-	gdt.add_entry(Descriptor::tss_segment(tss));
+	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 
 	unsafe {
 		// Load the GDT for the current core.
 		gdt.load();
 
 		// Reload the segment descriptors
-		load_cs(SegmentSelector::new(GDT_KERNEL_CODE, Ring::Ring0));
-		load_ds(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-		load_es(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-		load_ss(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-		load_tr(SegmentSelector::new(GDT_FIRST_TSS, Ring::Ring0));
+		CS::set_reg(kernel_code_selector);
+		DS::set_reg(kernel_data_selector);
+		ES::set_reg(kernel_data_selector);
+		SS::set_reg(kernel_data_selector);
+		tables::load_tss(tss_selector);
 	}
 }
 
