@@ -20,8 +20,7 @@ pub const GDT_KERNEL_CODE: u16 = 1;
 pub const GDT_KERNEL_DATA: u16 = 2;
 pub const GDT_FIRST_TSS: u16 = 3;
 
-/// We dynamically allocate a GDT large enough to hold the maximum number of entries.
-const GDT_ENTRIES: usize = 8192;
+const GDT_ENTRIES: usize = 5;
 
 #[repr(align(4096))]
 struct Gdt {
