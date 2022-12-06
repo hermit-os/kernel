@@ -10,8 +10,8 @@ use x86_64::VirtAddr;
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
-use crate::arch::x86_64::kernel::percore::*;
-use crate::config::*;
+use crate::arch::x86_64::kernel::percore::{core_scheduler, set_kernel_stack, PERCORE};
+use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
 	let gdt = Box::leak(Box::new(GlobalDescriptorTable::new()));
