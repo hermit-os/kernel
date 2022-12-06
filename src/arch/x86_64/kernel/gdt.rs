@@ -19,13 +19,13 @@ pub fn add_current_core() {
 	let kernel_data_selector = gdt.add_entry(Descriptor::kernel_data_segment());
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
-	let mut boxed_tss = Box::new(TaskStateSegment::new());
+	let mut tss = Box::leak(Box::new(TaskStateSegment::new()));
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
 	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
-	boxed_tss.privilege_stack_table[0] = VirtAddr::new(rsp);
+	tss.privilege_stack_table[0] = VirtAddr::new(rsp);
 	set_kernel_stack(rsp);
 
 	// Allocate all ISTs for this core.
@@ -33,14 +33,12 @@ pub fn add_current_core() {
 	for i in 0..IST_ENTRIES {
 		let ist = crate::mm::allocate(IST_SIZE, true);
 		let ist_start = ist.as_u64() + IST_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
-		boxed_tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
+		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
 	}
 
-	let tss = Box::into_raw(boxed_tss);
 	unsafe {
 		PERCORE.tss.set(tss);
 	}
-	let tss = unsafe { &*(tss as *mut x86_64::structures::tss::TaskStateSegment) };
 	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 
 	unsafe {
