@@ -41,10 +41,10 @@ pub fn add_current_core() {
 	}
 	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 
-	unsafe {
-		// Load the GDT for the current core.
-		gdt.load();
+	// Load the GDT for the current core.
+	gdt.load();
 
+	unsafe {
 		// Reload the segment descriptors
 		CS::set_reg(kernel_code_selector);
 		DS::set_reg(kernel_data_selector);
