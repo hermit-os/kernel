@@ -92,7 +92,6 @@ pub fn add_current_core() {
 
 	unsafe {
 		// Add this TSS to the GDT.
-		let idx = GDT_FIRST_TSS as usize + (core_id() as usize) * 2;
 		let tss = Box::into_raw(boxed_tss);
 		{
 			let base = tss as u64;
@@ -105,14 +104,13 @@ pub fn add_current_core() {
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
-			gdt.entries[idx..idx + 2]
-				.copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(
-					tss_descriptor,
-				));
+			gdt.entries[GDT_FIRST_TSS as usize..GDT_FIRST_TSS as usize + 2].copy_from_slice(
+				&mem::transmute::<Descriptor64, [Descriptor; 2]>(tss_descriptor),
+			);
 		}
 
 		// Load it.
-		let sel = SegmentSelector::new(idx as u16, Ring::Ring0);
+		let sel = SegmentSelector::new(GDT_FIRST_TSS, Ring::Ring0);
 		load_tr(sel);
 
 		// Store it in the PerCoreVariables structure for further manipulation.
