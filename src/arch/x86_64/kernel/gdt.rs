@@ -35,7 +35,9 @@ impl Gdt {
 	}
 }
 
-fn init(gdt: &mut Gdt) {
+pub fn add_current_core() {
+	let gdt = Box::leak(Box::new(Gdt::new()));
+
 	// The NULL descriptor is always the first entry.
 	gdt.entries[GDT_NULL as usize] = Descriptor::NULL;
 
@@ -55,11 +57,6 @@ fn init(gdt: &mut Gdt) {
 			.present()
 			.dpl(Ring::Ring0)
 			.finish();
-}
-
-pub fn add_current_core() {
-	let gdt = Box::leak(Box::new(Gdt::new()));
-	init(gdt);
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
 	let mut boxed_tss = Box::new(TaskStateSegment::new());
