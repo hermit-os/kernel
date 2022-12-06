@@ -248,7 +248,6 @@ pub fn boot_processor_init() {
 	crate::mm::init();
 	crate::mm::print_information();
 	env::init();
-	gdt::init();
 	gdt::add_current_core();
 	interrupts::load_idt();
 	pic::init();

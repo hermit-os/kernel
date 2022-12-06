@@ -23,8 +23,6 @@ pub const GDT_FIRST_TSS: u16 = 3;
 /// We dynamically allocate a GDT large enough to hold the maximum number of entries.
 const GDT_ENTRIES: usize = 8192;
 
-static mut GDT: Gdt = Gdt::new();
-
 #[repr(align(4096))]
 struct Gdt {
 	entries: [Descriptor; GDT_ENTRIES],
@@ -37,34 +35,36 @@ impl Gdt {
 		}
 	}
 }
-pub fn init() {
-	unsafe {
-		// The NULL descriptor is always the first entry.
-		GDT.entries[GDT_NULL as usize] = Descriptor::NULL;
 
-		// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
-		// All other parameters are ignored.
-		GDT.entries[GDT_KERNEL_CODE as usize] =
-			DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
-				.present()
-				.dpl(Ring::Ring0)
-				.l()
-				.finish();
+fn init(gdt: &mut Gdt) {
+	// The NULL descriptor is always the first entry.
+	gdt.entries[GDT_NULL as usize] = Descriptor::NULL;
 
-		// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
-		// All other parameters are ignored.
-		GDT.entries[GDT_KERNEL_DATA as usize] =
-			DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
-				.present()
-				.dpl(Ring::Ring0)
-				.finish();
-	}
+	// The second entry is a 64-bit Code Segment in kernel-space (Ring 0).
+	// All other parameters are ignored.
+	gdt.entries[GDT_KERNEL_CODE as usize] =
+		DescriptorBuilder::code_descriptor(0, 0, CodeSegmentType::ExecuteRead)
+			.present()
+			.dpl(Ring::Ring0)
+			.l()
+			.finish();
+
+	// The third entry is a 64-bit Data Segment in kernel-space (Ring 0).
+	// All other parameters are ignored.
+	gdt.entries[GDT_KERNEL_DATA as usize] =
+		DescriptorBuilder::data_descriptor(0, 0, DataSegmentType::ReadWrite)
+			.present()
+			.dpl(Ring::Ring0)
+			.finish();
 }
 
 pub fn add_current_core() {
+	let gdt = Box::leak(Box::new(Gdt::new()));
+	init(gdt);
+
 	unsafe {
 		// Load the GDT for the current core.
-		let gdtr = DescriptorTablePointer::new_from_slice(&(GDT.entries[0..GDT_ENTRIES]));
+		let gdtr = DescriptorTablePointer::new_from_slice(&(gdt.entries[0..GDT_ENTRIES]));
 		dtables::lgdt(&gdtr);
 
 		// Reload the segment descriptors
@@ -105,7 +105,7 @@ pub fn add_current_core() {
 				.present()
 				.dpl(Ring::Ring0)
 				.finish();
-			GDT.entries[idx..idx + 2]
+			gdt.entries[idx..idx + 2]
 				.copy_from_slice(&mem::transmute::<Descriptor64, [Descriptor; 2]>(
 					tss_descriptor,
 				));
