@@ -111,10 +111,17 @@ pub fn map<S>(
 
 	trace!("Mapping {pages:?} to {frames:?} with {flags:?}");
 
+	#[cfg(feature = "smp")]
+	let mut ipi_tlb_flush = false;
+
 	for (page, frame) in pages.zip(frames) {
 		unsafe {
 			// TODO: Require explicit unmaps
 			if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
+				#[cfg(feature = "smp")]
+				{
+					ipi_tlb_flush = true;
+				}
 				flush.flush();
 			}
 			recursive_page_table()
@@ -125,7 +132,9 @@ pub fn map<S>(
 	}
 
 	#[cfg(feature = "smp")]
-	crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+	if ipi_tlb_flush {
+		crate::arch::x86_64::kernel::apic::ipi_tlb_flush();
+	}
 }
 
 pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize)
