@@ -62,18 +62,6 @@ pub fn add_current_core() {
 	let gdt = Box::leak(Box::new(Gdt::new()));
 	init(gdt);
 
-	unsafe {
-		// Load the GDT for the current core.
-		let gdtr = DescriptorTablePointer::new_from_slice(&(gdt.entries[0..GDT_ENTRIES]));
-		dtables::lgdt(&gdtr);
-
-		// Reload the segment descriptors
-		load_cs(SegmentSelector::new(GDT_KERNEL_CODE, Ring::Ring0));
-		load_ds(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-		load_es(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-		load_ss(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
-	}
-
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
 	let mut boxed_tss = Box::new(TaskStateSegment::new());
 
@@ -109,12 +97,21 @@ pub fn add_current_core() {
 			);
 		}
 
-		// Load it.
-		let sel = SegmentSelector::new(GDT_FIRST_TSS, Ring::Ring0);
-		load_tr(sel);
-
 		// Store it in the PerCoreVariables structure for further manipulation.
 		PERCORE.tss.set(tss);
+	}
+
+	unsafe {
+		// Load the GDT for the current core.
+		let gdtr = DescriptorTablePointer::new_from_slice(&(gdt.entries[0..GDT_ENTRIES]));
+		dtables::lgdt(&gdtr);
+
+		// Reload the segment descriptors
+		load_cs(SegmentSelector::new(GDT_KERNEL_CODE, Ring::Ring0));
+		load_ds(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
+		load_es(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
+		load_ss(SegmentSelector::new(GDT_KERNEL_DATA, Ring::Ring0));
+		load_tr(SegmentSelector::new(GDT_FIRST_TSS, Ring::Ring0));
 	}
 }
 
