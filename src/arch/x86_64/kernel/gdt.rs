@@ -1,10 +1,11 @@
 use alloc::boxed::Box;
 use core::sync::atomic::Ordering;
 
-use x86::bits64::task::*;
 use x86_64::instructions::tables;
 use x86_64::registers::segmentation::{Segment, CS, DS, ES, SS};
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
+use x86_64::structures::tss::TaskStateSegment;
+use x86_64::VirtAddr;
 
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
@@ -22,15 +23,17 @@ pub fn add_current_core() {
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.
-	boxed_tss.rsp[0] = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
+	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
-	set_kernel_stack(boxed_tss.rsp[0]);
+	boxed_tss.privilege_stack_table[0] = VirtAddr::new(rsp);
+	set_kernel_stack(rsp);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
 		let ist = crate::mm::allocate(IST_SIZE, true);
-		boxed_tss.ist[i] = ist.as_u64() + IST_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
+		let ist_start = ist.as_u64() + IST_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
+		boxed_tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
 	}
 
 	let tss = Box::into_raw(boxed_tss);

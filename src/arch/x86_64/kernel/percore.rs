@@ -3,8 +3,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::{mem, ptr};
 
 use crossbeam_utils::CachePadded;
-use x86::bits64::task::TaskStateSegment;
 use x86::msr::*;
+use x86_64::structures::tss::TaskStateSegment;
 
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
