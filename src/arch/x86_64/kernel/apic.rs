@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 #[cfg(any(feature = "pci", feature = "smp"))]
 use core::arch::x86_64::_mm_mfence;
@@ -16,10 +15,9 @@ use x86::controlregs::*;
 use x86::msr::*;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::{IDT, IRQ_COUNTERS};
+use super::interrupts::IDT;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
-use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
@@ -511,13 +509,6 @@ pub extern "C" fn eoi() {
 }
 
 pub fn init() {
-	let boxed_irq = Box::new(IrqStatistics::new());
-	let boxed_irq_raw = Box::into_raw(boxed_irq);
-	unsafe {
-		IRQ_COUNTERS.insert(0, &(*boxed_irq_raw));
-		(*CoreLocal::get_raw()).irq_statistics = boxed_irq_raw;
-	}
-
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
 	unsafe {
 		CPU_LOCAL_APIC_IDS = Some(Vec::new());
@@ -739,22 +730,9 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and CoreLocal structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let mut current_core_local = CoreLocal::leak_new(core_id);
-	let boxed_irq = Box::new(IrqStatistics::new());
-	let boxed_irq_raw = Box::into_raw(boxed_irq);
-
-	unsafe {
-		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
-		current_core_local.irq_statistics = boxed_irq_raw;
-	}
+	let current_core_local = CoreLocal::leak_new(core_id);
 
 	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
-
-	trace!(
-		"Initialize per core data at {:p} (size {} bytes)",
-		current_core_local,
-		mem::size_of_val(current_core_local)
-	);
 
 	CURRENT_CORE_LOCAL_ADDRESS.store(current_core_local, Ordering::Relaxed);
 }

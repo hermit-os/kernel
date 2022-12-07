@@ -7,7 +7,7 @@ use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
 
-use super::interrupts::IrqStatistics;
+use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 pub struct CoreLocal {
@@ -21,7 +21,7 @@ pub struct CoreLocal {
 	/// start address of the kernel stack
 	pub kernel_stack: u64,
 	/// Interface to the interrupt counters
-	pub irq_statistics: *mut IrqStatistics,
+	irq_statistics: *mut IrqStatistics,
 }
 
 impl CoreLocal {
@@ -36,6 +36,13 @@ impl CoreLocal {
 		};
 		let mut this = Box::leak(Box::new(this));
 		this.this = &*this;
+
+		let irq_statistics = Box::leak(Box::new(IrqStatistics::new()));
+		this.irq_statistics = irq_statistics;
+		unsafe {
+			IRQ_COUNTERS.insert(core_id, irq_statistics);
+		}
+
 		this
 	}
 
