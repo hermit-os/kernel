@@ -62,71 +62,53 @@ impl<T> CoreLocalVariable<T> {
 	where
 		T: Copy,
 	{
-		if cfg!(feature = "smp") {
-			match mem::size_of::<T>() {
-				8 => unsafe {
-					let value: u64;
-					asm!(
-						"mov {}, gs:[{}]",
-						lateout(reg) value,
-						in(reg) self.offset(),
-						options(pure, readonly, nostack, preserves_flags),
-					);
-					mem::transmute_copy(&value)
-				},
-				4 => unsafe {
-					let value: u32;
-					asm!(
-						"mov {:e}, gs:[{}]",
-						lateout(reg) value,
-						in(reg) self.offset(),
-						options(pure, readonly, nostack, preserves_flags),
-					);
-					mem::transmute_copy(&value)
-				},
-				_ => unreachable!(),
-			}
-		} else {
-			unsafe {
-				*ptr::addr_of_mut!(CORE_LOCAL)
-					.cast::<u8>()
-					.add(self.offset())
-					.cast()
-			}
+		match mem::size_of::<T>() {
+			8 => unsafe {
+				let value: u64;
+				asm!(
+					"mov {}, gs:[{}]",
+					lateout(reg) value,
+					in(reg) self.offset(),
+					options(pure, readonly, nostack, preserves_flags),
+				);
+				mem::transmute_copy(&value)
+			},
+			4 => unsafe {
+				let value: u32;
+				asm!(
+					"mov {:e}, gs:[{}]",
+					lateout(reg) value,
+					in(reg) self.offset(),
+					options(pure, readonly, nostack, preserves_flags),
+				);
+				mem::transmute_copy(&value)
+			},
+			_ => unreachable!(),
 		}
 	}
 
 	#[inline]
 	pub unsafe fn set(&self, value: T) {
-		if cfg!(feature = "smp") {
-			match mem::size_of::<T>() {
-				8 => unsafe {
-					let value = mem::transmute_copy::<_, u64>(&value);
-					asm!(
-						"mov gs:[{}], {}",
-						in(reg) self.offset(),
-						in(reg) value,
-						options(nostack, preserves_flags),
-					);
-				},
-				4 => unsafe {
-					let value = mem::transmute_copy::<_, u32>(&value);
-					asm!(
-						"mov gs:[{}], {:e}",
-						in(reg) self.offset(),
-						in(reg) value,
-						options(nostack, preserves_flags),
-					);
-				},
-				_ => unreachable!(),
-			}
-		} else {
-			unsafe {
-				*ptr::addr_of_mut!(CORE_LOCAL)
-					.cast::<u8>()
-					.add(self.offset())
-					.cast() = value;
-			}
+		match mem::size_of::<T>() {
+			8 => unsafe {
+				let value = mem::transmute_copy::<_, u64>(&value);
+				asm!(
+					"mov gs:[{}], {}",
+					in(reg) self.offset(),
+					in(reg) value,
+					options(nostack, preserves_flags),
+				);
+			},
+			4 => unsafe {
+				let value = mem::transmute_copy::<_, u32>(&value);
+				asm!(
+					"mov gs:[{}], {:e}",
+					in(reg) self.offset(),
+					in(reg) value,
+					options(nostack, preserves_flags),
+				);
+			},
+			_ => unreachable!(),
 		}
 	}
 }
