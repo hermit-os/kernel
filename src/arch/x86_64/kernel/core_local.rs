@@ -7,7 +7,7 @@ use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
 
-use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
+use super::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 pub struct CoreLocal {
