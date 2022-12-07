@@ -21,7 +21,7 @@ pub struct CoreLocal {
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: Cell<*mut TaskStateSegment>,
 	/// start address of the kernel stack
-	kernel_stack: Cell<u64>,
+	pub kernel_stack: Cell<u64>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 }
@@ -67,16 +67,6 @@ pub fn core_id() -> CoreId {
 	} else {
 		0
 	}
-}
-
-#[inline(always)]
-pub fn get_kernel_stack() -> u64 {
-	CoreLocal::get().kernel_stack.get()
-}
-
-#[inline]
-pub fn set_kernel_stack(addr: u64) {
-	CoreLocal::get().kernel_stack.set(addr);
 }
 
 #[inline]
