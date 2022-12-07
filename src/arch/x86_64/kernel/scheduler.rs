@@ -150,7 +150,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		let tss = unsafe { &(*CORE_LOCAL.tss.get()) };
+		let tss = unsafe { &(*(*CoreLocal::get_raw()).tss) };
 		let stack = VirtAddr::from_usize(
 			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
 		);

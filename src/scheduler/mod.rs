@@ -356,7 +356,7 @@ impl PerCoreScheduler {
 		use x86_64::VirtAddr;
 
 		let current_task_borrowed = self.current_task.borrow();
-		let tss = unsafe { &mut (*CORE_LOCAL.tss.get()) };
+		let tss = unsafe { &mut (*(*CoreLocal::get_raw()).tss) };
 
 		let rsp = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()

@@ -10,7 +10,6 @@ use core::{cmp, fmt, mem, u32};
 
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
-use crossbeam_utils::CachePadded;
 use hermit_sync::without_interrupts;
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
@@ -516,7 +515,7 @@ pub fn init() {
 	let boxed_irq_raw = Box::into_raw(boxed_irq);
 	unsafe {
 		IRQ_COUNTERS.insert(0, &(*boxed_irq_raw));
-		CORE_LOCAL.irq_statistics.set(boxed_irq_raw);
+		(*CoreLocal::get_raw()).irq_statistics = boxed_irq_raw;
 	}
 
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
@@ -740,18 +739,16 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 	// Allocate stack and CoreLocal structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let mut boxed_core_local = Box::new(CachePadded::new(CoreLocalInner::new(core_id)));
+	let mut current_core_local = CoreLocal::leak_new(core_id);
 	let boxed_irq = Box::new(IrqStatistics::new());
 	let boxed_irq_raw = Box::into_raw(boxed_irq);
 
 	unsafe {
 		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
-		boxed_core_local.irq_statistics = CoreLocalVariable::new(boxed_irq_raw);
+		current_core_local.irq_statistics = boxed_irq_raw;
 	}
 
 	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
-
-	let current_core_local = Box::leak(boxed_core_local);
 
 	trace!(
 		"Initialize per core data at {:p} (size {} bytes)",
