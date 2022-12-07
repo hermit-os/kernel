@@ -33,9 +33,7 @@ impl CoreLocal {
 		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
 
 		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
-		unsafe {
-			IRQ_COUNTERS.insert(core_id, irq_statistics);
-		}
+		IRQ_COUNTERS.lock().insert(core_id, irq_statistics);
 
 		let this = Self {
 			this: ptr::null_mut(),

@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::InterruptTicketMutex;
+use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
 pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 use x86_64::registers::control::Cr2;
 use x86_64::set_general_handler;
@@ -139,8 +139,8 @@ fn get_irq_name(irq_number: u32) -> Option<&'static str> {
 	IRQ_NAMES.lock().get(&irq_number).copied()
 }
 
-/// Map between Core ID and per-core scheduler
-pub static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
+pub static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
+	InterruptSpinMutex::new(BTreeMap::new());
 
 pub struct IrqStatistics {
 	pub counters: [AtomicU64; 256],
@@ -162,18 +162,16 @@ impl IrqStatistics {
 
 pub fn print_statistics() {
 	info!("Number of interrupts");
-	unsafe {
-		for (core_id, irg_statistics) in IRQ_COUNTERS.iter() {
-			for (i, counter) in irg_statistics.counters.iter().enumerate() {
-				let counter = counter.load(Ordering::Relaxed);
-				if counter > 0 {
-					match get_irq_name(i.try_into().unwrap()) {
-						Some(name) => {
-							info!("[{}][{}]: {}", core_id, name, counter);
-						}
-						_ => {
-							info!("[{}][{}]: {}", core_id, i, counter);
-						}
+	for (core_id, irg_statistics) in IRQ_COUNTERS.lock().iter() {
+		for (i, counter) in irg_statistics.counters.iter().enumerate() {
+			let counter = counter.load(Ordering::Relaxed);
+			if counter > 0 {
+				match get_irq_name(i.try_into().unwrap()) {
+					Some(name) => {
+						info!("[{}][{}]: {}", core_id, name, counter);
+					}
+					_ => {
+						info!("[{}][{}]: {}", core_id, i, counter);
 					}
 				}
 			}
