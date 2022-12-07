@@ -20,7 +20,7 @@ pub struct CoreLocal {
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: *mut TaskStateSegment,
 	/// start address of the kernel stack
-	pub kernel_stack: u64,
+	kernel_stack: u64,
 	/// Interface to the interrupt counters
 	irq_statistics: *mut IrqStatistics,
 }
