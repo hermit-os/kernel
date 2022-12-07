@@ -3,8 +3,9 @@ use core::arch::asm;
 use core::ptr;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
-use x86::msr::*;
+use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
+use x86_64::VirtAddr;
 
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
@@ -103,7 +104,5 @@ pub fn init() {
 		}
 	};
 
-	unsafe {
-		wrmsr(IA32_GS_BASE, ptr as u64);
-	}
+	GsBase::write(VirtAddr::from_ptr(ptr));
 }
