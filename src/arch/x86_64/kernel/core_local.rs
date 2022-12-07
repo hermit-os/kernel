@@ -27,22 +27,22 @@ pub struct CoreLocal {
 
 impl CoreLocal {
 	pub fn leak_new(core_id: CoreId) -> &'static mut Self {
+		let irq_statistics = Box::leak(Box::new(IrqStatistics::new()));
+		unsafe {
+			// FIXME: This is a very illegal reborrow
+			IRQ_COUNTERS.insert(core_id, &*(irq_statistics as *const _));
+		}
+
 		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
 			scheduler: ptr::null_mut(),
 			tss: ptr::null_mut(),
 			kernel_stack: 0,
-			irq_statistics: ptr::null_mut(),
+			irq_statistics,
 		};
 		let mut this = Box::leak(Box::new(this));
 		this.this = &*this;
-
-		let irq_statistics = Box::leak(Box::new(IrqStatistics::new()));
-		this.irq_statistics = irq_statistics;
-		unsafe {
-			IRQ_COUNTERS.insert(core_id, irq_statistics);
-		}
 
 		this
 	}
