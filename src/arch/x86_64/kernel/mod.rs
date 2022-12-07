@@ -292,7 +292,7 @@ fn finish_processor_init() {
 
 		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
 		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
-		apic::init_next_processor_variables(core_id() + 1);
+		apic::init_next_processor_variables();
 	}
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve

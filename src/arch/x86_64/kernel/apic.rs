@@ -7,6 +7,7 @@ use core::ptr;
 use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 
+#[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
 use hermit_sync::without_interrupts;
@@ -726,15 +727,11 @@ pub fn init_x2apic() {
 }
 
 /// Initialize the required _start variables for the next CPU to be booted.
-pub fn init_next_processor_variables(core_id: CoreId) {
-	// Allocate stack and CoreLocal structure for the CPU and pass the addresses.
+pub fn init_next_processor_variables() {
+	// Allocate stack for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let current_core_local = CoreLocal::leak_new(core_id);
-
 	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
-
-	CURRENT_CORE_LOCAL_ADDRESS.store(current_core_local, Ordering::Relaxed);
 }
 
 /// Boot all Application Processors
@@ -811,7 +808,7 @@ pub fn boot_application_processors() {
 				"Waking up CPU {} with Local APIC ID {}",
 				core_id_to_boot, apic_id
 			);
-			init_next_processor_variables(core_id_to_boot);
+			init_next_processor_variables();
 
 			// Save the current number of initialized CPUs.
 			let current_processor_count = arch::get_processor_count();

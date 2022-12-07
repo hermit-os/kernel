@@ -1,13 +1,14 @@
 use alloc::boxed::Box;
 use core::arch::asm;
 use core::ptr;
-use core::sync::atomic::{AtomicPtr, Ordering};
+use core::sync::atomic::Ordering;
 
 use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
 
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
+use super::CPU_ONLINE;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 pub struct CoreLocal {
@@ -99,18 +100,11 @@ pub fn increment_irq_counter(irq_no: usize) {
 	}
 }
 
-pub static CURRENT_CORE_LOCAL_ADDRESS: AtomicPtr<CoreLocal> = AtomicPtr::new(ptr::null_mut());
-
 pub fn init() {
-	// Store the address to the CoreLocal structure allocated for this core in GS.
-	let ptr = {
-		let ptr = CURRENT_CORE_LOCAL_ADDRESS.load(Ordering::Relaxed);
-		if ptr.is_null() {
-			CoreLocal::leak_new(0)
-		} else {
-			ptr
-		}
-	};
+	debug_assert_eq!(VirtAddr::zero(), GsBase::read());
 
-	GsBase::write(VirtAddr::from_ptr(ptr));
+	let core_id = CPU_ONLINE.load(Ordering::Relaxed);
+	let core_local = CoreLocal::leak_new(core_id);
+
+	GsBase::write(VirtAddr::from_ptr(core_local));
 }
