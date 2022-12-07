@@ -22,15 +22,14 @@ pub struct CoreLocal {
 	/// start address of the kernel stack
 	kernel_stack: u64,
 	/// Interface to the interrupt counters
-	irq_statistics: *mut IrqStatistics,
+	irq_statistics: &'static IrqStatistics,
 }
 
 impl CoreLocal {
 	pub fn leak_new(core_id: CoreId) -> &'static mut Self {
-		let irq_statistics = Box::leak(Box::new(IrqStatistics::new()));
+		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
 		unsafe {
-			// FIXME: This is a very illegal reborrow
-			IRQ_COUNTERS.insert(core_id, &*(irq_statistics as *const _));
+			IRQ_COUNTERS.insert(core_id, irq_statistics);
 		}
 
 		let this = Self {
@@ -95,7 +94,7 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 #[inline]
 pub fn increment_irq_counter(irq_no: usize) {
 	unsafe {
-		let irq = &mut *(*CoreLocal::get_raw()).irq_statistics;
+		let irq = (*CoreLocal::get_raw()).irq_statistics;
 		irq.inc(irq_no);
 	}
 }

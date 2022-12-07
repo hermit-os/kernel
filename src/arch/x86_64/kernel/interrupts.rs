@@ -1,5 +1,6 @@
 use alloc::collections::BTreeMap;
 use core::arch::asm;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
@@ -141,19 +142,21 @@ fn get_irq_name(irq_number: u32) -> Option<&'static str> {
 /// Map between Core ID and per-core scheduler
 pub static mut IRQ_COUNTERS: BTreeMap<CoreId, &IrqStatistics> = BTreeMap::new();
 
-#[derive(Clone, Copy)]
-#[repr(align(64))]
 pub struct IrqStatistics {
-	pub counters: [u64; 256],
+	pub counters: [AtomicU64; 256],
 }
 
 impl IrqStatistics {
 	pub const fn new() -> Self {
-		IrqStatistics { counters: [0; 256] }
+		#[allow(clippy::declare_interior_mutable_const)]
+		const NEW_COUNTER: AtomicU64 = AtomicU64::new(0);
+		IrqStatistics {
+			counters: [NEW_COUNTER; 256],
+		}
 	}
 
-	pub fn inc(&mut self, pos: usize) {
-		self.counters[pos] += 1;
+	pub fn inc(&self, pos: usize) {
+		self.counters[pos].fetch_add(1, Ordering::Relaxed);
 	}
 }
 
@@ -162,13 +165,14 @@ pub fn print_statistics() {
 	unsafe {
 		for (core_id, irg_statistics) in IRQ_COUNTERS.iter() {
 			for (i, counter) in irg_statistics.counters.iter().enumerate() {
-				if *counter > 0 {
+				let counter = counter.load(Ordering::Relaxed);
+				if counter > 0 {
 					match get_irq_name(i.try_into().unwrap()) {
 						Some(name) => {
-							info!("[{}][{}]: {}", core_id, name, *counter);
+							info!("[{}][{}]: {}", core_id, name, counter);
 						}
 						_ => {
-							info!("[{}][{}]: {}", core_id, i, *counter);
+							info!("[{}][{}]: {}", core_id, i, counter);
 						}
 					}
 				}
