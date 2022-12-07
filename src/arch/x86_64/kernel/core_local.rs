@@ -40,6 +40,7 @@ impl CoreLocal {
 	}
 
 	pub fn get_raw() -> *mut Self {
+		debug_assert_ne!(VirtAddr::zero(), GsBase::read());
 		let raw;
 		unsafe {
 			asm!("mov {}, gs:0", out(reg) raw, options(nomem, nostack, preserves_flags));
