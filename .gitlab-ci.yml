@@ -94,10 +94,10 @@ test:qemu:
         -display none -m 64M -serial stdio -enable-kvm
         -kernel /usr/local/bin/rusty-loader-x86_64
         -initrd rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo
-     - qemu-system-x86_64 -smp 2
+     - qemu-system-x86_64 -smp 4
         -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand
         -device isa-debug-exit,iobase=0xf4,iosize=0x04
-        -display none -m 64M -serial stdio -enable-kvm
+        -display none -m 128M -serial stdio -enable-kvm
         -kernel /usr/local/bin/rusty-loader-x86_64
         -initrd rusty-hermit/target/x86_64-unknown-hermit/debug/rusty_demo
      - qemu-system-x86_64 -smp 1
@@ -106,10 +106,10 @@ test:qemu:
         -display none -m 64M -serial stdio -enable-kvm
         -kernel /usr/local/bin/rusty-loader-x86_64
         -initrd rusty-hermit/target/x86_64-unknown-hermit/release/rusty_demo
-     - qemu-system-x86_64 -smp 2
+     - qemu-system-x86_64 -smp 4
         -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand
         -device isa-debug-exit,iobase=0xf4,iosize=0x04
-        -display none -m 64M -serial stdio -enable-kvm
+        -display none -m 128M -serial stdio -enable-kvm
         -kernel /usr/local/bin/rusty-loader-x86_64
         -initrd rusty-hermit/target/x86_64-unknown-hermit/release/rusty_demo
    tags:
