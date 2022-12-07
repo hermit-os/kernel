@@ -7,7 +7,7 @@ use core::{mem, ptr, slice};
 use x86_64::structures::idt::InterruptDescriptorTable;
 
 use super::interrupts::IDT;
-use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::core_local::*;
 use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
 	BasePageSize, PageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
@@ -150,7 +150,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		let tss = unsafe { &(*PERCORE.tss.get()) };
+		let tss = unsafe { &(*CORE_LOCAL.tss.get()) };
 		let stack = VirtAddr::from_usize(
 			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
 		);

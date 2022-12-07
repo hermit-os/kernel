@@ -10,7 +10,7 @@ use x86_64::set_general_handler;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
 use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
 
-use crate::arch::x86_64::kernel::percore::{core_scheduler, increment_irq_counter};
+use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::scheduler::{self, CoreId};

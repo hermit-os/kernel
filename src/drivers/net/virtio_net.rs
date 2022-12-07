@@ -13,7 +13,7 @@ use core::result::Result;
 
 use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
-use crate::arch::kernel::percore::increment_irq_counter;
+use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;

@@ -53,10 +53,10 @@ use core::hint::spin_loop;
 #[cfg(feature = "smp")]
 use core::sync::atomic::{AtomicU32, Ordering};
 
+use arch::core_local::*;
 // Used for integration test status.
 #[doc(hidden)]
 pub use arch::kernel::is_uhyve as _is_uhyve;
-use arch::percore::*;
 use mm::allocator::LockedHeap;
 #[cfg(target_arch = "aarch64")]
 use qemu_exit::QEMUExit;

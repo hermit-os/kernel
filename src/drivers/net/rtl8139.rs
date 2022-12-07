@@ -8,9 +8,9 @@ use core::mem;
 
 use x86::io::*;
 
+use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::arch::kernel::interrupts::*;
 use crate::arch::kernel::pci;
-use crate::arch::kernel::percore::increment_irq_counter;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::drivers::error::DriverError;

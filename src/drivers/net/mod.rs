@@ -7,12 +7,12 @@ pub mod virtio_net;
 pub mod virtio_pci;
 
 use crate::arch::kernel::apic;
+use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio;
 #[cfg(feature = "pci")]
 use crate::arch::kernel::pci;
-use crate::arch::kernel::percore::*;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {

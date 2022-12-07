@@ -10,7 +10,7 @@ use x86_64::VirtAddr;
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
-use crate::arch::x86_64::kernel::percore::{core_scheduler, set_kernel_stack, PERCORE};
+use crate::arch::x86_64::kernel::core_local::{core_scheduler, set_kernel_stack, CORE_LOCAL};
 use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
@@ -37,7 +37,7 @@ pub fn add_current_core() {
 	}
 
 	unsafe {
-		PERCORE.tss.set(tss);
+		CORE_LOCAL.tss.set(tss);
 	}
 	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 

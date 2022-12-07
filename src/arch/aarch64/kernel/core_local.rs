@@ -3,44 +3,44 @@ use core::ptr;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 #[no_mangle]
-pub static mut PERCORE: PerCoreVariables = PerCoreVariables::new(0);
+pub static mut CORE_LOCAL: CoreLocal = CoreLocal::new(0);
 
-pub struct PerCoreVariables {
+pub struct CoreLocal {
 	/// ID of the current Core.
-	core_id: PerCoreVariable<CoreId>,
+	core_id: CoreLocalVariable<CoreId>,
 	/// Scheduler of the current Core.
-	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
+	scheduler: CoreLocalVariable<*mut PerCoreScheduler>,
 }
 
-impl PerCoreVariables {
+impl CoreLocal {
 	pub const fn new(core_id: CoreId) -> Self {
 		Self {
-			core_id: PerCoreVariable::new(core_id),
-			scheduler: PerCoreVariable::new(0 as *mut PerCoreScheduler),
+			core_id: CoreLocalVariable::new(core_id),
+			scheduler: CoreLocalVariable::new(0 as *mut PerCoreScheduler),
 		}
 	}
 }
 
 #[repr(C)]
-pub struct PerCoreVariable<T> {
+pub struct CoreLocalVariable<T> {
 	data: T,
 }
 
-pub trait PerCoreVariableMethods<T: Clone> {
+pub trait CoreLocalVariableMethods<T: Clone> {
 	unsafe fn get(&self) -> T;
 	unsafe fn set(&mut self, value: T);
 }
 
-impl<T> PerCoreVariable<T> {
+impl<T> CoreLocalVariable<T> {
 	const fn new(value: T) -> Self {
 		Self { data: value }
 	}
 }
 
 // Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
-// Implement the PerCoreVariableMethods trait functions using 64-bit memory moves.
+// Implement the CoreLocalVariableMethods trait functions using 64-bit memory moves.
 // The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
-impl<T> PerCoreVariableMethods<T> for PerCoreVariable<T>
+impl<T> CoreLocalVariableMethods<T> for CoreLocalVariable<T>
 where
 	T: Clone,
 {
@@ -57,18 +57,18 @@ where
 
 #[inline]
 pub fn core_id() -> CoreId {
-	unsafe { PERCORE.core_id.get() }
+	unsafe { CORE_LOCAL.core_id.get() }
 }
 
 #[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *PERCORE.scheduler.get() }
+	unsafe { &mut *CORE_LOCAL.scheduler.get() }
 }
 
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	unsafe {
-		PERCORE.scheduler.set(scheduler);
+		CORE_LOCAL.scheduler.set(scheduler);
 	}
 }
 

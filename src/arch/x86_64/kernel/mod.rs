@@ -8,12 +8,13 @@ use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
 use self::serial::SerialPort;
 use crate::arch::mm::{PhysAddr, VirtAddr};
-use crate::arch::x86_64::kernel::percore::*;
+use crate::arch::x86_64::kernel::core_local::*;
 use crate::env;
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
 pub mod apic;
+pub mod core_local;
 #[cfg(feature = "pci")]
 pub mod fuse;
 pub mod gdt;
@@ -22,7 +23,6 @@ pub mod interrupts;
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
-pub mod percore;
 pub mod pic;
 pub mod pit;
 pub mod processor;
@@ -181,7 +181,7 @@ pub fn get_cmdline() -> VirtAddr {
 // configuration first.
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
-	percore::init();
+	core_local::init();
 
 	let base = boot_info().hardware_info.serial_port_base.unwrap().get();
 	let serial_port = unsafe { SerialPort::new(base) };
@@ -269,7 +269,7 @@ pub fn boot_application_processors() {
 /// Application Processor initialization
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn application_processor_init() {
-	percore::init();
+	core_local::init();
 	processor::configure();
 	gdt::add_current_core();
 	interrupts::load_idt();

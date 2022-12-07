@@ -1,6 +1,6 @@
 use hermit_sync::{InterruptTicketMutexGuard, SpinMutex};
 
-use crate::arch::percore::core_scheduler;
+use crate::arch::core_local::core_scheduler;
 use crate::{arch, console};
 
 /// Enables lwIP's printf to print a whole string without being interrupted by

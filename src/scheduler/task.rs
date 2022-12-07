@@ -8,8 +8,8 @@ use core::num::NonZeroU64;
 use core::ops::DerefMut;
 
 use crate::arch;
+use crate::arch::core_local::*;
 use crate::arch::mm::VirtAddr;
-use crate::arch::percore::*;
 use crate::arch::scheduler::{TaskStacks, TaskTLS};
 use crate::scheduler::CoreId;
 

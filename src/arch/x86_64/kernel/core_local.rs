@@ -9,54 +9,54 @@ use x86_64::structures::tss::TaskStateSegment;
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-pub static mut PERCORE: PerCoreVariables = CachePadded::new(PerCoreInnerVariables::new(0));
+pub static mut CORE_LOCAL: CoreLocal = CachePadded::new(CoreLocalInner::new(0));
 
-pub type PerCoreVariables = CachePadded<PerCoreInnerVariables>;
+pub type CoreLocal = CachePadded<CoreLocalInner>;
 
-pub struct PerCoreInnerVariables {
+pub struct CoreLocalInner {
 	/// Sequential ID of this CPU Core.
-	core_id: PerCoreVariable<CoreId>,
+	core_id: CoreLocalVariable<CoreId>,
 	/// Scheduler for this CPU Core.
-	scheduler: PerCoreVariable<*mut PerCoreScheduler>,
+	scheduler: CoreLocalVariable<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
-	pub tss: PerCoreVariable<*mut TaskStateSegment>,
+	pub tss: CoreLocalVariable<*mut TaskStateSegment>,
 	/// start address of the kernel stack
-	pub kernel_stack: PerCoreVariable<u64>,
+	pub kernel_stack: CoreLocalVariable<u64>,
 	/// Interface to the interrupt counters
-	pub irq_statistics: PerCoreVariable<*mut IrqStatistics>,
+	pub irq_statistics: CoreLocalVariable<*mut IrqStatistics>,
 }
 
-impl PerCoreInnerVariables {
+impl CoreLocalInner {
 	pub const fn new(core_id: CoreId) -> Self {
 		Self {
-			core_id: PerCoreVariable::new(core_id),
-			scheduler: PerCoreVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
-			tss: PerCoreVariable::new(ptr::null_mut() as *mut TaskStateSegment),
-			kernel_stack: PerCoreVariable::new(0),
-			irq_statistics: PerCoreVariable::new(ptr::null_mut() as *mut IrqStatistics),
+			core_id: CoreLocalVariable::new(core_id),
+			scheduler: CoreLocalVariable::new(ptr::null_mut() as *mut PerCoreScheduler),
+			tss: CoreLocalVariable::new(ptr::null_mut() as *mut TaskStateSegment),
+			kernel_stack: CoreLocalVariable::new(0),
+			irq_statistics: CoreLocalVariable::new(ptr::null_mut() as *mut IrqStatistics),
 		}
 	}
 }
 
 #[repr(C)]
-pub struct PerCoreVariable<T> {
+pub struct CoreLocalVariable<T> {
 	data: T,
 }
 
-impl<T> PerCoreVariable<T> {
+impl<T> CoreLocalVariable<T> {
 	pub const fn new(value: T) -> Self {
 		Self { data: value }
 	}
 
 	#[inline]
 	unsafe fn offset(&self) -> usize {
-		let base = unsafe { &PERCORE } as *const _ as usize;
+		let base = unsafe { &CORE_LOCAL } as *const _ as usize;
 		let field = self as *const _ as usize;
 		field - base
 	}
 }
 
-impl<T> PerCoreVariable<T> {
+impl<T> CoreLocalVariable<T> {
 	#[inline]
 	pub unsafe fn get(&self) -> T
 	where
@@ -88,7 +88,7 @@ impl<T> PerCoreVariable<T> {
 			}
 		} else {
 			unsafe {
-				*ptr::addr_of_mut!(PERCORE)
+				*ptr::addr_of_mut!(CORE_LOCAL)
 					.cast::<u8>()
 					.add(self.offset())
 					.cast()
@@ -122,7 +122,7 @@ impl<T> PerCoreVariable<T> {
 			}
 		} else {
 			unsafe {
-				*ptr::addr_of_mut!(PERCORE)
+				*ptr::addr_of_mut!(CORE_LOCAL)
 					.cast::<u8>()
 					.add(self.offset())
 					.cast() = value;
@@ -134,7 +134,7 @@ impl<T> PerCoreVariable<T> {
 #[cfg(target_os = "none")]
 #[inline]
 pub fn core_id() -> CoreId {
-	unsafe { PERCORE.core_id.get() }
+	unsafe { CORE_LOCAL.core_id.get() }
 }
 
 #[cfg(not(target_os = "none"))]
@@ -144,42 +144,42 @@ pub fn core_id() -> CoreId {
 
 #[inline(always)]
 pub fn get_kernel_stack() -> u64 {
-	unsafe { PERCORE.kernel_stack.get() }
+	unsafe { CORE_LOCAL.kernel_stack.get() }
 }
 
 #[inline]
 pub fn set_kernel_stack(addr: u64) {
-	unsafe { PERCORE.kernel_stack.set(addr) }
+	unsafe { CORE_LOCAL.kernel_stack.set(addr) }
 }
 
 #[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *PERCORE.scheduler.get() }
+	unsafe { &mut *CORE_LOCAL.scheduler.get() }
 }
 
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	unsafe {
-		PERCORE.scheduler.set(scheduler);
+		CORE_LOCAL.scheduler.set(scheduler);
 	}
 }
 
 #[inline]
 pub fn increment_irq_counter(irq_no: usize) {
 	unsafe {
-		let irq = &mut *PERCORE.irq_statistics.get();
+		let irq = &mut *CORE_LOCAL.irq_statistics.get();
 		irq.inc(irq_no);
 	}
 }
 
-pub static CURRENT_PERCORE_ADDRESS: AtomicPtr<PerCoreVariables> = AtomicPtr::new(ptr::null_mut());
+pub static CURRENT_CORE_LOCAL_ADDRESS: AtomicPtr<CoreLocal> = AtomicPtr::new(ptr::null_mut());
 
 pub fn init() {
-	// Store the address to the PerCoreVariables structure allocated for this core in GS.
+	// Store the address to the CoreLocal structure allocated for this core in GS.
 	let ptr = {
-		let ptr = CURRENT_PERCORE_ADDRESS.load(Ordering::Relaxed);
+		let ptr = CURRENT_CORE_LOCAL_ADDRESS.load(Ordering::Relaxed);
 		if ptr.is_null() {
-			unsafe { ptr::addr_of_mut!(PERCORE) }
+			unsafe { ptr::addr_of_mut!(CORE_LOCAL) }
 		} else {
 			ptr
 		}

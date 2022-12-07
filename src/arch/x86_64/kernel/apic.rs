@@ -8,7 +8,7 @@ use core::ptr;
 use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 
-use arch::x86_64::kernel::percore::*;
+use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
 use crossbeam_utils::CachePadded;
 use hermit_sync::without_interrupts;
@@ -516,7 +516,7 @@ pub fn init() {
 	let boxed_irq_raw = Box::into_raw(boxed_irq);
 	unsafe {
 		IRQ_COUNTERS.insert(0, &(*boxed_irq_raw));
-		PERCORE.irq_statistics.set(boxed_irq_raw);
+		CORE_LOCAL.irq_statistics.set(boxed_irq_raw);
 	}
 
 	// Initialize an empty vector for the Local APIC IDs of all CPUs.
@@ -737,29 +737,29 @@ pub fn init_x2apic() {
 
 /// Initialize the required _start variables for the next CPU to be booted.
 pub fn init_next_processor_variables(core_id: CoreId) {
-	// Allocate stack and PerCoreVariables structure for the CPU and pass the addresses.
+	// Allocate stack and CoreLocal structure for the CPU and pass the addresses.
 	// Keep the stack executable to possibly support dynamically generated code on the stack (see https://security.stackexchange.com/a/47825).
 	let stack = mm::allocate(KERNEL_STACK_SIZE, true);
-	let mut boxed_percore = Box::new(CachePadded::new(PerCoreInnerVariables::new(core_id)));
+	let mut boxed_core_local = Box::new(CachePadded::new(CoreLocalInner::new(core_id)));
 	let boxed_irq = Box::new(IrqStatistics::new());
 	let boxed_irq_raw = Box::into_raw(boxed_irq);
 
 	unsafe {
 		IRQ_COUNTERS.insert(core_id, &(*boxed_irq_raw));
-		boxed_percore.irq_statistics = PerCoreVariable::new(boxed_irq_raw);
+		boxed_core_local.irq_statistics = CoreLocalVariable::new(boxed_irq_raw);
 	}
 
 	CURRENT_STACK_ADDRESS.store(stack.as_u64(), Ordering::Relaxed);
 
-	let current_percore = Box::leak(boxed_percore);
+	let current_core_local = Box::leak(boxed_core_local);
 
 	trace!(
 		"Initialize per core data at {:p} (size {} bytes)",
-		current_percore,
-		mem::size_of_val(current_percore)
+		current_core_local,
+		mem::size_of_val(current_core_local)
 	);
 
-	CURRENT_PERCORE_ADDRESS.store(current_percore, Ordering::Relaxed);
+	CURRENT_CORE_LOCAL_ADDRESS.store(current_core_local, Ordering::Relaxed);
 }
 
 /// Boot all Application Processors

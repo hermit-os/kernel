@@ -2,7 +2,7 @@
 use crossbeam_utils::Backoff;
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::percore::*;
+use crate::arch::core_local::*;
 use crate::scheduler::task::TaskHandlePriorityQueue;
 
 struct SemaphoreState {

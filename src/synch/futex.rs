@@ -6,7 +6,7 @@ use hashbrown::hash_map::Entry;
 use hashbrown::HashMap;
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::kernel::percore::core_scheduler;
+use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
 use crate::scheduler::task::TaskHandlePriorityQueue;

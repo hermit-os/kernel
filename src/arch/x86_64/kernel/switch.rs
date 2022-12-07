@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::{mem, ptr};
 
-use crate::{percore, set_current_kernel_stack};
+use crate::{core_local, set_current_kernel_stack};
 
 #[cfg(feature = "fsgsbase")]
 macro_rules! push_fs {
@@ -190,7 +190,7 @@ macro_rules! kernel_function_impl {
 					"sti",
 
 					f = in(reg) f,
-					kernel_stack_ptr = in(reg) percore::get_kernel_stack(),
+					kernel_stack_ptr = in(reg) core_local::get_kernel_stack(),
 
 					$($operands)*
 

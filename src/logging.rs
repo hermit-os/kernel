@@ -16,7 +16,7 @@ impl log::Log for KernelLogger {
 		if self.enabled(record.metadata()) {
 			println!(
 				"[{}][{}] {}",
-				crate::arch::percore::core_id(),
+				crate::arch::core_local::core_id(),
 				record.level(),
 				record.args()
 			);
