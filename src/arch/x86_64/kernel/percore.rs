@@ -1,5 +1,5 @@
 use core::arch::asm;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicPtr, Ordering};
 use core::{mem, ptr};
 
 use crossbeam_utils::CachePadded;
@@ -172,16 +172,20 @@ pub fn increment_irq_counter(irq_no: usize) {
 	}
 }
 
-pub static CURRENT_PERCORE_ADDRESS: AtomicU64 = AtomicU64::new(0);
+pub static CURRENT_PERCORE_ADDRESS: AtomicPtr<PerCoreVariables> = AtomicPtr::new(ptr::null_mut());
 
 pub fn init() {
 	// Store the address to the PerCoreVariables structure allocated for this core in GS.
-	let address = CURRENT_PERCORE_ADDRESS.load(Ordering::Relaxed);
-	unsafe {
-		if address == 0 {
-			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
+	let ptr = {
+		let ptr = CURRENT_PERCORE_ADDRESS.load(Ordering::Relaxed);
+		if ptr.is_null() {
+			unsafe { ptr::addr_of_mut!(PERCORE) }
 		} else {
-			wrmsr(IA32_GS_BASE, address);
+			ptr
 		}
+	};
+
+	unsafe {
+		wrmsr(IA32_GS_BASE, ptr as u64);
 	}
 }

@@ -759,7 +759,7 @@ pub fn init_next_processor_variables(core_id: CoreId) {
 		mem::size_of_val(current_percore)
 	);
 
-	CURRENT_PERCORE_ADDRESS.store(current_percore as *mut _ as u64, Ordering::Relaxed);
+	CURRENT_PERCORE_ADDRESS.store(current_percore, Ordering::Relaxed);
 }
 
 /// Boot all Application Processors
