@@ -168,10 +168,10 @@ pub fn print_statistics() {
 			if counter > 0 {
 				match get_irq_name(i.try_into().unwrap()) {
 					Some(name) => {
-						info!("[{}][{}]: {}", core_id, name, counter);
+						info!("[{core_id}][{name}]: {counter}");
 					}
 					_ => {
-						info!("[{}][{}]: {}", core_id, i, counter);
+						info!("[{core_id}][{i}]: {counter}");
 					}
 				}
 			}
