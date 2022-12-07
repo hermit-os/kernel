@@ -61,15 +61,12 @@ impl CoreLocal {
 	}
 }
 
-#[cfg(target_os = "none")]
-#[inline]
 pub fn core_id() -> CoreId {
-	CoreLocal::get().core_id
-}
-
-#[cfg(not(target_os = "none"))]
-pub fn core_id() -> CoreId {
-	0
+	if cfg!(target_os = "none") {
+		CoreLocal::get().core_id
+	} else {
+		0
+	}
 }
 
 #[inline(always)]
