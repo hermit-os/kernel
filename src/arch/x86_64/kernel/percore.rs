@@ -176,7 +176,7 @@ pub static CURRENT_PERCORE_ADDRESS: AtomicU64 = AtomicU64::new(0);
 
 pub fn init() {
 	// Store the address to the PerCoreVariables structure allocated for this core in GS.
-	let address = CURRENT_PERCORE_ADDRESS.load(Ordering::Acquire);
+	let address = CURRENT_PERCORE_ADDRESS.load(Ordering::Relaxed);
 	unsafe {
 		if address == 0 {
 			wrmsr(IA32_GS_BASE, &PERCORE as *const _ as u64);
