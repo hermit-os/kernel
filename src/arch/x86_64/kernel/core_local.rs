@@ -9,8 +9,6 @@ use x86_64::structures::tss::TaskStateSegment;
 use crate::arch::x86_64::kernel::interrupts::IrqStatistics;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-pub static mut CORE_LOCAL: CoreLocal = CoreLocal::new(0);
-
 pub struct CoreLocal {
 	this: *const Self,
 	/// Sequential ID of this CPU Core.
@@ -27,21 +25,17 @@ pub struct CoreLocal {
 
 impl CoreLocal {
 	pub fn leak_new(core_id: CoreId) -> &'static mut Self {
-		let this = Self::new(core_id);
-		let mut this = Box::leak(Box::new(this));
-		this.this = &*this;
-		this
-	}
-
-	const fn new(core_id: CoreId) -> Self {
-		Self {
+		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
 			scheduler: ptr::null_mut(),
 			tss: ptr::null_mut(),
 			kernel_stack: 0,
 			irq_statistics: ptr::null_mut(),
-		}
+		};
+		let mut this = Box::leak(Box::new(this));
+		this.this = &*this;
+		this
 	}
 
 	pub fn get_raw() -> *mut Self {
@@ -103,10 +97,7 @@ pub fn init() {
 	let ptr = {
 		let ptr = CURRENT_CORE_LOCAL_ADDRESS.load(Ordering::Relaxed);
 		if ptr.is_null() {
-			unsafe {
-				CORE_LOCAL.this = &CORE_LOCAL;
-				ptr::addr_of_mut!(CORE_LOCAL)
-			}
+			CoreLocal::leak_new(0)
 		} else {
 			ptr
 		}
