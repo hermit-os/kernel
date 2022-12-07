@@ -69,17 +69,14 @@ pub fn core_id() -> CoreId {
 	}
 }
 
-#[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { &mut *CoreLocal::get().scheduler.get() }
 }
 
-#[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
 }
 
-#[inline]
 pub fn increment_irq_counter(irq_no: usize) {
 	CoreLocal::get().irq_statistics.inc(irq_no);
 }
