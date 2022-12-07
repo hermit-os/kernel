@@ -36,9 +36,7 @@ pub fn add_current_core() {
 		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
 	}
 
-	unsafe {
-		(*CoreLocal::get_raw()).tss = tss;
-	}
+	CoreLocal::get().tss.set(tss);
 	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 
 	// Load the GDT for the current core.

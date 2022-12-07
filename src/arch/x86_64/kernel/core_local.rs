@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::arch::asm;
+use core::cell::Cell;
 use core::ptr;
 use core::sync::atomic::Ordering;
 
@@ -16,11 +17,11 @@ pub struct CoreLocal {
 	/// Sequential ID of this CPU Core.
 	core_id: CoreId,
 	/// Scheduler for this CPU Core.
-	scheduler: *mut PerCoreScheduler,
+	scheduler: Cell<*mut PerCoreScheduler>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
-	pub tss: *mut TaskStateSegment,
+	pub tss: Cell<*mut TaskStateSegment>,
 	/// start address of the kernel stack
-	kernel_stack: u64,
+	kernel_stack: Cell<u64>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 }
@@ -35,9 +36,9 @@ impl CoreLocal {
 		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
-			scheduler: ptr::null_mut(),
-			tss: ptr::null_mut(),
-			kernel_stack: 0,
+			scheduler: Cell::new(ptr::null_mut()),
+			tss: Cell::new(ptr::null_mut()),
+			kernel_stack: Cell::new(0),
 			irq_statistics,
 		};
 		let mut this = Box::leak(Box::new(this));
@@ -46,20 +47,20 @@ impl CoreLocal {
 		this
 	}
 
-	pub fn get_raw() -> *mut Self {
+	pub fn get() -> &'static Self {
 		debug_assert_ne!(VirtAddr::zero(), GsBase::read());
-		let raw;
 		unsafe {
+			let raw: *const Self;
 			asm!("mov {}, gs:0", out(reg) raw, options(nomem, nostack, preserves_flags));
+			&*raw
 		}
-		raw
 	}
 }
 
 #[cfg(target_os = "none")]
 #[inline]
 pub fn core_id() -> CoreId {
-	unsafe { (*CoreLocal::get_raw()).core_id }
+	CoreLocal::get().core_id
 }
 
 #[cfg(not(target_os = "none"))]
@@ -69,34 +70,27 @@ pub fn core_id() -> CoreId {
 
 #[inline(always)]
 pub fn get_kernel_stack() -> u64 {
-	unsafe { (*CoreLocal::get_raw()).kernel_stack }
+	CoreLocal::get().kernel_stack.get()
 }
 
 #[inline]
 pub fn set_kernel_stack(addr: u64) {
-	unsafe {
-		(*CoreLocal::get_raw()).kernel_stack = addr;
-	}
+	CoreLocal::get().kernel_stack.set(addr);
 }
 
 #[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *(*CoreLocal::get_raw()).scheduler }
+	unsafe { &mut *CoreLocal::get().scheduler.get() }
 }
 
 #[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	unsafe {
-		(*CoreLocal::get_raw()).scheduler = scheduler;
-	}
+	CoreLocal::get().scheduler.set(scheduler);
 }
 
 #[inline]
 pub fn increment_irq_counter(irq_no: usize) {
-	unsafe {
-		let irq = (*CoreLocal::get_raw()).irq_statistics;
-		irq.inc(irq_no);
-	}
+	CoreLocal::get().irq_statistics.inc(irq_no);
 }
 
 pub fn init() {
