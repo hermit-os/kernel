@@ -181,7 +181,7 @@ pub fn get_cmdline() -> VirtAddr {
 // configuration first.
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
-	core_local::init();
+	CoreLocal::install();
 
 	let base = boot_info().hardware_info.serial_port_base.unwrap().get();
 	let serial_port = unsafe { SerialPort::new(base) };
@@ -269,7 +269,7 @@ pub fn boot_application_processors() {
 /// Application Processor initialization
 #[cfg(all(target_os = "none", feature = "smp"))]
 pub fn application_processor_init() {
-	core_local::init();
+	CoreLocal::install();
 	processor::configure();
 	gdt::add_current_core();
 	interrupts::load_idt();

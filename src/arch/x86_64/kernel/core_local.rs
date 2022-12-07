@@ -27,7 +27,11 @@ pub struct CoreLocal {
 }
 
 impl CoreLocal {
-	pub fn leak_new(core_id: CoreId) -> &'static mut Self {
+	pub fn install() {
+		assert_eq!(VirtAddr::zero(), GsBase::read());
+
+		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
+
 		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
 		unsafe {
 			IRQ_COUNTERS.insert(core_id, irq_statistics);
@@ -44,7 +48,7 @@ impl CoreLocal {
 		let mut this = Box::leak(Box::new(this));
 		this.this = &*this;
 
-		this
+		GsBase::write(VirtAddr::from_ptr(this));
 	}
 
 	pub fn get() -> &'static Self {
@@ -91,13 +95,4 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 #[inline]
 pub fn increment_irq_counter(irq_no: usize) {
 	CoreLocal::get().irq_statistics.inc(irq_no);
-}
-
-pub fn init() {
-	debug_assert_eq!(VirtAddr::zero(), GsBase::read());
-
-	let core_id = CPU_ONLINE.load(Ordering::Relaxed);
-	let core_local = CoreLocal::leak_new(core_id);
-
-	GsBase::write(VirtAddr::from_ptr(core_local));
 }
