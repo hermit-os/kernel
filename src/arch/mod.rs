@@ -7,11 +7,11 @@ pub mod x86_64;
 
 // Export our platform-specific modules.
 #[cfg(target_arch = "aarch64")]
+pub use crate::arch::aarch64::kernel::core_local;
+#[cfg(target_arch = "aarch64")]
+use crate::arch::aarch64::kernel::core_local::core_scheduler;
+#[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts;
-#[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::kernel::percore;
-#[cfg(target_arch = "aarch64")]
-use crate::arch::aarch64::kernel::percore::core_scheduler;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::processor;
 #[cfg(target_arch = "aarch64")]
@@ -34,11 +34,11 @@ pub use crate::arch::x86_64::kernel::apic::{set_oneshot_timer, wakeup_core};
 #[cfg(all(target_arch = "x86_64", target_os = "none", feature = "smp"))]
 pub use crate::arch::x86_64::kernel::application_processor_init;
 #[cfg(target_arch = "x86_64")]
+pub use crate::arch::x86_64::kernel::core_local;
+#[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::interrupts;
-#[cfg(target_arch = "x86_64")]
-pub use crate::arch::x86_64::kernel::percore;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::processor;
 #[cfg(target_arch = "x86_64")]

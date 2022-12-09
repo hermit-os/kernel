@@ -4,13 +4,13 @@
 use alloc::alloc::Layout;
 use core::panic::PanicInfo;
 
-use crate::arch::percore;
+use crate::arch::core_local;
 use crate::syscalls;
 
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &PanicInfo<'_>) -> ! {
-	let core_id = percore::core_id();
+	let core_id = core_local::core_id();
 	println!("[{core_id}][PANIC] {info}");
 
 	syscalls::shutdown(1)

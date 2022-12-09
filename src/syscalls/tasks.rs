@@ -6,8 +6,8 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use hermit_sync::InterruptTicketMutex;
 
+use crate::arch::core_local::*;
 use crate::arch::get_processor_count;
-use crate::arch::percore::*;
 use crate::arch::processor::{get_frequency, get_timestamp};
 use crate::config::USER_STACK_SIZE;
 use crate::errno::*;

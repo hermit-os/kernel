@@ -1,6 +1,6 @@
+pub mod core_local;
 pub mod interrupts;
 pub mod pci;
-pub mod percore;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
@@ -15,7 +15,7 @@ use core::ptr;
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::TicketMutex;
 
-use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
@@ -136,7 +136,7 @@ pub fn get_cmdline() -> VirtAddr {
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
-	percore::init();
+	core_local::init();
 
 	unsafe {
 		COM1.port_address = boot_info()
@@ -226,7 +226,7 @@ pub fn boot_application_processors() {
 
 /// Application Processor initialization
 pub fn application_processor_init() {
-	percore::init();
+	core_local::init();
 	/*processor::configure();
 	gdt::add_current_core();
 	idt::install();

@@ -10,7 +10,7 @@ use x86_64::VirtAddr;
 use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
-use crate::arch::x86_64::kernel::percore::{core_scheduler, set_kernel_stack, PERCORE};
+use crate::arch::x86_64::kernel::core_local::{core_scheduler, CoreLocal};
 use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
@@ -26,7 +26,7 @@ pub fn add_current_core() {
 	let rsp = CURRENT_STACK_ADDRESS.load(Ordering::Relaxed) + KERNEL_STACK_SIZE as u64
 		- TaskStacks::MARKER_SIZE as u64;
 	tss.privilege_stack_table[0] = VirtAddr::new(rsp);
-	set_kernel_stack(rsp);
+	CoreLocal::get().kernel_stack.set(rsp);
 
 	// Allocate all ISTs for this core.
 	// Every task later gets its own IST1, so the IST1 allocated here is only used by the Idle task.
@@ -36,9 +36,7 @@ pub fn add_current_core() {
 		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
 	}
 
-	unsafe {
-		PERCORE.tss.set(tss);
-	}
+	CoreLocal::get().tss.set(tss);
 	let tss_selector = gdt.add_entry(Descriptor::tss_segment(tss));
 
 	// Load the GDT for the current core.

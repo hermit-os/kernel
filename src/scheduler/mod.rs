@@ -10,8 +10,8 @@ use crossbeam_utils::Backoff;
 use hermit_sync::{without_interrupts, *};
 
 use crate::arch;
+use crate::arch::core_local::*;
 use crate::arch::interrupts;
-use crate::arch::percore::*;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
@@ -357,14 +357,14 @@ impl PerCoreScheduler {
 		use x86_64::VirtAddr;
 
 		let current_task_borrowed = self.current_task.borrow();
-		let tss = unsafe { &mut (*PERCORE.tss.get()) };
+		let tss = unsafe { &mut *CoreLocal::get().tss.get() };
 
 		let rsp = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
 			- TaskStacks::MARKER_SIZE)
 			.as_u64();
 		tss.interrupt_stack_table[0] = VirtAddr::new(rsp);
-		set_kernel_stack(rsp);
+		CoreLocal::get().kernel_stack.set(rsp);
 		let ist_start = (current_task_borrowed.stacks.get_interrupt_stack()
 			+ current_task_borrowed.stacks.get_interrupt_stack_size()
 			- TaskStacks::MARKER_SIZE)

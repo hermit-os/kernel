@@ -1,6 +1,6 @@
 use hermit_sync::TicketMutex;
 
-use crate::arch::percore::*;
+use crate::arch::core_local::*;
 use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
 
 struct RecursiveMutexState {

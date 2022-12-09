@@ -4,7 +4,7 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::{mem, ptr};
 
-use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -109,7 +109,7 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		//let tss = unsafe { &(*PERCORE.tss.get()) };
+		//let tss = unsafe { &(*CORE_LOCAL.tss.get()) };
 		/*let stack = VirtAddr::from_usize(tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE);
 		debug!("Using boot stack {:#X}", stack);
 		let ist0 = VirtAddr::from_usize(tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE);

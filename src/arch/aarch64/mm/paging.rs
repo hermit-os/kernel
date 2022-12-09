@@ -2,7 +2,7 @@ use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr, usize};
 
-use crate::arch::aarch64::kernel::percore::*;
+use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::{
 	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve, processor,
 };
