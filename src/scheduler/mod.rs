@@ -83,7 +83,7 @@ struct NewTask {
 	arg: usize,
 	prio: Priority,
 	core_id: CoreId,
-	stack_size: usize,
+	stacks: TaskStacks,
 }
 
 impl From<NewTask> for Task {
@@ -94,9 +94,9 @@ impl From<NewTask> for Task {
 			arg,
 			prio,
 			core_id,
-			stack_size,
+			stacks,
 		} = value;
-		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stack_size);
+		let mut task = Self::new(tid, core_id, TaskStatus::Ready, prio, stacks);
 		task.create_stack_frame(func, arg);
 		task
 	}
@@ -113,13 +113,14 @@ impl PerCoreScheduler {
 	) -> TaskId {
 		// Create the new task.
 		let tid = get_tid();
+		let stacks = TaskStacks::new(stack_size);
 		let new_task = NewTask {
 			tid,
 			func,
 			arg,
 			prio,
 			core_id,
-			stack_size,
+			stacks,
 		};
 
 		// Add it to the task lists.
