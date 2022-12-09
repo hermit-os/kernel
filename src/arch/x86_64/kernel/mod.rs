@@ -3,11 +3,12 @@ use core::slice;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
+use hermit_sync::InterruptSpinMutex;
 use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 
+use self::serial::SerialPort;
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::percore::*;
-use crate::arch::x86_64::kernel::serial::SerialPort;
 use crate::env;
 
 #[cfg(feature = "acpi")]
@@ -34,8 +35,6 @@ pub mod systemtime;
 #[cfg(feature = "vga")]
 mod vga;
 
-const SERIAL_PORT_BAUDRATE: u32 = 115_200;
-
 /// Kernel header to announce machine features
 #[cfg_attr(
 	all(target_os = "none", not(feature = "newlib")),
@@ -55,7 +54,7 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 }
 
 /// Serial port to print kernel messages
-static mut COM1: SerialPort = SerialPort::new(0x3f8);
+static COM1: InterruptSpinMutex<Option<SerialPort>> = InterruptSpinMutex::new(None);
 
 pub fn get_ram_address() -> PhysAddr {
 	PhysAddr(boot_info().hardware_info.phys_addr_range.start)
@@ -178,60 +177,41 @@ pub fn get_cmdline() -> VirtAddr {
 	}
 }
 
+// We can only initialize the serial port here, because VGA requires processor
+// configuration first.
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
 	percore::init();
 
-	unsafe {
-		COM1.port_address = boot_info()
-			.hardware_info
-			.serial_port_base
-			.map(|uartport| uartport.get())
-			.unwrap_or_default();
-	}
+	let base = boot_info().hardware_info.serial_port_base.unwrap().get();
+	let serial_port = unsafe { SerialPort::new(base) };
+	*COM1.lock() = Some(serial_port);
+}
 
-	// We can only initialize the serial port here, because VGA requires processor
-	// configuration first.
-	unsafe {
-		COM1.init(SERIAL_PORT_BAUDRATE);
+#[cfg(target_os = "none")]
+pub fn output_message_buf(buf: &[u8]) {
+	// Output messages to the serial port and VGA screen in unikernel mode.
+	COM1.lock().as_mut().unwrap().send(buf);
+
+	#[cfg(feature = "vga")]
+	for &byte in buf {
+		// vga::write_byte() checks if VGA support has been initialized,
+		// so we don't need any additional if clause around it.
+		vga::write_byte(byte);
 	}
 }
 
 #[cfg(not(target_os = "none"))]
-pub fn output_message_byte(byte: u8) {
+pub fn output_message_buf(buf: &[u8]) {
 	use std::io::Write;
 
-	std::io::stderr().write_all(&[byte]).unwrap();
+	std::io::stderr().write_all(buf).unwrap();
 }
 
 #[cfg(not(target_os = "none"))]
 #[test]
 fn test_output() {
-	output_message_byte('t' as u8);
-	output_message_byte('e' as u8);
-	output_message_byte('s' as u8);
-	output_message_byte('t' as u8);
-	output_message_byte('\n' as u8);
-}
-
-#[cfg(target_os = "none")]
-pub fn output_message_byte(byte: u8) {
-	// Output messages to the serial port and VGA screen in unikernel mode.
-	unsafe {
-		COM1.write_byte(byte);
-	}
-
-	// vga::write_byte() checks if VGA support has been initialized,
-	// so we don't need any additional if clause around it.
-	#[cfg(feature = "vga")]
-	vga::write_byte(byte);
-}
-
-//#[cfg(target_os = "none")]
-pub fn output_message_buf(buf: &[u8]) {
-	for byte in buf {
-		output_message_byte(*byte);
-	}
+	output_message_buf(b"test message\n");
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.

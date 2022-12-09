@@ -25,7 +25,7 @@ pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::{
 	application_processor_init, boot_application_processors, boot_processor_init,
-	get_processor_count, message_output_init, output_message_buf, output_message_byte,
+	get_processor_count, message_output_init, output_message_buf,
 };
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::*;
@@ -51,7 +51,7 @@ pub use crate::arch::x86_64::kernel::systemtime::get_boot_time;
 pub use crate::arch::x86_64::kernel::{boot_application_processors, boot_processor_init};
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::{
-	get_processor_count, message_output_init, output_message_buf, output_message_byte,
+	get_processor_count, message_output_init, output_message_buf,
 };
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::*;

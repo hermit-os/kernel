@@ -38,7 +38,7 @@ pub extern "C" fn sys_acquire_putchar_lock() {
 }
 
 extern "C" fn __sys_putchar(character: u8) {
-	arch::output_message_byte(character);
+	arch::output_message_buf(&[character]);
 }
 
 #[no_mangle]
