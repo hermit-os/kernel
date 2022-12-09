@@ -63,7 +63,7 @@ macro_rules! hermit_var_or {
 impl NetworkInterface<HermitNet> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState {
-		let mtu = match unsafe { SYS.get_mtu() } {
+		let mtu = match SYS.get_mtu() {
 			Ok(mtu) => mtu,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
@@ -75,7 +75,7 @@ impl NetworkInterface<HermitNet> {
 			trace!("{}", printer);
 		});
 
-		let mac: [u8; 6] = match unsafe { SYS.get_mac_address() } {
+		let mac: [u8; 6] = match SYS.get_mac_address() {
 			Ok(mac) => mac,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
@@ -186,7 +186,7 @@ impl<'a> Device<'a> for HermitNet {
 	}
 
 	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
-		match unsafe { SYS.receive_rx_buffer() } {
+		match SYS.receive_rx_buffer() {
 			Ok((buffer, handle)) => Some((RxToken::new(buffer, handle), TxToken::new())),
 			_ => None,
 		}
@@ -217,7 +217,7 @@ impl phy::RxToken for RxToken {
 		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
 	{
 		let result = f(self.buffer);
-		if unsafe { SYS.rx_buffer_consumed(self.handle).is_ok() } {
+		if SYS.rx_buffer_consumed(self.handle).is_ok() {
 			result
 		} else {
 			Err(smoltcp::Error::Exhausted)
@@ -239,23 +239,20 @@ impl phy::TxToken for TxToken {
 	where
 		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
 	{
-		let (tx_buffer, handle) = unsafe {
-			SYS.get_tx_buffer(len)
-				.map_err(|_| smoltcp::Error::Exhausted)?
-		};
+		let (tx_buffer, handle) = SYS
+			.get_tx_buffer(len)
+			.map_err(|_| smoltcp::Error::Exhausted)?;
 		let tx_slice: &'static mut [u8] = unsafe { slice::from_raw_parts_mut(tx_buffer, len) };
 		match f(tx_slice) {
 			Ok(result) => {
-				if unsafe { SYS.send_tx_buffer(handle, len).is_ok() } {
+				if SYS.send_tx_buffer(handle, len).is_ok() {
 					Ok(result)
 				} else {
 					Err(smoltcp::Error::Exhausted)
 				}
 			}
 			Err(e) => {
-				unsafe {
-					let _ = SYS.free_tx_buffer(handle);
-				}
+				let _ = SYS.free_tx_buffer(handle);
 				Err(e)
 			}
 		}

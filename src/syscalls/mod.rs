@@ -2,6 +2,7 @@
 
 #[cfg(feature = "newlib")]
 use hermit_sync::InterruptTicketMutex;
+use hermit_sync::Lazy;
 
 pub use self::condvar::*;
 pub use self::futex::*;
@@ -42,7 +43,13 @@ const LWIP_FD_BIT: i32 = 1 << 30;
 #[cfg(feature = "newlib")]
 pub static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
 
-pub(crate) static mut SYS: &'static dyn SyscallInterface = &self::interfaces::Generic;
+pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
+	if env::is_uhyve() {
+		&self::interfaces::Uhyve
+	} else {
+		&self::interfaces::Generic
+	}
+});
 
 /// Shuts down the machine.
 ///
@@ -56,16 +63,10 @@ pub(crate) fn shutdown(arg: i32) -> ! {
 }
 
 pub(crate) fn init() {
-	unsafe {
-		// We know that HermitCore has successfully initialized a network interface.
-		// Now check if we can load a more specific SyscallInterface to make use of networking.
-		if env::is_uhyve() {
-			SYS = &interfaces::Uhyve;
-		}
+	Lazy::force(&SYS);
 
-		// Perform interface-specific initialization steps.
-		SYS.init();
-	}
+	// Perform interface-specific initialization steps.
+	SYS.init();
 
 	random_init();
 	#[cfg(feature = "newlib")]
@@ -91,14 +92,14 @@ pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
-	unsafe { SYS.get_application_parameters() }
+	SYS.get_application_parameters()
 }
 
 pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
 	// print some performance statistics
 	crate::arch::kernel::print_statistics();
 
-	unsafe { SYS.shutdown(arg) }
+	SYS.shutdown(arg)
 }
 
 #[no_mangle]
@@ -107,7 +108,7 @@ pub extern "C" fn sys_shutdown(arg: i32) -> ! {
 }
 
 extern "C" fn __sys_unlink(name: *const u8) -> i32 {
-	unsafe { SYS.unlink(name) }
+	SYS.unlink(name)
 }
 
 #[no_mangle]
@@ -169,7 +170,7 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 }
 
 extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {
-	unsafe { SYS.stat(file, st) }
+	SYS.stat(file, st)
 }
 
 #[no_mangle]
