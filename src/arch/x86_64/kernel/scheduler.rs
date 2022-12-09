@@ -151,11 +151,13 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let tss = unsafe { &(*PERCORE.tss.get()) };
-		let stack =
-			VirtAddr::from_usize(tss.rsp[0] as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE);
+		let stack = VirtAddr::from_usize(
+			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
+		);
 		debug!("Using boot stack {:#X}", stack);
-		let ist0 =
-			VirtAddr::from_usize(tss.ist[0] as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE);
+		let ist0 = VirtAddr::from_usize(
+			tss.interrupt_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
+		);
 		debug!("IST0 is located at {:#X}", ist0);
 
 		TaskStacks::Boot(BootStack { stack, ist0 })

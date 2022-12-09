@@ -324,18 +324,22 @@ impl PerCoreScheduler {
 
 	#[cfg(target_arch = "x86_64")]
 	pub fn set_current_kernel_stack(&self) {
+		use x86_64::VirtAddr;
+
 		let current_task_borrowed = self.current_task.borrow();
 		let tss = unsafe { &mut (*PERCORE.tss.get()) };
 
-		tss.rsp[0] = (current_task_borrowed.stacks.get_kernel_stack()
+		let rsp = (current_task_borrowed.stacks.get_kernel_stack()
 			+ current_task_borrowed.stacks.get_kernel_stack_size()
 			- TaskStacks::MARKER_SIZE)
 			.as_u64();
-		set_kernel_stack(tss.rsp[0]);
-		tss.ist[0] = (current_task_borrowed.stacks.get_interrupt_stack()
+		tss.interrupt_stack_table[0] = VirtAddr::new(rsp);
+		set_kernel_stack(rsp);
+		let ist_start = (current_task_borrowed.stacks.get_interrupt_stack()
 			+ current_task_borrowed.stacks.get_interrupt_stack_size()
 			- TaskStacks::MARKER_SIZE)
 			.as_u64();
+		tss.interrupt_stack_table[0] = VirtAddr::new(ist_start);
 	}
 
 	pub fn set_current_task_priority(&mut self, prio: Priority) {
