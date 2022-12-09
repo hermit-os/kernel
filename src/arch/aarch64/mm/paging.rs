@@ -244,7 +244,7 @@ impl<S: PageSize> Page<S> {
 		);
 
 		Self {
-			virtual_address: align_down!(virtual_address, S::SIZE),
+			virtual_address: VirtAddr(align_down!(virtual_address.0, S::SIZE)),
 			size: PhantomData,
 		}
 	}
