@@ -448,7 +448,7 @@ impl Task {
 		core_id: CoreId,
 		task_status: TaskStatus,
 		task_prio: Priority,
-		stack_size: usize,
+		stacks: TaskStacks,
 	) -> Task {
 		debug!("Creating new task {} on core {}", tid, core_id);
 
@@ -460,7 +460,7 @@ impl Task {
 			user_stack_pointer: VirtAddr(0u64),
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
-			stacks: TaskStacks::new(stack_size),
+			stacks,
 			next: None,
 			prev: None,
 			tls: None,
