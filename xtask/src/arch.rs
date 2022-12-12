@@ -32,8 +32,16 @@ impl Arch {
 
 	pub fn builtins_cargo_args(&self) -> &'static [&'static str] {
 		match self {
-			Arch::X86_64 => &["--target=x86_64-unknown-hermit", "-Zbuild-std=core"],
-			Arch::AArch64 => &["--target=aarch64-unknown-hermit", "-Zbuild-std=core"],
+			Arch::X86_64 => &[
+				"--target=x86_64-unknown-hermit",
+				"-Zbuild-std=core",
+				"-Zbuild-std-features=compiler-builtins-mem",
+			],
+			Arch::AArch64 => &[
+				"--target=aarch64-unknown-hermit",
+				"-Zbuild-std=core",
+				"-Zbuild-std-features=compiler-builtins-mem",
+			],
 		}
 	}
 

@@ -373,7 +373,7 @@ impl fmt::Display for PciBar {
 			PciBar::IO(io_bar) => ("IOBar", io_bar.addr as usize, io_bar.size),
 			PciBar::Memory(mem_bar) => ("MemoryBar", mem_bar.addr, mem_bar.size),
 		};
-		write!(f, "{}: {:#x} (size {:#x})", typ, addr, size)?;
+		write!(f, "{typ}: {addr:#x} (size {size:#x})")?;
 
 		Ok(())
 	}
@@ -422,7 +422,7 @@ impl fmt::Display for PciAdapter {
 		}
 
 		for pci_bar in &self.base_addresses {
-			write!(f, ", {}", pci_bar)?;
+			write!(f, ", {pci_bar}")?;
 		}
 
 		Ok(())

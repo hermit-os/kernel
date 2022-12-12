@@ -50,7 +50,7 @@ impl Archive {
 			.collect::<String>();
 
 		let rename_path = archive.with_extension("redefine-syms");
-		sh.write_file(&rename_path, &symbol_renames)?;
+		sh.write_file(&rename_path, symbol_renames)?;
 
 		let objcopy = binutil("objcopy")?;
 		cmd!(sh, "{objcopy} --prefix-symbols={prefix}_ {archive}").run()?;
