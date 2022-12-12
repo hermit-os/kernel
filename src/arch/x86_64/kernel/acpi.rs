@@ -423,8 +423,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	);
 	assert!(
 		verify_checksum(dsdt.header_start_address(), dsdt.header.length as usize).is_ok(),
-		"DSDT at {:#X} has invalid checksum",
-		dsdt_address
+		"DSDT at {dsdt_address:#X} has invalid checksum"
 	);
 
 	// Try to find the "_S5_" object for SLP_TYPA in the DSDT AML bytecode.
@@ -503,8 +502,7 @@ pub fn init() {
 			// Check and save the entire APIC table for the get_apic_table() call.
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"MADT at {:#X} has invalid checksum",
-				table_physical_address
+				"MADT at {table_physical_address:#X} has invalid checksum"
 			);
 			unsafe {
 				MADT = Some(table);
@@ -514,15 +512,13 @@ pub fn init() {
 			// Check and parse this table for the poweroff() call.
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"FADT at {:#X} has invalid checksum",
-				table_physical_address
+				"FADT at {table_physical_address:#X} has invalid checksum"
 			);
 			parse_fadt(table);
 		} else if table.header.signature() == "SSDT" {
 			assert!(
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
-				"SSDT at {:#X} has invalid checksum",
-				table_physical_address
+				"SSDT at {table_physical_address:#X} has invalid checksum"
 			);
 			parse_ssdt(table);
 		}

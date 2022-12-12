@@ -41,11 +41,11 @@ pub mod error {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match *self {
 				DriverError::InitVirtioDevFail(ref err) => {
-					write!(f, "Virtio driver failed: {:?}", err)
+					write!(f, "Virtio driver failed: {err:?}")
 				}
 				#[cfg(feature = "pci")]
 				DriverError::InitRTL8139DevFail(ref err) => {
-					write!(f, "RTL8139 driver failed: {:?}", err)
+					write!(f, "RTL8139 driver failed: {err:?}")
 				}
 			}
 		}
