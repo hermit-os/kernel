@@ -2,6 +2,8 @@ use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr, usize};
 
+use align_address::Align;
+
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::{
 	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve, processor,
@@ -244,7 +246,7 @@ impl<S: PageSize> Page<S> {
 		);
 
 		Self {
-			virtual_address: VirtAddr(align_down!(virtual_address.0, S::SIZE)),
+			virtual_address: VirtAddr(virtual_address.0.align_down(S::SIZE)),
 			size: PhantomData,
 		}
 	}

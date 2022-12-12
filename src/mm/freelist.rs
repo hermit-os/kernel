@@ -2,6 +2,8 @@ use alloc::collections::linked_list::LinkedList;
 use core::alloc::AllocError;
 use core::cmp::Ordering;
 
+use align_address::Align;
+
 pub struct FreeListEntry {
 	pub start: usize,
 	pub end: usize,
@@ -47,7 +49,7 @@ impl FreeList {
 					// We have found a region that is larger than the requested size.
 					// Return the address to the beginning of that region and shrink the region by that size.
 					if let Some(align) = alignment {
-						let new_addr = align_up!(region_start, align);
+						let new_addr = region_start.align_up(align);
 						node.start += size + (new_addr - region_start);
 						if new_addr != region_start {
 							let new_entry = FreeListEntry::new(region_start, new_addr);
@@ -63,7 +65,7 @@ impl FreeList {
 					// We have found a region that has exactly the requested size.
 					// Return the address to the beginning of that region and move the node into the pool for deletion or reuse.
 					if let Some(align) = alignment {
-						let new_addr = align_up!(region_start, align);
+						let new_addr = region_start.align_up(align);
 						if new_addr != region_start {
 							node.end = new_addr;
 						}

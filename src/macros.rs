@@ -1,17 +1,3 @@
-macro_rules! align_down {
-	($value:expr, $alignment:expr) => {{
-		use ::align_address::Align;
-		($value).align_down($alignment)
-	}};
-}
-
-macro_rules! align_up {
-	($value:expr, $alignment:expr) => {{
-		use ::align_address::Align;
-		($value).align_up($alignment)
-	}};
-}
-
 /// Print formatted text to our console.
 ///
 /// From <http://blog.phil-opp.com/rust-os/printing-to-screen.html>, but tweaked

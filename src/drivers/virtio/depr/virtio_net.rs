@@ -4,6 +4,8 @@ use alloc::vec::Vec;
 use core::sync::atomic::{fence, Ordering};
 use core::{fmt, mem, slice, u32, u8};
 
+use align_address::Align;
+
 use crate::arch::kernel::pci;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::VirtAddr;
@@ -172,7 +174,7 @@ struct RxBuffer {
 
 impl RxBuffer {
 	pub fn new(len: usize) -> Self {
-		let sz = align_up!(len, BasePageSize::SIZE as usize);
+		let sz = len.align_up(BasePageSize::SIZE as usize);
 		let addr = crate::mm::allocate(sz, true);
 
 		Self { addr, len: sz }
@@ -195,10 +197,7 @@ struct TxBuffer {
 
 impl TxBuffer {
 	pub fn new(len: usize) -> Self {
-		let sz = align_up!(
-			len + mem::size_of::<virtio_net_hdr>(),
-			BasePageSize::SIZE as usize
-		);
+		let sz = (len + mem::size_of::<virtio_net_hdr>()).align_up(BasePageSize::SIZE as usize);
 		let addr = crate::mm::allocate(sz, true);
 
 		Self {

@@ -10,6 +10,8 @@ use core::cell::RefCell;
 use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
+use align_address::Align;
+
 use self::error::VqPackedError;
 use super::super::features::Features;
 #[cfg(not(feature = "pci"))]
@@ -106,10 +108,8 @@ impl DescriptorRing {
 		let size = usize::try_from(size).unwrap();
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(
-			size * core::mem::size_of::<Descriptor>(),
-			BasePageSize::SIZE as usize
-		);
+		let _mem_len =
+			(size * core::mem::size_of::<Descriptor>()).align_up(BasePageSize::SIZE as usize);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
 
 		let ring: &'static mut [Descriptor] = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
@@ -1248,10 +1248,7 @@ impl PackedVq {
 
 		let descr_ring = RefCell::new(DescriptorRing::new(vq_size));
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(
-			core::mem::size_of::<EventSuppr>(),
-			BasePageSize::SIZE as usize
-		);
+		let _mem_len = core::mem::size_of::<EventSuppr>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event_ptr =
 			(crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;

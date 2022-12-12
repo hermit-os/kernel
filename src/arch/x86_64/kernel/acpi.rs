@@ -1,6 +1,7 @@
 use core::convert::Infallible;
 use core::{mem, ptr, slice, str};
 
+use align_address::Align;
 use x86::io::*;
 use x86_64::structures::paging::PhysFrame;
 
@@ -118,7 +119,7 @@ impl<'a> AcpiTable<'a> {
 		if table_length > allocated_length - offset {
 			virtualmem::deallocate(virtual_address, allocated_length);
 
-			allocated_length = align_up!(table_length + offset, BasePageSize::SIZE as usize);
+			allocated_length = (table_length + offset).align_up(BasePageSize::SIZE as usize);
 			count = allocated_length / BasePageSize::SIZE as usize;
 
 			virtual_address = virtualmem::allocate(allocated_length).unwrap();

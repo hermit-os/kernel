@@ -13,6 +13,8 @@ mod tests {
 	use std::mem::{align_of, size_of};
 	use std::prelude::v1::*;
 
+	use align_address::Align;
+
 	use super::*;
 	use crate::mm::allocator::*;
 	use crate::mm::hole::*;
@@ -77,7 +79,7 @@ mod tests {
 		let (hole_addr, hole_size) = heap.holes.first_hole().expect("ERROR: no hole left");
 
 		// note: the smallest allocation granularity is 64 byte
-		let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		let size = size.align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 		assert!(hole_addr == heap.bottom() + size);
 		assert!(hole_size == heap.size() - size);
 
@@ -117,12 +119,12 @@ mod tests {
 			// note: the smallest allocation granularity is 64 byte
 			assert_eq!(
 				(*(y.as_ptr() as *const Hole)).size,
-				align_up!(layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE)
+				layout.size().align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE)
 			);
 			heap.deallocate(x, layout.clone());
 			assert_eq!(
 				(*(x.as_ptr() as *const Hole)).size,
-				align_up!(layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE) * 2
+				layout.size().align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE) * 2
 			);
 			heap.deallocate(z, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size());
@@ -142,7 +144,7 @@ mod tests {
 
 		unsafe {
 			heap.deallocate(x, layout.clone());
-			let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let size = size.align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);
 			heap.deallocate(y, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size * 2);
@@ -166,7 +168,7 @@ mod tests {
 		unsafe {
 			heap.deallocate(x, layout.clone());
 			// note: the smallest allocation granularity is 64 byte
-			let size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			let size = size.align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);
 			heap.deallocate(z, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size);

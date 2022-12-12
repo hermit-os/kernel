@@ -7,6 +7,7 @@ mod test;
 use core::mem;
 use core::ops::Range;
 
+use align_address::Align;
 use hermit_sync::Lazy;
 #[cfg(feature = "newlib")]
 use hermit_sync::OnceCell;
@@ -100,12 +101,10 @@ pub fn init() {
 	let mut map_addr: VirtAddr;
 	let mut map_size: usize;
 
-	let available_memory = align_down!(
-		total_memory_size()
-			- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
-			- reserved_space,
-		LargePageSize::SIZE as usize
-	);
+	let available_memory = (total_memory_size()
+		- (kernel_end_address().as_usize() - env::get_ram_address().as_usize())
+		- reserved_space)
+		.align_down(LargePageSize::SIZE as usize);
 
 	// we reserve 10% of the memory for stack allocations
 	let stack_reserve: usize = (available_memory * 10) / 100;
@@ -126,10 +125,9 @@ pub fn init() {
 		}
 
 		info!("Kernel heap size: {} MB", kernel_heap_size >> 20);
-		let user_heap_size = align_down!(
-			available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE as usize,
-			LargePageSize::SIZE as usize
-		);
+		let user_heap_size =
+			(available_memory - kernel_heap_size - stack_reserve - LargePageSize::SIZE as usize)
+				.align_down(LargePageSize::SIZE as usize);
 		info!("User-space heap size: {} MB", user_heap_size >> 20);
 
 		map_addr = kernel_heap_end();
@@ -145,14 +143,12 @@ pub fn init() {
 		// Afterwards, we already use the heap and map the rest into
 		// the virtual address space.
 
-		let virt_size: usize = align_down!(
-			available_memory - stack_reserve,
-			LargePageSize::SIZE as usize
-		);
+		let virt_size: usize =
+			(available_memory - stack_reserve).align_down(LargePageSize::SIZE as usize);
 
 		let virt_addr = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
 			arch::mm::virtualmem::allocate_aligned(
-				align_up!(virt_size, HugePageSize::SIZE as usize),
+				virt_size.align_up(HugePageSize::SIZE as usize),
 				HugePageSize::SIZE as usize,
 			)
 			.unwrap()
@@ -202,23 +198,23 @@ pub fn init() {
 
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
-		&& align_down!(map_addr.as_usize(), HugePageSize::SIZE as usize) == 0
+		&& map_addr.as_usize().align_down(HugePageSize::SIZE as usize) == 0
 	{
-		let size = align_down!(map_size, HugePageSize::SIZE as usize);
+		let size = map_size.align_down(HugePageSize::SIZE as usize);
 		paging::map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
 	}
 
 	if has_2mib_pages && map_size > LargePageSize::SIZE as usize {
-		let size = align_down!(map_size, LargePageSize::SIZE as usize);
+		let size = map_size.align_down(LargePageSize::SIZE as usize);
 		paging::map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
 	}
 
 	if map_size > BasePageSize::SIZE as usize {
-		let size = align_down!(map_size, BasePageSize::SIZE as usize);
+		let size = map_size.align_down(BasePageSize::SIZE as usize);
 		paging::map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize);
 		map_size -= size;
 		map_addr += size;
@@ -238,7 +234,7 @@ pub fn print_information() {
 }
 
 pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
-	let size = align_up!(sz, BasePageSize::SIZE as usize);
+	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
 	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
 
@@ -254,7 +250,7 @@ pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 }
 
 pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
-	let size = align_up!(sz, BasePageSize::SIZE as usize);
+	let size = sz.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
 		arch::mm::paging::unmap::<BasePageSize>(
@@ -280,7 +276,7 @@ pub fn map(
 	no_execution: bool,
 	no_cache: bool,
 ) -> VirtAddr {
-	let size = align_up!(sz, BasePageSize::SIZE as usize);
+	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let count = size / BasePageSize::SIZE as usize;
 
 	let mut flags = PageTableEntryFlags::empty();
@@ -304,7 +300,7 @@ pub fn map(
 #[allow(dead_code)]
 /// unmaps virtual address, without 'freeing' physical memory it is mapped to!
 pub fn unmap(virtual_address: VirtAddr, sz: usize) {
-	let size = align_up!(sz, BasePageSize::SIZE as usize);
+	let size = sz.align_up(BasePageSize::SIZE as usize);
 
 	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
 		arch::mm::paging::unmap::<BasePageSize>(

@@ -7,6 +7,7 @@ use core::ptr;
 use core::sync::atomic::Ordering;
 use core::{cmp, fmt, mem, u32};
 
+use align_address::Align;
 #[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
@@ -329,7 +330,7 @@ fn search_mp_floating(start: PhysAddr, end: PhysAddr) -> Result<&'static ApicMP,
 		flags.normal().writable();
 		paging::map::<BasePageSize>(
 			virtual_address,
-			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
+			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 			1,
 			flags,
 		);
@@ -381,10 +382,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 	flags.normal().writable();
 	paging::map::<BasePageSize>(
 		virtual_address,
-		PhysAddr::from(align_down!(
-			mp_float.mp_config as usize,
-			BasePageSize::SIZE as usize
-		)),
+		PhysAddr::from((mp_float.mp_config as usize).align_down(BasePageSize::SIZE as usize)),
 		1,
 		flags,
 	);
