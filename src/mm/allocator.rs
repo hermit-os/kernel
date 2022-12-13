@@ -28,9 +28,9 @@ pub struct Heap {
 	index: usize,
 	bottom: usize,
 	size: usize,
-	#[cfg(target_os = "none")]
+	#[cfg(not(test))]
 	holes: HoleList,
-	#[cfg(not(target_os = "none"))]
+	#[cfg(test)]
 	pub holes: HoleList,
 }
 
