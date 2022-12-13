@@ -215,14 +215,6 @@ unsafe impl GlobalAlloc for LockedHeap {
 			})
 	}
 
-	unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-		let ptr = unsafe { self.alloc(layout) };
-		if !ptr.is_null() {
-			unsafe { ptr::write_bytes(ptr, 0, layout.size()) };
-		}
-		ptr
-	}
-
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
 		unsafe {
 			self.0
