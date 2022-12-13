@@ -183,16 +183,6 @@ impl LockedAllocator {
 	pub const fn empty() -> LockedAllocator {
 		LockedAllocator(InterruptTicketMutex::new(Heap::empty()))
 	}
-
-	/// Creates a new allocator with the given `bottom` and `size`. The bottom address must be valid
-	/// and the memory in the `[heap_bottom, heap_bottom + heap_size)` range must not be used for
-	/// anything else. This function is unsafe because it can cause undefined behavior if the
-	/// given address is invalid.
-	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedAllocator {
-		LockedAllocator(InterruptTicketMutex::new(unsafe {
-			Heap::new(heap_bottom, heap_size)
-		}))
-	}
 }
 
 impl Deref for LockedAllocator {
