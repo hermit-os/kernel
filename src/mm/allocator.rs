@@ -23,11 +23,6 @@ use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
 
 /// A fixed size heap backed by a linked list of free memory blocks.
-#[cfg_attr(any(target_arch = "x86_64", target_arch = "aarch64"), repr(align(128)))]
-#[cfg_attr(
-	not(any(target_arch = "x86_64", target_arch = "aarch64")),
-	repr(align(64))
-)]
 pub struct Heap {
 	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
 	index: usize,
