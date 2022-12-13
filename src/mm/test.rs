@@ -1,14 +1,8 @@
-// The memory allocator and its tests are derived from the crate `linked-list-allocator`
-// (https://github.com/phil-opp/linked-list-allocator).
-// This crate is dual-licensed under MIT or the Apache License (Version 2.0).
-
-// To avoid false sharing, our version allocate as smallest block 64 byte (= cache line).
-// In addition, for pre
+//! Copied from `linked-list-allocator = "0.6.4"`
 
 #[cfg(not(target_os = "none"))]
 #[cfg(test)]
 mod tests {
-	use alloc::alloc::alloc;
 	use core::alloc::Layout;
 	use std::mem::{align_of, size_of};
 	use std::prelude::v1::*;
@@ -21,28 +15,25 @@ mod tests {
 
 	fn new_heap() -> Heap {
 		const HEAP_SIZE: usize = 1000;
-		let layout = Layout::from_size_align(HEAP_SIZE, 1).unwrap();
-		let heap_space = unsafe { alloc(layout) as *const u8 };
+		let heap_space = Box::into_raw(Box::new([0u8; HEAP_SIZE]));
 
 		let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
-		assert_eq!(heap.bottom(), heap_space as usize);
-		assert_eq!(heap.size(), HEAP_SIZE);
+		assert!(heap.bottom == heap_space as usize);
+		assert!(heap.size == HEAP_SIZE);
 		heap
 	}
 
 	fn new_max_heap() -> Heap {
 		const HEAP_SIZE: usize = 1024;
 		const HEAP_SIZE_MAX: usize = 2048;
-		let layout = Layout::from_size_align(HEAP_SIZE_MAX, 1).unwrap();
-		let heap_space = unsafe { alloc(layout) as *const u8 };
+		let heap_space = Box::into_raw(Box::new([0u8; HEAP_SIZE_MAX]));
 
 		let heap = unsafe { Heap::new(heap_space as usize, HEAP_SIZE) };
-		assert_eq!(heap.bottom(), heap_space as usize);
-		assert_eq!(heap.size(), HEAP_SIZE);
+		assert!(heap.bottom == heap_space as usize);
+		assert!(heap.size == HEAP_SIZE);
 		heap
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn empty() {
 		let mut heap = Heap::empty();
@@ -50,7 +41,6 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_err());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn oom() {
 		let mut heap = new_heap();
@@ -59,7 +49,6 @@ mod tests {
 		assert!(addr.is_err());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_double_usize() {
 		let mut heap = new_heap();
@@ -68,18 +57,16 @@ mod tests {
 		let addr = heap.allocate_first_fit(layout.unwrap());
 		assert!(addr.is_ok());
 		let addr = addr.unwrap().as_ptr() as usize;
-		assert_eq!(addr, heap.bottom());
+		assert!(addr == heap.bottom);
 		let (hole_addr, hole_size) = heap.holes.first_hole().expect("ERROR: no hole left");
-
-		assert!(hole_addr == heap.bottom() + size);
-		assert!(hole_size == heap.size() - size);
+		assert!(hole_addr == heap.bottom + size);
+		assert!(hole_size == heap.size - size);
 
 		unsafe {
-			assert_eq!((*((addr + size) as *const Hole)).size, heap.size() - size);
+			assert_eq!((*((addr + size) as *const Hole)).size, heap.size - size);
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_and_free_double_usize() {
 		let mut heap = new_heap();
@@ -90,12 +77,11 @@ mod tests {
 			*(x.as_ptr() as *mut (usize, usize)) = (0xdeafdeadbeafbabe, 0xdeafdeadbeafbabe);
 
 			heap.deallocate(x, layout.clone());
-			assert_eq!((*(heap.bottom() as *const Hole)).size, heap.size());
-			assert!((*(heap.bottom() as *const Hole)).next.is_none());
+			assert_eq!((*(heap.bottom as *const Hole)).size, heap.size);
+			assert!((*(heap.bottom as *const Hole)).next.is_none());
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_right_before() {
 		let mut heap = new_heap();
@@ -111,11 +97,10 @@ mod tests {
 			heap.deallocate(x, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, layout.size() * 2);
 			heap.deallocate(z, layout.clone());
-			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size());
+			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size);
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_right_behind() {
 		let mut heap = new_heap();
@@ -132,11 +117,10 @@ mod tests {
 			heap.deallocate(y, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size * 2);
 			heap.deallocate(z, layout.clone());
-			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size());
+			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size);
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn deallocate_middle() {
 		let mut heap = new_heap();
@@ -157,11 +141,10 @@ mod tests {
 			heap.deallocate(y, layout.clone());
 			assert_eq!((*(x.as_ptr() as *const Hole)).size, size * 3);
 			heap.deallocate(a, layout.clone());
-			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size());
+			assert_eq!((*(x.as_ptr() as *const Hole)).size, heap.size);
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn reallocate_double_usize() {
 		let mut heap = new_heap();
@@ -181,7 +164,39 @@ mod tests {
 		assert_eq!(x, y);
 	}
 
-	#[cfg(not(target_os = "none"))]
+	#[test]
+	fn allocate_multiple_sizes() {
+		let mut heap = new_heap();
+		let base_size = size_of::<usize>();
+		let base_align = align_of::<usize>();
+
+		let layout_1 = Layout::from_size_align(base_size * 2, base_align).unwrap();
+		let layout_2 = Layout::from_size_align(base_size * 7, base_align).unwrap();
+		let layout_3 = Layout::from_size_align(base_size * 3, base_align * 4).unwrap();
+		let layout_4 = Layout::from_size_align(base_size * 4, base_align).unwrap();
+
+		let x = heap.allocate_first_fit(layout_1.clone()).unwrap();
+		let y = heap.allocate_first_fit(layout_2.clone()).unwrap();
+		assert_eq!(y.as_ptr() as usize, x.as_ptr() as usize + base_size * 2);
+		let z = heap.allocate_first_fit(layout_3.clone()).unwrap();
+		assert_eq!(z.as_ptr() as usize % (base_size * 4), 0);
+
+		unsafe {
+			heap.deallocate(x, layout_1.clone());
+		}
+
+		let a = heap.allocate_first_fit(layout_4.clone()).unwrap();
+		let b = heap.allocate_first_fit(layout_1.clone()).unwrap();
+		assert_eq!(b, x);
+
+		unsafe {
+			heap.deallocate(y, layout_2);
+			heap.deallocate(z, layout_3);
+			heap.deallocate(a, layout_4);
+			heap.deallocate(b, layout_1);
+		}
+	}
+
 	#[test]
 	fn allocate_usize() {
 		let mut heap = new_heap();
@@ -191,7 +206,6 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn allocate_usize_in_bigger_block() {
 		let mut heap = new_heap();
@@ -216,7 +230,6 @@ mod tests {
 		}
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	// see https://github.com/phil-opp/blog_os/issues/160
 	fn align_from_small_to_big() {
@@ -231,7 +244,6 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout_2.clone()).is_ok());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_empty_heap() {
 		let mut heap = new_max_heap();
@@ -245,7 +257,6 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_full_heap() {
 		let mut heap = new_max_heap();
@@ -260,7 +271,6 @@ mod tests {
 		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
 	}
 
-	#[cfg(not(target_os = "none"))]
 	#[test]
 	fn extend_fragmented_heap() {
 		let mut heap = new_max_heap();
