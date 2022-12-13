@@ -22,10 +22,36 @@ use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 /// Size of the preallocated space for the Bootstrap Allocator.
 const BOOTSTRAP_HEAP_SIZE: usize = 4096;
 
-/// A fixed size heap backed by a linked list of free memory blocks.
-pub struct Heap {
+struct BootstrapAllocator {
 	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
 	index: usize,
+}
+
+impl BootstrapAllocator {
+	const fn new() -> Self {
+		Self {
+			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
+			index: 0,
+		}
+	}
+
+	/// An allocation using the always available Bootstrap Allocator.
+	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
+		let ptr = &mut self.first_block[self.index] as *mut u8;
+
+		// Bump the heap index and align it up to the next boundary.
+		self.index = (self.index + layout.size()).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		if self.index >= BOOTSTRAP_HEAP_SIZE {
+			Err(AllocError)
+		} else {
+			Ok(NonNull::new(ptr).unwrap())
+		}
+	}
+}
+
+/// A fixed size heap backed by a linked list of free memory blocks.
+pub struct Heap {
+	bootstrap_allocator: BootstrapAllocator,
 	bottom: usize,
 	size: usize,
 	#[cfg(not(test))]
@@ -38,8 +64,7 @@ impl Heap {
 	/// Creates an empty heap. All allocate calls will return `None`.
 	pub const fn empty() -> Heap {
 		Heap {
-			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
-			index: 0,
+			bootstrap_allocator: BootstrapAllocator::new(),
 			bottom: 0,
 			size: 0,
 			holes: HoleList::empty(),
@@ -64,24 +89,10 @@ impl Heap {
 	/// given address is invalid.
 	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> Heap {
 		Heap {
-			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
-			index: 0,
+			bootstrap_allocator: BootstrapAllocator::new(),
 			bottom: heap_bottom,
 			size: heap_size,
 			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
-		}
-	}
-
-	/// An allocation using the always available Bootstrap Allocator.
-	unsafe fn alloc_bootstrap(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
-		let ptr = &mut self.first_block[self.index] as *mut u8;
-
-		// Bump the heap index and align it up to the next boundary.
-		self.index = (self.index + layout.size()).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-		if self.index >= BOOTSTRAP_HEAP_SIZE {
-			Err(AllocError)
-		} else {
-			Ok(NonNull::new(ptr).unwrap())
 		}
 	}
 
@@ -92,7 +103,7 @@ impl Heap {
 	/// reasonably fast for small allocations.
 	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
 		if self.bottom == 0 {
-			unsafe { self.alloc_bootstrap(layout) }
+			unsafe { self.bootstrap_allocator.alloc(layout) }
 		} else {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
 			size = (size).align_up(mem::align_of::<Hole>());
@@ -179,12 +190,8 @@ impl LockedHeap {
 	/// anything else. This function is unsafe because it can cause undefined behavior if the
 	/// given address is invalid.
 	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedHeap {
-		LockedHeap(InterruptTicketMutex::new(Heap {
-			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
-			index: 0,
-			bottom: heap_bottom,
-			size: heap_size,
-			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
+		LockedHeap(InterruptTicketMutex::new(unsafe {
+			Heap::new(heap_bottom, heap_size)
 		}))
 	}
 }
