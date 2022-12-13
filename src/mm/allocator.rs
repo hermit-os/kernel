@@ -198,9 +198,7 @@ unsafe impl GlobalAlloc for LockedAllocator {
 			.lock()
 			.allocate_first_fit(layout)
 			.ok()
-			.map_or(ptr::null_mut() as *mut u8, |mut mem| unsafe {
-				mem.as_mut()
-			})
+			.map_or(ptr::null_mut(), |mut mem| unsafe { mem.as_mut() })
 	}
 
 	unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
