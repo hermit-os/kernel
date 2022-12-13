@@ -57,7 +57,7 @@ use arch::core_local::*;
 // Used for integration test status.
 #[doc(hidden)]
 pub use arch::kernel::is_uhyve as _is_uhyve;
-use mm::allocator::LockedHeap;
+use mm::allocator::LockedAllocator;
 #[cfg(target_arch = "aarch64")]
 use qemu_exit::QEMUExit;
 
@@ -123,7 +123,7 @@ fn trivial_test() {
 
 #[cfg(target_os = "none")]
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: LockedAllocator = LockedAllocator::empty();
 
 /// Interface to allocate memory from system heap
 ///

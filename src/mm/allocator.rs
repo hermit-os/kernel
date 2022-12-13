@@ -176,26 +176,26 @@ impl Heap {
 	}
 }
 
-pub struct LockedHeap(InterruptTicketMutex<Heap>);
+pub struct LockedAllocator(InterruptTicketMutex<Heap>);
 
-impl LockedHeap {
-	/// Creates an empty heap. All allocate calls will return `None`.
-	pub const fn empty() -> LockedHeap {
-		LockedHeap(InterruptTicketMutex::new(Heap::empty()))
+impl LockedAllocator {
+	/// Creates an empty allocator. All allocate calls will return `None`.
+	pub const fn empty() -> LockedAllocator {
+		LockedAllocator(InterruptTicketMutex::new(Heap::empty()))
 	}
 
-	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
+	/// Creates a new allocator with the given `bottom` and `size`. The bottom address must be valid
 	/// and the memory in the `[heap_bottom, heap_bottom + heap_size)` range must not be used for
 	/// anything else. This function is unsafe because it can cause undefined behavior if the
 	/// given address is invalid.
-	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedHeap {
-		LockedHeap(InterruptTicketMutex::new(unsafe {
+	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> LockedAllocator {
+		LockedAllocator(InterruptTicketMutex::new(unsafe {
 			Heap::new(heap_bottom, heap_size)
 		}))
 	}
 }
 
-impl Deref for LockedHeap {
+impl Deref for LockedAllocator {
 	type Target = InterruptTicketMutex<Heap>;
 
 	fn deref(&self) -> &InterruptTicketMutex<Heap> {
@@ -205,7 +205,7 @@ impl Deref for LockedHeap {
 
 /// To avoid false sharing, the global memory allocator align
 /// all requests to a cache line.
-unsafe impl GlobalAlloc for LockedHeap {
+unsafe impl GlobalAlloc for LockedAllocator {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
 			.lock()
