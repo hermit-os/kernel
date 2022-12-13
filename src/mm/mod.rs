@@ -114,7 +114,7 @@ pub fn init() {
 
 		unsafe {
 			let start = allocate(kernel_heap_size, true);
-			crate::ALLOCATOR.init(start.as_usize(), kernel_heap_size);
+			crate::ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
 
 			info!("Kernel heap starts at {:#x}", start);
 		}
@@ -182,7 +182,7 @@ pub fn init() {
 
 		heap_start_addr = virt_addr;
 		unsafe {
-			crate::ALLOCATOR.init(virt_addr.as_usize(), virt_size);
+			crate::ALLOCATOR.init(virt_addr.as_mut_ptr(), virt_size);
 		}
 
 		map_addr = virt_addr + counter;

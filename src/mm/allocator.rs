@@ -53,7 +53,7 @@ impl Allocator {
 		}
 	}
 
-	unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
+	unsafe fn init(&mut self, heap_bottom: *mut u8, heap_size: usize) {
 		self.heap = Some(unsafe { Heap::new(heap_bottom, heap_size) });
 	}
 
@@ -89,7 +89,7 @@ impl LockedAllocator {
 		LockedAllocator(InterruptTicketMutex::new(Allocator::empty()))
 	}
 
-	pub unsafe fn init(&self, heap_bottom: usize, heap_size: usize) {
+	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
 		unsafe {
 			self.0.lock().init(heap_bottom, heap_size);
 		}
