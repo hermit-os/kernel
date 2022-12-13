@@ -1,8 +1,6 @@
 pub mod allocator;
 pub mod freelist;
 mod hole;
-#[cfg(test)]
-mod test;
 
 use core::mem;
 use core::ops::Range;

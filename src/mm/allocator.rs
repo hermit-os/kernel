@@ -7,6 +7,9 @@
 
 #![allow(dead_code)]
 
+#[path = "test.rs"]
+mod test;
+
 use core::alloc::{AllocError, GlobalAlloc, Layout};
 use core::ptr::NonNull;
 use core::{cmp, mem, ptr};
@@ -48,13 +51,11 @@ impl BootstrapAllocator {
 }
 
 /// A fixed size heap backed by a linked list of free memory blocks.
+// Copied from `linked-list-allocator = "0.6.4"`
 pub struct Heap {
 	bottom: usize,
 	size: usize,
-	#[cfg(not(test))]
 	holes: HoleList,
-	#[cfg(test)]
-	pub holes: HoleList,
 }
 
 impl Heap {
