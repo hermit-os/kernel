@@ -74,7 +74,7 @@ mod tests {
 		let layout = Layout::from_size_align(size, align_of::<usize>());
 		let addr = heap.allocate_first_fit(layout.unwrap());
 		assert!(addr.is_ok());
-		let addr = addr.unwrap().0.as_ptr() as usize;
+		let addr = addr.unwrap().as_ptr() as usize;
 		assert_eq!(addr, heap.bottom());
 		let (hole_addr, hole_size) = heap.holes.first_hole().expect("ERROR: no hole left");
 
@@ -94,7 +94,7 @@ mod tests {
 		let mut heap = new_heap();
 
 		let layout = Layout::from_size_align(size_of::<usize>() * 2, align_of::<usize>()).unwrap();
-		let x = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout.clone()).unwrap();
 		unsafe {
 			*(x.as_ptr() as *mut (usize, usize)) = (0xdeafdeadbeafbabe, 0xdeafdeadbeafbabe);
 
@@ -110,9 +110,9 @@ mod tests {
 		let mut heap = new_heap();
 		let layout = Layout::from_size_align(size_of::<usize>() * 5, 1).unwrap();
 
-		let x = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let y = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let z = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout.clone()).unwrap();
+		let y = heap.allocate_first_fit(layout.clone()).unwrap();
+		let z = heap.allocate_first_fit(layout.clone()).unwrap();
 
 		unsafe {
 			heap.deallocate(y, layout.clone());
@@ -138,9 +138,9 @@ mod tests {
 		let size = size_of::<usize>() * 5;
 		let layout = Layout::from_size_align(size, 1).unwrap();
 
-		let x = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let y = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let z = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout.clone()).unwrap();
+		let y = heap.allocate_first_fit(layout.clone()).unwrap();
+		let z = heap.allocate_first_fit(layout.clone()).unwrap();
 
 		unsafe {
 			heap.deallocate(x, layout.clone());
@@ -160,10 +160,10 @@ mod tests {
 		let size = size_of::<usize>() * 5;
 		let layout = Layout::from_size_align(size, 1).unwrap();
 
-		let x = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let y = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let z = heap.allocate_first_fit(layout.clone()).unwrap().0;
-		let a = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout.clone()).unwrap();
+		let y = heap.allocate_first_fit(layout.clone()).unwrap();
+		let z = heap.allocate_first_fit(layout.clone()).unwrap();
+		let a = heap.allocate_first_fit(layout.clone()).unwrap();
 
 		unsafe {
 			heap.deallocate(x, layout.clone());
@@ -187,12 +187,12 @@ mod tests {
 
 		let layout = Layout::from_size_align(size_of::<usize>() * 2, align_of::<usize>()).unwrap();
 
-		let x = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout.clone()).unwrap();
 		unsafe {
 			heap.deallocate(x, layout.clone());
 		}
 
-		let y = heap.allocate_first_fit(layout.clone()).unwrap().0;
+		let y = heap.allocate_first_fit(layout.clone()).unwrap();
 		unsafe {
 			heap.deallocate(y, layout.clone());
 		}
@@ -218,15 +218,15 @@ mod tests {
 		let layout_1 = Layout::from_size_align(size_of::<usize>() * 2, 1).unwrap();
 		let layout_2 = Layout::from_size_align(size_of::<usize>(), 1).unwrap();
 
-		let x = heap.allocate_first_fit(layout_1.clone()).unwrap().0;
-		let y = heap.allocate_first_fit(layout_1.clone()).unwrap().0;
+		let x = heap.allocate_first_fit(layout_1.clone()).unwrap();
+		let y = heap.allocate_first_fit(layout_1.clone()).unwrap();
 		unsafe {
 			heap.deallocate(x, layout_1.clone());
 		}
 
 		let z = heap.allocate_first_fit(layout_2.clone());
 		assert!(z.is_ok());
-		let z = z.unwrap().0;
+		let z = z.unwrap();
 		assert_eq!(x, z);
 
 		unsafe {
@@ -295,7 +295,7 @@ mod tests {
 
 		unsafe {
 			// Create a hole at the beginning of the heap
-			heap.deallocate(alloc1.unwrap().0, layout_1.clone());
+			heap.deallocate(alloc1.unwrap(), layout_1.clone());
 		}
 
 		unsafe {
