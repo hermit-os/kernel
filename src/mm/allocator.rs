@@ -49,7 +49,6 @@ impl BootstrapAllocator {
 
 /// A fixed size heap backed by a linked list of free memory blocks.
 pub struct Heap {
-	bootstrap_allocator: BootstrapAllocator,
 	bottom: usize,
 	size: usize,
 	#[cfg(not(test))]
@@ -62,7 +61,6 @@ impl Heap {
 	/// Creates an empty heap. All allocate calls will return `None`.
 	pub const fn empty() -> Heap {
 		Heap {
-			bootstrap_allocator: BootstrapAllocator::new(),
 			bottom: 0,
 			size: 0,
 			holes: HoleList::empty(),
@@ -87,7 +85,6 @@ impl Heap {
 	/// given address is invalid.
 	pub unsafe fn new(heap_bottom: usize, heap_size: usize) -> Heap {
 		Heap {
-			bootstrap_allocator: BootstrapAllocator::new(),
 			bottom: heap_bottom,
 			size: heap_size,
 			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
@@ -100,20 +97,16 @@ impl Heap {
 	/// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
 	/// reasonably fast for small allocations.
 	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
-		if self.bottom == 0 {
-			unsafe { self.bootstrap_allocator.alloc(layout) }
-		} else {
-			let mut size = cmp::max(layout.size(), HoleList::min_size());
-			size = (size).align_up(mem::align_of::<Hole>());
-			size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-			let layout = Layout::from_size_align(
-				size,
-				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
-			)
-			.unwrap();
+		let mut size = cmp::max(layout.size(), HoleList::min_size());
+		size = (size).align_up(mem::align_of::<Hole>());
+		size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		let layout = Layout::from_size_align(
+			size,
+			cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+		)
+		.unwrap();
 
-			self.holes.allocate_first_fit(layout)
-		}
+		self.holes.allocate_first_fit(layout)
 	}
 
 	/// Frees the given allocation. `ptr` must be a pointer returned
@@ -124,24 +117,16 @@ impl Heap {
 	/// correct place. If the freed block is adjacent to another free block, the blocks are merged
 	/// again. This operation is in `O(n)` since the list needs to be sorted by address.
 	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
-		let address = ptr.as_ptr() as usize;
+		let mut size = cmp::max(layout.size(), HoleList::min_size());
+		size = (size).align_up(mem::align_of::<Hole>());
+		size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		let layout = Layout::from_size_align(
+			size,
+			cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
+		)
+		.unwrap();
 
-		// We never deallocate memory of the Bootstrap Allocator.
-		// It would only increase the management burden and we wouldn't save
-		// any significant amounts of memory.
-		// So check if this is a pointer allocated by the System Allocator.
-		if address >= kernel_end_address().as_usize() {
-			let mut size = cmp::max(layout.size(), HoleList::min_size());
-			size = size.align_up(mem::align_of::<Hole>());
-			size = size.align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-			let layout = Layout::from_size_align(
-				size,
-				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
-			)
-			.unwrap();
-
-			unsafe { self.holes.deallocate(ptr, layout) };
-		}
+		unsafe { self.holes.deallocate(ptr, layout) };
 	}
 
 	/// Returns the bottom address of the heap.
@@ -175,12 +160,45 @@ impl Heap {
 	}
 }
 
-pub struct LockedAllocator(InterruptTicketMutex<Heap>);
+struct Allocator {
+	bootstrap_allocator: BootstrapAllocator,
+	heap: Option<Heap>,
+}
+
+impl Allocator {
+	const fn empty() -> Self {
+		Self {
+			bootstrap_allocator: BootstrapAllocator::new(),
+			heap: None,
+		}
+	}
+
+	unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
+		self.heap = Some(unsafe { Heap::new(heap_bottom, heap_size) });
+	}
+
+	fn allocate(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
+		match &mut self.heap {
+			Some(heap) => heap.allocate_first_fit(layout),
+			None => unsafe { self.bootstrap_allocator.alloc(layout) },
+		}
+	}
+
+	unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+		if ptr.as_ptr() as usize >= kernel_end_address().as_usize() {
+			unsafe { self.heap.as_mut().unwrap().deallocate(ptr, layout) }
+		} else {
+			// Don't deallocate from bootstrap_allocator
+		}
+	}
+}
+
+pub struct LockedAllocator(InterruptTicketMutex<Allocator>);
 
 impl LockedAllocator {
 	/// Creates an empty allocator. All allocate calls will return `None`.
 	pub const fn empty() -> LockedAllocator {
-		LockedAllocator(InterruptTicketMutex::new(Heap::empty()))
+		LockedAllocator(InterruptTicketMutex::new(Allocator::empty()))
 	}
 
 	pub unsafe fn init(&self, heap_bottom: usize, heap_size: usize) {
@@ -196,7 +214,7 @@ unsafe impl GlobalAlloc for LockedAllocator {
 	unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
 		self.0
 			.lock()
-			.allocate_first_fit(layout)
+			.allocate(layout)
 			.ok()
 			.map_or(ptr::null_mut(), |allocation| allocation.as_ptr())
 	}
@@ -207,5 +225,24 @@ unsafe impl GlobalAlloc for LockedAllocator {
 				.lock()
 				.deallocate(NonNull::new_unchecked(ptr), layout)
 		}
+	}
+}
+
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+	use core::mem;
+
+	use super::*;
+
+	#[test]
+	fn empty() {
+		let mut allocator = Allocator::empty();
+		let layout = Layout::from_size_align(1, 1).unwrap();
+		// we have 4 kbyte static memory
+		assert!(allocator.allocate(layout.clone()).is_ok());
+
+		let layout = Layout::from_size_align(0x1000, mem::align_of::<usize>());
+		let addr = allocator.allocate(layout.unwrap());
+		assert!(addr.is_err());
 	}
 }

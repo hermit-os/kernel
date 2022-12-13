@@ -49,12 +49,7 @@ mod tests {
 	fn empty() {
 		let mut heap = Heap::empty();
 		let layout = Layout::from_size_align(1, 1).unwrap();
-		// we have 4 kbyte static memory
-		assert!(heap.allocate_first_fit(layout.clone()).is_ok());
-
-		let layout = Layout::from_size_align(0x1000, align_of::<usize>());
-		let addr = heap.allocate_first_fit(layout.unwrap());
-		assert!(addr.is_err());
+		assert!(heap.allocate_first_fit(layout.clone()).is_err());
 	}
 
 	#[cfg(not(target_os = "none"))]
