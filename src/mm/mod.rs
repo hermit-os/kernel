@@ -1,6 +1,5 @@
 pub mod allocator;
 pub mod freelist;
-mod hole;
 
 use core::mem;
 use core::ops::Range;
