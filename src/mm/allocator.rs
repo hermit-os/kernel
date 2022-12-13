@@ -1,10 +1,6 @@
 //! Implementation of the HermitCore Allocator for dynamically allocating heap memory
 //! in the kernel.
 
-// This memory allocator is derived from the crate `linked-list-allocator`
-// (https://github.com/phil-opp/linked-list-allocator).
-// This crate is dual-licensed under MIT or the Apache License (Version 2.0).
-
 #![allow(dead_code)]
 
 #[path = "test.rs"]
@@ -12,7 +8,7 @@ mod test;
 
 use core::alloc::{AllocError, GlobalAlloc, Layout};
 use core::ptr::NonNull;
-use core::{cmp, mem, ptr};
+use core::{mem, ptr};
 
 use align_address::Align;
 use hermit_sync::InterruptTicketMutex;
@@ -57,6 +53,8 @@ pub struct Heap {
 	holes: HoleList,
 }
 
+// Copied from `linked-list-allocator = "0.6.4"`
+#[allow(warnings)]
 impl Heap {
 	/// Creates an empty heap. All allocate calls will return `None`.
 	pub const fn empty() -> Heap {
@@ -74,9 +72,9 @@ impl Heap {
 	/// This function must be called at most once and must only be used on an
 	/// empty heap.
 	pub unsafe fn init(&mut self, heap_bottom: usize, heap_size: usize) {
-		self.holes = unsafe { HoleList::new(heap_bottom, heap_size) };
 		self.bottom = heap_bottom;
 		self.size = heap_size;
+		self.holes = HoleList::new(heap_bottom, heap_size);
 	}
 
 	/// Creates a new heap with the given `bottom` and `size`. The bottom address must be valid
@@ -87,7 +85,7 @@ impl Heap {
 		Heap {
 			bottom: heap_bottom,
 			size: heap_size,
-			holes: unsafe { HoleList::new(heap_bottom, heap_size) },
+			holes: HoleList::new(heap_bottom, heap_size),
 		}
 	}
 
@@ -97,8 +95,11 @@ impl Heap {
 	/// enough. The runtime is in O(n) where n is the number of free blocks, but it should be
 	/// reasonably fast for small allocations.
 	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
-		let mut size = cmp::max(layout.size(), HoleList::min_size());
-		size = (size).align_up(mem::align_of::<Hole>());
+		let mut size = layout.size();
+		if size < HoleList::min_size() {
+			size = HoleList::min_size();
+		}
+		let size = align_up(size, mem::align_of::<Hole>());
 		let layout = Layout::from_size_align(size, layout.align()).unwrap();
 
 		self.holes.allocate_first_fit(layout)
@@ -112,11 +113,14 @@ impl Heap {
 	/// correct place. If the freed block is adjacent to another free block, the blocks are merged
 	/// again. This operation is in `O(n)` since the list needs to be sorted by address.
 	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
-		let mut size = cmp::max(layout.size(), HoleList::min_size());
-		size = (size).align_up(mem::align_of::<Hole>());
+		let mut size = layout.size();
+		if size < HoleList::min_size() {
+			size = HoleList::min_size();
+		}
+		let size = align_up(size, mem::align_of::<Hole>());
 		let layout = Layout::from_size_align(size, layout.align()).unwrap();
 
-		unsafe { self.holes.deallocate(ptr, layout) };
+		self.holes.deallocate(ptr, layout);
 	}
 
 	/// Returns the bottom address of the heap.
@@ -142,10 +146,8 @@ impl Heap {
 	pub unsafe fn extend(&mut self, by: usize) {
 		let top = self.top();
 		let layout = Layout::from_size_align(by, 1).unwrap();
-		unsafe {
-			self.holes
-				.deallocate(NonNull::new_unchecked(top as *mut u8), layout);
-		}
+		self.holes
+			.deallocate(NonNull::new_unchecked(top as *mut u8), layout);
 		self.size += by;
 	}
 }
@@ -189,6 +191,26 @@ impl Allocator {
 			// Don't deallocate from bootstrap_allocator
 		}
 	}
+}
+
+/// Align downwards. Returns the greatest x with alignment `align`
+/// so that x <= addr. The alignment must be a power of 2.
+// Copied from `linked-list-allocator = "0.6.4"`
+pub fn align_down(addr: usize, align: usize) -> usize {
+	if align.is_power_of_two() {
+		addr & !(align - 1)
+	} else if align == 0 {
+		addr
+	} else {
+		panic!("`align` must be a power of 2");
+	}
+}
+
+/// Align upwards. Returns the smallest x with alignment `align`
+/// so that x >= addr. The alignment must be a power of 2.
+// Copied from `linked-list-allocator = "0.6.4"`
+pub fn align_up(addr: usize, align: usize) -> usize {
+	align_down(addr + align - 1, align)
 }
 
 pub struct LockedAllocator(InterruptTicketMutex<Allocator>);
