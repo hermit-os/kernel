@@ -40,8 +40,7 @@ impl BootstrapAllocator {
 	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
 
-		// Bump the heap index and align it up to the next boundary.
-		self.index = (self.index + layout.size()).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		self.index += layout.size();
 		if self.index >= Self::SIZE {
 			Err(AllocError)
 		} else {
@@ -100,12 +99,7 @@ impl Heap {
 	pub fn allocate_first_fit(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
 		let mut size = cmp::max(layout.size(), HoleList::min_size());
 		size = (size).align_up(mem::align_of::<Hole>());
-		size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-		let layout = Layout::from_size_align(
-			size,
-			cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
-		)
-		.unwrap();
+		let layout = Layout::from_size_align(size, layout.align()).unwrap();
 
 		self.holes.allocate_first_fit(layout)
 	}
@@ -120,12 +114,7 @@ impl Heap {
 	pub unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
 		let mut size = cmp::max(layout.size(), HoleList::min_size());
 		size = (size).align_up(mem::align_of::<Hole>());
-		size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-		let layout = Layout::from_size_align(
-			size,
-			cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
-		)
-		.unwrap();
+		let layout = Layout::from_size_align(size, layout.align()).unwrap();
 
 		unsafe { self.holes.deallocate(ptr, layout) };
 	}
@@ -178,7 +167,14 @@ impl Allocator {
 		self.heap = Some(unsafe { Heap::new(heap_bottom, heap_size) });
 	}
 
+	fn align_layout(layout: Layout) -> Layout {
+		let size = layout.size().align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		let align = layout.align().max(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		Layout::from_size_align(size, align).unwrap()
+	}
+
 	fn allocate(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
+		let layout = Self::align_layout(layout);
 		match &mut self.heap {
 			Some(heap) => heap.allocate_first_fit(layout),
 			None => unsafe { self.bootstrap_allocator.alloc(layout) },
@@ -186,6 +182,7 @@ impl Allocator {
 	}
 
 	unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
+		let layout = Self::align_layout(layout);
 		if ptr.as_ptr() as usize >= kernel_end_address().as_usize() {
 			unsafe { self.heap.as_mut().unwrap().deallocate(ptr, layout) }
 		} else {
