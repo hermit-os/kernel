@@ -19,18 +19,17 @@ use crate::mm::hole::{Hole, HoleList};
 use crate::mm::kernel_end_address;
 use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
-/// Size of the preallocated space for the Bootstrap Allocator.
-const BOOTSTRAP_HEAP_SIZE: usize = 4096;
-
 struct BootstrapAllocator {
-	first_block: [u8; BOOTSTRAP_HEAP_SIZE],
+	first_block: [u8; Self::SIZE],
 	index: usize,
 }
 
 impl BootstrapAllocator {
+	const SIZE: usize = 4096;
+
 	const fn new() -> Self {
 		Self {
-			first_block: [0xCC; BOOTSTRAP_HEAP_SIZE],
+			first_block: [0xCC; Self::SIZE],
 			index: 0,
 		}
 	}
@@ -41,7 +40,7 @@ impl BootstrapAllocator {
 
 		// Bump the heap index and align it up to the next boundary.
 		self.index = (self.index + layout.size()).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-		if self.index >= BOOTSTRAP_HEAP_SIZE {
+		if self.index >= Self::SIZE {
 			Err(AllocError)
 		} else {
 			Ok(NonNull::new(ptr).unwrap())
