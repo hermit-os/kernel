@@ -8,7 +8,6 @@
 #![allow(dead_code)]
 
 use core::alloc::{AllocError, GlobalAlloc, Layout};
-use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{cmp, mem, ptr};
 
@@ -183,13 +182,11 @@ impl LockedAllocator {
 	pub const fn empty() -> LockedAllocator {
 		LockedAllocator(InterruptTicketMutex::new(Heap::empty()))
 	}
-}
 
-impl Deref for LockedAllocator {
-	type Target = InterruptTicketMutex<Heap>;
-
-	fn deref(&self) -> &InterruptTicketMutex<Heap> {
-		&self.0
+	pub unsafe fn init(&self, heap_bottom: usize, heap_size: usize) {
+		unsafe {
+			self.0.lock().init(heap_bottom, heap_size);
+		}
 	}
 }
 
