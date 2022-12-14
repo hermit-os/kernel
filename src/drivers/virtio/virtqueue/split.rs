@@ -10,6 +10,8 @@ use core::cell::RefCell;
 use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
+use align_address::Align;
+
 #[cfg(not(feature = "pci"))]
 use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 #[cfg(feature = "pci")]
@@ -389,10 +391,8 @@ impl SplitVq {
 		let size = vq_handler.set_vq_size(size.0);
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(
-			size as usize * core::mem::size_of::<Descriptor>(),
-			BasePageSize::SIZE as usize
-		);
+		let _mem_len = (size as usize * core::mem::size_of::<Descriptor>())
+			.align_up(BasePageSize::SIZE as usize);
 		let table_raw =
 			(crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
 
@@ -400,9 +400,9 @@ impl SplitVq {
 			raw: unsafe { core::slice::from_raw_parts_mut(table_raw, size as usize) },
 		};
 
-		let _mem_len = align_up!(6 + (size as usize * 2), BasePageSize::SIZE as usize);
+		let _mem_len = (6 + (size as usize * 2)).align_up(BasePageSize::SIZE as usize);
 		let avail_raw = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
-		let _mem_len = align_up!(6 + (size as usize * 8), BasePageSize::SIZE as usize);
+		let _mem_len = (6 + (size as usize * 8)).align_up(BasePageSize::SIZE as usize);
 		let used_raw = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
 		let avail_ring = unsafe {

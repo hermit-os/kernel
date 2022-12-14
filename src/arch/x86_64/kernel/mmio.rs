@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 use core::str;
 
+use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
 
 use crate::arch::x86_64::mm::paging::{
@@ -55,7 +56,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 			flags.normal().writable();
 			paging::map::<BasePageSize>(
 				virtual_address,
-				PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
+				PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 				1,
 				flags,
 			);
@@ -100,7 +101,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		info!("Found network card at {:#X}", mmio as *const _ as usize);
 
 		crate::arch::mm::physicalmem::reserve(
-			PhysAddr::from(align_down!(current_address, BasePageSize::SIZE as usize)),
+			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 			BasePageSize::SIZE as usize,
 		);
 

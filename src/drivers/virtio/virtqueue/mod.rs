@@ -20,6 +20,8 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ops::{BitAnd, Deref, DerefMut};
 
+use align_address::Align;
+
 use self::error::{BufferError, VirtqError};
 use self::packed::PackedVq;
 use self::split::SplitVq;
@@ -2268,7 +2270,7 @@ impl MemPool {
 		let len = bytes.0;
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(len, BasePageSize::SIZE as usize);
+		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
 		// Assert descriptor does not cross a page barrier
@@ -2303,7 +2305,7 @@ impl MemPool {
 		let len = bytes.0;
 
 		// Allocate heap memory via a vec, leak and cast
-		let _mem_len = align_up!(len, BasePageSize::SIZE as usize);
+		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
 		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
 
 		// Assert descriptor does not cross a page barrier

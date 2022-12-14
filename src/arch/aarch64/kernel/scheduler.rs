@@ -4,6 +4,8 @@ use alloc::rc::Rc;
 use core::cell::RefCell;
 use core::{mem, ptr};
 
+use align_address::Align;
+
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
@@ -47,7 +49,7 @@ impl TaskStacks {
 		let user_stack_size = if size < KERNEL_STACK_SIZE {
 			KERNEL_STACK_SIZE
 		} else {
-			align_up!(size, BasePageSize::SIZE as usize)
+			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
 		let virt_addr =

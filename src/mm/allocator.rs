@@ -12,6 +12,7 @@ use core::ops::Deref;
 use core::ptr::NonNull;
 use core::{cmp, mem, ptr};
 
+use align_address::Align;
 use hermit_sync::InterruptTicketMutex;
 
 use crate::mm::hole::{Hole, HoleList};
@@ -84,7 +85,7 @@ impl Heap {
 		let ptr = &mut self.first_block[self.index] as *mut u8;
 
 		// Bump the heap index and align it up to the next boundary.
-		self.index = align_up!(self.index + layout.size(), HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		self.index = (self.index + layout.size()).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 		if self.index >= BOOTSTRAP_HEAP_SIZE {
 			Err(AllocError)
 		} else {
@@ -105,8 +106,8 @@ impl Heap {
 			unsafe { self.alloc_bootstrap(layout) }
 		} else {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
-			size = align_up!(size, mem::align_of::<Hole>());
-			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			size = (size).align_up(mem::align_of::<Hole>());
+			size = (size).align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			let layout = Layout::from_size_align(
 				size,
 				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),
@@ -133,8 +134,8 @@ impl Heap {
 		// So check if this is a pointer allocated by the System Allocator.
 		if address >= kernel_end_address().as_usize() {
 			let mut size = cmp::max(layout.size(), HoleList::min_size());
-			size = align_up!(size, mem::align_of::<Hole>());
-			size = align_up!(size, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+			size = size.align_up(mem::align_of::<Hole>());
+			size = size.align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 			let layout = Layout::from_size_align(
 				size,
 				cmp::max(layout.align(), HW_DESTRUCTIVE_INTERFERENCE_SIZE),

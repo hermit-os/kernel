@@ -32,6 +32,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "align-address"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d39c09fbfba977f4842e1f6bdc48b979112b64f8886993a34e051bc5f3c5c288"
+
+[[package]]
 name = "anyhow"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -207,6 +213,7 @@ version = "0.6.0"
 dependencies = [
  "aarch64",
  "ahash",
+ "align-address",
  "async-task",
  "bitflags",
  "crossbeam-utils",

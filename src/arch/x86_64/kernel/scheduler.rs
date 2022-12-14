@@ -4,6 +4,7 @@ use alloc::boxed::Box;
 use core::arch::asm;
 use core::{mem, ptr, slice};
 
+use align_address::Align;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
 use super::interrupts::IDT;
@@ -88,7 +89,7 @@ impl TaskStacks {
 		let user_stack_size = if size < KERNEL_STACK_SIZE {
 			KERNEL_STACK_SIZE
 		} else {
-			align_up!(size, BasePageSize::SIZE as usize)
+			size.align_up(BasePageSize::SIZE as usize)
 		};
 		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
 		let virt_addr =
@@ -267,7 +268,7 @@ impl TaskTLS {
 			let tls_align = env::get_tls_align();
 
 			// As described in “ELF Handling For Thread-Local Storage”
-			let tls_offset = align_up!(tls_len, tls_align);
+			let tls_offset = tls_len.align_up(tls_align);
 
 			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
 			// So the thread pointer needs to be `block_ptr + tls_offset`.

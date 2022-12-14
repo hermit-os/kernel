@@ -6,6 +6,8 @@ use alloc::alloc::{AllocError, Layout};
 use core::mem::size_of;
 use core::ptr::NonNull;
 
+use align_address::Align;
+
 /// A sorted list of holes. It uses the the holes itself to store its nodes.
 pub struct HoleList {
 	first: Hole, // dummy
@@ -143,12 +145,12 @@ fn split_hole(hole: HoleInfo, required_layout: Layout) -> Option<Allocation> {
 	let required_size = required_layout.size();
 	let required_align = required_layout.align();
 
-	let (aligned_addr, front_padding) = if hole.addr == align_up!(hole.addr, required_align) {
+	let (aligned_addr, front_padding) = if hole.addr == hole.addr.align_up(required_align) {
 		// hole has already the required alignment
 		(hole.addr, None)
 	} else {
 		// the required alignment causes some padding before the allocation
-		let aligned_addr = align_up!(hole.addr + HoleList::min_size(), required_align);
+		let aligned_addr = (hole.addr + HoleList::min_size()).align_up(required_align);
 		(
 			aligned_addr,
 			Some(HoleInfo {
