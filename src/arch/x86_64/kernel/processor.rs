@@ -893,15 +893,6 @@ pub fn print_information() {
 	infofooter!();
 }
 
-/*#[cfg(not(target_os = "none"))]
-#[test]
-fn print_cpu_information() {
-	::logging::init();
-	detect_features();
-	detect_frequency();
-	print_information();
-}*/
-
 pub fn generate_random_number32() -> Option<u32> {
 	unsafe {
 		if FEATURES.supports_rdrand {
