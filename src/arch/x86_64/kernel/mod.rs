@@ -208,12 +208,6 @@ pub fn output_message_buf(buf: &[u8]) {
 	std::io::stderr().write_all(buf).unwrap();
 }
 
-#[cfg(not(target_os = "none"))]
-#[test]
-fn test_output() {
-	output_message_buf(b"test message\n");
-}
-
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 #[cfg(target_os = "none")]
 pub fn boot_processor_init() {
@@ -339,5 +333,15 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 		}
 		#[cfg(feature = "smp")]
 		crate::application_processor_main();
+	}
+}
+
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_output() {
+		output_message_buf(b"test message\n");
 	}
 }

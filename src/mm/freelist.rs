@@ -194,72 +194,74 @@ impl FreeList {
 	}
 }
 
-#[cfg(not(target_os = "none"))]
-#[test]
-fn add_element() {
-	let mut freelist = FreeList::new();
-	let entry = FreeListEntry::new(0x10000, 0x100000);
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+	use super::*;
 
-	freelist.list.push_back(entry);
+	#[test]
+	fn add_element() {
+		let mut freelist = FreeList::new();
+		let entry = FreeListEntry::new(0x10000, 0x100000);
 
-	let mut cursor = freelist.list.cursor_front_mut();
+		freelist.list.push_back(entry);
 
-	while let Some(node) = cursor.peek_next() {
-		assert!(node.start != 0x1000);
-		assert!(node.end != 0x10000);
+		let mut cursor = freelist.list.cursor_front_mut();
+
+		while let Some(node) = cursor.peek_next() {
+			assert!(node.start != 0x1000);
+			assert!(node.end != 0x10000);
+
+			cursor.move_next();
+		}
+	}
+
+	#[test]
+	fn allocate() {
+		let mut freelist = FreeList::new();
+		let entry = FreeListEntry::new(0x10000, 0x100000);
+
+		freelist.list.push_back(entry);
+		let addr = freelist.allocate(0x1000, None);
+
+		assert_eq!(addr.unwrap(), 0x10000);
+
+		let mut cursor = freelist.list.cursor_front_mut();
+		while let Some(node) = cursor.current() {
+			assert_eq!(node.start, 0x11000);
+			assert_eq!(node.end, 0x100000);
+
+			cursor.move_next();
+		}
+
+		let addr = freelist.allocate(0x1000, Some(0x2000));
+		let mut cursor = freelist.list.cursor_front_mut();
+		assert!(cursor.current().is_some());
+		if let Some(node) = cursor.current() {
+			assert_eq!(node.start, 0x11000);
+		}
 
 		cursor.move_next();
-	}
-}
-
-#[cfg(not(target_os = "none"))]
-#[test]
-fn allocate() {
-	let mut freelist = FreeList::new();
-	let entry = FreeListEntry::new(0x10000, 0x100000);
-
-	freelist.list.push_back(entry);
-	let addr = freelist.allocate(0x1000, None);
-
-	assert_eq!(addr.unwrap(), 0x10000);
-
-	let mut cursor = freelist.list.cursor_front_mut();
-	while let Some(node) = cursor.current() {
-		assert_eq!(node.start, 0x11000);
-		assert_eq!(node.end, 0x100000);
-
-		cursor.move_next();
+		assert!(cursor.current().is_some());
+		if let Some(node) = cursor.current() {
+			assert_eq!(node.start, 0x13000);
+		}
 	}
 
-	let addr = freelist.allocate(0x1000, Some(0x2000));
-	let mut cursor = freelist.list.cursor_front_mut();
-	assert!(cursor.current().is_some());
-	if let Some(node) = cursor.current() {
-		assert_eq!(node.start, 0x11000);
-	}
+	#[test]
+	fn deallocate() {
+		let mut freelist = FreeList::new();
+		let entry = FreeListEntry::new(0x10000, 0x100000);
 
-	cursor.move_next();
-	assert!(cursor.current().is_some());
-	if let Some(node) = cursor.current() {
-		assert_eq!(node.start, 0x13000);
-	}
-}
+		freelist.list.push_back(entry);
+		let addr = freelist.allocate(0x1000, None);
+		freelist.deallocate(addr.unwrap(), 0x1000);
 
-#[cfg(not(target_os = "none"))]
-#[test]
-fn deallocate() {
-	let mut freelist = FreeList::new();
-	let entry = FreeListEntry::new(0x10000, 0x100000);
+		let mut cursor = freelist.list.cursor_front_mut();
+		while let Some(node) = cursor.current() {
+			assert_eq!(node.start, 0x10000);
+			assert_eq!(node.end, 0x100000);
 
-	freelist.list.push_back(entry);
-	let addr = freelist.allocate(0x1000, None);
-	freelist.deallocate(addr.unwrap(), 0x1000);
-
-	let mut cursor = freelist.list.cursor_front_mut();
-	while let Some(node) = cursor.current() {
-		assert_eq!(node.start, 0x10000);
-		assert_eq!(node.end, 0x100000);
-
-		cursor.move_next();
+			cursor.move_next();
+		}
 	}
 }

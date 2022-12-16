@@ -30,8 +30,12 @@ impl Console {
 
 pub static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
 
-#[cfg(not(target_os = "none"))]
-#[test]
-fn test_console() {
-	println!("HelloWorld");
+#[cfg(all(test, not(target_os = "none")))]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_console() {
+		println!("HelloWorld");
+	}
 }
