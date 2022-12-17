@@ -40,12 +40,12 @@ impl BootstrapAllocator {
 	}
 }
 
-struct Allocator {
+struct GlobalAllocator {
 	bootstrap_allocator: BootstrapAllocator,
 	heap: Option<Heap>,
 }
 
-impl Allocator {
+impl GlobalAllocator {
 	const fn empty() -> Self {
 		Self {
 			bootstrap_allocator: BootstrapAllocator::new(),
@@ -81,12 +81,12 @@ impl Allocator {
 	}
 }
 
-pub struct LockedAllocator(InterruptTicketMutex<Allocator>);
+pub struct LockedAllocator(InterruptTicketMutex<GlobalAllocator>);
 
 impl LockedAllocator {
 	/// Creates an empty allocator. All allocate calls will return `None`.
 	pub const fn empty() -> LockedAllocator {
-		LockedAllocator(InterruptTicketMutex::new(Allocator::empty()))
+		LockedAllocator(InterruptTicketMutex::new(GlobalAllocator::empty()))
 	}
 
 	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
@@ -124,7 +124,7 @@ mod tests {
 
 	#[test]
 	fn empty() {
-		let mut allocator = Allocator::empty();
+		let mut allocator = GlobalAllocator::empty();
 		let layout = Layout::from_size_align(1, 1).unwrap();
 		// we have 4 kbyte static memory
 		assert!(allocator.allocate(layout.clone()).is_ok());
