@@ -1,7 +1,10 @@
 //! Implementation of the HermitCore Allocator for dynamically allocating heap memory
 //! in the kernel.
 
-use core::alloc::{AllocError, GlobalAlloc, Layout};
+mod bootstrap;
+mod bump;
+
+use core::alloc::{AllocError, Allocator, GlobalAlloc, Layout};
 use core::ptr;
 use core::ptr::NonNull;
 
@@ -9,46 +12,19 @@ use align_address::Align;
 use hermit_sync::InterruptTicketMutex;
 use linked_list_allocator::Heap;
 
-use crate::mm::kernel_end_address;
+use self::bootstrap::BootstrapAllocator;
+use self::bump::BumpAllocator;
 use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
-struct BootstrapAllocator {
-	first_block: [u8; Self::SIZE],
-	index: usize,
-}
-
-impl BootstrapAllocator {
-	const SIZE: usize = 4096;
-
-	const fn new() -> Self {
-		Self {
-			first_block: [0xCC; Self::SIZE],
-			index: 0,
-		}
-	}
-
-	/// An allocation using the always available Bootstrap Allocator.
-	unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
-		let ptr = &mut self.first_block[self.index] as *mut u8;
-
-		self.index += layout.size();
-		if self.index >= Self::SIZE {
-			Err(AllocError)
-		} else {
-			Ok(NonNull::new(ptr).unwrap())
-		}
-	}
-}
-
 struct GlobalAllocator {
-	bootstrap_allocator: BootstrapAllocator,
+	bootstrap_allocator: Option<BootstrapAllocator<BumpAllocator>>,
 	heap: Option<Heap>,
 }
 
 impl GlobalAllocator {
 	const fn empty() -> Self {
 		Self {
-			bootstrap_allocator: BootstrapAllocator::new(),
+			bootstrap_allocator: None,
 			heap: None,
 		}
 	}
@@ -67,16 +43,27 @@ impl GlobalAllocator {
 		let layout = Self::align_layout(layout);
 		match &mut self.heap {
 			Some(heap) => heap.allocate_first_fit(layout).map_err(|()| AllocError),
-			None => unsafe { self.bootstrap_allocator.alloc(layout) },
+			None => self
+				.bootstrap_allocator
+				.get_or_insert_with(Default::default)
+				.allocate(layout)
+				// FIXME: Use NonNull::as_mut_ptr once `slice_ptr_get` is stabilized
+				// https://github.com/rust-lang/rust/issues/74265
+				.map(|ptr| NonNull::new(ptr.as_ptr() as *mut u8).unwrap()),
 		}
 	}
 
 	unsafe fn deallocate(&mut self, ptr: NonNull<u8>, layout: Layout) {
 		let layout = Self::align_layout(layout);
-		if ptr.as_ptr() as usize >= kernel_end_address().as_usize() {
-			unsafe { self.heap.as_mut().unwrap().deallocate(ptr, layout) }
+		let bootstrap_allocator = self.bootstrap_allocator.as_ref().unwrap();
+		if bootstrap_allocator.manages(ptr) {
+			unsafe {
+				bootstrap_allocator.deallocate(ptr, layout);
+			}
 		} else {
-			// Don't deallocate from bootstrap_allocator
+			unsafe {
+				self.heap.as_mut().unwrap().deallocate(ptr, layout);
+			}
 		}
 	}
 }
