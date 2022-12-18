@@ -63,6 +63,9 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 	};
 
 	if has_packet {
+		#[cfg(feature = "tcp")]
+		crate::net::executor::wakeup_async_tasks();
+
 		// handle incoming packets
 		#[cfg(feature = "tcp")]
 		crate::net::network_poll();
