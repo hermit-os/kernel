@@ -294,7 +294,7 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 			&& optlen == size_of::<i32>().try_into().unwrap()
 		{
 			let value = unsafe { *(optval as *const i32) };
-			self.with(|socket| socket.set_nagle_enabled(!(value != 0)));
+			self.with(|socket| socket.set_nagle_enabled(value != 0));
 			0
 		} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
 			// smoltcp is always able to reuse the addr
@@ -407,11 +407,8 @@ impl ObjectInterface for Socket<IPv4> {
 				let remote = socket.remote_endpoint();
 				addr.sin_port = remote.port.to_be();
 
-				match remote.addr {
-					IpAddress::Ipv4(ip) => {
-						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
-					}
-					_ => {}
+				if let IpAddress::Ipv4(ip) = remote.addr {
+					addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
 				}
 			});
 
@@ -438,11 +435,8 @@ impl ObjectInterface for Socket<IPv4> {
 				addr.sin_port = local.port.to_be();
 				addr.sin_family = AF_INET.try_into().unwrap();
 
-				match local.addr {
-					IpAddress::Ipv4(ip) => {
-						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
-					}
-					_ => {}
+				if let IpAddress::Ipv4(ip) = local.addr {
+					addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
 				}
 			});
 
@@ -479,11 +473,8 @@ impl ObjectInterface for Socket<IPv6> {
 				let remote = socket.remote_endpoint();
 				addr.sin6_port = remote.port.to_be();
 
-				match remote.addr {
-					IpAddress::Ipv6(ip) => {
-						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
-					}
-					_ => {}
+				if let IpAddress::Ipv6(ip) = remote.addr {
+					addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 				}
 			});
 
@@ -510,11 +501,8 @@ impl ObjectInterface for Socket<IPv6> {
 				addr.sin6_port = local.port.to_be();
 				addr.sin6_family = AF_INET6.try_into().unwrap();
 
-				match local.addr {
-					IpAddress::Ipv6(ip) => {
-						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
-					}
-					_ => {}
+				if let IpAddress::Ipv6(ip) = local.addr {
+					addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 				}
 			});
 

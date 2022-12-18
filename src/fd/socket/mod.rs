@@ -18,11 +18,10 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 		domain, type_, protocol
 	);
 
-	if domain != AF_INET && domain != AF_INET6 {
-		-EINVAL
-	} else if type_ != SOCK_STREAM {
-		-EINVAL
-	} else if protocol != 0 && protocol != IPPROTO_UDP && protocol != IPPROTO_TCP {
+	if (domain != AF_INET && domain != AF_INET6)
+		|| type_ != SOCK_STREAM
+		|| (protocol != 0 && protocol != IPPROTO_UDP && protocol != IPPROTO_TCP)
+	{
 		-EINVAL
 	} else {
 		let mut guard = NIC.lock();

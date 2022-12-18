@@ -150,9 +150,7 @@ where
 				let core_scheduler = core_scheduler();
 				let task = core_scheduler.get_current_task_handle();
 				let wakeup_time = delay.map(|us| crate::arch::processor::get_timer_ticks() + us);
-				BLOCKED_ASYNC_TASKS
-					.lock()
-					.insert(task.get_id(), task.clone());
+				BLOCKED_ASYNC_TASKS.lock().insert(task.get_id(), task);
 				core_scheduler.block_current_task(wakeup_time);
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
