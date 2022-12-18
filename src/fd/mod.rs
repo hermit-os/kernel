@@ -345,6 +345,7 @@ pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<Box<dyn ObjectInterfa
 	Ok((*(OBJECT_MAP.lock().get(&fd).ok_or(-EINVAL)?)).clone())
 }
 
+#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<Box<dyn ObjectInterface>>,
