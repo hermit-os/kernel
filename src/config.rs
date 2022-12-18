@@ -13,14 +13,5 @@ pub(crate) const VIRTIO_MAX_QUEUE_SIZE: u16 = 1024;
 #[cfg(feature = "tcp")]
 pub(crate) const DEFAULT_KEEP_ALIVE_INTERVAL: u64 = 75000;
 
-pub(crate) const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize = {
-	use core::ptr;
-
-	use crossbeam_utils::CachePadded;
-
-	let array = [CachePadded::new(0_u8); 2];
-	let ptr0 = ptr::addr_of!(array[0]).cast::<u8>();
-	let ptr1 = ptr::addr_of!(array[1]).cast::<u8>();
-
-	unsafe { ptr1.offset_from(ptr0) as usize }
-};
+pub(crate) const HW_DESTRUCTIVE_INTERFERENCE_SIZE: usize =
+	core::mem::align_of::<crossbeam_utils::CachePadded<u8>>();
