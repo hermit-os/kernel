@@ -24,7 +24,7 @@ impl TryFrom<i32> for SeekWhence {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UhyveFile(i32);
 
 impl UhyveFile {
@@ -34,11 +34,8 @@ impl UhyveFile {
 }
 
 impl ObjectInterface for UhyveFile {
-	fn close(&self) -> i32 {
-		let mut sysclose = SysClose::new(self.0);
-		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
-
-		sysclose.ret
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
@@ -63,7 +60,14 @@ impl ObjectInterface for UhyveFile {
 	}
 }
 
-#[derive(Debug)]
+impl Drop for UhyveFile {
+	fn drop(&mut self) {
+		let mut sysclose = SysClose::new(self.0);
+		uhyve_send(UHYVE_PORT_CLOSE, &mut sysclose);
+	}
+}
+
+#[derive(Debug, Clone)]
 pub struct GenericFile(u64);
 
 impl GenericFile {
@@ -73,10 +77,8 @@ impl GenericFile {
 }
 
 impl ObjectInterface for GenericFile {
-	fn close(&self) -> i32 {
-		let mut fs = fs::FILESYSTEM.lock();
-		fs.close(self.0);
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
@@ -120,5 +122,12 @@ impl ObjectInterface for GenericFile {
 		});
 
 		ret as isize
+	}
+}
+
+impl Drop for GenericFile {
+	fn drop(&mut self) {
+		let mut fs = fs::FILESYSTEM.lock();
+		fs.close(self.0);
 	}
 }

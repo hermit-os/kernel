@@ -15,12 +15,13 @@ use smoltcp::phy::Device;
 use smoltcp::phy::Tracer;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::{Dhcpv4Event, Dhcpv4Socket};
-use smoltcp::socket::{TcpSocket, TcpSocketBuffer, TcpState};
+use smoltcp::socket::{
+	TcpSocket, TcpSocketBuffer, TcpState, UdpPacketMetadata, UdpSocket, UdpSocketBuffer,
+};
 use smoltcp::time::{Duration, Instant};
 use smoltcp::wire::IpAddress;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
-use smoltcp::Error;
 
 use crate::net::device::HermitNet;
 use crate::net::executor::spawn;
@@ -89,7 +90,6 @@ pub(crate) fn network_poll() {
 	if let Some(mut guard) = NIC.try_lock() {
 		if let NetworkState::Initialized(nic) = guard.deref_mut() {
 			let time = now();
-			nic.poll_common(time);
 			if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
 				let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
 				crate::core_scheduler().add_network_timer(wakeup_time);
@@ -124,11 +124,22 @@ impl<T> NetworkInterface<T>
 where
 	T: for<'a> Device<'a>,
 {
-	pub(crate) fn create_handle(&mut self) -> Result<Handle, ()> {
+	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
+		// Must fit mDNS payload of at least one packet
+		let udp_rx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY; 4], vec![0; 1024]);
+		// Will not send mDNS
+		let udp_tx_buffer = UdpSocketBuffer::new(vec![UdpPacketMetadata::EMPTY], vec![0; 0]);
+		let udp_socket = UdpSocket::new(udp_rx_buffer, udp_tx_buffer);
+		let udp_handle = self.iface.add_socket(udp_socket);
+
+		Ok(udp_handle)
+	}
+
+	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
 		let tcp_rx_buffer = TcpSocketBuffer::new(vec![0; 65535]);
 		let tcp_tx_buffer = TcpSocketBuffer::new(vec![0; 65535]);
 		let mut tcp_socket = TcpSocket::new(tcp_rx_buffer, tcp_tx_buffer);
-		tcp_socket.set_nagle_enabled(false);
+		tcp_socket.set_nagle_enabled(true);
 		let tcp_handle = self.iface.add_socket(tcp_socket);
 
 		Ok(tcp_handle)
@@ -190,7 +201,12 @@ pub(crate) struct AsyncSocket(Handle);
 
 impl AsyncSocket {
 	pub(crate) fn new() -> Self {
-		let handle = NIC.lock().as_nic_mut().unwrap().create_handle().unwrap();
+		let handle = NIC
+			.lock()
+			.as_nic_mut()
+			.unwrap()
+			.create_tcp_handle()
+			.unwrap();
 		Self(handle)
 	}
 
@@ -229,9 +245,10 @@ impl AsyncSocket {
 		res
 	}
 
-	pub(crate) async fn connect(&self, ip: &[u8], port: u16) -> Result<Handle, Error> {
-		let address = IpAddress::from_str(core::str::from_utf8(ip).map_err(|_| Error::Illegal)?)
-			.map_err(|_| Error::Illegal)?;
+	pub(crate) async fn connect(&self, ip: &[u8], port: u16) -> Result<Handle, i32> {
+		let address =
+			IpAddress::from_str(core::str::from_utf8(ip).map_err(|_| -crate::errno::EIO)?)
+				.map_err(|_| -crate::errno::EIO)?;
 
 		self.with_context(|socket, cx| {
 			socket.connect(
@@ -240,12 +257,12 @@ impl AsyncSocket {
 				LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst),
 			)
 		})
-		.map_err(|_| Error::Illegal)?;
+		.map_err(|_| -crate::errno::EIO)?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				TcpState::Closed | TcpState::TimeWait => Poll::Ready(Err(Error::Unaddressable)),
-				TcpState::Listen => Poll::Ready(Err(Error::Illegal)),
+				TcpState::Closed | TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EFAULT)),
+				TcpState::Listen => Poll::Ready(Err(-crate::errno::EIO)),
 				TcpState::SynSent | TcpState::SynReceived => {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
@@ -256,8 +273,8 @@ impl AsyncSocket {
 		.await
 	}
 
-	pub(crate) async fn accept(&self, port: u16) -> Result<(IpAddress, u16), Error> {
-		self.with(|socket| socket.listen(port).map_err(|_| Error::Illegal))?;
+	pub(crate) async fn accept(&self, port: u16) -> Result<(IpAddress, u16), i32> {
+		self.with(|socket| socket.listen(port).map_err(|_| -crate::errno::EIO))?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -268,7 +285,7 @@ impl AsyncSocket {
 						TcpState::Closed
 						| TcpState::Closing
 						| TcpState::FinWait1
-						| TcpState::FinWait2 => Poll::Ready(Err(Error::Illegal)),
+						| TcpState::FinWait2 => Poll::Ready(Err(-crate::errno::EIO)),
 						_ => {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
@@ -280,7 +297,7 @@ impl AsyncSocket {
 		.await?;
 
 		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| Error::Illegal)?;
+		let nic = guard.as_nic_mut().map_err(|_| -crate::errno::EIO)?;
 		let socket = nic.iface.get_socket::<TcpSocket<'_>>(self.0);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 		let endpoint = socket.remote_endpoint();
@@ -288,17 +305,17 @@ impl AsyncSocket {
 		Ok((endpoint.addr, endpoint.port))
 	}
 
-	pub(crate) async fn read(&self, buffer: &mut [u8]) -> Result<usize, Error> {
+	pub(crate) async fn read(&self, buffer: &mut [u8]) -> Result<usize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				TcpState::FinWait1
 				| TcpState::FinWait2
 				| TcpState::Closed
 				| TcpState::Closing
-				| TcpState::TimeWait => Poll::Ready(Err(Error::Illegal)),
+				| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 				_ => {
 					if socket.can_recv() {
-						let n = socket.recv_slice(buffer).map_err(|_| Error::Illegal)?;
+						let n = socket.recv_slice(buffer).map_err(|_| -crate::errno::EIO)?;
 						if n > 0 || buffer.is_empty() {
 							return Poll::Ready(Ok(n));
 						}
@@ -312,7 +329,7 @@ impl AsyncSocket {
 		.await
 	}
 
-	pub(crate) async fn write(&self, buffer: &[u8]) -> Result<usize, Error> {
+	pub(crate) async fn write(&self, buffer: &[u8]) -> Result<usize, i32> {
 		let len = buffer.len();
 		let mut pos: usize = 0;
 
@@ -323,15 +340,15 @@ impl AsyncSocket {
 					| TcpState::FinWait2
 					| TcpState::Closed
 					| TcpState::Closing
-					| TcpState::TimeWait => Poll::Ready(Err(Error::Illegal)),
+					| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 					_ => {
 						if !socket.may_send() {
-							return Poll::Ready(Err(Error::Illegal));
+							return Poll::Ready(Err(-crate::errno::EIO));
 						} else if socket.can_send() {
 							return Poll::Ready(
 								socket
 									.send_slice(&buffer[pos..])
-									.map_err(|_| Error::Illegal),
+									.map_err(|_| -crate::errno::EIO),
 							);
 						}
 
@@ -358,14 +375,14 @@ impl AsyncSocket {
 		Ok(pos)
 	}
 
-	pub(crate) async fn close(&self) -> Result<(), Error> {
+	pub(crate) async fn close(&self) -> Result<(), i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				TcpState::FinWait1
 				| TcpState::FinWait2
 				| TcpState::Closed
 				| TcpState::Closing
-				| TcpState::TimeWait => Poll::Ready(Err(Error::Illegal)),
+				| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 				_ => {
 					if socket.send_queue() > 0 {
 						socket.register_send_waker(cx.waker());

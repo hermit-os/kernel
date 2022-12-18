@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use core::{isize, slice};
 
 use crate::console::CONSOLE;
@@ -5,12 +6,12 @@ use crate::fd::{
 	uhyve_send, ObjectInterface, SysWrite, STDERR_FILENO, STDOUT_FILENO, UHYVE_PORT_WRITE,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GenericStdin;
 
 impl ObjectInterface for GenericStdin {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 }
 
@@ -20,12 +21,12 @@ impl GenericStdin {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GenericStdout;
 
 impl ObjectInterface for GenericStdout {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
@@ -45,12 +46,12 @@ impl GenericStdout {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GenericStderr;
 
 impl ObjectInterface for GenericStderr {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
@@ -70,12 +71,12 @@ impl GenericStderr {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UhyveStdin;
 
 impl ObjectInterface for UhyveStdin {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 }
 
@@ -85,12 +86,12 @@ impl UhyveStdin {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UhyveStdout;
 
 impl ObjectInterface for UhyveStdout {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
@@ -107,12 +108,12 @@ impl UhyveStdout {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UhyveStderr;
 
 impl ObjectInterface for UhyveStderr {
-	fn close(&self) -> i32 {
-		0
+	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {

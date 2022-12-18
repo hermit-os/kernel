@@ -15,6 +15,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::IpAddress;
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address};
 
+use crate::arch;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
 use crate::net::{NetworkInterface, NetworkState};
@@ -93,11 +94,15 @@ impl NetworkInterface<HermitNet> {
 
 		let dhcp = Dhcpv4Socket::new();
 
+		// Return the current time based on the wallclock time when we were booted up
+		// plus the current timer ticks.
+		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		let mut iface = InterfaceBuilder::new(device, vec![])
 			.hardware_addr(hardware_addr)
 			.neighbor_cache(neighbor_cache)
 			.ip_addrs(ip_addrs)
 			.routes(routes)
+			.random_seed(seed)
 			.finalize();
 
 		let dhcp_handle = iface.add_socket(dhcp);
@@ -164,11 +169,15 @@ impl NetworkInterface<HermitNet> {
 		info!("Configure gateway with address {}", mygw);
 		info!("MTU: {} bytes", mtu);
 
+		// Return the current time based on the wallclock time when we were booted up
+		// plus the current timer ticks.
+		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		let iface = InterfaceBuilder::new(device, vec![])
 			.hardware_addr(hardware_addr)
 			.neighbor_cache(neighbor_cache)
 			.ip_addrs(ip_addrs)
 			.routes(routes)
+			.random_seed(seed)
 			.finalize();
 
 		NetworkState::Initialized(Box::new(Self { iface }))
