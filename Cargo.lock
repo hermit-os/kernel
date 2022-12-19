@@ -98,6 +98,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "exclusive_cell"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5b9e9908e50b47ebbc3d6fd66ed295b997c270e8d2312a035bcc62722a160ef"
+
+[[package]]
 name = "fastrand"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,12 +174,13 @@ dependencies = [
 
 [[package]]
 name = "hermit-sync"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab42d49527a8773b233ceaabe8dde3e59a224673763ec25b21dcf194deeeba78"
+checksum = "2b3e7729a9899aad7d62872211aa67c56f6c91b31965041017f1e69317ed16a2"
 dependencies = [
  "aarch64-cpu",
  "crossbeam-utils",
+ "exclusive_cell",
  "generic_once_cell",
  "lock_api",
  "tock-registers 0.8.1",
