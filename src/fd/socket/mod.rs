@@ -181,3 +181,8 @@ pub extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(|e| e, |v| (*v).shutdown(how))
 }
+
+pub extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
+}

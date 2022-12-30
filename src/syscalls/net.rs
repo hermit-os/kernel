@@ -9,7 +9,7 @@ use smoltcp::wire::IpAddress;
 use crate::fd::socket::*;
 use crate::net::executor::block_on;
 use crate::net::{AsyncSocket, Handle};
-use crate::syscalls::{__sys_write, get_object};
+use crate::syscalls::__sys_write;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
 #[no_mangle]
@@ -338,11 +338,6 @@ pub extern "C" fn sys_send(s: i32, mem: *const c_void, len: usize, _flags: i32) 
 #[no_mangle]
 pub extern "C" fn sys_shutdown_socket(s: i32, how: i32) -> i32 {
 	kernel_function!(__sys_shutdown_socket(s, how))
-}
-
-extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
-	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
 }
 
 #[no_mangle]

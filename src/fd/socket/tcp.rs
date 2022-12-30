@@ -3,10 +3,12 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::DerefMut;
+use core::str::FromStr;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
 use futures_lite::future;
+use smoltcp::iface;
 use smoltcp::socket::{TcpSocket, TcpState};
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
@@ -17,6 +19,12 @@ use crate::net::executor::block_on;
 use crate::net::{now, Handle, NetworkState, NIC};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
+
+fn get_ephemeral_port() -> u16 {
+	static LOCAL_ENDPOINT: AtomicU16 = AtomicU16::new(49152);
+
+	LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst)
+}
 
 #[derive(Debug)]
 pub struct IPv4;
@@ -56,6 +64,25 @@ impl<T> Socket<T> {
 		res
 	}
 
+	fn with_context<R>(
+		&self,
+		f: impl FnOnce(&mut TcpSocket<'_>, &mut iface::Context<'_>) -> R,
+	) -> R {
+		let mut guard = NIC.lock();
+		let nic = guard.as_nic_mut().unwrap();
+		let res = {
+			let (s, cx) = nic
+				.iface
+				.get_socket_and_context::<TcpSocket<'_>>(self.handle);
+			f(s, cx)
+		};
+		let t = now();
+		if nic.poll_delay(t).map(|d| d.total_millis()).unwrap_or(0) == 0 {
+			nic.poll_common(t);
+		}
+		res
+	}
+
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -78,6 +105,27 @@ impl<T> Socket<T> {
 						Poll::Pending
 					}
 				}
+			})
+		})
+		.await
+	}
+
+	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, i32> {
+		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
+			.map_err(|x| {
+				info!("x {}", x);
+				-crate::errno::EIO
+			})?;
+
+		future::poll_fn(|cx| {
+			self.with(|socket| match socket.state() {
+				TcpState::Closed | TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EFAULT)),
+				TcpState::Listen => Poll::Ready(Err(-crate::errno::EIO)),
+				TcpState::SynSent | TcpState::SynReceived => {
+					socket.register_send_waker(cx.waker());
+					Poll::Pending
+				}
+				_ => Poll::Ready(Ok(0)),
 			})
 		})
 		.await
@@ -231,6 +279,10 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 		-EINVAL
 	}
 
+	default fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
+		-EINVAL
+	}
+
 	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
 		block_on(self.async_accept(addr, addrlen), None)
 			.map(|_| 0)
@@ -349,6 +401,7 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 				info!("set device to nonblocking mode");
 				self.nonblocking.store(true, Ordering::Release);
 			} else {
+				info!("set device to blocking mode");
 				self.nonblocking.store(false, Ordering::Release);
 			}
 
@@ -389,6 +442,35 @@ impl ObjectInterface for Socket<IPv4> {
 			let port = u16::from_be(addr.sin_port);
 			self.port.store(port, Ordering::Release);
 			0
+		} else {
+			-EINVAL
+		}
+	}
+
+	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+		if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
+			let saddr = unsafe { *(name as *const sockaddr_in) };
+			let port = u16::from_be(saddr.sin_port);
+			let address = IpAddress::v4(
+				saddr.sin_addr.s_addr[0],
+				saddr.sin_addr.s_addr[1],
+				saddr.sin_addr.s_addr[2],
+				saddr.sin_addr.s_addr[3],
+			);
+
+			if self.nonblocking.load(Ordering::Acquire) {
+				block_on(self.async_connect(address, port), Some(Duration::ZERO)).unwrap_or_else(
+					|x| {
+						if x == -ETIME {
+							-EAGAIN
+						} else {
+							x
+						}
+					},
+				)
+			} else {
+				block_on(self.async_connect(address, port), None).unwrap_or_else(|x| x)
+			}
 		} else {
 			-EINVAL
 		}
@@ -455,6 +537,41 @@ impl ObjectInterface for Socket<IPv6> {
 			let addr = unsafe { *(name as *const sockaddr_in6) };
 			self.port.store(addr.sin6_port, Ordering::Release);
 			0
+		} else {
+			-EINVAL
+		}
+	}
+
+	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+		if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
+			let saddr = unsafe { *(name as *const sockaddr_in6) };
+			let port = u16::from_be(saddr.sin6_port);
+			let a0 = ((saddr.sin6_addr.s6_addr[0] as u16) << 8) | saddr.sin6_addr.s6_addr[1] as u16;
+			let a1 = ((saddr.sin6_addr.s6_addr[2] as u16) << 8) | saddr.sin6_addr.s6_addr[3] as u16;
+			let a2 = ((saddr.sin6_addr.s6_addr[4] as u16) << 8) | saddr.sin6_addr.s6_addr[5] as u16;
+			let a3 = ((saddr.sin6_addr.s6_addr[6] as u16) << 8) | saddr.sin6_addr.s6_addr[7] as u16;
+			let a4 = ((saddr.sin6_addr.s6_addr[8] as u16) << 8) | saddr.sin6_addr.s6_addr[9] as u16;
+			let a5 =
+				((saddr.sin6_addr.s6_addr[10] as u16) << 8) | saddr.sin6_addr.s6_addr[11] as u16;
+			let a6 =
+				((saddr.sin6_addr.s6_addr[12] as u16) << 8) | saddr.sin6_addr.s6_addr[13] as u16;
+			let a7 =
+				((saddr.sin6_addr.s6_addr[14] as u16) << 8) | saddr.sin6_addr.s6_addr[15] as u16;
+			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
+
+			if self.nonblocking.load(Ordering::Acquire) {
+				block_on(self.async_connect(address, port), Some(Duration::ZERO)).unwrap_or_else(
+					|x| {
+						if x == -ETIME {
+							-EAGAIN
+						} else {
+							x
+						}
+					},
+				)
+			} else {
+				block_on(self.async_connect(address, port), None).unwrap_or_else(|x| x)
+			}
 		} else {
 			-EINVAL
 		}
