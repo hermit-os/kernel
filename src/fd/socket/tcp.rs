@@ -3,7 +3,6 @@ use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::DerefMut;
-use core::str::FromStr;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
