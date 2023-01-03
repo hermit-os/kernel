@@ -1,9 +1,9 @@
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ffi::{c_void, CStr};
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::RandomState;
+use dyn_clone::DynClone;
 use hashbrown::HashMap;
 use hermit_sync::InterruptTicketMutex;
 #[cfg(target_arch = "x86_64")]
@@ -194,9 +194,7 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms
 }
 
-pub trait ObjectInterface: Sync + Send + core::fmt::Debug {
-	fn clone_box(&self) -> Box<dyn ObjectInterface>;
-
+pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
 	fn read(&self, _buf: *mut u8, _len: usize) -> isize {

@@ -34,10 +34,6 @@ impl UhyveFile {
 }
 
 impl ObjectInterface for UhyveFile {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		let mut syswrite = SysWrite::new(self.0, buf, len);
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
@@ -77,10 +73,6 @@ impl GenericFile {
 }
 
 impl ObjectInterface for GenericFile {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		assert!(len <= isize::MAX as usize);
 		let buf = unsafe { slice::from_raw_parts(buf, len) };

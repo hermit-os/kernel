@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use core::ffi::c_void;
 use core::marker::PhantomData;
 use core::mem::size_of;
@@ -408,10 +407,6 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 		} else {
 			-EINVAL
 		}
-	}
-
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
 	}
 }
 

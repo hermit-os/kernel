@@ -71,7 +71,7 @@ pub(crate) extern "C" fn __sys_accept(
 		|v| {
 			let result = (*v).accept(addr, addrlen);
 			if result >= 0 {
-				let new_obj = (*v).clone_box();
+				let new_obj = dyn_clone::clone_box(&*v);
 				insert_object(fd, Arc::from(new_obj));
 				let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 				(*v).listen(1);

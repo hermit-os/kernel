@@ -1,5 +1,3 @@
-use alloc::boxed::Box;
-
 use crate::fd::ObjectInterface;
 use crate::net::Handle;
 
@@ -12,8 +10,4 @@ impl Socket {
 	}
 }
 
-impl ObjectInterface for Socket {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-}
+impl ObjectInterface for Socket {}

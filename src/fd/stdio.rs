@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use core::{isize, slice};
 
 use crate::console::CONSOLE;
@@ -9,11 +8,7 @@ use crate::fd::{
 #[derive(Debug, Clone)]
 pub struct GenericStdin;
 
-impl ObjectInterface for GenericStdin {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-}
+impl ObjectInterface for GenericStdin {}
 
 impl GenericStdin {
 	pub const fn new() -> Self {
@@ -25,10 +20,6 @@ impl GenericStdin {
 pub struct GenericStdout;
 
 impl ObjectInterface for GenericStdout {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		assert!(len <= isize::MAX as usize);
 		let buf = unsafe { slice::from_raw_parts(buf, len) };
@@ -50,10 +41,6 @@ impl GenericStdout {
 pub struct GenericStderr;
 
 impl ObjectInterface for GenericStderr {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		assert!(len <= isize::MAX as usize);
 		let buf = unsafe { slice::from_raw_parts(buf, len) };
@@ -74,11 +61,7 @@ impl GenericStderr {
 #[derive(Debug, Clone)]
 pub struct UhyveStdin;
 
-impl ObjectInterface for UhyveStdin {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-}
+impl ObjectInterface for UhyveStdin {}
 
 impl UhyveStdin {
 	pub const fn new() -> Self {
@@ -90,10 +73,6 @@ impl UhyveStdin {
 pub struct UhyveStdout;
 
 impl ObjectInterface for UhyveStdout {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf, len);
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
@@ -112,10 +91,6 @@ impl UhyveStdout {
 pub struct UhyveStderr;
 
 impl ObjectInterface for UhyveStderr {
-	fn clone_box(&self) -> Box<dyn ObjectInterface> {
-		Box::new(self.clone())
-	}
-
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf, len);
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
