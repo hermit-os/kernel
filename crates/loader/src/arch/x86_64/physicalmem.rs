@@ -1,4 +1,4 @@
-use crate::arch::paging::{BasePageSize, PageSize};
+use crate::arch::paging::{PageSize, Size4KiB};
 
 static mut CURRENT_ADDRESS: usize = 0;
 
@@ -11,11 +11,11 @@ pub fn init(address: usize) {
 pub fn allocate(size: usize) -> usize {
 	assert!(size > 0);
 	assert_eq!(
-		size % BasePageSize::SIZE as usize,
+		size % Size4KiB::SIZE as usize,
 		0,
 		"Size {:#x} is a multiple of {:#x}",
 		size,
-		BasePageSize::SIZE as usize
+		Size4KiB::SIZE as usize
 	);
 
 	unsafe {

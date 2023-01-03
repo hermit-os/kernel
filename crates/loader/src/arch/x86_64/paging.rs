@@ -86,7 +86,7 @@ impl PageTableEntry {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
 			assert_eq!(
-				physical_address % LargePageSize::SIZE as usize,
+				physical_address % Size2MiB::SIZE as usize,
 				0,
 				"Physical address is not on a 2 MiB page boundary (physical_address = {:#x})",
 				physical_address
@@ -94,7 +94,7 @@ impl PageTableEntry {
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
 			assert_eq!(
-				physical_address % BasePageSize::SIZE as usize,
+				physical_address % Size4KiB::SIZE as usize,
 				0,
 				"Physical address is not on a 4 KiB page boundary (physical_address = {:#x})",
 				physical_address
@@ -125,8 +125,8 @@ pub trait PageSize: Copy {
 
 /// A 4 KiB page mapped in the PGT.
 #[derive(Clone, Copy)]
-pub enum BasePageSize {}
-impl PageSize for BasePageSize {
+pub enum Size4KiB {}
+impl PageSize for Size4KiB {
 	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
@@ -134,8 +134,8 @@ impl PageSize for BasePageSize {
 
 /// A 2 MiB page mapped in the PDT.
 #[derive(Clone, Copy)]
-pub enum LargePageSize {}
-impl PageSize for LargePageSize {
+pub enum Size2MiB {}
+impl PageSize for Size2MiB {
 	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
@@ -364,7 +364,7 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE as usize);
+				let physical_address = physicalmem::allocate(Size4KiB::SIZE as usize);
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
