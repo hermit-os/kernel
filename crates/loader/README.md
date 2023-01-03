@@ -66,6 +66,11 @@ The following commands establish the tap device `tap10` on Linux:
 # echo 1 > /proc/sys/net/ipv4/conf/tap10/proxy_arp
 ```
 
+If you want Hermit to be accessible from outside the host, you have to enable IP forwarding:
+```
+# sysctl -w net.ipv4.ip_forward=1
+```
+
 You need to enable the `tcp` feature of the kernel.
 
 The network configuration can be set via environment variables during compile time.
