@@ -35,7 +35,7 @@ const STDERR_FILENO: FileDescriptor = 2;
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: InterruptTicketMutex<BTreeMap<FileDescriptor, Arc<Box<dyn ObjectInterface>>>> =
+static OBJECT_MAP: InterruptTicketMutex<BTreeMap<FileDescriptor, Arc<dyn ObjectInterface>>> =
 	InterruptTicketMutex::new(BTreeMap::new());
 /// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
@@ -295,11 +295,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 			let file = UhyveFile::new(sysopen.ret);
 
-			if OBJECT_MAP
-				.lock()
-				.try_insert(fd, Arc::new(Box::new(file)))
-				.is_err()
-			{
+			if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
 				Err(-EINVAL)
 			} else {
 				Ok(fd as FileDescriptor)
@@ -321,11 +317,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			if let Ok(filesystem_fd) = fs.open(name, open_flags_to_perm(flags, mode as u32)) {
 				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 				let file = GenericFile::new(filesystem_fd);
-				if OBJECT_MAP
-					.lock()
-					.try_insert(fd, Arc::new(Box::new(file)))
-					.is_err()
-				{
+				if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
 					Err(-EINVAL)
 				} else {
 					Ok(fd as FileDescriptor)
@@ -341,15 +333,15 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 	}
 }
 
-pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<Box<dyn ObjectInterface>>, i32> {
+pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
 	Ok((*(OBJECT_MAP.lock().get(&fd).ok_or(-EINVAL)?)).clone())
 }
 
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
-	obj: Arc<Box<dyn ObjectInterface>>,
-) -> Option<Arc<Box<dyn ObjectInterface>>> {
+	obj: Arc<dyn ObjectInterface>,
+) -> Option<Arc<dyn ObjectInterface>> {
 	OBJECT_MAP.lock().insert(fd, obj)
 }
 
@@ -378,7 +370,7 @@ pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
 	}
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<Box<dyn ObjectInterface>>, i32> {
+pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
 	if fd <= 2 {
 		Err(-EINVAL)
 	} else {
@@ -391,23 +383,23 @@ pub(crate) fn init() {
 	let mut guard = OBJECT_MAP.lock();
 	if env::is_uhyve() {
 		guard
-			.try_insert(STDIN_FILENO, Arc::new(Box::new(UhyveStdin::new())))
+			.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
 			.unwrap();
 		guard
-			.try_insert(STDOUT_FILENO, Arc::new(Box::new(UhyveStdout::new())))
+			.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
 			.unwrap();
 		guard
-			.try_insert(STDERR_FILENO, Arc::new(Box::new(UhyveStderr::new())))
+			.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
 			.unwrap();
 	} else {
 		guard
-			.try_insert(STDIN_FILENO, Arc::new(Box::new(GenericStdin::new())))
+			.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
 			.unwrap();
 		guard
-			.try_insert(STDOUT_FILENO, Arc::new(Box::new(GenericStdout::new())))
+			.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
 			.unwrap();
 		guard
-			.try_insert(STDERR_FILENO, Arc::new(Box::new(GenericStderr::new())))
+			.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
 			.unwrap();
 	}
 }

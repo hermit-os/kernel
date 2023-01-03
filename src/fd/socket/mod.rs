@@ -1,4 +1,3 @@
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::ffi::c_void;
 use core::ops::DerefMut;
@@ -32,11 +31,7 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 			if protocol == IPPROTO_UDP {
 				let handle = nic.create_udp_handle().unwrap();
 				let socket = self::udp::Socket::new(handle);
-				if OBJECT_MAP
-					.lock()
-					.try_insert(fd, Arc::new(Box::new(socket)))
-					.is_err()
-				{
+				if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
 					-EINVAL
 				} else {
 					fd
@@ -45,22 +40,14 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 				let handle = nic.create_tcp_handle().unwrap();
 				if domain == AF_INET {
 					let socket = self::tcp::Socket::<self::tcp::IPv4>::new(handle);
-					if OBJECT_MAP
-						.lock()
-						.try_insert(fd, Arc::new(Box::new(socket)))
-						.is_err()
-					{
+					if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
 						-EINVAL
 					} else {
 						fd
 					}
 				} else {
 					let socket = self::tcp::Socket::<self::tcp::IPv6>::new(handle);
-					if OBJECT_MAP
-						.lock()
-						.try_insert(fd, Arc::new(Box::new(socket)))
-						.is_err()
-					{
+					if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
 						-EINVAL
 					} else {
 						fd
@@ -85,7 +72,7 @@ pub(crate) extern "C" fn __sys_accept(
 			let result = (*v).accept(addr, addrlen);
 			if result >= 0 {
 				let new_obj = (*v).clone_box();
-				insert_object(fd, Arc::new(new_obj));
+				insert_object(fd, Arc::from(new_obj));
 				let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 				(*v).listen(1);
 				insert_object(new_fd, v.clone());
