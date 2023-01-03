@@ -64,6 +64,7 @@ The following commands establish the tap device `tap10` on Linux:
 # ip addr add 10.0.5.1/24 broadcast 10.0.5.255 dev tap10
 # ip link set dev tap10 up
 # echo 1 > /proc/sys/net/ipv4/conf/tap10/proxy_arp
+# sysctl -w net.ipv4.ip_forward=1
 ```
 
 You need to enable the `tcp` feature of the kernel.
