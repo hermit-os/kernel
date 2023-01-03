@@ -411,6 +411,12 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 	}
 
 	fn clone_box(&self) -> Box<dyn ObjectInterface> {
+		Box::new(self.clone())
+	}
+}
+
+impl<T> Clone for Socket<T> {
+	fn clone(&self) -> Self {
 		let mut guard = NIC.lock();
 
 		let handle = if let NetworkState::Initialized(nic) = guard.deref_mut() {
@@ -419,12 +425,12 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 			panic!("Unable to create handle");
 		};
 
-		Box::new(Self {
+		Self {
 			handle,
 			port: AtomicU16::new(self.port.load(Ordering::Acquire)),
 			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
 			phantom: PhantomData,
-		})
+		}
 	}
 }
 
