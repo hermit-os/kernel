@@ -17,7 +17,7 @@ use log::info;
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
 
-use paging::{PageSize, PageTableEntryFlags, Size2MiB, Size4KiB};
+use paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
 #[cfg(target_os = "none")]
 extern "C" {
@@ -86,7 +86,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	assert!(mb_info > 0, "Could not find Multiboot information");
 	info!("Found Multiboot information at {:#x}", mb_info);
 	let page_address = align_down!(mb_info, Size4KiB::SIZE as usize);
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableEntryFlags::WRITABLE);
+	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::WRITABLE);
 
 	// Load the Multiboot information and identity-map the modules information.
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
@@ -97,7 +97,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		.expect("Could not find first map address")
 		.start as usize;
 	let page_address = align_down!(modules_address, Size4KiB::SIZE as usize);
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableEntryFlags::empty());
+	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
 	// Iterate through all modules.
 	// Collect the start address of the first module and the highest end address of all modules.
@@ -145,12 +145,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		page_address,
 		Size4KiB::SIZE as usize / 1024
 	);
-	paging::map::<Size4KiB>(
-		page_address,
-		page_address,
-		counter,
-		PageTableEntryFlags::empty(),
-	);
+	paging::map::<Size4KiB>(page_address, page_address, counter, PageTableFlags::empty());
 
 	// map also the rest of the module
 	let address = align_up!(start_address, Size2MiB::SIZE as usize);
@@ -163,7 +158,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 			address,
 			Size2MiB::SIZE as usize / 1024
 		);
-		paging::map::<Size2MiB>(address, address, counter, PageTableEntryFlags::WRITABLE);
+		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::WRITABLE);
 	}
 
 	slice::from_raw_parts(elf_start as *const u8, elf_len)
@@ -183,7 +178,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 		// Identity-map the command line.
 		let page_address = align_down!(address as usize, Size4KiB::SIZE as usize);
-		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableEntryFlags::empty());
+		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
 		command_line
 	});
@@ -214,7 +209,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		new_stack,
 		new_stack,
 		KERNEL_STACK_SIZE as usize / Size4KiB::SIZE as usize,
-		PageTableEntryFlags::WRITABLE,
+		PageTableFlags::WRITABLE,
 	);
 
 	// clear stack
@@ -275,7 +270,7 @@ unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
 	let address = align_up!(address, Size2MiB::SIZE as usize);
 	let page_count = align_up!(memory_size, Size2MiB::SIZE as usize) / Size2MiB::SIZE as usize;
 
-	paging::map::<Size2MiB>(address, address, page_count, PageTableEntryFlags::WRITABLE);
+	paging::map::<Size2MiB>(address, address, page_count, PageTableFlags::WRITABLE);
 
 	address
 }

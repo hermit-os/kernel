@@ -21,7 +21,7 @@ bitflags::bitflags! {
 	/// Possible flags for an entry in either table (PML4, PDPT, PDT, PGT)
 	///
 	/// See Intel Vol. 3A, Tables 4-14 through 4-19
-	pub struct PageTableEntryFlags: usize {
+	pub struct PageTableFlags: usize {
 		/// Set if this entry is valid and points to a page or table.
 		const PRESENT = 1 << 0;
 
@@ -56,23 +56,23 @@ bitflags::bitflags! {
 	}
 }
 
-impl PageTableEntryFlags {
+impl PageTableFlags {
 	/// An empty set of flags for unused/zeroed table entries.
 	/// Needed as long as empty() is no const function.
-	const BLANK: PageTableEntryFlags = PageTableEntryFlags { bits: 0 };
+	const BLANK: PageTableFlags = PageTableFlags { bits: 0 };
 }
 
 /// An entry in either table (PML4, PDPT, PDT, PGT)
 #[derive(Clone, Copy)]
 pub struct PageTableEntry {
-	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
+	/// Physical memory address this entry refers, combined with flags from PageTableFlags.
 	physical_address_and_flags: usize,
 }
 
 impl PageTableEntry {
 	/// Returns whether this entry is valid (present).
 	fn is_present(&self) -> bool {
-		(self.physical_address_and_flags & PageTableEntryFlags::PRESENT.bits()) != 0
+		(self.physical_address_and_flags & PageTableFlags::PRESENT.bits()) != 0
 	}
 
 	/// Mark this as a valid (present) entry and set address translation and flags.
@@ -80,9 +80,9 @@ impl PageTableEntry {
 	/// # Arguments
 	///
 	/// * `physical_address` - The physical memory address this entry shall translate to
-	/// * `flags` - Flags from PageTableEntryFlags (note that the PRESENT and ACCESSED flags are set automatically)
-	fn set(&mut self, physical_address: usize, flags: PageTableEntryFlags) {
-		if flags.contains(PageTableEntryFlags::HUGE_PAGE) {
+	/// * `flags` - Flags from PageTableFlags (note that the PRESENT and ACCESSED flags are set automatically)
+	fn set(&mut self, physical_address: usize, flags: PageTableFlags) {
+		if flags.contains(PageTableFlags::HUGE_PAGE) {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
 			assert_eq!(
@@ -101,8 +101,8 @@ impl PageTableEntry {
 			);
 		}
 
-		self.physical_address_and_flags = physical_address
-			| (PageTableEntryFlags::PRESENT | PageTableEntryFlags::ACCESSED | flags).bits();
+		self.physical_address_and_flags =
+			physical_address | (PageTableFlags::PRESENT | PageTableFlags::ACCESSED | flags).bits();
 	}
 }
 
@@ -119,8 +119,8 @@ pub trait PageSize: Copy {
 	const MAP_LEVEL: usize;
 
 	/// Any extra flag that needs to be set to map a page of this size.
-	/// For example: PageTableEntryFlags::HUGE_PAGE
-	const MAP_EXTRA_FLAG: PageTableEntryFlags;
+	/// For example: PageTableFlags::HUGE_PAGE
+	const MAP_EXTRA_FLAG: PageTableFlags;
 }
 
 /// A 4 KiB page mapped in the PGT.
@@ -129,7 +129,7 @@ pub enum Size4KiB {}
 impl PageSize for Size4KiB {
 	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
+	const MAP_EXTRA_FLAG: PageTableFlags = PageTableFlags::BLANK;
 }
 
 /// A 2 MiB page mapped in the PDT.
@@ -138,7 +138,7 @@ pub enum Size2MiB {}
 impl PageSize for Size2MiB {
 	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
-	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
+	const MAP_EXTRA_FLAG: PageTableFlags = PageTableFlags::HUGE_PAGE;
 }
 
 /// A memory page of the size given by S.
@@ -287,7 +287,7 @@ trait LocallyMappable {
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) -> bool;
 }
 
@@ -296,7 +296,7 @@ trait Mappable: LocallyMappable {
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) -> bool;
 }
 
@@ -309,7 +309,7 @@ impl<L: PageTableLevel> LocallyMappable for PageTable<L> {
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) -> bool {
 		assert_eq!(L::LEVEL, S::MAP_LEVEL);
 		let index = page.table_index::<L>();
@@ -317,7 +317,7 @@ impl<L: PageTableLevel> LocallyMappable for PageTable<L> {
 
 		self.entries[index].set(
 			physical_address,
-			PageTableEntryFlags::DIRTY | S::MAP_EXTRA_FLAG | flags,
+			PageTableFlags::DIRTY | S::MAP_EXTRA_FLAG | flags,
 		);
 
 		if flush {
@@ -335,7 +335,7 @@ impl Mappable for PageTable<PGT> {
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) -> bool {
 		self.map_page_in_this_table::<S>(page, physical_address, flags)
 	}
@@ -354,7 +354,7 @@ where
 		&mut self,
 		page: Page<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) -> bool {
 		assert!(L::LEVEL >= S::MAP_LEVEL);
 
@@ -365,7 +365,7 @@ where
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
 				let physical_address = physicalmem::allocate(Size4KiB::SIZE as usize);
-				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
+				self.entries[index].set(physical_address, PageTableFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
 				let subtable = self.subtable::<S>(page);
@@ -408,13 +408,13 @@ where
 	///
 	/// * `range` - The range of pages of size S
 	/// * `physical_address` - First physical address to map these pages to
-	/// * `flags` - Flags from PageTableEntryFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
+	/// * `flags` - Flags from PageTableFlags to set for the page table entry (e.g. WRITABLE or EXECUTE_DISABLE).
 	///             The PRESENT, ACCESSED, and DIRTY flags are already set automatically.
 	fn map_pages<S: PageSize>(
 		&mut self,
 		range: PageIter<S>,
 		physical_address: usize,
-		flags: PageTableEntryFlags,
+		flags: PageTableFlags,
 	) {
 		let mut current_physical_address = physical_address;
 
@@ -436,7 +436,7 @@ pub fn map<S: PageSize>(
 	virtual_address: usize,
 	physical_address: usize,
 	count: usize,
-	flags: PageTableEntryFlags,
+	flags: PageTableFlags,
 ) {
 	let range = get_page_range::<S>(virtual_address, count);
 	let root_pagetable = unsafe { &mut *PML4_ADDRESS };
