@@ -1,9 +1,10 @@
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use core::ffi::{c_void, CStr};
 use core::sync::atomic::{AtomicI32, Ordering};
 
+use ahash::RandomState;
+use hashbrown::HashMap;
 use hermit_sync::InterruptTicketMutex;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -35,8 +36,13 @@ const STDERR_FILENO: FileDescriptor = 2;
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: InterruptTicketMutex<BTreeMap<FileDescriptor, Arc<dyn ObjectInterface>>> =
-	InterruptTicketMutex::new(BTreeMap::new());
+static OBJECT_MAP: InterruptTicketMutex<
+	HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>,
+> = InterruptTicketMutex::new(HashMap::<
+	FileDescriptor,
+	Arc<dyn ObjectInterface>,
+	RandomState,
+>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
