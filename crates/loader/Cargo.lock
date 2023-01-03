@@ -19,9 +19,9 @@ checksum = "1926655ba000b19e21f0402be09a1d52d318c8a8a68622870bfb7af2a71315cd"
 
 [[package]]
 name = "anyhow"
-version = "1.0.66"
+version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "216261ddc8289130e551ddcd5ce8a064710c0d064a4d2895c67151c92b5443f6"
+checksum = "2cb2f989d18dd141ab8ae82f64d1a8cdd37e0840f73a406896cf5e99502fab61"
 
 [[package]]
 name = "bit_field"
@@ -37,9 +37,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "cc"
-version = "1.0.77"
+version = "1.0.78"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e9f73505338f7d905b19d18738976aae232eb46b8efc15554ffc56deb5d9ebe4"
+checksum = "a20104e2335ce8a659d6dd92a51a767a0c062599c73b343fd152cb401e828c3d"
 
 [[package]]
 name = "cfg-if"
@@ -304,18 +304,18 @@ checksum = "f58e7b3ca8977093aae6b87b6a7730216fc4c53a6530bab5c43a783cd810c1a8"
 
 [[package]]
 name = "xshell"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d47097dc5c85234b1e41851b3422dd6d19b3befdd35b4ae5ce386724aeca981"
+checksum = "962c039b3a7b16cf4e9a4248397c6585c07547412e7d6a6e035389a802dcfe90"
 dependencies = [
  "xshell-macros",
 ]
 
 [[package]]
 name = "xshell-macros"
-version = "0.2.2"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88301b56c26dd9bf5c43d858538f82d6f3f7764767defbc5d34e59459901c41a"
+checksum = "1dbabb1cbd15a1d6d12d9ed6b35cc6777d4af87ab3ba155ea37215f20beab80c"
 
 [[package]]
 name = "xtask"
