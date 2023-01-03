@@ -1,3 +1,5 @@
+#![allow(clippy::upper_case_acronyms)]
+
 use core::arch::asm;
 use core::marker::PhantomData;
 

@@ -190,7 +190,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	// determine boot stack address
 	let mut new_stack = align_up!(&kernel_end as *const u8 as usize, BasePageSize::SIZE);
 
-	if new_stack + KERNEL_STACK_SIZE as usize > mb_info as usize {
+	if new_stack + KERNEL_STACK_SIZE as usize > mb_info {
 		new_stack = align_up!(
 			mb_info + mem::size_of::<Multiboot<'_, '_>>(),
 			BasePageSize::SIZE
