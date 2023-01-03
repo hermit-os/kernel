@@ -86,7 +86,7 @@ impl PageTableEntry {
 			// HUGE_PAGE may indicate a 2 MiB or 1 GiB page.
 			// We don't know this here, so we can only verify that at least the offset bits for a 2 MiB page are zero.
 			assert_eq!(
-				physical_address % LargePageSize::SIZE,
+				physical_address % LargePageSize::SIZE as usize,
 				0,
 				"Physical address is not on a 2 MiB page boundary (physical_address = {:#x})",
 				physical_address
@@ -94,7 +94,7 @@ impl PageTableEntry {
 		} else {
 			// Verify that the offset bits for a 4 KiB page are zero.
 			assert_eq!(
-				physical_address % BasePageSize::SIZE,
+				physical_address % BasePageSize::SIZE as usize,
 				0,
 				"Physical address is not on a 4 KiB page boundary (physical_address = {:#x})",
 				physical_address
@@ -112,7 +112,7 @@ impl PageTableEntry {
 /// Currently, deriving implementations for these traits only works if all dependent types implement it as well.
 pub trait PageSize: Copy {
 	/// The page size in bytes.
-	const SIZE: usize;
+	const SIZE: u64;
 
 	/// The page table level at which a page of this size is mapped (from 0 for PGT through 3 for PML4).
 	/// Implemented as a numeric value to enable numeric comparisons.
@@ -127,7 +127,7 @@ pub trait PageSize: Copy {
 #[derive(Clone, Copy)]
 pub enum BasePageSize {}
 impl PageSize for BasePageSize {
-	const SIZE: usize = 4096;
+	const SIZE: u64 = 4096;
 	const MAP_LEVEL: usize = 0;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::BLANK;
 }
@@ -136,7 +136,7 @@ impl PageSize for BasePageSize {
 #[derive(Clone, Copy)]
 pub enum LargePageSize {}
 impl PageSize for LargePageSize {
-	const SIZE: usize = 2 * 1024 * 1024;
+	const SIZE: u64 = 2 * 1024 * 1024;
 	const MAP_LEVEL: usize = 1;
 	const MAP_EXTRA_FLAG: PageTableEntryFlags = PageTableEntryFlags::HUGE_PAGE;
 }
@@ -179,7 +179,7 @@ impl<S: PageSize> Page<S> {
 		assert!(Self::is_valid_address(virtual_address));
 
 		Self {
-			virtual_address: align_down!(virtual_address, S::SIZE),
+			virtual_address: align_down!(virtual_address, S::SIZE as usize),
 			size: PhantomData,
 		}
 	}
@@ -212,7 +212,7 @@ impl<S: PageSize> Iterator for PageIter<S> {
 	fn next(&mut self) -> Option<Page<S>> {
 		if self.current.virtual_address <= self.last.virtual_address {
 			let p = self.current;
-			self.current.virtual_address += S::SIZE;
+			self.current.virtual_address += S::SIZE as usize;
 			Some(p)
 		} else {
 			None
@@ -364,7 +364,7 @@ where
 			// Does the table exist yet?
 			if !self.entries[index].is_present() {
 				// Allocate a single 4 KiB page for the new entry and mark it as a valid, writable subtable.
-				let physical_address = physicalmem::allocate(BasePageSize::SIZE);
+				let physical_address = physicalmem::allocate(BasePageSize::SIZE as usize);
 				self.entries[index].set(physical_address, PageTableEntryFlags::WRITABLE);
 
 				// Mark all entries as unused in the newly created table.
@@ -420,7 +420,7 @@ where
 
 		for page in range {
 			self.map_page::<S>(page, current_physical_address, flags);
-			current_physical_address += S::SIZE;
+			current_physical_address += S::SIZE as usize;
 		}
 	}
 }
@@ -428,7 +428,7 @@ where
 #[inline]
 fn get_page_range<S: PageSize>(virtual_address: usize, count: usize) -> PageIter<S> {
 	let first_page = Page::<S>::including_address(virtual_address);
-	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE);
+	let last_page = Page::<S>::including_address(virtual_address + (count - 1) * S::SIZE as usize);
 	Page::range(first_page, last_page)
 }
 
