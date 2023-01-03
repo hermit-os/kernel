@@ -1,11 +1,11 @@
-pub mod paging;
-pub mod physicalmem;
+mod paging;
+mod physicalmem;
 
 use core::arch::asm;
 #[cfg(target_os = "none")]
 use core::ptr::write_bytes;
 #[cfg(target_os = "none")]
-use core::{cmp, mem, slice};
+use core::{mem, slice};
 
 use hermit_entry::{
 	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
@@ -16,8 +16,9 @@ use log::info;
 #[cfg(target_os = "none")]
 use multiboot::information::{MemoryManagement, Multiboot, PAddr};
 use uart_16550::SerialPort;
+use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
-use paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
+use self::physicalmem::PhysAlloc;
 
 #[cfg(target_os = "none")]
 extern "C" {
@@ -82,11 +83,14 @@ pub unsafe fn boot_kernel(
 
 #[cfg(target_os = "none")]
 pub unsafe fn find_kernel() -> &'static [u8] {
+	use core::cmp;
+
+	paging::clean_up();
 	// Identity-map the Multiboot information.
 	assert!(mb_info > 0, "Could not find Multiboot information");
 	info!("Found Multiboot information at {:#x}", mb_info);
 	let page_address = align_down!(mb_info, Size4KiB::SIZE as usize);
-	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::WRITABLE);
+	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
 	// Load the Multiboot information and identity-map the modules information.
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
@@ -127,7 +131,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	// TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
-	physicalmem::init(free_memory_address);
+	PhysAlloc::init(free_memory_address);
 
 	// Identity-map the ELF header of the first module.
 	assert!(
@@ -136,15 +140,10 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	);
 	assert!(start_address > 0);
 	info!("Found an ELF module at {:#x}", start_address);
-	let page_address = align_down!(start_address, Size4KiB::SIZE as usize);
+	let page_address =
+		align_down!(start_address, Size4KiB::SIZE as usize) + Size4KiB::SIZE as usize;
 	let counter = (align_up!(start_address, Size2MiB::SIZE as usize) - page_address)
 		/ Size4KiB::SIZE as usize;
-	info!(
-		"Map {} pages at {:#x} (page size {} KByte)",
-		counter,
-		page_address,
-		Size4KiB::SIZE as usize / 1024
-	);
 	paging::map::<Size4KiB>(page_address, page_address, counter, PageTableFlags::empty());
 
 	// map also the rest of the module
@@ -152,13 +151,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let counter =
 		(align_up!(end_address, Size2MiB::SIZE as usize) - address) / Size2MiB::SIZE as usize;
 	if counter > 0 {
-		info!(
-			"Map {} pages at {:#x} (page size {} KByte)",
-			counter,
-			address,
-			Size2MiB::SIZE as usize / 1024
-		);
-		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::WRITABLE);
+		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::empty());
 	}
 
 	slice::from_raw_parts(elf_start as *const u8, elf_len)
@@ -173,16 +166,6 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
 
-	let command_line = multiboot.command_line().map(|command_line| {
-		let address = command_line.as_ptr();
-
-		// Identity-map the command line.
-		let page_address = align_down!(address as usize, Size4KiB::SIZE as usize);
-		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
-
-		command_line
-	});
-
 	// determine boot stack address
 	let mut new_stack = align_up!(&kernel_end as *const u8 as usize, Size4KiB::SIZE as usize);
 
@@ -193,6 +176,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
+	let command_line = multiboot.command_line();
 	if let Some(command_line) = command_line {
 		let cmdline = command_line.as_ptr() as usize;
 		let cmdsize = command_line.len();
@@ -276,6 +260,6 @@ unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
 }
 
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
-	let address = physicalmem::allocate(align_up!(memory_size as usize, Size2MiB::SIZE as usize));
+	let address = PhysAlloc::allocate(align_up!(memory_size as usize, Size2MiB::SIZE as usize));
 	map_memory(address, memory_size as usize) as u64
 }
