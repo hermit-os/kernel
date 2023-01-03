@@ -191,10 +191,15 @@ pub fn message_output_init() {
 #[cfg(target_os = "none")]
 pub fn output_message_buf(buf: &[u8]) {
 	// Output messages to the serial port and VGA screen in unikernel mode.
+
+use alloc::string::String;
 	COM1.lock().as_mut().unwrap().send(buf);
 
 	#[cfg(feature = "vga")]
-	vga::print(buf);
+	{
+		let s = String::from_utf8_lossy(buf);
+		vga::print(&s);
+	}
 }
 
 #[cfg(not(target_os = "none"))]
