@@ -145,10 +145,9 @@ where
 		Ok(tcp_handle)
 	}
 
-	pub(crate) fn poll_common(&mut self, timestamp: Instant) {
-		while self.iface.poll(timestamp).unwrap_or(true) {
-			// just to make progress
-		}
+	pub(crate) fn poll_common(&mut self, timestamp: Instant){
+		let _ = self.iface.poll(timestamp);
+
 		#[cfg(feature = "dhcpv4")]
 		match self
 			.iface
