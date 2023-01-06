@@ -1,7 +1,11 @@
+//! A bootstrap allocator based on a statically allocated buffer.
+
+/// A pointer range that can only be compared against.
 mod ptr_range {
 	use core::ops::Range;
 	use core::ptr::NonNull;
 
+	/// A pointer range that can only be compared against.
 	pub struct PtrRange<T> {
 		inner: Range<NonNull<T>>,
 	}
@@ -11,6 +15,7 @@ mod ptr_range {
 	unsafe impl<T> Sync for PtrRange<T> {}
 
 	impl<T> PtrRange<T> {
+		/// Returns `true` if the pointer range contains `ptr`.
 		pub fn contains(&self, ptr: NonNull<T>) -> bool {
 			self.inner.contains(&ptr)
 		}
@@ -32,6 +37,13 @@ use hermit_sync::ExclusiveCell;
 
 use self::ptr_range::PtrRange;
 
+/// A bootstrap allocator.
+///
+/// This allocator is generic over the internal allocator and can only be created once.
+/// The bootstrap allocator provides the internal allocator with static memory.
+///
+/// This allocator tracks, which static memory it was using initially.
+/// It can be queried whether a pointer belongs to it.
 pub struct BootstrapAllocator<A> {
 	ptr_range: PtrRange<u8>,
 	allocator: A,
@@ -45,6 +57,7 @@ where
 		let mem = {
 			const SIZE: usize = 4 * 1024;
 			const BYTE: MaybeUninit<u8> = MaybeUninit::uninit();
+			/// The actual memory of the boostrap allocator.
 			static MEM: ExclusiveCell<[MaybeUninit<u8>; SIZE]> = ExclusiveCell::new([BYTE; SIZE]);
 			MEM.take().unwrap()
 		};
@@ -65,6 +78,7 @@ where
 }
 
 impl<A> BootstrapAllocator<A> {
+	/// Returns `true` if the pointer belonged to the static memory of this allocator.
 	pub fn manages(&self, ptr: NonNull<u8>) -> bool {
 		self.ptr_range.contains(ptr)
 	}

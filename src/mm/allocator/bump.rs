@@ -1,8 +1,15 @@
+//! A bump allocator.
+//!
+//! This is a simple allocator design which can only allocate and not deallocate.
+
 use core::alloc::{AllocError, Allocator, Layout};
 use core::cell::Cell;
 use core::mem::MaybeUninit;
 use core::ptr::NonNull;
 
+/// A simple, `!Sync` implementation of a bump allocator.
+///
+/// This allocator manages the provided memory.
 pub struct BumpAllocator {
 	mem: Cell<&'static mut [MaybeUninit<u8>]>,
 }

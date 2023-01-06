@@ -16,8 +16,16 @@ use self::bootstrap::BootstrapAllocator;
 use self::bump::BumpAllocator;
 use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
+/// The global system allocator for Hermit.
 struct GlobalAllocator {
+	/// The bootstrap allocator, which is available immediately.
+	///
+	/// It allows allocations before the heap has been initalized.
 	bootstrap_allocator: Option<BootstrapAllocator<BumpAllocator>>,
+
+	/// The heap allocator.
+	///
+	/// This is not available immediately and must be initialized ([`Self::init`]).
 	heap: Option<Heap>,
 }
 
@@ -29,6 +37,12 @@ impl GlobalAllocator {
 		}
 	}
 
+	/// Initializes the heap allocator.
+	///
+	/// # Safety
+	///
+	/// The memory starting from `heap_bottom` with a size of `heap_size`
+	/// must be valid and ready to be managed and allocated from.
 	unsafe fn init(&mut self, heap_bottom: *mut u8, heap_size: usize) {
 		self.heap = Some(unsafe { Heap::new(heap_bottom, heap_size) });
 	}
