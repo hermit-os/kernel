@@ -85,19 +85,6 @@ async fn network_run() {
 	.await
 }
 
-#[inline]
-pub(crate) fn network_poll() {
-	if let Some(mut guard) = NIC.try_lock() {
-		if let NetworkState::Initialized(nic) = guard.deref_mut() {
-			let time = now();
-			if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
-				let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-				crate::core_scheduler().add_network_timer(wakeup_time);
-			}
-		}
-	}
-}
-
 pub(crate) fn init() {
 	info!("Try to nitialize network!");
 
@@ -145,7 +132,7 @@ where
 		Ok(tcp_handle)
 	}
 
-	pub(crate) fn poll_common(&mut self, timestamp: Instant){
+	pub(crate) fn poll_common(&mut self, timestamp: Instant) {
 		let _ = self.iface.poll(timestamp);
 
 		#[cfg(feature = "dhcpv4")]

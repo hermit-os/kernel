@@ -1,4 +1,3 @@
-use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use alloc::vec::Vec;
@@ -8,15 +7,13 @@ use core::task::{Context, Poll};
 
 use async_task::{Runnable, Task};
 use futures_lite::pin;
-use hermit_sync::{InterruptTicketMutex, TicketMutex};
+use hermit_sync::InterruptTicketMutex;
 use smoltcp::time::{Duration, Instant};
 
 use crate::core_scheduler;
-use crate::scheduler::task::{TaskHandle, TaskId};
+use crate::scheduler::task::TaskHandle;
 
-static QUEUE: TicketMutex<Vec<Runnable>> = TicketMutex::new(Vec::new());
-static BLOCKED_ASYNC_TASKS: TicketMutex<BTreeMap<TaskId, TaskHandle>> =
-	TicketMutex::new(BTreeMap::new());
+static QUEUE: InterruptTicketMutex<Vec<Runnable>> = InterruptTicketMutex::new(Vec::new());
 
 #[inline]
 fn network_delay(timestamp: Instant) -> Option<Duration> {
@@ -25,16 +22,6 @@ fn network_delay(timestamp: Instant) -> Option<Duration> {
 		.as_nic_mut()
 		.unwrap()
 		.poll_delay(timestamp)
-}
-
-#[inline]
-pub(crate) fn wakeup_async_tasks() {
-	let scheduler = core_scheduler();
-	let mut guard = BLOCKED_ASYNC_TASKS.lock();
-
-	while let Some((_id, handle)) = guard.pop_first() {
-		scheduler.custom_wakeup(handle);
-	}
 }
 
 fn run_executor_once() {
@@ -148,15 +135,16 @@ where
 			let unparked = task_notify.unparked.swap(false, Ordering::AcqRel);
 			if !unparked {
 				let core_scheduler = core_scheduler();
-				let task = core_scheduler.get_current_task_handle();
-				let wakeup_time = delay.map(|us| crate::arch::processor::get_timer_ticks() + us);
-				BLOCKED_ASYNC_TASKS.lock().insert(task.get_id(), task);
-				core_scheduler.block_current_task(wakeup_time);
+				if let Some(wakeup_time) =
+					delay.map(|us| crate::arch::processor::get_timer_ticks() + us)
+				{
+					core_scheduler.add_network_timer(wakeup_time);
+				}
+				core_scheduler.block_current_async_task();
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
 				// switch to another task
 				core_scheduler.reschedule();
-				BLOCKED_ASYNC_TASKS.lock().remove(&task.get_id());
 				// Polling mode => no NIC interrupts => NIC thread should not run
 				set_polling_mode(true);
 			}

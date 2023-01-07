@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::slice;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
@@ -196,7 +197,7 @@ impl<'a> Device<'a> for HermitNet {
 
 	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
 		match SYS.receive_rx_buffer() {
-			Ok((buffer, handle)) => Some((RxToken::new(buffer, handle), TxToken::new())),
+			Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
 			_ => None,
 		}
 	}
@@ -209,13 +210,12 @@ impl<'a> Device<'a> for HermitNet {
 
 #[doc(hidden)]
 pub(crate) struct RxToken {
-	buffer: &'static mut [u8],
-	handle: usize,
+	buffer: Vec<u8>,
 }
 
 impl RxToken {
-	pub(crate) fn new(buffer: &'static mut [u8], handle: usize) -> Self {
-		Self { buffer, handle }
+	pub(crate) fn new(buffer: Vec<u8>) -> Self {
+		Self { buffer }
 	}
 }
 
@@ -225,12 +225,7 @@ impl phy::RxToken for RxToken {
 	where
 		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
 	{
-		let result = f(self.buffer);
-		if SYS.rx_buffer_consumed(self.handle).is_ok() {
-			result
-		} else {
-			Err(smoltcp::Error::Exhausted)
-		}
+		f(&mut self.buffer[..])
 	}
 }
 
