@@ -238,6 +238,7 @@ dependencies = [
  "hermit-sync",
  "include-transformed",
  "linked_list_allocator",
+ "lock_api",
  "log",
  "multiboot",
  "num",
