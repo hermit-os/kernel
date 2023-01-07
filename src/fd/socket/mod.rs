@@ -31,7 +31,7 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 			if protocol == IPPROTO_UDP {
 				let handle = nic.create_udp_handle().unwrap();
 				let socket = self::udp::Socket::new(handle);
-				if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
+				if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
 					-EINVAL
 				} else {
 					fd
@@ -40,14 +40,14 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 				let handle = nic.create_tcp_handle().unwrap();
 				if domain == AF_INET {
 					let socket = self::tcp::Socket::<self::tcp::IPv4>::new(handle);
-					if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
+					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
 						-EINVAL
 					} else {
 						fd
 					}
 				} else {
 					let socket = self::tcp::Socket::<self::tcp::IPv6>::new(handle);
-					if OBJECT_MAP.lock().try_insert(fd, Arc::new(socket)).is_err() {
+					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
 						-EINVAL
 					} else {
 						fd

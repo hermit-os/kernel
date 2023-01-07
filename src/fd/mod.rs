@@ -5,7 +5,6 @@ use core::sync::atomic::{AtomicI32, Ordering};
 use ahash::RandomState;
 use dyn_clone::DynClone;
 use hashbrown::HashMap;
-use hermit_sync::InterruptTicketMutex;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
@@ -14,6 +13,7 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
+use crate::synch::rwlock::RWLock;
 use crate::syscalls::fs::{self, FilePerms};
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 use crate::syscalls::net::*;
@@ -36,13 +36,12 @@ const STDERR_FILENO: FileDescriptor = 2;
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: InterruptTicketMutex<
-	HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>,
-> = InterruptTicketMutex::new(HashMap::<
-	FileDescriptor,
-	Arc<dyn ObjectInterface>,
-	RandomState,
->::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static OBJECT_MAP: RWLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
+	RWLock::new(HashMap::<
+		FileDescriptor,
+		Arc<dyn ObjectInterface>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
@@ -299,7 +298,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 			let file = UhyveFile::new(sysopen.ret);
 
-			if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
+			if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
 				Err(-EINVAL)
 			} else {
 				Ok(fd as FileDescriptor)
@@ -321,7 +320,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			if let Ok(filesystem_fd) = fs.open(name, open_flags_to_perm(flags, mode as u32)) {
 				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 				let file = GenericFile::new(filesystem_fd);
-				if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
+				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
 					Err(-EINVAL)
 				} else {
 					Ok(fd as FileDescriptor)
@@ -338,7 +337,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
-	Ok((*(OBJECT_MAP.lock().get(&fd).ok_or(-EINVAL)?)).clone())
+	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(-EINVAL)?)).clone())
 }
 
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
@@ -346,7 +345,7 @@ pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
 ) -> Option<Arc<dyn ObjectInterface>> {
-	OBJECT_MAP.lock().insert(fd, obj)
+	OBJECT_MAP.write().insert(fd, obj)
 }
 
 // The dup system call allocates a new file descriptor that refers
@@ -354,7 +353,7 @@ pub(crate) fn insert_object(
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
 pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
-	let mut guard = OBJECT_MAP.lock();
+	let mut guard = OBJECT_MAP.write();
 	let obj = (*(guard.get(&fd).ok_or(-EINVAL)?)).clone();
 
 	let new_fd = || -> i32 {
@@ -378,13 +377,13 @@ pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterfac
 	if fd <= 2 {
 		Err(-EINVAL)
 	} else {
-		let obj = OBJECT_MAP.lock().remove(&fd).ok_or(-EINVAL)?;
+		let obj = OBJECT_MAP.write().remove(&fd).ok_or(-EINVAL)?;
 		Ok(obj)
 	}
 }
 
 pub(crate) fn init() {
-	let mut guard = OBJECT_MAP.lock();
+	let mut guard = OBJECT_MAP.write();
 	if env::is_uhyve() {
 		guard
 			.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))

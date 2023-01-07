@@ -51,15 +51,10 @@ impl<T> Socket<T> {
 	fn with<R>(&self, f: impl FnOnce(&mut TcpSocket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let res = {
-			let s = nic.iface.get_socket::<TcpSocket<'_>>(self.handle);
-			f(s)
-		};
-		let t = now();
-		if nic.poll_delay(t).map(|d| d.total_millis()).unwrap_or(0) == 0 {
-			nic.poll_common(t);
-		}
-		res
+		let result = f(nic.iface.get_socket::<TcpSocket<'_>>(self.handle));
+		nic.poll_common(now());
+
+		result
 	}
 
 	fn with_context<R>(
@@ -68,44 +63,105 @@ impl<T> Socket<T> {
 	) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let res = {
-			let (s, cx) = nic
-				.iface
-				.get_socket_and_context::<TcpSocket<'_>>(self.handle);
-			f(s, cx)
-		};
-		let t = now();
-		if nic.poll_delay(t).map(|d| d.total_millis()).unwrap_or(0) == 0 {
-			nic.poll_common(t);
-		}
-		res
+		let (s, cx) = nic
+			.iface
+			.get_socket_and_context::<TcpSocket<'_>>(self.handle);
+		let result = f(s, cx);
+		nic.poll_common(now());
+
+		result
 	}
 
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if socket.can_recv() {
-					let n = socket.recv_slice(buffer).map_err(|_| -crate::errno::EIO)?;
-					if n > 0 || buffer.is_empty() {
-						return Poll::Ready(Ok(n.try_into().unwrap()));
-					}
-				}
+		let mut pos: usize = 0;
 
-				match socket.state() {
-					TcpState::FinWait1
-					| TcpState::FinWait2
-					| TcpState::Closed
-					| TcpState::Closing
-					| TcpState::CloseWait
-					| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-					_ => {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
+		while pos < buffer.len() {
+			let n = future::poll_fn(|cx| {
+				self.with(|socket| {
+					if socket.can_recv() {
+						return Poll::Ready(
+							socket
+								.recv_slice(&mut buffer[pos..])
+								.map_err(|_| -crate::errno::EIO),
+						);
 					}
-				}
+
+					if pos > 0 {
+						// we already send some data => return 0 as signal to stop the
+						// async read
+						return Poll::Ready(Ok(0));
+					}
+
+					match socket.state() {
+						TcpState::FinWait1
+						| TcpState::FinWait2
+						| TcpState::Closed
+						| TcpState::Closing
+						| TcpState::CloseWait
+						| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+						_ => {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
+						}
+					}
+				})
 			})
-		})
-		.await
+			.await?;
+
+			if n == 0 {
+				break;
+			}
+
+			pos += n;
+		}
+
+		Ok(pos.try_into().unwrap())
+	}
+
+	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
+		let mut pos: usize = 0;
+
+		while pos < buffer.len() {
+			let n = future::poll_fn(|cx| {
+				self.with(|socket| {
+					if socket.can_send() {
+						return Poll::Ready(
+							socket
+								.send_slice(&buffer[pos..])
+								.map_err(|_| -crate::errno::EIO),
+						);
+					}
+
+					if pos > 0 {
+						// we already send some data => return 0 as signal to stop the
+						// async write
+						return Poll::Ready(Ok(0));
+					}
+
+					match socket.state() {
+						TcpState::FinWait1
+						| TcpState::FinWait2
+						| TcpState::Closed
+						| TcpState::Closing
+						| TcpState::CloseWait
+						| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+						_ => {
+							socket.register_send_waker(cx.waker());
+							Poll::Pending
+						}
+					}
+				})
+			})
+			.await?;
+
+			if n == 0 {
+				break;
+			}
+
+			pos += n;
+		}
+
+		Ok(pos.try_into().unwrap())
 	}
 
 	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, i32> {
@@ -127,53 +183,6 @@ impl<T> Socket<T> {
 			})
 		})
 		.await
-	}
-
-	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
-		let len = buffer.len();
-		let mut pos: usize = 0;
-
-		while pos < len {
-			let n = future::poll_fn(|cx| {
-				self.with(|socket| match socket.state() {
-					TcpState::FinWait1
-					| TcpState::FinWait2
-					| TcpState::Closed
-					| TcpState::Closing
-					| TcpState::CloseWait
-					| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-					_ => {
-						if !socket.may_send() {
-							return Poll::Ready(Err(-crate::errno::EIO));
-						} else if socket.can_send() {
-							return Poll::Ready(
-								socket
-									.send_slice(&buffer[pos..])
-									.map_err(|_| -crate::errno::EIO),
-							);
-						}
-
-						if pos > 0 {
-							// we already send some data => return 0 as signal to stop the
-							// async write
-							return Poll::Ready(Ok(0));
-						}
-
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
-					}
-				})
-			})
-			.await?;
-
-			if n == 0 {
-				return Ok(pos.try_into().unwrap());
-			}
-
-			pos += n;
-		}
-
-		Ok(pos.try_into().unwrap())
 	}
 
 	async fn async_close(&self) -> Result<(), i32> {
@@ -288,6 +297,10 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 	}
 
 	fn read(&self, buf: *mut u8, len: usize) -> isize {
+		if len == 0 {
+			return 0;
+		}
+
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
@@ -304,6 +317,10 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
+		if len == 0 {
+			return 0;
+		}
+
 		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
@@ -344,7 +361,14 @@ impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> Ob
 			&& optlen == size_of::<i32>().try_into().unwrap()
 		{
 			let value = unsafe { *(optval as *const i32) };
-			self.with(|socket| socket.set_nagle_enabled(value != 0));
+			self.with(|socket| {
+				socket.set_nagle_enabled(value != 0);
+				if value == 0 {
+					socket.set_ack_delay(None);
+				} else {
+					socket.set_ack_delay(Some(Duration::from_millis(10)));
+				}
+			});
 			0
 		} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
 			// smoltcp is always able to reuse the addr
