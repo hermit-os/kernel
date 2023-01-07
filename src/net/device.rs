@@ -113,7 +113,7 @@ impl NetworkInterface<HermitNet> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState {
-		let mtu = match unsafe { SYS.get_mtu() } {
+		let mtu = match SYS.get_mtu() {
 			Ok(mtu) => mtu,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
@@ -125,7 +125,7 @@ impl NetworkInterface<HermitNet> {
 			trace!("{}", printer);
 		});
 
-		let mac: [u8; 6] = match unsafe { SYS.get_mac_address() } {
+		let mac: [u8; 6] = match SYS.get_mac_address() {
 			Ok(mac) => mac,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
