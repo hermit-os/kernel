@@ -573,7 +573,7 @@ impl NetworkInterface for VirtioNetDriver {
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()> {
+	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
 		match self.recv_vqs.get_next() {
 			Some(transfer) => {
 				let transfer = match RxQueues::post_processing(transfer) {
@@ -595,9 +595,14 @@ impl NetworkInterface for VirtioNetDriver {
 					// so this is fine.
 					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
 					let ref_data: &'static mut [u8] = unsafe { &mut *(recv_ref) };
-					let raw_transfer = Box::into_raw(Box::new(transfer));
+					let vec_data = ref_data.to_vec();
+					transfer
+						.reuse()
+						.unwrap()
+						.provide()
+						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok((ref_data, raw_transfer as usize))
+					Ok(vec_data)
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
 					let payload_ptr =
@@ -609,9 +614,14 @@ impl NetworkInterface for VirtioNetDriver {
 							packet.len() - mem::size_of::<VirtioNetHdr>(),
 						)
 					};
-					let raw_transfer = Box::into_raw(Box::new(transfer));
+					let vec_data = ref_data.to_vec();
+					transfer
+						.reuse()
+						.unwrap()
+						.provide()
+						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok((ref_data, raw_transfer as usize))
+					Ok(vec_data)
 				} else {
 					error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
 					transfer
@@ -626,20 +636,6 @@ impl NetworkInterface for VirtioNetDriver {
 				}
 			}
 			None => Err(()),
-		}
-	}
-
-	// Tells driver, that buffer is consumed and can be deallocated
-	fn rx_buffer_consumed(&mut self, trf_handle: usize) {
-		unsafe {
-			let transfer = *Box::from_raw(trf_handle as *mut Transfer);
-
-			// Reuse transfer directly
-			transfer
-				.reuse()
-				.unwrap()
-				.provide()
-				.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 		}
 	}
 

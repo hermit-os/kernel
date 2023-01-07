@@ -6,6 +6,8 @@ pub mod virtio_net;
 #[cfg(feature = "pci")]
 pub mod virtio_pci;
 
+use alloc::vec::Vec;
+
 use crate::arch::kernel::apic;
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
@@ -31,9 +33,7 @@ pub trait NetworkInterface {
 	/// Check if a packet is available
 	fn has_packet(&self) -> bool;
 	/// Get RX buffer with an received packet
-	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()>;
-	/// Tells driver, that buffer is consumed and can be deallocated
-	fn rx_buffer_consumed(&mut self, trf_handle: usize);
+	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()>;
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
@@ -63,13 +63,11 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 	};
 
 	if has_packet {
-		#[cfg(feature = "tcp")]
-		crate::net::executor::wakeup_async_tasks();
+		let core_scheduler = core_scheduler();
 
-		// handle incoming packets
 		#[cfg(feature = "tcp")]
-		crate::net::network_poll();
+		core_scheduler.wakeup_async_tasks();
 
-		core_scheduler().scheduler();
+		core_scheduler.scheduler();
 	}
 }
