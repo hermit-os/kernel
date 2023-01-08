@@ -357,9 +357,9 @@ pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
 	let obj = (*(guard.get(&fd).ok_or(-EINVAL)?)).clone();
 
 	let new_fd = || -> i32 {
-		for (i, key) in guard.keys().enumerate() {
-			if i < (*key).try_into().unwrap() {
-				return i.try_into().unwrap();
+		for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
+			if !guard.contains_key(&i) {
+				return i;
 			}
 		}
 		FD_COUNTER.fetch_add(1, Ordering::SeqCst)
