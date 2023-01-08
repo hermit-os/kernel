@@ -64,10 +64,7 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 
 	if has_packet {
 		let core_scheduler = core_scheduler();
-
-		#[cfg(feature = "tcp")]
 		core_scheduler.wakeup_async_tasks();
-
 		core_scheduler.scheduler();
 	}
 }

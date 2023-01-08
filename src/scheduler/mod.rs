@@ -4,6 +4,8 @@ use alloc::rc::Rc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
+#[cfg(feature = "tcp")]
+use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
@@ -327,16 +329,33 @@ impl PerCoreScheduler {
 	pub fn block_current_async_task(&mut self) {
 		without_interrupts(|| {
 			self.blocked_async_tasks
-				.push_back(self.get_current_task_handle())
+				.push_back(self.get_current_task_handle());
+			self.blocked_tasks.add(self.current_task.clone(), None)
 		});
 	}
 
 	#[cfg(feature = "tcp")]
 	#[inline]
 	pub fn wakeup_async_tasks(&mut self) {
+		let mut has_tasks = false;
+
 		without_interrupts(|| {
 			while let Some(task) = self.blocked_async_tasks.pop_front() {
-				self.custom_wakeup(task);
+				has_tasks = true;
+				self.custom_wakeup(task)
+			}
+
+			if !has_tasks {
+				if let Some(mut guard) = crate::net::NIC.try_lock() {
+					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
+						let time = crate::net::now();
+						nic.poll_common(time);
+						if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
+							let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
+							self.add_network_timer(wakeup_time);
+						}
+					}
+				}
 			}
 		});
 	}
