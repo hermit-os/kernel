@@ -287,7 +287,7 @@ impl NetworkInterface for RTL8139Driver {
 					let second = &self.rxbuffer[..length as usize - first.len()];
 					[first, second].concat()
 				} else {
-					(&self.rxbuffer[pos..][..length.into()]).to_vec()
+					(self.rxbuffer[pos..][..length.into()]).to_vec()
 				};
 
 				self.consume_current_buffer();

@@ -8,7 +8,7 @@
 //! > phase-fair reader-writer lock is proposed as an alternative that
 //! > significantly reduces worst-case blocking for readers.
 //!
-//! This implementation is derived from https://github.com/cmnord/pflock and
+//! This implementation is derived from <https://github.com/cmnord/pflock> and
 //! modified for RustyHermit.
 
 #![allow(dead_code)]
@@ -32,6 +32,7 @@ const PHID: usize = 0x1; // phase ID bit
 const ZERO_MASK: usize = !255usize;
 
 unsafe impl RawRwLock for RWSpinLock {
+    #[allow(clippy::declare_interior_mutable_const)]
 	const INIT: RWSpinLock = RWSpinLock {
 		rin: AtomicUsize::new(0),
 		rout: AtomicUsize::new(0),
