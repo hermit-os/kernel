@@ -98,10 +98,10 @@ pub(crate) fn init() {
 	if let NetworkState::Initialized(nic) = guard.deref_mut() {
 		let time = now();
 		nic.poll_common(time);
-		if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
-			let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-			crate::core_scheduler().add_network_timer(wakeup_time);
-		}
+		let wakeup_time = nic
+			.poll_delay(time)
+			.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+		crate::core_scheduler().add_network_timer(wakeup_time);
 
 		spawn(network_run()).detach();
 	}

@@ -320,7 +320,7 @@ impl PerCoreScheduler {
 
 	#[cfg(feature = "tcp")]
 	#[inline]
-	pub fn add_network_timer(&mut self, wakeup_time: u64) {
+	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
 		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time))
 	}
 
@@ -345,15 +345,15 @@ impl PerCoreScheduler {
 				self.custom_wakeup(task)
 			}
 
-			if !has_tasks {
-				if let Some(mut guard) = crate::net::NIC.try_lock() {
-					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-						let time = crate::net::now();
-						nic.poll_common(time);
-						if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
-							let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-							self.add_network_timer(wakeup_time);
-						}
+			if let Some(mut guard) = crate::net::NIC.try_lock() {
+				if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
+					let time = crate::net::now();
+					nic.poll_common(time);
+					if !has_tasks {
+						let wakeup_time = nic
+							.poll_delay(time)
+							.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+						self.add_network_timer(wakeup_time);
 					}
 				}
 			}

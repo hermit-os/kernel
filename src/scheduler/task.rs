@@ -575,15 +575,28 @@ impl BlockedTaskQueue {
 	}
 
 	#[cfg(feature = "tcp")]
-	pub fn add_network_timer(&mut self, wakeup_time: u64) {
-		self.network_wakeup_time = Some(wakeup_time);
-		let mut cursor = self.list.cursor_front_mut();
-		if let Some(node) = cursor.current() {
-			if node.wakeup_time.is_none() || wakeup_time < node.wakeup_time.unwrap() {
-				arch::set_oneshot_timer(Some(wakeup_time));
+	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
+		self.network_wakeup_time = wakeup_time;
+
+		match wakeup_time {
+			Some(wt) => {
+				let mut cursor = self.list.cursor_front_mut();
+				if let Some(node) = cursor.current() {
+					if node.wakeup_time.is_none() || wt < node.wakeup_time.unwrap() {
+						arch::set_oneshot_timer(wakeup_time);
+					}
+				} else {
+					arch::set_oneshot_timer(wakeup_time);
+				}
 			}
-		} else {
-			arch::set_oneshot_timer(Some(wakeup_time));
+			None => {
+				let mut cursor = self.list.cursor_front_mut();
+				if let Some(node) = cursor.current() {
+					arch::set_oneshot_timer(node.wakeup_time);
+				} else {
+					arch::set_oneshot_timer(None);
+				}
+			}
 		}
 	}
 
@@ -712,7 +725,8 @@ impl BlockedTaskQueue {
 
 		#[cfg(feature = "tcp")]
 		if let Some(wakeup_time) = self.network_wakeup_time {
-			if wakeup_time <= arch::processor::get_timer_ticks() {
+			if wakeup_time <= time {
+				crate::net::executor::reset_polling_mode();
 				self.network_wakeup_time = None;
 			}
 		}
@@ -724,9 +738,21 @@ impl BlockedTaskQueue {
 				nic.poll_common(time);
 				if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
 					let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-					self.network_wakeup_time = Some(wakeup_time);
-					if cursor.current().is_none() {
-						arch::set_oneshot_timer(self.network_wakeup_time);
+					match self.network_wakeup_time {
+						None => {
+							self.network_wakeup_time = Some(wakeup_time);
+							if cursor.current().is_none() {
+								arch::set_oneshot_timer(self.network_wakeup_time);
+							}
+						}
+						Some(wt) => {
+							if wakeup_time < wt {
+								self.network_wakeup_time = Some(wakeup_time);
+								if cursor.current().is_none() {
+									arch::set_oneshot_timer(self.network_wakeup_time);
+								}
+							}
+						}
 					}
 				} else {
 					self.network_wakeup_time = None;
