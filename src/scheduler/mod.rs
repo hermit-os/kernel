@@ -72,6 +72,7 @@ pub struct PerCoreScheduler {
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
 	/// Queue of blocked tasks, sorted by wakeup time.
+	#[cfg(feature = "tcp")]
 	blocked_async_tasks: VecDeque<TaskHandle>,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
@@ -282,6 +283,7 @@ impl PerCoreScheduler {
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
 		without_interrupts(|| {
+			#[cfg(feature = "tcp")]
 			self.wakeup_async_tasks();
 			self.blocked_tasks.handle_waiting_tasks()
 		});
@@ -320,6 +322,7 @@ impl PerCoreScheduler {
 		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time))
 	}
 
+	#[cfg(feature = "tcp")]
 	#[inline]
 	pub fn block_current_async_task(&mut self) {
 		without_interrupts(|| {
@@ -328,6 +331,7 @@ impl PerCoreScheduler {
 		});
 	}
 
+	#[cfg(feature = "tcp")]
 	#[inline]
 	pub fn wakeup_async_tasks(&mut self) {
 		without_interrupts(|| {
@@ -664,6 +668,7 @@ pub fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
+		#[cfg(feature = "tcp")]
 		blocked_async_tasks: VecDeque::new(),
 		#[cfg(feature = "smp")]
 		input: InterruptTicketMutex::new(SchedulerInput::new()),
