@@ -32,7 +32,7 @@ const PHID: usize = 0x1; // phase ID bit
 const ZERO_MASK: usize = !255usize;
 
 unsafe impl RawRwLock for RWSpinLock {
-    #[allow(clippy::declare_interior_mutable_const)]
+	#[allow(clippy::declare_interior_mutable_const)]
 	const INIT: RWSpinLock = RWSpinLock {
 		rin: AtomicUsize::new(0),
 		rout: AtomicUsize::new(0),
