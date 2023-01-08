@@ -73,49 +73,41 @@ impl<T> Socket<T> {
 	}
 
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
-		let mut pos: usize = 0;
+		future::poll_fn(|cx| {
+			self.with(|socket| {
+				if socket.can_recv() {
+					return Poll::Ready(
+						socket
+							.recv_slice(buffer)
+							.map(|x| isize::try_from(x).unwrap())
+							.map_err(|_| -crate::errno::EIO),
+					);
+				}
 
-		while pos < buffer.len() {
-			let n = future::poll_fn(|cx| {
-				self.with(|socket| {
-					if socket.can_recv() {
-						return Poll::Ready(
-							socket
-								.recv_slice(&mut buffer[pos..])
-								.map_err(|_| -crate::errno::EIO),
-						);
-					}
-
-					if pos > 0 {
-						// we already send some data => return 0 as signal to stop the
-						// async read
-						return Poll::Ready(Ok(0));
-					}
-
-					match socket.state() {
-						TcpState::FinWait1
-						| TcpState::FinWait2
-						| TcpState::Closed
-						| TcpState::Closing
-						| TcpState::CloseWait
-						| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-						_ => {
+				match socket.state() {
+					TcpState::FinWait1
+					| TcpState::FinWait2
+					| TcpState::Closed
+					| TcpState::Closing
+					| TcpState::CloseWait
+					| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+					_ => {
+						if socket.can_recv() {
+							Poll::Ready(
+								socket
+									.recv_slice(buffer)
+									.map(|x| isize::try_from(x).unwrap())
+									.map_err(|_| -crate::errno::EIO),
+							)
+						} else {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
 						}
 					}
-				})
+				}
 			})
-			.await?;
-
-			if n == 0 {
-				break;
-			}
-
-			pos += n;
-		}
-
-		Ok(pos.try_into().unwrap())
+		})
+		.await
 	}
 
 	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
