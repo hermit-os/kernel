@@ -499,6 +499,7 @@ pub struct VirtioNetDriver {
 
 	pub(super) num_vqs: u16,
 	pub(super) irq: u8,
+	pub(super) polling_mode_counter: u32,
 }
 
 impl NetworkInterface for VirtioNetDriver {
@@ -641,9 +642,15 @@ impl NetworkInterface for VirtioNetDriver {
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			self.disable_interrupts()
+			if self.polling_mode_counter == 0 {
+				self.disable_interrupts();
+			}
+			self.polling_mode_counter += 1;
 		} else {
-			self.enable_interrupts()
+			self.polling_mode_counter -= 1;
+			if self.polling_mode_counter == 0 {
+				self.enable_interrupts();
+			}
 		}
 	}
 
