@@ -142,7 +142,7 @@ where
 		counter += 1;
 		let now = crate::net::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
-		if counter > 100 && delay.unwrap_or(10_000_000) > 100_000 {
+		if counter > 200 && delay.unwrap_or(10_000_000) > 100_000 {
 			let unparked = task_notify.unparked.swap(false, Ordering::AcqRel);
 			if !unparked {
 				let core_scheduler = core_scheduler();
