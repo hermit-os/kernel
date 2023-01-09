@@ -749,7 +749,7 @@ impl BlockedTaskQueue {
 			cursor.remove_current();
 		}
 
-		#[cfg(not(feature = "tcp"))]
+		#[cfg(feature = "tcp")]
 		arch::set_oneshot_timer(cursor.current().map_or_else(
 			|| self.network_wakeup_time,
 			|node| match node.wakeup_time {
