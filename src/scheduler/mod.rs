@@ -345,11 +345,11 @@ impl PerCoreScheduler {
 				self.custom_wakeup(task)
 			}
 
-			if let Some(mut guard) = crate::net::NIC.try_lock() {
-				if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-					let time = crate::net::now();
-					nic.poll_common(time);
-					if !has_tasks {
+			if !has_tasks {
+				if let Some(mut guard) = crate::net::NIC.try_lock() {
+					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
+						let time = crate::net::now();
+						nic.poll_common(time);
 						let wakeup_time = nic
 							.poll_delay(time)
 							.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());

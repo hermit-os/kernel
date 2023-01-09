@@ -2,68 +2,18 @@ use alloc::sync::Arc;
 use alloc::task::Wake;
 use alloc::vec::Vec;
 use core::future::Future;
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll};
 
 use async_task::{Runnable, Task};
 use futures_lite::pin;
-use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use hermit_sync::InterruptTicketMutex;
 use smoltcp::time::{Duration, Instant};
 
 use crate::core_scheduler;
 use crate::scheduler::task::TaskHandle;
 
 static QUEUE: InterruptTicketMutex<Vec<Runnable>> = InterruptTicketMutex::new(Vec::new());
-static POLLING_MODE: AtomicBool = AtomicBool::new(false);
-static POLLING_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-#[inline]
-fn check_polling_mode() {
-	without_interrupts(|| {
-		let old = POLLING_MODE.swap(true, Ordering::Relaxed);
-		POLLING_COUNTER.fetch_add(1, Ordering::Relaxed);
-
-		let timer = crate::arch::processor::get_timer_ticks();
-		core_scheduler().add_network_timer(Some(timer + 2000));
-
-		if !old {
-			// Enter polling mode => no NIC interrupts
-			set_polling_mode(true);
-		}
-	});
-}
-
-#[inline]
-fn leave_polling_mode() {
-	without_interrupts(|| {
-		POLLING_MODE.store(false, Ordering::Relaxed);
-		set_polling_mode(false);
-
-		let wakeup_time = network_delay(crate::net::now())
-			.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-		core_scheduler().add_network_timer(wakeup_time);
-	});
-}
-
-#[inline]
-pub(crate) fn reset_polling_mode() {
-	without_interrupts(|| {
-		let old = POLLING_COUNTER.swap(0, Ordering::Relaxed);
-
-		if old == 0 {
-			info!("off");
-			POLLING_MODE.store(false, Ordering::Relaxed);
-			set_polling_mode(false);
-
-			let wakeup_time = network_delay(crate::net::now())
-				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-			core_scheduler().add_network_timer(wakeup_time);
-		} else {
-			core_scheduler()
-				.add_network_timer(Some(crate::arch::processor::get_timer_ticks() + 2000));
-		}
-	});
-}
 
 /// set driver in polling mode
 #[inline]
@@ -151,6 +101,9 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, 
 where
 	F: Future<Output = Result<T, i32>>,
 {
+	// Enter polling mode => no NIC interrupts
+	set_polling_mode(true);
+
 	let mut counter: u16 = 0;
 	let start = crate::net::now();
 	let task_notify = Arc::new(TaskNotify::new());
@@ -159,17 +112,29 @@ where
 	pin!(future);
 
 	loop {
-		check_polling_mode();
-
 		// run background tasks
 		run_executor_once();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
+			let wakeup_time = network_delay(crate::net::now())
+				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+			core_scheduler().add_network_timer(wakeup_time);
+
+			// allow interrupts => NIC thread is able to run
+			set_polling_mode(false);
+
 			return t;
 		}
 
 		if let Some(duration) = timeout {
 			if crate::net::now() >= start + duration {
+				let wakeup_time = network_delay(crate::net::now())
+					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+				core_scheduler().add_network_timer(wakeup_time);
+
+				// allow interrupts => NIC thread is able to run
+				set_polling_mode(false);
+
 				return Err(-crate::errno::ETIME);
 			}
 		}
@@ -184,10 +149,15 @@ where
 				core_scheduler.add_network_timer(
 					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
 				);
+				let wakeup_time = delay.map(|d| crate::arch::processor::get_timer_ticks() + d);
+				core_scheduler.add_network_timer(wakeup_time);
 				core_scheduler.block_current_async_task();
-				leave_polling_mode();
+				// allow interrupts => NIC thread is able to run
+				set_polling_mode(false);
 				// switch to another task
 				core_scheduler.reschedule();
+				// Polling mode => no NIC interrupts => NIC thread should not run
+				set_polling_mode(true);
 				counter = 0;
 			}
 		}

@@ -635,6 +635,8 @@ impl BlockedTaskQueue {
 						Some(time) => {
 							if time > wt {
 								arch::set_oneshot_timer(wakeup_time);
+							} else {
+								arch::set_oneshot_timer(self.network_wakeup_time);
 							}
 						}
 						_ => arch::set_oneshot_timer(wakeup_time),
@@ -680,30 +682,31 @@ impl BlockedTaskQueue {
 				// next task's wakeup time (if any).
 				#[cfg(feature = "tcp")]
 				if first_task {
-					if let Some(next_node) = cursor.current() {
-						if let Some(network_wakeup_time) = self.network_wakeup_time {
-							if network_wakeup_time
-								<= next_node.wakeup_time.unwrap_or(network_wakeup_time)
-							{
-								arch::set_oneshot_timer(self.network_wakeup_time);
-							} else {
-								arch::set_oneshot_timer(next_node.wakeup_time);
+					arch::set_oneshot_timer(cursor.current().map_or_else(
+						|| self.network_wakeup_time,
+						|node| match node.wakeup_time {
+							Some(wt) => {
+								if let Some(timer) = self.network_wakeup_time {
+									if wt < timer {
+										Some(wt)
+									} else {
+										Some(timer)
+									}
+								} else {
+									Some(wt)
+								}
 							}
-						} else {
-							arch::set_oneshot_timer(next_node.wakeup_time);
-						}
-					} else {
-						arch::set_oneshot_timer(self.network_wakeup_time);
-					}
+							None => self.network_wakeup_time,
+						},
+					));
 				}
 				#[cfg(not(feature = "tcp"))]
 				if first_task {
-					if let Some(next_node) = cursor.current() {
-						arch::set_oneshot_timer(next_node.wakeup_time);
-					} else {
-						// if no task is available, we have to disable the timer
-						arch::set_oneshot_timer(None);
-					}
+					arch::set_oneshot_timer(
+						cursor
+							.current()
+							.map_or_else(|| None, |node| node.wakeup_time),
+					);
 				}
 
 				break;
@@ -724,39 +727,11 @@ impl BlockedTaskQueue {
 		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(feature = "tcp")]
-		if let Some(wakeup_time) = self.network_wakeup_time {
-			if wakeup_time <= time {
-				crate::net::executor::reset_polling_mode();
-				self.network_wakeup_time = None;
-			}
-		}
-
-		#[cfg(feature = "tcp")]
 		if let Some(mut guard) = crate::net::NIC.try_lock() {
 			if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-				let time = crate::net::now();
-				nic.poll_common(time);
-				if let Some(delay) = nic.poll_delay(time).map(|d| d.total_micros()) {
-					let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-					match self.network_wakeup_time {
-						None => {
-							self.network_wakeup_time = Some(wakeup_time);
-							if cursor.current().is_none() {
-								arch::set_oneshot_timer(self.network_wakeup_time);
-							}
-						}
-						Some(wt) => {
-							if wakeup_time < wt {
-								self.network_wakeup_time = Some(wakeup_time);
-								if cursor.current().is_none() {
-									arch::set_oneshot_timer(self.network_wakeup_time);
-								}
-							}
-						}
-					}
-				} else {
-					self.network_wakeup_time = None;
-				}
+				let now = crate::net::now();
+				nic.poll_common(now);
+				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
 			}
 		}
 
@@ -766,21 +741,6 @@ impl BlockedTaskQueue {
 			// that hasn't elapsed yet or waits indefinitely.
 			let node_wakeup_time = node.wakeup_time;
 			if node_wakeup_time.is_none() || time < node_wakeup_time.unwrap() {
-				// Adjust the One-Shot Timer to fire at this task's wakeup time (if any)
-				// and exit the loop.
-				#[cfg(feature = "tcp")]
-				if let Some(network_wakeup_time) = self.network_wakeup_time {
-					if network_wakeup_time <= node_wakeup_time.unwrap_or(network_wakeup_time) {
-						arch::set_oneshot_timer(self.network_wakeup_time);
-					} else {
-						arch::set_oneshot_timer(node_wakeup_time);
-					}
-				} else {
-					arch::set_oneshot_timer(node_wakeup_time);
-				}
-				#[cfg(not(feature = "tcp"))]
-				arch::set_oneshot_timer(node_wakeup_time);
-
 				break;
 			}
 
@@ -788,5 +748,30 @@ impl BlockedTaskQueue {
 			Self::wakeup_task(node.task.clone());
 			cursor.remove_current();
 		}
+
+		#[cfg(not(feature = "tcp"))]
+		arch::set_oneshot_timer(cursor.current().map_or_else(
+			|| self.network_wakeup_time,
+			|node| match node.wakeup_time {
+				Some(wt) => {
+					if let Some(timer) = self.network_wakeup_time {
+						if wt < timer {
+							Some(wt)
+						} else {
+							Some(timer)
+						}
+					} else {
+						Some(wt)
+					}
+				}
+				None => self.network_wakeup_time,
+			},
+		));
+		#[cfg(not(feature = "tcp"))]
+		arch::set_oneshot_timer(
+			cursor
+				.current()
+				.map_or_else(|| None, |node| node.wakeup_time),
+		);
 	}
 }
