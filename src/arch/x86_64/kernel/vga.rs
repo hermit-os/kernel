@@ -1,134 +1,202 @@
-use x86::io::*;
+mod text_buffer {
+	#[derive(Clone, Copy, Debug)]
+	#[repr(C)]
+	pub struct Char {
+		character: u8,
+		attribute: u8,
+	}
 
-use crate::arch::x86_64::mm::paging::{BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt};
-use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
+	impl Char {
+		pub const fn new(byte: u8) -> Self {
+			let character = if byte.is_ascii_graphic() || byte == b' ' {
+				byte
+			} else {
+				b'?'
+			};
+			let light_grey = 0x07;
+			Self {
+				character,
+				attribute: light_grey,
+			}
+		}
 
-const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
-const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
-const CURSOR_START_REGISTER: u8 = 0x0A;
-const CURSOR_DISABLE: u8 = 0x20;
+		pub const fn empty() -> Self {
+			let black = 0x00;
+			Self {
+				character: b' ',
+				attribute: black,
+			}
+		}
+	}
 
-const ATTRIBUTE_BLACK: u8 = 0x00;
-const ATTRIBUTE_LIGHTGREY: u8 = 0x07;
-const COLS: usize = 80;
-const ROWS: usize = 25;
-const VGA_BUFFER_ADDRESS: u64 = 0xB8000;
+	const WIDTH: usize = 80;
+	const HEIGHT: usize = 25;
+	const EMPTY_CHAR: Char = Char::empty();
 
-static mut VGA_SCREEN: VgaScreen = VgaScreen::new();
-
-#[derive(Clone, Copy)]
-#[repr(C, packed)]
-struct VgaCharacter {
-	character: u8,
-	attribute: u8,
+	pub type TextBuffer = [[Char; WIDTH]; HEIGHT];
+	pub const EMPTY_VGA_BUFFER: TextBuffer = [[EMPTY_CHAR; WIDTH]; HEIGHT];
 }
 
-impl VgaCharacter {
-	const fn new(character: u8, attribute: u8) -> Self {
-		Self {
-			character,
-			attribute,
+mod front_buffer {
+	use core::{fmt, ptr};
+
+	use hermit_sync::CallOnce;
+	use vcell::VolatileCell;
+	use x86_64::instructions::port::Port;
+
+	use super::text_buffer::TextBuffer;
+	use crate::arch::x86_64::mm::paging::{
+		BasePageSize, PageTableEntryFlags, PageTableEntryFlagsExt,
+	};
+	use crate::arch::x86_64::mm::{paging, PhysAddr, VirtAddr};
+
+	pub struct FrontBuffer {
+		buffer: &'static mut VolatileCell<TextBuffer>,
+	}
+
+	impl fmt::Debug for FrontBuffer {
+		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+			f.debug_struct("FrontBuffer").finish_non_exhaustive()
+		}
+	}
+
+	impl FrontBuffer {
+		pub fn take() -> Option<Self> {
+			static TAKEN: CallOnce = CallOnce::new();
+			TAKEN.call_once().ok()?;
+
+			const ADDR: usize = 0xB8000;
+
+			// Identity map the VGA buffer. We only need the first page.
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(
+				VirtAddr(ADDR.try_into().unwrap()),
+				PhysAddr(ADDR.try_into().unwrap()),
+				1,
+				flags,
+			);
+
+			// Disable the cursor.
+			unsafe {
+				const CRT_CONTROLLER_ADDRESS_PORT: u16 = 0x3D4;
+				const CRT_CONTROLLER_DATA_PORT: u16 = 0x3D5;
+				const CURSOR_START_REGISTER: u8 = 0x0A;
+				const CURSOR_DISABLE: u8 = 0x20;
+
+				Port::new(CRT_CONTROLLER_ADDRESS_PORT).write(CURSOR_START_REGISTER);
+				Port::new(CRT_CONTROLLER_DATA_PORT).write(CURSOR_DISABLE);
+			}
+
+			let buffer =
+				unsafe { &mut *ptr::from_exposed_addr_mut::<VolatileCell<TextBuffer>>(ADDR) };
+
+			Some(Self { buffer })
+		}
+
+		pub fn set(&mut self, buffer: TextBuffer) {
+			self.buffer.set(buffer);
+		}
+
+		pub fn get(&mut self) -> TextBuffer {
+			self.buffer.get()
 		}
 	}
 }
 
+mod back_buffer {
+	use super::text_buffer::{Char, TextBuffer};
+
+	#[derive(Debug)]
+	pub struct BackBuffer<'a> {
+		buffer: &'a mut TextBuffer,
+		column: usize,
+	}
+
+	impl<'a> From<&'a mut TextBuffer> for BackBuffer<'a> {
+		fn from(buffer: &'a mut TextBuffer) -> Self {
+			Self { buffer, column: 0 }
+		}
+	}
+
+	impl<'a> BackBuffer<'a> {
+		pub fn get(&self) -> TextBuffer {
+			*self.buffer
+		}
+
+		fn newline(&mut self) {
+			let len = self.buffer.len();
+			self.buffer.copy_within(1..len, 0);
+			self.buffer.last_mut().unwrap().fill(Char::empty());
+			self.column = 0;
+		}
+
+		fn write_byte(&mut self, byte: u8) {
+			if byte == b'\n' {
+				self.newline();
+			} else {
+				let line = self.buffer.last_mut().unwrap();
+
+				line[self.column] = Char::new(byte);
+				self.column += 1;
+
+				if self.column == line.len() {
+					self.newline();
+				}
+			}
+		}
+
+		pub fn write(&mut self, buf: &[u8]) {
+			for &byte in buf {
+				self.write_byte(byte);
+			}
+		}
+	}
+}
+
+use hermit_sync::{ExclusiveCell, InterruptOnceCell, InterruptSpinMutex};
+
+use self::back_buffer::BackBuffer;
+use self::front_buffer::FrontBuffer;
+use self::text_buffer::EMPTY_VGA_BUFFER;
+use crate::arch::x86_64::kernel::vga::text_buffer::TextBuffer;
+
+#[derive(Debug)]
 struct VgaScreen {
-	buffer: *mut [[VgaCharacter; COLS]; ROWS],
-	current_col: usize,
-	current_row: usize,
-	is_initialized: bool,
+	front_buffer: FrontBuffer,
+	back_buffer: BackBuffer<'static>,
 }
 
 impl VgaScreen {
-	const fn new() -> Self {
-		Self {
-			buffer: VGA_BUFFER_ADDRESS as *mut _,
-			current_col: 0,
-			current_row: 0,
-			is_initialized: false,
-		}
+	fn take() -> Option<Self> {
+		let mut front_buffer = FrontBuffer::take()?;
+
+		static BACK_BUFFER: ExclusiveCell<TextBuffer> = ExclusiveCell::new(EMPTY_VGA_BUFFER);
+		let back_buffer = BACK_BUFFER.take()?;
+		*back_buffer = front_buffer.get();
+
+		Some(Self {
+			front_buffer,
+			back_buffer: BackBuffer::from(back_buffer),
+		})
 	}
 
-	fn init(&mut self) {
-		// Identity map the VGA buffer. We only need the first page.
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(
-			VirtAddr(VGA_BUFFER_ADDRESS),
-			PhysAddr(VGA_BUFFER_ADDRESS),
-			1,
-			flags,
-		);
-
-		// Disable the cursor.
-		unsafe {
-			outb(CRT_CONTROLLER_ADDRESS_PORT, CURSOR_START_REGISTER);
-			outb(CRT_CONTROLLER_DATA_PORT, CURSOR_DISABLE);
-		}
-
-		// Clear the screen.
-		for r in 0..ROWS {
-			self.clear_row(r);
-		}
-
-		// Initialization done!
-		self.is_initialized = true;
-	}
-
-	#[inline]
-	fn clear_row(&mut self, row: usize) {
-		// Overwrite this row by a bogus character in black.
-		for c in 0..COLS {
-			unsafe {
-				(*self.buffer)[row][c] = VgaCharacter::new(0, ATTRIBUTE_BLACK);
-			}
-		}
-	}
-
-	fn write_byte(&mut self, byte: u8) {
-		if !self.is_initialized {
-			return;
-		}
-
-		// Move to the next row if we have a newline character or hit the end of a column.
-		if byte == b'\n' || self.current_col == COLS {
-			self.current_col = 0;
-			self.current_row += 1;
-		}
-
-		// Check if we have hit the end of the screen rows.
-		if self.current_row == ROWS {
-			// Shift all rows up by one line, removing the oldest visible screen row.
-			for r in 1..ROWS {
-				for c in 0..COLS {
-					unsafe {
-						(*self.buffer)[r - 1][c] = (*self.buffer)[r][c];
-					}
-				}
-			}
-
-			// Clear the last screen row and write to it next time.
-			self.clear_row(ROWS - 1);
-			self.current_row = ROWS - 1;
-		}
-
-		if byte != b'\n' {
-			// Put our character into the VGA screen buffer and advance the column counter.
-			unsafe {
-				(*self.buffer)[self.current_row][self.current_col] =
-					VgaCharacter::new(byte, ATTRIBUTE_LIGHTGREY);
-			}
-			self.current_col += 1;
-		}
+	fn print(&mut self, buf: &[u8]) {
+		self.back_buffer.write(buf);
+		self.front_buffer.set(self.back_buffer.get());
 	}
 }
+
+static VGA_SCREEN: InterruptOnceCell<InterruptSpinMutex<VgaScreen>> = InterruptOnceCell::new();
 
 pub fn init() {
-	unsafe { VGA_SCREEN.init() };
+	VGA_SCREEN
+		.set(InterruptSpinMutex::new(VgaScreen::take().unwrap()))
+		.unwrap();
 }
 
-pub fn write_byte(byte: u8) {
-	unsafe {
-		VGA_SCREEN.write_byte(byte);
+pub fn print(buf: &[u8]) {
+	if let Some(vga_screen) = VGA_SCREEN.get() {
+		vga_screen.lock().print(buf);
 	}
 }
