@@ -55,6 +55,7 @@ pci = ["num-derive"]
 acpi = []
 smp = ["include-transformed"]
 fsgsbase = []
+trace = []
 tcp = [
     "async-task",
     "futures-lite",
