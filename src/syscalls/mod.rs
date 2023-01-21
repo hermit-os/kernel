@@ -5,9 +5,9 @@ use hermit_sync::InterruptTicketMutex;
 use hermit_sync::Lazy;
 
 pub use self::condvar::*;
+pub use self::entropy::*;
 pub use self::futex::*;
 pub use self::processor::*;
-pub use self::random::*;
 pub use self::recmutex::*;
 pub use self::semaphore::*;
 pub use self::spinlock::*;
@@ -21,6 +21,7 @@ use crate::syscalls::interfaces::SyscallInterface;
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 mod condvar;
+mod entropy;
 pub(crate) mod fs;
 mod futex;
 mod interfaces;
@@ -29,7 +30,6 @@ mod lwip;
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 mod net;
 mod processor;
-mod random;
 mod recmutex;
 mod semaphore;
 mod spinlock;
@@ -68,7 +68,7 @@ pub(crate) fn init() {
 	// Perform interface-specific initialization steps.
 	SYS.init();
 
-	random_init();
+	init_entropy();
 	#[cfg(feature = "newlib")]
 	sbrk_init();
 }

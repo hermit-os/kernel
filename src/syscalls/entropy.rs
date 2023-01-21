@@ -1,6 +1,11 @@
+use core::mem::size_of;
+use core::slice;
+
 use hermit_sync::TicketMutex;
 
 use crate::arch;
+use crate::entropy::{self, Flags};
+use crate::errno::EINVAL;
 
 static PARK_MILLER_LEHMER_SEED: TicketMutex<u32> = TicketMutex::new(0);
 const RAND_MAX: u64 = 2_147_483_647;
@@ -12,24 +17,30 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 	random
 }
 
-unsafe extern "C" fn __sys_rand32(value: *mut u32) -> i32 {
-	let rand = try_sys!(arch::processor::generate_random_number32().ok_or("sys_rand32 failed"));
-	unsafe {
-		value.write(rand);
+unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> i32 {
+	let Some(flags) = Flags::from_bits(flags) else { return -EINVAL };
+
+	if len > isize::MAX as usize {
+		return -EINVAL;
 	}
-	0
+
+	let buf = unsafe {
+		buf.write_bytes(0, len);
+		slice::from_raw_parts_mut(buf, len)
+	};
+
+	entropy::read(buf, flags)
 }
 
-unsafe extern "C" fn __sys_rand64(value: *mut u64) -> i32 {
-	let rand = try_sys!(arch::processor::generate_random_number64().ok_or("sys_rand64 failed"));
-	unsafe {
-		value.write(rand);
-	}
-	0
-}
-
-extern "C" fn __sys_rand() -> u32 {
-	generate_park_miller_lehmer_random_number()
+/// Fill `len` bytes in `buf` with cryptographically secure random data.
+///
+/// Returns
+/// * `-EINVAL` if `flags` contains unknown flags.
+/// * `-EINVAL` if `len` is larger than `isize::MAX`.
+/// * `-ENOSYS` if the system does not support random data generation.
+#[no_mangle]
+pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> i32 {
+	kernel_function!(__sys_read_entropy(buf, len, flags))
 }
 
 /// Create a cryptographicly secure 32bit random number with the support of
@@ -38,7 +49,7 @@ extern "C" fn __sys_rand() -> u32 {
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
-	kernel_function!(__sys_rand32(value))
+	unsafe { sys_read_entropy(value.cast(), size_of::<u32>(), 0) }
 }
 
 /// Create a cryptographicly secure 64bit random number with the support of
@@ -47,7 +58,11 @@ pub unsafe extern "C" fn sys_secure_rand32(value: *mut u32) -> i32 {
 #[cfg(not(feature = "newlib"))]
 #[no_mangle]
 pub unsafe extern "C" fn sys_secure_rand64(value: *mut u64) -> i32 {
-	kernel_function!(__sys_rand64(value))
+	unsafe { sys_read_entropy(value.cast(), size_of::<u64>(), 0) }
+}
+
+extern "C" fn __sys_rand() -> u32 {
+	generate_park_miller_lehmer_random_number()
 }
 
 /// The function computes a sequence of pseudo-random integers
@@ -68,7 +83,7 @@ pub extern "C" fn sys_srand(seed: u32) {
 	kernel_function!(__sys_srand(seed))
 }
 
-pub(crate) fn random_init() {
+pub(crate) fn init_entropy() {
 	let seed: u32 = arch::processor::get_timestamp() as u32;
 
 	*PARK_MILLER_LEHMER_SEED.lock() = seed;

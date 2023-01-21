@@ -75,6 +75,7 @@ mod arch;
 mod config;
 mod console;
 mod drivers;
+mod entropy;
 mod env;
 pub mod errno;
 pub(crate) mod fd;
