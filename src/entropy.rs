@@ -18,8 +18,9 @@ static POOL: InterruptTicketMutex<Option<ChaCha20Rng>> = InterruptTicketMutex::n
 
 /// Fills `buf` with random data, respecting the options in `flags`.
 ///
-/// Returns `-ENOSYS` if the system does not support random data generation.
-pub fn read(buf: &mut [u8], _flags: Flags) -> i32 {
+/// Returns the number of bytes written or `-ENOSYS` if the system does not support
+/// random data generation.
+pub fn read(buf: &mut [u8], _flags: Flags) -> isize {
 	let pool = &mut *POOL.lock();
 	let pool = match pool {
 		Some(pool) => pool,
@@ -27,11 +28,13 @@ pub fn read(buf: &mut [u8], _flags: Flags) -> i32 {
 			if let Some(seed) = seed_entropy() {
 				pool.insert(ChaCha20Rng::from_seed(seed))
 			} else {
-				return -ENOSYS;
+				return -ENOSYS as isize;
 			}
 		}
 	};
 
 	pool.fill_bytes(buf);
-	0
+	// Slice lengths are always <= isize::MAX so this return value cannot conflict
+	// with error numbers.
+	buf.len() as isize
 }
