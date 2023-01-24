@@ -622,7 +622,7 @@ impl BlockedTaskQueue {
 		if let Some(wt) = wakeup_time {
 			let first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
-			let mut _guard = scopeguard::guard(first_task, |first_task| {
+			let _guard = scopeguard::guard(first_task, |first_task| {
 				// If the task is the new first task in the list, update the one-shot timer
 				// to fire when this task shall be woken up.
 				#[cfg(not(feature = "tcp"))]
