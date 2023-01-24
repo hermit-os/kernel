@@ -245,7 +245,6 @@ dependencies = [
  "pci-ids",
  "qemu-exit",
  "rand_chacha",
- "scopeguard",
  "shell-words",
  "smoltcp",
  "time",

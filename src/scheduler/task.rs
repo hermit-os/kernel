@@ -621,7 +621,7 @@ impl BlockedTaskQueue {
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
 			let mut cursor = self.list.cursor_front_mut();
-			let _guard = scopeguard::guard((), |_| {
+			let set_oneshot_timer = || {
 				#[cfg(not(feature = "tcp"))]
 				arch::set_oneshot_timer(wakeup_time);
 				#[cfg(feature = "tcp")]
@@ -635,18 +635,21 @@ impl BlockedTaskQueue {
 					}
 					_ => arch::set_oneshot_timer(wakeup_time),
 				}
-			});
+			};
 
 			while let Some(node) = cursor.current() {
 				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
 					cursor.insert_before(new_node);
 
+					set_oneshot_timer();
 					return;
 				}
 
 				cursor.move_next();
 			}
+
+			set_oneshot_timer();
 		}
 
 		self.list.push_back(new_node);
