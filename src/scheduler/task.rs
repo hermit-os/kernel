@@ -620,27 +620,20 @@ impl BlockedTaskQueue {
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
-			let first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
-			let _guard = scopeguard::guard(first_task, |first_task| {
-				// If the task is the new first task in the list, update the one-shot timer
-				// to fire when this task shall be woken up.
+			let _guard = scopeguard::guard((), |_| {
 				#[cfg(not(feature = "tcp"))]
-				if first_task {
-					arch::set_oneshot_timer(wakeup_time);
-				}
+				arch::set_oneshot_timer(wakeup_time);
 				#[cfg(feature = "tcp")]
-				if first_task {
-					match self.network_wakeup_time {
-						Some(time) => {
-							if time > wt {
-								arch::set_oneshot_timer(wakeup_time);
-							} else {
-								arch::set_oneshot_timer(self.network_wakeup_time);
-							}
+				match self.network_wakeup_time {
+					Some(time) => {
+						if time > wt {
+							arch::set_oneshot_timer(wakeup_time);
+						} else {
+							arch::set_oneshot_timer(self.network_wakeup_time);
 						}
-						_ => arch::set_oneshot_timer(wakeup_time),
 					}
+					_ => arch::set_oneshot_timer(wakeup_time),
 				}
 			});
 
