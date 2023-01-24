@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 use core::{fmt, u32, u8};
 
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
-use num_derive::{FromPrimitive, ToPrimitive};
 use x86::io::*;
 
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
@@ -46,44 +45,6 @@ pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
 static mut PCI_ADAPTERS: Vec<PciAdapter> = Vec::new();
 static mut PCI_DRIVERS: Vec<PciDriver<'_>> = Vec::new();
-
-/// Classes of PCI nodes.
-#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq, Eq)]
-pub enum PciClassCode {
-	TooOld = 0x00,
-	MassStorage = 0x01,
-	NetworkController = 0x02,
-	DisplayController = 0x03,
-	MultimediaController = 0x04,
-	MemoryController = 0x05,
-	BridgeDevice = 0x06,
-	SimpleCommunicationController = 0x07,
-	BaseSystemPeripheral = 0x08,
-	InputDevice = 0x09,
-	DockingStation = 0x0A,
-	Processor = 0x0B,
-	SerialBusController = 0x0C,
-	WirelessController = 0x0D,
-	IntelligentIoController = 0x0E,
-	EncryptionController = 0x0F,
-	DataAcquisitionSignalProcessing = 0x11,
-	Other = 0xFF,
-}
-
-/// Network Controller Sub Classes
-#[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive, PartialEq, Eq)]
-pub enum PciNetworkControllerSubclass {
-	Ethernet = 0x00,
-	TokenRing = 0x01,
-	Fddi = 0x02,
-	Atm = 0x03,
-	Isdn = 0x04,
-	WorldFip = 0x05,
-	Picmg = 0x06,
-	Infiniband = 0x07,
-	Fabric = 0x08,
-	Network = 0x80,
-}
 
 #[derive(Clone, Debug)]
 pub struct PciAdapter {
