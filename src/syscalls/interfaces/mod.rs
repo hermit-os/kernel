@@ -118,23 +118,10 @@ pub trait SyscallInterface: Send + Sync {
 		Err(())
 	}
 
-	fn receive_rx_buffer(&self) -> Result<(&'static mut [u8], usize), ()> {
+	fn receive_rx_buffer(&self) -> Result<Vec<u8>, ()> {
 		#[cfg(not(target_arch = "aarch64"))]
 		match get_network_driver() {
 			Some(driver) => driver.lock().receive_rx_buffer(),
-			_ => Err(()),
-		}
-		#[cfg(target_arch = "aarch64")]
-		Err(())
-	}
-
-	fn rx_buffer_consumed(&self, handle: usize) -> Result<(), ()> {
-		#[cfg(not(target_arch = "aarch64"))]
-		match get_network_driver() {
-			Some(driver) => {
-				driver.lock().rx_buffer_consumed(handle);
-				Ok(())
-			}
 			_ => Err(()),
 		}
 		#[cfg(target_arch = "aarch64")]

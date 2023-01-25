@@ -7,13 +7,22 @@ use core::task::{Context, Poll};
 
 use async_task::{Runnable, Task};
 use futures_lite::pin;
-use hermit_sync::{InterruptTicketMutex, TicketMutex};
+use hermit_sync::InterruptTicketMutex;
 use smoltcp::time::{Duration, Instant};
 
 use crate::core_scheduler;
 use crate::scheduler::task::TaskHandle;
 
-static QUEUE: TicketMutex<Vec<Runnable>> = TicketMutex::new(Vec::new());
+static QUEUE: InterruptTicketMutex<Vec<Runnable>> = InterruptTicketMutex::new(Vec::new());
+
+/// set driver in polling mode
+#[inline]
+fn set_polling_mode(value: bool) {
+	#[cfg(feature = "pci")]
+	if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+		driver.lock().set_polling_mode(value)
+	}
+}
 
 #[inline]
 fn network_delay(timestamp: Instant) -> Option<Duration> {
@@ -88,13 +97,14 @@ impl Wake for TaskNotify {
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, ()>
+pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i32>
 where
-	F: Future<Output = T>,
+	F: Future<Output = Result<T, i32>>,
 {
-	// Polling mode => no NIC interrupts => NIC thread should not run
+	// Enter polling mode => no NIC interrupts
 	set_polling_mode(true);
 
+	let mut counter: u16 = 0;
 	let start = crate::net::now();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.clone().into();
@@ -106,70 +116,49 @@ where
 		run_executor_once();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			if let Some(delay) = network_delay(crate::net::now()).map(|d| d.total_micros()) {
-				let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-				core_scheduler().add_network_timer(wakeup_time);
-			}
+			let wakeup_time = network_delay(crate::net::now())
+				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+			core_scheduler().add_network_timer(wakeup_time);
 
 			// allow interrupts => NIC thread is able to run
 			set_polling_mode(false);
-			return Ok(t);
+
+			return t;
 		}
 
 		if let Some(duration) = timeout {
 			if crate::net::now() >= start + duration {
-				if let Some(delay) = network_delay(crate::net::now()).map(|d| d.total_micros()) {
-					let wakeup_time = crate::arch::processor::get_timer_ticks() + delay;
-					core_scheduler().add_network_timer(wakeup_time);
-				}
+				let wakeup_time = network_delay(crate::net::now())
+					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+				core_scheduler().add_network_timer(wakeup_time);
 
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
-				return Err(());
+
+				return Err(-crate::errno::ETIME);
 			}
 		}
 
+		counter += 1;
 		let now = crate::net::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
-		if delay.unwrap_or(10_000_000) > 100_000 {
+		if counter > 200 && delay.unwrap_or(10_000_000) > 100_000 {
 			let unparked = task_notify.unparked.swap(false, Ordering::AcqRel);
 			if !unparked {
 				let core_scheduler = core_scheduler();
-				let wakeup_time = delay.map(|us| crate::arch::processor::get_timer_ticks() + us);
-				core_scheduler.block_current_task(wakeup_time);
+				core_scheduler.add_network_timer(
+					delay.map(|d| crate::arch::processor::get_timer_ticks() + d),
+				);
+				let wakeup_time = delay.map(|d| crate::arch::processor::get_timer_ticks() + d);
+				core_scheduler.add_network_timer(wakeup_time);
+				core_scheduler.block_current_async_task();
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
 				// switch to another task
 				core_scheduler.reschedule();
 				// Polling mode => no NIC interrupts => NIC thread should not run
 				set_polling_mode(true);
-			}
-		}
-	}
-}
-
-/// set driver in polling mode and threads will not be blocked
-fn set_polling_mode(value: bool) {
-	static IN_POLLING_MODE: InterruptTicketMutex<usize> = InterruptTicketMutex::new(0);
-
-	let mut guard = IN_POLLING_MODE.lock();
-
-	if value {
-		*guard += 1;
-
-		if *guard == 1 {
-			#[cfg(feature = "pci")]
-			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-				driver.lock().set_polling_mode(value)
-			}
-		}
-	} else {
-		*guard -= 1;
-
-		if *guard == 0 {
-			#[cfg(feature = "pci")]
-			if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
-				driver.lock().set_polling_mode(value)
+				counter = 0;
 			}
 		}
 	}

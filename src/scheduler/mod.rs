@@ -4,6 +4,8 @@ use alloc::rc::Rc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
+#[cfg(feature = "tcp")]
+use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
@@ -15,7 +17,6 @@ use crate::arch::interrupts;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
-
 pub mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
@@ -72,6 +73,9 @@ pub struct PerCoreScheduler {
 	finished_tasks: VecDeque<Rc<RefCell<Task>>>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
+	/// Queue of blocked tasks, sorted by wakeup time.
+	#[cfg(feature = "tcp")]
+	blocked_async_tasks: VecDeque<TaskHandle>,
 	/// Queues to handle incoming requests from the other cores
 	#[cfg(feature = "smp")]
 	input: InterruptTicketMutex<SchedulerInput>,
@@ -280,7 +284,11 @@ impl PerCoreScheduler {
 
 	#[inline]
 	pub fn handle_waiting_tasks(&mut self) {
-		without_interrupts(|| self.blocked_tasks.handle_waiting_tasks());
+		without_interrupts(|| {
+			#[cfg(feature = "tcp")]
+			self.wakeup_async_tasks();
+			self.blocked_tasks.handle_waiting_tasks()
+		});
 	}
 
 	#[cfg(not(feature = "smp"))]
@@ -312,8 +320,44 @@ impl PerCoreScheduler {
 
 	#[cfg(feature = "tcp")]
 	#[inline]
-	pub fn add_network_timer(&mut self, wakeup_time: u64) {
-		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time));
+	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
+		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time))
+	}
+
+	#[cfg(feature = "tcp")]
+	#[inline]
+	pub fn block_current_async_task(&mut self) {
+		without_interrupts(|| {
+			self.blocked_async_tasks
+				.push_back(self.get_current_task_handle());
+			self.blocked_tasks.add(self.current_task.clone(), None)
+		});
+	}
+
+	#[cfg(feature = "tcp")]
+	#[inline]
+	pub fn wakeup_async_tasks(&mut self) {
+		let mut has_tasks = false;
+
+		without_interrupts(|| {
+			while let Some(task) = self.blocked_async_tasks.pop_front() {
+				has_tasks = true;
+				self.custom_wakeup(task)
+			}
+
+			if !has_tasks {
+				if let Some(mut guard) = crate::net::NIC.try_lock() {
+					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
+						let time = crate::net::now();
+						nic.poll_common(time);
+						let wakeup_time = nic
+							.poll_delay(time)
+							.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+						self.add_network_timer(wakeup_time);
+					}
+				}
+			}
+		});
 	}
 
 	#[inline]
@@ -643,6 +687,8 @@ pub fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
+		#[cfg(feature = "tcp")]
+		blocked_async_tasks: VecDeque::new(),
 		#[cfg(feature = "smp")]
 		input: InterruptTicketMutex::new(SchedulerInput::new()),
 	});

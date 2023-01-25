@@ -55,6 +55,7 @@ pci = ["num-derive"]
 acpi = []
 smp = ["include-transformed"]
 fsgsbase = []
+trace = []
 tcp = [
     "async-task",
     "futures-lite",
@@ -71,6 +72,7 @@ ahash = { version = "0.8", default-features = false }
 align-address = "0.1"
 bitflags = "1.3"
 crossbeam-utils = { version = "0.8", default-features = false }
+dyn-clone = "1.0"
 hashbrown = { version = "0.13", default-features = false }
 hermit-entry = { version = "0.9", features = ["kernel"] }
 hermit-sync = "0.1.2"
@@ -87,6 +89,7 @@ qemu-exit = "3.0"
 rand_chacha = { version = "0.3", default-features = false }
 futures-lite = { version = "1.11", default-features = false, optional = true }
 async-task = { version = "4.3", default-features = false, optional = true }
+lock_api = "0.4"
 
 [dependencies.smoltcp]
 version = "0.8"

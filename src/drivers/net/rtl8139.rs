@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::collections::{btree_map, BTreeMap};
+use alloc::vec::Vec;
 use core::mem;
 
 use x86::io::*;
@@ -209,7 +209,7 @@ pub struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
-	box_map: BTreeMap<usize, Box<[u8]>>,
+	polling_mode_counter: u32,
 }
 
 impl NetworkInterface for RTL8139Driver {
@@ -270,7 +270,7 @@ impl NetworkInterface for RTL8139Driver {
 		false
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<(&'static mut [u8], usize), ()> {
+	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
 		let cmd = unsafe { inb(self.iobase + CR) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
@@ -282,25 +282,18 @@ impl NetworkInterface for RTL8139Driver {
 				let pos = (self.rxpos + mem::size_of::<u16>()) % RX_BUF_LEN;
 
 				// do we reach the end of the receive buffers?
-				// in this case, we have to copy the data in boxed slice
+				// in this case, we conact the two slices to one vec
 				let buf = if pos + length as usize > RX_BUF_LEN {
 					let first = &self.rxbuffer[pos..RX_BUF_LEN];
 					let second = &self.rxbuffer[..length as usize - first.len()];
-					let msg = [first, second].concat().into_boxed_slice();
-
-					// buffer address to release box in `rx_buffer_consumed`
-					match self.box_map.entry(self.rxpos) {
-						btree_map::Entry::Vacant(entry) => entry.insert(msg),
-						btree_map::Entry::Occupied(_) => unreachable!(),
-					}
+					[first, second].concat()
 				} else {
-					&mut self.rxbuffer[pos..][..length.into()]
+					(self.rxbuffer[pos..][..length.into()]).to_vec()
 				};
-				// SAFETY: This is a blatant lie and very unsound.
-				// The API must be fixed or the buffer may never touched again.
-				let buf = unsafe { mem::transmute(buf) };
 
-				Ok((buf, self.rxpos))
+				self.consume_current_buffer();
+
+				Ok(buf)
 			} else {
 				error!(
 					"RTL8192: invalid header {:#x}, rx_pos {}\n",
@@ -314,43 +307,22 @@ impl NetworkInterface for RTL8139Driver {
 		}
 	}
 
-	// Tells driver, that buffer is consumed and can be deallocated
-	fn rx_buffer_consumed(&mut self, handle: usize) {
-		if self.rxpos != handle {
-			warn!("Invalid handle {} != {}", self.rxpos, handle)
-		}
-
-		drop(self.box_map.remove(&self.rxpos));
-
-		let length = self.rx_peek_u16();
-		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
-
-		// packets are dword aligned
-		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
-		if self.rxpos >= 0x10 {
-			unsafe {
-				outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
-			}
-		} else {
-			unsafe {
-				outw(
-					self.iobase + CAPR,
-					(RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap(),
-				);
-			}
-		}
-	}
-
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			// disable interrupts from the NIC
-			unsafe {
-				outw(self.iobase + IMR, INT_MASK_NO_ROK);
+			if self.polling_mode_counter == 0 {
+				// disable interrupts from the NIC
+				unsafe {
+					outw(self.iobase + IMR, INT_MASK_NO_ROK);
+				}
 			}
+			self.polling_mode_counter += 1;
 		} else {
-			// Enable all known interrupts by setting the interrupt mask.
-			unsafe {
-				outw(self.iobase + IMR, INT_MASK);
+			self.polling_mode_counter -= 1;
+			if self.polling_mode_counter == 0 {
+				// Enable all known interrupts by setting the interrupt mask.
+				unsafe {
+					outw(self.iobase + IMR, INT_MASK);
+				}
 			}
 		}
 	}
@@ -390,6 +362,27 @@ impl NetworkInterface for RTL8139Driver {
 }
 
 impl RTL8139Driver {
+	// Tells driver, that buffer is consumed and can be deallocated
+	fn consume_current_buffer(&mut self) {
+		let length = self.rx_peek_u16();
+		self.advance_rxpos(usize::from(length) + mem::size_of::<u16>());
+
+		// packets are dword aligned
+		self.rxpos = ((self.rxpos + 3) & !0x3) % RX_BUF_LEN;
+		if self.rxpos >= 0x10 {
+			unsafe {
+				outw(self.iobase + CAPR, (self.rxpos - 0x10).try_into().unwrap());
+			}
+		} else {
+			unsafe {
+				outw(
+					self.iobase + CAPR,
+					(RX_BUF_LEN - (0x10 - self.rxpos)).try_into().unwrap(),
+				);
+			}
+		}
+	}
+
 	fn rx_peek_u16(&self) -> u16 {
 		u16::from_ne_bytes(
 			self.rxbuffer[self.rxpos..][..mem::size_of::<u16>()]
@@ -611,6 +604,6 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		rxbuffer,
 		rxpos: 0,
 		txbuffer,
-		box_map: BTreeMap::new(),
+		polling_mode_counter: 0,
 	})
 }

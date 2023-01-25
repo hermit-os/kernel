@@ -1,9 +1,10 @@
-use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
-use core::ffi::CStr;
+use core::ffi::{c_void, CStr};
 use core::sync::atomic::{AtomicI32, Ordering};
 
-use hermit_sync::InterruptTicketMutex;
+use ahash::RandomState;
+use dyn_clone::DynClone;
+use hashbrown::HashMap;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
@@ -12,9 +13,14 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
+use crate::synch::rwlock::RWLock;
 use crate::syscalls::fs::{self, FilePerms};
+#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+use crate::syscalls::net::*;
 
 mod file;
+#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+pub mod socket;
 mod stdio;
 
 const UHYVE_PORT_WRITE: u16 = 0x400;
@@ -30,8 +36,12 @@ const STDERR_FILENO: FileDescriptor = 2;
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: InterruptTicketMutex<BTreeMap<FileDescriptor, Arc<dyn ObjectInterface>>> =
-	InterruptTicketMutex::new(BTreeMap::new());
+static OBJECT_MAP: RWLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
+	RWLock::new(HashMap::<
+		FileDescriptor,
+		Arc<dyn ObjectInterface>,
+		RandomState,
+	>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
@@ -183,7 +193,7 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms
 }
 
-pub trait ObjectInterface: Sync + Send + core::fmt::Debug {
+pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
 	fn read(&self, _buf: *mut u8, _len: usize) -> isize {
@@ -193,17 +203,89 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug {
 	/// `write` attempts to write `len` bytes to the object references
 	/// by the descriptor
 	fn write(&self, _buf: *const u8, _len: usize) -> isize {
-		(-ENOSYS).try_into().unwrap()
-	}
-
-	/// close a file descriptor
-	fn close(&self) -> i32 {
-		-ENOSYS
+		(-EINVAL).try_into().unwrap()
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
 	fn lseek(&self, _offset: isize, _whence: i32) -> isize {
-		(-ENOSYS).try_into().unwrap()
+		(-EINVAL).try_into().unwrap()
+	}
+
+	/// `unlink` removes directory entry
+	fn unlink(&self, _name: *const u8) -> i32 {
+		-EINVAL
+	}
+
+	/// `accept` a connection on a socket
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> i32 {
+		-EINVAL
+	}
+
+	/// initiate a connection on a socket
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
+		-EINVAL
+	}
+
+	/// `bind` a name to a socket
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
+		-EINVAL
+	}
+
+	/// `listen` for connections on a socket
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn listen(&self, _backlog: i32) -> i32 {
+		-EINVAL
+	}
+
+	/// `setsockopt` sets options on sockets
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn setsockopt(
+		&self,
+		_level: i32,
+		_optname: i32,
+		_optval: *const c_void,
+		_optlen: socklen_t,
+	) -> i32 {
+		-EINVAL
+	}
+
+	/// `getsockopt` gets options on sockets
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn getsockopt(
+		&self,
+		_level: i32,
+		_option_name: i32,
+		_optval: *mut c_void,
+		_optlen: *mut socklen_t,
+	) -> i32 {
+		-EINVAL
+	}
+
+	/// `getsockname` gets socket name
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
+		-EINVAL
+	}
+
+	/// `getpeername` get address of connected peer
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
+		-EINVAL
+	}
+
+	/// shut down part of a full-duplex connection
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	fn shutdown(&self, _how: i32) -> i32 {
+		-EINVAL
+	}
+
+	/// The `ioctl` function manipulates the underlying device parameters of special
+	/// files.
+	fn ioctl(&self, _cmd: i32, _argp: *mut c_void) -> i32 {
+		-EINVAL
 	}
 }
 
@@ -216,7 +298,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 			let file = UhyveFile::new(sysopen.ret);
 
-			if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
+			if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
 				Err(-EINVAL)
 			} else {
 				Ok(fd as FileDescriptor)
@@ -238,7 +320,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			if let Ok(filesystem_fd) = fs.open(name, open_flags_to_perm(flags, mode as u32)) {
 				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 				let file = GenericFile::new(filesystem_fd);
-				if OBJECT_MAP.lock().try_insert(fd, Arc::new(file)).is_err() {
+				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
 					Err(-EINVAL)
 				} else {
 					Ok(fd as FileDescriptor)
@@ -255,17 +337,53 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
-	Ok((*(OBJECT_MAP.lock().get(&fd).ok_or(-EINVAL)?)).clone())
+	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(-EINVAL)?)).clone())
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) {
-	if fd > 2 && OBJECT_MAP.lock().remove(&fd).is_none() {
-		debug!("Unable to remove object {}", fd);
+#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+pub(crate) fn insert_object(
+	fd: FileDescriptor,
+	obj: Arc<dyn ObjectInterface>,
+) -> Option<Arc<dyn ObjectInterface>> {
+	OBJECT_MAP.write().insert(fd, obj)
+}
+
+// The dup system call allocates a new file descriptor that refers
+// to the same open file description as the descriptor oldfd. The new
+// file descriptor number is guaranteed to be the lowest-numbered
+// file descriptor that was unused in the calling process.
+pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
+	let mut guard = OBJECT_MAP.write();
+	let obj = (*(guard.get(&fd).ok_or(-EINVAL)?)).clone();
+
+	let new_fd = || -> i32 {
+		for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
+			if !guard.contains_key(&i) {
+				return i;
+			}
+		}
+		FD_COUNTER.fetch_add(1, Ordering::SeqCst)
+	};
+
+	let fd = new_fd();
+	if guard.try_insert(fd, obj).is_err() {
+		Err(-EMFILE)
+	} else {
+		Ok(fd as FileDescriptor)
+	}
+}
+
+pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
+	if fd <= 2 {
+		Err(-EINVAL)
+	} else {
+		let obj = OBJECT_MAP.write().remove(&fd).ok_or(-EINVAL)?;
+		Ok(obj)
 	}
 }
 
 pub(crate) fn init() {
-	let mut guard = OBJECT_MAP.lock();
+	let mut guard = OBJECT_MAP.write();
 	if env::is_uhyve() {
 		guard
 			.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))

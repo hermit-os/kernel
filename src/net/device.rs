@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::slice;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
@@ -15,6 +16,7 @@ use smoltcp::time::Instant;
 use smoltcp::wire::IpAddress;
 use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address};
 
+use crate::arch;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
 use crate::net::{NetworkInterface, NetworkState};
@@ -93,11 +95,15 @@ impl NetworkInterface<HermitNet> {
 
 		let dhcp = Dhcpv4Socket::new();
 
+		// Return the current time based on the wallclock time when we were booted up
+		// plus the current timer ticks.
+		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		let mut iface = InterfaceBuilder::new(device, vec![])
 			.hardware_addr(hardware_addr)
 			.neighbor_cache(neighbor_cache)
 			.ip_addrs(ip_addrs)
 			.routes(routes)
+			.random_seed(seed)
 			.finalize();
 
 		let dhcp_handle = iface.add_socket(dhcp);
@@ -107,7 +113,7 @@ impl NetworkInterface<HermitNet> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState {
-		let mtu = match unsafe { SYS.get_mtu() } {
+		let mtu = match SYS.get_mtu() {
 			Ok(mtu) => mtu,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
@@ -119,7 +125,7 @@ impl NetworkInterface<HermitNet> {
 			trace!("{}", printer);
 		});
 
-		let mac: [u8; 6] = match unsafe { SYS.get_mac_address() } {
+		let mac: [u8; 6] = match SYS.get_mac_address() {
 			Ok(mac) => mac,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
@@ -164,11 +170,15 @@ impl NetworkInterface<HermitNet> {
 		info!("Configure gateway with address {}", mygw);
 		info!("MTU: {} bytes", mtu);
 
+		// Return the current time based on the wallclock time when we were booted up
+		// plus the current timer ticks.
+		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		let iface = InterfaceBuilder::new(device, vec![])
 			.hardware_addr(hardware_addr)
 			.neighbor_cache(neighbor_cache)
 			.ip_addrs(ip_addrs)
 			.routes(routes)
+			.random_seed(seed)
 			.finalize();
 
 		NetworkState::Initialized(Box::new(Self { iface }))
@@ -187,7 +197,7 @@ impl<'a> Device<'a> for HermitNet {
 
 	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
 		match SYS.receive_rx_buffer() {
-			Ok((buffer, handle)) => Some((RxToken::new(buffer, handle), TxToken::new())),
+			Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
 			_ => None,
 		}
 	}
@@ -200,13 +210,12 @@ impl<'a> Device<'a> for HermitNet {
 
 #[doc(hidden)]
 pub(crate) struct RxToken {
-	buffer: &'static mut [u8],
-	handle: usize,
+	buffer: Vec<u8>,
 }
 
 impl RxToken {
-	pub(crate) fn new(buffer: &'static mut [u8], handle: usize) -> Self {
-		Self { buffer, handle }
+	pub(crate) fn new(buffer: Vec<u8>) -> Self {
+		Self { buffer }
 	}
 }
 
@@ -216,12 +225,7 @@ impl phy::RxToken for RxToken {
 	where
 		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
 	{
-		let result = f(self.buffer);
-		if SYS.rx_buffer_consumed(self.handle).is_ok() {
-			result
-		} else {
-			Err(smoltcp::Error::Exhausted)
-		}
+		f(&mut self.buffer[..])
 	}
 }
 

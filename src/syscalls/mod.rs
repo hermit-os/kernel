@@ -15,7 +15,7 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::fd::{get_object, remove_object, FileDescriptor};
+use crate::fd::{dup_object, get_object, remove_object, FileDescriptor};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -28,7 +28,7 @@ mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
-mod net;
+pub mod net;
 mod processor;
 mod recmutex;
 mod semaphore;
@@ -126,13 +126,8 @@ pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescri
 }
 
 extern "C" fn __sys_close(fd: FileDescriptor) -> i32 {
-	let obj = get_object(fd);
-	let result = obj.map_or_else(|e| e, |v| v.close());
-	if result == 0 {
-		remove_object(fd);
-	}
-
-	result
+	let obj = remove_object(fd);
+	obj.map_or_else(|e| e, |_| 0)
 }
 
 #[no_mangle]
@@ -142,8 +137,9 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 
 extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| v.read(buf, len))
+	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
 }
+
 #[no_mangle]
 pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	kernel_function!(__sys_read(fd, buf, len))
@@ -151,7 +147,7 @@ pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isiz
 
 extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| v.write(buf, len))
+	obj.map_or_else(|e| e as isize, |v| (*v).write(buf, len))
 }
 
 #[no_mangle]
@@ -159,9 +155,19 @@ pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i
 	kernel_function!(__sys_write(fd, buf, len))
 }
 
+extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e, |v| (*v).ioctl(cmd, argp))
+}
+
+#[no_mangle]
+pub extern "C" fn sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
+	kernel_function!(__sys_ioctl(fd, cmd, argp))
+}
+
 extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| v.lseek(offset, whence))
+	obj.map_or_else(|e| e as isize, |v| (*v).lseek(offset, whence))
 }
 
 #[no_mangle]
@@ -176,4 +182,13 @@ extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_stat(file: *const u8, st: usize) -> i32 {
 	kernel_function!(__sys_stat(file, st))
+}
+
+extern "C" fn __sys_dup(fd: i32) -> i32 {
+	dup_object(fd).map_or_else(|e| e, |v| v)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_dup(fd: i32) -> i32 {
+	kernel_function!(__sys_dup(fd))
 }

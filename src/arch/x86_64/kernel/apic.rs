@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-#[cfg(any(feature = "pci", feature = "smp"))]
+#[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
 #[cfg(feature = "smp")]
