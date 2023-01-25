@@ -2,8 +2,7 @@
 
 use core::arch::asm;
 use core::arch::x86_64::{
-	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdrand32_step, _rdrand64_step, _rdtsc, _xrstor,
-	_xsave,
+	__rdtscp, _fxrstor, _fxsave, _mm_lfence, _rdseed64_step, _rdtsc, _xrstor, _xsave,
 };
 use core::convert::Infallible;
 use core::hint::spin_loop;
@@ -49,7 +48,7 @@ struct Features {
 	linear_address_bits: u8,
 	supports_1gib_pages: bool,
 	supports_avx: bool,
-	supports_rdrand: bool,
+	supports_rdseed: bool,
 	supports_tsc_deadline: bool,
 	supports_x2apic: bool,
 	supports_xsave: bool,
@@ -79,7 +78,7 @@ static FEATURES: Lazy<Features> = Lazy::new(|| {
 		linear_address_bits: processor_capacity_info.linear_address_bits(),
 		supports_1gib_pages: extend_processor_identifiers.has_1gib_pages(),
 		supports_avx: feature_info.has_avx(),
-		supports_rdrand: feature_info.has_rdrand(),
+		supports_rdseed: extended_feature_info.has_rdseed(),
 		supports_tsc_deadline: feature_info.has_tsc_deadline(),
 		supports_x2apic: feature_info.has_x2apic(),
 		supports_xsave: feature_info.has_xsave(),
@@ -893,32 +892,27 @@ pub fn print_information() {
 	infofooter!();
 }
 
-pub fn generate_random_number32() -> Option<u32> {
-	unsafe {
-		if FEATURES.supports_rdrand {
-			let mut value: u32 = 0;
+pub fn seed_entropy() -> Option<[u8; 32]> {
+	let mut buf = [0; 32];
+	if FEATURES.supports_rdseed {
+		for word in buf.chunks_mut(8) {
+			let mut value = 0;
 
-			for _ in 0..RDRAND_RETRY_LIMIT {
-				if _rdrand32_step(&mut value) == 1 {
-					return Some(value);
-				}
+			// Some RDRAND implementations on AMD CPUs have had bugs where the carry
+			// flag was incorrectly set without there actually being a random value
+			// available. Even though no bugs are known for RDSEED, we should not
+			// consider the default values random for extra security.
+			while unsafe { _rdseed64_step(&mut value) != 1 } || value == 0 || value == !0 {
+				// Spin as per the recommendation in the
+				// Intel® Digital Random Number Generator (DRNG) implementation guide
+				spin_loop();
 			}
-		}
-		None
-	}
-}
 
-pub fn generate_random_number64() -> Option<u64> {
-	unsafe {
-		if FEATURES.supports_rdrand {
-			let mut value: u64 = 0;
-
-			for _ in 0..RDRAND_RETRY_LIMIT {
-				if _rdrand64_step(&mut value) == 1 {
-					return Some(value);
-				}
-			}
+			word.copy_from_slice(&value.to_ne_bytes());
 		}
+
+		Some(buf)
+	} else {
 		None
 	}
 }

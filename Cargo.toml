@@ -84,6 +84,7 @@ pci-ids = { version = "0.2", optional = true }
 scopeguard = { version = "1.1", default-features = false }
 shell-words = { version = "1.1", default-features = false }
 qemu-exit = "3.0"
+rand_chacha = { version = "0.3", default-features = false }
 futures-lite = { version = "1.11", default-features = false, optional = true }
 async-task = { version = "4.3", default-features = false, optional = true }
 
