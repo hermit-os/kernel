@@ -51,7 +51,7 @@ harness = false
 default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4"]
 vga = []
 newlib = []
-pci = ["num-derive"]
+pci = []
 acpi = []
 smp = ["include-transformed"]
 fsgsbase = []
@@ -79,11 +79,7 @@ hermit-sync = "0.1.2"
 include-transformed = { version = "0.2", optional = true }
 linked_list_allocator = { version = "0.10", default-features = false }
 log = { version = "0.4", default-features = false }
-num = { version = "0.4", default-features = false }
-num-derive = { version = "0.3", optional = true }
-num-traits = { version = "0.2", default-features = false }
 pci-ids = { version = "0.2", optional = true }
-scopeguard = { version = "1.1", default-features = false }
 shell-words = { version = "1.1", default-features = false }
 qemu-exit = "3.0"
 rand_chacha = { version = "0.3", default-features = false }

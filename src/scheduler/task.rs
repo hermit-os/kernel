@@ -620,40 +620,36 @@ impl BlockedTaskQueue {
 
 		// Shall the task automatically be woken up after a certain time?
 		if let Some(wt) = wakeup_time {
-			let first_task = true;
 			let mut cursor = self.list.cursor_front_mut();
-			let mut _guard = scopeguard::guard(first_task, |first_task| {
-				// If the task is the new first task in the list, update the one-shot timer
-				// to fire when this task shall be woken up.
+			let set_oneshot_timer = || {
 				#[cfg(not(feature = "tcp"))]
-				if first_task {
-					arch::set_oneshot_timer(wakeup_time);
-				}
+				arch::set_oneshot_timer(wakeup_time);
 				#[cfg(feature = "tcp")]
-				if first_task {
-					match self.network_wakeup_time {
-						Some(time) => {
-							if time > wt {
-								arch::set_oneshot_timer(wakeup_time);
-							} else {
-								arch::set_oneshot_timer(self.network_wakeup_time);
-							}
+				match self.network_wakeup_time {
+					Some(time) => {
+						if time > wt {
+							arch::set_oneshot_timer(wakeup_time);
+						} else {
+							arch::set_oneshot_timer(self.network_wakeup_time);
 						}
-						_ => arch::set_oneshot_timer(wakeup_time),
 					}
+					_ => arch::set_oneshot_timer(wakeup_time),
 				}
-			});
+			};
 
 			while let Some(node) = cursor.current() {
 				let node_wakeup_time = node.wakeup_time;
 				if node_wakeup_time.is_none() || wt < node_wakeup_time.unwrap() {
 					cursor.insert_before(new_node);
 
+					set_oneshot_timer();
 					return;
 				}
 
 				cursor.move_next();
 			}
+
+			set_oneshot_timer();
 		}
 
 		self.list.push_back(new_node);
