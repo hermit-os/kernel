@@ -85,12 +85,8 @@ pub(crate) extern "C" fn __sys_accept(
 }
 
 pub(crate) extern "C" fn __sys_listen(fd: i32, backlog: i32) -> i32 {
-	if backlog > 1 {
-		-EINVAL
-	} else {
-		let obj = get_object(fd);
-		obj.map_or_else(|e| e, |v| (*v).listen(backlog))
-	}
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e, |v| (*v).listen(backlog))
 }
 
 pub(crate) extern "C" fn __sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
