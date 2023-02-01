@@ -2,6 +2,7 @@ use core::convert::Infallible;
 use core::{mem, ptr, slice, str};
 
 use align_address::Align;
+use hermit_sync::OnceCell;
 use x86::io::*;
 use x86_64::structures::paging::PhysFrame;
 
@@ -41,11 +42,11 @@ const AML_BYTEPREFIX: u8 = 0x0A;
 const SLP_EN: u16 = 1 << 13;
 
 /// The "Multiple APIC Description Table" (MADT) preserved for get_apic_table().
-static mut MADT: Option<AcpiTable<'_>> = None;
+static MADT: OnceCell<AcpiTable<'_>> = OnceCell::new();
 /// The PM1A Control I/O Port for powering off the computer through ACPI.
-static mut PM1A_CNT_BLK: Option<u16> = None;
+static PM1A_CNT_BLK: OnceCell<u16> = OnceCell::new();
 /// The Sleeping State Type code for powering off the computer through ACPI.
-static mut SLP_TYPA: Option<u8> = None;
+static SLP_TYPA: OnceCell<u8> = OnceCell::new();
 
 /// The "Root System Description Pointer" structure providing pointers to all other ACPI tables.
 #[repr(C, packed)]
@@ -68,6 +69,7 @@ impl AcpiRsdp {
 }
 
 /// The header of (almost) every ACPI table.
+#[derive(Clone, Copy, Debug)]
 #[repr(C, packed)]
 struct AcpiSdtHeader {
 	signature: [u8; 4],
@@ -89,6 +91,7 @@ impl AcpiSdtHeader {
 
 /// A convenience structure to work with an ACPI table.
 /// Maps a single table to memory and frees the memory when a variable of this structure goes out of scope.
+#[derive(Debug)]
 pub struct AcpiTable<'a> {
 	header: &'a AcpiSdtHeader,
 	allocated_virtual_address: VirtAddr,
@@ -376,9 +379,7 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 				// Note that Power Off may also be controlled through PM1B_CNT_BLK / SLP_TYPB
 				// according to the ACPI Specification. However, this has not yet been observed on real computers
 				// and therefore not implemented.
-				unsafe {
-					SLP_TYPA = Some(slp_typa);
-				}
+				SLP_TYPA.set(slp_typa).unwrap();
 			}
 		}
 	}
@@ -402,9 +403,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	} else {
 		fadt_table.pm1a_cnt_blk as u16
 	};
-	unsafe {
-		PM1A_CNT_BLK = Some(pm1a_cnt_blk);
-	}
+	PM1A_CNT_BLK.set(pm1a_cnt_blk).unwrap();
 
 	// Map the "Differentiated System Description Table" (DSDT).
 	let x_dsdt_field_address = ptr::addr_of!(fadt_table.x_dsdt) as usize;
@@ -435,7 +434,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 fn parse_ssdt(ssdt: AcpiTable<'_>) {
 	// We don't need to parse the SSDT if we already have information about the "_S5_" object
 	// (e.g. from the DSDT or a previous SSDT).
-	if unsafe { SLP_TYPA }.is_some() {
+	if SLP_TYPA.get().is_some() {
 		return;
 	}
 
@@ -444,25 +443,25 @@ fn parse_ssdt(ssdt: AcpiTable<'_>) {
 }
 
 pub fn get_madt() -> Option<&'static AcpiTable<'static>> {
-	unsafe { MADT.as_ref() }
+	MADT.get()
 }
 
 pub fn poweroff() -> Result<Infallible, ()> {
-	unsafe {
-		if let (Some(pm1a_cnt_blk), Some(slp_typa)) = (PM1A_CNT_BLK, SLP_TYPA) {
-			let bits = (u16::from(slp_typa) << 10) | SLP_EN;
-			debug!(
-				"Powering Off through ACPI (port {:#X}, bitmask {:#X})",
-				pm1a_cnt_blk, bits
-			);
+	if let (Some(&pm1a_cnt_blk), Some(&slp_typa)) = (PM1A_CNT_BLK.get(), SLP_TYPA.get()) {
+		let bits = (u16::from(slp_typa) << 10) | SLP_EN;
+		debug!(
+			"Powering Off through ACPI (port {:#X}, bitmask {:#X})",
+			pm1a_cnt_blk, bits
+		);
+		unsafe {
 			outw(pm1a_cnt_blk, bits);
-			loop {
-				processor::halt();
-			}
-		} else {
-			warn!("ACPI Power Off is not available");
-			Err(())
 		}
+		loop {
+			processor::halt();
+		}
+	} else {
+		warn!("ACPI Power Off is not available");
+		Err(())
 	}
 }
 
@@ -505,9 +504,7 @@ pub fn init() {
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
 				"MADT at {table_physical_address:#X} has invalid checksum"
 			);
-			unsafe {
-				MADT = Some(table);
-			}
+			MADT.set(table).unwrap();
 		} else if table.header.signature() == "FACP" {
 			// The "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
 			// Check and parse this table for the poweroff() call.
