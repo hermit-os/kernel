@@ -251,6 +251,17 @@ pub fn local_apic_id_count() -> u32 {
 	unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().len() as u32 }
 }
 
+unsafe fn init_ioapic_address(phys_addr: PhysAddr) {
+	unsafe {
+		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {IOAPIC_ADDRESS:p}",);
+
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(IOAPIC_ADDRESS, phys_addr, 1, flags);
+	}
+}
+
 #[cfg(not(feature = "acpi"))]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// dummy implementation if acpi support is disabled
@@ -291,21 +302,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				unsafe {
-					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-					let record_addr = ioapic_record.address;
-					debug!(
-						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-						record_addr, IOAPIC_ADDRESS
-					);
-
-					let mut flags = PageTableEntryFlags::empty();
-					flags.device().writable().execute_disable();
-					paging::map::<BasePageSize>(
-						IOAPIC_ADDRESS,
-						PhysAddr(record_addr.into()),
-						1,
-						flags,
-					);
+					init_ioapic_address(PhysAddr(ioapic_record.address.into()));
 				}
 			}
 			_ => {
@@ -401,15 +398,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		let default_address = PhysAddr(0xFEC0_0000);
 
 		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-			debug!(
-				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-				default_address, IOAPIC_ADDRESS
-			);
-
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
+			init_ioapic_address(default_address);
 		}
 	} else {
 		// entries starts directly after the config table
@@ -428,24 +417,11 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				// IO-APIC entry
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
-					let ioapic = io_entry.addr;
+					let ioapic = PhysAddr(io_entry.addr.into());
 					info!("Found IOAPIC at 0x{:x}", ioapic);
 
 					unsafe {
-						IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-						debug!(
-							"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-							ioapic, IOAPIC_ADDRESS
-						);
-
-						let mut flags = PageTableEntryFlags::empty();
-						flags.device().writable().execute_disable();
-						paging::map::<BasePageSize>(
-							IOAPIC_ADDRESS,
-							PhysAddr(ioapic as u64),
-							1,
-							flags,
-						);
+						init_ioapic_address(ioapic);
 					}
 
 					addr += mem::size_of::<ApicIoEntry>();
@@ -463,43 +439,27 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
-	let default_address = PhysAddr(0xFEC0_0000);
+	let default_address = PhysAddr(0xFEE0_0000);
 
 	unsafe {
-		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-		debug!(
-			"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-			default_address, IOAPIC_ADDRESS
-		);
-
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
+		init_ioapic_address(default_address);
 	}
 
-	PhysAddr(0xFEE0_0000)
+	default_address
 }
 
 fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if env::is_uhyve() {
-		let default_address = PhysAddr(0xFEC0_0000);
+		let default_address = PhysAddr(0xFEE0_0000);
 
 		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-			debug!(
-				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-				default_address, IOAPIC_ADDRESS
-			);
-
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
+			init_ioapic_address(default_address);
 		}
 
-		return Ok(PhysAddr(0xFEE0_0000));
+		Ok(default_address)
+	} else {
+		Err(())
 	}
-
-	Err(())
 }
 
 #[no_mangle]
