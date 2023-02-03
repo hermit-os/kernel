@@ -11,7 +11,7 @@ use align_address::Align;
 #[cfg(feature = "smp")]
 use arch::x86_64::kernel::core_local::*;
 use arch::x86_64::kernel::{interrupts, processor};
-use hermit_sync::without_interrupts;
+use hermit_sync::{without_interrupts, OnceCell, SpinMutex};
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
@@ -86,19 +86,16 @@ const SMP_BOOT_CODE_OFFSET_PML4: usize = SMP_BOOT_CODE_OFFSET_BOOTINFO + 0x08;
 
 const X2APIC_ENABLE: u64 = 1 << 10;
 
-static mut LOCAL_APIC_ADDRESS: VirtAddr = VirtAddr::zero();
-static mut IOAPIC_ADDRESS: VirtAddr = VirtAddr::zero();
+static LOCAL_APIC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
+static IOAPIC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
 
 /// Stores the Local APIC IDs of all CPUs. The index equals the Core ID.
 /// Both numbers often match, but don't need to (e.g. when a core has been disabled).
-///
-/// As Rust currently implements no way of zero-initializing a global Vec in a no_std environment,
-/// we have to encapsulate it in an Option...
-static mut CPU_LOCAL_APIC_IDS: Option<Vec<u8>> = None;
+static CPU_LOCAL_APIC_IDS: SpinMutex<Vec<u8>> = SpinMutex::new(Vec::new());
 
 /// After calibration, initialize the APIC Timer with this counter value to let it fire an interrupt
 /// after 1 microsecond.
-static mut CALIBRATED_COUNTER_VALUE: u64 = 0;
+static CALIBRATED_COUNTER_VALUE: OnceCell<u64> = OnceCell::new();
 
 /// MP Floating Pointer Structure
 #[repr(C, packed)]
@@ -241,14 +238,22 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStac
 
 #[inline]
 pub fn add_local_apic_id(id: u8) {
-	unsafe {
-		CPU_LOCAL_APIC_IDS.as_mut().unwrap().push(id);
-	}
+	CPU_LOCAL_APIC_IDS.lock().push(id);
 }
 
 #[cfg(feature = "smp")]
 pub fn local_apic_id_count() -> u32 {
-	unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap().len() as u32 }
+	CPU_LOCAL_APIC_IDS.lock().len() as u32
+}
+
+fn init_ioapic_address(phys_addr: PhysAddr) {
+	let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+	IOAPIC_ADDRESS.set(ioapic_address).unwrap();
+	debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
+
+	let mut flags = PageTableEntryFlags::empty();
+	flags.device().writable().execute_disable();
+	paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
 }
 
 #[cfg(not(feature = "acpi"))]
@@ -290,23 +295,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 				let ioapic_record = unsafe { &*(current_address as *const IoApicRecord) };
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
-				unsafe {
-					IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-					let record_addr = ioapic_record.address;
-					debug!(
-						"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-						record_addr, IOAPIC_ADDRESS
-					);
-
-					let mut flags = PageTableEntryFlags::empty();
-					flags.device().writable().execute_disable();
-					paging::map::<BasePageSize>(
-						IOAPIC_ADDRESS,
-						PhysAddr(record_addr.into()),
-						1,
-						flags,
-					);
-				}
+				init_ioapic_address(PhysAddr(ioapic_record.address.into()));
 			}
 			_ => {
 				// Just ignore other entries for now.
@@ -400,17 +389,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		warn!("No MP table entries! Guess IO-APIC!");
 		let default_address = PhysAddr(0xFEC0_0000);
 
-		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-			debug!(
-				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-				default_address, IOAPIC_ADDRESS
-			);
-
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
-		}
+		init_ioapic_address(default_address);
 	} else {
 		// entries starts directly after the config table
 		addr += mem::size_of::<ApicConfigTable>();
@@ -428,25 +407,10 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				// IO-APIC entry
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
-					let ioapic = io_entry.addr;
+					let ioapic = PhysAddr(io_entry.addr.into());
 					info!("Found IOAPIC at 0x{:x}", ioapic);
 
-					unsafe {
-						IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-						debug!(
-							"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-							ioapic, IOAPIC_ADDRESS
-						);
-
-						let mut flags = PageTableEntryFlags::empty();
-						flags.device().writable().execute_disable();
-						paging::map::<BasePageSize>(
-							IOAPIC_ADDRESS,
-							PhysAddr(ioapic as u64),
-							1,
-							flags,
-						);
-					}
+					init_ioapic_address(ioapic);
 
 					addr += mem::size_of::<ApicIoEntry>();
 				}
@@ -463,43 +427,23 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 fn default_apic() -> PhysAddr {
 	warn!("Try to use default APIC address");
 
-	let default_address = PhysAddr(0xFEC0_0000);
+	let default_address = PhysAddr(0xFEE0_0000);
 
-	unsafe {
-		IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-		debug!(
-			"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-			default_address, IOAPIC_ADDRESS
-		);
+	init_ioapic_address(default_address);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
-	}
-
-	PhysAddr(0xFEE0_0000)
+	default_address
 }
 
 fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if env::is_uhyve() {
-		let default_address = PhysAddr(0xFEC0_0000);
+		let default_address = PhysAddr(0xFEE0_0000);
 
-		unsafe {
-			IOAPIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-			debug!(
-				"Mapping IOAPIC at {:#X} to virtual address {:#X}",
-				default_address, IOAPIC_ADDRESS
-			);
+		init_ioapic_address(default_address);
 
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(IOAPIC_ADDRESS, default_address, 1, flags);
-		}
-
-		return Ok(PhysAddr(0xFEE0_0000));
+		Ok(default_address)
+	} else {
+		Err(())
 	}
-
-	Err(())
 }
 
 #[no_mangle]
@@ -508,11 +452,6 @@ pub extern "C" fn eoi() {
 }
 
 pub fn init() {
-	// Initialize an empty vector for the Local APIC IDs of all CPUs.
-	unsafe {
-		CPU_LOCAL_APIC_IDS = Some(Vec::new());
-	}
-
 	// Detect CPUs and APICs.
 	let local_apic_physical_address = detect_from_uhyve()
 		.or_else(|_| detect_from_acpi())
@@ -524,17 +463,16 @@ pub fn init() {
 	if !processor::supports_x2apic() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
-		unsafe {
-			LOCAL_APIC_ADDRESS = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-			debug!(
-				"Mapping Local APIC at {:#X} to virtual address {:#X}",
-				local_apic_physical_address, LOCAL_APIC_ADDRESS
-			);
+		let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
+		debug!(
+			"Mapping Local APIC at {:#X} to virtual address {:#X}",
+			local_apic_physical_address, local_apic_address
+		);
 
-			let mut flags = PageTableEntryFlags::empty();
-			flags.device().writable().execute_disable();
-			paging::map::<BasePageSize>(LOCAL_APIC_ADDRESS, local_apic_physical_address, 1, flags);
-		}
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
@@ -654,14 +592,14 @@ fn calibrate_timer() {
 
 	// Save the difference of the initial value and current value as the result of the calibration
 	// and re-enable interrupts.
-	unsafe {
-		CALIBRATED_COUNTER_VALUE =
-			(u64::from(u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT))) / microseconds;
-		debug!(
-			"Calibrated APIC Timer with a counter value of {} for 1 microsecond",
-			CALIBRATED_COUNTER_VALUE
+	let calibrated_counter_value =
+		(u64::from(u32::MAX - local_apic_read(IA32_X2APIC_CUR_COUNT))) / microseconds;
+	CALIBRATED_COUNTER_VALUE
+		.set(calibrated_counter_value)
+		.unwrap();
+	debug!(
+			"Calibrated APIC Timer with a counter value of {calibrated_counter_value} for 1 microsecond",
 		);
-	}
 }
 
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
@@ -691,7 +629,7 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 				1
 			};
 			let init_count = cmp::min(
-				unsafe { CALIBRATED_COUNTER_VALUE } * ticks,
+				CALIBRATED_COUNTER_VALUE.get().unwrap() * ticks,
 				u64::from(u32::MAX),
 			);
 
@@ -790,7 +728,7 @@ pub fn boot_application_processors() {
 	}
 
 	// Now wake up each application processor.
-	let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+	let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 	let core_id = core_id();
 
 	for (core_id_to_boot, &apic_id) in apic_ids.iter().enumerate() {
@@ -848,7 +786,7 @@ pub fn boot_application_processors() {
 #[cfg(feature = "smp")]
 pub fn ipi_tlb_flush() {
 	if arch::get_processor_count() > 1 {
-		let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+		let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 		let core_id = core_id();
 
 		// Ensure that all memory operations have completed before issuing a TLB flush.
@@ -879,7 +817,7 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 	#[cfg(feature = "smp")]
 	if core_id_to_wakeup != core_id() {
 		without_interrupts(|| {
-			let apic_ids = unsafe { CPU_LOCAL_APIC_IDS.as_ref().unwrap() };
+			let apic_ids = CPU_LOCAL_APIC_IDS.lock();
 			let local_apic_id = apic_ids[core_id_to_wakeup as usize];
 			let destination = u64::from(local_apic_id) << 32;
 			local_apic_write(
@@ -896,7 +834,7 @@ pub fn wakeup_core(core_id_to_wakeup: CoreId) {
 /// Translate the x2APIC MSR into an xAPIC memory address.
 #[inline]
 fn translate_x2apic_msr_to_xapic_address(x2apic_msr: u32) -> VirtAddr {
-	unsafe { LOCAL_APIC_ADDRESS + ((x2apic_msr as u64 & 0xFF) << 4) }
+	*LOCAL_APIC_ADDRESS.get().unwrap() + ((x2apic_msr as u64 & 0xFF) << 4)
 }
 
 fn local_apic_read(x2apic_msr: u32) -> u32 {
@@ -910,9 +848,9 @@ fn local_apic_read(x2apic_msr: u32) -> u32 {
 
 fn ioapic_write(reg: u32, value: u32) {
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
+		core::ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
 		core::ptr::write_volatile(
-			(IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
+			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_mut_ptr::<u32>(),
 			value,
 		);
 	}
@@ -922,9 +860,10 @@ fn ioapic_read(reg: u32) -> u32 {
 	let value;
 
 	unsafe {
-		core::ptr::write_volatile(IOAPIC_ADDRESS.as_mut_ptr::<u32>(), reg);
-		value =
-			core::ptr::read_volatile((IOAPIC_ADDRESS + 4 * mem::size_of::<u32>()).as_ptr::<u32>());
+		core::ptr::write_volatile(IOAPIC_ADDRESS.get().unwrap().as_mut_ptr::<u32>(), reg);
+		value = core::ptr::read_volatile(
+			(*IOAPIC_ADDRESS.get().unwrap() + 4 * mem::size_of::<u32>()).as_ptr::<u32>(),
+		);
 	}
 
 	value
@@ -964,7 +903,9 @@ fn local_apic_write(x2apic_msr: u32, value: u64) {
 			// Instead of a single 64-bit ICR register, xAPIC has two 32-bit registers (ICR1 and ICR2).
 			// There is a gap between them and the destination field in ICR2 is also 8 bits instead of 32 bits.
 			let destination = ((value >> 8) & 0xFF00_0000) as u32;
-			let icr2 = unsafe { &mut *((LOCAL_APIC_ADDRESS + APIC_ICR2).as_mut_ptr::<u32>()) };
+			let icr2 = unsafe {
+				&mut *((*LOCAL_APIC_ADDRESS.get().unwrap() + APIC_ICR2).as_mut_ptr::<u32>())
+			};
 			*icr2 = destination;
 
 			// The remaining data without the destination will now be written into ICR1.
