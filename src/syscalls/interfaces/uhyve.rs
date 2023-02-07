@@ -174,9 +174,9 @@ impl SyscallInterface for Uhyve {
 		);
 		uhyve_send(UHYVE_PORT_CMDVAL, &mut syscmdval);
 
-		let (argv_ptr, _, _) = argv.into_raw_parts();
-		let (env_ptr, _, _) = env.into_raw_parts();
-		(syscmdsize.argc, argv_ptr, env_ptr)
+		let argv = argv.leak().as_ptr();
+		let env = env.leak().as_ptr();
+		(syscmdsize.argc, argv, env)
 	}
 
 	fn shutdown(&self, arg: i32) -> ! {
