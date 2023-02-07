@@ -17,7 +17,6 @@
 #![feature(new_uninit)]
 #![feature(specialization)]
 #![feature(core_intrinsics)]
-#![feature(alloc_error_handler)]
 #![feature(strict_provenance)]
 #![feature(is_some_and)]
 #![cfg_attr(target_os = "none", no_std)]
