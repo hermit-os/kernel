@@ -16,7 +16,6 @@
 #![feature(naked_functions)]
 #![feature(new_uninit)]
 #![feature(specialization)]
-#![feature(core_intrinsics)]
 #![feature(strict_provenance)]
 #![feature(is_some_and)]
 #![cfg_attr(target_os = "none", no_std)]
