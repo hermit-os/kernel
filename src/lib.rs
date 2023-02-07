@@ -78,8 +78,6 @@ pub(crate) mod fd;
 mod mm;
 #[cfg(feature = "tcp")]
 mod net;
-#[cfg(target_os = "none")]
-mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
@@ -380,4 +378,13 @@ fn application_processor_main() -> ! {
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
 	core_scheduler.run();
+}
+
+#[cfg(target_os = "none")]
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+	let core_id = crate::arch::core_local::core_id();
+	println!("[{core_id}][PANIC] {info}");
+
+	crate::syscalls::shutdown(1)
 }
