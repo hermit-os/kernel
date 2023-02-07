@@ -11,7 +11,6 @@
 #![feature(allocator_api)]
 #![feature(atomic_mut_ptr)]
 #![feature(asm_const)]
-#![feature(const_mut_refs)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
 #![feature(new_uninit)]
