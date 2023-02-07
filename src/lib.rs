@@ -19,7 +19,6 @@
 #![feature(core_intrinsics)]
 #![feature(alloc_error_handler)]
 #![feature(vec_into_raw_parts)]
-#![feature(drain_filter)]
 #![feature(strict_provenance)]
 #![feature(is_some_and)]
 #![cfg_attr(target_os = "none", no_std)]
