@@ -22,6 +22,11 @@ bitflags! {
 	}
 }
 
+fn addr(addr: &AtomicU32) -> usize {
+	let ptr: *const _ = addr;
+	ptr.addr()
+}
+
 /// If the value at address matches the expected value, park the current thread until it is either
 /// woken up with `futex_wake` (returns 0) or the specified timeout elapses (returns -ETIMEDOUT).
 ///
@@ -44,10 +49,7 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 	let scheduler = core_scheduler();
 	scheduler.block_current_task(wakeup_time);
 	let handle = scheduler.get_current_task_handle();
-	parking_lot
-		.entry(address.as_mut_ptr().addr())
-		.or_default()
-		.push(handle);
+	parking_lot.entry(addr(address)).or_default().push(handle);
 	drop(parking_lot);
 
 	loop {
@@ -57,7 +59,7 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 		if wakeup_time.is_some_and(|t| t <= get_timer_ticks()) {
 			let mut wakeup = true;
 			// Timeout occurred, try to remove ourselves from the waiting queue.
-			if let Entry::Occupied(mut queue) = parking_lot.entry(address.as_mut_ptr().addr()) {
+			if let Entry::Occupied(mut queue) = parking_lot.entry(addr(address)) {
 				// If we are not in the waking queue, this must have been a wakeup.
 				wakeup = !queue.get_mut().remove(handle);
 				if queue.get().is_empty() {
@@ -73,7 +75,7 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 		} else {
 			// If we are not in the waking queue, this must have been a wakeup.
 			let wakeup = !parking_lot
-				.get(&address.as_mut_ptr().addr())
+				.get(&addr(address))
 				.is_some_and(|queue| queue.contains(handle));
 
 			if wakeup {
@@ -97,7 +99,7 @@ pub fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
 	}
 
 	let mut parking_lot = PARKING_LOT.lock();
-	let mut queue = match parking_lot.entry(address.as_mut_ptr().addr()) {
+	let mut queue = match parking_lot.entry(addr(address)) {
 		Entry::Occupied(entry) => entry,
 		Entry::Vacant(_) => return 0,
 	};

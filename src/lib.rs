@@ -9,7 +9,6 @@
 #![allow(incomplete_features)]
 #![feature(abi_x86_interrupt)]
 #![feature(allocator_api)]
-#![feature(atomic_mut_ptr)]
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
