@@ -6,7 +6,7 @@
 #![warn(unsafe_op_in_unsafe_fn)]
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
-#![allow(incomplete_features)]
+#![cfg_attr(target_arch = "aarch64", allow(incomplete_features))]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
