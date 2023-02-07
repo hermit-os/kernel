@@ -1,8 +1,7 @@
 use core::hint::spin_loop;
-use core::num::NonZeroU64;
 
 use hermit_entry::boot_info::PlatformInfo;
-use hermit_sync::without_interrupts;
+use hermit_sync::{without_interrupts, OnceCell};
 use time::OffsetDateTime;
 use x86::io::*;
 
@@ -171,10 +170,10 @@ impl Rtc {
 	}
 }
 
-static mut BOOT_TIME: Option<NonZeroU64> = None;
+static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
 pub fn get_boot_time() -> u64 {
-	unsafe { BOOT_TIME.unwrap().get() }
+	*BOOT_TIME.get().unwrap()
 }
 
 pub fn init() {
@@ -191,7 +190,5 @@ pub fn init() {
 	info!("HermitCore-rs booted on {boot_time}");
 
 	let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-	unsafe {
-		BOOT_TIME = Some(micros.try_into().unwrap());
-	}
+	BOOT_TIME.set(micros).unwrap();
 }
