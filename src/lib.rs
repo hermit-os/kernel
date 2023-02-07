@@ -12,7 +12,7 @@
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
-#![feature(specialization)]
+#![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
