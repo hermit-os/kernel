@@ -12,7 +12,6 @@
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
-#![feature(new_uninit)]
 #![feature(specialization)]
 #![feature(strict_provenance)]
 #![feature(is_some_and)]
