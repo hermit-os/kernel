@@ -7,7 +7,7 @@
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
-#![feature(abi_x86_interrupt)]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
