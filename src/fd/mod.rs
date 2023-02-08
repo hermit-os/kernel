@@ -13,7 +13,6 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::synch::rwlock::RWLock;
 use crate::syscalls::fs::{self, FilePerms};
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 use crate::syscalls::net::*;
@@ -36,8 +35,8 @@ const STDERR_FILENO: FileDescriptor = 2;
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: RWLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
-	RWLock::new(HashMap::<
+static OBJECT_MAP: pflock::PFLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
+	pflock::PFLock::new(HashMap::<
 		FileDescriptor,
 		Arc<dyn ObjectInterface>,
 		RandomState,
