@@ -261,26 +261,6 @@ impl<T> Socket<T> {
 
 		Ok(())
 	}
-}
-
-impl<T: core::marker::Sync + core::marker::Send + core::fmt::Debug + 'static> ObjectInterface
-	for Socket<T>
-{
-	default fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
-		-EINVAL
-	}
-
-	default fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
-		-EINVAL
-	}
-
-	default fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
-		-EINVAL
-	}
-
-	default fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
-		-EINVAL
-	}
 
 	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
 		block_on(self.async_accept(addr, addrlen), None)
@@ -545,6 +525,50 @@ impl ObjectInterface for Socket<IPv4> {
 			-EINVAL
 		}
 	}
+
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+		self.accept(addr, addrlen)
+	}
+
+	fn read(&self, buf: *mut u8, len: usize) -> isize {
+		self.read(buf, len)
+	}
+
+	fn write(&self, buf: *const u8, len: usize) -> isize {
+		self.write(buf, len)
+	}
+
+	fn listen(&self, backlog: i32) -> i32 {
+		self.listen(backlog)
+	}
+
+	fn setsockopt(
+		&self,
+		level: i32,
+		optname: i32,
+		optval: *const c_void,
+		optlen: socklen_t,
+	) -> i32 {
+		self.setsockopt(level, optname, optval, optlen)
+	}
+
+	fn getsockopt(
+		&self,
+		level: i32,
+		optname: i32,
+		optval: *mut c_void,
+		optlen: *mut socklen_t,
+	) -> i32 {
+		self.getsockopt(level, optname, optval, optlen)
+	}
+
+	fn shutdown(&self, how: i32) -> i32 {
+		self.shutdown(how)
+	}
+
+	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
+		self.ioctl(cmd, argp)
+	}
 }
 
 impl ObjectInterface for Socket<IPv6> {
@@ -645,5 +669,49 @@ impl ObjectInterface for Socket<IPv6> {
 		} else {
 			-EINVAL
 		}
+	}
+
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+		self.accept(addr, addrlen)
+	}
+
+	fn read(&self, buf: *mut u8, len: usize) -> isize {
+		self.read(buf, len)
+	}
+
+	fn write(&self, buf: *const u8, len: usize) -> isize {
+		self.write(buf, len)
+	}
+
+	fn listen(&self, backlog: i32) -> i32 {
+		self.listen(backlog)
+	}
+
+	fn setsockopt(
+		&self,
+		level: i32,
+		optname: i32,
+		optval: *const c_void,
+		optlen: socklen_t,
+	) -> i32 {
+		self.setsockopt(level, optname, optval, optlen)
+	}
+
+	fn getsockopt(
+		&self,
+		level: i32,
+		optname: i32,
+		optval: *mut c_void,
+		optlen: *mut socklen_t,
+	) -> i32 {
+		self.getsockopt(level, optname, optval, optlen)
+	}
+
+	fn shutdown(&self, how: i32) -> i32 {
+		self.shutdown(how)
+	}
+
+	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
+		self.ioctl(cmd, argp)
 	}
 }
