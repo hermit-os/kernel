@@ -243,6 +243,7 @@ dependencies = [
  "multiboot",
  "num-traits",
  "pci-ids",
+ "pflock",
  "qemu-exit",
  "rand_chacha",
  "shell-words",
@@ -353,6 +354,15 @@ dependencies = [
  "phf_codegen",
  "proc-macro2",
  "quote",
+]
+
+[[package]]
+name = "pflock"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cb30d7f84b469117e8b95025621135ec4b32c8a987e7e40e38d3654e0b2e47e"
+dependencies = [
+ "lock_api",
 ]
 
 [[package]]
