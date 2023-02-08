@@ -4,7 +4,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use ahash::RandomState;
 use hashbrown::HashMap;
-use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex};
+use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, SpinMutex, OnceCell};
 pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as enable_and_wait};
 use x86_64::registers::control::Cr2;
 use x86_64::set_general_handler;
@@ -19,16 +19,19 @@ use crate::scheduler::{self, CoreId};
 pub const IST_ENTRIES: usize = 3;
 pub const IST_SIZE: usize = BasePageSize::SIZE as usize;
 
-pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+pub static IDT_BUILDER: SpinMutex<Option<InterruptDescriptorTable>> = SpinMutex::new(Some(InterruptDescriptorTable::new()));
+static IDT: OnceCell<InterruptDescriptorTable> = OnceCell::new();
 
 pub fn load_idt() {
-	unsafe {
-		IDT.load_unsafe();
+	if let Some(idt) = IDT_BUILDER.lock().take() {
+		IDT.set(idt).unwrap();
 	}
+	IDT.get().unwrap().load();
 }
 
 pub fn install() {
-	let idt = unsafe { &mut IDT };
+	let mut idt = IDT_BUILDER.lock();
+	let idt = idt.as_mut().unwrap();
 
 	set_general_handler!(idt, abort, 0..32);
 	set_general_handler!(idt, unhandle, 32..64);
@@ -54,7 +57,8 @@ pub fn install() {
 pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 	debug!("Install handler for interrupt {}", irq_number);
 
-	let idt = unsafe { &mut IDT };
+	let mut idt = IDT_BUILDER.lock();
+	let idt = idt.as_mut().unwrap();
 	unsafe {
 		idt[(32 + irq_number) as usize].set_handler_addr(x86_64::VirtAddr::new(handler as u64));
 	}

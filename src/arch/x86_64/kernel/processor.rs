@@ -395,7 +395,7 @@ impl CpuFrequency {
 
 	#[cfg(target_os = "none")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
-		use crate::arch::x86_64::kernel::interrupts::IDT;
+		use crate::arch::x86_64::kernel::interrupts::IDT_BUILDER;
 
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
 		if env::is_uhyve() {
@@ -408,7 +408,8 @@ impl CpuFrequency {
 
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
-		let idt = unsafe { &mut IDT };
+		let mut idt = IDT_BUILDER.lock();
+		let idt = idt.as_mut().unwrap();
 		idt[pit::PIT_INTERRUPT_NUMBER as usize]
 			.set_handler_fn(Self::measure_frequency_timer_handler);
 		pit::init(measurement_frequency);
