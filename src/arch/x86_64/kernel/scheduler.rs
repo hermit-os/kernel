@@ -274,10 +274,7 @@ impl TaskTLS {
 			// So the thread pointer needs to be `block_ptr + tls_offset`.
 			// Allocating only tls_len bytes would be enough to hold the TLS block.
 			// For the thread pointer to be sound though, we need it's value to be included in or one byte past the same allocation.
-			let block = Box::<[u8]>::new_zeroed_slice(tls_offset);
-
-			// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
-			unsafe { block.assume_init() }
+			vec![0; tls_offset].into_boxed_slice()
 		};
 
 		// Initialize beginning of the TLS block with TLS initialization image

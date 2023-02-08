@@ -7,22 +7,13 @@
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
 #![allow(incomplete_features)]
-#![feature(abi_x86_interrupt)]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
-#![feature(atomic_mut_ptr)]
 #![feature(asm_const)]
-#![feature(const_mut_refs)]
 #![feature(linked_list_cursors)]
 #![feature(naked_functions)]
-#![feature(new_uninit)]
 #![feature(specialization)]
-#![feature(core_intrinsics)]
-#![feature(alloc_error_handler)]
-#![feature(vec_into_raw_parts)]
-#![feature(drain_filter)]
 #![feature(strict_provenance)]
-#![feature(map_try_insert)]
-#![feature(is_some_and)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
 #![cfg_attr(all(target_os = "none", test), test_runner(crate::test_runner))]
@@ -82,8 +73,6 @@ pub(crate) mod fd;
 mod mm;
 #[cfg(feature = "tcp")]
 mod net;
-#[cfg(target_os = "none")]
-mod runtime_glue;
 mod scheduler;
 mod synch;
 mod syscalls;
@@ -384,4 +373,13 @@ fn application_processor_main() -> ! {
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
 	core_scheduler.run();
+}
+
+#[cfg(target_os = "none")]
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
+	let core_id = crate::arch::core_local::core_id();
+	println!("[{core_id}][PANIC] {info}");
+
+	crate::syscalls::shutdown(1)
 }

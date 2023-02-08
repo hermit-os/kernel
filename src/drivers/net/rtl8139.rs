@@ -519,19 +519,8 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 		outl(iobase + TCR, TCR_IFG | TCR_MXDMA0 | TCR_MXDMA1 | TCR_MXDMA2);
 	}
 
-	let rxbuffer = Box::<[u8]>::try_new_zeroed_slice(RX_BUF_LEN).map_err(|_| {
-		error!("Unable to allocate buffers for RTL8139");
-		DriverError::InitRTL8139DevFail(RTL8139Error::Unknown)
-	})?;
-	// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
-	let rxbuffer = unsafe { rxbuffer.assume_init() };
-
-	let txbuffer = Box::<[u8]>::try_new_zeroed_slice(NO_TX_BUFFERS * TX_BUF_LEN).map_err(|_| {
-		error!("Unable to allocate buffers for RTL8139");
-		DriverError::InitRTL8139DevFail(RTL8139Error::Unknown)
-	})?;
-	// SAFETY: All u8s can hold the bit-pattern 0 as a valid value
-	let txbuffer = unsafe { txbuffer.assume_init() };
+	let rxbuffer = vec![0; RX_BUF_LEN].into_boxed_slice();
+	let txbuffer = vec![0; NO_TX_BUFFERS * TX_BUF_LEN].into_boxed_slice();
 
 	debug!(
 		"Allocate TxBuffer at {:p} and RxBuffer at {:p}",

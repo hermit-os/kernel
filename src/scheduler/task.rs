@@ -168,9 +168,8 @@ impl TaskHandlePriorityQueue {
 	/// Checks if the given task is in the queue. Returns `true` if the task
 	/// was found.
 	pub fn contains(&self, task: TaskHandle) -> bool {
-		self.queues[task.priority.into() as usize]
-			.as_ref()
-			.is_some_and(|queue| queue.iter().any(|queued| queued.id == task.id))
+		matches!(self.queues[task.priority.into() as usize]
+			.as_ref(), Some(queue) if queue.iter().any(|queued| queued.id == task.id))
 	}
 
 	/// Add a task handle by its priority to the queue
