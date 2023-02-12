@@ -1,6 +1,7 @@
 use std::str::FromStr;
 
 use anyhow::anyhow;
+use xshell::{cmd, Shell};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Target {
@@ -10,6 +11,19 @@ pub enum Target {
 }
 
 impl Target {
+	pub fn install(&self) -> xshell::Result<()> {
+		let sh = Shell::new()?;
+
+		let triple = self.triple();
+		cmd!(sh, "rustup target add {triple}").run()?;
+
+		if self == &Self::X86_64 {
+			cmd!(sh, "rustup component add llvm-tools-preview").run()?;
+		}
+
+		Ok(())
+	}
+
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",

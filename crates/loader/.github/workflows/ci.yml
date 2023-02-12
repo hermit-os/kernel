@@ -7,9 +7,6 @@ on:
       - trying
   pull_request:
 
-env:
-  CARGO_TERM_COLOR: always
-
 defaults:
   run:
     shell: bash
@@ -24,6 +21,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - name: Clippy
         run: cargo xtask clippy
         env:
@@ -34,6 +35,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
       - name: Check Formatting
         run: cargo fmt -- --check
 
@@ -65,12 +70,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
             lfs: true
-      - name: Use nightly toolchain (UEFI)
+      - name: Install stable Rust toolchain
+        if: matrix.target != 'x86_64-uefi'
+        uses: dtolnay/rust-toolchain@stable
+      - name: Use nightly Rust toolchain (UEFI)
         if: matrix.target == 'x86_64-uefi'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2023-02-01
-          targets: x86_64-unknown-uefi
       - name: Build
         run: cargo xtask build --target ${{ matrix.target }}
         env:

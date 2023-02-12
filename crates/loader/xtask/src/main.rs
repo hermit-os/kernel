@@ -30,6 +30,8 @@ impl flags::Xtask {
 
 impl flags::Build {
 	fn run(self) -> Result<()> {
+		self.target.install()?;
+
 		let sh = Shell::new()?;
 
 		eprintln!("Building loader");
@@ -147,6 +149,7 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
 		for target in [Target::X86_64] {
+			target.install()?;
 			let triple = target.triple();
 			cmd!(sh, "cargo clippy --target={triple}")
 				.env("HERMIT_APP", hermit_app(target))
