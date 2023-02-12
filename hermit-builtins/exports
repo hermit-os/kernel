@@ -1,0 +1,5 @@
+memcmp
+memcpy
+memmove
+memset
+strlen
