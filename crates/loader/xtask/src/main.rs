@@ -33,9 +33,9 @@ impl flags::Build {
 		let sh = sh()?;
 
 		eprintln!("Building loader");
-		cmd!(sh, "cargo build")
+		let triple = self.target.triple();
+		cmd!(sh, "cargo build --target={triple}")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(self.target.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.profile_args())
 			.run()?;
@@ -147,8 +147,8 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
 		for target in [Target::X86_64] {
-			let target_args = target.cargo_args();
-			cmd!(sh, "cargo clippy {target_args...}")
+			let triple = target.triple();
+			cmd!(sh, "cargo clippy --target={triple}")
 				.env("HERMIT_APP", hermit_app(target))
 				.run()?;
 		}
