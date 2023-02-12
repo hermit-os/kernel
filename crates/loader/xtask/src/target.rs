@@ -26,14 +26,6 @@ impl Target {
 		}
 	}
 
-	pub fn cargo_args(&self) -> &'static [&'static str] {
-		match self {
-			Self::X86_64 => &["--target=x86_64-unknown-none"],
-			Self::X86_64Uefi => &["--target=x86_64-unknown-uefi"],
-			Self::AArch64 => &["--target=aarch64-unknown-none-softfloat"],
-		}
-	}
-
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &[
