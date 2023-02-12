@@ -30,7 +30,9 @@ impl flags::Xtask {
 
 impl flags::Build {
 	fn run(self) -> Result<()> {
-		let sh = sh()?;
+		self.target.install()?;
+
+		let sh = Shell::new()?;
 
 		eprintln!("Building loader");
 		let triple = self.target.triple();
@@ -85,7 +87,7 @@ impl flags::Build {
 	}
 
 	fn convert_to_elf32_i386(&self) -> Result<()> {
-		let sh = sh()?;
+		let sh = Shell::new()?;
 		let objcopy = binutil("objcopy")?;
 		let object = self.dist_object();
 		cmd!(sh, "{objcopy} --output-target elf32-i386 {object}").run()?;
@@ -139,7 +141,7 @@ impl flags::Build {
 
 impl flags::Clippy {
 	fn run(self) -> Result<()> {
-		let sh = sh()?;
+		let sh = Shell::new()?;
 
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/rusty-loader/issues/78
@@ -147,6 +149,7 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/rusty-loader/issues/122
 		#[allow(clippy::single_element_loop)]
 		for target in [Target::X86_64] {
+			target.install()?;
 			let triple = target.triple();
 			cmd!(sh, "cargo clippy --target={triple}")
 				.env("HERMIT_APP", hermit_app(target))
@@ -160,11 +163,7 @@ impl flags::Clippy {
 }
 
 fn hermit_app(target: Target) -> PathBuf {
-	let mut hermit_app = project_root().to_path_buf();
-	hermit_app.push("data");
-	hermit_app.push(target.name());
-	hermit_app.push("hello_world");
-	hermit_app
+	["data", target.name(), "hello_world"].iter().collect()
 }
 
 fn binutil(name: &str) -> Result<PathBuf> {
@@ -177,14 +176,4 @@ fn binutil(name: &str) -> Result<PathBuf> {
 		.ok_or_else(|| anyhow!("could not find {exe}"))?;
 
 	Ok(path)
-}
-
-fn sh() -> Result<Shell> {
-	let sh = Shell::new()?;
-	sh.change_dir(project_root());
-	Ok(sh)
-}
-
-fn project_root() -> &'static Path {
-	Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap()
 }
