@@ -69,7 +69,8 @@ jobs:
         if: matrix.target == 'x86_64-uefi'
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2022-08-01
+          toolchain: nightly-2023-02-01
+          targets: x86_64-unknown-uefi
       - name: Build
         run: cargo xtask build --target ${{ matrix.target }}
         env:
