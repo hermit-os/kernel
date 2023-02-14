@@ -63,7 +63,8 @@ impl flags::Build {
 
 		eprintln!("Exporting hermit-builtins symbols");
 		let builtins = self.builtins_archive();
-		builtins.retain_symbols(["memcmp", "memcpy", "memmove", "memset", "strlen"].into_iter())?;
+		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
+		builtins.retain_symbols(builtin_symbols.lines())?;
 
 		dist_archive.append(&builtins)?;
 
