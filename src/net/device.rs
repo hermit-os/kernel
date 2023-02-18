@@ -151,6 +151,15 @@ impl<'a> NetworkInterface<'a> {
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
+		let ip_addrs = [IpCidr::new(
+			IpAddress::v4(
+				myip.as_bytes()[0],
+				myip.as_bytes()[1],
+				myip.as_bytes()[2],
+				myip.as_bytes()[3],
+			),
+			prefix_len.try_into().unwrap(),
+		)];
 
 		info!("MAC address {}", hardware_addr);
 		info!("Configure network interface with address {}", ip_addrs[0]);
