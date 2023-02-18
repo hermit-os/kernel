@@ -89,7 +89,7 @@ async-task = { version = "4.3", default-features = false, optional = true }
 lock_api = "0.4"
 
 [dependencies.smoltcp]
-version = "0.8"
+version = "0.9"
 optional = true
 default-features = false
 features = [

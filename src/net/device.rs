@@ -1,20 +1,19 @@
 use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::slice;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
-use smoltcp::iface::{InterfaceBuilder, NeighborCache, Routes};
+use smoltcp::iface::{Config, Interface, SocketSet};
 #[cfg(feature = "trace")]
 use smoltcp::phy::Tracer;
-use smoltcp::phy::{self, Device, DeviceCapabilities};
+use smoltcp::phy::{self, Device, DeviceCapabilities, Medium};
 #[cfg(feature = "dhcpv4")]
-use smoltcp::socket::Dhcpv4Socket;
+use smoltcp::socket::dhcpv4;
 use smoltcp::time::Instant;
+use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
-use smoltcp::wire::IpAddress;
-use smoltcp::wire::{EthernetAddress, HardwareAddress, IpCidr, Ipv4Address};
+use smoltcp::wire::{IpAddress, IpCidr, Ipv4Address};
 
 use crate::arch;
 #[cfg(not(feature = "dhcpv4"))]
@@ -62,16 +61,16 @@ macro_rules! hermit_var_or {
 	}};
 }
 
-impl NetworkInterface<HermitNet> {
+impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
-	pub(crate) fn create() -> NetworkState {
+	pub(crate) fn create() -> NetworkState<'a> {
 		let mtu = match SYS.get_mtu() {
 			Ok(mtu) => mtu,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
 			}
 		};
-		let device = HermitNet::new(mtu);
+		let mut device = HermitNet::new(mtu);
 		#[cfg(feature = "trace")]
 		let device = Tracer::new(device, |_timestamp, printer| {
 			trace!("{}", printer);
@@ -84,42 +83,42 @@ impl NetworkInterface<HermitNet> {
 			}
 		};
 
-		let neighbor_cache = NeighborCache::new(BTreeMap::new());
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [IpCidr::new(Ipv4Address::UNSPECIFIED.into(), 0)];
-		let routes = Routes::new(BTreeMap::new());
 
 		info!("MAC address {}", hardware_addr);
 		info!("MTU: {} bytes", mtu);
 
-		let dhcp = Dhcpv4Socket::new();
+		let dhcp = dhcpv4::Socket::new();
 
-		// Return the current time based on the wallclock time when we were booted up
-		// plus the current timer ticks.
-		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
-		let mut iface = InterfaceBuilder::new(device, vec![])
-			.hardware_addr(hardware_addr)
-			.neighbor_cache(neighbor_cache)
-			.ip_addrs(ip_addrs)
-			.routes(routes)
-			.random_seed(seed)
-			.finalize();
+		// use the current time based on the wall-clock time as seed
+		let mut config = Config::new();
+		config.random_seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
+		if device.capabilities().medium == Medium::Ethernet {
+			config.hardware_addr = Some(hardware_addr).into();
+		}
 
-		let dhcp_handle = iface.add_socket(dhcp);
+		let iface = Interface::new(config, &mut device);
+		let mut sockets = SocketSet::new(vec![]);
+		let dhcp_handle = sockets.add(dhcp);
 
-		NetworkState::Initialized(Box::new(Self { iface, dhcp_handle }))
+		NetworkState::Initialized(Box::new(Self {
+			iface,
+			sockets,
+			device,
+			dhcp_handle,
+		}))
 	}
 
 	#[cfg(not(feature = "dhcpv4"))]
-	pub(crate) fn create() -> NetworkState {
+	pub(crate) fn create() -> NetworkState<'a> {
 		let mtu = match SYS.get_mtu() {
 			Ok(mtu) => mtu,
 			Err(_) => {
 				return NetworkState::InitializationFailed;
 			}
 		};
-		let device = HermitNet::new(mtu);
+		let mut device = HermitNet::new(mtu);
 		#[cfg(feature = "trace")]
 		let device = Tracer::new(device, |_timestamp, printer| {
 			trace!("{}", printer);
@@ -150,44 +149,48 @@ impl NetworkInterface<HermitNet> {
 			prefix_len += (!mymask.as_bytes()[3]).trailing_zeros();
 		}
 
-		let neighbor_cache = NeighborCache::new(BTreeMap::new());
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
-		let ip_addrs = [IpCidr::new(
-			IpAddress::v4(
-				myip.as_bytes()[0],
-				myip.as_bytes()[1],
-				myip.as_bytes()[2],
-				myip.as_bytes()[3],
-			),
-			prefix_len.try_into().unwrap(),
-		)];
-		let mut routes = Routes::new(BTreeMap::new());
-		routes.add_default_ipv4_route(mygw).unwrap();
 
 		info!("MAC address {}", hardware_addr);
 		info!("Configure network interface with address {}", ip_addrs[0]);
 		info!("Configure gateway with address {}", mygw);
 		info!("MTU: {} bytes", mtu);
 
-		// Return the current time based on the wallclock time when we were booted up
-		// plus the current timer ticks.
-		let seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
-		let iface = InterfaceBuilder::new(device, vec![])
-			.hardware_addr(hardware_addr)
-			.neighbor_cache(neighbor_cache)
-			.ip_addrs(ip_addrs)
-			.routes(routes)
-			.random_seed(seed)
-			.finalize();
+		// use the current time based on the wall-clock time as seed
+		let mut config = Config::new();
+		config.random_seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
+		if device.capabilities().medium == Medium::Ethernet {
+			config.hardware_addr = Some(hardware_addr).into();
+		}
 
-		NetworkState::Initialized(Box::new(Self { iface }))
+		let mut iface = Interface::new(config, &mut device);
+		iface.update_ip_addrs(|ip_addrs| {
+			ip_addrs
+				.push(IpCidr::new(
+					IpAddress::v4(
+						myip.as_bytes()[0],
+						myip.as_bytes()[1],
+						myip.as_bytes()[2],
+						myip.as_bytes()[3],
+					),
+					prefix_len.try_into().unwrap(),
+				))
+				.unwrap();
+		});
+		iface.routes_mut().add_default_ipv4_route(mygw).unwrap();
+
+		NetworkState::Initialized(Box::new(Self {
+			iface,
+			sockets: SocketSet::new(vec![]),
+			device,
+		}))
 	}
 }
 
-impl<'a> Device<'a> for HermitNet {
-	type RxToken = RxToken;
-	type TxToken = TxToken;
+impl Device for HermitNet {
+	type RxToken<'a> = RxToken;
+	type TxToken<'a> = TxToken;
 
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
@@ -195,14 +198,14 @@ impl<'a> Device<'a> for HermitNet {
 		cap
 	}
 
-	fn receive(&'a mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
 		match SYS.receive_rx_buffer() {
 			Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
 			_ => None,
 		}
 	}
 
-	fn transmit(&'a mut self) -> Option<Self::TxToken> {
+	fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
 		trace!("create TxToken to transfer data");
 		Some(TxToken::new())
 	}
@@ -220,10 +223,9 @@ impl RxToken {
 }
 
 impl phy::RxToken for RxToken {
-	#[allow(unused_mut)]
-	fn consume<R, F>(mut self, _timestamp: Instant, f: F) -> smoltcp::Result<R>
+	fn consume<R, F>(mut self, f: F) -> R
 	where
-		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
+		F: FnOnce(&mut [u8]) -> R,
 	{
 		f(&mut self.buffer[..])
 	}
@@ -239,26 +241,14 @@ impl TxToken {
 }
 
 impl phy::TxToken for TxToken {
-	fn consume<R, F>(self, _timestamp: Instant, len: usize, f: F) -> smoltcp::Result<R>
+	fn consume<R, F>(self, len: usize, f: F) -> R
 	where
-		F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
+		F: FnOnce(&mut [u8]) -> R,
 	{
-		let (tx_buffer, handle) = SYS
-			.get_tx_buffer(len)
-			.map_err(|_| smoltcp::Error::Exhausted)?;
+		let (tx_buffer, handle) = SYS.get_tx_buffer(len).unwrap();
 		let tx_slice: &'static mut [u8] = unsafe { slice::from_raw_parts_mut(tx_buffer, len) };
-		match f(tx_slice) {
-			Ok(result) => {
-				if SYS.send_tx_buffer(handle, len).is_ok() {
-					Ok(result)
-				} else {
-					Err(smoltcp::Error::Exhausted)
-				}
-			}
-			Err(e) => {
-				let _ = SYS.free_tx_buffer(handle);
-				Err(e)
-			}
-		}
+		let result = f(tx_slice);
+		let _ = SYS.send_tx_buffer(handle, len);
+		result
 	}
 }
