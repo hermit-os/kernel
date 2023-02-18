@@ -144,10 +144,8 @@ impl<'a> NetworkInterface<'a> {
 				self.iface.update_ip_addrs(|addrs| {
 					if let Some(dest) = addrs.iter_mut().next() {
 						*dest = IpCidr::Ipv4(config.address);
-					} else {
-						if !addrs.push(IpCidr::Ipv4(config.address)).is_ok() {
-							info!("Unable to update IP address");
-						}
+					} else if addrs.push(IpCidr::Ipv4(config.address)).is_err() {
+						info!("Unable to update IP address");
 					}
 				});
 				if let Some(router) = config.router {

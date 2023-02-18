@@ -95,7 +95,7 @@ impl<'a> NetworkInterface<'a> {
 		let mut config = Config::new();
 		config.random_seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		if device.capabilities().medium == Medium::Ethernet {
-			config.hardware_addr = Some(hardware_addr).into();
+			config.hardware_addr = Some(hardware_addr);
 		}
 
 		let iface = Interface::new(config, &mut device);
