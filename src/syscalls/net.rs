@@ -2,7 +2,7 @@
 #![allow(nonstandard_style)]
 use core::ffi::c_void;
 
-use smoltcp::socket::TcpSocket;
+use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
@@ -95,7 +95,7 @@ pub fn sys_tcp_stream_peek(_handle: Handle, _buf: &mut [u8]) -> Result<usize, ()
 pub fn sys_tcp_set_no_delay(handle: Handle, mode: bool) -> Result<(), ()> {
 	let mut guard = crate::net::NIC.lock();
 	let nic = guard.as_nic_mut().map_err(drop)?;
-	let socket = nic.iface.get_socket::<TcpSocket<'_>>(handle);
+	let socket = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 	socket.set_nagle_enabled(!mode);
 
 	Ok(())
@@ -127,11 +127,13 @@ pub fn sys_tcp_stream_get_tll(_handle: Handle) -> Result<u32, ()> {
 pub fn sys_tcp_stream_peer_addr(handle: Handle) -> Result<(IpAddress, u16), ()> {
 	let mut guard = crate::net::NIC.lock();
 	let nic = guard.as_nic_mut().map_err(drop)?;
-	let socket = nic.iface.get_socket::<TcpSocket<'_>>(handle);
+	let socket = nic.get_mut_socket::<tcp::Socket<'_>>(handle);
 	socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
-	let endpoint = socket.remote_endpoint();
-
-	Ok((endpoint.addr, endpoint.port))
+	if let Some(endpoint) = socket.remote_endpoint() {
+		Ok((endpoint.addr, endpoint.port))
+	} else {
+		Err(())
+	}
 }
 
 #[cfg(feature = "tcp")]

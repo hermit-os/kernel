@@ -7,7 +7,7 @@ use core::task::Poll;
 
 use futures_lite::future;
 use smoltcp::iface;
-use smoltcp::socket::{TcpSocket, TcpState};
+use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
@@ -48,24 +48,19 @@ impl<T> Socket<T> {
 		}
 	}
 
-	fn with<R>(&self, f: impl FnOnce(&mut TcpSocket<'_>) -> R) -> R {
+	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let result = f(nic.iface.get_socket::<TcpSocket<'_>>(self.handle));
+		let result = f(nic.get_mut_socket::<tcp::Socket<'_>>(self.handle));
 		nic.poll_common(now());
 
 		result
 	}
 
-	fn with_context<R>(
-		&self,
-		f: impl FnOnce(&mut TcpSocket<'_>, &mut iface::Context<'_>) -> R,
-	) -> R {
+	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().unwrap();
-		let (s, cx) = nic
-			.iface
-			.get_socket_and_context::<TcpSocket<'_>>(self.handle);
+		let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(self.handle);
 		let result = f(s, cx);
 		nic.poll_common(now());
 
@@ -85,12 +80,12 @@ impl<T> Socket<T> {
 				}
 
 				match socket.state() {
-					TcpState::FinWait1
-					| TcpState::FinWait2
-					| TcpState::Closed
-					| TcpState::Closing
-					| TcpState::CloseWait
-					| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+					tcp::State::FinWait1
+					| tcp::State::FinWait2
+					| tcp::State::Closed
+					| tcp::State::Closing
+					| tcp::State::CloseWait
+					| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 					_ => {
 						if socket.can_recv() {
 							Poll::Ready(
@@ -131,12 +126,12 @@ impl<T> Socket<T> {
 					}
 
 					match socket.state() {
-						TcpState::FinWait1
-						| TcpState::FinWait2
-						| TcpState::Closed
-						| TcpState::Closing
-						| TcpState::CloseWait
-						| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+						tcp::State::FinWait1
+						| tcp::State::FinWait2
+						| tcp::State::Closed
+						| tcp::State::Closing
+						| tcp::State::CloseWait
+						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 						_ => {
 							socket.register_send_waker(cx.waker());
 							Poll::Pending
@@ -159,15 +154,17 @@ impl<T> Socket<T> {
 	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, i32> {
 		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
 			.map_err(|x| {
-				info!("x {}", x);
+				info!("x {:?}", x);
 				-crate::errno::EIO
 			})?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				TcpState::Closed | TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EFAULT)),
-				TcpState::Listen => Poll::Ready(Err(-crate::errno::EIO)),
-				TcpState::SynSent | TcpState::SynReceived => {
+				tcp::State::Closed | tcp::State::TimeWait => {
+					Poll::Ready(Err(-crate::errno::EFAULT))
+				}
+				tcp::State::Listen => Poll::Ready(Err(-crate::errno::EIO)),
+				tcp::State::SynSent | tcp::State::SynReceived => {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
 				}
@@ -180,11 +177,11 @@ impl<T> Socket<T> {
 	async fn async_close(&self) -> Result<(), i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				TcpState::FinWait1
-				| TcpState::FinWait2
-				| TcpState::Closed
-				| TcpState::Closing
-				| TcpState::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+				tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Closed
+				| tcp::State::Closing
+				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 				_ => {
 					if socket.send_queue() > 0 {
 						socket.register_send_waker(cx.waker());
@@ -200,11 +197,11 @@ impl<T> Socket<T> {
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				TcpState::FinWait1
-				| TcpState::FinWait2
-				| TcpState::Closed
-				| TcpState::Closing
-				| TcpState::TimeWait => Poll::Ready(Ok(())),
+				tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Closed
+				| tcp::State::Closing
+				| tcp::State::TimeWait => Poll::Ready(Ok(())),
 				_ => {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
@@ -221,11 +218,11 @@ impl<T> Socket<T> {
 	) -> Result<(), i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				TcpState::Closed => {
+				tcp::State::Closed => {
 					let _ = socket.listen(self.port.load(Ordering::Acquire));
 					Poll::Ready(())
 				}
-				TcpState::Listen => Poll::Ready(()),
+				tcp::State::Listen => Poll::Ready(()),
 				_ => {
 					socket.register_recv_waker(cx.waker());
 					Poll::Pending
@@ -240,10 +237,10 @@ impl<T> Socket<T> {
 					Poll::Ready(Ok(()))
 				} else {
 					match socket.state() {
-						TcpState::Closed
-						| TcpState::Closing
-						| TcpState::FinWait1
-						| TcpState::FinWait2 => Poll::Ready(Err(-crate::errno::EIO)),
+						tcp::State::Closed
+						| tcp::State::Closing
+						| tcp::State::FinWait1
+						| tcp::State::FinWait2 => Poll::Ready(Err(-crate::errno::EIO)),
 						_ => {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
@@ -256,7 +253,7 @@ impl<T> Socket<T> {
 
 		let mut guard = NIC.lock();
 		let nic = guard.as_nic_mut().map_err(|_| -crate::errno::EIO)?;
-		let socket = nic.iface.get_socket::<TcpSocket<'_>>(self.handle);
+		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 
 		Ok(())
@@ -479,20 +476,24 @@ impl ObjectInterface for Socket<IPv4> {
 
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in>().try_into().unwrap() {
+			let mut ret: i32 = 0;
 			let addr = unsafe { &mut *(name as *mut sockaddr_in) };
 
 			self.with(|socket| {
-				let remote = socket.remote_endpoint();
-				addr.sin_port = remote.port.to_be();
+				if let Some(remote) = socket.remote_endpoint() {
+					addr.sin_port = remote.port.to_be();
 
-				if let IpAddress::Ipv4(ip) = remote.addr {
-					addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+					if let IpAddress::Ipv4(ip) = remote.addr {
+						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+					}
+				} else {
+					ret = -crate::errno::ENOTCONN;
 				}
 			});
 
 			*namelen = size_of::<sockaddr_in>().try_into().unwrap();
 
-			0
+			ret
 		} else {
 			-EINVAL
 		}
@@ -506,15 +507,15 @@ impl ObjectInterface for Socket<IPv4> {
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in>().try_into().unwrap() {
 			let addr = unsafe { &mut *(name as *mut sockaddr_in) };
+			addr.sin_family = AF_INET.try_into().unwrap();
 
 			self.with(|socket| {
-				let local = socket.local_endpoint();
+				if let Some(local) = socket.local_endpoint() {
+					addr.sin_port = local.port.to_be();
 
-				addr.sin_port = local.port.to_be();
-				addr.sin_family = AF_INET.try_into().unwrap();
-
-				if let IpAddress::Ipv4(ip) = local.addr {
-					addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+					if let IpAddress::Ipv4(ip) = local.addr {
+						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+					}
 				}
 			});
 
@@ -624,20 +625,24 @@ impl ObjectInterface for Socket<IPv6> {
 
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in6>().try_into().unwrap() {
+			let mut ret: i32 = 0;
 			let addr = unsafe { &mut *(name as *mut sockaddr_in6) };
 
 			self.with(|socket| {
-				let remote = socket.remote_endpoint();
-				addr.sin6_port = remote.port.to_be();
+				if let Some(remote) = socket.remote_endpoint() {
+					addr.sin6_port = remote.port.to_be();
 
-				if let IpAddress::Ipv6(ip) = remote.addr {
-					addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+					if let IpAddress::Ipv6(ip) = remote.addr {
+						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+					}
+				} else {
+					ret = -crate::errno::ENOTCONN;
 				}
 			});
 
 			*namelen = size_of::<sockaddr_in>().try_into().unwrap();
 
-			0
+			ret
 		} else {
 			-EINVAL
 		}
@@ -651,15 +656,15 @@ impl ObjectInterface for Socket<IPv6> {
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in6>().try_into().unwrap() {
 			let addr = unsafe { &mut *(name as *mut sockaddr_in6) };
+			addr.sin6_family = AF_INET6.try_into().unwrap();
 
 			self.with(|socket| {
-				let local = socket.local_endpoint();
+				if let Some(local) = socket.local_endpoint() {
+					addr.sin6_port = local.port.to_be();
 
-				addr.sin6_port = local.port.to_be();
-				addr.sin6_family = AF_INET6.try_into().unwrap();
-
-				if let IpAddress::Ipv6(ip) = local.addr {
-					addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+					if let IpAddress::Ipv6(ip) = local.addr {
+						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+					}
 				}
 			});
 
