@@ -12,9 +12,9 @@ use crate::arch::kernel::apic;
 use crate::arch::kernel::core_local::*;
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
-use crate::arch::kernel::mmio;
+use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
-use crate::arch::kernel::pci;
+use crate::arch::kernel::pci as hardware;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {
@@ -45,21 +45,11 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 	debug!("Receive network interrupt");
 	apic::eoi();
 
-	#[cfg(feature = "pci")]
-	let has_packet = match pci::get_network_driver() {
-		Some(driver) => driver.lock().handle_interrupt(),
-		_ => {
-			debug!("Unable to handle interrupt!");
-			false
-		}
-	};
-	#[cfg(not(feature = "pci"))]
-	let has_packet = match mmio::get_network_driver() {
-		Some(driver) => driver.lock().handle_interrupt(),
-		_ => {
-			debug!("Unable to handle interrupt!");
-			false
-		}
+	let has_packet = if let Some(driver) = hardware::get_network_driver() {
+		driver.lock().handle_interrupt()
+	} else {
+		debug!("Unable to handle interrupt!");
+		false
 	};
 
 	if has_packet {
