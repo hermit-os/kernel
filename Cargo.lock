@@ -237,10 +237,11 @@ dependencies = [
 
 [[package]]
 name = "hermit-entry"
-version = "0.9.1"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6decc531b731ff869007d027547adc48446591650c065dd04c98bd65d420c3e5"
+checksum = "b95c35e11db119492028983535374cc944260a8c0db53a784d80ccfa44a97369"
 dependencies = [
+ "align-address",
  "time",
 ]
 
