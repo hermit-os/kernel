@@ -16,10 +16,13 @@ use smoltcp::wire::{EthernetAddress, HardwareAddress};
 use smoltcp::wire::{IpAddress, IpCidr, Ipv4Address};
 
 use crate::arch;
+#[cfg(not(feature = "pci"))]
+use crate::arch::kernel::mmio as hardware;
+#[cfg(feature = "pci")]
+use crate::arch::kernel::pci as hardware;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
 use crate::net::{NetworkInterface, NetworkState};
-use crate::syscalls::SYS;
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]
@@ -64,24 +67,18 @@ macro_rules! hermit_var_or {
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let mtu = match SYS.get_mtu() {
-			Ok(mtu) => mtu,
-			Err(_) => {
-				return NetworkState::InitializationFailed;
-			}
+		let (mtu, mac) = if let Some(driver) = hardware::get_network_driver() {
+			let guard = driver.lock();
+			(guard.get_mtu(), guard.get_mac_address())
+		} else {
+			return NetworkState::InitializationFailed;
 		};
+
 		let mut device = HermitNet::new(mtu);
 		#[cfg(feature = "trace")]
 		let device = Tracer::new(device, |_timestamp, printer| {
 			trace!("{}", printer);
 		});
-
-		let mac: [u8; 6] = match SYS.get_mac_address() {
-			Ok(mac) => mac,
-			Err(_) => {
-				return NetworkState::InitializationFailed;
-			}
-		};
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
@@ -112,24 +109,18 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let mtu = match SYS.get_mtu() {
-			Ok(mtu) => mtu,
-			Err(_) => {
-				return NetworkState::InitializationFailed;
-			}
+		let (mtu, mac) = if let Some(driver) = hardware::get_network_driver() {
+			let guard = driver.lock();
+			(guard.get_mtu(), guard.get_mac_address())
+		} else {
+			return NetworkState::InitializationFailed;
 		};
+
 		let mut device = HermitNet::new(mtu);
 		#[cfg(feature = "trace")]
 		let device = Tracer::new(device, |_timestamp, printer| {
 			trace!("{}", printer);
 		});
-
-		let mac: [u8; 6] = match SYS.get_mac_address() {
-			Ok(mac) => mac,
-			Err(_) => {
-				return NetworkState::InitializationFailed;
-			}
-		};
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
@@ -208,9 +199,13 @@ impl Device for HermitNet {
 	}
 
 	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		match SYS.receive_rx_buffer() {
-			Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
-			_ => None,
+		if let Some(driver) = hardware::get_network_driver() {
+			match driver.lock().receive_rx_buffer() {
+				Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
+				_ => None,
+			}
+		} else {
+			None
 		}
 	}
 
@@ -254,10 +249,18 @@ impl phy::TxToken for TxToken {
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		let (tx_buffer, handle) = SYS.get_tx_buffer(len).unwrap();
+		let (tx_buffer, handle) = hardware::get_network_driver()
+			.unwrap()
+			.lock()
+			.get_tx_buffer(len)
+			.unwrap();
 		let tx_slice: &'static mut [u8] = unsafe { slice::from_raw_parts_mut(tx_buffer, len) };
 		let result = f(tx_slice);
-		let _ = SYS.send_tx_buffer(handle, len);
+		hardware::get_network_driver()
+			.unwrap()
+			.lock()
+			.send_tx_buffer(handle, len)
+			.expect("Unable to send TX buffer");
 		result
 	}
 }

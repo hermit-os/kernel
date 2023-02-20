@@ -46,7 +46,7 @@ pub(crate) static NIC: InterruptTicketMutex<NetworkState<'_>> =
 	InterruptTicketMutex::new(NetworkState::Missing);
 
 pub(crate) struct NetworkInterface<'a> {
-	pub iface: smoltcp::iface::Interface,
+	iface: smoltcp::iface::Interface,
 	sockets: SocketSet<'a>,
 	device: HermitNet,
 	#[cfg(feature = "dhcpv4")]
