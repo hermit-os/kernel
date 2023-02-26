@@ -157,8 +157,8 @@ impl FuseInterface for VirtioFsDriver {
 		T: fuse::FuseOut + core::fmt::Debug,
 	{
 		if let Some(mut buff_tkn) = self.ready_queue.pop() {
-			let cmd_len = Some(core::mem::size_of_val(cmd));
-			let rsp_len = Some(core::mem::size_of_val(rsp));
+			let cmd_len = Some(cmd.len());
+			let rsp_len = Some(rsp.len());
 			buff_tkn.restr_size(cmd_len, rsp_len).unwrap();
 
 			let transfer_tkn = buff_tkn.write(Some(cmd), Some(rsp)).unwrap();

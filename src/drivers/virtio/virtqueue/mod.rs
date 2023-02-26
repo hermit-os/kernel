@@ -531,6 +531,14 @@ impl Virtq {
 /// the representation the device expects. It is advised to only use `#[repr(C)]` and to check the output
 /// of `as_slice_u8` and `as_slice_u8_mut`.
 pub trait AsSliceU8 {
+	/// Retruns the size of the structure
+	///
+	/// In case of an unsized structure, the function should returns
+	/// the exact value of the structure.
+	fn len(&self) -> usize {
+		core::mem::size_of_val(self)
+	}
+
 	/// Returns a slice of the given structure.
 	///
 	/// ** WARN:**
@@ -538,12 +546,7 @@ pub trait AsSliceU8 {
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
 	/// the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8(&self) -> &[u8] {
-		unsafe {
-			core::slice::from_raw_parts(
-				(self as *const _) as *const u8,
-				core::mem::size_of_val(self),
-			)
-		}
+		unsafe { core::slice::from_raw_parts((self as *const _) as *const u8, self.len()) }
 	}
 
 	/// Returns a mutable slice of the given structure.
@@ -553,12 +556,7 @@ pub trait AsSliceU8 {
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
 	/// the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8_mut(&mut self) -> &mut [u8] {
-		unsafe {
-			core::slice::from_raw_parts_mut(
-				(self as *const _) as *mut u8,
-				core::mem::size_of_val(self),
-			)
-		}
+		unsafe { core::slice::from_raw_parts_mut((self as *const _) as *mut u8, self.len()) }
 	}
 }
 

@@ -280,8 +280,11 @@ pub struct Cmd<T: FuseIn + fmt::Debug> {
 	extra_buffer: [u8],
 }
 
-// Using the default implementation of the trait for Cmd
-impl<T: FuseIn + core::fmt::Debug> AsSliceU8 for Cmd<T> {}
+impl<T: FuseIn + core::fmt::Debug> AsSliceU8 for Cmd<T> {
+	fn len(&self) -> usize {
+		self.header.len.try_into().unwrap()
+	}
+}
 
 #[repr(C)]
 #[derive(Debug)]
@@ -291,8 +294,11 @@ pub struct Rsp<T: FuseOut + fmt::Debug> {
 	extra_buffer: [u8],
 }
 
-// Using the default implementation of the trait for Rsp
-impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {}
+impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {
+	fn len(&self) -> usize {
+		self.header.len.try_into().unwrap()
+	}
+}
 
 fn create_in_header<T>(nodeid: u64, opcode: Opcode) -> fuse_in_header
 where
@@ -325,7 +331,8 @@ fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_init_out>>(ptr)) };
+	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_init_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -350,7 +357,9 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_ou
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_entry_out>>(ptr)) };
+	let mut rsp =
+		unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_entry_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -446,7 +455,8 @@ fn create_read(
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, usize::try_from(size).unwrap());
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_read_out>>(ptr)) };
+	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_read_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -504,7 +514,9 @@ fn create_write(
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_write_out>>(ptr)) };
+	let mut rsp =
+		unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_write_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -544,7 +556,8 @@ fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_op
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_open_out>>(ptr)) };
+	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_open_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -579,7 +592,9 @@ fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_release_out>>(ptr)) };
+	let mut rsp =
+		unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_release_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -654,7 +669,9 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_unlink_out>>(ptr)) };
+	let mut rsp =
+		unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_unlink_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
@@ -707,7 +724,9 @@ fn create_create(
 	let layout = Layout::from_size_align(len, 64);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
-	let rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_create_out>>(ptr)) };
+	let mut rsp =
+		unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_create_out>>(ptr)) };
+	rsp.header.len = len.try_into().unwrap();
 
 	(cmd, rsp)
 }
