@@ -126,7 +126,7 @@ jobs:
       - name: Install QEMU, NASM
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 nasm
+          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev
       - name: Checkout rusty-hermit
         uses: actions/checkout@v3
         with:
@@ -148,6 +148,8 @@ jobs:
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
+      - name: Install virtiofsd
+        run: cargo install virtiofsd
       - name: Test dev profile
         run: |
           qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
@@ -232,4 +234,3 @@ jobs:
       - name: Test kernel
         run: qemu-system-aarch64 -semihosting -display none -serial stdio -kernel target/aarch64/debug/rusty-loader -machine virt,gic-version=max -m 512M -cpu max -smp 1
         working-directory: loader
-        
