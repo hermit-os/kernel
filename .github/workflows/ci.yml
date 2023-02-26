@@ -152,19 +152,27 @@ jobs:
         run: cargo install virtiofsd
       - name: Test dev profile
         run: |
-          qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
+          virtiofsd --socket-path=./vhostqemu --shared-dir ./img --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
+          qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio \
             -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -kernel rusty-loader-x86_64 \
+            -chardev socket,id=char0,path=./vhostqemu \
+            -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
+            -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
             -initrd target/x86_64-unknown-hermit/debug/rusty_demo
       - name: Build release profile
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --release
       - name: Test release profile
         run: |
-          qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
+          virtiofsd --socket-path=./vhostqemu --shared-dir ./img --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
+          qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio \
             -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -kernel rusty-loader-x86_64 \
+            -chardev socket,id=char0,path=./vhostqemu \
+            -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
+            -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
             -initrd target/x86_64-unknown-hermit/release/rusty_demo
       - name: Build minimal profile
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
