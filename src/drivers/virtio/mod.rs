@@ -10,6 +10,7 @@ pub mod error {
 
 	#[cfg(feature = "pci")]
 	use crate::arch::x86_64::kernel::pci::error::PciError;
+	#[cfg(feature = "pci")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
 
@@ -19,12 +20,17 @@ pub mod error {
 		FromPci(PciError),
 		DevNotSupported(u16),
 		NetDriver(VirtioNetError),
+		#[cfg(feature = "pci")]
 		FsDriver(VirtioFsError),
+		#[cfg(not(feature = "pci"))]
+		Unknown,
 	}
 
 	impl fmt::Display for VirtioError {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match self {
+				#[cfg(not(feature = "pci"))]
+				VirtioError::Unknown => write!(f, "Driver failure"),
                 #[cfg(feature = "pci")]
 				VirtioError::FromPci(pci_error) => match pci_error {
                     PciError::General(id) => write!(f, "Driver failed to initialize device with id: {id:#x}. Due to unknown reasosn!"),
@@ -46,6 +52,7 @@ pub mod error {
                     VirtioNetError::ProcessOngoing => write!(f, "Virtio network performed an unsuitable operation upon an ongoging transfer."),
 					VirtioNetError::Unknown => write!(f, "Virtio network driver failed due unknown reason!"),
                 },
+				#[cfg(feature = "pci")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
 					VirtioFsError::NoDevCfg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"),
 					VirtioFsError::NoComCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed common config!"),

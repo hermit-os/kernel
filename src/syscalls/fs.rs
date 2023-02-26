@@ -1,6 +1,6 @@
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
@@ -164,6 +164,8 @@ impl Filesystem {
 		mntpath: &str,
 		mntobj: Box<dyn PosixFileSystem + Send>,
 	) -> Result<(), ()> {
+		use alloc::string::ToString;
+
 		debug!("Mounting {}", mntpath);
 		if mntpath.contains('/') {
 			warn!(

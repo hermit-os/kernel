@@ -7,6 +7,9 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(feature = "pci")]
 use crate::drivers::fs::virtio_pci::FsDevCfgRaw;
 use crate::drivers::virtio::error::VirtioFsError;
+#[cfg(not(feature = "pci"))]
+use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
+#[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
 	AsSliceU8, BuffSpec, BufferToken, Bytes, Virtq, VqIndex, VqSize, VqType,

@@ -5,6 +5,9 @@ use alloc::vec::Vec;
 use core::alloc::GlobalAlloc;
 use core::{fmt, u32, u8};
 
+#[cfg(not(feature = "pci"))]
+use crate::arch::kernel::mmio::get_filesystem_driver;
+#[cfg(feature = "pci")]
 use crate::arch::kernel::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::syscalls::fs::{self, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence};
