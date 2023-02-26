@@ -344,6 +344,7 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_ou
 	cmd.header = create_in_header::<fuse_lookup_in>(FUSE_ROOT_ID, Opcode::FUSE_LOOKUP);
 	cmd.header.len = len.try_into().unwrap();
 	cmd.extra_buffer[..slice.len()].copy_from_slice(slice);
+	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
 	let layout = Layout::from_size_align(len, 64);
@@ -647,6 +648,7 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 	cmd.header = create_in_header::<fuse_unlink_in>(FUSE_ROOT_ID, Opcode::FUSE_UNLINK);
 	cmd.header.len = len.try_into().unwrap();
 	cmd.extra_buffer[..slice.len()].copy_from_slice(slice);
+	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_unlink_out>();
 	let layout = Layout::from_size_align(len, 64);
@@ -699,6 +701,7 @@ fn create_create(
 		..Default::default()
 	};
 	cmd.extra_buffer[..slice.len()].copy_from_slice(slice);
+	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_create_out>();
 	let layout = Layout::from_size_align(len, 64);
