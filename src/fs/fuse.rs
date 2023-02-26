@@ -187,7 +187,7 @@ impl PosixFile for FuseFile {
 			}
 
 			let len: usize = if rsp.rsp.size > buf.len().try_into().unwrap() {
-				buf.len().try_into().unwrap()
+				buf.len()
 			} else {
 				rsp.rsp.size.try_into().unwrap()
 			};

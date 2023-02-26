@@ -96,9 +96,7 @@ impl VirtioFsDriver {
 		// Indicate device, that driver is able to handle it
 		self.com_cfg.set_drv();
 
-		let mut feats: Vec<Features> = Vec::new();
-		feats.push(Features::VIRTIO_F_VERSION_1);
-
+		let feats: Vec<Features> = vec![Features::VIRTIO_F_VERSION_1];
 		self.negotiate_features(&feats)?;
 
 		// Indicates the device, that the current feature set is final for the driver
