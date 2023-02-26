@@ -70,6 +70,7 @@ mod entropy;
 mod env;
 pub mod errno;
 pub(crate) mod fd;
+pub(crate) mod fs;
 mod mm;
 #[cfg(feature = "tcp")]
 mod net;
@@ -265,6 +266,7 @@ extern "C" fn initd(_arg: usize) {
 
 	syscalls::init();
 	fd::init();
+	fs::init();
 
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
