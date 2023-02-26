@@ -1,8 +1,6 @@
 //! A module containing virtios core infrastructure for hermit-rs.
 //!
 //! The module contains virtios transport mechanisms, virtqueues and virtio specific errors
-#[cfg(feature = "pci")]
-pub mod depr;
 pub mod env;
 pub mod transport;
 pub mod virtqueue;
@@ -12,6 +10,7 @@ pub mod error {
 
 	#[cfg(feature = "pci")]
 	use crate::arch::x86_64::kernel::pci::error::PciError;
+	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
 
 	#[derive(Debug)]
@@ -20,13 +19,12 @@ pub mod error {
 		FromPci(PciError),
 		DevNotSupported(u16),
 		NetDriver(VirtioNetError),
-		Unknown,
+		FsDriver(VirtioFsError),
 	}
 
 	impl fmt::Display for VirtioError {
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match self {
-                VirtioError::Unknown => write!(f, "Driver failed to initialize virtio device due to unknown reasosn!"),
                 #[cfg(feature = "pci")]
 				VirtioError::FromPci(pci_error) => match pci_error {
                     PciError::General(id) => write!(f, "Driver failed to initialize device with id: {id:#x}. Due to unknown reasosn!"),
@@ -38,16 +36,25 @@ pub mod error {
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
                 VirtioError::NetDriver(net_error) => match net_error {
                     VirtioNetError::General => write!(f, "Virtio network driver failed due to unknown reasons!"),
-                    VirtioNetError::NoDevCfg(id) => write!(f, "Network driver failed, for device {id:x}, due to a missing or malformed device config!"),
-                    VirtioNetError::NoComCfg(id) =>  write!(f, "Network driver failed, for device {id:x}, due to a missing or malformed common config!"),
-                    VirtioNetError::NoIsrCfg(id) =>  write!(f, "Network driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
-                    VirtioNetError::NoNotifCfg(id) =>  write!(f, "Network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
-                    VirtioNetError::FailFeatureNeg(id) => write!(f, "Network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
-                    VirtioNetError::FeatReqNotMet(feats) => write!(f, "Network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
+                    VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),
+                    VirtioNetError::NoComCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed common config!"),
+                    VirtioNetError::NoIsrCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+                    VirtioNetError::NoNotifCfg(id) =>  write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed notification config!"),
+                    VirtioNetError::FailFeatureNeg(id) => write!(f, "Virtio network driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
+                    VirtioNetError::FeatReqNotMet(feats) => write!(f, "Virtio network driver tried to set feature bit without setting dependency feature. Feat set: {:x}", u64::from(*feats)),
                     VirtioNetError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
-                    VirtioNetError::ProcessOngoing => write!(f, "Driver performed an unsuitable operation upon an ongoging transfer."),
+                    VirtioNetError::ProcessOngoing => write!(f, "Virtio network performed an unsuitable operation upon an ongoging transfer."),
 					VirtioNetError::Unknown => write!(f, "Virtio network driver failed due unknown reason!"),
                 },
+				VirtioError::FsDriver(fs_error) => match fs_error {
+					VirtioFsError::NoDevCfg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"),
+					VirtioFsError::NoComCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed common config!"),
+					VirtioFsError::NoIsrCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed ISR status config!"),
+                    VirtioFsError::NoNotifCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed notification config!"),
+					VirtioFsError::FailFeatureNeg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, device did not acknowledge negotiated feature set!"),
+					VirtioFsError::IncompFeatsSet(drv_feats, dev_feats) => write!(f, "Feature set: {:x} , is incompatible with the device features: {:x}", u64::from(*drv_feats), u64::from(*dev_feats)),
+					VirtioFsError::Unknown => write!(f, "Virtio filesystem failed, driver failed due unknown reason!"),
+				},
             }
 		}
 	}

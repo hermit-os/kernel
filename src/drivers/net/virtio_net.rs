@@ -418,7 +418,7 @@ impl TxQueues {
 				self.ready_queue.push(
 					vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
 						.unwrap()
-						.write_seq(Some(VirtioNetHdr::get_tx_hdr()), None::<VirtioNetHdr>)
+						.write_seq(Some(&VirtioNetHdr::get_tx_hdr()), None::<&VirtioNetHdr>)
 						.unwrap(),
 				)
 			}
@@ -628,7 +628,7 @@ impl NetworkInterface for VirtioNetDriver {
 					transfer
 						.reuse()
 						.unwrap()
-						.write_seq(None::<VirtioNetHdr>, Some(VirtioNetHdr::get_rx_hdr()))
+						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::get_rx_hdr()))
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);

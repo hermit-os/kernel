@@ -540,7 +540,7 @@ pub trait AsSliceU8 {
 	fn as_slice_u8(&self) -> &[u8] {
 		unsafe {
 			core::slice::from_raw_parts(
-				(self as *const Self) as *const u8,
+				(self as *const _) as *const u8,
 				core::mem::size_of_val(self),
 			)
 		}
@@ -555,7 +555,7 @@ pub trait AsSliceU8 {
 	fn as_slice_u8_mut(&mut self) -> &mut [u8] {
 		unsafe {
 			core::slice::from_raw_parts_mut(
-				(self as *const Self) as *mut u8,
+				(self as *const _) as *mut u8,
 				core::mem::size_of_val(self),
 			)
 		}
@@ -1606,10 +1606,10 @@ impl BufferToken {
 	/// descriptors.
 	/// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a single continuous
 	/// memory element and as a result writes `T` or `H` as a slice of bytes into this memory.
-	pub fn write<K: AsSliceU8, H: AsSliceU8>(
+	pub fn write<K: AsSliceU8 + ?Sized, H: AsSliceU8 + ?Sized>(
 		mut self,
-		send: Option<K>,
-		recv: Option<H>,
+		send: Option<&K>,
+		recv: Option<&H>,
 	) -> Result<TransferToken, VirtqError> {
 		if let Some(data) = send {
 			match self.send_buff.as_mut() {
@@ -1641,10 +1641,11 @@ impl BufferToken {
 		if let Some(data) = recv {
 			match self.recv_buff.as_mut() {
 				Some(buff) => {
-					if buff.len() < data.as_slice_u8().len() {
+					let data_slc = data.as_slice_u8();
+
+					if buff.len() < data_slc.len() {
 						return Err(VirtqError::WriteToLarge(self));
 					} else {
-						let data_slc = data.as_slice_u8();
 						let mut from = 0usize;
 
 						for i in 0..buff.num_descr() {
@@ -1684,10 +1685,10 @@ impl BufferToken {
 	///   * Will result in 4 bytes written to the second buffer descriptor of the recv buffer. Nothing is written into the second buffer descriptor.
 	/// * Third Write: `write_seq(Some(10 bytes, Some(4 bytes))`:
 	///   * Will result in 10 bytes written to the second buffer descriptor of the send buffer and 4 bytes written to the third buffer descriptor of the recv buffer.
-	pub fn write_seq<K: AsSliceU8, H: AsSliceU8>(
+	pub fn write_seq<K: AsSliceU8, H: AsSliceU8 + ?Sized>(
 		mut self,
-		send_seq: Option<K>,
-		recv_seq: Option<H>,
+		send_seq: Option<&K>,
+		recv_seq: Option<&H>,
 	) -> Result<Self, VirtqError> {
 		if let Some(data) = send_seq {
 			match self.send_buff.as_mut() {
