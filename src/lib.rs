@@ -11,6 +11,7 @@
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
+#![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]

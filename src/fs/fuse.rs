@@ -2,6 +2,7 @@ use alloc::alloc::{alloc, Layout};
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::mem::MaybeUninit;
 use core::{fmt, u32, u8};
 
 #[cfg(not(feature = "pci"))]
@@ -56,7 +57,7 @@ impl PosixFileSystem for Fuse {
 				.ok_or(FileError::ENOSYS)?
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
-			file.fuse_fh = Some(rsp.rsp.fh);
+			file.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
 			let (cmd, mut rsp) = create_create(path, perms.raw, perms.mode);
@@ -65,8 +66,9 @@ impl PosixFileSystem for Fuse {
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
 
-			file.fuse_nid = Some(rsp.rsp.entry.nodeid);
-			file.fuse_fh = Some(rsp.rsp.open.fh);
+			let inner = unsafe { rsp.rsp.assume_init() };
+			file.fuse_nid = Some(inner.entry.nodeid);
+			file.fuse_fh = Some(inner.open.fh);
 		}
 
 		Ok(Box::new(file))
@@ -104,7 +106,7 @@ impl Fuse {
 			.unwrap()
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
-		Some(rsp.rsp.nodeid)
+		Some(unsafe { rsp.rsp.assume_init().nodeid })
 	}
 }
 
@@ -156,7 +158,7 @@ impl PosixFile for FuseFile {
 			};
 			self.offset += len;
 
-			Ok(rsp.extra_buffer[..len].to_vec())
+			Ok(unsafe { MaybeUninit::slice_assume_init_ref(&rsp.extra_buffer[..len]).to_vec() })
 		} else {
 			warn!("File not open, cannot read!");
 			Err(FileError::ENOENT)
@@ -185,10 +187,11 @@ impl PosixFile for FuseFile {
 				return Err(FileError::EIO);
 			}
 
-			let len: usize = if rsp.rsp.size > buf.len().try_into().unwrap() {
+			let rsp_size = unsafe { rsp.rsp.assume_init().size };
+			let len: usize = if rsp_size > buf.len().try_into().unwrap() {
 				buf.len()
 			} else {
-				rsp.rsp.size.try_into().unwrap()
+				rsp_size.try_into().unwrap()
 			};
 			self.offset += len;
 			Ok(len.try_into().unwrap())
@@ -290,8 +293,8 @@ impl<T: FuseIn + core::fmt::Debug> AsSliceU8 for Cmd<T> {
 #[derive(Debug)]
 pub struct Rsp<T: FuseOut + fmt::Debug> {
 	header: fuse_out_header,
-	rsp: T,
-	extra_buffer: [u8],
+	rsp: MaybeUninit<T>,
+	extra_buffer: [MaybeUninit<u8>],
 }
 
 impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {
