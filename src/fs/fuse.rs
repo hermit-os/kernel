@@ -10,6 +10,7 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 use crate::arch::kernel::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::syscalls::fs::{self, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence};
+use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
@@ -315,7 +316,7 @@ where
 
 fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
 	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_init_in>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut cmd = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Cmd<fuse_init_in>>(ptr)) };
@@ -328,7 +329,7 @@ fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
 	cmd.header = create_in_header::<fuse_init_in>(0, Opcode::FUSE_INIT);
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_init_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_init_out>>(ptr)) };
@@ -343,7 +344,7 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_ou
 		+ core::mem::size_of::<fuse_lookup_in>()
 		+ slice.len()
 		+ 1;
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, slice.len() + 1);
 	let mut cmd =
@@ -354,7 +355,7 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_ou
 	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp =
@@ -437,7 +438,7 @@ fn create_read(
 	offset: u64,
 ) -> (Box<Cmd<fuse_read_in>>, Box<Rsp<fuse_read_out>>) {
 	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_read_in>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut cmd = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Cmd<fuse_read_in>>(ptr)) };
@@ -452,7 +453,7 @@ fn create_read(
 	let len = core::mem::size_of::<fuse_out_header>()
 		+ core::mem::size_of::<fuse_read_out>()
 		+ usize::try_from(size).unwrap();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, usize::try_from(size).unwrap());
 	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_read_out>>(ptr)) };
@@ -491,7 +492,7 @@ fn create_write(
 ) -> (Box<Cmd<fuse_write_in>>, Box<Rsp<fuse_write_out>>) {
 	let len =
 		core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_write_in>() + buf.len();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, buf.len());
 	let mut cmd = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Cmd<fuse_write_in>>(ptr)) };
@@ -511,7 +512,7 @@ fn create_write(
 	cmd.extra_buffer.copy_from_slice(buf);
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_write_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp =
@@ -542,7 +543,7 @@ unsafe impl FuseOut for fuse_open_out {}
 
 fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_open_out>>) {
 	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_open_in>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut cmd = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Cmd<fuse_open_in>>(ptr)) };
@@ -553,7 +554,7 @@ fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_op
 	};
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_open_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp = unsafe { Box::from_raw(core::mem::transmute::<_, &mut Rsp<fuse_open_out>>(ptr)) };
@@ -580,7 +581,7 @@ unsafe impl FuseOut for fuse_release_out {}
 
 fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse_release_out>>) {
 	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_release_in>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut cmd =
@@ -589,7 +590,7 @@ fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse
 	cmd.cmd.fh = fh;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_release_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp =
@@ -655,7 +656,7 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 		+ core::mem::size_of::<fuse_unlink_in>()
 		+ slice.len()
 		+ 1;
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, slice.len() + 1);
 	let mut cmd =
@@ -666,7 +667,7 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_unlink_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp =
@@ -705,7 +706,7 @@ fn create_create(
 		+ core::mem::size_of::<fuse_create_in>()
 		+ slice.len()
 		+ 1;
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, slice.len() + 1);
 	let mut cmd =
@@ -721,7 +722,7 @@ fn create_create(
 	cmd.extra_buffer[slice.len()] = 0;
 
 	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_create_out>();
-	let layout = Layout::from_size_align(len, 64);
+	let layout = Layout::from_size_align(len, HW_DESTRUCTIVE_INTERFERENCE_SIZE);
 	let data = unsafe { alloc(layout.unwrap()) };
 	let ptr = (data, 0);
 	let mut rsp =
