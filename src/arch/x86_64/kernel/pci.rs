@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use alloc::vec::Vec;
 use core::{fmt, u32, u8};
 
@@ -5,10 +7,10 @@ use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use x86::io::*;
 
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
+use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::net::NetworkInterface;
-use crate::drivers::virtio::depr::virtio_fs::VirtioFsDriver;
 use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
@@ -44,7 +46,7 @@ pub const PCI_MULTIFUNCTION_MASK: u32 = 0x0080_0000;
 pub const PCI_CAP_ID_VNDR: u32 = 0x09;
 
 static mut PCI_ADAPTERS: Vec<PciAdapter> = Vec::new();
-static mut PCI_DRIVERS: Vec<PciDriver<'_>> = Vec::new();
+static mut PCI_DRIVERS: Vec<PciDriver> = Vec::new();
 
 #[derive(Clone, Debug)]
 pub struct PciAdapter {
@@ -79,13 +81,13 @@ pub struct MemoryBar {
 }
 
 #[allow(clippy::large_enum_variant)]
-pub enum PciDriver<'a> {
-	VirtioFs(InterruptTicketMutex<VirtioFsDriver<'a>>),
+pub enum PciDriver {
+	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 	RTL8139Net(InterruptTicketMutex<RTL8139Driver>),
 }
 
-impl<'a> PciDriver<'a> {
+impl PciDriver {
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<dyn NetworkInterface>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
@@ -94,7 +96,7 @@ impl<'a> PciDriver<'a> {
 		}
 	}
 
-	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver<'a>>> {
+	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
 			_ => None,
@@ -102,7 +104,7 @@ impl<'a> PciDriver<'a> {
 	}
 }
 
-pub fn register_driver(drv: PciDriver<'static>) {
+pub fn register_driver(drv: PciDriver) {
 	unsafe {
 		PCI_DRIVERS.push(drv);
 	}
@@ -112,7 +114,7 @@ pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkI
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
-pub fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver<'static>>> {
+pub fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	unsafe {
 		PCI_DRIVERS
 			.iter()
@@ -448,9 +450,15 @@ pub fn init_drivers() {
 				adapter.device_id
 			);
 
-			if let Ok(VirtioDriver::Network(drv)) = pci_virtio::init_device(adapter) {
-				nic_available = true;
-				register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+			match pci_virtio::init_device(adapter) {
+				Ok(VirtioDriver::Network(drv)) => {
+					nic_available = true;
+					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
+				}
+				Ok(VirtioDriver::FileSystem(drv)) => {
+					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)))
+				}
+				_ => {}
 			}
 		}
 

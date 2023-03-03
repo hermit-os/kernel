@@ -15,8 +15,6 @@ use crate::env;
 pub mod acpi;
 pub mod apic;
 pub mod core_local;
-#[cfg(feature = "pci")]
-pub mod fuse;
 pub mod gdt;
 pub mod interrupts;
 #[cfg(not(feature = "pci"))]

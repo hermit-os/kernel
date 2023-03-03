@@ -1,6 +1,8 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
 #[cfg(not(target_arch = "aarch64"))]
+pub mod fs;
+#[cfg(not(target_arch = "aarch64"))]
 pub mod net;
 
 #[cfg(not(target_arch = "aarch64"))]

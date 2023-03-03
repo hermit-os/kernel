@@ -7,17 +7,14 @@ use alloc::vec::Vec;
 use core::mem;
 use core::result::Result;
 
-use hermit_sync::InterruptTicketMutex;
-
-use crate::arch::kernel::pci as kernel_pci;
 use crate::arch::kernel::pci::error::PciError;
-use crate::arch::kernel::pci::{PciAdapter, PciDriver};
+use crate::arch::kernel::pci::PciAdapter;
 use crate::arch::mm::PhysAddr;
 use crate::arch::x86_64::kernel::interrupts::*;
 use crate::drivers::error::DriverError;
+use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-use crate::drivers::virtio::depr::virtio_fs;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
 use crate::drivers::virtio::{device, env};
@@ -1242,7 +1239,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		}
 		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(adapter) {
 			Ok(virt_net_drv) => {
-				info!("Virtio network driver initialized with Virtio network device.");
+				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Network(virt_net_drv))
 			}
 			Err(virtio_error) => {
@@ -1254,19 +1251,20 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 			}
 		},
 		DevId::VIRTIO_DEV_ID_FS => {
-			info!("Found Virtio-FS device!");
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match virtio_fs::create_virtiofs_driver(adapter) {
-				Some(virt_fs_drv) => {
-					kernel_pci::register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(
-						virt_fs_drv,
-					)));
-					// initialize file system
-					virtio_fs::init_fs();
-					Ok(VirtioDriver::FileSystem)
+			match VirtioFsDriver::init(adapter) {
+				Ok(virt_fs_drv) => {
+					info!("Virtio filesystem driver initialized.");
+					Ok(VirtioDriver::FileSystem(virt_fs_drv))
 				}
-				None => Err(DriverError::InitVirtioDevFail(VirtioError::Unknown)),
+				Err(virtio_error) => {
+					error!(
+						"Virtio filesystem driver could not be initialized with device: {:x}",
+						adapter.device_id
+					);
+					Err(DriverError::InitVirtioDevFail(virtio_error))
+				}
 			}
 		}
 		_ => {
@@ -1293,7 +1291,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 
 					Ok(drv)
 				}
-				VirtioDriver::FileSystem => Ok(drv),
+				VirtioDriver::FileSystem(_) => Ok(drv),
 			}
 		}
 		Err(virt_err) => Err(virt_err),
@@ -1302,7 +1300,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 
 pub enum VirtioDriver {
 	Network(VirtioNetDriver),
-	FileSystem,
+	FileSystem(VirtioFsDriver),
 }
 /// The module contains constants specific to PCI.
 #[allow(dead_code)]

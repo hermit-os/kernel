@@ -122,7 +122,7 @@ impl Filesystem {
 				return Ok((fs.deref(), internal_path));
 			}
 
-			info!(
+			warn!(
 				"Trying to open file on non-existing mount point '{}'!",
 				mount
 			);
@@ -151,7 +151,7 @@ impl Filesystem {
 
 	/// Unlinks a file given by path
 	pub fn unlink(&mut self, path: &str) -> Result<(), FileError> {
-		info!("Unlinking file {}", path);
+		debug!("Unlinking file {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
 		fs.unlink(internal_path)?;
 		Ok(())
@@ -164,9 +164,9 @@ impl Filesystem {
 		mntpath: &str,
 		mntobj: Box<dyn PosixFileSystem + Send>,
 	) -> Result<(), ()> {
-		use alloc::borrow::ToOwned;
+		use alloc::string::ToString;
 
-		info!("Mounting {}", mntpath);
+		debug!("Mounting {}", mntpath);
 		if mntpath.contains('/') {
 			warn!(
 				"Trying to mount at '{}', but slashes in name are not supported!",
@@ -182,7 +182,8 @@ impl Filesystem {
 		}
 
 		// insert filesystem into mounts, done
-		self.mounts.insert(mntpath.to_owned(), mntobj);
+		self.mounts.insert(mntpath.to_string(), mntobj);
+
 		Ok(())
 	}
 
@@ -198,6 +199,8 @@ pub enum FileError {
 	ENOENT,
 	#[cfg(feature = "pci")]
 	ENOSYS,
+	#[cfg(feature = "pci")]
+	EIO,
 }
 
 pub trait PosixFileSystem {

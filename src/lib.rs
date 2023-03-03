@@ -11,6 +11,7 @@
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(linked_list_cursors)]
+#![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]
@@ -70,6 +71,7 @@ mod entropy;
 mod env;
 pub mod errno;
 pub(crate) mod fd;
+pub(crate) mod fs;
 mod mm;
 #[cfg(feature = "tcp")]
 mod net;
@@ -265,6 +267,7 @@ extern "C" fn initd(_arg: usize) {
 
 	syscalls::init();
 	fd::init();
+	fs::init();
 
 	// Get the application arguments and environment variables.
 	#[cfg(not(test))]
