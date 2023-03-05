@@ -6,6 +6,10 @@ fn main() -> Result<(), String> {
 
 	if target_arch == "x86_64" && target_os == "none" {
 		let mut nasm = nasm_rs::Build::new();
+
+		#[cfg(feature = "fc")]
+		nasm.file("src/arch/x86_64/entry_fc.asm");
+		#[cfg(not(feature = "fc"))]
 		nasm.file("src/arch/x86_64/entry.asm");
 		let objects = nasm.compile_objects()?;
 

@@ -36,11 +36,21 @@ impl flags::Build {
 
 		eprintln!("Building loader");
 		let triple = self.target.triple();
-		cmd!(sh, "cargo build --target={triple}")
-			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(self.target_dir_args())
-			.args(self.profile_args())
-			.run()?;
+		if self.target == Target::X86_64Fc {
+			cmd!(sh, "cargo build --target={triple}")
+				.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
+				.args(self.target_dir_args())
+				.args(self.profile_args())
+				.args(&["--no-default-features"])
+				.args(&["--features", "fc"])
+				.run()?;
+		} else {
+			cmd!(sh, "cargo build --target={triple}")
+				.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
+				.args(self.target_dir_args())
+				.args(self.profile_args())
+				.run()?;
+		}
 
 		let build_object = self.build_object();
 		let dist_object = self.dist_object();
