@@ -127,10 +127,6 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let linux_e820_entries = *((&(boot_params as usize) + E820_ENTRIES_OFFSET) as *const u8);
 	info!("Number of e820-entries: {}", linux_e820_entries);
 
-	let mut found_entry = false;
-	let mut start_address: usize = 0;
-	let mut end_address: usize = 0;
-
 	let e820_entries_address = &(boot_params as usize) + E820_TABLE_OFFSET;
 	info!("e820-entry-table at 0x{:x}", e820_entries_address);
 	let page_address = align_down!(e820_entries_address, Size4KiB::SIZE as usize);
@@ -138,39 +134,6 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	if !(boot_params >= page_address && boot_params < page_address + Size4KiB::SIZE as usize) {
 		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 	}
-
-	for index in 0..linux_e820_entries {
-		found_entry = true;
-
-		//20: Size of one e820-Entry
-		let entry_address = e820_entries_address + (index as usize) * 20;
-		let entry_start = *(entry_address as *const u64);
-		let entry_size = *((entry_address + 8) as *const u64);
-		let entry_type = *((entry_address + 16) as *const u32);
-
-		info!(
-			"e820-Entry with index {}: Address 0x{:x}, Size 0x{:x}, Type 0x{:x}",
-			index, entry_start, entry_size, entry_type
-		);
-
-		let entry_end = entry_start + entry_size;
-
-		if start_address == 0 {
-			start_address = entry_start as usize;
-		}
-
-		if entry_end as usize > end_address {
-			end_address = entry_end as usize;
-		}
-	}
-
-	// Identity-map the start of RAM
-	assert!(found_entry, "Could not find any free RAM areas!");
-
-	info!(
-		"Found available RAM: [0x{:x} - 0x{:x}]",
-		start_address, end_address
-	);
 
 	// Load the RustyHermit-ELF from the initrd supplied by Firecracker
 	let ramdisk_address = *((&(boot_params as usize)
@@ -344,12 +307,55 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		KERNEL_STACK_SIZE.try_into().unwrap(),
 	);
 
+	// Load the boot_param memory-map information
+	let linux_e820_entries = *((&(boot_params as usize) + E820_ENTRIES_OFFSET) as *const u8);
+	info!("Number of e820-entries: {}", linux_e820_entries);
+
+	let mut found_entry = false;
+	let mut start_address: usize = 0;
+	let mut end_address: usize = 0;
+
+	let e820_entries_address = &(boot_params as usize) + E820_TABLE_OFFSET;
+
+	for index in 0..linux_e820_entries {
+		found_entry = true;
+
+		//20: Size of one e820-Entry
+		let entry_address = e820_entries_address + (index as usize) * 20;
+		let entry_start = *(entry_address as *const u64);
+		let entry_size = *((entry_address + 8) as *const u64);
+		let entry_type = *((entry_address + 16) as *const u32);
+
+		info!(
+			"e820-Entry with index {}: Address 0x{:x}, Size 0x{:x}, Type 0x{:x}",
+			index, entry_start, entry_size, entry_type
+		);
+
+		let entry_end = entry_start + entry_size;
+
+		if start_address == 0 {
+			start_address = entry_start as usize;
+		}
+
+		if entry_end as usize > end_address {
+			end_address = entry_end as usize;
+		}
+	}
+
+	// Identity-map the start of RAM
+	assert!(found_entry, "Could not find any free RAM areas!");
+
+	info!(
+		"Found available RAM: [0x{:x} - 0x{:x}]",
+		start_address, end_address
+	);
+
 	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
 	BOOT_INFO = {
 		let boot_info = BootInfo {
 			hardware_info: HardwareInfo {
-				phys_addr_range: 0..0,
+				phys_addr_range: start_address as u64..end_address as u64,
 				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
 			},
 			load_info,
