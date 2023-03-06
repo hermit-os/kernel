@@ -94,6 +94,10 @@ impl flags::Build {
 			rustflags.push("-Zinstrument-mcount");
 		}
 
+		if self.randomize_layout {
+			rustflags.push("-Zrandomize-layout")
+		}
+
 		rustflags.extend(self.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
