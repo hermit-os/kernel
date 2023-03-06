@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::{fmt, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
-use hermit_sync::Lazy;
+use hermit_sync::{without_interrupts, Lazy};
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 use x86::controlregs::*;
@@ -368,6 +368,7 @@ impl CpuFrequency {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			match boot_info().platform_info {
 				PlatformInfo::Multiboot { .. } => Err(()),
+				PlatformInfo::LinuxBootParams { .. } => Err(()),
 				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
 					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
 				)
@@ -993,9 +994,16 @@ pub fn shutdown() -> ! {
 	match acpi_result {
 		Ok(_never) => unreachable!(),
 		Err(()) => {
-			// Try QEMU's debug exit
-			let exit_handler = qemu_exit::X86::new(0xf4, 3);
-			exit_handler.exit_success()
+			match boot_info().platform_info {
+				PlatformInfo::LinuxBootParams { .. } => without_interrupts(|| loop {
+					halt();
+				}),
+				_ => {
+					// Try QEMU's debug exit
+					let exit_handler = qemu_exit::X86::new(0xf4, 3);
+					exit_handler.exit_success()
+				}
+			}
 		}
 	}
 }

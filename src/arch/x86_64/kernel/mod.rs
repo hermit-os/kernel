@@ -111,6 +111,7 @@ pub fn get_mbinfo() -> VirtAddr {
 			multiboot_info_addr,
 			..
 		} => VirtAddr(multiboot_info_addr.get()),
+		PlatformInfo::LinuxBootParams { .. } => VirtAddr(0),
 		PlatformInfo::Uhyve { .. } => VirtAddr(0),
 	}
 }
@@ -147,6 +148,7 @@ pub fn is_uhyve() -> bool {
 pub fn is_uhyve_with_pci() -> bool {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => false,
+		PlatformInfo::LinuxBootParams { .. } => false,
 		PlatformInfo::Uhyve { has_pci, .. } => has_pci,
 	}
 }
@@ -156,6 +158,9 @@ pub fn get_cmdsize() -> usize {
 		PlatformInfo::Multiboot { command_line, .. } => command_line
 			.map(|command_line| command_line.len())
 			.unwrap_or_default(),
+		PlatformInfo::LinuxBootParams { command_line, .. } => command_line
+			.map(|command_line| command_line.len())
+			.unwrap_or_default(),
 		PlatformInfo::Uhyve { .. } => 0,
 	}
 }
@@ -163,6 +168,11 @@ pub fn get_cmdsize() -> usize {
 pub fn get_cmdline() -> VirtAddr {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { command_line, .. } => VirtAddr(
+			command_line
+				.map(|command_line| command_line.as_ptr() as u64)
+				.unwrap_or_default(),
+		),
+		PlatformInfo::LinuxBootParams { command_line, .. } => VirtAddr(
 			command_line
 				.map(|command_line| command_line.as_ptr() as u64)
 				.unwrap_or_default(),
