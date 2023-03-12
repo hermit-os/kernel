@@ -5,7 +5,7 @@
 OUTPUT_FORMAT("elf64-littleaarch64")
 OUTPUT_ARCH("aarch64")
 ENTRY(_start)
-phys = 0x40000000;
+phys = 0x40200000;
 
 PHDRS
 {
@@ -18,7 +18,7 @@ SECTIONS
 {
   . = phys;
   kernel_start = .;
-  .text ALIGN(4096) : AT(phys) {
+  .text : {
     KEEP(*(.text._start))
     *(.text)
     *(.text.*)
@@ -47,7 +47,7 @@ SECTIONS
    ***********************************************************************************************/
   __boot_core_stack_start = .;         /*   ^             */ 
                                        /*   | stack       */
-  . += 16K;                           /*   | growth      */
+  . += 16K;                            /*   | growth      */
                                        /*   | direction   */
   __boot_core_stack_end_exclusive = .; /*   |             */
   kernel_end = .;
