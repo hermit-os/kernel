@@ -158,7 +158,6 @@ name = "rusty-loader"
 version = "0.4.0"
 dependencies = [
  "align-data",
- "bitflags",
  "cc",
  "hermit-entry",
  "log",
