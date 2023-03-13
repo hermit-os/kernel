@@ -70,7 +70,7 @@ dhcpv4 = [
 [dependencies]
 ahash = { version = "0.8", default-features = false }
 align-address = "0.1"
-bitflags = "1.3"
+bitflags = "2.0"
 crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
 hashbrown = { version = "0.13", default-features = false }
