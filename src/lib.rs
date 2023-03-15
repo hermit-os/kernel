@@ -24,9 +24,6 @@
 )]
 #![cfg_attr(all(target_os = "none", test), no_main)]
 
-#[cfg(all(feature = "newlib", feature = "pci"))]
-compile_error!("feature \"newlib\" and feature \"pci\" cannot be enabled at the same time");
-
 // EXTERNAL CRATES
 #[macro_use]
 extern crate alloc;
@@ -262,7 +259,7 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	#[cfg(not(feature = "newlib"))]
 	arch::init_drivers();
-	#[cfg(feature = "tcp")]
+	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	crate::net::init();
 
 	syscalls::init();
