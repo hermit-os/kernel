@@ -31,9 +31,7 @@ jobs:
       - run: rustup show
       - uses: Swatinem/rust-cache@v2
       - name: Check each feature
-        run: |
-          cargo hack check --package libhermit-rs --each-feature --no-dev-deps --exclude-features newlib --target x86_64-unknown-none
-          cargo check --package libhermit-rs --no-default-features --features newlib --target x86_64-unknown-none
+        run: cargo hack check --package libhermit-rs --each-feature --no-dev-deps --target x86_64-unknown-none
         env:
           RUSTFLAGS:
 
