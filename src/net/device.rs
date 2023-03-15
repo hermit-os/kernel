@@ -5,8 +5,6 @@ use core::slice;
 use core::str::FromStr;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
-#[cfg(feature = "trace")]
-use smoltcp::phy::Tracer;
 use smoltcp::phy::{self, Device, DeviceCapabilities, Medium};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
@@ -75,10 +73,6 @@ impl<'a> NetworkInterface<'a> {
 		};
 
 		let mut device = HermitNet::new(mtu);
-		#[cfg(feature = "trace")]
-		let device = Tracer::new(device, |_timestamp, printer| {
-			trace!("{}", printer);
-		});
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
@@ -117,10 +111,6 @@ impl<'a> NetworkInterface<'a> {
 		};
 
 		let mut device = HermitNet::new(mtu);
-		#[cfg(feature = "trace")]
-		let device = Tracer::new(device, |_timestamp, printer| {
-			trace!("{}", printer);
-		});
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();

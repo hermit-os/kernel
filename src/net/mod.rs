@@ -10,8 +10,6 @@ use core::task::Poll;
 use futures_lite::future;
 use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{self, SocketHandle, SocketSet};
-#[cfg(feature = "trace")]
-use smoltcp::phy::Tracer;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 use smoltcp::socket::{tcp, udp, AnySocket};
