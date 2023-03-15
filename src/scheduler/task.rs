@@ -487,30 +487,6 @@ impl Task {
 			lwip_errno: 0,
 		}
 	}
-
-	#[cfg(feature = "newlib")]
-	pub fn new_like(tid: TaskId, core_id: CoreId, task: &Task) -> Task {
-		debug!(
-			"Creating task {} on core {} like task {}",
-			tid, core_id, task.id
-		);
-
-		Task {
-			id: tid,
-			status: TaskStatus::Ready,
-			prio: task.prio,
-			last_stack_pointer: VirtAddr(0u64),
-			user_stack_pointer: VirtAddr(0u64),
-			last_fpu_state: arch::processor::FPUState::new(),
-			core_id,
-			stacks: TaskStacks::new(task.stacks.get_user_stack_size()),
-			next: None,
-			prev: None,
-			tls: None,
-			#[cfg(feature = "newlib")]
-			lwip_errno: 0,
-		}
-	}
 }
 
 /*impl Drop for Task {

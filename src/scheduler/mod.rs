@@ -223,12 +223,14 @@ impl PerCoreScheduler {
 
 		// Clone the current task.
 		let tid = get_tid();
-		let clone_task = Rc::new(RefCell::new(Task::new_like(
+		let clone_task = NewTask {
 			tid,
+			func,
+			arg,
+			prio: current_task_borrowed.prio,
 			core_id,
-			&current_task_borrowed,
-		)));
-		clone_task.borrow_mut().create_stack_frame(func, arg);
+			stacks: TaskStacks::new(current_task_borrowed.stacks.get_user_stack_size()),
+		};
 
 		// Add it to the task lists.
 		let wakeup = {
@@ -250,11 +252,13 @@ impl PerCoreScheduler {
 				input_locked.new_tasks.push_back(clone_task);
 				true
 			} else {
+				let clone_task = Rc::new(RefCell::new(Task::from(clone_task)));
 				core_scheduler().ready_queue.push(clone_task);
 				false
 			}
 			#[cfg(not(feature = "smp"))]
 			if core_id == 0 {
+				let clone_task = Rc::new(RefCell::new(Task::from(clone_task)));
 				core_scheduler().ready_queue.push(clone_task);
 				false
 			} else {
