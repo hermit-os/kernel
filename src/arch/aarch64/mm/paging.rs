@@ -30,6 +30,7 @@ bitflags! {
 	/// Useful flags for an entry in either table (L0Table, L1Table, L2Table, L3Table).
 	///
 	/// See ARM Architecture Reference Manual, ARMv8, for ARMv8-A Reference Profile, Issue C.a, Chapter D4.3.3
+	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 	pub struct PageTableEntryFlags: u64 {
 		/// Set if this entry is valid.
 		const PRESENT = 1 << 0;
@@ -75,7 +76,7 @@ bitflags! {
 impl PageTableEntryFlags {
 	/// An empty set of flags for unused/zeroed table entries.
 	/// Needed as long as empty() is no const function.
-	const BLANK: PageTableEntryFlags = PageTableEntryFlags { bits: 0 };
+	const BLANK: PageTableEntryFlags = PageTableEntryFlags::empty();
 
 	pub fn device(&mut self) -> &mut Self {
 		self.insert(PageTableEntryFlags::DEVICE_NGNRE);
