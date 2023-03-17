@@ -34,11 +34,7 @@ pub mod systemtime;
 mod vga;
 
 /// Kernel header to announce machine features
-#[cfg_attr(
-	all(target_os = "none", not(feature = "newlib")),
-	link_section = ".data"
-)]
-#[cfg_attr(all(target_os = "none", feature = "newlib"), link_section = ".mboot")]
+#[cfg_attr(target_os = "none", link_section = ".data")]
 static mut RAW_BOOT_INFO: Option<&'static RawBootInfo> = None;
 static mut BOOT_INFO: Option<BootInfo> = None;
 
