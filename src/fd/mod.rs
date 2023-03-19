@@ -13,7 +13,7 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::syscalls::fs::{self, FilePerms};
+use crate::syscalls::fs::{self, FilePerms, SeekWhence};
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
@@ -125,7 +125,9 @@ struct SysLseek {
 }
 
 impl SysLseek {
-	fn new(fd: i32, offset: isize, whence: i32) -> SysLseek {
+	fn new(fd: i32, offset: isize, whence: SeekWhence) -> SysLseek {
+		let whence: i32 = num::ToPrimitive::to_i32(&whence).unwrap();
+
 		SysLseek { fd, offset, whence }
 	}
 }
@@ -206,7 +208,7 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	fn lseek(&self, _offset: isize, _whence: i32) -> isize {
+	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> isize {
 		(-EINVAL).try_into().unwrap()
 	}
 

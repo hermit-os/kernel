@@ -167,7 +167,10 @@ pub extern "C" fn sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::
 
 extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).lseek(offset, whence))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| (*v).lseek(offset, num::FromPrimitive::from_i32(whence).unwrap()),
+	)
 }
 
 #[no_mangle]

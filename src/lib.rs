@@ -34,6 +34,8 @@ extern crate log;
 #[cfg(not(target_os = "none"))]
 #[macro_use]
 extern crate std;
+#[macro_use]
+extern crate num_derive;
 
 use alloc::alloc::Layout;
 use core::alloc::GlobalAlloc;
