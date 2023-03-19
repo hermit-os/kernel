@@ -1,28 +1,11 @@
 use alloc::boxed::Box;
-use core::{isize, slice, str};
+use core::{isize, slice};
 
 use crate::fd::{
 	uhyve_send, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE,
 	UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
 };
 use crate::syscalls::fs::{self, PosixFile, SeekWhence};
-
-const SEEK_SET: i32 = 0;
-const SEEK_CUR: i32 = 1;
-const SEEK_END: i32 = 2;
-
-impl TryFrom<i32> for SeekWhence {
-	type Error = &'static str;
-
-	fn try_from(value: i32) -> Result<Self, Self::Error> {
-		match value {
-			SEEK_CUR => Ok(SeekWhence::Cur),
-			SEEK_SET => Ok(SeekWhence::Set),
-			SEEK_END => Ok(SeekWhence::End),
-			_ => Err("Got invalid seek whence parameter!"),
-		}
-	}
-}
 
 #[derive(Debug, Clone)]
 pub struct UhyveFile(i32);
@@ -48,7 +31,7 @@ impl ObjectInterface for UhyveFile {
 		sysread.ret
 	}
 
-	fn lseek(&self, offset: isize, whence: i32) -> isize {
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> isize {
 		let mut syslseek = SysLseek::new(self.0, offset, whence);
 		uhyve_send(UHYVE_PORT_LSEEK, &mut syslseek);
 
@@ -104,13 +87,13 @@ impl ObjectInterface for GenericFile {
 		read_bytes as isize
 	}
 
-	fn lseek(&self, offset: isize, whence: i32) -> isize {
-		debug!("lseek! {}, {}, {}", self.0, offset, whence);
+	fn lseek(&self, offset: isize, whence: SeekWhence) -> isize {
+		debug!("lseek! {}, {}, {:?}", self.0, offset, whence);
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mut ret = 0;
 		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
-			ret = file.lseek(offset, whence.try_into().unwrap()).unwrap(); // TODO: might fail
+			ret = file.lseek(offset, whence).unwrap(); // TODO: might fail
 		});
 
 		ret as isize

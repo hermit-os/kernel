@@ -204,13 +204,23 @@ impl PosixFile for FuseFile {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError> {
 		debug!("fuse lseek");
 
-		match whence {
-			SeekWhence::Set => self.offset = offset as usize,
-			SeekWhence::Cur => self.offset = (self.offset as isize + offset) as usize,
-			SeekWhence::End => unimplemented!("Can't seek from end yet!"),
-		}
+		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+			let (cmd, mut rsp) = create_lseek(nid, fh, offset, whence);
+			get_filesystem_driver()
+				.ok_or(FileError::ENOSYS)?
+				.lock()
+				.send_command(cmd.as_ref(), rsp.as_mut());
 
-		Ok(self.offset)
+			if rsp.header.error < 0 {
+				return Err(FileError::EIO);
+			}
+
+			let rsp_offset = unsafe { rsp.rsp.assume_init().offset };
+
+			Ok(rsp_offset.try_into().unwrap())
+		} else {
+			Err(FileError::EIO)
+		}
 	}
 }
 
@@ -260,6 +270,9 @@ pub enum Opcode {
 	FUSE_NOTIFY_REPLY = 41,
 	FUSE_BATCH_FORGET = 42,
 	FUSE_FALLOCATE = 43,
+	FUSE_READDIRPLUS = 44,
+	FUSE_RENAME2 = 45,
+	FUSE_LSEEK = 46,
 
 	FUSE_SETVOLNAME = 61,
 	FUSE_GETXTIMES = 62,
@@ -481,6 +494,67 @@ fn create_read(
 		let data = alloc(layout.unwrap());
 		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
 			as *mut Rsp<fuse_read_out>;
+		(*raw).header = fuse_out_header {
+			len: len.try_into().unwrap(),
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+
+	(cmd, rsp)
+}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_lseek_in {
+	pub fh: u64,
+	pub offset: u64,
+	pub whence: u32,
+	pub padding: u32,
+}
+unsafe impl FuseIn for fuse_lseek_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_lseek_out {
+	offset: u64,
+}
+unsafe impl FuseOut for fuse_lseek_out {}
+
+fn create_lseek(
+	nid: u64,
+	fh: u64,
+	offset: isize,
+	whence: SeekWhence,
+) -> (Box<Cmd<fuse_lseek_in>>, Box<Rsp<fuse_lseek_out>>) {
+	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_lseek_in>();
+	let layout = Layout::from_size_align(len, core::mem::align_of::<fuse_in_header>());
+	let cmd = unsafe {
+		let data = alloc(layout.unwrap());
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_lseek_in>;
+		(*raw).header = fuse_in_header {
+			len: len.try_into().unwrap(),
+			opcode: Opcode::FUSE_LSEEK as u32,
+			unique: 1,
+			nodeid: nid,
+			..Default::default()
+		};
+		(*raw).cmd = fuse_lseek_in {
+			fh,
+			offset: offset.try_into().unwrap(),
+			whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+
+	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_lseek_out>();
+	let layout = Layout::from_size_align(len, core::mem::align_of::<fuse_out_header>());
+	let rsp = unsafe {
+		let data = alloc(layout.unwrap());
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_lseek_out>;
 		(*raw).header = fuse_out_header {
 			len: len.try_into().unwrap(),
 			..Default::default()

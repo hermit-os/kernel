@@ -228,8 +228,11 @@ pub struct FilePerms {
 	pub mode: u32,
 }
 
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum SeekWhence {
-	Set,
-	Cur,
-	End,
+	Set = 0,
+	Cur = 1,
+	End = 2,
+	Data = 3,
+	Hole = 4,
 }
