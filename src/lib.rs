@@ -257,7 +257,6 @@ extern "C" fn initd(_arg: usize) {
 	}
 
 	// Initialize Drivers
-	#[cfg(not(feature = "newlib"))]
 	arch::init_drivers();
 	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	crate::net::init();
