@@ -1,5 +1,5 @@
 mod device;
-pub(crate) mod executor;
+pub(crate) mod runtime;
 
 use alloc::boxed::Box;
 use core::ops::DerefMut;
@@ -18,7 +18,7 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch;
 use crate::executor::device::HermitNet;
-use crate::executor::executor::spawn;
+use crate::executor::runtime::spawn;
 
 pub(crate) enum NetworkState<'a> {
 	Missing,
