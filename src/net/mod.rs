@@ -3,24 +3,22 @@ pub(crate) mod executor;
 
 use alloc::boxed::Box;
 use core::ops::DerefMut;
-use core::str::FromStr;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::Poll;
 
 use futures_lite::future;
 use hermit_sync::InterruptTicketMutex;
-use smoltcp::iface::{self, SocketHandle, SocketSet};
+use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 use smoltcp::socket::{tcp, udp, AnySocket};
 use smoltcp::time::{Duration, Instant};
-use smoltcp::wire::IpAddress;
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::net::device::HermitNet;
 use crate::net::executor::spawn;
-use crate::{arch, DEFAULT_KEEP_ALIVE_INTERVAL};
+use crate::arch;
 
 pub(crate) enum NetworkState<'a> {
 	Missing,
@@ -209,226 +207,5 @@ impl<'a> NetworkInterface<'a> {
 		handle: SocketHandle,
 	) -> (&mut T, &mut smoltcp::iface::Context) {
 		(self.sockets.get_mut(handle), self.iface.context())
-	}
-}
-
-pub(crate) struct AsyncSocket(Handle);
-
-impl AsyncSocket {
-	pub(crate) fn new() -> Self {
-		let handle = NIC
-			.lock()
-			.as_nic_mut()
-			.unwrap()
-			.create_tcp_handle()
-			.unwrap();
-		Self(handle)
-	}
-
-	pub(crate) fn inner(&self) -> Handle {
-		self.0
-	}
-
-	fn with<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>) -> R) -> R {
-		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().unwrap();
-		let res = {
-			let s = nic.get_mut_socket::<tcp::Socket<'_>>(self.0);
-			f(s)
-		};
-		let t = now();
-		if nic.poll_delay(t).map(|d| d.total_millis()).unwrap_or(0) == 0 {
-			nic.poll_common(t);
-		}
-		res
-	}
-
-	fn with_context<R>(&self, f: impl FnOnce(&mut tcp::Socket<'_>, &mut iface::Context) -> R) -> R {
-		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().unwrap();
-		let res = {
-			let (s, cx) = nic.get_socket_and_context::<tcp::Socket<'_>>(self.0);
-			f(s, cx)
-		};
-		let t = now();
-		if nic.poll_delay(t).map(|d| d.total_millis()).unwrap_or(0) == 0 {
-			nic.poll_common(t);
-		}
-		res
-	}
-
-	pub(crate) async fn connect(&self, ip: &[u8], port: u16) -> Result<Handle, i32> {
-		let address =
-			IpAddress::from_str(core::str::from_utf8(ip).map_err(|_| -crate::errno::EIO)?)
-				.map_err(|_| -crate::errno::EIO)?;
-
-		self.with_context(|socket, cx| {
-			socket.connect(
-				cx,
-				(address, port),
-				LOCAL_ENDPOINT.fetch_add(1, Ordering::SeqCst),
-			)
-		})
-		.map_err(|_| -crate::errno::EIO)?;
-
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::TimeWait => {
-					Poll::Ready(Err(-crate::errno::EFAULT))
-				}
-				tcp::State::Listen => Poll::Ready(Err(-crate::errno::EIO)),
-				tcp::State::SynSent | tcp::State::SynReceived => {
-					socket.register_send_waker(cx.waker());
-					Poll::Pending
-				}
-				_ => Poll::Ready(Ok(self.0)),
-			})
-		})
-		.await
-	}
-
-	pub(crate) async fn accept(&self, port: u16) -> Result<(IpAddress, u16), i32> {
-		self.with(|socket| socket.listen(port).map_err(|_| -crate::errno::EIO))?;
-
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if socket.is_active() {
-					Poll::Ready(Ok(()))
-				} else {
-					match socket.state() {
-						tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::FinWait1
-						| tcp::State::FinWait2 => Poll::Ready(Err(-crate::errno::EIO)),
-						_ => {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
-				}
-			})
-		})
-		.await?;
-
-		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| -crate::errno::EIO)?;
-		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.0);
-		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
-		let endpoint = socket.remote_endpoint().ok_or(-crate::errno::EIO)?;
-
-		Ok((endpoint.addr, endpoint.port))
-	}
-
-	pub(crate) async fn read(&self, buffer: &mut [u8]) -> Result<usize, i32> {
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-				_ => {
-					if socket.can_recv() {
-						let n = socket.recv_slice(buffer).map_err(|_| -crate::errno::EIO)?;
-						if n > 0 || buffer.is_empty() {
-							return Poll::Ready(Ok(n));
-						}
-					}
-
-					socket.register_recv_waker(cx.waker());
-					Poll::Pending
-				}
-			})
-		})
-		.await
-	}
-
-	pub(crate) async fn write(&self, buffer: &[u8]) -> Result<usize, i32> {
-		let len = buffer.len();
-		let mut pos: usize = 0;
-
-		while pos < len {
-			let n = future::poll_fn(|cx| {
-				self.with(|socket| match socket.state() {
-					tcp::State::FinWait1
-					| tcp::State::FinWait2
-					| tcp::State::Closed
-					| tcp::State::Closing
-					| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-					_ => {
-						if !socket.may_send() {
-							return Poll::Ready(Err(-crate::errno::EIO));
-						} else if socket.can_send() {
-							return Poll::Ready(
-								socket
-									.send_slice(&buffer[pos..])
-									.map_err(|_| -crate::errno::EIO),
-							);
-						}
-
-						if pos > 0 {
-							// we already send some data => return 0 as signal to stop the
-							// async write
-							return Poll::Ready(Ok(0));
-						}
-
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
-					}
-				})
-			})
-			.await?;
-
-			if n == 0 {
-				return Ok(pos);
-			}
-
-			pos += n;
-		}
-
-		Ok(pos)
-	}
-
-	pub(crate) async fn close(&self) -> Result<(), i32> {
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-				_ => {
-					if socket.send_queue() > 0 {
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
-					} else {
-						socket.close();
-						Poll::Ready(Ok(()))
-					}
-				}
-			})
-		})
-		.await?;
-
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Ok(())),
-				_ => {
-					socket.register_send_waker(cx.waker());
-					Poll::Pending
-				}
-			})
-		})
-		.await
-	}
-}
-
-impl From<Handle> for AsyncSocket {
-	fn from(handle: Handle) -> Self {
-		AsyncSocket(handle)
 	}
 }
