@@ -350,9 +350,9 @@ impl PerCoreScheduler {
 			}
 
 			if !has_tasks {
-				if let Some(mut guard) = crate::net::NIC.try_lock() {
-					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-						let time = crate::net::now();
+				if let Some(mut guard) = crate::executor::NIC.try_lock() {
+					if let crate::executor::NetworkState::Initialized(nic) = guard.deref_mut() {
+						let time = crate::executor::now();
 						nic.poll_common(time);
 						let wakeup_time = nic
 							.poll_delay(time)

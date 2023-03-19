@@ -70,11 +70,11 @@ mod drivers;
 mod entropy;
 mod env;
 pub mod errno;
+#[cfg(feature = "tcp")]
+mod executor;
 pub(crate) mod fd;
 pub(crate) mod fs;
 mod mm;
-#[cfg(feature = "tcp")]
-mod net;
 mod scheduler;
 mod synch;
 mod syscalls;
@@ -261,7 +261,7 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	arch::init_drivers();
 	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
-	crate::net::init();
+	crate::executor::init();
 
 	syscalls::init();
 	fd::init();

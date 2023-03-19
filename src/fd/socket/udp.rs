@@ -1,5 +1,5 @@
+use crate::executor::Handle;
 use crate::fd::ObjectInterface;
-use crate::net::Handle;
 
 #[derive(Debug, Clone)]
 pub struct Socket(Handle);

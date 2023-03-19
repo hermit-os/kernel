@@ -12,9 +12,9 @@ use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
 use crate::errno::*;
+use crate::executor::executor::block_on;
+use crate::executor::{now, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
-use crate::net::executor::block_on;
-use crate::net::{now, Handle, NetworkState, NIC};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 

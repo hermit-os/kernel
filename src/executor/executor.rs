@@ -26,7 +26,7 @@ fn set_polling_mode(value: bool) {
 
 #[inline]
 fn network_delay(timestamp: Instant) -> Option<Duration> {
-	crate::net::NIC
+	crate::executor::NIC
 		.lock()
 		.as_nic_mut()
 		.unwrap()
@@ -105,7 +105,7 @@ where
 	set_polling_mode(true);
 
 	let mut counter: u16 = 0;
-	let start = crate::net::now();
+	let start = crate::executor::now();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.clone().into();
 	let mut cx = Context::from_waker(&waker);
@@ -116,7 +116,7 @@ where
 		run_executor_once();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			let wakeup_time = network_delay(crate::net::now())
+			let wakeup_time = network_delay(crate::executor::now())
 				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 			core_scheduler().add_network_timer(wakeup_time);
 
@@ -127,8 +127,8 @@ where
 		}
 
 		if let Some(duration) = timeout {
-			if crate::net::now() >= start + duration {
-				let wakeup_time = network_delay(crate::net::now())
+			if crate::executor::now() >= start + duration {
+				let wakeup_time = network_delay(crate::executor::now())
 					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 				core_scheduler().add_network_timer(wakeup_time);
 
@@ -140,7 +140,7 @@ where
 		}
 
 		counter += 1;
-		let now = crate::net::now();
+		let now = crate::executor::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
 		if counter > 200 && delay.unwrap_or(10_000_000) > 100_000 {
 			let unparked = task_notify.unparked.swap(false, Ordering::AcqRel);

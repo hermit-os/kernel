@@ -16,9 +16,9 @@ use smoltcp::time::{Duration, Instant};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
-use crate::net::device::HermitNet;
-use crate::net::executor::spawn;
 use crate::arch;
+use crate::executor::device::HermitNet;
+use crate::executor::executor::spawn;
 
 pub(crate) enum NetworkState<'a> {
 	Missing,
