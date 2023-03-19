@@ -168,9 +168,10 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	let mode =
 		match mode {
 			0x777 => 0o777,
+            0o777 => 0o777,
 			0 => 0,
 			_ => {
-				info!("Mode neither 777 nor 0, should never happen with current hermit stdlib! Using 777");
+				info!("Mode {:#x} should never happen with current hermit stdlib! Using 0o777");
 				0o777
 			}
 		};
