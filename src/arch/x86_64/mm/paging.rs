@@ -123,6 +123,7 @@ pub fn map<S>(
 					ipi_tlb_flush = true;
 				}
 				flush.flush();
+				debug!("Had to unmap page {page:?} before mapping.");
 			}
 			recursive_page_table()
 				.map_to(page, frame, flags, &mut physicalmem::FrameAlloc)
