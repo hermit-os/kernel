@@ -71,13 +71,7 @@ jobs:
         with:
             lfs: true
       - name: Install stable Rust toolchain
-        if: matrix.target != 'x86_64-uefi'
         uses: dtolnay/rust-toolchain@stable
-      - name: Use nightly Rust toolchain (UEFI)
-        if: matrix.target == 'x86_64-uefi'
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly-2023-02-01
       - name: Build
         run: cargo xtask build --target ${{ matrix.target }}
         env:

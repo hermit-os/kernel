@@ -21,8 +21,8 @@ x86_64 = { version = "0.14", default-features = false }
 align-data = "0.1"
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.19" }
-uefi-services = "0.16"
+uefi = { version = "0.20" }
+uefi-services = "0.17"
 
 [build-dependencies]
 cc = "1.0"
