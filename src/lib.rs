@@ -244,18 +244,17 @@ extern "C" fn initd(_arg: usize) {
 		fn init_rtl8139_netif(freq: u32) -> i32;
 	}
 
-	// initialize LwIP library for newlib-based applications
-	#[cfg(feature = "newlib")]
-	unsafe {
-		init_lwip();
-		init_rtl8139_netif(processor::get_frequency() as u32);
-	}
+	if !env::is_uhyve() {
+		// initialize LwIP library for newlib-based applications
+		#[cfg(feature = "newlib")]
+		unsafe {
+			init_lwip();
+			init_rtl8139_netif(processor::get_frequency() as u32);
+		}
 
-	if env::is_uhyve() {
-		// Initialize the uhyve-net interface using the IP and gateway addresses specified in hcip, hcmask, hcgateway.
-		info!("HermitCore is running on uhyve!");
-	} else {
 		info!("HermitCore is running on common system!");
+	} else {
+		info!("HermitCore is running on uhyve!");
 	}
 
 	// Initialize Drivers
