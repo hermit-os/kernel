@@ -15,6 +15,10 @@ static PHYSICAL_FREE_LIST: InterruptTicketMutex<FreeList> =
 	InterruptTicketMutex::new(FreeList::new());
 static TOTAL_MEMORY: AtomicUsize = AtomicUsize::new(0);
 
+const KVM_32BIT_MAX_MEM_SIZE: usize = 1 << 32;
+const KVM_32BIT_GAP_SIZE: usize = 768 << 20;
+const KVM_32BIT_GAP_START: usize = KVM_32BIT_MAX_MEM_SIZE - KVM_32BIT_GAP_SIZE;
+
 fn detect_from_multiboot_info() -> Result<(), ()> {
 	let mb_info = get_mbinfo();
 	if mb_info.is_zero() {
@@ -58,22 +62,21 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 }
 
 fn detect_from_limits() -> Result<(), ()> {
-	let apic_gap = 0xFE000000;
 	let limit = get_limit();
 	if limit == 0 {
 		return Err(());
 	}
 
 	// add gap for the APIC
-	if limit > apic_gap {
-		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), apic_gap);
+	if limit > KVM_32BIT_GAP_START {
+		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START);
 		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
-		if limit > 0x100000000 {
-			let entry = FreeListEntry::new(0x100000000, limit - 0x100000000);
+		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
+			let entry = FreeListEntry::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit);
 			PHYSICAL_FREE_LIST.lock().list.push_back(entry);
-			TOTAL_MEMORY.store(limit - (0x100000000 - apic_gap), Ordering::SeqCst);
+			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
 		} else {
-			TOTAL_MEMORY.store(apic_gap, Ordering::SeqCst);
+			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
 		}
 	} else {
 		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
