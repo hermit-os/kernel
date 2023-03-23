@@ -35,7 +35,7 @@ pub fn install() {
 	set_general_handler!(idt, unknown, 64..);
 
 	unsafe {
-		for i in idt.slice_mut(0..) {
+		for i in idt.slice_mut(32..) {
 			let addr = i.handler_addr();
 			i.set_handler_addr(addr).set_stack_index(0);
 		}
