@@ -16,7 +16,7 @@ use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::scheduler::{self, CoreId};
 
-pub const IST_ENTRIES: usize = 3;
+pub const IST_ENTRIES: usize = 4;
 pub const IST_SIZE: usize = BasePageSize::SIZE as usize;
 
 pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
@@ -35,19 +35,26 @@ pub fn install() {
 	set_general_handler!(idt, unknown, 64..);
 
 	unsafe {
+		for i in idt.slice_mut(0..) {
+			let addr = i.handler_addr();
+			i.set_handler_addr(addr).set_stack_index(0);
+		}
 		idt.double_fault
 			.set_handler_fn(double_fault_exception)
-			.set_stack_index(0);
+			.set_stack_index(1);
 		idt.non_maskable_interrupt
 			.set_handler_fn(nmi_exception)
-			.set_stack_index(1);
+			.set_stack_index(2);
 		idt.machine_check
 			.set_handler_fn(machine_check_exception)
-			.set_stack_index(2);
+			.set_stack_index(3);
+		idt.device_not_available
+			.set_handler_fn(device_not_available_exception)
+			.set_stack_index(0);
+		idt.page_fault
+			.set_handler_fn(page_fault_handler)
+			.set_stack_index(0);
 	}
-	idt.device_not_available
-		.set_handler_fn(device_not_available_exception);
-	idt.page_fault.set_handler_fn(page_fault_handler);
 }
 
 #[no_mangle]
