@@ -2,7 +2,6 @@
 #![no_main]
 #![warn(rust_2018_idioms)]
 #![allow(clippy::missing_safety_doc)]
-#![cfg_attr(target_os = "uefi", feature(abi_efiapi))]
 
 #[macro_use]
 mod macros;
