@@ -323,6 +323,7 @@ fn boot_processor_main() -> ! {
 		info!("The current hermit-kernel is only implemented up to this point on aarch64.");
 		if env::is_uhyve() {
 			syscalls::init();
+			syscalls::__sys_shutdown(0);
 		} else {
 			info!("Attempting to exit via QEMU.");
 			info!("This requires that you passed the `-semihosting` option to QEMU.");
