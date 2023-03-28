@@ -51,17 +51,6 @@ pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 	}
 });
 
-/// Shuts down the machine.
-///
-/// This does not require the syscall interface to be initialized.
-pub(crate) fn shutdown(arg: i32) -> ! {
-	if env::is_uhyve() {
-		crate::syscalls::interfaces::Uhyve.shutdown(arg)
-	} else {
-		crate::syscalls::interfaces::Generic.shutdown(arg)
-	}
-}
-
 pub(crate) fn init() {
 	Lazy::force(&SYS);
 
