@@ -110,7 +110,9 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
 	unsafe {
-		idt[(32 + irq_number) as usize].set_handler_addr(x86_64::VirtAddr::new(handler as u64));
+		idt[(32 + irq_number) as usize]
+			.set_handler_addr(x86_64::VirtAddr::new(handler as u64))
+			.set_stack_index(0);
 	}
 }
 

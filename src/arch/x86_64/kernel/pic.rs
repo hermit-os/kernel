@@ -32,10 +32,14 @@ pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
-	idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
-		.set_handler_fn(spurious_interrupt_on_master);
-	idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
-		.set_handler_fn(spurious_interrupt_on_slave);
+	unsafe {
+		idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+			.set_handler_fn(spurious_interrupt_on_master)
+			.set_stack_index(0);
+		idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+			.set_handler_fn(spurious_interrupt_on_slave)
+			.set_stack_index(0);
+	}
 
 	unsafe {
 		// Remapping IRQs with a couple of IO output operations
