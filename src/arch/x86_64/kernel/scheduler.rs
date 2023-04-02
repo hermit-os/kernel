@@ -61,8 +61,6 @@ struct State {
 pub struct BootStack {
 	/// stack for kernel tasks
 	stack: VirtAddr,
-	/// stack to handle interrupts
-	ist0: VirtAddr,
 }
 
 pub struct CommonStack {
@@ -91,9 +89,9 @@ impl TaskStacks {
 		} else {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
-		let total_size = user_stack_size + DEFAULT_STACK_SIZE + KERNEL_STACK_SIZE;
+		let total_size = user_stack_size + DEFAULT_STACK_SIZE;
 		let virt_addr =
-			crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
+			crate::arch::mm::virtualmem::allocate(total_size + 3 * BasePageSize::SIZE as usize)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
 		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
@@ -107,26 +105,18 @@ impl TaskStacks {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 
-		// map IST0 into the address space
+		// map kernel stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
-			KERNEL_STACK_SIZE / BasePageSize::SIZE as usize,
-			flags,
-		);
-
-		// map kernel stack into the address space
-		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE,
-			phys_addr + KERNEL_STACK_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
 			flags,
 		);
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
-			phys_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE,
+			virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE,
+			phys_addr + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
 			flags,
 		);
@@ -134,9 +124,7 @@ impl TaskStacks {
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr
-					+ KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE
-					+ 3 * BasePageSize::SIZE as usize)
+				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize)
 					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
@@ -156,20 +144,14 @@ impl TaskStacks {
 			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
 		);
 		debug!("Using boot stack {:#X}", stack);
-		let ist0 = VirtAddr::from_usize(
-			tss.interrupt_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
-		);
-		debug!("IST0 is located at {:#X}", ist0);
 
-		TaskStacks::Boot(BootStack { stack, ist0 })
+		TaskStacks::Boot(BootStack { stack })
 	}
 
 	pub fn get_user_stack_size(&self) -> usize {
 		match self {
 			TaskStacks::Boot(_) => 0,
-			TaskStacks::Common(stacks) => {
-				stacks.total_size - DEFAULT_STACK_SIZE - KERNEL_STACK_SIZE
-			}
+			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE,
 		}
 	}
 
@@ -177,7 +159,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + KERNEL_STACK_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
+				stacks.virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE
 			}
 		}
 	}
@@ -185,9 +167,7 @@ impl TaskStacks {
 	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
-			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + KERNEL_STACK_SIZE + 2 * BasePageSize::SIZE
-			}
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
 		}
 	}
 
@@ -196,17 +176,6 @@ impl TaskStacks {
 			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
 			TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
 		}
-	}
-
-	pub fn get_interrupt_stack(&self) -> VirtAddr {
-		match self {
-			TaskStacks::Boot(stacks) => stacks.ist0,
-			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
-		}
-	}
-
-	pub fn get_interrupt_stack_size(&self) -> usize {
-		KERNEL_STACK_SIZE
 	}
 }
 
