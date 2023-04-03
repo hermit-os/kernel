@@ -34,6 +34,31 @@ pub fn install() {
 	set_general_handler!(idt, unhandle, 32..64);
 	set_general_handler!(idt, unknown, 64..);
 
+	idt.divide_error.set_handler_fn(divide_error_exception);
+	idt.debug.set_handler_fn(debug_exception);
+	idt.breakpoint.set_handler_fn(breakpoint_exception);
+	idt.overflow.set_handler_fn(overflow_exception);
+	idt.bound_range_exceeded
+		.set_handler_fn(bound_range_exceeded_exception);
+	idt.invalid_opcode.set_handler_fn(invalid_opcode_exception);
+	idt.device_not_available
+		.set_handler_fn(device_not_available_exception);
+	idt.invalid_tss.set_handler_fn(invalid_tss_exception);
+	idt.segment_not_present
+		.set_handler_fn(segment_not_present_exception);
+	idt.stack_segment_fault
+		.set_handler_fn(stack_segment_fault_exception);
+	idt.general_protection_fault
+		.set_handler_fn(general_protection_exception);
+	idt.page_fault.set_handler_fn(page_fault_handler);
+	idt.x87_floating_point
+		.set_handler_fn(floating_point_exception);
+	idt.alignment_check
+		.set_handler_fn(alignment_check_exception);
+	idt.simd_floating_point
+		.set_handler_fn(simd_floating_point_exception);
+	idt.virtualization.set_handler_fn(virtualization_exception);
+
 	unsafe {
 		idt.double_fault
 			.set_handler_fn(double_fault_exception)
@@ -78,8 +103,38 @@ fn unknown(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64
 	apic::eoi();
 }
 
+extern "x86-interrupt" fn divide_error_exception(stack_frame: ExceptionStackFrame) {
+	error!("Divide Error (#DE) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn debug_exception(stack_frame: ExceptionStackFrame) {
+	error!("Debug (#DB) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
 extern "x86-interrupt" fn nmi_exception(stack_frame: ExceptionStackFrame) {
 	error!("Non-Maskable Interrupt (NMI) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn breakpoint_exception(stack_frame: ExceptionStackFrame) {
+	error!("Breakpoint (#BP) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn overflow_exception(stack_frame: ExceptionStackFrame) {
+	error!("Overflow (#OF) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn bound_range_exceeded_exception(stack_frame: ExceptionStackFrame) {
+	error!("BOUND Range Exceeded (#BR) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn invalid_opcode_exception(stack_frame: ExceptionStackFrame) {
+	error!("Invalid Opcode (#UD) Exception: {:#?}", stack_frame);
 	scheduler::abort();
 }
 
@@ -98,6 +153,46 @@ extern "x86-interrupt" fn device_not_available_exception(_stack_frame: Exception
 	core_scheduler().fpu_switch();
 }
 
+extern "x86-interrupt" fn invalid_tss_exception(stack_frame: ExceptionStackFrame, _code: u64) {
+	error!("Invalid TSS (#TS) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn segment_not_present_exception(
+	stack_frame: ExceptionStackFrame,
+	_code: u64,
+) {
+	error!("Segment Not Present (#NP) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn stack_segment_fault_exception(
+	stack_frame: ExceptionStackFrame,
+	error_code: u64,
+) {
+	error!(
+		"Stack Segment Fault (#SS) Exception: {:#?}, error {:#X}",
+		stack_frame, error_code
+	);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn general_protection_exception(
+	stack_frame: ExceptionStackFrame,
+	error_code: u64,
+) {
+	error!(
+		"General Protection (#GP) Exception: {:#?}, error {:#X}",
+		stack_frame, error_code
+	);
+	error!(
+		"fs = {:#X}, gs = {:#X}",
+		processor::readfs(),
+		processor::readgs()
+	);
+	scheduler::abort();
+}
+
 extern "x86-interrupt" fn double_fault_exception(
 	stack_frame: ExceptionStackFrame,
 	error_code: u64,
@@ -107,6 +202,16 @@ extern "x86-interrupt" fn double_fault_exception(
 		stack_frame, error_code
 	);
 	scheduler::abort()
+}
+
+extern "x86-interrupt" fn floating_point_exception(stack_frame: ExceptionStackFrame) {
+	error!("Floating-Point Error (#MF) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn alignment_check_exception(stack_frame: ExceptionStackFrame, _code: u64) {
+	error!("Alignment Check (#AC) Exception: {:#?}", stack_frame);
+	scheduler::abort();
 }
 
 pub extern "x86-interrupt" fn page_fault_handler(
@@ -125,6 +230,16 @@ pub extern "x86-interrupt" fn page_fault_handler(
 extern "x86-interrupt" fn machine_check_exception(stack_frame: ExceptionStackFrame) -> ! {
 	error!("Machine Check (#MC) Exception: {:#?}", stack_frame);
 	scheduler::abort()
+}
+
+extern "x86-interrupt" fn simd_floating_point_exception(stack_frame: ExceptionStackFrame) {
+	error!("SIMD Floating-Point (#XM) Exception: {:#?}", stack_frame);
+	scheduler::abort();
+}
+
+extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFrame) {
+	error!("Virtualization (#VE) Exception: {:#?}", stack_frame);
+	scheduler::abort();
 }
 
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u32, &'static str, RandomState>> =
