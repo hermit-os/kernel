@@ -1,7 +1,6 @@
 use x86::io::*;
-use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::IDT;
+use super::interrupts::IDT_BUILDER;
 use crate::arch::x86_64::kernel::interrupts::ExceptionStackFrame;
 
 const PIC1_COMMAND_PORT: u16 = 0x20;
@@ -31,7 +30,8 @@ pub fn eoi(int_no: u8) {
 pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	let mut idt = IDT_BUILDER.lock();
+	let idt = idt.as_mut().unwrap();
 	idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
 		.set_handler_fn(spurious_interrupt_on_master);
 	idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]

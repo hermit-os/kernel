@@ -5,9 +5,8 @@ use core::arch::asm;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
-use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::IDT;
+use super::interrupts::IDT_BUILDER;
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
@@ -350,7 +349,8 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 }
 
 pub fn install_timer_handler() {
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	let mut idt = IDT_BUILDER.lock();
+	let idt = idt.as_mut().unwrap();
 	idt[apic::TIMER_INTERRUPT_NUMBER as usize].set_handler_fn(timer_handler);
 	interrupts::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
 }

@@ -217,7 +217,6 @@ pub fn boot_processor_init() {
 	crate::mm::print_information();
 	env::init();
 	gdt::add_current_core();
-	interrupts::load_idt();
 	pic::init();
 
 	processor::detect_frequency();
@@ -242,6 +241,7 @@ pub fn boot_processor_init() {
 	apic::init();
 	scheduler::install_timer_handler();
 	finish_processor_init();
+	interrupts::load_idt();
 	interrupts::enable();
 }
 
@@ -260,13 +260,13 @@ pub fn application_processor_init() {
 	CoreLocal::install();
 	processor::configure();
 	gdt::add_current_core();
-	interrupts::load_idt();
 	apic::init_x2apic();
 	apic::init_local_apic();
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
 	}
 	interrupts::enable();
+	interrupts::load_idt();
 	finish_processor_init();
 }
 

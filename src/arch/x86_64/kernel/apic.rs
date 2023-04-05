@@ -15,9 +15,8 @@ use hermit_sync::{without_interrupts, OnceCell, SpinMutex};
 #[cfg(feature = "smp")]
 use x86::controlregs::*;
 use x86::msr::*;
-use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::IDT;
+use super::interrupts::IDT_BUILDER;
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
 use crate::arch::x86_64::kernel::CURRENT_STACK_ADDRESS;
@@ -476,7 +475,8 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	let mut idt = IDT_BUILDER.lock();
+	let idt = idt.as_mut().unwrap();
 	idt[ERROR_INTERRUPT_NUMBER as usize].set_handler_fn(error_interrupt_handler);
 	idt[SPURIOUS_INTERRUPT_NUMBER as usize].set_handler_fn(spurious_interrupt_handler);
 	#[cfg(feature = "smp")]
