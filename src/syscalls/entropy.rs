@@ -28,7 +28,18 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 		slice::from_raw_parts_mut(buf, len)
 	};
 
-	entropy::read(buf, flags)
+	let ret = entropy::read(buf, flags);
+	if ret < 0 {
+		warn!("Unable to read entropy! Fallback to a naive implementation!");
+		for i in &mut *buf {
+			*i = (generate_park_miller_lehmer_random_number() & 0xFF)
+				.try_into()
+				.unwrap();
+		}
+		buf.len().try_into().unwrap()
+	} else {
+		ret
+	}
 }
 
 /// Fill `len` bytes in `buf` with cryptographically secure random data.
