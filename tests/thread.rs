@@ -90,7 +90,7 @@ pub fn test_futex() {
 
 #[test_case]
 pub fn test_thread_local() {
-	#[repr(C, align(0x1000))]
+	#[repr(C, align(0x10))]
 	struct AlignedByte(u8);
 
 	#[thread_local]
