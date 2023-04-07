@@ -485,11 +485,12 @@ pub fn init() {
 		// Depending on the RSDP revision, either an XSDT or an RSDT has been chosen above.
 		// The XSDT contains 64-bit pointers whereas the RSDT has 32-bit pointers.
 		let table_physical_address = if rsdp.revision >= 2 {
-			let address = PhysAddr(unsafe { *(current_address as *const u64) });
+			let address = PhysAddr(unsafe { ptr::read_unaligned(current_address as *const u64) });
 			current_address += mem::size_of::<u64>();
 			address
 		} else {
-			let address = PhysAddr((unsafe { *(current_address as *const u32) }).into());
+			let address =
+				PhysAddr((unsafe { ptr::read_unaligned(current_address as *const u32) }).into());
 			current_address += mem::size_of::<u32>();
 			address
 		};
