@@ -227,9 +227,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package hello_world
-      - run: rustup toolchain install nightly-2022-08-01 --target aarch64-unknown-none-softfloat --component llvm-tools-preview
+      - run: rustup toolchain install nightly-2023-04-05 --target aarch64-unknown-none-softfloat --component llvm-tools-preview
       - name: Build loader
-        run: cargo +nightly-2022-08-01 xtask build --target aarch64
+        run: cargo +nightly-2023-04-05 xtask build --target aarch64
         working-directory: loader
         env:
           HERMIT_APP: ../../../../target/aarch64-unknown-hermit/debug/hello_world
