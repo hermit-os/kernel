@@ -721,10 +721,14 @@ pub fn boot_application_processors() {
 			"Set entry point for application processor to {:p}",
 			start::_start as *const ()
 		);
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr()) =
-			start::_start as usize;
-		*((SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr()) =
-			raw_boot_info() as *const _ as u64;
+		ptr::write_unaligned(
+			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_ENTRY).as_mut_ptr(),
+			start::_start as usize,
+		);
+		ptr::write_unaligned(
+			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr(),
+			raw_boot_info() as *const _ as u64,
+		);
 	}
 
 	// Now wake up each application processor.
