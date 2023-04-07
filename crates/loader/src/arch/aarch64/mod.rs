@@ -80,9 +80,40 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	#[repr(align(8))]
-	struct Align8;
-	align_data::include_aligned!(Align8, env!("HERMIT_APP"))
+	let fdt = unsafe {
+		core::slice::from_raw_parts(
+			FDT as *mut u8,
+			&kernel_end as *const u8 as usize - RAM_START as usize,
+		)
+	};
+	let fdt = fdt::Fdt::new(fdt).unwrap();
+
+	let chosen = fdt.find_node("/chosen").unwrap();
+	let initrd_start = chosen
+		.properties()
+		.find(|n| n.name == "initrd-start")
+		.map(|n| {
+			let mut arr = [0u8; 8];
+			arr.copy_from_slice(&n.value[..n.value.len()]);
+			usize::from_be_bytes(arr)
+		})
+		.unwrap();
+	let initrd_end = chosen
+		.properties()
+		.find(|n| n.name == "initrd-end")
+		.map(|n| {
+			let mut arr = [0u8; 8];
+			arr.copy_from_slice(&n.value[..n.value.len()]);
+			usize::from_be_bytes(arr)
+		})
+		.unwrap();
+
+	info!("initrd {:#x} {:#x}", initrd_start, initrd_end);
+	for i in chosen.properties() {
+		info!("a {:?}", i);
+	}
+
+	unsafe { core::slice::from_raw_parts(initrd_start as *const u8, initrd_end - initrd_start) }
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
