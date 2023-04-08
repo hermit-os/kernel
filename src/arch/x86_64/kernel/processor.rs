@@ -652,6 +652,9 @@ impl fmt::Display for CpuFeaturePrinter {
 		if self.extended_feature_info.has_sgx() {
 			write!(f, "SGX ")?;
 		}
+		if self.extended_feature_info.has_rdseed() {
+			write!(f, "RDSEED ")?;
+		}
 
 		Ok(())
 	}
