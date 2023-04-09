@@ -164,23 +164,6 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 }
 
 fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
-	// mode is passed in as hex (0x777). Linux/Fuse expects octal (0o777).
-	// just passing mode as is to FUSE create, leads to very weird permissions: 0b0111_0111_0111 -> 'r-x rwS rwt'
-	// TODO: change in stdlib
-	#[cfg(not(feature = "newlib"))]
-	let mode = match mode {
-		0x777 => 0o777,
-		0o777 => 0o777,
-		0 => 0,
-		_ => {
-			info!(
-				"Mode {:#X} should never happen with current hermit stdlib! Using 0o777",
-				mode
-			);
-			0o777
-		}
-	};
-
 	let mut perms = FilePerms {
 		raw: flags as u32,
 		mode,
