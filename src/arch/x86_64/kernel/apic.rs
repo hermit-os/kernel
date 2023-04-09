@@ -476,15 +476,25 @@ pub fn init() {
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
-	idt[ERROR_INTERRUPT_NUMBER as usize].set_handler_fn(error_interrupt_handler);
-	idt[SPURIOUS_INTERRUPT_NUMBER as usize].set_handler_fn(spurious_interrupt_handler);
-	#[cfg(feature = "smp")]
-	{
-		idt[TLB_FLUSH_INTERRUPT_NUMBER as usize].set_handler_fn(tlb_flush_handler);
-		interrupts::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
-		idt[WAKEUP_INTERRUPT_NUMBER as usize].set_handler_fn(wakeup_handler);
-		interrupts::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+	unsafe {
+		let idt = &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable);
+		idt[ERROR_INTERRUPT_NUMBER as usize]
+			.set_handler_fn(error_interrupt_handler)
+			.set_stack_index(0);
+		idt[SPURIOUS_INTERRUPT_NUMBER as usize]
+			.set_handler_fn(spurious_interrupt_handler)
+			.set_stack_index(0);
+		#[cfg(feature = "smp")]
+		{
+			idt[TLB_FLUSH_INTERRUPT_NUMBER as usize]
+				.set_handler_fn(tlb_flush_handler)
+				.set_stack_index(0);
+			interrupts::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
+			idt[WAKEUP_INTERRUPT_NUMBER as usize]
+				.set_handler_fn(wakeup_handler)
+				.set_stack_index(0);
+			interrupts::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+		}
 	}
 
 	// Initialize interrupt handling over APIC.

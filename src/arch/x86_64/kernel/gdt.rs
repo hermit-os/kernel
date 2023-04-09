@@ -11,6 +11,7 @@ use super::interrupts::{IST_ENTRIES, IST_SIZE};
 use super::scheduler::TaskStacks;
 use super::CURRENT_STACK_ADDRESS;
 use crate::arch::x86_64::kernel::core_local::{core_scheduler, CoreLocal};
+use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::config::KERNEL_STACK_SIZE;
 
 pub fn add_current_core() {
@@ -29,9 +30,16 @@ pub fn add_current_core() {
 	CoreLocal::get().kernel_stack.set(rsp);
 
 	// Allocate all ISTs for this core.
+	// Every task later gets its own IST, so the IST allocated here is only used by the Idle task.
 	for i in 0..IST_ENTRIES {
-		let ist = crate::mm::allocate(IST_SIZE, true);
-		let ist_start = ist.as_u64() + IST_SIZE as u64 - TaskStacks::MARKER_SIZE as u64;
+		let sz = if i == 0 {
+			IST_SIZE
+		} else {
+			BasePageSize::SIZE as usize
+		};
+
+		let ist = crate::mm::allocate(sz, true);
+		let ist_start = ist.as_u64() + sz as u64 - TaskStacks::MARKER_SIZE as u64;
 		tss.interrupt_stack_table[i] = VirtAddr::new(ist_start);
 	}
 

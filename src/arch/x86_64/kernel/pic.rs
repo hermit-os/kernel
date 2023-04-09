@@ -31,13 +31,15 @@ pub fn eoi(int_no: u8) {
 pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
-	idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
-		.set_handler_fn(spurious_interrupt_on_master);
-	idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
-		.set_handler_fn(spurious_interrupt_on_slave);
-
 	unsafe {
+		let idt = &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable);
+		idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+			.set_handler_fn(spurious_interrupt_on_master)
+			.set_stack_index(0);
+		idt[(PIC2_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
+			.set_handler_fn(spurious_interrupt_on_slave)
+			.set_stack_index(0);
+
 		// Remapping IRQs with a couple of IO output operations
 		//
 		// Normally, IRQs 0 to 7 are mapped to entries 8 to 15. This

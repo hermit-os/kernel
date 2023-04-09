@@ -7,7 +7,7 @@ use core::{mem, ptr, slice};
 use align_address::Align;
 use x86_64::structures::idt::InterruptDescriptorTable;
 
-use super::interrupts::IDT;
+use super::interrupts::{IDT, IST_SIZE};
 use crate::arch::x86_64::kernel::core_local::*;
 use crate::arch::x86_64::kernel::{apic, interrupts};
 use crate::arch::x86_64::mm::paging::{
@@ -61,6 +61,8 @@ struct State {
 pub struct BootStack {
 	/// stack for kernel tasks
 	stack: VirtAddr,
+	/// stack to handle interrupts
+	ist1: VirtAddr,
 }
 
 pub struct CommonStack {
@@ -89,9 +91,9 @@ impl TaskStacks {
 		} else {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
-		let total_size = user_stack_size + DEFAULT_STACK_SIZE;
+		let total_size = user_stack_size + DEFAULT_STACK_SIZE + IST_SIZE;
 		let virt_addr =
-			crate::arch::mm::virtualmem::allocate(total_size + 3 * BasePageSize::SIZE as usize)
+			crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
 		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
@@ -105,18 +107,26 @@ impl TaskStacks {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 
-		// map kernel stack into the address space
+		// map IST1 into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
+			IST_SIZE / BasePageSize::SIZE as usize,
+			flags,
+		);
+
+		// map kernel stack into the address space
+		crate::arch::mm::paging::map::<BasePageSize>(
+			virt_addr + IST_SIZE + 2 * BasePageSize::SIZE,
+			phys_addr + IST_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
 			flags,
 		);
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE,
-			phys_addr + DEFAULT_STACK_SIZE,
+			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
+			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
 			flags,
 		);
@@ -124,7 +134,7 @@ impl TaskStacks {
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize)
+				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE as usize)
 					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
@@ -144,14 +154,18 @@ impl TaskStacks {
 			tss.privilege_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - KERNEL_STACK_SIZE,
 		);
 		debug!("Using boot stack {:#X}", stack);
+		let ist1 = VirtAddr::from_usize(
+			tss.interrupt_stack_table[0].as_u64() as usize + Self::MARKER_SIZE - IST_SIZE,
+		);
+		debug!("IST1 is located at {:#X}", ist1);
 
-		TaskStacks::Boot(BootStack { stack })
+		TaskStacks::Boot(BootStack { stack, ist1 })
 	}
 
 	pub fn get_user_stack_size(&self) -> usize {
 		match self {
 			TaskStacks::Boot(_) => 0,
-			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE,
+			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE - IST_SIZE,
 		}
 	}
 
@@ -159,7 +173,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE
+				stacks.virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE
 			}
 		}
 	}
@@ -167,7 +181,7 @@ impl TaskStacks {
 	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
-			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
+			TaskStacks::Common(stacks) => stacks.virt_addr + IST_SIZE + 2 * BasePageSize::SIZE,
 		}
 	}
 
@@ -176,6 +190,17 @@ impl TaskStacks {
 			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
 			TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
 		}
+	}
+
+	pub fn get_interrupt_stack(&self) -> VirtAddr {
+		match self {
+			TaskStacks::Boot(stacks) => stacks.ist1,
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE,
+		}
+	}
+
+	pub fn get_interrupt_stack_size(&self) -> usize {
+		IST_SIZE
 	}
 }
 
@@ -350,7 +375,11 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 }
 
 pub fn install_timer_handler() {
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
-	idt[apic::TIMER_INTERRUPT_NUMBER as usize].set_handler_fn(timer_handler);
+	unsafe {
+		let idt = &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable);
+		idt[apic::TIMER_INTERRUPT_NUMBER as usize]
+			.set_handler_fn(timer_handler)
+			.set_stack_index(0);
+	}
 	interrupts::add_irq_name((apic::TIMER_INTERRUPT_NUMBER - 32).into(), "Timer");
 }
