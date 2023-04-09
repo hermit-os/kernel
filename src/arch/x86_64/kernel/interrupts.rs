@@ -16,8 +16,8 @@ use crate::arch::x86_64::kernel::{apic, processor};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::scheduler::{self, CoreId};
 
-pub const IST_ENTRIES: usize = 3;
-pub const IST_SIZE: usize = BasePageSize::SIZE as usize;
+pub const IST_ENTRIES: usize = 4;
+pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
 
 pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
 
@@ -34,45 +34,71 @@ pub fn install() {
 	set_general_handler!(idt, unhandle, 32..64);
 	set_general_handler!(idt, unknown, 64..);
 
-	idt.divide_error.set_handler_fn(divide_error_exception);
-	idt.debug.set_handler_fn(debug_exception);
-	idt.breakpoint.set_handler_fn(breakpoint_exception);
-	idt.overflow.set_handler_fn(overflow_exception);
-	idt.bound_range_exceeded
-		.set_handler_fn(bound_range_exceeded_exception);
-	idt.invalid_opcode.set_handler_fn(invalid_opcode_exception);
-	idt.device_not_available
-		.set_handler_fn(device_not_available_exception);
-	idt.invalid_tss.set_handler_fn(invalid_tss_exception);
-	idt.segment_not_present
-		.set_handler_fn(segment_not_present_exception);
-	idt.stack_segment_fault
-		.set_handler_fn(stack_segment_fault_exception);
-	idt.general_protection_fault
-		.set_handler_fn(general_protection_exception);
-	idt.page_fault.set_handler_fn(page_fault_handler);
-	idt.x87_floating_point
-		.set_handler_fn(floating_point_exception);
-	idt.alignment_check
-		.set_handler_fn(alignment_check_exception);
-	idt.simd_floating_point
-		.set_handler_fn(simd_floating_point_exception);
-	idt.virtualization.set_handler_fn(virtualization_exception);
-
 	unsafe {
+		for i in 32..256 {
+			let addr = idt[i].handler_addr();
+			idt[i].set_handler_addr(addr).set_stack_index(0);
+		}
+
+		idt.divide_error
+			.set_handler_fn(divide_error_exception)
+			.set_stack_index(0);
+		idt.debug.set_handler_fn(debug_exception).set_stack_index(0);
+		idt.breakpoint
+			.set_handler_fn(breakpoint_exception)
+			.set_stack_index(0);
+		idt.overflow
+			.set_handler_fn(overflow_exception)
+			.set_stack_index(0);
+		idt.bound_range_exceeded
+			.set_handler_fn(bound_range_exceeded_exception)
+			.set_stack_index(0);
+		idt.invalid_opcode
+			.set_handler_fn(invalid_opcode_exception)
+			.set_stack_index(0);
+		idt.device_not_available
+			.set_handler_fn(device_not_available_exception)
+			.set_stack_index(0);
+		idt.invalid_tss
+			.set_handler_fn(invalid_tss_exception)
+			.set_stack_index(0);
+		idt.segment_not_present
+			.set_handler_fn(segment_not_present_exception)
+			.set_stack_index(0);
+		idt.stack_segment_fault
+			.set_handler_fn(stack_segment_fault_exception)
+			.set_stack_index(0);
+		idt.general_protection_fault
+			.set_handler_fn(general_protection_exception)
+			.set_stack_index(0);
+		idt.page_fault
+			.set_handler_fn(page_fault_handler)
+			.set_stack_index(0);
+		idt.x87_floating_point
+			.set_handler_fn(floating_point_exception)
+			.set_stack_index(0);
+		idt.alignment_check
+			.set_handler_fn(alignment_check_exception)
+			.set_stack_index(0);
+		idt.simd_floating_point
+			.set_handler_fn(simd_floating_point_exception)
+			.set_stack_index(0);
+		idt.virtualization
+			.set_handler_fn(virtualization_exception)
+			.set_stack_index(0);
 		idt.double_fault
 			.set_handler_fn(double_fault_exception)
-			.set_stack_index(0);
+			.set_stack_index(1);
 		idt.non_maskable_interrupt
 			.set_handler_fn(nmi_exception)
-			.set_stack_index(1);
+			.set_stack_index(2);
 		idt.machine_check
 			.set_handler_fn(machine_check_exception)
-			.set_stack_index(2);
+			.set_stack_index(3);
+		idt.device_not_available
+			.set_handler_fn(device_not_available_exception)
+			.set_stack_index(0);
 	}
-	idt.device_not_available
-		.set_handler_fn(device_not_available_exception);
-	idt.page_fault.set_handler_fn(page_fault_handler);
 }
 
 #[no_mangle]
@@ -81,7 +107,9 @@ pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
 
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
 	unsafe {
-		idt[(32 + irq_number) as usize].set_handler_addr(x86_64::VirtAddr::new(handler as u64));
+		idt[(32 + irq_number) as usize]
+			.set_handler_addr(x86_64::VirtAddr::new(handler as u64))
+			.set_stack_index(0);
 	}
 }
 

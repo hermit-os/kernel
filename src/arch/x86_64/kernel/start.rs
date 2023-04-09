@@ -39,6 +39,8 @@ pub unsafe extern "C" fn _start(_boot_info: &'static RawBootInfo, cpu_id: u32) -
 			"mov rax, qword ptr [rax]",
 			"test rax, rax",
 			"cmovne rsp, rax",
+			"mov rax, qword ptr [rip + {current_stack_address}@GOTPCREL]",
+			"mov qword ptr [rax], rsp",
 
 			// Add top stack offset
 			"add rsp, {stack_top_offset}",
