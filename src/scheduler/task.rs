@@ -305,8 +305,8 @@ impl PriorityTaskQueue {
 	/// Change priority of specific task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
 		let i = handle.get_priority().into() as usize;
-		let mut index = 0;
-		for current_task in &self.queues[i] {
+
+		for (index, current_task) in self.queues[i].iter().enumerate() {
 			// Move the task from its old list to the new list.
 			if handle.id == current_task.borrow().id {
 				// Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
@@ -318,7 +318,6 @@ impl PriorityTaskQueue {
 				self.push(task);
 				return Ok(());
 			}
-			index += 1;
 		}
 
 		Err(())
