@@ -115,13 +115,19 @@ pub fn find_kernel() -> &'static [u8] {
 		}
 	}
 
-	// we assume that the loader use little endian
+	#[cfg(target_endian = "little")]
 	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
 		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
 	} else {
-		let sz = header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64);
-		sz.to_le()
+		header.e_shoff.to_le() + (header.e_shentsize.to_le() as u64 * header.e_shnum.to_le() as u64)
 	};
+	#[cfg(target_endian = "big")]
+	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
+		header.e_shoff.to_be() + (header.e_shentsize.to_be() as u64 * header.e_shnum.to_be() as u64)
+	} else {
+		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
+	};
+
 	info!("Found ELF file with size {}", file_size);
 
 	unsafe { core::slice::from_raw_parts(module_start as *const u8, file_size.try_into().unwrap()) }
