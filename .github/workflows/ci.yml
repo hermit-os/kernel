@@ -223,7 +223,6 @@ jobs:
       - name: Test kernel
         run: |
           qemu-system-aarch64 -semihosting \
-            -display none -serial stdio -kernel rusty-loader-aarch64 -machine virt,gic-version=max \
-            -m 512M -cpu max -smp 1 -display none -serial stdio \
-            -kernel target/aarch64/release/rusty-loader \
+            -kernel rusty-loader-aarch64 -machine virt,gic-version=max \
+            -m 512M -cpu max -smp 1 -display none -serial stdio -kernel rusty-loader-aarch64 \
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/hello_world
