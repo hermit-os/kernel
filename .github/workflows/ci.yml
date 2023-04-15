@@ -213,16 +213,24 @@ jobs:
           file: rusty-loader-aarch64
       - name: Apply rust-toolchain.toml
         run: rustup show
-      - uses: Swatinem/rust-cache@v2
-      - name: Build dev profile
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package hello_world
       - name: Install QEMU
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-aarch64
-      - name: Test kernel
+      - uses: Swatinem/rust-cache@v2
+      - name: Build dev profile
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package hello_world
+      - name: Test dev kernel
         run: |
           qemu-system-aarch64 -semihosting \
             -kernel rusty-loader-aarch64 -machine virt,gic-version=max \
             -m 512M -cpu max -smp 1 -display none -serial stdio -kernel rusty-loader-aarch64 \
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/hello_world
+      - name: Build release profile
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --release
+      - name: Test release kernel
+        run: |
+          qemu-system-aarch64 -semihosting \
+            -kernel rusty-loader-aarch64 -machine virt,gic-version=max \
+            -m 512M -cpu max -smp 1 -display none -serial stdio -kernel rusty-loader-aarch64 \
+            -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/hello_world
