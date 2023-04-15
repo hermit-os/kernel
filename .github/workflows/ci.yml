@@ -227,7 +227,7 @@ jobs:
             -m 512M -cpu max -smp 1 -display none -serial stdio -kernel rusty-loader-aarch64 \
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/hello_world
       - name: Build release profile
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --release
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package hello_world --release
       - name: Test release kernel
         run: |
           qemu-system-aarch64 -semihosting \
