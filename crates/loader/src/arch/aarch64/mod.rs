@@ -4,6 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
+use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
 use hermit_entry::{
 	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
 	elf::LoadedKernel,
@@ -30,7 +31,12 @@ const RAM_START: u64 = 0x40000000;
 const SERIAL_PORT_ADDRESS: u32 = 0x09000000;
 /// Default stack size of the kernel
 const KERNEL_STACK_SIZE: usize = 32_768;
+/// Qemu assumes for ELF kernel that the DTB is located at
+/// start of RAM (0x4000_0000)
+/// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
+const FDT: u64 = RAM_START;
 
+#[allow(dead_code)]
 const PT_DEVICE: u64 = 0x707;
 const PT_PT: u64 = 0x713;
 const PT_MEM: u64 = 0x713;
@@ -41,7 +47,28 @@ const PT_SELF: u64 = 1 << 55;
 static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 pub fn message_output_init() {
-	// nothing to do
+	let fdt = unsafe {
+		core::slice::from_raw_parts(
+			FDT as *mut u8,
+			&kernel_end as *const u8 as usize - RAM_START as usize,
+		)
+	};
+	let fdt = fdt::Fdt::new(fdt).unwrap();
+
+	let uart_address: u32 = if let Some(stdout) = fdt.chosen().stdout() {
+		if let Some(pos) = stdout.name.find("@") {
+			let len = stdout.name.len();
+			u32::from_str_radix(&stdout.name[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
+		} else {
+			SERIAL_PORT_ADDRESS
+		}
+	} else {
+		SERIAL_PORT_ADDRESS
+	};
+
+	unsafe {
+		COM1.set_port(uart_address);
+	}
 }
 
 pub fn output_message_byte(byte: u8) {
@@ -55,9 +82,49 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	#[repr(align(8))]
-	struct Align8;
-	align_data::include_aligned!(Align8, env!("HERMIT_APP"))
+	let fdt = unsafe {
+		core::slice::from_raw_parts(
+			FDT as *mut u8,
+			&kernel_end as *const u8 as usize - RAM_START as usize,
+		)
+	};
+	let fdt = fdt::Fdt::new(fdt).unwrap();
+
+	let chosen = fdt.find_node("/chosen").unwrap();
+	let module_start = chosen
+		.children()
+		.find(|node| node.name.starts_with("module@"))
+		.map(|node| {
+			let value = node.name.strip_prefix("module@").unwrap();
+			if let Some(value) = value.strip_prefix("0x") {
+				info!("value {}", value);
+				usize::from_str_radix(value, 16).unwrap()
+			} else if let Some(value) = value.strip_prefix("0X") {
+				usize::from_str_radix(value, 16).unwrap()
+			} else {
+				usize::from_str_radix(value, 10).unwrap()
+			}
+		})
+		.unwrap();
+	let header =
+		unsafe { &*core::mem::transmute::<*const u8, *const Header>(module_start as *const u8) };
+
+	for i in 0..SELFMAG {
+		if header.e_ident[i] != ELFMAG[i] {
+			panic!("Don't found valid ELF file!");
+		}
+	}
+
+	// we assume that the loader use little endian
+	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
+		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
+	} else {
+		let sz = header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64);
+		sz.to_le()
+	};
+	info!("Found ELF file with size {}", file_size);
+
+	unsafe { core::slice::from_raw_parts(module_start as *const u8, file_size.try_into().unwrap()) }
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
@@ -65,6 +132,18 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		load_info,
 		entry_point,
 	} = kernel_info;
+
+	let fdt = unsafe {
+		core::slice::from_raw_parts(
+			FDT as *mut u8,
+			&kernel_end as *const u8 as usize - RAM_START as usize,
+		)
+	};
+	let fdt = fdt::Fdt::new(fdt).unwrap();
+	info!("Detect {} CPU(s)", fdt.cpus().count());
+
+	let uart_address: u32 = unsafe { COM1.get_port() };
+	info!("Detect UART at {:#x}", uart_address);
 
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut l0_pgtable as *mut u64, 512);
 	for i in pgt_slice.iter_mut() {
@@ -90,7 +169,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	pgt_slice[1] = SERIAL_PORT_ADDRESS as u64 + PT_MEM_CD;
+	pgt_slice[1] = uart_address as u64 + PT_MEM_CD;
 
 	// map kernel to KERNEL_START and stack below the kernel
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut l2k_pgtable as *mut u64, 512);
@@ -132,10 +211,20 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
 	pub static mut BOOT_INFO: Option<RawBootInfo> = None;
+
+	let ram_start = fdt.memory().regions().next().unwrap().starting_address as u64;
+	let ram_size = fdt
+		.memory()
+		.regions()
+		.next()
+		.unwrap()
+		.size
+		.unwrap_or(0x20000000usize) as u64;
+
 	BOOT_INFO = {
 		let boot_info = BootInfo {
 			hardware_info: HardwareInfo {
-				phys_addr_range: RAM_START..RAM_START + 0x20000000, // 512 MB
+				phys_addr_range: ram_start..ram_start + ram_size,
 				serial_port_base: SerialPortBase::new(0x1000),
 			},
 			load_info,

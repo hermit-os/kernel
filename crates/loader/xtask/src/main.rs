@@ -151,19 +151,13 @@ impl flags::Clippy {
 		for target in [Target::X86_64] {
 			target.install()?;
 			let triple = target.triple();
-			cmd!(sh, "cargo clippy --target={triple}")
-				.env("HERMIT_APP", hermit_app(target))
-				.run()?;
+			cmd!(sh, "cargo clippy --target={triple}").run()?;
 		}
 
 		cmd!(sh, "cargo clippy --package xtask").run()?;
 
 		Ok(())
 	}
-}
-
-fn hermit_app(target: Target) -> PathBuf {
-	["data", target.name(), "hello_world"].iter().collect()
 }
 
 fn binutil(name: &str) -> Result<PathBuf> {

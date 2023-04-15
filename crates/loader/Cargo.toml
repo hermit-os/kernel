@@ -19,6 +19,8 @@ x86_64 = { version = "0.14", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 align-data = "0.1"
+fdt = { version = "0.1.5" }
+goblin = { version = "0.6", default-features = false, features = ["elf64"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = { version = "0.20" }
