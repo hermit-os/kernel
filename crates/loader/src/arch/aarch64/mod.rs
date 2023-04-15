@@ -4,6 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
+use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
 use hermit_entry::{
 	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
 	elf::LoadedKernel,
@@ -35,6 +36,7 @@ const KERNEL_STACK_SIZE: usize = 32_768;
 /// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
 const FDT: u64 = RAM_START;
 
+#[allow(dead_code)]
 const PT_DEVICE: u64 = 0x707;
 const PT_PT: u64 = 0x713;
 const PT_MEM: u64 = 0x713;
@@ -89,31 +91,40 @@ pub fn find_kernel() -> &'static [u8] {
 	let fdt = fdt::Fdt::new(fdt).unwrap();
 
 	let chosen = fdt.find_node("/chosen").unwrap();
-	let initrd_start = chosen
-		.properties()
-		.find(|n| n.name == "initrd-start")
-		.map(|n| {
-			let mut arr = [0u8; 8];
-			arr.copy_from_slice(&n.value[..n.value.len()]);
-			usize::from_be_bytes(arr)
+	let module_start = chosen
+		.children()
+		.find(|node| node.name.starts_with("module@"))
+		.map(|node| {
+			let value = node.name.strip_prefix("module@").unwrap();
+			if let Some(value) = value.strip_prefix("0x") {
+				info!("value {}", value);
+				usize::from_str_radix(value, 16).unwrap()
+			} else if let Some(value) = value.strip_prefix("0X") {
+				usize::from_str_radix(value, 16).unwrap()
+			} else {
+				usize::from_str_radix(value, 10).unwrap()
+			}
 		})
 		.unwrap();
-	let initrd_end = chosen
-		.properties()
-		.find(|n| n.name == "initrd-end")
-		.map(|n| {
-			let mut arr = [0u8; 8];
-			arr.copy_from_slice(&n.value[..n.value.len()]);
-			usize::from_be_bytes(arr)
-		})
-		.unwrap();
+	let header =
+		unsafe { &*core::mem::transmute::<*const u8, *const Header>(module_start as *const u8) };
 
-	info!("initrd {:#x} {:#x}", initrd_start, initrd_end);
-	for i in chosen.properties() {
-		info!("a {:?}", i);
+	for i in 0..SELFMAG {
+		if header.e_ident[i] != ELFMAG[i] {
+			panic!("Don't found valid ELF file!");
+		}
 	}
 
-	unsafe { core::slice::from_raw_parts(initrd_start as *const u8, initrd_end - initrd_start) }
+	// we assume that the loader use little endian
+	let file_size = if header.e_ident[EI_DATA] == ELFDATA2LSB {
+		header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64)
+	} else {
+		let sz = header.e_shoff + (header.e_shentsize as u64 * header.e_shnum as u64);
+		sz.to_le()
+	};
+	info!("Found ELF file with size {}", file_size);
+
+	unsafe { core::slice::from_raw_parts(module_start as *const u8, file_size.try_into().unwrap()) }
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
