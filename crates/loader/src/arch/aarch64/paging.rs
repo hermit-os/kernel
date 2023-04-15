@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use core::marker::PhantomData;
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
