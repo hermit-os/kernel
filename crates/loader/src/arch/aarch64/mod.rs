@@ -81,6 +81,15 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	align_up!(&kernel_end as *const u8 as u64, LargePageSize::SIZE as u64)
 }
 
+fn print_node(node: fdt::node::FdtNode<'_, '_>, n_spaces: usize) {
+    (0..n_spaces).for_each(|_| print!(" "));
+    println!("{}/", node.name);
+
+    for child in node.children() {
+        print_node(child, n_spaces + 4);
+    }
+}
+
 pub fn find_kernel() -> &'static [u8] {
 	let fdt = unsafe {
 		core::slice::from_raw_parts(
@@ -89,6 +98,8 @@ pub fn find_kernel() -> &'static [u8] {
 		)
 	};
 	let fdt = fdt::Fdt::new(fdt).unwrap();
+
+	print_node(fdt.find_node("/").unwrap(), 0);
 
 	let chosen = fdt.find_node("/chosen").unwrap();
 	let module_start = chosen
@@ -232,6 +243,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			hardware_info: HardwareInfo {
 				phys_addr_range: ram_start..ram_start + ram_size,
 				serial_port_base: SerialPortBase::new(0x1000),
+                device_tree: core::num::NonZeroU64::new(FDT),
 			},
 			load_info,
 			platform_info: PlatformInfo::LinuxBoot,
