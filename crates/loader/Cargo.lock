@@ -45,12 +45,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "fdt"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "784a4df722dc6267a04af36895398f59d21d07dce47232adf31ec0ff2fa45e67"
-
-[[package]]
 name = "goblin"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -61,10 +55,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "hermit-dtb"
+version = "0.1.0"
+source = "git+https://github.com/hermitcore/hermit-dtb.git#7c87b15905f7800b662b9e26d8fa7dd5122129d7"
+
+[[package]]
 name = "hermit-entry"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b95c35e11db119492028983535374cc944260a8c0db53a784d80ccfa44a97369"
 dependencies = [
  "align-address",
  "goblin",
@@ -165,8 +162,8 @@ version = "0.4.2"
 dependencies = [
  "align-data",
  "cc",
- "fdt",
  "goblin",
+ "hermit-dtb",
  "hermit-entry",
  "log",
  "multiboot",

@@ -7,7 +7,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-hermit-entry = { version = "0.9", features = ["loader"] }
+hermit-entry = { path = "/Users/stefan/Projects/hermit-entry", features = ["loader"] }
 log = "0.4"
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
@@ -19,7 +19,7 @@ x86_64 = { version = "0.14", default-features = false }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 align-data = "0.1"
-fdt = { version = "0.1.5" }
+hermit-dtb = { git = "https://github.com/hermitcore/hermit-dtb.git" }
 goblin = { version = "0.6", default-features = false, features = ["elf64"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]

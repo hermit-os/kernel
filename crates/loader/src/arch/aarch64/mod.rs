@@ -5,6 +5,7 @@ pub mod serial;
 use core::arch::asm;
 
 use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
+use hermit_dtb::Dtb;
 use hermit_entry::{
 	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
 	elf::LoadedKernel,
@@ -34,7 +35,7 @@ const KERNEL_STACK_SIZE: usize = 32_768;
 /// Qemu assumes for ELF kernel that the DTB is located at
 /// start of RAM (0x4000_0000)
 /// see <https://qemu.readthedocs.io/en/latest/system/arm/virt.html>
-const FDT: u64 = RAM_START;
+const DEVICE_TREE: u64 = RAM_START;
 
 #[allow(dead_code)]
 const PT_DEVICE: u64 = 0x707;
@@ -47,18 +48,17 @@ const PT_SELF: u64 = 1 << 55;
 static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 pub fn message_output_init() {
-	let fdt = unsafe {
-		core::slice::from_raw_parts(
-			FDT as *mut u8,
-			&kernel_end as *const u8 as usize - RAM_START as usize,
-		)
-	};
-	let fdt = fdt::Fdt::new(fdt).unwrap();
+	let dtb =
+		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
 
-	let uart_address: u32 = if let Some(stdout) = fdt.chosen().stdout() {
-		if let Some(pos) = stdout.name.find("@") {
-			let len = stdout.name.len();
-			u32::from_str_radix(&stdout.name[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
+	let property = dtb.get_property("/chosen", "stdout-path");
+	let uart_address = if let Some(stdout) = property {
+		let stdout = core::str::from_utf8(stdout)
+			.unwrap()
+			.trim_matches(char::from(0));
+		if let Some(pos) = stdout.find("@") {
+			let len = stdout.len();
+			u32::from_str_radix(&stdout[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
 		} else {
 			SERIAL_PORT_ADDRESS
 		}
@@ -81,34 +81,16 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 	align_up!(&kernel_end as *const u8 as u64, LargePageSize::SIZE as u64)
 }
 
-fn print_node(node: fdt::node::FdtNode<'_, '_>, n_spaces: usize) {
-    (0..n_spaces).for_each(|_| print!(" "));
-    println!("{}/", node.name);
-
-    for child in node.children() {
-        print_node(child, n_spaces + 4);
-    }
-}
-
 pub fn find_kernel() -> &'static [u8] {
-	let fdt = unsafe {
-		core::slice::from_raw_parts(
-			FDT as *mut u8,
-			&kernel_end as *const u8 as usize - RAM_START as usize,
-		)
-	};
-	let fdt = fdt::Fdt::new(fdt).unwrap();
+	let dtb =
+		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
 
-	print_node(fdt.find_node("/").unwrap(), 0);
-
-	let chosen = fdt.find_node("/chosen").unwrap();
-	let module_start = chosen
-		.children()
-		.find(|node| node.name.starts_with("module@"))
+	let module_start = dtb
+		.enum_subnodes("/chosen")
+		.find(|node| node.starts_with("module@"))
 		.map(|node| {
-			let value = node.name.strip_prefix("module@").unwrap();
+			let value = node.strip_prefix("module@").unwrap();
 			if let Some(value) = value.strip_prefix("0x") {
-				info!("value {}", value);
 				usize::from_str_radix(value, 16).unwrap()
 			} else if let Some(value) = value.strip_prefix("0X") {
 				usize::from_str_radix(value, 16).unwrap()
@@ -117,6 +99,7 @@ pub fn find_kernel() -> &'static [u8] {
 			}
 		})
 		.unwrap();
+
 	let header =
 		unsafe { &*core::mem::transmute::<*const u8, *const Header>(module_start as *const u8) };
 
@@ -150,14 +133,13 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let fdt = unsafe {
-		core::slice::from_raw_parts(
-			FDT as *mut u8,
-			&kernel_end as *const u8 as usize - RAM_START as usize,
-		)
-	};
-	let fdt = fdt::Fdt::new(fdt).unwrap();
-	info!("Detect {} CPU(s)", fdt.cpus().count());
+	let dtb =
+		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+	let cpus = dtb
+		.enum_subnodes("/cpus")
+		.filter(|c| c.split('@').next().unwrap() == "cpu")
+		.count();
+	info!("Detect {} CPU(s)", cpus);
 
 	let uart_address: u32 = unsafe { COM1.get_port() };
 	info!("Detect UART at {:#x}", uart_address);
@@ -229,21 +211,27 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
 	pub static mut BOOT_INFO: Option<RawBootInfo> = None;
 
-	let ram_start = fdt.memory().regions().next().unwrap().starting_address as u64;
-	let ram_size = fdt
-		.memory()
-		.regions()
-		.next()
-		.unwrap()
-		.size
-		.unwrap_or(0x20000000usize) as u64;
+	let dtb =
+		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+
+	if let Some(device_type) = dtb.get_property("/memory", "device_type") {
+		let device_type = core::str::from_utf8(device_type)
+			.unwrap()
+			.trim_matches(char::from(0));
+		assert!(device_type == "memory");
+	}
+
+	let reg = dtb.get_property("/memory", "reg").unwrap();
+	let (start_slice, size_slice) = reg.split_at(core::mem::size_of::<u64>());
+	let ram_start = u64::from_be_bytes(start_slice.try_into().unwrap());
+	let ram_size = u64::from_be_bytes(size_slice.try_into().unwrap());
 
 	BOOT_INFO = {
 		let boot_info = BootInfo {
 			hardware_info: HardwareInfo {
 				phys_addr_range: ram_start..ram_start + ram_size,
 				serial_port_base: SerialPortBase::new(0x1000),
-                device_tree: core::num::NonZeroU64::new(FDT),
+				device_tree: core::num::NonZeroU64::new(DEVICE_TREE),
 			},
 			load_info,
 			platform_info: PlatformInfo::LinuxBoot,

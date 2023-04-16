@@ -210,7 +210,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			hardware_info: HardwareInfo {
 				phys_addr_range: 0..0,
 				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-                device_tree: None,
+				device_tree: None,
 			},
 			load_info,
 			platform_info: PlatformInfo::Multiboot {
