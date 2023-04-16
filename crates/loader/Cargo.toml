@@ -7,7 +7,7 @@ readme = "README.md"
 edition = "2021"
 
 [dependencies]
-hermit-entry = { path = "/Users/stefan/Projects/hermit-entry", features = ["loader"] }
+hermit-entry = { version = "0.9.3", features = ["loader"] }
 log = "0.4"
 
 [target.'cfg(all(target_os = "none", target_arch = "x86_64"))'.dependencies]
