@@ -5,6 +5,7 @@ on:
     branches:
       - staging
       - trying
+      - master
   pull_request:
 
 defaults:
