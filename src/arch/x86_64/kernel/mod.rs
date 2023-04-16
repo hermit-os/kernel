@@ -121,6 +121,7 @@ pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
 
 	match boot_info().platform_info {
+        PlatformInfo::LinuxBootParams { .. } => apic::local_apic_id_count(),
 		PlatformInfo::Multiboot { .. } => apic::local_apic_id_count(),
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
 		PlatformInfo::Uhyve { num_cpus, .. } => cmp::max(
