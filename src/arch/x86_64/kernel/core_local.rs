@@ -12,6 +12,7 @@ use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
+#[repr(C)]
 pub struct CoreLocal {
 	this: *const Self,
 	/// Sequential ID of this CPU Core.
