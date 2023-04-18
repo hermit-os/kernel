@@ -272,6 +272,30 @@ impl PriorityTaskQueue {
 		task
 	}
 
+	/// Remove the task at index from the queue and return that task,
+    /// or None if the index is out of range or the list is empty.
+    fn remove_from_queue(
+        &mut self,
+        task_index: usize,
+        queue_index: usize,
+    ) -> Option<Rc<RefCell<Task>>> {
+        //assert!(prio < NO_PRIORITIES, "Priority {} is too high", prio);
+
+        let queue = &mut self.queues[queue_index];
+        if task_index <= queue.len() {
+            // Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
+            let mut split_list = queue.split_off(task_index);
+            let element = split_list.pop_front();
+            queue.append(&mut split_list);
+            if queue.is_empty() {
+                self.prio_bitmap &= !(1 << queue_index as u64);
+            }
+            element
+        } else {
+            None
+        }
+    }
+
 	/// Pop the task with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
@@ -304,20 +328,15 @@ impl PriorityTaskQueue {
 
 	/// Change priority of specific task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
-		let i = handle.get_priority().into() as usize;
-
-		for (index, current_task) in self.queues[i].iter().enumerate() {
-			// Move the task from its old list to the new list.
-			if handle.id == current_task.borrow().id {
-				// Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
-				let mut split_list = self.queues[i].split_off(index);
-				let task = split_list.pop_front().ok_or(())?;
-				self.queues[i].append(&mut split_list);
-
-				task.borrow_mut().prio = prio;
-				self.push(task);
-				return Ok(());
-			}
+		let old_priority = handle.get_priority().into() as usize;
+		if let Some(index) = self.queues[old_priority]
+			.iter()
+			.position(|current_task| current_task.borrow().id == handle.id)
+		{
+			let Some(task) = self.remove_from_queue(index, old_priority) else { return Err(()) };
+			task.borrow_mut().prio = prio;
+			self.push(task);
+			return Ok(());
 		}
 
 		Err(())
