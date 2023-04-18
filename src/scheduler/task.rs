@@ -237,33 +237,18 @@ impl TaskHandlePriorityQueue {
 	}
 }
 
-#[derive(Default)]
-struct QueueHead {
-	head: Option<Rc<RefCell<Task>>>,
-	tail: Option<Rc<RefCell<Task>>>,
-}
-
-impl QueueHead {
-	pub const fn new() -> Self {
-		Self {
-			head: None,
-			tail: None,
-		}
-	}
-}
-
 /// Realize a priority queue for tasks
 pub struct PriorityTaskQueue {
-	queues: [QueueHead; NO_PRIORITIES],
+	queues: [LinkedList<Rc<RefCell<Task>>>; NO_PRIORITIES],
 	prio_bitmap: u64,
 }
 
 impl PriorityTaskQueue {
 	/// Creates an empty priority queue for tasks
 	pub const fn new() -> PriorityTaskQueue {
-		const QUEUE_HEAD: QueueHead = QueueHead::new();
+		const EMPTY_LIST: LinkedList<Rc<RefCell<Task>>> = LinkedList::new();
 		PriorityTaskQueue {
-			queues: [QUEUE_HEAD; NO_PRIORITIES],
+			queues: [EMPTY_LIST; NO_PRIORITIES],
 			prio_bitmap: 0,
 		}
 	}
@@ -274,53 +259,41 @@ impl PriorityTaskQueue {
 		//assert!(i < NO_PRIORITIES, "Priority {} is too high", i);
 
 		self.prio_bitmap |= (1 << i) as u64;
-		match self.queues[i].tail {
-			None => {
-				// first element in the queue
-				self.queues[i].head = Some(task.clone());
-
-				let mut borrow = task.borrow_mut();
-				borrow.next = None;
-				borrow.prev = None;
-			}
-			Some(ref mut tail) => {
-				// add task at the end of the node
-				tail.borrow_mut().next = Some(task.clone());
-
-				let mut borrow = task.borrow_mut();
-				borrow.next = None;
-				borrow.prev = Some(tail.clone());
-			}
-		}
-
-		self.queues[i].tail = Some(task);
+		let queue = &mut self.queues[i];
+		queue.push_back(task);
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let (new_head, task) = {
-			let head = self.queues[queue_index].head.as_mut()?;
-			let mut borrow = head.borrow_mut();
-
-			if let Some(ref mut nhead) = borrow.next {
-				nhead.borrow_mut().prev = None;
-			}
-
-			let new_head = borrow.next.clone();
-			borrow.next = None;
-			borrow.prev = None;
-
-			let task = head.clone();
-
-			(new_head, task)
-		};
-
-		self.queues[queue_index].head = new_head;
-		if self.queues[queue_index].head.is_none() {
-			self.queues[queue_index].tail = None;
+		let task = self.queues[queue_index].pop_back();
+		if self.queues[queue_index].is_empty() {
 			self.prio_bitmap &= !(1 << queue_index as u64);
 		}
 
-		Some(task)
+		task
+	}
+
+	/// Remove the task at index from the queue and return that task,
+	/// or None if the index is out of range or the list is empty.
+	fn remove_from_queue(
+		&mut self,
+		task_index: usize,
+		queue_index: usize,
+	) -> Option<Rc<RefCell<Task>>> {
+		//assert!(prio < NO_PRIORITIES, "Priority {} is too high", prio);
+
+		let queue = &mut self.queues[queue_index];
+		if task_index <= queue.len() {
+			// Calling remove is unstable: https://github.com/rust-lang/rust/issues/69210
+			let mut split_list = queue.split_off(task_index);
+			let element = split_list.pop_front();
+			queue.append(&mut split_list);
+			if queue.is_empty() {
+				self.prio_bitmap &= !(1 << queue_index as u64);
+			}
+			element
+		} else {
+			None
+		}
 	}
 
 	/// Pop the task with the highest priority from the queue
@@ -355,50 +328,18 @@ impl PriorityTaskQueue {
 
 	/// Change priority of specific task
 	pub fn set_priority(&mut self, handle: TaskHandle, prio: Priority) -> Result<(), ()> {
-		let i = handle.get_priority().into() as usize;
-		let mut pos = self.queues[i].head.as_mut().ok_or(())?;
-
-		loop {
-			if handle.id == pos.borrow().id {
-				let task = pos.clone();
-
-				// Extract found task from queue and set new priority
-				{
-					let mut borrow = task.borrow_mut();
-
-					let new = borrow.next.as_ref().cloned();
-					if let Some(prev) = borrow.prev.as_mut() {
-						prev.borrow_mut().next = new;
-					}
-
-					let new = borrow.prev.as_ref().cloned();
-					if let Some(next) = borrow.next.as_mut() {
-						next.borrow_mut().prev = new;
-					}
-
-					if borrow.prev.as_mut().is_none() {
-						// Ok, the task is head of the list
-						self.queues[i].head = borrow.next.as_ref().cloned();
-					}
-
-					if borrow.next.as_mut().is_none() {
-						// Ok, the task is tail of the list
-						self.queues[i].tail = borrow.prev.as_ref().cloned();
-					}
-
-					borrow.prio = prio;
-					borrow.next = None;
-					borrow.prev = None;
-				}
-
-				self.push(task);
-
-				return Ok(());
-			}
-
-			let ptr = pos.as_ptr();
-			pos = unsafe { (*ptr).next.as_mut().ok_or(())? };
+		let old_priority = handle.get_priority().into() as usize;
+		if let Some(index) = self.queues[old_priority]
+			.iter()
+			.position(|current_task| current_task.borrow().id == handle.id)
+		{
+			let Some(task) = self.remove_from_queue(index, old_priority) else { return Err(()) };
+			task.borrow_mut().prio = prio;
+			self.push(task);
+			return Ok(());
 		}
+
+		Err(())
 	}
 }
 
@@ -425,10 +366,6 @@ pub struct Task {
 	pub core_id: CoreId,
 	/// Stack of the task
 	pub stacks: TaskStacks,
-	/// next task in queue
-	pub next: Option<Rc<RefCell<Task>>>,
-	/// previous task in queue
-	pub prev: Option<Rc<RefCell<Task>>>,
 	/// Task Thread-Local-Storage (TLS)
 	pub tls: Option<TaskTLS>,
 	/// lwIP error code for this task
@@ -460,8 +397,6 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks,
-			next: None,
-			prev: None,
 			tls: None,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
@@ -480,8 +415,6 @@ impl Task {
 			last_fpu_state: arch::processor::FPUState::new(),
 			core_id,
 			stacks: TaskStacks::from_boot_stacks(),
-			next: None,
-			prev: None,
 			tls: None,
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
