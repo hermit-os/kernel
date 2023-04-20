@@ -1,11 +1,6 @@
 name: CI
 
-on:
-  pull_request:
-  push:
-    branches:
-      - staging
-      - trying
+on: push
 
 env:
   CARGO_INCREMENTAL: 0
@@ -190,7 +185,7 @@ jobs:
             -append "-freq $FREQ" \
             || qemu_status=$?
           test $qemu_status -eq 3
-  
+
   run-aarch64:
     name: Run RustyHermit (aarch64)
     runs-on: ubuntu-latest
