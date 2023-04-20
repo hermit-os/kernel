@@ -1,3 +1,4 @@
+use alloc::alloc::{alloc, Layout};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
@@ -141,10 +142,9 @@ impl SyscallInterface for Uhyve {
 		let mut argv = Box::new(Vec::with_capacity(syscmdsize.argc as usize));
 		let mut argv_phy = Vec::with_capacity(syscmdsize.argc as usize);
 		for i in 0..syscmdsize.argc as usize {
-			argv.push(
-				crate::__sys_malloc(syscmdsize.argsz[i] as usize * mem::size_of::<u8>(), 1)
-					.cast_const(),
-			);
+			let layout = Layout::from_size_align(syscmdsize.argsz[i] as usize * mem::size_of::<u8>(), 1);
+			argv.push(alloc(layout).cast_const());
+
 			argv_phy.push(
 				paging::virtual_to_physical(VirtAddr(argv[i] as u64))
 					.unwrap()
@@ -156,10 +156,9 @@ impl SyscallInterface for Uhyve {
 		let mut env = Box::new(Vec::with_capacity(syscmdsize.envc as usize + 1));
 		let mut env_phy = Vec::with_capacity(syscmdsize.envc as usize + 1);
 		for i in 0..syscmdsize.envc as usize {
-			env.push(
-				crate::__sys_malloc(syscmdsize.envsz[i] as usize * mem::size_of::<u8>(), 1)
-					.cast_const(),
-			);
+			let layout = Layout::from_size_align(syscmdsize.envsz[i] as usize * mem::size_of::<u8>(), 1);
+			env.push(alloc(layout).cast_const());
+
 			env_phy.push(
 				paging::virtual_to_physical(VirtAddr(env[i] as u64))
 					.unwrap()
