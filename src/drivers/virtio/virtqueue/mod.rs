@@ -21,6 +21,7 @@ use core::cell::RefCell;
 use core::ops::{BitAnd, Deref, DerefMut};
 
 use align_address::Align;
+use zerocopy::AsBytes;
 
 use self::error::{BufferError, VirtqError};
 use self::packed::PackedVq;
@@ -1683,7 +1684,7 @@ impl BufferToken {
 	///   * Will result in 4 bytes written to the second buffer descriptor of the recv buffer. Nothing is written into the second buffer descriptor.
 	/// * Third Write: `write_seq(Some(10 bytes, Some(4 bytes))`:
 	///   * Will result in 10 bytes written to the second buffer descriptor of the send buffer and 4 bytes written to the third buffer descriptor of the recv buffer.
-	pub fn write_seq<K: AsSliceU8, H: AsSliceU8 + ?Sized>(
+	pub fn write_seq<K: AsBytes, H: AsBytes + ?Sized>(
 		mut self,
 		send_seq: Option<&K>,
 		recv_seq: Option<&H>,
@@ -1691,7 +1692,7 @@ impl BufferToken {
 		if let Some(data) = send_seq {
 			match self.send_buff.as_mut() {
 				Some(buff) => {
-					match buff.next_write(data.as_slice_u8()) {
+					match buff.next_write(data.as_bytes()) {
 						Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
 						Err(_) => {
 							// Need no match here, as result is the same, but for the future one could
@@ -1707,7 +1708,7 @@ impl BufferToken {
 		if let Some(data) = recv_seq {
 			match self.recv_buff.as_mut() {
 				Some(buff) => {
-					match buff.next_write(data.as_slice_u8()) {
+					match buff.next_write(data.as_bytes()) {
 						Ok(_) => (), // Do nothing, write fitted inside descriptor and not to many writes to buffer happened
 						Err(_) => {
 							// Need no match here, as result is the same, but for the future one could
