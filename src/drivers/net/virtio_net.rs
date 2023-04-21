@@ -11,6 +11,8 @@ use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
 
+use zerocopy::AsBytes;
+
 use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 use crate::arch::kernel::core_local::increment_irq_counter;
@@ -25,7 +27,7 @@ use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
 use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
-	AsSliceU8, BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
+	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 
 pub const ETH_HDR: usize = 14usize;
@@ -41,7 +43,7 @@ pub struct NetDevCfg {
 	pub features: FeatureSet,
 }
 
-#[derive(Debug)]
+#[derive(AsBytes, Debug)]
 #[repr(C)]
 pub struct VirtioNetHdr {
 	flags: u8,
@@ -57,9 +59,6 @@ pub struct VirtioNetHdr {
 	/// Number of buffers this Packet consists of
 	num_buffers: u16,
 }
-
-// Using the default implementation of the trait for VirtioNetHdr
-impl AsSliceU8 for VirtioNetHdr {}
 
 impl VirtioNetHdr {
 	pub fn get_tx_hdr() -> VirtioNetHdr {
