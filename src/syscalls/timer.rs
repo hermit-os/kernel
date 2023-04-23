@@ -46,6 +46,15 @@ pub(crate) fn timespec_to_microseconds(time: timespec) -> Option<u64> {
 		.and_then(|millions| millions.checked_add(u64::try_from(time.tv_nsec).ok()? / 1000))
 }
 
+/// Finds the resolution (or precision) of the clock with clock_id
+/// Stores result in parameter res
+/// Returns 0 on success, -EINVAL otherwise
+///
+/// Supported clocks:
+/// - CLOCK_REALTIME
+/// - CLOCK_PROCESS_CPUTIME_ID
+/// - CLOCK_THREAD_CPUTIME_ID
+/// - CLOCK_MONOTONIC
 extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	assert!(
 		!res.is_null(),
@@ -71,6 +80,13 @@ pub extern "C" fn sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	kernel_function!(__sys_clock_getres(clock_id, res))
 }
 
+/// Get the current time of a clock with clock_id
+/// Stores result in parameter res
+/// Returns 0 on success, -EINVAL otherwise
+///
+/// Supported clocks:
+/// - CLOCK_REALTIME
+/// - CLOCK_MONOTONIC
 extern "C" fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	assert!(
 		!tp.is_null(),
@@ -104,6 +120,12 @@ pub extern "C" fn sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	kernel_function!(__sys_clock_gettime(clock_id, tp))
 }
 
+/// Sleep a clock for a specified number of nanoseconds
+/// Returns 0 on success, -EINVAL otherwise
+///
+/// Supported clocks:
+/// - CLOCK_REALTIME
+/// - CLOCK_MONOTONIC
 extern "C" fn __sys_clock_nanosleep(
 	clock_id: u64,
 	flags: i32,
@@ -164,6 +186,10 @@ pub extern "C" fn sys_clock_settime(clock_id: u64, tp: *const timespec) -> i32 {
 	kernel_function!(__sys_clock_settime(clock_id, tp))
 }
 
+/// Get the current time based on wallclock time when booted up, plus current timer ticks
+/// Returns 0 on success, -EINVAL otherwise
+///
+/// **Parameter tz should be set to 0 since tz is obsolete**
 extern "C" fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
