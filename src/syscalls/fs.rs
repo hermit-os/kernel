@@ -141,6 +141,9 @@ impl Filesystem {
 		Ok(self.add_file(file))
 	}
 
+	/// Closes a file with given fd.
+	/// If the file is currently open, closes it
+	/// Remove the file from map of open files
 	pub fn close(&mut self, fd: u64) {
 		debug!("Closing fd {}", fd);
 		if let Some(file) = self.files.get_mut(&fd) {
