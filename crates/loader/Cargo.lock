@@ -57,7 +57,8 @@ dependencies = [
 [[package]]
 name = "hermit-dtb"
 version = "0.1.0"
-source = "git+https://github.com/hermitcore/hermit-dtb.git#7c87b15905f7800b662b9e26d8fa7dd5122129d7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88ae61b1a7e45f5da7fe03033da5a4f2ddc1af8be6428b458eae39551eea6957"
 
 [[package]]
 name = "hermit-entry"
