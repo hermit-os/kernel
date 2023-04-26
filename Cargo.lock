@@ -4,11 +4,12 @@ version = 3
 
 [[package]]
 name = "aarch64"
-version = "0.0.7"
+version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d48df31899ce44f6ca081b39bcf4f9913e4435e3ec4287283451f71f1577ab3"
+checksum = "bc85366f9bad15a101c93ca48d7907eba7610abe9fb9d7ab2fb55f74c8073baf"
 dependencies = [
- "cortex-a",
+ "aarch64-cpu",
+ "tock-registers",
 ]
 
 [[package]]
@@ -17,7 +18,7 @@ version = "9.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eb711c57d60565ba8f6523eb371e6243639617d817b4df1ae09af250af1af411"
 dependencies = [
- "tock-registers 0.8.1",
+ "tock-registers",
 ]
 
 [[package]]
@@ -99,15 +100,6 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
-name = "cortex-a"
-version = "7.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdecfbb28672ad3664e71ae05a398a52df430d86d660691501b28968cc4467e6"
-dependencies = [
- "tock-registers 0.7.0",
-]
 
 [[package]]
 name = "critical-section"
@@ -278,6 +270,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
 
 [[package]]
+name = "hermit-dtb"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89e0de208fa9b99664812350b33072d0d9b3a63caaebb03eeb23316eeedfb8d0"
+
+[[package]]
 name = "hermit-entry"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -298,7 +296,7 @@ dependencies = [
  "exclusive_cell",
  "generic_once_cell",
  "lock_api",
- "tock-registers 0.8.1",
+ "tock-registers",
  "x86_64",
 ]
 
@@ -336,9 +334,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.141"
+version = "0.2.142"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3304a64d199bb964be99741b7a14d26972741915b3649639149b2479bb46f4b5"
+checksum = "6a987beff54b60ffa6d51982e1aa1146bc42f19bd26be28b0586f252fccf5317"
 
 [[package]]
 name = "libhermit-rs"
@@ -354,6 +352,7 @@ dependencies = [
  "float-cmp",
  "futures-lite",
  "hashbrown",
+ "hermit-dtb",
  "hermit-entry",
  "hermit-sync",
  "include-transformed",
@@ -371,6 +370,7 @@ dependencies = [
  "shell-words",
  "smoltcp",
  "time",
+ "tock-registers",
  "uart_16550",
  "x86",
  "x86_64",
@@ -385,9 +385,9 @@ checksum = "9afa463f5405ee81cdb9cc2baf37e08ec7e4c8209442b5d72c04cfb2cd6e6286"
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.3.1"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59d8c75012853d2e872fb56bc8a2e53718e2cafe1a4c823143141c6d90c322f"
+checksum = "36eb31c1778188ae1e64398743890d0877fef36d11521ac60406b42016e8c2cf"
 
 [[package]]
 name = "llvm-tools"
@@ -717,9 +717,9 @@ dependencies = [
 
 [[package]]
 name = "rustix"
-version = "0.37.11"
+version = "0.37.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "85597d61f83914ddeba6a47b3b8ffe7365107221c2e557ed94426489fefb5f77"
+checksum = "a0661814f891c57c930a610266415528da53c4933e6dea5fb350cbfe048a9ece"
 dependencies = [
  "bitflags 1.3.2",
  "errno",
@@ -877,12 +877,6 @@ name = "time-core"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
-
-[[package]]
-name = "tock-registers"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ee8fba06c1f4d0b396ef61a54530bb6b28f0dc61c38bc8bc5a5a48161e6282e"
 
 [[package]]
 name = "tock-registers"
