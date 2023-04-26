@@ -1,5 +1,5 @@
 use core::arch::asm;
-use core::sync::atomic::spin_loop_hint;
+use core::hint::spin_loop;
 
 extern "C" {
 	static mut cpu_freq: u32;
@@ -99,7 +99,7 @@ pub fn supports_2mib_pages() -> bool {
 pub fn udelay(usecs: u64) {
 	let end = get_timestamp() + get_frequency() as u64 * usecs;
 	while get_timestamp() < end {
-		spin_loop_hint();
+		spin_loop();
 	}
 }
 
