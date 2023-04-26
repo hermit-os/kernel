@@ -1,5 +1,6 @@
 use core::arch::asm;
-use core::sync::atomic::spin_loop_hint;
+
+use hint::spin_loop;
 
 extern "C" {
 	static mut cpu_freq: u32;
