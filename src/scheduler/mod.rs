@@ -520,12 +520,7 @@ impl PerCoreScheduler {
 			// do housekeeping
 			let _ = self.cleanup_tasks();
 
-			let still_idle = {
-				let status = self.current_task.borrow().status;
-				status == TaskStatus::Idle && self.ready_queue.is_empty()
-			};
-
-			if still_idle {
+			if self.ready_queue.is_empty() {
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
 				} else {
