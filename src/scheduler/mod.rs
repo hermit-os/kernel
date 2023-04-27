@@ -517,16 +517,15 @@ impl PerCoreScheduler {
 
 		loop {
 			interrupts::disable();
-			if !self.scheduler() {
-				backoff.reset()
-			}
-
 			// do housekeeping
-			let wakeup_tasks = self.cleanup_tasks();
+			let _ = self.cleanup_tasks();
 
-			// Re-enable interrupts and simultaneously set the CPU into the HALT state to only wake up at the next interrupt.
-			// This atomic operation guarantees that we cannot miss a wakeup interrupt in between.
-			if !wakeup_tasks {
+			let still_idle = {
+				let status = self.current_task.borrow().status;
+				status == TaskStatus::Idle && self.ready_queue.is_empty()
+			};
+
+			if still_idle {
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
 				} else {
@@ -535,15 +534,15 @@ impl PerCoreScheduler {
 				}
 			} else {
 				interrupts::enable();
+				self.reschedule();
+				backoff.reset();
 			}
 		}
 	}
 
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
-	/// Returns `true` if the new and the old task is the idle task,
-	/// otherwise the function returns `false`.
-	pub fn scheduler(&mut self) -> bool {
+	pub fn scheduler(&mut self) {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
 		let _ = self.cleanup_tasks();
@@ -634,10 +633,6 @@ impl PerCoreScheduler {
 					}
 				}
 			}
-
-			false
-		} else {
-			status == TaskStatus::Idle
 		}
 	}
 }
