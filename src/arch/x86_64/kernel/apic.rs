@@ -265,7 +265,7 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 #[cfg(feature = "acpi")]
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
-	let madt = acpi::get_madt().expect("HermitCore requires a MADT in the ACPI tables");
+	let madt = acpi::get_madt().ok_or(())?;
 	let madt_header = unsafe { &*(madt.table_start_address() as *const AcpiMadtHeader) };
 
 	// Jump to the actual table entries (after the table header).
@@ -429,22 +429,12 @@ fn default_apic() -> PhysAddr {
 
 	let default_address = PhysAddr(0xFEE0_0000);
 
-	init_ioapic_address(default_address);
+	// currently, uhyve doesn't support an IO-APIC
+	if !env::is_uhyve() {
+		init_ioapic_address(default_address);
+	}
 
 	default_address
-}
-
-fn detect_from_uhyve() -> Result<PhysAddr, ()> {
-	if env::is_uhyve() {
-		let default_address = PhysAddr(0xFEE0_0000);
-
-		// currently, uhyve doesn't support an IO-APIC
-		//init_ioapic_address(default_address);
-
-		Ok(default_address)
-	} else {
-		Err(())
-	}
 }
 
 #[no_mangle]
@@ -454,8 +444,7 @@ pub extern "C" fn eoi() {
 
 pub fn init() {
 	// Detect CPUs and APICs.
-	let local_apic_physical_address = detect_from_uhyve()
-		.or_else(|_| detect_from_acpi())
+	let local_apic_physical_address = detect_from_acpi()
 		.or_else(|_| detect_from_mp())
 		.unwrap_or_else(|_| default_apic());
 
