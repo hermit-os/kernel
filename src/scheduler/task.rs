@@ -296,6 +296,11 @@ impl PriorityTaskQueue {
 		}
 	}
 
+	/// Returns true if the queue is empty.
+	pub fn is_empty(&self) -> bool {
+		self.prio_bitmap == 0
+	}
+
 	/// Pop the task with the highest priority from the queue
 	pub fn pop(&mut self) -> Option<Rc<RefCell<Task>>> {
 		if let Some(i) = msb(self.prio_bitmap) {
