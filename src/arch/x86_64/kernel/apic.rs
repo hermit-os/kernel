@@ -438,7 +438,8 @@ fn detect_from_uhyve() -> Result<PhysAddr, ()> {
 	if env::is_uhyve() {
 		let default_address = PhysAddr(0xFEE0_0000);
 
-		init_ioapic_address(default_address);
+		// currently, uhyve doesn't support an IO-APIC
+		//init_ioapic_address(default_address);
 
 		Ok(default_address)
 	} else {
@@ -507,8 +508,11 @@ pub fn init() {
 		calibrate_timer();
 	}
 
-	// init ioapic
-	init_ioapic();
+	// currently, IO-APIC isn't supported by uhyve
+	if !env::is_uhyve() {
+		// initialize IO-APIC
+		init_ioapic();
+	}
 }
 
 fn init_ioapic() {
