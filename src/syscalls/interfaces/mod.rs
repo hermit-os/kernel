@@ -32,7 +32,7 @@ pub trait SyscallInterface: Send + Sync {
 		let mut envv = Vec::new();
 
 		let envs = env::vars();
-		debug!("Setting envv as: {:?}", envs);
+		debug!("Setting env as: {:?}", envs);
 		for (key, value) in envs {
 			let ptr = Box::leak(format!("{key}={value}\0").into_boxed_str()).as_ptr();
 			envv.push(ptr);
