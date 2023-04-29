@@ -6,9 +6,10 @@ use align_address::Align;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::{
-	get_base_address, get_boot_info_address, get_image_size, get_ram_address, is_uhyve, processor,
+	get_base_address, get_boot_info_address, get_image_size, get_ram_address, processor,
 };
 use crate::arch::aarch64::mm::{physicalmem, virtualmem, PhysAddr, VirtAddr};
+use crate::env::is_uhyve;
 use crate::{mm, scheduler, KERNEL_STACK_SIZE};
 
 /// Pointer to the root page table (called "Level 0" in ARM terminology).
@@ -78,12 +79,24 @@ impl PageTableEntryFlags {
 	/// Needed as long as empty() is no const function.
 	const BLANK: PageTableEntryFlags = PageTableEntryFlags::empty();
 
+	pub fn present(&mut self) -> &mut Self {
+		self.insert(PageTableEntryFlags::PRESENT);
+		self
+	}
+
 	pub fn device(&mut self) -> &mut Self {
-		self.insert(PageTableEntryFlags::DEVICE_NGNRE);
+		self.remove(PageTableEntryFlags::NORMAL);
+		self.remove(PageTableEntryFlags::NORMAL_NC);
+		self.remove(PageTableEntryFlags::DEVICE_NGNRE);
+		self.remove(PageTableEntryFlags::DEVICE_GRE);
+		self.insert(PageTableEntryFlags::DEVICE_NGNRNE);
 		self
 	}
 
 	pub fn normal(&mut self) -> &mut Self {
+		self.remove(PageTableEntryFlags::NORMAL_NC);
+		self.remove(PageTableEntryFlags::DEVICE_NGNRE);
+		self.remove(PageTableEntryFlags::DEVICE_GRE);
 		self.insert(PageTableEntryFlags::NORMAL);
 		self
 	}
@@ -106,7 +119,7 @@ impl PageTableEntryFlags {
 }
 
 /// An entry in either table
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct PageTableEntry {
 	/// Physical memory address this entry refers, combined with flags from PageTableEntryFlags.
 	physical_address_and_flags: PhysAddr,

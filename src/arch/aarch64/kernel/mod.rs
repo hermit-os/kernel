@@ -1,11 +1,9 @@
 pub mod core_local;
 pub mod interrupts;
-pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
 mod start;
-pub mod stubs;
 pub mod switch;
 pub mod systemtime;
 
@@ -17,7 +15,6 @@ use hermit_sync::TicketMutex;
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
-pub use crate::arch::aarch64::kernel::stubs::*;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
@@ -104,12 +101,12 @@ pub fn get_tls_align() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	todo!()
+	1
 }
 
 #[cfg(feature = "smp")]
 pub fn get_processor_count() -> u32 {
-	todo!()
+	1
 }
 
 #[cfg(not(feature = "smp"))]
@@ -117,17 +114,30 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-/// Whether HermitCore is running under the "uhyve" hypervisor.
-pub fn is_uhyve() -> bool {
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
-}
-
 pub fn get_cmdsize() -> usize {
-	todo!()
+	let dtb = unsafe {
+		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
+			.expect(".dtb file has invalid header")
+	};
+
+	if let Some(cmd) = dtb.get_property("/chosen", "bootargs") {
+		cmd.len()
+	} else {
+		0
+	}
 }
 
 pub fn get_cmdline() -> VirtAddr {
-	todo!()
+	let dtb = unsafe {
+		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
+			.expect(".dtb file has invalid header")
+	};
+
+	if let Some(cmd) = dtb.get_property("/chosen", "bootargs") {
+		VirtAddr(cmd.as_ptr() as u64)
+	} else {
+		VirtAddr::zero()
+	}
 }
 
 /// Earliest initialization function called by the Boot Processor.
@@ -166,50 +176,19 @@ pub fn output_message_buf(buf: &[u8]) {
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
 pub fn boot_processor_init() {
-	//processor::configure();
+	processor::configure();
 
 	crate::mm::init();
 	crate::mm::print_information();
-
-	return;
-	/*processor::detect_features();
-	processor::configure();
-
-	::mm::init();
-	::mm::print_information();
 	env::init();
-	gdt::init();
-	gdt::add_current_core();
-	idt::install();
-
-	if !env::is_uhyve() {
-		pic::init();
-	}
-
-	interrupts::install();
+	interrupts::init();
 	interrupts::enable();
 	processor::detect_frequency();
 	processor::print_information();
+
+	/*
 	systemtime::init();
-
-	if !env::is_uhyve() {
-		pci::init();
-		pci::print_information();
-		acpi::init();
-	}
-
-	apic::init();
-	scheduler::install_timer_handler();*/
-
-	// Read out PMCCNTR_EL0 in an infinite loop.
-	// TODO: This currently stays at zero on uhyve. Fix uhyve! :)
-	loop {
-		unsafe {
-			let pmccntr: u64;
-			asm!("mrs {}, pmccntr_el0", out(reg) pmccntr, options(nomem, nostack));
-			println!("Count: {}", pmccntr);
-		}
-	}
+	*/
 
 	finish_processor_init();
 }
@@ -223,29 +202,11 @@ pub fn boot_application_processors() {
 /// Application Processor initialization
 pub fn application_processor_init() {
 	core_local::init();
-	/*processor::configure();
-	gdt::add_current_core();
-	idt::install();
-	apic::init_x2apic();
-	apic::init_local_apic();
-	interrupts::enable();*/
 	finish_processor_init();
 }
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
-
-	/*if env::is_uhyve() {
-		// uhyve does not use apic::detect_from_acpi and therefore does not know the number of processors and
-		// their APIC IDs in advance.
-		// Therefore, we have to add each booted processor into the CPU_LOCAL_APIC_IDS vector ourselves.
-		// Fortunately, the Core IDs are guaranteed to be sequential and match the Local APIC IDs.
-		apic::add_local_apic_id(core_id() as u8);
-
-		// uhyve also boots each processor into _start itself and does not use apic::boot_application_processors.
-		// Therefore, the current processor already needs to prepare the processor variables for a possible next processor.
-		apic::init_next_processor_variables(core_id() + 1);
-	}*/
 
 	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
 	// to initialize the next processor.
