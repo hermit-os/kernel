@@ -7,12 +7,15 @@ use core::{slice, str};
 use ahash::RandomState;
 use hashbrown::hash_map::Iter;
 use hashbrown::HashMap;
+use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
 
 pub use crate::arch::kernel::{
-	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address, get_tls_align,
-	get_tls_filesz, get_tls_memsz, get_tls_start, is_uhyve,
+	get_base_address, get_image_size, get_ram_address, get_tls_align, get_tls_filesz,
+	get_tls_memsz, get_tls_start,
 };
+use crate::arch::mm::VirtAddr;
+use crate::kernel::boot_info;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
 
@@ -27,6 +30,39 @@ struct Cli {
 	freq: Option<u16>,
 	env_vars: HashMap<String, String, RandomState>,
 	args: Vec<String>,
+}
+
+/// Whether HermitCore is running under the "uhyve" hypervisor.
+pub fn is_uhyve() -> bool {
+	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
+}
+
+fn get_cmdsize() -> usize {
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { command_line, .. } => command_line
+			.map(|command_line| command_line.len())
+			.unwrap_or_default(),
+		PlatformInfo::LinuxBootParams { command_line, .. } => command_line
+			.map(|command_line| command_line.len())
+			.unwrap_or_default(),
+		PlatformInfo::Uhyve { .. } => 0,
+	}
+}
+
+fn get_cmdline() -> VirtAddr {
+	match boot_info().platform_info {
+		PlatformInfo::Multiboot { command_line, .. } => VirtAddr(
+			command_line
+				.map(|command_line| command_line.as_ptr() as u64)
+				.unwrap_or_default(),
+		),
+		PlatformInfo::LinuxBootParams { command_line, .. } => VirtAddr(
+			command_line
+				.map(|command_line| command_line.as_ptr() as u64)
+				.unwrap_or_default(),
+		),
+		PlatformInfo::Uhyve { .. } => VirtAddr(0),
+	}
 }
 
 fn get_cmdline_str() -> &'static str {

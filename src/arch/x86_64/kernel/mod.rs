@@ -9,7 +9,7 @@ use x86::controlregs::{cr0, cr0_write, cr4, Cr0};
 use self::serial::SerialPort;
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::x86_64::kernel::core_local::*;
-use crate::env;
+use crate::env::{self, is_uhyve};
 
 #[cfg(feature = "acpi")]
 pub mod acpi;
@@ -141,44 +141,11 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-/// Whether HermitCore is running under the "uhyve" hypervisor.
-pub fn is_uhyve() -> bool {
-	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
-}
-
-pub fn is_uhyve_with_pci() -> bool {
+fn is_uhyve_with_pci() -> bool {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => false,
 		PlatformInfo::LinuxBootParams { .. } => false,
 		PlatformInfo::Uhyve { has_pci, .. } => has_pci,
-	}
-}
-
-pub fn get_cmdsize() -> usize {
-	match boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. } => command_line
-			.map(|command_line| command_line.len())
-			.unwrap_or_default(),
-		PlatformInfo::LinuxBootParams { command_line, .. } => command_line
-			.map(|command_line| command_line.len())
-			.unwrap_or_default(),
-		PlatformInfo::Uhyve { .. } => 0,
-	}
-}
-
-pub fn get_cmdline() -> VirtAddr {
-	match boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. } => VirtAddr(
-			command_line
-				.map(|command_line| command_line.as_ptr() as u64)
-				.unwrap_or_default(),
-		),
-		PlatformInfo::LinuxBootParams { command_line, .. } => VirtAddr(
-			command_line
-				.map(|command_line| command_line.as_ptr() as u64)
-				.unwrap_or_default(),
-		),
-		PlatformInfo::Uhyve { .. } => VirtAddr(0),
 	}
 }
 
