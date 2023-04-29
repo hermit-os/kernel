@@ -288,6 +288,7 @@ impl CpuFrequency {
 			source: CpuFrequencySources::Invalid,
 		}
 	}
+
 	fn set_detected_cpu_frequency(
 		&mut self,
 		mhz: u16,
