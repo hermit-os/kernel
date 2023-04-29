@@ -21,6 +21,7 @@ const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
 const TASK_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x8000_0000_0000);
 
 pub fn init() {
+	// don't use the first two kilobytes
 	if get_ram_address() > PhysAddr(0x2000) {
 		let entry = FreeListEntry {
 			start: 0x2000,
