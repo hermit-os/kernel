@@ -13,11 +13,11 @@ use crate::arch::aarch64::kernel::core_local::core_scheduler;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts;
 #[cfg(target_arch = "aarch64")]
+pub use crate::arch::aarch64::kernel::interrupts::{set_oneshot_timer, wakeup_core};
+#[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::processor;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::scheduler;
-#[cfg(target_arch = "aarch64")]
-pub use crate::arch::aarch64::kernel::stubs::{set_oneshot_timer, wakeup_core};
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::switch;
 #[cfg(target_arch = "aarch64")]

@@ -5,7 +5,7 @@
 .extern do_sync
 .extern do_error
 
-.macro trap_entry, el
+.macro trap_entry
      stp x29, x30, [sp, #-16]!
      stp x27, x28, [sp, #-16]!
      stp x25, x26, [sp, #-16]!
@@ -30,7 +30,7 @@
      stp x22, x23, [sp, #-16]!
 .endm
 
-.macro trap_exit, el
+.macro trap_exit
      ldp x22, x23, [sp], #16
      msr elr_el1, x22
      msr spsr_el1, x23
@@ -74,10 +74,10 @@ b       do_bad_mode
  */
 .align 6
 el1_sync:
-      trap_entry 1
+      trap_entry
       mov     x0, sp
       bl      do_sync
-      trap_exit 1
+      trap_exit
       eret
 .size el1_sync, .-el1_sync
 .type el1_sync, @function
@@ -87,21 +87,10 @@ el1_sync:
  */
 .align 6
 el1_irq:
-      trap_entry 1
+      trap_entry
       mov     x0, sp
       bl      do_irq
-      cmp     x0, 0
-      b.eq    1f
-
-      //mov x1, sp
-      //str x1, [x0]                   /* store old sp */
-      // bl get_current_stack          /* get new sp   */
-      // mov sp, x0
-
-      /* call cleanup code */
-      // bl finish_task_switch
-
-1:    trap_exit 1
+      trap_exit
       eret
 .size el1_irq, .-el1_irq
 .type el1_irq, @function
@@ -111,31 +100,20 @@ el1_irq:
  */
 .align 6
 el1_fiq:
-      trap_entry 1
+      trap_entry
       mov     x0, sp
       bl      do_fiq
-      cmp     x0, 0
-      b.eq    1f
-
-      //mov x1, sp
-      //str x1, [x0]                  /* store old sp */
-      //bl get_current_stack          /* get new sp   */
-      //mov sp, x0
-
-      /* call cleanup code */
-      //bl finish_task_switch
-
-1:    trap_exit 1
+      trap_exit
       eret
 .size el1_fiq, .-el1_fiq
 .type el1_fiq, @function
 
 .align 6
 el1_error:
-      trap_entry 1
+      trap_entry
       mov     x0, sp
       bl      do_error
-      trap_exit 1
+      trap_exit
       eret
 .size el1_error, .-el1_error
 .type el1_error, @function
@@ -201,4 +179,3 @@ ventry el0_irq_invalid          // IRQ 32-bit EL0
 ventry el0_fiq_invalid          // FIQ 32-bit EL0
 ventry el0_error_invalid        // Error 32-bit EL0
 .size vector_table, .-vector_table
-

@@ -1,26 +1,108 @@
 use core::arch::asm;
 use core::hint::spin_loop;
+use core::{fmt, str};
 
-extern "C" {
-	static mut cpu_freq: u32;
+use aarch64::regs::CNTFRQ_EL0;
+use hermit_dtb::Dtb;
+use hermit_sync::Lazy;
+use qemu_exit::QEMUExit;
+use tock_registers::interfaces::Readable;
+
+use crate::arch::aarch64::kernel::boot_info;
+use crate::env;
+
+static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
+	let mut cpu_frequency = CpuFrequency::new();
+	unsafe {
+		cpu_frequency.detect();
+	}
+	cpu_frequency
+});
+
+enum CpuFrequencySources {
+	Invalid,
+	CommandLine,
+	Register,
 }
 
-pub struct FPUState {
-	// TODO
+impl fmt::Display for CpuFrequencySources {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match &self {
+			CpuFrequencySources::CommandLine => write!(f, "Command Line"),
+			CpuFrequencySources::Register => write!(f, "CNTFRQ_EL0"),
+			_ => panic!("Attempted to print an invalid CPU Frequency Source"),
+		}
+	}
 }
+
+struct CpuFrequency {
+	mhz: u16,
+	source: CpuFrequencySources,
+}
+
+impl CpuFrequency {
+	const fn new() -> Self {
+		CpuFrequency {
+			mhz: 0,
+			source: CpuFrequencySources::Invalid,
+		}
+	}
+
+	fn set_detected_cpu_frequency(
+		&mut self,
+		mhz: u16,
+		source: CpuFrequencySources,
+	) -> Result<(), ()> {
+		//The clock frequency must never be set to zero, otherwise a division by zero will
+		//occur during runtime
+		if mhz > 0 {
+			self.mhz = mhz;
+			self.source = source;
+			Ok(())
+		} else {
+			Err(())
+		}
+	}
+
+	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
+		let mhz = env::freq().ok_or(())?;
+		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
+	}
+
+	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
+		let mhz = CNTFRQ_EL0.get() / 1000000;
+		self.set_detected_cpu_frequency(mhz.try_into().unwrap(), CpuFrequencySources::Register)
+	}
+
+	unsafe fn detect(&mut self) {
+		unsafe {
+			self.detect_from_register()
+				.or_else(|_e| self.detect_from_cmdline())
+				.unwrap();
+		}
+	}
+
+	fn get(&self) -> u16 {
+		self.mhz
+	}
+}
+
+impl fmt::Display for CpuFrequency {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "{} MHz (from {})", self.mhz, self.source)
+	}
+}
+
+pub struct FPUState;
 
 impl FPUState {
 	pub fn new() -> Self {
 		Self {}
 	}
 
-	pub fn restore(&self) {
-		// TODO
-	}
+	pub fn restore(&self) {}
 
-	pub fn save(&self) {
-		// TODO
-	}
+	pub fn save(&self) {}
 }
 
 pub fn seed_entropy() -> Option<[u8; 32]> {
@@ -64,19 +146,18 @@ pub fn halt() {
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
 
-	loop {
-		halt();
-	}
+	let exit_handler = qemu_exit::AArch64::new();
+	exit_handler.exit_success();
 }
 
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
-	0
+	get_timestamp() / u64::from(get_frequency())
 }
 
 pub fn get_frequency() -> u16 {
-	0
+	CPU_FREQUENCY.get()
 }
 
 #[inline]
@@ -117,7 +198,6 @@ pub fn configure() {
 			in(reg) pmuserenr_el0,
 			options(nostack, nomem),
 		);
-		debug!("pmuserenr_el0");
 
 		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
@@ -127,7 +207,6 @@ pub fn configure() {
 			in(reg) pmcntenset_el0,
 			options(nostack, nomem),
 		);
-		debug!("pmcntenset_el0");
 
 		// Enable PMCCNTR_EL0 using PMCR_EL0.
 		let mut pmcr_el0: u32 = 0;
@@ -147,4 +226,24 @@ pub fn configure() {
 			options(nostack, nomem),
 		);
 	}
+}
+
+pub fn detect_frequency() {
+	Lazy::force(&CPU_FREQUENCY);
+}
+
+pub fn print_information() {
+	let dtb = unsafe {
+		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
+			.expect(".dtb file has invalid header")
+	};
+
+	let reg = dtb
+		.get_property("/cpus/cpu@0", "compatible")
+		.unwrap_or(b"unknown");
+
+	infoheader!(" CPU INFORMATION ");
+	infoentry!("Processor compatiblity", str::from_utf8(reg).unwrap());
+	infoentry!("System frequency", *CPU_FREQUENCY);
+	infofooter!();
 }
