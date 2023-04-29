@@ -47,7 +47,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 use arch::core_local::*;
 // Used for integration test status.
 #[doc(hidden)]
-pub use arch::kernel::is_uhyve as _is_uhyve;
+pub use env::is_uhyve as _is_uhyve;
 use mm::allocator::LockedAllocator;
 #[cfg(target_arch = "aarch64")]
 use qemu_exit::QEMUExit;
