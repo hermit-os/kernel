@@ -72,7 +72,7 @@ jobs:
       - name: Check docs
         run: |
           cargo doc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
-          cargo doc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat
+          cargo doc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat --no-default-features
 
   build:
     name: Build
