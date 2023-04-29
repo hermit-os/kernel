@@ -44,7 +44,7 @@ fn get_cmdline_str() -> &'static str {
 	} else {
 		// SAFETY: cmdline and cmdsize are valid forever.
 		let slice = unsafe { slice::from_raw_parts(cmdline, cmdsize) };
-		str::from_utf8(slice).unwrap()
+		str::from_utf8(slice).unwrap().trim_matches(char::from(0))
 	}
 }
 
