@@ -185,10 +185,7 @@ pub fn boot_processor_init() {
 	interrupts::enable();
 	processor::detect_frequency();
 	processor::print_information();
-
-	/*
 	systemtime::init();
-	*/
 
 	finish_processor_init();
 }
