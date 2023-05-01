@@ -236,7 +236,7 @@ pub struct TaskTLS {
 }
 
 impl TaskTLS {
-	fn from_environment() -> Option<Self> {
+	fn from_environment() -> Option<Box<Self>> {
 		// For details on thread-local storage data structures see
 		//
 		// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
@@ -287,7 +287,7 @@ impl TaskTLS {
 			_block: block,
 			thread_ptr,
 		};
-		Some(this)
+		Some(Box::new(this))
 	}
 
 	fn thread_ptr(&self) -> &*mut () {
