@@ -85,8 +85,8 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 
 pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	assert!(
-		virtual_address >= mm::kernel_end_address(),
-		"Virtual address {:#X} is not >= KERNEL_END_ADDRESS",
+		virtual_address >= mm::kernel_end_address() || virtual_address < mm::kernel_start_address(),
+		"Virtual address {:#X} belongs to the kernel",
 		virtual_address
 	);
 	assert!(
