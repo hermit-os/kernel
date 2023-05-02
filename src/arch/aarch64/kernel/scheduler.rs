@@ -1,10 +1,11 @@
 //! Architecture dependent interface to initialize a task
 
+use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use core::arch::asm;
 use core::cell::RefCell;
-use core::{mem, ptr};
+use core::{mem, ptr, slice};
 
 use align_address::Align;
 
@@ -261,13 +262,34 @@ impl Drop for TaskStacks {
 	}
 }
 
+/*
+ * https://fuchsia.dev/fuchsia-src/development/kernel/threads/tls and
+ * and https://uclibc.org/docs/tls.pdf is used to understand variant 1
+ * of the TLS implementations.
+ */
+
+#[derive(Copy, Clone)]
+#[repr(C)]
+struct DtvPointer {
+	val: *const (),
+	to_free: *const (),
+}
+
+#[repr(C)]
+union Dtv {
+	counter: usize,
+	pointer: DtvPointer,
+}
+
+#[repr(C)]
 pub struct TaskTLS {
-	thread_ptr: Box<*mut ()>,
-	_block: Box<[u8]>,
+	dtv: mem::MaybeUninit<Box<[Dtv; 2]>>,
+	_private: usize,
+	block: [u8],
 }
 
 impl TaskTLS {
-	fn from_environment() -> Option<Self> {
+	fn from_environment() -> Option<Box<Self>> {
 		let tls_len = env::get_tls_memsz();
 
 		if env::get_tls_memsz() == 0 {
@@ -280,33 +302,49 @@ impl TaskTLS {
 			let tls_init_len = env::get_tls_filesz();
 
 			// SAFETY: We will have to trust the environment here.
-			unsafe { core::slice::from_raw_parts(tls_init_data, tls_init_len) }
+			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
 		};
 
-		// Allocate TLS block
-		let mut block = vec![0; tls_len].into_boxed_slice();
+		let off = core::cmp::max(16, env::get_tls_align()) - 16;
+		let block_len = env::get_tls_memsz() + off;
+		let len = block_len + mem::size_of::<Box<[Dtv; 2]>>();
 
-		// Initialize beginning of the TLS block with TLS initialization image
-		block[..tls_init_image.len()].copy_from_slice(tls_init_image);
+		let layout = Layout::from_size_align(len, 16).unwrap();
+		let mut this = unsafe {
+			let data = alloc_zeroed(layout);
+			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
 
-		let thread_ptr = block.as_mut_ptr_range().start.cast::<()>();
-		// Put thread pointer on heap, so it does not move and can be referenced in fs:0
-		let thread_ptr = Box::new(thread_ptr);
+			let addr = (*raw).block.as_ptr().offset(off as isize).cast::<()>();
+			(*raw).dtv.as_mut_ptr().write(Box::new([
+				Dtv { counter: 1 },
+				Dtv {
+					pointer: DtvPointer {
+						val: addr,
+						to_free: ptr::null(),
+					},
+				},
+			]));
 
-		let this = Self {
-			thread_ptr,
-			_block: block,
+			Box::from_raw(raw)
 		};
+
+		this.block[off..off + tls_init_image.len()].copy_from_slice(tls_init_image);
+
 		Some(this)
 	}
 
-	fn thread_ptr(&self) -> &*mut () {
-		&self.thread_ptr
+	fn thread_ptr(&self) -> *const Box<[Dtv; 2]> {
+		self.dtv.as_ptr()
 	}
 }
 
 extern "C" fn leave_task() -> ! {
 	core_scheduler().exit(0)
+}
+
+#[cfg(not(target_os = "none"))]
+extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
+	unimplemented!()
 }
 
 #[cfg(target_os = "none")]
@@ -357,7 +395,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).tpidr_el0 = tls.thread_ptr() as *const _ as u64;
+				(*state).tpidr_el0 = tls.thread_ptr() as u64;
 			}
 
 			/*

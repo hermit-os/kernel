@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
 use core::cell::RefCell;
@@ -372,7 +373,7 @@ pub struct Task {
 	/// Stack of the task
 	pub stacks: TaskStacks,
 	/// Task Thread-Local-Storage (TLS)
-	pub tls: Option<TaskTLS>,
+	pub tls: Option<Box<TaskTLS>>,
 	/// lwIP error code for this task
 	#[cfg(feature = "newlib")]
 	pub lwip_errno: i32,
