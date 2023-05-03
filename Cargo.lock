@@ -45,6 +45,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c7d0618f0e0b7e8ff11427422b64564d5fb0be1940354bfe2e0529b18a9d9b8"
 
 [[package]]
+name = "arm-gic"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d16805d71f41d1714a51ee34f40633c42980a2afaf8ae237bcba09d6e15494ef"
+dependencies = [
+ "bitflags 2.2.1",
+]
+
+[[package]]
 name = "async-task"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -345,6 +354,7 @@ dependencies = [
  "aarch64",
  "ahash",
  "align-address",
+ "arm-gic",
  "async-task",
  "bitflags 2.2.1",
  "crossbeam-utils",

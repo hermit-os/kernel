@@ -1,8 +1,11 @@
+use alloc::vec::Vec;
 use core::arch::asm;
+use core::ptr;
 
 use aarch64::regs::*;
+use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
 use hermit_dtb::Dtb;
-use hermit_sync::{InterruptTicketMutex, OnceCell};
+use hermit_sync::{without_interrupts, InterruptTicketMutex, OnceCell};
 use tock_registers::interfaces::Readable;
 
 use crate::arch::aarch64::kernel::boot_info;
@@ -13,64 +16,32 @@ use crate::arch::aarch64::mm::paging::{
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
 use crate::errno::EFAULT;
 use crate::scheduler::CoreId;
-use crate::sys_exit;
+use crate::{core_scheduler, sys_exit};
 
 pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
-
-/*
- * GIC Distributor interface register offsets that are common to GICv3 & GICv2
- */
-
-const GICD_CTLR: usize = 0x0;
-const GICD_TYPER: usize = 0x4;
-const GICD_IIDR: usize = 0x8;
-const GICD_IGROUPR: usize = 0x80;
-const GICD_ISENABLER: usize = 0x100;
-const GICD_ICENABLER: usize = 0x180;
-const GICD_ISPENDR: usize = 0x200;
-const GICD_ICPENDR: usize = 0x280;
-const GICD_ISACTIVER: usize = 0x300;
-const GICD_ICACTIVER: usize = 0x380;
-const GICD_IPRIORITYR: usize = 0x400;
-const GICD_ITARGETSR: usize = 0x800;
-const GICD_ICFGR: usize = 0xC00;
-const GICD_NSACR: usize = 0xE00;
-const GICD_SGIR: usize = 0xF00;
-
-const GICD_CTLR_ENABLEGRP0: u32 = 1 << 0;
-const GICD_CTLR_ENABLEGRP1: u32 = 1 << 1;
-
-/* Physical CPU Interface registers */
-const GICC_CTLR: usize = 0x0;
-const GICC_PMR: usize = 0x4;
-const GICC_BPR: usize = 0x8;
-const GICC_IAR: usize = 0xC;
-const GICC_EOIR: usize = 0x10;
-const GICC_RPR: usize = 0x14;
-const GICC_HPPIR: usize = 0x18;
-const GICC_AHPPIR: usize = 0x28;
-const GICC_IIDR: usize = 0xFC;
-const GICC_DIR: usize = 0x1000;
-const GICC_PRIODROP: usize = GICC_EOIR;
-
-const GICC_CTLR_ENABLEGRP0: u32 = 1 << 0;
-const GICC_CTLR_ENABLEGRP1: u32 = 1 << 1;
-const GICC_CTLR_FIQEN: u32 = 1 << 3;
-const GICC_CTLR_ACKCTL: u32 = 1 << 2;
 
 /// maximum number of interrupt handlers
 const MAX_HANDLERS: usize = 256;
 
-static GICC_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
-static GICD_ADDRESS: OnceCell<VirtAddr> = OnceCell::new();
+/// Number of the timer interrupt
+static mut TIMER_INTERRUPT: u32 = 0;
+/// Possible interrupt handlers
+static mut INTERRUPT_HANDLERS: [Option<fn(state: &State)>; MAX_HANDLERS] = [None; MAX_HANDLERS];
+/// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
+static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
-/// Number of used supported interrupts
-static NR_IRQS: OnceCell<u32> = OnceCell::new();
-static mut INTERRUPT_HANDLERS: [fn(state: &State); MAX_HANDLERS] =
-	[default_interrupt_handler; MAX_HANDLERS];
+fn timer_handler(_state: &State) {
+	debug!("Handle timer interrupt");
 
-fn default_interrupt_handler(_state: &State) {
-	warn!("Entering default interrupt handler");
+	// disable timer
+	unsafe {
+		asm!(
+			"msr cntp_cval_el0, {disable}",
+			"msr cntp_ctl_el0, {disable}",
+			disable = in(reg) 0,
+			options(nostack, nomem),
+		);
+	}
 }
 
 /// Enable all interrupts
@@ -113,43 +84,67 @@ pub fn disable() {
 }
 
 pub fn irq_install_handler(irq_number: u32, handler: fn(state: &State)) {
-	info!("Install handler for interrupt {}", irq_number);
+	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
-		INTERRUPT_HANDLERS[irq_number as usize] = handler;
+		INTERRUPT_HANDLERS[irq_number as usize] = Some(handler);
 	}
 }
 
 #[no_mangle]
 pub extern "C" fn do_fiq(state: &State) {
-	info!("fiq");
-	let iar = gicc_read(GICC_IAR);
-	let vector: usize = iar as usize & 0x3ff;
+	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+		let vector: usize = u32::from(irqid).try_into().unwrap();
 
-	info!("Receive fiq {}", vector);
+		debug!("Receive fiq {}", vector);
 
-	if vector < MAX_HANDLERS {
-		unsafe {
-			INTERRUPT_HANDLERS[vector](state);
+		if vector < MAX_HANDLERS {
+			unsafe {
+				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
+					handler(state);
+				}
+			}
+		}
+
+		core_scheduler().handle_waiting_tasks();
+
+		GicV3::end_interrupt(irqid);
+
+		if unsafe { vector == TIMER_INTERRUPT.try_into().unwrap() } {
+			// a timer interrupt may have caused unblocking of tasks
+			core_scheduler().scheduler();
 		}
 	}
-
-	gicc_write(GICC_EOIR, iar.try_into().unwrap());
 }
 
 #[no_mangle]
-pub extern "C" fn do_irq(_state: &State) {
-	let iar = gicc_read(GICC_IAR);
-	let vector = iar & 0x3ff;
+pub extern "C" fn do_irq(state: &State) {
+	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+		let vector: usize = u32::from(irqid).try_into().unwrap();
 
-	info!("Receive interrupt {}", vector);
+		debug!("Receive interrupt {}", vector);
 
-	gicc_write(GICC_EOIR, iar);
+		if vector < MAX_HANDLERS {
+			unsafe {
+				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
+					handler(state);
+				}
+			}
+		}
+
+		core_scheduler().handle_waiting_tasks();
+
+		GicV3::end_interrupt(irqid);
+
+		if unsafe { vector == TIMER_INTERRUPT.try_into().unwrap() } {
+			// a timer interrupt may have caused unblocking of tasks
+			core_scheduler().scheduler();
+		}
+	}
 }
 
 #[no_mangle]
-pub extern "C" fn do_sync(state: &State) {
-	info!("{:#012x?}", state);
-	let iar = gicc_read(GICC_IAR);
+pub extern "C" fn do_sync(_state: &State) {
+	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
 	let ec = esr >> 26;
 	let iss = esr & 0xFFFFFF;
@@ -170,8 +165,7 @@ pub extern "C" fn do_sync(state: &State) {
 			error!("Table Base Register {:#x}", TTBR0_EL1.get());
 			error!("Exception Syndrome Register {:#x}", esr);
 
-			// send EOI
-			gicc_write(GICC_EOIR, iar);
+			GicV3::end_interrupt(irqid);
 			sys_exit(-EFAULT);
 		} else {
 			error!("Unknown exception");
@@ -185,133 +179,19 @@ pub extern "C" fn do_sync(state: &State) {
 
 #[no_mangle]
 pub extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
-	error!("Receive unhandled exception: {}\n", reason);
+	error!("Receive unhandled exception: {}", reason);
 
 	sys_exit(-EFAULT);
 }
 
 #[no_mangle]
 pub extern "C" fn do_error(_state: &State) -> ! {
-	error!("Receive error interrupt\n");
+	error!("Receive error interrupt");
 
 	sys_exit(-EFAULT);
 }
 
-#[inline]
-fn gicd_read(off: usize) -> u32 {
-	let value: u32;
-
-	// we have to use inline assembly to guarantee 32bit memory access
-	unsafe {
-		asm!("ldar {value:w}, [{addr}]",
-			value = out(reg) value,
-			addr = in(reg) (GICD_ADDRESS.get().unwrap().as_usize() + off),
-			options(nostack, readonly),
-		);
-	}
-
-	value
-}
-
-#[inline]
-fn gicd_write(off: usize, value: u32) {
-	// we have to use inline assembly to guarantee 32bit memory access
-	unsafe {
-		asm!("str {value:w}, [{addr}]",
-			value = in(reg) value,
-			addr = in(reg) (GICD_ADDRESS.get().unwrap().as_usize() + off),
-			options(nostack),
-		);
-	}
-}
-
-#[inline]
-fn gicc_read(off: usize) -> u32 {
-	let value: u32;
-
-	// we have to use inline assembly to guarantee 32bit memory access
-	unsafe {
-		asm!("ldar {value:w}, [{addr}]",
-			value = out(reg) value,
-			addr = in(reg) (GICC_ADDRESS.get().unwrap().as_usize() + off),
-			options(nostack, readonly),
-		);
-	}
-
-	value
-}
-
-#[inline]
-fn gicc_write(off: usize, value: u32) {
-	// we have to use inline assembly to guarantee 32bit memory access
-	unsafe {
-		asm!("str {value:w}, [{addr}]",
-			value = in(reg) value,
-			addr = in(reg) (GICC_ADDRESS.get().unwrap().as_usize() + off),
-			options(nostack),
-		);
-	}
-}
-
-/// Global enable forwarding interrupts from distributor to cpu interface
-fn gicd_enable() {
-	gicd_write(GICD_CTLR, GICD_CTLR_ENABLEGRP0 | GICD_CTLR_ENABLEGRP1);
-}
-
-/// Global disable forwarding interrupts from distributor to cpu interface
-fn gicd_disable() {
-	gicd_write(GICD_CTLR, 0);
-}
-
-/// Global enable signalling of interrupt from the cpu interface
-fn gicc_enable() {
-	gicc_write(
-		GICC_CTLR,
-		GICC_CTLR_ENABLEGRP0 | GICC_CTLR_ENABLEGRP1 | GICC_CTLR_FIQEN | GICC_CTLR_ACKCTL,
-	);
-}
-
-/// Global disable signalling of interrupt from the cpu interface
-fn gicc_disable() {
-	gicc_write(GICC_CTLR, 0);
-}
-
-fn gicc_set_priority(priority: u32) {
-	gicc_write(GICC_PMR, priority & 0xFF);
-}
-
-static MASK_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
-
-pub fn mask_interrupt(vector: u32) -> Result<(), ()> {
-	if vector < *NR_IRQS.get().unwrap() && vector < MAX_HANDLERS.try_into().unwrap() {
-		let _guard = MASK_LOCK.lock();
-
-		let regoff = GICD_ICENABLER + 4 * (vector as usize / 32);
-		gicd_write(regoff, 1 << (vector % 32));
-
-		Ok(())
-	} else {
-		Err(())
-	}
-}
-
-pub fn unmask_interrupt(vector: u32) -> Result<(), ()> {
-	if vector < *NR_IRQS.get().unwrap() && vector < MAX_HANDLERS.try_into().unwrap() {
-		let _guard = MASK_LOCK.lock();
-
-		let regoff = GICD_ISENABLER + 4 * (vector as usize / 32);
-		gicd_write(regoff, 1 << (vector % 32));
-		Ok(())
-	} else {
-		Err(())
-	}
-}
-
-pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
-	todo!("set_oneshot_timer stub");
-}
-
-pub fn wakeup_core(core_to_wakeup: CoreId) {
+pub fn wakeup_core(_core_to_wakeup: CoreId) {
 	todo!("wakeup_core stub");
 }
 
@@ -344,7 +224,6 @@ pub fn init() {
 
 	let gicd_address =
 		virtualmem::allocate_aligned(gicd_size.try_into().unwrap(), 0x10000).unwrap();
-	GICD_ADDRESS.set(gicd_address).unwrap();
 	debug!("Mapping GIC Distributor interface to virtual address {gicd_address:p}",);
 
 	let mut flags = PageTableEntryFlags::empty();
@@ -358,7 +237,6 @@ pub fn init() {
 
 	let gicc_address =
 		virtualmem::allocate_aligned(gicc_size.try_into().unwrap(), 0x10000).unwrap();
-	GICC_ADDRESS.set(gicc_address).unwrap();
 	debug!("Mapping generic interrupt controller to virtual address {gicc_address:p}",);
 	paging::map::<BasePageSize>(
 		gicc_address,
@@ -367,39 +245,49 @@ pub fn init() {
 		flags,
 	);
 
-	gicc_disable();
-	gicd_disable();
+	GicV3::set_priority_mask(0xff);
+	let mut gic = unsafe { GicV3::new(gicd_address.as_mut_ptr(), gicc_address.as_mut_ptr()) };
+	gic.setup();
 
-	let nr_irqs = ((gicd_read(GICD_TYPER) & 0x1f) + 1) * 32;
-	info!("Number of supported interrupts {}", nr_irqs);
-	NR_IRQS.set(nr_irqs).unwrap();
+	for node in dtb.enum_subnodes("/") {
+		let parts: Vec<_> = node.split('@').collect();
 
-	gicd_write(GICD_ICENABLER, 0xffff0000);
-	gicd_write(GICD_ISENABLER, 0x0000ffff);
-	gicd_write(GICD_ICPENDR, 0xffffffff);
-	gicd_write(GICD_IGROUPR, 0);
+		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
+			if core::str::from_utf8(compatible)
+				.unwrap()
+				.find("timer")
+				.is_some()
+			{
+				let irq_slice = dtb
+					.get_property(parts.first().unwrap(), "interrupts")
+					.unwrap();
+				/* Secure Phys IRQ */
+				let (_irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (_irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (_irqflags, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				/* Non-secure Phys IRQ */
+				let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
+				let _irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+				let irq = u32::from_be_bytes(irq.try_into().unwrap());
+				let _irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+				unsafe {
+					TIMER_INTERRUPT = irq;
+				}
 
-	for i in 0..32 / 4 {
-		gicd_write(GICD_IPRIORITYR + i * 4, 0x80808080);
+				info!("Timer interrupt: {}", irq);
+				irq_install_handler(irq + 16, timer_handler);
+
+				// enable timer interrupt
+				let timer_irqid = IntId::ppi(irq);
+				gic.set_interrupt_priority(timer_irqid, 0x00);
+				gic.enable_interrupt(timer_irqid, true);
+			}
+		}
 	}
 
-	for i in 32 / 16..nr_irqs / 16 {
-		gicd_write(GICD_NSACR + i as usize * 4, 0xffffffff);
+	unsafe {
+		GIC.set(gic).unwrap();
 	}
-
-	for i in 32 / 32..nr_irqs / 32 {
-		gicd_write(GICD_ICENABLER + i as usize * 4, 0xffffffff);
-		gicd_write(GICD_ICPENDR + i as usize * 4, 0xffffffff);
-		gicd_write(GICD_IGROUPR + i as usize * 4, 0);
-	}
-
-	for i in 32 / 4..nr_irqs / 4 {
-		gicd_write(GICD_ITARGETSR + i as usize * 4, 0);
-		gicd_write(GICD_IPRIORITYR + i as usize * 4, 0x80808080);
-	}
-
-	gicd_enable();
-
-	gicc_set_priority(0xF0);
-	gicc_enable();
 }
