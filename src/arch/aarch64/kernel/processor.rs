@@ -4,13 +4,14 @@ use core::{fmt, str};
 
 use aarch64::regs::CNTFRQ_EL0;
 use hermit_dtb::Dtb;
-use hermit_sync::Lazy;
+use hermit_sync::{without_interrupts, Lazy};
 use qemu_exit::QEMUExit;
 use tock_registers::interfaces::Readable;
 
 use crate::arch::aarch64::kernel::boot_info;
 use crate::env;
 
+// System counter frequency in Hz
 static CPU_FREQUENCY: Lazy<CpuFrequency> = Lazy::new(|| {
 	let mut cpu_frequency = CpuFrequency::new();
 	unsafe {
@@ -36,27 +37,27 @@ impl fmt::Display for CpuFrequencySources {
 }
 
 struct CpuFrequency {
-	mhz: u16,
+	hz: u32,
 	source: CpuFrequencySources,
 }
 
 impl CpuFrequency {
 	const fn new() -> Self {
 		CpuFrequency {
-			mhz: 0,
+			hz: 0,
 			source: CpuFrequencySources::Invalid,
 		}
 	}
 
 	fn set_detected_cpu_frequency(
 		&mut self,
-		mhz: u16,
+		hz: u32,
 		source: CpuFrequencySources,
 	) -> Result<(), ()> {
 		//The clock frequency must never be set to zero, otherwise a division by zero will
 		//occur during runtime
-		if mhz > 0 {
-			self.mhz = mhz;
+		if hz > 0 {
+			self.hz = hz;
 			self.source = source;
 			Ok(())
 		} else {
@@ -66,12 +67,12 @@ impl CpuFrequency {
 
 	unsafe fn detect_from_cmdline(&mut self) -> Result<(), ()> {
 		let mhz = env::freq().ok_or(())?;
-		self.set_detected_cpu_frequency(mhz, CpuFrequencySources::CommandLine)
+		self.set_detected_cpu_frequency(u32::from(mhz) * 1000000, CpuFrequencySources::CommandLine)
 	}
 
 	unsafe fn detect_from_register(&mut self) -> Result<(), ()> {
-		let mhz = CNTFRQ_EL0.get() / 1000000;
-		self.set_detected_cpu_frequency(mhz.try_into().unwrap(), CpuFrequencySources::Register)
+		let hz = CNTFRQ_EL0.get() & 0xFFFFFFFF;
+		self.set_detected_cpu_frequency(hz.try_into().unwrap(), CpuFrequencySources::Register)
 	}
 
 	unsafe fn detect(&mut self) {
@@ -82,14 +83,14 @@ impl CpuFrequency {
 		}
 	}
 
-	fn get(&self) -> u16 {
-		self.mhz
+	fn get(&self) -> u32 {
+		self.hz
 	}
 }
 
 impl fmt::Display for CpuFrequency {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write!(f, "{} MHz (from {})", self.mhz, self.source)
+		write!(f, "{} Hz (from {})", self.hz, self.source)
 	}
 }
 
@@ -150,19 +151,31 @@ pub fn shutdown() -> ! {
 	exit_handler.exit_success();
 }
 
+#[inline]
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
-	get_timestamp() / u64::from(get_frequency())
+	(1000000 * get_timestamp()) / u64::from(CPU_FREQUENCY.get())
 }
 
+#[inline]
 pub fn get_frequency() -> u16 {
-	CPU_FREQUENCY.get()
+	(CPU_FREQUENCY.get() / 1000000).try_into().unwrap()
 }
 
 #[inline]
 pub fn get_timestamp() -> u64 {
-	0
+	let value: u64;
+
+	unsafe {
+		asm!(
+			"mrs {value}, cntpct_el0",
+			value = out(reg) value,
+			options(nostack),
+		);
+	}
+
+	value
 }
 
 #[inline]
@@ -232,6 +245,40 @@ pub fn detect_frequency() {
 	Lazy::force(&CPU_FREQUENCY);
 }
 
+#[inline]
+fn __set_oneshot_timer(wakeup_time: Option<u64>) {
+	if let Some(wt) = wakeup_time {
+		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
+		let deadline = (wt * u64::from(CPU_FREQUENCY.get())) / 1000000;
+
+		unsafe {
+			asm!(
+				"msr cntp_cval_el0, {value}",
+				"msr cntp_ctl_el0, {enable}",
+				value = in(reg) deadline,
+				enable = in(reg) 1,
+				options(nostack, nomem),
+			);
+		}
+	} else {
+		// disable timer
+		unsafe {
+			asm!(
+				"msr cntp_cval_el0, {disable}",
+				"msr cntp_ctl_el0, {disable}",
+				disable = in(reg) 0,
+				options(nostack, nomem),
+			);
+		}
+	}
+}
+
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	without_interrupts(|| {
+		__set_oneshot_timer(wakeup_time);
+	});
+}
+
 pub fn print_information() {
 	let dtb = unsafe {
 		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
@@ -244,6 +291,6 @@ pub fn print_information() {
 
 	infoheader!(" CPU INFORMATION ");
 	infoentry!("Processor compatiblity", str::from_utf8(reg).unwrap());
-	infoentry!("System frequency", *CPU_FREQUENCY);
+	infoentry!("Counter frequency", *CPU_FREQUENCY);
 	infofooter!();
 }

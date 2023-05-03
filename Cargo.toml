@@ -120,6 +120,7 @@ x86_64 = "0.14"
 hermit-dtb = { version = "0.1" }
 aarch64 = { version = "0.0.10", default-features = false }
 tock-registers = { version = "0.8.x", default-features = false }
+arm-gic = { version = "0.1" }
 
 [dev-dependencies]
 float-cmp = "0.9"

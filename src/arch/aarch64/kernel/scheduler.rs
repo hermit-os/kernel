@@ -290,8 +290,6 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	fn from_environment() -> Option<Box<Self>> {
-		let tls_len = env::get_tls_memsz();
-
 		if env::get_tls_memsz() == 0 {
 			return None;
 		}
@@ -336,10 +334,6 @@ impl TaskTLS {
 	fn thread_ptr(&self) -> *const Box<[Dtv; 2]> {
 		self.dtv.as_ptr()
 	}
-}
-
-extern "C" fn leave_task() -> ! {
-	core_scheduler().exit(0)
 }
 
 #[cfg(not(target_os = "none"))]
