@@ -7,21 +7,15 @@ updates:
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    # Automatic rebases cancel pending bors merges
-    rebase-strategy: "disabled"
 
   - package-ecosystem: "cargo"
     directory: "/hermit-builtins"
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    # Automatic rebases cancel pending bors merges
-    rebase-strategy: "disabled"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    # Automatic rebases cancel pending bors merges
-    rebase-strategy: "disabled"

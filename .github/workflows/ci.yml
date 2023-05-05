@@ -2,10 +2,7 @@ name: CI
 
 on:
   pull_request:
-  push:
-    branches:
-      - staging
-      - trying
+  merge_group:
 
 env:
   CARGO_INCREMENTAL: 0
