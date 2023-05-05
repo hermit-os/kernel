@@ -10,8 +10,6 @@ updates:
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    # Automatic rebases cancel pending bors merges
-    rebase-strategy: "disabled"
   # Enable version updates for Github Actions
   - package-ecosystem: "github-actions"
     # Set to `/` to check the Actions used in `.github/workflows`
@@ -20,5 +18,3 @@ updates:
     schedule:
       interval: "weekly"
       timezone: "Europe/Berlin"
-    # Automatic rebases cancel pending bors merges
-    rebase-strategy: "disabled"
