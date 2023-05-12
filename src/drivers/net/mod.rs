@@ -1,4 +1,4 @@
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
 pub mod rtl8139;
 #[cfg(not(feature = "pci"))]
 pub mod virtio_mmio;
@@ -8,13 +8,17 @@ pub mod virtio_pci;
 
 use alloc::vec::Vec;
 
+#[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
 use crate::arch::kernel::core_local::*;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
+#[cfg(target_arch = "aarch64")]
+use crate::arch::scheduler::State;
 #[cfg(feature = "pci")]
-use crate::arch::kernel::pci as hardware;
+use crate::drivers::pci as hardware;
 
 /// A trait for accessing the network interface
 pub trait NetworkInterface {
@@ -40,11 +44,8 @@ pub trait NetworkInterface {
 	fn handle_interrupt(&mut self) -> bool;
 }
 
-#[cfg(target_arch = "x86_64")]
-pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
-	debug!("Receive network interrupt");
-	apic::eoi();
-
+#[inline]
+fn _irqhandler() {
 	let has_packet = if let Some(driver) = hardware::get_network_driver() {
 		driver.lock().handle_interrupt()
 	} else {
@@ -58,4 +59,17 @@ pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFra
 		core_scheduler.wakeup_async_tasks();
 		core_scheduler.scheduler();
 	}
+}
+
+#[cfg(target_arch = "aarch64")]
+pub fn network_irqhandler(_state: &State) {
+	debug!("Receive network interrupt");
+	_irqhandler();
+}
+
+#[cfg(target_arch = "x86_64")]
+pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
+	debug!("Receive network interrupt");
+	apic::eoi();
+	_irqhandler();
 }

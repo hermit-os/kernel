@@ -51,10 +51,27 @@ pub(crate) struct NetworkInterface<'a> {
 	dhcp_handle: SocketHandle,
 }
 
+#[cfg(target_arch = "x86_64")]
 fn start_endpoint() -> u16 {
 	((unsafe { core::arch::x86_64::_rdtsc() }) % (u16::MAX as u64))
 		.try_into()
 		.unwrap()
+}
+
+#[cfg(target_arch = "aarch64")]
+fn start_endpoint() -> u16 {
+	use core::arch::asm;
+	let value: u64;
+
+	unsafe {
+		asm!(
+			"mrs {value}, cntpct_el0",
+			value = out(reg) value,
+			options(nostack),
+		);
+	}
+
+	(value % (u16::MAX as u64)).try_into().unwrap()
 }
 
 #[inline]

@@ -5,10 +5,9 @@
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::arch::x86_64::_mm_mfence;
 use core::cell::RefCell;
-use core::convert::TryInto;
 use core::ptr::read_volatile;
+use core::sync::atomic::{fence, Ordering};
 
 use crate::drivers::net::virtio_net::constants::{FeatureSet, Status};
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
@@ -38,9 +37,9 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let mtu = read_volatile(&self.mtu);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let after = read_volatile(&self.config_generation);
 
 				if before == after {
@@ -57,10 +56,10 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let mut src = self.mac.iter();
 				mac.fill_with(|| read_volatile(src.next().unwrap()));
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let after = read_volatile(&self.config_generation);
 
 				if before == after {
@@ -75,9 +74,9 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let status = read_volatile(&self.status);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let after = read_volatile(&self.config_generation);
 
 				if before == after {
@@ -92,9 +91,9 @@ impl NetDevCfgRaw {
 		unsafe {
 			loop {
 				let before = read_volatile(&self.config_generation);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let max_pairs = read_volatile(&self.max_virtqueue_pairs);
-				_mm_mfence();
+				fence(Ordering::SeqCst);
 				let after = read_volatile(&self.config_generation);
 
 				if before == after {
@@ -160,9 +159,9 @@ impl VirtioNetDriver {
 	pub fn init(
 		dev_id: u16,
 		registers: &'static mut MmioRegisterLayout,
-		irq_no: u32,
+		irq_no: u8,
 	) -> Result<VirtioNetDriver, VirtioError> {
-		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq_no.try_into().unwrap()) {
+		if let Ok(mut drv) = VirtioNetDriver::new(dev_id, registers, irq_no) {
 			match drv.init_dev() {
 				Err(error_code) => Err(VirtioError::NetDriver(error_code)),
 				_ => {

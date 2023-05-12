@@ -1,7 +1,7 @@
-#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+#[cfg(all(feature = "pci"))]
 pub mod fuse;
 
 pub fn init() {
-	#[cfg(all(feature = "pci", target_arch = "x86_64"))]
+	#[cfg(all(feature = "pci"))]
 	fuse::init();
 }

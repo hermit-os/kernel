@@ -17,11 +17,11 @@ pub const MAGIC_VALUE: u32 = 0x74726976;
 
 pub const MMIO_START: usize = 0x00000000c0000000;
 pub const MMIO_END: usize = 0x00000000c0000fff;
-const IRQ_NUMBER: u32 = 12;
+const IRQ_NUMBER: u8 = 12;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
 
-pub enum MmioDriver {
+pub(crate) enum MmioDriver {
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
 }
 
@@ -116,7 +116,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 	Err("Network card not found!")
 }
 
-pub fn register_driver(drv: MmioDriver) {
+pub(crate) fn register_driver(drv: MmioDriver) {
 	unsafe {
 		MMIO_DRIVERS.push(drv);
 	}

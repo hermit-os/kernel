@@ -76,6 +76,6 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
 }
 
-pub fn increment_irq_counter(irq_no: usize) {
+pub fn increment_irq_counter(irq_no: u8) {
 	CoreLocal::get().irq_statistics.inc(irq_no);
 }

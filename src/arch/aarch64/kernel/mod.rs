@@ -1,5 +1,9 @@
 pub mod core_local;
 pub mod interrupts;
+#[cfg(not(feature = "pci"))]
+pub mod mmio;
+#[cfg(feature = "pci")]
+pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
@@ -42,6 +46,10 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 
 pub fn get_boot_info_address() -> VirtAddr {
 	VirtAddr(raw_boot_info() as *const _ as u64)
+}
+
+pub fn is_uhyve_with_pci() -> bool {
+	false
 }
 
 pub fn get_ram_address() -> PhysAddr {
@@ -186,6 +194,8 @@ pub fn boot_processor_init() {
 	processor::detect_frequency();
 	processor::print_information();
 	systemtime::init();
+	#[cfg(feature = "pci")]
+	pci::init();
 
 	finish_processor_init();
 }
@@ -210,9 +220,6 @@ fn finish_processor_init() {
 	*CPU_ONLINE.lock() += 1;
 }
 
-pub fn network_adapter_init() -> i32 {
-	// AArch64 supports no network adapters on bare-metal/QEMU, so return a failure code.
-	-1
+pub fn print_statistics() {
+	interrupts::print_statistics();
 }
-
-pub fn print_statistics() {}

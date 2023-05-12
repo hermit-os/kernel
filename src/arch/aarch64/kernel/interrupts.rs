@@ -1,19 +1,20 @@
+use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::ptr;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
-use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
+use ahash::RandomState;
+use arm_gic::gicv3::{GicV3, IntId};
+use hashbrown::HashMap;
 use hermit_dtb::Dtb;
-use hermit_sync::{without_interrupts, InterruptTicketMutex, OnceCell};
+use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
 use tock_registers::interfaces::Readable;
 
 use crate::arch::aarch64::kernel::boot_info;
 use crate::arch::aarch64::kernel::scheduler::State;
-use crate::arch::aarch64::mm::paging::{
-	self, virt_to_phys, BasePageSize, PageSize, PageTableEntryFlags,
-};
-use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
+use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
+use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
 use crate::errno::EFAULT;
 use crate::scheduler::CoreId;
 use crate::{core_scheduler, sys_exit};
@@ -83,7 +84,7 @@ pub fn disable() {
 	}
 }
 
-pub fn irq_install_handler(irq_number: u32, handler: fn(state: &State)) {
+pub fn irq_install_handler(irq_number: u8, handler: fn(state: &State)) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
 		INTERRUPT_HANDLERS[irq_number as usize] = Some(handler);
@@ -276,8 +277,8 @@ pub fn init() {
 					TIMER_INTERRUPT = irq;
 				}
 
-				info!("Timer interrupt: {}", irq);
-				irq_install_handler(irq + 16, timer_handler);
+				debug!("Timer interrupt: {}", irq);
+				irq_install_handler((irq + 16).try_into().unwrap(), timer_handler);
 
 				// enable timer interrupt
 				let timer_irqid = IntId::ppi(irq);
@@ -289,5 +290,57 @@ pub fn init() {
 
 	unsafe {
 		GIC.set(gic).unwrap();
+	}
+}
+
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
+	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+
+pub fn add_irq_name(irq_number: u8, name: &'static str) {
+	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
+	IRQ_NAMES.lock().insert(32 + irq_number, name);
+}
+
+fn get_irq_name(irq_number: u8) -> Option<&'static str> {
+	IRQ_NAMES.lock().get(&irq_number).copied()
+}
+
+pub static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
+	InterruptSpinMutex::new(BTreeMap::new());
+
+pub struct IrqStatistics {
+	pub counters: [AtomicU64; 256],
+}
+
+impl IrqStatistics {
+	pub const fn new() -> Self {
+		#[allow(clippy::declare_interior_mutable_const)]
+		const NEW_COUNTER: AtomicU64 = AtomicU64::new(0);
+		IrqStatistics {
+			counters: [NEW_COUNTER; 256],
+		}
+	}
+
+	pub fn inc(&self, pos: u8) {
+		self.counters[usize::from(pos)].fetch_add(1, Ordering::Relaxed);
+	}
+}
+
+pub fn print_statistics() {
+	info!("Number of interrupts");
+	for (core_id, irg_statistics) in IRQ_COUNTERS.lock().iter() {
+		for (i, counter) in irg_statistics.counters.iter().enumerate() {
+			let counter = counter.load(Ordering::Relaxed);
+			if counter > 0 {
+				match get_irq_name(i.try_into().unwrap()) {
+					Some(name) => {
+						info!("[{core_id}][{name}]: {counter}");
+					}
+					_ => {
+						info!("[{core_id}][{i}]: {counter}");
+					}
+				}
+			}
+		}
 	}
 }

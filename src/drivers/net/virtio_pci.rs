@@ -7,9 +7,10 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 
-use crate::arch::kernel::pci::PciAdapter;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
+use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
@@ -19,7 +20,7 @@ use crate::drivers::virtio::virtqueue::Virtq;
 /// See specification v1.1. - 5.1.4
 ///
 #[repr(C)]
-pub struct NetDevCfgRaw {
+pub(crate) struct NetDevCfgRaw {
 	// Specifies Mac address, only Valid if VIRTIO_NET_F_MAC is set
 	mac: [u8; 6],
 	// Indicates status of device. Only valid if VIRTIO_NET_F_STATUS is set
@@ -86,15 +87,16 @@ impl VirtioNetDriver {
 
 	/// Instantiates a new (VirtioNetDriver)[VirtioNetDriver] struct, by checking the available
 	/// configuration structures and moving them into the struct.
-	pub fn new(
+	pub(crate) fn new(
 		mut caps_coll: UniCapsColl,
-		adapter: &PciAdapter,
+		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioNetError> {
+		let device_id = device.device_id();
 		let com_cfg = match caps_coll.get_com_cfg() {
 			Some(com_cfg) => com_cfg,
 			None => {
 				error!("No common config. Aborting!");
-				return Err(error::VirtioNetError::NoComCfg(adapter.device_id));
+				return Err(error::VirtioNetError::NoComCfg(device_id));
 			}
 		};
 
@@ -102,7 +104,7 @@ impl VirtioNetDriver {
 			Some(isr_stat) => isr_stat,
 			None => {
 				error!("No ISR status config. Aborting!");
-				return Err(error::VirtioNetError::NoIsrCfg(adapter.device_id));
+				return Err(error::VirtioNetError::NoIsrCfg(device_id));
 			}
 		};
 
@@ -110,7 +112,7 @@ impl VirtioNetDriver {
 			Some(notif_cfg) => notif_cfg,
 			None => {
 				error!("No notif config. Aborting!");
-				return Err(error::VirtioNetError::NoNotifCfg(adapter.device_id));
+				return Err(error::VirtioNetError::NoNotifCfg(device_id));
 			}
 		};
 
@@ -123,7 +125,7 @@ impl VirtioNetDriver {
 				}
 				None => {
 					error!("No dev config. Aborting!");
-					return Err(error::VirtioNetError::NoDevCfg(adapter.device_id));
+					return Err(error::VirtioNetError::NoDevCfg(device_id));
 				}
 			}
 		};
@@ -147,7 +149,7 @@ impl VirtioNetDriver {
 				false,
 			),
 			num_vqs: 0,
-			irq: adapter.irq,
+			irq: device.irq().unwrap(),
 			polling_mode_counter: 0,
 		})
 	}
@@ -160,9 +162,11 @@ impl VirtioNetDriver {
 	///
 	/// Returns a driver instance of
 	/// [VirtioNetDriver](structs.virtionetdriver.html) or an [VirtioError](enums.virtioerror.html).
-	pub fn init(adapter: &PciAdapter) -> Result<VirtioNetDriver, VirtioError> {
-		let mut drv = match pci::map_caps(adapter) {
-			Ok(caps) => match VirtioNetDriver::new(caps, adapter) {
+	pub(crate) fn init(
+		device: &PciDevice<PciConfigRegion>,
+	) -> Result<VirtioNetDriver, VirtioError> {
+		let mut drv = match pci::map_caps(device) {
+			Ok(caps) => match VirtioNetDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(vnet_err) => {
 					error!("Initializing new network driver failed. Aborting!");

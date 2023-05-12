@@ -1,5 +1,6 @@
 use core::ptr;
 
+use super::interrupts::IRQ_COUNTERS;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 #[no_mangle]
@@ -69,6 +70,13 @@ pub fn core_scheduler() -> &'static mut PerCoreScheduler {
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	unsafe {
 		CORE_LOCAL.scheduler.set(scheduler);
+	}
+}
+
+pub fn increment_irq_counter(irq_no: u8) {
+	unsafe {
+		let id = CORE_LOCAL.core_id.get();
+		IRQ_COUNTERS.lock().get(&id).unwrap().inc(irq_no);
 	}
 }
 

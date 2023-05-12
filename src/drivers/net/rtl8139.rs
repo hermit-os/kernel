@@ -6,15 +6,17 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::mem;
 
+use pci_types::{Bar, InterruptLine, MAX_BARS};
 use x86::io::*;
 
 use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::arch::kernel::interrupts::*;
-use crate::arch::kernel::pci;
 use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{network_irqhandler, NetworkInterface};
+use crate::drivers::pci::PciDevice;
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
@@ -199,10 +201,10 @@ pub enum RTL8139Error {
 ///
 /// Struct allows to control device queues as also
 /// the device itself.
-pub struct RTL8139Driver {
+pub(crate) struct RTL8139Driver {
 	iobase: u16,
 	mtu: u16,
-	irq: u8,
+	irq: InterruptLine,
 	mac: [u8; 6],
 	tx_in_use: [bool; NO_TX_BUFFERS],
 	tx_counter: usize,
@@ -328,7 +330,7 @@ impl NetworkInterface for RTL8139Driver {
 	}
 
 	fn handle_interrupt(&mut self) -> bool {
-		increment_irq_counter((32 + self.irq).into());
+		increment_irq_counter(32 + self.irq);
 
 		let isr_contents = unsafe { inw(self.iobase + ISR) };
 
@@ -429,23 +431,26 @@ impl Drop for RTL8139Driver {
 	}
 }
 
-pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverError> {
-	let mut iter = adapter.base_addresses.iter().filter_map(|&x| match x {
-		pci::PciBar::IO(base) => Some(base.addr),
-		_ => None,
-	});
-	let iobase: u16 = iter
-		.next()
+pub(crate) fn init_device(
+	device: &PciDevice<PciConfigRegion>,
+) -> Result<RTL8139Driver, DriverError> {
+	let irq = device.irq().unwrap();
+	let mut iobase: Option<u32> = None;
+
+	for i in 0..MAX_BARS {
+		if let Some(Bar::Io { port }) = device.bar(i.try_into().unwrap()) {
+			iobase = Some(port)
+		}
+	}
+
+	let iobase: u16 = iobase
 		.ok_or(DriverError::InitRTL8139DevFail(RTL8139Error::Unknown))?
 		.try_into()
 		.unwrap();
 
-	debug!(
-		"Found RTL8139 at iobase {:#x} (irq {})",
-		iobase, adapter.irq
-	);
+	debug!("Found RTL8139 at iobase {:#x} (irq {})", iobase, irq);
 
-	adapter.make_bus_master();
+	device.make_bus_master();
 
 	let mac: [u8; 6] = unsafe {
 		[
@@ -579,14 +584,14 @@ pub fn init_device(adapter: &pci::PciAdapter) -> Result<RTL8139Driver, DriverErr
 	}
 
 	// Install interrupt handler for RTL8139
-	debug!("Install interrupt handler for RTL8139 at {}", adapter.irq);
-	irq_install_handler(adapter.irq.into(), network_irqhandler as usize);
-	add_irq_name(adapter.irq as u32, "rtl8139_net");
+	debug!("Install interrupt handler for RTL8139 at {}", irq);
+	irq_install_handler(irq, network_irqhandler);
+	add_irq_name(irq, "rtl8139_net");
 
 	Ok(RTL8139Driver {
 		iobase,
 		mtu: 1500,
-		irq: adapter.irq,
+		irq,
 		mac,
 		tx_in_use: [false; NO_TX_BUFFERS],
 		tx_counter: 0,

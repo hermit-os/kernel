@@ -2,6 +2,8 @@ use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use pci_types::InterruptLine;
+
 use self::constants::{FeatureSet, Features};
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(feature = "pci")]
@@ -19,7 +21,7 @@ use crate::fs::fuse::{self, FuseInterface};
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
-pub struct FsDevCfg {
+pub(crate) struct FsDevCfg {
 	pub raw: &'static FsDevCfgRaw,
 	pub dev_id: u16,
 	pub features: FeatureSet,
@@ -30,14 +32,14 @@ pub struct FsDevCfg {
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
 #[allow(dead_code)]
-pub struct VirtioFsDriver {
+pub(crate) struct VirtioFsDriver {
 	pub(super) dev_cfg: FsDevCfg,
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
 	pub(super) notif_cfg: NotifCfg,
 	pub(super) vqueues: Vec<Rc<Virtq>>,
 	pub(super) ready_queue: Vec<BufferToken>,
-	pub(super) irq: u8,
+	pub(super) irq: InterruptLine,
 }
 
 // Backend-independent interface for Virtio network driver
@@ -86,7 +88,7 @@ impl VirtioFsDriver {
 	///
 	/// See Virtio specification v1.1. - 3.1.1.
 	///                      and v1.1. - 5.11.5
-	pub fn init_dev(&mut self) -> Result<(), VirtioFsError> {
+	pub(crate) fn init_dev(&mut self) -> Result<(), VirtioFsError> {
 		// Reset
 		self.com_cfg.reset_dev();
 

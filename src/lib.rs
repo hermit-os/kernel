@@ -54,6 +54,7 @@ use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
+use crate::kernel::is_uhyve_with_pci;
 pub use crate::syscalls::*;
 
 #[macro_use]
@@ -335,6 +336,11 @@ fn boot_processor_main() -> ! {
 	info!("Compiled with FSGSBASE support");
 	#[cfg(feature = "smp")]
 	info!("Compiled with SMP support");
+
+	if is_uhyve_with_pci() || !env::is_uhyve() {
+		#[cfg(feature = "pci")]
+		crate::drivers::pci::print_information();
+	}
 
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
