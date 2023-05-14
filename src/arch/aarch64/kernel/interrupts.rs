@@ -88,7 +88,7 @@ pub fn disable() {
 pub fn irq_install_handler(irq_number: u8, handler: fn(state: &State)) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
-		INTERRUPT_HANDLERS[irq_number as usize] = Some(handler);
+		INTERRUPT_HANDLERS[irq_number as usize + 16] = Some(handler);
 	}
 }
 
@@ -281,7 +281,8 @@ pub fn init() {
 				}
 
 				debug!("Timer interrupt: {}", irq);
-				irq_install_handler((irq + 16).try_into().unwrap(), timer_handler);
+				irq_install_handler(irq.try_into().unwrap(), timer_handler);
+				add_irq_name(irq.try_into().unwrap(), "Timer");
 
 				// enable timer interrupt
 				let timer_irqid = IntId::ppi(irq);
@@ -301,7 +302,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 pub fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
-	IRQ_NAMES.lock().insert(32 + irq_number, name);
+	IRQ_NAMES.lock().insert(16 + irq_number, name);
 }
 
 fn get_irq_name(irq_number: u8) -> Option<&'static str> {
