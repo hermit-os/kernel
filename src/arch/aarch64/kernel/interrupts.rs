@@ -11,6 +11,7 @@ use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
 use tock_registers::interfaces::Readable;
 
+use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::boot_info;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
@@ -97,6 +98,7 @@ pub extern "C" fn do_fiq(state: &State) {
 		let vector: usize = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive fiq {}", vector);
+		increment_irq_counter(vector.try_into().unwrap());
 
 		if vector < MAX_HANDLERS {
 			unsafe {
@@ -123,6 +125,7 @@ pub extern "C" fn do_irq(state: &State) {
 		let vector: usize = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive interrupt {}", vector);
+		increment_irq_counter(vector.try_into().unwrap());
 
 		if vector < MAX_HANDLERS {
 			unsafe {
