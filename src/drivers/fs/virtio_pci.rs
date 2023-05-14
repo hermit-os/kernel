@@ -1,8 +1,9 @@
 use alloc::vec::Vec;
 
-use crate::arch::kernel::pci::PciAdapter;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::constants::FeatureSet;
 use crate::drivers::fs::virtio_fs::{FsDevCfg, VirtioFsDriver};
+use crate::drivers::pci::PciDevice;
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
@@ -12,7 +13,7 @@ use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
 ///
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
-pub struct FsDevCfgRaw {
+pub(crate) struct FsDevCfgRaw {
 	/// Tag is the name associated with this file system.
 	/// The tag is encoded in UTF-8 and padded with NUL bytes if shorter than the available space.
 	/// This field is not NUL-terminated if the encoded bytes take up the entire field.
@@ -63,13 +64,15 @@ impl VirtioFsDriver {
 	/// configuration structures and moving them into the struct.
 	pub fn new(
 		mut caps_coll: UniCapsColl,
-		adapter: &PciAdapter,
+		device: &PciDevice<PciConfigRegion>,
 	) -> Result<Self, error::VirtioFsError> {
+		let device_id = device.device_id();
+
 		let com_cfg = match caps_coll.get_com_cfg() {
 			Some(com_cfg) => com_cfg,
 			None => {
 				error!("No common config. Aborting!");
-				return Err(error::VirtioFsError::NoComCfg(adapter.device_id));
+				return Err(error::VirtioFsError::NoComCfg(device_id));
 			}
 		};
 
@@ -77,7 +80,7 @@ impl VirtioFsDriver {
 			Some(isr_stat) => isr_stat,
 			None => {
 				error!("No ISR status config. Aborting!");
-				return Err(error::VirtioFsError::NoIsrCfg(adapter.device_id));
+				return Err(error::VirtioFsError::NoIsrCfg(device_id));
 			}
 		};
 
@@ -85,7 +88,7 @@ impl VirtioFsDriver {
 			Some(notif_cfg) => notif_cfg,
 			None => {
 				error!("No notif config. Aborting!");
-				return Err(error::VirtioFsError::NoNotifCfg(adapter.device_id));
+				return Err(error::VirtioFsError::NoNotifCfg(device_id));
 			}
 		};
 
@@ -98,7 +101,7 @@ impl VirtioFsDriver {
 				}
 				None => {
 					error!("No dev config. Aborting!");
-					return Err(error::VirtioFsError::NoDevCfg(adapter.device_id));
+					return Err(error::VirtioFsError::NoDevCfg(device_id));
 				}
 			}
 		};
@@ -110,14 +113,14 @@ impl VirtioFsDriver {
 			notif_cfg,
 			vqueues: Vec::new(),
 			ready_queue: Vec::new(),
-			irq: adapter.irq,
+			irq: device.irq().unwrap(),
 		})
 	}
 
 	/// Initializes virtio filesystem device
-	pub fn init(adapter: &PciAdapter) -> Result<VirtioFsDriver, VirtioError> {
-		let mut drv = match pci::map_caps(adapter) {
-			Ok(caps) => match VirtioFsDriver::new(caps, adapter) {
+	pub fn init(device: &PciDevice<PciConfigRegion>) -> Result<VirtioFsDriver, VirtioError> {
+		let mut drv = match pci::map_caps(device) {
+			Ok(caps) => match VirtioFsDriver::new(caps, device) {
 				Ok(driver) => driver,
 				Err(fs_err) => {
 					error!("Initializing new network driver failed. Aborting!");

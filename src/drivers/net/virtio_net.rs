@@ -11,6 +11,7 @@ use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
 
+use pci_types::InterruptLine;
 use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -35,7 +36,7 @@ pub const ETH_HDR: usize = 14usize;
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
 /// for the driver.
-pub struct NetDevCfg {
+pub(crate) struct NetDevCfg {
 	pub raw: &'static NetDevCfgRaw,
 	pub dev_id: u16,
 
@@ -486,7 +487,7 @@ impl TxQueues {
 ///
 /// Struct allows to control devices virtqueues as also
 /// the device itself.
-pub struct VirtioNetDriver {
+pub(crate) struct VirtioNetDriver {
 	pub(super) dev_cfg: NetDevCfg,
 	pub(super) com_cfg: ComCfg,
 	pub(super) isr_stat: IsrStatus,
@@ -497,7 +498,7 @@ pub struct VirtioNetDriver {
 	pub(super) send_vqs: TxQueues,
 
 	pub(super) num_vqs: u16,
-	pub(super) irq: u8,
+	pub(super) irq: InterruptLine,
 	pub(super) polling_mode_counter: u32,
 }
 
@@ -654,7 +655,7 @@ impl NetworkInterface for VirtioNetDriver {
 	}
 
 	fn handle_interrupt(&mut self) -> bool {
-		increment_irq_counter((32 + self.irq).into());
+		increment_irq_counter(32 + self.irq);
 
 		let result = if self.isr_stat.is_interrupt() {
 			true

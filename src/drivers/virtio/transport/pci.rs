@@ -7,17 +7,18 @@ use alloc::vec::Vec;
 use core::mem;
 use core::result::Result;
 
-use crate::arch::kernel::pci::error::PciError;
-use crate::arch::kernel::pci::PciAdapter;
+use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
-use crate::arch::x86_64::kernel::interrupts::*;
+use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
+use crate::drivers::pci::error::PciError;
+use crate::drivers::pci::PciDevice;
+use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
-use crate::drivers::virtio::{device, env};
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5
@@ -129,8 +130,6 @@ impl From<u8> for CfgType {
 #[derive(Clone)]
 pub struct Origin {
 	cfg_ptr: u32, // Register to be read to reach configuration structure of type cfg_type
-	dev: u8,      // PCI device this configuration comes from
-	bus: u8,      // Bus of the PCI device
 	dev_id: u16,
 	cap_struct: PciCapRaw,
 }
@@ -184,6 +183,7 @@ pub struct PciCap {
 	id: u8,
 	offset: MemOff,
 	length: MemLen,
+	device: PciDevice<PciConfigRegion>,
 	// Following field can be used to retrieve original structure
 	// from the config space. Needed by some structures and f
 	// device specific configs.
@@ -634,10 +634,8 @@ impl NotifCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let notify_off_multiplier = env::pci::read_cfg_no_adapter(
-			cap.origin.bus,
-			cap.origin.dev,
-			cap.origin.cfg_ptr + u32::from(cap.origin.cap_struct.cap_len),
+		let notify_off_multiplier = cap.device.read_register(
+			u16::try_from(cap.origin.cfg_ptr).unwrap() + u16::from(cap.origin.cap_struct.cap_len),
 		);
 
 		// define base memory address from which the actual Queue Notify address can be derived via
@@ -882,10 +880,8 @@ impl ShMemCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let offset_high = env::pci::read_cfg_no_adapter(
-			cap.origin.bus,
-			cap.origin.bus,
-			cap.origin.cfg_ptr + u32::from(cap.origin.cap_struct.cap_len),
+		let offset_high = cap.device.read_register(
+			u16::try_from(cap.origin.cfg_ptr).unwrap() + u16::from(cap.origin.cap_struct.cap_len),
 		);
 
 		// Create 64 bit offset from high and low 32 bit values
@@ -894,10 +890,9 @@ impl ShMemCfg {
 
 		// Assumes the cap_len is a multiple of 8
 		// This read MIGHT be slow, as it does NOT ensure 32 bit alignment.
-		let length_high = env::pci::read_cfg_no_adapter(
-			cap.origin.bus,
-			cap.origin.bus,
-			cap.origin.cfg_ptr + u32::from(cap.origin.cap_struct.cap_len + 4),
+		let length_high = cap.device.read_register(
+			u16::try_from(cap.origin.cfg_ptr).unwrap()
+				+ u16::from(cap.origin.cap_struct.cap_len + 4),
 		);
 
 		// Create 64 bit length from high and low 32 bit values
@@ -987,7 +982,7 @@ impl PciBar {
 }
 
 /// Reads a raw capability struct [PciCapRaw](structs.PcicapRaw.html) out of a PCI device's configuration space.
-fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
+fn read_cap_raw(device: &PciDevice<PciConfigRegion>, register: u32) -> PciCapRaw {
 	let mut quadruple_word: [u8; 16] = [0; 16];
 
 	debug!("Converting read word from PCI device config space into native endian bytes.");
@@ -996,7 +991,9 @@ fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
 	for i in 0..4 {
 		// Read word need to be converted to little endian bytes as PCI is little endian.
 		// Interpretation of multi byte values needs to be swapped for big endian machines
-		let word: [u8; 4] = env::pci::read_config(adapter, register + 4 * i).to_le_bytes();
+		let word: [u8; 4] = device
+			.read_register((register + 4 * i).try_into().unwrap())
+			.to_le_bytes();
 		let i = 4 * i as usize;
 		quadruple_word[i..i + 4].copy_from_slice(&word);
 	}
@@ -1021,14 +1018,18 @@ fn read_cap_raw(adapter: &PciAdapter, register: u32) -> PciCapRaw {
 ///
 /// Returns ONLY Virtio specific capabilities, which allow to locate the actual capability
 /// structures inside the memory areas, indicated by the BaseAddressRegisters (BAR's).
-fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, PciError> {
-	let ptr: u32 = dev_caps_ptr(adapter);
+fn read_caps(
+	device: &PciDevice<PciConfigRegion>,
+	bars: Vec<PciBar>,
+) -> Result<Vec<PciCap>, PciError> {
+	let device_id = device.device_id();
+	let ptr: u32 = dev_caps_ptr(device);
 
 	// Checks if pointer is well formed and does not point into config header space
 	let mut next_ptr = if ptr >= 0x40u32 {
 		ptr
 	} else {
-		return Err(PciError::BadCapPtr(adapter.device_id));
+		return Err(PciError::BadCapPtr(device_id));
 	};
 
 	let mut cap_list: Vec<PciCap> = Vec::new();
@@ -1040,12 +1041,12 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 		// and only returns correct values if both reads
 		// return equal values.
 		// For clarity see Virtio specification v1.1. - 2.4.1
-		let mut before = read_cap_raw(adapter, next_ptr);
-		let mut cap_raw = read_cap_raw(adapter, next_ptr);
+		let mut before = read_cap_raw(device, next_ptr);
+		let mut cap_raw = read_cap_raw(device, next_ptr);
 
 		while before != cap_raw {
-			before = read_cap_raw(adapter, next_ptr);
-			cap_raw = read_cap_raw(adapter, next_ptr);
+			before = read_cap_raw(device, next_ptr);
+			cap_raw = read_cap_raw(device, next_ptr);
 		}
 
 		let mut iter = bars.iter();
@@ -1068,7 +1069,7 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 						}
 						None => {
 							error!("Found virtio capability whose BAR is not mapped or non existing. Capability of type {:x} and id {:x} for device {:x}, can not be used!",
-                                cap_raw.cfg_type, cap_raw.id, adapter.device_id);
+                                cap_raw.cfg_type, cap_raw.id, device_id);
 
 							continue 'cap_list;
 						}
@@ -1081,11 +1082,10 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 					id: cap_raw.id,
 					offset: MemOff::from(cap_raw.offset),
 					length: MemLen::from(cap_raw.length),
+					device: *device,
 					origin: Origin {
 						cfg_ptr: next_ptr,
-						dev: adapter.device,
-						bus: adapter.bus,
-						dev_id: adapter.device_id,
+						dev_id: device_id,
 						cap_struct: cap_raw,
 					},
 				})
@@ -1098,11 +1098,8 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 	}
 
 	if cap_list.is_empty() {
-		error!(
-			"No virtio capability found for device {:x}",
-			adapter.device_id
-		);
-		Err(PciError::NoVirtioCaps(adapter.device_id))
+		error!("No virtio capability found for device {:x}", device_id);
+		Err(PciError::NoVirtioCaps(device_id))
 	} else {
 		Ok(cap_list)
 	}
@@ -1110,34 +1107,33 @@ fn read_caps(adapter: &PciAdapter, bars: Vec<PciBar>) -> Result<Vec<PciCap>, Pci
 
 /// Wrapper function to get a devices current status.
 /// As the device is not static, return value is not static.
-fn dev_status(adapter: &PciAdapter) -> u32 {
+fn dev_status(device: &PciDevice<PciConfigRegion>) -> u32 {
 	// reads register 01 from PCU Header of type 00H. WHich is the Status(16bit) and Command(16bit) register
-	let stat_com_reg = env::pci::read_config(
-		adapter,
-		u32::from(constants::RegisterHeader00H::PCI_COMMAND_REGISTER),
-	);
+	let stat_com_reg = device
+		.read_register(crate::drivers::pci::constants::RegisterHeader::PCI_COMMAND_REGISTER.into());
 	stat_com_reg >> 16
 }
 
 /// Wrapper function to get a devices capabilities list pointer, which represents
 /// an offset starting from the header of the device's configuration space.
-fn dev_caps_ptr(adapter: &PciAdapter) -> u32 {
-	let cap_lst_reg = env::pci::read_config(
-		adapter,
-		u32::from(constants::RegisterHeader00H::PCI_CAPABILITY_LIST_REGISTER),
+fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u32 {
+	let cap_lst_reg = device.read_register(
+		crate::drivers::pci::constants::RegisterHeader::PCI_CAPABILITY_LIST_REGISTER.into(),
 	);
-	cap_lst_reg & u32::from(constants::Masks::PCI_MASK_CAPLIST_POINTER)
+	cap_lst_reg & u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_CAPLIST_POINTER)
 }
 
 /// Maps memory areas indicated by devices BAR's into virtual address space.
-fn map_bars(adapter: &PciAdapter) -> Result<Vec<PciBar>, PciError> {
-	crate::drivers::virtio::env::pci::map_bar_mem(adapter)
+fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError> {
+	crate::drivers::virtio::env::pci::map_bar_mem(device)
 }
 
 /// Checks if the status of the device inidactes the device is using the
 /// capabilities pointer and therefore defines a capabiites list.
-fn no_cap_list(adapter: &PciAdapter) -> bool {
-	dev_status(adapter) & u32::from(constants::Masks::PCI_MASK_STATUS_CAPABILITIES_LIST) == 0
+fn no_cap_list(device: &PciDevice<PciConfigRegion>) -> bool {
+	dev_status(device)
+		& u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_STATUS_CAPABILITIES_LIST)
+		== 0
 }
 
 /// Checks if minimal set of capabilities is present.
@@ -1152,21 +1148,23 @@ fn check_caps(caps: UniCapsColl) -> Result<UniCapsColl, PciError> {
 	Ok(caps)
 }
 
-pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
+pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsColl, PciError> {
+	let device_id = device.device_id();
+
 	// In case caplist pointer is not used, abort as it is essential
-	if no_cap_list(adapter) {
+	if no_cap_list(device) {
 		error!("Found virtio device without capability list. Aborting!");
-		return Err(PciError::NoCapPtr(adapter.device_id));
+		return Err(PciError::NoCapPtr(device_id));
 	}
 
 	// Mapped memory areas are reachable through PciBar structs.
-	let bar_list = match map_bars(adapter) {
+	let bar_list = match map_bars(device) {
 		Ok(list) => list,
 		Err(pci_error) => return Err(pci_error),
 	};
 
 	// Get list of PciCaps pointing to capabilities
-	let cap_list = match read_caps(adapter, bar_list) {
+	let cap_list = match read_caps(device, bar_list) {
 		Ok(list) => list,
 		Err(pci_error) => return Err(pci_error),
 	};
@@ -1179,21 +1177,21 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
 				Some(cap) => caps.add_cfg_common(ComCfg::new(cap, pci_cap.id)),
 				None => error!(
 					"Common config capability with id {}, of device {:x}, could not be mapped!",
-					pci_cap.id, adapter.device_id
+					pci_cap.id, device_id
 				),
 			},
 			CfgType::VIRTIO_PCI_CAP_NOTIFY_CFG => match NotifCfg::new(&pci_cap) {
 				Some(notif) => caps.add_cfg_notif(notif),
 				None => error!(
 					"Notification config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, adapter.device_id
+					pci_cap.id, device_id
 				),
 			},
 			CfgType::VIRTIO_PCI_CAP_ISR_CFG => match IsrStatusRaw::map(&pci_cap) {
 				Some(isr_stat) => caps.add_cfg_isr(IsrStatus::new(isr_stat, pci_cap.id)),
 				None => error!(
 					"ISR status config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, adapter.device_id
+					pci_cap.id, device_id
 				),
 			},
 			CfgType::VIRTIO_PCI_CAP_PCI_CFG => caps.add_cfg_alt(PciCfgAlt::new(&pci_cap)),
@@ -1201,7 +1199,7 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
 				Some(sh_mem) => caps.add_cfg_sh_mem(sh_mem),
 				None => error!(
 					"Shared Memory config capability with id {}, of device {:x} could not be used!",
-					pci_cap.id, adapter.device_id
+					pci_cap.id, device_id
 				),
 			},
 			CfgType::VIRTIO_PCI_CAP_DEVICE_CFG => caps.add_cfg_dev(pci_cap),
@@ -1218,8 +1216,12 @@ pub fn map_caps(adapter: &PciAdapter) -> Result<UniCapsColl, PciError> {
 /// Checks existing drivers for support of given device. Upon match, provides
 /// driver with a [Caplist](struct.Caplist.html) struct, holding the structures of the capabilities
 /// list of the given device.
-pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
-	let virt_drv = match DevId::from(adapter.device_id) {
+pub(crate) fn init_device(
+	device: &PciDevice<PciConfigRegion>,
+) -> Result<VirtioDriver, DriverError> {
+	let device_id = device.device_id();
+
+	let virt_drv = match DevId::from(device_id) {
 		DevId::VIRTIO_TRANS_DEV_ID_NET
 		| DevId::VIRTIO_TRANS_DEV_ID_BLK
 		| DevId::VIRTIO_TRANS_DEV_ID_MEM_BALL
@@ -1229,15 +1231,15 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		| DevId::VIRTIO_TRANS_DEV_ID_9P => {
 			warn!(
 				"Legacy/transitional Virtio device, with id: {:#x} is NOT supported, skipping!",
-				adapter.device_id
+				device_id
 			);
 
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(adapter.device_id),
+				VirtioError::DevNotSupported(device_id),
 			))
 		}
-		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(adapter) {
+		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
 				Ok(VirtioDriver::Network(virt_net_drv))
@@ -1245,7 +1247,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 			Err(virtio_error) => {
 				error!(
 					"Virtio networkd driver could not be initialized with device: {:x}",
-					adapter.device_id
+					device_id
 				);
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
@@ -1253,7 +1255,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		DevId::VIRTIO_DEV_ID_FS => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
-			match VirtioFsDriver::init(adapter) {
+			match VirtioFsDriver::init(device) {
 				Ok(virt_fs_drv) => {
 					info!("Virtio filesystem driver initialized.");
 					Ok(VirtioDriver::FileSystem(virt_fs_drv))
@@ -1261,7 +1263,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 				Err(virtio_error) => {
 					error!(
 						"Virtio filesystem driver could not be initialized with device: {:x}",
-						adapter.device_id
+						device_id
 					);
 					Err(DriverError::InitVirtioDevFail(virtio_error))
 				}
@@ -1270,12 +1272,12 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		_ => {
 			warn!(
 				"Virtio device with id: {:#x} is NOT supported, skipping!",
-				adapter.device_id
+				device_id
 			);
 
 			// Return Driver error inidacting device is not supported
 			Err(DriverError::InitVirtioDevFail(
-				VirtioError::DevNotSupported(adapter.device_id),
+				VirtioError::DevNotSupported(device_id),
 			))
 		}
 	};
@@ -1284,10 +1286,11 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 		Ok(drv) => {
 			match &drv {
 				VirtioDriver::Network(_) => {
-					info!("Install virtio interrupt handler at line {}", adapter.irq);
+					let irq = device.irq().unwrap();
+					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
-					irq_install_handler(adapter.irq as u32, network_irqhandler as usize);
-					add_irq_name(adapter.irq as u32, "virtio_net");
+					irq_install_handler(irq, network_irqhandler);
+					add_irq_name(irq, "virtio_net");
 
 					Ok(drv)
 				}
@@ -1298,79 +1301,7 @@ pub fn init_device(adapter: &PciAdapter) -> Result<VirtioDriver, DriverError> {
 	}
 }
 
-pub enum VirtioDriver {
+pub(crate) enum VirtioDriver {
 	Network(VirtioNetDriver),
 	FileSystem(VirtioFsDriver),
-}
-/// The module contains constants specific to PCI.
-#[allow(dead_code)]
-pub mod constants {
-	// PCI constants
-	pub const PCI_MAX_BUS_NUMBER: u8 = 32;
-	pub const PCI_MAX_DEVICE_NUMBER: u8 = 32;
-	pub const PCI_CONFIG_ADDRESS_PORT: u16 = 0xCF8;
-	pub const PCI_CONFIG_ADDRESS_ENABLE: u32 = 1 << 31;
-	pub const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
-	pub const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;
-	pub const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
-
-	/// PCI registers offset inside header,
-	/// if PCI header is of type 00h.
-	#[allow(dead_code, non_camel_case_types)]
-	#[repr(u32)]
-	pub enum RegisterHeader00H {
-		PCI_ID_REGISTER = 0x00u32,
-		PCI_COMMAND_REGISTER = 0x04u32,
-		PCI_CLASS_REGISTER = 0x08u32,
-		PCI_HEADER_REGISTER = 0x0Cu32,
-		PCI_BAR0_REGISTER = 0x10u32,
-		PCI_CAPABILITY_LIST_REGISTER = 0x34u32,
-		PCI_INTERRUPT_REGISTER = 0x3Cu32,
-	}
-
-	impl From<RegisterHeader00H> for u32 {
-		fn from(val: RegisterHeader00H) -> u32 {
-			match val {
-				RegisterHeader00H::PCI_ID_REGISTER => 0x00u32,
-				RegisterHeader00H::PCI_COMMAND_REGISTER => 0x04u32,
-				RegisterHeader00H::PCI_CLASS_REGISTER => 0x08u32,
-				RegisterHeader00H::PCI_HEADER_REGISTER => 0x0Cu32,
-				RegisterHeader00H::PCI_BAR0_REGISTER => 0x10u32,
-				RegisterHeader00H::PCI_CAPABILITY_LIST_REGISTER => 0x34u32,
-				RegisterHeader00H::PCI_INTERRUPT_REGISTER => 0x3Cu32,
-			}
-		}
-	}
-
-	/// PCI masks. For convenience put into an enum and provides
-	/// an `Into<u32>` method for usage.
-	#[allow(dead_code, non_camel_case_types)]
-	#[repr(u32)]
-	pub enum Masks {
-		PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
-		PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
-		PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
-		PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
-		PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
-		PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
-		PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
-		PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
-		PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
-	}
-
-	impl From<Masks> for u32 {
-		fn from(val: Masks) -> u32 {
-			match val {
-				Masks::PCI_MASK_STATUS_CAPABILITIES_LIST => 0x0000_0010u32,
-				Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
-				Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
-				Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
-				Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
-				Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
-				Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
-				Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
-				Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
-			}
-		}
-	}
 }

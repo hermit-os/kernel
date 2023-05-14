@@ -14,6 +14,8 @@ use crate::arch::aarch64::kernel::core_local::core_scheduler;
 pub use crate::arch::aarch64::kernel::interrupts;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts::wakeup_core;
+#[cfg(all(target_arch = "aarch64", feature = "pci"))]
+pub use crate::arch::aarch64::kernel::pci;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::processor;
 #[cfg(target_arch = "aarch64")]
@@ -41,6 +43,8 @@ pub use crate::arch::x86_64::kernel::core_local;
 pub use crate::arch::x86_64::kernel::gdt::set_current_kernel_stack;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::interrupts;
+#[cfg(all(target_arch = "x86_64", feature = "pci"))]
+pub use crate::arch::x86_64::kernel::pci;
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::kernel::processor;
 #[cfg(target_arch = "x86_64")]
@@ -59,9 +63,9 @@ pub use crate::arch::x86_64::kernel::{
 pub use crate::arch::x86_64::*;
 
 pub fn init_drivers() {
-	// Initialize PCI Drivers if on x86_64
+	// Initialize PCI Drivers for x86_64
 	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
-	crate::arch::x86_64::kernel::pci::init_drivers();
+	crate::drivers::pci::init_drivers();
 	#[cfg(all(target_arch = "x86_64", not(feature = "pci")))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();
 }

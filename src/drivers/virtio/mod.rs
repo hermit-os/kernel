@@ -9,10 +9,10 @@ pub mod error {
 	use core::fmt;
 
 	#[cfg(feature = "pci")]
-	use crate::arch::x86_64::kernel::pci::error::PciError;
-	#[cfg(feature = "pci")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
+	#[cfg(feature = "pci")]
+	use crate::drivers::pci::error::PciError;
 
 	#[derive(Debug)]
 	pub enum VirtioError {

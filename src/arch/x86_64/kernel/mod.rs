@@ -237,8 +237,6 @@ pub fn boot_processor_init() {
 	if is_uhyve_with_pci() || !is_uhyve() {
 		#[cfg(feature = "pci")]
 		pci::init();
-		#[cfg(feature = "pci")]
-		pci::print_information();
 	}
 	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]

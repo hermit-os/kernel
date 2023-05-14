@@ -9,8 +9,8 @@ use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::u8;
 
+use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
-use crate::arch::x86_64::kernel::interrupts::*;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
@@ -343,13 +343,13 @@ struct IsrStatusRaw {
 	interrupt_ack: u32,
 }
 
-pub enum VirtioDriver {
+pub(crate) enum VirtioDriver {
 	Network(VirtioNetDriver),
 }
 
-pub fn init_device(
+pub(crate) fn init_device(
 	registers: &'static mut MmioRegisterLayout,
-	irq_no: u32,
+	irq_no: u8,
 ) -> Result<VirtioDriver, DriverError> {
 	let dev_id: u16 = 0;
 
@@ -367,7 +367,7 @@ pub fn init_device(
 				Ok(virt_net_drv) => {
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
-					irq_install_handler(irq_no, network_irqhandler as usize);
+					irq_install_handler(irq_no, network_irqhandler);
 					add_irq_name(irq_no, "virtio_net");
 
 					Ok(VirtioDriver::Network(virt_net_drv))

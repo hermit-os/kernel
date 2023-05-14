@@ -60,7 +60,7 @@ pub fn init() {
 				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
 				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
 				let addr = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
-				let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
+				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
 				debug!("Found RTC at {:#X} (size {:#X})", addr, size);

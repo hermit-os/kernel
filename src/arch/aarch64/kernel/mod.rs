@@ -1,5 +1,9 @@
 pub mod core_local;
 pub mod interrupts;
+#[cfg(not(feature = "pci"))]
+pub mod mmio;
+#[cfg(feature = "pci")]
+pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
@@ -9,6 +13,7 @@ pub mod systemtime;
 
 use core::arch::{asm, global_asm};
 use core::ptr;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::TicketMutex;
@@ -23,7 +28,11 @@ use crate::env;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 static mut COM1: SerialPort = SerialPort::new(0x800);
-static CPU_ONLINE: TicketMutex<u32> = TicketMutex::new(0);
+
+/// `CPU_ONLINE` is the count of CPUs that finished initialization.
+///
+/// It also synchronizes initialization of CPU cores.
+pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 
 global_asm!(include_str!("start.s"));
 
@@ -42,6 +51,10 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 
 pub fn get_boot_info_address() -> VirtAddr {
 	VirtAddr(raw_boot_info() as *const _ as u64)
+}
+
+pub fn is_uhyve_with_pci() -> bool {
+	false
 }
 
 pub fn get_ram_address() -> PhysAddr {
@@ -101,7 +114,7 @@ pub fn get_tls_align() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	1
+	CPU_ONLINE.load(Ordering::Acquire)
 }
 
 #[cfg(feature = "smp")]
@@ -142,7 +155,7 @@ pub fn get_cmdline() -> VirtAddr {
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
-	core_local::init();
+	CoreLocal::install();
 
 	unsafe {
 		COM1.port_address = boot_info()
@@ -186,6 +199,8 @@ pub fn boot_processor_init() {
 	processor::detect_frequency();
 	processor::print_information();
 	systemtime::init();
+	#[cfg(feature = "pci")]
+	pci::init();
 
 	finish_processor_init();
 }
@@ -198,21 +213,16 @@ pub fn boot_application_processors() {
 
 /// Application Processor initialization
 pub fn application_processor_init() {
-	core_local::init();
+	CoreLocal::install();
 	finish_processor_init();
 }
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
 
-	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
-	// to initialize the next processor.
-	*CPU_ONLINE.lock() += 1;
+	CPU_ONLINE.fetch_add(1, Ordering::Release);
 }
 
-pub fn network_adapter_init() -> i32 {
-	// AArch64 supports no network adapters on bare-metal/QEMU, so return a failure code.
-	-1
+pub fn print_statistics() {
+	interrupts::print_statistics();
 }
-
-pub fn print_statistics() {}

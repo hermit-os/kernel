@@ -2,9 +2,7 @@
 
 use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::boxed::Box;
-use alloc::rc::Rc;
 use core::arch::asm;
-use core::cell::RefCell;
 use core::{mem, ptr, slice};
 
 use align_address::Align;

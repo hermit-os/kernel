@@ -204,7 +204,7 @@ impl fmt::Display for IoApicRecord {
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn tlb_flush_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	debug!("Received TLB Flush Interrupt");
-	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER.into());
+	increment_irq_counter(TLB_FLUSH_INTERRUPT_NUMBER);
 	unsafe {
 		cr3_write(cr3());
 	}
@@ -227,7 +227,7 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: interrupts::Ex
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	debug!("Received Wakeup Interrupt");
-	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER.into());
+	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER);
 	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
 	eoi();
@@ -479,11 +479,11 @@ pub fn init() {
 			idt[TLB_FLUSH_INTERRUPT_NUMBER as usize]
 				.set_handler_fn(tlb_flush_handler)
 				.set_stack_index(0);
-			interrupts::add_irq_name((TLB_FLUSH_INTERRUPT_NUMBER - 32).into(), "TLB flush");
+			interrupts::add_irq_name(TLB_FLUSH_INTERRUPT_NUMBER - 32, "TLB flush");
 			idt[WAKEUP_INTERRUPT_NUMBER as usize]
 				.set_handler_fn(wakeup_handler)
 				.set_stack_index(0);
-			interrupts::add_irq_name((WAKEUP_INTERRUPT_NUMBER - 32).into(), "Wakeup");
+			interrupts::add_irq_name(WAKEUP_INTERRUPT_NUMBER - 32, "Wakeup");
 		}
 	}
 

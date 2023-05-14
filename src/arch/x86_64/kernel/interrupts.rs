@@ -9,7 +9,7 @@ pub use x86_64::instructions::interrupts::{disable, enable, enable_and_hlt as en
 use x86_64::registers::control::Cr2;
 use x86_64::set_general_handler;
 pub use x86_64::structures::idt::InterruptStackFrame as ExceptionStackFrame;
-use x86_64::structures::idt::{InterruptDescriptorTable, PageFaultErrorCode};
+use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
 
 use crate::arch::x86_64::kernel::core_local::{core_scheduler, increment_irq_counter};
 use crate::arch::x86_64::kernel::{apic, processor};
@@ -99,16 +99,23 @@ pub fn install() {
 			.set_handler_fn(device_not_available_exception)
 			.set_stack_index(0);
 	}
+
+	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
 #[no_mangle]
-pub extern "C" fn irq_install_handler(irq_number: u32, handler: usize) {
+pub extern "C" fn irq_install_handler(
+	irq_number: u8,
+	handler: extern "x86-interrupt" fn(InterruptStackFrame),
+) {
 	debug!("Install handler for interrupt {}", irq_number);
 
 	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
 	unsafe {
 		idt[(32 + irq_number) as usize]
-			.set_handler_addr(x86_64::VirtAddr::new(handler as u64))
+			.set_handler_addr(x86_64::VirtAddr::new(
+				u64::try_from(handler as usize).unwrap(),
+			))
 			.set_stack_index(0);
 	}
 }
@@ -123,7 +130,7 @@ fn abort(stack_frame: ExceptionStackFrame, index: u8, error_code: Option<u64>) {
 fn unhandle(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
 	warn!("received unhandled irq {index}");
 	apic::eoi();
-	increment_irq_counter(index.into());
+	increment_irq_counter(index);
 }
 
 fn unknown(_stack_frame: ExceptionStackFrame, index: u8, _error_code: Option<u64>) {
@@ -270,15 +277,15 @@ extern "x86-interrupt" fn virtualization_exception(stack_frame: ExceptionStackFr
 	scheduler::abort();
 }
 
-static IRQ_NAMES: InterruptTicketMutex<HashMap<u32, &'static str, RandomState>> =
+static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
-pub fn add_irq_name(irq_number: u32, name: &'static str) {
+pub fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
 	IRQ_NAMES.lock().insert(32 + irq_number, name);
 }
 
-fn get_irq_name(irq_number: u32) -> Option<&'static str> {
+fn get_irq_name(irq_number: u8) -> Option<&'static str> {
 	IRQ_NAMES.lock().get(&irq_number).copied()
 }
 
@@ -298,8 +305,8 @@ impl IrqStatistics {
 		}
 	}
 
-	pub fn inc(&self, pos: usize) {
-		self.counters[pos].fetch_add(1, Ordering::Relaxed);
+	pub fn inc(&self, pos: u8) {
+		self.counters[usize::from(pos)].fetch_add(1, Ordering::Relaxed);
 	}
 }
 

@@ -17,7 +17,7 @@ use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
-use crate::arch::kernel::pci as hardware;
+use crate::drivers::pci as hardware;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
 use crate::net::{NetworkInterface, NetworkState};

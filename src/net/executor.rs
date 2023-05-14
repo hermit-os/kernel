@@ -19,7 +19,7 @@ static QUEUE: InterruptTicketMutex<Vec<Runnable>> = InterruptTicketMutex::new(Ve
 #[inline]
 fn set_polling_mode(value: bool) {
 	#[cfg(feature = "pci")]
-	if let Some(driver) = crate::arch::kernel::pci::get_network_driver() {
+	if let Some(driver) = crate::drivers::pci::get_network_driver() {
 		driver.lock().set_polling_mode(value)
 	}
 }

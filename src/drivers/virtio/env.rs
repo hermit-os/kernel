@@ -181,49 +181,14 @@ pub mod pci {
 	use alloc::vec::Vec;
 	use core::result::Result;
 
-	use crate::arch::x86_64::kernel::pci;
-	use crate::arch::x86_64::kernel::pci::error::PciError;
-	use crate::arch::x86_64::kernel::pci::{PciAdapter, PciBar};
-	use crate::arch::x86_64::mm::PhysAddr;
+	use pci_types::{Bar, MAX_BARS};
+
+	use crate::arch::mm::PhysAddr;
+	use crate::arch::pci::PciConfigRegion;
+	use crate::drivers::pci::error::PciError;
+	use crate::drivers::pci::PciDevice;
 	use crate::drivers::virtio::env::memory::VirtMemAddr;
 	use crate::drivers::virtio::transport::pci::PciBar as VirtioPciBar;
-
-	/// Wrapper function to read the configuration space of a PCI
-	/// device at the given register. Returns the registers value.
-	pub fn read_config(adapter: &PciAdapter, register: u32) -> u32 {
-		from_pci_endian(pci::read_config(
-			adapter.bus,
-			adapter.device,
-			register.to_le(),
-		))
-	}
-
-	/// Wrapper function to read the configuration space of a PCI
-	/// device at the given register. Returns the registers value.
-	pub fn read_cfg_no_adapter(bus: u8, device: u8, register: u32) -> u32 {
-		from_pci_endian(pci::read_config(bus, device, register.to_le()))
-	}
-
-	/// Wrapper function to write the configuration space of a PCI
-	/// device at the given register.
-	#[allow(dead_code)]
-	pub fn write_config(adapter: &PciAdapter, register: u32, data: u32) {
-		pci::write_config(adapter.bus, adapter.device, register.to_le(), data.to_le());
-	}
-
-	/// Converts a given little endian coded u32 to native endian coded.
-	//
-	// INFO: As the endianness received from the device is little endian coded
-	// the given value must be swapped again on big endian machines. Which is done
-	// via the u32::to_le() method as the u32::to_be() would be a no-op in big endian
-	// machines. Resulting in no conversion.
-	fn from_pci_endian(val: u32) -> u32 {
-		if cfg!(target = "big_endian") {
-			val.to_le()
-		} else {
-			val
-		}
-	}
 
 	/// Maps all memory areas indicated by the devices BAR's into
 	/// Virtual address space.
@@ -233,44 +198,55 @@ pub mod pci {
 	///
 	/// WARN: Currently unsafely casts kernel::PciBar.size (usize) to an
 	/// u64
-	pub fn map_bar_mem(adapter: &PciAdapter) -> Result<Vec<VirtioPciBar>, PciError> {
+	pub(crate) fn map_bar_mem(
+		device: &PciDevice<PciConfigRegion>,
+	) -> Result<Vec<VirtioPciBar>, PciError> {
 		let mut mapped_bars: Vec<VirtioPciBar> = Vec::new();
 
-		for bar in &adapter.base_addresses {
-			match bar {
-				PciBar::IO(_) => {
+		for i in 0..MAX_BARS {
+			match device.bar(i.try_into().unwrap()) {
+				Some(Bar::Io { .. }) => {
 					warn!("Cannot map I/O BAR!");
 					continue;
 				}
-				PciBar::Memory(bar) => {
-					if bar.width != 64 {
-						warn!("Currently only mapping of 64 bit BAR's is supported!");
-						continue;
-					}
-					if !bar.prefetchable {
+				Some(Bar::Memory64 {
+					address,
+					size,
+					prefetchable,
+				}) => {
+					if !prefetchable {
 						warn!("Currently only mapping of prefetchable BAR's is supported!");
 						continue;
 					}
 
 					let virtual_address = VirtMemAddr::from(
-						crate::mm::map(PhysAddr::from(bar.addr), bar.size, true, true, true).0,
+						crate::mm::map(
+							PhysAddr::from(address),
+							size.try_into().unwrap(),
+							true,
+							true,
+							true,
+						)
+						.0,
 					);
 
 					mapped_bars.push(VirtioPciBar::new(
-						bar.index,
+						i.try_into().unwrap(),
 						virtual_address,
-						bar.size as u64,
+						size,
 					));
 				}
+				Some(Bar::Memory32 { .. }) => {
+					warn!("Currently only mapping of 64 bit BAR's is supported!");
+				}
+				_ => {}
 			}
 		}
 
 		if mapped_bars.is_empty() {
-			error!(
-				"No correct memory BAR for device {:x} found.",
-				adapter.device_id
-			);
-			Err(PciError::NoBar(adapter.device_id))
+			let device_id = device.device_id();
+			error!("No correct memory BAR for device {:x} found.", device_id);
+			Err(PciError::NoBar(device_id))
 		} else {
 			Ok(mapped_bars)
 		}
