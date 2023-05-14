@@ -1,6 +1,9 @@
+use alloc::boxed::Box;
 use core::ptr;
+use core::sync::atomic::Ordering;
 
-use super::interrupts::IRQ_COUNTERS;
+use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
+use super::CPU_ONLINE;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 #[no_mangle]
@@ -19,6 +22,13 @@ impl CoreLocal {
 			core_id: CoreLocalVariable::new(core_id),
 			scheduler: CoreLocalVariable::new(0 as *mut PerCoreScheduler),
 		}
+	}
+
+	pub fn install() {
+		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
+
+		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
+		IRQ_COUNTERS.lock().insert(core_id, irq_statistics);
 	}
 }
 
@@ -82,8 +92,4 @@ pub fn increment_irq_counter(irq_no: u8) {
 			warn!("Unknown core {}, is core {} already registered?", id, id);
 		}
 	}
-}
-
-pub fn init() {
-	// TODO: Implement!
 }

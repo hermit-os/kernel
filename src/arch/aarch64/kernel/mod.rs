@@ -13,10 +13,12 @@ pub mod systemtime;
 
 use core::arch::{asm, global_asm};
 use core::ptr;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
 use hermit_sync::TicketMutex;
 
+use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
@@ -26,7 +28,11 @@ use crate::env;
 const SERIAL_PORT_BAUDRATE: u32 = 115200;
 
 static mut COM1: SerialPort = SerialPort::new(0x800);
-static CPU_ONLINE: TicketMutex<u32> = TicketMutex::new(0);
+
+/// `CPU_ONLINE` is the count of CPUs that finished initialization.
+///
+/// It also synchronizes initialization of CPU cores.
+pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 
 global_asm!(include_str!("start.s"));
 
@@ -108,7 +114,7 @@ pub fn get_tls_align() -> usize {
 
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
-	1
+	CPU_ONLINE.load(Ordering::Acquire)
 }
 
 #[cfg(feature = "smp")]
@@ -149,7 +155,7 @@ pub fn get_cmdline() -> VirtAddr {
 
 /// Earliest initialization function called by the Boot Processor.
 pub fn message_output_init() {
-	core_local::init();
+	CoreLocal::install();
 
 	unsafe {
 		COM1.port_address = boot_info()
@@ -207,16 +213,14 @@ pub fn boot_application_processors() {
 
 /// Application Processor initialization
 pub fn application_processor_init() {
-	core_local::init();
+	CoreLocal::install();
 	finish_processor_init();
 }
 
 fn finish_processor_init() {
 	debug!("Initialized Processor");
 
-	// This triggers apic::boot_application_processors (bare-metal/QEMU) or uhyve
-	// to initialize the next processor.
-	*CPU_ONLINE.lock() += 1;
+	CPU_ONLINE.fetch_add(1, Ordering::Release);
 }
 
 pub fn print_statistics() {
