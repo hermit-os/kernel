@@ -24,7 +24,7 @@ impl PciConfigRegion {
 
 impl ConfigRegionAccess for PciConfigRegion {
 	#[inline]
-	fn function_exists(&self, address: PciAddress) -> bool {
+	fn function_exists(&self, _address: PciAddress) -> bool {
 		// we trust the device tree
 		true
 	}
@@ -37,7 +37,9 @@ impl ConfigRegionAccess for PciConfigRegion {
 			| u64::from(pci_addr.function()) << 12
 			| (u64::from(offset) & 0xFFF)
 			| self.0.as_u64();
-		crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(addr as *const u32))
+		unsafe {
+			crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(addr as *const u32))
+		}
 	}
 
 	#[inline]
@@ -48,7 +50,9 @@ impl ConfigRegionAccess for PciConfigRegion {
 			| u64::from(pci_addr.function()) << 12
 			| (u64::from(offset) & 0xFFF)
 			| self.0.as_u64();
-		core::ptr::write_volatile(addr as *mut u32, value.to_le());
+		unsafe {
+			core::ptr::write_volatile(addr as *mut u32, value.to_le());
+		}
 	}
 }
 
@@ -70,7 +74,7 @@ pub fn init() {
 				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
 				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
 				let addr = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
-				let (slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
+				let (slice, _residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
 				let size = u64::from_be_bytes(slice.try_into().unwrap());
 
 				let pci_address =

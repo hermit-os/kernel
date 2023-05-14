@@ -4,7 +4,6 @@ use core::{fmt, mem, ptr, usize};
 
 use align_address::Align;
 
-use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::{
 	get_base_address, get_boot_info_address, get_image_size, get_ram_address, processor,
 };
@@ -639,11 +638,13 @@ pub unsafe fn init() {
 	info!("RAM starts at physical address 0x{:x}", ram_start);
 
 	// determine physical address size
-	asm!(
-		"mrs {}, id_aa64mmfr0_el1",
-		out(reg) aa64mmfr0,
-		options(nostack),
-	);
+	unsafe {
+		asm!(
+			"mrs {}, id_aa64mmfr0_el1",
+			out(reg) aa64mmfr0,
+			options(nostack),
+		);
+	}
 
 	let pa_range: u64 = match aa64mmfr0 & 0b1111 {
 		0b0000 => 32,
