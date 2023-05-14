@@ -99,6 +99,8 @@ pub fn install() {
 			.set_handler_fn(device_not_available_exception)
 			.set_stack_index(0);
 	}
+
+	IRQ_NAMES.lock().insert(7, "FPU");
 }
 
 #[no_mangle]
