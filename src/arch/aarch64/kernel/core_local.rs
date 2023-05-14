@@ -76,7 +76,11 @@ pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 pub fn increment_irq_counter(irq_no: u8) {
 	unsafe {
 		let id = CORE_LOCAL.core_id.get();
-		IRQ_COUNTERS.lock().get(&id).unwrap().inc(irq_no);
+		if let Some(counter) = IRQ_COUNTERS.lock().get(&id) {
+			counter.inc(irq_no);
+		} else {
+			warn!("Unknown core {}, is core {} already registered?", id, id);
+		}
 	}
 }
 
