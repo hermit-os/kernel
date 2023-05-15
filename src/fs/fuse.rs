@@ -10,7 +10,9 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
-use crate::syscalls::fs::{self, Dirent, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence};
+use crate::syscalls::fs::{
+	self, Dirent, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence,
+};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
@@ -27,7 +29,7 @@ pub struct fuse_dirent_head {
 	pub off: u64,
 	pub namelen: u32,
 	pub type_var: u32, // type is keyword?
-	// name buffer
+	                   // name buffer
 }
 
 pub trait FuseInterface {
@@ -93,7 +95,7 @@ impl PosixFileSystem for Fuse {
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
-	}	
+	}
 }
 
 impl Fuse {
@@ -137,13 +139,12 @@ impl Fuse {
 
 		// Opendir
 		let (mut cmd, mut rsp) = create_open(file.fuse_nid.unwrap(), 0x10000);
-		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32; 
+		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
 		get_filesystem_driver()
 			.ok_or(FileError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
 		file.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
-
 
 		Ok(Box::new(file))
 	}
@@ -287,7 +288,7 @@ impl PosixFile for FuseFile {
 
 			// See https://elixir.bootlin.com/linux/v6.3.1/source/fs/fuse/readdir.c#L126
 			// and http://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html#a65b7d7fc14d3958d7fb7d215fda20301
-			// Also interesting: fuse_readdir_common in libfuse/lib/fuse.c 
+			// Also interesting: fuse_readdir_common in libfuse/lib/fuse.c
 			let mut buffer_ptr = rsp.extra_buffer.as_ptr() as *const u8;
 			let buffer_end = buffer_ptr as usize + len;
 			let mut dir_vec = alloc::vec::Vec::<Dirent>::new();
@@ -295,37 +296,27 @@ impl PosixFile for FuseFile {
 			while buffer_end - buffer_ptr as usize > core::mem::size_of::<fuse_dirent_head>() {
 				let dirent = unsafe { &*(buffer_ptr as *const fuse_dirent_head) };
 				info!("Len: {}", dirent.namelen);
-				unsafe { 
+				unsafe {
 					buffer_ptr = buffer_ptr.byte_add(core::mem::size_of::<fuse_dirent_head>())
 				};
-				let name = unsafe { 
-					core::slice::from_raw_parts( 
-						buffer_ptr,
-						dirent.namelen as usize
-					)
-				};
-				dir_vec.push(
-					Dirent {
-						d_ino: dirent.d_ino,
-						off: dirent.off,
-						type_var: dirent.type_var,
-						name: String::from_utf8(name.to_vec()).unwrap(),
-					}
-				);
+				let name =
+					unsafe { core::slice::from_raw_parts(buffer_ptr, dirent.namelen as usize) };
+				dir_vec.push(Dirent {
+					d_ino: dirent.d_ino,
+					off: dirent.off,
+					type_var: dirent.type_var,
+					name: String::from_utf8(name.to_vec()).unwrap(),
+				});
 				self.offset = dirent.off as usize;
 
-				unsafe { 
-					buffer_ptr = buffer_ptr
-						.byte_add(dirent.namelen as usize);
+				unsafe {
+					buffer_ptr = buffer_ptr.byte_add(dirent.namelen as usize);
 					// align_offset seems to be dangerous
 					buffer_ptr = buffer_ptr
-						.wrapping_add(
-							buffer_ptr.align_offset(core::mem::size_of::<u64>())
-					);
+						.wrapping_add(buffer_ptr.align_offset(core::mem::size_of::<u64>()));
 				};
 			}
 
-		
 			Ok(dir_vec)
 		} else {
 			warn!("Dir not open, cannot read!");
@@ -1157,7 +1148,6 @@ pub fn init() {
 		let fuse = Box::new(Fuse::new());
 		fuse.send_init();
 
-		
 		let nid = fuse.lookup("/");
 		info!("Root node id {}", nid.expect("No root node?"));
 
@@ -1178,7 +1168,7 @@ pub fn init() {
 		info!("Mounting virtio-fs at /{}", mount_point);
 		fs.mount(mount_point.as_str(), fuse)
 			.expect("Mount failed. Duplicate mount_point?");
-		
+
 		panic!("Stopping.");
 	}
 }
