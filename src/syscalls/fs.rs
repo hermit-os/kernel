@@ -238,7 +238,7 @@ pub struct Dirent {
 	pub d_ino: u64,
 	pub off: u64,
 	pub type_var: u32, // type is keyword?
-	pub name : String,
+	pub name: String,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
