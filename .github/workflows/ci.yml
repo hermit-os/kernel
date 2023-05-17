@@ -183,10 +183,10 @@ jobs:
             sleep 5
             curl http://127.0.0.1:9975/help
             sleep 1
-      - name: Test httpd with DHCP support (release, virtio-net)
+      - name: Test httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 128M -serial stdio \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/debug/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
@@ -211,7 +211,7 @@ jobs:
       - name: Test httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 128M -serial stdio \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
