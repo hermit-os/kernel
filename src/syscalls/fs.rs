@@ -218,6 +218,7 @@ pub trait PosixFile {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 
 	fn readdir(&mut self) -> Result<Vec<Dirent>, FileError>;
+	fn mkdir(&self, name: &str, mode: u32) -> Option<u64>;
 }
 
 // TODO: raw is partially redundant, create nicer interface
