@@ -263,6 +263,15 @@ impl PosixFile for FuseFile {
 		}
 	}
 
+	fn mkdir(&self, name: &str, mode: u32) -> Option<u64> {
+		let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid?, name, mode);
+		get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		Some(unsafe { rsp.rsp.assume_init().nodeid })
+	}
+
 	fn readdir(&mut self) -> Result<Vec<Dirent>, FileError> {
 		// Linux seems to allocate a single page to store the dirfile
 		let mut len = MAX_READ_LEN as u32;
@@ -1073,6 +1082,14 @@ unsafe impl FuseIn for fuse_create_in {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
+pub struct fuse_mkdir_in {
+	pub mode: u32,
+	pub umask: u32,
+}
+unsafe impl FuseIn for fuse_mkdir_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
 pub struct fuse_create_out {
 	pub entry: fuse_entry_out,
 	pub open: fuse_open_out,
@@ -1142,6 +1159,67 @@ fn create_create(
 	(cmd, rsp)
 }
 
+fn create_mkdir(
+	nid: u64,
+	path: &str,
+	mode: u32,
+) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
+	let slice = path.as_bytes();
+	let len = core::mem::size_of::<fuse_in_header>()
+		+ core::mem::size_of::<fuse_mkdir_in>()
+		+ slice.len()
+		+ 1;
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_in_header>(),
+			core::mem::align_of::<fuse_mkdir_in>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let cmd = unsafe {
+		let data = alloc(layout);
+		let raw =
+			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_mkdir_in>;
+		(*raw).header = create_in_header::<fuse_mkdir_in>(nid, Opcode::FUSE_MKDIR);
+		(*raw).header.len = len.try_into().unwrap();
+		(*raw).cmd = fuse_mkdir_in {
+			mode,
+			..Default::default()
+		};
+		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
+		(*raw).extra_buffer[slice.len()] = 0;
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*cmd));
+
+	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_out_header>(),
+			core::mem::align_of::<fuse_entry_out>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let rsp = unsafe {
+		let data = alloc(layout);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
+		(*raw).header = fuse_out_header {
+			len: len.try_into().unwrap(),
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*rsp));
+
+	(cmd, rsp)
+}
+
 pub fn init() {
 	if let Some(driver) = get_filesystem_driver() {
 		// Instantiate global fuse object
@@ -1153,6 +1231,7 @@ pub fn init() {
 
 		// Print dir content
 		let mut root_dir = fuse.opendir("/").unwrap();
+		root_dir.mkdir("new_dir",0x777);
 
 		while let Ok(dirent_vec) = root_dir.readdir() {
 			info!("Result {:#?}", dirent_vec);
