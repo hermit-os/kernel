@@ -2,7 +2,9 @@ use core::arch::asm;
 
 #[inline(always)]
 pub unsafe extern "C" fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize) {
-	switch_to_task(old_stack, new_stack);
+	unsafe {
+		switch_to_task(old_stack, new_stack);
+	}
 }
 
 #[naked]
