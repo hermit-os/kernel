@@ -64,7 +64,7 @@ pub use crate::arch::x86_64::*;
 
 pub fn init_drivers() {
 	// Initialize PCI Drivers for x86_64
-	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
+	#[cfg(feature = "pci")]
 	crate::drivers::pci::init_drivers();
 	#[cfg(all(target_arch = "x86_64", not(feature = "pci")))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();

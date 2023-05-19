@@ -15,7 +15,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
-use crate::drivers::pci::PciDevice;
+use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
@@ -1109,18 +1109,15 @@ fn read_caps(
 /// As the device is not static, return value is not static.
 fn dev_status(device: &PciDevice<PciConfigRegion>) -> u32 {
 	// reads register 01 from PCU Header of type 00H. WHich is the Status(16bit) and Command(16bit) register
-	let stat_com_reg = device
-		.read_register(crate::drivers::pci::constants::RegisterHeader::PCI_COMMAND_REGISTER.into());
+	let stat_com_reg = device.read_register(DeviceHeader::PCI_COMMAND_REGISTER.into());
 	stat_com_reg >> 16
 }
 
 /// Wrapper function to get a devices capabilities list pointer, which represents
 /// an offset starting from the header of the device's configuration space.
 fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u32 {
-	let cap_lst_reg = device.read_register(
-		crate::drivers::pci::constants::RegisterHeader::PCI_CAPABILITY_LIST_REGISTER.into(),
-	);
-	cap_lst_reg & u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_CAPLIST_POINTER)
+	let cap_lst_reg = device.read_register(DeviceHeader::PCI_CAPABILITY_LIST_REGISTER.into());
+	cap_lst_reg & u32::from(Masks::PCI_MASK_CAPLIST_POINTER)
 }
 
 /// Maps memory areas indicated by devices BAR's into virtual address space.
@@ -1131,9 +1128,7 @@ fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError
 /// Checks if the status of the device inidactes the device is using the
 /// capabilities pointer and therefore defines a capabiites list.
 fn no_cap_list(device: &PciDevice<PciConfigRegion>) -> bool {
-	dev_status(device)
-		& u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_STATUS_CAPABILITIES_LIST)
-		== 0
+	dev_status(device) & u32::from(Masks::PCI_MASK_STATUS_CAPABILITIES_LIST) == 0
 }
 
 /// Checks if minimal set of capabilities is present.

@@ -799,7 +799,7 @@ impl VirtioNetDriver {
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
 
 		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
-		// Aborts in case incompatible features are selected by the dricer or the device does not support min_feat_set.
+		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
 		match self.negotiate_features(&feats) {
 			Ok(_) => info!(
 				"Driver found a subset of features for virtio device {:x}. Features are: {:?}",

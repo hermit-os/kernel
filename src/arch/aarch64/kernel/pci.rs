@@ -2,11 +2,11 @@ use alloc::vec::Vec;
 use core::{str, u32, u64, u8};
 
 use hermit_dtb::Dtb;
-use pci_types::{ConfigRegionAccess, PciAddress, PciHeader};
+use pci_types::{Bar, ConfigRegionAccess, PciAddress, PciHeader, MAX_BARS};
 
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr, VirtAddr};
-use crate::drivers::pci::{PciDevice, PCI_DEVICES};
+use crate::drivers::pci::{PciCommand, PciDevice, PCI_DEVICES};
 use crate::kernel::boot_info;
 
 const PCI_MAX_DEVICE_NUMBER: u8 = 32;
@@ -90,6 +90,71 @@ pub fn init() {
 					flags,
 				);
 
+				/// Try to find regions for the device registers
+				let mut io_start: u64 = 0;
+				let mut mem32_start: u64 = 0;
+				let mut mem64_start: u64 = 0;
+				let mut residual_slice =
+					dtb.get_property(parts.first().unwrap(), "ranges").unwrap();
+				let mut value_slice;
+				while residual_slice.len() > 0 {
+					(value_slice, residual_slice) =
+						residual_slice.split_at(core::mem::size_of::<u32>());
+					let high = u32::from_be_bytes(value_slice.try_into().unwrap());
+					(value_slice, residual_slice) =
+						residual_slice.split_at(core::mem::size_of::<u32>());
+					let mid = u32::from_be_bytes(value_slice.try_into().unwrap());
+					(value_slice, residual_slice) =
+						residual_slice.split_at(core::mem::size_of::<u32>());
+					let low = u32::from_be_bytes(value_slice.try_into().unwrap());
+
+					match high & 0x3000000 {
+						0 => debug!("Configuration space"),
+						0x1000000 => {
+							debug!("IO space");
+							if io_start != 0 {
+								warn!("Found already IO space");
+							}
+
+							(value_slice, residual_slice) =
+								residual_slice.split_at(core::mem::size_of::<u64>());
+							io_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+						}
+						0x2000000 => {
+							let prefetchable = (high & 0x40000000) != 0;
+							debug!("32 bit memory space: prefetchable {}", prefetchable);
+							if mem32_start != 0 {
+								warn!("Found already 32 bit memory space");
+							}
+
+							(value_slice, residual_slice) =
+								residual_slice.split_at(core::mem::size_of::<u64>());
+							mem32_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+						}
+						0x3000000 => {
+							let prefetchable = (high & 0x40000000) != 0;
+							debug!("64 bit memory space: prefetchable {}", prefetchable);
+							if mem64_start != 0 {
+								warn!("Found already 64 bit memory space");
+							}
+
+							(value_slice, residual_slice) =
+								residual_slice.split_at(core::mem::size_of::<u64>());
+							mem64_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+						}
+						_ => panic!("Unknown space code"),
+					}
+
+					// currently, the size is ignores
+					(value_slice, residual_slice) =
+						residual_slice.split_at(core::mem::size_of::<u64>());
+					//let size = u64::from_be_bytes(value_slice.try_into().unwrap());
+				}
+
+				debug!("IO address space starts at{:#X}", io_start);
+				debug!("Memory32 address space starts at {:#X}", mem32_start);
+				debug!("Memory64 address space starsmem64_start {:#X}", mem64_start);
+
 				let max_bus_number = size
 					/ (PCI_MAX_DEVICE_NUMBER as u64
 						* PCI_MAX_FUNCTION_NUMBER as u64
@@ -104,8 +169,55 @@ pub fn init() {
 
 						let (device_id, vendor_id) = header.id(&pci_config);
 						if device_id != u16::MAX && vendor_id != u16::MAX {
+							let dev = PciDevice::new(pci_address, pci_config);
+
+							// Initializes BARs
+							let mut cmd = PciCommand::PCI_COMMAND_INTX_DISABLE;
+							for i in 0..MAX_BARS {
+								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
+									match bar {
+										Bar::Io { .. } => {
+											dev.set_bar(
+												i.try_into().unwrap(),
+												Bar::Io {
+													port: io_start.try_into().unwrap(),
+												},
+											);
+											io_start += 0x20;
+											cmd |= PciCommand::PCI_COMMAND_IO
+												| PciCommand::PCI_COMMAND_MASTER;
+										}
+										/// Currently, we ignore 32 bit memory bars
+										/*Bar::Memory32 { address, size, prefetchable } => {
+											dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
+											mem32_start += u64::from(size);
+											cmd |= PciCommand::PCI_COMMAND_MEMORY|PciCommand::PCI_COMMAND_MASTER;
+										}*/
+										Bar::Memory64 {
+											address,
+											size,
+											prefetchable,
+										} => {
+											dev.set_bar(
+												i.try_into().unwrap(),
+												Bar::Memory64 {
+													address: mem64_start,
+													size,
+													prefetchable,
+												},
+											);
+											mem64_start += size;
+											cmd |= PciCommand::PCI_COMMAND_MEMORY
+												| PciCommand::PCI_COMMAND_MASTER;
+										}
+										_ => {}
+									}
+								}
+							}
+							dev.set_command(cmd);
+
 							unsafe {
-								PCI_DEVICES.push(PciDevice::new(pci_address, pci_config));
+								PCI_DEVICES.push(dev);
 							}
 						}
 					}
