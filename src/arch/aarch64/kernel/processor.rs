@@ -100,10 +100,6 @@ impl FPUState {
 	pub fn new() -> Self {
 		Self {}
 	}
-
-	pub fn restore(&self) {}
-
-	pub fn save(&self) {}
 }
 
 pub fn seed_entropy() -> Option<[u8; 32]> {

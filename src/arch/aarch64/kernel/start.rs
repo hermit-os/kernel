@@ -20,18 +20,20 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) ->
 	const _START: Entry = _start;
 	const _PRE_INIT: Entry = pre_init;
 
-	asm!(
-		// Add stack top offset
-		"mov x8, {stack_top_offset}",
-		"add sp, sp, x8",
+	unsafe {
+		asm!(
+			// Add stack top offset
+			"mov x8, {stack_top_offset}",
+			"add sp, sp, x8",
 
-		// Jump to Rust code
-		"b {pre_init}",
+			// Jump to Rust code
+			"b {pre_init}",
 
-		stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
-		pre_init = sym pre_init,
-		options(noreturn),
-	)
+			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+			pre_init = sym pre_init,
+			options(noreturn),
+		)
+	}
 }
 
 #[inline(never)]
@@ -43,14 +45,16 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 	}
 
 	// set exception table
-	asm!(
-		"adrp x4, {vector_table}",
-		"add  x4, x4, #:lo12:{vector_table}",
-		"msr vbar_el1, x4",
-		vector_table = sym vector_table,
-		out("x4") _,
-		options(nostack),
-	);
+	unsafe {
+		asm!(
+			"adrp x4, {vector_table}",
+			"add  x4, x4, #:lo12:{vector_table}",
+			"msr vbar_el1, x4",
+			vector_table = sym vector_table,
+			out("x4") _,
+			options(nostack),
+		);
+	}
 
 	// Memory barrier
 	asm!("dsb sy", options(nostack),);
