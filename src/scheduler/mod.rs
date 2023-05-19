@@ -453,6 +453,7 @@ impl PerCoreScheduler {
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
+	#[cfg(target_arch = "x86_64")]
 	pub fn fpu_switch(&mut self) {
 		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
 			debug!(

@@ -110,30 +110,8 @@ pub fn seed_entropy() -> Option<[u8; 32]> {
 	None
 }
 
-pub fn run_on_hypervisor() -> bool {
+pub(crate) fn run_on_hypervisor() -> bool {
 	true
-}
-
-/// Search the most significant bit
-#[inline(always)]
-pub fn msb(value: u64) -> Option<u64> {
-	if value > 0 {
-		let ret: u64;
-
-		unsafe {
-			asm!(
-				"clz {0}, {1}",
-				"sub {0}, {2}, {0}",
-				out(reg) ret,
-				in(reg) value,
-				const 64 - 1,
-				options(nostack, nomem),
-			);
-		}
-		Some(ret)
-	} else {
-		None
-	}
 }
 
 /// The halt function stops the processor until the next interrupt arrives
@@ -292,5 +270,8 @@ pub fn print_information() {
 	infoheader!(" CPU INFORMATION ");
 	infoentry!("Processor compatiblity", str::from_utf8(reg).unwrap());
 	infoentry!("Counter frequency", *CPU_FREQUENCY);
+	if run_on_hypervisor() {
+		info!("Run on hypervisor");
+	}
 	infofooter!();
 }

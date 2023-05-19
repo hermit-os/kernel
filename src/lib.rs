@@ -49,8 +49,6 @@ use arch::core_local::*;
 #[doc(hidden)]
 pub use env::is_uhyve as _is_uhyve;
 use mm::allocator::LockedAllocator;
-#[cfg(target_arch = "aarch64")]
-use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
