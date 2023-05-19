@@ -56,6 +56,67 @@ impl ConfigRegionAccess for PciConfigRegion {
 	}
 }
 
+fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
+	/// Try to find regions for the device registers
+	let mut io_start: u64 = 0;
+	let mut mem32_start: u64 = 0;
+	let mut mem64_start: u64 = 0;
+
+	let mut residual_slice = dtb.get_property(parts.first().unwrap(), "ranges").unwrap();
+	let mut value_slice;
+	while residual_slice.len() > 0 {
+		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
+		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		let mid = u32::from_be_bytes(value_slice.try_into().unwrap());
+		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
+		let low = u32::from_be_bytes(value_slice.try_into().unwrap());
+
+		match high & 0x3000000 {
+			0 => debug!("Configuration space"),
+			0x1000000 => {
+				debug!("IO space");
+				if io_start != 0 {
+					warn!("Found already IO space");
+				}
+
+				(value_slice, residual_slice) =
+					residual_slice.split_at(core::mem::size_of::<u64>());
+				io_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+			}
+			0x2000000 => {
+				let prefetchable = (high & 0x40000000) != 0;
+				debug!("32 bit memory space: prefetchable {}", prefetchable);
+				if mem32_start != 0 {
+					warn!("Found already 32 bit memory space");
+				}
+
+				(value_slice, residual_slice) =
+					residual_slice.split_at(core::mem::size_of::<u64>());
+				mem32_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+			}
+			0x3000000 => {
+				let prefetchable = (high & 0x40000000) != 0;
+				debug!("64 bit memory space: prefetchable {}", prefetchable);
+				if mem64_start != 0 {
+					warn!("Found already 64 bit memory space");
+				}
+
+				(value_slice, residual_slice) =
+					residual_slice.split_at(core::mem::size_of::<u64>());
+				mem64_start = u64::from_be_bytes(value_slice.try_into().unwrap());
+			}
+			_ => panic!("Unknown space code"),
+		}
+
+		// currently, the size is ignores
+		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u64>());
+		//let size = u64::from_be_bytes(value_slice.try_into().unwrap());
+	}
+
+	(io_start, mem32_start, mem64_start)
+}
+
 pub fn init() {
 	let dtb = unsafe {
 		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
@@ -90,70 +151,14 @@ pub fn init() {
 					flags,
 				);
 
-				/// Try to find regions for the device registers
-				let mut io_start: u64 = 0;
-				let mut mem32_start: u64 = 0;
-				let mut mem64_start: u64 = 0;
-				let mut residual_slice =
-					dtb.get_property(parts.first().unwrap(), "ranges").unwrap();
-				let mut value_slice;
-				while residual_slice.len() > 0 {
-					(value_slice, residual_slice) =
-						residual_slice.split_at(core::mem::size_of::<u32>());
-					let high = u32::from_be_bytes(value_slice.try_into().unwrap());
-					(value_slice, residual_slice) =
-						residual_slice.split_at(core::mem::size_of::<u32>());
-					let mid = u32::from_be_bytes(value_slice.try_into().unwrap());
-					(value_slice, residual_slice) =
-						residual_slice.split_at(core::mem::size_of::<u32>());
-					let low = u32::from_be_bytes(value_slice.try_into().unwrap());
-
-					match high & 0x3000000 {
-						0 => debug!("Configuration space"),
-						0x1000000 => {
-							debug!("IO space");
-							if io_start != 0 {
-								warn!("Found already IO space");
-							}
-
-							(value_slice, residual_slice) =
-								residual_slice.split_at(core::mem::size_of::<u64>());
-							io_start = u64::from_be_bytes(value_slice.try_into().unwrap());
-						}
-						0x2000000 => {
-							let prefetchable = (high & 0x40000000) != 0;
-							debug!("32 bit memory space: prefetchable {}", prefetchable);
-							if mem32_start != 0 {
-								warn!("Found already 32 bit memory space");
-							}
-
-							(value_slice, residual_slice) =
-								residual_slice.split_at(core::mem::size_of::<u64>());
-							mem32_start = u64::from_be_bytes(value_slice.try_into().unwrap());
-						}
-						0x3000000 => {
-							let prefetchable = (high & 0x40000000) != 0;
-							debug!("64 bit memory space: prefetchable {}", prefetchable);
-							if mem64_start != 0 {
-								warn!("Found already 64 bit memory space");
-							}
-
-							(value_slice, residual_slice) =
-								residual_slice.split_at(core::mem::size_of::<u64>());
-							mem64_start = u64::from_be_bytes(value_slice.try_into().unwrap());
-						}
-						_ => panic!("Unknown space code"),
-					}
-
-					// currently, the size is ignores
-					(value_slice, residual_slice) =
-						residual_slice.split_at(core::mem::size_of::<u64>());
-					//let size = u64::from_be_bytes(value_slice.try_into().unwrap());
-				}
+				let (mut io_start, mem32_start, mut mem64_start) = detect_pci_regions(&dtb, &parts);
 
 				debug!("IO address space starts at{:#X}", io_start);
 				debug!("Memory32 address space starts at {:#X}", mem32_start);
 				debug!("Memory64 address space starsmem64_start {:#X}", mem64_start);
+				assert!(io_start > 0);
+				assert!(mem32_start > 0);
+				assert!(mem64_start > 0);
 
 				let max_bus_number = size
 					/ (PCI_MAX_DEVICE_NUMBER as u64
