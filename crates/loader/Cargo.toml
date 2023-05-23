@@ -23,8 +23,8 @@ hermit-dtb = { version = "0.1" }
 goblin = { version = "0.6", default-features = false, features = ["elf64"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = { version = "0.20" }
-uefi-services = "0.17"
+uefi = "0.21"
+uefi-services = "0.18"
 
 [build-dependencies]
 cc = "1.0"
