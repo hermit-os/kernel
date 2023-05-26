@@ -208,6 +208,7 @@ pub enum FileError {
 
 pub trait PosixFileSystem {
 	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
+	fn readdir(&self, path: &str) -> Result<Box<dyn PosixReadDir + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
 }
 
@@ -216,9 +217,31 @@ pub trait PosixFile {
 	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError>;
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
+}
 
-	fn readdir(&mut self) -> Result<Vec<Dirent>, FileError>;
-	fn mkdir(&self, name: &str, mode: u32) -> Option<u64>;
+pub trait PosixReadDir {
+	fn next(&mut self) -> Option<Result<Box<dyn PosixDirEntry>, FileError>>;
+}
+
+
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+pub enum PosixFileType {
+	Unknown = 0, // DT_UNKNOWN
+	Fifo = 1, // DT_FIFO
+	CharacterDevice = 2, // DT_CHR
+	Directory = 4, // DT_DIR
+	BlockDevice = 6, // DT_BLK
+	RegularFile = 8, // DT_REG
+	SymbolicLink = 10, // DT_LNK
+	Socket = 12, // DT_SOCK
+	Whiteout = 14 // DT_WHT
+}
+
+pub trait PosixDirEntry {
+	fn internal_path(&self) -> String;
+	fn file_name(&self) -> String;
+	fn file_type(&self) -> PosixFileType;
+	// fn metadata(&self) -> PosixMetadata;
 }
 
 // TODO: raw is partially redundant, create nicer interface
@@ -232,14 +255,6 @@ pub struct FilePerms {
 	pub directio: bool,
 	pub raw: u32,
 	pub mode: u32,
-}
-
-#[derive(Debug)]
-pub struct Dirent {
-	pub d_ino: u64,
-	pub off: u64,
-	pub type_var: u32, // type is keyword?
-	pub name: String,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]

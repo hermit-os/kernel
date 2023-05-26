@@ -1,9 +1,12 @@
 use alloc::alloc::{alloc, Layout};
 use alloc::boxed::Box;
+use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::borrow::ToOwned;
 use core::mem::MaybeUninit;
 use core::{fmt, u32, u8};
+use num_traits::cast::FromPrimitive;
 
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio::get_filesystem_driver;
@@ -11,7 +14,7 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::syscalls::fs::{
-	self, Dirent, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence,
+	self, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence, PosixReadDir, PosixDirEntry, PosixFileType,
 };
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
@@ -86,6 +89,36 @@ impl PosixFileSystem for Fuse {
 		Ok(Box::new(file))
 	}
 
+	fn readdir(&self, path: &str) -> Result<Box<dyn PosixReadDir + Send>, FileError> {
+		let mut readdir = FuseReaddir {
+			fuse_nid: None,
+			fuse_fh: None,
+			offset: 0,
+			path: path.to_owned(),
+			local_cache: VecDeque::new()
+		};
+
+		// Lookup nodeid
+
+		readdir.fuse_nid = self.lookup(path);
+
+		if readdir.fuse_nid.is_none() {
+			warn!("Fuse lookup seems to have failed!");
+			return Err(FileError::ENOENT);
+		}
+
+		// Opendir
+		let (mut cmd, mut rsp) = create_open(readdir.fuse_nid.unwrap(), 0x10000);
+		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		readdir.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
+
+		Ok(Box::new(readdir))
+	}
+
 	fn unlink(&self, path: &str) -> core::result::Result<(), FileError> {
 		let (cmd, mut rsp) = create_unlink(path);
 		get_filesystem_driver()
@@ -120,34 +153,6 @@ impl Fuse {
 			.send_command(cmd.as_ref(), rsp.as_mut());
 		Some(unsafe { rsp.rsp.assume_init().nodeid })
 	}
-
-	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError> {
-		let mut file = FuseFile {
-			fuse_nid: None,
-			fuse_fh: None,
-			offset: 0,
-		};
-
-		// Lookup nodeid
-
-		file.fuse_nid = self.lookup(path);
-
-		if file.fuse_nid.is_none() {
-			warn!("Fuse lookup seems to have failed!");
-			return Err(FileError::ENOENT);
-		}
-
-		// Opendir
-		let (mut cmd, mut rsp) = create_open(file.fuse_nid.unwrap(), 0x10000);
-		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
-		get_filesystem_driver()
-			.ok_or(FileError::ENOSYS)?
-			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
-		file.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
-
-		Ok(Box::new(file))
-	}
 }
 
 impl Default for Fuse {
@@ -160,6 +165,110 @@ struct FuseFile {
 	fuse_nid: Option<u64>,
 	fuse_fh: Option<u64>,
 	offset: usize,
+}
+
+struct FuseReaddir {
+	fuse_nid: Option<u64>,
+	fuse_fh: Option<u64>,
+	offset: usize,
+	local_cache: VecDeque<FuseDirent>, 
+	path: String,
+}
+
+#[derive(Debug)]
+struct FuseDirent {
+	d_ino: u64,
+	off: u64,
+	type_var: u32, // type is keyword?
+	name: String,
+}
+
+impl PosixReadDir for FuseReaddir {
+
+	fn next(&mut self) -> Option<Result<Box<dyn PosixDirEntry>, FileError>> {
+		if self.local_cache.is_empty() {
+			// Linux seems to allocate a single page to store the dirfile
+			let len = MAX_READ_LEN as u32;
+
+			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+				let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset as u64);
+				cmd.header.opcode = Opcode::FUSE_READDIR as u32;
+				if let Some(fs_driver) = get_filesystem_driver() {
+					fs_driver
+					.lock()
+					.send_command(cmd.as_ref(), rsp.as_mut());
+				}
+				else {
+					return Some(Err(FileError::ENOSYS));
+				}
+					
+				let len: usize = if rsp.header.len as usize
+					- ::core::mem::size_of::<fuse_out_header>()
+					- ::core::mem::size_of::<fuse_read_out>()
+					>= len.try_into().unwrap()
+				{
+					len.try_into().unwrap()
+				} else {
+					rsp.header.len as usize
+						- ::core::mem::size_of::<fuse_out_header>()
+						- ::core::mem::size_of::<fuse_read_out>()
+				};
+
+				// See https://elixir.bootlin.com/linux/v6.3.1/source/fs/fuse/readdir.c#L126
+				// and http://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html#a65b7d7fc14d3958d7fb7d215fda20301
+				// Also interesting: fuse_readdir_common in libfuse/lib/fuse.c
+				let mut buffer_ptr = rsp.extra_buffer.as_ptr() as *const u8;
+				let buffer_end = buffer_ptr as usize + len;
+
+				while buffer_end - buffer_ptr as usize > core::mem::size_of::<fuse_dirent_head>() {
+					let dirent = unsafe { &*(buffer_ptr as *const fuse_dirent_head) };
+					// info!("Len: {}", dirent.namelen);
+					unsafe {
+						buffer_ptr = buffer_ptr.byte_add(core::mem::size_of::<fuse_dirent_head>())
+					};
+					let name =
+						unsafe { core::slice::from_raw_parts(buffer_ptr, dirent.namelen as usize) };
+					self.local_cache.push_back(FuseDirent {
+						d_ino: dirent.d_ino,
+						off: dirent.off,
+						type_var: dirent.type_var,
+						name: String::from_utf8(name.to_vec()).unwrap(),
+					});
+					self.offset = dirent.off as usize;
+
+					unsafe {
+						buffer_ptr = buffer_ptr.byte_add(dirent.namelen as usize);
+						// align_offset seems to be dangerous
+						buffer_ptr = buffer_ptr
+							.wrapping_add(buffer_ptr.align_offset(core::mem::size_of::<u64>()));
+					};
+				}
+
+			} else {
+				warn!("Dir not open, cannot read!");
+				return Some(Err(FileError::ENOENT));
+			}
+		}
+
+		if self.local_cache.is_empty() {
+			None
+		}
+		else {
+			Some(Ok(Box::new(self.local_cache.pop_front().unwrap())))
+		}
+	}
+}
+
+impl PosixDirEntry for FuseDirent {
+	fn internal_path(&self) -> String {
+		unimplemented!()
+	}
+	fn file_name(&self) -> String {
+		self.name.to_owned()
+	}
+	fn file_type(&self) -> PosixFileType {
+		PosixFileType::from_u32(self.type_var).unwrap_or(PosixFileType::Unknown)
+	}
 }
 
 impl PosixFile for FuseFile {
@@ -263,75 +372,14 @@ impl PosixFile for FuseFile {
 		}
 	}
 
-	fn mkdir(&self, name: &str, mode: u32) -> Option<u64> {
-		let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid?, name, mode);
-		get_filesystem_driver()
-			.unwrap()
-			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
-		Some(unsafe { rsp.rsp.assume_init().nodeid })
-	}
-
-	fn readdir(&mut self) -> Result<Vec<Dirent>, FileError> {
-		// Linux seems to allocate a single page to store the dirfile
-		let mut len = MAX_READ_LEN as u32;
-
-		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset as u64);
-			cmd.header.opcode = Opcode::FUSE_READDIR as u32;
-			get_filesystem_driver()
-				.ok_or(FileError::ENOSYS)?
-				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
-			let len: usize = if rsp.header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
-				- ::core::mem::size_of::<fuse_read_out>()
-				>= len.try_into().unwrap()
-			{
-				len.try_into().unwrap()
-			} else {
-				rsp.header.len as usize
-					- ::core::mem::size_of::<fuse_out_header>()
-					- ::core::mem::size_of::<fuse_read_out>()
-			};
-
-			// See https://elixir.bootlin.com/linux/v6.3.1/source/fs/fuse/readdir.c#L126
-			// and http://libfuse.github.io/doxygen/structfuse__lowlevel__ops.html#a65b7d7fc14d3958d7fb7d215fda20301
-			// Also interesting: fuse_readdir_common in libfuse/lib/fuse.c
-			let mut buffer_ptr = rsp.extra_buffer.as_ptr() as *const u8;
-			let buffer_end = buffer_ptr as usize + len;
-			let mut dir_vec = alloc::vec::Vec::<Dirent>::new();
-
-			while buffer_end - buffer_ptr as usize > core::mem::size_of::<fuse_dirent_head>() {
-				let dirent = unsafe { &*(buffer_ptr as *const fuse_dirent_head) };
-				info!("Len: {}", dirent.namelen);
-				unsafe {
-					buffer_ptr = buffer_ptr.byte_add(core::mem::size_of::<fuse_dirent_head>())
-				};
-				let name =
-					unsafe { core::slice::from_raw_parts(buffer_ptr, dirent.namelen as usize) };
-				dir_vec.push(Dirent {
-					d_ino: dirent.d_ino,
-					off: dirent.off,
-					type_var: dirent.type_var,
-					name: String::from_utf8(name.to_vec()).unwrap(),
-				});
-				self.offset = dirent.off as usize;
-
-				unsafe {
-					buffer_ptr = buffer_ptr.byte_add(dirent.namelen as usize);
-					// align_offset seems to be dangerous
-					buffer_ptr = buffer_ptr
-						.wrapping_add(buffer_ptr.align_offset(core::mem::size_of::<u64>()));
-				};
-			}
-
-			Ok(dir_vec)
-		} else {
-			warn!("Dir not open, cannot read!");
-			Err(FileError::ENOENT)
-		}
-	}
+	// fn mkdir(&self, name: &str, mode: u32) -> Option<u64> {
+	// 	let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid?, name, mode);
+	// 	get_filesystem_driver()
+	// 		.unwrap()
+	// 		.lock()
+	// 		.send_command(cmd.as_ref(), rsp.as_mut());
+	// 	Some(unsafe { rsp.rsp.assume_init().nodeid })
+	// }
 }
 
 #[repr(u32)]
@@ -1230,17 +1278,22 @@ pub fn init() {
 		info!("Root node id {}", nid.expect("No root node?"));
 
 		// Print dir content
-		let mut root_dir = fuse.opendir("/").unwrap();
-		root_dir.mkdir("new_dir",0x777);
+		let mut root_dir = fuse.readdir("/").unwrap();
+		// root_dir.mkdir("new_dir",0x777);
 
-		while let Ok(dirent_vec) = root_dir.readdir() {
-			info!("Result {:#?}", dirent_vec);
-
-			// The filesystem will return an empty buffer when all dirs have been read
-			if dirent_vec.len() == 0 {
-				break;
-			}
+		while let Some(dirent) = root_dir.next() {
+			let dirent = dirent.unwrap();
+			info!("Name: {:#?}, Type: {:#?}", dirent.file_name(), dirent.file_type());
 		}
+
+		// while let Ok(dirent_vec) = root_dir.readdir() {
+		// 	info!("Result {:#?}", dirent_vec);
+
+		// 	// The filesystem will return an empty buffer when all dirs have been read
+		// 	if dirent_vec.len() == 0 {
+		// 		break;
+		// 	}
+		// }
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mount_point = driver.lock().get_mount_point();
