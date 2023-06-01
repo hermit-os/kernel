@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::{GicV3, IntId};
+use arm_gic::gicv3::{GicV3, IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
@@ -277,14 +277,17 @@ pub fn init() {
 				let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
 				let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
 				let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let _irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+				let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 				let irq = u32::from_be_bytes(irq.try_into().unwrap());
-				let _irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+				let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
 				unsafe {
 					TIMER_INTERRUPT = irq;
 				}
 
-				debug!("Timer interrupt: {}", irq);
+				debug!(
+					"Timer interrupt: {}, type {}, flags {}",
+					irq, irqtype, irqflags
+				);
 				unsafe {
 					INTERRUPT_HANDLERS[irq as usize + PPI_START as usize] = Some(timer_handler);
 				}
@@ -293,8 +296,21 @@ pub fn init() {
 					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
 
 				// enable timer interrupt
-				let timer_irqid = IntId::ppi(irq);
+				let timer_irqid = if irqtype == 1 {
+					IntId::ppi(irq)
+				} else if irqtype == 0 {
+					IntId::spi(irq)
+				} else {
+					panic!("Invalid interrupt type");
+				};
 				gic.set_interrupt_priority(timer_irqid, 0x00);
+				if irqflags == 4 || irqflags == 8 {
+					gic.set_trigger(timer_irqid, Trigger::Level);
+				} else if irqflags == 2 || irqflags == 1 {
+					gic.set_trigger(timer_irqid, Trigger::Edge);
+				} else {
+					panic!("Invalid interrupt level!");
+				}
 				gic.enable_interrupt(timer_irqid, true);
 			}
 		}

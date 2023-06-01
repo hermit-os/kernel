@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use core::{str, u32, u64, u8};
 
-use arm_gic::gicv3::IntId;
+use arm_gic::gicv3::{IntId, Trigger};
 use hermit_dtb::Dtb;
 use pci_types::{
 	Bar, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader, MAX_BARS,
@@ -208,6 +208,13 @@ fn detect_interrupt(
 				let irq_id = IntId::spi(irq_number.into());
 				let gic = unsafe { GIC.get_mut().unwrap() };
 				gic.set_interrupt_priority(irq_id, 0x10);
+				if irq_flags == 4 {
+					gic.set_trigger(irq_id, Trigger::Level);
+				} else if irq_flags == 2 {
+					gic.set_trigger(irq_id, Trigger::Edge);
+				} else {
+					panic!("Invalid interrupt level!");
+				}
 				gic.enable_interrupt(irq_id, true);
 
 				return Some((pin, irq_number.try_into().unwrap()));
