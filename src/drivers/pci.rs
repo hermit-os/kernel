@@ -312,7 +312,7 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 			let mut command = self
 				.access
 				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
-			command = command & 0xFFFF_0000u32;
+			command &= 0xFFFF_0000u32;
 			command |= u32::from(line);
 			command |= u32::from(pin) << 8;
 			self.access.write(
@@ -320,9 +320,6 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 				DeviceHeader::PCI_INTERRUPT_REGISTER.into(),
 				command,
 			);
-			let command = self
-				.access
-				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
 		}
 	}
 
