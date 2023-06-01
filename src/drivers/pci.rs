@@ -6,8 +6,8 @@ use core::fmt;
 use bitflags::bitflags;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use pci_types::{
-	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, PciAddress, PciHeader,
-	VendorId, MAX_BARS,
+	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
+	PciHeader, VendorId, MAX_BARS,
 };
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -297,13 +297,32 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		Some((virtual_address, size))
 	}
 
-	pub fn irq(&self) -> Option<InterruptLine> {
+	pub fn get_irq(&self) -> Option<InterruptLine> {
 		let header = PciHeader::new(self.address);
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			let (_pin, line) = endpoint.interrupt(&self.access);
 			Some(line)
 		} else {
 			None
+		}
+	}
+
+	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
+		unsafe {
+			let mut command = self
+				.access
+				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
+			command = command & 0xFFFF_0000u32;
+			command |= u32::from(line);
+			command |= u32::from(pin) << 8;
+			self.access.write(
+				self.address,
+				DeviceHeader::PCI_INTERRUPT_REGISTER.into(),
+				command,
+			);
+			let command = self
+				.access
+				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
 		}
 	}
 

@@ -149,7 +149,7 @@ impl VirtioNetDriver {
 				false,
 			),
 			num_vqs: 0,
-			irq: device.irq().unwrap(),
+			irq: device.get_irq().unwrap(),
 			polling_mode_counter: 0,
 		})
 	}

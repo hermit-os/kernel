@@ -24,13 +24,17 @@ pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
 
 /// maximum number of interrupt handlers
 const MAX_HANDLERS: usize = 256;
+/// The ID of the first Private Peripheral Interrupt.
+const PPI_START: u8 = 16;
+/// The ID of the first Shared Peripheral Interrupt.
+const SPI_START: u8 = 32;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
 /// Possible interrupt handlers
 static mut INTERRUPT_HANDLERS: [Option<fn(state: &State)>; MAX_HANDLERS] = [None; MAX_HANDLERS];
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
-static mut GIC: OnceCell<GicV3> = OnceCell::new();
+pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
 fn timer_handler(_state: &State) {
 	debug!("Handle timer interrupt");
@@ -88,7 +92,7 @@ pub fn disable() {
 pub fn irq_install_handler(irq_number: u8, handler: fn(state: &State)) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
-		INTERRUPT_HANDLERS[irq_number as usize + 16] = Some(handler);
+		INTERRUPT_HANDLERS[irq_number as usize + SPI_START as usize] = Some(handler);
 	}
 }
 
@@ -281,8 +285,12 @@ pub fn init() {
 				}
 
 				debug!("Timer interrupt: {}", irq);
-				irq_install_handler(irq.try_into().unwrap(), timer_handler);
-				add_irq_name(irq.try_into().unwrap(), "Timer");
+				unsafe {
+					INTERRUPT_HANDLERS[irq as usize + PPI_START as usize] = Some(timer_handler);
+				}
+				IRQ_NAMES
+					.lock()
+					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
 
 				// enable timer interrupt
 				let timer_irqid = IntId::ppi(irq);
@@ -302,7 +310,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 pub fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
-	IRQ_NAMES.lock().insert(16 + irq_number, name);
+	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
 
 fn get_irq_name(irq_number: u8) -> Option<&'static str> {

@@ -1281,7 +1281,7 @@ pub(crate) fn init_device(
 		Ok(drv) => {
 			match &drv {
 				VirtioDriver::Network(_) => {
-					let irq = device.irq().unwrap();
+					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
 					irq_install_handler(irq, network_irqhandler);
