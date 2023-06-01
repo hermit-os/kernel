@@ -434,7 +434,7 @@ impl Drop for RTL8139Driver {
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
 ) -> Result<RTL8139Driver, DriverError> {
-	let irq = device.irq().unwrap();
+	let irq = device.get_irq().unwrap();
 	let mut iobase: Option<u32> = None;
 
 	for i in 0..MAX_BARS {
