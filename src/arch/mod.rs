@@ -62,6 +62,28 @@ pub use crate::arch::x86_64::kernel::{
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::*;
 
+/// Force strict CPU ordering, serializes load and store operations.
+#[allow(dead_code)]
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub(crate) fn memory_barrier() {
+	use core::arch::asm;
+	unsafe {
+		asm!("dmb ish", options(nostack, nomem, preserves_flags),);
+	}
+}
+
+/// Force strict CPU ordering, serializes load and store operations.
+#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+pub(crate) fn memory_barrier() {
+	use core::arch::asm;
+	unsafe {
+		asm!("mfence", options(nostack, nomem, preserves_flags),);
+	}
+}
+
 pub fn init_drivers() {
 	// Initialize PCI Drivers for x86_64
 	#[cfg(feature = "pci")]

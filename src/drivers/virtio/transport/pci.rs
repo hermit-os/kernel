@@ -8,6 +8,7 @@ use core::mem;
 use core::result::Result;
 
 use crate::arch::kernel::interrupts::*;
+use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
@@ -463,6 +464,7 @@ impl ComCfg {
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status = 0;
 	}
 
@@ -470,18 +472,21 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status = u8::from(device::Status::FAILED);
 	}
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::ACKNOWLEDGE);
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::DRIVER);
 	}
 
@@ -489,6 +494,7 @@ impl ComCfg {
 	///
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::FEATURES_OK);
 	}
 
@@ -499,6 +505,7 @@ impl ComCfg {
 	/// Re-reads device status to ensure the FEATURES_OK bit is still set:
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
+		memory_barrier();
 		self.com_cfg.device_status & u8::from(device::Status::FEATURES_OK)
 			== u8::from(device::Status::FEATURES_OK)
 	}
@@ -507,6 +514,7 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK);
 	}
 
@@ -514,7 +522,9 @@ impl ComCfg {
 	pub fn dev_features(&mut self) -> u64 {
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
+		memory_barrier();
 		self.com_cfg.device_feature_select = 1;
+		memory_barrier();
 
 		// read high 32 bits of device features
 		let mut dev_feat = u64::from(self.com_cfg.device_feature) << 32;
@@ -522,6 +532,7 @@ impl ComCfg {
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		self.com_cfg.device_feature_select = 0;
+		memory_barrier();
 
 		// read low 32 bits of device features
 		dev_feat |= u64::from(self.com_cfg.device_feature);
@@ -536,7 +547,9 @@ impl ComCfg {
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
+		memory_barrier();
 		self.com_cfg.driver_feature_select = 0;
+		memory_barrier();
 
 		// write low 32 bits of device features
 		self.com_cfg.driver_feature = low;
@@ -544,6 +557,7 @@ impl ComCfg {
 		// Indicate to device that driver_features field shows high 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
 		self.com_cfg.driver_feature_select = 1;
+		memory_barrier();
 
 		// write high 32 bits of device features
 		self.com_cfg.driver_feature = high;
