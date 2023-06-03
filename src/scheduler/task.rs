@@ -637,9 +637,9 @@ impl BlockedTaskQueue {
 		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(feature = "tcp")]
-		if let Some(mut guard) = crate::net::NIC.try_lock() {
-			if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-				let now = crate::net::now();
+		if let Some(mut guard) = crate::executor::NIC.try_lock() {
+			if let crate::executor::NetworkState::Initialized(nic) = guard.deref_mut() {
+				let now = crate::executor::now();
 				nic.poll_common(now);
 				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
 			}

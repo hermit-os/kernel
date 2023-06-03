@@ -4,8 +4,8 @@ use core::ops::DerefMut;
 use core::sync::atomic::Ordering;
 
 use crate::errno::*;
+use crate::executor::{NetworkState, NIC};
 use crate::fd::{get_object, insert_object, FD_COUNTER, OBJECT_MAP};
-use crate::net::{NetworkState, NIC};
 use crate::syscalls::net::*;
 
 mod tcp;
