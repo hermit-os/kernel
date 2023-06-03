@@ -587,7 +587,7 @@ impl ComCfgRaw {
 			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
-                 cap.bar.index
+                cap.bar.index
             );
 			return None;
 		}
