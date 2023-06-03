@@ -49,7 +49,7 @@ pub(crate) mod constants {
 }
 
 bitflags! {
-	#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+	#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 	pub struct PciCommand: u32 {
 		/// Enable response in I/O space
 		const PCI_COMMAND_IO = 0x1;
@@ -69,9 +69,9 @@ bitflags! {
 		const PCI_COMMAND_WAIT = 0x80;
 		/// Enable SERR
 		const PCI_COMMAND_SERR = 0x100;
-		/// Enable back-to-back writes
+		///  Device is allowed to generate fast back-to-back transactions;
 		const PCI_COMMAND_FAST_BACK = 0x200;
-		/// INTx Emulation Disable
+		/// INTx# signal is disabled
 		const PCI_COMMAND_INTX_DISABLE = 0x400;
 	}
 }
