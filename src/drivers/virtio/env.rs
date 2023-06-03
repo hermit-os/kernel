@@ -204,7 +204,7 @@ pub mod pci {
 		let mut mapped_bars: Vec<VirtioPciBar> = Vec::new();
 
 		for i in 0..MAX_BARS {
-			match device.bar(i.try_into().unwrap()) {
+			match device.get_bar(i.try_into().unwrap()) {
 				Some(Bar::Io { .. }) => {
 					warn!("Cannot map I/O BAR!");
 					continue;

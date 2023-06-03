@@ -3,10 +3,11 @@
 use alloc::vec::Vec;
 use core::fmt;
 
+use bitflags::bitflags;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use pci_types::{
-	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, PciAddress, PciHeader,
-	VendorId, MAX_BARS,
+	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
+	PciHeader, VendorId, MAX_BARS,
 };
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
@@ -45,65 +46,92 @@ pub(crate) mod constants {
 	pub(crate) const PCI_CONFIG_DATA_PORT: u16 = 0xCFC;
 	pub(crate) const PCI_CAP_ID_VNDR_VIRTIO: u32 = 0x09;
 	pub(crate) const PCI_MASK_IS_DEV_BUS_MASTER: u32 = 0x0000_0004u32;
-	pub(crate) const PCI_COMMAND_BUSMASTER: u32 = 1 << 2;
+}
 
-	/// PCI registers offset inside header,
-	/// if PCI header is of type 00h.
-	#[allow(dead_code, non_camel_case_types)]
-	#[repr(u16)]
-	pub enum RegisterHeader {
-		PCI_ID_REGISTER = 0x00u16,
-		PCI_COMMAND_REGISTER = 0x04u16,
-		PCI_CLASS_REGISTER = 0x08u16,
-		PCI_HEADER_REGISTER = 0x0Cu16,
-		PCI_BAR0_REGISTER = 0x10u16,
-		PCI_CAPABILITY_LIST_REGISTER = 0x34u16,
-		PCI_INTERRUPT_REGISTER = 0x3Cu16,
+bitflags! {
+	#[derive(Default, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+	pub struct PciCommand: u32 {
+		/// Enable response in I/O space
+		const PCI_COMMAND_IO = 0x1;
+		/// Enable response in Memory space
+		const PCI_COMMAND_MEMORY = 0x2;
+		/// Enable bus mastering
+		const PCI_COMMAND_MASTER = 0x4;
+		/// Enable response to special cycles
+		const PCI_COMMAND_SPECIAL = 0x8;
+		// Use memory write and invalidate
+		const PCI_COMMAND_INVALIDATE = 0x10;
+		/// Enable palette snooping
+		const PCI_COMMAND_VGA_PALETTE = 0x20;
+		/// Enable parity checking
+		const PCI_COMMAND_PARITY = 0x40;
+		/// Enable address/data stepping
+		const PCI_COMMAND_WAIT = 0x80;
+		/// Enable SERR
+		const PCI_COMMAND_SERR = 0x100;
+		///  Device is allowed to generate fast back-to-back transactions;
+		const PCI_COMMAND_FAST_BACK = 0x200;
+		/// INTx# signal is disabled
+		const PCI_COMMAND_INTX_DISABLE = 0x400;
 	}
+}
 
-	impl From<RegisterHeader> for u16 {
-		fn from(val: RegisterHeader) -> u16 {
-			match val {
-				RegisterHeader::PCI_ID_REGISTER => 0x00u16,
-				RegisterHeader::PCI_COMMAND_REGISTER => 0x04u16,
-				RegisterHeader::PCI_CLASS_REGISTER => 0x08u16,
-				RegisterHeader::PCI_HEADER_REGISTER => 0x0Cu16,
-				RegisterHeader::PCI_BAR0_REGISTER => 0x10u16,
-				RegisterHeader::PCI_CAPABILITY_LIST_REGISTER => 0x34u16,
-				RegisterHeader::PCI_INTERRUPT_REGISTER => 0x3Cu16,
-			}
+/// PCI registers offset inside header,
+/// if PCI header is of type 00h (general device).
+#[allow(dead_code, non_camel_case_types)]
+#[repr(u16)]
+pub enum DeviceHeader {
+	PCI_ID_REGISTER = 0x00u16,
+	PCI_COMMAND_REGISTER = 0x04u16,
+	PCI_CLASS_REGISTER = 0x08u16,
+	PCI_HEADER_REGISTER = 0x0Cu16,
+	PCI_BAR0_REGISTER = 0x10u16,
+	PCI_CAPABILITY_LIST_REGISTER = 0x34u16,
+	PCI_INTERRUPT_REGISTER = 0x3Cu16,
+}
+
+impl From<DeviceHeader> for u16 {
+	fn from(val: DeviceHeader) -> u16 {
+		match val {
+			DeviceHeader::PCI_ID_REGISTER => 0x00u16,
+			DeviceHeader::PCI_COMMAND_REGISTER => 0x04u16,
+			DeviceHeader::PCI_CLASS_REGISTER => 0x08u16,
+			DeviceHeader::PCI_HEADER_REGISTER => 0x0Cu16,
+			DeviceHeader::PCI_BAR0_REGISTER => 0x10u16,
+			DeviceHeader::PCI_CAPABILITY_LIST_REGISTER => 0x34u16,
+			DeviceHeader::PCI_INTERRUPT_REGISTER => 0x3Cu16,
 		}
 	}
+}
 
-	/// PCI masks. For convenience put into an enum and provides
-	/// an `Into<u32>` method for usage.
-	#[allow(dead_code, non_camel_case_types)]
-	#[repr(u32)]
-	pub enum Masks {
-		PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
-		PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
-		PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
-		PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
-		PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
-		PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
-		PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
-		PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
-		PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
-	}
+/// PCI masks. For convenience put into an enum and provides
+/// an `Into<u32>` method for usage.
+#[allow(dead_code, non_camel_case_types)]
+#[repr(u32)]
+pub enum Masks {
+	PCI_MASK_IS_BAR_IO_BAR = 0x0000_0001u32,
+	PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT = 0x0000_0004u32,
+	PCI_MASK_IS_MEM_BAR_PREFETCHABLE = 0x0000_0008u32,
+	PCI_MASK_STATUS_CAPABILITIES_LIST = 0x0000_0010u32,
+	PCI_MASK_CAPLIST_POINTER = 0x0000_00FCu32,
+	PCI_MASK_HEADER_TYPE = 0x007F_0000u32,
+	PCI_MASK_MULTIFUNCTION = 0x0080_0000u32,
+	PCI_MASK_MEM_BASE_ADDRESS = 0xFFFF_FFF0u32,
+	PCI_MASK_IO_BASE_ADDRESS = 0xFFFF_FFFCu32,
+}
 
-	impl From<Masks> for u32 {
-		fn from(val: Masks) -> u32 {
-			match val {
-				Masks::PCI_MASK_STATUS_CAPABILITIES_LIST => 0x0000_0010u32,
-				Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
-				Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
-				Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
-				Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
-				Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
-				Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
-				Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
-				Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
-			}
+impl From<Masks> for u32 {
+	fn from(val: Masks) -> u32 {
+		match val {
+			Masks::PCI_MASK_STATUS_CAPABILITIES_LIST => 0x0000_0010u32,
+			Masks::PCI_MASK_CAPLIST_POINTER => 0x0000_00FCu32,
+			Masks::PCI_MASK_HEADER_TYPE => 0x007F_0000u32,
+			Masks::PCI_MASK_MULTIFUNCTION => 0x0080_0000u32,
+			Masks::PCI_MASK_MEM_BASE_ADDRESS => 0xFFFF_FFF0u32,
+			Masks::PCI_MASK_IO_BASE_ADDRESS => 0xFFFF_FFFCu32,
+			Masks::PCI_MASK_IS_MEM_BAR_PREFETCHABLE => 0x0000_0008u32,
+			Masks::PCI_MASK_IS_MEM_BASE_ADDRESS_64BIT => 0x0000_0004u32,
+			Masks::PCI_MASK_IS_BAR_IO_BAR => 0x0000_0001u32,
 		}
 	}
 }
@@ -130,24 +158,34 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		unsafe { self.access.write(self.address, register, value) }
 	}
 
-	pub fn make_bus_master(&self) {
-		use crate::drivers::pci::constants::{RegisterHeader, PCI_COMMAND_BUSMASTER};
-
+	/// Set flag to the command register
+	pub fn set_command(&self, cmd: PciCommand) {
 		unsafe {
 			let mut command = self
 				.access
-				.read(self.address, RegisterHeader::PCI_COMMAND_REGISTER.into());
-			command |= PCI_COMMAND_BUSMASTER;
+				.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into());
+			command |= cmd.bits();
 			self.access.write(
 				self.address,
-				RegisterHeader::PCI_COMMAND_REGISTER.into(),
+				DeviceHeader::PCI_COMMAND_REGISTER.into(),
 				command,
 			)
 		}
 	}
 
+	/// Get value of the command register
+	pub fn get_command(&self) -> PciCommand {
+		unsafe {
+			PciCommand::from_bits(
+				self.access
+					.read(self.address, DeviceHeader::PCI_COMMAND_REGISTER.into()),
+			)
+			.unwrap()
+		}
+	}
+
 	/// Returns the bar at bar-register `slot`.
-	pub fn bar(&self, slot: u8) -> Option<Bar> {
+	pub fn get_bar(&self, slot: u8) -> Option<Bar> {
 		let header = PciHeader::new(self.address);
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			return endpoint.bar(slot, &self.access);
@@ -156,11 +194,57 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		None
 	}
 
+	/// Configure the bar at register `slot`
+	#[allow(unused_variables)]
+	pub fn set_bar(&self, slot: u8, bar: Bar) {
+		let cmd = u16::from(DeviceHeader::PCI_BAR0_REGISTER) + u16::from(slot) * 4;
+		match bar {
+			Bar::Io { port } => unsafe {
+				self.access.write(self.address, cmd, port | 1);
+			},
+			Bar::Memory32 {
+				address,
+				size,
+				prefetchable,
+			} => {
+				if prefetchable {
+					unsafe {
+						self.access.write(self.address, cmd, address | 1 << 3);
+					}
+				} else {
+					unsafe {
+						self.access.write(self.address, cmd, address);
+					}
+				}
+			}
+			Bar::Memory64 {
+				address,
+				size,
+				prefetchable,
+			} => {
+				let high: u32 = (address >> 32).try_into().unwrap();
+				let low: u32 = (address & 0xFFFF_FFF0u64).try_into().unwrap();
+				if prefetchable {
+					unsafe {
+						self.access.write(self.address, cmd, low | 2 << 1 | 1 << 3);
+					}
+				} else {
+					unsafe {
+						self.access.write(self.address, cmd, low | 2 << 1);
+					}
+				}
+				unsafe {
+					self.access.write(self.address, cmd + 4, high);
+				}
+			}
+		}
+	}
+
 	/// Memory maps pci bar with specified index to identical location in virtual memory.
 	/// no_cache determines if we set the `Cache Disable` flag in the page-table-entry.
 	/// Returns (virtual-pointer, size) if successful, else None (if bar non-existent or IOSpace)
 	pub fn memory_map_bar(&self, index: u8, no_cache: bool) -> Option<(VirtAddr, usize)> {
-		let (address, size, prefetchable, width) = match self.bar(index) {
+		let (address, size, prefetchable, width) = match self.get_bar(index) {
 			Some(Bar::Io { .. }) => {
 				warn!("Cannot map IOBar!");
 				return None;
@@ -213,13 +297,29 @@ impl<T: ConfigRegionAccess> PciDevice<T> {
 		Some((virtual_address, size))
 	}
 
-	pub fn irq(&self) -> Option<InterruptLine> {
+	pub fn get_irq(&self) -> Option<InterruptLine> {
 		let header = PciHeader::new(self.address);
 		if let Some(endpoint) = EndpointHeader::from_header(header, &self.access) {
 			let (_pin, line) = endpoint.interrupt(&self.access);
 			Some(line)
 		} else {
 			None
+		}
+	}
+
+	pub fn set_irq(&self, pin: InterruptPin, line: InterruptLine) {
+		unsafe {
+			let mut command = self
+				.access
+				.read(self.address, DeviceHeader::PCI_INTERRUPT_REGISTER.into());
+			command &= 0xFFFF_0000u32;
+			command |= u32::from(line);
+			command |= u32::from(pin) << 8;
+			self.access.write(
+				self.address,
+				DeviceHeader::PCI_INTERRUPT_REGISTER.into(),
+				command,
+			);
 		}
 	}
 
@@ -397,7 +497,6 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 	}
 }
 
-#[cfg(not(target_arch = "aarch64"))]
 pub(crate) fn init_drivers() {
 	let mut nic_available = false;
 

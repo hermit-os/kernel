@@ -10,7 +10,7 @@ use core::cell::RefCell;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
-use crate::drivers::pci::PciDevice;
+use crate::drivers::pci::{PciCommand, PciDevice};
 use crate::drivers::virtio::error::{self, VirtioError};
 use crate::drivers::virtio::transport::pci;
 use crate::drivers::virtio::transport::pci::{PciCap, UniCapsColl};
@@ -149,7 +149,7 @@ impl VirtioNetDriver {
 				false,
 			),
 			num_vqs: 0,
-			irq: device.irq().unwrap(),
+			irq: device.get_irq().unwrap(),
 			polling_mode_counter: 0,
 		})
 	}
@@ -165,6 +165,9 @@ impl VirtioNetDriver {
 	pub(crate) fn init(
 		device: &PciDevice<PciConfigRegion>,
 	) -> Result<VirtioNetDriver, VirtioError> {
+		// enable bus master mode
+		device.set_command(PciCommand::PCI_COMMAND_MASTER);
+
 		let mut drv = match pci::map_caps(device) {
 			Ok(caps) => match VirtioNetDriver::new(caps, device) {
 				Ok(driver) => driver,

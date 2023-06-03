@@ -15,14 +15,12 @@ use core::arch::{asm, global_asm};
 use core::ptr;
 use core::sync::atomic::{AtomicU32, Ordering};
 
-use hermit_entry::boot_info::{BootInfo, PlatformInfo, RawBootInfo};
-use hermit_sync::TicketMutex;
+use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 
 use crate::arch::aarch64::kernel::core_local::*;
 use crate::arch::aarch64::kernel::serial::SerialPort;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::config::*;
 use crate::env;
 
 const SERIAL_PORT_BAUDRATE: u32 = 115200;

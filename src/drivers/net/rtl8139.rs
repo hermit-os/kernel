@@ -16,7 +16,7 @@ use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::net::{network_irqhandler, NetworkInterface};
-use crate::drivers::pci::PciDevice;
+use crate::drivers::pci::{PciCommand, PciDevice};
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
@@ -434,11 +434,11 @@ impl Drop for RTL8139Driver {
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
 ) -> Result<RTL8139Driver, DriverError> {
-	let irq = device.irq().unwrap();
+	let irq = device.get_irq().unwrap();
 	let mut iobase: Option<u32> = None;
 
 	for i in 0..MAX_BARS {
-		if let Some(Bar::Io { port }) = device.bar(i.try_into().unwrap()) {
+		if let Some(Bar::Io { port }) = device.get_bar(i.try_into().unwrap()) {
 			iobase = Some(port)
 		}
 	}
@@ -450,7 +450,7 @@ pub(crate) fn init_device(
 
 	debug!("Found RTL8139 at iobase {:#x} (irq {})", iobase, irq);
 
-	device.make_bus_master();
+	device.set_command(PciCommand::PCI_COMMAND_MASTER);
 
 	let mac: [u8; 6] = unsafe {
 		[

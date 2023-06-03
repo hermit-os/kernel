@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use alloc::vec::Vec;
 use core::arch::asm;
 use core::str;
