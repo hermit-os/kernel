@@ -58,7 +58,7 @@ pub fn init() {
 		let parts: Vec<_> = node.split('@').collect();
 
 		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if str::from_utf8(compatible).unwrap().find("pl031").is_some() {
+			if str::from_utf8(compatible).unwrap().contains("pl031") {
 				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
 				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
 				let addr = PhysAddr(u64::from_be_bytes(slice.try_into().unwrap()));
