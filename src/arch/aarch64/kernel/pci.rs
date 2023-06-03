@@ -1,7 +1,10 @@
+use alloc::borrow::ToOwned;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::{str, u32, u64, u8};
 
 use arm_gic::gicv3::{IntId, Trigger};
+use bit_field::BitField;
 use hermit_dtb::Dtb;
 use pci_types::{
 	Bar, ConfigRegionAccess, InterruptLine, InterruptPin, PciAddress, PciHeader, MAX_BARS,
@@ -76,9 +79,9 @@ fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		match high & 0x3000000 {
-			0 => debug!("Configuration space"),
-			0x1000000 => {
+		match high.get_bits(24..=25) {
+			0b00 => debug!("Configuration space"),
+			0b01 => {
 				debug!("IO space");
 				if io_start != 0 {
 					warn!("Found already IO space");
@@ -88,8 +91,8 @@ fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
 					residual_slice.split_at(core::mem::size_of::<u64>());
 				io_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
-			0x2000000 => {
-				let prefetchable = (high & 0x40000000) != 0;
+			0b10 => {
+				let prefetchable = high.get_bit(30);
 				debug!("32 bit memory space: prefetchable {}", prefetchable);
 				if mem32_start != 0 {
 					warn!("Found already 32 bit memory space");
@@ -99,8 +102,8 @@ fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
 					residual_slice.split_at(core::mem::size_of::<u64>());
 				mem32_start = u64::from_be_bytes(value_slice.try_into().unwrap());
 			}
-			0x3000000 => {
-				let prefetchable = (high & 0x40000000) != 0;
+			0b11 => {
+				let prefetchable = high.get_bit(30);
 				debug!("64 bit memory space: prefetchable {}", prefetchable);
 				if mem64_start != 0 {
 					warn!("Found already 64 bit memory space");
@@ -135,14 +138,14 @@ fn detect_interrupt(
 
 	let mut pin: u8 = 0;
 
-	let slice = dtb.get_property("/", "interrupt-parent").unwrap();
-	let interrupt_parent = u32::from_be_bytes(slice.try_into().unwrap());
+	//let slice = dtb.get_property("/", "interrupt-parent").unwrap();
+	//let interrupt_parent = u32::from_be_bytes(slice.try_into().unwrap());
 
 	let slice = dtb.get_property("/", "#address-cells").unwrap();
 	let address_cells = u32::from_be_bytes(slice.try_into().unwrap());
 
-	let slice = dtb.get_property("/intc", "#interrupt-cells").unwrap();
-	let interrupt_cells = u32::from_be_bytes(slice.try_into().unwrap());
+	//let slice = dtb.get_property("/intc", "#interrupt-cells").unwrap();
+	//let interrupt_cells = u32::from_be_bytes(slice.try_into().unwrap());
 
 	let mut residual_slice = dtb
 		.get_property(parts.first().unwrap(), "interrupt-map")
@@ -201,7 +204,7 @@ fn detect_interrupt(
 			irq_flags
 		);
 
-		if high == addr {
+		if high.get_bits(0..24) == addr {
 			pin += 1;
 			if irq_type == 0 {
 				// enable interrupt
@@ -285,7 +288,7 @@ pub fn init() {
 							let dev = PciDevice::new(pci_address, pci_config);
 
 							// Initializes BARs
-							let mut cmd = PciCommand::PCI_COMMAND_INTX_DISABLE;
+							let mut cmd = PciCommand::default();
 							for i in 0..MAX_BARS {
 								if let Some(bar) = dev.get_bar(i.try_into().unwrap()) {
 									match bar {
