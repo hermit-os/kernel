@@ -1,5 +1,4 @@
 use alloc::boxed::Box;
-use core::ptr;
 use core::sync::atomic::Ordering;
 
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};

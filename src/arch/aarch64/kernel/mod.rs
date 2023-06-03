@@ -11,8 +11,7 @@ mod start;
 pub mod switch;
 pub mod systemtime;
 
-use core::arch::{asm, global_asm};
-use core::ptr;
+use core::arch::global_asm;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};

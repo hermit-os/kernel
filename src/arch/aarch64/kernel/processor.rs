@@ -1,5 +1,4 @@
 use core::arch::asm;
-use core::hint::spin_loop;
 use core::{fmt, str};
 
 use aarch64::regs::CNTFRQ_EL0;
@@ -162,15 +161,6 @@ pub fn supports_2mib_pages() -> bool {
 	false
 }
 
-/// Delay execution by the given number of microseconds using busy-waiting.
-#[inline]
-pub fn udelay(usecs: u64) {
-	let end = get_timestamp() + get_frequency() as u64 * usecs;
-	while get_timestamp() < end {
-		spin_loop();
-	}
-}
-
 pub fn configure() {
 	// TODO: PMCCNTR_EL0 is the best replacement for RDTSC on AArch64.
 	// However, this test code showed that it's apparently not supported under uhyve yet.
@@ -179,7 +169,7 @@ pub fn configure() {
 	unsafe {
 		// TODO: Setting PMUSERENR_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
-		let pmuserenr_el0: u32 = 1 << 0 | 1 << 2 | 1 << 3;
+		let pmuserenr_el0: u64 = 1 << 0 | 1 << 2 | 1 << 3;
 		asm!(
 			"msr pmuserenr_el0, {}",
 			in(reg) pmuserenr_el0,
@@ -188,7 +178,7 @@ pub fn configure() {
 
 		// TODO: Setting PMCNTENSET_EL0 is probably not required, but find out about that
 		// when reading PMCCNTR_EL0 works at all.
-		let pmcntenset_el0: u32 = 1 << 31;
+		let pmcntenset_el0: u64 = 1 << 31;
 		asm!(
 			"msr pmcntenset_el0, {}",
 			in(reg) pmcntenset_el0,
@@ -196,7 +186,7 @@ pub fn configure() {
 		);
 
 		// Enable PMCCNTR_EL0 using PMCR_EL0.
-		let mut pmcr_el0: u32 = 0;
+		let mut pmcr_el0: u64;
 		asm!(
 			"mrs {}, pmcr_el0",
 			out(reg) pmcr_el0,
@@ -223,14 +213,14 @@ pub fn detect_frequency() {
 fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	if let Some(wt) = wakeup_time {
 		// wt is the absolute wakeup time in microseconds based on processor::get_timer_ticks.
-		let deadline = (wt * u64::from(CPU_FREQUENCY.get())) / 1000000;
+		let deadline: u64 = (wt * u64::from(CPU_FREQUENCY.get())) / 1000000;
 
 		unsafe {
 			asm!(
 				"msr cntp_cval_el0, {value}",
 				"msr cntp_ctl_el0, {enable}",
 				value = in(reg) deadline,
-				enable = in(reg) 1,
+				enable = in(reg) 1u64,
 				options(nostack, nomem),
 			);
 		}
@@ -238,9 +228,8 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 		// disable timer
 		unsafe {
 			asm!(
-				"msr cntp_cval_el0, {disable}",
-				"msr cntp_ctl_el0, {disable}",
-				disable = in(reg) 0,
+				"msr cntp_cval_el0, xzr",
+				"msr cntp_ctl_el0, xzr",
 				options(nostack, nomem),
 			);
 		}

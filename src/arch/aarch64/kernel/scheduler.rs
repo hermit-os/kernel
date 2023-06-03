@@ -7,8 +7,6 @@ use core::{mem, ptr, slice};
 
 use align_address::Align;
 
-use crate::arch::aarch64::kernel::core_local::*;
-use crate::arch::aarch64::kernel::processor;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::interrupts::IST_SIZE;
