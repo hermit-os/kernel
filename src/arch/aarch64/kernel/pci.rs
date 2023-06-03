@@ -63,14 +63,14 @@ impl ConfigRegionAccess for PciConfigRegion {
 
 /// Try to find regions for the device registers
 #[allow(unused_assignments)]
-fn detect_pci_regions(dtb: &Dtb<'_>, parts: &Vec<&str>) -> (u64, u64, u64) {
+fn detect_pci_regions(dtb: &Dtb<'_>, parts: &[&str]) -> (u64, u64, u64) {
 	let mut io_start: u64 = 0;
 	let mut mem32_start: u64 = 0;
 	let mut mem64_start: u64 = 0;
 
 	let mut residual_slice = dtb.get_property(parts.first().unwrap(), "ranges").unwrap();
 	let mut value_slice;
-	while residual_slice.len() > 0 {
+	while !residual_slice.is_empty() {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
@@ -128,7 +128,7 @@ fn detect_interrupt(
 	bus: u32,
 	dev: u32,
 	dtb: &Dtb<'_>,
-	parts: &Vec<&str>,
+	parts: &[&str],
 ) -> Option<(InterruptPin, InterruptLine)> {
 	let addr = bus << 16 | dev << 11;
 	if addr == 0 {
@@ -151,7 +151,7 @@ fn detect_interrupt(
 		.get_property(parts.first().unwrap(), "interrupt-map")
 		.unwrap();
 	let mut value_slice;
-	while residual_slice.len() > 0 {
+	while !residual_slice.is_empty() {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
@@ -208,7 +208,7 @@ fn detect_interrupt(
 			pin += 1;
 			if irq_type == 0 {
 				// enable interrupt
-				let irq_id = IntId::spi(irq_number.into());
+				let irq_id = IntId::spi(irq_number);
 				let gic = unsafe { GIC.get_mut().unwrap() };
 				gic.set_interrupt_priority(irq_id, 0x10);
 				if irq_flags == 4 {
@@ -240,8 +240,7 @@ pub fn init() {
 		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
 			if str::from_utf8(compatible)
 				.unwrap()
-				.find("pci-host-ecam-generic")
-				.is_some()
+				.contains("pci-host-ecam-generic")
 			{
 				let reg = dtb.get_property(parts.first().unwrap(), "reg").unwrap();
 				let (slice, residual_slice) = reg.split_at(core::mem::size_of::<u64>());
@@ -355,8 +354,7 @@ pub fn init() {
 				return;
 			} else if str::from_utf8(compatible)
 				.unwrap()
-				.find("pci-host-cam-generic")
-				.is_some()
+				.contains("pci-host-cam-generic")
 			{
 				warn!("Currently, pci-host-cam-generic isn't supported!");
 			}

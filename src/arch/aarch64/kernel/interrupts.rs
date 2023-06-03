@@ -260,11 +260,7 @@ pub fn init() {
 		let parts: Vec<_> = node.split('@').collect();
 
 		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if core::str::from_utf8(compatible)
-				.unwrap()
-				.find("timer")
-				.is_some()
-			{
+			if core::str::from_utf8(compatible).unwrap().contains("timer") {
 				let irq_slice = dtb
 					.get_property(parts.first().unwrap(), "interrupts")
 					.unwrap();
