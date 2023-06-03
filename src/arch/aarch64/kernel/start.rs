@@ -4,8 +4,7 @@ use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_entry::Entry;
 
 use crate::arch::aarch64::kernel::scheduler::TaskStacks;
-use crate::arch::aarch64::kernel::serial::SerialPort;
-use crate::arch::aarch64::kernel::{get_processor_count, BOOT_INFO, RAW_BOOT_INFO};
+use crate::arch::aarch64::kernel::{BOOT_INFO, RAW_BOOT_INFO};
 use crate::KERNEL_STACK_SIZE;
 
 extern "C" {
@@ -54,10 +53,10 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 			out("x4") _,
 			options(nostack),
 		);
-	}
 
-	// Memory barrier
-	asm!("dsb sy", options(nostack),);
+		// Memory barrier
+		asm!("dsb sy", options(nostack),);
+	}
 
 	if cpu_id == 0 {
 		crate::boot_processor_main()

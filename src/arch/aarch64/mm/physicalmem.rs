@@ -3,7 +3,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::aarch64::kernel::{get_limit, get_ram_address};
+use crate::arch::aarch64::kernel::get_limit;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::aarch64::mm::PhysAddr;
 use crate::mm;

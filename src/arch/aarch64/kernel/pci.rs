@@ -1,5 +1,3 @@
-use alloc::borrow::ToOwned;
-use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::{str, u32, u64, u8};
 
@@ -63,8 +61,9 @@ impl ConfigRegionAccess for PciConfigRegion {
 	}
 }
 
-fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
-	/// Try to find regions for the device registers
+/// Try to find regions for the device registers
+#[allow(unused_assignments)]
+fn detect_pci_regions(dtb: &Dtb<'_>, parts: &Vec<&str>) -> (u64, u64, u64) {
 	let mut io_start: u64 = 0;
 	let mut mem32_start: u64 = 0;
 	let mut mem64_start: u64 = 0;
@@ -75,9 +74,9 @@ fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let mid = u32::from_be_bytes(value_slice.try_into().unwrap());
+		let _mid = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let low = u32::from_be_bytes(value_slice.try_into().unwrap());
+		let _low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		match high.get_bits(24..=25) {
 			0b00 => debug!("Configuration space"),
@@ -124,10 +123,11 @@ fn detect_pci_regions(dtb: &Dtb, parts: &Vec<&str>) -> (u64, u64, u64) {
 	(io_start, mem32_start, mem64_start)
 }
 
+#[allow(unused_assignments)]
 fn detect_interrupt(
 	bus: u32,
 	dev: u32,
-	dtb: &Dtb,
+	dtb: &Dtb<'_>,
 	parts: &Vec<&str>,
 ) -> Option<(InterruptPin, InterruptLine)> {
 	let addr = bus << 16 | dev << 11;
@@ -155,19 +155,19 @@ fn detect_interrupt(
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
 		let high = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let mid = u32::from_be_bytes(value_slice.try_into().unwrap());
+		let _mid = u32::from_be_bytes(value_slice.try_into().unwrap());
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let low = u32::from_be_bytes(value_slice.try_into().unwrap());
+		let _low = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let child_specifier = u32::from_be_bytes(value_slice.try_into().unwrap());
+		//let child_specifier = u32::from_be_bytes(value_slice.try_into().unwrap());
 
 		(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-		let parent = u32::from_be_bytes(value_slice.try_into().unwrap());
+		//let parent = u32::from_be_bytes(value_slice.try_into().unwrap());
 
-		for i in 0..address_cells {
+		for _i in 0..address_cells {
 			(value_slice, residual_slice) = residual_slice.split_at(core::mem::size_of::<u32>());
-			let parent_address = u32::from_be_bytes(value_slice.try_into().unwrap());
+			//let parent_address = u32::from_be_bytes(value_slice.try_into().unwrap());
 		}
 
 		// The 1st cell is the interrupt type; 0 for SPI interrupts, 1 for PPI
@@ -303,14 +303,14 @@ pub fn init() {
 											cmd |= PciCommand::PCI_COMMAND_IO
 												| PciCommand::PCI_COMMAND_MASTER;
 										}
-										/// Currently, we ignore 32 bit memory bars
+										// Currently, we ignore 32 bit memory bars
 										/*Bar::Memory32 { address, size, prefetchable } => {
 											dev.set_bar(i.try_into().unwrap(), Bar::Memory32 { address: mem32_start.try_into().unwrap(), size,  prefetchable });
 											mem32_start += u64::from(size);
 											cmd |= PciCommand::PCI_COMMAND_MEMORY|PciCommand::PCI_COMMAND_MASTER;
 										}*/
 										Bar::Memory64 {
-											address,
+											address: _,
 											size,
 											prefetchable,
 										} => {

@@ -156,7 +156,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 	unsafe {
 		asm!(
 			"str x8, [{port}]",
-			port = in(reg) port,
+			port = in(reg) u64::from(port),
 			in("x8") physical_address.as_u64(),
 			options(nostack),
 		);

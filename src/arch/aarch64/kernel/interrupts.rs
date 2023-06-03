@@ -42,9 +42,8 @@ fn timer_handler(_state: &State) {
 	// disable timer
 	unsafe {
 		asm!(
-			"msr cntp_cval_el0, {disable}",
-			"msr cntp_ctl_el0, {disable}",
-			disable = in(reg) 0,
+			"msr cntp_cval_el0, xzr",
+			"msr cntp_ctl_el0, xzr",
 			options(nostack, nomem),
 		);
 	}

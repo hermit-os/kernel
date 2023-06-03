@@ -9,8 +9,6 @@ pub mod x86_64;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::core_local;
 #[cfg(target_arch = "aarch64")]
-use crate::arch::aarch64::kernel::core_local::core_scheduler;
-#[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts::wakeup_core;
