@@ -16,9 +16,9 @@ use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
+use crate::core_scheduler;
 use crate::errno::EFAULT;
-use crate::scheduler::CoreId;
-use crate::{core_scheduler, sys_exit};
+use crate::scheduler::{self, CoreId};
 
 pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
 
@@ -173,7 +173,7 @@ pub extern "C" fn do_sync(_state: &State) {
 			error!("Exception Syndrome Register {:#x}", esr);
 
 			GicV3::end_interrupt(irqid);
-			sys_exit(-EFAULT);
+			scheduler::abort()
 		} else {
 			error!("Unknown exception");
 		}
@@ -188,14 +188,14 @@ pub extern "C" fn do_sync(_state: &State) {
 pub extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
 	error!("Receive unhandled exception: {}", reason);
 
-	sys_exit(-EFAULT);
+	scheduler::abort()
 }
 
 #[no_mangle]
 pub extern "C" fn do_error(_state: &State) -> ! {
 	error!("Receive error interrupt");
 
-	sys_exit(-EFAULT);
+	scheduler::abort()
 }
 
 pub fn wakeup_core(_core_to_wakeup: CoreId) {
