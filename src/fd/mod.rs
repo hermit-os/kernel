@@ -204,6 +204,14 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		-EINVAL
 	}
 
+	/// 'readdir' returns a pointer to a dirent structure
+    /// representing the next directory entry in the directory stream
+	/// pointed to by the file descriptor
+	fn readdir(&self) -> *const u64 {
+		// TODO: Error handling
+		core::ptr::null()
+	}
+
 	/// `accept` a connection on a socket
 	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> i32 {
@@ -307,6 +315,36 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			let mut fs = fs::FILESYSTEM.lock();
 			if let Ok(filesystem_fd) = fs.open(name, open_flags_to_perm(flags, mode as u32)) {
 				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+				let file = GenericFile::new(filesystem_fd);
+				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
+					Err(-EINVAL)
+				} else {
+					Ok(fd as FileDescriptor)
+				}
+			} else {
+				Err(-EINVAL)
+			}
+		}
+		#[cfg(not(target_arch = "x86_64"))]
+		{
+			Err(-ENOSYS)
+		}
+	}
+}
+
+pub(crate) fn opendir(name: *const u8) -> Result<FileDescriptor, i32> {
+	if env::is_uhyve() {
+		Err(-EINVAL)
+	} else {
+		#[cfg(target_arch = "x86_64")]
+		{
+			let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+			debug!("Open directory {}", name);
+
+			let mut fs = fs::FILESYSTEM.lock();
+			if let Ok(filesystem_fd) = fs.opendir(name) {
+				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+				// Would a GenericDir make sense?
 				let file = GenericFile::new(filesystem_fd);
 				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
 					Err(-EINVAL)
