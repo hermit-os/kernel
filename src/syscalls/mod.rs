@@ -107,6 +107,15 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
+extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
+	crate::fd::opendir(name).map_or_else(|e| e, |v| v)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
+	kernel_function!(__sys_opendir(name))
+}
+
 extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
 	crate::fd::open(name, flags, mode).map_or_else(|e| e, |v| v)
 }
@@ -167,6 +176,16 @@ extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isi
 #[no_mangle]
 pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	kernel_function!(__sys_lseek(fd, offset, whence))
+}
+
+extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const u64 {
+	let obj = get_object(fd);
+	obj.map_or(core::ptr::null(), |v| (*v).readdir())
+}
+
+#[no_mangle]
+pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const u64 {
+	kernel_function!(__sys_readdir(fd))
 }
 
 extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {

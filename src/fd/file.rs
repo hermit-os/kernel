@@ -98,6 +98,18 @@ impl ObjectInterface for GenericFile {
 
 		ret as isize
 	}
+
+	fn readdir(&self) -> *const u64 {
+		debug!("readdir ! {}", self.0);
+
+		let mut fs = fs::FILESYSTEM.lock();
+		let mut ret: *const u64 = core::ptr::null();
+		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
+			ret = file.readdir().unwrap(); // TODO: might fail
+		});
+
+		ret
+	}
 }
 
 impl Drop for GenericFile {

@@ -141,6 +141,14 @@ impl Filesystem {
 		Ok(self.add_file(file))
 	}
 
+	/// Similar to open
+	pub fn opendir(&mut self, path: &str) -> Result<u64, FileError> {
+		debug!("Opening dir {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		let file = fs.opendir(internal_path)?;
+		Ok(self.add_file(file))
+	}
+
 	/// Closes a file with given fd.
 	/// If the file is currently open, closes it
 	/// Remove the file from map of open files
@@ -204,11 +212,17 @@ pub enum FileError {
 	ENOSYS,
 	#[cfg(feature = "fs")]
 	EIO,
+	#[cfg(feature = "pci")]
+	EBADF,
+	#[cfg(feature = "pci")]
+	EINVAL,
+	#[cfg(feature = "pci")]
+	EISDIR,
 }
 
 pub trait PosixFileSystem {
 	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
-	fn readdir(&self, path: &str) -> Result<Box<dyn PosixReadDir + Send>, FileError>;
+	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
 }
 
@@ -217,11 +231,13 @@ pub trait PosixFile {
 	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError>;
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
+
+	fn readdir(&mut self) -> Result<*const u64, FileError>;
 }
 
-pub trait PosixReadDir {
-	fn next(&mut self) -> Option<Result<Box<dyn PosixDirEntry>, FileError>>;
-}
+// pub trait PosixReadDir {
+// 	fn next(&mut self) -> Option<Result<Box<dyn PosixDirEntry>, FileError>>;
+// }
 
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -235,13 +251,6 @@ pub enum PosixFileType {
 	SymbolicLink = 10, // DT_LNK
 	Socket = 12, // DT_SOCK
 	Whiteout = 14 // DT_WHT
-}
-
-pub trait PosixDirEntry {
-	fn internal_path(&self) -> String;
-	fn file_name(&self) -> String;
-	fn file_type(&self) -> PosixFileType;
-	// fn metadata(&self) -> PosixMetadata;
 }
 
 // TODO: raw is partially redundant, create nicer interface
