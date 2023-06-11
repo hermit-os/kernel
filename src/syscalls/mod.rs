@@ -65,19 +65,19 @@ pub(crate) fn init() {
 #[cfg(target_os = "none")]
 #[no_mangle]
 pub extern "C" fn sys_malloc(size: usize, align: usize) -> *mut u8 {
-	__sys_malloc(size, align)
+	kernel_function!(__sys_malloc(size, align))
 }
 
 #[cfg(target_os = "none")]
 #[no_mangle]
 pub extern "C" fn sys_realloc(ptr: *mut u8, size: usize, align: usize, new_size: usize) -> *mut u8 {
-	__sys_realloc(ptr, size, align, new_size)
+	kernel_function!(__sys_realloc(ptr, size, align, new_size))
 }
 
 #[cfg(target_os = "none")]
 #[no_mangle]
 pub extern "C" fn sys_free(ptr: *mut u8, size: usize, align: usize) {
-	__sys_free(ptr, size, align)
+	kernel_function!(__sys_free(ptr, size, align))
 }
 
 pub(crate) fn get_application_parameters() -> (i32, *const *const u8, *const *const u8) {
