@@ -51,25 +51,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "convert_case"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6245d59a3e82a7fc217c5828a6692dbc6dfb63a0c8c90495621f7b9d79704a0e"
-
-[[package]]
-name = "derive_more"
-version = "0.99.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fb810d30a7c1953f91334de7244731fc3f3c10d7fe163338a35b9f640960321"
-dependencies = [
- "convert_case",
- "proc-macro2",
- "quote",
- "rustc_version",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "goblin"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -176,15 +157,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc_version"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa0f585226d2e68097d4f95d113b15b83a82e819ab25717ec0590d9584ef366"
-dependencies = [
- "semver",
-]
-
-[[package]]
 name = "rustversion"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -213,12 +185,6 @@ name = "scroll"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04c565b551bafbef4157586fa379538366e4385d42082f255bfd96e4fe8519da"
-
-[[package]]
-name = "semver"
-version = "1.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bebd363326d05ec3e2f532ab7660680f3b02130d780c299bca73469d521bc0ed"
 
 [[package]]
 name = "syn"
@@ -279,12 +245,11 @@ dependencies = [
 
 [[package]]
 name = "uefi"
-version = "0.21.0"
+version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b568c22d9ed54fb8695eff4252975063a3fa20281049df911d0237b44b86b6a"
+checksum = "4c66321e9355bcd547e25268acd230530cb17a1569ec0ed142237f3967075dcd"
 dependencies = [
  "bitflags 2.3.1",
- "derive_more",
  "log",
  "ptr_meta",
  "ucs2",
@@ -306,9 +271,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-raw"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d5b1c8cd8a8a201bcc0d132f8367f5cb7c38c99a5debe304392d379963776d5"
+checksum = "d73e08d8e944b7c7e90a7c8a53213bdd71ceb7b414ee664f522c1cc579888c25"
 dependencies = [
  "bitflags 2.3.1",
  "ptr_meta",
@@ -317,9 +282,9 @@ dependencies = [
 
 [[package]]
 name = "uefi-services"
-version = "0.18.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de55164b5fc3eddb8619add9fa14d91321bb337507e1f0d065a992060f1ccafc"
+checksum = "2788f4d571cf33b37838f238e732840c3ec42e899b141bcd96d2b84cf2c2e614"
 dependencies = [
  "cfg-if",
  "log",
