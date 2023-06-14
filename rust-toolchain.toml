@@ -1,6 +1,6 @@
 [toolchain]
 # Manually sync this with Dockerfile!
-channel = "nightly-2023-04-05"
+channel = "nightly-2023-06-19"
 components = [
     "llvm-tools-preview",
     "rust-src",
