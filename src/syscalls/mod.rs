@@ -16,6 +16,7 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{dup_object, get_object, remove_object, FileDescriptor};
+use crate::syscalls::fs::Dirent;
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -176,13 +177,13 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
-extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const u64 {
+extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const Dirent {
 	let obj = get_object(fd);
 	obj.map_or(core::ptr::null(), |v| (*v).readdir())
 }
 
 #[no_mangle]
-pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const u64 {
+pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const Dirent {
 	kernel_function!(__sys_readdir(fd))
 }
 

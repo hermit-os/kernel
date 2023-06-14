@@ -13,7 +13,7 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::syscalls::fs::{self, FilePerms, SeekWhence};
+use crate::syscalls::fs::{self, Dirent, FilePerms, SeekWhence};
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
@@ -205,9 +205,9 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
-    /// representing the next directory entry in the directory stream
+	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> *const u64 {
+	fn readdir(&self) -> *const Dirent {
 		// TODO: Error handling
 		core::ptr::null()
 	}

@@ -5,7 +5,7 @@ use crate::fd::{
 	uhyve_send, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE,
 	UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
 };
-use crate::syscalls::fs::{self, PosixFile, SeekWhence};
+use crate::syscalls::fs::{self, Dirent, PosixFile, SeekWhence};
 
 #[derive(Debug, Clone)]
 pub struct UhyveFile(i32);
@@ -99,11 +99,11 @@ impl ObjectInterface for GenericFile {
 		ret as isize
 	}
 
-	fn readdir(&self) -> *const u64 {
+	fn readdir(&self) -> *const Dirent {
 		debug!("readdir ! {}", self.0);
 
 		let mut fs = fs::FILESYSTEM.lock();
-		let mut ret: *const u64 = core::ptr::null();
+		let mut ret: *const Dirent = core::ptr::null();
 		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
 			ret = file.readdir().unwrap(); // TODO: might fail
 		});
