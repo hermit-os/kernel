@@ -42,6 +42,7 @@ use hermit_sync::TicketMutex;
 /// TODO:
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
+pub use crate::fs::fuse::fuse_dirent as Dirent;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
 pub static FILESYSTEM: TicketMutex<Filesystem> = TicketMutex::new(Filesystem::new());
@@ -96,7 +97,7 @@ impl Filesystem {
 			pathsplit.next(); // empty, since first char is /
 
 			let mount = pathsplit.next().unwrap();
-			let internal_path = pathsplit.next().unwrap();
+			let internal_path = pathsplit.next().unwrap_or("/");
 			if let Some(fs) = self.mounts.get(mount) {
 				return Ok((fs.deref(), internal_path));
 			}
@@ -111,7 +112,7 @@ impl Filesystem {
 			} else {
 				"."
 			};
-			let internal_path = pathsplit.next().unwrap();
+			let internal_path = pathsplit.next().unwrap_or("/");
 
 			debug!(
 				"Assume that the directory '{}' is used as mount point!",
@@ -215,8 +216,6 @@ pub enum FileError {
 	#[cfg(feature = "pci")]
 	EBADF,
 	#[cfg(feature = "pci")]
-	EINVAL,
-	#[cfg(feature = "pci")]
 	EISDIR,
 }
 
@@ -232,25 +231,20 @@ pub trait PosixFile {
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 
-	fn readdir(&mut self) -> Result<*const u64, FileError>;
+	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
 }
-
-// pub trait PosixReadDir {
-// 	fn next(&mut self) -> Option<Result<Box<dyn PosixDirEntry>, FileError>>;
-// }
-
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum PosixFileType {
-	Unknown = 0, // DT_UNKNOWN
-	Fifo = 1, // DT_FIFO
+	Unknown = 0,         // DT_UNKNOWN
+	Fifo = 1,            // DT_FIFO
 	CharacterDevice = 2, // DT_CHR
-	Directory = 4, // DT_DIR
-	BlockDevice = 6, // DT_BLK
-	RegularFile = 8, // DT_REG
-	SymbolicLink = 10, // DT_LNK
-	Socket = 12, // DT_SOCK
-	Whiteout = 14 // DT_WHT
+	Directory = 4,       // DT_DIR
+	BlockDevice = 6,     // DT_BLK
+	RegularFile = 8,     // DT_REG
+	SymbolicLink = 10,   // DT_LNK
+	Socket = 12,         // DT_SOCK
+	Whiteout = 14,       // DT_WHT
 }
 
 // TODO: raw is partially redundant, create nicer interface
