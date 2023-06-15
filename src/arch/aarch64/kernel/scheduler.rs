@@ -3,94 +3,98 @@
 use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::boxed::Box;
 use core::arch::asm;
+use core::sync::atomic::Ordering;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
 
+use crate::arch::aarch64::kernel::core_local::core_scheduler;
+use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
-use crate::interrupts::IST_SIZE;
 use crate::scheduler::task::{Task, TaskFrame};
 use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]
-pub struct State {
+pub(crate) struct State {
+	/// stack selector
+	pub spsel: u64,
 	/// Exception Link Register
-	elr_el1: u64,
+	pub elr_el1: u64,
 	/// Program Status Register
-	spsr_el1: u64,
+	pub spsr_el1: u64,
+	/// User-level stack
+	pub sp_el0: u64,
 	/// Thread ID Register
-	tpidr_el0: u64,
+	pub tpidr_el0: u64,
 	/// X0 register
-	x0: u64,
+	pub x0: u64,
 	/// X1 register
-	x1: u64,
+	pub x1: u64,
 	/// X2 register
-	x2: u64,
+	pub x2: u64,
 	/// X3 register
-	x3: u64,
+	pub x3: u64,
 	/// X4 register
-	x4: u64,
+	pub x4: u64,
 	/// X5 register
-	x5: u64,
+	pub x5: u64,
 	/// X6 register
-	x6: u64,
+	pub x6: u64,
 	/// X7 register
-	x7: u64,
+	pub x7: u64,
 	/// X8 register
-	x8: u64,
+	pub x8: u64,
 	/// X9 register
-	x9: u64,
+	pub x9: u64,
 	/// X10 register
-	x10: u64,
+	pub x10: u64,
 	/// X11 register
-	x11: u64,
+	pub x11: u64,
 	/// X12 register
-	x12: u64,
+	pub x12: u64,
 	/// X13 register
-	x13: u64,
+	pub x13: u64,
 	/// X14 register
-	x14: u64,
+	pub x14: u64,
 	/// X15 register
-	x15: u64,
+	pub x15: u64,
 	/// X16 register
-	x16: u64,
+	pub x16: u64,
 	/// X17 register
-	x17: u64,
+	pub x17: u64,
 	/// X18 register
-	x18: u64,
+	pub x18: u64,
 	/// X19 register
-	x19: u64,
+	pub x19: u64,
 	/// X20 register
-	x20: u64,
+	pub x20: u64,
 	/// X21 register
-	x21: u64,
+	pub x21: u64,
 	/// X22 register
-	x22: u64,
+	pub x22: u64,
 	/// X23 register
-	x23: u64,
+	pub x23: u64,
 	/// X24 register
-	x24: u64,
+	pub x24: u64,
 	/// X25 register
-	x25: u64,
+	pub x25: u64,
 	/// X26 register
-	x26: u64,
+	pub x26: u64,
 	/// X27 register
-	x27: u64,
+	pub x27: u64,
 	/// X28 register
-	x28: u64,
+	pub x28: u64,
 	/// X29 register
-	x29: u64,
+	pub x29: u64,
 	/// X30 register
-	x30: u64,
+	pub x30: u64,
 }
 
 pub struct BootStack {
 	/// stack for kernel tasks
 	stack: VirtAddr,
-	/// stack to handle interrupts
-	ist0: VirtAddr,
 }
 
 pub struct CommonStack {
@@ -119,9 +123,9 @@ impl TaskStacks {
 		} else {
 			size.align_up(BasePageSize::SIZE as usize)
 		};
-		let total_size = user_stack_size + DEFAULT_STACK_SIZE + IST_SIZE;
+		let total_size = user_stack_size + DEFAULT_STACK_SIZE;
 		let virt_addr =
-			crate::arch::mm::virtualmem::allocate(total_size + 4 * BasePageSize::SIZE as usize)
+			crate::arch::mm::virtualmem::allocate(total_size + 3 * BasePageSize::SIZE as usize)
 				.expect("Failed to allocate Virtual Memory for TaskStacks");
 		let phys_addr = crate::arch::mm::physicalmem::allocate(total_size)
 			.expect("Failed to allocate Physical Memory for TaskStacks");
@@ -135,26 +139,18 @@ impl TaskStacks {
 		let mut flags = PageTableEntryFlags::empty();
 		flags.normal().writable().execute_disable();
 
-		// map IST0 into the address space
+		// map kernel stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
 			virt_addr + BasePageSize::SIZE,
 			phys_addr,
-			IST_SIZE / BasePageSize::SIZE as usize,
-			flags,
-		);
-
-		// map kernel stack into the address space
-		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + IST_SIZE + 2 * BasePageSize::SIZE,
-			phys_addr + IST_SIZE,
 			DEFAULT_STACK_SIZE / BasePageSize::SIZE as usize,
 			flags,
 		);
 
 		// map user stack into the address space
 		crate::arch::mm::paging::map::<BasePageSize>(
-			virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE,
-			phys_addr + IST_SIZE + DEFAULT_STACK_SIZE,
+			virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE,
+			phys_addr + DEFAULT_STACK_SIZE,
 			user_stack_size / BasePageSize::SIZE as usize,
 			flags,
 		);
@@ -162,7 +158,7 @@ impl TaskStacks {
 		// clear user stack
 		unsafe {
 			ptr::write_bytes(
-				(virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE as usize)
+				(virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize)
 					.as_mut_ptr::<u8>(),
 				0xAC,
 				user_stack_size,
@@ -177,21 +173,16 @@ impl TaskStacks {
 	}
 
 	pub fn from_boot_stacks() -> TaskStacks {
-		//let tss = unsafe { &(*CORE_LOCAL.tss.get()) };
-		/*let stack = VirtAddr::from_usize(tss.rsp[0] as usize + 0x10 - KERNEL_STACK_SIZE);
+		let stack = VirtAddr::from_u64(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
 		debug!("Using boot stack {:#X}", stack);
-		let ist0 = VirtAddr::from_usize(tss.ist[0] as usize + 0x10 - KERNEL_STACK_SIZE);
-		debug!("IST0 is located at {:#X}", ist0);*/
-		let stack = VirtAddr::zero();
-		let ist0 = VirtAddr::zero();
 
-		TaskStacks::Boot(BootStack { stack, ist0 })
+		TaskStacks::Boot(BootStack { stack })
 	}
 
 	pub fn get_user_stack_size(&self) -> usize {
 		match self {
 			TaskStacks::Boot(_) => 0,
-			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE - IST_SIZE,
+			TaskStacks::Common(stacks) => stacks.total_size - DEFAULT_STACK_SIZE,
 		}
 	}
 
@@ -199,7 +190,7 @@ impl TaskStacks {
 		match self {
 			TaskStacks::Boot(_) => VirtAddr::zero(),
 			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + IST_SIZE + DEFAULT_STACK_SIZE + 3 * BasePageSize::SIZE as usize
+				stacks.virt_addr + DEFAULT_STACK_SIZE + 2 * BasePageSize::SIZE as usize
 			}
 		}
 	}
@@ -207,9 +198,7 @@ impl TaskStacks {
 	pub fn get_kernel_stack(&self) -> VirtAddr {
 		match self {
 			TaskStacks::Boot(stacks) => stacks.stack,
-			TaskStacks::Common(stacks) => {
-				stacks.virt_addr + IST_SIZE + 2 * BasePageSize::SIZE as usize
-			}
+			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE as usize,
 		}
 	}
 
@@ -218,17 +207,6 @@ impl TaskStacks {
 			TaskStacks::Boot(_) => KERNEL_STACK_SIZE,
 			TaskStacks::Common(_) => DEFAULT_STACK_SIZE,
 		}
-	}
-
-	pub fn get_interrupt_stack(&self) -> VirtAddr {
-		match self {
-			TaskStacks::Boot(stacks) => stacks.ist0,
-			TaskStacks::Common(stacks) => stacks.virt_addr + BasePageSize::SIZE as usize,
-		}
-	}
-
-	pub fn get_interrupt_stack_size(&self) -> usize {
-		IST_SIZE
 	}
 }
 
@@ -246,11 +224,11 @@ impl Drop for TaskStacks {
 
 				crate::arch::mm::paging::unmap::<BasePageSize>(
 					stacks.virt_addr,
-					stacks.total_size / BasePageSize::SIZE as usize + 4,
+					stacks.total_size / BasePageSize::SIZE as usize + 3,
 				);
 				crate::arch::mm::virtualmem::deallocate(
 					stacks.virt_addr,
-					stacks.total_size + 4 * BasePageSize::SIZE as usize,
+					stacks.total_size + 3 * BasePageSize::SIZE as usize,
 				);
 				crate::arch::mm::physicalmem::deallocate(stacks.phys_addr, stacks.total_size);
 			}
@@ -339,30 +317,25 @@ extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64
 
 #[cfg(target_os = "none")]
 #[naked]
-extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize, _user_stack: u64) -> ! {
+extern "C" fn task_start(_f: extern "C" fn(usize), _arg: usize) -> ! {
 	// `f` is in the `x0` register
 	// `arg` is in the `x1` register
-	// `user_stack` is in the `x2` register
 
 	unsafe {
 		asm!(
-			"mov sp, x2",
-			"adrp x4, {task_entry}",
-			"add  x4, x4, #:lo12:{task_entry}",
+			"msr spsel, {l0}",
+			"mov x25, x0",
+			"mov x0, x1",
+			"blr x25",
+			"mov x0, xzr",
+			"adrp x4, {exit}",
+			"add  x4, x4, #:lo12:{exit}",
 			"br x4",
-			task_entry = sym task_entry,
+			l0 = const 0,
+			exit = sym crate::sys_thread_exit,
 			options(noreturn)
 		)
 	}
-}
-
-#[inline(never)]
-extern "C" fn task_entry(func: extern "C" fn(usize), arg: usize) -> ! {
-	// Call the actual entry point of the task.
-	func(arg);
-
-	// Exit task
-	crate::sys_thread_exit(0)
 }
 
 impl TaskFrame for Task {
@@ -389,24 +362,31 @@ impl TaskFrame for Task {
 			}
 
 			/*
-			 * The x30 needs to hold the address of the
-			 * first function to be called when returning from switch_context.
+			 * The elr_el1 needs to hold the address of the
+			 * first function to be called when returning from exception handler.
 			 */
-			(*state).x30 = task_start as usize as u64;
+			(*state).elr_el1 = task_start as usize as u64;
 			(*state).x0 = func as usize as u64; // use second argument to transfer the entry point
 			(*state).x1 = arg as u64;
+			(*state).spsel = 1;
 
 			/* Zero the condition flags. */
 			(*state).spsr_el1 = 0x3E5;
 
 			// Set the task's stack pointer entry to the stack we have just crafted.
 			self.last_stack_pointer = stack;
+
+			// initialize user-level stack
 			self.user_stack_pointer = self.stacks.get_user_stack()
 				+ self.stacks.get_user_stack_size()
 				- TaskStacks::MARKER_SIZE;
-
-			// x2 is required to initialize the stack
-			(*state).x2 = self.user_stack_pointer.as_u64() - mem::size_of::<u64>() as u64;
+			*self.user_stack_pointer.as_mut_ptr::<u64>() = 0xDEAD_BEEFu64;
+			(*state).sp_el0 = self.user_stack_pointer.as_u64();
 		}
 	}
+}
+
+#[no_mangle]
+pub(crate) extern "C" fn get_last_stack_pointer() -> u64 {
+	core_scheduler().get_last_stack_pointer().as_u64()
 }

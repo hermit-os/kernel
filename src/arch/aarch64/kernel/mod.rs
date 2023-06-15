@@ -12,7 +12,7 @@ pub mod switch;
 pub mod systemtime;
 
 use core::arch::global_asm;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 
@@ -29,7 +29,9 @@ static mut COM1: SerialPort = SerialPort::new(0x800);
 /// `CPU_ONLINE` is the count of CPUs that finished initialization.
 ///
 /// It also synchronizes initialization of CPU cores.
-pub static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
+
+pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 
 global_asm!(include_str!("start.s"));
 
@@ -209,6 +211,7 @@ pub fn boot_application_processors() {
 }
 
 /// Application Processor initialization
+#[allow(dead_code)]
 pub fn application_processor_init() {
 	CoreLocal::install();
 	finish_processor_init();

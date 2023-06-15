@@ -252,15 +252,14 @@ pub extern "C" fn sys_spawn2(
 	kernel_function!(__sys_spawn2(func, arg, prio, stack_size, selector))
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn sys_spawn(
+extern "C" fn __sys_spawn(
 	id: *mut Tid,
 	func: extern "C" fn(usize),
 	arg: usize,
 	prio: u8,
 	selector: isize,
 ) -> i32 {
-	let new_id = kernel_function!(__sys_spawn2(func, arg, prio, USER_STACK_SIZE, selector));
+	let new_id = __sys_spawn2(func, arg, prio, USER_STACK_SIZE, selector);
 
 	if !id.is_null() {
 		unsafe {
@@ -269,6 +268,17 @@ pub unsafe extern "C" fn sys_spawn(
 	}
 
 	0
+}
+
+#[no_mangle]
+pub extern "C" fn sys_spawn(
+	id: *mut Tid,
+	func: extern "C" fn(usize),
+	arg: usize,
+	prio: u8,
+	selector: isize,
+) -> i32 {
+	kernel_function!(__sys_spawn(id, func, arg, prio, selector))
 }
 
 extern "C" fn __sys_join(id: Tid) -> i32 {
