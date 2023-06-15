@@ -201,18 +201,24 @@ impl PosixFile for FuseDir {
 	}
 
 	fn readdir(&mut self) -> Result<*const Dirent, FileError> {
-		// This code is ugly
-
 		// Check if we have to read the directory via FUSE or still have a direntry in the last respnse
-		if self.response.as_ref().map_or(true, |resp| {
-			resp.header.len - self.buffer_offset
-				<= core::mem::size_of::<fuse_dirent>().try_into().unwrap()
-		}) {
-			debug!("Read from FUSE dirfile");
-			// Linux seems to allocate a single page to store the dirfile
-			let len = MAX_READ_LEN as u32;
+		let resp: &_ = match &mut self.response {
+			Some(resp)
+				if resp.header.len - self.buffer_offset
+					> core::mem::size_of::<fuse_dirent>().try_into().unwrap() =>
+			{
+				resp
+			}
+			option => {
+				debug!("Read from FUSE dirfile");
+				// Linux seems to allocate a single page to store the dirfile
+				let len = MAX_READ_LEN as u32;
 
-			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+				let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) else {
+					warn!("Dir not open, cannot read!");
+					return Err(FileError::EBADF);
+				};
+
 				let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset as u64);
 				cmd.header.opcode = Opcode::FUSE_READDIR as u32;
 				if let Some(fs_driver) = get_filesystem_driver() {
@@ -239,21 +245,16 @@ impl PosixFile for FuseDir {
 				}
 
 				// Keep smart pointer to response
-				self.response = Some(rsp);
+				let rsp = option.insert(rsp);
 				self.buffer_offset = 0;
 
 				debug!("New buffer len: {}", len);
-			} else {
-				warn!("Dir not open, cannot read!");
-				return Err(FileError::EBADF);
+				rsp
 			}
-		}
+		};
 
 		let return_ptr: *const u8 = unsafe {
-			self.response
-				.as_ref()
-				.unwrap()
-				.extra_buffer
+			resp.extra_buffer
 				.as_ptr()
 				.byte_add(self.buffer_offset.try_into().unwrap()) as _
 		};
