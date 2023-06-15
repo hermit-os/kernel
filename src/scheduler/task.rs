@@ -265,7 +265,7 @@ impl PriorityTaskQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let task = self.queues[queue_index].pop_back();
+		let task = self.queues[queue_index].pop_front();
 		if self.queues[queue_index].is_empty() {
 			self.prio_bitmap &= !(1 << queue_index as u64);
 		}
