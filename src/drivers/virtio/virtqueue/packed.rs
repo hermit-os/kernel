@@ -784,7 +784,7 @@ impl<'a> WriteCtrl<'a> {
 			self.buff_id = mem_desc.id.as_ref().unwrap().0;
 			self.incrmt();
 		} else {
-			let mut desc_ref = &mut self.desc_ring.ring[self.position];
+			let desc_ref = &mut self.desc_ring.ring[self.position];
 			desc_ref.address = paging::virt_to_phys(VirtAddr::from(mem_desc.ptr as u64)).into();
 			desc_ref.len = mem_desc.len as u32;
 			desc_ref.buff_id = self.buff_id;

@@ -1,7 +1,7 @@
-#[cfg(all(feature = "pci"))]
+#[cfg(feature = "pci")]
 pub mod fuse;
 
 pub fn init() {
-	#[cfg(all(feature = "pci"))]
+	#[cfg(feature = "pci")]
 	fuse::init();
 }
