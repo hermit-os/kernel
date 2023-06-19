@@ -80,6 +80,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "goblin"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f27c1b4369c2cd341b5de549380158b105a04c331be5db9110eef7b6d2742134"
+dependencies = [
+ "plain",
+ "scroll",
+]
+
+[[package]]
 name = "hermit-dtb"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -87,12 +97,12 @@ checksum = "89e0de208fa9b99664812350b33072d0d9b3a63caaebb03eeb23316eeedfb8d0"
 
 [[package]]
 name = "hermit-entry"
-version = "0.9.3"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5161b343513f1cd3bcc38a7e9ef5f7ba996e9533fa7116797b2684cffe11038f"
+checksum = "600425e7ea281ec0c0d90909a2508a2644ffa839d8112c43dec88029cf270219"
 dependencies = [
  "align-address",
- "goblin",
+ "goblin 0.7.1",
  "log",
  "plain",
  "time",
@@ -196,7 +206,7 @@ version = "0.4.3"
 dependencies = [
  "align-data",
  "cc",
- "goblin",
+ "goblin 0.6.1",
  "hermit-dtb",
  "hermit-entry",
  "log",
