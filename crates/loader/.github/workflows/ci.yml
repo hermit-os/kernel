@@ -94,7 +94,7 @@ jobs:
         if: matrix.target == 'aarch64'
         run: |
           qemu-system-aarch64 \
-            -machine virt,gic-version=max -cpu cortex-a72 -smp 1 -m 512M \
+            -machine virt,gic-version=3 -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/debug/rusty-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
@@ -121,7 +121,7 @@ jobs:
         if: matrix.target == 'aarch64'
         run: |
           qemu-system-aarch64 \
-            -machine virt,gic-version=max -cpu cortex-a72 -smp 1 -m 512M \
+            -machine virt,gic-version=3 -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
             -kernel target/aarch64/release/rusty-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
