@@ -223,6 +223,8 @@ pub trait PosixFileSystem {
 	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
+
+	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
 }
 
 pub trait PosixFile {
