@@ -44,7 +44,7 @@ impl CoreLocal {
 			kernel_stack: Cell::new(0),
 			irq_statistics,
 		};
-		let mut this = Box::leak(Box::new(this));
+		let this = Box::leak(Box::new(this));
 		this.this = &*this;
 
 		GsBase::write(VirtAddr::from_ptr(this));
