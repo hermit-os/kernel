@@ -106,6 +106,15 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
+extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
+	SYS.rmdir(name)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_rmdir(name: *const u8) -> i32 {
+	kernel_function!(__sys_rmdir(name))
+}
+
 extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
 	crate::fd::opendir(name).map_or_else(|e| e, |v| v)
 }

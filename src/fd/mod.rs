@@ -199,8 +199,13 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		(-EINVAL).try_into().unwrap()
 	}
 
-	/// `unlink` removes directory entry
+	/// `unlink` removes file entry
 	fn unlink(&self, _name: *const u8) -> i32 {
+		-EINVAL
+	}
+
+	/// `rmdir` removes directory entry
+	fn rmdir(&self, _name: *const u8) -> i32 {
 		-EINVAL
 	}
 
