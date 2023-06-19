@@ -349,7 +349,7 @@ checksum = "f92be4933c13fd498862a9e02a3055f8a8d9c039ce33db97306fd5a6caa7f29b"
 
 [[package]]
 name = "libhermit-rs"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "aarch64",
  "ahash",
