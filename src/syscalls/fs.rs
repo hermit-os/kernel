@@ -169,6 +169,14 @@ impl Filesystem {
 		Ok(())
 	}
 
+	/// Remove directory given by path
+	pub fn rmdir(&mut self, path: &str) -> Result<(), FileError> {
+		debug!("Removing directory {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.rmdir(internal_path)?;
+		Ok(())
+	}
+
 	/// Create new backing-fs at mountpoint mntpath
 	#[cfg(feature = "fs")]
 	pub fn mount(
