@@ -31,7 +31,7 @@ impl CoreLocal {
 			scheduler: Cell::new(ptr::null_mut()),
 			irq_statistics,
 		};
-		let mut this = Box::leak(Box::new(this));
+		let this = Box::leak(Box::new(this));
 		this.this = &*this;
 
 		unsafe {
