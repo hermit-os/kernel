@@ -552,6 +552,8 @@ impl PerCoreScheduler {
 				target_list: 0b1,
 			},
 		);
+
+		interrupts::enable();
 	}
 
 	/// Only the idle task should call this function.
