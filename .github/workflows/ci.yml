@@ -264,7 +264,7 @@ jobs:
       - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-aarch64
+          sudo apt-get install qemu-system-aarch64 libcap-ng-dev libseccomp-dev
       - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package rusty_demo --features pci-ids
