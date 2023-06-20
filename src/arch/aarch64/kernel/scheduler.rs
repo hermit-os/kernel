@@ -286,7 +286,7 @@ impl TaskTLS {
 			let data = alloc_zeroed(layout);
 			let raw = ptr::slice_from_raw_parts_mut(data, block_len) as *mut TaskTLS;
 
-			let addr = (*raw).block.as_ptr().offset(off as isize).cast::<()>();
+			let addr = (*raw).block.as_ptr().add(off).cast::<()>();
 			(*raw).dtv.as_mut_ptr().write(Box::new([
 				Dtv { counter: 1 },
 				Dtv {

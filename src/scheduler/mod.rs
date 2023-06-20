@@ -293,7 +293,7 @@ impl PerCoreScheduler {
 
 	/// Returns `true` if a reschedule is required
 	#[inline]
-	#[cfg(feature = "smp")]
+	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn is_scheduling(&self) -> bool {
 		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
 	}
@@ -488,7 +488,7 @@ impl PerCoreScheduler {
 		}
 	}
 
-	#[cfg(feature = "smp")]
+	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn check_input(&mut self) {
 		let mut input_locked = self.input.lock();
 
@@ -719,9 +719,9 @@ pub fn add_current_core() {
 		#[cfg(feature = "smp")]
 		core_id,
 		current_task: idle_task.clone(),
-		idle_task: idle_task.clone(),
 		#[cfg(target_arch = "x86_64")]
-		fpu_owner: idle_task,
+		fpu_owner: idle_task.clone(),
+		idle_task,
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
