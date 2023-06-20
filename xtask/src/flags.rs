@@ -24,6 +24,8 @@ xflags::xflags! {
 			optional --profile profile: String
 			/// Enable the `-Z instrument-mcount` flag.
 			optional --instrument-mcount
+			/// Enable the `-Z randomize-layout` flag.
+			optional --randomize-layout
 		}
 
 		/// Run clippy for all targets.
@@ -54,6 +56,7 @@ pub struct Build {
 	pub release: bool,
 	pub profile: Option<String>,
 	pub instrument_mcount: bool,
+	pub randomize_layout: bool,
 }
 
 #[derive(Debug)]
