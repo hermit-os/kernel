@@ -335,9 +335,7 @@ pub(crate) fn init() {
 	let reschedid = IntId::sgi(SGI_RESCHED.into());
 	gic.set_interrupt_priority(reschedid, 0x00);
 	gic.enable_interrupt(reschedid, true);
-	IRQ_NAMES
-		.lock()
-		.insert(u8::try_from(SGI_RESCHED).unwrap(), "Reschedule");
+	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	unsafe {
 		GIC.set(gic).unwrap();
