@@ -10,6 +10,7 @@ use alloc::vec::Vec;
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
+#[allow(unused_imports)]
 use crate::arch::kernel::core_local::*;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::interrupts::ExceptionStackFrame;
@@ -45,31 +46,38 @@ pub trait NetworkInterface {
 }
 
 #[inline]
-fn _irqhandler() {
-	let has_packet = if let Some(driver) = hardware::get_network_driver() {
+fn _irqhandler() -> bool {
+	if let Some(driver) = hardware::get_network_driver() {
 		driver.lock().handle_interrupt()
 	} else {
 		debug!("Unable to handle interrupt!");
 		false
-	};
+	}
+}
+
+#[cfg(target_arch = "aarch64")]
+pub(crate) fn network_irqhandler(_state: &State) -> bool {
+	debug!("Receive network interrupt");
+	let has_packet = _irqhandler();
+
+	if has_packet {
+		#[cfg(feature = "tcp")]
+		core_scheduler().wakeup_async_tasks();
+	}
+
+	has_packet
+}
+
+#[cfg(target_arch = "x86_64")]
+pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
+	debug!("Receive network interrupt");
+	apic::eoi();
+	let has_packet = _irqhandler();
 
 	if has_packet {
 		let core_scheduler = core_scheduler();
 		#[cfg(feature = "tcp")]
 		core_scheduler.wakeup_async_tasks();
-		core_scheduler.scheduler();
+		core_scheduler.reschedule();
 	}
-}
-
-#[cfg(target_arch = "aarch64")]
-pub fn network_irqhandler(_state: &State) {
-	debug!("Receive network interrupt");
-	_irqhandler();
-}
-
-#[cfg(target_arch = "x86_64")]
-pub extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
-	debug!("Receive network interrupt");
-	apic::eoi();
-	_irqhandler();
 }

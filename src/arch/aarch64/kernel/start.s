@@ -4,8 +4,9 @@
 .extern do_fiq
 .extern do_sync
 .extern do_error
+.extern get_last_stack_pointer
 
-.macro trap_entry
+.macro trap_entry spsel
      stp x29, x30, [sp, #-16]!
      stp x27, x28, [sp, #-16]!
      stp x25, x26, [sp, #-16]!
@@ -25,15 +26,22 @@
      mrs x22, tpidr_el0
      stp x22, x0, [sp, #-16]!
 
-     mrs x22, elr_el1
-     mrs x23, spsr_el1
+     mrs x23, sp_el0
+     mrs x22, spsr_el1
+     stp x22, x23, [sp, #-16]!
+
+     mrs x23, elr_el1
+     mov x22, #\spsel
      stp x22, x23, [sp, #-16]!
 .endm
 
 .macro trap_exit
      ldp x22, x23, [sp], #16
-     msr elr_el1, x22
-     msr spsr_el1, x23
+     msr elr_el1, x23
+
+     ldp x22, x23, [sp], #16
+     msr spsr_el1, x22
+     msr sp_el0, x23
 
      ldp x22, x0, [sp], #16
      msr tpidr_el0, x22
@@ -53,7 +61,7 @@
      ldp x25, x26, [sp], #16
      ldp x27, x28, [sp], #16
      ldp x29, x30, [sp], #16
-.endm
+ .endm
 
 /*
  * Exception vector entry
@@ -74,11 +82,15 @@ b       do_bad_mode
  */
 .align 6
 el1_sync:
-      trap_entry
+      trap_entry 1
       mov     x0, sp
       bl      do_sync
       trap_exit
       eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
 .size el1_sync, .-el1_sync
 .type el1_sync, @function
 
@@ -87,11 +99,23 @@ el1_sync:
  */
 .align 6
 el1_irq:
-      trap_entry
+      trap_entry 1
       mov     x0, sp
       bl      do_irq
+      cmp x0, 0
+      b.eq 1f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+1:
       trap_exit
       eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
 .size el1_irq, .-el1_irq
 .type el1_irq, @function
 
@@ -100,23 +124,124 @@ el1_irq:
  */
 .align 6
 el1_fiq:
-      trap_entry
+      trap_entry 1
       mov     x0, sp
       bl      do_fiq
+      cmp x0, 0
+      b.eq 2f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+2:
       trap_exit
       eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
 .size el1_fiq, .-el1_fiq
 .type el1_fiq, @function
 
 .align 6
 el1_error:
-      trap_entry
+      trap_entry 1
       mov     x0, sp
       bl      do_error
       trap_exit
       eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
 .size el1_error, .-el1_error
 .type el1_error, @function
+
+/*
+ * SYNC exception handler with SP0.
+ */
+.align 6
+el1_sp0_sync:
+      msr spsel, #1
+      trap_entry 0
+      mov     x0, sp
+      bl      do_sync
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el1_sp0_sync, .-el1_sp0_sync
+.type el1_sp0_sync, @function
+
+/*
+ * IRQ handler with SP0.
+ */
+.align 6
+el1_sp0_irq:
+      msr spsel, #1
+      trap_entry 0
+      mov     x0, sp
+      bl      do_irq
+      cmp x0, 0
+      b.eq 3f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+3:
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el1_sp0_irq, .-el1_sp0_irq
+.type el1_sp0_irq, @function
+
+/*
+ * FIQ handler with SP0.
+ */
+.align 6
+el1_sp0_fiq:
+      msr spsel, #1
+      trap_entry 0
+      mov     x0, sp
+      bl      do_fiq
+      cmp x0, 0
+      b.eq 4f
+      // switch to the next task
+      mov x1, sp
+      str x1, [x0]                  /* store old sp */
+      bl get_last_stack_pointer     /* get new sp   */
+      mov sp, x0
+4:
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el1_sp0_fiq, .-el1_sp0_fiq
+.type el1_sp0_fiq, @function
+
+.align 6
+el1_sp0_error:
+      msr spsel, #1
+      trap_entry 0
+      mov     x0, sp
+      bl      do_error
+      trap_exit
+      eret
+      // speculation barrier after the ERET to prevent the CPU
+      // from speculating past the exception return.
+      dsb     nsh
+      isb
+.size el1_sp0_error, .-el1_sp0_error
+.type el1_sp0_error, @function
 
 el0_sync_invalid:
    invalid 0
@@ -156,10 +281,10 @@ el1_error_invalid:
 .global vector_table
 vector_table:
 /* Current EL with SP0 */
-ventry el1_sync_invalid	        // Synchronous EL1t
-ventry el1_irq_invalid	        // IRQ EL1t
-ventry el1_fiq_invalid	        // FIQ EL1t
-ventry el1_error_invalid        // Error EL1t
+ventry el1_sp0_sync  	        // Synchronous EL1t
+ventry el1_sp0_irq	        // IRQ EL1t
+ventry el1_sp0_fiq   	        // FIQ EL1t
+ventry el1_sp0_error            // Error EL1t
 
 /* Current EL with SPx */
 ventry el1_sync                 // Synchronous EL1h

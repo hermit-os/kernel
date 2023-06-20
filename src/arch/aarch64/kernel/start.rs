@@ -21,6 +21,11 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) ->
 
 	unsafe {
 		asm!(
+			"msr spsel, {l1}", // we want to use sp_el1
+			"adrp x8, {current_stack_address}",
+			"mov x4, sp",
+			"str x4, [x8, #:lo12:{current_stack_address}]",
+
 			// Add stack top offset
 			"mov x8, {stack_top_offset}",
 			"add sp, sp, x8",
@@ -28,7 +33,9 @@ pub unsafe extern "C" fn _start(boot_info: &'static RawBootInfo, cpu_id: u32) ->
 			// Jump to Rust code
 			"b {pre_init}",
 
+			l1 = const 1,
 			stack_top_offset = const KERNEL_STACK_SIZE - TaskStacks::MARKER_SIZE,
+			current_stack_address = sym super::CURRENT_STACK_ADDRESS,
 			pre_init = sym pre_init,
 			options(noreturn),
 		)

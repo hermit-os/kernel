@@ -1,94 +1,72 @@
 use alloc::boxed::Box;
+use core::arch::asm;
+use core::cell::Cell;
+use core::ptr;
 use core::sync::atomic::Ordering;
 
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-#[no_mangle]
-pub static mut CORE_LOCAL: CoreLocal = CoreLocal::new(0);
-
 pub struct CoreLocal {
+	this: *const Self,
 	/// ID of the current Core.
-	core_id: CoreLocalVariable<CoreId>,
+	core_id: CoreId,
 	/// Scheduler of the current Core.
-	scheduler: CoreLocalVariable<*mut PerCoreScheduler>,
+	scheduler: Cell<*mut PerCoreScheduler>,
+	/// Interface to the interrupt counters
+	irq_statistics: &'static IrqStatistics,
 }
 
 impl CoreLocal {
-	pub const fn new(core_id: CoreId) -> Self {
-		Self {
-			core_id: CoreLocalVariable::new(core_id),
-			scheduler: CoreLocalVariable::new(0 as *mut PerCoreScheduler),
-		}
-	}
-
 	pub fn install() {
 		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
 
 		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
 		IRQ_COUNTERS.lock().insert(core_id, irq_statistics);
-	}
-}
 
-#[repr(C)]
-pub struct CoreLocalVariable<T> {
-	data: T,
-}
+		let this = Self {
+			this: ptr::null_mut(),
+			core_id,
+			scheduler: Cell::new(ptr::null_mut()),
+			irq_statistics,
+		};
+		let mut this = Box::leak(Box::new(this));
+		this.this = &*this;
 
-pub trait CoreLocalVariableMethods<T: Clone> {
-	unsafe fn get(&self) -> T;
-	unsafe fn set(&mut self, value: T);
-}
-
-impl<T> CoreLocalVariable<T> {
-	const fn new(value: T) -> Self {
-		Self { data: value }
-	}
-}
-
-// Treat all per-core variables as 64-bit variables by default. This is true for u64, usize, pointers.
-// Implement the CoreLocalVariableMethods trait functions using 64-bit memory moves.
-// The functions are implemented as default functions, which can be overridden in specialized implementations of the trait.
-impl<T> CoreLocalVariableMethods<T> for CoreLocalVariable<T>
-where
-	T: Clone,
-{
-	#[inline]
-	default unsafe fn get(&self) -> T {
-		self.data.clone()
+		unsafe {
+			asm!("msr tpidr_el1, {}", in(reg) this, options(nomem, nostack, preserves_flags));
+		}
 	}
 
 	#[inline]
-	default unsafe fn set(&mut self, value: T) {
-		self.data = value;
+	pub fn get() -> &'static Self {
+		unsafe {
+			let raw: *const Self;
+			asm!("mrs {}, tpidr_el1", out(reg) raw, options(nomem, nostack, preserves_flags));
+			&*raw
+		}
 	}
 }
 
 #[inline]
 pub fn core_id() -> CoreId {
-	unsafe { CORE_LOCAL.core_id.get() }
+	if cfg!(target_os = "none") {
+		CoreLocal::get().core_id
+	} else {
+		0
+	}
 }
 
 #[inline]
 pub fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *CORE_LOCAL.scheduler.get() }
+	unsafe { &mut *CoreLocal::get().scheduler.get() }
 }
 
-#[inline]
 pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	unsafe {
-		CORE_LOCAL.scheduler.set(scheduler);
-	}
+	CoreLocal::get().scheduler.set(scheduler);
 }
 
 pub fn increment_irq_counter(irq_no: u8) {
-	unsafe {
-		let id = CORE_LOCAL.core_id.get();
-		if let Some(counter) = IRQ_COUNTERS.lock().get(&id) {
-			counter.inc(irq_no);
-		} else {
-			warn!("Unknown core {}, is core {} already registered?", id, id);
-		}
-	}
+	CoreLocal::get().irq_statistics.inc(irq_no);
 }

@@ -1,67 +1,96 @@
 use core::arch::asm;
+use core::{mem, ptr};
 
-#[inline(always)]
-pub unsafe extern "C" fn switch_to_fpu_owner(old_stack: *mut usize, new_stack: usize) {
-	unsafe {
-		switch_to_task(old_stack, new_stack);
-	}
+macro_rules! kernel_function_impl {
+	($kernel_function:ident($($arg:ident: $A:ident),*) { $($operands:tt)* }) => {
+		/// Executes `f` on the kernel stack.
+		#[allow(dead_code)]
+		pub fn $kernel_function<R, $($A),*>(f: unsafe extern "C" fn($($A),*) -> R, $($arg: $A),*) -> R {
+			unsafe {
+				assert!(mem::size_of::<R>() <= mem::size_of::<usize>());
+
+				$(
+					assert!(mem::size_of::<$A>() <= mem::size_of::<usize>());
+					let $arg = {
+						let mut reg = 0_usize;
+						// SAFETY: $A is smaller than usize and directly fits in a register
+						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
+						ptr::write(&mut reg as *mut _ as _, $arg);
+						reg
+					};
+				)*
+
+				let ret: u64;
+				asm!(
+					// Switch to kernel stack
+					"msr spsel, {l1}",
+
+					// To make sure, Rust manages the stack in `f` correctly,
+					// we keep all arguments and return values in registers
+					// until we switch the stack back. Thus follows the sizing
+					// requirements for arguments and return types.
+					"blr {f}",
+
+					// Switch back to user stack
+					"msr spsel, {l0}",
+
+					l0 = const 0,
+					l1 = const 1,
+					f = in(reg) f,
+
+					$($operands)*
+
+					// Return argument in x0
+					lateout("x0") ret,
+
+					clobber_abi("C"),
+				);
+
+				// SAFETY: R is smaller than usize and directly fits in rax
+				// Since f returns R, we can safely convert ret to R
+				mem::transmute_copy(&ret)
+			}
+		}
+	};
 }
 
-#[naked]
-pub unsafe extern "C" fn switch_to_task(_old_stack: *mut usize, _new_stack: usize) {
-	unsafe {
-		asm!(
-			// save general purpose registers
-			"stp x29, x30, [sp, #-16]!",
-			"stp x27, x28, [sp, #-16]!",
-			"stp x25, x26, [sp, #-16]!",
-			"stp x23, x24, [sp, #-16]!",
-			"stp x21, x22, [sp, #-16]!",
-			"stp x19, x20, [sp, #-16]!",
-			"stp x17, x18, [sp, #-16]!",
-			"stp x15, x16, [sp, #-16]!",
-			"stp x13, x14, [sp, #-16]!",
-			"stp x11, x12, [sp, #-16]!",
-			"stp x9, x10, [sp, #-16]!",
-			"stp x7, x8, [sp, #-16]!",
-			"stp x5, x6, [sp, #-16]!",
-			"stp x3, x4, [sp, #-16]!",
-			"stp x1, x2, [sp, #-16]!",
-			// save thread id register and process state
-			"mrs x22, tpidr_el0",
-			"stp x22, x0, [sp, #-16]!",
-			"mrs x22, elr_el1",
-			"mrs x23, spsr_el1",
-			"stp x22, x23, [sp, #-16]!",
-			// Store the old `sp` behind `old_stack`
-			"mov x24, sp",
-			"str x24, [x0]",
-			// Set `sp` to `new_stack`
-			"mov sp, x1",
-			// restore thread id register and process state
-			"ldp x22, x23, [sp], #16",
-			"msr elr_el1, x22",
-			"msr spsr_el1, x23",
-			"ldp x22, x0, [sp], #16",
-			"msr tpidr_el0, x22",
-			// restore general purpose registers
-			"ldp x1, x2, [sp], #16",
-			"ldp x3, x4, [sp], #16",
-			"ldp x5, x6, [sp], #16",
-			"ldp x7, x8, [sp], #16",
-			"ldp x9, x10, [sp], #16",
-			"ldp x11, x12, [sp], #16",
-			"ldp x13, x14, [sp], #16",
-			"ldp x15, x16, [sp], #16",
-			"ldp x17, x18, [sp], #16",
-			"ldp x19, x20, [sp], #16",
-			"ldp x21, x22, [sp], #16",
-			"ldp x23, x24, [sp], #16",
-			"ldp x25, x26, [sp], #16",
-			"ldp x27, x28, [sp], #16",
-			"ldp x29, x30, [sp], #16",
-			"ret",
-			options(noreturn),
-		);
-	}
-}
+kernel_function_impl!(kernel_function0() {});
+
+kernel_function_impl!(kernel_function1(arg1: A1) {
+	in("x0") arg1,
+});
+
+kernel_function_impl!(kernel_function2(arg1: A1, arg2: A2) {
+	in("x0") arg1,
+	in("x1") arg2,
+});
+
+kernel_function_impl!(kernel_function3(arg1: A1, arg2: A2, arg3: A3) {
+	in("x0") arg1,
+	in("x1") arg2,
+	in("x2") arg3,
+});
+
+kernel_function_impl!(kernel_function4(arg1: A1, arg2: A2, arg3: A3, arg4: A4) {
+	in("x0") arg1,
+	in("x1") arg2,
+	in("x2") arg3,
+	in("x3") arg4,
+});
+
+kernel_function_impl!(kernel_function5(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5) {
+	in("x0") arg1,
+	in("x1") arg2,
+	in("x2") arg3,
+	in("x3") arg4,
+	in("x4") arg5,
+});
+
+kernel_function_impl!(kernel_function6(arg1: A1, arg2: A2, arg3: A3, arg4: A4, arg5: A5, arg6: A6) {
+	in("x0") arg1,
+	in("x1") arg2,
+	in("x2") arg3,
+	in("x3") arg4,
+	in("x4") arg5,
+	in("x5") arg6,
+});
