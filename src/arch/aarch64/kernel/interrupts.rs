@@ -30,9 +30,12 @@ pub(crate) const SGI_RESCHED: u8 = 1;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
+/// A handler function for an interrupt.
+///
+/// Returns true if we should reschedule.
+type HandlerFunc = fn(state: &State) -> bool;
 /// Possible interrupt handlers
-static mut INTERRUPT_HANDLERS: [Option<fn(state: &State) -> bool>; MAX_HANDLERS] =
-	[None; MAX_HANDLERS];
+static mut INTERRUPT_HANDLERS: [Option<HandlerFunc>; MAX_HANDLERS] = [None; MAX_HANDLERS];
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
 pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
@@ -90,7 +93,7 @@ pub fn disable() {
 	}
 }
 
-pub(crate) fn irq_install_handler(irq_number: u8, handler: fn(state: &State) -> bool) {
+pub(crate) fn irq_install_handler(irq_number: u8, handler: HandlerFunc) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
 		INTERRUPT_HANDLERS[irq_number as usize + SPI_START as usize] = Some(handler);
