@@ -275,7 +275,7 @@ jobs:
           virtiofsd --socket-path=./vhostqemu --shared-dir ./img --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
           qemu-system-aarch64 -semihosting \
             -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
+            -m 1G -cpu cortex-a72 -smp 1 -display none -serial stdio \
             -chardev socket,id=char0,path=./vhostqemu \
             -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
             -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
@@ -287,7 +287,7 @@ jobs:
           virtiofsd --socket-path=./vhostqemu --shared-dir ./img --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
           qemu-system-aarch64 -semihosting \
             -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
+            -m 1G -cpu cortex-a72 -smp 1 -display none -serial stdio \
             -chardev socket,id=char0,path=./vhostqemu \
             -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
             -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
