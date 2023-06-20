@@ -195,8 +195,7 @@ impl flags::Clippy {
 
 		// TODO: Enable clippy for aarch64
 		// https://github.com/hermitcore/libhermit-rs/issues/381
-		#[allow(clippy::single_element_loop)]
-		for target in [Arch::X86_64] {
+		for target in [Arch::X86_64, Arch::AArch64] {
 			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}").run()?;
 			cmd!(sh, "cargo clippy {target_args...}")
