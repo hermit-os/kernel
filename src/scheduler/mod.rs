@@ -757,22 +757,20 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 		id
 	);
 
-	{
-		match WAITING_TASKS.lock().get_mut(&id) {
-			Some(queue) => {
-				queue.push_back(core_scheduler.get_current_task_handle());
-				core_scheduler.block_current_task(None);
-			}
-			_ => {
-				return Ok(());
-			}
+	loop {
+		let mut waiting_tasks_guard = WAITING_TASKS.lock();
+
+		if let Some(queue) = waiting_tasks_guard.get_mut(&id) {
+			queue.push_back(core_scheduler.get_current_task_handle());
+			core_scheduler.block_current_task(None);
+
+			// Switch to the next task.
+			drop(waiting_tasks_guard);
+			core_scheduler.reschedule();
+		} else {
+			return Ok(());
 		}
 	}
-
-	// Switch to the next task.
-	core_scheduler.reschedule();
-
-	Ok(())
 }
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {
