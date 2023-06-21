@@ -73,6 +73,18 @@ pub trait SyscallInterface: Send + Sync {
 		0
 	}
 
+	#[cfg(target_arch = "x86_64")]
+	fn rmdir(&self, name: *const u8) -> i32 {
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+		debug!("rmdir {}", name);
+
+		fs::FILESYSTEM
+			.lock()
+			.rmdir(name)
+			.expect("Removing directory failed!"); // TODO: error handling
+		0
+	}
+
 	fn stat(&self, _file: *const u8, _st: usize) -> i32 {
 		info!("stat is unimplemented");
 		-ENOSYS

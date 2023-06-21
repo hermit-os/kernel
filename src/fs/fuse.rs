@@ -131,6 +131,17 @@ impl PosixFileSystem for Fuse {
 
 		Ok(())
 	}
+
+	fn rmdir(&self, path: &str) -> core::result::Result<(), FileError> {
+		let (cmd, mut rsp) = create_rmdir(path);
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		trace!("rmdir answer {:?}", rsp);
+
+		Ok(())
+	}
 }
 
 impl Fuse {
@@ -1263,6 +1274,71 @@ fn create_mkdir(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
+		(*raw).header = fuse_out_header {
+			len: len.try_into().unwrap(),
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*rsp));
+
+	(cmd, rsp)
+}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_rmdir_in {}
+unsafe impl FuseIn for fuse_rmdir_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+pub struct fuse_rmdir_out {}
+unsafe impl FuseOut for fuse_rmdir_out {}
+
+fn create_rmdir(
+	name: &str
+) -> (Box<Cmd<fuse_rmdir_in>>, Box<Rsp<fuse_rmdir_out>>) {
+	let slice = name.as_bytes();
+	let len = core::mem::size_of::<fuse_in_header>()
+		+ core::mem::size_of::<fuse_rmdir_in>()
+		+ slice.len()
+		+ 1;
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_in_header>(),
+			core::mem::align_of::<fuse_rmdir_in>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let cmd = unsafe {
+		let data = alloc(layout);
+		let raw =
+			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_rmdir_in>;
+		(*raw).header = create_in_header::<fuse_rmdir_in>(FUSE_ROOT_ID, Opcode::FUSE_RMDIR);
+		(*raw).header.len = len.try_into().unwrap();
+		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
+		(*raw).extra_buffer[slice.len()] = 0;
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*cmd));
+
+	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_rmdir_out>();
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_out_header>(),
+			core::mem::align_of::<fuse_rmdir_out>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let rsp = unsafe {
+		let data = alloc(layout);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_rmdir_out>;
 		(*raw).header = fuse_out_header {
 			len: len.try_into().unwrap(),
 			..Default::default()

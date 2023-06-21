@@ -169,6 +169,14 @@ impl Filesystem {
 		Ok(())
 	}
 
+	/// Remove directory given by path
+	pub fn rmdir(&mut self, path: &str) -> Result<(), FileError> {
+		debug!("Removing directory {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.rmdir(internal_path)?;
+		Ok(())
+	}
+
 	/// Create new backing-fs at mountpoint mntpath
 	#[cfg(feature = "pci")]
 	pub fn mount(
@@ -223,6 +231,8 @@ pub trait PosixFileSystem {
 	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
+
+	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
 }
 
 pub trait PosixFile {
