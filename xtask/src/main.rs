@@ -3,14 +3,16 @@
 mod arch;
 mod archive;
 mod flags;
+mod hypervisor;
 
 use std::env::{self, VarError};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use arch::Arch;
 use archive::Archive;
+use hypervisor::Hypervisor;
 use xshell::{cmd, Shell};
 
 fn main() -> Result<()> {
@@ -21,6 +23,7 @@ impl flags::Xtask {
 	fn run(self) -> Result<()> {
 		match self.subcommand {
 			flags::XtaskCmd::Build(build) => build.run(),
+			flags::XtaskCmd::Run(run) => run.run(),
 			flags::XtaskCmd::Clippy(clippy) => clippy.run(),
 		}
 	}
@@ -190,6 +193,100 @@ impl flags::Build {
 		let mut dist_archive = self.out_dir(self.arch.name());
 		dist_archive.push("libhermit.a");
 		dist_archive.into()
+	}
+}
+
+impl flags::Run {
+	fn run(self) -> Result<()> {
+		let sh = sh()?;
+		sh.change_dir("..");
+
+		if !sh.path_exists("hermit-sys") {
+			let parent = sh.current_dir().canonicalize()?;
+			bail!("Missing rusty-hermit repository at {}", parent.display());
+		}
+
+		let archs = self
+			.arch
+			.map(|arch| vec![arch])
+			.unwrap_or(vec![Arch::X86_64, Arch::AArch64]);
+
+		let images = archs
+			.into_iter()
+			.map(|arch| Ok((arch, self.build_image(arch)?)))
+			.collect::<Result<Vec<_>>>()?;
+
+		let hypervisors = self
+			.hypervisor
+			.map(|hypervisor| vec![hypervisor])
+			.unwrap_or_else(|| vec![Hypervisor::Qemu, Hypervisor::Uhyve]);
+
+		for (arch, image) in &images {
+			for hypervisor in &hypervisors {
+				self.run_image(image, *hypervisor, *arch)?;
+			}
+		}
+
+		Ok(())
+	}
+
+	fn build_image(&self, arch: Arch) -> Result<PathBuf> {
+		let sh = sh()?;
+		sh.change_dir("..");
+
+		let hermit_triple = arch.hermit_triple();
+		let package = &self.package;
+
+		let profile = if self.release { "release" } else { "dev" };
+		cmd!(sh, "cargo build -Zbuild-std=std,panic_abort --package {package} --target {hermit_triple} --profile {profile}")
+			.env_remove("CARGO")
+			.env_remove("RUSTUP_TOOLCHAIN")
+			.run()?;
+
+		let profile_path = if self.release { "release" } else { "debug" };
+		Ok(PathBuf::from(format!(
+			"target/{hermit_triple}/{profile_path}/{package}"
+		)))
+	}
+
+	fn run_image(&self, image: &Path, hypervisor: Hypervisor, arch: Arch) -> Result<()> {
+		let sh = sh()?;
+		sh.change_dir("..");
+
+		match (hypervisor, arch) {
+			(hypervisor::Hypervisor::Uhyve, _) => cmd!(sh, "uhyve -v {image}").run()?,
+			(hypervisor::Hypervisor::Qemu, Arch::X86_64) => {
+				cmd!(sh, "qemu-system-x86_64 -initrd {image}")
+					.args(&[
+						"-cpu",
+						"qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt",
+					])
+					.args(&["-smp", "1"])
+					.args(&["-m", "64M"])
+					.args(&["-device", "isa-debug-exit,iobase=0xf4,iosize=0x04"])
+					.args(&["-display", "none"])
+					.args(&["-serial", "stdio"])
+					.args(&["-kernel", "rusty-loader-x86_64"])
+					.run()?;
+			}
+			(hypervisor::Hypervisor::Qemu, Arch::AArch64) => {
+				cmd!(
+					sh,
+					"qemu-system-aarch64 -device guest-loader,addr=0x48000000,initrd={image}"
+				)
+				.args(&["-machine", "virt,gic-version=3"])
+				.args(&["-cpu", "cortex-a76"])
+				.args(&["-smp", "1"])
+				.args(&["-m", "512M"])
+				.args(&["-semihosting"])
+				.args(&["-display", "none"])
+				.args(&["-serial", "stdio"])
+				.args(&["-kernel", "rusty-loader-aarch64"])
+				.run()?;
+			}
+		}
+
+		Ok(())
 	}
 }
 

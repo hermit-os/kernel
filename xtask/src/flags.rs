@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::arch::Arch;
+use crate::hypervisor::Hypervisor;
 
 xflags::xflags! {
 	src "./src/flags.rs"
@@ -28,6 +29,18 @@ xflags::xflags! {
 			optional --randomize-layout
 		}
 
+		cmd run
+		{
+			/// Package with the target to run.
+			required -p, --package package: String
+			/// Hypervisor to run the target with (uhyve/qemu).
+			optional --hypervisor hypervisor: Hypervisor
+			/// Build for the architecture.
+			optional --arch arch: Arch
+			/// Build artifacts in release mode, with optimizations.
+			optional -r, --release
+		}
+
 		/// Run clippy for all targets.
 		cmd clippy {}
 	}
@@ -44,6 +57,7 @@ pub struct Xtask {
 #[derive(Debug)]
 pub enum XtaskCmd {
 	Build(Build),
+	Run(Run),
 	Clippy(Clippy),
 }
 
@@ -57,6 +71,14 @@ pub struct Build {
 	pub profile: Option<String>,
 	pub instrument_mcount: bool,
 	pub randomize_layout: bool,
+}
+
+#[derive(Debug)]
+pub struct Run {
+	pub package: String,
+	pub hypervisor: Option<Hypervisor>,
+	pub arch: Option<Arch>,
+	pub release: bool,
 }
 
 #[derive(Debug)]
