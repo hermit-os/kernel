@@ -38,6 +38,18 @@ $ qemu-system-x86_64 ... \
     -append "[KERNEL_ARGS] [--] [APP_ARGS]"
 ```
 
+On AArch64, the base command is as follows:
+
+```
+$ qemu-system-aarch64 \
+                  -machine virt,gic-version=3 \
+                  -cpu cortex-a76 -smp 1 -m 512M  \
+                  -semihosting \
+                  -display none -serial stdio \
+                  -kernel <LOADER> \
+                  -device guest-loader,addr=0x48000000,initrd=<APP>
+```
+
 ### Using QEMU as microvm
 
 QEMU provides the [microvm virtual platform], which is a minimalist machine type without PCI nor ACPI support.
