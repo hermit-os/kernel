@@ -357,6 +357,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			hardware_info: HardwareInfo {
 				phys_addr_range: start_address as u64..end_address as u64,
 				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
+				device_tree: None,
 			},
 			load_info,
 			platform_info: PlatformInfo::LinuxBootParams {
