@@ -10,10 +10,12 @@
 ## Building
 
 ```bash
-$ cargo xtask build --target x86_64
+$ cargo xtask build --target <TARGET> --release
 ```
 
-Afterward, the loader is located at `target/x86_64/debug/rusty-loader`.
+With `<TARGET>` being either `x86_64`, `x86_64-uefi`, or `aarch64`.
+
+Afterward, the loader is located at `target/<TARGET>/release/rusty-loader`.
 
 ## Running
 
