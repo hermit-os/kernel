@@ -13,7 +13,7 @@
 $ cargo xtask build --target x86_64
 ```
 
-Afterwards, the loader is located at `target/x86_64/debug/rusty-loader`.
+Afterward, the loader is located at `target/x86_64/debug/rusty-loader`.
 
 ## Running
 
@@ -39,7 +39,7 @@ $ qemu-system-x86_64 ... \
 ### Using QEMU as microvm
 
 QEMU provides the [microvm virtual platform], which is a minimalist machine type without PCI nor ACPI support.
-Microvms have smaller memory footprint and a faster boot time.
+Microvms have a smaller memory footprint and a faster boot time.
 
 [microvm virtual platform]: https://qemu.readthedocs.io/en/latest/system/i386/microvm.html
 
@@ -56,7 +56,7 @@ Depending on the virtualized processor, the processor frequency has to be passed
 
 ### Network support
 
-To enable an ethernet device, we have to set up a tap device on the host system.
+To enable an Ethernet device, we have to set up a tap device on the host system.
 The following commands establish the tap device `tap10` on Linux:
 
 ```
@@ -82,9 +82,9 @@ HERMIT_GATEWAY="10.0.5.1"
 HERMIT_MASK="255.255.255.0"
 ```
 
-Currently, Hermit only supports [virtio]:
+Currently, Hermit only supports [Virtio]:
 
-[virtio]: https://www.redhat.com/en/blog/introduction-virtio-networking-and-vhost-net
+[Virtio]: https://www.redhat.com/en/blog/introduction-virtio-networking-and-vhost-net
 
 ```
 $ qemu-system-x86_64 ... \
@@ -92,7 +92,7 @@ $ qemu-system-x86_64 ... \
     -device virtio-net-pci,netdev=net0,disable-legacy=on
 ```
 
-You can now access the files in SHARED_DIRECTORY under the virtiofs tag like `/myfs/testfile`.
+You can now access the files in `SHARED_DIRECTORY` under the virtiofs tag like `/myfs/testfile`.
 
 ## License
 
