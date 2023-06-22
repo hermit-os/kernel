@@ -44,7 +44,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        target: [x86_64, x86_64-uefi, aarch64]
+        target: [x86_64, x86_64-uefi, x86_64-fc, aarch64]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install QEMU, NASM (ubuntu)
