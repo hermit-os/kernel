@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use core::{isize, slice};
+use core::ffi::CStr;
 
 use crate::fd::{
 	uhyve_send, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE,
@@ -106,6 +107,20 @@ impl ObjectInterface for GenericFile {
 		let mut ret: *const Dirent = core::ptr::null();
 		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
 			ret = file.readdir().unwrap(); // TODO: might fail
+		});
+
+		ret
+	}
+
+	fn mkdir(&self, name: *const u8, mode: u32) -> i32 {
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+
+		debug!("mkdir ! {}, {}, {}", self.0, name, mode);
+
+		let mut fs = fs::FILESYSTEM.lock();
+		let mut ret = 0;
+		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
+			ret = file.mkdir(name, mode).unwrap(); // TODO: might fail
 		});
 
 		ret

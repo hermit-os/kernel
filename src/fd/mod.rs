@@ -217,6 +217,11 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		core::ptr::null()
 	}
 
+	/// `mkdir` creates a directory entry
+	fn mkdir(&self, _name: *const u8, _mode: u32) -> i32 {
+		-EINVAL
+	}
+
 	/// `accept` a connection on a socket
 	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> i32 {

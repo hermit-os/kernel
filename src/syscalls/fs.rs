@@ -242,6 +242,7 @@ pub trait PosixFile {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 
 	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
