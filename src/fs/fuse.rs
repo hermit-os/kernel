@@ -283,6 +283,15 @@ impl PosixFile for FuseDir {
 		assert!(return_ptr.is_aligned_to(U64_SIZE.try_into().unwrap()));
 		Ok(return_ptr.cast())
 	}
+
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
+		let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid.unwrap(), name, mode);
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		Ok(unsafe { rsp.rsp.assume_init().nodeid.try_into().unwrap() })
+	}
 }
 
 impl PosixFile for FuseFile {
@@ -390,14 +399,9 @@ impl PosixFile for FuseFile {
 		Err(FileError::EBADF)
 	}
 
-	// fn mkdir(&self, name: &str, mode: u32) -> Option<u64> {
-	// 	let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid?, name, mode);
-	// 	get_filesystem_driver()
-	// 		.unwrap()
-	// 		.lock()
-	// 		.send_command(cmd.as_ref(), rsp.as_mut());
-	// 	Some(unsafe { rsp.rsp.assume_init().nodeid })
-	// }
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
+		Err(FileError::EBADF)
+	}
 }
 
 #[repr(u32)]
