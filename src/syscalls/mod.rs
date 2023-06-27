@@ -106,6 +106,15 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
+extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
+	SYS.mkdir(name, mode)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
+	kernel_function!(__sys_mkdir(name, mode))
+}
+
 extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
 	SYS.rmdir(name)
 }
@@ -194,16 +203,6 @@ extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const Dirent {
 #[no_mangle]
 pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const Dirent {
 	kernel_function!(__sys_readdir(fd))
-}
-
-extern "C" fn __sys_mkdir(fd: FileDescriptor, name: *const u8, mode: u32) -> i32 {
-	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).mkdir(name, mode))
-}
-
-#[no_mangle]
-pub extern "C" fn sys_mkdir(fd: FileDescriptor, name: *const u8, mode: u32) -> i32 {
-	kernel_function!(__sys_mkdir(fd, name, mode))
 }
 
 extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {

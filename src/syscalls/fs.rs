@@ -177,6 +177,14 @@ impl Filesystem {
 		Ok(())
 	}
 
+	/// Create directory given by path
+	pub fn mkdir(&mut self, path: &str, mode: u32) -> Result<(), FileError> {
+		debug!("Removing directory {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.mkdir(internal_path, mode)?;
+		Ok(())
+	}
+
 	/// Create new backing-fs at mountpoint mntpath
 	#[cfg(feature = "pci")]
 	pub fn mount(
@@ -233,6 +241,7 @@ pub trait PosixFileSystem {
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
 
 	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
 }
 
 pub trait PosixFile {
@@ -242,7 +251,6 @@ pub trait PosixFile {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 
 	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
-	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
