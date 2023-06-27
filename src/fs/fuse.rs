@@ -1362,28 +1362,6 @@ pub fn init() {
 		let fuse = Box::new(Fuse::new());
 		fuse.send_init();
 
-		// let nid = fuse.lookup("/");
-		// info!("Root node id {}", nid.expect("No root node?"));
-
-		// // Print dir content
-		// let mut root_dir = fuse.opendir("/").unwrap();
-		// root_dir.mkdir("new_dir",0o777);
-		// fuse.rmdir("new_dir");
-
-		// while let Some(dirent) = root_dir.next() {
-		// 	let dirent = dirent.unwrap();
-		// 	info!("Name: {:#?}, Type: {:#?}", dirent.file_name(), dirent.file_type());
-		// }
-
-		// while let Ok(dirent_vec) = root_dir.readdir() {
-		// 	info!("Result {:#?}", dirent_vec);
-
-		// 	// The filesystem will return an empty buffer when all dirs have been read
-		// 	if dirent_vec.len() == 0 {
-		// 		break;
-		// 	}
-		// }
-
 		let mut fs = fs::FILESYSTEM.lock();
 		let mount_point = driver.lock().get_mount_point();
 		info!("Mounting virtio-fs at /{}", mount_point);
