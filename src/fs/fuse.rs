@@ -142,6 +142,21 @@ impl PosixFileSystem for Fuse {
 
 		Ok(())
 	}
+
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
+		info!("Mkdir: {}, mode: {}", name, mode);
+
+		let (mut cmd, mut rsp) = create_mkdir(name, mode);
+
+		info!("Cmd: {:?}", cmd);
+		info!("Rsp: {:?}", rsp);
+
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		Ok(unsafe { rsp.rsp.assume_init().nodeid.try_into().unwrap() })
+	}
 }
 
 impl Fuse {
@@ -283,15 +298,6 @@ impl PosixFile for FuseDir {
 		assert!(return_ptr.is_aligned_to(U64_SIZE.try_into().unwrap()));
 		Ok(return_ptr.cast())
 	}
-
-	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
-		let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid.unwrap(), name, mode);
-		get_filesystem_driver()
-			.ok_or(FileError::ENOSYS)?
-			.lock()
-			.send_command(cmd.as_ref(), rsp.as_mut());
-		Ok(unsafe { rsp.rsp.assume_init().nodeid.try_into().unwrap() })
-	}
 }
 
 impl PosixFile for FuseFile {
@@ -396,10 +402,6 @@ impl PosixFile for FuseFile {
 	}
 
 	fn readdir(&mut self) -> Result<*const Dirent, FileError> {
-		Err(FileError::EBADF)
-	}
-
-	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
 		Err(FileError::EBADF)
 	}
 }
@@ -1230,7 +1232,6 @@ fn create_create(
 }
 
 fn create_mkdir(
-	nid: u64,
 	path: &str,
 	mode: u32,
 ) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
@@ -1252,7 +1253,7 @@ fn create_mkdir(
 		let data = alloc(layout);
 		let raw =
 			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_mkdir_in>;
-		(*raw).header = create_in_header::<fuse_mkdir_in>(nid, Opcode::FUSE_MKDIR);
+		(*raw).header = create_in_header::<fuse_mkdir_in>(FUSE_ROOT_ID, Opcode::FUSE_MKDIR);
 		(*raw).header.len = len.try_into().unwrap();
 		(*raw).cmd = fuse_mkdir_in {
 			mode,
@@ -1360,6 +1361,28 @@ pub fn init() {
 		// Instantiate global fuse object
 		let fuse = Box::new(Fuse::new());
 		fuse.send_init();
+
+		// let nid = fuse.lookup("/");
+		// info!("Root node id {}", nid.expect("No root node?"));
+
+		// // Print dir content
+		// let mut root_dir = fuse.opendir("/").unwrap();
+		// root_dir.mkdir("new_dir",0o777);
+		// fuse.rmdir("new_dir");
+
+		// while let Some(dirent) = root_dir.next() {
+		// 	let dirent = dirent.unwrap();
+		// 	info!("Name: {:#?}, Type: {:#?}", dirent.file_name(), dirent.file_type());
+		// }
+
+		// while let Ok(dirent_vec) = root_dir.readdir() {
+		// 	info!("Result {:#?}", dirent_vec);
+
+		// 	// The filesystem will return an empty buffer when all dirs have been read
+		// 	if dirent_vec.len() == 0 {
+		// 		break;
+		// 	}
+		// }
 
 		let mut fs = fs::FILESYSTEM.lock();
 		let mount_point = driver.lock().get_mount_point();

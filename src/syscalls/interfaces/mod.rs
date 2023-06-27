@@ -78,6 +78,18 @@ pub trait SyscallInterface: Send + Sync {
 		0
 	}
 
+	#[cfg(target_arch = "x86_64")]
+	fn mkdir(&self, name: *const u8, mode: u32) -> i32 {
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+		debug!("mkdir {}, mode {}", name, mode);
+
+		fs::FILESYSTEM
+			.lock()
+			.mkdir(name, mode)
+			.expect("Creating directory failed!"); // TODO: error handling
+		0
+	}
+
 	fn stat(&self, _file: *const u8, _st: usize) -> i32 {
 		info!("stat is unimplemented");
 		-ENOSYS
