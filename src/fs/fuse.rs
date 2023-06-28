@@ -144,12 +144,7 @@ impl PosixFileSystem for Fuse {
 	}
 
 	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
-		info!("Mkdir: {}, mode: {}", name, mode);
-
 		let (mut cmd, mut rsp) = create_mkdir(name, mode);
-
-		info!("Cmd: {:?}", cmd);
-		info!("Rsp: {:?}", rsp);
 
 		get_filesystem_driver()
 			.ok_or(FileError::ENOSYS)?
