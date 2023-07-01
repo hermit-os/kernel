@@ -142,6 +142,16 @@ impl PosixFileSystem for Fuse {
 
 		Ok(())
 	}
+
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
+		let (mut cmd, mut rsp) = create_mkdir(name, mode);
+
+		get_filesystem_driver()
+			.ok_or(FileError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+		Ok(unsafe { rsp.rsp.assume_init().nodeid.try_into().unwrap() })
+	}
 }
 
 impl Fuse {
@@ -389,15 +399,6 @@ impl PosixFile for FuseFile {
 	fn readdir(&mut self) -> Result<*const Dirent, FileError> {
 		Err(FileError::EBADF)
 	}
-
-	// fn mkdir(&self, name: &str, mode: u32) -> Option<u64> {
-	// 	let (mut cmd, mut rsp) = create_mkdir(self.fuse_nid?, name, mode);
-	// 	get_filesystem_driver()
-	// 		.unwrap()
-	// 		.lock()
-	// 		.send_command(cmd.as_ref(), rsp.as_mut());
-	// 	Some(unsafe { rsp.rsp.assume_init().nodeid })
-	// }
 }
 
 #[repr(u32)]
@@ -1226,7 +1227,6 @@ fn create_create(
 }
 
 fn create_mkdir(
-	nid: u64,
 	path: &str,
 	mode: u32,
 ) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
@@ -1248,7 +1248,7 @@ fn create_mkdir(
 		let data = alloc(layout);
 		let raw =
 			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_mkdir_in>;
-		(*raw).header = create_in_header::<fuse_mkdir_in>(nid, Opcode::FUSE_MKDIR);
+		(*raw).header = create_in_header::<fuse_mkdir_in>(FUSE_ROOT_ID, Opcode::FUSE_MKDIR);
 		(*raw).header.len = len.try_into().unwrap();
 		(*raw).cmd = fuse_mkdir_in {
 			mode,
