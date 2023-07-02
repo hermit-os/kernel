@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use core::arch::asm;
 use core::marker::PhantomData;
 use core::{fmt, mem, ptr, usize};
@@ -39,19 +41,19 @@ bitflags! {
 		const TABLE_OR_4KIB_PAGE = 1 << 1;
 
 		/// Set if this entry points to device memory (non-gathering, non-reordering, no early write acknowledgement)
-		const DEVICE_NGNRNE = 0 << 4 | 0 << 3 | 0 << 2;
+		const DEVICE_NGNRNE = 0;
 
 		/// Set if this entry points to device memory (non-gathering, non-reordering, early write acknowledgement)
-		const DEVICE_NGNRE = 0 << 4 | 0 << 3 | 1 << 2;
+		const DEVICE_NGNRE = 1 << 2;
 
 		/// Set if this entry points to device memory (gathering, reordering, early write acknowledgement)
-		const DEVICE_GRE = 0 << 4 | 1 << 3 | 0 << 2;
+		const DEVICE_GRE = 1 << 3;
 
 		/// Set if this entry points to normal memory (non-cacheable)
-		const NORMAL_NC = 0 << 4 | 1 << 3 | 1 << 2;
+		const NORMAL_NC = 1 << 3 | 1 << 2;
 
 		/// Set if this entry points to normal memory (cacheable)
-		const NORMAL = 1 << 4 | 0 << 3 | 0 << 2;
+		const NORMAL = 1 << 4;
 
 		/// Set if memory referenced by this entry shall be read-only.
 		const READ_ONLY = 1 << 7;
@@ -269,14 +271,14 @@ impl<S: PageSize> Page<S> {
 		assert!(first.virtual_address <= last.virtual_address);
 		PageIter {
 			current: first,
-			last: last,
+			last,
 		}
 	}
 
 	/// Returns the index of this page in the table given by L.
 	fn table_index<L: PageTableLevel>(&self) -> usize {
 		assert!(L::LEVEL <= S::MAP_LEVEL);
-		self.virtual_address.as_usize() >> PAGE_BITS >> (3 - L::LEVEL) * PAGE_MAP_BITS
+		self.virtual_address.as_usize() >> PAGE_BITS >> ((3 - L::LEVEL) * PAGE_MAP_BITS)
 			& PAGE_MAP_MASK
 	}
 }
@@ -510,6 +512,8 @@ where
 	/// Returns the next subtable for the given page in the page table hierarchy.
 	///
 	/// Must only be called if a page of this size is mapped in a subtable!
+	// FIXME: https://github.com/hermitcore/libhermit-rs/issues/771
+	#[allow(clippy::mut_from_ref)]
 	fn subtable<S: PageSize>(&self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
 		assert!(L::LEVEL < S::MAP_LEVEL);
 

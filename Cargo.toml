@@ -1,6 +1,6 @@
 [package]
 name = "libhermit-rs"
-version = "0.6.1"
+version = "0.6.2"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
 	"Colin Finck <colin.finck@rwth-aachen.de>",
@@ -70,10 +70,11 @@ dhcpv4 = [
 [dependencies]
 ahash = { version = "0.8", default-features = false }
 align-address = "0.1"
-bitflags = "2.2"
+bitflags = "2.3"
+bit_field = "0.10"
 crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
-hashbrown = { version = "0.13", default-features = false }
+hashbrown = { version = "0.14", default-features = false }
 hermit-entry = { version = "0.9", features = ["kernel"] }
 hermit-sync = "0.1.2"
 include-transformed = { version = "0.2", optional = true }
@@ -92,7 +93,7 @@ num-traits = { version = "0.2", default-features = false }
 num-derive = "0.3"
 zerocopy = "0.6"
 time = { version = "0.3", default-features = false }
-pci_types = { git = "https://github.com/hermitcore/pci_types.git", branch = "hermit" }
+pci_types = { version = "0.5" }
 
 [dependencies.smoltcp]
 version = "0.9"

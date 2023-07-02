@@ -4,8 +4,8 @@ use core::ops::DerefMut;
 use core::sync::atomic::Ordering;
 
 use crate::errno::*;
+use crate::executor::{NetworkState, NIC};
 use crate::fd::{get_object, insert_object, FD_COUNTER, OBJECT_MAP};
-use crate::net::{NetworkState, NIC};
 use crate::syscalls::net::*;
 
 mod tcp;
@@ -18,7 +18,7 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 	);
 
 	if (domain != AF_INET && domain != AF_INET6)
-		|| type_ != SOCK_STREAM
+		|| (type_ != SOCK_STREAM && type_ != SOCK_DGRAM)
 		|| (protocol != 0 && protocol != IPPROTO_UDP && protocol != IPPROTO_TCP)
 	{
 		-EINVAL

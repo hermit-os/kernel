@@ -51,8 +51,6 @@ use arch::core_local::*;
 #[doc(hidden)]
 pub use env::is_uhyve as _is_uhyve;
 use mm::allocator::LockedAllocator;
-#[cfg(target_arch = "aarch64")]
-use qemu_exit::QEMUExit;
 
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
@@ -72,11 +70,11 @@ mod drivers;
 mod entropy;
 mod env;
 pub mod errno;
+#[cfg(feature = "tcp")]
+mod executor;
 pub(crate) mod fd;
 pub(crate) mod fs;
 mod mm;
-#[cfg(feature = "tcp")]
-mod net;
 mod scheduler;
 mod synch;
 mod syscalls;
@@ -263,7 +261,7 @@ extern "C" fn initd(_arg: usize) {
 	// Initialize Drivers
 	arch::init_drivers();
 	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
-	crate::net::init();
+	crate::executor::init();
 
 	syscalls::init();
 	fd::init();

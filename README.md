@@ -28,6 +28,7 @@ cargo xtask build --arch x86_64
 ```
 
 On completion, the script will print the path of `libhermit.a`.
+If you want to build _libhermit-rs_ for aarch64, please replace `x86_64` by `aarch64`.
 
 ### Control the kernel messages verbosity
 

@@ -20,7 +20,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::pci as hardware;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
-use crate::net::{NetworkInterface, NetworkState};
+use crate::executor::{NetworkInterface, NetworkState};
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]

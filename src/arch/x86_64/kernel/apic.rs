@@ -232,7 +232,7 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStac
 	core_scheduler.check_input();
 	eoi();
 	if core_scheduler.is_scheduling() {
-		core_scheduler.scheduler();
+		core_scheduler.reschedule();
 	}
 }
 

@@ -55,13 +55,6 @@ pub trait SyscallInterface: Send + Sync {
 		arch::processor::shutdown()
 	}
 
-	#[cfg(not(target_arch = "x86_64"))]
-	fn unlink(&self, _name: *const u8) -> i32 {
-		debug!("unlink is unimplemented, returning -ENOSYS");
-		-ENOSYS
-	}
-
-	#[cfg(target_arch = "x86_64")]
 	fn unlink(&self, name: *const u8) -> i32 {
 		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 		debug!("unlink {}", name);

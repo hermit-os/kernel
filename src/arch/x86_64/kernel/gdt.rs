@@ -20,7 +20,7 @@ pub fn add_current_core() {
 	let kernel_data_selector = gdt.add_entry(Descriptor::kernel_data_segment());
 
 	// Dynamically allocate memory for a Task-State Segment (TSS) for this core.
-	let mut tss = Box::leak(Box::new(TaskStateSegment::new()));
+	let tss = Box::leak(Box::new(TaskStateSegment::new()));
 
 	// Every task later gets its own stack, so this boot stack is only used by the Idle task on each core.
 	// When switching to another task on this core, this entry is replaced.

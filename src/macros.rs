@@ -1,17 +1,28 @@
-/// Print formatted text to our console.
+/// Prints to the standard output.
 ///
-/// From <http://blog.phil-opp.com/rust-os/printing-to-screen.html>, but tweaked
-/// for HermitCore.
+/// Adapted from [`std::print`].
+///
+/// [`std::print`]: https://doc.rust-lang.org/stable/std/macro.print.html
 #[macro_export]
 macro_rules! print {
-	($($arg:tt)+) => ($crate::_print(::core::format_args!($($arg)+)));
+    ($($arg:tt)*) => {{
+        $crate::_print(::core::format_args!($($arg)*));
+    }};
 }
 
-/// Print formatted text to our console, followed by a newline.
+/// Prints to the standard output, with a newline.
+///
+/// Adapted from [`std::println`].
+///
+/// [`std::println`]: https://doc.rust-lang.org/stable/std/macro.println.html
 #[macro_export]
 macro_rules! println {
-	() => (print!("\n"));
-	($($arg:tt)+) => (print!("{}\n", ::core::format_args!($($arg)+)));
+    () => {
+        $crate::print!("\n")
+    };
+    ($($arg:tt)*) => {{
+        $crate::_print(::core::format_args!("{}\n", format_args!($($arg)*)));
+    }};
 }
 
 /// Prints and returns the value of a given expression for quick and dirty
@@ -58,7 +69,7 @@ macro_rules! dbg {
 /// let ret = f(arg);
 /// ```
 #[allow(unused_macro_rules)]
-#[cfg(all(target_arch = "x86_64", not(feature = "newlib")))]
+#[cfg(not(feature = "newlib"))]
 macro_rules! kernel_function {
 	($f:ident()) => {
 		$crate::arch::switch::kernel_function0($f)
@@ -91,10 +102,7 @@ macro_rules! kernel_function {
 
 // TODO: Properly switch kernel stack with newlib
 // https://github.com/hermitcore/libhermit-rs/issues/471
-#[cfg(any(
-	target_arch = "aarch64",
-	all(target_arch = "x86_64", feature = "newlib")
-))]
+#[cfg(all(target_arch = "x86_64", feature = "newlib"))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		$f($($x)*)

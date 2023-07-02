@@ -14,6 +14,7 @@ use hermit_sync::{without_interrupts, *};
 use crate::arch;
 use crate::arch::core_local::*;
 use crate::arch::interrupts;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
@@ -66,6 +67,7 @@ pub struct PerCoreScheduler {
 	/// Idle Task
 	idle_task: Rc<RefCell<Task>>,
 	/// Task that currently owns the FPU
+	#[cfg(target_arch = "x86_64")]
 	fpu_owner: Rc<RefCell<Task>>,
 	/// Queue of tasks, which are ready
 	ready_queue: PriorityTaskQueue,
@@ -192,11 +194,21 @@ impl PerCoreScheduler {
 			);
 			current_task_borrowed.status = TaskStatus::Finished;
 			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+
+			let current_id = current_task_borrowed.id;
+			drop(current_task_borrowed);
+
+			// wakeup tasks, which are waiting for task with the identifier id
+			if let Some(mut queue) = WAITING_TASKS.lock().remove(&current_id) {
+				while let Some(task) = queue.pop_front() {
+					self.custom_wakeup(task);
+				}
+			}
 		};
 
 		without_interrupts(closure);
 
-		self.scheduler();
+		self.reschedule();
 		unreachable!()
 	}
 
@@ -281,7 +293,7 @@ impl PerCoreScheduler {
 
 	/// Returns `true` if a reschedule is required
 	#[inline]
-	#[cfg(feature = "smp")]
+	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn is_scheduling(&self) -> bool {
 		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
 	}
@@ -350,9 +362,9 @@ impl PerCoreScheduler {
 			}
 
 			if !has_tasks {
-				if let Some(mut guard) = crate::net::NIC.try_lock() {
-					if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-						let time = crate::net::now();
+				if let Some(mut guard) = crate::executor::NIC.try_lock() {
+					if let crate::executor::NetworkState::Initialized(nic) = guard.deref_mut() {
+						let time = crate::executor::now();
 						nic.poll_common(time);
 						let wakeup_time = nic
 							.poll_delay(time)
@@ -453,6 +465,7 @@ impl PerCoreScheduler {
 
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
+	#[cfg(target_arch = "x86_64")]
 	pub fn fpu_switch(&mut self) {
 		if !Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
 			debug!(
@@ -468,28 +481,14 @@ impl PerCoreScheduler {
 	}
 
 	/// Check if a finished task could be deleted.
-	/// Return true if a task is waked up
-	fn cleanup_tasks(&mut self) -> bool {
-		let mut result = false;
-
+	fn cleanup_tasks(&mut self) {
 		// Pop the first finished task and remove it from the TASKS list, which implicitly deallocates all associated memory.
 		while let Some(finished_task) = self.finished_tasks.pop_front() {
-			let borrowed = finished_task.borrow();
-			debug!("Cleaning up task {}", borrowed.id);
-
-			// wakeup tasks, which are waiting for task with the identifier id
-			if let Some(mut queue) = WAITING_TASKS.lock().remove(&borrowed.id) {
-				while let Some(task) = queue.pop_front() {
-					result = true;
-					self.custom_wakeup(task);
-				}
-			}
+			debug!("Cleaning up task {}", finished_task.borrow().id);
 		}
-
-		result
 	}
 
-	#[cfg(feature = "smp")]
+	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn check_input(&mut self) {
 		let mut input_locked = self.input.lock();
 
@@ -505,8 +504,56 @@ impl PerCoreScheduler {
 
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag will be cleared during the reschedule
+	#[cfg(target_arch = "x86_64")]
 	pub fn reschedule(&mut self) {
-		without_interrupts(|| self.scheduler());
+		without_interrupts(|| {
+			if let Some(last_stack_pointer) = self.scheduler() {
+				let (new_stack_pointer, is_idle) = {
+					let borrowed = self.current_task.borrow();
+					(
+						borrowed.last_stack_pointer,
+						borrowed.status == TaskStatus::Idle,
+					)
+				};
+
+				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+					unsafe {
+						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				} else {
+					unsafe {
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				}
+			}
+		})
+	}
+
+	/// Trigger an interrupt to reschedule the system
+	#[cfg(target_arch = "aarch64")]
+	pub fn reschedule(&self) {
+		use core::arch::asm;
+
+		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
+
+		use crate::interrupts::SGI_RESCHED;
+
+		unsafe {
+			asm!("dsb nsh", "isb", options(nostack, nomem, preserves_flags));
+		}
+
+		let reschedid = IntId::sgi(SGI_RESCHED.into());
+		GicV3::send_sgi(
+			reschedid,
+			SgiTarget::List {
+				affinity3: 0,
+				affinity2: 0,
+				affinity1: 0,
+				target_list: 0b1,
+			},
+		);
+
+		interrupts::enable();
 	}
 
 	/// Only the idle task should call this function.
@@ -518,7 +565,7 @@ impl PerCoreScheduler {
 		loop {
 			interrupts::disable();
 			// do housekeeping
-			let _ = self.cleanup_tasks();
+			self.cleanup_tasks();
 
 			if self.ready_queue.is_empty() {
 				if backoff.is_completed() {
@@ -535,12 +582,18 @@ impl PerCoreScheduler {
 		}
 	}
 
+	#[inline]
+	#[cfg(target_arch = "aarch64")]
+	pub fn get_last_stack_pointer(&self) -> crate::arch::mm::VirtAddr {
+		self.current_task.borrow().last_stack_pointer
+	}
+
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
-	pub fn scheduler(&mut self) {
+	pub fn scheduler(&mut self) -> Option<*mut usize> {
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
-		let _ = self.cleanup_tasks();
+		self.cleanup_tasks();
 
 		// Get information about the current task.
 		let (id, last_stack_pointer, prio, status) = {
@@ -592,18 +645,14 @@ impl PerCoreScheduler {
 			}
 
 			// Handle the new task and get information about it.
-			let (new_id, new_stack_pointer, is_idle) = {
+			let (new_id, new_stack_pointer) = {
 				let mut borrowed = task.borrow_mut();
 				if borrowed.status != TaskStatus::Idle {
 					// Mark the new task as running.
 					borrowed.status = TaskStatus::Running;
 				}
 
-				(
-					borrowed.id,
-					borrowed.last_stack_pointer,
-					borrowed.status == TaskStatus::Idle,
-				)
+				(borrowed.id, borrowed.last_stack_pointer)
 			};
 
 			if id != new_id {
@@ -617,18 +666,12 @@ impl PerCoreScheduler {
 				);
 				self.current_task = task;
 
-				// Finally save our current context and restore the context of the new task.
-				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
-					unsafe {
-						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
-					}
-				} else {
-					unsafe {
-						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
-					}
-				}
+				// Finally return the context of the new task.
+				return Some(last_stack_pointer);
 			}
 		}
+
+		None
 	}
 }
 
@@ -676,8 +719,9 @@ pub fn add_current_core() {
 		#[cfg(feature = "smp")]
 		core_id,
 		current_task: idle_task.clone(),
-		idle_task: idle_task.clone(),
-		fpu_owner: idle_task,
+		#[cfg(target_arch = "x86_64")]
+		fpu_owner: idle_task.clone(),
+		idle_task,
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
@@ -713,22 +757,20 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 		id
 	);
 
-	{
-		match WAITING_TASKS.lock().get_mut(&id) {
-			Some(queue) => {
-				queue.push_back(core_scheduler.get_current_task_handle());
-				core_scheduler.block_current_task(None);
-			}
-			_ => {
-				return Ok(());
-			}
+	loop {
+		let mut waiting_tasks_guard = WAITING_TASKS.lock();
+
+		if let Some(queue) = waiting_tasks_guard.get_mut(&id) {
+			queue.push_back(core_scheduler.get_current_task_handle());
+			core_scheduler.block_current_task(None);
+
+			// Switch to the next task.
+			drop(waiting_tasks_guard);
+			core_scheduler.reschedule();
+		} else {
+			return Ok(());
 		}
 	}
-
-	// Switch to the next task.
-	core_scheduler.scheduler();
-
-	Ok(())
 }
 
 fn get_task_handle(id: TaskId) -> Option<TaskHandle> {

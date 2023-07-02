@@ -6,9 +6,7 @@ pub struct SerialPort {
 
 impl SerialPort {
 	pub const fn new(port_address: u32) -> Self {
-		Self {
-			port_address: port_address,
-		}
+		Self { port_address }
 	}
 
 	pub fn write_byte(&self, byte: u8) {

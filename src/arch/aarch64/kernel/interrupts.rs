@@ -5,7 +5,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
 use ahash::RandomState;
-use arm_gic::gicv3::{GicV3, IntId};
+use arm_gic::gicv3::{GicV3, IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
@@ -16,34 +16,42 @@ use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
 use crate::arch::aarch64::kernel::scheduler::State;
 use crate::arch::aarch64::mm::paging::{self, BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{virtualmem, PhysAddr};
-use crate::errno::EFAULT;
-use crate::scheduler::CoreId;
-use crate::{core_scheduler, sys_exit};
-
-pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
+use crate::core_scheduler;
+use crate::scheduler::{self, CoreId};
 
 /// maximum number of interrupt handlers
 const MAX_HANDLERS: usize = 256;
+/// The ID of the first Private Peripheral Interrupt.
+const PPI_START: u8 = 16;
+/// The ID of the first Shared Peripheral Interrupt.
+const SPI_START: u8 = 32;
+/// Software-generated interrupt for rescheduling
+pub(crate) const SGI_RESCHED: u8 = 1;
 
 /// Number of the timer interrupt
 static mut TIMER_INTERRUPT: u32 = 0;
+/// A handler function for an interrupt.
+///
+/// Returns true if we should reschedule.
+type HandlerFunc = fn(state: &State) -> bool;
 /// Possible interrupt handlers
-static mut INTERRUPT_HANDLERS: [Option<fn(state: &State)>; MAX_HANDLERS] = [None; MAX_HANDLERS];
+static mut INTERRUPT_HANDLERS: [Option<HandlerFunc>; MAX_HANDLERS] = [None; MAX_HANDLERS];
 /// Driver for the Arm Generic Interrupt Controller version 3 (or 4).
-static mut GIC: OnceCell<GicV3> = OnceCell::new();
+pub(crate) static mut GIC: OnceCell<GicV3> = OnceCell::new();
 
-fn timer_handler(_state: &State) {
+fn timer_handler(_state: &State) -> bool {
 	debug!("Handle timer interrupt");
 
 	// disable timer
 	unsafe {
 		asm!(
-			"msr cntp_cval_el0, {disable}",
-			"msr cntp_ctl_el0, {disable}",
-			disable = in(reg) 0,
+			"msr cntp_cval_el0, xzr",
+			"msr cntp_ctl_el0, xzr",
 			options(nostack, nomem),
 		);
 	}
+
+	true
 }
 
 /// Enable all interrupts
@@ -85,16 +93,17 @@ pub fn disable() {
 	}
 }
 
-pub fn irq_install_handler(irq_number: u8, handler: fn(state: &State)) {
+pub(crate) fn irq_install_handler(irq_number: u8, handler: HandlerFunc) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
-		INTERRUPT_HANDLERS[irq_number as usize + 16] = Some(handler);
+		INTERRUPT_HANDLERS[irq_number as usize + SPI_START as usize] = Some(handler);
 	}
 }
 
 #[no_mangle]
-pub extern "C" fn do_fiq(state: &State) {
+pub(crate) extern "C" fn do_fiq(state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+		let mut reschedule: bool = false;
 		let vector: usize = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive fiq {}", vector);
@@ -103,7 +112,7 @@ pub extern "C" fn do_fiq(state: &State) {
 		if vector < MAX_HANDLERS {
 			unsafe {
 				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
-					handler(state);
+					reschedule = handler(state);
 				}
 			}
 		}
@@ -112,16 +121,25 @@ pub extern "C" fn do_fiq(state: &State) {
 
 		GicV3::end_interrupt(irqid);
 
-		if unsafe { vector == TIMER_INTERRUPT.try_into().unwrap() } {
+		if unsafe {
+			reschedule
+				|| vector == TIMER_INTERRUPT.try_into().unwrap()
+				|| vector == SGI_RESCHED.try_into().unwrap()
+		} {
 			// a timer interrupt may have caused unblocking of tasks
-			core_scheduler().scheduler();
+			return core_scheduler()
+				.scheduler()
+				.unwrap_or(core::ptr::null_mut());
 		}
 	}
+
+	core::ptr::null_mut()
 }
 
 #[no_mangle]
-pub extern "C" fn do_irq(state: &State) {
+pub(crate) extern "C" fn do_irq(state: &State) -> *mut usize {
 	if let Some(irqid) = GicV3::get_and_acknowledge_interrupt() {
+		let mut reschedule: bool = false;
 		let vector: usize = u32::from(irqid).try_into().unwrap();
 
 		debug!("Receive interrupt {}", vector);
@@ -130,7 +148,7 @@ pub extern "C" fn do_irq(state: &State) {
 		if vector < MAX_HANDLERS {
 			unsafe {
 				if let Some(handler) = INTERRUPT_HANDLERS[vector] {
-					handler(state);
+					reschedule = handler(state);
 				}
 			}
 		}
@@ -139,15 +157,23 @@ pub extern "C" fn do_irq(state: &State) {
 
 		GicV3::end_interrupt(irqid);
 
-		if unsafe { vector == TIMER_INTERRUPT.try_into().unwrap() } {
+		if unsafe {
+			reschedule
+				|| vector == TIMER_INTERRUPT.try_into().unwrap()
+				|| vector == SGI_RESCHED.try_into().unwrap()
+		} {
 			// a timer interrupt may have caused unblocking of tasks
-			core_scheduler().scheduler();
+			return core_scheduler()
+				.scheduler()
+				.unwrap_or(core::ptr::null_mut());
 		}
 	}
+
+	core::ptr::null_mut()
 }
 
 #[no_mangle]
-pub extern "C" fn do_sync(_state: &State) {
+pub(crate) extern "C" fn do_sync(state: &State) {
 	let irqid = GicV3::get_and_acknowledge_interrupt().unwrap();
 	let esr = ESR_EL1.get();
 	let ec = esr >> 26;
@@ -163,6 +189,7 @@ pub extern "C" fn do_sync(_state: &State) {
 
 			// add page fault handler
 
+			error!("Current stack pointer {:#x}", state as *const _ as u64);
 			error!("Unable to handle page fault at {:#x}", far);
 			error!("Exception return address {:#x}", ELR_EL1.get());
 			error!("Thread ID register {:#x}", TPIDR_EL0.get());
@@ -170,7 +197,7 @@ pub extern "C" fn do_sync(_state: &State) {
 			error!("Exception Syndrome Register {:#x}", esr);
 
 			GicV3::end_interrupt(irqid);
-			sys_exit(-EFAULT);
+			scheduler::abort()
 		} else {
 			error!("Unknown exception");
 		}
@@ -182,24 +209,24 @@ pub extern "C" fn do_sync(_state: &State) {
 }
 
 #[no_mangle]
-pub extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
+pub(crate) extern "C" fn do_bad_mode(_state: &State, reason: u32) -> ! {
 	error!("Receive unhandled exception: {}", reason);
 
-	sys_exit(-EFAULT);
+	scheduler::abort()
 }
 
 #[no_mangle]
-pub extern "C" fn do_error(_state: &State) -> ! {
+pub(crate) extern "C" fn do_error(_state: &State) -> ! {
 	error!("Receive error interrupt");
 
-	sys_exit(-EFAULT);
+	scheduler::abort()
 }
 
 pub fn wakeup_core(_core_to_wakeup: CoreId) {
 	todo!("wakeup_core stub");
 }
 
-pub fn init() {
+pub(crate) fn init() {
 	info!("Intialize generic interrupt controller");
 
 	let dtb = unsafe {
@@ -257,11 +284,7 @@ pub fn init() {
 		let parts: Vec<_> = node.split('@').collect();
 
 		if let Some(compatible) = dtb.get_property(parts.first().unwrap(), "compatible") {
-			if core::str::from_utf8(compatible)
-				.unwrap()
-				.find("timer")
-				.is_some()
-			{
+			if core::str::from_utf8(compatible).unwrap().contains("timer") {
 				let irq_slice = dtb
 					.get_property(parts.first().unwrap(), "interrupts")
 					.unwrap();
@@ -273,24 +296,49 @@ pub fn init() {
 				let (irqtype, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
 				let (irq, irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
 				let (irqflags, _irq_slice) = irq_slice.split_at(core::mem::size_of::<u32>());
-				let _irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
+				let irqtype = u32::from_be_bytes(irqtype.try_into().unwrap());
 				let irq = u32::from_be_bytes(irq.try_into().unwrap());
-				let _irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
+				let irqflags = u32::from_be_bytes(irqflags.try_into().unwrap());
 				unsafe {
 					TIMER_INTERRUPT = irq;
 				}
 
-				debug!("Timer interrupt: {}", irq);
-				irq_install_handler(irq.try_into().unwrap(), timer_handler);
-				add_irq_name(irq.try_into().unwrap(), "Timer");
+				debug!(
+					"Timer interrupt: {}, type {}, flags {}",
+					irq, irqtype, irqflags
+				);
+				unsafe {
+					INTERRUPT_HANDLERS[irq as usize + PPI_START as usize] = Some(timer_handler);
+				}
+				IRQ_NAMES
+					.lock()
+					.insert(u8::try_from(irq).unwrap() + PPI_START, "Timer");
 
 				// enable timer interrupt
-				let timer_irqid = IntId::ppi(irq);
+				let timer_irqid = if irqtype == 1 {
+					IntId::ppi(irq)
+				} else if irqtype == 0 {
+					IntId::spi(irq)
+				} else {
+					panic!("Invalid interrupt type");
+				};
 				gic.set_interrupt_priority(timer_irqid, 0x00);
+				if irqflags == 4 || irqflags == 8 {
+					gic.set_trigger(timer_irqid, Trigger::Level);
+				} else if irqflags == 2 || irqflags == 1 {
+					gic.set_trigger(timer_irqid, Trigger::Edge);
+				} else {
+					panic!("Invalid interrupt level!");
+				}
 				gic.enable_interrupt(timer_irqid, true);
 			}
 		}
 	}
+
+	let reschedid = IntId::sgi(SGI_RESCHED.into());
+	gic.set_interrupt_priority(reschedid, 0x00);
+	gic.enable_interrupt(reschedid, true);
+	IRQ_NAMES.lock().insert(SGI_RESCHED, "Reschedule");
 
 	unsafe {
 		GIC.set(gic).unwrap();
@@ -302,7 +350,7 @@ static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 
 pub fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
-	IRQ_NAMES.lock().insert(16 + irq_number, name);
+	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
 
 fn get_irq_name(irq_number: u8) -> Option<&'static str> {

@@ -371,7 +371,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
-	core_scheduler().scheduler();
+	core_scheduler().reschedule();
 }
 
 pub fn install_timer_handler() {

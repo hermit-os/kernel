@@ -9,8 +9,6 @@ pub mod x86_64;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::core_local;
 #[cfg(target_arch = "aarch64")]
-use crate::arch::aarch64::kernel::core_local::core_scheduler;
-#[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::interrupts::wakeup_core;
@@ -62,9 +60,31 @@ pub use crate::arch::x86_64::kernel::{
 #[cfg(target_arch = "x86_64")]
 pub use crate::arch::x86_64::*;
 
+/// Force strict CPU ordering, serializes load and store operations.
+#[allow(dead_code)]
+#[cfg(target_arch = "aarch64")]
+#[inline(always)]
+pub(crate) fn memory_barrier() {
+	use core::arch::asm;
+	unsafe {
+		asm!("dmb ish", options(nostack, nomem, preserves_flags),);
+	}
+}
+
+/// Force strict CPU ordering, serializes load and store operations.
+#[allow(dead_code)]
+#[cfg(target_arch = "x86_64")]
+#[inline(always)]
+pub(crate) fn memory_barrier() {
+	use core::arch::asm;
+	unsafe {
+		asm!("mfence", options(nostack, nomem, preserves_flags),);
+	}
+}
+
 pub fn init_drivers() {
 	// Initialize PCI Drivers for x86_64
-	#[cfg(all(target_arch = "x86_64", feature = "pci"))]
+	#[cfg(feature = "pci")]
 	crate::drivers::pci::init_drivers();
 	#[cfg(all(target_arch = "x86_64", not(feature = "pci")))]
 	crate::arch::x86_64::kernel::mmio::init_drivers();

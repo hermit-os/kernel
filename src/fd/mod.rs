@@ -156,7 +156,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 	unsafe {
 		asm!(
 			"str x8, [{port}]",
-			port = in(reg) port,
+			port = in(reg) u64::from(port),
 			in("x8") physical_address.as_u64(),
 			options(nostack),
 		);
@@ -313,7 +313,6 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			Err(sysopen.ret)
 		}
 	} else {
-		#[cfg(target_arch = "x86_64")]
 		{
 			// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 			// flags is bitmask of O_DEC_* defined above.
@@ -334,10 +333,6 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			} else {
 				Err(-EINVAL)
 			}
-		}
-		#[cfg(not(target_arch = "x86_64"))]
-		{
-			Err(-ENOSYS)
 		}
 	}
 }

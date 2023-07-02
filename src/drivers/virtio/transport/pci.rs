@@ -8,6 +8,7 @@ use core::mem;
 use core::result::Result;
 
 use crate::arch::kernel::interrupts::*;
+use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
@@ -15,7 +16,7 @@ use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 use crate::drivers::net::network_irqhandler;
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
-use crate::drivers::pci::PciDevice;
+use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
@@ -463,6 +464,7 @@ impl ComCfg {
 
 	/// Resets the device status field to zero.
 	pub fn reset_dev(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status = 0;
 	}
 
@@ -470,18 +472,21 @@ impl ComCfg {
 	/// A driver MUST NOT initialize and use the device any further after this.
 	/// A driver MAY use the device again after a proper reset of the device.
 	pub fn set_failed(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status = u8::from(device::Status::FAILED);
 	}
 
 	/// Sets the ACKNOWLEDGE bit in the device status field. This indicates, the
 	/// OS has notived the device
 	pub fn ack_dev(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::ACKNOWLEDGE);
 	}
 
 	/// Sets the DRIVER bit in the device status field. This indicates, the OS
 	/// know how to run this device.
 	pub fn set_drv(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::DRIVER);
 	}
 
@@ -489,6 +494,7 @@ impl ComCfg {
 	///
 	/// Drivers MUST NOT accept new features after this step.
 	pub fn features_ok(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::FEATURES_OK);
 	}
 
@@ -499,6 +505,7 @@ impl ComCfg {
 	/// Re-reads device status to ensure the FEATURES_OK bit is still set:
 	/// otherwise, the device does not support our subset of features and the device is unusable.
 	pub fn check_features(&self) -> bool {
+		memory_barrier();
 		self.com_cfg.device_status & u8::from(device::Status::FEATURES_OK)
 			== u8::from(device::Status::FEATURES_OK)
 	}
@@ -507,6 +514,7 @@ impl ComCfg {
 	///
 	/// After this call, the device is "live"!
 	pub fn drv_ok(&mut self) {
+		memory_barrier();
 		self.com_cfg.device_status |= u8::from(device::Status::DRIVER_OK);
 	}
 
@@ -514,7 +522,9 @@ impl ComCfg {
 	pub fn dev_features(&mut self) -> u64 {
 		// Indicate device to show high 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
+		memory_barrier();
 		self.com_cfg.device_feature_select = 1;
+		memory_barrier();
 
 		// read high 32 bits of device features
 		let mut dev_feat = u64::from(self.com_cfg.device_feature) << 32;
@@ -522,6 +532,7 @@ impl ComCfg {
 		// Indicate device to show low 32 bits in device_feature field.
 		// See Virtio specification v1.1. - 4.1.4.3
 		self.com_cfg.device_feature_select = 0;
+		memory_barrier();
 
 		// read low 32 bits of device features
 		dev_feat |= u64::from(self.com_cfg.device_feature);
@@ -536,7 +547,9 @@ impl ComCfg {
 
 		// Indicate to device that driver_features field shows low 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
+		memory_barrier();
 		self.com_cfg.driver_feature_select = 0;
+		memory_barrier();
 
 		// write low 32 bits of device features
 		self.com_cfg.driver_feature = low;
@@ -544,6 +557,7 @@ impl ComCfg {
 		// Indicate to device that driver_features field shows high 32 bits.
 		// See Virtio specification v1.1. - 4.1.4.3
 		self.com_cfg.driver_feature_select = 1;
+		memory_barrier();
 
 		// write high 32 bits of device features
 		self.com_cfg.driver_feature = high;
@@ -587,7 +601,7 @@ impl ComCfgRaw {
 			error!("Common config of with id {} of device {:x}, does not fit into memory specified by bar {:x}!", 
                 cap.id,
                 cap.origin.dev_id,
-                 cap.bar.index
+                cap.bar.index
             );
 			return None;
 		}
@@ -1109,18 +1123,15 @@ fn read_caps(
 /// As the device is not static, return value is not static.
 fn dev_status(device: &PciDevice<PciConfigRegion>) -> u32 {
 	// reads register 01 from PCU Header of type 00H. WHich is the Status(16bit) and Command(16bit) register
-	let stat_com_reg = device
-		.read_register(crate::drivers::pci::constants::RegisterHeader::PCI_COMMAND_REGISTER.into());
+	let stat_com_reg = device.read_register(DeviceHeader::PCI_COMMAND_REGISTER.into());
 	stat_com_reg >> 16
 }
 
 /// Wrapper function to get a devices capabilities list pointer, which represents
 /// an offset starting from the header of the device's configuration space.
 fn dev_caps_ptr(device: &PciDevice<PciConfigRegion>) -> u32 {
-	let cap_lst_reg = device.read_register(
-		crate::drivers::pci::constants::RegisterHeader::PCI_CAPABILITY_LIST_REGISTER.into(),
-	);
-	cap_lst_reg & u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_CAPLIST_POINTER)
+	let cap_lst_reg = device.read_register(DeviceHeader::PCI_CAPABILITY_LIST_REGISTER.into());
+	cap_lst_reg & u32::from(Masks::PCI_MASK_CAPLIST_POINTER)
 }
 
 /// Maps memory areas indicated by devices BAR's into virtual address space.
@@ -1131,9 +1142,7 @@ fn map_bars(device: &PciDevice<PciConfigRegion>) -> Result<Vec<PciBar>, PciError
 /// Checks if the status of the device inidactes the device is using the
 /// capabilities pointer and therefore defines a capabiites list.
 fn no_cap_list(device: &PciDevice<PciConfigRegion>) -> bool {
-	dev_status(device)
-		& u32::from(crate::drivers::pci::constants::Masks::PCI_MASK_STATUS_CAPABILITIES_LIST)
-		== 0
+	dev_status(device) & u32::from(Masks::PCI_MASK_STATUS_CAPABILITIES_LIST) == 0
 }
 
 /// Checks if minimal set of capabilities is present.
@@ -1286,7 +1295,7 @@ pub(crate) fn init_device(
 		Ok(drv) => {
 			match &drv {
 				VirtioDriver::Network(_) => {
-					let irq = device.irq().unwrap();
+					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
 					// Install interrupt handler
 					irq_install_handler(irq, network_irqhandler);

@@ -265,7 +265,7 @@ impl PriorityTaskQueue {
 	}
 
 	fn pop_from_queue(&mut self, queue_index: usize) -> Option<Rc<RefCell<Task>>> {
-		let task = self.queues[queue_index].pop_back();
+		let task = self.queues[queue_index].pop_front();
 		if self.queues[queue_index].is_empty() {
 			self.prio_bitmap &= !(1 << queue_index as u64);
 		}
@@ -323,7 +323,7 @@ impl PriorityTaskQueue {
 	}
 
 	/// Returns the highest priority of all available task
-	#[cfg(feature = "smp")]
+	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn get_highest_priority(&self) -> Priority {
 		if let Some(i) = msb(self.prio_bitmap) {
 			Priority::from(i.try_into().unwrap())
@@ -637,9 +637,9 @@ impl BlockedTaskQueue {
 		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(feature = "tcp")]
-		if let Some(mut guard) = crate::net::NIC.try_lock() {
-			if let crate::net::NetworkState::Initialized(nic) = guard.deref_mut() {
-				let now = crate::net::now();
+		if let Some(mut guard) = crate::executor::NIC.try_lock() {
+			if let crate::executor::NetworkState::Initialized(nic) = guard.deref_mut() {
+				let now = crate::executor::now();
 				nic.poll_common(now);
 				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
 			}

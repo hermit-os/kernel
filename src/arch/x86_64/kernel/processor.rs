@@ -665,7 +665,7 @@ impl fmt::Display for CpuFeaturePrinter {
 	}
 }
 
-pub fn run_on_hypervisor() -> bool {
+pub(crate) fn run_on_hypervisor() -> bool {
 	env::is_uhyve() || FEATURES.run_on_hypervisor
 }
 
