@@ -90,7 +90,7 @@ async-task = { version = "4.4", default-features = false, optional = true }
 lock_api = "0.4"
 num = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
-num-derive = "0.3"
+num-derive = "0.4"
 zerocopy = "0.6"
 time = { version = "0.3", default-features = false }
 pci_types = { version = "0.5" }
