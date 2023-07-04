@@ -55,14 +55,13 @@ jobs:
       - name: Install QEMU, NASM (macos)
         if: matrix.os == 'macos-latest'
         run: |
-          brew update
-          brew install nasm
-          # FIXME: Install latest QEMU again, once CI can handle it again
-          # brew install qemu
+          # TODO: Enable, once the CI can cope with this again:
+          # brew update
+          brew install qemu nasm
       - name: Install QEMU, NASM (windows)
         if: matrix.os == 'windows-latest'
         run: |
-          choco install qemu --checksum64 20d26b460ec045b2cad4bdc4af59713db3110ab95dd73821a590571e4fc1ce1b972e9647867c16e061d1f7381de362ac9c9bfc027f47cdcce8a186818b595ffb
+          choco install qemu --version=2023.5.31 --checksum64=20d26b460ec045b2cad4bdc4af59713db3110ab95dd73821a590571e4fc1ce1b972e9647867c16e061d1f7381de362ac9c9bfc027f47cdcce8a186818b595ffb
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
           choco install nasm
           echo "C:\Program Files\NASM" >> $GITHUB_PATH
