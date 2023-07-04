@@ -83,13 +83,13 @@ impl<'a> NetworkInterface<'a> {
 		let dhcp = dhcpv4::Socket::new();
 
 		// use the current time based on the wall-clock time as seed
-		let mut config = Config::new();
+		let mut config = Config::new(hardware_addr);
 		config.random_seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		if device.capabilities().medium == Medium::Ethernet {
-			config.hardware_addr = Some(hardware_addr);
+			config.hardware_addr = hardware_addr;
 		}
 
-		let iface = Interface::new(config, &mut device);
+		let iface = Interface::new(config, &mut device, crate::executor::now());
 		let mut sockets = SocketSet::new(vec![]);
 		let dhcp_handle = sockets.add(dhcp);
 
@@ -148,13 +148,13 @@ impl<'a> NetworkInterface<'a> {
 		info!("MTU: {} bytes", mtu);
 
 		// use the current time based on the wall-clock time as seed
-		let mut config = Config::new();
+		let mut config = Config::new(hardware_addr);
 		config.random_seed = (arch::get_boot_time() + arch::processor::get_timer_ticks()) / 1000000;
 		if device.capabilities().medium == Medium::Ethernet {
-			config.hardware_addr = Some(hardware_addr).into();
+			config.hardware_addr = hardware_addr;
 		}
 
-		let mut iface = Interface::new(config, &mut device);
+		let mut iface = Interface::new(config, &mut device, crate::executor::now());
 		iface.update_ip_addrs(|ip_addrs| {
 			ip_addrs
 				.push(IpCidr::new(
