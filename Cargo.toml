@@ -96,7 +96,7 @@ time = { version = "0.3", default-features = false }
 pci_types = { version = "0.5" }
 
 [dependencies.smoltcp]
-version = "0.9"
+version = "0.10"
 optional = true
 default-features = false
 features = [
