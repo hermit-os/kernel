@@ -61,7 +61,7 @@ jobs:
       - name: Install QEMU, NASM (windows)
         if: matrix.os == 'windows-latest'
         run: |
-          choco install qemu --checksum64 20d26b460ec045b2cad4bdc4af59713db3110ab95dd73821a590571e4fc1ce1b972e9647867c16e061d1f7381de362ac9c9bfc027f47cdcce8a186818b595ffb
+          choco install qemu --version=2023.5.31 --checksum64=20d26b460ec045b2cad4bdc4af59713db3110ab95dd73821a590571e4fc1ce1b972e9647867c16e061d1f7381de362ac9c9bfc027f47cdcce8a186818b595ffb
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
           choco install nasm
           echo "C:\Program Files\NASM" >> $GITHUB_PATH
