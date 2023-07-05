@@ -15,8 +15,9 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
+use crate::errno::ERRNO;
 use crate::fd::{dup_object, get_object, remove_object, FileDescriptor};
-use crate::syscalls::fs::Dirent;
+use crate::syscalls::fs::{Dirent, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -97,6 +98,24 @@ pub extern "C" fn sys_shutdown(arg: i32) -> ! {
 	kernel_function!(__sys_shutdown(arg))
 }
 
+extern "C" fn __sys_get_errno() -> i32 {
+	unsafe { ERRNO }
+}
+
+#[no_mangle]
+pub extern "C" fn sys_get_errno() -> i32 {
+	kernel_function!(__sys_get_errno())
+}
+
+extern "C" fn __sys_set_errno(e: i32) {
+	unsafe { ERRNO = e };
+}
+
+#[no_mangle]
+pub extern "C" fn sys_set_errno(e: i32) {
+	kernel_function!(__sys_set_errno(e))
+}
+
 extern "C" fn __sys_unlink(name: *const u8) -> i32 {
 	SYS.unlink(name)
 }
@@ -122,6 +141,34 @@ extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_rmdir(name: *const u8) -> i32 {
 	kernel_function!(__sys_rmdir(name))
+}
+
+extern "C" fn __sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
+	SYS.stat(name, stat)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
+	kernel_function!(__sys_stat(name, stat))
+}
+
+extern "C" fn __sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
+	SYS.lstat(name, stat)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
+	kernel_function!(__sys_lstat(name, stat))
+}
+
+extern "C" fn __sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e, |v| (*v).fstat(stat))
+}
+
+#[no_mangle]
+pub extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
+	kernel_function!(__sys_fstat(fd, stat))
 }
 
 extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
@@ -203,15 +250,6 @@ extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const Dirent {
 #[no_mangle]
 pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const Dirent {
 	kernel_function!(__sys_readdir(fd))
-}
-
-extern "C" fn __sys_stat(file: *const u8, st: usize) -> i32 {
-	SYS.stat(file, st)
-}
-
-#[no_mangle]
-pub extern "C" fn sys_stat(file: *const u8, st: usize) -> i32 {
-	kernel_function!(__sys_stat(file, st))
 }
 
 extern "C" fn __sys_dup(fd: i32) -> i32 {
