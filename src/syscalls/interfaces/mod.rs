@@ -4,8 +4,8 @@ use core::ffi::CStr;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
-use crate::errno::*;
-use crate::syscalls::fs::{self};
+use crate::errno::ENOENT;
+use crate::syscalls::fs::{self, FileAttr};
 use crate::{arch, env};
 
 mod generic;
@@ -62,8 +62,7 @@ pub trait SyscallInterface: Send + Sync {
 		fs::FILESYSTEM
 			.lock()
 			.unlink(name)
-			.expect("Unlinking failed!"); // TODO: error handling
-		0
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -74,8 +73,7 @@ pub trait SyscallInterface: Send + Sync {
 		fs::FILESYSTEM
 			.lock()
 			.rmdir(name)
-			.expect("Removing directory failed!"); // TODO: error handling
-		0
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 
 	#[cfg(target_arch = "x86_64")]
@@ -86,12 +84,40 @@ pub trait SyscallInterface: Send + Sync {
 		fs::FILESYSTEM
 			.lock()
 			.mkdir(name, mode)
-			.expect("Creating directory failed!"); // TODO: error handling
-		0
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 
-	fn stat(&self, _file: *const u8, _st: usize) -> i32 {
-		info!("stat is unimplemented");
+	#[cfg(not(target_arch = "x86_64"))]
+	fn stat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
+		debug!("stat is unimplemented, returning -ENOSYS");
 		-ENOSYS
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	fn stat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+		debug!("stat {}", name);
+
+		fs::FILESYSTEM
+			.lock()
+			.stat(name, stat)
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	}
+
+	#[cfg(not(target_arch = "x86_64"))]
+	fn lstat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
+		debug!("lstat is unimplemented, returning -ENOSYS");
+		-ENOSYS
+	}
+
+	#[cfg(target_arch = "x86_64")]
+	fn lstat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
+		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+		debug!("lstat {}", name);
+
+		fs::FILESYSTEM
+			.lock()
+			.lstat(name, stat)
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 }

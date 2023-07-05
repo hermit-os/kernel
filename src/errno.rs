@@ -1,3 +1,6 @@
+#[thread_local]
+pub static mut ERRNO: i32 = 0;
+
 /// Operation not permitted
 pub const EPERM: i32 = 1;
 

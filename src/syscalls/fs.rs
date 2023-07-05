@@ -42,6 +42,7 @@ use hermit_sync::TicketMutex;
 /// TODO:
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
+use crate::errno;
 pub use crate::fs::fuse::fuse_dirent as Dirent;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
@@ -185,6 +186,22 @@ impl Filesystem {
 		Ok(())
 	}
 
+	/// stat
+	pub fn stat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+		debug!("Getting stats {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.stat(internal_path, stat)?;
+		Ok(())
+	}
+
+	/// lstat
+	pub fn lstat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+		debug!("Getting lstats {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.lstat(internal_path, stat)?;
+		Ok(())
+	}
+
 	/// Create new backing-fs at mountpoint mntpath
 	#[cfg(feature = "fs")]
 	pub fn mount(
@@ -221,18 +238,19 @@ impl Filesystem {
 	}
 }
 
+// TODO: Integrate with src/errno.rs ?
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum FileError {
-	ENOENT,
-	#[cfg(feature = "fs")]
-	ENOSYS,
-	#[cfg(feature = "fs")]
-	EIO,
+	ENOENT = errno::ENOENT as isize,
+	#[cfg(any(feature = "fs", feature = "pci"))]
+	ENOSYS = errno::ENOSYS as isize,
+	#[cfg(any(feature = "fs", feature = "pci"))]
+	EIO = errno::EIO as isize,
 	#[cfg(feature = "pci")]
-	EBADF,
+	EBADF = errno::EBADF as isize,
 	#[cfg(feature = "pci")]
-	EISDIR,
+	EISDIR = errno::EISDIR as isize,
 }
 
 pub trait PosixFileSystem {
@@ -242,6 +260,8 @@ pub trait PosixFileSystem {
 
 	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
 	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
+	fn stat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
+	fn lstat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
 }
 
 pub trait PosixFile {
@@ -251,6 +271,28 @@ pub trait PosixFile {
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
 
 	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
+	fn fstat(&self, stat: *mut FileAttr) -> Result<(), FileError>;
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FileAttr {
+	pub st_dev: u64,
+	pub st_ino: u64,
+	pub st_nlink: u64,
+	pub st_mode: u32,
+	pub st_uid: u32,
+	pub st_gid: u32,
+	pub st_rdev: u64,
+	pub st_size: i64,
+	pub st_blksize: i64,
+	pub st_blocks: i64,
+	pub st_atime: i64,
+	pub st_atime_nsec: i64,
+	pub st_mtime: i64,
+	pub st_mtime_nsec: i64,
+	pub st_ctime: i64,
+	pub st_ctime_nsec: i64,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]

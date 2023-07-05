@@ -14,7 +14,7 @@ use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-use crate::syscalls::fs::{self, Dirent, FilePerms, SeekWhence};
+use crate::syscalls::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
@@ -200,6 +200,11 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		(-EINVAL).try_into().unwrap()
 	}
 
+	/// `fstat`
+	fn fstat(&self, _stat: *mut FileAttr) -> i32 {
+		-EINVAL
+	}
+
 	/// `unlink` removes file entry
 	fn unlink(&self, _name: *const u8) -> i32 {
 		-EINVAL
@@ -214,7 +219,9 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
 	fn readdir(&self) -> *const Dirent {
-		// TODO: Error handling
+		unsafe {
+			ERRNO = ENOSYS;
+		}
 		core::ptr::null()
 	}
 
