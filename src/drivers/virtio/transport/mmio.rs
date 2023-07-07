@@ -290,9 +290,16 @@ impl NotifCtrl {
 	}
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
-		let data = u32::from_ne_bytes(notif_data.try_into().unwrap());
-		unsafe {
-			*self.notif_addr = data;
+		if self.f_notif_data {
+			unsafe {
+				(self.notif_addr as *mut u32)
+					.write_unaligned(u32::from_ne_bytes(notif_data.try_into().unwrap()));
+			}
+		} else {
+			unsafe {
+				(self.notif_addr as *mut u16)
+					.write_unaligned(u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()));
+			}
 		}
 	}
 }

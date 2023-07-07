@@ -711,21 +711,13 @@ impl NotifCtrl {
 		// virtqueue index or the index and the next position inside the queue.
 		if self.f_notif_data {
 			unsafe {
-				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 4);
-				let mut notif_data = notif_data.iter();
-
-				for byte in notif_area {
-					*byte = *notif_data.next().unwrap();
-				}
+				(self.notif_addr as *mut u32)
+					.write_unaligned(u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()));
 			}
 		} else {
 			unsafe {
-				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 2);
-				let mut notif_data = notif_data.iter();
-
-				for byte in notif_area {
-					*byte = *notif_data.next().unwrap();
-				}
+				(self.notif_addr as *mut u16)
+					.write_unaligned(u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()));
 			}
 		}
 	}
