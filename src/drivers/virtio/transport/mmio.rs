@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use core::convert::TryInto;
+use core::intrinsics::unaligned_volatile_store;
 use core::ptr::{read_volatile, write_volatile};
 use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
@@ -290,9 +291,24 @@ impl NotifCtrl {
 	}
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
-		let data = u32::from_ne_bytes(notif_data.try_into().unwrap());
-		unsafe {
-			*self.notif_addr = data;
+		if self.f_notif_data {
+			let ptr = self.notif_addr as *mut u32;
+
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()),
+				);
+			}
+		} else {
+			let ptr = self.notif_addr as *mut u16;
+
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()),
+				);
+			}
 		}
 	}
 }
