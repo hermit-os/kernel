@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 use alloc::vec::Vec;
+use core::intrinsics::unaligned_volatile_store;
 use core::mem;
 use core::result::Result;
 
@@ -710,14 +711,22 @@ impl NotifCtrl {
 		// Depending in the feature negotiation, we write eitehr only the
 		// virtqueue index or the index and the next position inside the queue.
 		if self.f_notif_data {
+			let ptr = self.notif_addr as *mut u32;
+
 			unsafe {
-				(self.notif_addr as *mut u32)
-					.write_unaligned(u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()));
+				unaligned_volatile_store(
+					ptr,
+					u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()),
+				);
 			}
 		} else {
+			let ptr = self.notif_addr as *mut u16;
+
 			unsafe {
-				(self.notif_addr as *mut u16)
-					.write_unaligned(u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()));
+				unaligned_volatile_store(
+					ptr,
+					u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()),
+				);
 			}
 		}
 	}
