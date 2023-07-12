@@ -136,8 +136,8 @@ pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
 	trace!(
-		"__sys_malloc: allocate memory at {:#x} (size {:#x}, align {:#x})",
-		ptr as usize,
+		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
+		ptr,
 		size,
 		align
 	);
@@ -175,8 +175,8 @@ pub(crate) extern "C" fn __sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-			"__sys_realloc called with ptr {:#x}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
-			ptr as usize, size, align, new_size
+			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
+			ptr, size, align, new_size
 		);
 			return core::ptr::null::<*mut u8>() as *mut u8;
 		}
@@ -185,14 +185,14 @@ pub(crate) extern "C" fn __sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-			"__sys_realloc failed to resize ptr {:#x} with size {:#x}, align {:#x}, new_size {:#x} !",
-			ptr as usize, size, align, new_size
+			"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
+			ptr, size, align, new_size
 		);
 		} else {
 			trace!(
-				"__sys_realloc: resized memory at {:#x}, new address {:#x}",
-				ptr as usize,
-				new_ptr as usize
+				"__sys_realloc: resized memory at {:p}, new address {:p}",
+				ptr,
+				new_ptr
 			);
 		}
 		new_ptr
@@ -222,8 +222,8 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
 		} else {
 			trace!(
-				"sys_free: deallocate memory at {:#x} (size {:#x})",
-				ptr as usize,
+				"sys_free: deallocate memory at {:p} (size {:#x})",
+				ptr,
 				size
 			);
 		}
