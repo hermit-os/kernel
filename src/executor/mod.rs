@@ -95,7 +95,7 @@ async fn network_run() {
 }
 
 pub(crate) fn init() {
-	info!("Try to nitialize network!");
+	info!("Try to initialize network!");
 
 	// initialize variable, which contains the next local endpoint
 	LOCAL_ENDPOINT.store(start_endpoint(), Ordering::Relaxed);
