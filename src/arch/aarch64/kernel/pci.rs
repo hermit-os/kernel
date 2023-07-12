@@ -250,7 +250,7 @@ pub fn init() {
 
 				let pci_address =
 					virtualmem::allocate_aligned(size.try_into().unwrap(), 0x10000000).unwrap();
-				info!("Mapping PCI Enhanced Configuration Space interface to virtual address {:#X} (size {:#X})", pci_address, size);
+				info!("Mapping PCI Enhanced Configuration Space interface to virtual address {:p} (size {:#X})", pci_address, size);
 
 				let mut flags = PageTableEntryFlags::empty();
 				flags.device().writable().execute_disable();

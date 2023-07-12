@@ -408,7 +408,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				2 => {
 					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
 					let ioapic = PhysAddr(io_entry.addr.into());
-					info!("Found IOAPIC at 0x{:x}", ioapic);
+					info!("Found IOAPIC at 0x{:p}", ioapic);
 
 					init_ioapic_address(ioapic);
 
@@ -456,7 +456,7 @@ pub fn init() {
 		let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
 		debug!(
-			"Mapping Local APIC at {:#X} to virtual address {:#X}",
+			"Mapping Local APIC at {:p} to virtual address {:p}",
 			local_apic_physical_address, local_apic_address
 		);
 
@@ -696,7 +696,7 @@ pub fn boot_application_processors() {
 
 	// Identity-map the boot code page and copy over the code.
 	debug!(
-		"Mapping SMP boot code to physical and virtual address {:#X}",
+		"Mapping SMP boot code to physical and virtual address {:p}",
 		SMP_BOOT_CODE_ADDRESS
 	);
 	let mut flags = PageTableEntryFlags::empty();
