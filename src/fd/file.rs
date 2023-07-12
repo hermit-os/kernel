@@ -103,12 +103,15 @@ impl ObjectInterface for GenericFile {
 	/// `fstat`
 	fn fstat(&self, stat: *mut FileAttr) -> i32 {
 		debug!("fstat ! {}", self.0);
+		let mut result = 0;
 		let mut fs = fs::FILESYSTEM.lock();
 		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
-			file.fstat(stat).unwrap(); // TODO: might fail
+			result = file
+				.fstat(stat)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0);
 		});
 
-		0
+		result
 	}
 
 	fn readdir(&self) -> *const Dirent {

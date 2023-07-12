@@ -27,6 +27,8 @@ const U64_SIZE: u32 = ::core::mem::size_of::<u64>() as u32;
 const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
+const FUSE_GETATTR_FH: u32 = 1 << 0;
+
 #[repr(C)]
 #[derive(Debug)]
 pub struct fuse_dirent {
@@ -221,7 +223,11 @@ impl Fuse {
 			.unwrap()
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
-		Some(unsafe { rsp.rsp.assume_init().nodeid })
+		if rsp.header.error == 0 {
+			Some(unsafe { rsp.rsp.assume_init().nodeid })
+		} else {
+			None
+		}
 	}
 
 	pub fn readlink(&self, nid: u64) -> Result<String, FileError> {
@@ -478,7 +484,7 @@ impl PosixFile for FuseFile {
 
 	fn fstat(&self, stat: *mut FileAttr) -> Result<(), FileError> {
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_getattr(nid, fh, 0);
+			let (cmd, mut rsp) = create_getattr(nid, fh, FUSE_GETATTR_FH);
 			get_filesystem_driver()
 				.ok_or(FileError::ENOSYS)?
 				.lock()
