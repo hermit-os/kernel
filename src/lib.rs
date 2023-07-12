@@ -303,7 +303,7 @@ fn boot_processor_main() -> ! {
 	}
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	info!("Kernel starts at {:#x}", env::get_base_address());
+	info!("Kernel starts at {:p}", env::get_base_address());
 
 	extern "C" {
 		static mut __bss_start: u8;
@@ -312,7 +312,7 @@ fn boot_processor_main() -> ! {
 		core::ptr::addr_of_mut!(__bss_start)
 	});
 	info!(
-		"TLS starts at {:#x} (size {} Bytes)",
+		"TLS starts at {:p} (size {} Bytes)",
 		env::get_tls_start(),
 		env::get_tls_memsz()
 	);

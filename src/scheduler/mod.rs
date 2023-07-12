@@ -658,7 +658,7 @@ impl PerCoreScheduler {
 			if id != new_id {
 				// Tell the scheduler about the new task.
 				debug!(
-					"Switching task from {} to {} (stack {:#X} => {:#X})",
+					"Switching task from {} to {} (stack {:#X} => {:p})",
 					id,
 					new_id,
 					unsafe { *last_stack_pointer },

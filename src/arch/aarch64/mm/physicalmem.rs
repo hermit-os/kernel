@@ -93,7 +93,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	assert!(
 		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
-		"Physical address {:#X} is not >= KERNEL_END_ADDRESS",
+		"Physical address {:p} is not >= KERNEL_END_ADDRESS",
 		physical_address
 	);
 	assert!(size > 0);

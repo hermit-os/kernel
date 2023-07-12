@@ -245,11 +245,11 @@ pub(crate) fn init() {
 	let gicc_size = u64::from_be_bytes(slice.try_into().unwrap());
 
 	info!(
-		"Found GIC Distributor interface at {:#X} (size {:#X})",
+		"Found GIC Distributor interface at {:p} (size {:#X})",
 		gicd_start, gicd_size
 	);
 	info!(
-		"Found generic interrupt controller at {:#X} (size {:#X})",
+		"Found generic interrupt controller at {:p} (size {:#X})",
 		gicc_start, gicc_size
 	);
 
