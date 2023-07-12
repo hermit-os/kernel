@@ -4,6 +4,7 @@
 
 #![warn(rust_2018_idioms)]
 #![warn(unsafe_op_in_unsafe_fn)]
+#![warn(clippy::uninlined_format_args)]
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(target_arch = "aarch64", allow(incomplete_features))]

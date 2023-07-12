@@ -57,9 +57,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 	assert_eq!(
 		size % alignment,
 		0,
-		"Size {:#X} is not a multiple of the given alignment {:#X}",
-		size,
-		alignment
+		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
 	);
 	assert_eq!(
 		alignment % BasePageSize::SIZE as usize,
@@ -81,13 +79,11 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 pub fn deallocate(virtual_address: VirtAddr, size: usize) {
 	assert!(
 		virtual_address >= mm::kernel_end_address() || virtual_address < mm::kernel_start_address(),
-		"Virtual address {:p} belongs to the kernel",
-		virtual_address
+		"Virtual address {virtual_address:p} belongs to the kernel"
 	);
 	assert!(
 		virtual_address < KERNEL_VIRTUAL_MEMORY_END,
-		"Virtual address {:p} is not < KERNEL_VIRTUAL_MEMORY_END",
-		virtual_address
+		"Virtual address {virtual_address:p} is not < KERNEL_VIRTUAL_MEMORY_END"
 	);
 	assert_eq!(
 		virtual_address % BasePageSize::SIZE,

@@ -397,7 +397,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 			// If the devices uses an IRQ, output this one as well.
 			let (_, irq) = endpoint.interrupt(&self.access);
 			if irq != 0 && irq != u8::MAX {
-				write!(f, ", IRQ {}", irq)?;
+				write!(f, ", IRQ {irq}")?;
 			}
 
 			let mut slot: u8 = 0;
@@ -409,7 +409,7 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 							size,
 							prefetchable,
 						} => {
-							write!(f, ", BAR{} Memory64 {{ address: {:#X}, size: {:#X}, prefetchable: {} }}", slot, address, size, prefetchable)?;
+							write!(f, ", BAR{slot} Memory64 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}")?;
 							slot += 1;
 						}
 						Bar::Memory32 {
@@ -417,10 +417,10 @@ impl<T: ConfigRegionAccess> fmt::Display for PciDevice<T> {
 							size,
 							prefetchable,
 						} => {
-							write!(f, ", BAR{} Memory32 {{ address: {:#X}, size: {:#X}, prefetchable: {} }}", slot, address, size, prefetchable)?;
+							write!(f, ", BAR{slot} Memory32 {{ address: {address:#X}, size: {size:#X}, prefetchable: {prefetchable} }}")?;
 						}
 						Bar::Io { port } => {
-							write!(f, ", BAR{} IO {{ port: {:#X} }}", slot, port)?;
+							write!(f, ", BAR{slot} IO {{ port: {port:#X} }}")?;
 						}
 					}
 				}

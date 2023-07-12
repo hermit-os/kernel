@@ -152,8 +152,7 @@ impl PageTableEntry {
 		assert_eq!(
 			physical_address % BasePageSize::SIZE,
 			0,
-			"Physical address is not on a 4 KiB page boundary (physical_address = {:p})",
-			physical_address
+			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:p})"
 		);
 
 		let mut flags_to_set = flags;
@@ -256,8 +255,7 @@ impl<S: PageSize> Page<S> {
 	fn including_address(virtual_address: VirtAddr) -> Self {
 		assert!(
 			Self::is_valid_address(virtual_address),
-			"Virtual address {:p} is invalid",
-			virtual_address
+			"Virtual address {virtual_address:p} is invalid"
 		);
 
 		Self {
