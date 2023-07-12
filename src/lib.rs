@@ -7,6 +7,7 @@
 #![warn(clippy::uninlined_format_args)]
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![warn(fuzzy_provenance_casts)]
+#![warn(lossy_provenance_casts)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(target_arch = "aarch64", allow(incomplete_features))]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
