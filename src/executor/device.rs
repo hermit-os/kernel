@@ -154,7 +154,7 @@ impl<'a> NetworkInterface<'a> {
 			config.hardware_addr = hardware_addr;
 		}
 
-		let mut iface = Interface::new(config, &mut device, crate::executor::tcp::now());
+		let mut iface = Interface::new(config, &mut device, crate::executor::network::now());
 		iface.update_ip_addrs(|ip_addrs| {
 			ip_addrs
 				.push(IpCidr::new(
