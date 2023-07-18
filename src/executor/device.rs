@@ -20,7 +20,7 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::pci as hardware;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
-use crate::executor::{NetworkInterface, NetworkState};
+use crate::executor::network::{NetworkInterface, NetworkState};
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]
@@ -89,7 +89,7 @@ impl<'a> NetworkInterface<'a> {
 			config.hardware_addr = hardware_addr;
 		}
 
-		let iface = Interface::new(config, &mut device, crate::executor::now());
+		let iface = Interface::new(config, &mut device, crate::executor::network::now());
 		let mut sockets = SocketSet::new(vec![]);
 		let dhcp_handle = sockets.add(dhcp);
 
@@ -154,7 +154,7 @@ impl<'a> NetworkInterface<'a> {
 			config.hardware_addr = hardware_addr;
 		}
 
-		let mut iface = Interface::new(config, &mut device, crate::executor::now());
+		let mut iface = Interface::new(config, &mut device, crate::executor::tcp::now());
 		iface.update_ip_addrs(|ip_addrs| {
 			ip_addrs
 				.push(IpCidr::new(

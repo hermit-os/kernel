@@ -1,19 +1,18 @@
 use core::ffi::c_void;
+use core::future;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
-use futures_lite::future;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
 use crate::errno::*;
-use crate::executor::runtime::block_on;
-use crate::executor::{now, Handle, NetworkState, NIC};
+use crate::executor::network::{block_on, now, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;

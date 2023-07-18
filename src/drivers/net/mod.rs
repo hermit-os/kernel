@@ -47,37 +47,30 @@ pub trait NetworkInterface {
 
 #[inline]
 fn _irqhandler() -> bool {
-	if let Some(driver) = hardware::get_network_driver() {
+	let result = if let Some(driver) = hardware::get_network_driver() {
 		driver.lock().handle_interrupt()
 	} else {
 		debug!("Unable to handle interrupt!");
 		false
-	}
+	};
+
+	crate::executor::run();
+
+	result
 }
 
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn network_irqhandler(_state: &State) -> bool {
 	debug!("Receive network interrupt");
-	let has_packet = _irqhandler();
-
-	if has_packet {
-		#[cfg(feature = "tcp")]
-		core_scheduler().wakeup_async_tasks();
-	}
-
-	has_packet
+	_irqhandler()
 }
 
 #[cfg(target_arch = "x86_64")]
 pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
 	debug!("Receive network interrupt");
 	apic::eoi();
-	let has_packet = _irqhandler();
+	let _ = _irqhandler();
 
-	if has_packet {
-		let core_scheduler = core_scheduler();
-		#[cfg(feature = "tcp")]
-		core_scheduler.wakeup_async_tasks();
-		core_scheduler.reschedule();
-	}
+	crate::executor::run();
+	core_scheduler().reschedule();
 }
