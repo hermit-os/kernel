@@ -13,6 +13,7 @@ use smoltcp::wire::{EthernetAddress, HardwareAddress};
 #[cfg(not(feature = "dhcpv4"))]
 use smoltcp::wire::{IpAddress, IpCidr, Ipv4Address};
 
+use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
@@ -20,7 +21,6 @@ use crate::arch::kernel::mmio as hardware;
 use crate::drivers::pci as hardware;
 #[cfg(not(feature = "dhcpv4"))]
 use crate::env;
-use super::network::{NetworkInterface, NetworkState};
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]
