@@ -4,7 +4,7 @@ use core::future;
 use core::future::Future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
-use core::task::{Context, Poll, Waker};
+use core::task::{Context, Poll};
 
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use smoltcp::iface::{SocketHandle, SocketSet};
@@ -223,6 +223,15 @@ fn network_delay(timestamp: Instant) -> Option<Duration> {
 		.poll_delay(timestamp)
 }
 
+#[inline]
+fn network_poll(timestamp: Instant) {
+	crate::executor::network::NIC
+		.lock()
+		.as_nic_mut()
+		.unwrap()
+		.poll_common(timestamp);
+}
+
 /// Blocks the current thread on `f`, running the executor when idling.
 pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i32>
 where
@@ -284,13 +293,8 @@ where
 				// allow interrupts => NIC thread is able to run
 				set_polling_mode(false);
 
-				// just a check if do not miss a packet
-				{
-					let waker = Waker::noop();
-					let mut cx = Context::from_waker(&waker);
-					let mut f = Box::pin(network_run());
-					let _ = f.as_mut().poll(&mut cx);
-				}
+				// just a check if we don't miss a packet
+				network_poll(now);
 
 				// switch to another task
 				core_scheduler.reschedule();
