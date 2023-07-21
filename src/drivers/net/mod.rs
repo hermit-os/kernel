@@ -54,6 +54,7 @@ fn _irqhandler() -> bool {
 		false
 	};
 
+	// TODO: do we need it?
 	crate::executor::run();
 
 	result
@@ -71,6 +72,5 @@ pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionS
 	apic::eoi();
 	let _ = _irqhandler();
 
-	crate::executor::run();
 	core_scheduler().reschedule();
 }

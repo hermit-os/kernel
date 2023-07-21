@@ -9,7 +9,6 @@ pub(crate) mod task;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use core::future::Future;
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::{Context, Poll, Waker};
 
 use hermit_sync::without_interrupts;
@@ -21,15 +20,12 @@ use crate::scheduler::task::TaskHandle;
 struct TaskNotify {
 	/// The single task executor .
 	handle: TaskHandle,
-	/// A flag to ensure a wakeup is not "forgotten" before the next `block_current_task`
-	unparked: AtomicBool,
 }
 
 impl TaskNotify {
 	pub fn new() -> Self {
 		Self {
 			handle: core_scheduler().get_current_task_handle(),
-			unparked: AtomicBool::new(false),
 		}
 	}
 }
@@ -40,12 +36,8 @@ impl Wake for TaskNotify {
 	}
 
 	fn wake_by_ref(self: &Arc<Self>) {
-		// Make sure the wakeup is remembered until the next `park()`.
-		let unparked = self.unparked.swap(true, Ordering::AcqRel);
-		if !unparked {
-			trace!("Waker wakes async task {}", self.handle.get_id());
-			core_scheduler().custom_wakeup(self.handle);
-		}
+		trace!("Wakeup task {}", self.handle.get_id());
+		core_scheduler().custom_wakeup(self.handle);
 	}
 }
 
