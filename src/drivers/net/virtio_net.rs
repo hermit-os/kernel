@@ -10,6 +10,7 @@ use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
+use core::str::FromStr;
 
 use pci_types::InterruptLine;
 use zerocopy::AsBytes;
@@ -517,7 +518,13 @@ impl NetworkInterface for VirtioNetDriver {
 	/// Currently, if VIRTIO_NET_F_MAC is not set
 	//  MTU is set static to 1500 bytes.
 	fn get_mtu(&self) -> u16 {
-		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
+		if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
+			warn!(
+				"Using value of the environment variable HERMIT_MTU ({}) as MTU",
+				my_mtu
+			);
+			u16::from_str(&my_mtu).unwrap()
+		} else if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.dev_cfg.raw.get_mtu()
 		} else {
 			1500
