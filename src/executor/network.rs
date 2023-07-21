@@ -243,7 +243,7 @@ where
 	let mut counter: u16 = 0;
 	let start = crate::executor::network::now();
 	let task_notify = Arc::new(TaskNotify::new());
-	let waker = task_notify.clone().into();
+	let waker = task_notify.into();
 	let mut cx = Context::from_waker(&waker);
 	let mut future = future;
 	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
@@ -288,7 +288,7 @@ where
 			let ticks = crate::arch::processor::get_timer_ticks();
 			let wakeup_time = timeout
 				.map(|duration| u64::try_from((start + duration).total_micros()).unwrap())
-				.or_else(|| Some(ticks + 1000));
+				.or(Some(ticks + 1000));
 			let network_timer = delay.map(|d| ticks + d);
 			let core_scheduler = core_scheduler();
 
