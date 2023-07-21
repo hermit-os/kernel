@@ -553,6 +553,9 @@ impl PerCoreScheduler {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
 	pub fn scheduler(&mut self) -> Option<*mut usize> {
+		// run background tasks
+		crate::executor::run();
+
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system
 		self.cleanup_tasks();
