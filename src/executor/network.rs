@@ -241,6 +241,7 @@ where
 	set_polling_mode(true);
 
 	let mut counter: u16 = 0;
+	let mut blocking_time = 1000;
 	let start = crate::executor::network::now();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.into();
@@ -259,7 +260,7 @@ where
 				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 			core_scheduler().add_network_timer(wakeup_time);
 
-			// allow interrupts => NIC thread is able to run
+			// allow network interrupts
 			set_polling_mode(false);
 
 			return t;
@@ -271,7 +272,7 @@ where
 					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 				core_scheduler().add_network_timer(wakeup_time);
 
-				// allow interrupts => NIC thread is able to run
+				// allow network interrupts
 				set_polling_mode(false);
 
 				return Err(-crate::errno::ETIME);
@@ -285,17 +286,33 @@ where
 		let now = crate::executor::network::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
 		if counter > 200 && delay.unwrap_or(10_000_000) > 100_000 {
+			// add additional check before the task will block
+			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
+				// allow network interrupts
+				set_polling_mode(false);
+				// enable interrupts
+				interrupts::enable();
+
+				return t;
+			}
+
 			let ticks = crate::arch::processor::get_timer_ticks();
 			let wakeup_time = timeout
-				.map(|duration| u64::try_from((start + duration).total_micros()).unwrap())
-				.or(Some(ticks + 1000));
+				.map(|duration| {
+					core::cmp::min(
+						u64::try_from((start + duration).total_micros()).unwrap(),
+						ticks + delay.unwrap_or(blocking_time),
+					)
+				})
+				.or(Some(ticks + delay.unwrap_or(blocking_time)));
 			let network_timer = delay.map(|d| ticks + d);
 			let core_scheduler = core_scheduler();
+			blocking_time *= 2;
 
 			core_scheduler.add_network_timer(network_timer);
 			core_scheduler.block_current_task(wakeup_time);
 
-			// allow interrupts => NIC thread is able to run
+			// allow network interrupts
 			set_polling_mode(false);
 
 			// enable interrupts
