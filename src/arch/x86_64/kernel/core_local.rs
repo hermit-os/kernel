@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::cell::{Cell, RefCell};
+use core::cell::{Cell, RefCell, RefMut};
 use core::ptr;
 use core::sync::atomic::Ordering;
 
@@ -88,8 +88,8 @@ pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { &mut *CoreLocal::get().scheduler.get() }
 }
 
-pub(crate) fn async_tasks() -> &'static mut Vec<AsyncTask> {
-	CoreLocal::get_mut().async_tasks.get_mut()
+pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
+	CoreLocal::get_mut().async_tasks.borrow_mut()
 }
 
 pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
