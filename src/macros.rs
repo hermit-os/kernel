@@ -108,3 +108,30 @@ macro_rules! kernel_function {
 		$f($($x)*)
 	}};
 }
+
+/// Returns the value of the specified environment variable.
+///
+/// The value is fetched from the current runtime environment and, if not
+/// present, falls back to the same environment variable set at compile time
+/// (might not be present as well).
+#[allow(unused_macros)]
+macro_rules! hermit_var {
+	($name:expr) => {{
+		use alloc::borrow::Cow;
+
+		match crate::env::var($name) {
+			Some(val) => Some(Cow::from(val)),
+			None => option_env!($name).map(Cow::Borrowed),
+		}
+	}};
+}
+
+/// Tries to fetch the specified environment variable with a default value.
+///
+/// Fetches according to [`hermit_var`] or returns the specified default value.
+#[allow(unused_macros)]
+macro_rules! hermit_var_or {
+	($name:expr, $default:expr) => {{
+		hermit_var!($name).as_deref().unwrap_or($default)
+	}};
+}

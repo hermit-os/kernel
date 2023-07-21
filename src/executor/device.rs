@@ -19,8 +19,6 @@ use crate::arch;
 use crate::arch::kernel::mmio as hardware;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
-#[cfg(not(feature = "dhcpv4"))]
-use crate::env;
 
 /// Data type to determine the mac address
 #[derive(Debug, Copy, Clone)]
@@ -33,33 +31,6 @@ impl HermitNet {
 	pub(crate) const fn new(mtu: u16) -> Self {
 		Self { mtu }
 	}
-}
-
-/// Returns the value of the specified environment variable.
-///
-/// The value is fetched from the current runtime environment and, if not
-/// present, falls back to the same environment variable set at compile time
-/// (might not be present as well).
-#[cfg(not(feature = "dhcpv4"))]
-macro_rules! hermit_var {
-	($name:expr) => {{
-		use alloc::borrow::Cow;
-
-		match env::var($name) {
-			Some(val) => Some(Cow::from(val)),
-			None => option_env!($name).map(Cow::Borrowed),
-		}
-	}};
-}
-
-/// Tries to fetch the specified environment variable with a default value.
-///
-/// Fetches according to [`hermit_var`] or returns the specified default value.
-#[cfg(not(feature = "dhcpv4"))]
-macro_rules! hermit_var_or {
-	($name:expr, $default:expr) => {{
-		hermit_var!($name).as_deref().unwrap_or($default)
-	}};
 }
 
 impl<'a> NetworkInterface<'a> {
