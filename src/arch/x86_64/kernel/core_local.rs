@@ -1,7 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::ptr;
 use core::sync::atomic::Ordering;
 
@@ -28,7 +28,7 @@ pub(crate) struct CoreLocal {
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
-	async_tasks: Cell<Vec<AsyncTask>>,
+	async_tasks: RefCell<Vec<AsyncTask>>,
 }
 
 impl CoreLocal {
@@ -47,7 +47,7 @@ impl CoreLocal {
 			tss: Cell::new(ptr::null_mut()),
 			kernel_stack: Cell::new(0),
 			irq_statistics,
-			async_tasks: Cell::new(Vec::new()),
+			async_tasks: RefCell::new(Vec::new()),
 		};
 		let this = Box::leak(Box::new(this));
 		this.this = &*this;
