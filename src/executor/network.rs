@@ -6,7 +6,7 @@ use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::{Context, Poll};
 
-use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
