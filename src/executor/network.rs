@@ -251,9 +251,7 @@ where
 
 	loop {
 		// run background tasks
-		without_interrupts(|| {
-			crate::executor::run();
-		});
+		crate::executor::run();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
 			let wakeup_time = network_delay(crate::executor::network::now())
@@ -349,9 +347,7 @@ where
 
 	loop {
 		// run background tasks
-		without_interrupts(|| {
-			crate::executor::run();
-		});
+		crate::executor::run();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
 			let wakeup_time = network_delay(crate::executor::network::now())

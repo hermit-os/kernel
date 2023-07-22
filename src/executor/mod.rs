@@ -45,13 +45,15 @@ pub(crate) fn run() {
 	let waker = Waker::noop();
 	let mut cx = Context::from_waker(&waker);
 
-	async_tasks().retain_mut(|task| {
-		trace!("Run async task {}", task.id());
+	without_interrupts(|| {
+		async_tasks().retain_mut(|task| {
+			trace!("Run async task {}", task.id());
 
-		match task.poll(&mut cx) {
-			Poll::Ready(()) => false,
-			Poll::Pending => true,
-		}
+			match task.poll(&mut cx) {
+				Poll::Ready(()) => false,
+				Poll::Pending => true,
+			}
+		})
 	});
 }
 
