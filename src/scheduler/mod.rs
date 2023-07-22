@@ -9,10 +9,14 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
 use hermit_sync::{without_interrupts, *};
+#[cfg(target_arch = "riscv64")]
+use riscv::register::sstatus;
 
 use crate::arch;
 use crate::arch::core_local::*;
 use crate::arch::interrupts;
+#[cfg(target_arch = "riscv64")]
+use crate::arch::switch::switch_to_task;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
@@ -140,6 +144,11 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		);
 
 		interrupts::enable();
+	}
+
+	#[cfg(target_arch = "riscv64")]
+	fn reschedule(self) {
+		without_interrupts(|| self.scheduler());
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -357,7 +366,7 @@ impl PerCoreScheduler {
 
 	/// Returns `true` if a reschedule is required
 	#[inline]
-	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
 	pub fn is_scheduling(&self) -> bool {
 		self.current_task.borrow().prio < self.ready_queue.get_highest_priority()
 	}
@@ -492,6 +501,17 @@ impl PerCoreScheduler {
 		})
 	}
 
+	#[cfg(target_arch = "riscv64")]
+	pub fn set_current_kernel_stack(&self) {
+		let current_task_borrowed = self.current_task.borrow();
+
+		let stack = (current_task_borrowed.stacks.get_kernel_stack()
+			+ current_task_borrowed.stacks.get_kernel_stack_size()
+			- TaskStacks::MARKER_SIZE)
+			.as_u64();
+		CoreLocal::get().kernel_stack.set(stack);
+	}
+
 	/// Save the FPU context for the current FPU owner and restore it for the current task,
 	/// which wants to use the FPU now.
 	#[cfg(target_arch = "x86_64")]
@@ -517,7 +537,7 @@ impl PerCoreScheduler {
 		}
 	}
 
-	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
 	pub fn check_input(&mut self) {
 		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
@@ -648,10 +668,26 @@ impl PerCoreScheduler {
 					unsafe { *last_stack_pointer },
 					new_stack_pointer
 				);
-				self.current_task = task;
+				#[cfg(not(target_arch = "riscv64"))]
+				{
+					self.current_task = task;
+				}
 
 				// Finally return the context of the new task.
+				#[cfg(not(target_arch = "riscv64"))]
 				return Some(last_stack_pointer);
+
+				#[cfg(target_arch = "riscv64")]
+				{
+					if sstatus::read().fs() == sstatus::FS::Dirty {
+						self.current_task.borrow_mut().last_fpu_state.save();
+					}
+					task.borrow().last_fpu_state.restore();
+					self.current_task = task;
+					unsafe {
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				}
 			}
 		}
 

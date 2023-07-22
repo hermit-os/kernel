@@ -9,7 +9,7 @@ use hermit_sync::Lazy;
 #[cfg(feature = "newlib")]
 use hermit_sync::OnceCell;
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 use crate::arch::mm::paging::HugePageSize;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
@@ -82,7 +82,7 @@ pub(crate) fn init() {
 	let reserved_space = (npage_3tables + npage_2tables + npage_1tables)
 		* BasePageSize::SIZE as usize
 		+ LargePageSize::SIZE as usize;
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
@@ -152,7 +152,7 @@ pub(crate) fn init() {
 			virt_addr
 		);
 
-		#[cfg(target_arch = "x86_64")]
+		#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
 			// Mount large pages to the next huge page boundary
 			let npages = (virt_addr.align_up_to_huge_page().as_usize() - virt_addr.as_usize())
@@ -169,14 +169,14 @@ pub(crate) fn init() {
 			map_size = virt_size;
 		}
 
-		#[cfg(not(target_arch = "x86_64"))]
+		#[cfg(not(any(target_arch = "x86_64", target_arch = "riscv64")))]
 		{
 			map_addr = virt_addr;
 			map_size = virt_size;
 		}
 	}
 
-	#[cfg(target_arch = "x86_64")]
+	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
 		&& map_addr.is_aligned(HugePageSize::SIZE)

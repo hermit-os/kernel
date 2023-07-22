@@ -7,8 +7,12 @@
 #![warn(clippy::uninlined_format_args)]
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
-#![cfg_attr(target_arch = "aarch64", allow(incomplete_features))]
+#![cfg_attr(
+	any(target_arch = "aarch64", target_arch = "riscv64"),
+	allow(incomplete_features)
+)]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
+#![cfg_attr(target_arch = "riscv64", feature(offset_of))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(core_intrinsics)]
@@ -19,7 +23,10 @@
 #![feature(pointer_is_aligned)]
 #![feature(ptr_from_ref)]
 #![feature(slice_from_ptr_range)]
-#![cfg_attr(target_arch = "aarch64", feature(specialization))]
+#![cfg_attr(
+	any(target_arch = "aarch64", target_arch = "riscv64"),
+	feature(specialization)
+)]
 #![feature(strict_provenance)]
 #![cfg_attr(target_os = "none", no_std)]
 #![cfg_attr(target_os = "none", feature(custom_test_frameworks))]
@@ -268,6 +275,10 @@ extern "C" fn initd(_arg: usize) {
 	arch::init_drivers();
 	crate::executor::init();
 
+	// Initialize MMIO Drivers if on riscv64
+	#[cfg(target_arch = "riscv64")]
+	riscv64::kernel::init_drivers();
+
 	syscalls::init();
 	fd::init();
 	#[cfg(feature = "fs")]
@@ -320,6 +331,8 @@ fn boot_processor_main() -> ! {
 	});
 	info!("tls_info = {:#x?}", kernel::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
+
+	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
 	if !env::is_uhyve() {
@@ -354,6 +367,7 @@ fn boot_processor_main() -> ! {
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();
+	#[cfg(not(target_arch = "riscv64"))]
 	scheduler::add_current_core();
 
 	info!("Entering idle loop for application processor");

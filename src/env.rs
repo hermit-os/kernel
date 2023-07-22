@@ -23,6 +23,7 @@ pub fn init() {
 struct Cli {
 	#[allow(dead_code)]
 	image_path: Option<String>,
+	#[cfg(not(target_arch = "riscv64"))]
 	freq: Option<u16>,
 	env_vars: HashMap<String, String, RandomState>,
 	args: Vec<String>,
@@ -36,6 +37,7 @@ pub fn is_uhyve() -> bool {
 impl Default for Cli {
 	fn default() -> Self {
 		let mut image_path = None;
+		#[cfg(not(target_arch = "riscv64"))]
 		let mut freq = None;
 		let mut env_vars = HashMap::<String, String, RandomState>::with_hasher(
 			RandomState::with_seeds(0, 0, 0, 0),
@@ -53,6 +55,7 @@ impl Default for Cli {
 		};
 		while let Some(word) = words.next() {
 			match word.as_str() {
+				#[cfg(not(target_arch = "riscv64"))]
 				"-freq" => {
 					let s = expect_arg(words.next(), word.as_str());
 					freq = Some(s.parse().unwrap());
@@ -81,6 +84,7 @@ impl Default for Cli {
 
 		Self {
 			image_path,
+			#[cfg(not(target_arch = "riscv64"))]
 			freq,
 			env_vars,
 			args,
@@ -89,6 +93,7 @@ impl Default for Cli {
 }
 
 /// CPU Frequency in MHz if given through the -freq command-line parameter.
+#[cfg(not(target_arch = "riscv64"))]
 pub fn freq() -> Option<u16> {
 	CLI.get().unwrap().freq
 }

@@ -18,6 +18,7 @@ use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
+#[cfg(not(target_arch = "riscv64"))]
 use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 #[cfg(not(feature = "pci"))]
@@ -462,6 +463,7 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) send_vqs: TxQueues,
 
 	pub(super) num_vqs: u16,
+	#[cfg_attr(target_arch = "riscv64", allow(dead_code))]
 	pub(super) irq: InterruptLine,
 	pub(super) mtu: u16,
 	pub(super) checksums: ChecksumCapabilities,
@@ -648,6 +650,7 @@ impl NetworkDriver for VirtioNetDriver {
 	}
 
 	fn handle_interrupt(&mut self) -> bool {
+		#[cfg(not(target_arch = "riscv64"))]
 		increment_irq_counter(32 + self.irq);
 
 		let result = if self.isr_stat.is_interrupt() {

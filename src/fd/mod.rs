@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::ffi::{c_void, CStr};
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 use core::sync::atomic::{AtomicI32, Ordering};
 
@@ -162,6 +163,13 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 			options(nostack),
 		);
 	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "riscv64")]
+fn uhyve_send<T>(_port: u16, _data: &mut T) {
+	todo!()
 }
 
 fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
