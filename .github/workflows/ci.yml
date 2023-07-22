@@ -176,7 +176,7 @@ jobs:
             -initrd target/x86_64-unknown-hermit/debug/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device rtl8139,netdev=u1 &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Test httpd with DHCP support (debug, virtio-net)
@@ -187,7 +187,7 @@ jobs:
             -initrd target/x86_64-unknown-hermit/debug/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release)
@@ -201,7 +201,7 @@ jobs:
             -initrd target/x86_64-unknown-hermit/release/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device rtl8139,netdev=u1 &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Test httpd with DHCP support (release, virtio-net)
@@ -212,7 +212,7 @@ jobs:
             -initrd target/x86_64-unknown-hermit/release/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build minimal profile
@@ -287,7 +287,7 @@ jobs:
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release)
@@ -301,6 +301,6 @@ jobs:
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/httpd \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
+            sleep 10
             curl http://127.0.0.1:9975/help
             sleep 1
