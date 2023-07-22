@@ -397,8 +397,6 @@ impl CpuFrequency {
 
 	#[cfg(target_os = "none")]
 	fn measure_frequency(&mut self) -> Result<(), ()> {
-		use x86_64::structures::idt::InterruptDescriptorTable;
-
 		use crate::arch::x86_64::kernel::interrupts::IDT;
 
 		// The PIC is not initialized for uhyve, so we cannot measure anything.
@@ -413,7 +411,7 @@ impl CpuFrequency {
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
 		unsafe {
-			let idt = &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable);
+			let idt = &mut IDT;
 			idt[pit::PIT_INTERRUPT_NUMBER as usize]
 				.set_handler_fn(Self::measure_frequency_timer_handler)
 				.set_stack_index(0);

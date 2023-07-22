@@ -339,7 +339,9 @@ impl PriorityTaskQueue {
 			.iter()
 			.position(|current_task| current_task.borrow().id == handle.id)
 		{
-			let Some(task) = self.remove_from_queue(index, old_priority) else { return Err(()) };
+			let Some(task) = self.remove_from_queue(index, old_priority) else {
+				return Err(());
+			};
 			task.borrow_mut().prio = prio;
 			self.push(task);
 			return Ok(());

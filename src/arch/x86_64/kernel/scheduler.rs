@@ -5,7 +5,6 @@ use core::arch::asm;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
-use x86_64::structures::idt::InterruptDescriptorTable;
 
 use super::interrupts::{IDT, IST_SIZE};
 use crate::arch::x86_64::kernel::core_local::*;
@@ -376,7 +375,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 
 pub fn install_timer_handler() {
 	unsafe {
-		let idt = &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable);
+		let idt = &mut IDT;
 		idt[apic::TIMER_INTERRUPT_NUMBER as usize]
 			.set_handler_fn(timer_handler)
 			.set_stack_index(0);

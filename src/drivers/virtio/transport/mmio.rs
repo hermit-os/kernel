@@ -292,7 +292,7 @@ impl NotifCtrl {
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
 		if self.f_notif_data {
-			let ptr = self.notif_addr as *mut u32;
+			let ptr = self.notif_addr;
 
 			unsafe {
 				unaligned_volatile_store(

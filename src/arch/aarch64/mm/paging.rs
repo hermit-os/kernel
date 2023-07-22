@@ -557,7 +557,7 @@ pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<Pa
 	trace!("Looking up Page Table Entry for {:p}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.get_page_table_entry(page)
 }
 
@@ -565,7 +565,7 @@ pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<Ph
 	trace!("Getting physical address for {:p}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	let address = root_pagetable.get_page_table_entry(page)?.address();
 	let offset = virtual_address & (S::SIZE - 1);
 	Some(PhysAddr(address.as_u64() | offset.as_u64()))
@@ -597,7 +597,7 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
@@ -624,7 +624,7 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
