@@ -18,7 +18,9 @@ fn generate_park_miller_lehmer_random_number() -> u32 {
 }
 
 unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
-	let Some(flags) = Flags::from_bits(flags) else { return -EINVAL as isize  };
+	let Some(flags) = Flags::from_bits(flags) else {
+		return -EINVAL as isize;
+	};
 
 	let buf = unsafe {
 		// Cap the number of bytes to be read at a time to isize::MAX to uphold
