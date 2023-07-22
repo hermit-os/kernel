@@ -30,6 +30,17 @@ impl Clippy {
 			// 	.run()?;
 		}
 
+		{
+			let target_args = Arch::Riscv64.cargo_args();
+			cmd!(sh, "cargo clippy {target_args...}")
+				.arg("--no-default-features")
+				.run()?;
+			cmd!(sh, "cargo clippy {target_args...}")
+				.arg("--no-default-features")
+				.arg("--features=smp,tcp")
+				.run()?;
+		}
+
 		cmd!(sh, "cargo clippy")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.arg("--target=x86_64-unknown-none")

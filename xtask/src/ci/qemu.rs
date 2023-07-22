@@ -115,6 +115,8 @@ impl Qemu {
 			]
 		} else if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
 			vec!["-machine".to_string(), "virt,gic-version=3".to_string()]
+		} else if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
+			vec!["-machine".to_string(), "virt".to_string()]
 		} else {
 			vec![]
 		}
@@ -156,6 +158,16 @@ impl Qemu {
 				));
 				cpu_args
 			}
+			Arch::Riscv64 => {
+				let mut cpu_args = if self.accel {
+					todo!()
+				} else {
+					vec!["-cpu".to_string(), "rv64".to_string()]
+				};
+				cpu_args.push("-initrd".to_string());
+				cpu_args.push(self.build.image().into_os_string().into_string().unwrap());
+				cpu_args
+			}
 		}
 	}
 
@@ -169,6 +181,9 @@ impl Qemu {
 
 	fn memory(&self) -> usize {
 		let mut memory = 32usize;
+		if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
+			memory *= 2;
+		}
 		if self.build.cargo_build.artifact.profile() == "dev" {
 			memory *= 4;
 		}
