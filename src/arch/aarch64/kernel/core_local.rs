@@ -1,14 +1,16 @@
 use alloc::boxed::Box;
+use alloc::vec::Vec;
 use core::arch::asm;
-use core::cell::Cell;
+use core::cell::{Cell, RefCell, RefMut};
 use core::ptr;
 use core::sync::atomic::Ordering;
 
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
+use crate::executor::task::AsyncTask;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
-pub struct CoreLocal {
+pub(crate) struct CoreLocal {
 	this: *const Self,
 	/// ID of the current Core.
 	core_id: CoreId,
@@ -16,6 +18,8 @@ pub struct CoreLocal {
 	scheduler: Cell<*mut PerCoreScheduler>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
+	/// Queue of async tasks
+	async_tasks: RefCell<Vec<AsyncTask>>,
 }
 
 impl CoreLocal {
@@ -30,6 +34,7 @@ impl CoreLocal {
 			core_id,
 			scheduler: Cell::new(ptr::null_mut()),
 			irq_statistics,
+			async_tasks: RefCell::new(Vec::new()),
 		};
 		let this = Box::leak(Box::new(this));
 		this.this = &*this;
@@ -50,7 +55,7 @@ impl CoreLocal {
 }
 
 #[inline]
-pub fn core_id() -> CoreId {
+pub(crate) fn core_id() -> CoreId {
 	if cfg!(target_os = "none") {
 		CoreLocal::get().core_id
 	} else {
@@ -59,14 +64,18 @@ pub fn core_id() -> CoreId {
 }
 
 #[inline]
-pub fn core_scheduler() -> &'static mut PerCoreScheduler {
+pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 	unsafe { &mut *CoreLocal::get().scheduler.get() }
 }
 
-pub fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
+pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
+	CoreLocal::get().async_tasks.borrow_mut()
+}
+
+pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
 	CoreLocal::get().scheduler.set(scheduler);
 }
 
-pub fn increment_irq_counter(irq_no: u8) {
+pub(crate) fn increment_irq_counter(irq_no: u8) {
 	CoreLocal::get().irq_statistics.inc(irq_no);
 }

@@ -15,6 +15,7 @@
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
+#![feature(noop_waker)]
 #![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]
 #![cfg_attr(target_os = "none", no_std)]
@@ -70,7 +71,6 @@ mod drivers;
 mod entropy;
 mod env;
 pub mod errno;
-#[cfg(feature = "tcp")]
 mod executor;
 pub(crate) mod fd;
 pub(crate) mod fs;
@@ -260,7 +260,6 @@ extern "C" fn initd(_arg: usize) {
 
 	// Initialize Drivers
 	arch::init_drivers();
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	crate::executor::init();
 
 	syscalls::init();
@@ -359,6 +358,7 @@ fn application_processor_main() -> ! {
 	info!("Entering idle loop for application processor");
 
 	synch_all_cores();
+	crate::executor::init();
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.

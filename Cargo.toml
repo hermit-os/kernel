@@ -57,8 +57,6 @@ smp = ["include-transformed"]
 fsgsbase = []
 trace = []
 tcp = [
-    "async-task",
-    "futures-lite",
     "smoltcp",
 ]
 dhcpv4 = [
@@ -85,8 +83,6 @@ pflock = "0.2"
 shell-words = { version = "1.1", default-features = false }
 qemu-exit = "3.0"
 rand_chacha = { version = "0.3", default-features = false }
-futures-lite = { version = "1.11", default-features = false, optional = true }
-async-task = { version = "4.4", default-features = false, optional = true }
 lock_api = "0.4"
 num = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }

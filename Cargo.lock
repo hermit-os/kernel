@@ -54,12 +54,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-task"
-version = "4.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc7ab41815b3c653ccd2978ec3255c81349336702dfdf62ee6f7069b12a3aae"
-
-[[package]]
 name = "atomic-polyfill"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -219,22 +213,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-core"
-version = "0.3.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bca583b7e26f571124fe5b7561d49cb2868d79116cfa0eefce955557c6fee8c"
-
-[[package]]
-name = "futures-lite"
-version = "1.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49a9d51ce47660b1e808d3c990b4709f2f415d928835a17dfd16991515c46bce"
-dependencies = [
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
 name = "generic_once_cell"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -365,13 +343,11 @@ dependencies = [
  "ahash",
  "align-address",
  "arm-gic",
- "async-task",
  "bit_field",
  "bitflags 2.3.3",
  "crossbeam-utils",
  "dyn-clone",
  "float-cmp",
- "futures-lite",
  "hashbrown",
  "hermit-dtb",
  "hermit-entry",
@@ -639,12 +615,6 @@ checksum = "e1fb5f6f826b772a8d4c0394209441e7d37cbbb967ae9c7e0e8134365c9ee676"
 dependencies = [
  "siphasher",
 ]
-
-[[package]]
-name = "pin-project-lite"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0a7ae3ac2f1173085d398531c705756c94a4c56843785df85a60c1a0afac116"
 
 [[package]]
 name = "plain"
