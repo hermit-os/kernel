@@ -43,6 +43,10 @@ pub trait NetworkInterface {
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
 	fn handle_interrupt(&mut self) -> bool;
+	/// Returns true, if the device has to create checksums
+	fn with_checksums(&self) -> bool {
+		true
+	}
 }
 
 #[inline]

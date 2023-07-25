@@ -5,7 +5,7 @@ use core::slice;
 use core::str::FromStr;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
-use smoltcp::phy::{self, Device, DeviceCapabilities, Medium};
+use smoltcp::phy::{self, Checksum, Device, DeviceCapabilities, Medium};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
 use smoltcp::time::Instant;
@@ -24,26 +24,34 @@ use crate::drivers::pci as hardware;
 #[derive(Debug, Copy, Clone)]
 #[repr(C)]
 pub(crate) struct HermitNet {
-	pub mtu: u16,
+	mtu: u16,
+	with_checksums: bool,
 }
 
 impl HermitNet {
-	pub(crate) const fn new(mtu: u16) -> Self {
-		Self { mtu }
+	pub(crate) const fn new(mtu: u16, with_checksums: bool) -> Self {
+		Self {
+			mtu,
+			with_checksums,
+		}
 	}
 }
 
 impl<'a> NetworkInterface<'a> {
 	#[cfg(feature = "dhcpv4")]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac) = if let Some(driver) = hardware::get_network_driver() {
+		let (mtu, mac, with_checksums) = if let Some(driver) = hardware::get_network_driver() {
 			let guard = driver.lock();
-			(guard.get_mtu(), guard.get_mac_address())
+			(
+				guard.get_mtu(),
+				guard.get_mac_address(),
+				guard.with_checksums(),
+			)
 		} else {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu);
+		let mut device = HermitNet::new(mtu, with_checksums);
 
 		let ethernet_addr = EthernetAddress([mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]]);
 		let hardware_addr = HardwareAddress::Ethernet(ethernet_addr);
@@ -74,14 +82,18 @@ impl<'a> NetworkInterface<'a> {
 
 	#[cfg(not(feature = "dhcpv4"))]
 	pub(crate) fn create() -> NetworkState<'a> {
-		let (mtu, mac) = if let Some(driver) = hardware::get_network_driver() {
+		let (mtu, mac, with_checksums) = if let Some(driver) = hardware::get_network_driver() {
 			let guard = driver.lock();
-			(guard.get_mtu(), guard.get_mac_address())
+			(
+				guard.get_mtu(),
+				guard.get_mac_address(),
+				guard.with_checksums(),
+			)
 		} else {
 			return NetworkState::InitializationFailed;
 		};
 
-		let mut device = HermitNet::new(mtu);
+		let mut device = HermitNet::new(mtu, with_checksums);
 
 		let myip = Ipv4Address::from_str(hermit_var_or!("HERMIT_IP", "10.0.5.3")).unwrap();
 		let mygw = Ipv4Address::from_str(hermit_var_or!("HERMIT_GATEWAY", "10.0.5.1")).unwrap();
@@ -156,6 +168,10 @@ impl Device for HermitNet {
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
 		cap.max_transmission_unit = self.mtu.into();
+		if !self.with_checksums {
+			cap.checksum.tcp = Checksum::None;
+			cap.checksum.udp = Checksum::None;
+		}
 		cap
 	}
 

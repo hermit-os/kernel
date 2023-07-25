@@ -15,7 +15,7 @@ use core::str::FromStr;
 use pci_types::InterruptLine;
 use zerocopy::AsBytes;
 
-use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
+use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -48,8 +48,8 @@ pub(crate) struct NetDevCfg {
 #[derive(AsBytes, Debug)]
 #[repr(C)]
 pub struct VirtioNetHdr {
-	flags: u8,
-	gso_type: u8,
+	flags: NetHdrFlag,
+	gso_type: NetHdrGSO,
 	/// Ethernet + IP + tcp/udp hdrs
 	hdr_len: u16,
 	/// Bytes to append to hdr_len per frame
@@ -62,23 +62,11 @@ pub struct VirtioNetHdr {
 	num_buffers: u16,
 }
 
-impl VirtioNetHdr {
-	pub fn get_tx_hdr() -> VirtioNetHdr {
-		VirtioNetHdr {
-			flags: 0,
-			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
-			hdr_len: 0,
-			gso_size: 0,
-			csum_start: 0,
-			csum_offset: 0,
-			num_buffers: 0,
-		}
-	}
-
-	pub fn get_rx_hdr() -> VirtioNetHdr {
-		VirtioNetHdr {
-			flags: 0,
-			gso_type: 0,
+impl Default for VirtioNetHdr {
+	fn default() -> Self {
+		Self {
+			flags: NetHdrFlag::VIRTIO_NET_HDR_F_NONE,
+			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE,
 			hdr_len: 0,
 			gso_size: 0,
 			csum_start: 0,
@@ -419,7 +407,7 @@ impl TxQueues {
 				self.ready_queue.push(
 					vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
 						.unwrap()
-						.write_seq(Some(&VirtioNetHdr::get_tx_hdr()), None::<&VirtioNetHdr>)
+						.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
 						.unwrap(),
 				)
 			}
@@ -568,7 +556,53 @@ impl NetworkInterface for VirtioNetDriver {
 	fn send_tx_buffer(&mut self, tkn_handle: usize, _len: usize) -> Result<(), ()> {
 		// This does not result in a new assignment, or in a drop of the BufferToken, which
 		// would be dangerous, as the memory is freed then.
-		let tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
+		let mut tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
+
+		// If a checksum isn't necessary, we have inform the host within the header
+		// see Virtio specification 5.1.6.2
+		if !self.with_checksums() {
+			unsafe {
+				let (send_ptrs, _) = tkn.raw_ptrs();
+				let (addr, _) = send_ptrs.unwrap()[0];
+				let header = addr as *mut VirtioNetHdr;
+				let type_ = u16::from_be(
+					*(addr.offset(
+						(12 + core::mem::size_of::<VirtioNetHdr>())
+							.try_into()
+							.unwrap(),
+					) as *const u16),
+				);
+
+				*header = Default::default();
+				match type_ {
+					0x0800 /* IPv4 */ => {
+						let protocol = *(addr.offset((14+9+core::mem::size_of::<VirtioNetHdr>()).try_into().unwrap()) as *const u8);
+						if protocol == 6 /* TCP */ {
+							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							(*header).csum_start = 14+20;
+							(*header).csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							(*header).csum_start = 14+20;
+							(*header).csum_offset = 6;
+						}
+					},
+					0x86DD /* IPv6 */ => {
+						let protocol = *(addr.offset((14+9+core::mem::size_of::<VirtioNetHdr>()).try_into().unwrap()) as *const u8);
+						if protocol == 6 /* TCP */ {
+							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							(*header).csum_start = 14+40;
+							(*header).csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							(*header).csum_start = 14+40;
+							(*header).csum_offset = 6;
+						}
+					},
+					_ => {},
+				}
+			}
+		}
 
 		tkn.provide()
 			.dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
@@ -598,6 +632,15 @@ impl NetworkInterface for VirtioNetDriver {
 				// If the given length is zero, we currently fail.
 				if recv_data.len() == 2 {
 					let recv_payload = recv_data.pop().unwrap();
+					let header = recv_data.pop().unwrap();
+					let header = unsafe {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
+						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
+							header[..HEADER_SIZE].try_into().unwrap(),
+						)
+					};
+					trace!("Receive data with header {:?}", header);
+
 					// Create static reference for the user-space
 					// As long as we keep the Transfer in a raw reference this reference is static,
 					// so this is fine.
@@ -613,6 +656,14 @@ impl NetworkInterface for VirtioNetDriver {
 					Ok(vec_data)
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
+					let header = unsafe {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
+						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
+							packet[..HEADER_SIZE].try_into().unwrap(),
+						)
+					};
+					trace!("Receive data with header {:?}", header);
+
 					let payload_ptr =
 						(&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
 
@@ -635,7 +686,7 @@ impl NetworkInterface for VirtioNetDriver {
 					transfer
 						.reuse()
 						.unwrap()
-						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::get_rx_hdr()))
+						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::default()))
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
@@ -676,6 +727,15 @@ impl NetworkInterface for VirtioNetDriver {
 		self.isr_stat.acknowledge();
 
 		result
+	}
+
+	/// Returns `true` if the device supports the virtio feature
+	/// `VIRTIO_NET_F_GUEST_CSUM` and trust the incoming packages.
+	fn with_checksums(&self) -> bool {
+		!self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 	}
 }
 
@@ -796,12 +856,13 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_NET_F_MTU);
 		// Packed Vq can be used
 		feats.push(Features::VIRTIO_F_RING_PACKED);
+		// Avoid the creation of checksums
+		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
 		// needs to take care of calculating checksum in
 		// RxQueues.post_processing()
-		// feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
 
@@ -1068,6 +1129,8 @@ pub mod constants {
 	use alloc::vec::Vec;
 	use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
+	use zerocopy::AsBytes;
+
 	pub use super::error::VirtioNetError;
 
 	// Configuration constants
@@ -1077,10 +1140,11 @@ pub mod constants {
 	///
 	/// See Virtio specification v1.1. - 5.1.6
 	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Copy, Clone, Debug)]
+	#[derive(AsBytes, Copy, Clone, Debug)]
 	#[repr(u8)]
-	///
 	pub enum NetHdrFlag {
+		/// No further information
+		VIRTIO_NET_HDR_F_NONE = 0,
 		/// use csum_start, csum_offset
 		VIRTIO_NET_HDR_F_NEEDS_CSUM = 1,
 		/// csum is valid
@@ -1092,6 +1156,7 @@ pub mod constants {
 	impl From<NetHdrFlag> for u8 {
 		fn from(val: NetHdrFlag) -> Self {
 			match val {
+				NetHdrFlag::VIRTIO_NET_HDR_F_NONE => 0,
 				NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM => 1,
 				NetHdrFlag::VIRTIO_NET_HDR_F_DATA_VALID => 2,
 				NetHdrFlag::VIRTIO_NET_HDR_F_RSC_INFO => 4,
@@ -1147,7 +1212,7 @@ pub mod constants {
 	///
 	/// See Virtio specification v1.1. - 5.1.6
 	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Copy, Clone, Debug)]
+	#[derive(AsBytes, Copy, Clone, Debug)]
 	#[repr(u8)]
 	pub enum NetHdrGSO {
 		/// not a GSO frame
