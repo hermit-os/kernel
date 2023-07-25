@@ -632,14 +632,14 @@ impl NetworkInterface for VirtioNetDriver {
 				// If the given length is zero, we currently fail.
 				if recv_data.len() == 2 {
 					let recv_payload = recv_data.pop().unwrap();
-					let header = recv_data.pop().unwrap();
+					/*let header = recv_data.pop().unwrap();
 					let header = unsafe {
 						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
 							header[..HEADER_SIZE].try_into().unwrap(),
 						)
 					};
-					trace!("Receive data with header {:?}", header);
+					trace!("Receive data with header {:?}", header);*/
 
 					// Create static reference for the user-space
 					// As long as we keep the Transfer in a raw reference this reference is static,
@@ -656,13 +656,13 @@ impl NetworkInterface for VirtioNetDriver {
 					Ok(vec_data)
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
-					let header = unsafe {
+					/*let header = unsafe {
 						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
 							packet[..HEADER_SIZE].try_into().unwrap(),
 						)
 					};
-					trace!("Receive data with header {:?}", header);
+					trace!("Receive data with header {:?}", header);*/
 
 					let payload_ptr =
 						(&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
