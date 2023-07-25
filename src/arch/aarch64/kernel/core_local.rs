@@ -52,15 +52,6 @@ impl CoreLocal {
 			&*raw
 		}
 	}
-
-	#[inline]
-	pub fn get_mut() -> &'static mut Self {
-		unsafe {
-			let raw: *mut Self;
-			asm!("mrs {}, tpidr_el1", out(reg) raw, options(nomem, nostack, preserves_flags));
-			&mut *raw
-		}
-	}
 }
 
 #[inline]
@@ -78,7 +69,7 @@ pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
 }
 
 pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
-	CoreLocal::get_mut().async_tasks.borrow_mut()
+	CoreLocal::get().async_tasks.borrow_mut()
 }
 
 pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
