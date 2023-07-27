@@ -168,6 +168,7 @@ impl Device for HermitNet {
 	fn capabilities(&self) -> DeviceCapabilities {
 		let mut cap = DeviceCapabilities::default();
 		cap.max_transmission_unit = self.mtu.into();
+		cap.max_burst_size = Some(65535 / cap.max_transmission_unit);
 		if !self.with_checksums {
 			cap.checksum.tcp = Checksum::None;
 			cap.checksum.udp = Checksum::None;
@@ -176,9 +177,13 @@ impl Device for HermitNet {
 	}
 
 	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
+		let mut buffer = vec![0; self.mtu.into()];
 		if let Some(driver) = hardware::get_network_driver() {
-			match driver.lock().receive_rx_buffer() {
-				Ok(buffer) => Some((RxToken::new(buffer), TxToken::new())),
+			match driver.lock().receive_rx_buffer(&mut buffer[..]) {
+				Ok(size) => {
+					buffer.resize(size, 0);
+					Some((RxToken::new(buffer), TxToken::new()))
+				}
 				_ => None,
 			}
 		} else {
@@ -187,7 +192,6 @@ impl Device for HermitNet {
 	}
 
 	fn transmit(&mut self, _timestamp: Instant) -> Option<Self::TxToken<'_>> {
-		trace!("create TxToken to transfer data");
 		Some(TxToken::new())
 	}
 }
