@@ -6,8 +6,6 @@ pub mod virtio_net;
 #[cfg(feature = "pci")]
 pub mod virtio_pci;
 
-use alloc::vec::Vec;
-
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
 #[allow(unused_imports)]
@@ -38,7 +36,7 @@ pub trait NetworkInterface {
 	/// Check if a packet is available
 	fn has_packet(&self) -> bool;
 	/// Get RX buffer with an received packet
-	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()>;
+	fn receive_rx_buffer(&mut self, buffer: &mut [u8]) -> Result<usize, ()>;
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available

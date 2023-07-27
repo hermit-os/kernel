@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::mem;
 
 use pci_types::{Bar, InterruptLine, MAX_BARS};
@@ -272,7 +271,7 @@ impl NetworkInterface for RTL8139Driver {
 		false
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
+	fn receive_rx_buffer(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
 		let cmd = unsafe { inb(self.iobase + CR) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
@@ -285,17 +284,19 @@ impl NetworkInterface for RTL8139Driver {
 
 				// do we reach the end of the receive buffers?
 				// in this case, we conact the two slices to one vec
-				let buf = if pos + length as usize > RX_BUF_LEN {
-					let first = &self.rxbuffer[pos..RX_BUF_LEN];
-					let second = &self.rxbuffer[..length as usize - first.len()];
-					[first, second].concat()
+				if pos + length as usize > RX_BUF_LEN {
+					buffer[..RX_BUF_LEN - pos].copy_from_slice(&self.rxbuffer[pos..RX_BUF_LEN]);
+					buffer[RX_BUF_LEN - pos..usize::from(length)].copy_from_slice(
+						&self.rxbuffer[0..usize::from(length) - (RX_BUF_LEN - pos)],
+					);
 				} else {
-					(self.rxbuffer[pos..][..length.into()]).to_vec()
+					buffer[..length.into()]
+						.copy_from_slice(&self.rxbuffer[pos..pos + usize::from(length)]);
 				};
 
 				self.consume_current_buffer();
 
-				Ok(buf)
+				Ok(length.into())
 			} else {
 				error!(
 					"RTL8192: invalid header {:#x}, rx_pos {}\n",

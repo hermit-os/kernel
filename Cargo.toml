@@ -103,6 +103,13 @@ features = [
     "proto-ipv6",
     "socket-tcp",
     "socket-udp",
+    # Enable IP fragmentation
+    #"proto-ipv4-fragmentation",
+    #
+    # Assume a MTU size of 9000
+    #"fragmentation-buffer-size-8192",
+    #"reassembly-buffer-size-8192",
+    #
     # Enable for increased output
     # "log",
     # "verbose",

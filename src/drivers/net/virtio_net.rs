@@ -10,7 +10,6 @@ use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
-use core::str::FromStr;
 
 use pci_types::InterruptLine;
 use zerocopy::AsBytes;
@@ -210,7 +209,7 @@ impl RxQueues {
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550).unwrap(),
+				Bytes::new(65550 + ETH_HDR).unwrap(),
 			];
 
 			let spec = if dev_cfg
@@ -219,7 +218,9 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
+				BuffSpec::Single(
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap(),
+				)
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -254,7 +255,12 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1514).unwrap())
+				BuffSpec::Single(
+					Bytes::new(
+						mem::size_of::<VirtioNetHdr>() + dev_cfg.raw.get_mtu() as usize + ETH_HDR,
+					)
+					.unwrap(),
+				)
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -391,25 +397,55 @@ impl TxQueues {
 			// Unwrapping is safe, as one virtq will be definitely in the vector.
 			let vq = self.vqs.get(0).unwrap();
 
-			// Virtio specification v1.1. - 5.1.6.2 point 5.
-			//      Header and data are added as ONE output descriptor to the transmitvq.
-			//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
-			// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-			let buff_def = Bytes::new(
-				mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.get_mtu() as usize) + ETH_HDR,
-			)
-			.unwrap();
-			let spec = BuffSpec::Single(buff_def);
+			if dev_cfg
+				.features
+				.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4)
+				| dev_cfg
+					.features
+					.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
+				| dev_cfg
+					.features
+					.is_feature(Features::VIRTIO_NET_F_GUEST_UFO)
+			{
+				// Virtio specification v1.1. - 5.1.6.2 point 5.
+				//      Header and data are added as ONE output descriptor to the transmitvq.
+				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
+				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
+				let buff_def =
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap();
+				let spec = BuffSpec::Single(buff_def);
 
-			let num_buff: u16 = vq.size().into();
+				let num_buff: u16 = vq.size().into();
 
-			for _ in 0..num_buff {
-				self.ready_queue.push(
-					vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
-						.unwrap()
-						.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
-						.unwrap(),
+				for _ in 0..num_buff {
+					self.ready_queue.push(
+						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+							.unwrap()
+							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
+							.unwrap(),
+					)
+				}
+			} else {
+				// Virtio specification v1.1. - 5.1.6.2 point 5.
+				//      Header and data are added as ONE output descriptor to the transmitvq.
+				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
+				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
+				let buff_def = Bytes::new(
+					mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.get_mtu() as usize) + ETH_HDR,
 				)
+				.unwrap();
+				let spec = BuffSpec::Single(buff_def);
+
+				let num_buff: u16 = vq.size().into();
+
+				for _ in 0..num_buff {
+					self.ready_queue.push(
+						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+							.unwrap()
+							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
+							.unwrap(),
+					)
+				}
 			}
 		} else {
 			self.is_multi = true;
@@ -489,6 +525,7 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
 	pub(super) polling_mode_counter: u32,
+	pub(super) mtu: u16,
 }
 
 impl NetworkInterface for VirtioNetDriver {
@@ -503,16 +540,8 @@ impl NetworkInterface for VirtioNetDriver {
 	}
 
 	/// Returns the current MTU of the device.
-	/// Currently, if VIRTIO_NET_F_MAC is not set
-	//  MTU is set static to 1500 bytes.
 	fn get_mtu(&self) -> u16 {
-		if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			u16::from_str(&my_mtu).unwrap()
-		} else if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
-			self.dev_cfg.raw.get_mtu()
-		} else {
-			1500
-		}
+		self.mtu
 	}
 
 	/// Provides the "user-space" with a pointer to usable memory.
@@ -611,7 +640,7 @@ impl NetworkInterface for VirtioNetDriver {
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
+	fn receive_rx_buffer(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
 		match self.recv_vqs.get_next() {
 			Some(transfer) => {
 				let transfer = match RxQueues::post_processing(transfer) {
@@ -642,14 +671,15 @@ impl NetworkInterface for VirtioNetDriver {
 					// so this is fine.
 					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
 					let ref_data: &'static mut [u8] = unsafe { &mut *(recv_ref) };
-					let vec_data = ref_data.to_vec();
+					let len = ref_data.len();
+					buffer[..len].copy_from_slice(ref_data);
 					transfer
 						.reuse()
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(vec_data)
+					Ok(len)
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
 					/*let header = unsafe {
@@ -669,14 +699,15 @@ impl NetworkInterface for VirtioNetDriver {
 							packet.len() - mem::size_of::<VirtioNetHdr>(),
 						)
 					};
-					let vec_data = ref_data.to_vec();
+					let len = ref_data.len();
+					buffer[..len].copy_from_slice(ref_data);
 					transfer
 						.reuse()
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(vec_data)
+					Ok(len)
 				} else {
 					error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
 					transfer
