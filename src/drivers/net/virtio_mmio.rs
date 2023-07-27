@@ -121,6 +121,15 @@ impl VirtioNetDriver {
 		let isr_stat = IsrStatus::new(registers);
 		let notif_cfg = NotifCfg::new(registers);
 
+		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
+			u16::from_str(&my_mtu).unwrap()
+		} else if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
+			dev_cfg.raw.get_mtu()
+		} else {
+			// fallback to the default MTU
+			1500
+		};
+
 		Ok(VirtioNetDriver {
 			dev_cfg,
 			com_cfg: ComCfg::new(registers, 1),
@@ -141,6 +150,7 @@ impl VirtioNetDriver {
 			num_vqs: 0,
 			irq,
 			polling_mode_counter: 0,
+			mtu,
 		})
 	}
 

@@ -136,7 +136,7 @@ impl VirtioNetDriver {
 		} else if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			dev_cfg.raw.get_mtu()
 		} else {
-			// fallback to default MTU
+			// fallback to the default MTU
 			1500
 		};
 
