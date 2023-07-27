@@ -246,7 +246,7 @@ impl RxQueues {
 			//
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(1514).unwrap(),
+				Bytes::new((dev_cfg.raw.get_mtu() as usize) + ETH_HDR).unwrap(),
 			];
 			let spec = if dev_cfg
 				.features
@@ -507,10 +507,6 @@ impl NetworkInterface for VirtioNetDriver {
 	//  MTU is set static to 1500 bytes.
 	fn get_mtu(&self) -> u16 {
 		if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			warn!(
-				"Using value of the environment variable HERMIT_MTU ({}) as MTU",
-				my_mtu
-			);
 			u16::from_str(&my_mtu).unwrap()
 		} else if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.dev_cfg.raw.get_mtu()
