@@ -290,7 +290,8 @@ impl NetworkInterface for RTL8139Driver {
 						&self.rxbuffer[0..usize::from(length) - (RX_BUF_LEN - pos)],
 					);
 				} else {
-					buffer[..length.into()].copy_from_slice(&self.rxbuffer[pos..length.into()]);
+					buffer[..length.into()]
+						.copy_from_slice(&self.rxbuffer[pos..pos + usize::from(length)]);
 				};
 
 				self.consume_current_buffer();
