@@ -6,6 +6,7 @@ use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::{Context, Poll};
 
+use crossbeam_utils::Backoff;
 use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
@@ -240,8 +241,7 @@ where
 	// Enter polling mode => no NIC interrupts
 	set_polling_mode(true);
 
-	let mut counter: u16 = 0;
-	let mut blocking_time = 1000;
+	let backoff = Backoff::new();
 	let start = crate::executor::network::now();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.into();
@@ -277,35 +277,17 @@ where
 			}
 		}
 
-		counter += 1;
-		// besure that we are not interrupted by a timer, which is able
+		// be sure that we are not interrupted by a timer, which is able
 		// to call `reschedule`
 		interrupts::disable();
 		let now = crate::executor::network::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
-		if counter > 200 && delay.unwrap_or(10_000_000) > 100_000 {
-			// add additional check before the task will block
-			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-				// allow network interrupts
-				set_polling_mode(false);
-				// enable interrupts
-				interrupts::enable();
-
-				return t;
-			}
-
+		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 100_000 {
 			let ticks = crate::arch::processor::get_timer_ticks();
-			let wakeup_time = timeout
-				.map(|duration| {
-					core::cmp::min(
-						u64::try_from((start + duration).total_micros()).unwrap(),
-						ticks + delay.unwrap_or(blocking_time),
-					)
-				})
-				.or(Some(ticks + delay.unwrap_or(blocking_time)));
+			let wakeup_time =
+				timeout.map(|duration| u64::try_from((start + duration).total_micros()).unwrap());
 			let network_timer = delay.map(|d| ticks + d);
 			let core_scheduler = core_scheduler();
-			blocking_time *= 2;
 
 			core_scheduler.add_network_timer(network_timer);
 			core_scheduler.block_current_task(wakeup_time);
@@ -313,20 +295,32 @@ where
 			// allow network interrupts
 			set_polling_mode(false);
 
+			// add additional check if we miss a network interrupt
+			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
+				// move task from the list of blocked task
+				let handle = core_scheduler.get_current_task_handle();
+				core_scheduler.custom_wakeup(handle);
+
+				// enable interrupts
+				interrupts::enable();
+
+				return t;
+			}
+
 			// enable interrupts
 			interrupts::enable();
 
 			// switch to another task
 			core_scheduler.reschedule();
-
-			// reset polling counter
-			counter = 0;
+			backoff.reset();
 
 			// Enter polling mode => no NIC interrupts
 			set_polling_mode(true);
 		} else {
 			// enable interrupts
 			interrupts::enable();
+
+			backoff.snooze();
 		}
 	}
 }
