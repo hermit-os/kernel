@@ -2,7 +2,6 @@
 //!
 //! The module contains ...
 
-use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -22,7 +21,7 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
 #[cfg(feature = "pci")]
 use crate::drivers::net::virtio_pci::NetDevCfgRaw;
-use crate::drivers::net::NetworkInterface;
+use crate::drivers::net::NetworkDriver;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -30,6 +29,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
 	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
+use crate::executor::device::{RxToken, TxToken};
 
 pub const ETH_HDR: usize = 14usize;
 
@@ -524,11 +524,10 @@ pub(crate) struct VirtioNetDriver {
 
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
-	pub(super) polling_mode_counter: u32,
 	pub(super) mtu: u16,
 }
 
-impl NetworkInterface for VirtioNetDriver {
+impl NetworkDriver for VirtioNetDriver {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
@@ -544,110 +543,89 @@ impl NetworkInterface for VirtioNetDriver {
 		self.mtu
 	}
 
-	/// Provides the "user-space" with a pointer to usable memory.
-	///
-	/// Therefore the driver checks if a free BufferToken is in its TxQueues struct.
-	/// If one is found, the function does return a pointer to the memory area, where
-	/// the "user-space" can write to and a raw pointer to the token in order to provide
-	/// it to the queue after the "user-space" driver has written to the buffer.
-	///
-	/// If not BufferToken is found the functions returns an error.
-	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
-		// Adding virtio header size to length.
-		let len = len + core::mem::size_of::<VirtioNetHdr>();
-
-		match self.send_vqs.get_tkn(len) {
-			Some((mut buff_tkn, _vq_index)) => {
-				let (send_ptrs, _) = buff_tkn.raw_ptrs();
-				// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
-				// see TxQueue.add()
-				let (buff_ptr, _) = send_ptrs.unwrap()[0];
-
-				// Do not show user-space memory for VirtioNetHdr.
-				let buff_ptr = unsafe {
-					buff_ptr.offset(isize::try_from(core::mem::size_of::<VirtioNetHdr>()).unwrap())
-				};
-
-				Ok((buff_ptr, Box::into_raw(Box::new(buff_tkn)) as usize))
-			}
-			None => Err(()),
-		}
-	}
-
-	fn free_tx_buffer(&self, token: usize) {
-		unsafe { drop(Box::from_raw(token as *mut BufferToken)) }
-	}
-
-	fn send_tx_buffer(&mut self, tkn_handle: usize, _len: usize) -> Result<(), ()> {
-		// This does not result in a new assignment, or in a drop of the BufferToken, which
-		// would be dangerous, as the memory is freed then.
-		let mut tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
-
-		// If a checksum isn't necessary, we have inform the host within the header
-		// see Virtio specification 5.1.6.2
-		if !self.with_checksums() {
-			unsafe {
-				let (send_ptrs, _) = tkn.raw_ptrs();
-				let (addr, _) = send_ptrs.unwrap()[0];
-				let header = addr as *mut VirtioNetHdr;
-				let type_ = u16::from_be(
-					*(addr.offset(
-						(12 + core::mem::size_of::<VirtioNetHdr>())
-							.try_into()
-							.unwrap(),
-					) as *const u16),
-				);
-
-				*header = Default::default();
-				match type_ {
-					0x0800 /* IPv4 */ => {
-						let protocol = *(addr.offset((14+9+core::mem::size_of::<VirtioNetHdr>()).try_into().unwrap()) as *const u8);
-						if protocol == 6 /* TCP */ {
-							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							(*header).csum_start = 14+20;
-							(*header).csum_offset = 16;
-						} else if protocol == 17 /* UDP */ {
-							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							(*header).csum_start = 14+20;
-							(*header).csum_offset = 6;
-						}
-					},
-					0x86DD /* IPv6 */ => {
-						let protocol = *(addr.offset((14+9+core::mem::size_of::<VirtioNetHdr>()).try_into().unwrap()) as *const u8);
-						if protocol == 6 /* TCP */ {
-							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							(*header).csum_start = 14+40;
-							(*header).csum_offset = 16;
-						} else if protocol == 17 /* UDP */ {
-							(*header).flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							(*header).csum_start = 14+40;
-							(*header).csum_offset = 6;
-						}
-					},
-					_ => {},
-				}
-			}
-		}
-
-		tkn.provide()
-			.dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
-
-		Ok(())
-	}
-
 	fn has_packet(&self) -> bool {
 		self.recv_vqs.poll();
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	fn receive_rx_buffer(&mut self, buffer: &mut [u8]) -> Result<usize, ()> {
+	/// Provides smoltcp a slice to copy the IP packet and transfer the packet
+	/// to the send queue.
+	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
+		if let Some((mut buff_tkn, _vq_index)) = self
+			.send_vqs
+			.get_tkn(len + core::mem::size_of::<VirtioNetHdr>())
+		{
+			let (send_ptrs, _) = buff_tkn.raw_ptrs();
+			// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
+			// see TxQueue.add()
+			let (buff_ptr, _) = send_ptrs.unwrap()[0];
+
+			// Do not show smoltcp the memory region for VirtioNetHdr.
+			let header = unsafe { &mut *(buff_ptr as *mut VirtioNetHdr) };
+			*header = Default::default();
+			let buff_ptr = unsafe {
+				buff_ptr.offset(isize::try_from(core::mem::size_of::<VirtioNetHdr>()).unwrap())
+			};
+
+			let buf_slice: &'static mut [u8] =
+				unsafe { core::slice::from_raw_parts_mut(buff_ptr, len) };
+			let result = f(buf_slice);
+
+			// If a checksum isn't necessary, we have inform the host within the header
+			// see Virtio specification 5.1.6.2
+			if !self.with_checksums() {
+				let type_ = unsafe { u16::from_be(*(buff_ptr.offset(12) as *const u16)) };
+
+				match type_ {
+					0x0800 /* IPv4 */ => {
+						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						if protocol == 6 /* TCP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+20;
+							header.csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+20;
+							header.csum_offset = 6;
+						}
+					},
+					0x86DD /* IPv6 */ => {
+						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						if protocol == 6 /* TCP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+40;
+							header.csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+40;
+							header.csum_offset = 6;
+						}
+					},
+					_ => {},
+				}
+			}
+
+			buff_tkn
+				.provide()
+				.dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
+
+			result
+		} else {
+			panic!("Unable to get token for send queue");
+		}
+	}
+
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
 		match self.recv_vqs.get_next() {
 			Some(transfer) => {
 				let transfer = match RxQueues::post_processing(transfer) {
 					Ok(trf) => trf,
 					Err(vnet_err) => {
-						error!("Post processing failed. Err: {:?}", vnet_err);
-						return Err(());
+						warn!("Post processing failed. Err: {:?}", vnet_err);
+						return None;
 					}
 				};
 
@@ -671,15 +649,14 @@ impl NetworkInterface for VirtioNetDriver {
 					// so this is fine.
 					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
 					let ref_data: &'static mut [u8] = unsafe { &mut *(recv_ref) };
-					let len = ref_data.len();
-					buffer[..len].copy_from_slice(ref_data);
+					let vec_data = ref_data.to_vec();
 					transfer
 						.reuse()
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(len)
+					Some((RxToken::new(vec_data), TxToken::new()))
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
 					/*let header = unsafe {
@@ -699,15 +676,14 @@ impl NetworkInterface for VirtioNetDriver {
 							packet.len() - mem::size_of::<VirtioNetHdr>(),
 						)
 					};
-					let len = ref_data.len();
-					buffer[..len].copy_from_slice(ref_data);
+					let vec_data = ref_data.to_vec();
 					transfer
 						.reuse()
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(len)
+					Some((RxToken::new(vec_data), TxToken::new()))
 				} else {
 					error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
 					transfer
@@ -718,24 +694,18 @@ impl NetworkInterface for VirtioNetDriver {
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Err(())
+					None
 				}
 			}
-			None => Err(()),
+			None => None,
 		}
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			if self.polling_mode_counter == 0 {
-				self.disable_interrupts();
-			}
-			self.polling_mode_counter += 1;
+			self.disable_interrupts();
 		} else {
-			self.polling_mode_counter -= 1;
-			if self.polling_mode_counter == 0 {
-				self.enable_interrupts();
-			}
+			self.enable_interrupts();
 		}
 	}
 
@@ -1191,50 +1161,6 @@ pub mod constants {
 		}
 	}
 
-	impl BitOr for NetHdrFlag {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrFlag) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrFlag> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrFlag) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrFlag {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrFlag> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrFlag) {
-			*self &= u8::from(rhs);
-		}
-	}
-
 	/// Enum containing Virtios netword GSO types
 	///
 	/// See Virtio specification v1.1. - 5.1.6
@@ -1263,50 +1189,6 @@ pub mod constants {
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6 => 4,
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_ECN => 0x80,
 			}
-		}
-	}
-
-	impl BitOr for NetHdrGSO {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrGSO) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrGSO> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrGSO) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrGSO {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrGSO> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrGSO) {
-			*self &= u8::from(rhs);
 		}
 	}
 

@@ -108,6 +108,7 @@ pub fn freq() -> Option<u16> {
 	CLI.get().unwrap().freq
 }
 
+#[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
 	CLI.get().unwrap().env_vars.get(key)
 }

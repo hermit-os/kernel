@@ -56,6 +56,7 @@ acpi = []
 smp = ["include-transformed"]
 fsgsbase = []
 trace = []
+rtl8139 = ["tcp", "pci"]
 tcp = [
     "smoltcp",
 ]
