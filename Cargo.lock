@@ -353,7 +353,6 @@ dependencies = [
  "hermit-entry",
  "hermit-sync",
  "include-transformed",
- "linked_list_allocator",
  "lock_api",
  "log",
  "multiboot",
@@ -367,6 +366,7 @@ dependencies = [
  "rand_chacha",
  "shell-words",
  "smoltcp",
+ "talc",
  "time",
  "tock-registers",
  "uart_16550",
@@ -374,12 +374,6 @@ dependencies = [
  "x86_64",
  "zerocopy",
 ]
-
-[[package]]
-name = "linked_list_allocator"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9afa463f5405ee81cdb9cc2baf37e08ec7e4c8209442b5d72c04cfb2cd6e6286"
 
 [[package]]
 name = "linux-raw-sys"
@@ -853,6 +847,12 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
+
+[[package]]
+name = "talc"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f5a67558ec5b9d8f6356bdf89b3b9087c705d6aed2196457fb3c0979e57fd9f"
 
 [[package]]
 name = "tempfile"
