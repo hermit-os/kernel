@@ -181,9 +181,6 @@ pub fn init() {
 		}
 
 		heap_start_addr = virt_addr;
-		unsafe {
-			crate::ALLOCATOR.init(virt_addr.as_mut_ptr(), virt_size);
-		}
 
 		map_addr = virt_addr + counter;
 		map_size = virt_size - counter;
@@ -214,6 +211,14 @@ pub fn init() {
 	}
 
 	let heap_end_addr = map_addr;
+
+	#[cfg(not(feature = "newlib"))]
+	unsafe {
+		crate::ALLOCATOR.init(
+			heap_start_addr.as_mut_ptr(),
+			(heap_end_addr - heap_start_addr).into(),
+		);
+	}
 
 	let heap_addr_range = heap_start_addr..heap_end_addr;
 	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
