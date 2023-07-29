@@ -1191,50 +1191,6 @@ pub mod constants {
 		}
 	}
 
-	impl BitOr for NetHdrFlag {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrFlag) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrFlag> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrFlag) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrFlag {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrFlag> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrFlag) {
-			*self &= u8::from(rhs);
-		}
-	}
-
 	/// Enum containing Virtios netword GSO types
 	///
 	/// See Virtio specification v1.1. - 5.1.6
@@ -1263,50 +1219,6 @@ pub mod constants {
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6 => 4,
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_ECN => 0x80,
 			}
-		}
-	}
-
-	impl BitOr for NetHdrGSO {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrGSO) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrGSO> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrGSO) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrGSO {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrGSO> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrGSO) {
-			*self &= u8::from(rhs);
 		}
 	}
 
