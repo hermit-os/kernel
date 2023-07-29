@@ -296,6 +296,7 @@ where
 			set_polling_mode(false);
 
 			// add additional check if we miss a network interrupt
+			network_poll(now);
 			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
 				// move task from the list of blocked task
 				let handle = core_scheduler.get_current_task_handle();
