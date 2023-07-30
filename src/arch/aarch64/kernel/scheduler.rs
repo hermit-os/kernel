@@ -209,7 +209,7 @@ impl TaskStacks {
 		}
 	}
 }
-
+#[cfg(target_os = "none")]
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
 		// we should never deallocate a boot stack
