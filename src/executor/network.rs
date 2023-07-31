@@ -18,6 +18,8 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch::core_local::*;
 use crate::arch::{self, interrupts};
+#[cfg(feature = "pci")]
+use crate::drivers::net::NetworkDriver;
 use crate::executor::device::HermitNet;
 use crate::executor::{spawn, TaskNotify};
 

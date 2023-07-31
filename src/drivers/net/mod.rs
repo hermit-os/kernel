@@ -1,9 +1,10 @@
-#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+#[cfg(feature = "rtl8139")]
 pub mod rtl8139;
-#[cfg(not(feature = "pci"))]
+#[cfg(all(not(feature = "pci"), not(feature = "rtl8139")))]
 pub mod virtio_mmio;
+#[cfg(not(feature = "rtl8139"))]
 pub mod virtio_net;
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "pci", not(feature = "rtl8139")))]
 pub mod virtio_pci;
 
 #[cfg(target_arch = "x86_64")]
@@ -18,25 +19,22 @@ use crate::arch::kernel::mmio as hardware;
 use crate::arch::scheduler::State;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
+use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
-pub trait NetworkInterface {
+pub(crate) trait NetworkDriver {
 	/// Returns the mac address of the device.
 	fn get_mac_address(&self) -> [u8; 6];
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16;
-	/// Get buffer to create a TX packet
-	///
-	/// This returns ownership of the TX buffer.
-	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()>;
-	/// Frees the TX buffer (takes ownership)
-	fn free_tx_buffer(&self, token: usize);
-	/// Send TC packets (takes TX buffer ownership)
-	fn send_tx_buffer(&mut self, tkn_handle: usize, len: usize) -> Result<(), ()>;
+	/// Get buffer with the received packet
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)>;
+	/// Send packet with the size `len`
+	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R;
 	/// Check if a packet is available
 	fn has_packet(&self) -> bool;
-	/// Get RX buffer with an received packet
-	fn receive_rx_buffer(&mut self, buffer: &mut [u8]) -> Result<usize, ()>;
 	/// Enable / disable the polling mode of the network interface
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available

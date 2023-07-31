@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 #[cfg(feature = "tcp")]
-mod device;
+pub(crate) mod device;
 #[cfg(feature = "tcp")]
 pub(crate) mod network;
 pub(crate) mod task;
