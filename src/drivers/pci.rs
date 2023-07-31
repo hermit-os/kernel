@@ -482,6 +482,7 @@ impl PciDriver {
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
+			#[allow(unreachable_patterns)]
 			_ => None,
 		}
 	}
