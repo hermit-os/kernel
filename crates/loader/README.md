@@ -25,7 +25,7 @@ Boot a hermit application:
 $ qemu-system-x86_64 \
     -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
     -smp 1 \
-    -m 64M \
+    -m 128M \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
     -display none -serial stdio \
     -kernel <LOADER> \
