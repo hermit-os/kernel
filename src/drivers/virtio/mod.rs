@@ -10,7 +10,7 @@ pub mod error {
 
 	#[cfg(feature = "pci")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
-	#[cfg(not(feature = "rtl8139"))]
+	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
@@ -20,7 +20,7 @@ pub mod error {
 		#[cfg(feature = "pci")]
 		FromPci(PciError),
 		DevNotSupported(u16),
-		#[cfg(not(feature = "rtl8139"))]
+		#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 		NetDriver(VirtioNetError),
 		#[cfg(feature = "pci")]
 		FsDriver(VirtioFsError),
@@ -42,7 +42,7 @@ pub mod error {
                     PciError::NoVirtioCaps(id) => write!(f, "Driver failed to initialize device with id: {id:#x}. Reason: No Virtio capabilities were found."),
                 },
                 VirtioError::DevNotSupported(id) => write!(f, "Device with id {id:#x} not supported."),
-				#[cfg(not(feature = "rtl8139"))]
+				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
                 VirtioError::NetDriver(net_error) => match net_error {
                     VirtioNetError::General => write!(f, "Virtio network driver failed due to unknown reasons!"),
                     VirtioNetError::NoDevCfg(id) => write!(f, "Virtio network driver failed, for device {id:x}, due to a missing or malformed device config!"),

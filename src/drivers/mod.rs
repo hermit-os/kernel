@@ -1,6 +1,7 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
 pub mod fs;
+#[cfg(feature = "tcp")]
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
