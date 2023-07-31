@@ -367,6 +367,7 @@ pub(crate) enum VirtioDriver {
 	Network(VirtioNetDriver),
 }
 
+#[allow(unused_variables)]
 pub(crate) fn init_device(
 	registers: &'static mut MmioRegisterLayout,
 	irq_no: u8,

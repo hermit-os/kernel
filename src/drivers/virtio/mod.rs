@@ -15,6 +15,7 @@ pub mod error {
 	#[cfg(feature = "pci")]
 	use crate::drivers::pci::error::PciError;
 
+	#[allow(dead_code)]
 	#[derive(Debug)]
 	pub enum VirtioError {
 		#[cfg(feature = "pci")]
