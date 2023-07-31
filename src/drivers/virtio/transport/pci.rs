@@ -8,16 +8,16 @@ use core::intrinsics::unaligned_volatile_store;
 use core::mem;
 use core::result::Result;
 
-#[cfg(not(feature = "rtl8139"))]
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
-#[cfg(not(feature = "rtl8139"))]
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::network_irqhandler;
-#[cfg(not(feature = "rtl8139"))]
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
@@ -1252,7 +1252,7 @@ pub(crate) fn init_device(
 				VirtioError::DevNotSupported(device_id),
 			))
 		}
-		#[cfg(not(feature = "rtl8139"))]
+		#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
@@ -1299,7 +1299,7 @@ pub(crate) fn init_device(
 	match virt_drv {
 		Ok(drv) => {
 			match &drv {
-				#[cfg(not(feature = "rtl8139"))]
+				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 				VirtioDriver::Network(_) => {
 					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
@@ -1317,7 +1317,7 @@ pub(crate) fn init_device(
 }
 
 pub(crate) enum VirtioDriver {
-	#[cfg(not(feature = "rtl8139"))]
+	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	Network(VirtioNetDriver),
 	FileSystem(VirtioFsDriver),
 }

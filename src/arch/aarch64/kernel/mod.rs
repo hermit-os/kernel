@@ -1,6 +1,6 @@
 pub mod core_local;
 pub mod interrupts;
-#[cfg(not(feature = "pci"))]
+#[cfg(all(not(feature = "pci"), feature = "tcp"))]
 pub mod mmio;
 #[cfg(feature = "pci")]
 pub mod pci;
