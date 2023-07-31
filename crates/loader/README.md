@@ -24,7 +24,8 @@ Boot a hermit application:
 ```
 $ qemu-system-x86_64 \
     -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
-    -smp 1 -m 64M \
+    -smp 1 \
+    -m 64M \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
     -display none -serial stdio \
     -kernel <LOADER> \
@@ -43,7 +44,9 @@ On AArch64, the base command is as follows:
 ```
 $ qemu-system-aarch64 \
                   -machine virt,gic-version=3 \
-                  -cpu cortex-a76 -smp 1 -m 512M  \
+                  -cpu cortex-a76 \
+                  -smp 1 \
+                  -m 512M  \
                   -semihosting \
                   -display none -serial stdio \
                   -kernel <LOADER> \
