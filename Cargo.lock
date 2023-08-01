@@ -856,9 +856,9 @@ dependencies = [
 
 [[package]]
 name = "talc"
-version = "2.0.0"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f5a67558ec5b9d8f6356bdf89b3b9087c705d6aed2196457fb3c0979e57fd9f"
+checksum = "01bb0495aaae3e2a1ae07e91583476607f09275f6572d326a5a13796f05098d0"
 
 [[package]]
 name = "tempfile"
