@@ -229,6 +229,11 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, 
 where
 	F: Future<Output = Result<T, i32>>,
 {
+	// be sure that network interrupts are enabled
+	if let Some(driver) = crate::drivers::pci::get_network_driver() {
+		driver.lock().set_polling_mode(false)
+	}
+
 	// be sure that we are not interrupted by a timer, which is able
 	// to call `reschedule`
 	interrupts::disable();
