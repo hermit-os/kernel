@@ -1,7 +1,7 @@
 use hermit_sync::InterruptTicketMutex;
 
-use crate::drivers::net::NetworkInterface;
+use crate::drivers::net::virtio_net::VirtioNetDriver;
 
-pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkInterface>> {
+pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
 	None
 }
