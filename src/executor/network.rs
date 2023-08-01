@@ -18,7 +18,11 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch::core_local::*;
 use crate::arch::{self, interrupts};
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_network_driver;
 use crate::executor::device::HermitNet;
 use crate::executor::{spawn, TaskNotify};
 
@@ -231,7 +235,7 @@ where
 	F: Future<Output = Result<T, i32>>,
 {
 	// be sure that network interrupts are enabled
-	if let Some(driver) = crate::drivers::pci::get_network_driver() {
+	if let Some(driver) = get_network_driver() {
 		driver.lock().set_polling_mode(false)
 	}
 

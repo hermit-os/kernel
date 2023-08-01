@@ -11,7 +11,11 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
+#[cfg(not(feature = "pci"))]
+use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
+#[cfg(feature = "pci")]
+use crate::drivers::pci::get_network_driver;
 use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
@@ -294,10 +298,7 @@ impl<T> Socket<T> {
 
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 
-		crate::drivers::pci::get_network_driver()
-			.unwrap()
-			.lock()
-			.set_polling_mode(true);
+		get_network_driver().unwrap().lock().set_polling_mode(true);
 
 		if self.nonblocking.load(Ordering::Acquire) {
 			poll_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
