@@ -7,7 +7,7 @@ use core::sync::atomic::{AtomicU16, Ordering};
 use core::task::{Context, Poll};
 
 use crossbeam_utils::Backoff;
-use hermit_sync::InterruptTicketMutex;
+use hermit_sync::{without_interrupts, InterruptTicketMutex};
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
@@ -18,8 +18,6 @@ use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch::core_local::*;
 use crate::arch::{self, interrupts};
-#[cfg(feature = "pci")]
-use crate::drivers::net::NetworkDriver;
 use crate::executor::device::HermitNet;
 use crate::executor::{spawn, TaskNotify};
 
@@ -208,15 +206,6 @@ impl<'a> NetworkInterface<'a> {
 	}
 }
 
-/// set driver in polling mode
-#[inline]
-fn set_polling_mode(value: bool) {
-	#[cfg(feature = "pci")]
-	if let Some(driver) = crate::drivers::pci::get_network_driver() {
-		driver.lock().set_polling_mode(value)
-	}
-}
-
 #[inline]
 fn network_delay(timestamp: Instant) -> Option<Duration> {
 	crate::executor::network::NIC
@@ -240,11 +229,12 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, 
 where
 	F: Future<Output = Result<T, i32>>,
 {
-	// Enter polling mode => no NIC interrupts
-	set_polling_mode(true);
+	// be sure that we are not interrupted by a timer, which is able
+	// to call `reschedule`
+	interrupts::disable();
 
 	let backoff = Backoff::new();
-	let start = crate::executor::network::now();
+	let start = now();
 	let task_notify = Arc::new(TaskNotify::new());
 	let waker = task_notify.into();
 	let mut cx = Context::from_waker(&waker);
@@ -256,73 +246,52 @@ where
 		crate::executor::run();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			let wakeup_time = network_delay(crate::executor::network::now())
+			let network_timer = network_delay(now())
 				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-			core_scheduler().add_network_timer(wakeup_time);
+			core_scheduler().add_network_timer(network_timer);
 
-			// allow network interrupts
-			set_polling_mode(false);
+			// enable interrupts
+			interrupts::enable();
 
 			return t;
 		}
 
 		if let Some(duration) = timeout {
 			if crate::executor::network::now() >= start + duration {
-				let wakeup_time = network_delay(crate::executor::network::now())
+				let network_timer = network_delay(now())
 					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(wakeup_time);
+				core_scheduler().add_network_timer(network_timer);
 
-				// allow network interrupts
-				set_polling_mode(false);
+				// enable interrupts
+				interrupts::enable();
 
 				return Err(-crate::errno::ETIME);
 			}
 		}
 
-		// be sure that we are not interrupted by a timer, which is able
-		// to call `reschedule`
-		interrupts::disable();
 		let now = crate::executor::network::now();
 		let delay = network_delay(now).map(|d| d.total_micros());
-		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 100_000 {
-			let ticks = crate::arch::processor::get_timer_ticks();
+		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
+			let core_scheduler = core_scheduler();
 			let wakeup_time =
 				timeout.map(|duration| u64::try_from((start + duration).total_micros()).unwrap());
-			let network_timer = delay.map(|d| ticks + d);
-			let core_scheduler = core_scheduler();
+			let network_timer = network_delay(now)
+				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 
 			core_scheduler.add_network_timer(network_timer);
 			core_scheduler.block_current_task(wakeup_time);
-
-			// allow network interrupts
-			set_polling_mode(false);
-
-			// add additional check if we miss a network interrupt
-			network_poll(now);
-			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-				// move task from the list of blocked task
-				let handle = core_scheduler.get_current_task_handle();
-				core_scheduler.custom_wakeup(handle);
-
-				// enable interrupts
-				interrupts::enable();
-
-				return t;
-			}
 
 			// enable interrupts
 			interrupts::enable();
 
 			// switch to another task
 			core_scheduler.reschedule();
+
+			// disable interrupts
+			interrupts::disable();
+
 			backoff.reset();
-
-			// Enter polling mode => no NIC interrupts
-			set_polling_mode(true);
 		} else {
-			// enable interrupts
-			interrupts::enable();
-
 			backoff.snooze();
 		}
 	}
@@ -333,41 +302,36 @@ pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i
 where
 	F: Future<Output = Result<T, i32>>,
 {
-	// Enter polling mode => no NIC interrupts
-	set_polling_mode(true);
+	// be sure that we are not interrupted by a timer, which is able
+	// to call `reschedule`
+	without_interrupts(|| {
+		let start = now();
+		let waker = core::task::Waker::noop();
+		let mut cx = Context::from_waker(&waker);
+		let mut future = future;
+		let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
 
-	let start = crate::executor::network::now();
-	let waker = core::task::Waker::noop();
-	let mut cx = Context::from_waker(&waker);
-	let mut future = future;
-	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
+		loop {
+			// run background tasks
+			crate::executor::run();
 
-	loop {
-		// run background tasks
-		crate::executor::run();
-
-		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			let wakeup_time = network_delay(crate::executor::network::now())
-				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-			core_scheduler().add_network_timer(wakeup_time);
-
-			// allow interrupts => NIC thread is able to run
-			set_polling_mode(false);
-
-			return t;
-		}
-
-		if let Some(duration) = timeout {
-			if crate::executor::network::now() >= start + duration {
-				let wakeup_time = network_delay(crate::executor::network::now())
+			if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
+				let wakeup_time = network_delay(now())
 					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 				core_scheduler().add_network_timer(wakeup_time);
 
-				// allow interrupts => NIC thread is able to run
-				set_polling_mode(false);
+				return t;
+			}
 
-				return Err(-crate::errno::ETIME);
+			if let Some(duration) = timeout {
+				if crate::executor::network::now() >= start + duration {
+					let wakeup_time = network_delay(now())
+						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+					core_scheduler().add_network_timer(wakeup_time);
+
+					return Err(-crate::errno::ETIME);
+				}
 			}
 		}
-	}
+	})
 }

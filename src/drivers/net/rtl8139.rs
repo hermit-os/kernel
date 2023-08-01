@@ -211,7 +211,6 @@ pub(crate) struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
-	polling_mode_counter: u32,
 }
 
 impl NetworkDriver for RTL8139Driver {
@@ -307,20 +306,13 @@ impl NetworkDriver for RTL8139Driver {
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			if self.polling_mode_counter == 0 {
-				// disable interrupts from the NIC
-				unsafe {
-					outw(self.iobase + IMR, INT_MASK_NO_ROK);
-				}
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK_NO_ROK);
 			}
-			self.polling_mode_counter += 1;
 		} else {
-			self.polling_mode_counter -= 1;
-			if self.polling_mode_counter == 0 {
-				// Enable all known interrupts by setting the interrupt mask.
-				unsafe {
-					outw(self.iobase + IMR, INT_MASK);
-				}
+			// Enable all known interrupts by setting the interrupt mask.
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK);
 			}
 		}
 	}
@@ -594,6 +586,5 @@ pub(crate) fn init_device(
 		rxbuffer,
 		rxpos: 0,
 		txbuffer,
-		polling_mode_counter: 0,
 	})
 }

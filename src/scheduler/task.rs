@@ -500,6 +500,8 @@ impl BlockedTaskQueue {
 				if let Some(node) = cursor.current() {
 					if node.wakeup_time.is_none() || wt < node.wakeup_time.unwrap() {
 						arch::set_oneshot_timer(wakeup_time);
+					} else {
+						arch::set_oneshot_timer(node.wakeup_time);
 					}
 				} else {
 					arch::set_oneshot_timer(wakeup_time);

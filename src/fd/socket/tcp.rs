@@ -11,6 +11,7 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
+use crate::drivers::net::NetworkDriver;
 use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
@@ -102,7 +103,7 @@ impl<T> Socket<T> {
 								warn!("async_read: Unable to consume data");
 								Poll::Ready(Ok(0))
 							} else {
-								socket.register_recv_waker(cx.waker());
+								//socket.register_recv_waker(cx.waker());
 								Poll::Pending
 							}
 						}
@@ -153,7 +154,7 @@ impl<T> Socket<T> {
 								warn!("async_write: Unable to consume data");
 								Poll::Ready(Ok(0))
 							} else {
-								socket.register_send_waker(cx.waker());
+								//socket.register_send_waker(cx.waker());
 								Poll::Pending
 							}
 						}
@@ -293,8 +294,13 @@ impl<T> Socket<T> {
 
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 
+		crate::drivers::pci::get_network_driver()
+			.unwrap()
+			.lock()
+			.set_polling_mode(true);
+
 		if self.nonblocking.load(Ordering::Acquire) {
-			block_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			poll_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -302,7 +308,7 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			block_on(self.async_read(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_read(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
 		}
 	}
 
