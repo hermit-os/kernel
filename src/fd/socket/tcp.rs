@@ -71,7 +71,7 @@ impl<T> Socket<T> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
-			let n = future::poll_fn(|cx| {
+			let n = future::poll_fn(|_cx| {
 				self.with(|socket| {
 					if socket.can_recv() {
 						return Poll::Ready(
@@ -126,7 +126,7 @@ impl<T> Socket<T> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
-			let n = future::poll_fn(|cx| {
+			let n = future::poll_fn(|_cx| {
 				self.with(|socket| {
 					if socket.can_send() {
 						return Poll::Ready(
