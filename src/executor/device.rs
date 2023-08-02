@@ -1,6 +1,5 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::slice;
 #[cfg(not(feature = "dhcpv4"))]
 use core::str::FromStr;
 
@@ -17,6 +16,7 @@ use super::network::{NetworkInterface, NetworkState};
 use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::arch::kernel::mmio as hardware;
+use crate::drivers::net::NetworkDriver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci as hardware;
 
@@ -177,15 +177,8 @@ impl Device for HermitNet {
 	}
 
 	fn receive(&mut self, _timestamp: Instant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
-		let mut buffer = vec![0; self.mtu.into()];
 		if let Some(driver) = hardware::get_network_driver() {
-			match driver.lock().receive_rx_buffer(&mut buffer[..]) {
-				Ok(size) => {
-					buffer.resize(size, 0);
-					Some((RxToken::new(buffer), TxToken::new()))
-				}
-				_ => None,
-			}
+			driver.lock().receive_packet()
 		} else {
 			None
 		}
@@ -195,6 +188,9 @@ impl Device for HermitNet {
 		Some(TxToken::new())
 	}
 }
+
+// Unique handle to identify the RxToken
+pub(crate) type RxHandle = usize;
 
 #[doc(hidden)]
 pub(crate) struct RxToken {
@@ -230,18 +226,9 @@ impl phy::TxToken for TxToken {
 	where
 		F: FnOnce(&mut [u8]) -> R,
 	{
-		let (tx_buffer, handle) = hardware::get_network_driver()
-			.unwrap()
-			.lock()
-			.get_tx_buffer(len)
-			.unwrap();
-		let tx_slice: &'static mut [u8] = unsafe { slice::from_raw_parts_mut(tx_buffer, len) };
-		let result = f(tx_slice);
 		hardware::get_network_driver()
 			.unwrap()
 			.lock()
-			.send_tx_buffer(handle, len)
-			.expect("Unable to send TX buffer");
-		result
+			.send_packet(len, f)
 	}
 }

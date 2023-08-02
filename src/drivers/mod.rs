@@ -1,6 +1,9 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
 pub mod fs;
+#[cfg(not(feature = "pci"))]
+pub mod mmio;
+#[cfg(feature = "tcp")]
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
@@ -12,14 +15,14 @@ pub mod virtio;
 pub mod error {
 	use core::fmt;
 
-	#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	use crate::drivers::virtio::error::VirtioError;
 
 	#[derive(Debug)]
 	pub enum DriverError {
 		InitVirtioDevFail(VirtioError),
-		#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+		#[cfg(feature = "rtl8139")]
 		InitRTL8139DevFail(RTL8139Error),
 	}
 
@@ -29,7 +32,7 @@ pub mod error {
 		}
 	}
 
-	#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+	#[cfg(feature = "rtl8139")]
 	impl From<RTL8139Error> for DriverError {
 		fn from(err: RTL8139Error) -> Self {
 			DriverError::InitRTL8139DevFail(err)
@@ -42,7 +45,7 @@ pub mod error {
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")
 				}
-				#[cfg(all(feature = "pci", not(target_arch = "aarch64")))]
+				#[cfg(feature = "rtl8139")]
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {err:?}")
 				}

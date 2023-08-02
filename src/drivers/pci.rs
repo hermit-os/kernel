@@ -13,10 +13,10 @@ use pci_types::{
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
-#[cfg(not(target_arch = "aarch64"))]
+#[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::pci as pci_virtio;
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
@@ -456,16 +456,24 @@ pub(crate) fn print_information() {
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum PciDriver {
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
+	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
-	#[cfg(not(target_arch = "aarch64"))]
+	#[cfg(all(feature = "rtl8139", feature = "tcp"))]
 	RTL8139Net(InterruptTicketMutex<RTL8139Driver>),
 }
 
 impl PciDriver {
-	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<dyn NetworkInterface>> {
+	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
-			#[cfg(not(target_arch = "aarch64"))]
+			_ => None,
+		}
+	}
+
+	#[cfg(all(feature = "rtl8139", feature = "tcp"))]
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<RTL8139Driver>> {
+		match self {
 			Self::RTL8139Net(drv) => Some(drv),
 			_ => None,
 		}
@@ -474,6 +482,7 @@ impl PciDriver {
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
+			#[allow(unreachable_patterns)]
 			_ => None,
 		}
 	}
@@ -485,7 +494,13 @@ pub(crate) fn register_driver(drv: PciDriver) {
 	}
 }
 
-pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkInterface>> {
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
+	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
+}
+
+#[cfg(all(feature = "rtl8139", feature = "tcp"))]
+pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL8139Driver>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
@@ -498,8 +513,6 @@ pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<Vi
 }
 
 pub(crate) fn init_drivers() {
-	let mut nic_available = false;
-
 	// virtio: 4.1.2 PCI Device Discovery
 	without_interrupts(|| {
 		for adapter in unsafe {
@@ -514,8 +527,8 @@ pub(crate) fn init_drivers() {
 			);
 
 			match pci_virtio::init_device(adapter) {
+				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 				Ok(VirtioDriver::Network(drv)) => {
-					nic_available = true;
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 				}
 				Ok(VirtioDriver::FileSystem(drv)) => {
@@ -525,24 +538,21 @@ pub(crate) fn init_drivers() {
 			}
 		}
 
-		// do we already found a network interface?
-		#[cfg(not(target_arch = "aarch64"))]
-		if !nic_available {
-			// Searching for Realtek RTL8139, which is supported by Qemu
-			for adapter in unsafe {
-				PCI_DEVICES.iter().filter(|x| {
-					let (vendor_id, device_id) = x.id();
-					vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
-				})
-			} {
-				info!(
-					"Found Realtek network device with device id {:#x}",
-					adapter.device_id()
-				);
+		// Searching for Realtek RTL8139, which is supported by Qemu
+		#[cfg(feature = "rtl8139")]
+		for adapter in unsafe {
+			PCI_DEVICES.iter().filter(|x| {
+				let (vendor_id, device_id) = x.id();
+				vendor_id == 0x10ec && (0x8138..=0x8139).contains(&device_id)
+			})
+		} {
+			info!(
+				"Found Realtek network device with device id {:#x}",
+				adapter.device_id()
+			);
 
-				if let Ok(drv) = rtl8139::init_device(adapter) {
-					register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
-				}
+			if let Ok(drv) = rtl8139::init_device(adapter) {
+				register_driver(PciDriver::RTL8139Net(InterruptTicketMutex::new(drv)))
 			}
 		}
 	});

@@ -16,7 +16,8 @@ use crate::arch::interrupts;
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
-pub mod task;
+
+pub(crate) mod task;
 
 static NO_TASKS: AtomicU32 = AtomicU32::new(0);
 /// Map between Core ID and per-core scheduler
