@@ -14,12 +14,6 @@ use crate::arch::core_local::*;
 use crate::arch::interrupts;
 #[cfg(target_arch = "x86_64")]
 use crate::arch::switch::{switch_to_fpu_owner, switch_to_task};
-#[cfg(all(not(feature = "pci"), feature = "tcp"))]
-use crate::drivers::mmio::get_network_driver;
-#[cfg(feature = "tcp")]
-use crate::drivers::net::NetworkDriver;
-#[cfg(all(feature = "pci", feature = "tcp"))]
-use crate::drivers::pci::get_network_driver;
 use crate::kernel::scheduler::TaskStacks;
 use crate::scheduler::task::*;
 
@@ -532,11 +526,6 @@ impl PerCoreScheduler {
 
 			// run async tasks
 			crate::executor::run();
-
-			#[cfg(feature = "tcp")]
-			if let Some(driver) = get_network_driver() {
-				driver.lock().set_polling_mode(false)
-			}
 
 			// do housekeeping
 			self.cleanup_tasks();

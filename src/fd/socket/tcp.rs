@@ -11,11 +11,6 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_network_driver;
-use crate::drivers::net::NetworkDriver;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_network_driver;
 use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
@@ -72,65 +67,47 @@ impl<T> Socket<T> {
 	}
 
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
-		let mut pos: usize = 0;
+		future::poll_fn(|cx| {
+			self.with(|socket| {
+				if socket.can_recv() {
+					return Poll::Ready(
+						socket
+							.recv(|data| {
+								let len = core::cmp::min(buffer.len(), data.len());
+								buffer[..len].copy_from_slice(&data[..len]);
+								(len, isize::try_from(len).unwrap())
+							})
+							.map_err(|_| -crate::errno::EIO),
+					);
+				}
 
-		while pos < buffer.len() {
-			let n = future::poll_fn(|_cx| {
-				self.with(|socket| {
-					if socket.can_recv() {
-						return Poll::Ready(
-							socket
-								.recv(|data| {
-									let len = core::cmp::min(buffer.len() - pos, data.len());
-									buffer[pos..pos + len].copy_from_slice(&data[..len]);
-									(len, len)
-								})
-								.map_err(|_| -crate::errno::EIO),
-						);
-					}
-
-					if pos > 0 {
-						// we already send some data => return 0 as signal to stop the
-						// async write
-						return Poll::Ready(Ok(0));
-					}
-
-					match socket.state() {
-						tcp::State::FinWait1
-						| tcp::State::FinWait2
-						| tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::CloseWait
-						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-						_ => {
-							if socket.can_recv() {
-								warn!("async_read: Unable to consume data");
-								Poll::Ready(Ok(0))
-							} else {
-								//socket.register_recv_waker(cx.waker());
-								Poll::Pending
-							}
+				match socket.state() {
+					tcp::State::FinWait1
+					| tcp::State::FinWait2
+					| tcp::State::Closed
+					| tcp::State::Closing
+					| tcp::State::CloseWait
+					| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+					_ => {
+						if socket.can_recv() {
+							warn!("async_read: Unable to consume data");
+							Poll::Ready(Ok(0))
+						} else {
+							socket.register_recv_waker(cx.waker());
+							Poll::Pending
 						}
 					}
-				})
+				}
 			})
-			.await?;
-
-			if n == 0 {
-				break;
-			}
-
-			pos += n;
-		}
-
-		Ok(pos.try_into().unwrap())
+		})
+		.await
 	}
 
 	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
-			let n = future::poll_fn(|_cx| {
+			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
 					if socket.can_send() {
 						return Poll::Ready(
@@ -158,7 +135,7 @@ impl<T> Socket<T> {
 								warn!("async_write: Unable to consume data");
 								Poll::Ready(Ok(0))
 							} else {
-								//socket.register_send_waker(cx.waker());
+								socket.register_send_waker(cx.waker());
 								Poll::Pending
 							}
 						}
@@ -298,10 +275,8 @@ impl<T> Socket<T> {
 
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 
-		get_network_driver().unwrap().lock().set_polling_mode(true);
-
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			block_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -309,7 +284,7 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			poll_on(self.async_read(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			block_on(self.async_read(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
 		}
 	}
 
