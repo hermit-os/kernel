@@ -69,8 +69,10 @@ impl<T> Socket<T> {
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if socket.can_recv() {
-					return Poll::Ready(
+				if !socket.is_active() {
+					Poll::Ready(Err(-crate::errno::EIO))
+				} else if socket.can_recv() {
+					Poll::Ready(
 						socket
 							.recv(|data| {
 								let len = core::cmp::min(buffer.len(), data.len());
@@ -78,25 +80,10 @@ impl<T> Socket<T> {
 								(len, isize::try_from(len).unwrap())
 							})
 							.map_err(|_| -crate::errno::EIO),
-					);
-				}
-
-				match socket.state() {
-					tcp::State::FinWait1
-					| tcp::State::FinWait2
-					| tcp::State::Closed
-					| tcp::State::Closing
-					| tcp::State::CloseWait
-					| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-					_ => {
-						if socket.can_recv() {
-							warn!("async_read: Unable to consume data");
-							Poll::Ready(Ok(0))
-						} else {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
+					)
+				} else {
+					socket.register_recv_waker(cx.waker());
+					Poll::Pending
 				}
 			})
 		})
@@ -109,36 +96,21 @@ impl<T> Socket<T> {
 		while pos < buffer.len() {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
-					if socket.can_send() {
-						return Poll::Ready(
+					if !socket.is_active() {
+						Poll::Ready(Err(-crate::errno::EIO))
+					} else if socket.can_send() {
+						Poll::Ready(
 							socket
 								.send_slice(&buffer[pos..])
 								.map_err(|_| -crate::errno::EIO),
-						);
-					}
-
-					if pos > 0 {
+						)
+					} else if pos > 0 {
 						// we already send some data => return 0 as signal to stop the
 						// async write
-						return Poll::Ready(Ok(0));
-					}
-
-					match socket.state() {
-						tcp::State::FinWait1
-						| tcp::State::FinWait2
-						| tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::CloseWait
-						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-						_ => {
-							if socket.can_send() {
-								warn!("async_write: Unable to consume data");
-								Poll::Ready(Ok(0))
-							} else {
-								socket.register_send_waker(cx.waker());
-								Poll::Pending
-							}
-						}
+						Poll::Ready(Ok(0))
+					} else {
+						socket.register_send_waker(cx.waker());
+						Poll::Pending
 					}
 				})
 			})
