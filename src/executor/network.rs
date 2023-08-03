@@ -334,6 +334,9 @@ where
 	// be sure that we are not interrupted by a timer, which is able
 	// to call `reschedule`
 	without_interrupts(|| {
+		// avoid network interrupts
+		get_network_driver().unwrap().lock().set_polling_mode(true);
+
 		let start = now();
 		let waker = core::task::Waker::noop();
 		let mut cx = Context::from_waker(&waker);
@@ -349,6 +352,9 @@ where
 					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 				core_scheduler().add_network_timer(wakeup_time);
 
+				// allow network interrupts
+				get_network_driver().unwrap().lock().set_polling_mode(false);
+
 				return t;
 			}
 
@@ -357,6 +363,9 @@ where
 					let wakeup_time = network_delay(now())
 						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
 					core_scheduler().add_network_timer(wakeup_time);
+
+					// allow network interrupts
+					get_network_driver().unwrap().lock().set_polling_mode(false);
 
 					return Err(-crate::errno::ETIME);
 				}
