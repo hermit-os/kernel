@@ -33,7 +33,12 @@ fn addr(addr: &AtomicU32) -> usize {
 /// The timeout is given in microseconds. If [`Flags::RELATIVE`] is given, it is interpreted as
 /// relative to the current time. Otherwise it is understood to be an absolute time
 /// (see `get_timer_ticks`).
-pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flags: Flags) -> i32 {
+pub(crate) fn futex_wait(
+	address: &AtomicU32,
+	expected: u32,
+	timeout: Option<u64>,
+	flags: Flags,
+) -> i32 {
 	let mut parking_lot = PARKING_LOT.lock();
 	// Check the futex value after locking the parking lot so that all changes are observed.
 	if address.load(SeqCst) != expected {
@@ -96,16 +101,16 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 /// The timeout is given in microseconds. If [`Flags::RELATIVE`] is given, it is interpreted as
 /// relative to the current time. Otherwise it is understood to be an absolute time
 /// (see `get_timer_ticks`).
-pub fn futex_wait_and_set(
+pub(crate) fn futex_wait_and_set(
 	address: &AtomicU32,
 	expected: u32,
 	timeout: Option<u64>,
 	flags: Flags,
-	new_val: u32,
+	new_value: u32,
 ) -> i32 {
 	let mut parking_lot = PARKING_LOT.lock();
 	// Check the futex value after locking the parking lot so that all changes are observed.
-	if address.swap(new_val, SeqCst) != expected {
+	if address.swap(new_value, SeqCst) != expected {
 		return -EAGAIN;
 	}
 
@@ -161,7 +166,7 @@ pub fn futex_wait_and_set(
 /// Wake `count` threads waiting on the futex at address. Returns the number of threads
 /// woken up (saturates to `i32::MAX`). If `count` is `i32::MAX`, wake up all matching
 /// waiting threads. If `count` is negative, returns -EINVAL.
-pub fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
+pub(crate) fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
 	if count < 0 {
 		return -EINVAL;
 	}
@@ -184,6 +189,45 @@ pub fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
 
 	if queue.get().is_empty() {
 		queue.remove();
+	}
+
+	woken
+}
+
+/// Wake `count` threads waiting on the futex at address. Returns the number of threads
+/// woken up (saturates to `i32::MAX`). If `count` is `i32::MAX`, wake up all matching
+/// waiting threads. If `count` is negative, returns -EINVAL. If no thread is available,
+/// the futex at address will set to `new_value`.
+pub(crate) fn futex_wake_or_set(address: &AtomicU32, count: i32, new_value: u32) -> i32 {
+	if count < 0 {
+		return -EINVAL;
+	}
+
+	let mut parking_lot = PARKING_LOT.lock();
+	let mut queue = match parking_lot.entry(addr(address)) {
+		Entry::Occupied(entry) => entry,
+		Entry::Vacant(_) => {
+			address.store(new_value, SeqCst);
+			return 0;
+		}
+	};
+
+	let scheduler = core_scheduler();
+	let mut woken = 0;
+	while woken != count || count == i32::MAX {
+		match queue.get_mut().pop() {
+			Some(handle) => scheduler.custom_wakeup(handle),
+			None => break,
+		}
+		woken = woken.saturating_add(1);
+	}
+
+	if queue.get().is_empty() {
+		queue.remove();
+	}
+
+	if woken == 0 {
+		address.store(new_value, SeqCst);
 	}
 
 	woken
