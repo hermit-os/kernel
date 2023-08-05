@@ -294,6 +294,8 @@ impl NotifCtrl {
 	}
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
+		fence(Ordering::Acquire);
+
 		if self.f_notif_data {
 			let ptr = self.notif_addr;
 
@@ -313,6 +315,8 @@ impl NotifCtrl {
 				);
 			}
 		}
+
+		fence(Ordering::Release);
 	}
 }
 
