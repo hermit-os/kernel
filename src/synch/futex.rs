@@ -89,6 +89,75 @@ pub fn futex_wait(address: &AtomicU32, expected: u32, timeout: Option<u64>, flag
 	}
 }
 
+/// If the value at address matches the expected value, park the current thread until it is either
+/// woken up with `futex_wake` (returns 0) or the specified timeout elapses (returns -ETIMEDOUT).
+/// In addition, the value `new_value` will stored at address.
+///
+/// The timeout is given in microseconds. If [`Flags::RELATIVE`] is given, it is interpreted as
+/// relative to the current time. Otherwise it is understood to be an absolute time
+/// (see `get_timer_ticks`).
+pub fn futex_wait_and_set(
+	address: &AtomicU32,
+	expected: u32,
+	timeout: Option<u64>,
+	flags: Flags,
+	new_val: u32,
+) -> i32 {
+	let mut parking_lot = PARKING_LOT.lock();
+	// Check the futex value after locking the parking lot so that all changes are observed.
+	if address.swap(new_val, SeqCst) != expected {
+		return -EAGAIN;
+	}
+
+	let wakeup_time = if flags.contains(Flags::RELATIVE) {
+		timeout.and_then(|t| get_timer_ticks().checked_add(t))
+	} else {
+		timeout
+	};
+
+	let scheduler = core_scheduler();
+	scheduler.block_current_task(wakeup_time);
+	let handle = scheduler.get_current_task_handle();
+	parking_lot.entry(addr(address)).or_default().push(handle);
+	drop(parking_lot);
+
+	loop {
+		scheduler.reschedule();
+
+		let mut parking_lot = PARKING_LOT.lock();
+		if matches!(wakeup_time, Some(t) if t <= get_timer_ticks()) {
+			let mut wakeup = true;
+			// Timeout occurred, try to remove ourselves from the waiting queue.
+			if let Entry::Occupied(mut queue) = parking_lot.entry(addr(address)) {
+				// If we are not in the waking queue, this must have been a wakeup.
+				wakeup = !queue.get_mut().remove(handle);
+				if queue.get().is_empty() {
+					queue.remove();
+				}
+			}
+
+			if wakeup {
+				return 0;
+			} else {
+				return -ETIMEDOUT;
+			}
+		} else {
+			// If we are not in the waking queue, this must have been a wakeup.
+			let wakeup = !matches!(parking_lot
+				.get(&addr(address)), Some(queue) if queue.contains(handle));
+
+			if wakeup {
+				return 0;
+			} else {
+				// A spurious wakeup occurred, sleep again.
+				// Tasks do not change core, so the handle in the parking lot is still current.
+				scheduler.block_current_task(wakeup_time);
+			}
+		}
+		drop(parking_lot);
+	}
+}
+
 /// Wake `count` threads waiting on the futex at address. Returns the number of threads
 /// woken up (saturates to `i32::MAX`). If `count` is `i32::MAX`, wake up all matching
 /// waiting threads. If `count` is negative, returns -EINVAL.

@@ -9,24 +9,29 @@ pub(crate) mod task;
 use alloc::sync::Arc;
 use alloc::task::Wake;
 use core::future::Future;
+use core::sync::atomic::{AtomicU32, Ordering};
 use core::task::{Context, Poll, Waker};
 
 use hermit_sync::without_interrupts;
 
 use crate::arch::core_local::*;
 use crate::executor::task::AsyncTask;
-use crate::scheduler::task::TaskHandle;
+use crate::synch::futex::*;
 
 struct TaskNotify {
 	/// The single task executor .
-	handle: TaskHandle,
+	futex: AtomicU32,
 }
 
 impl TaskNotify {
-	pub fn new() -> Self {
+	pub const fn new() -> Self {
 		Self {
-			handle: core_scheduler().get_current_task_handle(),
+			futex: AtomicU32::new(0),
 		}
+	}
+
+	pub fn wait(&self, timeout: Option<u64>) {
+		let _ = futex_wait_and_set(&self.futex, 0, timeout, Flags::RELATIVE, 0);
 	}
 }
 
@@ -36,8 +41,8 @@ impl Wake for TaskNotify {
 	}
 
 	fn wake_by_ref(self: &Arc<Self>) {
-		trace!("Wakeup task {}", self.handle.get_id());
-		core_scheduler().custom_wakeup(self.handle);
+		self.futex.store(u32::MAX, Ordering::SeqCst);
+		let _ = futex_wake(&self.futex, 1);
 	}
 }
 
