@@ -7,6 +7,7 @@ use alloc::vec::Vec;
 use core::intrinsics::unaligned_volatile_store;
 use core::mem;
 use core::result::Result;
+use core::sync::atomic::{fence, Ordering};
 
 #[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::arch::kernel::interrupts::*;
@@ -713,6 +714,9 @@ impl NotifCtrl {
 		// See Virtio specification v.1.1. - 4.1.5.2
 		// Depending in the feature negotiation, we write eitehr only the
 		// virtqueue index or the index and the next position inside the queue.
+
+		fence(Ordering::Acquire);
+
 		if self.f_notif_data {
 			let ptr = self.notif_addr as *mut u32;
 
@@ -732,6 +736,8 @@ impl NotifCtrl {
 				);
 			}
 		}
+
+		fence(Ordering::Release);
 	}
 }
 
