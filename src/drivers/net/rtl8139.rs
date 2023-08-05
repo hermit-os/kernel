@@ -3,7 +3,6 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 use core::mem;
 
 use pci_types::{Bar, InterruptLine, MAX_BARS};
@@ -15,8 +14,9 @@ use crate::arch::mm::paging::virt_to_phys;
 use crate::arch::mm::VirtAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
-use crate::drivers::net::{network_irqhandler, NetworkInterface};
+use crate::drivers::net::{network_irqhandler, NetworkDriver};
 use crate::drivers::pci::{PciCommand, PciDevice};
+use crate::executor::device::{RxToken, TxToken};
 
 /// size of the receive buffer
 const RX_BUF_LEN: usize = 8192;
@@ -211,10 +211,9 @@ pub(crate) struct RTL8139Driver {
 	rxbuffer: Box<[u8]>,
 	rxpos: usize,
 	txbuffer: Box<[u8]>,
-	polling_mode_counter: u32,
 }
 
-impl NetworkInterface for RTL8139Driver {
+impl NetworkDriver for RTL8139Driver {
 	/// Returns the MAC address of the network interface
 	fn get_mac_address(&self) -> [u8; 6] {
 		self.mac
@@ -225,37 +224,32 @@ impl NetworkInterface for RTL8139Driver {
 		self.mtu
 	}
 
-	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
+	/// Send packet with the size `len`
+	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
 		let id = self.tx_counter % NO_TX_BUFFERS;
 
 		if self.tx_in_use[id] || len > TX_BUF_LEN {
-			trace!("Unable to get TX buffer");
-			Err(())
+			panic!("Unable to get TX buffer");
 		} else {
 			self.tx_in_use[id] = true;
 			self.tx_counter += 1;
 
-			Ok((
-				self.txbuffer[id * TX_BUF_LEN..][..TX_BUF_LEN].as_mut_ptr(),
-				id,
-			))
+			let buffer = &mut self.txbuffer[id * TX_BUF_LEN..][..len];
+			let result = f(buffer);
+
+			// send the packet
+			unsafe {
+				outl(
+					self.iobase + TSD0 + (4 * id as u16),
+					len.try_into().unwrap(),
+				); //|0x3A0000);
+			}
+
+			result
 		}
-	}
-
-	fn free_tx_buffer(&self, _token: usize) {
-		// get_tx_buffer did not allocate
-	}
-
-	fn send_tx_buffer(&mut self, id: usize, len: usize) -> Result<(), ()> {
-		// send the packet
-		unsafe {
-			outl(
-				self.iobase + TSD0 + (4 * id as u16),
-				len.try_into().unwrap(),
-			); //|0x3A0000);
-		}
-
-		Ok(())
 	}
 
 	fn has_packet(&self) -> bool {
@@ -272,7 +266,8 @@ impl NetworkInterface for RTL8139Driver {
 		false
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
+	/// Get buffer with the received packet
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
 		let cmd = unsafe { inb(self.iobase + CR) };
 
 		if (cmd & CR_BUFE) != CR_BUFE {
@@ -285,7 +280,7 @@ impl NetworkInterface for RTL8139Driver {
 
 				// do we reach the end of the receive buffers?
 				// in this case, we conact the two slices to one vec
-				let buf = if pos + length as usize > RX_BUF_LEN {
+				let vec_data = if pos + length as usize > RX_BUF_LEN {
 					let first = &self.rxbuffer[pos..RX_BUF_LEN];
 					let second = &self.rxbuffer[..length as usize - first.len()];
 					[first, second].concat()
@@ -295,36 +290,29 @@ impl NetworkInterface for RTL8139Driver {
 
 				self.consume_current_buffer();
 
-				Ok(buf)
+				Some((RxToken::new(vec_data), TxToken::new()))
 			} else {
-				error!(
+				warn!(
 					"RTL8192: invalid header {:#x}, rx_pos {}\n",
 					header, self.rxpos
 				);
 
-				Err(())
+				None
 			}
 		} else {
-			Err(())
+			None
 		}
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			if self.polling_mode_counter == 0 {
-				// disable interrupts from the NIC
-				unsafe {
-					outw(self.iobase + IMR, INT_MASK_NO_ROK);
-				}
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK_NO_ROK);
 			}
-			self.polling_mode_counter += 1;
 		} else {
-			self.polling_mode_counter -= 1;
-			if self.polling_mode_counter == 0 {
-				// Enable all known interrupts by setting the interrupt mask.
-				unsafe {
-					outw(self.iobase + IMR, INT_MASK);
-				}
+			// Enable all known interrupts by setting the interrupt mask.
+			unsafe {
+				outw(self.iobase + IMR, INT_MASK);
 			}
 		}
 	}
@@ -598,6 +586,5 @@ pub(crate) fn init_device(
 		rxbuffer,
 		rxpos: 0,
 		txbuffer,
-		polling_mode_counter: 0,
 	})
 }

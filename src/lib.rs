@@ -4,17 +4,20 @@
 
 #![warn(rust_2018_idioms)]
 #![warn(unsafe_op_in_unsafe_fn)]
+#![warn(clippy::uninlined_format_args)]
 #![warn(clippy::transmute_ptr_to_ptr)]
 #![allow(clippy::missing_safety_doc)]
 #![cfg_attr(target_arch = "aarch64", allow(incomplete_features))]
 #![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
+#![feature(core_intrinsics)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![feature(pointer_byte_offsets)]
 #![feature(pointer_is_aligned)]
+#![feature(noop_waker)]
 #![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]
 #![feature(thread_local)]
@@ -71,7 +74,6 @@ mod drivers;
 mod entropy;
 mod env;
 pub mod errno;
-#[cfg(feature = "tcp")]
 mod executor;
 pub(crate) mod fd;
 pub(crate) mod fs;
@@ -138,8 +140,8 @@ pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
 
 	trace!(
-		"__sys_malloc: allocate memory at {:#x} (size {:#x}, align {:#x})",
-		ptr as usize,
+		"__sys_malloc: allocate memory at {:p} (size {:#x}, align {:#x})",
+		ptr,
 		size,
 		align
 	);
@@ -177,8 +179,8 @@ pub(crate) extern "C" fn __sys_realloc(
 		let layout_res = Layout::from_size_align(size, align);
 		if layout_res.is_err() || size == 0 || new_size == 0 {
 			warn!(
-			"__sys_realloc called with ptr {:#x}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
-			ptr as usize, size, align, new_size
+			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
+			ptr, size, align, new_size
 		);
 			return core::ptr::null::<*mut u8>() as *mut u8;
 		}
@@ -187,14 +189,14 @@ pub(crate) extern "C" fn __sys_realloc(
 
 		if new_ptr.is_null() {
 			debug!(
-			"__sys_realloc failed to resize ptr {:#x} with size {:#x}, align {:#x}, new_size {:#x} !",
-			ptr as usize, size, align, new_size
+			"__sys_realloc failed to resize ptr {:p} with size {:#x}, align {:#x}, new_size {:#x} !",
+			ptr, size, align, new_size
 		);
 		} else {
 			trace!(
-				"__sys_realloc: resized memory at {:#x}, new address {:#x}",
-				ptr as usize,
-				new_ptr as usize
+				"__sys_realloc: resized memory at {:p}, new address {:p}",
+				ptr,
+				new_ptr
 			);
 		}
 		new_ptr
@@ -224,8 +226,8 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 			debug_assert_ne!(size, 0, "__sys_free error: size cannot be 0");
 		} else {
 			trace!(
-				"sys_free: deallocate memory at {:#x} (size {:#x})",
-				ptr as usize,
+				"sys_free: deallocate memory at {:p} (size {:#x})",
+				ptr,
 				size
 			);
 		}
@@ -261,7 +263,6 @@ extern "C" fn initd(_arg: usize) {
 
 	// Initialize Drivers
 	arch::init_drivers();
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
 	crate::executor::init();
 
 	syscalls::init();
@@ -305,7 +306,7 @@ fn boot_processor_main() -> ! {
 	}
 
 	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
-	info!("Kernel starts at {:#x}", env::get_base_address());
+	info!("Kernel starts at {:p}", env::get_base_address());
 
 	extern "C" {
 		static mut __bss_start: u8;
@@ -314,7 +315,7 @@ fn boot_processor_main() -> ! {
 		core::ptr::addr_of_mut!(__bss_start)
 	});
 	info!(
-		"TLS starts at {:#x} (size {} Bytes)",
+		"TLS starts at {:p} (size {} Bytes)",
 		env::get_tls_start(),
 		env::get_tls_memsz()
 	);
@@ -360,6 +361,7 @@ fn application_processor_main() -> ! {
 	info!("Entering idle loop for application processor");
 
 	synch_all_cores();
+	crate::executor::init();
 
 	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.

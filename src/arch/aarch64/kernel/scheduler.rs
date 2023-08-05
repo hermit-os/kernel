@@ -131,7 +131,7 @@ impl TaskStacks {
 			.expect("Failed to allocate Physical Memory for TaskStacks");
 
 		debug!(
-			"Create stacks at {:#X} with a size of {} KB",
+			"Create stacks at {:p} with a size of {} KB",
 			virt_addr,
 			total_size >> 10
 		);
@@ -174,7 +174,7 @@ impl TaskStacks {
 
 	pub fn from_boot_stacks() -> TaskStacks {
 		let stack = VirtAddr::from_u64(CURRENT_STACK_ADDRESS.load(Ordering::Relaxed));
-		debug!("Using boot stack {:#X}", stack);
+		debug!("Using boot stack {:p}", stack);
 
 		TaskStacks::Boot(BootStack { stack })
 	}
@@ -217,7 +217,7 @@ impl Drop for TaskStacks {
 			TaskStacks::Boot(_) => {}
 			TaskStacks::Common(stacks) => {
 				debug!(
-					"Deallocating stacks at {:#X} with a size of {} KB",
+					"Deallocating stacks at {:p} with a size of {} KB",
 					stacks.virt_addr,
 					stacks.total_size >> 10,
 				);

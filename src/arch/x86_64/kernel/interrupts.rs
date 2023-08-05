@@ -28,7 +28,7 @@ pub fn load_idt() {
 }
 
 pub fn install() {
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	let idt = unsafe { &mut IDT };
 
 	set_general_handler!(idt, abort, 0..32);
 	set_general_handler!(idt, unhandle, 32..64);
@@ -110,7 +110,7 @@ pub extern "C" fn irq_install_handler(
 ) {
 	debug!("Install handler for interrupt {}", irq_number);
 
-	let idt = unsafe { &mut *(&mut IDT as *mut _ as *mut InterruptDescriptorTable) };
+	let idt = unsafe { &mut IDT };
 	unsafe {
 		idt[(32 + irq_number) as usize]
 			.set_handler_addr(x86_64::VirtAddr::new(

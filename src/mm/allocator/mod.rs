@@ -10,7 +10,7 @@ use core::ptr::NonNull;
 
 use align_address::Align;
 use hermit_sync::InterruptTicketMutex;
-use linked_list_allocator::Heap;
+use talc::{ErrOnOom, Span, Talc};
 
 use self::bootstrap::BootstrapAllocator;
 use self::bump::BumpAllocator;
@@ -26,7 +26,7 @@ struct GlobalAllocator {
 	/// The heap allocator.
 	///
 	/// This is not available immediately and must be initialized ([`Self::init`]).
-	heap: Option<Heap>,
+	heap: Option<Talc<ErrOnOom>>,
 }
 
 impl GlobalAllocator {
@@ -44,7 +44,12 @@ impl GlobalAllocator {
 	/// The memory starting from `heap_bottom` with a size of `heap_size`
 	/// must be valid and ready to be managed and allocated from.
 	unsafe fn init(&mut self, heap_bottom: *mut u8, heap_size: usize) {
-		self.heap = Some(unsafe { Heap::new(heap_bottom, heap_size) });
+		self.heap = unsafe {
+			Some(Talc::with_arena(
+				ErrOnOom,
+				Span::from_base_size(heap_bottom, heap_size),
+			))
+		}
 	}
 
 	fn align_layout(layout: Layout) -> Layout {
@@ -56,7 +61,7 @@ impl GlobalAllocator {
 	fn allocate(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocError> {
 		let layout = Self::align_layout(layout);
 		match &mut self.heap {
-			Some(heap) => heap.allocate_first_fit(layout).map_err(|()| AllocError),
+			Some(heap) => unsafe { heap.malloc(layout).map_err(|_| AllocError) },
 			None => self
 				.bootstrap_allocator
 				.get_or_insert_with(Default::default)
@@ -76,7 +81,7 @@ impl GlobalAllocator {
 			}
 		} else {
 			unsafe {
-				self.heap.as_mut().unwrap().deallocate(ptr, layout);
+				self.heap.as_mut().unwrap().free(ptr, layout);
 			}
 		}
 	}

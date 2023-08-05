@@ -1,19 +1,18 @@
 use core::ffi::c_void;
+use core::future;
 use core::marker::PhantomData;
 use core::mem::size_of;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
-use futures_lite::future;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
 use crate::errno::*;
-use crate::executor::runtime::block_on;
-use crate::executor::{now, Handle, NetworkState, NIC};
+use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
 use crate::fd::ObjectInterface;
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
@@ -70,35 +69,21 @@ impl<T> Socket<T> {
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
-				if socket.can_recv() {
-					return Poll::Ready(
+				if !socket.is_active() {
+					Poll::Ready(Err(-crate::errno::EIO))
+				} else if socket.can_recv() {
+					Poll::Ready(
 						socket
-							.recv_slice(buffer)
-							.map(|x| isize::try_from(x).unwrap())
+							.recv(|data| {
+								let len = core::cmp::min(buffer.len(), data.len());
+								buffer[..len].copy_from_slice(&data[..len]);
+								(len, isize::try_from(len).unwrap())
+							})
 							.map_err(|_| -crate::errno::EIO),
-					);
-				}
-
-				match socket.state() {
-					tcp::State::FinWait1
-					| tcp::State::FinWait2
-					| tcp::State::Closed
-					| tcp::State::Closing
-					| tcp::State::CloseWait
-					| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-					_ => {
-						if socket.can_recv() {
-							Poll::Ready(
-								socket
-									.recv_slice(buffer)
-									.map(|x| isize::try_from(x).unwrap())
-									.map_err(|_| -crate::errno::EIO),
-							)
-						} else {
-							socket.register_recv_waker(cx.waker());
-							Poll::Pending
-						}
-					}
+					)
+				} else {
+					socket.register_recv_waker(cx.waker());
+					Poll::Pending
 				}
 			})
 		})
@@ -111,31 +96,21 @@ impl<T> Socket<T> {
 		while pos < buffer.len() {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
-					if socket.can_send() {
-						return Poll::Ready(
+					if !socket.is_active() {
+						Poll::Ready(Err(-crate::errno::EIO))
+					} else if socket.can_send() {
+						Poll::Ready(
 							socket
 								.send_slice(&buffer[pos..])
 								.map_err(|_| -crate::errno::EIO),
-						);
-					}
-
-					if pos > 0 {
+						)
+					} else if pos > 0 {
 						// we already send some data => return 0 as signal to stop the
 						// async write
-						return Poll::Ready(Ok(0));
-					}
-
-					match socket.state() {
-						tcp::State::FinWait1
-						| tcp::State::FinWait2
-						| tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::CloseWait
-						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
-						_ => {
-							socket.register_send_waker(cx.waker());
-							Poll::Pending
-						}
+						Poll::Ready(Ok(0))
+					} else {
+						socket.register_send_waker(cx.waker());
+						Poll::Pending
 					}
 				})
 			})
@@ -293,7 +268,7 @@ impl<T> Socket<T> {
 		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			block_on(self.async_write(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			poll_on(self.async_write(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -301,7 +276,7 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			block_on(self.async_write(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_write(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
 		}
 	}
 

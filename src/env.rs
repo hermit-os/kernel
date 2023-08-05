@@ -108,7 +108,7 @@ pub fn freq() -> Option<u16> {
 	CLI.get().unwrap().freq
 }
 
-#[cfg(all(feature = "tcp", not(feature = "dhcpv4")))]
+#[allow(dead_code)]
 pub fn var(key: &str) -> Option<&String> {
 	CLI.get().unwrap().env_vars.get(key)
 }

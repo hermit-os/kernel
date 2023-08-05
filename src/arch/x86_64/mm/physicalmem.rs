@@ -158,7 +158,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	assert!(
 		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
-		"Physical address {physical_address:#X} is not >= KERNEL_END_ADDRESS"
+		"Physical address {physical_address:p} is not >= KERNEL_END_ADDRESS"
 	);
 	assert!(size > 0);
 	assert_eq!(
@@ -174,12 +174,13 @@ pub fn deallocate(physical_address: PhysAddr, size: usize) {
 		.deallocate(physical_address.as_usize(), size);
 }
 
+#[allow(dead_code)]
 #[cfg(not(feature = "pci"))]
 pub fn reserve(physical_address: PhysAddr, size: usize) {
 	assert_eq!(
 		physical_address % BasePageSize::SIZE as usize,
 		0,
-		"Physical address {:#X} is not a multiple of {:#X}",
+		"Physical address {:p} is not a multiple of {:#X}",
 		physical_address,
 		BasePageSize::SIZE
 	);

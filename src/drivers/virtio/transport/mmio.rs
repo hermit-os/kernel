@@ -4,15 +4,19 @@
 #![allow(dead_code)]
 
 use core::convert::TryInto;
+use core::intrinsics::unaligned_volatile_store;
 use core::ptr::{read_volatile, write_volatile};
 use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::u8;
 
+#[cfg(feature = "tcp")]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
 use crate::drivers::error::DriverError;
+#[cfg(feature = "tcp")]
 use crate::drivers::net::network_irqhandler;
+#[cfg(feature = "tcp")]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
@@ -290,10 +294,29 @@ impl NotifCtrl {
 	}
 
 	pub fn notify_dev(&self, notif_data: &[u8]) {
-		let data = u32::from_ne_bytes(notif_data.try_into().unwrap());
-		unsafe {
-			*self.notif_addr = data;
+		fence(Ordering::Acquire);
+
+		if self.f_notif_data {
+			let ptr = self.notif_addr;
+
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()),
+				);
+			}
+		} else {
+			let ptr = self.notif_addr as *mut u16;
+
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()),
+				);
+			}
 		}
+
+		fence(Ordering::Release);
 	}
 }
 
@@ -344,9 +367,11 @@ struct IsrStatusRaw {
 }
 
 pub(crate) enum VirtioDriver {
+	#[cfg(feature = "tcp")]
 	Network(VirtioNetDriver),
 }
 
+#[allow(unused_variables)]
 pub(crate) fn init_device(
 	registers: &'static mut MmioRegisterLayout,
 	irq_no: u8,
@@ -362,6 +387,7 @@ pub(crate) fn init_device(
 
 	// Verify the device-ID to find the network card
 	match registers.device_id {
+		#[cfg(feature = "tcp")]
 		DevId::VIRTIO_DEV_ID_NET => {
 			match VirtioNetDriver::init(dev_id, registers, irq_no) {
 				Ok(virt_net_drv) => {

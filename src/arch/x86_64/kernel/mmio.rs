@@ -9,7 +9,6 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::arch::x86_64::mm::{paging, PhysAddr};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-use crate::drivers::net::NetworkInterface;
 use crate::drivers::virtio::transport::mmio as mmio_virtio;
 use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioDriver};
 
@@ -27,7 +26,7 @@ pub(crate) enum MmioDriver {
 
 impl MmioDriver {
 	#[allow(unreachable_patterns)]
-	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<dyn NetworkInterface>> {
+	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
 			_ => None,
@@ -122,11 +121,11 @@ pub(crate) fn register_driver(drv: MmioDriver) {
 	}
 }
 
-pub fn get_network_driver() -> Option<&'static InterruptTicketMutex<dyn NetworkInterface>> {
+pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
 	unsafe { MMIO_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
-pub fn init_drivers() {
+pub(crate) fn init_drivers() {
 	// virtio: MMIO Device Discovery
 	without_interrupts(|| {
 		if let Ok(mmio) = detect_network() {

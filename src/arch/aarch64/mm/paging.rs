@@ -152,8 +152,7 @@ impl PageTableEntry {
 		assert_eq!(
 			physical_address % BasePageSize::SIZE,
 			0,
-			"Physical address is not on a 4 KiB page boundary (physical_address = {:#X})",
-			physical_address
+			"Physical address is not on a 4 KiB page boundary (physical_address = {physical_address:p})"
 		);
 
 		let mut flags_to_set = flags;
@@ -256,8 +255,7 @@ impl<S: PageSize> Page<S> {
 	fn including_address(virtual_address: VirtAddr) -> Self {
 		assert!(
 			Self::is_valid_address(virtual_address),
-			"Virtual address {:#X} is invalid",
-			virtual_address
+			"Virtual address {virtual_address:p} is invalid"
 		);
 
 		Self {
@@ -556,18 +554,18 @@ fn get_page_range<S: PageSize>(virtual_address: VirtAddr, count: usize) -> PageI
 }
 
 pub fn get_page_table_entry<S: PageSize>(virtual_address: VirtAddr) -> Option<PageTableEntry> {
-	trace!("Looking up Page Table Entry for {:#X}", virtual_address);
+	trace!("Looking up Page Table Entry for {:p}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.get_page_table_entry(page)
 }
 
 pub fn get_physical_address<S: PageSize>(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	trace!("Getting physical address for {:#X}", virtual_address);
+	trace!("Getting physical address for {:p}", virtual_address);
 
 	let page = Page::<S>::including_address(virtual_address);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	let address = root_pagetable.get_page_table_entry(page)?.address();
 	let offset = virtual_address & (S::SIZE - 1);
 	Some(PhysAddr(address.as_u64() | offset.as_u64()))
@@ -592,14 +590,14 @@ pub fn map<S: PageSize>(
 	flags: PageTableEntryFlags,
 ) {
 	trace!(
-		"Mapping virtual address {:#X} to physical address {:#X} ({} pages)",
+		"Mapping virtual address {:p} to physical address {:p} ({} pages)",
 		virtual_address,
 		physical_address,
 		count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, physical_address, flags);
 }
 
@@ -620,13 +618,13 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) {
 
 pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	trace!(
-		"Unmapping virtual address {:#X} ({} pages)",
+		"Unmapping virtual address {:p} ({} pages)",
 		virtual_address,
 		count
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr() as *mut PageTable<L0Table>) };
+	let root_pagetable = unsafe { &mut *(L0TABLE_ADDRESS.as_mut_ptr::<PageTable<L0Table>>()) };
 	root_pagetable.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
@@ -639,7 +637,7 @@ pub unsafe fn init() {
 	let aa64mmfr0: u64;
 
 	let ram_start = get_ram_address();
-	info!("RAM starts at physical address 0x{:x}", ram_start);
+	info!("RAM starts at physical address {:p}", ram_start);
 
 	// determine physical address size
 	unsafe {

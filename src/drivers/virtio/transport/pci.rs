@@ -4,16 +4,21 @@
 #![allow(dead_code)]
 
 use alloc::vec::Vec;
+use core::intrinsics::unaligned_volatile_store;
 use core::mem;
 use core::result::Result;
+use core::sync::atomic::{fence, Ordering};
 
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::network_irqhandler;
+#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
@@ -709,25 +714,30 @@ impl NotifCtrl {
 		// See Virtio specification v.1.1. - 4.1.5.2
 		// Depending in the feature negotiation, we write eitehr only the
 		// virtqueue index or the index and the next position inside the queue.
-		if self.f_notif_data {
-			unsafe {
-				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 4);
-				let mut notif_data = notif_data.iter();
 
-				for byte in notif_area {
-					*byte = *notif_data.next().unwrap();
-				}
+		fence(Ordering::Acquire);
+
+		if self.f_notif_data {
+			let ptr = self.notif_addr as *mut u32;
+
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()),
+				);
 			}
 		} else {
-			unsafe {
-				let notif_area = core::slice::from_raw_parts_mut(self.notif_addr as *mut u8, 2);
-				let mut notif_data = notif_data.iter();
+			let ptr = self.notif_addr as *mut u16;
 
-				for byte in notif_area {
-					*byte = *notif_data.next().unwrap();
-				}
+			unsafe {
+				unaligned_volatile_store(
+					ptr,
+					u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()),
+				);
 			}
 		}
+
+		fence(Ordering::Release);
 	}
 }
 
@@ -1248,6 +1258,7 @@ pub(crate) fn init_device(
 				VirtioError::DevNotSupported(device_id),
 			))
 		}
+		#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
@@ -1294,6 +1305,7 @@ pub(crate) fn init_device(
 	match virt_drv {
 		Ok(drv) => {
 			match &drv {
+				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 				VirtioDriver::Network(_) => {
 					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
@@ -1311,6 +1323,7 @@ pub(crate) fn init_device(
 }
 
 pub(crate) enum VirtioDriver {
+	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	Network(VirtioNetDriver),
 	FileSystem(VirtioFsDriver),
 }

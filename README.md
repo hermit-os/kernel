@@ -4,7 +4,7 @@
 
 [![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/libhermit-rs/hermit/)
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
-[![Slack Status](https://matrix.osbyexample.com:3008/badge.svg)](https://matrix.osbyexample.com:3008)
+[![Zulip Badge](https://img.shields.io/badge/chat-hermit-57A37C?logo=zulip)](https://hermit.zulipchat.com/)
 
 _libhermit-rs_ is the kernel of the [RustyHermit](https://github.com/hermitcore/rusty-hermit) unikernel project.
 
@@ -69,4 +69,4 @@ at your option.
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
 libhermit-rs is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
-Create your own fork, send us a pull request, and chat with us on [Slack](https://matrix.osbyexample.com:3008)
+Create your own fork, send us a pull request, and chat with us on [Zulip](https://hermit.zulipchat.com/).

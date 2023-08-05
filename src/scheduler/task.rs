@@ -339,7 +339,9 @@ impl PriorityTaskQueue {
 			.iter()
 			.position(|current_task| current_task.borrow().id == handle.id)
 		{
-			let Some(task) = self.remove_from_queue(index, old_priority) else { return Err(()) };
+			let Some(task) = self.remove_from_queue(index, old_priority) else {
+				return Err(());
+			};
 			task.borrow_mut().prio = prio;
 			self.push(task);
 			return Ok(());
@@ -498,6 +500,8 @@ impl BlockedTaskQueue {
 				if let Some(node) = cursor.current() {
 					if node.wakeup_time.is_none() || wt < node.wakeup_time.unwrap() {
 						arch::set_oneshot_timer(wakeup_time);
+					} else {
+						arch::set_oneshot_timer(node.wakeup_time);
 					}
 				} else {
 					arch::set_oneshot_timer(wakeup_time);
@@ -637,9 +641,9 @@ impl BlockedTaskQueue {
 		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(feature = "tcp")]
-		if let Some(mut guard) = crate::executor::NIC.try_lock() {
-			if let crate::executor::NetworkState::Initialized(nic) = guard.deref_mut() {
-				let now = crate::executor::now();
+		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
+				let now = crate::executor::network::now();
 				nic.poll_common(now);
 				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
 			}

@@ -67,9 +67,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 	assert_eq!(
 		size % alignment,
 		0,
-		"Size {:#X} is not a multiple of the given alignment {:#X}",
-		size,
-		alignment
+		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
 	);
 	assert_eq!(
 		alignment % BasePageSize::SIZE as usize,
@@ -93,8 +91,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 pub fn deallocate(physical_address: PhysAddr, size: usize) {
 	assert!(
 		physical_address >= PhysAddr(mm::kernel_end_address().as_u64()),
-		"Physical address {:#X} is not >= KERNEL_END_ADDRESS",
-		physical_address
+		"Physical address {physical_address:p} is not >= KERNEL_END_ADDRESS"
 	);
 	assert!(size > 0);
 	assert_eq!(

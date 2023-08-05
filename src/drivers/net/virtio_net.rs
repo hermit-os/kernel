@@ -2,7 +2,6 @@
 //!
 //! The module contains ...
 
-use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
@@ -14,7 +13,7 @@ use core::result::Result;
 use pci_types::InterruptLine;
 use zerocopy::AsBytes;
 
-use self::constants::{FeatureSet, Features, NetHdrGSO, Status, MAX_NUM_VQ};
+use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
 use self::error::VirtioNetError;
 use crate::arch::kernel::core_local::increment_irq_counter;
 use crate::config::VIRTIO_MAX_QUEUE_SIZE;
@@ -22,7 +21,7 @@ use crate::config::VIRTIO_MAX_QUEUE_SIZE;
 use crate::drivers::net::virtio_mmio::NetDevCfgRaw;
 #[cfg(feature = "pci")]
 use crate::drivers::net::virtio_pci::NetDevCfgRaw;
-use crate::drivers::net::NetworkInterface;
+use crate::drivers::net::NetworkDriver;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, NotifCfg};
 #[cfg(feature = "pci")]
@@ -30,6 +29,7 @@ use crate::drivers::virtio::transport::pci::{ComCfg, IsrStatus, NotifCfg};
 use crate::drivers::virtio::virtqueue::{
 	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
+use crate::executor::device::{RxToken, TxToken};
 
 pub const ETH_HDR: usize = 14usize;
 
@@ -47,8 +47,8 @@ pub(crate) struct NetDevCfg {
 #[derive(AsBytes, Debug)]
 #[repr(C)]
 pub struct VirtioNetHdr {
-	flags: u8,
-	gso_type: u8,
+	flags: NetHdrFlag,
+	gso_type: NetHdrGSO,
 	/// Ethernet + IP + tcp/udp hdrs
 	hdr_len: u16,
 	/// Bytes to append to hdr_len per frame
@@ -61,23 +61,11 @@ pub struct VirtioNetHdr {
 	num_buffers: u16,
 }
 
-impl VirtioNetHdr {
-	pub fn get_tx_hdr() -> VirtioNetHdr {
-		VirtioNetHdr {
-			flags: 0,
-			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE.into(),
-			hdr_len: 0,
-			gso_size: 0,
-			csum_start: 0,
-			csum_offset: 0,
-			num_buffers: 0,
-		}
-	}
-
-	pub fn get_rx_hdr() -> VirtioNetHdr {
-		VirtioNetHdr {
-			flags: 0,
-			gso_type: 0,
+impl Default for VirtioNetHdr {
+	fn default() -> Self {
+		Self {
+			flags: NetHdrFlag::VIRTIO_NET_HDR_F_NONE,
+			gso_type: NetHdrGSO::VIRTIO_NET_HDR_GSO_NONE,
 			hdr_len: 0,
 			gso_size: 0,
 			csum_start: 0,
@@ -221,7 +209,7 @@ impl RxQueues {
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550).unwrap(),
+				Bytes::new(65550 + ETH_HDR).unwrap(),
 			];
 
 			let spec = if dev_cfg
@@ -230,7 +218,9 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
+				BuffSpec::Single(
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap(),
+				)
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -257,7 +247,7 @@ impl RxQueues {
 			//
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(1514).unwrap(),
+				Bytes::new((dev_cfg.raw.get_mtu() as usize) + ETH_HDR).unwrap(),
 			];
 			let spec = if dev_cfg
 				.features
@@ -265,7 +255,12 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 1514).unwrap())
+				BuffSpec::Single(
+					Bytes::new(
+						mem::size_of::<VirtioNetHdr>() + dev_cfg.raw.get_mtu() as usize + ETH_HDR,
+					)
+					.unwrap(),
+				)
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -402,25 +397,55 @@ impl TxQueues {
 			// Unwrapping is safe, as one virtq will be definitely in the vector.
 			let vq = self.vqs.get(0).unwrap();
 
-			// Virtio specification v1.1. - 5.1.6.2 point 5.
-			//      Header and data are added as ONE output descriptor to the transmitvq.
-			//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
-			// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-			let buff_def = Bytes::new(
-				mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.get_mtu() as usize) + ETH_HDR,
-			)
-			.unwrap();
-			let spec = BuffSpec::Single(buff_def);
+			if dev_cfg
+				.features
+				.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4)
+				| dev_cfg
+					.features
+					.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
+				| dev_cfg
+					.features
+					.is_feature(Features::VIRTIO_NET_F_GUEST_UFO)
+			{
+				// Virtio specification v1.1. - 5.1.6.2 point 5.
+				//      Header and data are added as ONE output descriptor to the transmitvq.
+				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
+				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
+				let buff_def =
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap();
+				let spec = BuffSpec::Single(buff_def);
 
-			let num_buff: u16 = vq.size().into();
+				let num_buff: u16 = vq.size().into();
 
-			for _ in 0..num_buff {
-				self.ready_queue.push(
-					vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
-						.unwrap()
-						.write_seq(Some(&VirtioNetHdr::get_tx_hdr()), None::<&VirtioNetHdr>)
-						.unwrap(),
+				for _ in 0..num_buff {
+					self.ready_queue.push(
+						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+							.unwrap()
+							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
+							.unwrap(),
+					)
+				}
+			} else {
+				// Virtio specification v1.1. - 5.1.6.2 point 5.
+				//      Header and data are added as ONE output descriptor to the transmitvq.
+				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
+				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
+				let buff_def = Bytes::new(
+					mem::size_of::<VirtioNetHdr>() + (dev_cfg.raw.get_mtu() as usize) + ETH_HDR,
 				)
+				.unwrap();
+				let spec = BuffSpec::Single(buff_def);
+
+				let num_buff: u16 = vq.size().into();
+
+				for _ in 0..num_buff {
+					self.ready_queue.push(
+						vq.prep_buffer(Rc::clone(vq), Some(spec.clone()), None)
+							.unwrap()
+							.write_seq(Some(&VirtioNetHdr::default()), None::<&VirtioNetHdr>)
+							.unwrap(),
+					)
+				}
 			}
 		} else {
 			self.is_multi = true;
@@ -499,10 +524,10 @@ pub(crate) struct VirtioNetDriver {
 
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
-	pub(super) polling_mode_counter: u32,
+	pub(super) mtu: u16,
 }
 
-impl NetworkInterface for VirtioNetDriver {
+impl NetworkDriver for VirtioNetDriver {
 	/// Returns the mac address of the device.
 	/// If VIRTIO_NET_F_MAC is not set, the function panics currently!
 	fn get_mac_address(&self) -> [u8; 6] {
@@ -514,59 +539,8 @@ impl NetworkInterface for VirtioNetDriver {
 	}
 
 	/// Returns the current MTU of the device.
-	/// Currently, if VIRTIO_NET_F_MAC is not set
-	//  MTU is set static to 1500 bytes.
 	fn get_mtu(&self) -> u16 {
-		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
-			self.dev_cfg.raw.get_mtu()
-		} else {
-			1500
-		}
-	}
-
-	/// Provides the "user-space" with a pointer to usable memory.
-	///
-	/// Therefore the driver checks if a free BufferToken is in its TxQueues struct.
-	/// If one is found, the function does return a pointer to the memory area, where
-	/// the "user-space" can write to and a raw pointer to the token in order to provide
-	/// it to the queue after the "user-space" driver has written to the buffer.
-	///
-	/// If not BufferToken is found the functions returns an error.
-	fn get_tx_buffer(&mut self, len: usize) -> Result<(*mut u8, usize), ()> {
-		// Adding virtio header size to length.
-		let len = len + core::mem::size_of::<VirtioNetHdr>();
-
-		match self.send_vqs.get_tkn(len) {
-			Some((mut buff_tkn, _vq_index)) => {
-				let (send_ptrs, _) = buff_tkn.raw_ptrs();
-				// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
-				// see TxQueue.add()
-				let (buff_ptr, _) = send_ptrs.unwrap()[0];
-
-				// Do not show user-space memory for VirtioNetHdr.
-				let buff_ptr = unsafe {
-					buff_ptr.offset(isize::try_from(core::mem::size_of::<VirtioNetHdr>()).unwrap())
-				};
-
-				Ok((buff_ptr, Box::into_raw(Box::new(buff_tkn)) as usize))
-			}
-			None => Err(()),
-		}
-	}
-
-	fn free_tx_buffer(&self, token: usize) {
-		unsafe { drop(Box::from_raw(token as *mut BufferToken)) }
-	}
-
-	fn send_tx_buffer(&mut self, tkn_handle: usize, _len: usize) -> Result<(), ()> {
-		// This does not result in a new assignment, or in a drop of the BufferToken, which
-		// would be dangerous, as the memory is freed then.
-		let tkn = *unsafe { Box::from_raw(tkn_handle as *mut BufferToken) };
-
-		tkn.provide()
-			.dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
-
-		Ok(())
+		self.mtu
 	}
 
 	fn has_packet(&self) -> bool {
@@ -574,14 +548,84 @@ impl NetworkInterface for VirtioNetDriver {
 		!self.recv_vqs.poll_queue.borrow().is_empty()
 	}
 
-	fn receive_rx_buffer(&mut self) -> Result<Vec<u8>, ()> {
+	/// Provides smoltcp a slice to copy the IP packet and transfer the packet
+	/// to the send queue.
+	fn send_packet<R, F>(&mut self, len: usize, f: F) -> R
+	where
+		F: FnOnce(&mut [u8]) -> R,
+	{
+		if let Some((mut buff_tkn, _vq_index)) = self
+			.send_vqs
+			.get_tkn(len + core::mem::size_of::<VirtioNetHdr>())
+		{
+			let (send_ptrs, _) = buff_tkn.raw_ptrs();
+			// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
+			// see TxQueue.add()
+			let (buff_ptr, _) = send_ptrs.unwrap()[0];
+
+			// Do not show smoltcp the memory region for VirtioNetHdr.
+			let header = unsafe { &mut *(buff_ptr as *mut VirtioNetHdr) };
+			*header = Default::default();
+			let buff_ptr = unsafe {
+				buff_ptr.offset(isize::try_from(core::mem::size_of::<VirtioNetHdr>()).unwrap())
+			};
+
+			let buf_slice: &'static mut [u8] =
+				unsafe { core::slice::from_raw_parts_mut(buff_ptr, len) };
+			let result = f(buf_slice);
+
+			// If a checksum isn't necessary, we have inform the host within the header
+			// see Virtio specification 5.1.6.2
+			if !self.with_checksums() {
+				let type_ = unsafe { u16::from_be(*(buff_ptr.offset(12) as *const u16)) };
+
+				match type_ {
+					0x0800 /* IPv4 */ => {
+						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						if protocol == 6 /* TCP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+20;
+							header.csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+20;
+							header.csum_offset = 6;
+						}
+					},
+					0x86DD /* IPv6 */ => {
+						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						if protocol == 6 /* TCP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+40;
+							header.csum_offset = 16;
+						} else if protocol == 17 /* UDP */ {
+							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
+							header.csum_start = 14+40;
+							header.csum_offset = 6;
+						}
+					},
+					_ => {},
+				}
+			}
+
+			buff_tkn
+				.provide()
+				.dispatch_await(Rc::clone(&self.send_vqs.poll_queue), false);
+
+			result
+		} else {
+			panic!("Unable to get token for send queue");
+		}
+	}
+
+	fn receive_packet(&mut self) -> Option<(RxToken, TxToken)> {
 		match self.recv_vqs.get_next() {
 			Some(transfer) => {
 				let transfer = match RxQueues::post_processing(transfer) {
 					Ok(trf) => trf,
 					Err(vnet_err) => {
-						error!("Post processing failed. Err: {:?}", vnet_err);
-						return Err(());
+						warn!("Post processing failed. Err: {:?}", vnet_err);
+						return None;
 					}
 				};
 
@@ -591,6 +635,15 @@ impl NetworkInterface for VirtioNetDriver {
 				// If the given length is zero, we currently fail.
 				if recv_data.len() == 2 {
 					let recv_payload = recv_data.pop().unwrap();
+					/*let header = recv_data.pop().unwrap();
+					let header = unsafe {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
+						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
+							header[..HEADER_SIZE].try_into().unwrap(),
+						)
+					};
+					trace!("Receive data with header {:?}", header);*/
+
 					// Create static reference for the user-space
 					// As long as we keep the Transfer in a raw reference this reference is static,
 					// so this is fine.
@@ -603,9 +656,17 @@ impl NetworkInterface for VirtioNetDriver {
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(vec_data)
+					Some((RxToken::new(vec_data), TxToken::new()))
 				} else if recv_data.len() == 1 {
 					let packet = recv_data.pop().unwrap();
+					/*let header = unsafe {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
+						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
+							packet[..HEADER_SIZE].try_into().unwrap(),
+						)
+					};
+					trace!("Receive data with header {:?}", header);*/
+
 					let payload_ptr =
 						(&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
 
@@ -622,35 +683,29 @@ impl NetworkInterface for VirtioNetDriver {
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Ok(vec_data)
+					Some((RxToken::new(vec_data), TxToken::new()))
 				} else {
 					error!("Empty transfer, or with wrong buffer layout. Reusing and returning error to user-space network driver...");
 					transfer
 						.reuse()
 						.unwrap()
-						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::get_rx_hdr()))
+						.write_seq(None::<&VirtioNetHdr>, Some(&VirtioNetHdr::default()))
 						.unwrap()
 						.provide()
 						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
 
-					Err(())
+					None
 				}
 			}
-			None => Err(()),
+			None => None,
 		}
 	}
 
 	fn set_polling_mode(&mut self, value: bool) {
 		if value {
-			if self.polling_mode_counter == 0 {
-				self.disable_interrupts();
-			}
-			self.polling_mode_counter += 1;
+			self.disable_interrupts();
 		} else {
-			self.polling_mode_counter -= 1;
-			if self.polling_mode_counter == 0 {
-				self.enable_interrupts();
-			}
+			self.enable_interrupts();
 		}
 	}
 
@@ -669,6 +724,15 @@ impl NetworkInterface for VirtioNetDriver {
 		self.isr_stat.acknowledge();
 
 		result
+	}
+
+	/// Returns `true` if the device supports the virtio feature
+	/// `VIRTIO_NET_F_GUEST_CSUM` and trust the incoming packages.
+	fn with_checksums(&self) -> bool {
+		!self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 	}
 }
 
@@ -789,12 +853,13 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_NET_F_MTU);
 		// Packed Vq can be used
 		feats.push(Features::VIRTIO_F_RING_PACKED);
+		// Avoid the creation of checksums
+		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
 		// needs to take care of calculating checksum in
 		// RxQueues.post_processing()
-		// feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
 		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
 
@@ -1061,6 +1126,8 @@ pub mod constants {
 	use alloc::vec::Vec;
 	use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign};
 
+	use zerocopy::AsBytes;
+
 	pub use super::error::VirtioNetError;
 
 	// Configuration constants
@@ -1070,10 +1137,11 @@ pub mod constants {
 	///
 	/// See Virtio specification v1.1. - 5.1.6
 	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Copy, Clone, Debug)]
+	#[derive(AsBytes, Copy, Clone, Debug)]
 	#[repr(u8)]
-	///
 	pub enum NetHdrFlag {
+		/// No further information
+		VIRTIO_NET_HDR_F_NONE = 0,
 		/// use csum_start, csum_offset
 		VIRTIO_NET_HDR_F_NEEDS_CSUM = 1,
 		/// csum is valid
@@ -1085,6 +1153,7 @@ pub mod constants {
 	impl From<NetHdrFlag> for u8 {
 		fn from(val: NetHdrFlag) -> Self {
 			match val {
+				NetHdrFlag::VIRTIO_NET_HDR_F_NONE => 0,
 				NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM => 1,
 				NetHdrFlag::VIRTIO_NET_HDR_F_DATA_VALID => 2,
 				NetHdrFlag::VIRTIO_NET_HDR_F_RSC_INFO => 4,
@@ -1092,55 +1161,11 @@ pub mod constants {
 		}
 	}
 
-	impl BitOr for NetHdrFlag {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrFlag) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrFlag> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrFlag) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrFlag {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrFlag> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrFlag) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrFlag> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrFlag) {
-			*self &= u8::from(rhs);
-		}
-	}
-
 	/// Enum containing Virtios netword GSO types
 	///
 	/// See Virtio specification v1.1. - 5.1.6
 	#[allow(dead_code, non_camel_case_types)]
-	#[derive(Copy, Clone, Debug)]
+	#[derive(AsBytes, Copy, Clone, Debug)]
 	#[repr(u8)]
 	pub enum NetHdrGSO {
 		/// not a GSO frame
@@ -1164,50 +1189,6 @@ pub mod constants {
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6 => 4,
 				NetHdrGSO::VIRTIO_NET_HDR_GSO_ECN => 0x80,
 			}
-		}
-	}
-
-	impl BitOr for NetHdrGSO {
-		type Output = u8;
-
-		fn bitor(self, rhs: Self) -> Self::Output {
-			u8::from(self) | u8::from(rhs)
-		}
-	}
-
-	impl BitOr<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitor(self, rhs: NetHdrGSO) -> Self::Output {
-			self | u8::from(rhs)
-		}
-	}
-
-	impl BitOrAssign<NetHdrGSO> for u8 {
-		fn bitor_assign(&mut self, rhs: NetHdrGSO) {
-			*self |= u8::from(rhs);
-		}
-	}
-
-	impl BitAnd for NetHdrGSO {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			u8::from(self) & u8::from(rhs)
-		}
-	}
-
-	impl BitAnd<NetHdrGSO> for u8 {
-		type Output = u8;
-
-		fn bitand(self, rhs: NetHdrGSO) -> Self::Output {
-			self & u8::from(rhs)
-		}
-	}
-
-	impl BitAndAssign<NetHdrGSO> for u8 {
-		fn bitand_assign(&mut self, rhs: NetHdrGSO) {
-			*self &= u8::from(rhs);
 		}
 	}
 

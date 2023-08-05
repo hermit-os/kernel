@@ -66,7 +66,7 @@ pub fn init() {
 
 	info!("Total memory size: {} MB", total_memory_size() >> 20);
 	info!(
-		"Kernel region: [{:#x} - {:#x}]",
+		"Kernel region: [{:p} - {:p}]",
 		kernel_start_address(),
 		kernel_end_address()
 	);
@@ -152,7 +152,7 @@ pub fn init() {
 		};
 
 		info!(
-			"Heap: size {} MB, start address {:#x}",
+			"Heap: size {} MB, start address {:p}",
 			virt_size >> 20,
 			virt_addr
 		);
@@ -181,9 +181,6 @@ pub fn init() {
 		}
 
 		heap_start_addr = virt_addr;
-		unsafe {
-			crate::ALLOCATOR.init(virt_addr.as_mut_ptr(), virt_size);
-		}
 
 		map_addr = virt_addr + counter;
 		map_size = virt_size - counter;
@@ -214,6 +211,14 @@ pub fn init() {
 	}
 
 	let heap_end_addr = map_addr;
+
+	#[cfg(not(feature = "newlib"))]
+	unsafe {
+		crate::ALLOCATOR.init(
+			heap_start_addr.as_mut_ptr(),
+			(heap_end_addr - heap_start_addr).into(),
+		);
+	}
 
 	let heap_addr_range = heap_start_addr..heap_end_addr;
 	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
@@ -254,7 +259,7 @@ pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 		arch::mm::physicalmem::deallocate(phys_addr, size);
 	} else {
 		panic!(
-			"No page table entry for virtual address {:#X}",
+			"No page table entry for virtual address {:p}",
 			virtual_address
 		);
 	}
@@ -303,7 +308,7 @@ pub fn unmap(virtual_address: VirtAddr, sz: usize) {
 		arch::mm::virtualmem::deallocate(virtual_address, size);
 	} else {
 		panic!(
-			"No page table entry for virtual address {:#X}",
+			"No page table entry for virtual address {:p}",
 			virtual_address
 		);
 	}

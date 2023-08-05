@@ -24,6 +24,7 @@ const MAX_HANDLERS: usize = 256;
 /// The ID of the first Private Peripheral Interrupt.
 const PPI_START: u8 = 16;
 /// The ID of the first Shared Peripheral Interrupt.
+#[allow(dead_code)]
 const SPI_START: u8 = 32;
 /// Software-generated interrupt for rescheduling
 pub(crate) const SGI_RESCHED: u8 = 1;
@@ -93,6 +94,7 @@ pub fn disable() {
 	}
 }
 
+#[allow(dead_code)]
 pub(crate) fn irq_install_handler(irq_number: u8, handler: HandlerFunc) {
 	debug!("Install handler for interrupt {}", irq_number);
 	unsafe {
@@ -245,11 +247,11 @@ pub(crate) fn init() {
 	let gicc_size = u64::from_be_bytes(slice.try_into().unwrap());
 
 	info!(
-		"Found GIC Distributor interface at {:#X} (size {:#X})",
+		"Found GIC Distributor interface at {:p} (size {:#X})",
 		gicd_start, gicd_size
 	);
 	info!(
-		"Found generic interrupt controller at {:#X} (size {:#X})",
+		"Found generic interrupt controller at {:p} (size {:#X})",
 		gicc_start, gicc_size
 	);
 
@@ -348,7 +350,8 @@ pub(crate) fn init() {
 static IRQ_NAMES: InterruptTicketMutex<HashMap<u8, &'static str, RandomState>> =
 	InterruptTicketMutex::new(HashMap::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 
-pub fn add_irq_name(irq_number: u8, name: &'static str) {
+#[allow(dead_code)]
+pub(crate) fn add_irq_name(irq_number: u8, name: &'static str) {
 	debug!("Register name \"{}\"  for interrupt {}", name, irq_number);
 	IRQ_NAMES.lock().insert(SPI_START + irq_number, name);
 }
@@ -357,10 +360,10 @@ fn get_irq_name(irq_number: u8) -> Option<&'static str> {
 	IRQ_NAMES.lock().get(&irq_number).copied()
 }
 
-pub static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
+pub(crate) static IRQ_COUNTERS: InterruptSpinMutex<BTreeMap<CoreId, &IrqStatistics>> =
 	InterruptSpinMutex::new(BTreeMap::new());
 
-pub struct IrqStatistics {
+pub(crate) struct IrqStatistics {
 	pub counters: [AtomicU64; 256],
 }
 
@@ -378,7 +381,7 @@ impl IrqStatistics {
 	}
 }
 
-pub fn print_statistics() {
+pub(crate) fn print_statistics() {
 	info!("Number of interrupts");
 	for (core_id, irg_statistics) in IRQ_COUNTERS.lock().iter() {
 		for (i, counter) in irg_statistics.counters.iter().enumerate() {

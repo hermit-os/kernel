@@ -165,7 +165,7 @@ where
 {
 	assert!(
 		frame.start_address().as_u64() < mm::kernel_start_address().0,
-		"Address {:#X} to be identity-mapped is not below Kernel start address",
+		"Address {:p} to be identity-mapped is not below Kernel start address",
 		frame.start_address()
 	);
 
@@ -187,7 +187,7 @@ where
 	RecursivePageTable<'static>: Mapper<S>,
 {
 	trace!(
-		"Unmapping virtual address {:#X} ({} pages)",
+		"Unmapping virtual address {:p} ({} pages)",
 		virtual_address,
 		count
 	);
