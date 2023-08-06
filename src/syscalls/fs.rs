@@ -161,7 +161,7 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	#[cfg(feature = "pci")]
+	#[cfg(feature = "fs")]
 	pub fn mount(
 		&mut self,
 		mntpath: &str,
@@ -200,9 +200,9 @@ impl Filesystem {
 #[derive(Debug)]
 pub enum FileError {
 	ENOENT,
-	#[cfg(feature = "pci")]
+	#[cfg(feature = "fs")]
 	ENOSYS,
-	#[cfg(feature = "pci")]
+	#[cfg(feature = "fs")]
 	EIO,
 }
 

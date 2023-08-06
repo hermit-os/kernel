@@ -1,5 +1,6 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
+#[cfg(feature = "fs")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
@@ -7,6 +8,7 @@ pub mod mmio;
 pub mod net;
 #[cfg(feature = "pci")]
 pub mod pci;
+#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 pub mod virtio;
 
 /// A common error module for drivers.
@@ -17,15 +19,18 @@ pub mod error {
 
 	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
+	#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 	use crate::drivers::virtio::error::VirtioError;
 
 	#[derive(Debug)]
 	pub enum DriverError {
+		#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 		InitVirtioDevFail(VirtioError),
 		#[cfg(feature = "rtl8139")]
 		InitRTL8139DevFail(RTL8139Error),
 	}
 
+	#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 	impl From<VirtioError> for DriverError {
 		fn from(err: VirtioError) -> Self {
 			DriverError::InitVirtioDevFail(err)
@@ -40,8 +45,10 @@ pub mod error {
 	}
 
 	impl fmt::Display for DriverError {
+		#[allow(unused_variables)]
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 			match *self {
+				#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")
 				}

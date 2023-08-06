@@ -15,6 +15,7 @@ use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
+#[cfg(feature = "fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::network_irqhandler;
@@ -1272,6 +1273,7 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "fs")]
 		DevId::VIRTIO_DEV_ID_FS => {
 			// TODO: check subclass
 			// TODO: proper error handling on driver creation fail
@@ -1315,6 +1317,7 @@ pub(crate) fn init_device(
 
 					Ok(drv)
 				}
+				#[cfg(feature = "fs")]
 				VirtioDriver::FileSystem(_) => Ok(drv),
 			}
 		}
@@ -1325,5 +1328,6 @@ pub(crate) fn init_device(
 pub(crate) enum VirtioDriver {
 	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	Network(VirtioNetDriver),
+	#[cfg(feature = "fs")]
 	FileSystem(VirtioFsDriver),
 }

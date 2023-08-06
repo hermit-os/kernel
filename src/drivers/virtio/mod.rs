@@ -8,7 +8,7 @@ pub mod virtqueue;
 pub mod error {
 	use core::fmt;
 
-	#[cfg(feature = "pci")]
+	#[cfg(feature = "fs")]
 	pub use crate::drivers::fs::virtio_fs::error::VirtioFsError;
 	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	pub use crate::drivers::net::virtio_net::error::VirtioNetError;
@@ -23,7 +23,7 @@ pub mod error {
 		DevNotSupported(u16),
 		#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 		NetDriver(VirtioNetError),
-		#[cfg(feature = "pci")]
+		#[cfg(feature = "fs")]
 		FsDriver(VirtioFsError),
 		#[cfg(not(feature = "pci"))]
 		Unknown,
@@ -56,7 +56,7 @@ pub mod error {
                     VirtioNetError::ProcessOngoing => write!(f, "Virtio network performed an unsuitable operation upon an ongoging transfer."),
 					VirtioNetError::Unknown => write!(f, "Virtio network driver failed due unknown reason!"),
                 },
-				#[cfg(feature = "pci")]
+				#[cfg(feature = "fs")]
 				VirtioError::FsDriver(fs_error) => match fs_error {
 					VirtioFsError::NoDevCfg(id) => write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed device config!"),
 					VirtioFsError::NoComCfg(id) =>  write!(f, "Virtio filesystem driver failed, for device {id:x}, due to a missing or malformed common config!"),
