@@ -1044,6 +1044,7 @@ fn create_create(
 pub fn init() {
 	if let Some(driver) = get_filesystem_driver() {
 		// Instantiate global fuse object
+		info!("Initialize FUSE support");
 		let fuse = Box::new(Fuse::new());
 		fuse.send_init();
 

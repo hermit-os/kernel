@@ -73,6 +73,7 @@ mod env;
 pub mod errno;
 mod executor;
 pub(crate) mod fd;
+#[cfg(feature = "fs")]
 pub(crate) mod fs;
 mod mm;
 mod scheduler;
@@ -264,6 +265,7 @@ extern "C" fn initd(_arg: usize) {
 
 	syscalls::init();
 	fd::init();
+	#[cfg(feature = "fs")]
 	fs::init();
 
 	// Get the application arguments and environment variables.
