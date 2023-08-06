@@ -48,7 +48,7 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4"]
+default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fs"]
 vga = []
 newlib = []
 pci = []
@@ -57,6 +57,7 @@ smp = ["include-transformed"]
 fsgsbase = []
 trace = []
 rtl8139 = ["tcp", "pci"]
+fs = ["pci"]
 tcp = [
     "smoltcp",
 ]
