@@ -662,16 +662,7 @@ impl NetworkDriver for VirtioNetDriver {
 					};
 					trace!("Receive data with header {:?}", header);*/
 
-					let payload_ptr =
-						(&packet[mem::size_of::<VirtioNetHdr>()] as *const u8) as *mut u8;
-
-					let ref_data: &'static mut [u8] = unsafe {
-						core::slice::from_raw_parts_mut(
-							payload_ptr,
-							packet.len() - mem::size_of::<VirtioNetHdr>(),
-						)
-					};
-					let vec_data = ref_data.to_vec();
+					let vec_data = packet[mem::size_of::<VirtioNetHdr>()..].to_vec();
 					transfer
 						.reuse()
 						.unwrap()
