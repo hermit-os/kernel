@@ -103,7 +103,7 @@ fn binutil(name: &str) -> Result<PathBuf> {
 			llvm_tools::Error::NotFound => anyhow!(
 				"Could not find llvm-tools component\n\
 				\n\
-				Maybe the rustup component `llvm-tools-preview` is missing? Install it through: `rustup component add llvm-tools-preview`"
+				Maybe the rustup component `llvm-tools` is missing? Install it through: `rustup component add llvm-tools`"
 			),
 			err => anyhow!("{err:?}"),
 		})?

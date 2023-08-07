@@ -2,7 +2,7 @@
 # Manually sync this with Dockerfile!
 channel = "nightly-2023-07-15"
 components = [
-    "llvm-tools-preview",
+    "llvm-tools",
     "rust-src",
 ]
 targets = [ "x86_64-unknown-none" ]
