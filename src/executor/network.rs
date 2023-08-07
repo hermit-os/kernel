@@ -16,8 +16,8 @@ use smoltcp::time::{Duration, Instant};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
-use crate::arch::core_local::*;
 use crate::arch;
+use crate::arch::core_local::*;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
