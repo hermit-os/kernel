@@ -5,8 +5,8 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
     # Manually sync this with rust-toolchain.toml!
-    RUST_VERSION=nightly-2023-07-15 \
-    RUST_COMPONENTS="llvm-tools-preview rust-src" \
+    RUST_VERSION=nightly-2023-08-01 \
+    RUST_COMPONENTS="llvm-tools rust-src" \
     RUST_TARGETS="x86_64-unknown-none"
 
 RUN set -eux; \

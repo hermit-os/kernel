@@ -698,7 +698,7 @@ impl<'a> ReadCtrl<'a> {
 
 	/// Updates the descriptor flags inside the actual ring if necessary and
 	/// increments the poll_index by one.
-	fn update_send(&mut self, send_buff: &mut Buffer) {
+	fn update_send(&mut self, send_buff: &Buffer) {
 		for _desc in send_buff.as_slice() {
 			// Increase poll_index and reset ring position beforehand in order to have a consistent and clean
 			// data structure.
