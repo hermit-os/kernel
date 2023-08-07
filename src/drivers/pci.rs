@@ -4,7 +4,9 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use bitflags::bitflags;
-use hermit_sync::{without_interrupts, InterruptTicketMutex};
+use hermit_sync::without_interrupts;
+#[cfg(any(feature = "tcp", feature = "fs"))]
+use hermit_sync::InterruptTicketMutex;
 use pci_types::{
 	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
 	PciHeader, VendorId, MAX_BARS,
@@ -12,12 +14,15 @@ use pci_types::{
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::pci::PciConfigRegion;
+#[cfg(feature = "fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 #[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
+#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
+#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
 /// Converts a given little endian coded u32 to native endian coded.
@@ -455,6 +460,7 @@ pub(crate) fn print_information() {
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum PciDriver {
+	#[cfg(feature = "fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
@@ -465,6 +471,7 @@ pub(crate) enum PciDriver {
 impl PciDriver {
 	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
+		#[allow(unreachable_patterns)]
 		match self {
 			Self::VirtioNet(drv) => Some(drv),
 			_ => None,
@@ -473,12 +480,14 @@ impl PciDriver {
 
 	#[cfg(all(feature = "rtl8139", feature = "tcp"))]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<RTL8139Driver>> {
+		#[allow(unreachable_patterns)]
 		match self {
 			Self::RTL8139Net(drv) => Some(drv),
 			_ => None,
 		}
 	}
 
+	#[cfg(feature = "fs")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
@@ -504,6 +513,7 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL81
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
+#[cfg(feature = "fs")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	unsafe {
 		PCI_DRIVERS
@@ -526,11 +536,13 @@ pub(crate) fn init_drivers() {
 				adapter.device_id()
 			);
 
+			#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 				}
+				#[cfg(feature = "fs")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)))
 				}

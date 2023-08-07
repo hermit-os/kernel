@@ -231,6 +231,7 @@ pub fn print_information() {
 	arch::mm::virtualmem::print_information();
 }
 
+#[allow(dead_code)]
 pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
@@ -247,6 +248,7 @@ pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	virtual_address
 }
 
+#[allow(dead_code)]
 pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 
