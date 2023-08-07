@@ -275,8 +275,6 @@ where
 			}
 		}
 
-		// disable all interrupts
-		interrupts::disable();
 		let delay = network_delay(now).map(|d| d.total_micros());
 		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
 			let ticks = crate::arch::processor::get_timer_ticks();
@@ -288,9 +286,6 @@ where
 			// allow network interrupts
 			get_network_driver().unwrap().lock().set_polling_mode(false);
 
-			// enable interrupts
-			interrupts::enable();
-
 			// switch to another task
 			task_notify.wait(wakeup_time);
 
@@ -298,9 +293,6 @@ where
 			get_network_driver().unwrap().lock().set_polling_mode(true);
 			backoff.reset();
 		} else {
-			// enable interrupts
-			interrupts::enable();
-
 			backoff.snooze();
 		}
 	}
