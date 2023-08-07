@@ -17,7 +17,7 @@ use smoltcp::time::{Duration, Instant};
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch::core_local::*;
-use crate::arch::{self, interrupts};
+use crate::arch;
 #[cfg(not(feature = "pci"))]
 use crate::drivers::mmio::get_network_driver;
 use crate::drivers::net::NetworkDriver;
