@@ -1,3 +1,5 @@
+#[cfg(all(target_arch = "riscv64", feature = "gem-net"))]
+pub mod gem;
 #[cfg(feature = "rtl8139")]
 pub mod rtl8139;
 #[cfg(all(not(feature = "pci"), not(feature = "rtl8139")))]

@@ -27,7 +27,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check each feature
-        run: cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none
+        run: cargo hack check --package hermit-kernel --each-feature --skip gem-net --no-dev-deps --target x86_64-unknown-none
         env:
           RUSTFLAGS:
 

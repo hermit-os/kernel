@@ -20,6 +20,8 @@ pub mod virtio;
 pub mod error {
 	use core::fmt;
 
+	#[cfg(feature = "gem-net")]
+	use crate::drivers::net::gem::GEMError;
 	#[cfg(feature = "rtl8139")]
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	#[cfg(any(
@@ -37,6 +39,8 @@ pub mod error {
 		InitVirtioDevFail(VirtioError),
 		#[cfg(feature = "rtl8139")]
 		InitRTL8139DevFail(RTL8139Error),
+		#[cfg(feature = "gem-net")]
+		InitGEMDevFail(GEMError),
 	}
 
 	#[cfg(any(
@@ -56,6 +60,13 @@ pub mod error {
 		}
 	}
 
+	#[cfg(feature = "gem-net")]
+	impl From<GEMError> for DriverError {
+		fn from(err: GEMError) -> Self {
+			DriverError::InitGEMDevFail(err)
+		}
+	}
+
 	impl fmt::Display for DriverError {
 		#[allow(unused_variables)]
 		fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -70,6 +81,10 @@ pub mod error {
 				#[cfg(feature = "rtl8139")]
 				DriverError::InitRTL8139DevFail(ref err) => {
 					write!(f, "RTL8139 driver failed: {err:?}")
+				}
+				#[cfg(feature = "gem-net")]
+				DriverError::InitGEMDevFail(ref err) => {
+					write!(f, "GEM driver failed: {err:?}")
 				}
 			}
 		}

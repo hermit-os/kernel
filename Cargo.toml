@@ -54,6 +54,7 @@ dhcpv4 = [
 ]
 fs = ["pci"]
 fsgsbase = []
+gem-net = ["tcp"]
 newlib = []
 pci = []
 rtl8139 = ["tcp", "pci"]
