@@ -644,12 +644,7 @@ impl NetworkDriver for VirtioNetDriver {
 					};
 					trace!("Receive data with header {:?}", header);*/
 
-					// Create static reference for the user-space
-					// As long as we keep the Transfer in a raw reference this reference is static,
-					// so this is fine.
-					let recv_ref = (recv_payload as *const [u8]) as *mut [u8];
-					let ref_data: &'static mut [u8] = unsafe { &mut *(recv_ref) };
-					let vec_data = ref_data.to_vec();
+					let vec_data = recv_payload.to_vec();
 					transfer
 						.reuse()
 						.unwrap()
