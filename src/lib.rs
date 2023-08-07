@@ -115,8 +115,20 @@ fn trivial_test() {
 }
 
 #[cfg(target_os = "none")]
+static mut ARENA: [u8; 0x2000] = [0; 0x2000];
+
+#[cfg(target_os = "none")]
 #[global_allocator]
-static ALLOCATOR: LockedAllocator = LockedAllocator::empty();
+static mut ALLOCATOR: LockedAllocator = LockedAllocator(
+	talc::Talc::new(unsafe {
+		// if we're in a hosted environment, the Rust runtime may allocate before
+		// main() is called, so we need to initialize the arena automatically
+		talc::InitOnOom::new(talc::Span::from_slice(
+			ARENA.as_slice() as *const [u8] as *mut [u8]
+		))
+	})
+	.lock(),
+);
 
 /// Interface to allocate memory from system heap
 ///

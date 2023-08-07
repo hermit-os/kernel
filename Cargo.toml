@@ -89,7 +89,7 @@ num = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 num-derive = "0.4"
 zerocopy = "0.6"
-talc = { version = "2", default-features = false }
+talc = { version = "2" }
 time = { version = "0.3", default-features = false }
 pci_types = { version = "0.5" }
 
