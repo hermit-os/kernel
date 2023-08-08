@@ -2,9 +2,8 @@ use core::alloc::AllocError;
 
 use hermit_sync::InterruptTicketMutex;
 
-use crate::arch::aarch64::kernel::get_ram_address;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize};
-use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
+use crate::arch::aarch64::mm::VirtAddr;
 use crate::mm;
 use crate::mm::freelist::{FreeList, FreeListEntry};
 
@@ -16,15 +15,6 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
 const KERNEL_VIRTUAL_MEMORY_END: VirtAddr = VirtAddr(0x1_0000_0000);
 
 pub fn init() {
-	// don't use the first two kilobytes
-	if get_ram_address() > PhysAddr(0x2000) {
-		let entry = FreeListEntry {
-			start: 0x2000,
-			end: get_ram_address().as_usize(),
-		};
-		KERNEL_FREE_LIST.lock().list.push_back(entry);
-	}
-
 	let entry = FreeListEntry {
 		start: mm::kernel_end_address().as_usize(),
 		end: KERNEL_VIRTUAL_MEMORY_END.as_usize(),
