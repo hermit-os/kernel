@@ -119,7 +119,7 @@ features = [
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 multiboot = "0.8"
-uart_16550 = "0.2"
+uart_16550 = "0.3"
 x86 = { version = "0.52", default-features = false }
 x86_64 = "0.14"
 
