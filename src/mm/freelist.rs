@@ -4,6 +4,7 @@ use core::cmp::Ordering;
 
 use align_address::Align;
 
+#[derive(Debug)]
 pub struct FreeListEntry {
 	pub start: usize,
 	pub end: usize,
@@ -15,6 +16,7 @@ impl FreeListEntry {
 	}
 }
 
+#[derive(Debug)]
 pub struct FreeList {
 	pub list: LinkedList<FreeListEntry>,
 }
