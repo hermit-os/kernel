@@ -76,6 +76,6 @@ unsafe extern "C" fn pre_init(boot_info: &'static RawBootInfo, cpu_id: u32) -> !
 			}
 		}
 		#[cfg(feature = "smp")]
-		crate::application_processor_main();
+		crate::application_processor_main()
 	}
 }

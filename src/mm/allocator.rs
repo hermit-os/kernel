@@ -62,15 +62,12 @@ mod tests {
 
 	#[test]
 	fn empty() {
-		let mut arena: [u8; 0x1000] = [0; 0x1000];
-		let allocator: LockedAllocator = LockedAllocator(
-			talc::Talc::new(unsafe {
-				talc::InitOnOom::new(talc::Span::from_slice(
-					arena.as_slice() as *const [u8] as *mut [u8]
-				))
-			})
-			.lock(),
-		);
+		const ARENA_SIZE: usize = 0x1000;
+		let mut arena: [u8; ARENA_SIZE] = [0; ARENA_SIZE];
+		let allocator: LockedAllocator = LockedAllocator::new();
+		unsafe {
+			allocator.init(&mut arena as *mut [u8] as *mut u8, ARENA_SIZE);
+		}
 
 		let layout = Layout::from_size_align(1, 1).unwrap();
 		// we have 4 kbyte  memory

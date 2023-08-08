@@ -6,6 +6,8 @@ pub mod aarch64;
 pub mod x86_64;
 
 // Export our platform-specific modules.
+#[cfg(all(target_arch = "aarch64", target_os = "none"))]
+pub use crate::arch::aarch64::kernel::boot_processor_init;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::core_local;
 #[cfg(target_arch = "aarch64")]
@@ -26,8 +28,8 @@ pub use crate::arch::aarch64::kernel::switch;
 pub use crate::arch::aarch64::kernel::systemtime::get_boot_time;
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::kernel::{
-	application_processor_init, boot_application_processors, boot_processor_init,
-	get_processor_count, message_output_init, output_message_buf,
+	application_processor_init, boot_application_processors, get_processor_count,
+	message_output_init, output_message_buf,
 };
 #[cfg(target_arch = "aarch64")]
 pub use crate::arch::aarch64::*;
