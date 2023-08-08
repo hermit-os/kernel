@@ -37,26 +37,26 @@ static KERNEL_ADDR_RANGE: Lazy<Range<VirtAddr>> = Lazy::new(|| {
 /// User heap address range.
 static HEAP_ADDR_RANGE: OnceCell<Range<VirtAddr>> = OnceCell::new();
 
-pub fn kernel_start_address() -> VirtAddr {
+pub(crate) fn kernel_start_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.start
 }
 
-pub fn kernel_end_address() -> VirtAddr {
+pub(crate) fn kernel_end_address() -> VirtAddr {
 	KERNEL_ADDR_RANGE.end
 }
 
 #[cfg(feature = "newlib")]
-pub fn task_heap_start() -> VirtAddr {
+pub(crate) fn task_heap_start() -> VirtAddr {
 	HEAP_ADDR_RANGE.get().unwrap().start
 }
 
 #[cfg(feature = "newlib")]
-pub fn task_heap_end() -> VirtAddr {
+pub(crate) fn task_heap_end() -> VirtAddr {
 	HEAP_ADDR_RANGE.get().unwrap().end
 }
 
 #[cfg(target_os = "none")]
-pub fn init() {
+pub(crate) fn init() {
 	use crate::arch::mm::paging;
 
 	Lazy::force(&KERNEL_ADDR_RANGE);
@@ -231,13 +231,13 @@ pub fn init() {
 	HEAP_ADDR_RANGE.set(heap_addr_range).unwrap();
 }
 
-pub fn print_information() {
+pub(crate) fn print_information() {
 	arch::mm::physicalmem::print_information();
 	arch::mm::virtualmem::print_information();
 }
 
 #[allow(dead_code)]
-pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
+pub(crate) fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 	let physical_address = arch::mm::physicalmem::allocate(size).unwrap();
 	let virtual_address = arch::mm::virtualmem::allocate(size).unwrap();
@@ -254,7 +254,7 @@ pub fn allocate(sz: usize, no_execution: bool) -> VirtAddr {
 }
 
 #[allow(dead_code)]
-pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
+pub(crate) fn deallocate(virtual_address: VirtAddr, sz: usize) {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 
 	if let Some(phys_addr) = arch::mm::paging::virtual_to_physical(virtual_address) {
@@ -274,7 +274,7 @@ pub fn deallocate(virtual_address: VirtAddr, sz: usize) {
 
 /// Maps a given physical address and size in virtual space and returns address.
 #[cfg(feature = "pci")]
-pub fn map(
+pub(crate) fn map(
 	physical_address: PhysAddr,
 	sz: usize,
 	writable: bool,
@@ -304,7 +304,7 @@ pub fn map(
 
 #[allow(dead_code)]
 /// unmaps virtual address, without 'freeing' physical memory it is mapped to!
-pub fn unmap(virtual_address: VirtAddr, sz: usize) {
+pub(crate) fn unmap(virtual_address: VirtAddr, sz: usize) {
 	let size = sz.align_up(BasePageSize::SIZE as usize);
 
 	if arch::mm::paging::virtual_to_physical(virtual_address).is_some() {
