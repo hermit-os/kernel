@@ -3,11 +3,9 @@
 mod flags;
 mod target;
 
-use std::{
-	env::{self, VarError},
-	ffi::OsStr,
-	path::{Path, PathBuf},
-};
+use std::env::{self, VarError};
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use llvm_tools::LlvmTools;

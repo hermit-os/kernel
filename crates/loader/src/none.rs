@@ -1,11 +1,12 @@
-use crate::arch;
-use crate::console;
+use core::fmt::Write;
+use core::mem::MaybeUninit;
+use core::ptr::addr_of_mut;
+use core::slice;
 
 use hermit_entry::elf::KernelObject;
-
-use core::{fmt::Write, mem::MaybeUninit, ptr::addr_of_mut, slice};
-
 use log::info;
+
+use crate::{arch, console};
 
 extern "C" {
 	static kernel_end: u8;
