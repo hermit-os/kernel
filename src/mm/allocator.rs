@@ -7,15 +7,17 @@ use align_address::Align;
 use hermit_sync::RawInterruptTicketMutex;
 use talc::{InitOnOom, Span, Talck};
 
-use crate::HW_DESTRUCTIVE_INTERFERENCE_SIZE;
-
 pub struct LockedAllocator(pub Talck<RawInterruptTicketMutex, InitOnOom>);
 
 impl LockedAllocator {
 	#[inline]
 	fn align_layout(layout: Layout) -> Layout {
-		let size = layout.size().align_up(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
-		let align = layout.align().max(HW_DESTRUCTIVE_INTERFERENCE_SIZE);
+		let size = layout
+			.size()
+			.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>());
+		let align = layout
+			.align()
+			.max(core::mem::align_of::<crossbeam_utils::CachePadded<u8>>());
 		Layout::from_size_align(size, align).unwrap()
 	}
 
