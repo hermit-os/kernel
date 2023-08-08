@@ -5,11 +5,15 @@ use core::alloc::{GlobalAlloc, Layout};
 
 use align_address::Align;
 use hermit_sync::RawInterruptTicketMutex;
-use talc::{InitOnOom, Span, Talck};
+use talc::{ErrOnOom, Span, Talc, Talck};
 
-pub struct LockedAllocator(pub Talck<RawInterruptTicketMutex, InitOnOom>);
+pub struct LockedAllocator(Talck<RawInterruptTicketMutex, ErrOnOom>);
 
 impl LockedAllocator {
+	pub const fn new() -> Self {
+		Self(Talc::new(ErrOnOom).lock())
+	}
+
 	#[inline]
 	fn align_layout(layout: Layout) -> Layout {
 		let size = layout
@@ -25,6 +29,13 @@ impl LockedAllocator {
 		let arena = Span::from_base_size(heap_bottom, heap_size);
 		unsafe {
 			self.0.talc().init(arena);
+		}
+	}
+
+	pub unsafe fn extend(&self, heap_bottom: *mut u8, heap_size: usize) {
+		let arena = Span::from_base_size(heap_bottom, heap_size);
+		unsafe {
+			self.0.talc().extend(arena);
 		}
 	}
 }

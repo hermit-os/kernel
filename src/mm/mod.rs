@@ -114,7 +114,7 @@ pub fn init() {
 
 		unsafe {
 			let start = allocate(kernel_heap_size, true);
-			crate::ALLOCATOR.init(start.as_mut_ptr(), kernel_heap_size);
+			crate::ALLOCATOR.extend(start.as_mut_ptr(), kernel_heap_size);
 
 			info!("Kernel heap starts at {:#x}", start);
 		}
@@ -211,16 +211,21 @@ pub fn init() {
 	}
 
 	let heap_end_addr = map_addr;
+	let init_heap_start_addr = env::get_base_address() + env::get_image_size();
 
 	#[cfg(not(feature = "newlib"))]
 	unsafe {
-		crate::ALLOCATOR.init(
-			heap_start_addr.as_mut_ptr(),
-			(heap_end_addr - heap_start_addr).into(),
+		crate::ALLOCATOR.extend(
+			init_heap_start_addr.as_mut_ptr(),
+			(heap_end_addr - init_heap_start_addr).into(),
 		);
 	}
+	info!(
+		"Heap extension from {:#x} to {:#x}",
+		heap_start_addr, heap_end_addr
+	);
 
-	let heap_addr_range = heap_start_addr..heap_end_addr;
+	let heap_addr_range = init_heap_start_addr..heap_end_addr;
 	info!("Heap is located at {heap_addr_range:#x?} ({map_size} Bytes unmapped)");
 	#[cfg(feature = "newlib")]
 	HEAP_ADDR_RANGE.set(heap_addr_range).unwrap();
