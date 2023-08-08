@@ -9,17 +9,15 @@ use core::ptr::write_bytes;
 #[cfg(target_os = "none")]
 use core::slice;
 
+use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
+use hermit_entry::elf::LoadedKernel;
 #[cfg(all(target_os = "none", feature = "fc"))]
 use hermit_entry::fc::{
 	BOOT_FLAG_OFFSET, CMD_LINE_PTR_OFFSET, CMD_LINE_SIZE_OFFSET, E820_ENTRIES_OFFSET,
 	E820_TABLE_OFFSET, HDR_MAGIC_OFFSET, LINUX_KERNEL_BOOT_FLAG_MAGIC, LINUX_KERNEL_HRD_MAGIC,
 	LINUX_SETUP_HEADER_OFFSET, RAMDISK_IMAGE_OFFSET, RAMDISK_SIZE_OFFSET,
 };
-use hermit_entry::{
-	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
-	elf::LoadedKernel,
-	Entry,
-};
+use hermit_entry::Entry;
 use log::info;
 #[cfg(all(target_os = "none", not(feature = "fc")))]
 use multiboot::information::MemoryManagement;

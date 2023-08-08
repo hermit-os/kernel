@@ -1,7 +1,8 @@
 use core::fmt::Debug;
 
+use x86_64::structures::paging::mapper::CleanUp;
 use x86_64::structures::paging::{
-	mapper::CleanUp, Mapper, Page, PageSize, PageTableFlags, PhysFrame, RecursivePageTable,
+	Mapper, Page, PageSize, PageTableFlags, PhysFrame, RecursivePageTable,
 };
 
 use super::physicalmem::PhysAlloc;

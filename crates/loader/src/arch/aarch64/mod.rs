@@ -6,11 +6,9 @@ use core::arch::asm;
 
 use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
 use hermit_dtb::Dtb;
-use hermit_entry::{
-	boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase},
-	elf::LoadedKernel,
-	Entry,
-};
+use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
+use hermit_entry::elf::LoadedKernel;
+use hermit_entry::Entry;
 use log::info;
 
 use crate::arch::paging::*;
