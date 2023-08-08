@@ -7,6 +7,7 @@ pub mod pci;
 pub mod processor;
 pub mod scheduler;
 pub mod serial;
+#[cfg(target_os = "none")]
 mod start;
 pub mod switch;
 pub mod systemtime;
@@ -187,6 +188,7 @@ pub fn output_message_buf(buf: &[u8]) {
 }
 
 /// Real Boot Processor initialization as soon as we have put the first Welcome message on the screen.
+#[cfg(target_os = "none")]
 pub fn boot_processor_init() {
 	processor::configure();
 
