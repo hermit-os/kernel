@@ -140,16 +140,10 @@ pub(crate) fn init() {
 
 		let virt_size: usize =
 			(available_memory - stack_reserve).align_down(LargePageSize::SIZE as usize);
-
-		let virt_addr = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
-			arch::mm::virtualmem::allocate_aligned(
-				virt_size.align_up(HugePageSize::SIZE as usize),
-				HugePageSize::SIZE as usize,
-			)
-			.unwrap()
-		} else {
-			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize).unwrap()
-		};
+		let virt_addr =
+			arch::mm::virtualmem::allocate_aligned(virt_size, LargePageSize::SIZE as usize)
+				.unwrap();
+		heap_start_addr = virt_addr;
 
 		info!(
 			"Heap: size {} MB, start address {:p}",
@@ -157,33 +151,23 @@ pub(crate) fn init() {
 			virt_addr
 		);
 
-		// try to map a huge page
-		let mut counter = if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
-			paging::map_heap::<HugePageSize>(virt_addr, 1);
-			HugePageSize::SIZE as usize
+		#[cfg(target_arch = "x86_64")]
+		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
+			// Mount large pages to the next huge page boundary
+			map_addr = virt_addr.align_up_to_huge_page();
+			map_size = virt_size - (map_addr - virt_addr).as_usize();
+			let npages = (map_addr - virt_addr).as_usize() / LargePageSize::SIZE as usize;
+			paging::map_heap::<LargePageSize>(virt_addr, npages);
 		} else {
-			0
-		};
-
-		if counter == 0 && has_2mib_pages {
-			// fall back to large pages
-			paging::map_heap::<LargePageSize>(virt_addr, 1);
-			counter = LargePageSize::SIZE as usize;
+			map_addr = virt_addr;
+			map_size = virt_size;
 		}
 
-		if counter == 0 {
-			// fall back to normal pages, but map at least the size of a large page
-			paging::map_heap::<BasePageSize>(
-				virt_addr,
-				LargePageSize::SIZE as usize / BasePageSize::SIZE as usize,
-			);
-			counter = LargePageSize::SIZE as usize;
+		#[cfg(not(target_arch = "x86_64"))]
+		{
+			map_addr = virt_addr;
+			map_size = virt_size;
 		}
-
-		heap_start_addr = virt_addr;
-
-		map_addr = virt_addr + counter;
-		map_size = virt_size - counter;
 	}
 
 	if has_1gib_pages
