@@ -49,7 +49,10 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			start_address.as_usize(),
 			(m.base_address() + m.length()) as usize,
 		);
-		let _ = TOTAL_MEMORY.fetch_add((m.base_address() + m.length()) as usize, Ordering::SeqCst);
+		let _ = TOTAL_MEMORY.fetch_add(
+			(m.base_address() + m.length() - start_address.as_u64()) as usize,
+			Ordering::SeqCst,
+		);
 		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
 	}
 
