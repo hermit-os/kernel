@@ -611,13 +611,11 @@ pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), us
 	};
 
 	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
-	let mut map_counter: usize = 0;
 
-	for virt_addr in virt_addrs {
+	for (map_counter, virt_addr) in virt_addrs.enumerate() {
 		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
 			.map_err(|_| map_counter)?;
 		map::<S>(virt_addr, phys_addr, 1, flags);
-		map_counter += 1;
 	}
 
 	Ok(())
