@@ -8,6 +8,7 @@ pub use self::condvar::*;
 pub use self::entropy::*;
 pub use self::futex::*;
 pub use self::processor::*;
+#[cfg(feature = "newlib")]
 pub use self::recmutex::*;
 pub use self::semaphore::*;
 pub use self::spinlock::*;
@@ -30,6 +31,7 @@ mod lwip;
 #[cfg(all(feature = "tcp", not(feature = "newlib")))]
 pub mod net;
 mod processor;
+#[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
 mod spinlock;
