@@ -138,7 +138,9 @@ pub fn map<S>(
 	}
 }
 
-pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize)
+/// Maps `count` pages at address `virt_addr`. If the allocation of a physical memory failed,
+/// the number of successfull mapped pages are returned as error value.
+pub fn map_heap<S: PageSize>(virt_addr: VirtAddr, count: usize) -> Result<(), usize>
 where
 	S: PageSize + Debug,
 	RecursivePageTable<'static>: Mapper<S>,
@@ -151,10 +153,13 @@ where
 
 	let virt_addrs = (0..count).map(|n| virt_addr + n * S::SIZE as usize);
 
-	for virt_addr in virt_addrs {
-		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize).unwrap();
+	for (map_counter, virt_addr) in virt_addrs.enumerate() {
+		let phys_addr = physicalmem::allocate_aligned(S::SIZE as usize, S::SIZE as usize)
+			.map_err(|_| map_counter)?;
 		map::<S>(virt_addr, phys_addr, 1, flags);
 	}
+
+	Ok(())
 }
 
 #[cfg(feature = "acpi")]
