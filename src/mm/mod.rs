@@ -154,10 +154,15 @@ pub(crate) fn init() {
 		#[cfg(target_arch = "x86_64")]
 		if has_1gib_pages && virt_size > HugePageSize::SIZE as usize {
 			// Mount large pages to the next huge page boundary
-			map_addr = virt_addr.align_up_to_huge_page();
-			map_size = virt_size - (map_addr - virt_addr).as_usize();
-			let npages = (map_addr - virt_addr).as_usize() / LargePageSize::SIZE as usize;
-			paging::map_heap::<LargePageSize>(virt_addr, npages);
+			let npages = (virt_addr.align_up_to_huge_page().as_usize() - virt_addr.as_usize())
+				/ LargePageSize::SIZE as usize;
+			if let Err(n) = paging::map_heap::<LargePageSize>(virt_addr, npages) {
+				map_addr = virt_addr + n * LargePageSize::SIZE as usize;
+				map_size = virt_size - (map_addr - virt_addr).as_usize();
+			} else {
+				map_addr = virt_addr.align_up_to_huge_page();
+				map_size = virt_size - (map_addr - virt_addr).as_usize();
+			}
 		} else {
 			map_addr = virt_addr;
 			map_size = virt_size;
@@ -170,28 +175,50 @@ pub(crate) fn init() {
 		}
 	}
 
+	#[cfg(target_arch = "x86_64")]
 	if has_1gib_pages
 		&& map_size > HugePageSize::SIZE as usize
-		&& map_addr.as_usize().align_down(HugePageSize::SIZE as usize) == 0
+		&& map_addr.is_aligned(HugePageSize::SIZE)
 	{
 		let size = map_size.align_down(HugePageSize::SIZE as usize);
-		paging::map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize);
-		map_size -= size;
-		map_addr += size;
+		if let Err(num_pages) =
+			paging::map_heap::<HugePageSize>(map_addr, size / HugePageSize::SIZE as usize)
+		{
+			map_size -= num_pages * HugePageSize::SIZE as usize;
+			map_addr += num_pages * HugePageSize::SIZE as usize;
+		} else {
+			map_size -= size;
+			map_addr += size;
+		}
 	}
 
-	if has_2mib_pages && map_size > LargePageSize::SIZE as usize {
+	if has_2mib_pages
+		&& map_size > LargePageSize::SIZE as usize
+		&& map_addr.is_aligned(LargePageSize::SIZE)
+	{
 		let size = map_size.align_down(LargePageSize::SIZE as usize);
-		paging::map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize);
-		map_size -= size;
-		map_addr += size;
+		if let Err(num_pages) =
+			paging::map_heap::<LargePageSize>(map_addr, size / LargePageSize::SIZE as usize)
+		{
+			map_size -= num_pages * LargePageSize::SIZE as usize;
+			map_addr += num_pages * LargePageSize::SIZE as usize;
+		} else {
+			map_size -= size;
+			map_addr += size;
+		}
 	}
 
-	if map_size > BasePageSize::SIZE as usize {
+	if map_size > BasePageSize::SIZE as usize && map_addr.is_aligned(BasePageSize::SIZE) {
 		let size = map_size.align_down(BasePageSize::SIZE as usize);
-		paging::map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize);
-		map_size -= size;
-		map_addr += size;
+		if let Err(num_pages) =
+			paging::map_heap::<BasePageSize>(map_addr, size / BasePageSize::SIZE as usize)
+		{
+			map_size -= num_pages * BasePageSize::SIZE as usize;
+			map_addr += num_pages * BasePageSize::SIZE as usize;
+		} else {
+			map_size -= size;
+			map_addr += size;
+		}
 	}
 
 	let heap_end_addr = map_addr;
