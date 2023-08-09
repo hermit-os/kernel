@@ -152,6 +152,7 @@ pub fn get_timestamp() -> u64 {
 }
 
 #[inline]
+#[allow(dead_code)]
 pub fn supports_1gib_pages() -> bool {
 	false
 }
