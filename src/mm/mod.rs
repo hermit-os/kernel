@@ -10,10 +10,10 @@ use hermit_sync::Lazy;
 use hermit_sync::OnceCell;
 
 #[cfg(target_arch = "x86_64")]
+use crate::arch::mm::paging::HugePageSize;
+#[cfg(target_arch = "x86_64")]
 use crate::arch::mm::paging::PageTableEntryFlagsExt;
-use crate::arch::mm::paging::{
-	BasePageSize, HugePageSize, LargePageSize, PageSize, PageTableEntryFlags,
-};
+use crate::arch::mm::paging::{BasePageSize, LargePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::mm::physicalmem::total_memory_size;
 #[cfg(feature = "newlib")]
 use crate::arch::mm::virtualmem::kernel_heap_end;
@@ -82,6 +82,7 @@ pub(crate) fn init() {
 	let reserved_space = (npage_3tables + npage_2tables + npage_1tables)
 		* BasePageSize::SIZE as usize
 		+ LargePageSize::SIZE as usize;
+	#[cfg(target_arch = "x86_64")]
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
 
