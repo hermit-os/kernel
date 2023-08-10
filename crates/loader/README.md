@@ -19,31 +19,49 @@ Afterward, the loader is located at `target/<TARGET>/release/rusty-loader`.
 
 ## Running
 
-Boot a hermit application:
+### x86-64
+
+On x86-64 Linux with KVM, you can boot Hermit like this:
 
 ```
 $ qemu-system-x86_64 \
-    -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
-    -smp 1 -m 64M \
+    -enable-kvm \
+    -cpu host \
+    -smp 1 \
+    -m 128M \
     -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
     -display none -serial stdio \
     -kernel <LOADER> \
     -initrd <APP>
 ```
 
-Arguments can be provided like this:
+#### No KVM
+
+If you want to emulate x86-64 instead of using KVM, omit `-enable-kvm` and set the CPU explicitly to a model of your choice, for example `-cpu Skylake-Client`.
+
+#### Benchmarking
+
+If you want to benchmark Hermit, make sure to enable the _invariant TSC_ (`invtsc`) feature by setting `-cpu host,migratable=no,+invtsc,enforce`.
+
+#### Providing Arguments
+
+Unikernel arguments can be provided like this:
 
 ```
 $ qemu-system-x86_64 ... \
     -append "[KERNEL_ARGS] [--] [APP_ARGS]"
 ```
 
+### AArch64
+
 On AArch64, the base command is as follows:
 
 ```
 $ qemu-system-aarch64 \
                   -machine virt,gic-version=3 \
-                  -cpu cortex-a76 -smp 1 -m 512M  \
+                  -cpu cortex-a76 \
+                  -smp 1 \
+                  -m 512M  \
                   -semihosting \
                   -display none -serial stdio \
                   -kernel <LOADER> \
