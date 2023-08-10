@@ -11,7 +11,8 @@ use core::mem;
 use core::result::Result;
 
 use pci_types::InterruptLine;
-use smoltcp::phy::{Checksum, ChecksumCapabilities};
+use smoltcp::phy::{Checksum, ChecksumCapabilities, TsoCapabilities};
+use smoltcp::wire::{ETHERNET_HEADER_LEN, IPV4_HEADER_LEN, IPV6_HEADER_LEN, TCP_HEADER_LEN};
 use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -31,8 +32,6 @@ use crate::drivers::virtio::virtqueue::{
 	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 use crate::executor::device::{RxToken, TxToken};
-
-pub const ETH_HDR: usize = 14usize;
 
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
@@ -210,7 +209,7 @@ impl RxQueues {
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550 + ETH_HDR).unwrap(),
+				Bytes::new(65550 + ETHERNET_HEADER_LEN).unwrap(),
 			];
 
 			let spec = if dev_cfg
@@ -220,7 +219,8 @@ impl RxQueues {
 				BuffSpec::Indirect(&buff_def)
 			} else {
 				BuffSpec::Single(
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap(),
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETHERNET_HEADER_LEN)
+						.unwrap(),
 				)
 			};
 
@@ -398,20 +398,19 @@ impl TxQueues {
 
 			if dev_cfg
 				.features
-				.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4)
+				.is_feature(Features::VIRTIO_NET_F_HOST_TSO4)
 				| dev_cfg
 					.features
-					.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
-				| dev_cfg
-					.features
-					.is_feature(Features::VIRTIO_NET_F_GUEST_UFO)
+					.is_feature(Features::VIRTIO_NET_F_HOST_TSO6)
+				| dev_cfg.features.is_feature(Features::VIRTIO_NET_F_HOST_UFO)
 			{
 				// Virtio specification v1.1. - 5.1.6.2 point 5.
 				//      Header and data are added as ONE output descriptor to the transmitvq.
 				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
 				let buff_def =
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap();
+					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETHERNET_HEADER_LEN)
+						.unwrap();
 				let spec = BuffSpec::Single(buff_def);
 
 				let num_buff: u16 = vq.size().into();
@@ -523,7 +522,8 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
 	pub(super) mtu: u16,
-	pub(super) checksums: ChecksumCapabilities,
+	pub(super) checksum: ChecksumCapabilities,
+	pub(super) tso: TsoCapabilities,
 }
 
 impl NetworkDriver for VirtioNetDriver {
@@ -542,8 +542,14 @@ impl NetworkDriver for VirtioNetDriver {
 		self.mtu
 	}
 
-	fn get_checksums(&self) -> ChecksumCapabilities {
-		self.checksums.clone()
+	/// Returns description of checksum behavior
+	fn get_checksum(&self) -> ChecksumCapabilities {
+		self.checksum.clone()
+	}
+
+	/// Returns description of tso behavior
+	fn get_tso(&self) -> TsoCapabilities {
+		self.tso
 	}
 
 	fn has_packet(&self) -> bool {
@@ -562,7 +568,7 @@ impl NetworkDriver for VirtioNetDriver {
 			.get_tkn(len + core::mem::size_of::<VirtioNetHdr>())
 		{
 			let (send_ptrs, _) = buff_tkn.raw_ptrs();
-			// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
+			// Currently we have single Buffers in the TxQueue of size: MTU + ETHERNET_HEADER_LEN + VIRTIO_NET_HDR
 			// see TxQueue.add()
 			let (buff_ptr, _) = send_ptrs.unwrap()[0];
 
@@ -579,31 +585,41 @@ impl NetworkDriver for VirtioNetDriver {
 
 			// If a checksum isn't necessary, we have inform the host within the header
 			// see Virtio specification 5.1.6.2
-			if !self.checksums.tcp.tx() || !self.checksums.udp.tx() {
+			if !self.checksum.tcp.tx() || !self.checksum.udp.tx() {
 				let type_ = unsafe { u16::from_be(*(buff_ptr.offset(12) as *const u16)) };
 
 				match type_ {
 					0x0800 /* IPv4 */ => {
-						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						let protocol = unsafe { *(buff_ptr.offset((ETHERNET_HEADER_LEN+9).try_into().unwrap()) as *const u8) };
 						if protocol == 6 /* TCP */ {
+							if self.tso.tso4() && len > self.mtu.into() {
+								header.gso_type = NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV4;
+								header.hdr_len = (ETHERNET_HEADER_LEN+IPV4_HEADER_LEN+TCP_HEADER_LEN).try_into().unwrap();
+								header.gso_size = self.mtu - (IPV4_HEADER_LEN + TCP_HEADER_LEN + ETHERNET_HEADER_LEN) as u16;
+							}
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+20;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV4_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 16;
 						} else if protocol == 17 /* UDP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+20;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV4_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 6;
 						}
 					},
 					0x86DD /* IPv6 */ => {
-						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						let protocol = unsafe { *(buff_ptr.offset((ETHERNET_HEADER_LEN+9).try_into().unwrap()) as *const u8) };
 						if protocol == 6 /* TCP */ {
+							if self.tso.tso6() && len > self.mtu.into() {
+								header.gso_type = NetHdrGSO::VIRTIO_NET_HDR_GSO_TCPV6;
+								header.hdr_len = (ETHERNET_HEADER_LEN+IPV6_HEADER_LEN+TCP_HEADER_LEN).try_into().unwrap();
+								header.gso_size = self.mtu - (IPV6_HEADER_LEN + TCP_HEADER_LEN + ETHERNET_HEADER_LEN) as u16;
+							}
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+40;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV6_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 16;
 						} else if protocol == 17 /* UDP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+40;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV6_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 6;
 						}
 					},
@@ -837,13 +853,12 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 		// Host should avoid the creation of checksums
 		feats.push(Features::VIRTIO_NET_F_CSUM);
-
-		// Currently the driver does NOT support the features below.
-		// In order to provide functionality for these, the driver
-		// needs to take care of calculating checksum in
-		// RxQueues.post_processing()
-		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
-		// feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
+		// Enable TCP segmentation offloading for IPv4
+		feats.push(Features::VIRTIO_NET_F_GUEST_TSO4);
+		feats.push(Features::VIRTIO_NET_F_HOST_TSO4);
+		// Enable TCP segmentation offloading for IPv6
+		feats.push(Features::VIRTIO_NET_F_GUEST_TSO6);
+		feats.push(Features::VIRTIO_NET_F_HOST_TSO6);
 
 		// Negotiate features with device. Automatically reduces selected feats in order to meet device capabilities.
 		// Aborts in case incompatible features are selected by the driver or the device does not support min_feat_set.
@@ -928,6 +943,7 @@ impl VirtioNetDriver {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		// ask the device if it expects checksums
 		if self
 			.dev_cfg
 			.features
@@ -937,30 +953,57 @@ impl VirtioNetDriver {
 				.features
 				.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
-			self.checksums.ipv4 = Checksum::Tx;
-			self.checksums.udp = Checksum::None;
-			self.checksums.tcp = Checksum::None;
+			self.checksum.ipv4 = Checksum::Tx;
+			self.checksum.udp = Checksum::None;
+			self.checksum.tcp = Checksum::None;
 		} else if self
 			.dev_cfg
 			.features
 			.is_feature(Features::VIRTIO_NET_F_CSUM)
 		{
-			self.checksums.udp = Checksum::Rx;
-			self.checksums.tcp = Checksum::Rx;
+			self.checksum.udp = Checksum::Rx;
+			self.checksum.tcp = Checksum::Rx;
 		} else if self
 			.dev_cfg
 			.features
 			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
-			self.checksums.ipv4 = Checksum::Tx;
-			self.checksums.udp = Checksum::Tx;
-			self.checksums.tcp = Checksum::Tx;
+			self.checksum.ipv4 = Checksum::Tx;
+			self.checksum.udp = Checksum::Tx;
+			self.checksum.tcp = Checksum::Tx;
 		}
-		info!("{:?}", self.checksums);
+		info!("{:?}", self.checksum);
 
+		// ask device for the supported mtu
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.mtu = self.dev_cfg.raw.get_mtu();
 		}
+
+		// ask the device if TSO is supported
+		if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_HOST_TSO4)
+			&& self
+				.dev_cfg
+				.features
+				.is_feature(Features::VIRTIO_NET_F_HOST_TSO6)
+		{
+			self.tso = TsoCapabilities::Both;
+		} else if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_HOST_TSO4)
+		{
+			self.tso = TsoCapabilities::Tso4;
+		} else if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_HOST_TSO6)
+		{
+			self.tso = TsoCapabilities::Tso6;
+		}
+		info!("TsoCapabilities: {:?}", self.tso);
 
 		Ok(())
 	}
