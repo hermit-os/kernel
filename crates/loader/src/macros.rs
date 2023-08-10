@@ -1,7 +1,8 @@
-/// Print formatted text to our console.
+/// Prints to the standard output.
 ///
-/// From http://blog.phil-opp.com/rust-os/printing-to-screen.html, but tweaked
-/// for HermitCore.
+/// Adapted from [`std::print`].
+///
+/// [`std::print`]: https://doc.rust-lang.org/stable/std/macro.print.html
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {{
@@ -9,14 +10,18 @@ macro_rules! print {
     }};
 }
 
-/// Print formatted text to our console, followed by a newline.
+/// Prints to the standard output, with a newline.
+///
+/// Adapted from [`std::println`].
+///
+/// [`std::println`]: https://doc.rust-lang.org/stable/std/macro.println.html
 #[macro_export]
 macro_rules! println {
     () => {
         $crate::print!("\n")
     };
     ($($arg:tt)*) => {{
-        print!("{}\n", ::core::format_args!($($arg)*))
+        $crate::_print(::core::format_args!("{}\n", format_args!($($arg)*)));
     }};
 }
 
