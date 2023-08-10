@@ -39,8 +39,8 @@ jobs:
       - name: Check Formatting
         run: cargo fmt -- --check
 
-  integration-test:
-    name: Integration Test
+  run:
+    name: Run
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
