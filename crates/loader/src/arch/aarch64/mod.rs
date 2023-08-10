@@ -4,6 +4,7 @@ pub mod serial;
 
 use core::arch::asm;
 
+use align_address::Align;
 use goblin::elf::header::header64::{Header, EI_DATA, ELFDATA2LSB, ELFMAG, SELFMAG};
 use hermit_dtb::Dtb;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
@@ -76,7 +77,7 @@ pub fn output_message_byte(byte: u8) {
 }
 
 pub unsafe fn get_memory(_memory_size: u64) -> u64 {
-	align_up!(&kernel_end as *const u8 as u64, LargePageSize::SIZE as u64)
+	(&kernel_end as *const u8 as u64).align_up(LargePageSize::SIZE as u64)
 }
 
 pub fn find_kernel() -> &'static [u8] {
