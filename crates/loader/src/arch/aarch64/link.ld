@@ -36,10 +36,8 @@ SECTIONS
     *(.data.*)
   } :segment_rw
   .bss    : ALIGN(8) {
-    bss_start = .;
     *(.bss)
     *(.bss.*)
-    bss_end = .;
   } :segment_rw
   . = ALIGN(4K); /* Align to page boundary */
   /***********************************************************************************************

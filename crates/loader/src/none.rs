@@ -1,6 +1,5 @@
 use core::fmt::Write;
 use core::mem::MaybeUninit;
-use core::ptr::addr_of_mut;
 use core::slice;
 
 use hermit_entry::elf::KernelObject;
@@ -17,7 +16,6 @@ extern "C" {
 /// (called from entry.asm or entry.rs)
 #[no_mangle]
 unsafe extern "C" fn loader_main() -> ! {
-	init_bss();
 	arch::message_output_init();
 	crate::log::init();
 
@@ -36,19 +34,6 @@ unsafe extern "C" fn loader_main() -> ! {
 	let kernel_info = kernel.load_kernel(memory, memory.as_ptr() as u64);
 
 	arch::boot_kernel(kernel_info)
-}
-
-unsafe fn init_bss() {
-	extern "C" {
-		static mut bss_start: MaybeUninit<u8>;
-		static mut bss_end: MaybeUninit<u8>;
-	}
-
-	let start_ptr = addr_of_mut!(bss_start);
-	let end_ptr = addr_of_mut!(bss_end);
-	let len = end_ptr.offset_from(start_ptr).try_into().unwrap();
-	let slice = slice::from_raw_parts_mut(start_ptr, len);
-	slice.fill(MaybeUninit::new(0));
 }
 
 #[panic_handler]
