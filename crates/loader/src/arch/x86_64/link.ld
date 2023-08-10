@@ -22,10 +22,8 @@ SECTIONS
     *(.data.*)
   }
   .bss ALIGN(4096) : AT(ADDR(.bss)) {
-    bss_start = .;
     *(.bss)
     *(.bss.*)
   }
-  bss_end = .;
   kernel_end = .;
 }
