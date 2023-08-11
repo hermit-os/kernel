@@ -17,9 +17,6 @@ mod uefi;
 
 use core::fmt::{self, Write};
 
-// Workaround for https://github.com/hermitcore/rusty-loader/issues/117
-use rusty_loader as _;
-
 #[doc(hidden)]
 fn _print(args: fmt::Arguments<'_>) {
 	unsafe {
