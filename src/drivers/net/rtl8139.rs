@@ -578,7 +578,7 @@ pub(crate) fn init_device(
 
 	Ok(RTL8139Driver {
 		iobase,
-		mtu: 1500,
+		mtu: 1514,
 		irq,
 		mac,
 		tx_in_use: [false; NO_TX_BUFFERS],
