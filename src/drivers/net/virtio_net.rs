@@ -929,6 +929,10 @@ impl VirtioNetDriver {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
+			self.mtu = self.dev_cfg.raw.get_mtu();
+		}
+
 		Ok(())
 	}
 

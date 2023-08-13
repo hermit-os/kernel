@@ -10,7 +10,7 @@ use core::ptr::read_volatile;
 use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
-use crate::drivers::net::virtio_net::constants::{FeatureSet, Features, Status};
+use crate::drivers::net::virtio_net::constants::{FeatureSet, Status};
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, MmioRegisterLayout, NotifCfg};
@@ -124,8 +124,6 @@ impl VirtioNetDriver {
 
 		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
 			u16::from_str(&my_mtu).unwrap() + 14
-		} else if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
-			dev_cfg.raw.get_mtu()
 		} else {
 			// fallback to the default MTU
 			1514

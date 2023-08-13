@@ -9,7 +9,7 @@ use core::cell::RefCell;
 use core::str::FromStr;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio_net::constants::{FeatureSet, Features};
+use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::pci::{PciCommand, PciDevice};
 use crate::drivers::virtio::error::{self, VirtioError};
@@ -133,8 +133,6 @@ impl VirtioNetDriver {
 
 		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
 			u16::from_str(&my_mtu).unwrap() + 14
-		} else if dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
-			dev_cfg.raw.get_mtu()
 		} else {
 			// fallback to the default MTU
 			1514
