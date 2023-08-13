@@ -7,6 +7,8 @@ pub mod virtio_net;
 #[cfg(all(feature = "pci", not(feature = "rtl8139")))]
 pub mod virtio_pci;
 
+use smoltcp::phy::ChecksumCapabilities;
+
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
 #[allow(unused_imports)]
@@ -23,6 +25,10 @@ use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
 pub(crate) trait NetworkDriver {
+	/// Returns smoltcp's checksum capabilities
+	fn get_checksums(&self) -> ChecksumCapabilities {
+		ChecksumCapabilities::default()
+	}
 	/// Returns the mac address of the device.
 	fn get_mac_address(&self) -> [u8; 6];
 	/// Returns the current MTU of the device.
@@ -39,10 +45,6 @@ pub(crate) trait NetworkDriver {
 	fn set_polling_mode(&mut self, value: bool);
 	/// Handle interrupt and check if a packet is available
 	fn handle_interrupt(&mut self) -> bool;
-	/// Returns true, if the device has to create checksums
-	fn with_checksums(&self) -> bool {
-		true
-	}
 }
 
 #[inline]
