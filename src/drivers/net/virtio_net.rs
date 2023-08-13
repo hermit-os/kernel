@@ -937,6 +937,7 @@ impl VirtioNetDriver {
 				.features
 				.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
+			self.checksums.ipv4 = Checksum::Tx;
 			self.checksums.udp = Checksum::None;
 			self.checksums.tcp = Checksum::None;
 		} else if self
@@ -951,6 +952,7 @@ impl VirtioNetDriver {
 			.features
 			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
+			self.checksums.ipv4 = Checksum::Tx;
 			self.checksums.udp = Checksum::Tx;
 			self.checksums.tcp = Checksum::Tx;
 		}
