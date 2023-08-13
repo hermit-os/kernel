@@ -9,7 +9,7 @@ use core::cell::RefCell;
 use core::str::FromStr;
 
 use crate::arch::pci::PciConfigRegion;
-use crate::drivers::net::virtio_net::constants::{FeatureSet, Features};
+use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::pci::{PciCommand, PciDevice};
 use crate::drivers::virtio::error::{self, VirtioError};

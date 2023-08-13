@@ -10,7 +10,7 @@ use core::ptr::read_volatile;
 use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
-use crate::drivers::net::virtio_net::constants::{FeatureSet, Features, Status};
+use crate::drivers::net::virtio_net::constants::{FeatureSet, Status};
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
 use crate::drivers::virtio::transport::mmio::{ComCfg, IsrStatus, MmioRegisterLayout, NotifCfg};
