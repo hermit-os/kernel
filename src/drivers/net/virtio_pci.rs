@@ -8,6 +8,8 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::str::FromStr;
 
+use smoltcp::phy::ChecksumCapabilities;
+
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::constants::FeatureSet;
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
@@ -159,6 +161,7 @@ impl VirtioNetDriver {
 			num_vqs: 0,
 			irq: device.get_irq().unwrap(),
 			mtu,
+			checksums: ChecksumCapabilities::default(),
 		})
 	}
 

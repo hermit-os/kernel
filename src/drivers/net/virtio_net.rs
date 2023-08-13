@@ -11,6 +11,7 @@ use core::mem;
 use core::result::Result;
 
 use pci_types::InterruptLine;
+use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -522,6 +523,7 @@ pub(crate) struct VirtioNetDriver {
 	pub(super) num_vqs: u16,
 	pub(super) irq: InterruptLine,
 	pub(super) mtu: u16,
+	pub(super) checksums: ChecksumCapabilities,
 }
 
 impl NetworkDriver for VirtioNetDriver {
@@ -538,6 +540,10 @@ impl NetworkDriver for VirtioNetDriver {
 	/// Returns the current MTU of the device.
 	fn get_mtu(&self) -> u16 {
 		self.mtu
+	}
+
+	fn get_checksums(&self) -> ChecksumCapabilities {
+		self.checksums.clone()
 	}
 
 	fn has_packet(&self) -> bool {
@@ -573,7 +579,7 @@ impl NetworkDriver for VirtioNetDriver {
 
 			// If a checksum isn't necessary, we have inform the host within the header
 			// see Virtio specification 5.1.6.2
-			if !self.with_checksums() {
+			if !self.checksums.tcp.tx() || !self.checksums.udp.tx() {
 				let type_ = unsafe { u16::from_be(*(buff_ptr.offset(12) as *const u16)) };
 
 				match type_ {
@@ -708,15 +714,6 @@ impl NetworkDriver for VirtioNetDriver {
 
 		result
 	}
-
-	/// Returns `true` if the device supports the virtio feature
-	/// `VIRTIO_NET_F_GUEST_CSUM` and trust the incoming packages.
-	fn with_checksums(&self) -> bool {
-		!self
-			.dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
-	}
 }
 
 // Backend-independent interface for Virtio network driver
@@ -836,8 +833,10 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_NET_F_MTU);
 		// Packed Vq can be used
 		feats.push(Features::VIRTIO_F_RING_PACKED);
-		// Avoid the creation of checksums
+		// Guest avoids the creation of checksums
 		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
+		// Host should avoid the creation of checksums
+		feats.push(Features::VIRTIO_NET_F_CSUM);
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
@@ -929,6 +928,36 @@ impl VirtioNetDriver {
 		// At this point the device is "live"
 		self.com_cfg.drv_ok();
 
+		if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_CSUM)
+			&& self
+				.dev_cfg
+				.features
+				.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
+		{
+			self.checksums.ipv4 = Checksum::Tx;
+			self.checksums.udp = Checksum::None;
+			self.checksums.tcp = Checksum::None;
+		} else if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_CSUM)
+		{
+			self.checksums.udp = Checksum::Rx;
+			self.checksums.tcp = Checksum::Rx;
+		} else if self
+			.dev_cfg
+			.features
+			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
+		{
+			self.checksums.ipv4 = Checksum::Tx;
+			self.checksums.udp = Checksum::Tx;
+			self.checksums.tcp = Checksum::Tx;
+		}
+		info!("{:?}", self.checksums);
+
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.mtu = self.dev_cfg.raw.get_mtu();
 		}
@@ -1003,11 +1032,6 @@ impl VirtioNetDriver {
 			}
 
 			self.ctrl_vq.0.as_ref().unwrap().enable_notifs();
-		}
-
-		// If device does not take care of MAC address, the driver has to create one
-		if !self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MAC) {
-			todo!("Driver created MAC address should be passed to device here.")
 		}
 
 		Ok(())

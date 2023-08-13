@@ -10,6 +10,8 @@ use core::ptr::read_volatile;
 use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
 
+use smoltcp::phy::ChecksumCapabilities;
+
 use crate::drivers::net::virtio_net::constants::{FeatureSet, Status};
 use crate::drivers::net::virtio_net::{CtrlQueue, NetDevCfg, RxQueues, TxQueues, VirtioNetDriver};
 use crate::drivers::virtio::error::{VirtioError, VirtioNetError};
@@ -149,6 +151,7 @@ impl VirtioNetDriver {
 			num_vqs: 0,
 			irq,
 			mtu,
+			checksums: ChecksumCapabilities::default(),
 		})
 	}
 
