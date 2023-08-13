@@ -151,7 +151,7 @@ impl VirtioNetDriver {
 			num_vqs: 0,
 			irq,
 			mtu,
-			checksums: ChecksumCapabilities::default(),
+			checksum: ChecksumCapabilities::default(),
 			tso: TsoCapabilities::default(),
 		})
 	}
