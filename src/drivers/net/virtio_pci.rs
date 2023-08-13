@@ -134,7 +134,7 @@ impl VirtioNetDriver {
 		};
 
 		let mtu = if let Some(my_mtu) = hermit_var!("HERMIT_MTU") {
-			u16::from_str(&my_mtu).unwrap() + 14
+			u16::from_str(&my_mtu).unwrap()
 		} else {
 			// fallback to the default MTU
 			1514
