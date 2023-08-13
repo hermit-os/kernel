@@ -835,7 +835,7 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_F_RING_PACKED);
 		// Guest avoids the creation of checksums
 		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
-		// Host should the creation of checksums
+		// Host should avoid the creation of checksums
 		feats.push(Features::VIRTIO_NET_F_CSUM);
 
 		// Currently the driver does NOT support the features below.
