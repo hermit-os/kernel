@@ -2,9 +2,10 @@ mod address_range;
 mod start;
 
 use core::arch::asm;
-use core::slice;
+use core::{mem, slice};
 
 use address_range::AddressRange;
+use fdt::node::FdtNode;
 use hermit_entry::boot_info::{
 	BootInfo, DeviceTreeAddress, HardwareInfo, PlatformInfo, RawBootInfo,
 };
@@ -17,27 +18,44 @@ pub fn message_output_init() {}
 
 pub use sbi::legacy::console_putchar as output_message_byte;
 
-pub fn find_kernel() -> &'static [u8] {
-	let fdt = start::get_fdt();
-	let chosen = fdt.find_node("/chosen").unwrap();
-
-	let initrd_start = chosen
-		.property("linux,initrd-start")
-		.unwrap()
-		.as_usize()
-		.unwrap();
+fn find_kernel_linux(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
+	let initrd_start = chosen.property("linux,initrd-start")?.as_usize()?;
 	let initrd_start = sptr::from_exposed_addr_mut::<u8>(initrd_start);
-	let initrd_end = chosen
-		.property("linux,initrd-end")
-		.unwrap()
-		.as_usize()
-		.unwrap();
+	let initrd_end = chosen.property("linux,initrd-end")?.as_usize()?;
 	let initrd_end = sptr::from_exposed_addr_mut::<u8>(initrd_end);
 	// SAFETY: We trust the raw pointer from the firmware
 	let initrd_len = unsafe { initrd_end.offset_from(initrd_start).try_into().unwrap() };
 
 	// SAFETY: We trust the raw pointer from the firmware
-	unsafe { slice::from_raw_parts(initrd_start, initrd_len) }
+	Some(unsafe { slice::from_raw_parts(initrd_start, initrd_len) })
+}
+
+fn find_kernel_multiboot(chosen: &FdtNode<'_, '_>) -> Option<&'static [u8]> {
+	let module = chosen
+		.children()
+		.filter(|child| child.name.starts_with("module@"))
+		.find(|child| {
+			child.compatible().map_or(false, |compatible| {
+				compatible
+					.all()
+					.any(|compatible| compatible == "multiboot,ramdisk")
+			})
+		})?;
+	let reg = module.property("reg").unwrap();
+	let addr = usize::from_be_bytes(reg.value[..mem::size_of::<usize>()].try_into().unwrap());
+	let len = usize::from_be_bytes(reg.value[mem::size_of::<usize>()..].try_into().unwrap());
+
+	let initrd_start = sptr::from_exposed_addr_mut::<u8>(addr);
+	// SAFETY: We trust the raw pointer from the firmware
+	return Some(unsafe { slice::from_raw_parts(initrd_start, len) });
+}
+
+pub fn find_kernel() -> &'static [u8] {
+	let fdt = start::get_fdt();
+	let chosen = fdt.find_node("/chosen").unwrap();
+	find_kernel_linux(&chosen)
+		.or_else(|| find_kernel_multiboot(&chosen))
+		.expect("could not find kernel")
 }
 
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
