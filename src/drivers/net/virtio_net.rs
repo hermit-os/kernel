@@ -209,7 +209,7 @@ impl RxQueues {
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550 + ETHERNET_HEADER_LEN).unwrap(),
+				Bytes::new(65550).unwrap(),
 			];
 
 			let spec = if dev_cfg
@@ -218,10 +218,7 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETHERNET_HEADER_LEN)
-						.unwrap(),
-				)
+				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -408,9 +405,7 @@ impl TxQueues {
 				//      Header and data are added as ONE output descriptor to the transmitvq.
 				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-				let buff_def =
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETHERNET_HEADER_LEN)
-						.unwrap();
+				let buff_def = Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap();
 				let spec = BuffSpec::Single(buff_def);
 
 				let num_buff: u16 = vq.size().into();
