@@ -7,7 +7,7 @@ pub mod virtio_net;
 #[cfg(all(feature = "pci", not(feature = "rtl8139")))]
 pub mod virtio_pci;
 
-use smoltcp::phy::ChecksumCapabilities;
+use smoltcp::phy::{ChecksumCapabilities, TsoCapabilities};
 
 #[cfg(target_arch = "x86_64")]
 use crate::arch::kernel::apic;
@@ -25,9 +25,13 @@ use crate::executor::device::{RxToken, TxToken};
 
 /// A trait for accessing the network interface
 pub(crate) trait NetworkDriver {
-	/// Returns smoltcp's checksum capabilities
-	fn get_checksums(&self) -> ChecksumCapabilities {
+	/// A description of checksum behavior for every supported protocol.
+	fn get_checksum(&self) -> ChecksumCapabilities {
 		ChecksumCapabilities::default()
+	}
+	/// Specifies if the device support TCP segmentation offloading (TSO)
+	fn get_tso(&self) -> TsoCapabilities {
+		TsoCapabilities::None
 	}
 	/// Returns the mac address of the device.
 	fn get_mac_address(&self) -> [u8; 6];

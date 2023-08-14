@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::str::FromStr;
 
-use smoltcp::phy::ChecksumCapabilities;
+use smoltcp::phy::{ChecksumCapabilities, TsoCapabilities};
 
 use crate::arch::pci::PciConfigRegion;
 use crate::drivers::net::virtio_net::constants::FeatureSet;
@@ -161,7 +161,8 @@ impl VirtioNetDriver {
 			num_vqs: 0,
 			irq: device.get_irq().unwrap(),
 			mtu,
-			checksums: ChecksumCapabilities::default(),
+			checksum: ChecksumCapabilities::default(),
+			tso: TsoCapabilities::default(),
 		})
 	}
 
