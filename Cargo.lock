@@ -50,7 +50,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d16805d71f41d1714a51ee34f40633c42980a2afaf8ae237bcba09d6e15494ef"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
 ]
 
 [[package]]
@@ -82,9 +82,9 @@ checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
-version = "2.3.3"
+version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "630be753d4e58660abd17930c71b647fe46c27ea6b63cc59e1e3851406972e42"
+checksum = "b4682ae6287fcf752ecaabbfcc7b6f9b72aa33933dc23a554d853aea8eea8635"
 
 [[package]]
 name = "byteorder"
@@ -324,7 +324,7 @@ dependencies = [
  "align-address",
  "arm-gic",
  "bit_field",
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "crossbeam-utils",
  "dyn-clone",
  "float-cmp",
@@ -719,7 +719,7 @@ version = "0.38.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "172891ebdceb05aa0005f533a6cbfca599ddd7d966f6f5d4d9b2e70478e70399"
 dependencies = [
- "bitflags 2.3.3",
+ "bitflags 2.4.0",
  "errno",
  "libc",
  "linux-raw-sys",
