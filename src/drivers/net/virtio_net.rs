@@ -12,6 +12,7 @@ use core::result::Result;
 
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
+use smoltcp::wire::{ETHERNET_HEADER_LEN, IPV4_HEADER_LEN, IPV6_HEADER_LEN};
 use zerocopy::AsBytes;
 
 use self::constants::{FeatureSet, Features, NetHdrFlag, NetHdrGSO, Status, MAX_NUM_VQ};
@@ -31,8 +32,6 @@ use crate::drivers::virtio::virtqueue::{
 	BuffSpec, BufferToken, Bytes, Transfer, Virtq, VqIndex, VqSize, VqType,
 };
 use crate::executor::device::{RxToken, TxToken};
-
-pub const ETH_HDR: usize = 14usize;
 
 /// A wrapper struct for the raw configuration structure.
 /// Handling the right access to fields, as some are read-only
@@ -210,7 +209,7 @@ impl RxQueues {
 			// as many packages as possible inside the queue.
 			let buff_def = [
 				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550 + ETH_HDR).unwrap(),
+				Bytes::new(65550).unwrap(),
 			];
 
 			let spec = if dev_cfg
@@ -219,9 +218,7 @@ impl RxQueues {
 			{
 				BuffSpec::Indirect(&buff_def)
 			} else {
-				BuffSpec::Single(
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap(),
-				)
+				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
 			};
 
 			let num_buff: u16 = vq.size().into();
@@ -410,8 +407,7 @@ impl TxQueues {
 				//      Header and data are added as ONE output descriptor to the transmitvq.
 				//      Hence we are interpreting this, as the fact, that send packets must be inside a single descriptor.
 				// As usize is currently safe as the minimal usize is defined as 16bit in rust.
-				let buff_def =
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550 + ETH_HDR).unwrap();
+				let buff_def = Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap();
 				let spec = BuffSpec::Single(buff_def);
 
 				let num_buff: u16 = vq.size().into();
@@ -562,7 +558,7 @@ impl NetworkDriver for VirtioNetDriver {
 			.get_tkn(len + core::mem::size_of::<VirtioNetHdr>())
 		{
 			let (send_ptrs, _) = buff_tkn.raw_ptrs();
-			// Currently we have single Buffers in the TxQueue of size: MTU + ETH_HDR + VIRTIO_NET_HDR
+			// Currently we have single Buffers in the TxQueue of size: MTU + ETHERNET_HEADER_LEN + VIRTIO_NET_HDR
 			// see TxQueue.add()
 			let (buff_ptr, _) = send_ptrs.unwrap()[0];
 
@@ -584,26 +580,26 @@ impl NetworkDriver for VirtioNetDriver {
 
 				match type_ {
 					0x0800 /* IPv4 */ => {
-						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						let protocol = unsafe { *(buff_ptr.offset((ETHERNET_HEADER_LEN+9).try_into().unwrap()) as *const u8) };
 						if protocol == 6 /* TCP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+20;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV4_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 16;
 						} else if protocol == 17 /* UDP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+20;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV4_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 6;
 						}
 					},
 					0x86DD /* IPv6 */ => {
-						let protocol = unsafe { *(buff_ptr.offset((14+9).try_into().unwrap()) as *const u8) };
+						let protocol = unsafe { *(buff_ptr.offset((ETHERNET_HEADER_LEN+9).try_into().unwrap()) as *const u8) };
 						if protocol == 6 /* TCP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+40;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV6_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 16;
 						} else if protocol == 17 /* UDP */ {
 							header.flags = NetHdrFlag::VIRTIO_NET_HDR_F_NEEDS_CSUM;
-							header.csum_start = 14+40;
+							header.csum_start = (ETHERNET_HEADER_LEN+IPV6_HEADER_LEN).try_into().unwrap();
 							header.csum_offset = 6;
 						}
 					},
@@ -937,7 +933,6 @@ impl VirtioNetDriver {
 				.features
 				.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
-			self.checksums.ipv4 = Checksum::Tx;
 			self.checksums.udp = Checksum::None;
 			self.checksums.tcp = Checksum::None;
 		} else if self
@@ -952,11 +947,10 @@ impl VirtioNetDriver {
 			.features
 			.is_feature(Features::VIRTIO_NET_F_GUEST_CSUM)
 		{
-			self.checksums.ipv4 = Checksum::Tx;
 			self.checksums.udp = Checksum::Tx;
 			self.checksums.tcp = Checksum::Tx;
 		}
-		info!("{:?}", self.checksums);
+		debug!("{:?}", self.checksums);
 
 		if self.dev_cfg.features.is_feature(Features::VIRTIO_NET_F_MTU) {
 			self.mtu = self.dev_cfg.raw.get_mtu();
