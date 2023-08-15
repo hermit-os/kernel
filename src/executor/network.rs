@@ -234,8 +234,12 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, 
 where
 	F: Future<Output = Result<T, i32>>,
 {
-	// allow network interrupts
-	get_network_driver().unwrap().lock().set_polling_mode(true);
+	// disable network interrupts
+	let no_retransmission = {
+		let mut guard = get_network_driver().unwrap().lock();
+		guard.set_polling_mode(true);
+		!guard.get_checksums().tcp.tx()
+	};
 
 	let backoff = Backoff::new();
 	let start = now();
@@ -252,9 +256,11 @@ where
 		let now = crate::executor::network::now();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			let network_timer = network_delay(now)
-				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-			core_scheduler().add_network_timer(network_timer);
+			if !no_retransmission {
+				let network_timer = network_delay(now)
+					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+				core_scheduler().add_network_timer(network_timer);
+			}
 
 			// allow network interrupts
 			get_network_driver().unwrap().lock().set_polling_mode(false);
@@ -264,9 +270,11 @@ where
 
 		if let Some(duration) = timeout {
 			if crate::executor::network::now() >= start + duration {
-				let network_timer = network_delay(now)
-					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(network_timer);
+				if !no_retransmission {
+					let network_timer = network_delay(now)
+						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+					core_scheduler().add_network_timer(network_timer);
+				}
 
 				// allow network interrupts
 				get_network_driver().unwrap().lock().set_polling_mode(false);
@@ -277,11 +285,13 @@ where
 
 		let delay = network_delay(now).map(|d| d.total_micros());
 		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
-			let ticks = crate::arch::processor::get_timer_ticks();
 			let wakeup_time =
 				timeout.map(|duration| u64::try_from((start + duration).total_micros()).unwrap());
-			let network_timer = delay.map(|d| ticks + d);
-			core_scheduler().add_network_timer(network_timer);
+			if !no_retransmission {
+				let ticks = crate::arch::processor::get_timer_ticks();
+				let network_timer = delay.map(|d| ticks + d);
+				core_scheduler().add_network_timer(network_timer);
+			}
 
 			// allow network interrupts
 			get_network_driver().unwrap().lock().set_polling_mode(false);
@@ -303,8 +313,12 @@ pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i
 where
 	F: Future<Output = Result<T, i32>>,
 {
-	// avoid network interrupts
-	get_network_driver().unwrap().lock().set_polling_mode(true);
+	// disable network interrupts
+	let no_retransmission = {
+		let mut guard = get_network_driver().unwrap().lock();
+		guard.set_polling_mode(true);
+		guard.get_checksums().tcp.tx()
+	};
 
 	let start = now();
 	let waker = core::task::Waker::noop();
@@ -317,9 +331,11 @@ where
 		crate::executor::run();
 
 		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			let wakeup_time = network_delay(now())
-				.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-			core_scheduler().add_network_timer(wakeup_time);
+			if !no_retransmission {
+				let wakeup_time = network_delay(now())
+					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+				core_scheduler().add_network_timer(wakeup_time);
+			}
 
 			// allow network interrupts
 			get_network_driver().unwrap().lock().set_polling_mode(false);
@@ -329,9 +345,11 @@ where
 
 		if let Some(duration) = timeout {
 			if crate::executor::network::now() >= start + duration {
-				let wakeup_time = network_delay(now())
-					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(wakeup_time);
+				if !no_retransmission {
+					let wakeup_time = network_delay(now())
+						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
+					core_scheduler().add_network_timer(wakeup_time);
+				}
 
 				// allow network interrupts
 				get_network_driver().unwrap().lock().set_polling_mode(false);
