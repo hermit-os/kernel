@@ -8,7 +8,6 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ptr;
-use core::sync::atomic::{fence, Ordering};
 
 use align_address::Align;
 
@@ -21,6 +20,7 @@ use super::{
 	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
 	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
+use crate::arch::memory_barrier;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
 
@@ -57,7 +57,7 @@ struct AvailRing {
 
 struct UsedRing {
 	flags: &'static mut u16,
-	index: &'static mut u16,
+	index: *mut u16,
 	ring: &'static mut [UsedElem],
 	event: &'static mut u16,
 }
@@ -193,14 +193,14 @@ impl DescrRing {
 		self.avail_ring.ring[*self.avail_ring.index as usize % self.avail_ring.ring.len()] =
 			index as u16;
 
-		fence(Ordering::SeqCst);
+		memory_barrier();
 		*self.avail_ring.index = self.avail_ring.index.wrapping_add(1);
 
 		(pin, 0, 0)
 	}
 
 	fn poll(&mut self) {
-		while self.read_idx != *self.used_ring.index {
+		while self.read_idx != unsafe { ptr::read_volatile(self.used_ring.index) } {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
 			let used_elem = self.used_ring.ring[cur_ring_index];
 
@@ -426,7 +426,7 @@ impl SplitVq {
 		let used_ring = unsafe {
 			UsedRing {
 				flags: &mut *(used_raw as *mut u16),
-				index: &mut *(used_raw.offset(2) as *mut u16),
+				index: used_raw.offset(2) as *mut u16,
 				ring: core::slice::from_raw_parts_mut(
 					(used_raw.offset(4) as *const _) as *mut UsedElem,
 					size as usize,
