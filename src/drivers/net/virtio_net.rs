@@ -198,9 +198,8 @@ impl RxQueues {
 			.features
 			.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF)
 		{
-			//((dev_cfg.raw.get_mtu() as usize + mem::size_of::<VirtioNetHdr>()) / num_buff as usize)
-			//	.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>())
-			1514 + mem::size_of::<VirtioNetHdr>()
+			(1514 + mem::size_of::<VirtioNetHdr>())
+				.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>())
 		} else {
 			dev_cfg.raw.get_mtu() as usize + mem::size_of::<VirtioNetHdr>()
 		};
@@ -208,20 +207,6 @@ impl RxQueues {
 		// See Virtio specification v1.1 - 5.1.6.3.1
 		//
 		let spec = BuffSpec::Single(Bytes::new(rx_size).unwrap());
-		/*let buff_def = [Bytes::new(rx_size).unwrap()];
-		let spec = if dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			&&
-			dev_cfg
-			.features
-			.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF)
-		{
-			BuffSpec::Indirect(&buff_def)
-		} else {
-			BuffSpec::Single(buff_def[0])
-		};*/
-
 		for _ in 0..num_buff {
 			let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
 				Ok(tkn) => tkn,

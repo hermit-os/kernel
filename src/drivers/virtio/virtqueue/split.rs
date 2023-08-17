@@ -202,7 +202,7 @@ impl DescrRing {
 	fn poll(&mut self) {
 		while self.read_idx != unsafe { ptr::read_volatile(self.used_ring.index) } {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
-			let used_elem = self.used_ring.ring[cur_ring_index];
+			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
 
 			let tkn = unsafe { &mut *(self.ref_ring[used_elem.id as usize]) };
 
@@ -225,6 +225,7 @@ impl DescrRing {
 				}
 				None => tkn.state = TransferState::Finished,
 			}
+			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
 		}
 	}
