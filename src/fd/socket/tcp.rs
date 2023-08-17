@@ -248,7 +248,7 @@ impl<T> Socket<T> {
 		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			block_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			poll_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -256,7 +256,13 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			block_on(self.async_read(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_read(slice), Some(Duration::from_secs(2))).unwrap_or_else(|x| {
+				if x == -ETIME {
+					block_on(self.async_read(slice), None).unwrap_or_else(|y| y.try_into().unwrap())
+				} else {
+					x.try_into().unwrap()
+				}
+			})
 		}
 	}
 

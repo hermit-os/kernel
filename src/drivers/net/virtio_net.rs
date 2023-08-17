@@ -10,6 +10,7 @@ use core::cmp::Ordering;
 use core::mem;
 use core::result::Result;
 
+use align_address::Align;
 use pci_types::InterruptLine;
 use smoltcp::phy::{Checksum, ChecksumCapabilities};
 use smoltcp::wire::{ETHERNET_HEADER_LEN, IPV4_HEADER_LEN, IPV6_HEADER_LEN};
@@ -191,92 +192,36 @@ impl RxQueues {
 		// Safe virtqueue
 		let rc_vq = Rc::new(vq);
 		let vq = &rc_vq;
+		let num_buff: u16 = vq.size().into();
 
-		if dev_cfg
+		let rx_size = if dev_cfg
 			.features
-			.is_feature(Features::VIRTIO_NET_F_GUEST_TSO4)
-			| dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_NET_F_GUEST_TSO6)
-			| dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_NET_F_GUEST_UFO)
+			.is_feature(Features::VIRTIO_NET_F_MRG_RXBUF)
 		{
-			// Receive Buffers must be at least 65562 bytes large with these features set.
-			// See Virtio specification v1.1 - 5.1.6.3.1
-
-			// Currently we choose indirect descriptors if possible in order to allow
-			// as many packages as possible inside the queue.
-			let buff_def = [
-				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(65550).unwrap(),
-			];
-
-			let spec = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				BuffSpec::Indirect(&buff_def)
-			} else {
-				BuffSpec::Single(Bytes::new(mem::size_of::<VirtioNetHdr>() + 65550).unwrap())
-			};
-
-			let num_buff: u16 = vq.size().into();
-
-			for _ in 0..num_buff {
-				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-					Ok(tkn) => tkn,
-					Err(_vq_err) => {
-						error!("Setup of network queue failed, which should not happen!");
-						panic!("setup of network queue failed!");
-					}
-				};
-
-				// BufferTokens are directly provided to the queue
-				// TransferTokens are directly dispatched
-				// Transfers will be awaited at the queue
-				buff_tkn
-					.provide()
-					.dispatch_await(Rc::clone(&self.poll_queue), false);
-			}
+			(1514 + mem::size_of::<VirtioNetHdr>())
+				.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>())
 		} else {
-			// If above features not set, buffers must be at least 1526 bytes large.
-			// See Virtio specification v1.1 - 5.1.6.3.1
-			//
-			let buff_def = [
-				Bytes::new(mem::size_of::<VirtioNetHdr>()).unwrap(),
-				Bytes::new(dev_cfg.raw.get_mtu() as usize).unwrap(),
-			];
-			let spec = if dev_cfg
-				.features
-				.is_feature(Features::VIRTIO_F_RING_INDIRECT_DESC)
-			{
-				BuffSpec::Indirect(&buff_def)
-			} else {
-				BuffSpec::Single(
-					Bytes::new(mem::size_of::<VirtioNetHdr>() + dev_cfg.raw.get_mtu() as usize)
-						.unwrap(),
-				)
+			dev_cfg.raw.get_mtu() as usize + mem::size_of::<VirtioNetHdr>()
+		};
+
+		// See Virtio specification v1.1 - 5.1.6.3.1
+		//
+		let spec = BuffSpec::Single(Bytes::new(rx_size).unwrap());
+		for _ in 0..num_buff {
+			let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
+				Ok(tkn) => tkn,
+				Err(_vq_err) => {
+					error!("Setup of network queue failed, which should not happen!");
+					panic!("setup of network queue failed!");
+				}
 			};
 
-			let num_buff: u16 = vq.size().into();
-
-			for _ in 0..num_buff {
-				let buff_tkn = match vq.prep_buffer(Rc::clone(vq), None, Some(spec.clone())) {
-					Ok(tkn) => tkn,
-					Err(_vq_err) => {
-						error!("Setup of network queue failed, which should not happen!");
-						panic!("setup of network queue failed!");
-					}
-				};
-
-				// BufferTokens are directly provided to the queue
-				// TransferTokens are directly dispatched
-				// Transfers will be awaited at the queue
-				buff_tkn
-					.provide()
-					.dispatch_await(Rc::clone(&self.poll_queue), false);
-			}
+			// BufferTokens are directly provided to the queue
+			// TransferTokens are directly dispatched
+			// Transfers will be awaited at the queue
+			buff_tkn
+				.provide()
+				.dispatch_await(Rc::clone(&self.poll_queue), false);
 		}
 
 		// Safe virtqueue
@@ -631,42 +576,50 @@ impl NetworkDriver for VirtioNetDriver {
 				let (_, recv_data_opt) = transfer.as_slices().unwrap();
 				let mut recv_data = recv_data_opt.unwrap();
 
-				// If the given length is zero, we currently fail.
-				if recv_data.len() == 2 {
-					let recv_payload = recv_data.pop().unwrap();
-					/*let header = recv_data.pop().unwrap();
-					let header = unsafe {
-						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
-						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
-							header[..HEADER_SIZE].try_into().unwrap(),
-						)
+				// If the given length isn't 1, we currently fail.
+				if recv_data.len() == 1 {
+					let mut vec_data: Vec<u8> = Vec::with_capacity(self.mtu.into());
+					let num_buffers = {
+						let packet = recv_data.pop().unwrap();
+						let header = unsafe {
+							const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
+							core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
+								packet[..HEADER_SIZE].try_into().unwrap(),
+							)
+						};
+						trace!("Header: {:?}", header);
+						let num_buffers = header.num_buffers;
+
+						vec_data.extend_from_slice(&packet[mem::size_of::<VirtioNetHdr>()..]);
+						transfer
+							.reuse()
+							.unwrap()
+							.provide()
+							.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+
+						num_buffers
 					};
-					trace!("Receive data with header {:?}", header);*/
 
-					let vec_data = recv_payload.to_vec();
-					transfer
-						.reuse()
-						.unwrap()
-						.provide()
-						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+					for _ in 1..num_buffers {
+						let transfer =
+							match RxQueues::post_processing(self.recv_vqs.get_next().unwrap()) {
+								Ok(trf) => trf,
+								Err(vnet_err) => {
+									warn!("Post processing failed. Err: {:?}", vnet_err);
+									return None;
+								}
+							};
 
-					Some((RxToken::new(vec_data), TxToken::new()))
-				} else if recv_data.len() == 1 {
-					let packet = recv_data.pop().unwrap();
-					/*let header = unsafe {
-						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
-						core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
-							packet[..HEADER_SIZE].try_into().unwrap(),
-						)
-					};
-					trace!("Receive data with header {:?}", header);*/
-
-					let vec_data = packet[mem::size_of::<VirtioNetHdr>()..].to_vec();
-					transfer
-						.reuse()
-						.unwrap()
-						.provide()
-						.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+						let (_, recv_data_opt) = transfer.as_slices().unwrap();
+						let mut recv_data = recv_data_opt.unwrap();
+						let packet = recv_data.pop().unwrap();
+						vec_data.extend_from_slice(packet);
+						transfer
+							.reuse()
+							.unwrap()
+							.provide()
+							.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+					}
 
 					Some((RxToken::new(vec_data), TxToken::new()))
 				} else {
@@ -833,6 +786,8 @@ impl VirtioNetDriver {
 		feats.push(Features::VIRTIO_NET_F_GUEST_CSUM);
 		// Host should avoid the creation of checksums
 		feats.push(Features::VIRTIO_NET_F_CSUM);
+		// Driver can merge receive buffers
+		feats.push(Features::VIRTIO_NET_F_MRG_RXBUF);
 
 		// Currently the driver does NOT support the features below.
 		// In order to provide functionality for these, the driver
