@@ -1,4 +1,5 @@
 use std::env;
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
@@ -45,9 +46,10 @@ impl Archive {
 		let archive = self.as_ref();
 		let prefix = archive.file_stem().unwrap().to_str().unwrap();
 
-		let symbol_renames = symbols
-			.map(|symbol| format!("{prefix}_{symbol} {symbol}\n"))
-			.collect::<String>();
+		let symbol_renames = symbols.fold(String::new(), |mut output, symbol| {
+			let _ = writeln!(output, "{prefix}_{symbol} {symbol}");
+			output
+		});
 
 		let rename_path = archive.with_extension("redefine-syms");
 		sh.write_file(&rename_path, symbol_renames)?;
