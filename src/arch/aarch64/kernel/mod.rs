@@ -34,6 +34,7 @@ pub(crate) static CPU_ONLINE: AtomicU32 = AtomicU32::new(0);
 
 pub(crate) static CURRENT_STACK_ADDRESS: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(target_os = "none")]
 global_asm!(include_str!("start.s"));
 
 /// Kernel header to announce machine features
