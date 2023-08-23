@@ -80,6 +80,7 @@ mod scheduler;
 mod synch;
 mod syscalls;
 
+#[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
 
 #[doc(hidden)]
