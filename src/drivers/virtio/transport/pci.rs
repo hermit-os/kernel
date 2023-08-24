@@ -26,6 +26,7 @@ use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::env::memory::{MemLen, MemOff, VirtMemAddr};
 use crate::drivers::virtio::error::VirtioError;
+use crate::drivers::vsock::VirtioVsockDriver;
 
 /// Virtio device ID's
 /// See Virtio specification v1.1. - 5
@@ -47,6 +48,7 @@ pub enum DevId {
 	VIRTIO_TRANS_DEV_ID_ENTROPY = 0x1005,
 	VIRTIO_TRANS_DEV_ID_9P = 0x1009,
 	VIRTIO_DEV_ID_NET = 0x1041,
+	VIRTIO_DEV_ID_VSOCK = 0x1053,
 	VIRTIO_DEV_ID_FS = 0x105A,
 }
 
@@ -61,6 +63,7 @@ impl From<DevId> for u16 {
 			DevId::VIRTIO_TRANS_DEV_ID_ENTROPY => 0x1005,
 			DevId::VIRTIO_TRANS_DEV_ID_9P => 0x1009,
 			DevId::VIRTIO_DEV_ID_NET => 0x1041,
+			DevId::VIRTIO_DEV_ID_VSOCK => 0x1053,
 			DevId::VIRTIO_DEV_ID_FS => 0x105A,
 			DevId::INVALID => 0x0,
 		}
@@ -78,6 +81,7 @@ impl From<u16> for DevId {
 			0x1005 => DevId::VIRTIO_TRANS_DEV_ID_ENTROPY,
 			0x1009 => DevId::VIRTIO_TRANS_DEV_ID_9P,
 			0x1041 => DevId::VIRTIO_DEV_ID_NET,
+			0x1053 => DevId::VIRTIO_DEV_ID_VSOCK,
 			0x105A => DevId::VIRTIO_DEV_ID_FS,
 			_ => DevId::INVALID,
 		}
@@ -1273,6 +1277,20 @@ pub(crate) fn init_device(
 				Err(DriverError::InitVirtioDevFail(virtio_error))
 			}
 		},
+		#[cfg(feature = "vsock")]
+		DevId::VIRTIO_DEV_ID_VSOCK => match VirtioVsockDriver::init(device) {
+			Ok(virt_vsock_drv) => {
+				info!("Virtio socket device initialized.");
+				Ok(VirtioDriver::Vsock(virt_vsock_drv))
+			}
+			Err(virtio_error) => {
+				error!(
+					"Virtio socket device driver could not be initialized with device: {:x}",
+					device_id
+				);
+				Err(DriverError::InitVirtioDevFail(virtio_error))
+			}
+		},
 		#[cfg(feature = "fs")]
 		DevId::VIRTIO_DEV_ID_FS => {
 			// TODO: check subclass
@@ -1317,6 +1335,8 @@ pub(crate) fn init_device(
 
 					Ok(drv)
 				}
+				#[cfg(feature = "vsock")]
+				VirtioDriver::Vsock(_) => Ok(drv),
 				#[cfg(feature = "fs")]
 				VirtioDriver::FileSystem(_) => Ok(drv),
 			}
@@ -1330,4 +1350,6 @@ pub(crate) enum VirtioDriver {
 	Network(VirtioNetDriver),
 	#[cfg(feature = "fs")]
 	FileSystem(VirtioFsDriver),
+	#[cfg(feature = "vsock")]
+	Vsock(VirtioVsockDriver),
 }

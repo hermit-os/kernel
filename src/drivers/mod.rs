@@ -10,6 +10,8 @@ pub mod net;
 pub mod pci;
 #[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
 pub mod virtio;
+#[cfg(feature = "vsock")]
+pub mod vsock;
 
 /// A common error module for drivers.
 /// [DriverError](enums.drivererror.html) values will be
