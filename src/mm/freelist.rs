@@ -18,7 +18,7 @@ impl FreeListEntry {
 
 #[derive(Debug)]
 pub struct FreeList {
-	pub list: LinkedList<FreeListEntry>,
+	list: LinkedList<FreeListEntry>,
 }
 
 trait LinkedListExt<T> {
@@ -54,6 +54,10 @@ impl FreeList {
 		Self {
 			list: LinkedList::new(),
 		}
+	}
+
+	pub fn push(&mut self, entry: FreeListEntry) {
+		self.list.push_back(entry);
 	}
 
 	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, AllocError> {
@@ -203,7 +207,7 @@ impl FreeList {
 		// We could not find an entry with a higher address than us.
 		// So we become the new last entry in the list. Get that entry from the node pool.
 		let new_element = FreeListEntry::new(address, end);
-		self.list.push_back(new_element);
+		self.push(new_element);
 	}
 
 	pub fn print_information(&self, header: &str) {
@@ -226,7 +230,7 @@ mod tests {
 		let mut freelist = FreeList::new();
 		let entry = FreeListEntry::new(0x10000, 0x100000);
 
-		freelist.list.push_back(entry);
+		freelist.push(entry);
 		let addr = freelist.allocate(0x1000, None);
 
 		assert_eq!(addr.unwrap(), 0x10000);
@@ -247,7 +251,7 @@ mod tests {
 		let mut freelist = FreeList::new();
 		let entry = FreeListEntry::new(0x10000, 0x100000);
 
-		freelist.list.push_back(entry);
+		freelist.push(entry);
 		let addr = freelist.allocate(0x1000, None);
 		freelist.deallocate(addr.unwrap(), 0x1000);
 

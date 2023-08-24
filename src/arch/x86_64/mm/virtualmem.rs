@@ -15,7 +15,7 @@ pub fn init() {
 		mm::kernel_end_address().as_usize(),
 		kernel_heap_end().as_usize(),
 	);
-	KERNEL_FREE_LIST.lock().list.push_back(entry);
+	KERNEL_FREE_LIST.lock().push(entry);
 }
 
 pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
