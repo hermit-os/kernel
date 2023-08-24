@@ -231,26 +231,15 @@ mod tests {
 
 		assert_eq!(addr.unwrap(), 0x10000);
 
-		let mut cursor = freelist.list.cursor_front_mut();
-		while let Some(node) = cursor.current() {
+		for node in &freelist.list {
 			assert_eq!(node.start, 0x11000);
 			assert_eq!(node.end, 0x100000);
-
-			cursor.move_next();
 		}
 
 		let addr = freelist.allocate(0x1000, Some(0x2000));
-		let mut cursor = freelist.list.cursor_front_mut();
-		assert!(cursor.current().is_some());
-		if let Some(node) = cursor.current() {
-			assert_eq!(node.start, 0x11000);
-		}
-
-		cursor.move_next();
-		assert!(cursor.current().is_some());
-		if let Some(node) = cursor.current() {
-			assert_eq!(node.start, 0x13000);
-		}
+		let mut iter = freelist.list.iter();
+		assert_eq!(iter.next().unwrap().start, 0x11000);
+		assert_eq!(iter.next().unwrap().start, 0x13000);
 	}
 
 	#[test]
@@ -262,12 +251,9 @@ mod tests {
 		let addr = freelist.allocate(0x1000, None);
 		freelist.deallocate(addr.unwrap(), 0x1000);
 
-		let mut cursor = freelist.list.cursor_front_mut();
-		while let Some(node) = cursor.current() {
+		for node in &freelist.list {
 			assert_eq!(node.start, 0x10000);
 			assert_eq!(node.end, 0x100000);
-
-			cursor.move_next();
 		}
 	}
 }
