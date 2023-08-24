@@ -13,7 +13,6 @@
 #![feature(asm_const)]
 #![feature(core_intrinsics)]
 #![feature(linked_list_cursors)]
-#![feature(linked_list_remove)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![feature(noop_waker)]

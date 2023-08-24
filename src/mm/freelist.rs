@@ -1,4 +1,4 @@
-use alloc::collections::linked_list::LinkedList;
+use alloc::vec::Vec;
 use core::alloc::AllocError;
 use core::cmp::Ordering;
 
@@ -18,46 +18,16 @@ impl FreeListEntry {
 
 #[derive(Debug)]
 pub struct FreeList {
-	list: LinkedList<FreeListEntry>,
-}
-
-trait LinkedListExt<T> {
-	fn insert(&mut self, index: usize, element: T);
-	fn get(&self, index: usize) -> Option<&T>;
-	fn get_mut(&mut self, index: usize) -> Option<&mut T>;
-}
-
-impl<T> LinkedListExt<T> for LinkedList<T> {
-	fn insert(&mut self, index: usize, element: T) {
-		let mut split = self.split_off(index);
-		self.push_back(element);
-		self.append(&mut split);
-	}
-
-	fn get(&self, index: usize) -> Option<&T> {
-		self.iter()
-			.enumerate()
-			.find(|(i, _)| *i == index)
-			.map(|(_, element)| element)
-	}
-
-	fn get_mut(&mut self, index: usize) -> Option<&mut T> {
-		self.iter_mut()
-			.enumerate()
-			.find(|(i, _)| *i == index)
-			.map(|(_, element)| element)
-	}
+	list: Vec<FreeListEntry>,
 }
 
 impl FreeList {
 	pub const fn new() -> Self {
-		Self {
-			list: LinkedList::new(),
-		}
+		Self { list: Vec::new() }
 	}
 
 	pub fn push(&mut self, entry: FreeListEntry) {
-		self.list.push_back(entry);
+		self.list.push(entry);
 	}
 
 	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, AllocError> {
