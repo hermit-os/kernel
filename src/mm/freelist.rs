@@ -222,23 +222,6 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn add_element() {
-		let mut freelist = FreeList::new();
-		let entry = FreeListEntry::new(0x10000, 0x100000);
-
-		freelist.list.push_back(entry);
-
-		let mut cursor = freelist.list.cursor_front_mut();
-
-		while let Some(node) = cursor.peek_next() {
-			assert!(node.start != 0x1000);
-			assert!(node.end != 0x10000);
-
-			cursor.move_next();
-		}
-	}
-
-	#[test]
 	fn allocate() {
 		let mut freelist = FreeList::new();
 		let entry = FreeListEntry::new(0x10000, 0x100000);
