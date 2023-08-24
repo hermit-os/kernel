@@ -21,6 +21,34 @@ pub struct FreeList {
 	pub list: LinkedList<FreeListEntry>,
 }
 
+trait LinkedListExt<T> {
+	fn insert(&mut self, index: usize, element: T);
+	fn get(&self, index: usize) -> Option<&T>;
+	fn get_mut(&mut self, index: usize) -> Option<&mut T>;
+}
+
+impl<T> LinkedListExt<T> for LinkedList<T> {
+	fn insert(&mut self, index: usize, element: T) {
+		let mut split = self.split_off(index);
+		self.push_back(element);
+		self.append(&mut split);
+	}
+
+	fn get(&self, index: usize) -> Option<&T> {
+		self.iter()
+			.enumerate()
+			.find(|(i, _)| *i == index)
+			.map(|(_, element)| element)
+	}
+
+	fn get_mut(&mut self, index: usize) -> Option<&mut T> {
+		self.iter_mut()
+			.enumerate()
+			.find(|(i, _)| *i == index)
+			.map(|(_, element)| element)
+	}
+}
+
 impl FreeList {
 	pub const fn new() -> Self {
 		Self {
@@ -42,8 +70,7 @@ impl FreeList {
 		};
 
 		// Find a region in the Free List that has at least the requested size.
-		let mut cursor = self.list.cursor_front_mut();
-		while let Some(node) = cursor.current() {
+		for (i, node) in self.list.iter_mut().enumerate() {
 			let (region_start, region_size) = (node.start, node.end - node.start);
 
 			match region_size.cmp(&new_size) {
@@ -55,7 +82,7 @@ impl FreeList {
 						node.start += size + (new_addr - region_start);
 						if new_addr != region_start {
 							let new_entry = FreeListEntry::new(region_start, new_addr);
-							cursor.insert_before(new_entry);
+							self.list.insert(i, new_entry);
 						}
 						return Ok(new_addr);
 					} else {
@@ -73,14 +100,12 @@ impl FreeList {
 						}
 						return Ok(new_addr);
 					} else {
-						cursor.remove_current();
+						self.list.remove(i);
 						return Ok(region_start);
 					}
 				}
 				Ordering::Less => {}
 			}
-
-			cursor.move_next();
 		}
 
 		Err(AllocError)
@@ -96,14 +121,13 @@ impl FreeList {
 		);
 
 		// Find a region in the Free List that has at least the requested size.
-		let mut cursor = self.list.cursor_front_mut();
-		while let Some(node) = cursor.current() {
+		for (i, node) in self.list.iter_mut().enumerate() {
 			let (region_start, region_size) = (node.start, node.end - node.start);
 
 			if address > region_start && address + size < region_start + region_size {
 				node.start = address + size;
 				let new_entry = FreeListEntry::new(region_start, address);
-				cursor.insert_before(new_entry);
+				self.list.insert(i, new_entry);
 				return Ok(());
 			} else if address > region_start && address + size == region_start + region_size {
 				node.start = address + size;
@@ -112,8 +136,6 @@ impl FreeList {
 				node.start = region_start + size;
 				return Ok(());
 			}
-
-			cursor.move_next();
 		}
 
 		Err(AllocError)
@@ -128,9 +150,8 @@ impl FreeList {
 		);
 
 		let end = address + size;
-		let mut cursor = self.list.cursor_front_mut();
 
-		while let Some(node) = cursor.current() {
+		for (i, node) in self.list.iter_mut().enumerate() {
 			let (region_start, region_end) = (node.start, node.end);
 
 			if region_start == end {
@@ -138,14 +159,16 @@ impl FreeList {
 				node.start = address;
 
 				// Check if it can even reunite with the previous region.
-				if let Some(prev_node) = cursor.peek_prev() {
-					let prev_region_end = prev_node.end;
+				if i > 0 {
+					if let Some(prev_node) = self.list.get_mut(i - 1) {
+						let prev_region_end = prev_node.end;
 
-					if prev_region_end == address {
-						// It can reunite, so let the current region span over the reunited region and move the duplicate node
-						// into the pool for deletion or reuse.
-						prev_node.end = region_end;
-						cursor.remove_current();
+						if prev_region_end == address {
+							// It can reunite, so let the current region span over the reunited region and move the duplicate node
+							// into the pool for deletion or reuse.
+							prev_node.end = region_end;
+							self.list.remove(i);
+						}
 					}
 				}
 
@@ -154,14 +177,14 @@ impl FreeList {
 				node.end = end;
 
 				// Check if it can even reunite with the next region.
-				if let Some(next_node) = cursor.peek_next() {
+				if let Some(next_node) = self.list.get_mut(i + 1) {
 					let next_region_start = next_node.start;
 
 					if next_region_start == end {
 						// It can reunite, so let the current region span over the reunited region and move the duplicate node
 						// into the pool for deletion or reuse.
 						next_node.start = region_start;
-						cursor.remove_current();
+						self.list.remove(i);
 					}
 				}
 
@@ -172,11 +195,9 @@ impl FreeList {
 				// We search the list from low to high addresses and insert us before the first entry that has a
 				// higher address than us.
 				let new_entry = FreeListEntry::new(address, end);
-				cursor.insert_before(new_entry);
+				self.list.insert(i, new_entry);
 				return;
 			}
-
-			cursor.move_next();
 		}
 
 		// We could not find an entry with a higher address than us.
