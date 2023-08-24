@@ -85,6 +85,7 @@ qemu-exit = "3.0"
 rand_chacha = { version = "0.3", default-features = false }
 shell-words = { version = "1.1", default-features = false }
 smallvec = { version = "1", features = ["const_new"] }
+take-static = "0.1"
 talc = { version = "2" }
 time = { version = "0.3", default-features = false }
 zerocopy = { version = "0.7", features = ["derive"] }

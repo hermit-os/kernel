@@ -26,8 +26,12 @@ impl CoreLocal {
 	pub fn install() {
 		let core_id = CPU_ONLINE.load(Ordering::Relaxed);
 
-		let irq_statistics = &*Box::leak(Box::new(IrqStatistics::new()));
-		IRQ_COUNTERS.lock().insert(core_id, irq_statistics);
+		let irq_statistics = if core_id == 0 {
+			static FIRST_IRQ_STATISTICS: IrqStatistics = IrqStatistics::new();
+			&FIRST_IRQ_STATISTICS
+		} else {
+			&*Box::leak(Box::new(IrqStatistics::new()))
+		};
 
 		let this = Self {
 			this: ptr::null_mut(),
@@ -36,7 +40,15 @@ impl CoreLocal {
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
 		};
-		let this = Box::leak(Box::new(this));
+		let this = if core_id == 0 {
+			take_static::take_static! {
+				static FIRST_CORE_LOCAL: Option<CoreLocal> = None;
+			}
+			FIRST_CORE_LOCAL.take().unwrap().insert(this)
+		} else {
+			this.add_irq_counter();
+			Box::leak(Box::new(this))
+		};
 		this.this = &*this;
 
 		unsafe {
@@ -51,6 +63,12 @@ impl CoreLocal {
 			asm!("mrs {}, tpidr_el1", out(reg) raw, options(nomem, nostack, preserves_flags));
 			&*raw
 		}
+	}
+
+	pub fn add_irq_counter(&self) {
+		IRQ_COUNTERS
+			.lock()
+			.insert(self.core_id, self.irq_statistics);
 	}
 }
 
