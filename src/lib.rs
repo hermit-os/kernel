@@ -299,13 +299,6 @@ fn synch_all_cores() {
 /// Entry Point of HermitCore for the Boot Processor
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
-	let init_heap_start = env::get_base_address() + env::get_image_size();
-	let init_heap_len =
-		init_heap_start.align_up_to_large_page().as_usize() - init_heap_start.as_usize();
-	unsafe {
-		ALLOCATOR.init(init_heap_start.as_mut_ptr(), init_heap_len);
-	}
-
 	// Initialize the kernel and hardware.
 	arch::message_output_init();
 	unsafe {
@@ -325,11 +318,6 @@ fn boot_processor_main() -> ! {
 		"TLS starts at {:p} (size {} Bytes)",
 		env::get_tls_start(),
 		env::get_tls_memsz()
-	);
-	info!(
-		"Init heap: [0x{:p} - 0x{:p}]",
-		init_heap_start,
-		init_heap_start + init_heap_len
 	);
 	arch::boot_processor_init();
 	scheduler::add_current_core();
