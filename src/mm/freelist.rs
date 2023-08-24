@@ -1,8 +1,8 @@
-use alloc::vec::Vec;
 use core::alloc::AllocError;
 use core::cmp::Ordering;
 
 use align_address::Align;
+use smallvec::SmallVec;
 
 #[derive(Debug)]
 pub struct FreeListEntry {
@@ -18,12 +18,14 @@ impl FreeListEntry {
 
 #[derive(Debug)]
 pub struct FreeList {
-	list: Vec<FreeListEntry>,
+	list: SmallVec<[FreeListEntry; 16]>,
 }
 
 impl FreeList {
 	pub const fn new() -> Self {
-		Self { list: Vec::new() }
+		Self {
+			list: SmallVec::new_const(),
+		}
 	}
 
 	pub fn push(&mut self, entry: FreeListEntry) {
