@@ -87,7 +87,7 @@ impl flags::Build {
 			.unwrap_or_default();
 
 		// TODO: Re-enable mutable-noalias
-		// https://github.com/hermitcore/libhermit-rs/issues/200
+		// https://github.com/hermitcore/hermit-kernel/issues/200
 		rustflags.push("-Zmutable-noalias=no");
 
 		if self.instrument_mcount {
@@ -198,7 +198,7 @@ impl flags::Clippy {
 		let sh = sh()?;
 
 		// TODO: Enable clippy for aarch64
-		// https://github.com/hermitcore/libhermit-rs/issues/381
+		// https://github.com/hermitcore/hermit-kernel/issues/381
 		for target in [Arch::X86_64, Arch::AArch64] {
 			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}").run()?;
@@ -210,7 +210,7 @@ impl flags::Clippy {
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 			// TODO: Enable clippy for newlib
-			// https://github.com/hermitcore/libhermit-rs/issues/470
+			// https://github.com/hermitcore/hermit-kernel/issues/470
 			// cmd!(sh, "cargo clippy {target_args...}")
 			// 	.arg("--no-default-features")
 			// 	.arg("--features=acpi,fsgsbase,newlib,smp,vga")

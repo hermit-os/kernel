@@ -21,7 +21,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install nasm
       - name: Generate documentation
-        run: cargo doc --target x86_64-unknown-none --package libhermit-rs
+        run: cargo doc --target x86_64-unknown-none --package hermit-kernel
       - name: Generate index.html
         run: |
           cat > target/x86_64-unknown-none/doc/index.html <<EOL
@@ -29,10 +29,10 @@ jobs:
           <html>
             <head>
               <title>Redirect!</title>
-              <meta http-equiv="refresh" content="0; url=https://hermitcore.github.io/libhermit-rs/hermit/" />
+              <meta http-equiv="refresh" content="0; url=https://hermitcore.github.io/kernel/hermit/" />
             </head>
             <body>
-              <p><a href="https://hermitcore.github.io/libhermit-rs/hermit/">Redirect</a></p>
+              <p><a href="https://hermitcore.github.io/kernel/hermit/">Redirect</a></p>
             </body>
           </html>
           EOL
