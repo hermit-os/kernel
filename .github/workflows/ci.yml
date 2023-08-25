@@ -125,11 +125,11 @@ jobs:
           repository: hermitcore/rusty-hermit
           submodules: true
       - name: Remove hermit-kernel submodule
-        run: git rm -r libhermit-rs
+        run: git rm -r kernel
       - name: Checkout hermit-kernel
         uses: actions/checkout@v3
         with:
-          path: libhermit-rs
+          path: kernel
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
@@ -250,11 +250,11 @@ jobs:
           repository: hermitcore/rusty-hermit
           submodules: true
       - name: Remove hermit-kernel submodule
-        run: git rm -r libhermit-rs
+        run: git rm -r kernel
       - name: Checkout hermit-kernel
         uses: actions/checkout@v3
         with:
-          path: libhermit-rs
+          path: kernel
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@1.1.1
         with:
