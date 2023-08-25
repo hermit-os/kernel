@@ -26,7 +26,7 @@ jobs:
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Check each feature
-        run: cargo hack check --package libhermit-rs --each-feature --no-dev-deps --target x86_64-unknown-none
+        run: cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none
         env:
           RUSTFLAGS:
 
@@ -67,8 +67,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Check docs
         run: |
-          cargo doc --package libhermit-rs --no-deps --document-private-items --target x86_64-unknown-none
-          cargo doc --package libhermit-rs --no-deps --document-private-items --target aarch64-unknown-none-softfloat --no-default-features
+          cargo doc --package hermit-kernel --no-deps --document-private-items --target x86_64-unknown-none
+          cargo doc --package hermit-kernel --no-deps --document-private-items --target aarch64-unknown-none-softfloat --no-default-features
 
   build:
     name: Build
@@ -124,12 +124,12 @@ jobs:
         with:
           repository: hermitcore/rusty-hermit
           submodules: true
-      - name: Remove libhermit-rs submodule
-        run: git rm -r libhermit-rs
-      - name: Checkout libhermit-rs
+      - name: Remove hermit-kernel submodule
+        run: git rm -r hermit-kernel
+      - name: Checkout hermit-kernel
         uses: actions/checkout@v3
         with:
-          path: libhermit-rs
+          path: hermit-kernel
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Build dev profile
@@ -249,12 +249,12 @@ jobs:
         with:
           repository: hermitcore/rusty-hermit
           submodules: true
-      - name: Remove libhermit-rs submodule
-        run: git rm -r libhermit-rs
-      - name: Checkout libhermit-rs
+      - name: Remove hermit-kernel submodule
+        run: git rm -r hermit-kernel
+      - name: Checkout hermit-kernel
         uses: actions/checkout@v3
         with:
-          path: libhermit-rs
+          path: hermit-kernel
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@1.1.1
         with:

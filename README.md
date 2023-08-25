@@ -1,12 +1,12 @@
 <img width="100" align="right" src="img/hermitcore_logo.png" />
 
-# RustyHermit: libhermit-rs
+# Hermit Kernel
 
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/libhermit-rs/hermit/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/kernel/hermit-kernel/)
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
 [![Zulip Badge](https://img.shields.io/badge/chat-hermit-57A37C?logo=zulip)](https://hermit.zulipchat.com/)
 
-_libhermit-rs_ is the kernel of the [RustyHermit](https://github.com/hermitcore/rusty-hermit) unikernel project.
+This is the kernel of the [Hermit](https://github.com/hermitcore) unikernel project.
 
 ## Requirements
 
@@ -28,11 +28,11 @@ cargo xtask build --arch x86_64
 ```
 
 On completion, the script will print the path of `libhermit.a`.
-If you want to build _libhermit-rs_ for aarch64, please replace `x86_64` by `aarch64`.
+If you want to build the kernel for aarch64, please replace `x86_64` by `aarch64`.
 
 ### Control the kernel messages verbosity
 
-_libhermit-rs_ uses the lightweight logging crate [log](https://github.com/rust-lang/log) to print kernel messages.
+This kernel uses the lightweight logging crate [log](https://github.com/rust-lang/log) to print kernel messages.
 The environment variable `HERMIT_LOG_LEVEL_FILTER` controls the verbosity. 
 You can change it by setting it at compile time to a string matching the name of a [LevelFilter](https://docs.rs/log/0.4.8/log/enum.LevelFilter.html).
 If the variable is not set, or the name doesn't match, then `LevelFilter::Info` is used by default.
@@ -43,7 +43,7 @@ $ HERMIT_LOG_LEVEL_FILTER=Debug cargo xtask build --arch x86_64
 
 ## Credits
 
-_libhermit-rs_ is derived from following tutorials and software distributions:
+This kernel is derived from following tutorials and software distributions:
 
 1. Philipp Oppermann's [excellent series of blog posts][opp].
 2. Erik Kidd's [toyos-rs][kidd], which is an extension of Philipp Opermann's kernel.
@@ -68,5 +68,5 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-libhermit-rs is being developed on [GitHub](https://github.com/hermitcore/libhermit-rs).
+The kernel is being developed on [hermitcore/kernel](https://github.com/hermitcore/kernel).
 Create your own fork, send us a pull request, and chat with us on [Zulip](https://hermit.zulipchat.com/).
