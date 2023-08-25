@@ -26,7 +26,6 @@ exclude = [
 	"/.gitlab-ci.yml",
 	"/Dockerfile",
 	"/img/*",
-	"./CMakeLists.txt",
 	".gitattributes",
 	".gitignore",
 ]
