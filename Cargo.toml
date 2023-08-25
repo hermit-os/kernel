@@ -1,5 +1,5 @@
 [package]
-name = "libhermit-rs"
+name = "hermit-kernel"
 version = "0.6.4"
 authors = [
 	"Stefan Lankes <slankes@eonerc.rwth-aachen.de>",
@@ -16,8 +16,8 @@ license = "MIT OR Apache-2.0"
 readme = "README.md"
 keywords = ["unikernel", "libos"]
 categories = ["os"]
-repository = "https://github.com/hermitcore/libhermit-rs"
-documentation = "https://hermitcore.github.io/libhermit-rs/hermit/"
+repository = "https://github.com/hermitcore/kernel"
+documentation = "https://hermitcore.github.io/kernel/hermit/"
 edition = "2021"
 description = "A Rust-based library operating system"
 exclude = [
