@@ -1,6 +1,6 @@
 # The Hermit Loader
 
-This project is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [QEMU](https://www.qemu.org).
+This project is a loader to run the [Hermit kernel](https://github.com/hermitcore/kernel) within [QEMU](https://www.qemu.org).
 
 ## Requirements
 

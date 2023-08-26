@@ -134,7 +134,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 	}
 
-	// Load the RustyHermit-ELF from the initrd supplied by Firecracker
+	// Load the Hermit-ELF from the initrd supplied by Firecracker
 	let ramdisk_address = *((&(boot_params as usize)
 		+ LINUX_SETUP_HEADER_OFFSET
 		+ RAMDISK_IMAGE_OFFSET) as *const u32);

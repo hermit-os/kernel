@@ -1,4 +1,4 @@
-; This is the kernel's entry point, if RustyHermit is running with
+; This is the kernel's entry point, if Hermit is running with
 ; FireCracker. FireCracker assumes a 64 bit Linux kernel.
 
 [BITS 64]
