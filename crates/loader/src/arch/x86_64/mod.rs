@@ -134,7 +134,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 	}
 
-	// Load the RustyHermit-ELF from the initrd supplied by Firecracker
+	// Load the Hermit-ELF from the initrd supplied by Firecracker
 	let ramdisk_address = *((&(boot_params as usize)
 		+ LINUX_SETUP_HEADER_OFFSET
 		+ RAMDISK_IMAGE_OFFSET) as *const u32);
@@ -150,7 +150,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let elf_len = ramdisk_size as usize;
 
 	let free_memory_address = (&kernel_end as *const u8 as usize).align_up(Size2MiB::SIZE as usize);
-	// TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/96
+	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	info!("Intialize PhysAlloc with {:#x}", free_memory_address);
 	// Memory after the highest end address is unused and available for the physical memory manager.
@@ -221,7 +221,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	info!("Module length: {:#x}", elf_len);
 
 	let free_memory_address = end_address.align_up(Size2MiB::SIZE as usize);
-	// TODO: Workaround for https://github.com/hermitcore/rusty-loader/issues/96
+	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	// Memory after the highest end address is unused and available for the physical memory manager.
 	PhysAlloc::init(free_memory_address);

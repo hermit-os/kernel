@@ -55,7 +55,8 @@ jobs:
       - name: Install QEMU, NASM (macos)
         if: matrix.os == 'macos-latest'
         run: |
-          brew update
+          # enable once it works again
+          # brew update
           brew install qemu nasm
       - name: Install QEMU, NASM (windows)
         if: matrix.os == 'windows-latest'
@@ -79,14 +80,14 @@ jobs:
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64/debug/rusty-loader \
+            -kernel target/x86_64/debug/hermit-loader \
             -initrd data/x86_64/hello_world
           qemu-system-x86_64 \
             -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64/debug/rusty-loader \
+            -kernel target/x86_64/debug/hermit-loader \
             -initrd data/x86_64/hello_c
       - name: Run loader (aarch64)
         if: matrix.target == 'aarch64'
@@ -94,7 +95,7 @@ jobs:
           qemu-system-aarch64 \
             -machine virt,gic-version=3 -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
-            -kernel target/aarch64/debug/rusty-loader \
+            -kernel target/aarch64/debug/hermit-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
       - name: Run loader (riscv64)
         if: matrix.target == 'riscv64'
@@ -105,7 +106,7 @@ jobs:
             -smp 1 \
             -m 32M \
             -display none -serial stdio \
-            -kernel target/riscv64/debug/rusty-loader \
+            -kernel target/riscv64/debug/hermit-loader \
             -initrd data/riscv64/hello_world
       - name: Build (release)
         run: cargo xtask build --target ${{ matrix.target }} --release
@@ -117,14 +118,14 @@ jobs:
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64/release/rusty-loader \
+            -kernel target/x86_64/release/hermit-loader \
             -initrd data/x86_64/hello_world
           qemu-system-x86_64 \
             -cpu qemu64,apic,fsgsbase,fxsr,rdrand,rdtscp,xsave,xsaveopt \
             -smp 1 -m 64M \
             -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -display none -serial stdio \
-            -kernel target/x86_64/release/rusty-loader \
+            -kernel target/x86_64/release/hermit-loader \
             -initrd data/x86_64/hello_c
       - name: Run loader (release, aarch64)
         if: matrix.target == 'aarch64'
@@ -132,7 +133,7 @@ jobs:
           qemu-system-aarch64 \
             -machine virt,gic-version=3 -cpu cortex-a72 -smp 1 -m 512M \
             -display none -serial stdio -semihosting \
-            -kernel target/aarch64/release/rusty-loader \
+            -kernel target/aarch64/release/hermit-loader \
             -device guest-loader,addr=0x48000000,initrd=data/aarch64/hello_world
       - name: Run loader (release, riscv64)
         if: matrix.target == 'riscv64'
@@ -143,5 +144,5 @@ jobs:
             -smp 1 \
             -m 32M \
             -display none -serial stdio \
-            -kernel target/riscv64/release/rusty-loader \
+            -kernel target/riscv64/release/hermit-loader \
             -initrd data/riscv64/hello_world

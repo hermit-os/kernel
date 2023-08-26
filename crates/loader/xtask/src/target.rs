@@ -64,15 +64,15 @@ impl Target {
 
 	pub fn build_name(&self) -> &'static str {
 		match self {
-			Self::X86_64Uefi => "rusty-loader.efi",
-			_ => "rusty-loader",
+			Self::X86_64Uefi => "hermit-loader.efi",
+			_ => "hermit-loader",
 		}
 	}
 
 	pub fn dist_name(&self) -> &'static str {
 		match self {
 			Self::X86_64Uefi => "BootX64.efi",
-			_ => "rusty-loader",
+			_ => "hermit-loader",
 		}
 	}
 }
