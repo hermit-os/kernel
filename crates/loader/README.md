@@ -1,6 +1,6 @@
-# RustyLoader
+# The Hermit Loader
 
-**RustyLoader** is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [QEMU](https://www.qemu.org).
+This project is a loader to run [RustyHermit](https://github.com/hermitcore/libhermit-rs) within [QEMU](https://www.qemu.org).
 
 ## Requirements
 
@@ -15,7 +15,7 @@ $ cargo xtask build --target <TARGET> --release
 
 With `<TARGET>` being either `x86_64`, `x86_64-uefi`, or `aarch64`.
 
-Afterward, the loader is located at `target/<TARGET>/release/rusty-loader`.
+Afterward, the loader is located at `target/<TARGET>/release/hermit-loader`.
 
 ## Running
 

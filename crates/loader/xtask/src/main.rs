@@ -152,9 +152,9 @@ impl flags::Clippy {
 		let sh = Shell::new()?;
 
 		// TODO: Enable clippy for aarch64
-		// https://github.com/hermitcore/rusty-loader/issues/78
+		// https://github.com/hermitcore/loader/issues/78
 		// TODO: Enable clippy for x86_64-uefi
-		// https://github.com/hermitcore/rusty-loader/issues/122
+		// https://github.com/hermitcore/loader/issues/122
 		#[allow(clippy::single_element_loop)]
 		for target in [Target::X86_64, Target::Riscv64] {
 			target.install()?;
