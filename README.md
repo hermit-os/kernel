@@ -17,7 +17,7 @@ This is the kernel of the [Hermit](https://github.com/hermitcore) unikernel proj
 
 Usually the kernel will be linked as static library to your applications.
 
-- **Rust applications:** Instructions can be found in the [rusty-hermit](https://github.com/hermitcore/rusty-hermit) repository.
+- **Rust applications:** Instructions can be found in the [hermit-rs](https://github.com/hermitcore/hermit-rs) repository.
 - **For C/C++ applications:** Instructions can be found in the [hermit-playground](https://github.com/hermitcore/hermit-playground) repository.
  
 

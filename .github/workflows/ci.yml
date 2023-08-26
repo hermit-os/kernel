@@ -112,17 +112,17 @@ jobs:
           RUSTFLAGS:
 
   run-x86_64:
-    name: Run RustyHermit (x86_64)
+    name: Run Hermit for Rust (x86_64)
     runs-on: ubuntu-latest
     steps:
       - name: Install QEMU, NASM
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev
-      - name: Checkout rusty-hermit
+      - name: Checkout hermit-rs
         uses: actions/checkout@v3
         with:
-          repository: hermitcore/rusty-hermit
+          repository: hermitcore/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
@@ -241,13 +241,13 @@ jobs:
           test $qemu_status -eq 3
   
   run-aarch64:
-    name: Run RustyHermit (aarch64)
+    name: Run Hermit for Rust (aarch64)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout rusty-hermit
+      - name: Checkout hermit-rs
         uses: actions/checkout@v3
         with:
-          repository: hermitcore/rusty-hermit
+          repository: hermitcore/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
