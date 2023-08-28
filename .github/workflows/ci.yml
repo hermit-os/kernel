@@ -111,6 +111,39 @@ jobs:
         env:
           RUSTFLAGS:
 
+  uhyve:
+    name: Uhyve
+    runs-on: [self-hosted]
+    steps:
+      - name: Install QEMU, NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm qemu-kvm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Uhyve
+        run: cargo install uhyve
+      - name: Checkout hermit-rs
+        uses: actions/checkout@v3
+        with:
+          repository: hermitcore/hermit-rs
+          submodules: true
+      - name: Remove hermit-kernel submodule
+        run: git rm -r kernel
+      - name: Checkout hermit-kernel
+        uses: actions/checkout@v3
+        with:
+          path: kernel
+      - uses: mkroening/rust-toolchain-toml@main
+      - uses: Swatinem/rust-cache@v2
+      - name: Build dev profile
+        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
+      - name: Run dev profile
+        run: uhyve --verbose -c 2 target/x86_64-unknown-hermit/debug/rusty_demo
+      - name: Build release profile
+        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --release --features pci-ids
+      - name: Run release profile
+        run: uhyve --verbose -c 2 target/x86_64-unknown-hermit/release/rusty_demo
+
   run-x86_64:
     name: Run Hermit for Rust (x86_64)
     runs-on: ubuntu-latest
