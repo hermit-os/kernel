@@ -31,13 +31,6 @@ impl LockedAllocator {
 			self.0.talc().init(arena);
 		}
 	}
-
-	pub unsafe fn extend(&self, heap_bottom: *mut u8, heap_size: usize) {
-		let arena = Span::from_base_size(heap_bottom, heap_size);
-		unsafe {
-			self.0.talc().extend(arena);
-		}
-	}
 }
 
 /// To avoid false sharing, the global memory allocator align

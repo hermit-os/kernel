@@ -27,7 +27,7 @@ fn detect_from_limits() -> Result<(), ()> {
 		limit - mm::kernel_end_address().as_usize(),
 		Ordering::SeqCst,
 	);
-	PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+	PHYSICAL_FREE_LIST.lock().push(entry);
 
 	Ok(())
 }

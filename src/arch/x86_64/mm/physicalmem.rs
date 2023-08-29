@@ -53,7 +53,7 @@ fn detect_from_multiboot_info() -> Result<(), ()> {
 			(m.base_address() + m.length() - start_address.as_u64()) as usize,
 			Ordering::SeqCst,
 		);
-		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+		PHYSICAL_FREE_LIST.lock().push(entry);
 	}
 
 	assert!(
@@ -73,17 +73,17 @@ fn detect_from_limits() -> Result<(), ()> {
 	// add gap for the APIC
 	if limit > KVM_32BIT_GAP_START {
 		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), KVM_32BIT_GAP_START);
-		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+		PHYSICAL_FREE_LIST.lock().push(entry);
 		if limit > KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE {
 			let entry = FreeListEntry::new(KVM_32BIT_GAP_START + KVM_32BIT_GAP_SIZE, limit);
-			PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+			PHYSICAL_FREE_LIST.lock().push(entry);
 			TOTAL_MEMORY.store(limit - KVM_32BIT_GAP_SIZE, Ordering::SeqCst);
 		} else {
 			TOTAL_MEMORY.store(KVM_32BIT_GAP_START, Ordering::SeqCst);
 		}
 	} else {
 		let entry = FreeListEntry::new(mm::kernel_end_address().as_usize(), limit);
-		PHYSICAL_FREE_LIST.lock().list.push_back(entry);
+		PHYSICAL_FREE_LIST.lock().push(entry);
 		TOTAL_MEMORY.store(limit, Ordering::SeqCst);
 	}
 

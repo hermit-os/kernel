@@ -195,6 +195,7 @@ pub fn boot_processor_init() {
 
 	crate::mm::init();
 	crate::mm::print_information();
+	CoreLocal::get().add_irq_counter();
 	env::init();
 	interrupts::init();
 	interrupts::enable();
