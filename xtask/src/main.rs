@@ -197,8 +197,6 @@ impl flags::Clippy {
 	fn run(self) -> Result<()> {
 		let sh = sh()?;
 
-		// TODO: Enable clippy for aarch64
-		// https://github.com/hermitcore/hermit-kernel/issues/381
 		for target in [Arch::X86_64, Arch::AArch64] {
 			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}").run()?;
