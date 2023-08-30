@@ -11,8 +11,7 @@ use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
 
 pub use crate::arch::kernel::{
-	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address, get_tls_align,
-	get_tls_filesz, get_tls_memsz, get_tls_start,
+	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address,
 };
 use crate::kernel::boot_info;
 

@@ -316,8 +316,8 @@ fn boot_processor_main() -> ! {
 	});
 	info!(
 		"TLS starts at {:p} (size {} Bytes)",
-		env::get_tls_start(),
-		env::get_tls_memsz()
+		kernel::get_tls_start(),
+		kernel::get_tls_memsz()
 	);
 	arch::boot_processor_init();
 	scheduler::add_current_core();

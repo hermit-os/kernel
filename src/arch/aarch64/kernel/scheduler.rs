@@ -13,7 +13,7 @@ use crate::arch::aarch64::kernel::CURRENT_STACK_ADDRESS;
 use crate::arch::aarch64::mm::paging::{BasePageSize, PageSize, PageTableEntryFlags};
 use crate::arch::aarch64::mm::{PhysAddr, VirtAddr};
 use crate::scheduler::task::{Task, TaskFrame};
-use crate::{env, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
+use crate::{kernel, DEFAULT_STACK_SIZE, KERNEL_STACK_SIZE};
 
 #[derive(Debug)]
 #[repr(C, packed)]
@@ -264,21 +264,21 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	fn from_environment() -> Option<Box<Self>> {
-		if env::get_tls_memsz() == 0 {
+		if kernel::get_tls_memsz() == 0 {
 			return None;
 		}
 
 		// Get TLS initialization image
 		let tls_init_image = {
-			let tls_init_data = env::get_tls_start().as_ptr::<u8>();
-			let tls_init_len = env::get_tls_filesz();
+			let tls_init_data = kernel::get_tls_start().as_ptr::<u8>();
+			let tls_init_len = kernel::get_tls_filesz();
 
 			// SAFETY: We will have to trust the environment here.
 			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
 		};
 
-		let off = core::cmp::max(16, env::get_tls_align()) - 16;
-		let block_len = env::get_tls_memsz() + off;
+		let off = core::cmp::max(16, kernel::get_tls_align()) - 16;
+		let block_len = kernel::get_tls_memsz() + off;
 		let len = block_len + mem::size_of::<Box<[Dtv; 2]>>();
 
 		let layout = Layout::from_size_align(len, 16).unwrap();
