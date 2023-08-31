@@ -13,6 +13,7 @@ pub mod switch;
 pub mod systemtime;
 
 use core::arch::global_asm;
+use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
@@ -90,30 +91,14 @@ pub fn get_processor_count() -> u32 {
 	1
 }
 
-pub fn get_cmdsize() -> usize {
+pub fn args() -> Option<&'static str> {
 	let dtb = unsafe {
 		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
 			.expect(".dtb file has invalid header")
 	};
 
-	if let Some(cmd) = dtb.get_property("/chosen", "bootargs") {
-		cmd.len()
-	} else {
-		0
-	}
-}
-
-pub fn get_cmdline() -> VirtAddr {
-	let dtb = unsafe {
-		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
-	};
-
-	if let Some(cmd) = dtb.get_property("/chosen", "bootargs") {
-		VirtAddr(cmd.as_ptr() as u64)
-	} else {
-		VirtAddr::zero()
-	}
+	dtb.get_property("/chosen", "bootargs")
+		.map(|property| str::from_utf8(property).unwrap())
 }
 
 /// Earliest initialization function called by the Boot Processor.

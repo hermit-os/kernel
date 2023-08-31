@@ -111,31 +111,11 @@ pub fn is_uhyve_with_pci() -> bool {
 	}
 }
 
-pub fn get_cmdsize() -> usize {
+pub fn args() -> Option<&'static str> {
 	match boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. } => command_line
-			.map(|command_line| command_line.len())
-			.unwrap_or_default(),
-		PlatformInfo::LinuxBootParams { command_line, .. } => command_line
-			.map(|command_line| command_line.len())
-			.unwrap_or_default(),
-		PlatformInfo::Uhyve { .. } => 0,
-	}
-}
-
-pub fn get_cmdline() -> VirtAddr {
-	match boot_info().platform_info {
-		PlatformInfo::Multiboot { command_line, .. } => VirtAddr(
-			command_line
-				.map(|command_line| command_line.as_ptr() as u64)
-				.unwrap_or_default(),
-		),
-		PlatformInfo::LinuxBootParams { command_line, .. } => VirtAddr(
-			command_line
-				.map(|command_line| command_line.as_ptr() as u64)
-				.unwrap_or_default(),
-		),
-		PlatformInfo::Uhyve { .. } => VirtAddr(0),
+		PlatformInfo::Multiboot { command_line, .. } => command_line,
+		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
+		PlatformInfo::Uhyve { .. } => None,
 	}
 }
 

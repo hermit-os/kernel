@@ -2,7 +2,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::{slice, str};
+use core::str;
 
 use ahash::RandomState;
 use hashbrown::hash_map::Iter;
@@ -10,9 +10,7 @@ use hashbrown::HashMap;
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::OnceCell;
 
-pub use crate::arch::kernel::{
-	get_base_address, get_cmdline, get_cmdsize, get_image_size, get_ram_address,
-};
+pub use crate::arch::kernel::{self, get_base_address, get_image_size, get_ram_address};
 use crate::kernel::boot_info;
 
 static CLI: OnceCell<Cli> = OnceCell::new();
@@ -35,18 +33,6 @@ pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }
 
-fn get_cmdline_str() -> &'static str {
-	let cmdsize = get_cmdsize();
-	let cmdline = get_cmdline().as_ptr::<u8>();
-	if cmdline.is_null() {
-		""
-	} else {
-		// SAFETY: cmdline and cmdsize are valid forever.
-		let slice = unsafe { slice::from_raw_parts(cmdline, cmdsize) };
-		str::from_utf8(slice).unwrap().trim_matches(char::from(0))
-	}
-}
-
 impl Default for Cli {
 	fn default() -> Self {
 		let mut image_path = None;
@@ -56,7 +42,7 @@ impl Default for Cli {
 		);
 		let mut args = Vec::new();
 
-		let words = shell_words::split(get_cmdline_str()).unwrap();
+		let words = shell_words::split(kernel::args().unwrap_or_default()).unwrap();
 		debug!("cli_words = {words:?}");
 
 		let mut words = words.into_iter();
