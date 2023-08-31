@@ -14,7 +14,7 @@ use crate::arch::x86_64::mm::paging::{
 };
 use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
-use crate::env;
+use crate::kernel;
 use crate::scheduler::task::{Task, TaskFrame};
 
 #[repr(C, packed)]
@@ -235,22 +235,18 @@ pub struct TaskTLS {
 }
 
 impl TaskTLS {
+	// For details on thread-local storage data structures see
+	//
+	// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
+	// https://akkadia.org/drepper/tls.pdf
 	fn from_environment() -> Option<Box<Self>> {
-		// For details on thread-local storage data structures see
-		//
-		// “ELF Handling For Thread-Local Storage” Section 3.4.6: x86-64 Specific Definitions for Run-Time Handling of TLS
-		// https://akkadia.org/drepper/tls.pdf
-
-		let tls_len = env::get_tls_memsz();
-
-		if env::get_tls_memsz() == 0 {
-			return None;
-		}
+		let tls_info = kernel::boot_info().load_info.tls_info?;
+		assert_ne!(tls_info.memsz, 0);
 
 		// Get TLS initialization image
 		let tls_init_image = {
-			let tls_init_data = env::get_tls_start().as_ptr::<u8>();
-			let tls_init_len = env::get_tls_filesz();
+			let tls_init_data = ptr::from_exposed_addr(tls_info.start.try_into().unwrap());
+			let tls_init_len = tls_info.filesz.try_into().unwrap();
 
 			// SAFETY: We will have to trust the environment here.
 			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
@@ -258,10 +254,10 @@ impl TaskTLS {
 
 		// Allocate TLS block
 		let mut block = {
-			let tls_align = env::get_tls_align();
-
 			// As described in “ELF Handling For Thread-Local Storage”
-			let tls_offset = tls_len.align_up(tls_align);
+			let tls_offset = usize::try_from(tls_info.memsz)
+				.unwrap()
+				.align_up(usize::try_from(tls_info.align).unwrap());
 
 			// To access TLS blocks on x86-64, TLS offsets are *subtracted* from the thread register value.
 			// So the thread pointer needs to be `block_ptr + tls_offset`.

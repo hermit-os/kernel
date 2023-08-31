@@ -75,44 +75,6 @@ pub fn get_limit() -> usize {
 	boot_info().hardware_info.phys_addr_range.end as usize
 }
 
-pub fn get_tls_start() -> VirtAddr {
-	VirtAddr(
-		boot_info()
-			.load_info
-			.tls_info
-			.as_ref()
-			.map(|tls_info| tls_info.start)
-			.unwrap_or_default(),
-	)
-}
-
-pub fn get_tls_filesz() -> usize {
-	boot_info()
-		.load_info
-		.tls_info
-		.as_ref()
-		.map(|tls_info| tls_info.filesz)
-		.unwrap_or_default() as usize
-}
-
-pub fn get_tls_memsz() -> usize {
-	boot_info()
-		.load_info
-		.tls_info
-		.as_ref()
-		.map(|tls_info| tls_info.memsz)
-		.unwrap_or_default() as usize
-}
-
-pub fn get_tls_align() -> usize {
-	boot_info()
-		.load_info
-		.tls_info
-		.as_ref()
-		.map(|tls_info| tls_info.align)
-		.unwrap_or_default() as usize
-}
-
 #[cfg(feature = "smp")]
 pub fn get_possible_cpus() -> u32 {
 	CPU_ONLINE.load(Ordering::Acquire)
