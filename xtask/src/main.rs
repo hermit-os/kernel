@@ -9,9 +9,10 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use arch::Arch;
-use archive::Archive;
 use xshell::{cmd, Shell};
+
+use self::arch::Arch;
+use self::archive::Archive;
 
 fn main() -> Result<()> {
 	flags::Xtask::from_env()?.run()
