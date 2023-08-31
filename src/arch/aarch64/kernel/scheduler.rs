@@ -264,21 +264,20 @@ pub struct TaskTLS {
 
 impl TaskTLS {
 	fn from_environment() -> Option<Box<Self>> {
-		if kernel::get_tls_memsz() == 0 {
-			return None;
-		}
+		let tls_info = kernel::boot_info().load_info.tls_info?;
+		assert_ne!(tls_info.memsz, 0);
 
 		// Get TLS initialization image
 		let tls_init_image = {
-			let tls_init_data = kernel::get_tls_start().as_ptr::<u8>();
-			let tls_init_len = kernel::get_tls_filesz();
+			let tls_init_data = ptr::from_exposed_addr(tls_info.start.try_into().unwrap());
+			let tls_init_len = tls_info.filesz.try_into().unwrap();
 
 			// SAFETY: We will have to trust the environment here.
 			unsafe { slice::from_raw_parts(tls_init_data, tls_init_len) }
 		};
 
-		let off = core::cmp::max(16, kernel::get_tls_align()) - 16;
-		let block_len = kernel::get_tls_memsz() + off;
+		let off = core::cmp::max(16, usize::try_from(tls_info.align).unwrap()) - 16;
+		let block_len = usize::try_from(tls_info.memsz).unwrap() + off;
 		let len = block_len + mem::size_of::<Box<[Dtv; 2]>>();
 
 		let layout = Layout::from_size_align(len, 16).unwrap();

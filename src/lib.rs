@@ -314,11 +314,7 @@ fn boot_processor_main() -> ! {
 	info!("BSS starts at {:p}", unsafe {
 		core::ptr::addr_of_mut!(__bss_start)
 	});
-	info!(
-		"TLS starts at {:p} (size {} Bytes)",
-		kernel::get_tls_start(),
-		kernel::get_tls_memsz()
-	);
+	info!("tls_info = {:#x?}", kernel::boot_info().load_info.tls_info);
 	arch::boot_processor_init();
 	scheduler::add_current_core();
 
