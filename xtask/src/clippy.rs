@@ -8,7 +8,7 @@ impl flags::Clippy {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 
-		for target in [Arch::X86_64, Arch::AArch64] {
+		for target in [Arch::X86_64, Arch::Aarch64] {
 			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}").run()?;
 			cmd!(sh, "cargo clippy {target_args...}")
