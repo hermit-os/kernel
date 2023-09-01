@@ -4,24 +4,31 @@ mod arch;
 mod archive;
 mod build;
 mod clippy;
-mod flags;
 
 use std::path::Path;
 
 use anyhow::Result;
+use clap::Parser;
 use xshell::Shell;
 
-fn main() -> Result<()> {
-	flags::Xtask::from_env()?.run()
+#[derive(Parser)]
+enum Cli {
+	Build(build::Build),
+	Clippy(clippy::Clippy),
 }
 
-impl flags::Xtask {
+impl Cli {
 	fn run(self) -> Result<()> {
-		match self.subcommand {
-			flags::XtaskCmd::Build(build) => build.run(),
-			flags::XtaskCmd::Clippy(clippy) => clippy.run(),
+		match self {
+			Self::Build(build) => build.run(),
+			Self::Clippy(clippy) => clippy.run(),
 		}
 	}
+}
+
+fn main() -> Result<()> {
+	let cli = Cli::parse();
+	cli.run()
 }
 
 pub fn sh() -> Result<Shell> {

@@ -1,10 +1,12 @@
-use std::str::FromStr;
+use clap::ValueEnum;
 
-use anyhow::anyhow;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Target architecture.
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+#[value(rename_all = "snake_case")]
 pub enum Arch {
+	/// x86-64
 	X86_64,
+	/// AArch64
 	Aarch64,
 }
 
@@ -62,18 +64,6 @@ impl Arch {
 		match self {
 			Self::X86_64 => &[],
 			Self::Aarch64 => &["-Crelocation-model=pic"],
-		}
-	}
-}
-
-impl FromStr for Arch {
-	type Err = anyhow::Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			"x86_64" => Ok(Self::X86_64),
-			"aarch64" => Ok(Self::Aarch64),
-			s => Err(anyhow!("Unsupported arch: {s}")),
 		}
 	}
 }

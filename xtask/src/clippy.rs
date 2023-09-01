@@ -1,10 +1,14 @@
 use anyhow::Result;
+use clap::Args;
 use xshell::cmd;
 
 use crate::arch::Arch;
-use crate::flags;
 
-impl flags::Clippy {
+/// Run Clippy for all targets.
+#[derive(Args)]
+pub struct Clippy;
+
+impl Clippy {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 

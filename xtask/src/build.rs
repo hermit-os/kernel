@@ -3,12 +3,49 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use clap::Args;
 use xshell::cmd;
 
+use crate::arch::Arch;
 use crate::archive::Archive;
-use crate::flags;
 
-impl flags::Build {
+/// Build the kernel.
+#[derive(Args)]
+pub struct Build {
+	/// Build for the architecture.
+	#[arg(value_enum, long)]
+	pub arch: Arch,
+
+	/// Directory for all generated artifacts.
+	#[arg(long)]
+	pub target_dir: Option<PathBuf>,
+
+	/// Do not activate the `default` feature.
+	#[arg(long)]
+	pub no_default_features: bool,
+
+	/// Space or comma separated list of features to activate.
+	#[arg(long)]
+	pub features: Vec<String>,
+
+	/// Build artifacts in release mode, with optimizations.
+	#[arg(short, long)]
+	pub release: bool,
+
+	/// Build artifacts with the specified profile.
+	#[arg(long)]
+	pub profile: Option<String>,
+
+	/// Enable the `-Z instrument-mcount` flag.
+	#[arg(long)]
+	pub instrument_mcount: bool,
+
+	/// Enable the `-Z randomize-layout` flag.
+	#[arg(long)]
+	pub randomize_layout: bool,
+}
+
+impl Build {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 
