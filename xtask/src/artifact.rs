@@ -31,6 +31,13 @@ impl Artifact {
 			.unwrap_or(if self.release { "release" } else { "dev" })
 	}
 
+	pub fn profile_path_component(&self) -> &str {
+		match self.profile() {
+			"dev" => "debug",
+			profile => profile,
+		}
+	}
+
 	pub fn target_dir(&self) -> &Path {
 		self.target_dir
 			.as_deref()
@@ -40,10 +47,7 @@ impl Artifact {
 	fn out_dir(&self, triple: impl AsRef<Path>) -> PathBuf {
 		let mut out_dir = self.target_dir().to_path_buf();
 		out_dir.push(triple);
-		out_dir.push(match self.profile() {
-			"dev" => "debug",
-			profile => profile,
-		});
+		out_dir.push(self.profile_path_component());
 		out_dir
 	}
 
