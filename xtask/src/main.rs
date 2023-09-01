@@ -2,6 +2,7 @@
 
 mod arch;
 mod archive;
+mod artifact;
 mod build;
 mod clippy;
 

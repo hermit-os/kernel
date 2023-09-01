@@ -1,24 +1,17 @@
 use std::env::{self, VarError};
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use crate::arch::Arch;
-use crate::archive::Archive;
+use crate::artifact::Artifact;
 
 /// Build the kernel.
 #[derive(Args)]
 pub struct Build {
-	/// Build for the architecture.
-	#[arg(value_enum, long)]
-	pub arch: Arch,
-
-	/// Directory for all generated artifacts.
-	#[arg(long)]
-	pub target_dir: Option<PathBuf>,
+	#[command(flatten)]
+	artifact: Artifact,
 
 	/// Do not activate the `default` feature.
 	#[arg(long)]
@@ -27,14 +20,6 @@ pub struct Build {
 	/// Space or comma separated list of features to activate.
 	#[arg(long)]
 	pub features: Vec<String>,
-
-	/// Build artifacts in release mode, with optimizations.
-	#[arg(short, long)]
-	pub release: bool,
-
-	/// Build artifacts with the specified profile.
-	#[arg(long)]
-	pub profile: Option<String>,
 
 	/// Enable the `-Z instrument-mcount` flag.
 	#[arg(long)]
@@ -52,15 +37,15 @@ impl Build {
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(self.arch.cargo_args())
+			.args(self.artifact.arch.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
 			.args(self.profile_args())
 			.run()?;
 
-		let build_archive = self.build_archive();
-		let dist_archive = self.dist_archive();
+		let build_archive = self.artifact.build_archive();
+		let dist_archive = self.artifact.dist_archive();
 		eprintln!(
 			"Copying {} to {}",
 			build_archive.as_ref().display(),
@@ -75,13 +60,13 @@ impl Build {
 		eprintln!("Building hermit-builtins");
 		cmd!(sh, "cargo build")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
-			.args(self.arch.builtins_cargo_args())
+			.args(self.artifact.arch.builtins_cargo_args())
 			.args(self.target_dir_args())
 			.args(self.profile_args())
 			.run()?;
 
 		eprintln!("Exporting hermit-builtins symbols");
-		let builtins = self.builtins_archive();
+		let builtins = self.artifact.builtins_archive();
 		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
 		builtins.retain_symbols(builtin_symbols.lines())?;
 
@@ -117,13 +102,13 @@ impl Build {
 			rustflags.push("-Zrandomize-layout")
 		}
 
-		rustflags.extend(self.arch.rustflags());
+		rustflags.extend(self.artifact.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
 	}
 
 	fn target_dir_args(&self) -> [&OsStr; 2] {
-		["--target-dir".as_ref(), self.target_dir().as_ref()]
+		["--target-dir".as_ref(), self.artifact.target_dir().as_ref()]
 	}
 
 	fn no_default_features_args(&self) -> &[&str] {
@@ -141,11 +126,11 @@ impl Build {
 	}
 
 	fn profile_args(&self) -> [&str; 2] {
-		["--profile", self.profile()]
+		["--profile", self.artifact.profile()]
 	}
 
 	fn export_syms(&self) -> Result<()> {
-		let archive = self.dist_archive();
+		let archive = self.artifact.dist_archive();
 
 		let syscall_symbols = archive.syscall_symbols()?;
 		let explicit_exports = [
@@ -169,45 +154,5 @@ impl Build {
 		archive.retain_symbols(symbols)?;
 
 		Ok(())
-	}
-
-	fn profile(&self) -> &str {
-		self.profile
-			.as_deref()
-			.unwrap_or(if self.release { "release" } else { "dev" })
-	}
-
-	fn target_dir(&self) -> &Path {
-		self.target_dir
-			.as_deref()
-			.unwrap_or_else(|| Path::new("target"))
-	}
-
-	fn out_dir(&self, triple: impl AsRef<Path>) -> PathBuf {
-		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(triple);
-		out_dir.push(match self.profile() {
-			"dev" => "debug",
-			profile => profile,
-		});
-		out_dir
-	}
-
-	fn builtins_archive(&self) -> Archive {
-		let mut builtins_archive = self.out_dir(self.arch.hermit_triple());
-		builtins_archive.push("libhermit_builtins.a");
-		builtins_archive.into()
-	}
-
-	fn build_archive(&self) -> Archive {
-		let mut built_archive = self.out_dir(self.arch.triple());
-		built_archive.push("libhermit.a");
-		built_archive.into()
-	}
-
-	fn dist_archive(&self) -> Archive {
-		let mut dist_archive = self.out_dir(self.arch.name());
-		dist_archive.push("libhermit.a");
-		dist_archive.into()
 	}
 }
