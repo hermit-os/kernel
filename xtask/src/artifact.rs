@@ -48,7 +48,9 @@ impl Artifact {
 	}
 
 	pub fn builtins_archive(&self) -> Archive {
-		let mut builtins_archive = self.out_dir(self.arch.hermit_triple());
+		let mut builtins_archive = self.target_dir().to_path_buf();
+		builtins_archive.push(self.arch.hermit_triple());
+		builtins_archive.push("release");
 		builtins_archive.push("libhermit_builtins.a");
 		builtins_archive.into()
 	}

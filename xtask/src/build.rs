@@ -37,11 +37,11 @@ impl Build {
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
+			.args(&["--profile", self.artifact.profile()])
 			.args(self.artifact.arch.cargo_args())
 			.args(self.target_dir_args())
 			.args(self.no_default_features_args())
 			.args(self.features_args())
-			.args(self.profile_args())
 			.run()?;
 
 		let build_archive = self.artifact.build_archive();
@@ -58,11 +58,10 @@ impl Build {
 		self.export_syms()?;
 
 		eprintln!("Building hermit-builtins");
-		cmd!(sh, "cargo build")
+		cmd!(sh, "cargo build --release")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
 			.args(self.artifact.arch.builtins_cargo_args())
 			.args(self.target_dir_args())
-			.args(self.profile_args())
 			.run()?;
 
 		eprintln!("Exporting hermit-builtins symbols");
@@ -123,10 +122,6 @@ impl Build {
 		self.features
 			.iter()
 			.flat_map(|feature| ["--features", feature.as_str()])
-	}
-
-	fn profile_args(&self) -> [&str; 2] {
-		["--profile", self.artifact.profile()]
 	}
 
 	fn export_syms(&self) -> Result<()> {
