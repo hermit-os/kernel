@@ -44,13 +44,6 @@ impl Artifact {
 			.unwrap_or_else(|| Path::new("target"))
 	}
 
-	fn out_dir(&self, triple: impl AsRef<Path>) -> PathBuf {
-		let mut out_dir = self.target_dir().to_path_buf();
-		out_dir.push(triple);
-		out_dir.push(self.profile_path_component());
-		out_dir
-	}
-
 	pub fn builtins_archive(&self) -> Archive {
 		let mut builtins_archive = self.target_dir().to_path_buf();
 		builtins_archive.push(self.arch.hermit_triple());
@@ -60,13 +53,17 @@ impl Artifact {
 	}
 
 	pub fn build_archive(&self) -> Archive {
-		let mut built_archive = self.out_dir(self.arch.triple());
+		let mut built_archive = self.target_dir().to_path_buf();
+		built_archive.push(self.arch.triple());
+		built_archive.push(self.profile_path_component());
 		built_archive.push("libhermit.a");
 		built_archive.into()
 	}
 
 	pub fn dist_archive(&self) -> Archive {
-		let mut dist_archive = self.out_dir(self.arch.name());
+		let mut dist_archive = self.target_dir().to_path_buf();
+		dist_archive.push(self.arch.name());
+		dist_archive.push(self.profile_path_component());
 		dist_archive.push("libhermit.a");
 		dist_archive.into()
 	}
