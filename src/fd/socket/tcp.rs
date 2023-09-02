@@ -71,22 +71,28 @@ impl<T> Socket<T> {
 	#[allow(clippy::needless_pass_by_ref_mut)]
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if !socket.is_active() {
-					Poll::Ready(Err(-crate::errno::EIO))
-				} else if socket.can_recv() {
-					Poll::Ready(
-						socket
-							.recv(|data| {
-								let len = core::cmp::min(buffer.len(), data.len());
-								buffer[..len].copy_from_slice(&data[..len]);
-								(len, isize::try_from(len).unwrap())
-							})
-							.map_err(|_| -crate::errno::EIO),
-					)
-				} else {
-					socket.register_recv_waker(cx.waker());
-					Poll::Pending
+			self.with(|socket| match socket.state() {
+				tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Closed
+				| tcp::State::Closing
+				| tcp::State::CloseWait
+				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+				_ => {
+					if socket.can_recv() {
+						Poll::Ready(
+							socket
+								.recv(|data| {
+									let len = core::cmp::min(buffer.len(), data.len());
+									buffer[..len].copy_from_slice(&data[..len]);
+									(len, isize::try_from(len).unwrap())
+								})
+								.map_err(|_| -crate::errno::EIO),
+						)
+					} else {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					}
 				}
 			})
 		})
@@ -99,21 +105,29 @@ impl<T> Socket<T> {
 		while pos < buffer.len() {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
-					if !socket.is_active() {
-						Poll::Ready(Err(-crate::errno::EIO))
-					} else if socket.can_send() {
-						Poll::Ready(
-							socket
-								.send_slice(&buffer[pos..])
-								.map_err(|_| -crate::errno::EIO),
-						)
-					} else if pos > 0 {
-						// we already send some data => return 0 as signal to stop the
-						// async write
-						Poll::Ready(Ok(0))
-					} else {
-						socket.register_send_waker(cx.waker());
-						Poll::Pending
+					match socket.state() {
+						tcp::State::FinWait1
+						| tcp::State::FinWait2
+						| tcp::State::Closed
+						| tcp::State::Closing
+						| tcp::State::CloseWait
+						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+						_ => {
+							if socket.can_send() {
+								Poll::Ready(
+									socket
+										.send_slice(&buffer[pos..])
+										.map_err(|_| -crate::errno::EIO),
+								)
+							} else if pos > 0 {
+								// we already send some data => return 0 as signal to stop the
+								// async write
+								Poll::Ready(Ok(0))
+							} else {
+								socket.register_send_waker(cx.waker());
+								Poll::Pending
+							}
+						}
 					}
 				})
 			})
