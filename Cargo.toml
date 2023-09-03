@@ -48,7 +48,7 @@ harness = false
 default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fs"]
 acpi = []
 dhcpv4 = [
-    "tcp",
+    "smoltcp",
     "smoltcp/proto-dhcpv4",
     "smoltcp/socket-dhcpv4",
 ]
@@ -58,7 +58,8 @@ newlib = []
 pci = []
 rtl8139 = ["tcp", "pci"]
 smp = ["include-transformed"]
-tcp = ["smoltcp"]
+tcp = ["smoltcp", "smoltcp/socket-tcp"]
+udp = ["smoltcp", "smoltcp/socket-udp"]
 trace = []
 vga = []
 
@@ -100,8 +101,6 @@ features = [
     "medium-ethernet",
     "proto-ipv4",
     "proto-ipv6",
-    "socket-tcp",
-    "socket-udp",
     # Enable IP fragmentation
     #"proto-ipv4-fragmentation",
     #

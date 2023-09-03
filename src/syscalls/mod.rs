@@ -28,7 +28,7 @@ mod futex;
 mod interfaces;
 #[cfg(feature = "newlib")]
 mod lwip;
-#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub mod net;
 mod processor;
 #[cfg(feature = "newlib")]

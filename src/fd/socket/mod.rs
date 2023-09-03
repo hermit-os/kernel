@@ -8,7 +8,9 @@ use crate::executor::network::{NetworkState, NIC};
 use crate::fd::{get_object, insert_object, FD_COUNTER, OBJECT_MAP};
 use crate::syscalls::net::*;
 
+#[cfg(feature = "tcp")]
 mod tcp;
+#[cfg(feature = "udp")]
 mod udp;
 
 pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
@@ -19,7 +21,7 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 
 	if (domain != AF_INET && domain != AF_INET6)
 		|| (type_ != SOCK_STREAM && type_ != SOCK_DGRAM)
-		|| (protocol != 0 && protocol != IPPROTO_UDP && protocol != IPPROTO_TCP)
+		|| protocol != 0
 	{
 		-EINVAL
 	} else {
@@ -28,32 +30,47 @@ pub(crate) extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) ->
 		if let NetworkState::Initialized(nic) = guard.deref_mut() {
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 
-			if protocol == IPPROTO_UDP {
+			#[cfg(feature = "udp")]
+			if type_ == SOCK_DGRAM {
 				let handle = nic.create_udp_handle().unwrap();
-				let socket = self::udp::Socket::new(handle);
-				if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
-					-EINVAL
+				if domain == AF_INET {
+					let socket = self::udp::Socket::<self::udp::IPv4>::new(handle);
+					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
+						return -EINVAL;
+					} else {
+						return fd;
+					}
 				} else {
-					fd
+					let socket = self::udp::Socket::<self::udp::IPv6>::new(handle);
+					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
+						return -EINVAL;
+					} else {
+						return fd;
+					}
 				}
-			} else {
+			}
+
+			#[cfg(feature = "tcp")]
+			if type_ == SOCK_STREAM {
 				let handle = nic.create_tcp_handle().unwrap();
 				if domain == AF_INET {
 					let socket = self::tcp::Socket::<self::tcp::IPv4>::new(handle);
 					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
-						-EINVAL
+						return -EINVAL;
 					} else {
-						fd
+						return fd;
 					}
 				} else {
 					let socket = self::tcp::Socket::<self::tcp::IPv6>::new(handle);
 					if OBJECT_MAP.write().try_insert(fd, Arc::new(socket)).is_err() {
-						-EINVAL
+						return -EINVAL;
 					} else {
-						fd
+						return fd;
 					}
 				}
 			}
+
+			-EINVAL
 		} else {
 			-EINVAL
 		}

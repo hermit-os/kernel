@@ -5,7 +5,7 @@ use core::fmt;
 
 use bitflags::bitflags;
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "fs"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "fs"))]
 use hermit_sync::InterruptTicketMutex;
 use pci_types::{
 	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
@@ -18,11 +18,17 @@ use crate::arch::pci::PciConfigRegion;
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
-#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
-#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
+#[cfg(any(
+	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
+	feature = "fs"
+))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
-#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
+#[cfg(any(
+	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
+	feature = "fs"
+))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
 /// Converts a given little endian coded u32 to native endian coded.
@@ -462,14 +468,14 @@ pub(crate) fn print_information() {
 pub(crate) enum PciDriver {
 	#[cfg(feature = "fs")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
-	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
-	#[cfg(all(feature = "rtl8139", feature = "tcp"))]
+	#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
 	RTL8139Net(InterruptTicketMutex<RTL8139Driver>),
 }
 
 impl PciDriver {
-	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<VirtioNetDriver>> {
 		#[allow(unreachable_patterns)]
 		match self {
@@ -478,7 +484,7 @@ impl PciDriver {
 		}
 	}
 
-	#[cfg(all(feature = "rtl8139", feature = "tcp"))]
+	#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
 	fn get_network_driver(&self) -> Option<&InterruptTicketMutex<RTL8139Driver>> {
 		#[allow(unreachable_patterns)]
 		match self {
@@ -503,12 +509,12 @@ pub(crate) fn register_driver(drv: PciDriver) {
 	}
 }
 
-#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<VirtioNetDriver>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
-#[cfg(all(feature = "rtl8139", feature = "tcp"))]
+#[cfg(all(feature = "rtl8139", any(feature = "tcp", feature = "udp")))]
 pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL8139Driver>> {
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
@@ -536,9 +542,12 @@ pub(crate) fn init_drivers() {
 				adapter.device_id()
 			);
 
-			#[cfg(any(all(feature = "tcp", not(feature = "rtl8139")), feature = "fs"))]
+			#[cfg(any(
+				all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
+				feature = "fs"
+			))]
 			match pci_virtio::init_device(adapter) {
-				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 				}

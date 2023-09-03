@@ -11,7 +11,11 @@ use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::socket::dhcpv4;
-use smoltcp::socket::{tcp, udp, AnySocket};
+#[cfg(feature = "tcp")]
+use smoltcp::socket::tcp;
+#[cfg(feature = "udp")]
+use smoltcp::socket::udp;
+use smoltcp::socket::AnySocket;
 use smoltcp::time::{Duration, Instant};
 #[cfg(feature = "dhcpv4")]
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
@@ -118,18 +122,19 @@ pub(crate) fn init() {
 }
 
 impl<'a> NetworkInterface<'a> {
+	#[cfg(feature = "udp")]
 	pub(crate) fn create_udp_handle(&mut self) -> Result<Handle, ()> {
-		// Must fit mDNS payload of at least one packet
 		let udp_rx_buffer =
-			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 1024]);
-		// Will not send mDNS
-		let udp_tx_buffer = udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY], vec![0; 0]);
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 65535]);
+		let udp_tx_buffer =
+			udp::PacketBuffer::new(vec![udp::PacketMetadata::EMPTY; 4], vec![0; 65535]);
 		let udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
 		let udp_handle = self.sockets.add(udp_socket);
 
 		Ok(udp_handle)
 	}
 
+	#[cfg(feature = "tcp")]
 	pub(crate) fn create_tcp_handle(&mut self) -> Result<Handle, ()> {
 		let tcp_rx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);
 		let tcp_tx_buffer = tcp::SocketBuffer::new(vec![0; 65535]);

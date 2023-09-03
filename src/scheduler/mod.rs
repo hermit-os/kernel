@@ -329,7 +329,7 @@ impl PerCoreScheduler {
 		});
 	}
 
-	#[cfg(feature = "tcp")]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	#[inline]
 	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
 		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time))

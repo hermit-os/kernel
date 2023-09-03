@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod device;
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 pub(crate) mod network;
 pub(crate) mod task;
 
@@ -74,6 +74,6 @@ where
 }
 
 pub fn init() {
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	crate::executor::network::init();
 }

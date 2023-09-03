@@ -10,13 +10,13 @@ use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::u8;
 
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::mm::PhysAddr;
 use crate::drivers::error::DriverError;
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::network_irqhandler;
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::virtio::device;
 use crate::drivers::virtio::error::VirtioError;
@@ -367,7 +367,7 @@ struct IsrStatusRaw {
 }
 
 pub(crate) enum VirtioDriver {
-	#[cfg(feature = "tcp")]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	Network(VirtioNetDriver),
 }
 
@@ -387,7 +387,7 @@ pub(crate) fn init_device(
 
 	// Verify the device-ID to find the network card
 	match registers.device_id {
-		#[cfg(feature = "tcp")]
+		#[cfg(any(feature = "tcp", feature = "udp"))]
 		DevId::VIRTIO_DEV_ID_NET => {
 			match VirtioNetDriver::init(dev_id, registers, irq_no) {
 				Ok(virt_net_drv) => {
