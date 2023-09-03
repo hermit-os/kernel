@@ -72,11 +72,12 @@ impl<T> Socket<T> {
 	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
+				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+					Poll::Ready(Ok(0))
+				}
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
-				| tcp::State::Closed
-				| tcp::State::Closing
-				| tcp::State::CloseWait
+				| tcp::State::Listen
 				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 				_ => {
 					if socket.can_recv() {
@@ -106,11 +107,12 @@ impl<T> Socket<T> {
 			let n = future::poll_fn(|cx| {
 				self.with(|socket| {
 					match socket.state() {
+						tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+							Poll::Ready(Ok(0))
+						}
 						tcp::State::FinWait1
 						| tcp::State::FinWait2
-						| tcp::State::Closed
-						| tcp::State::Closing
-						| tcp::State::CloseWait
+						| tcp::State::Listen
 						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
 						_ => {
 							if socket.can_send() {
