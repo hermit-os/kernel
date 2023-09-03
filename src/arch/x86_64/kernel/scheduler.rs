@@ -1,6 +1,7 @@
 //! Architecture dependent interface to initialize a task
 
 use alloc::boxed::Box;
+use core::arch::asm;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
