@@ -32,6 +32,9 @@ exclude = [
 crate-type = ["staticlib", "lib"]  # "lib" required for integration tests
 name = "hermit"
 
+[build]
+profiler = true
+
 [[test]]
 name = "basic_math"
 harness = true

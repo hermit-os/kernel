@@ -694,29 +694,26 @@ impl BlockedTaskQueue {
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
 
-	use crate::arch::scheduler::CommonStack;
 	use super::*;
-	
+	use crate::arch::scheduler::CommonStack;
+
 	#[test]
 	fn test_TaskQueueEmpty() {
-		
-		let PrioQueue = PriorityTaskQueue::new();	
+		let PrioQueue = PriorityTaskQueue::new();
 		assert!(PrioQueue.is_empty());
 	}
 
-
 	#[test]
-    fn test_TaskQueuePush() {
-	
-        let mut task_queue = PriorityTaskQueue::new();
-        let mut tasks: Vec<Rc<RefCell<Task>>> = Vec::new();
+	fn test_TaskQueuePush() {
+		let mut task_queue = PriorityTaskQueue::new();
+		let mut tasks: Vec<Rc<RefCell<Task>>> = Vec::new();
 		struct PAddr(pub u64);
 		let mut queue_length = 1;
 		let mut counter = 0;
-		
-	  // create some tasks with different priorities and push them in a vector
-       for i in 0..11 {
-		let task = Rc::new(RefCell::new(Task {
+
+		// create some tasks with different priorities and push them in a vector
+		for i in 0..11 {
+			let task = Rc::new(RefCell::new(Task {
 				id: TaskId(i),
 				status: TaskStatus::Running,
 				prio: Priority(i as u8),
@@ -734,30 +731,27 @@ mod tests {
 				lwip_errno: 0,
 			}));
 			// two tasks with same priority (Task id 9 and 10)
-			if i == 10
-			{
+			if i == 10 {
 				task.borrow_mut().prio = Priority((i - 1) as u8);
-			}	
+			}
 			// push tasks in vector (will be iterated over the vector in the next lines)
-            tasks.push(task);
-       }
-   // push the tasks in the queue
-        for task in tasks {
+			tasks.push(task);
+		}
+		// push the tasks in the queue
+		for task in tasks {
 			task_queue.push(task.clone());
 			let i = task.borrow().prio.into() as usize;
-	        // verifying Queue bitmap
+			// verifying Queue bitmap
 			assert_eq!((task_queue.prio_bitmap & 1 << i), 1 << i);
 
-			if counter == 10
-			{
+			if counter == 10 {
 				queue_length = 2; // two tasks are added in the same queue
 			}
 
-			// verifying queue length	
-            assert_eq!( task_queue.queues[i].len(), queue_length);
+			// verifying queue length
+			assert_eq!(task_queue.queues[i].len(), queue_length);
 			// verifiying task ids with the ones in the Queue
-			if (counter < 10)
-			{			
+			if (counter < 10) {
 				assert_eq!(
 					task_queue.queues[i].front().unwrap().as_ptr(),
 					task.as_ptr(),
@@ -765,79 +759,28 @@ mod tests {
 					i,
 					task.borrow().id.0
 				);
-			}
-			else
-			{
+			} else {
 				task_queue.pop(); // remove first element (task id 9)
 				assert_eq!(
-				task_queue.queues[i].front().unwrap().borrow().id.0,
-				task.borrow().id.0);
+					task_queue.queues[i].front().unwrap().borrow().id.0,
+					task.borrow().id.0
+				);
 			}
-			counter = counter+1;
-        }	
-    }
-
-	#[test]
-	fn test_TaskQueuePop(){
-
-	let mut task_queue = PriorityTaskQueue::new();
-	struct PAddr(pub u64);
-		
-	  // Create 3 Queues with 2 tasks each
-       for i in 0..6 {
-		let task = Rc::new(RefCell::new(Task {
-				id: TaskId(i),
-				status: TaskStatus::Running,
-				prio: Priority((i%3) as u8),
-				last_stack_pointer: x86::bits64::paging::VAddr(10),
-				user_stack_pointer: x86::bits64::paging::VAddr(10),
-				last_fpu_state: arch::processor::FPUState::new(),
-				core_id: 1,
-				stacks: TaskStacks::Common(CommonStack {
-					virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
-					phys_addr: x86::bits64::paging::PAddr(2000),
-					total_size: 4000,
-				}),
-				tls: None,
-				#[cfg(feature = "newlib")]
-				lwip_errno: 0,
-			}));
-
-            task_queue.push(task.clone());
-       }
-
-	   for i in 0..3 
-	   {
-		let prio = 2-i;
-		assert_eq!( task_queue.queues[prio].len(), 2);
-		assert_eq!((task_queue.prio_bitmap & 1 << prio), (1 << prio));
-
-		task_queue.pop(); // first pop in the Queue
-
-		// verifying queue length	
-        assert_eq!( task_queue.queues[prio].len(), 1);
-		assert_eq!((task_queue.prio_bitmap & 1 << prio), (1 << prio));
-
-		task_queue.pop(); // second pop in the Queue
-
-		assert!( task_queue.queues[prio].is_empty());
-		assert_eq!((task_queue.prio_bitmap & (1 << prio )), 0); // Queue should be empty
-	   }
+			counter = counter + 1;
+		}
 	}
 
-
 	#[test]
-	fn test_TaskQueuePopWithPriority(){
+	fn test_TaskQueuePop() {
+		let mut task_queue = PriorityTaskQueue::new();
+		struct PAddr(pub u64);
 
-	let mut task_queue = PriorityTaskQueue::new();
-	struct PAddr(pub u64);
-		
-	  // Create two tasks with different prios
-       for i in 0..2 {
-		let task = Rc::new(RefCell::new(Task {
+		// Create 3 Queues with 2 tasks each
+		for i in 0..6 {
+			let task = Rc::new(RefCell::new(Task {
 				id: TaskId(i),
 				status: TaskStatus::Running,
-				prio: Priority((i%2) as u8),
+				prio: Priority((i % 3) as u8),
 				last_stack_pointer: x86::bits64::paging::VAddr(10),
 				user_stack_pointer: x86::bits64::paging::VAddr(10),
 				last_fpu_state: arch::processor::FPUState::new(),
@@ -852,197 +795,268 @@ mod tests {
 				lwip_errno: 0,
 			}));
 
-            task_queue.push(task.clone());
-       }
+			task_queue.push(task.clone());
+		}
 
-		assert_eq!( task_queue.queues[1].len(), 1);
-		assert_eq!((task_queue.prio_bitmap & 1 << 1), (1<<1) );
+		for i in 0..3 {
+			let prio = 2 - i;
+			assert_eq!(task_queue.queues[prio].len(), 2);
+			assert_eq!((task_queue.prio_bitmap & 1 << prio), (1 << prio));
+
+			task_queue.pop(); // first pop in the Queue
+
+			// verifying queue length
+			assert_eq!(task_queue.queues[prio].len(), 1);
+			assert_eq!((task_queue.prio_bitmap & 1 << prio), (1 << prio));
+
+			task_queue.pop(); // second pop in the Queue
+
+			assert!(task_queue.queues[prio].is_empty());
+			assert_eq!((task_queue.prio_bitmap & (1 << prio)), 0); // Queue should be empty
+		}
+	}
+
+	#[test]
+	fn test_TaskQueuePopWithPriority() {
+		let mut task_queue = PriorityTaskQueue::new();
+		struct PAddr(pub u64);
+
+		// Create two tasks with different prios
+		for i in 0..2 {
+			let task = Rc::new(RefCell::new(Task {
+				id: TaskId(i),
+				status: TaskStatus::Running,
+				prio: Priority((i % 2) as u8),
+				last_stack_pointer: x86::bits64::paging::VAddr(10),
+				user_stack_pointer: x86::bits64::paging::VAddr(10),
+				last_fpu_state: arch::processor::FPUState::new(),
+				core_id: 1,
+				stacks: TaskStacks::Common(CommonStack {
+					virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
+					phys_addr: x86::bits64::paging::PAddr(2000),
+					total_size: 4000,
+				}),
+				tls: None,
+				#[cfg(feature = "newlib")]
+				lwip_errno: 0,
+			}));
+
+			task_queue.push(task.clone());
+		}
+
+		assert_eq!(task_queue.queues[1].len(), 1);
+		assert_eq!((task_queue.prio_bitmap & 1 << 1), (1 << 1));
 
 		task_queue.pop_with_prio(Priority(1 as u8)); // pop task with prio 1
 
-		assert!( task_queue.queues[1].is_empty());
-		assert_eq!((task_queue.prio_bitmap & (1 << 1 )), 0); // Queue of prio 1 should be empty
+		assert!(task_queue.queues[1].is_empty());
+		assert_eq!((task_queue.prio_bitmap & (1 << 1)), 0); // Queue of prio 1 should be empty
 
-		task_queue.pop_with_prio(Priority(1 as u8)); 
+		task_queue.pop_with_prio(Priority(1 as u8));
 
-		assert_eq!( task_queue.queues[0].len(), 1);
-		assert_eq!((task_queue.prio_bitmap & (1 << 0 )), 1);   
+		assert_eq!(task_queue.queues[0].len(), 1);
+		assert_eq!((task_queue.prio_bitmap & (1 << 0)), 1);
 	}
 
 	#[test]
-	fn test_TaskQueueSetPriority(){
+	fn test_TaskQueueSetPriority() {
+		let mut task_queue = PriorityTaskQueue::new();
+		struct PAddr(pub u64);
 
-	let mut task_queue = PriorityTaskQueue::new();
-	struct PAddr(pub u64);
-		
-      // create task with priority 0
+		// create task with priority 0
 		let task = Rc::new(RefCell::new(Task {
-				id: TaskId(7),
-				status: TaskStatus::Running,
-				prio: Priority((0) as u8),
-				last_stack_pointer: x86::bits64::paging::VAddr(10),
-				user_stack_pointer: x86::bits64::paging::VAddr(10),
-				last_fpu_state: arch::processor::FPUState::new(),
-				core_id: 1,
-				stacks: TaskStacks::Common(CommonStack {
-					virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
-					phys_addr: x86::bits64::paging::PAddr(2000),
-					total_size: 4000,
-				}),
-				tls: None,
-				#[cfg(feature = "newlib")]
-				lwip_errno: 0,
-			}));
+			id: TaskId(7),
+			status: TaskStatus::Running,
+			prio: Priority((0) as u8),
+			last_stack_pointer: x86::bits64::paging::VAddr(10),
+			user_stack_pointer: x86::bits64::paging::VAddr(10),
+			last_fpu_state: arch::processor::FPUState::new(),
+			core_id: 1,
+			stacks: TaskStacks::Common(CommonStack {
+				virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
+				phys_addr: x86::bits64::paging::PAddr(2000),
+				total_size: 4000,
+			}),
+			tls: None,
+			#[cfg(feature = "newlib")]
+			lwip_errno: 0,
+		}));
 
-            task_queue.push(task.clone());
+		task_queue.push(task.clone());
 
-			// create task handle with same
-			let mut task_id = TaskId::from(7);
-			let prio = Priority::from(0);
+		// create task handle with same
+		let mut task_id = TaskId::from(7);
+		let prio = Priority::from(0);
+		#[cfg(feature = "smp")]
+		let cid: CoreId = 1;
+
+		let task_handle = TaskHandle {
+			id: task_id,
+			priority: prio,
 			#[cfg(feature = "smp")]
-			let cid: CoreId = 1;
-			
-			let task_handle = TaskHandle {
-				id: task_id,
-				priority:prio,
-				#[cfg(feature = "smp")]
-				core_id: cid,
-			};	     
+			core_id: cid,
+		};
 
-		assert_eq!( task_queue.queues[0].len(), 1);
+		assert_eq!(task_queue.queues[0].len(), 1);
 		assert_eq!((task_queue.prio_bitmap & 1 << 0), (1 << 0));
 
-		assert_eq!( task_queue.queues[1].len(), 0);
+		assert_eq!(task_queue.queues[1].len(), 0);
 		assert_eq!((task_queue.prio_bitmap & 1 << 1), 0);
 
 		task_queue.set_priority(task_handle, Priority(1 as u8)); // pop task with prio 1
 
-		assert!( task_queue.queues[0].is_empty());
-		assert_eq!((task_queue.prio_bitmap & (1 << 1 )), 1<<1); // Queue of prio 1 should be empty
+		assert!(task_queue.queues[0].is_empty());
+		assert_eq!((task_queue.prio_bitmap & (1 << 1)), 1 << 1); // Queue of prio 1 should be empty
 	}
 
 	#[test]
-	fn test_TaskQueueGetHighestPriority(){
-
+	fn test_TaskQueueGetHighestPriority() {
 		let mut task_queue = PriorityTaskQueue::new();
 		struct PAddr(pub u64);
 
 		// empty Queue, should return prio 0
 		assert_eq!(task_queue.get_highest_priority(), IDLE_PRIO);
-			
-		  // Create 3 tasks with different prios
-		   for i in 0..3 {
+
+		// Create 3 tasks with different prios
+		for i in 0..3 {
 			let task = Rc::new(RefCell::new(Task {
-					id: TaskId(i),
-					status: TaskStatus::Running,
-					prio: Priority((i) as u8),
-					last_stack_pointer: x86::bits64::paging::VAddr(10),
-					user_stack_pointer: x86::bits64::paging::VAddr(10),
-					last_fpu_state: arch::processor::FPUState::new(),
-					core_id: 1,
-					stacks: TaskStacks::Common(CommonStack {
-						virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
-						phys_addr: x86::bits64::paging::PAddr(2000),
-						total_size: 4000,
-					}),
-					tls: None,
-					#[cfg(feature = "newlib")]
-					lwip_errno: 0,
-				}));
-	
-				task_queue.push(task.clone());
-		   }
-	
-		   assert_eq!(task_queue.get_highest_priority(), Priority(2 as u8)); // pop task with prio 2
-		   task_queue.pop();
-		   assert_eq!(task_queue.get_highest_priority(), Priority(1 as u8)); // pop task with prio 1
+				id: TaskId(i),
+				status: TaskStatus::Running,
+				prio: Priority((i) as u8),
+				last_stack_pointer: x86::bits64::paging::VAddr(10),
+				user_stack_pointer: x86::bits64::paging::VAddr(10),
+				last_fpu_state: arch::processor::FPUState::new(),
+				core_id: 1,
+				stacks: TaskStacks::Common(CommonStack {
+					virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
+					phys_addr: x86::bits64::paging::PAddr(2000),
+					total_size: 4000,
+				}),
+				tls: None,
+				#[cfg(feature = "newlib")]
+				lwip_errno: 0,
+			}));
+
+			task_queue.push(task.clone());
 		}
 
+		assert_eq!(task_queue.get_highest_priority(), Priority(2 as u8)); // pop task with prio 2
+		task_queue.pop();
+		assert_eq!(task_queue.get_highest_priority(), Priority(1 as u8)); // pop task with prio 1
+	}
 
-	
-		#[test]
-		fn test_TaskHandleEqCmp() {
-			
-				let mut task_id = TaskId::from(1);
-				let prio = Priority::from(5);
-				#[cfg(feature = "smp")]
-				let cid: CoreId = 0;
-				
-				let task_handle = TaskHandle {
-					id: task_id,
-					priority:prio,
-					#[cfg(feature = "smp")]
-					core_id: cid,
-				};			
-	
-				let task_handle_from_new = TaskHandle::new(task_id,prio, #[cfg(feature = "smp")]cid);	
-				let result = task_handle_from_new.eq(&task_handle);
-				assert_eq!(result, true);   //Test eq function. return true
-				
-				let mut task_id = TaskId::from(5);
-				let task_handle_from_new = TaskHandle::new(task_id,prio, #[cfg(feature = "smp")]cid);	
-				let result = task_handle_from_new.cmp(&task_handle);
-				assert_eq!(result, Ordering::Greater); //Test cmp function. return GREATER
-		}
+	#[test]
+	fn test_TaskHandleEqCmp() {
+		let mut task_id = TaskId::from(1);
+		let prio = Priority::from(5);
+		#[cfg(feature = "smp")]
+		let cid: CoreId = 0;
+
+		let task_handle = TaskHandle {
+			id: task_id,
+			priority: prio,
+			#[cfg(feature = "smp")]
+			core_id: cid,
+		};
+
+		let task_handle_from_new = TaskHandle::new(
+			task_id,
+			prio,
+			#[cfg(feature = "smp")]
+			cid,
+		);
+		let result = task_handle_from_new.eq(&task_handle);
+		assert_eq!(result, true); //Test eq function. return true
+
+		let mut task_id = TaskId::from(5);
+		let task_handle_from_new = TaskHandle::new(
+			task_id,
+			prio,
+			#[cfg(feature = "smp")]
+			cid,
+		);
+		let result = task_handle_from_new.cmp(&task_handle);
+		assert_eq!(result, Ordering::Greater); //Test cmp function. return GREATER
+	}
 
 	#[test]
 	fn test_TaskHandlePushPop() {
-
 		let mut PrioQueue = TaskHandlePriorityQueue::new();
 		let mut tasks: Vec<TaskHandle> = Vec::new();
 		let cid: CoreId = 0;
-       
-	   // check if queue is empty
-        assert!(PrioQueue.is_empty());
 
-      	for i in 0..10 
-		{
+		// check if queue is empty
+		assert!(PrioQueue.is_empty());
+
+		for i in 0..10 {
 			let mut task_id = TaskId::from(i);
 			let prio = Priority::from(i as u8);
 			#[cfg(feature = "smp")]
-			
-
-	    	let task_handle = TaskHandle::new(task_id,prio, #[cfg(feature = "smp")]cid);
+			let task_handle = TaskHandle::new(
+				task_id,
+				prio,
+				#[cfg(feature = "smp")]
+				cid,
+			);
 			tasks.push(task_handle);
-		};
-		
+		}
+
 		// push test
 		for task_handle in tasks {
-
 			PrioQueue.push(task_handle);
-			let i = task_handle.priority.into() as usize;   	
-            assert_eq!((PrioQueue.prio_bitmap & 1 << i), (1 << i));
-        };
+			let i = task_handle.priority.into() as usize;
+			assert_eq!((PrioQueue.prio_bitmap & 1 << i), (1 << i));
+		}
 
 		// pop_from_queue test
-		assert_eq!(PrioQueue.pop_from_queue(9),Some(TaskHandle::new(TaskId::from(9),Priority::from(9 as u8), #[cfg(feature = "smp")]cid)));
-		assert_eq!((PrioQueue.prio_bitmap & (1 <<9 )), 0);
+		assert_eq!(
+			PrioQueue.pop_from_queue(9),
+			Some(TaskHandle::new(
+				TaskId::from(9),
+				Priority::from(9 as u8),
+				#[cfg(feature = "smp")]
+				cid
+			))
+		);
+		assert_eq!((PrioQueue.prio_bitmap & (1 << 9)), 0);
 
-	   // pop test
-	   for idx in 0..9
-	   {
-		PrioQueue.pop();			
-		assert_eq!((PrioQueue.prio_bitmap & (1 <<(8-idx) )), 0);
-       };
+		// pop test
+		for idx in 0..9 {
+			PrioQueue.pop();
+			assert_eq!((PrioQueue.prio_bitmap & (1 << (8 - idx))), 0);
+		}
 	}
 
 	#[test]
 	fn test_TaskHandleContains() {
-
 		let mut PrioQueue = TaskHandlePriorityQueue::new();
 		#[cfg(feature = "smp")]
 		let cid: CoreId = 0;
 
-			let mut task_id = TaskId::from(0);
-			let prio = Priority::from(0 as u8);
+		let mut task_id = TaskId::from(0);
+		let prio = Priority::from(0 as u8);
 
-	    	let task_handle = TaskHandle::new(task_id,prio, #[cfg(feature = "smp")]cid);
-			let mut PrioQueue = TaskHandlePriorityQueue::new();
-			PrioQueue.push(task_handle);
+		let task_handle = TaskHandle::new(
+			task_id,
+			prio,
+			#[cfg(feature = "smp")]
+			cid,
+		);
+		let mut PrioQueue = TaskHandlePriorityQueue::new();
+		PrioQueue.push(task_handle);
 
-
-		let task_handle_exist = TaskHandle::new( TaskId::from(0),Priority::from(0 as u8), #[cfg(feature = "smp")]cid);
-		let task_handle_not_exist = TaskHandle::new( TaskId::from(1),Priority::from(0 as u8), #[cfg(feature = "smp")]cid);
+		let task_handle_exist = TaskHandle::new(
+			TaskId::from(0),
+			Priority::from(0 as u8),
+			#[cfg(feature = "smp")]
+			cid,
+		);
+		let task_handle_not_exist = TaskHandle::new(
+			TaskId::from(1),
+			Priority::from(0 as u8),
+			#[cfg(feature = "smp")]
+			cid,
+		);
 
 		assert!(PrioQueue.contains(task_handle_exist));
 
@@ -1051,25 +1065,34 @@ mod tests {
 
 	#[test]
 	fn test_TaskHandleRemove() {
-
 		let mut PrioQueue = TaskHandlePriorityQueue::new();
 		#[cfg(feature = "smp")]
 		let cid: CoreId = 0;
 
-		let task_handle1 = TaskHandle::new( TaskId::from(0),Priority::from(1 as u8), #[cfg(feature = "smp")]cid);
-		let task_handle2 = TaskHandle::new( TaskId::from(1),Priority::from(1 as u8), #[cfg(feature = "smp")]cid);
+		let task_handle1 = TaskHandle::new(
+			TaskId::from(0),
+			Priority::from(1 as u8),
+			#[cfg(feature = "smp")]
+			cid,
+		);
+		let task_handle2 = TaskHandle::new(
+			TaskId::from(1),
+			Priority::from(1 as u8),
+			#[cfg(feature = "smp")]
+			cid,
+		);
 
 		PrioQueue.push(task_handle1);
 		PrioQueue.push(task_handle2);
 
-		assert!(PrioQueue.contains(task_handle1));	
+		assert!(PrioQueue.contains(task_handle1));
 		assert!(PrioQueue.remove(task_handle1));
 		assert!(!PrioQueue.contains(task_handle1));
 	}
 
 	#[test]
-    fn test_wakeup_task_blocked() {
-        let task = Rc::new(RefCell::new(Task {
+	fn test_wakeup_task_blocked() {
+		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(1),
 			status: TaskStatus::Blocked,
 			prio: Priority(1 as u8),
@@ -1086,16 +1109,16 @@ mod tests {
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}));
-        
-        BlockedTaskQueue::wakeup_task(task.clone());
-        
-        let borrowed = task.borrow();
-        assert_eq!(borrowed.status, TaskStatus::Ready);
-    }
+
+		BlockedTaskQueue::wakeup_task(task.clone());
+
+		let borrowed = task.borrow();
+		assert_eq!(borrowed.status, TaskStatus::Ready);
+	}
 
 	#[test]
-    #[should_panic(expected = "Try to wake up task")]
-    fn test_wakeup_task_wrong_core() {
+	#[should_panic(expected = "Try to wake up task")]
+	fn test_wakeup_task_wrong_core() {
 		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(1),
 			status: TaskStatus::Blocked,
@@ -1113,13 +1136,13 @@ mod tests {
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}));
-        
-        BlockedTaskQueue::wakeup_task(task.clone());
-    }
-    
-    #[test]
-    #[should_panic(expected = "Trying to wake up task")]
-    fn test_wakeup_task_not_blocked() {
+
+		BlockedTaskQueue::wakeup_task(task.clone());
+	}
+
+	#[test]
+	#[should_panic(expected = "Trying to wake up task")]
+	fn test_wakeup_task_not_blocked() {
 		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(1),
 			status: TaskStatus::Ready,
@@ -1137,16 +1160,16 @@ mod tests {
 			#[cfg(feature = "newlib")]
 			lwip_errno: 0,
 		}));
-       
-        BlockedTaskQueue::wakeup_task(task.clone());
-    }
+
+		BlockedTaskQueue::wakeup_task(task.clone());
+	}
 
 	#[test]
 	fn test_custom_wakeup_with_network_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: Some(50),
-        };
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: Some(50),
+		};
 
 		let task1 = Rc::new(RefCell::new(Task {
 			id: TaskId(1),
@@ -1166,7 +1189,7 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        let task2 = Rc::new(RefCell::new(Task {
+		let task2 = Rc::new(RefCell::new(Task {
 			id: TaskId(2),
 			status: TaskStatus::Blocked,
 			prio: Priority(1 as u8),
@@ -1184,24 +1207,35 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        queue.list.push_back(BlockedTask::new(task1.clone(), Some(100)));
-        queue.list.push_back(BlockedTask::new(task2.clone(), Some(6)));
+		queue
+			.list
+			.push_back(BlockedTask::new(task1.clone(), Some(100)));
+		queue
+			.list
+			.push_back(BlockedTask::new(task2.clone(), Some(6)));
 
-        queue.custom_wakeup( TaskHandle::new( TaskId::from(1),Priority::from(1 as u8), #[cfg(feature = "smp")]0));
+		queue.custom_wakeup(TaskHandle::new(
+			TaskId::from(1),
+			Priority::from(1 as u8),
+			#[cfg(feature = "smp")]
+			0,
+		));
 
-        // Assert that task1 is woken up and removed from the list
-        assert_eq!(task1.borrow().status, TaskStatus::Ready);
-        assert!(queue.list.iter().all(|node| node.task.borrow().id != TaskId(1)));
-
-    }
+		// Assert that task1 is woken up and removed from the list
+		assert_eq!(task1.borrow().status, TaskStatus::Ready);
+		assert!(queue
+			.list
+			.iter()
+			.all(|node| node.task.borrow().id != TaskId(1)));
+	}
 	#[test]
-    fn test_custom_wakeup_without_network_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: None,
-        };
+	fn test_custom_wakeup_without_network_wakeup_time() {
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: None,
+		};
 
-        let task1 = Rc::new(RefCell::new(Task {
+		let task1 = Rc::new(RefCell::new(Task {
 			id: TaskId(1),
 			status: TaskStatus::Blocked,
 			prio: Priority(1 as u8),
@@ -1219,7 +1253,7 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        let task2 = Rc::new(RefCell::new(Task {
+		let task2 = Rc::new(RefCell::new(Task {
 			id: TaskId(2),
 			status: TaskStatus::Blocked,
 			prio: Priority(1 as u8),
@@ -1237,56 +1271,34 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        queue.list.push_back(BlockedTask::new(task1.clone(), Some(100)));
-        queue.list.push_back(BlockedTask::new(task2.clone(), Some(5)));
+		queue
+			.list
+			.push_back(BlockedTask::new(task1.clone(), Some(100)));
+		queue
+			.list
+			.push_back(BlockedTask::new(task2.clone(), Some(5)));
 
-		queue.custom_wakeup( TaskHandle::new( TaskId::from(2),Priority::from(1 as u8), #[cfg(feature = "smp")]0));
+		queue.custom_wakeup(TaskHandle::new(
+			TaskId::from(2),
+			Priority::from(1 as u8),
+			#[cfg(feature = "smp")]
+			0,
+		));
 
-        // Assert that task2 is woken up and removed from the list
-        assert_eq!(task2.borrow().status, TaskStatus::Ready);
-        assert!(queue.list.iter().all(|node| node.task.borrow().id != TaskId(2)));
-    }
+		// Assert that task2 is woken up and removed from the list
+		assert_eq!(task2.borrow().status, TaskStatus::Ready);
+		assert!(queue
+			.list
+			.iter()
+			.all(|node| node.task.borrow().id != TaskId(2)));
+	}
 
 	#[test]
-    fn test_add_network_timer_with_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: None,
-        };
-
-            let task = Rc::new(RefCell::new(Task {
-			id: TaskId(2),
-			status: TaskStatus::Blocked,
-			prio: Priority(1 as u8),
-			last_stack_pointer: x86::bits64::paging::VAddr(10),
-			user_stack_pointer: x86::bits64::paging::VAddr(10),
-			last_fpu_state: arch::processor::FPUState::new(),
-			core_id: 0,
-			stacks: TaskStacks::Common(CommonStack {
-				virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
-				phys_addr: x86::bits64::paging::PAddr(2000),
-				total_size: 4000,
-			}),
-			tls: None,
-			#[cfg(feature = "newlib")]
-			lwip_errno: 0,
-		}));
-
-        let wakeup_time = Some(100);
-
-        queue.add_network_timer(wakeup_time);
-
-        // Assert that the network_wakeup_time is set correctly
-        assert_eq!(queue.network_wakeup_time, wakeup_time);
-     
-    }
-
-    #[test]
-    fn test_add_network_timer_without_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: Some(50),
-        };
+	fn test_add_network_timer_with_wakeup_time() {
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: None,
+		};
 
 		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(2),
@@ -1306,25 +1318,24 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        queue.list.push_front(BlockedTask::new( task,  Some(50)));
+		let wakeup_time = Some(100);
 
-        queue.add_network_timer(None);
+		queue.add_network_timer(wakeup_time);
 
-        // Assert that the network_wakeup_time is set correctly
-        assert_eq!(queue.network_wakeup_time, None);
-
-    }
+		// Assert that the network_wakeup_time is set correctly
+		assert_eq!(queue.network_wakeup_time, wakeup_time);
+	}
 
 	#[test]
-    fn test_add_with_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: None,
-        };
+	fn test_add_network_timer_without_wakeup_time() {
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: Some(50),
+		};
 
 		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(2),
-			status: TaskStatus::Running,
+			status: TaskStatus::Blocked,
 			prio: Priority(1 as u8),
 			last_stack_pointer: x86::bits64::paging::VAddr(10),
 			user_stack_pointer: x86::bits64::paging::VAddr(10),
@@ -1340,20 +1351,20 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        let wakeup_time = Some(100);
+		queue.list.push_front(BlockedTask::new(task, Some(50)));
 
-        queue.add(task.clone(), wakeup_time);
+		queue.add_network_timer(None);
 
-        // Assert that the task status is set to Blocked
-        assert_eq!(task.borrow().status, TaskStatus::Blocked);
-    }
+		// Assert that the network_wakeup_time is set correctly
+		assert_eq!(queue.network_wakeup_time, None);
+	}
 
 	#[test]
-    fn test_add_without_wakeup_time() {
-        let mut queue = BlockedTaskQueue {
-            list: LinkedList::new(),
-            network_wakeup_time: Some(50),
-        };
+	fn test_add_with_wakeup_time() {
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: None,
+		};
 
 		let task = Rc::new(RefCell::new(Task {
 			id: TaskId(2),
@@ -1373,10 +1384,42 @@ mod tests {
 			lwip_errno: 0,
 		}));
 
-        queue.add(task.clone(), None);
+		let wakeup_time = Some(100);
 
-        // Assert that the task status is set to Blocked
-        assert_eq!(task.borrow().status, TaskStatus::Blocked);
-    }
+		queue.add(task.clone(), wakeup_time);
 
+		// Assert that the task status is set to Blocked
+		assert_eq!(task.borrow().status, TaskStatus::Blocked);
+	}
+
+	#[test]
+	fn test_add_without_wakeup_time() {
+		let mut queue = BlockedTaskQueue {
+			list: LinkedList::new(),
+			network_wakeup_time: Some(50),
+		};
+
+		let task = Rc::new(RefCell::new(Task {
+			id: TaskId(2),
+			status: TaskStatus::Running,
+			prio: Priority(1 as u8),
+			last_stack_pointer: x86::bits64::paging::VAddr(10),
+			user_stack_pointer: x86::bits64::paging::VAddr(10),
+			last_fpu_state: arch::processor::FPUState::new(),
+			core_id: 0,
+			stacks: TaskStacks::Common(CommonStack {
+				virt_addr: x86::bits64::paging::VAddr::from_u64(2000),
+				phys_addr: x86::bits64::paging::PAddr(2000),
+				total_size: 4000,
+			}),
+			tls: None,
+			#[cfg(feature = "newlib")]
+			lwip_errno: 0,
+		}));
+
+		queue.add(task.clone(), None);
+
+		// Assert that the task status is set to Blocked
+		assert_eq!(task.borrow().status, TaskStatus::Blocked);
+	}
 }

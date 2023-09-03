@@ -1007,10 +1007,17 @@ pub fn shutdown() -> ! {
 	}
 }
 
+#[cfg(target_os = "none")]
 pub fn get_timer_ticks() -> u64 {
 	// We simulate a timer with a 1 microsecond resolution by taking the CPU timestamp
 	// and dividing it by the CPU frequency in MHz.
 	get_timestamp() / u64::from(get_frequency())
+}
+
+#[cfg(not(target_os = "none"))]
+pub fn get_timer_ticks() -> u64 {
+	println!("Mocking get_timer_ticks()");
+	10
 }
 
 pub fn get_frequency() -> u16 {
