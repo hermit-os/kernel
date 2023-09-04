@@ -600,7 +600,7 @@ struct ComCfgRaw {
 // Common configuration raw does NOT provide a PUBLIC
 // interface.
 impl ComCfgRaw {
-	/// Returns a boxed [ComCfgRaw](ComCfgRaw) structure. The box points to the actual structure inside the
+	/// Returns a boxed [ComCfgRaw] structure. The box points to the actual structure inside the
 	/// PCI devices memory space.
 	fn map(cap: &PciCap) -> Option<&'static mut ComCfgRaw> {
 		if cap.bar.length < u64::from(cap.length + cap.offset) {
@@ -800,7 +800,7 @@ struct IsrStatusRaw {
 
 impl IsrStatusRaw {
 	/// Returns a mutable reference to the ISR status capability structure indicated by the
-	/// [PciCap](PciCap) struct. Reference has a static lifetime as the structure is controlled by the
+	/// [PciCap] struct. Reference has a static lifetime as the structure is controlled by the
 	/// device and will not be moved.
 	fn map(cap: &PciCap) -> Option<&'static mut IsrStatusRaw> {
 		if cap.bar.length < u64::from(cap.length + cap.offset) {

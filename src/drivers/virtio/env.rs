@@ -7,8 +7,8 @@
 pub mod memory {
 	use core::ops::Add;
 
-	/// A newtype representing a memory offset which can be used to be added to [PhyMemAddr](PhyMemAddr) or
-	/// to [VirtMemAddr](VirtMemAddr).
+	/// A newtype representing a memory offset which can be used to be added to [PhyMemAddr] or
+	/// to [VirtMemAddr].
 	#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 	pub struct MemOff(usize);
 
@@ -32,8 +32,8 @@ pub mod memory {
 		}
 	}
 
-	/// A newtype representing a memory length which can be used to be added to [PhyMemAddr](PhyMemAddr) or
-	/// to [VirtMemAddr](VirtMemAddr).
+	/// A newtype representing a memory length which can be used to be added to [PhyMemAddr] or
+	/// to [VirtMemAddr].
 	#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
 	pub struct MemLen(usize);
 

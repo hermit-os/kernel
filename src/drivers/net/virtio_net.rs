@@ -1344,7 +1344,7 @@ pub mod constants {
 	}
 
 	impl Features {
-		/// Return a vector of [Features](Features) for a given input of a u64 representation.
+		/// Return a vector of [Features] for a given input of a u64 representation.
 		///
 		/// INFO: In case the FEATURES enum is changed, this function MUST also be adjusted to the new set!
 		//

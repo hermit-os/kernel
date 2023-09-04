@@ -387,7 +387,7 @@ impl Virtq {
 	/// * Data behind the respective raw pointers will NOT be deallocated. Under no circumstances.
 	/// * Calley is responsible for ensuring the raw pointers will remain valid from start till end of transfer.
 	///   * start: call of `fn prep_transfer_from_raw()`
-	///   * end: closing of [Transfer](Transfer) via `Transfer.close()`.
+	///   * end: closing of [Transfer] via `Transfer.close()`.
 	///   * In case the underlying BufferToken is reused, the raw pointers MUST still be valid all the time
 	///   BufferToken exists.
 	/// * Transfer created from this TransferTokens will ONLY allow to return a copy of the data.
@@ -400,13 +400,13 @@ impl Virtq {
 	///     * None: No send buffers are provided to the device
 	///     * Some:
 	///         * `T` defines the structure which will be provided to the device
-	///         * [BuffSpec](BuffSpec) defines how this struct will be presented to the device.
+	///         * [BuffSpec] defines how this struct will be presented to the device.
 	///         See documentation on `BuffSpec` for details.
 	/// * recv: `Option<(*mut K, BuffSpec)>`
 	///     * None: No buffers, which are writable for the device are provided to the device.
 	///     * Some:
 	///         * `K` defines the structure which will be provided to the device
-	///         * [BuffSpec](BuffSpec) defines how this struct will be presented to the device.
+	///         * [BuffSpec] defines how this struct will be presented to the device.
 	///         See documentation on `BuffSpec` for details.
 	///
 	/// **Reasons for Failure:**
@@ -455,20 +455,20 @@ impl Virtq {
 		}
 	}
 
-	/// Provides the calley with empty buffers as specified via the `send` and `recv` function parameters, (see [BuffSpec](BuffSpec)), in form of
-	/// a [BufferToken](BufferToken).
+	/// Provides the calley with empty buffers as specified via the `send` and `recv` function parameters, (see [BuffSpec]), in form of
+	/// a [BufferToken].
 	/// Fails upon multiple circumstances.
 	///
 	/// **Parameters**
 	/// * send: `Option<BuffSpec>`
 	///     * None: No send buffers are provided to the device
 	///     * Some:
-	///         * [BuffSpec](BuffSpec) defines the size of the buffer and how the buffer is
+	///         * [BuffSpec] defines the size of the buffer and how the buffer is
 	///         Buffer will be structured. See documentation on `BuffSpec` for details.
 	/// * recv: `Option<BuffSpec>`
 	///     * None: No buffers, which are writable for the device are provided to the device.
 	///     * Some:
-	///         * [BuffSpec](BuffSpec) defines the size of the buffer and how the buffer is
+	///         * [BuffSpec] defines the size of the buffer and how the buffer is
 	///         Buffer will be structured. See documentation on `BuffSpec` for details.
 	///
 	/// **Reasons for Failure:**
@@ -520,7 +520,7 @@ impl Virtq {
 }
 
 /// The trait needs to be implemented on structures which are to be used via the `prep_transfer()` function of virtqueues and for
-/// structures which are to be used to write data into buffers of a [BufferToken](BufferToken) via `BufferToken.write()` or
+/// structures which are to be used to write data into buffers of a [BufferToken] via `BufferToken.write()` or
 /// `BufferToken.write_seq()`.
 ///
 /// **INFO:*
@@ -561,7 +561,7 @@ pub trait AsSliceU8 {
 	}
 }
 
-/// The [Transfer](Transfer) will be received when a [TransferToken](TransferToken) is dispatched via `TransferToken.dispatch()` or
+/// The [Transfer] will be received when a [TransferToken] is dispatched via `TransferToken.dispatch()` or
 /// via `TransferToken.dispatch_blocking()`.
 ///
 /// The struct represents an ongoing transfer or an active transfer. While this does NOT mean, that the transfer is at all times inside
@@ -591,7 +591,7 @@ pub struct Transfer {
 }
 
 impl Drop for Transfer {
-	/// When an unclosed transfer is dropped. The [Pinned](Pinned)<[TransferToken](struct.TransferToken.html)> is returned to the respective
+	/// When an unclosed transfer is dropped. The [Pinned]<[TransferToken]> is returned to the respective
 	/// virtqueue, who is responsible of handling these situations.
 	fn drop(&mut self) {
 		if let Some(tkn) = self.transfer_tkn.take() {
@@ -1080,8 +1080,8 @@ impl TransferToken {
 	/// Dispatches the provided TransferToken to the respectuve queue and does
 	/// return when, the queue finished the transfer.
 	///
-	/// The resultaing [TransferState](TransferState) in this case is of course
-	/// finished and the returned [Transfer](Transfer) can be reused, copied from
+	/// The resultaing [TransferState] in this case is of course
+	/// finished and the returned [Transfer] can be reused, copied from
 	/// or return the underlying buffers.
 	///
 	/// **INFO:**
@@ -1601,7 +1601,7 @@ impl BufferToken {
 	///
 	///
 	/// # Detailed Description
-	/// The respective send and recv buffers (see [BufferToken](BufferToken) docs for details on buffers) consist of multiple
+	/// The respective send and recv buffers (see [BufferToken] docs for details on buffers) consist of multiple
 	/// descriptors.
 	/// The `write()` function does NOT take into account the distinct descriptors of a buffer but treats the buffer as a single continuous
 	/// memory element and as a result writes `T` or `H` as a slice of bytes into this memory.
@@ -1724,7 +1724,7 @@ impl BufferToken {
 		Ok(self)
 	}
 
-	/// Consumes the [BufferToken](BufferToken) and returns a [TransferToken](TransferToken), that can be used to actually start the transfer.
+	/// Consumes the [BufferToken] and returns a [TransferToken], that can be used to actually start the transfer.
 	///
 	/// After this call, the buffers are no longer writable.
 	pub fn provide(self) -> TransferToken {
@@ -1746,7 +1746,7 @@ enum Buffer {
 	},
 	/// A buffer consisting of a chain of [Memory Descriptors](MemDescr).
 	/// Especially useful if one wants to send multiple structures to a device,
-	/// as he can sequentially write (see [BufferToken](BufferToken) `write_seq()`)
+	/// as he can sequentially write (see [BufferToken] `write_seq()`)
 	/// those structs into the descriptors.
 	Multiple {
 		desc_lst: Box<[MemDescr]>,
@@ -1985,7 +1985,7 @@ struct MemDescr {
 	_mem_len: usize,
 	/// If `id == None` this is an untracked memory descriptor
 	/// * Meaining: The descriptor does NOT count as a descriptor
-	/// taken from the [MemPool](MemPool).
+	/// taken from the [MemPool].
 	id: Option<MemDescrId>,
 	/// Refers to the controlling [memory pool](MemPool)
 	pool: Rc<MemPool>,
@@ -2042,7 +2042,7 @@ impl MemDescr {
 	///
 	/// Be cautious with the usage of clones of `MemDescr`. Typically this function
 	/// should only be used to create a second controlling descriptor of an
-	/// indirect buffer. See [Buffer](Buffer) `Buffer::Indirect` for details!
+	/// indirect buffer. See [Buffer] `Buffer::Indirect` for details!
 	fn no_dealloc_clone(&self) -> Self {
 		MemDescr {
 			ptr: self.ptr,
