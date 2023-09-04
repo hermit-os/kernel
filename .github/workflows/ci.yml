@@ -22,7 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Check each feature
@@ -34,7 +34,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Install NASM
         run: |
           sudo apt-get update
@@ -48,7 +48,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add rustfmt
       - run: cargo fmt -- --check
@@ -61,7 +61,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add aarch64-unknown-none-softfloat
       - uses: Swatinem/rust-cache@v2
@@ -78,7 +78,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Build minimal kernel
@@ -94,7 +94,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Unit tests
@@ -120,14 +120,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev
       - name: Checkout hermit-rs
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: hermitcore/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
       - name: Checkout hermit-kernel
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kernel
       - uses: mkroening/rust-toolchain-toml@main
@@ -247,14 +247,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout hermit-rs
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: hermitcore/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
       - name: Checkout hermit-kernel
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           path: kernel
       - name: Download loader
