@@ -842,9 +842,9 @@ dependencies = [
 
 [[package]]
 name = "take-static"
-version = "0.1.0"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f87a2fd121b45f8363ac84f579b8246ef518b04a6e545a8c09b9e98b78d32bde"
+checksum = "cf67eb0a80961fdb5df5e14b75c5b9fc93bdbf88b00d0260b7eec55041c4fe01"
 dependencies = [
  "call-once",
 ]
