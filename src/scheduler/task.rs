@@ -5,7 +5,7 @@ use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::fmt;
 use core::num::NonZeroU64;
-#[cfg(feature = "tcp")]
+#[cfg(any(feature = "tcp", feature = "udp"))]
 use core::ops::DerefMut;
 
 use crate::arch;
@@ -449,7 +449,7 @@ impl BlockedTask {
 
 pub struct BlockedTaskQueue {
 	list: LinkedList<BlockedTask>,
-	#[cfg(feature = "tcp")]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	network_wakeup_time: Option<u64>,
 }
 
@@ -457,7 +457,7 @@ impl BlockedTaskQueue {
 	pub const fn new() -> Self {
 		Self {
 			list: LinkedList::new(),
-			#[cfg(feature = "tcp")]
+			#[cfg(any(feature = "tcp", feature = "udp"))]
 			network_wakeup_time: None,
 		}
 	}
@@ -490,7 +490,7 @@ impl BlockedTaskQueue {
 		core_scheduler().ready_queue.push(task);
 	}
 
-	#[cfg(feature = "tcp")]
+	#[cfg(any(feature = "tcp", feature = "udp"))]
 	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
 		self.network_wakeup_time = wakeup_time;
 
@@ -540,9 +540,9 @@ impl BlockedTaskQueue {
 		if let Some(wt) = wakeup_time {
 			let mut cursor = self.list.cursor_front_mut();
 			let set_oneshot_timer = || {
-				#[cfg(not(feature = "tcp"))]
+				#[cfg(not(any(feature = "tcp", feature = "udp")))]
 				arch::set_oneshot_timer(wakeup_time);
-				#[cfg(feature = "tcp")]
+				#[cfg(any(feature = "tcp", feature = "udp"))]
 				match self.network_wakeup_time {
 					Some(time) => {
 						if time > wt {
@@ -578,7 +578,7 @@ impl BlockedTaskQueue {
 		let mut first_task = true;
 		let mut cursor = self.list.cursor_front_mut();
 
-		#[cfg(feature = "tcp")]
+		#[cfg(any(feature = "tcp", feature = "udp"))]
 		if let Some(wakeup_time) = self.network_wakeup_time {
 			if wakeup_time <= arch::processor::get_timer_ticks() {
 				self.network_wakeup_time = None;
@@ -594,7 +594,7 @@ impl BlockedTaskQueue {
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
 				// next task's wakeup time (if any).
-				#[cfg(feature = "tcp")]
+				#[cfg(any(feature = "tcp", feature = "udp"))]
 				if first_task {
 					arch::set_oneshot_timer(cursor.current().map_or_else(
 						|| self.network_wakeup_time,
@@ -614,7 +614,7 @@ impl BlockedTaskQueue {
 						},
 					));
 				}
-				#[cfg(not(feature = "tcp"))]
+				#[cfg(not(any(feature = "tcp", feature = "udp")))]
 				if first_task {
 					arch::set_oneshot_timer(
 						cursor
@@ -640,7 +640,7 @@ impl BlockedTaskQueue {
 		let time = arch::processor::get_timer_ticks();
 		let mut cursor = self.list.cursor_front_mut();
 
-		#[cfg(feature = "tcp")]
+		#[cfg(any(feature = "tcp", feature = "udp"))]
 		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
 			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
 				let now = crate::executor::network::now();
@@ -663,7 +663,7 @@ impl BlockedTaskQueue {
 			cursor.remove_current();
 		}
 
-		#[cfg(feature = "tcp")]
+		#[cfg(any(feature = "tcp", feature = "udp"))]
 		arch::set_oneshot_timer(cursor.current().map_or_else(
 			|| self.network_wakeup_time,
 			|node| match node.wakeup_time {
@@ -681,7 +681,7 @@ impl BlockedTaskQueue {
 				None => self.network_wakeup_time,
 			},
 		));
-		#[cfg(not(feature = "tcp"))]
+		#[cfg(not(any(feature = "tcp", feature = "udp")))]
 		arch::set_oneshot_timer(
 			cursor
 				.current()

@@ -14,11 +14,11 @@ use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
 use crate::syscalls::fs::{self, FilePerms, SeekWhence};
-#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
 mod file;
-#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub mod socket;
 mod stdio;
 
@@ -205,31 +205,31 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `accept` a connection on a socket
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> i32 {
 		-EINVAL
 	}
 
 	/// initiate a connection on a socket
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
 		-EINVAL
 	}
 
 	/// `bind` a name to a socket
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
 		-EINVAL
 	}
 
 	/// `listen` for connections on a socket
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn listen(&self, _backlog: i32) -> i32 {
 		-EINVAL
 	}
 
 	/// `setsockopt` sets options on sockets
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn setsockopt(
 		&self,
 		_level: i32,
@@ -241,7 +241,7 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `getsockopt` gets options on sockets
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn getsockopt(
 		&self,
 		_level: i32,
@@ -253,19 +253,19 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `getsockname` gets socket name
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
 		-EINVAL
 	}
 
 	/// `getpeername` get address of connected peer
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
 		-EINVAL
 	}
 
 	/// shut down part of a full-duplex connection
-	#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn shutdown(&self, _how: i32) -> i32 {
 		-EINVAL
 	}
@@ -323,7 +323,7 @@ pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>,
 	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(-EINVAL)?)).clone())
 }
 
-#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,

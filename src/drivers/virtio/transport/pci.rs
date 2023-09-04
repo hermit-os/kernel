@@ -9,7 +9,7 @@ use core::mem;
 use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 
-#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::arch::kernel::interrupts::*;
 use crate::arch::memory_barrier;
 use crate::arch::mm::PhysAddr;
@@ -17,9 +17,9 @@ use crate::arch::pci::PciConfigRegion;
 use crate::drivers::error::DriverError;
 #[cfg(feature = "fs")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
-#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::network_irqhandler;
-#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 use crate::drivers::pci::error::PciError;
 use crate::drivers::pci::{DeviceHeader, Masks, PciDevice};
@@ -1259,7 +1259,7 @@ pub(crate) fn init_device(
 				VirtioError::DevNotSupported(device_id),
 			))
 		}
-		#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+		#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 		DevId::VIRTIO_DEV_ID_NET => match VirtioNetDriver::init(device) {
 			Ok(virt_net_drv) => {
 				info!("Virtio network driver initialized.");
@@ -1307,7 +1307,7 @@ pub(crate) fn init_device(
 	match virt_drv {
 		Ok(drv) => {
 			match &drv {
-				#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				VirtioDriver::Network(_) => {
 					let irq = device.get_irq().unwrap();
 					info!("Install virtio interrupt handler at line {}", irq);
@@ -1326,7 +1326,7 @@ pub(crate) fn init_device(
 }
 
 pub(crate) enum VirtioDriver {
-	#[cfg(all(not(feature = "rtl8139"), feature = "tcp"))]
+	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	Network(VirtioNetDriver),
 	#[cfg(feature = "fs")]
 	FileSystem(VirtioFsDriver),
