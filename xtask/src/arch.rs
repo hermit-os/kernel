@@ -60,6 +60,19 @@ impl Arch {
 		}
 	}
 
+	pub fn ci_cargo_args(&self) -> &'static [&'static str] {
+		match self {
+			Arch::X86_64 => &[
+				"--target=x86_64-unknown-hermit",
+				"-Zbuild-std=std,panic_abort",
+			],
+			Arch::Aarch64 => &[
+				"--target=aarch64-unknown-hermit",
+				"-Zbuild-std=std,panic_abort",
+			],
+		}
+	}
+
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &[],

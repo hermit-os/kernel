@@ -80,4 +80,16 @@ impl Artifact {
 		.collect::<PathBuf>()
 		.into()
 	}
+
+	pub fn ci_image(&self, package: &str) -> PathBuf {
+		[
+			"..".as_ref(),
+			self.target_dir(),
+			self.arch.hermit_triple().as_ref(),
+			self.profile_path_component().as_ref(),
+			package.as_ref(),
+		]
+		.iter()
+		.collect()
+	}
 }

@@ -5,6 +5,7 @@ mod archive;
 mod artifact;
 mod build;
 mod cargo_build;
+mod ci;
 mod clippy;
 
 use std::path::Path;
@@ -16,6 +17,8 @@ use xshell::Shell;
 #[derive(Parser)]
 enum Cli {
 	Build(build::Build),
+	#[command(subcommand)]
+	Ci(ci::Ci),
 	Clippy(clippy::Clippy),
 }
 
@@ -23,6 +26,7 @@ impl Cli {
 	fn run(self) -> Result<()> {
 		match self {
 			Self::Build(build) => build.run(),
+			Self::Ci(ci) => ci.run(),
 			Self::Clippy(clippy) => clippy.run(),
 		}
 	}
