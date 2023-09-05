@@ -118,7 +118,7 @@ jobs:
       - name: Install QEMU, NASM
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev
+          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
         with:
@@ -241,6 +241,32 @@ jobs:
             -append "-freq $FREQ" \
             || qemu_status=$?
           test $qemu_status -eq 3
+      - name: Build udp tests (debug, virtio-net)
+        run:
+          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+      - name: Test udp profile
+        run: |
+          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/debug/testudp \
+            -netdev user,id=u1,hostfwd=udp::8080-:8080,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
+            -device virtio-net-pci,netdev=u1,disable-legacy=on &
+          sleep 5
+          echo "exit" | socat -d -d -d - UDP:localhost:8080 -
+      - name: Build udp tests (release, virtio-net)
+        run:
+          cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+      - name: Test udp profile
+        run: |
+          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/release/testudp \
+            -netdev user,id=u1,hostfwd=udp::8080-:8080,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
+            -device virtio-net-pci,netdev=u1,disable-legacy=on &
+          sleep 5
+          echo "exit" | socat -d -d -d - UDP:localhost:8080 -
   
   run-aarch64:
     name: Run Hermit for Rust (aarch64)
