@@ -68,6 +68,56 @@ $ qemu-system-aarch64 \
                   -device guest-loader,addr=0x48000000,initrd=<APP>
 ```
 
+### Debugging
+
+You can use QEMU to debug the loaded Hermit images:
+
+1.  Start your Hermit image normally.
+
+    Look for the following line:
+
+    ```log
+    [LOADER][INFO] Loading kernel to <START>..<END> (len = <LEN> B)
+    ```
+
+    We need to know `<START>` to tell GDB later where the program is loaded.
+
+2.  Add `-S -s` to your QEMU command.
+
+    `-S` makes QEMU start with a stopped CPU, which can be started explicitly.
+    `-s` is a shorthand for `-gdb tcp::1234` for accepting GDB connections.
+
+3.  Start GDB without arguments.
+
+    You should use the `rust-gdb` or `rust-gdbgui` wrappers for Rust's pretty printing.
+    Both respect the `RUST_GDB` environment variable for cross-debugging (e.g., `aarch64-elf-gdb`).
+
+4.  Connect to QEMU.
+
+    ```gdb
+    target remote :1234
+    ```
+
+5.  Load the Hermit image to the correct address.
+
+    We can now tell GDB where the Hermit image will be located:
+
+    ```gdb
+    symbol-file -o <START> <IMAGE_PATH>
+    ```
+
+6.  Debug away!
+
+    You can now add breakpoints and start execution:
+    
+    ```gdb
+    b hermit::boot_processor_main
+    c
+    ```
+
+    For fast iteration times, consider creating a [`.gdbinit`](https://sourceware.org/gdb/onlinedocs/gdb/gdbinit-man.html).
+
+
 ### Using QEMU as microvm
 
 QEMU provides the [microvm virtual platform], which is a minimalist machine type without PCI nor ACPI support.
