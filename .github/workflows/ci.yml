@@ -230,7 +230,6 @@ jobs:
       - name: Build minimal profile
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
       - name: Test minimal profile
-        id: minimal
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
           echo "FREQ = $FREQ"
