@@ -135,6 +135,11 @@ jobs:
           sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            kernel
+            kernel/hermit-builtins
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
       - name: Download loader
@@ -297,6 +302,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-aarch64
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            kernel
+            kernel/hermit-builtins
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package rusty_demo --features pci-ids
       - name: Test dev kernel
