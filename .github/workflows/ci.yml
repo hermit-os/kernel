@@ -176,8 +176,7 @@ jobs:
             -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
             -initrd target/x86_64-unknown-hermit/release/rusty_demo
       - name: Build httpd with DHCP support (debug, rtl8139)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4,rtl8139
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4,rtl8139
       - name: Test httpd with DHCP support (debug, rtl8139)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -190,8 +189,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (debug, virtio-net)
-        run:
-            cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4
       - name: Test httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -204,8 +202,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release, rtl8139)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4,rtl8139
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4,rtl8139
       - name: Test httpd with DHCP support (release, rtl8139)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -218,8 +215,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4
       - name: Test httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -250,8 +246,7 @@ jobs:
             || qemu_status=$?
           test $qemu_status -eq 3
       - name: Build udp tests (debug, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
       - name: Test udp profile
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -263,8 +258,7 @@ jobs:
           sleep 5
           echo "exit" | socat -d -d -d - UDP:localhost:9975
       - name: Build udp tests (release, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
       - name: Test udp profile
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -324,8 +318,7 @@ jobs:
             -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/rusty_demo
       - name: Build httpd with DHCP support (debug)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
       - name: Test httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-aarch64 -semihosting \
@@ -338,8 +331,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
       - name: Test httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-aarch64 -semihosting \
