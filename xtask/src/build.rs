@@ -1,25 +1,16 @@
 use std::env::{self, VarError};
-use std::ffi::OsStr;
 
 use anyhow::Result;
 use clap::Args;
 use xshell::cmd;
 
-use crate::artifact::Artifact;
+use crate::cargo_build::{CargoBuild, CmdExt};
 
 /// Build the kernel.
 #[derive(Args)]
 pub struct Build {
 	#[command(flatten)]
-	artifact: Artifact,
-
-	/// Do not activate the `default` feature.
-	#[arg(long)]
-	pub no_default_features: bool,
-
-	/// Space or comma separated list of features to activate.
-	#[arg(long)]
-	pub features: Vec<String>,
+	cargo_build: CargoBuild,
 
 	/// Enable the `-Z instrument-mcount` flag.
 	#[arg(long)]
@@ -37,15 +28,12 @@ impl Build {
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-			.args(&["--profile", self.artifact.profile()])
-			.args(self.artifact.arch.cargo_args())
-			.args(self.target_dir_args())
-			.args(self.no_default_features_args())
-			.args(self.features_args())
+			.args(self.cargo_build.artifact.arch.cargo_args())
+			.cargo_build_args(&self.cargo_build)
 			.run()?;
 
-		let build_archive = self.artifact.build_archive();
-		let dist_archive = self.artifact.dist_archive();
+		let build_archive = self.cargo_build.artifact.build_archive();
+		let dist_archive = self.cargo_build.artifact.dist_archive();
 		eprintln!(
 			"Copying {} to {}",
 			build_archive.as_ref().display(),
@@ -60,12 +48,12 @@ impl Build {
 		eprintln!("Building hermit-builtins");
 		cmd!(sh, "cargo build --release")
 			.arg("--manifest-path=hermit-builtins/Cargo.toml")
-			.args(self.artifact.arch.builtins_cargo_args())
-			.args(self.target_dir_args())
+			.args(self.cargo_build.artifact.arch.builtins_cargo_args())
+			.target_dir_args(&self.cargo_build)
 			.run()?;
 
 		eprintln!("Exporting hermit-builtins symbols");
-		let builtins = self.artifact.builtins_archive();
+		let builtins = self.cargo_build.artifact.builtins_archive();
 		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
 		builtins.retain_symbols(builtin_symbols.lines())?;
 
@@ -101,31 +89,13 @@ impl Build {
 			rustflags.push("-Zrandomize-layout")
 		}
 
-		rustflags.extend(self.artifact.arch.rustflags());
+		rustflags.extend(self.cargo_build.artifact.arch.rustflags());
 
 		Ok(rustflags.join("\x1f"))
 	}
 
-	fn target_dir_args(&self) -> [&OsStr; 2] {
-		["--target-dir".as_ref(), self.artifact.target_dir().as_ref()]
-	}
-
-	fn no_default_features_args(&self) -> &[&str] {
-		if self.no_default_features {
-			&["--no-default-features"]
-		} else {
-			&[]
-		}
-	}
-
-	fn features_args(&self) -> impl Iterator<Item = &str> {
-		self.features
-			.iter()
-			.flat_map(|feature| ["--features", feature.as_str()])
-	}
-
 	fn export_syms(&self) -> Result<()> {
-		let archive = self.artifact.dist_archive();
+		let archive = self.cargo_build.artifact.dist_archive();
 
 		let syscall_symbols = archive.syscall_symbols()?;
 		let explicit_exports = [

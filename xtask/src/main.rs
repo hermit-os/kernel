@@ -4,6 +4,7 @@ mod arch;
 mod archive;
 mod artifact;
 mod build;
+mod cargo_build;
 mod clippy;
 
 use std::path::Path;

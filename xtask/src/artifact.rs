@@ -46,6 +46,7 @@ impl Artifact {
 
 	pub fn builtins_archive(&self) -> Archive {
 		[
+			"hermit-builtins".as_ref(),
 			self.target_dir(),
 			self.arch.hermit_triple().as_ref(),
 			"release".as_ref(),
