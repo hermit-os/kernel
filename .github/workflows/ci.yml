@@ -253,7 +253,7 @@ jobs:
             -netdev user,id=u1,hostfwd=udp::8080-:8080,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
           sleep 5
-          echo "exit" | socat -d -d -d - UDP:localhost:8080 -
+          echo "exit" | socat -d -d -d - UDP:localhost:8080
       - name: Build udp tests (release, virtio-net)
         run:
           cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
@@ -266,7 +266,7 @@ jobs:
             -netdev user,id=u1,hostfwd=udp::8080-:8080,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
             -device virtio-net-pci,netdev=u1,disable-legacy=on &
           sleep 5
-          echo "exit" | socat -d -d -d - UDP:localhost:8080 -
+          echo "exit" | socat -d -d -d - UDP:localhost:8080
   
   run-aarch64:
     name: Run Hermit for Rust (aarch64)
