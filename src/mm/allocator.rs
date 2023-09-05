@@ -28,7 +28,7 @@ impl LockedAllocator {
 	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
 		let arena = Span::from_base_size(heap_bottom, heap_size);
 		unsafe {
-			self.0.talc().init(arena);
+			self.0.talc().claim(arena).unwrap();
 		}
 	}
 }
