@@ -412,6 +412,7 @@ jobs:
       uses: dsaltares/fetch-gh-release-asset@1.1.1
       with:
         repo: firecracker-microvm/firecracker
+        version: tags/v1.4.1
         file: firecracker-v1.4.1-x86_64.tgz
         target: 'firecracker-x86_64.tgz'
     - name: Install firecracker
