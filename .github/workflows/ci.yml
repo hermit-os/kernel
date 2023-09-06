@@ -419,7 +419,7 @@ jobs:
         tar xzvf firecracker-x86_64.tgz --one-top-level=fc --strip-components 1
     - name: Build minimal profile (debug)
       run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --package hello_world
-    - name: Test minimal profile
+    - name: Test debug profile (Firecracker)
       run: |
         ./fc/firecracker-v1.4.1-x86_64 --no-api --config-file ./kernel/fc-config.json &
         sleep 1
