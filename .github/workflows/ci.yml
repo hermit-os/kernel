@@ -327,8 +327,6 @@ jobs:
         run:
           cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
       - name: Test httpd with DHCP support (debug, virtio-net)
-        # FIXME: Make test less flaky and remove continue-on-error
-        continue-on-error: true
         run: |
           qemu-system-aarch64 -semihosting \
             -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
@@ -343,8 +341,6 @@ jobs:
         run:
           cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
       - name: Test httpd with DHCP support (release, virtio-net)
-        # FIXME: Make test less flaky and remove continue-on-error
-        continue-on-error: true
         run: |
           qemu-system-aarch64 -semihosting \
             -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \

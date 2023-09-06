@@ -332,9 +332,9 @@ dependencies = [
 
 [[package]]
 name = "hermit-sync"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "645fad6b0a6c72039c4b2741c8f8e82731f47b6773a87b2a74269be8672f9f20"
+checksum = "ff009f072428c6d076906c6ae80b71d6e2adda8e4dc5edba81f3fdb0a74d4e57"
 dependencies = [
  "aarch64-cpu",
  "exclusive_cell",
