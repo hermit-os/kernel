@@ -112,3 +112,12 @@ pub fn mask(int_no: u8) {
 pub fn unmask(int_no: u8) {
 	edit_mask(int_no, false);
 }
+
+/// Disable PIC
+pub fn disable() {
+	unsafe {
+		// Mask all interrupts on both PICs.
+		outb(PIC1_DATA_PORT, 0xFF);
+		outb(PIC2_DATA_PORT, 0xFF);
+	}
+}

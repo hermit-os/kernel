@@ -162,6 +162,10 @@ pub fn boot_processor_init() {
 	pic::init();
 
 	processor::detect_frequency();
+	if !is_uhyve() {
+		// be sure that the PIC is disabled
+		pic::disable();
+	}
 	processor::print_information();
 	unsafe {
 		trace!("Cr0: {:#x}, Cr4: {:#x}", cr0(), cr4());
