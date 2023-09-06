@@ -20,12 +20,12 @@ jobs:
     name: Check
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - uses: taiki-e/install-action@cargo-hack
       - name: Install NASM
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Check each feature
@@ -60,11 +60,11 @@ jobs:
     name: Check docs
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Install NASM
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add aarch64-unknown-none-softfloat
       - uses: Swatinem/rust-cache@v2
@@ -77,11 +77,11 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Install NASM
         run: |
           sudo apt-get update
           sudo apt-get install nasm
-      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Build minimal kernel
@@ -93,11 +93,11 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Install QEMU, NASM
         run: |
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm
-      - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Unit tests
@@ -118,10 +118,6 @@ jobs:
     name: Run Hermit for Rust (x86_64)
     runs-on: ubuntu-latest
     steps:
-      - name: Install QEMU, NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
         with:
@@ -133,8 +129,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: kernel
+      - name: Install QEMU, NASM
+        run: |
+          sudo apt-get update
+          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            kernel
+            kernel/hermit-builtins
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
       - name: Download loader
@@ -297,6 +302,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-aarch64
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            kernel
+            kernel/hermit-builtins
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package rusty_demo --features pci-ids
       - name: Test dev kernel
