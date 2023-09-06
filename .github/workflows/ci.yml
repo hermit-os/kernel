@@ -105,7 +105,7 @@ jobs:
         env:
           RUSTFLAGS: -Awarnings
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
@@ -143,7 +143,7 @@ jobs:
       - name: Build dev profile
         run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
@@ -292,7 +292,7 @@ jobs:
         with:
           path: kernel
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-aarch64
@@ -376,7 +376,7 @@ jobs:
     - name: Build dev profile
       run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit
     - name: Download loader (x86_64)
-      uses: dsaltares/fetch-gh-release-asset@1.1.1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
         repo: hermitcore/rusty-loader
         file: rusty-loader-x86_64
@@ -410,7 +410,7 @@ jobs:
           -kernel rusty-loader-x86_64 \
           -initrd target/x86_64-unknown-hermit/release/rusty_demo
     - name: Download loader (x86_64-fc)
-      uses: dsaltares/fetch-gh-release-asset@1.1.1
+      uses: dsaltares/fetch-gh-release-asset@master
       with:
         repo: hermitcore/rusty-loader
         file: rusty-loader-x86_64-fc
