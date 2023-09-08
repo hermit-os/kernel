@@ -105,7 +105,7 @@ jobs:
         env:
           RUSTFLAGS: -Awarnings
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
@@ -139,16 +139,15 @@ jobs:
           workspaces: |
             .
             kernel
-            kernel/hermit-builtins
-      - name: Build dev profile
-        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-x86_64
       - name: Install virtiofsd
         run: cargo install virtiofsd
+      - name: Build dev profile
+        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
       - name: Test dev profile
         run: |
           mkdir -p foo
@@ -176,8 +175,7 @@ jobs:
             -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
             -initrd target/x86_64-unknown-hermit/release/rusty_demo
       - name: Build httpd with DHCP support (debug, rtl8139)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4,rtl8139
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4,rtl8139
       - name: Test httpd with DHCP support (debug, rtl8139)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -190,8 +188,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (debug, virtio-net)
-        run:
-            cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4
       - name: Test httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -204,8 +201,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release, rtl8139)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4,rtl8139
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4,rtl8139
       - name: Test httpd with DHCP support (release, rtl8139)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -218,8 +214,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4
       - name: Test httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -234,7 +229,6 @@ jobs:
       - name: Build minimal profile
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
       - name: Test minimal profile
-        id: minimal
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
           echo "FREQ = $FREQ"
@@ -250,8 +244,7 @@ jobs:
             || qemu_status=$?
           test $qemu_status -eq 3
       - name: Build udp tests (debug, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
       - name: Test udp profile
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -263,8 +256,7 @@ jobs:
           sleep 5
           echo "exit" | socat -d -d -d - UDP:localhost:9975
       - name: Build udp tests (release, virtio-net)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
       - name: Test udp profile
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -292,7 +284,7 @@ jobs:
         with:
           path: kernel
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@1.1.1
+        uses: dsaltares/fetch-gh-release-asset@master
         with:
           repo: hermitcore/rusty-loader
           file: rusty-loader-aarch64
@@ -324,8 +316,7 @@ jobs:
             -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
             -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/rusty_demo
       - name: Build httpd with DHCP support (debug)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
       - name: Test httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-aarch64 -semihosting \
@@ -338,8 +329,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build httpd with DHCP support (release)
-        run:
-          cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
+        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
       - name: Test httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-aarch64 -semihosting \
@@ -356,10 +346,6 @@ jobs:
     name: Run Hermit for Rust (x86_64 + kvm)
     runs-on: [self-hosted]
     steps:
-    - name: Install QEMU, NASM
-      run: |
-        sudo apt-get update
-        sudo apt-get install qemu-system-x86 nasm
     - name: Checkout hermit-rs
       uses: actions/checkout@v4
       with:
@@ -371,22 +357,43 @@ jobs:
       uses: actions/checkout@v4
       with:
         path: kernel
+    - name: Install QEMU, NASM
+      run: |
+        sudo apt-get update
+        sudo apt-get install qemu-system-x86 nasm
+    - name: Check KVM availability
+      shell: bash
+      run: |
+          lscpu
+          kvm-ok
+    - name: Download loader (x86_64)
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        file: rusty-loader-x86_64
+        repo: hermitcore/rusty-loader
+    - name: Download loader (x86_64-fc)
+      uses: dsaltares/fetch-gh-release-asset@master
+      with:
+        file: rusty-loader-x86_64-fc
+        repo: hermitcore/rusty-loader
+    - name: Install firecracker
+      run: |
+        # https://github.com/firecracker-microvm/firecracker/blob/7c5fc8707f26c4244d48a747631ab0fb31fc4c39/docs/getting-started.md#getting-a-firecracker-binary
+        ARCH="$(uname -m)"
+        release_url="https://github.com/firecracker-microvm/firecracker/releases"
+        latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
+        curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
+        | tar -xz
+        
+        # Rename the binary to "firecracker"
+        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
+        echo "$PWD" >> $GITHUB_PATH
+    - uses: dtolnay/rust-toolchain@stable
+    - run: cargo install uhyve
     - uses: mkroening/rust-toolchain-toml@main
     - uses: Swatinem/rust-cache@v2
     - name: Build dev profile
       run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit
-    - name: Download loader (x86_64)
-      uses: dsaltares/fetch-gh-release-asset@1.1.1
-      with:
-        repo: hermitcore/rusty-loader
-        file: rusty-loader-x86_64
-    - name: Install uhyve
-      run: cargo +stable install --locked uhyve
-    - name: Check KVM availability
-      shell: bash
-      run: |
-         lscpu
-         kvm-ok
     - name: Test debug version (Uhyve)
       run: uhyve --verbose -c 1 target/x86_64-unknown-hermit/debug/rusty_demo
       env:
@@ -409,23 +416,6 @@ jobs:
           -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
           -kernel rusty-loader-x86_64 \
           -initrd target/x86_64-unknown-hermit/release/rusty_demo
-    - name: Download loader (x86_64-fc)
-      uses: dsaltares/fetch-gh-release-asset@1.1.1
-      with:
-        repo: hermitcore/rusty-loader
-        file: rusty-loader-x86_64-fc
-    - name: Install firecracker
-      run: |
-        # https://github.com/firecracker-microvm/firecracker/blob/7c5fc8707f26c4244d48a747631ab0fb31fc4c39/docs/getting-started.md#getting-a-firecracker-binary
-        ARCH="$(uname -m)"
-        release_url="https://github.com/firecracker-microvm/firecracker/releases"
-        latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-        curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
-        | tar -xz
-        
-        # Rename the binary to "firecracker"
-        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
-        echo "$PWD" >> $GITHUB_PATH
     - name: Build minimal profile (debug)
       run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --package hello_world
     - name: Test debug profile (Firecracker)
