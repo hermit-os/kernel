@@ -414,17 +414,19 @@ jobs:
       with:
         repo: hermitcore/rusty-loader
         file: rusty-loader-x86_64-fc
-    - name: Download firecracker
-      uses: dsaltares/fetch-gh-release-asset@1.1.1
-      with:
-        repo: firecracker-microvm/firecracker
-        version: tags/v1.4.1
-        file: firecracker-v1.4.1-x86_64.tgz
-        target: 'firecracker-x86_64.tgz'
     - name: Install firecracker
       run: |
-        tar xzvf firecracker-x86_64.tgz --one-top-level=fc --strip-components 1
+        # https://github.com/firecracker-microvm/firecracker/blob/7c5fc8707f26c4244d48a747631ab0fb31fc4c39/docs/getting-started.md#getting-a-firecracker-binary
+        ARCH="$(uname -m)"
+        release_url="https://github.com/firecracker-microvm/firecracker/releases"
+        latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
+        curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
+        | tar -xz
+        
+        # Rename the binary to "firecracker"
+        mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
+        echo "$PWD" >> $GITHUB_PATH
     - name: Build minimal profile (debug)
       run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --package hello_world
     - name: Test debug profile (Firecracker)
-      run: ./fc/firecracker-v1.4.1-x86_64 --no-api --config-file ./kernel/fc-config.json
+      run: firecracker --no-api --config-file ./kernel/fc-config.json
