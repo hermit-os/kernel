@@ -11,12 +11,16 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::{fmt, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
-use hermit_sync::{without_interrupts, Lazy};
+use hermit_sync::Lazy;
 use qemu_exit::QEMUExit;
 use x86::bits64::segmentation;
 use x86::controlregs::*;
 use x86::cpuid::*;
 use x86::msr::*;
+use x86_64::instructions::interrupts::int3;
+use x86_64::instructions::tables::lidt;
+use x86_64::structures::DescriptorTablePointer;
+use x86_64::VirtAddr;
 
 #[cfg(feature = "acpi")]
 use crate::arch::x86_64::kernel::acpi;
@@ -975,6 +979,23 @@ pub fn halt() {
 	}
 }
 
+/// Causes a triple fault.
+///
+/// Triple faults cause CPU resets.
+/// On KVM, this results in `KVM_EXIT_SHUTDOWN`.
+/// This is the preferred way of shutting down the CPU on firecracker.
+///
+/// See [Triple Faulting the CPU](http://www.rcollins.org/Productivity/TripleFault.html).
+fn triple_fault() -> ! {
+	let idt = DescriptorTablePointer {
+		limit: 0,
+		base: VirtAddr::zero(),
+	};
+	unsafe { lidt(&idt) };
+	int3();
+	unreachable!()
+}
+
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
@@ -994,9 +1015,7 @@ pub fn shutdown() -> ! {
 		Ok(_never) => unreachable!(),
 		Err(()) => {
 			match boot_info().platform_info {
-				PlatformInfo::LinuxBootParams { .. } => without_interrupts(|| loop {
-					halt();
-				}),
+				PlatformInfo::LinuxBootParams { .. } => triple_fault(),
 				PlatformInfo::Multiboot { .. } => {
 					// Try QEMU's debug exit
 					let exit_handler = qemu_exit::X86::new(0xf4, 3);
