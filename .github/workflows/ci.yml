@@ -427,7 +427,4 @@ jobs:
     - name: Build minimal profile (debug)
       run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --package hello_world
     - name: Test debug profile (Firecracker)
-      run: |
-        ./fc/firecracker-v1.4.1-x86_64 --no-api --config-file ./kernel/fc-config.json &
-        sleep 1
-        kill -KILL $(pidof firecracker-v1.4.1-x86_64)
+      run: ./fc/firecracker-v1.4.1-x86_64 --no-api --config-file ./kernel/fc-config.json
