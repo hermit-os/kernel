@@ -997,11 +997,12 @@ pub fn shutdown() -> ! {
 				PlatformInfo::LinuxBootParams { .. } => without_interrupts(|| loop {
 					halt();
 				}),
-				_ => {
+				PlatformInfo::Multiboot { .. } => {
 					// Try QEMU's debug exit
 					let exit_handler = qemu_exit::X86::new(0xf4, 3);
 					exit_handler.exit_success()
 				}
+				PlatformInfo::Uhyve { .. } => todo!(),
 			}
 		}
 	}
