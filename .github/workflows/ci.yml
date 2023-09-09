@@ -422,7 +422,7 @@ jobs:
     - name: Test minimal httpd with DHCP support (debug, virtio-net)
       run: |
         qemu-system-x86_64 -smp 1 -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-          -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
+          -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on \
           -global virtio-mmio.force-legacy=false \
           -nodefaults -no-user-config \
           -display none -m 256M -serial stdio \
@@ -439,7 +439,7 @@ jobs:
     - name: Test minimal httpd with DHCP support (release, virtio-net)
       run: |
         qemu-system-x86_64 -smp 1 -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-          -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
+          -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on \
           -global virtio-mmio.force-legacy=false \
           -nodefaults -no-user-config \
           -display none -m 256M -serial stdio \
