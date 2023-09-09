@@ -227,19 +227,19 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build minimal profile
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world --features acpi
       - name: Test minimal profile
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
           echo "FREQ = $FREQ"
           qemu-system-x86_64 \
-            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on \
-            -global virtio-mmio.force-legacy=on -nodefaults -no-user-config \
+          -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
+            -global virtio-mmio.force-legacy=false \
+            -nodefaults -no-user-config \
             -display none -smp 1 -m 64M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/hello_world \
             -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -append "-freq $FREQ" \
             || qemu_status=$?
           test $qemu_status -eq 3
@@ -248,7 +248,9 @@ jobs:
       - name: Test minimal httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on -global virtio-mmio.force-legacy=on \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
+            -global virtio-mmio.force-legacy=false \
+            -nodefaults -no-user-config \
             -display none -m 256M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/debug/httpd \
@@ -262,7 +264,9 @@ jobs:
       - name: Test minimal httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on -global virtio-mmio.force-legacy=on \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
+            -global virtio-mmio.force-legacy=false \
+            -nodefaults -no-user-config \
             -display none -m 256M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/httpd \
