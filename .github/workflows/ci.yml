@@ -244,7 +244,7 @@ jobs:
             || qemu_status=$?
           test $qemu_status -eq 3
       - name: Build minimal httpd with DHCP support (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,acpi
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,acpi,tcp
       - name: Test minimal httpd with DHCP support (debug, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
@@ -258,7 +258,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build minimal httpd with DHCP support (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,acpi
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,acpi,tcp
       - name: Test minimal httpd with DHCP support (release, virtio-net)
         run: |
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
