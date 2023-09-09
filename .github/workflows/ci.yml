@@ -227,7 +227,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build minimal profile
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world --features acpi
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
       - name: Test minimal profile
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
@@ -245,7 +245,7 @@ jobs:
             || qemu_status=$?
           test $qemu_status -eq 3
       - name: Build minimal httpd with DHCP support (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,acpi,tcp
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,tcp
       - name: Test minimal httpd with DHCP support (debug, virtio-net)
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
@@ -265,7 +265,7 @@ jobs:
             curl http://127.0.0.1:9975/help
             sleep 1
       - name: Build minimal httpd with DHCP support (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,acpi,tcp
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,tcp
       - name: Test minimal httpd with DHCP support (release, virtio-net)
         run: |
           FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
