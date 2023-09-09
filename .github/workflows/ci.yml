@@ -240,6 +240,7 @@ jobs:
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/hello_world \
             -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -append "-freq $FREQ" \
             || qemu_status=$?
           test $qemu_status -eq 3
@@ -247,6 +248,8 @@ jobs:
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,acpi,tcp
       - name: Test minimal httpd with DHCP support (debug, virtio-net)
         run: |
+          FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
+          echo "FREQ = $FREQ"
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
             -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
             -global virtio-mmio.force-legacy=false \
@@ -254,8 +257,10 @@ jobs:
             -display none -m 256M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/debug/httpd \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-device,netdev=u1 &
+            -device virtio-net-device,netdev=u1 \
+            -append "-freq $FREQ" &
             sleep 5
             curl http://127.0.0.1:9975/help
             sleep 1
@@ -263,6 +268,8 @@ jobs:
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,acpi,tcp
       - name: Test minimal httpd with DHCP support (release, virtio-net)
         run: |
+          FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
+          echo "FREQ = $FREQ"
           qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
             -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on,ioapic2=off \
             -global virtio-mmio.force-legacy=false \
@@ -270,8 +277,10 @@ jobs:
             -display none -m 256M -serial stdio \
             -kernel rusty-loader-x86_64 \
             -initrd target/x86_64-unknown-hermit/release/httpd \
+            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
             -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-device,netdev=u1 &
+            -device virtio-net-device,netdev=u1 \
+            -append "-freq $FREQ" &
             sleep 5
             curl http://127.0.0.1:9975/help
             sleep 1
