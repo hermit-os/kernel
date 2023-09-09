@@ -243,6 +243,34 @@ jobs:
             -append "-freq $FREQ" \
             || qemu_status=$?
           test $qemu_status -eq 3
+      - name: Build minimal httpd with DHCP support (debug, virtio-net)
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --no-default-features --features ci,dhcpv4,acpi
+      - name: Test minimal httpd with DHCP support (debug, virtio-net)
+        run: |
+          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on -global virtio-mmio.force-legacy=on \
+            -display none -m 256M -serial stdio \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/debug/httpd \
+            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
+            -device virtio-net-device,netdev=u1 &
+            sleep 5
+            curl http://127.0.0.1:9975/help
+            sleep 1
+      - name: Build minimal httpd with DHCP support (debug, virtio-net)
+        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --no-default-features --features ci,dhcpv4,acpi
+      - name: Test minimal httpd with DHCP support (release, virtio-net)
+        run: |
+          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
+            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on,pcie=on -global virtio-mmio.force-legacy=on \
+            -display none -m 256M -serial stdio \
+            -kernel rusty-loader-x86_64 \
+            -initrd target/x86_64-unknown-hermit/release/httpd \
+            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
+            -device virtio-net-device,netdev=u1 &
+            sleep 5
+            curl http://127.0.0.1:9975/help
+            sleep 1
       - name: Build udp tests (debug, virtio-net)
         run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
       - name: Test udp profile
