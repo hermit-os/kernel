@@ -638,7 +638,6 @@ impl BlockedTaskQueue {
 	pub fn handle_waiting_tasks(&mut self) {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
-		let mut cursor = self.list.cursor_front_mut();
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
 		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
@@ -650,6 +649,7 @@ impl BlockedTaskQueue {
 		}
 
 		// Loop through all blocked tasks.
+		let mut cursor = self.list.cursor_front_mut();
 		while let Some(node) = cursor.current() {
 			// Get the wakeup time of this task and check if we have reached the first task
 			// that hasn't elapsed yet or waits indefinitely.
