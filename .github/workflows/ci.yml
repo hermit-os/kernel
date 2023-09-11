@@ -117,6 +117,9 @@ jobs:
   run-x86_64:
     name: Run Hermit for Rust (x86_64)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kernel
     steps:
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
@@ -125,6 +128,7 @@ jobs:
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
+        working-directory: .
       - name: Checkout hermit-kernel
         uses: actions/checkout@v4
         with:
@@ -149,131 +153,31 @@ jobs:
           file: rusty-loader-x86_64
       - name: Install virtiofsd
         run: cargo install virtiofsd
-      - name: Build dev profile
-        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --features pci-ids
-      - name: Test dev profile
-        run: |
-          mkdir -p foo
-          virtiofsd --socket-path=./vhostqemu --shared-dir ./foo --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
-          qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio \
-            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-            -kernel rusty-loader-x86_64 \
-            -chardev socket,id=char0,path=./vhostqemu \
-            -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
-            -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
-            -initrd target/x86_64-unknown-hermit/debug/rusty_demo
-      - name: Build release profile
-        run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit --release --features pci-ids
-      - name: Test release profile
-        run: |
-          mkdir -p foo
-          virtiofsd --socket-path=./vhostqemu --shared-dir ./foo --announce-submounts --sandbox none --seccomp none --inode-file-handles=never &
-          qemu-system-x86_64 -display none -smp 1 -m 1G -serial stdio \
-            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-            -kernel rusty-loader-x86_64 \
-            -chardev socket,id=char0,path=./vhostqemu \
-            -device vhost-user-fs-pci,queue-size=1024,chardev=char0,tag=root \
-            -object memory-backend-file,id=mem,size=1G,mem-path=/dev/shm,share=on -numa node,memdev=mem \
-            -initrd target/x86_64-unknown-hermit/release/rusty_demo
-      - name: Build httpd with DHCP support (debug, rtl8139)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4,rtl8139
-      - name: Test httpd with DHCP support (debug, rtl8139)
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 128M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/debug/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device rtl8139,netdev=u1 &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
-      - name: Build httpd with DHCP support (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --features ci,dhcpv4
-      - name: Test httpd with DHCP support (debug, virtio-net)
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/debug/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
-      - name: Build httpd with DHCP support (release, rtl8139)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4,rtl8139
-      - name: Test httpd with DHCP support (release, rtl8139)
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 128M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/release/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device rtl8139,netdev=u1 &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
-      - name: Build httpd with DHCP support (release, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package httpd --release --features ci,dhcpv4
-      - name: Test httpd with DHCP support (release, virtio-net)
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/release/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
-      - name: Build minimal profile
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --release --package hello_world
-      - name: Test minimal profile
-        run: |
-          FREQ=`grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F: '{print $2}' | awk '{printf("%d\n",$1 + 0.5)}'`
-          echo "FREQ = $FREQ"
-          qemu-system-x86_64 \
-            -M microvm,x-option-roms=off,pit=off,pic=off,rtc=on \
-            -global virtio-mmio.force-legacy=on -nodefaults -no-user-config \
-            -display none -smp 1 -m 64M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/release/hello_world \
-            -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 \
-            -append "-freq $FREQ" \
-            || qemu_status=$?
-          test $qemu_status -eq 3
-      - name: Build udp tests (debug, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
-      - name: Test udp profile
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/debug/testudp \
-            -netdev user,id=u1,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-          sleep 5
-          echo "exit" | socat -d -d -d - UDP:localhost:9975
-      - name: Build udp tests (release, virtio-net)
-        run: cargo build -Zbuild-std=std,panic_abort --release --target x86_64-unknown-hermit --package testudp --features udp,dhcpv4
-      - name: Test udp profile
-        run: |
-          qemu-system-x86_64 -smp 1 -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-            -device isa-debug-exit,iobase=0xf4,iosize=0x04 -display none -m 512M -serial stdio \
-            -kernel rusty-loader-x86_64 \
-            -initrd target/x86_64-unknown-hermit/release/testudp \
-            -netdev user,id=u1,hostfwd=udp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-          sleep 5
-          echo "exit" | socat -d -d -d - UDP:localhost:9975
+      - name: rusty_demo with pci-ids and virtiofsd
+        run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --features pci-ids --virtiofsd
+      - name: rusty_demo with pci-ids and virtiofsd (release)
+        run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --features pci-ids --virtiofsd --release
+      - name: httpd with virtio-net-pci and dhcpv4
+        run: cargo xtask ci qemu --arch x86_64 --package httpd --features ci,dhcpv4 --netdev virtio-net-pci
+      - name: httpd with virtio-net-pci and dhcpv4 (release)
+        run: cargo xtask ci qemu --arch x86_64 --package httpd --features ci,dhcpv4 --netdev virtio-net-pci --release
+      - name: httpd with rtl8139 and dhcpv4
+        run: cargo xtask ci qemu --arch x86_64 --package httpd --features ci,dhcpv4,rtl8139 --netdev rtl8139
+      - name: httpd with rtl8139 and dhcpv4 (release)
+        run: cargo xtask ci qemu --arch x86_64 --package httpd --features ci,dhcpv4,rtl8139 --netdev rtl8139 --release
+      - name: hello_world on microVM (release)
+        run: cargo xtask ci qemu --arch x86_64 --package hello_world --no-default-features --microvm --release
+      - name: testudp with virtio-net-pci and dhcpv4
+        run: cargo xtask ci qemu --arch x86_64 --package testudp --features udp,dhcpv4 --netdev virtio-net-pci
+      - name: testudp with virtio-net-pci and dhcpv4 (release)
+        run: cargo xtask ci qemu --arch x86_64 --package testudp --features udp,dhcpv4 --netdev virtio-net-pci --release
   
   run-aarch64:
     name: Run Hermit for Rust (aarch64)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kernel
     steps:
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
@@ -282,6 +186,7 @@ jobs:
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
+        working-directory: .
       - name: Checkout hermit-kernel
         uses: actions/checkout@v4
         with:
@@ -305,52 +210,21 @@ jobs:
             .
             kernel
             kernel/hermit-builtins
-      - name: Build dev profile
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package rusty_demo --features pci-ids
-      - name: Test dev kernel
-        run: |
-          qemu-system-aarch64 -semihosting \
-            -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
-            -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/rusty_demo
-      - name: Build release profile
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package rusty_demo --release --features pci-ids
-      - name: Test release kernel
-        run: |
-          qemu-system-aarch64 -semihosting \
-            -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
-            -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/rusty_demo
-      - name: Build httpd with DHCP support (debug)
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --features ci,dhcpv4
-      - name: Test httpd with DHCP support (debug, virtio-net)
-        run: |
-          qemu-system-aarch64 -semihosting \
-            -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
-            -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/debug/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
-      - name: Build httpd with DHCP support (release)
-        run: cargo build -Zbuild-std=std,panic_abort --target aarch64-unknown-hermit --package httpd --release --features ci,dhcpv4
-      - name: Test httpd with DHCP support (release, virtio-net)
-        run: |
-          qemu-system-aarch64 -semihosting \
-            -kernel rusty-loader-aarch64 -machine virt,gic-version=3 \
-            -m 512M -cpu cortex-a72 -smp 1 -display none -serial stdio \
-            -device guest-loader,addr=0x48000000,initrd=target/aarch64-unknown-hermit/release/httpd \
-            -netdev user,id=u1,hostfwd=tcp::9975-:9975,net=192.168.76.0/24,dhcpstart=192.168.76.9 \
-            -device virtio-net-pci,netdev=u1,disable-legacy=on &
-            sleep 5
-            curl http://127.0.0.1:9975/help
-            sleep 1
+      - name: rusty_demo with pci-ids
+        run: cargo xtask ci qemu --arch aarch64 --package rusty_demo --features pci-ids
+      - name: rusty_demo with pci-ids (release)
+        run: cargo xtask ci qemu --arch aarch64 --package rusty_demo --features pci-ids --release
+      - name: httpd with dhcpv4
+        run: cargo xtask ci qemu --arch aarch64 --package httpd --features ci,dhcpv4 --netdev virtio-net-pci
+      - name: httpd with dhcpv4 (release)
+        run: cargo xtask ci qemu --arch aarch64 --package httpd --features ci,dhcpv4 --netdev virtio-net-pci --release
 
   run-x86_64-kvm:
     name: Run Hermit for Rust (x86_64 + kvm)
     runs-on: [self-hosted]
+    defaults:
+      run:
+        working-directory: kernel
     steps:
     - name: Checkout hermit-rs
       uses: actions/checkout@v4
@@ -359,6 +233,7 @@ jobs:
         submodules: true
     - name: Remove hermit-kernel submodule
       run: git rm -r kernel
+      working-directory: .
     - name: Checkout hermit-kernel
       uses: actions/checkout@v4
       with:
@@ -401,31 +276,13 @@ jobs:
       with:
         toolchain-file: 'kernel/rust-toolchain.toml'
     - uses: Swatinem/rust-cache@v2
-    - name: Build dev profile
-      run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit
-    - name: Test debug version (Uhyve)
-      run: uhyve --verbose -c 1 target/x86_64-unknown-hermit/debug/rusty_demo
-      env:
-        RUST_LOG: debug
-    - name: Test debug profile (Qemu)
-      run: |
-        qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
-          -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-          -kernel rusty-loader-x86_64 \
-          -initrd target/x86_64-unknown-hermit/debug/rusty_demo
-    - name: Build release profile
-      run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --package rusty_demo --release
-    - name: Test release version (Uhyve)
-      run: uhyve --verbose -c 1 target/x86_64-unknown-hermit/release/rusty_demo
-      env:
-        RUST_LOG: debug
-    - name: Test release profile (Qemu)
-      run: |
-        qemu-system-x86_64 -display none -smp 1 -m 128M -serial stdio \
-          -enable-kvm -cpu qemu64,apic,fsgsbase,rdtscp,xsave,xsaveopt,fxsr,rdrand \
-          -kernel rusty-loader-x86_64 \
-          -initrd target/x86_64-unknown-hermit/release/rusty_demo
-    - name: Build minimal profile (debug)
-      run: cargo build -Zbuild-std=std,panic_abort --target x86_64-unknown-hermit --no-default-features --package hello_world
-    - name: Test debug profile (Firecracker)
-      run: firecracker --no-api --config-file ./kernel/fc-config.json
+    - name: rusty_demo on Uhyve
+      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo
+    - name: rusty_demo on Uhyve (release)
+      run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo --release
+    - name: rusty_demo on QEMU (with KVM)
+      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel
+    - name: rusty_demo on QEMU (with KVM, release)
+      run: cargo xtask ci qemu --arch x86_64 --package rusty_demo --accel --release
+    - name: hello_world on Firecracker
+      run: cargo xtask ci firecracker --arch x86_64 --package hello_world --no-default-features

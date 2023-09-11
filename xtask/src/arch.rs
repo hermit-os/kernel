@@ -1,32 +1,34 @@
-use std::str::FromStr;
+use clap::ValueEnum;
 
-use anyhow::anyhow;
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// Target architecture.
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
+#[value(rename_all = "snake_case")]
 pub enum Arch {
+	/// x86-64
 	X86_64,
-	AArch64,
+	/// AArch64
+	Aarch64,
 }
 
 impl Arch {
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",
-			Self::AArch64 => "aarch64",
+			Self::Aarch64 => "aarch64",
 		}
 	}
 
 	pub fn triple(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64-unknown-none",
-			Self::AArch64 => "aarch64-unknown-none-softfloat",
+			Self::Aarch64 => "aarch64-unknown-none-softfloat",
 		}
 	}
 
 	pub fn hermit_triple(&self) -> &'static str {
 		match self {
 			Arch::X86_64 => "x86_64-unknown-hermit",
-			Arch::AArch64 => "aarch64-unknown-hermit",
+			Arch::Aarch64 => "aarch64-unknown-hermit",
 		}
 	}
 
@@ -37,7 +39,7 @@ impl Arch {
 				"-Zbuild-std=core",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
-			Arch::AArch64 => &[
+			Arch::Aarch64 => &[
 				"--target=aarch64-unknown-hermit",
 				"-Zbuild-std=core",
 				"-Zbuild-std-features=compiler-builtins-mem",
@@ -48,7 +50,7 @@ impl Arch {
 	pub fn cargo_args(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &["--target=x86_64-unknown-none"],
-			Self::AArch64 => &[
+			Self::Aarch64 => &[
 				"--target=aarch64-unknown-none-softfloat",
 				// We can't use prebuilt std for aarch64 because it is built with
 				// relocation-model=static and we need relocation-model=pic
@@ -58,22 +60,23 @@ impl Arch {
 		}
 	}
 
+	pub fn ci_cargo_args(&self) -> &'static [&'static str] {
+		match self {
+			Arch::X86_64 => &[
+				"--target=x86_64-unknown-hermit",
+				"-Zbuild-std=std,panic_abort",
+			],
+			Arch::Aarch64 => &[
+				"--target=aarch64-unknown-hermit",
+				"-Zbuild-std=std,panic_abort",
+			],
+		}
+	}
+
 	pub fn rustflags(&self) -> &'static [&'static str] {
 		match self {
 			Self::X86_64 => &[],
-			Self::AArch64 => &["-Crelocation-model=pic"],
-		}
-	}
-}
-
-impl FromStr for Arch {
-	type Err = anyhow::Error;
-
-	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		match s {
-			"x86_64" => Ok(Self::X86_64),
-			"aarch64" => Ok(Self::AArch64),
-			s => Err(anyhow!("Unsupported arch: {s}")),
+			Self::Aarch64 => &["-Crelocation-model=pic"],
 		}
 	}
 }
