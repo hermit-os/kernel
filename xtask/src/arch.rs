@@ -27,19 +27,19 @@ impl Arch {
 
 	pub fn hermit_triple(&self) -> &'static str {
 		match self {
-			Arch::X86_64 => "x86_64-unknown-hermit",
-			Arch::Aarch64 => "aarch64-unknown-hermit",
+			Self::X86_64 => "x86_64-unknown-hermit",
+			Self::Aarch64 => "aarch64-unknown-hermit",
 		}
 	}
 
 	pub fn builtins_cargo_args(&self) -> &'static [&'static str] {
 		match self {
-			Arch::X86_64 => &[
+			Self::X86_64 => &[
 				"--target=x86_64-unknown-hermit",
 				"-Zbuild-std=core",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
-			Arch::Aarch64 => &[
+			Self::Aarch64 => &[
 				"--target=aarch64-unknown-hermit",
 				"-Zbuild-std=core",
 				"-Zbuild-std-features=compiler-builtins-mem",
@@ -62,11 +62,11 @@ impl Arch {
 
 	pub fn ci_cargo_args(&self) -> &'static [&'static str] {
 		match self {
-			Arch::X86_64 => &[
+			Self::X86_64 => &[
 				"--target=x86_64-unknown-hermit",
 				"-Zbuild-std=std,panic_abort",
 			],
-			Arch::Aarch64 => &[
+			Self::Aarch64 => &[
 				"--target=aarch64-unknown-hermit",
 				"-Zbuild-std=std,panic_abort",
 			],
