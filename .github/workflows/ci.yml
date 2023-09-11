@@ -134,6 +134,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
       - uses: mkroening/rust-toolchain-toml@main
+      - uses: mkroening/rust-toolchain-toml@main
+        with:
+          toolchain-file: 'kernel/rust-toolchain.toml'
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
@@ -289,6 +292,9 @@ jobs:
           repo: hermitcore/rusty-loader
           file: rusty-loader-aarch64
       - uses: mkroening/rust-toolchain-toml@main
+      - uses: mkroening/rust-toolchain-toml@main
+        with:
+          toolchain-file: 'kernel/rust-toolchain.toml'
       - name: Install QEMU
         run: |
           sudo apt-get update
@@ -391,6 +397,9 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - run: cargo install uhyve
     - uses: mkroening/rust-toolchain-toml@main
+    - uses: mkroening/rust-toolchain-toml@main
+      with:
+        toolchain-file: 'kernel/rust-toolchain.toml'
     - uses: Swatinem/rust-cache@v2
     - name: Build dev profile
       run: cargo build -Zbuild-std=std,panic_abort --package rusty_demo --target x86_64-unknown-hermit
