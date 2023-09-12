@@ -5,6 +5,8 @@ use core::cell::{Cell, RefCell, RefMut};
 use core::ptr;
 use core::sync::atomic::Ordering;
 
+#[cfg(feature = "smp")]
+use hermit_sync::InterruptTicketMutex;
 use x86_64::registers::model_specific::GsBase;
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::VirtAddr;
@@ -12,6 +14,8 @@ use x86_64::VirtAddr;
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
 use crate::executor::task::AsyncTask;
+#[cfg(feature = "smp")]
+use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 #[repr(C)]
@@ -29,6 +33,9 @@ pub(crate) struct CoreLocal {
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
 	async_tasks: RefCell<Vec<AsyncTask>>,
+	/// Queues to handle incoming requests from the other cores
+	#[cfg(feature = "smp")]
+	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
 }
 
 impl CoreLocal {
@@ -52,6 +59,8 @@ impl CoreLocal {
 			kernel_stack: Cell::new(0),
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
+			#[cfg(feature = "smp")]
+			scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 		};
 		let this = if core_id == 0 {
 			take_static::take_static! {

@@ -35,7 +35,7 @@ static TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 pub type CoreId = u32;
 
 #[cfg(feature = "smp")]
-struct SchedulerInput {
+pub struct SchedulerInput {
 	/// Queue of new tasks
 	new_tasks: VecDeque<NewTask>,
 	/// Queue of task, which are wakeup by another core
@@ -74,9 +74,6 @@ pub struct PerCoreScheduler {
 	finished_tasks: VecDeque<Rc<RefCell<Task>>>,
 	/// Queue of blocked tasks, sorted by wakeup time.
 	blocked_tasks: BlockedTaskQueue,
-	/// Queues to handle incoming requests from the other cores
-	#[cfg(feature = "smp")]
-	input: InterruptTicketMutex<SchedulerInput>,
 }
 
 struct NewTask {
@@ -447,7 +444,7 @@ impl PerCoreScheduler {
 
 	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
 	pub fn check_input(&mut self) {
-		let mut input_locked = self.input.lock();
+		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
 		while let Some(task) = input_locked.wakeup_tasks.pop_front() {
 			self.blocked_tasks.custom_wakeup(task);
@@ -689,18 +686,16 @@ pub fn add_current_core() {
 		ready_queue: PriorityTaskQueue::new(),
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
-		#[cfg(feature = "smp")]
-		input: InterruptTicketMutex::new(SchedulerInput::new()),
 	});
 
 	let scheduler = Box::into_raw(boxed_scheduler);
 	set_core_scheduler(scheduler);
 	#[cfg(feature = "smp")]
 	{
-		let scheduler = unsafe { scheduler.as_ref().unwrap() };
-		SCHEDULER_INPUTS
-			.lock()
-			.insert(core_id.try_into().unwrap(), &scheduler.input);
+		SCHEDULER_INPUTS.lock().insert(
+			core_id.try_into().unwrap(),
+			&CoreLocal::get().scheduler_input,
+		);
 	}
 }
 
