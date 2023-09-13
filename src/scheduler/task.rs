@@ -609,12 +609,14 @@ impl BlockedTaskQueue {
 					);
 				}
 
-				break;
+				return;
 			}
 
 			first_task = false;
 			cursor.move_next();
 		}
+
+		unreachable!();
 	}
 
 	/// Wakes up all tasks whose wakeup time has elapsed.
