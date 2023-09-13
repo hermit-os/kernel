@@ -293,19 +293,27 @@ impl PerCoreScheduler {
 	pub fn handle_waiting_tasks(&mut self) {
 		without_interrupts(|| {
 			crate::executor::run();
-			self.blocked_tasks.handle_waiting_tasks();
+			for task in self.blocked_tasks.handle_waiting_tasks() {
+				self.ready_queue.push(task);
+			}
 		});
 	}
 
 	#[cfg(not(feature = "smp"))]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
-		without_interrupts(|| self.blocked_tasks.custom_wakeup(task));
+		without_interrupts(|| {
+			let task = self.blocked_tasks.custom_wakeup(task);
+			self.ready_queue.push(task);
+		});
 	}
 
 	#[cfg(feature = "smp")]
 	pub fn custom_wakeup(&mut self, task: TaskHandle) {
 		if task.get_core_id() == self.core_id {
-			without_interrupts(|| self.blocked_tasks.custom_wakeup(task));
+			without_interrupts(|| {
+				let task = self.blocked_tasks.custom_wakeup(task);
+				self.ready_queue.push(task);
+			});
 		} else {
 			get_scheduler_input(task.get_core_id())
 				.lock()
@@ -447,7 +455,8 @@ impl PerCoreScheduler {
 		let mut input_locked = CoreLocal::get().scheduler_input.lock();
 
 		while let Some(task) = input_locked.wakeup_tasks.pop_front() {
-			self.blocked_tasks.custom_wakeup(task);
+			let task = self.blocked_tasks.custom_wakeup(task);
+			self.ready_queue.push(task);
 		}
 
 		while let Some(new_task) = input_locked.new_tasks.pop_front() {

@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::collections::{LinkedList, VecDeque};
 use alloc::rc::Rc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::cmp::Ordering;
 use core::fmt;
@@ -463,31 +464,26 @@ impl BlockedTaskQueue {
 	}
 
 	fn wakeup_task(task: Rc<RefCell<Task>>) {
-		{
-			let mut borrowed = task.borrow_mut();
-			debug!(
-				"Waking up task {} on core {}",
-				borrowed.id, borrowed.core_id
-			);
+		let mut borrowed = task.borrow_mut();
+		debug!(
+			"Waking up task {} on core {}",
+			borrowed.id, borrowed.core_id
+		);
 
-			assert!(
-				borrowed.core_id == core_id(),
-				"Try to wake up task {} on the wrong core {} != {}",
-				borrowed.id,
-				borrowed.core_id,
-				core_id()
-			);
+		assert!(
+			borrowed.core_id == core_id(),
+			"Try to wake up task {} on the wrong core {} != {}",
+			borrowed.id,
+			borrowed.core_id,
+			core_id()
+		);
 
-			assert!(
-				borrowed.status == TaskStatus::Blocked,
-				"Trying to wake up task {} which is not blocked",
-				borrowed.id
-			);
-			borrowed.status = TaskStatus::Ready;
-		}
-
-		// Add the task to the ready queue.
-		core_scheduler().ready_queue.push(task);
+		assert!(
+			borrowed.status == TaskStatus::Blocked,
+			"Trying to wake up task {} which is not blocked",
+			borrowed.id
+		);
+		borrowed.status = TaskStatus::Ready;
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
@@ -560,7 +556,7 @@ impl BlockedTaskQueue {
 	}
 
 	/// Manually wake up a blocked task.
-	pub fn custom_wakeup(&mut self, task: TaskHandle) {
+	pub fn custom_wakeup(&mut self, task: TaskHandle) -> Rc<RefCell<Task>> {
 		let mut first_task = true;
 		let mut cursor = self.list.cursor_front_mut();
 
@@ -574,8 +570,8 @@ impl BlockedTaskQueue {
 		// Loop through all blocked tasks to find it.
 		while let Some(node) = cursor.current() {
 			if node.task.borrow().id == task.get_id() {
-				// Remove it from the list of blocked tasks and wake it up.
-				Self::wakeup_task(node.task.clone());
+				// Remove it from the list of blocked tasks.
+				let task_ref = node.task.clone();
 				cursor.remove_current();
 
 				// If this is the first task, adjust the One-Shot Timer to fire at the
@@ -609,7 +605,10 @@ impl BlockedTaskQueue {
 					);
 				}
 
-				return;
+				// Wake it up.
+				Self::wakeup_task(task_ref.clone());
+
+				return task_ref;
 			}
 
 			first_task = false;
@@ -623,7 +622,7 @@ impl BlockedTaskQueue {
 	///
 	/// Should be called by the One-Shot Timer interrupt handler when the wakeup time for
 	/// at least one task has elapsed.
-	pub fn handle_waiting_tasks(&mut self) {
+	pub fn handle_waiting_tasks(&mut self) -> Vec<Rc<RefCell<Task>>> {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
 
@@ -636,6 +635,8 @@ impl BlockedTaskQueue {
 			}
 		}
 
+		let mut tasks = vec![];
+
 		// Loop through all blocked tasks.
 		let mut cursor = self.list.cursor_front_mut();
 		while let Some(node) = cursor.current() {
@@ -647,7 +648,7 @@ impl BlockedTaskQueue {
 			}
 
 			// Otherwise, this task has elapsed, so remove it from the list and wake it up.
-			Self::wakeup_task(node.task.clone());
+			tasks.push(node.task.clone());
 			cursor.remove_current();
 		}
 
@@ -675,5 +676,11 @@ impl BlockedTaskQueue {
 				.current()
 				.map_or_else(|| None, |node| node.wakeup_time),
 		);
+
+		for task in tasks.iter().cloned() {
+			Self::wakeup_task(task);
+		}
+
+		tasks
 	}
 }
