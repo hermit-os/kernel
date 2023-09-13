@@ -174,7 +174,7 @@ impl PerCoreScheduler {
 
 	/// Terminate the current task on the current core.
 	pub fn exit(&mut self, exit_code: i32) -> ! {
-		let closure = || {
+		without_interrupts(|| {
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
 			assert_ne!(
@@ -200,9 +200,7 @@ impl PerCoreScheduler {
 					self.custom_wakeup(task);
 				}
 			}
-		};
-
-		without_interrupts(closure);
+		});
 
 		self.reschedule();
 		unreachable!()
