@@ -494,28 +494,14 @@ impl BlockedTaskQueue {
 	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
 		self.network_wakeup_time = wakeup_time;
 
-		match wakeup_time {
-			Some(wt) => {
-				let mut cursor = self.list.cursor_front_mut();
-				if let Some(node) = cursor.current() {
-					if node.wakeup_time.is_none() || wt < node.wakeup_time.unwrap() {
-						arch::set_oneshot_timer(wakeup_time);
-					} else {
-						arch::set_oneshot_timer(node.wakeup_time);
-					}
-				} else {
-					arch::set_oneshot_timer(wakeup_time);
-				}
-			}
-			None => {
-				let mut cursor = self.list.cursor_front_mut();
-				if let Some(node) = cursor.current() {
-					arch::set_oneshot_timer(node.wakeup_time);
-				} else {
-					arch::set_oneshot_timer(None);
-				}
-			}
-		}
+		let next = self.list.front().and_then(|t| t.wakeup_time);
+
+		let time = match (wakeup_time, next) {
+			(Some(a), Some(b)) => Some(a.min(b)),
+			(a, b) => a.or(b),
+		};
+
+		arch::set_oneshot_timer(time);
 	}
 
 	/// Blocks the given task for `wakeup_time` ticks, or indefinitely if None is given.
