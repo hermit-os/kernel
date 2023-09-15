@@ -59,18 +59,18 @@ struct State {
 
 pub struct BootStack {
 	/// stack for kernel tasks
-	stack: VirtAddr,
+	pub stack: VirtAddr,
 	/// stack to handle interrupts
-	ist1: VirtAddr,
+	pub ist1: VirtAddr,
 }
 
 pub struct CommonStack {
 	/// start address of allocated virtual memory region
-	virt_addr: VirtAddr,
+	pub virt_addr: VirtAddr,
 	/// start address of allocated virtual memory region
-	phys_addr: PhysAddr,
+	pub phys_addr: PhysAddr,
 	/// total size of all stacks
-	total_size: usize,
+	pub total_size: usize,
 }
 
 pub enum TaskStacks {
@@ -202,7 +202,7 @@ impl TaskStacks {
 		IST_SIZE
 	}
 }
-
+#[cfg(target_os = "none")]
 impl Drop for TaskStacks {
 	fn drop(&mut self) {
 		// we should never deallocate a boot stack
@@ -366,7 +366,7 @@ extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStack
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
 	core_scheduler().handle_waiting_tasks();
 	apic::eoi();
-	core_scheduler().reschedule();
+	core_scheduler().scheduler();
 }
 
 pub fn install_timer_handler() {

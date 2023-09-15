@@ -645,10 +645,16 @@ fn __set_oneshot_timer(wakeup_time: Option<u64>) {
 	}
 }
 
+#[cfg(target_os = "none")]
 pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 	without_interrupts(|| {
 		__set_oneshot_timer(wakeup_time);
 	});
+}
+
+#[cfg(not(target_os = "none"))]
+pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
+	println!("Mocking : set_oneshot_timer()");
 }
 
 pub fn init_x2apic() {
