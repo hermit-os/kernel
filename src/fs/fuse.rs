@@ -149,7 +149,7 @@ impl PosixFileSystem for Fuse {
 	}
 
 	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError> {
-		let (mut cmd, mut rsp) = create_mkdir(name, mode);
+		let (cmd, mut rsp) = create_mkdir(name, mode);
 
 		get_filesystem_driver()
 			.ok_or(FileError::ENOSYS)?
@@ -231,7 +231,7 @@ impl Fuse {
 	}
 
 	pub fn readlink(&self, nid: u64) -> Result<String, FileError> {
-		let mut len = MAX_READ_LEN as u32;
+		let len = MAX_READ_LEN as u32;
 		let (cmd, mut rsp) = create_readlink(nid, len);
 		get_filesystem_driver()
 			.unwrap()
@@ -318,7 +318,7 @@ impl PosixFile for FuseDir {
 					return Err(FileError::EBADF);
 				};
 
-				let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset as u64);
+				let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset);
 				cmd.header.opcode = Opcode::FUSE_READDIR as u32;
 				if let Some(fs_driver) = get_filesystem_driver() {
 					fs_driver.lock().send_command(cmd.as_ref(), rsp.as_mut());
@@ -682,7 +682,7 @@ fn create_getattr(
 		(*raw).cmd = fuse_getattr_in {
 			getattr_flags: flags,
 			dummy: 0,
-			fh: fh,
+			fh,
 		};
 
 		Box::from_raw(raw)
@@ -1316,22 +1316,24 @@ pub struct fuse_attr {
 
 impl fuse_attr {
 	unsafe fn fill_stat(self, stat: *mut FileAttr) {
-		(*stat).st_dev = 0;
-		(*stat).st_ino = self.ino;
-		(*stat).st_nlink = self.nlink as u64;
-		(*stat).st_mode = self.mode;
-		(*stat).st_uid = self.uid;
-		(*stat).st_gid = self.gid;
-		(*stat).st_rdev = self.rdev as u64;
-		(*stat).st_size = self.size.try_into().unwrap();
-		(*stat).st_blksize = self.blksize as i64;
-		(*stat).st_blocks = self.blocks.try_into().unwrap();
-		(*stat).st_atime = self.atime.try_into().unwrap();
-		(*stat).st_atime_nsec = self.atimensec as i64;
-		(*stat).st_mtime = self.mtime.try_into().unwrap();
-		(*stat).st_mtime_nsec = self.atimensec as i64;
-		(*stat).st_ctime = self.ctime.try_into().unwrap();
-		(*stat).st_ctime_nsec = self.ctimensec as i64;
+		unsafe {
+			(*stat).st_dev = 0;
+			(*stat).st_ino = self.ino;
+			(*stat).st_nlink = self.nlink as u64;
+			(*stat).st_mode = self.mode;
+			(*stat).st_uid = self.uid;
+			(*stat).st_gid = self.gid;
+			(*stat).st_rdev = self.rdev as u64;
+			(*stat).st_size = self.size.try_into().unwrap();
+			(*stat).st_blksize = self.blksize as i64;
+			(*stat).st_blocks = self.blocks.try_into().unwrap();
+			(*stat).st_atime = self.atime.try_into().unwrap();
+			(*stat).st_atime_nsec = self.atimensec as i64;
+			(*stat).st_mtime = self.mtime.try_into().unwrap();
+			(*stat).st_mtime_nsec = self.atimensec as i64;
+			(*stat).st_ctime = self.ctime.try_into().unwrap();
+			(*stat).st_ctime_nsec = self.ctimensec as i64;
+		}
 	}
 }
 

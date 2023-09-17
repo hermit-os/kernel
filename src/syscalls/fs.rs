@@ -43,7 +43,10 @@ use hermit_sync::TicketMutex;
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
 use crate::errno;
+#[cfg(feature = "fs")]
 pub use crate::fs::fuse::fuse_dirent as Dirent;
+#[cfg(not(feature = "fs"))]
+pub struct Dirent;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
 pub static FILESYSTEM: TicketMutex<Filesystem> = TicketMutex::new(Filesystem::new());
@@ -144,6 +147,7 @@ impl Filesystem {
 	}
 
 	/// Similar to open
+	#[allow(dead_code)]
 	pub fn opendir(&mut self, path: &str) -> Result<u64, FileError> {
 		debug!("Opening dir {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
@@ -171,6 +175,7 @@ impl Filesystem {
 	}
 
 	/// Remove directory given by path
+	#[allow(dead_code)]
 	pub fn rmdir(&mut self, path: &str) -> Result<(), FileError> {
 		debug!("Removing directory {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
@@ -179,6 +184,7 @@ impl Filesystem {
 	}
 
 	/// Create directory given by path
+	#[allow(dead_code)]
 	pub fn mkdir(&mut self, path: &str, mode: u32) -> Result<(), FileError> {
 		debug!("Removing directory {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
@@ -187,6 +193,7 @@ impl Filesystem {
 	}
 
 	/// stat
+	#[allow(dead_code)]
 	pub fn stat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
 		debug!("Getting stats {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
@@ -195,6 +202,7 @@ impl Filesystem {
 	}
 
 	/// lstat
+	#[allow(dead_code)]
 	pub fn lstat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
 		debug!("Getting lstats {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;

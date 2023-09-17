@@ -4,7 +4,8 @@ use core::ffi::CStr;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
-use crate::errno::ENOENT;
+#[cfg(not(target_arch = "x86_64"))]
+use crate::errno::ENOSYS;
 use crate::syscalls::fs::{self, FileAttr};
 use crate::{arch, env};
 

@@ -127,8 +127,14 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
+#[cfg(target_arch = "x86_64")]
 extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	SYS.mkdir(name, mode)
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+extern "C" fn __sys_mkdir(_name: *const u8, _mode: u32) -> i32 {
+	-crate::errno::ENOSYS
 }
 
 #[no_mangle]
@@ -136,8 +142,14 @@ pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	kernel_function!(__sys_mkdir(name, mode))
 }
 
+#[cfg(target_arch = "x86_64")]
 extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
 	SYS.rmdir(name)
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+extern "C" fn __sys_rmdir(_name: *const u8) -> i32 {
+	-crate::errno::ENOSYS
 }
 
 #[no_mangle]

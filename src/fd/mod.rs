@@ -13,9 +13,8 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
-#[cfg(all(feature = "tcp", not(feature = "newlib")))]
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
 mod file;
@@ -345,6 +344,7 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 	}
 }
 
+#[allow(unused_variables)]
 pub(crate) fn opendir(name: *const u8) -> Result<FileDescriptor, i32> {
 	if env::is_uhyve() {
 		Err(-EINVAL)
