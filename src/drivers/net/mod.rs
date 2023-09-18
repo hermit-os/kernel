@@ -70,6 +70,8 @@ pub(crate) fn network_irqhandler(_state: &State) -> bool {
 
 #[cfg(target_arch = "x86_64")]
 pub(crate) extern "x86-interrupt" fn network_irqhandler(_stack_frame: ExceptionStackFrame) {
+	use crate::scheduler::PerCoreSchedulerExt;
+
 	debug!("Receive network interrupt");
 	apic::eoi();
 	let _ = _irqhandler();

@@ -56,6 +56,7 @@ use mm::allocator::LockedAllocator;
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
 use crate::kernel::is_uhyve_with_pci;
+use crate::scheduler::PerCoreSchedulerExt;
 pub use crate::syscalls::*;
 
 #[macro_use]

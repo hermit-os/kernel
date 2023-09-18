@@ -14,6 +14,7 @@ use crate::errno::*;
 #[cfg(feature = "newlib")]
 use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
+use crate::scheduler::PerCoreSchedulerExt;
 use crate::syscalls::timer::timespec;
 use crate::{arch, scheduler, syscalls};
 

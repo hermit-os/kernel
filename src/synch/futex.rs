@@ -10,6 +10,7 @@ use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
 use crate::scheduler::task::TaskHandlePriorityQueue;
+use crate::scheduler::PerCoreSchedulerExt;
 
 // TODO: Replace with a concurrent hashmap.
 static PARKING_LOT: InterruptTicketMutex<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =

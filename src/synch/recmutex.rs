@@ -2,6 +2,7 @@ use hermit_sync::TicketMutex;
 
 use crate::arch::core_local::*;
 use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
+use crate::scheduler::PerCoreSchedulerExt;
 
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,

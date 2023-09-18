@@ -76,6 +76,112 @@ pub struct PerCoreScheduler {
 	blocked_tasks: BlockedTaskQueue,
 }
 
+pub trait PerCoreSchedulerExt {
+	/// Triggers the scheduler to reschedule the tasks.
+	/// Interrupt flag will be cleared during the reschedule
+	fn reschedule(self);
+
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	fn add_network_timer(self, wakeup_time: Option<u64>);
+
+	/// Terminate the current task on the current core.
+	fn exit(self, exit_code: i32) -> !;
+}
+
+impl PerCoreSchedulerExt for &mut PerCoreScheduler {
+	#[cfg(target_arch = "x86_64")]
+	fn reschedule(self) {
+		without_interrupts(|| {
+			if let Some(last_stack_pointer) = self.scheduler() {
+				let (new_stack_pointer, is_idle) = {
+					let borrowed = self.current_task.borrow();
+					(
+						borrowed.last_stack_pointer,
+						borrowed.status == TaskStatus::Idle,
+					)
+				};
+
+				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+					unsafe {
+						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				} else {
+					unsafe {
+						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
+					}
+				}
+			}
+		})
+	}
+
+	/// Trigger an interrupt to reschedule the system
+	#[cfg(target_arch = "aarch64")]
+	fn reschedule(self) {
+		use core::arch::asm;
+
+		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
+
+		use crate::interrupts::SGI_RESCHED;
+
+		unsafe {
+			asm!("dsb nsh", "isb", options(nostack, nomem, preserves_flags));
+		}
+
+		let reschedid = IntId::sgi(SGI_RESCHED.into());
+		GicV3::send_sgi(
+			reschedid,
+			SgiTarget::List {
+				affinity3: 0,
+				affinity2: 0,
+				affinity1: 0,
+				target_list: 0b1,
+			},
+		);
+
+		interrupts::enable();
+	}
+
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	fn add_network_timer(self, wakeup_time: Option<u64>) {
+		without_interrupts(|| {
+			self.blocked_tasks.add_network_timer(wakeup_time);
+		})
+	}
+
+	fn exit(self, exit_code: i32) -> ! {
+		without_interrupts(|| {
+			// Get the current task.
+			let mut current_task_borrowed = self.current_task.borrow_mut();
+			assert_ne!(
+				current_task_borrowed.status,
+				TaskStatus::Idle,
+				"Trying to terminate the idle task"
+			);
+
+			// Finish the task and reschedule.
+			debug!(
+				"Finishing task {} with exit code {}",
+				current_task_borrowed.id, exit_code
+			);
+			current_task_borrowed.status = TaskStatus::Finished;
+			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
+
+			let current_id = current_task_borrowed.id;
+			drop(current_task_borrowed);
+
+			// wakeup tasks, which are waiting for task with the identifier id
+			if let Some(mut queue) = WAITING_TASKS.lock().remove(&current_id) {
+				while let Some(task) = queue.pop_front() {
+					self.custom_wakeup(task);
+				}
+			}
+		});
+
+		self.reschedule();
+		unreachable!()
+	}
+}
+
 struct NewTask {
 	tid: TaskId,
 	func: extern "C" fn(usize),
@@ -167,40 +273,6 @@ impl PerCoreScheduler {
 		}
 
 		tid
-	}
-
-	/// Terminate the current task on the current core.
-	pub fn exit(&mut self, exit_code: i32) -> ! {
-		without_interrupts(|| {
-			// Get the current task.
-			let mut current_task_borrowed = self.current_task.borrow_mut();
-			assert_ne!(
-				current_task_borrowed.status,
-				TaskStatus::Idle,
-				"Trying to terminate the idle task"
-			);
-
-			// Finish the task and reschedule.
-			debug!(
-				"Finishing task {} with exit code {}",
-				current_task_borrowed.id, exit_code
-			);
-			current_task_borrowed.status = TaskStatus::Finished;
-			NO_TASKS.fetch_sub(1, Ordering::SeqCst);
-
-			let current_id = current_task_borrowed.id;
-			drop(current_task_borrowed);
-
-			// wakeup tasks, which are waiting for task with the identifier id
-			if let Some(mut queue) = WAITING_TASKS.lock().remove(&current_id) {
-				while let Some(task) = queue.pop_front() {
-					self.custom_wakeup(task);
-				}
-			}
-		});
-
-		self.reschedule();
-		unreachable!()
 	}
 
 	#[cfg(feature = "newlib")]
@@ -332,12 +404,6 @@ impl PerCoreScheduler {
 		});
 	}
 
-	#[cfg(any(feature = "tcp", feature = "udp"))]
-	#[inline]
-	pub fn add_network_timer(&mut self, wakeup_time: Option<u64>) {
-		without_interrupts(|| self.blocked_tasks.add_network_timer(wakeup_time))
-	}
-
 	#[inline]
 	pub fn get_current_task_handle(&self) -> TaskHandle {
 		without_interrupts(|| {
@@ -463,60 +529,6 @@ impl PerCoreScheduler {
 			let task = Rc::new(RefCell::new(Task::from(new_task)));
 			self.ready_queue.push(task.clone());
 		}
-	}
-
-	/// Triggers the scheduler to reschedule the tasks.
-	/// Interrupt flag will be cleared during the reschedule
-	#[cfg(target_arch = "x86_64")]
-	pub fn reschedule(&mut self) {
-		without_interrupts(|| {
-			if let Some(last_stack_pointer) = self.scheduler() {
-				let (new_stack_pointer, is_idle) = {
-					let borrowed = self.current_task.borrow();
-					(
-						borrowed.last_stack_pointer,
-						borrowed.status == TaskStatus::Idle,
-					)
-				};
-
-				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
-					unsafe {
-						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
-					}
-				} else {
-					unsafe {
-						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
-					}
-				}
-			}
-		})
-	}
-
-	/// Trigger an interrupt to reschedule the system
-	#[cfg(target_arch = "aarch64")]
-	pub fn reschedule(&self) {
-		use core::arch::asm;
-
-		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
-
-		use crate::interrupts::SGI_RESCHED;
-
-		unsafe {
-			asm!("dsb nsh", "isb", options(nostack, nomem, preserves_flags));
-		}
-
-		let reschedid = IntId::sgi(SGI_RESCHED.into());
-		GicV3::send_sgi(
-			reschedid,
-			SgiTarget::List {
-				affinity3: 0,
-				affinity2: 0,
-				affinity1: 0,
-				target_list: 0b1,
-			},
-		);
-
-		interrupts::enable();
 	}
 
 	/// Only the idle task should call this function.

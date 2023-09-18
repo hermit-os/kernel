@@ -225,6 +225,8 @@ extern "x86-interrupt" fn spurious_interrupt_handler(stack_frame: interrupts::Ex
 
 #[cfg(feature = "smp")]
 extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStackFrame) {
+	use crate::scheduler::PerCoreSchedulerExt;
+
 	debug!("Received Wakeup Interrupt");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER);
 	let core_scheduler = core_scheduler();

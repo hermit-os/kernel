@@ -16,6 +16,7 @@ use crate::arch::x86_64::mm::{PhysAddr, VirtAddr};
 use crate::config::*;
 use crate::kernel;
 use crate::scheduler::task::{Task, TaskFrame};
+use crate::scheduler::PerCoreSchedulerExt;
 
 #[repr(C, packed)]
 struct State {
