@@ -1,12 +1,11 @@
 use hermit_sync::{InterruptTicketMutexGuard, SpinMutex};
+use lock_api::MutexGuard;
 
 use crate::arch::core_local::core_scheduler;
 use crate::{arch, console};
 
 /// Enables lwIP's printf to print a whole string without being interrupted by
 /// a message from the kernel.
-static CONSOLE_GUARD: SpinMutex<Option<InterruptTicketMutexGuard<'_, console::Console>>> =
-	SpinMutex::new(None);
 
 extern "C" fn __sys_lwip_get_errno() -> i32 {
 	core_scheduler().get_lwip_errno()
@@ -27,9 +26,9 @@ pub extern "C" fn sys_lwip_set_errno(errno: i32) {
 }
 
 extern "C" fn __sys_acquire_putchar_lock() {
-	let mut console_guard = CONSOLE_GUARD.lock();
-	assert!(console_guard.is_none());
-	*console_guard = Some(console::CONSOLE.lock());
+	// FIXME: use core-local storage instead
+	// better yet: remove and replace all of this
+	MutexGuard::leak(console::CONSOLE.lock());
 }
 
 #[no_mangle]
@@ -47,9 +46,9 @@ pub extern "C" fn sys_putchar(character: u8) {
 }
 
 extern "C" fn __sys_release_putchar_lock() {
-	let mut console_guard = CONSOLE_GUARD.lock();
-	assert!(console_guard.is_some());
-	drop(console_guard.take());
+	unsafe {
+		console::CONSOLE.force_unlock();
+	}
 }
 
 #[no_mangle]
