@@ -1,9 +1,8 @@
-use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, VecDeque};
 use alloc::rc::Rc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{RefCell, RefMut};
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
@@ -88,9 +87,9 @@ pub trait PerCoreSchedulerExt {
 	fn exit(self, exit_code: i32) -> !;
 }
 
-impl PerCoreSchedulerExt for &mut PerCoreScheduler {
+impl PerCoreSchedulerExt for RefMut<'_, PerCoreScheduler> {
 	#[cfg(target_arch = "x86_64")]
-	fn reschedule(self) {
+	fn reschedule(mut self) {
 		without_interrupts(|| {
 			if let Some(last_stack_pointer) = self.scheduler() {
 				let (new_stack_pointer, is_idle) = {
@@ -102,10 +101,12 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 				};
 
 				if is_idle || Rc::ptr_eq(&self.current_task, &self.fpu_owner) {
+					drop(self);
 					unsafe {
 						switch_to_fpu_owner(last_stack_pointer, new_stack_pointer.as_usize());
 					}
 				} else {
+					drop(self);
 					unsafe {
 						switch_to_task(last_stack_pointer, new_stack_pointer.as_usize());
 					}
@@ -122,6 +123,8 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 		use arm_gic::gicv3::{GicV3, IntId, SgiTarget};
 
 		use crate::interrupts::SGI_RESCHED;
+
+		drop(self);
 
 		unsafe {
 			asm!("dsb nsh", "isb", options(nostack, nomem, preserves_flags));
@@ -142,13 +145,14 @@ impl PerCoreSchedulerExt for &mut PerCoreScheduler {
 	}
 
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	fn add_network_timer(self, wakeup_time: Option<u64>) {
+	fn add_network_timer(mut self, wakeup_time: Option<u64>) {
 		without_interrupts(|| {
 			self.blocked_tasks.add_network_timer(wakeup_time);
+			drop(self);
 		})
 	}
 
-	fn exit(self, exit_code: i32) -> ! {
+	fn exit(mut self, exit_code: i32) -> ! {
 		without_interrupts(|| {
 			// Get the current task.
 			let mut current_task_borrowed = self.current_task.borrow_mut();
@@ -538,7 +542,7 @@ impl PerCoreScheduler {
 		let backoff = Backoff::new();
 
 		loop {
-			let core_scheduler = core_scheduler();
+			let mut core_scheduler = core_scheduler();
 			interrupts::disable();
 
 			// run async tasks
@@ -548,6 +552,7 @@ impl PerCoreScheduler {
 			core_scheduler.cleanup_tasks();
 
 			if core_scheduler.ready_queue.is_empty() {
+				drop(core_scheduler);
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
 				} else {
@@ -698,7 +703,7 @@ pub fn add_current_core() {
 		"Initializing scheduler for core {} with idle task {}",
 		core_id, tid
 	);
-	let boxed_scheduler = Box::new(PerCoreScheduler {
+	set_core_scheduler(PerCoreScheduler {
 		#[cfg(feature = "smp")]
 		core_id,
 		current_task: idle_task.clone(),
@@ -709,9 +714,6 @@ pub fn add_current_core() {
 		finished_tasks: VecDeque::new(),
 		blocked_tasks: BlockedTaskQueue::new(),
 	});
-
-	let scheduler = Box::into_raw(boxed_scheduler);
-	set_core_scheduler(scheduler);
 	#[cfg(feature = "smp")]
 	{
 		SCHEDULER_INPUTS.lock().insert(
@@ -728,11 +730,9 @@ fn get_scheduler_input(core_id: CoreId) -> &'static InterruptTicketMutex<Schedul
 }
 
 pub fn join(id: TaskId) -> Result<(), ()> {
-	let core_scheduler = core_scheduler();
-
 	debug!(
 		"Task {} is waiting for task {}",
-		core_scheduler.get_current_task_id(),
+		core_scheduler().get_current_task_id(),
 		id
 	);
 
@@ -740,6 +740,7 @@ pub fn join(id: TaskId) -> Result<(), ()> {
 		let mut waiting_tasks_guard = WAITING_TASKS.lock();
 
 		if let Some(queue) = waiting_tasks_guard.get_mut(&id) {
+			let mut core_scheduler = core_scheduler();
 			queue.push_back(core_scheduler.get_current_task_handle());
 			core_scheduler.block_current_task(None);
 

@@ -68,12 +68,12 @@ impl Semaphore {
 	pub fn acquire(&self, time: Option<u64>) -> bool {
 		#[cfg(feature = "smp")]
 		let backoff = Backoff::new();
-		let core_scheduler = core_scheduler();
 
 		let wakeup_time = time.map(|ms| crate::arch::processor::get_timer_ticks() + ms * 1000);
 
 		// Loop until we have acquired the semaphore.
 		loop {
+			let mut core_scheduler = core_scheduler();
 			let mut locked_state = self.state.lock();
 
 			if locked_state.count > 0 {
