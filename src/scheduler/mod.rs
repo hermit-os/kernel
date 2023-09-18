@@ -534,19 +534,20 @@ impl PerCoreScheduler {
 	/// Only the idle task should call this function.
 	/// Set the idle task to halt state if not another
 	/// available.
-	pub fn run(&mut self) -> ! {
+	pub fn run() -> ! {
 		let backoff = Backoff::new();
 
 		loop {
+			let core_scheduler = core_scheduler();
 			interrupts::disable();
 
 			// run async tasks
 			crate::executor::run();
 
 			// do housekeeping
-			self.cleanup_tasks();
+			core_scheduler.cleanup_tasks();
 
-			if self.ready_queue.is_empty() {
+			if core_scheduler.ready_queue.is_empty() {
 				if backoff.is_completed() {
 					interrupts::enable_and_wait();
 				} else {
@@ -555,7 +556,7 @@ impl PerCoreScheduler {
 				}
 			} else {
 				interrupts::enable();
-				self.reschedule();
+				core_scheduler.reschedule();
 				backoff.reset();
 			}
 		}

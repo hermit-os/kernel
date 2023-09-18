@@ -56,7 +56,7 @@ use mm::allocator::LockedAllocator;
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
 use crate::kernel::is_uhyve_with_pci;
-use crate::scheduler::PerCoreSchedulerExt;
+use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 pub use crate::syscalls::*;
 
 #[macro_use]
@@ -343,9 +343,8 @@ fn boot_processor_main() -> ! {
 	// Start the initd task.
 	scheduler::PerCoreScheduler::spawn(initd, 0, scheduler::task::NORMAL_PRIO, 0, USER_STACK_SIZE);
 
-	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	core_scheduler.run();
+	PerCoreScheduler::run();
 }
 
 /// Entry Point of HermitCore for an Application Processor
@@ -359,9 +358,8 @@ fn application_processor_main() -> ! {
 	synch_all_cores();
 	crate::executor::init();
 
-	let core_scheduler = core_scheduler();
 	// Run the scheduler loop.
-	core_scheduler.run();
+	PerCoreScheduler::run();
 }
 
 #[cfg(target_os = "none")]
