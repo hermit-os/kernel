@@ -16,9 +16,8 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::errno::ERRNO;
-use crate::fd::{dup_object, get_object, remove_object, FileDescriptor};
-use crate::syscalls::fs::{Dirent, FileAttr};
+use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor};
+use crate::syscalls::fs::FileAttr;
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -98,24 +97,6 @@ pub(crate) extern "C" fn __sys_shutdown(arg: i32) -> ! {
 #[no_mangle]
 pub extern "C" fn sys_shutdown(arg: i32) -> ! {
 	kernel_function!(__sys_shutdown(arg))
-}
-
-extern "C" fn __sys_get_errno() -> i32 {
-	unsafe { ERRNO }
-}
-
-#[no_mangle]
-pub extern "C" fn sys_get_errno() -> i32 {
-	kernel_function!(__sys_get_errno())
-}
-
-extern "C" fn __sys_set_errno(e: i32) {
-	unsafe { ERRNO = e };
-}
-
-#[no_mangle]
-pub extern "C" fn sys_set_errno(e: i32) {
-	kernel_function!(__sys_set_errno(e))
 }
 
 extern "C" fn __sys_unlink(name: *const u8) -> i32 {
@@ -256,13 +237,15 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
-extern "C" fn __sys_readdir(fd: FileDescriptor) -> *const Dirent {
+extern "C" fn __sys_readdir(fd: FileDescriptor) -> DirectoryEntry {
 	let obj = get_object(fd);
-	obj.map_or(core::ptr::null(), |v| (*v).readdir())
+	obj.map_or(DirectoryEntry::Invalid(-crate::errno::EINVAL), |v| {
+		(*v).readdir()
+	})
 }
 
 #[no_mangle]
-pub extern "C" fn sys_readdir(fd: FileDescriptor) -> *const Dirent {
+pub extern "C" fn sys_readdir(fd: FileDescriptor) -> DirectoryEntry {
 	kernel_function!(__sys_readdir(fd))
 }
 

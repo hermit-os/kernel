@@ -181,6 +181,13 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms
 }
 
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+pub enum DirectoryEntry {
+	Invalid(i32),
+	Valid(*const Dirent),
+}
+
 pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
@@ -217,11 +224,8 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> *const Dirent {
-		unsafe {
-			ERRNO = ENOSYS;
-		}
-		core::ptr::null()
+	fn readdir(&self) -> DirectoryEntry {
+		DirectoryEntry::Invalid(-ENOSYS)
 	}
 
 	/// `mkdir` creates a directory entry

@@ -1,12 +1,11 @@
 use alloc::boxed::Box;
 use core::{isize, slice};
 
-use crate::errno::*;
 use crate::fd::{
-	uhyve_send, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite, UHYVE_PORT_CLOSE,
-	UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
+	uhyve_send, DirectoryEntry, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite,
+	UHYVE_PORT_CLOSE, UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
 };
-use crate::syscalls::fs::{self, Dirent, FileAttr, PosixFile, SeekWhence};
+use crate::syscalls::fs::{self, FileAttr, PosixFile, SeekWhence};
 
 #[derive(Debug, Clone)]
 pub struct UhyveFile(i32);
@@ -114,15 +113,15 @@ impl ObjectInterface for GenericFile {
 		result
 	}
 
-	fn readdir(&self) -> *const Dirent {
+	fn readdir(&self) -> DirectoryEntry {
 		debug!("readdir ! {}", self.0);
 
 		let mut fs = fs::FILESYSTEM.lock();
-		let mut ret: *const Dirent = core::ptr::null();
+		let mut ret = DirectoryEntry::Invalid(-crate::errno::EINVAL);
 		fs.fd_op(self.0, |file: &mut Box<dyn PosixFile + Send>| {
 			match file.readdir() {
-				Ok(dir_ptr) => ret = dir_ptr,
-				Err(e) => unsafe { ERRNO = num::ToPrimitive::to_i32(&e).unwrap() },
+				Ok(dir_ptr) => ret = DirectoryEntry::Valid(dir_ptr),
+				Err(e) => ret = DirectoryEntry::Invalid(-num::ToPrimitive::to_i32(&e).unwrap()),
 			}
 		});
 
