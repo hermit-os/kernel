@@ -42,6 +42,11 @@ use hermit_sync::TicketMutex;
 /// TODO:
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
+use crate::errno;
+#[cfg(feature = "fs")]
+pub use crate::fs::fuse::fuse_dirent as Dirent;
+#[cfg(not(feature = "fs"))]
+pub struct Dirent;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
 pub static FILESYSTEM: TicketMutex<Filesystem> = TicketMutex::new(Filesystem::new());
@@ -96,7 +101,7 @@ impl Filesystem {
 			pathsplit.next(); // empty, since first char is /
 
 			let mount = pathsplit.next().unwrap();
-			let internal_path = pathsplit.next().unwrap();
+			let internal_path = pathsplit.next().unwrap_or("/");
 			if let Some(fs) = self.mounts.get(mount) {
 				return Ok((fs.deref(), internal_path));
 			}
@@ -111,7 +116,7 @@ impl Filesystem {
 			} else {
 				"."
 			};
-			let internal_path = pathsplit.next().unwrap();
+			let internal_path = pathsplit.next().unwrap_or("/");
 
 			debug!(
 				"Assume that the directory '{}' is used as mount point!",
@@ -141,6 +146,15 @@ impl Filesystem {
 		Ok(self.add_file(file))
 	}
 
+	/// Similar to open
+	#[allow(dead_code)]
+	pub fn opendir(&mut self, path: &str) -> Result<u64, FileError> {
+		debug!("Opening dir {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		let file = fs.opendir(internal_path)?;
+		Ok(self.add_file(file))
+	}
+
 	/// Closes a file with given fd.
 	/// If the file is currently open, closes it
 	/// Remove the file from map of open files
@@ -157,6 +171,42 @@ impl Filesystem {
 		debug!("Unlinking file {}", path);
 		let (fs, internal_path) = self.parse_path(path)?;
 		fs.unlink(internal_path)?;
+		Ok(())
+	}
+
+	/// Remove directory given by path
+	#[allow(dead_code)]
+	pub fn rmdir(&mut self, path: &str) -> Result<(), FileError> {
+		debug!("Removing directory {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.rmdir(internal_path)?;
+		Ok(())
+	}
+
+	/// Create directory given by path
+	#[allow(dead_code)]
+	pub fn mkdir(&mut self, path: &str, mode: u32) -> Result<(), FileError> {
+		debug!("Removing directory {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.mkdir(internal_path, mode)?;
+		Ok(())
+	}
+
+	/// stat
+	#[allow(dead_code)]
+	pub fn stat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+		debug!("Getting stats {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.stat(internal_path, stat)?;
+		Ok(())
+	}
+
+	/// lstat
+	#[allow(dead_code)]
+	pub fn lstat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+		debug!("Getting lstats {}", path);
+		let (fs, internal_path) = self.parse_path(path)?;
+		fs.lstat(internal_path, stat)?;
 		Ok(())
 	}
 
@@ -196,19 +246,30 @@ impl Filesystem {
 	}
 }
 
+// TODO: Integrate with src/errno.rs ?
 #[allow(clippy::upper_case_acronyms)]
-#[derive(Debug)]
+#[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum FileError {
-	ENOENT,
-	#[cfg(feature = "fs")]
-	ENOSYS,
-	#[cfg(feature = "fs")]
-	EIO,
+	ENOENT = errno::ENOENT as isize,
+	#[cfg(any(feature = "fs", feature = "pci"))]
+	ENOSYS = errno::ENOSYS as isize,
+	#[cfg(any(feature = "fs", feature = "pci"))]
+	EIO = errno::EIO as isize,
+	#[cfg(feature = "pci")]
+	EBADF = errno::EBADF as isize,
+	#[cfg(feature = "pci")]
+	EISDIR = errno::EISDIR as isize,
 }
 
 pub trait PosixFileSystem {
 	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
+	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError>;
 	fn unlink(&self, _path: &str) -> Result<(), FileError>;
+
+	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
+	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
+	fn stat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
+	fn lstat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
 }
 
 pub trait PosixFile {
@@ -216,6 +277,43 @@ pub trait PosixFile {
 	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError>;
 	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
 	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
+
+	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
+	fn fstat(&self, stat: *mut FileAttr) -> Result<(), FileError>;
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct FileAttr {
+	pub st_dev: u64,
+	pub st_ino: u64,
+	pub st_nlink: u64,
+	pub st_mode: u32,
+	pub st_uid: u32,
+	pub st_gid: u32,
+	pub st_rdev: u64,
+	pub st_size: i64,
+	pub st_blksize: i64,
+	pub st_blocks: i64,
+	pub st_atime: i64,
+	pub st_atime_nsec: i64,
+	pub st_mtime: i64,
+	pub st_mtime_nsec: i64,
+	pub st_ctime: i64,
+	pub st_ctime_nsec: i64,
+}
+
+#[derive(Debug, FromPrimitive, ToPrimitive)]
+pub enum PosixFileType {
+	Unknown = 0,         // DT_UNKNOWN
+	Fifo = 1,            // DT_FIFO
+	CharacterDevice = 2, // DT_CHR
+	Directory = 4,       // DT_DIR
+	BlockDevice = 6,     // DT_BLK
+	RegularFile = 8,     // DT_REG
+	SymbolicLink = 10,   // DT_LNK
+	Socket = 12,         // DT_SOCK
+	Whiteout = 14,       // DT_WHT
 }
 
 // TODO: raw is partially redundant, create nicer interface

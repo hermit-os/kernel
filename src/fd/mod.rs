@@ -13,7 +13,7 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::syscalls::fs::{self, FilePerms, SeekWhence};
+use crate::syscalls::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
@@ -181,6 +181,13 @@ fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
 	perms
 }
 
+#[derive(Copy, Clone, Debug)]
+#[repr(C)]
+pub enum DirectoryEntry {
+	Invalid(i32),
+	Valid(*const Dirent),
+}
+
 pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
@@ -199,8 +206,30 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		(-EINVAL).try_into().unwrap()
 	}
 
-	/// `unlink` removes directory entry
+	/// `fstat`
+	fn fstat(&self, _stat: *mut FileAttr) -> i32 {
+		-EINVAL
+	}
+
+	/// `unlink` removes file entry
 	fn unlink(&self, _name: *const u8) -> i32 {
+		-EINVAL
+	}
+
+	/// `rmdir` removes directory entry
+	fn rmdir(&self, _name: *const u8) -> i32 {
+		-EINVAL
+	}
+
+	/// 'readdir' returns a pointer to a dirent structure
+	/// representing the next directory entry in the directory stream
+	/// pointed to by the file descriptor
+	fn readdir(&self) -> DirectoryEntry {
+		DirectoryEntry::Invalid(-ENOSYS)
+	}
+
+	/// `mkdir` creates a directory entry
+	fn mkdir(&self, _name: *const u8, _mode: u32) -> i32 {
 		-EINVAL
 	}
 
@@ -315,6 +344,37 @@ pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescrip
 			} else {
 				Err(-EINVAL)
 			}
+		}
+	}
+}
+
+#[allow(unused_variables)]
+pub(crate) fn opendir(name: *const u8) -> Result<FileDescriptor, i32> {
+	if env::is_uhyve() {
+		Err(-EINVAL)
+	} else {
+		#[cfg(target_arch = "x86_64")]
+		{
+			let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+			debug!("Open directory {}", name);
+
+			let mut fs = fs::FILESYSTEM.lock();
+			if let Ok(filesystem_fd) = fs.opendir(name) {
+				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+				// Would a GenericDir make sense?
+				let file = GenericFile::new(filesystem_fd);
+				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
+					Err(-EINVAL)
+				} else {
+					Ok(fd as FileDescriptor)
+				}
+			} else {
+				Err(-EINVAL)
+			}
+		}
+		#[cfg(not(target_arch = "x86_64"))]
+		{
+			Err(-ENOSYS)
 		}
 	}
 }
