@@ -29,6 +29,7 @@ use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::get_network_driver;
 use crate::executor::device::HermitNet;
 use crate::executor::{spawn, TaskNotify};
+use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
 	Missing,

@@ -10,6 +10,7 @@ use crate::arch::kernel::core_local::core_scheduler;
 use crate::arch::kernel::processor::get_timer_ticks;
 use crate::errno::{EAGAIN, EINVAL, ETIMEDOUT};
 use crate::scheduler::task::TaskHandlePriorityQueue;
+use crate::scheduler::PerCoreSchedulerExt;
 
 // TODO: Replace with a concurrent hashmap.
 static PARKING_LOT: InterruptTicketMutex<HashMap<usize, TaskHandlePriorityQueue, RandomState>> =
@@ -51,14 +52,15 @@ pub(crate) fn futex_wait(
 		timeout
 	};
 
-	let scheduler = core_scheduler();
+	let mut scheduler = core_scheduler();
 	scheduler.block_current_task(wakeup_time);
 	let handle = scheduler.get_current_task_handle();
 	parking_lot.entry(addr(address)).or_default().push(handle);
 	drop(parking_lot);
+	drop(scheduler);
 
 	loop {
-		scheduler.reschedule();
+		core_scheduler().reschedule();
 
 		let mut parking_lot = PARKING_LOT.lock();
 		if matches!(wakeup_time, Some(t) if t <= get_timer_ticks()) {
@@ -87,7 +89,7 @@ pub(crate) fn futex_wait(
 			} else {
 				// A spurious wakeup occurred, sleep again.
 				// Tasks do not change core, so the handle in the parking lot is still current.
-				scheduler.block_current_task(wakeup_time);
+				core_scheduler().block_current_task(wakeup_time);
 			}
 		}
 		drop(parking_lot);
@@ -120,14 +122,15 @@ pub(crate) fn futex_wait_and_set(
 		timeout
 	};
 
-	let scheduler = core_scheduler();
+	let mut scheduler = core_scheduler();
 	scheduler.block_current_task(wakeup_time);
 	let handle = scheduler.get_current_task_handle();
 	parking_lot.entry(addr(address)).or_default().push(handle);
 	drop(parking_lot);
+	drop(scheduler);
 
 	loop {
-		scheduler.reschedule();
+		core_scheduler().reschedule();
 
 		let mut parking_lot = PARKING_LOT.lock();
 		if matches!(wakeup_time, Some(t) if t <= get_timer_ticks()) {
@@ -156,7 +159,7 @@ pub(crate) fn futex_wait_and_set(
 			} else {
 				// A spurious wakeup occurred, sleep again.
 				// Tasks do not change core, so the handle in the parking lot is still current.
-				scheduler.block_current_task(wakeup_time);
+				core_scheduler().block_current_task(wakeup_time);
 			}
 		}
 		drop(parking_lot);
@@ -177,7 +180,7 @@ pub(crate) fn futex_wake(address: &AtomicU32, count: i32) -> i32 {
 		Entry::Vacant(_) => return 0,
 	};
 
-	let scheduler = core_scheduler();
+	let mut scheduler = core_scheduler();
 	let mut woken = 0;
 	while woken != count || count == i32::MAX {
 		match queue.get_mut().pop() {
@@ -212,7 +215,7 @@ pub(crate) fn futex_wake_or_set(address: &AtomicU32, count: i32, new_value: u32)
 		}
 	};
 
-	let scheduler = core_scheduler();
+	let mut scheduler = core_scheduler();
 	let mut woken = 0;
 	while woken != count || count == i32::MAX {
 		match queue.get_mut().pop() {

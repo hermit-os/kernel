@@ -2,6 +2,7 @@ use hermit_sync::TicketMutex;
 
 use crate::arch::core_local::*;
 use crate::scheduler::task::{TaskHandlePriorityQueue, TaskId};
+use crate::scheduler::PerCoreSchedulerExt;
 
 struct RecursiveMutexState {
 	current_tid: Option<TaskId>,
@@ -26,10 +27,10 @@ impl RecursiveMutex {
 
 	pub fn acquire(&self) {
 		// Get information about the current task.
-		let core_scheduler = core_scheduler();
-		let tid = core_scheduler.get_current_task_id();
+		let tid = core_scheduler().get_current_task_id();
 
 		loop {
+			let mut core_scheduler = core_scheduler();
 			{
 				let mut locked_state = self.state.lock();
 

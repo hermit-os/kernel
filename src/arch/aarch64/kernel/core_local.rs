@@ -1,13 +1,18 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::cell::{Cell, RefCell, RefMut};
+use core::cell::{RefCell, RefMut};
 use core::ptr;
 use core::sync::atomic::Ordering;
+
+#[cfg(feature = "smp")]
+use hermit_sync::InterruptTicketMutex;
 
 use super::interrupts::{IrqStatistics, IRQ_COUNTERS};
 use super::CPU_ONLINE;
 use crate::executor::task::AsyncTask;
+#[cfg(feature = "smp")]
+use crate::scheduler::SchedulerInput;
 use crate::scheduler::{CoreId, PerCoreScheduler};
 
 pub(crate) struct CoreLocal {
@@ -15,11 +20,14 @@ pub(crate) struct CoreLocal {
 	/// ID of the current Core.
 	core_id: CoreId,
 	/// Scheduler of the current Core.
-	scheduler: Cell<*mut PerCoreScheduler>,
+	scheduler: RefCell<Option<PerCoreScheduler>>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
 	async_tasks: RefCell<Vec<AsyncTask>>,
+	/// Queues to handle incoming requests from the other cores
+	#[cfg(feature = "smp")]
+	pub scheduler_input: InterruptTicketMutex<SchedulerInput>,
 }
 
 impl CoreLocal {
@@ -36,9 +44,11 @@ impl CoreLocal {
 		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
-			scheduler: Cell::new(ptr::null_mut()),
+			scheduler: RefCell::new(None),
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
+			#[cfg(feature = "smp")]
+			scheduler_input: InterruptTicketMutex::new(SchedulerInput::new()),
 		};
 		let this = if core_id == 0 {
 			take_static::take_static! {
@@ -81,17 +91,18 @@ pub(crate) fn core_id() -> CoreId {
 	}
 }
 
-#[inline]
-pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *CoreLocal::get().scheduler.get() }
+pub(crate) fn core_scheduler() -> RefMut<'static, PerCoreScheduler> {
+	RefMut::map(CoreLocal::get().scheduler.borrow_mut(), |scheduler| {
+		scheduler.as_mut().unwrap()
+	})
 }
 
 pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
 	CoreLocal::get().async_tasks.borrow_mut()
 }
 
-pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	CoreLocal::get().scheduler.set(scheduler);
+pub(crate) fn set_core_scheduler(scheduler: PerCoreScheduler) {
+	*CoreLocal::get().scheduler.borrow_mut() = Some(scheduler);
 }
 
 pub(crate) fn increment_irq_counter(irq_no: u8) {

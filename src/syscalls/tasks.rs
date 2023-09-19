@@ -14,6 +14,7 @@ use crate::errno::*;
 #[cfg(feature = "newlib")]
 use crate::mm::{task_heap_end, task_heap_start};
 use crate::scheduler::task::{Priority, TaskHandle, TaskId};
+use crate::scheduler::PerCoreSchedulerExt;
 use crate::syscalls::timer::timespec;
 use crate::{arch, scheduler, syscalls};
 
@@ -115,7 +116,7 @@ pub(crate) extern "C" fn __sys_usleep(usecs: u64) {
 		// Enough time to set a wakeup timer and block the current task.
 		debug!("sys_usleep blocking the task for {} microseconds", usecs);
 		let wakeup_time = arch::processor::get_timer_ticks() + usecs;
-		let core_scheduler = core_scheduler();
+		let mut core_scheduler = core_scheduler();
 		core_scheduler.block_current_task(Some(wakeup_time));
 
 		// Switch to the next task.
@@ -299,7 +300,7 @@ static BLOCKED_TASKS: InterruptTicketMutex<BTreeMap<TaskId, TaskHandle>> =
 
 extern "C" fn __sys_block_current_task(timeout: &Option<u64>) {
 	let wakeup_time = timeout.map(|t| arch::processor::get_timer_ticks() + t * 1000);
-	let core_scheduler = core_scheduler();
+	let mut core_scheduler = core_scheduler();
 	let handle = core_scheduler.get_current_task_handle();
 	let tid = core_scheduler.get_current_task_id();
 
