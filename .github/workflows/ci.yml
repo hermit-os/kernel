@@ -107,7 +107,7 @@ jobs:
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@master
         with:
-          repo: hermitcore/rusty-loader
+          repo: hermit-os/loader
           file: rusty-loader-x86_64
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=rusty-loader-x86_64
@@ -124,7 +124,7 @@ jobs:
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
         with:
-          repository: hermitcore/hermit-rs
+          repository: hermit-os/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
@@ -149,7 +149,7 @@ jobs:
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@master
         with:
-          repo: hermitcore/rusty-loader
+          repo: hermit-os/loader
           file: rusty-loader-x86_64
       - name: Install virtiofsd
         run: cargo install virtiofsd
@@ -182,7 +182,7 @@ jobs:
       - name: Checkout hermit-rs
         uses: actions/checkout@v4
         with:
-          repository: hermitcore/hermit-rs
+          repository: hermit-os/hermit-rs
           submodules: true
       - name: Remove hermit-kernel submodule
         run: git rm -r kernel
@@ -194,7 +194,7 @@ jobs:
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@master
         with:
-          repo: hermitcore/rusty-loader
+          repo: hermit-os/loader
           file: rusty-loader-aarch64
       - uses: mkroening/rust-toolchain-toml@main
       - uses: mkroening/rust-toolchain-toml@main
@@ -229,7 +229,7 @@ jobs:
     - name: Checkout hermit-rs
       uses: actions/checkout@v4
       with:
-        repository: hermitcore/hermit-rs
+        repository: hermit-os/hermit-rs
         submodules: true
     - name: Remove hermit-kernel submodule
       run: git rm -r kernel
@@ -251,12 +251,12 @@ jobs:
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         file: rusty-loader-x86_64
-        repo: hermitcore/rusty-loader
+        repo: hermit-os/loader
     - name: Download loader (x86_64-fc)
       uses: dsaltares/fetch-gh-release-asset@master
       with:
         file: rusty-loader-x86_64-fc
-        repo: hermitcore/rusty-loader
+        repo: hermit-os/loader
     - name: Install firecracker
       run: |
         # https://github.com/firecracker-microvm/firecracker/blob/7c5fc8707f26c4244d48a747631ab0fb31fc4c39/docs/getting-started.md#getting-a-firecracker-binary

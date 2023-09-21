@@ -510,7 +510,7 @@ where
 	/// Returns the next subtable for the given page in the page table hierarchy.
 	///
 	/// Must only be called if a page of this size is mapped in a subtable!
-	// FIXME: https://github.com/hermitcore/kernel/issues/771
+	// FIXME: https://github.com/hermit-os/kernel/issues/771
 	#[allow(clippy::mut_from_ref)]
 	fn subtable<S: PageSize>(&self, page: Page<S>) -> &mut PageTable<L::SubtableLevel> {
 		assert!(L::LEVEL < S::MAP_LEVEL);

@@ -78,7 +78,7 @@ impl Build {
 			.unwrap_or_default();
 
 		// TODO: Re-enable mutable-noalias
-		// https://github.com/hermitcore/kernel/issues/200
+		// https://github.com/hermit-os/kernel/issues/200
 		rustflags.push("-Zmutable-noalias=no");
 
 		if self.instrument_mcount {

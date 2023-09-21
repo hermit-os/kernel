@@ -1,12 +1,12 @@
-<img width="256" align="right" src="https://github.com/hermitcore/.github/blob/main/img/Hermit.svg" />
+<img width="256" align="right" src="https://github.com/hermit-os/.github/blob/main/img/Hermit.svg" />
 
 # Hermit Kernel
 
-[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermitcore.github.io/kernel/hermit/)
+[![Documentation](https://img.shields.io/badge/docs-latest-blue.svg)](https://hermit-os.github.io/kernel/hermit/)
 ![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)
 [![Zulip Badge](https://img.shields.io/badge/chat-hermit-57A37C?logo=zulip)](https://hermit.zulipchat.com/)
 
-This is the kernel of the [Hermit](https://github.com/hermitcore) unikernel project.
+This is the kernel of the [Hermit](https://github.com/hermit-os) unikernel project.
 
 ## Requirements
 
@@ -17,8 +17,8 @@ This is the kernel of the [Hermit](https://github.com/hermitcore) unikernel proj
 
 Usually the kernel will be linked as static library to your applications.
 
-- **Rust applications:** Instructions can be found in the [hermit-rs](https://github.com/hermitcore/hermit-rs) repository.
-- **For C/C++ applications:** Instructions can be found in the [hermit-playground](https://github.com/hermitcore/hermit-playground) repository.
+- **Rust applications:** Instructions can be found in the [hermit-rs](https://github.com/hermit-os/hermit-rs) repository.
+- **For C/C++ applications:** Instructions can be found in the [hermit-playground](https://github.com/hermit-os/hermit-playground) repository.
  
 
 ### Standalone static library build
@@ -68,5 +68,5 @@ at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
 
-The kernel is being developed on [hermitcore/kernel](https://github.com/hermitcore/kernel).
+The kernel is being developed on [hermit-os/kernel](https://github.com/hermit-os/kernel).
 Create your own fork, send us a pull request, and chat with us on [Zulip](https://hermit.zulipchat.com/).
