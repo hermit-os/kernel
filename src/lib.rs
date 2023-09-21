@@ -1,4 +1,4 @@
-//! First version is derived and adapted for HermitCore from
+//! First version is derived and adapted for Hermit from
 //! Philipp Oppermann's excellent series of blog posts (<http://blog.phil-opp.com/>)
 //! and Eric Kidd's toy OS (<https://github.com/emk/toyos-rs>).
 
@@ -258,9 +258,9 @@ extern "C" fn initd(_arg: usize) {
 			init_rtl8139_netif(processor::get_frequency() as u32);
 		}
 
-		info!("HermitCore is running on common system!");
+		info!("Hermit is running on common system!");
 	} else {
-		info!("HermitCore is running on uhyve!");
+		info!("Hermit is running on uhyve!");
 	}
 
 	// Initialize Drivers
@@ -299,7 +299,7 @@ fn synch_all_cores() {
 	}
 }
 
-/// Entry Point of HermitCore for the Boot Processor
+/// Entry Point of Hermit for the Boot Processor
 #[cfg(target_os = "none")]
 fn boot_processor_main() -> ! {
 	// Initialize the kernel and hardware.
@@ -308,7 +308,7 @@ fn boot_processor_main() -> ! {
 		logging::init();
 	}
 
-	info!("Welcome to HermitCore-rs {}", env!("CARGO_PKG_VERSION"));
+	info!("Welcome to Hermit {}", env!("CARGO_PKG_VERSION"));
 	info!("Kernel starts at {:p}", env::get_base_address());
 
 	extern "C" {
@@ -349,7 +349,7 @@ fn boot_processor_main() -> ! {
 	PerCoreScheduler::run();
 }
 
-/// Entry Point of HermitCore for an Application Processor
+/// Entry Point of Hermit for an Application Processor
 #[cfg(all(target_os = "none", feature = "smp"))]
 fn application_processor_main() -> ! {
 	arch::application_processor_init();

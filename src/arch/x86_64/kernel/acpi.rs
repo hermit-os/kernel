@@ -468,7 +468,7 @@ pub fn poweroff() -> Result<Infallible, ()> {
 pub fn init() {
 	// Detect the RSDP and get a pointer to either the XSDT (64-bit) or RSDT (32-bit), whichever is available.
 	// Both are called RSDT in the following.
-	let rsdp = detect_acpi().expect("HermitCore requires an ACPI-compliant system");
+	let rsdp = detect_acpi().expect("Hermit requires an ACPI-compliant system");
 	let rsdt_physical_address = if rsdp.revision >= 2 {
 		PhysAddr(rsdp.xsdt_physical_address)
 	} else {

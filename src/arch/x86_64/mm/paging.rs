@@ -227,7 +227,7 @@ pub fn init_page_tables() {
 		// Uhyve identity-maps the first Gibibyte of memory (512 page table entries * 2MiB pages)
 		// We now unmap all memory after the kernel image, so that we can remap it ourselves later for the heap.
 		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
-		// See https://github.com/hermitcore/uhyve/issues/426
+		// See https://github.com/hermit-os/uhyve/issues/426
 		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
 		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
 		let end_page = Page::from_page_table_indices_2mib(

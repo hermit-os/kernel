@@ -7,7 +7,7 @@ use crate::arch;
 pub struct Console(());
 
 /// A collection of methods that are required to format
-/// a message to HermitCore's console.
+/// a message to Hermit's console.
 impl fmt::Write for Console {
 	/// Print a string of characters.
 	#[inline]

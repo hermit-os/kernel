@@ -28,7 +28,7 @@ struct Cli {
 	args: Vec<String>,
 }
 
-/// Whether HermitCore is running under the "uhyve" hypervisor.
+/// Whether Hermit is running under the "uhyve" hypervisor.
 pub fn is_uhyve() -> bool {
 	matches!(boot_info().platform_info, PlatformInfo::Uhyve { .. })
 }

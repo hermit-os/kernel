@@ -23,7 +23,7 @@ impl Clippy {
 				.arg("--features=acpi,fsgsbase,pci,smp,vga")
 				.run()?;
 			// TODO: Enable clippy for newlib
-			// https://github.com/hermitcore/kernel/issues/470
+			// https://github.com/hermit-os/kernel/issues/470
 			// cmd!(sh, "cargo clippy {target_args...}")
 			// 	.arg("--no-default-features")
 			// 	.arg("--features=acpi,fsgsbase,newlib,smp,vga")

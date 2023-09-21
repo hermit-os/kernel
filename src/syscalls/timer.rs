@@ -65,7 +65,7 @@ extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 
 	match clock_id {
 		CLOCK_REALTIME | CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID | CLOCK_MONOTONIC => {
-			// All clocks in HermitCore have 1 microsecond resolution.
+			// All clocks in Hermit have 1 microsecond resolution.
 			microseconds_to_timespec(1, result);
 			0
 		}

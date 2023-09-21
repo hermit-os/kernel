@@ -579,7 +579,7 @@ fn calibrate_timer() {
 	// The APIC Timer is used to provide a one-shot interrupt for the tickless timer
 	// implemented through processor::get_timer_ticks.
 	// Therefore determine a counter value for 1 microsecond, which is the resolution
-	// used throughout all of HermitCore. Wait 30ms for accuracy.
+	// used throughout all of Hermit. Wait 30ms for accuracy.
 	let microseconds = 30_000;
 
 	// Be sure that all interrupts for calibration accuracy and initialize the counter are disabled.
