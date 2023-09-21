@@ -1,4 +1,4 @@
-//! Implementation of the HermitCore Allocator for dynamically allocating heap memory
+//! Implementation of the Hermit Allocator for dynamically allocating heap memory
 //! in the kernel.
 
 use core::alloc::{GlobalAlloc, Layout};

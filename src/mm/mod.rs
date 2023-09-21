@@ -110,7 +110,7 @@ pub(crate) fn init() {
 
 	#[cfg(feature = "newlib")]
 	{
-		info!("An application with a C-based runtime is running on top of HermitCore!");
+		info!("An application with a C-based runtime is running on top of Hermit!");
 		let kernel_heap_size = 10 * LargePageSize::SIZE as usize;
 
 		unsafe {
@@ -133,7 +133,7 @@ pub(crate) fn init() {
 
 	#[cfg(not(feature = "newlib"))]
 	{
-		info!("A pure Rust application is running on top of HermitCore!");
+		info!("A pure Rust application is running on top of Hermit!");
 
 		// At first, we map only a small part into the heap.
 		// Afterwards, we already use the heap and map the rest into

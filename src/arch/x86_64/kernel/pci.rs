@@ -56,7 +56,7 @@ impl ConfigRegionAccess for PciConfigRegion {
 pub(crate) fn init() {
 	debug!("Scanning PCI Busses 0 to {}", PCI_MAX_BUS_NUMBER - 1);
 
-	// HermitCore only uses PCI for network devices.
+	// Hermit only uses PCI for network devices.
 	// Therefore, multifunction devices as well as additional bridges are not scanned.
 	// We also limit scanning to the first 32 buses.
 	let pci_config = PciConfigRegion::new();

@@ -1,10 +1,10 @@
 ; This is the entry point for the application processors.
-; It is loaded at 0x8000 by HermitCore and filled with parameters.
+; It is loaded at 0x8000 by Hermit and filled with parameters.
 ; It does the switch from Real Mode -> Protected Mode -> Long Mode,
 ; sets up CR3 for this CPU, and then calls into _start.
 ;
 ; In contrast to this self-contained entry point, _start is linked
-; to the rest of HermitCore and thus has access to all exported symbols
+; to the rest of Hermit and thus has access to all exported symbols
 ; (like the actual Rust entry point).
 
 
