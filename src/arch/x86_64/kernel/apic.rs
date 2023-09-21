@@ -682,11 +682,9 @@ pub fn init_next_processor_variables() {
 pub fn boot_application_processors() {
 	use core::hint;
 
-	use include_transformed::include_nasm_bin;
-
 	use super::{raw_boot_info, start};
 
-	let smp_boot_code = include_nasm_bin!("boot.asm");
+	let smp_boot_code = include_bytes!(concat!(core::env!("OUT_DIR"), "/boot.bin"));
 
 	// We shouldn't have any problems fitting the boot code into a single page, but let's better be sure.
 	assert!(

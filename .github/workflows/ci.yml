@@ -22,10 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: taiki-e/install-action@cargo-hack
-      - name: Install NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install nasm
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Check each feature
@@ -38,10 +34,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install nasm
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup component add clippy
       - uses: Swatinem/rust-cache@v2
@@ -61,10 +53,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install nasm
       - uses: mkroening/rust-toolchain-toml@main
       - run: rustup target add aarch64-unknown-none-softfloat
       - uses: Swatinem/rust-cache@v2
@@ -78,10 +66,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install nasm
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Build minimal kernel
@@ -94,10 +78,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install QEMU, NASM
+      - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 nasm
+          sudo apt-get install qemu-system-x86
       - uses: mkroening/rust-toolchain-toml@main
       - uses: Swatinem/rust-cache@v2
       - name: Unit tests
@@ -133,10 +117,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: kernel
-      - name: Install QEMU, NASM
+      - name: Install QEMU
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 nasm libcap-ng-dev libseccomp-dev socat
+          sudo apt-get install qemu-system-x86 libcap-ng-dev libseccomp-dev socat
       - uses: mkroening/rust-toolchain-toml@main
       - uses: mkroening/rust-toolchain-toml@main
         with:
@@ -238,10 +222,10 @@ jobs:
       uses: actions/checkout@v4
       with:
         path: kernel
-    - name: Install QEMU, NASM
+    - name: Install QEMU
       run: |
         sudo apt-get update
-        sudo apt-get install -y --no-install-recommends qemu-system-x86 nasm
+        sudo apt-get install -y --no-install-recommends qemu-system-x86
     - name: Check KVM availability
       shell: bash
       run: |

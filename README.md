@@ -11,7 +11,6 @@ This is the kernel of the [Hermit](https://github.com/hermit-os) unikernel proje
 ## Requirements
 
 * [`rustup`](https://www.rust-lang.org/tools/install)
-* [NASM](https://nasm.us/) (only for SMP on x86_64)
 
 ## Building the kernel
 
