@@ -1118,9 +1118,9 @@ dependencies = [
 
 [[package]]
 name = "talc"
-version = "3.0.1"
+version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1be706e6eccf295514e89645a2a52d93ac93ef1c87cdeb50cffb48ab58e6490"
+checksum = "1900c5f25f6cf628003ca29dea56d5e6db60f3c42490fc043c7bb1737afcd681"
 dependencies = [
  "lock_api",
 ]
