@@ -2,10 +2,11 @@ use core::fmt::Debug;
 use core::ptr;
 
 use x86_64::instructions::tlb;
+use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::mapper::UnmapError;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
+	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
 };
 
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
@@ -65,8 +66,6 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	use x86_64::structures::paging::mapper::Translate;
-
 	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
 	let page_table = unsafe { recursive_page_table() };
 	page_table
@@ -248,13 +247,11 @@ pub fn init_page_tables() {
 }
 
 #[allow(dead_code)]
-unsafe fn disect(virt_addr: x86_64::VirtAddr) {
+unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
-	use x86_64::structures::paging::{Size1GiB, Size4KiB, Translate};
+	use x86_64::structures::paging::{Size1GiB, Size4KiB};
 
-	let recursive_page_table = unsafe { recursive_page_table() };
-
-	match recursive_page_table.translate(virt_addr) {
+	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
 			frame,
 			offset,
@@ -302,7 +299,14 @@ unsafe fn print_page_tables(levels: usize) {
 	assert!((1..=4).contains(&levels));
 
 	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
-		for (i, entry) in table.iter().filter(|entry| !entry.is_unused()).enumerate() {
+		for (i, entry) in table
+			.iter()
+			.enumerate()
+			.filter(|(_i, entry)| !entry.is_unused())
+		{
+			if level != min_level && i >= 1 {
+				break;
+			}
 			let indent = &"        "[0..2 * (4 - level)];
 			println!("{indent}L{level} Entry {i}: {entry:?}",);
 
@@ -316,6 +320,15 @@ unsafe fn print_page_tables(levels: usize) {
 		}
 	}
 
-	let mut recursive_page_table = unsafe { recursive_page_table() };
-	print(recursive_page_table.level_4_table(), 4, 5 - levels);
+	// Recursive
+	// let mut recursive_page_table = unsafe { recursive_page_table() };
+	// let pt = recursive_page_table.level_4_table();
+
+	// Identity mapped
+	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	let level_4_table_ptr =
+		ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
+	let pt = unsafe { &*level_4_table_ptr };
+
+	print(pt, 4, 5 - levels);
 }
