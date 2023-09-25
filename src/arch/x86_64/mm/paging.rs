@@ -2,10 +2,11 @@ use core::fmt::Debug;
 use core::ptr;
 
 use x86_64::instructions::tlb;
+use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::mapper::UnmapError;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
+	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
 };
 
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
@@ -307,6 +308,9 @@ unsafe fn print_page_tables(levels: usize) {
 			.enumerate()
 			.filter(|(_i, entry)| !entry.is_unused())
 		{
+			if level != min_level && i >= 1 {
+				break;
+			}
 			let indent = &"        "[0..2 * (4 - level)];
 			println!("{indent}L{level} Entry {i}: {entry:?}",);
 
@@ -320,6 +324,15 @@ unsafe fn print_page_tables(levels: usize) {
 		}
 	}
 
-	let mut recursive_page_table = unsafe { recursive_page_table() };
-	print(recursive_page_table.level_4_table(), 4, 5 - levels);
+	// Recursive
+	// let mut recursive_page_table = unsafe { recursive_page_table() };
+	// let pt = recursive_page_table.level_4_table();
+
+	// Identity mapped
+	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	let level_4_table_ptr =
+		ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
+	let pt = unsafe { &*level_4_table_ptr };
+
+	print(pt, 4, 5 - levels);
 }
