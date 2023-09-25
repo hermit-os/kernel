@@ -6,7 +6,7 @@ use x86_64::registers::control::Cr3;
 use x86_64::structures::paging::mapper::UnmapError;
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB,
+	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
 };
 
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
@@ -66,8 +66,6 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 
 /// Translate a virtual memory address to a physical one.
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
-	use x86_64::structures::paging::mapper::Translate;
-
 	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
 	let page_table = unsafe { recursive_page_table() };
 	page_table
@@ -249,13 +247,11 @@ pub fn init_page_tables() {
 }
 
 #[allow(dead_code)]
-unsafe fn disect(virt_addr: x86_64::VirtAddr) {
+unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 	use x86_64::structures::paging::mapper::{MappedFrame, TranslateResult};
-	use x86_64::structures::paging::{Size1GiB, Size4KiB, Translate};
+	use x86_64::structures::paging::{Size1GiB, Size4KiB};
 
-	let recursive_page_table = unsafe { recursive_page_table() };
-
-	match recursive_page_table.translate(virt_addr) {
+	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
 			frame,
 			offset,
