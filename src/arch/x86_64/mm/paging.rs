@@ -302,7 +302,11 @@ unsafe fn print_page_tables(levels: usize) {
 	assert!((1..=4).contains(&levels));
 
 	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
-		for (i, entry) in table.iter().filter(|entry| !entry.is_unused()).enumerate() {
+		for (i, entry) in table
+			.iter()
+			.enumerate()
+			.filter(|(_i, entry)| !entry.is_unused())
+		{
 			let indent = &"        "[0..2 * (4 - level)];
 			println!("{indent}L{level} Entry {i}: {entry:?}",);
 
