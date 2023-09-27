@@ -27,10 +27,10 @@ impl RecursiveMutex {
 
 	pub fn acquire(&self) {
 		// Get information about the current task.
-		let tid = core_scheduler().get_current_task_id();
+		let core_scheduler = core_scheduler();
+		let tid = core_scheduler.get_current_task_id();
 
 		loop {
-			let mut core_scheduler = core_scheduler();
 			{
 				let mut locked_state = self.state.lock();
 

@@ -229,7 +229,7 @@ extern "x86-interrupt" fn wakeup_handler(_stack_frame: interrupts::ExceptionStac
 
 	debug!("Received Wakeup Interrupt");
 	increment_irq_counter(WAKEUP_INTERRUPT_NUMBER);
-	let mut core_scheduler = core_scheduler();
+	let core_scheduler = core_scheduler();
 	core_scheduler.check_input();
 	eoi();
 	if core_scheduler.is_scheduling() {
