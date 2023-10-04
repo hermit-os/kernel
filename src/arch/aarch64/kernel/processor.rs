@@ -1,11 +1,10 @@
 use core::arch::asm;
 use core::{fmt, str};
 
-use aarch64::regs::CNTFRQ_EL0;
+use aarch64::regs::{Readable, CNTFRQ_EL0};
 use hermit_dtb::Dtb;
 use hermit_sync::{without_interrupts, Lazy};
 use qemu_exit::QEMUExit;
-use tock_registers::interfaces::Readable;
 
 use crate::arch::aarch64::kernel::boot_info;
 use crate::env;

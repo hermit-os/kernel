@@ -469,7 +469,6 @@ dependencies = [
  "take-static",
  "talc",
  "time",
- "tock-registers",
  "uart_16550",
  "x86",
  "x86_64",

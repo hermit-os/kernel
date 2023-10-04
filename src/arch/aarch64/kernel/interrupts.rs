@@ -9,7 +9,6 @@ use arm_gic::gicv3::{GicV3, IntId, Trigger};
 use hashbrown::HashMap;
 use hermit_dtb::Dtb;
 use hermit_sync::{InterruptSpinMutex, InterruptTicketMutex, OnceCell};
-use tock_registers::interfaces::Readable;
 
 use crate::arch::aarch64::kernel::boot_info;
 use crate::arch::aarch64::kernel::core_local::increment_irq_counter;
