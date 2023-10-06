@@ -1,5 +1,6 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
+use interrupt_ref_cell::{InterruptRefCell, InterruptRefMut};
 use core::arch::asm;
 use core::cell::{RefCell, RefMut};
 use core::ptr;
@@ -20,7 +21,7 @@ pub(crate) struct CoreLocal {
 	/// ID of the current Core.
 	core_id: CoreId,
 	/// Scheduler of the current Core.
-	scheduler: RefCell<Option<PerCoreScheduler>>,
+	scheduler: InterruptRefCell<Option<PerCoreScheduler>>,
 	/// Interface to the interrupt counters
 	irq_statistics: &'static IrqStatistics,
 	/// Queue of async tasks
@@ -44,7 +45,7 @@ impl CoreLocal {
 		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
-			scheduler: RefCell::new(None),
+			scheduler: InterruptRefCell::new(None),
 			irq_statistics,
 			async_tasks: RefCell::new(Vec::new()),
 			#[cfg(feature = "smp")]
@@ -91,8 +92,13 @@ pub(crate) fn core_id() -> CoreId {
 	}
 }
 
-pub(crate) fn core_scheduler() -> RefMut<'static, PerCoreScheduler> {
-	RefMut::map(CoreLocal::get().scheduler.borrow_mut(), |scheduler| {
+#[track_caller]
+pub(crate) fn core_scheduler() -> InterruptRefMut<'static, PerCoreScheduler> {
+	println!("{}", core::panic::Location::caller());
+	if CoreLocal::get().scheduler.try_borrow().is_err() {
+		println!("Oh no");
+	}
+	InterruptRefMut::map(CoreLocal::get().scheduler.borrow_mut(), |scheduler| {
 		scheduler.as_mut().unwrap()
 	})
 }

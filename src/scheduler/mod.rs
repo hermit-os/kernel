@@ -7,6 +7,7 @@ use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
 use hermit_sync::{without_interrupts, *};
+use interrupt_ref_cell::{InterruptRefCell, InterruptRefMut};
 
 use crate::arch;
 use crate::arch::core_local::*;
@@ -87,7 +88,7 @@ pub trait PerCoreSchedulerExt {
 	fn exit(self, exit_code: i32) -> !;
 }
 
-impl PerCoreSchedulerExt for RefMut<'_, PerCoreScheduler> {
+impl PerCoreSchedulerExt for InterruptRefMut<'_, PerCoreScheduler> {
 	#[cfg(target_arch = "x86_64")]
 	fn reschedule(mut self) {
 		without_interrupts(|| {
@@ -366,10 +367,9 @@ impl PerCoreScheduler {
 	}
 
 	#[inline]
-	pub fn handle_waiting_tasks(&mut self) {
+	pub fn handle_waiting_tasks(&mut self, network_wakeup_time: Option<u64>) {
 		without_interrupts(|| {
-			crate::executor::run();
-			for task in self.blocked_tasks.handle_waiting_tasks() {
+			for task in self.blocked_tasks.handle_waiting_tasks(network_wakeup_time) {
 				self.ready_queue.push(task);
 			}
 		});
@@ -576,8 +576,6 @@ impl PerCoreScheduler {
 	/// Triggers the scheduler to reschedule the tasks.
 	/// Interrupt flag must be cleared before calling this function.
 	pub fn scheduler(&mut self) -> Option<*mut usize> {
-		// run background tasks
-		crate::executor::run();
 
 		// Someone wants to give up the CPU
 		// => we have time to cleanup the system

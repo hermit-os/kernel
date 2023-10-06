@@ -451,6 +451,7 @@ dependencies = [
  "hermit-dtb",
  "hermit-entry",
  "hermit-sync",
+ "interrupt-ref-cell",
  "llvm-tools",
  "lock_api",
  "log",
@@ -495,6 +496,13 @@ checksum = "7d20d6b07bfbc108882d88ed8e37d39636dcc260e15e30c45e6ba089610b917c"
 dependencies = [
  "unicode-bidi",
  "unicode-normalization",
+]
+
+[[package]]
+name = "interrupt-ref-cell"
+version = "0.1.0"
+dependencies = [
+ "interrupts",
 ]
 
 [[package]]

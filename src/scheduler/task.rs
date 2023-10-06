@@ -622,18 +622,11 @@ impl BlockedTaskQueue {
 	///
 	/// Should be called by the One-Shot Timer interrupt handler when the wakeup time for
 	/// at least one task has elapsed.
-	pub fn handle_waiting_tasks(&mut self) -> Vec<Rc<RefCell<Task>>> {
+	pub fn handle_waiting_tasks(&mut self, network_time_delay: Option<u64>) -> Vec<Rc<RefCell<Task>>> {
 		// Get the current time.
 		let time = arch::processor::get_timer_ticks();
 
-		#[cfg(any(feature = "tcp", feature = "udp"))]
-		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
-			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
-				let now = crate::executor::network::now();
-				nic.poll_common(now);
-				self.network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
-			}
-		}
+		self.network_wakeup_time = network_time_delay;
 
 		let mut tasks = vec![];
 
