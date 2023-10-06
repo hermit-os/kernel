@@ -24,7 +24,7 @@ pub(crate) struct CoreLocal {
 	/// Sequential ID of this CPU Core.
 	core_id: CoreId,
 	/// Scheduler for this CPU Core.
-	scheduler: Cell<*mut PerCoreScheduler>,
+	scheduler: RefCell<Option<PerCoreScheduler>>,
 	/// Task State Segment (TSS) allocated for this CPU Core.
 	pub tss: Cell<*mut TaskStateSegment>,
 	/// start address of the kernel stack
@@ -54,7 +54,7 @@ impl CoreLocal {
 		let this = Self {
 			this: ptr::null_mut(),
 			core_id,
-			scheduler: Cell::new(ptr::null_mut()),
+			scheduler: RefCell::new(None),
 			tss: Cell::new(ptr::null_mut()),
 			kernel_stack: Cell::new(0),
 			irq_statistics,
@@ -101,16 +101,18 @@ pub(crate) fn core_id() -> CoreId {
 	}
 }
 
-pub(crate) fn core_scheduler() -> &'static mut PerCoreScheduler {
-	unsafe { &mut *CoreLocal::get().scheduler.get() }
+pub(crate) fn core_scheduler() -> RefMut<'static, PerCoreScheduler> {
+	RefMut::map(CoreLocal::get().scheduler.borrow_mut(), |scheduler| {
+		scheduler.as_mut().unwrap()
+	})
 }
 
 pub(crate) fn async_tasks() -> RefMut<'static, Vec<AsyncTask>> {
 	CoreLocal::get().async_tasks.borrow_mut()
 }
 
-pub(crate) fn set_core_scheduler(scheduler: *mut PerCoreScheduler) {
-	CoreLocal::get().scheduler.set(scheduler);
+pub(crate) fn set_core_scheduler(scheduler: PerCoreScheduler) {
+	*CoreLocal::get().scheduler.borrow_mut() = Some(scheduler);
 }
 
 pub(crate) fn increment_irq_counter(irq_no: u8) {
