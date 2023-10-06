@@ -425,6 +425,7 @@ impl<T> Clone for Socket<T> {
 impl<T> Drop for Socket<T> {
 	fn drop(&mut self) {
 		let _ = block_on(self.async_close(), None);
+		NIC.lock().as_nic_mut().unwrap().destroy_socket(self.handle);
 	}
 }
 
