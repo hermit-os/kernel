@@ -215,6 +215,11 @@ impl<'a> NetworkInterface<'a> {
 	) -> (&mut T, &mut smoltcp::iface::Context) {
 		(self.sockets.get_mut(handle), self.iface.context())
 	}
+
+	pub(crate) fn destroy_socket(&mut self, handle: Handle) {
+		// This deallocates the socket's buffers
+		self.sockets.remove(handle);
+	}
 }
 
 #[inline]
