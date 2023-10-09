@@ -1,4 +1,5 @@
-// Platform-specific implementations
+//! Architecture-specific architecture abstraction.
+
 #[cfg(target_arch = "aarch64")]
 pub mod aarch64;
 
