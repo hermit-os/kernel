@@ -10,3 +10,9 @@ pub(crate) fn memory_barrier() {
 		asm!("dmb ish", options(nostack, nomem, preserves_flags),);
 	}
 }
+
+pub fn init_drivers() {
+	// Initialize PCI Drivers
+	#[cfg(feature = "pci")]
+	crate::drivers::pci::init_drivers();
+}
