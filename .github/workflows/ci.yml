@@ -193,7 +193,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.arch }}-${{ matrix.profile }}
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.package == 'rusty_demo' }}
           workspaces: |
             .
             kernel
