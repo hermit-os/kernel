@@ -109,7 +109,7 @@ jobs:
           RUSTFLAGS:
 
   run-hermit:
-    name: Run Hermit for Rust
+    name: Run
     runs-on: ubuntu-latest
     defaults:
       run:
