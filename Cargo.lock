@@ -444,6 +444,7 @@ dependencies = [
  "arm-gic",
  "bit_field",
  "bitflags 2.4.0",
+ "cfg-if",
  "crossbeam-utils",
  "dyn-clone",
  "float-cmp",
