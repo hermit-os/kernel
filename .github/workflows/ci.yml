@@ -192,6 +192,7 @@ jobs:
           toolchain-file: 'kernel/rust-toolchain.toml'
       - uses: Swatinem/rust-cache@v2
         with:
+          key: ${{ matrix.arch }}-${{ matrix.profile }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
