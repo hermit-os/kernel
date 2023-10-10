@@ -41,6 +41,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            hermit-builtins
       - run: cargo xtask clippy
 
   format:
@@ -76,6 +79,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            hermit-builtins
       - name: Build minimal kernel
         run: |
           cargo xtask build --arch x86_64 --no-default-features
@@ -94,6 +100,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+          workspaces: |
+            .
+            hermit-builtins
       - name: Unit tests
         run: cargo test --lib
         env:
@@ -183,10 +192,12 @@ jobs:
           toolchain-file: 'kernel/rust-toolchain.toml'
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          key: ${{ matrix.arch }}-${{ matrix.profile }}
+          save-if: ${{ github.ref == 'refs/heads/main' && matrix.package == 'rusty_demo' }}
           workspaces: |
             .
             kernel
+            kernel/hermit-builtins
       - name: Download loader
         uses: dsaltares/fetch-gh-release-asset@master
         with:
@@ -266,6 +277,10 @@ jobs:
     - uses: Swatinem/rust-cache@v2
       with:
         save-if: ${{ github.ref == 'refs/heads/main' }}
+        workspaces: |
+          .
+          kernel
+          kernel/hermit-builtins
     - name: rusty_demo on Uhyve
       run: cargo xtask ci uhyve --arch x86_64 --package rusty_demo
     - name: rusty_demo on Uhyve (release)
