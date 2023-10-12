@@ -2,6 +2,7 @@
 
 use alloc::boxed::Box;
 use core::arch::asm;
+use core::ops::DerefMut;
 use core::{mem, ptr, slice};
 
 use align_address::Align;
@@ -365,7 +366,23 @@ impl TaskFrame for Task {
 
 extern "x86-interrupt" fn timer_handler(_stack_frame: interrupts::ExceptionStackFrame) {
 	increment_irq_counter(apic::TIMER_INTERRUPT_NUMBER);
-	core_scheduler().handle_waiting_tasks();
+
+
+	let mut network_wakeup_time = None;
+
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+		if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
+			let now = crate::executor::network::now();
+			nic.poll_common(now);
+			let time = crate::arch::processor::get_timer_ticks();
+			network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
+		}
+	}
+
+	crate::executor::run();
+
+	core_scheduler().handle_waiting_tasks(network_wakeup_time);
 	apic::eoi();
 	core_scheduler().reschedule();
 }

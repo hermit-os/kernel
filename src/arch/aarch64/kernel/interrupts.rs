@@ -1,7 +1,8 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::arch::asm;
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::ops::DerefMut;
+use core::sync::atomic::{AtomicU64, Ordering, compiler_fence};
 
 use aarch64::regs::*;
 use ahash::RandomState;
@@ -118,7 +119,20 @@ pub(crate) extern "C" fn do_fiq(state: &State) -> *mut usize {
 			}
 		}
 
-		core_scheduler().handle_waiting_tasks();
+		let mut network_wakeup_time = None;
+
+		#[cfg(any(feature = "tcp", feature = "udp"))]
+		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
+				let now = crate::executor::network::now();
+				nic.poll_common(now);
+				let time = crate::arch::processor::get_timer_ticks();
+				network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
+			}
+		}
+
+		crate::executor::run();
+		core_scheduler().handle_waiting_tasks(network_wakeup_time);
 
 		GicV3::end_interrupt(irqid);
 
@@ -154,9 +168,21 @@ pub(crate) extern "C" fn do_irq(state: &State) -> *mut usize {
 			}
 		}
 
-		core_scheduler().handle_waiting_tasks();
+		let mut network_wakeup_time = None;
 
-		GicV3::end_interrupt(irqid);
+		#[cfg(any(feature = "tcp", feature = "udp"))]
+		if let Some(mut guard) = crate::executor::network::NIC.try_lock() {
+			if let crate::executor::network::NetworkState::Initialized(nic) = guard.deref_mut() {
+				let now = crate::executor::network::now();
+				nic.poll_common(now);
+				let time = crate::arch::processor::get_timer_ticks();
+				network_wakeup_time = nic.poll_delay(now).map(|d| d.total_micros() + time);
+			}
+		}
+
+		crate::executor::run();
+		core_scheduler().handle_waiting_tasks(network_wakeup_time);
+
 
 		if unsafe {
 			reschedule
@@ -164,10 +190,15 @@ pub(crate) extern "C" fn do_irq(state: &State) -> *mut usize {
 				|| vector == SGI_RESCHED.try_into().unwrap()
 		} {
 			// a timer interrupt may have caused unblocking of tasks
-			return core_scheduler()
-				.scheduler()
-				.unwrap_or(core::ptr::null_mut());
+			// run background tasks
+			crate::executor::run();
+			let ret = core_scheduler()
+				.scheduler();
+			compiler_fence(Ordering::SeqCst);
+				GicV3::end_interrupt(irqid);
+				return ret.unwrap_or(core::ptr::null_mut());
 		}
+		GicV3::end_interrupt(irqid);
 	}
 
 	core::ptr::null_mut()
