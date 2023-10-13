@@ -62,6 +62,7 @@ tcp = ["smoltcp", "smoltcp/socket-tcp"]
 udp = ["smoltcp", "smoltcp/socket-udp"]
 trace = []
 vga = []
+fc = []
 
 [dependencies]
 ahash = { version = "0.8", default-features = false }

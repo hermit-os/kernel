@@ -14,8 +14,21 @@ use crate::drivers::virtio::transport::mmio::{DevId, MmioRegisterLayout, VirtioD
 
 pub const MAGIC_VALUE: u32 = 0x74726976;
 
+#[cfg(feature = "fc")]
+pub const MMIO_START: usize = 0x00000000d0000000;
+#[cfg(not(feature = "fc"))]
 pub const MMIO_START: usize = 0x00000000c0000000;
+
+#[cfg(feature = "fc")]
+pub const MMIO_END: usize = 0x00000000ffffffff;
+#[cfg(not(feature = "fc"))]
 pub const MMIO_END: usize = 0x00000000c0000fff;
+
+#[cfg(feature = "fc")]
+pub const MMIO_LEN: usize = 0x1000;
+#[cfg(not(feature = "fc"))]
+pub const MMIO_LEN: usize = 0x200;
+
 const IRQ_NUMBER: u8 = 12;
 
 static mut MMIO_DRIVERS: Vec<MmioDriver> = Vec::new();
@@ -43,7 +56,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
 	// Look for the device-ID in all possible 64-byte aligned addresses within this range.
-	for current_address in (MMIO_START..MMIO_END).step_by(512) {
+	for current_address in (MMIO_START..MMIO_END).step_by(MMIO_LEN) {
 		trace!(
 			"try to detect MMIO device at physical address {:#X}",
 			current_address
