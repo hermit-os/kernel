@@ -338,9 +338,9 @@ fn search_s5_in_table(table: AcpiTable<'_>) {
 	// Get the AML code.
 	// As we do not implement an AML interpreter, we search through the bytecode.
 	let aml = unsafe {
-		slice::from_raw_parts(
-			table.table_start_address() as *const u8,
-			table.table_end_address() - table.table_start_address(),
+		slice::from_ptr_range(
+			ptr::from_exposed_addr(table.table_start_address())
+				..ptr::from_exposed_addr(table.table_end_address()),
 		)
 	};
 
