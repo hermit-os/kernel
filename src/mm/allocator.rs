@@ -59,7 +59,7 @@ mod tests {
 		let mut arena: [u8; ARENA_SIZE] = [0; ARENA_SIZE];
 		let allocator: LockedAllocator = LockedAllocator::new();
 		unsafe {
-			allocator.init(&mut arena as *mut [u8] as *mut u8, ARENA_SIZE);
+			allocator.init(arena.as_mut_ptr(), ARENA_SIZE);
 		}
 
 		let layout = Layout::from_size_align(1, 1).unwrap();

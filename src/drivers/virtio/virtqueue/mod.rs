@@ -2203,7 +2203,7 @@ impl MemPool {
 		};
 
 		Ok(MemDescr {
-			ptr: (&slice[0] as *const u8) as *mut u8,
+			ptr: slice.as_ptr() as *mut _,
 			len: slice.len(),
 			_init_len: slice.len(),
 			_mem_len: slice.len(),
@@ -2240,7 +2240,7 @@ impl MemPool {
 		assert_eq!(end_phy, end_phy_calc);
 
 		MemDescr {
-			ptr: (&slice[0] as *const u8) as *mut u8,
+			ptr: slice.as_ptr() as *mut _,
 			len: slice.len(),
 			_init_len: slice.len(),
 			_mem_len: slice.len(),
