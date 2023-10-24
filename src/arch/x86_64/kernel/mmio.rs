@@ -74,7 +74,7 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		let version = mmio.get_version();
 
 		if magic != MAGIC_VALUE {
-			trace!("It's not a MMIO-device at {:#X}", mmio as *const _ as usize);
+			trace!("It's not a MMIO-device at {mmio:p}");
 			continue;
 		}
 
@@ -84,20 +84,17 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		}
 
 		// We found a MMIO-device (whose 512-bit address in this structure).
-		trace!("Found a MMIO-device at {:#X}", mmio as *const _ as usize);
+		trace!("Found a MMIO-device at {mmio:p}");
 
 		// Verify the device-ID to find the network card
 		let id = mmio.get_device_id();
 
 		if id != DevId::VIRTIO_DEV_ID_NET {
-			trace!(
-				"It's not a network card at {:#X}",
-				mmio as *const _ as usize
-			);
+			trace!("It's not a network card at {mmio:p}");
 			continue;
 		}
 
-		info!("Found network card at {:#X}", mmio as *const _ as usize);
+		info!("Found network card at {mmio:p}");
 
 		crate::arch::mm::physicalmem::reserve(
 			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),

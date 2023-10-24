@@ -190,7 +190,7 @@ pub(crate) extern "C" fn do_sync(state: &State) {
 
 			// add page fault handler
 
-			error!("Current stack pointer {:#x}", state as *const _ as u64);
+			error!("Current stack pointer {state:p}");
 			error!("Unable to handle page fault at {:#x}", far);
 			error!("Exception return address {:#x}", ELR_EL1.get());
 			error!("Thread ID register {:#x}", TPIDR_EL0.get());
