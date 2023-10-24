@@ -18,6 +18,7 @@
 #![feature(noop_waker)]
 #![feature(pointer_byte_offsets)]
 #![feature(pointer_is_aligned)]
+#![feature(ptr_from_ref)]
 #![cfg_attr(target_arch = "aarch64", feature(specialization))]
 #![feature(strict_provenance)]
 #![cfg_attr(target_os = "none", no_std)]

@@ -8,7 +8,7 @@ use core::intrinsics::unaligned_volatile_store;
 use core::ptr::{read_volatile, write_volatile};
 use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
-use core::u8;
+use core::{ptr, u8};
 
 #[cfg(any(feature = "tcp", feature = "udp"))]
 use crate::arch::kernel::interrupts::*;
@@ -251,7 +251,7 @@ pub struct NotifCfg {
 
 impl NotifCfg {
 	pub fn new(registers: &mut MmioRegisterLayout) -> Self {
-		let raw = &mut registers.queue_notify as *mut u32;
+		let raw = ptr::from_mut(&mut registers.queue_notify);
 
 		NotifCfg { queue_notify: raw }
 	}
@@ -332,7 +332,7 @@ pub struct IsrStatus {
 
 impl IsrStatus {
 	pub fn new(registers: &mut MmioRegisterLayout) -> Self {
-		let ptr = &mut registers.interrupt_status as *mut _;
+		let ptr = ptr::from_mut(&mut registers.interrupt_status);
 		let raw: &'static mut IsrStatusRaw = unsafe { &mut *(ptr as *mut IsrStatusRaw) };
 
 		IsrStatus { raw }

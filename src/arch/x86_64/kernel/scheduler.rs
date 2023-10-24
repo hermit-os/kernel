@@ -342,7 +342,7 @@ impl TaskFrame for Task {
 			ptr::write_bytes(stack.as_mut_ptr::<u8>(), 0, mem::size_of::<State>());
 
 			if let Some(tls) = &self.tls {
-				(*state).fs = tls.thread_ptr() as *const _ as u64;
+				(*state).fs = ptr::from_ref(tls.thread_ptr()).addr() as u64;
 			}
 			(*state).rip = task_start as usize as u64;
 			(*state).rdi = func as usize as u64;

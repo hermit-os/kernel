@@ -729,7 +729,7 @@ pub fn boot_application_processors() {
 		);
 		ptr::write_unaligned(
 			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr(),
-			raw_boot_info() as *const _ as u64,
+			ptr::from_ref(raw_boot_info()).addr() as u64,
 		);
 	}
 

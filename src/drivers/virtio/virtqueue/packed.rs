@@ -150,7 +150,7 @@ impl DescriptorRing {
 
 					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
 					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(Pinned::from_raw(tkn as *mut TransferToken)),
+						transfer_tkn: Some(Pinned::from_raw(ptr::from_mut(tkn))),
 					});
 				}
 				None => tkn.state = TransferState::Finished,
@@ -542,7 +542,7 @@ impl<'a> ReadCtrl<'a> {
 				(None, None) => unreachable!("Empty Transfers are not allowed..."),
 			}
 
-			Some(tkn as *mut TransferToken)
+			Some(ptr::from_mut(tkn))
 		} else {
 			None
 		}

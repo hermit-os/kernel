@@ -517,7 +517,7 @@ where
 
 		// Calculate the address of the subtable.
 		let index = page.table_index::<L>();
-		let table_address = self as *const PageTable<L> as usize;
+		let table_address = core::ptr::from_ref(self).addr();
 		let subtable_address =
 			(table_address << PAGE_MAP_BITS) & !(usize::MAX << 48) | (index << PAGE_BITS);
 		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }

@@ -1,5 +1,6 @@
 use alloc::sync::Arc;
 use core::ffi::{c_void, CStr};
+use core::ptr;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::RandomState;
@@ -136,7 +137,7 @@ impl SysLseek {
 #[inline]
 #[cfg(target_arch = "x86_64")]
 fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(data as *mut _ as u64);
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -150,7 +151,7 @@ fn uhyve_send<T>(port: u16, data: &mut T) {
 fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
-	let ptr = VirtAddr(data as *mut _ as u64);
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {

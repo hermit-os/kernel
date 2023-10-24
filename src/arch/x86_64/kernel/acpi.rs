@@ -140,7 +140,7 @@ impl<'a> AcpiTable<'a> {
 	}
 
 	pub fn header_start_address(&self) -> usize {
-		self.header as *const _ as usize
+		ptr::from_ref(self.header).addr()
 	}
 
 	pub fn table_start_address(&self) -> usize {
@@ -395,7 +395,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	// In that case, it shall be preferred over the I/O port specified in pm1a_cnt_blk.
 	// As all PM1 control registers are supposed to be in I/O space, we can simply check the address_space field
 	// of x_pm1a_cnt_blk to determine the validity of x_pm1a_cnt_blk.
-	let x_pm1a_cnt_blk_field_address = &fadt_table.x_pm1a_cnt_blk as *const _ as usize;
+	let x_pm1a_cnt_blk_field_address = ptr::from_ref(&fadt_table.x_pm1a_cnt_blk).addr();
 	let pm1a_cnt_blk = if x_pm1a_cnt_blk_field_address < fadt.table_end_address()
 		&& fadt_table.x_pm1a_cnt_blk.address_space == GENERIC_ADDRESS_IO_SPACE
 	{
