@@ -429,7 +429,7 @@ impl SplitVq {
 				flags: &mut *(used_raw as *mut u16),
 				index: used_raw.offset(2) as *mut u16,
 				ring: core::slice::from_raw_parts_mut(
-					(used_raw.offset(4) as *const _) as *mut UsedElem,
+					used_raw.offset(4) as *mut UsedElem,
 					size as usize,
 				),
 				event: &mut *(used_raw.offset(4 + 8 * (size as isize)) as *mut u16),
