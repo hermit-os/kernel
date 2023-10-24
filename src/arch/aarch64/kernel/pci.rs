@@ -22,7 +22,7 @@ pub(crate) struct PciConfigRegion(VirtAddr);
 
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
-		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligend PCI Config Space");
+		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligned PCI Config Space");
 		Self(addr)
 	}
 }
