@@ -148,11 +148,11 @@ impl SyscallInterface for Uhyve {
 
 			argv.push(unsafe { alloc(layout).cast_const() });
 
-			argv_phy.push(
+			argv_phy.push(ptr::from_exposed_addr::<u8>(
 				paging::virtual_to_physical(VirtAddr(argv[i] as u64))
 					.unwrap()
-					.as_u64() as *const u8,
-			);
+					.as_usize(),
+			));
 		}
 
 		// create array to receive the environment
@@ -164,11 +164,11 @@ impl SyscallInterface for Uhyve {
 					.unwrap();
 			env.push(unsafe { alloc(layout).cast_const() });
 
-			env_phy.push(
+			env_phy.push(ptr::from_exposed_addr::<u8>(
 				paging::virtual_to_physical(VirtAddr(env[i] as u64))
 					.unwrap()
-					.as_u64() as *const u8,
-			);
+					.as_usize(),
+			));
 		}
 
 		// ask uhyve for the environment

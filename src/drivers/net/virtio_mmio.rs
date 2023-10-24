@@ -6,6 +6,7 @@ use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::ptr;
 use core::ptr::read_volatile;
 use core::str::FromStr;
 use core::sync::atomic::{fence, Ordering};
@@ -115,7 +116,7 @@ impl VirtioNetDriver {
 		irq: u8,
 	) -> Result<Self, VirtioNetError> {
 		let dev_cfg_raw: &'static NetDevCfgRaw =
-			unsafe { &*(((registers as *const _ as usize) + 0xFC) as *const NetDevCfgRaw) };
+			unsafe { &*(ptr::from_exposed_addr(ptr::from_ref(registers).addr() + 0xFC)) };
 		let dev_cfg = NetDevCfg {
 			raw: dev_cfg_raw,
 			dev_id,

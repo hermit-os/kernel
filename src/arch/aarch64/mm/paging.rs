@@ -520,7 +520,7 @@ where
 		let table_address = core::ptr::from_ref(self).addr();
 		let subtable_address =
 			(table_address << PAGE_MAP_BITS) & !(usize::MAX << 48) | (index << PAGE_BITS);
-		unsafe { &mut *(subtable_address as *mut PageTable<L::SubtableLevel>) }
+		unsafe { &mut *(ptr::from_exposed_addr_mut(subtable_address)) }
 	}
 
 	/// Maps a continuous range of pages.

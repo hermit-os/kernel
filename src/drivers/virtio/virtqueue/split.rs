@@ -394,17 +394,18 @@ impl SplitVq {
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = (size as usize * core::mem::size_of::<Descriptor>())
 			.align_up(BasePageSize::SIZE as usize);
-		let table_raw =
-			(crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
+		let table_raw = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let descr_table = DescrTable {
 			raw: unsafe { core::slice::from_raw_parts_mut(table_raw, size as usize) },
 		};
 
 		let _mem_len = (6 + (size as usize * 2)).align_up(BasePageSize::SIZE as usize);
-		let avail_raw = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
+		let avail_raw =
+			ptr::from_exposed_addr_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
 		let _mem_len = (6 + (size as usize * 8)).align_up(BasePageSize::SIZE as usize);
-		let used_raw = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
+		let used_raw =
+			ptr::from_exposed_addr_mut::<u8>(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let avail_ring = unsafe {
 			AvailRing {
@@ -456,11 +457,11 @@ impl SplitVq {
 			used_ring,
 		};
 
-		let notif_ctrl = NotifCtrl::new(
-			(notif_cfg.base()
+		let notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
+			notif_cfg.base()
 				+ usize::try_from(vq_handler.notif_off()).unwrap()
-				+ usize::try_from(notif_cfg.multiplier()).unwrap()) as *mut usize,
-		);
+				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
+		));
 
 		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(size));

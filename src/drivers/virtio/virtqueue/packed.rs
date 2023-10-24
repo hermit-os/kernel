@@ -110,7 +110,7 @@ impl DescriptorRing {
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
 			(size * core::mem::size_of::<Descriptor>()).align_up(BasePageSize::SIZE as usize);
-		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const Descriptor) as *mut Descriptor;
+		let ptr = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		let ring: &'static mut [Descriptor] = unsafe { core::slice::from_raw_parts_mut(ptr, size) };
 
@@ -1251,9 +1251,9 @@ impl PackedVq {
 		let _mem_len = core::mem::size_of::<EventSuppr>().align_up(BasePageSize::SIZE as usize);
 
 		let drv_event_ptr =
-			(crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;
+			ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 		let dev_event_ptr =
-			(crate::mm::allocate(_mem_len, true).0 as *const EventSuppr) as *mut EventSuppr;
+			ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		// Provide memory areas of the queues data structures to the device
 		vq_handler.set_ring_addr(paging::virt_to_phys(VirtAddr::from(
@@ -1277,11 +1277,11 @@ impl PackedVq {
 			raw: dev_event,
 		};
 
-		let mut notif_ctrl = NotifCtrl::new(
-			(notif_cfg.base()
+		let mut notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
+			notif_cfg.base()
 				+ usize::try_from(vq_handler.notif_off()).unwrap()
-				+ usize::try_from(notif_cfg.multiplier()).unwrap()) as *mut usize,
-		);
+				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
+		));
 
 		if feats & Features::VIRTIO_F_NOTIFICATION_DATA == Features::VIRTIO_F_NOTIFICATION_DATA {
 			notif_ctrl.enable_notif_data();

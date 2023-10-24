@@ -1,6 +1,7 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 use core::arch::asm;
+use core::ptr;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 use aarch64::regs::*;
@@ -231,8 +232,10 @@ pub(crate) fn init() {
 	info!("Intialize generic interrupt controller");
 
 	let dtb = unsafe {
-		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		Dtb::from_raw(ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	let reg = dtb.get_property("/intc", "reg").unwrap();

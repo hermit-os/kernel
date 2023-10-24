@@ -93,8 +93,10 @@ pub fn get_processor_count() -> u32 {
 
 pub fn args() -> Option<&'static str> {
 	let dtb = unsafe {
-		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		hermit_dtb::Dtb::from_raw(ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	dtb.get_property("/chosen", "bootargs")

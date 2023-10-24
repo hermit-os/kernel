@@ -228,8 +228,10 @@ fn detect_interrupt(
 
 pub fn init() {
 	let dtb = unsafe {
-		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		Dtb::from_raw(core::ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	for node in dtb.enum_subnodes("/") {

@@ -237,7 +237,7 @@ struct AcpiFadt {
 /// (wrapping) sum over all table fields equals zero.
 fn verify_checksum(start_address: usize, length: usize) -> Result<(), ()> {
 	// Get a slice over all bytes of the structure that are considered for the checksum.
-	let slice = unsafe { slice::from_raw_parts(start_address as *const u8, length) };
+	let slice = unsafe { slice::from_raw_parts(ptr::from_exposed_addr(start_address), length) };
 
 	// Perform a wrapping sum over these bytes.
 	let checksum = slice.iter().fold(0, |acc: u8, x| acc.wrapping_add(*x));
@@ -269,7 +269,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 		}
 
 		// Verify the signature to find out if this is really an ACPI RSDP.
-		let rsdp = unsafe { &*(current_address as *const AcpiRsdp) };
+		let rsdp = unsafe { &*(ptr::from_exposed_addr::<AcpiRsdp>(current_address)) };
 		if &rsdp.signature != b"RSD PTR " {
 			continue;
 		}
@@ -389,7 +389,7 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	// Get us a reference to the actual fields of the FADT table.
 	// Note that not all fields may be accessible depending on the ACPI revision of the computer.
 	// Always check fadt.table_end_address() when accessing an optional field!
-	let fadt_table = unsafe { &*(fadt.table_start_address() as *const AcpiFadt) };
+	let fadt_table = unsafe { &*ptr::from_exposed_addr::<AcpiFadt>(fadt.table_start_address()) };
 
 	// Check if the FADT is large enough to hold an x_pm1a_cnt_blk field and if this field is non-zero.
 	// In that case, it shall be preferred over the I/O port specified in pm1a_cnt_blk.
@@ -485,12 +485,16 @@ pub fn init() {
 		// Depending on the RSDP revision, either an XSDT or an RSDT has been chosen above.
 		// The XSDT contains 64-bit pointers whereas the RSDT has 32-bit pointers.
 		let table_physical_address = if rsdp.revision >= 2 {
-			let address = PhysAddr(unsafe { ptr::read_unaligned(current_address as *const u64) });
+			let address = PhysAddr(unsafe {
+				ptr::read_unaligned(ptr::from_exposed_addr::<u64>(current_address))
+			});
 			current_address += mem::size_of::<u64>();
 			address
 		} else {
-			let address =
-				PhysAddr((unsafe { ptr::read_unaligned(current_address as *const u32) }).into());
+			let address = PhysAddr(
+				(unsafe { ptr::read_unaligned(ptr::from_exposed_addr::<u32>(current_address)) })
+					.into(),
+			);
 			current_address += mem::size_of::<u32>();
 			address
 		};
