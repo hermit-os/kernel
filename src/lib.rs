@@ -137,7 +137,7 @@ pub(crate) extern "C" fn __sys_malloc(size: usize, align: usize) -> *mut u8 {
 			"__sys_malloc called with size {:#x}, align {:#x} is an invalid layout!",
 			size, align
 		);
-		return core::ptr::null::<*mut u8>() as *mut u8;
+		return core::ptr::null_mut();
 	}
 	let layout = layout_res.unwrap();
 	let ptr = unsafe { ALLOCATOR.alloc(layout) };
@@ -185,7 +185,7 @@ pub(crate) extern "C" fn __sys_realloc(
 			"__sys_realloc called with ptr {:p}, size {:#x}, align {:#x}, new_size {:#x} is an invalid layout!",
 			ptr, size, align, new_size
 		);
-			return core::ptr::null::<*mut u8>() as *mut u8;
+			return core::ptr::null_mut();
 		}
 		let layout = layout_res.unwrap();
 		let new_ptr = ALLOCATOR.realloc(ptr, layout, new_size);
