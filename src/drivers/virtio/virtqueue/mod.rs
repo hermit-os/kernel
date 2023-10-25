@@ -19,6 +19,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ops::{BitAnd, Deref, DerefMut};
+use core::ptr;
 
 use align_address::Align;
 use zerocopy::AsBytes;
@@ -145,8 +146,8 @@ impl Virtq {
 	pub fn check_bounds<T: AsSliceU8>(data: &T) -> bool {
 		let slice = data.as_slice_u8();
 
-		let start_virt = (&slice[0] as *const u8) as usize;
-		let end_virt = (&slice[slice.len() - 1] as *const u8) as usize;
+		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
+		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
 		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
 		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
@@ -165,8 +166,8 @@ impl Virtq {
 	/// Slices provided to the Queue must pass this test, otherwise the queue
 	/// currently panics.
 	pub fn check_bounds_slice(slice: &[u8]) -> bool {
-		let start_virt = (&slice[0] as *const u8) as usize;
-		let end_virt = (&slice[slice.len() - 1] as *const u8) as usize;
+		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
+		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
 		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
 		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
@@ -547,7 +548,7 @@ pub trait AsSliceU8 {
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
 	/// the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8(&self) -> &[u8] {
-		unsafe { core::slice::from_raw_parts((self as *const _) as *const u8, self.len()) }
+		unsafe { core::slice::from_raw_parts(ptr::from_ref(self) as *const u8, self.len()) }
 	}
 
 	/// Returns a mutable slice of the given structure.
@@ -557,7 +558,7 @@ pub trait AsSliceU8 {
 	/// * The slice must serialize the actual structure the device expects, as the queue will use
 	/// the addresses of the slice in order to refer to the structure.
 	fn as_slice_u8_mut(&mut self) -> &mut [u8] {
-		unsafe { core::slice::from_raw_parts_mut((self as *const _) as *mut u8, self.len()) }
+		unsafe { core::slice::from_raw_parts_mut(ptr::from_mut(self) as *mut u8, self.len()) }
 	}
 }
 
@@ -2189,8 +2190,8 @@ impl MemPool {
 		assert!(!slice.is_empty());
 
 		// Assert descriptor does not cross a page barrier
-		let start_virt = (&slice[0] as *const u8) as usize;
-		let end_virt = (&slice[slice.len() - 1] as *const u8) as usize;
+		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
+		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
 		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
 		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
@@ -2202,7 +2203,7 @@ impl MemPool {
 		};
 
 		Ok(MemDescr {
-			ptr: (&slice[0] as *const u8) as *mut u8,
+			ptr: slice.as_ptr() as *mut _,
 			len: slice.len(),
 			_init_len: slice.len(),
 			_mem_len: slice.len(),
@@ -2231,15 +2232,15 @@ impl MemPool {
 		assert!(!slice.is_empty());
 
 		// Assert descriptor does not cross a page barrier
-		let start_virt = (&slice[0] as *const u8) as usize;
-		let end_virt = (&slice[slice.len() - 1] as *const u8) as usize;
+		let start_virt = ptr::from_ref(slice.first().unwrap()).addr();
+		let end_virt = ptr::from_ref(slice.last().unwrap()).addr();
 		let end_phy_calc = paging::virt_to_phys(VirtAddr::from(start_virt)) + (slice.len() - 1);
 		let end_phy = paging::virt_to_phys(VirtAddr::from(end_virt));
 
 		assert_eq!(end_phy, end_phy_calc);
 
 		MemDescr {
-			ptr: (&slice[0] as *const u8) as *mut u8,
+			ptr: slice.as_ptr() as *mut _,
 			len: slice.len(),
 			_init_len: slice.len(),
 			_mem_len: slice.len(),
@@ -2271,7 +2272,7 @@ impl MemPool {
 
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
-		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
+		let ptr = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		// Assert descriptor does not cross a page barrier
 		let start_virt = ptr as usize;
@@ -2306,7 +2307,7 @@ impl MemPool {
 
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len = len.align_up(BasePageSize::SIZE as usize);
-		let ptr = (crate::mm::allocate(_mem_len, true).0 as *const u8) as *mut u8;
+		let ptr = ptr::from_exposed_addr_mut(crate::mm::allocate(_mem_len, true).0 as usize);
 
 		// Assert descriptor does not cross a page barrier
 		let start_virt = ptr as usize;

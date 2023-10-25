@@ -8,7 +8,7 @@ use core::convert::Infallible;
 use core::hint::spin_loop;
 use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicU64, Ordering};
-use core::{fmt, u32};
+use core::{fmt, ptr, u32};
 
 use hermit_entry::boot_info::PlatformInfo;
 use hermit_sync::Lazy;
@@ -221,7 +221,7 @@ impl FPUState {
 	pub fn restore(&self) {
 		if supports_xsave() {
 			unsafe {
-				_xrstor(self as *const _ as _, u64::MAX);
+				_xrstor(ptr::from_ref(self) as _, u64::MAX);
 			}
 		} else {
 			self.restore_common();
@@ -231,7 +231,7 @@ impl FPUState {
 	pub fn save(&mut self) {
 		if supports_xsave() {
 			unsafe {
-				_xsave(self as *mut _ as _, u64::MAX);
+				_xsave(ptr::from_mut(self) as _, u64::MAX);
 			}
 		} else {
 			self.save_common();
@@ -240,13 +240,13 @@ impl FPUState {
 
 	pub fn restore_common(&self) {
 		unsafe {
-			_fxrstor(self as *const _ as _);
+			_fxrstor(ptr::from_ref(self) as _);
 		}
 	}
 
 	pub fn save_common(&mut self) {
 		unsafe {
-			_fxsave(self as *mut _ as _);
+			_fxsave(ptr::from_mut(self) as _);
 			asm!("fnclex", options(nomem, nostack));
 		}
 	}

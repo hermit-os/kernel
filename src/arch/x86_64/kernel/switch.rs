@@ -166,7 +166,7 @@ macro_rules! kernel_function_impl {
 						let mut reg = 0_usize;
 						// SAFETY: $A is smaller than usize and directly fits in a register
 						// Since f takes $A as argument via C calling convention, any opper bytes do not matter.
-						ptr::write(&mut reg as *mut _ as _, $arg);
+						ptr::write(ptr::from_mut(&mut reg) as _, $arg);
 						reg
 					};
 				)*

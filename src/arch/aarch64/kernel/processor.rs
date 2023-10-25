@@ -244,8 +244,10 @@ pub fn set_oneshot_timer(wakeup_time: Option<u64>) {
 
 pub fn print_information() {
 	let dtb = unsafe {
-		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		Dtb::from_raw(core::ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	let reg = dtb

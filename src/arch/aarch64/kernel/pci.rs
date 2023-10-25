@@ -22,8 +22,18 @@ pub(crate) struct PciConfigRegion(VirtAddr);
 
 impl PciConfigRegion {
 	pub const fn new(addr: VirtAddr) -> Self {
-		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligend PCI Config Space");
+		assert!(addr.as_u64() & 0xFFFFFFF == 0, "Unaligned PCI Config Space");
 		Self(addr)
+	}
+
+	#[inline]
+	fn addr_from_offset(&self, pci_addr: PciAddress, offset: u16) -> usize {
+		assert!(offset & 0xF000 == 0, "Invalid offset");
+		(u64::from(pci_addr.bus()) << 20
+			| u64::from(pci_addr.device()) << 15
+			| u64::from(pci_addr.function()) << 12
+			| (u64::from(offset) & 0xFFF)
+			| self.0.as_u64()) as usize
 	}
 }
 
@@ -36,27 +46,15 @@ impl ConfigRegionAccess for PciConfigRegion {
 
 	#[inline]
 	unsafe fn read(&self, pci_addr: PciAddress, offset: u16) -> u32 {
-		assert!(offset & 0xF000 == 0, "Inavlid offset");
-		let addr = u64::from(pci_addr.bus()) << 20
-			| u64::from(pci_addr.device()) << 15
-			| u64::from(pci_addr.function()) << 12
-			| (u64::from(offset) & 0xFFF)
-			| self.0.as_u64();
-		unsafe {
-			crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(addr as *const u32))
-		}
+		let ptr = core::ptr::from_exposed_addr(self.addr_from_offset(pci_addr, offset));
+		unsafe { crate::drivers::pci::from_pci_endian(core::ptr::read_volatile(ptr)) }
 	}
 
 	#[inline]
 	unsafe fn write(&self, pci_addr: PciAddress, offset: u16, value: u32) {
-		assert!(offset & 0xF000 == 0, "Inavlid offset");
-		let addr = u64::from(pci_addr.bus()) << 20
-			| u64::from(pci_addr.device()) << 15
-			| u64::from(pci_addr.function()) << 12
-			| (u64::from(offset) & 0xFFF)
-			| self.0.as_u64();
+		let ptr = core::ptr::from_exposed_addr_mut(self.addr_from_offset(pci_addr, offset));
 		unsafe {
-			core::ptr::write_volatile(addr as *mut u32, value.to_le());
+			core::ptr::write_volatile(ptr, value.to_le());
 		}
 	}
 }
@@ -230,8 +228,10 @@ fn detect_interrupt(
 
 pub fn init() {
 	let dtb = unsafe {
-		Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		Dtb::from_raw(core::ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	for node in dtb.enum_subnodes("/") {

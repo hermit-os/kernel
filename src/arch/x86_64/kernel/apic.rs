@@ -2,10 +2,8 @@ use alloc::vec::Vec;
 #[cfg(feature = "smp")]
 use core::arch::x86_64::_mm_mfence;
 use core::hint::spin_loop;
-#[cfg(feature = "smp")]
-use core::ptr;
 use core::sync::atomic::Ordering;
-use core::{cmp, fmt, mem, u32};
+use core::{cmp, fmt, mem, ptr, u32};
 
 use align_address::Align;
 #[cfg(feature = "smp")]
@@ -267,21 +265,23 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 fn detect_from_acpi() -> Result<PhysAddr, ()> {
 	// Get the Multiple APIC Description Table (MADT) from the ACPI information and its specific table header.
 	let madt = acpi::get_madt().ok_or(())?;
-	let madt_header = unsafe { &*(madt.table_start_address() as *const AcpiMadtHeader) };
+	let madt_header =
+		unsafe { &*(ptr::from_exposed_addr::<AcpiMadtHeader>(madt.table_start_address())) };
 
 	// Jump to the actual table entries (after the table header).
 	let mut current_address = madt.table_start_address() + mem::size_of::<AcpiMadtHeader>();
 
 	// Loop through all table entries.
 	while current_address < madt.table_end_address() {
-		let record = unsafe { &*(current_address as *const AcpiMadtRecordHeader) };
+		let record = unsafe { &*(ptr::from_exposed_addr::<AcpiMadtRecordHeader>(current_address)) };
 		current_address += mem::size_of::<AcpiMadtRecordHeader>();
 
 		match record.entry_type {
 			0 => {
 				// Processor Local APIC
-				let processor_local_apic_record =
-					unsafe { &*(current_address as *const ProcessorLocalApicRecord) };
+				let processor_local_apic_record = unsafe {
+					&*(ptr::from_exposed_addr::<ProcessorLocalApicRecord>(current_address))
+				};
 				debug!(
 					"Found Processor Local APIC record: {}",
 					processor_local_apic_record
@@ -293,7 +293,8 @@ fn detect_from_acpi() -> Result<PhysAddr, ()> {
 			}
 			1 => {
 				// I/O APIC
-				let ioapic_record = unsafe { &*(current_address as *const IoApicRecord) };
+				let ioapic_record =
+					unsafe { &*(ptr::from_exposed_addr::<IoApicRecord>(current_address)) };
 				debug!("Found I/O APIC record: {}", ioapic_record);
 
 				init_ioapic_address(PhysAddr(ioapic_record.address.into()));
@@ -379,7 +380,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 
 	let mut addr: usize = virtual_address.as_usize()
 		| (mp_float.mp_config as usize & (BasePageSize::SIZE as usize - 1));
-	let mp_config: &ApicConfigTable = unsafe { &*(addr as *const ApicConfigTable) };
+	let mp_config: &ApicConfigTable = unsafe { &*(ptr::from_exposed_addr(addr)) };
 	if mp_config.signature != MP_CONFIG_SIGNATURE {
 		warn!("Invalid MP config table");
 		virtualmem::deallocate(virtual_address, BasePageSize::SIZE as usize);
@@ -395,11 +396,11 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 		// entries starts directly after the config table
 		addr += mem::size_of::<ApicConfigTable>();
 		for _i in 0..mp_config.entry_count {
-			match unsafe { *(addr as *const u8) } {
+			match unsafe { *(ptr::from_exposed_addr(addr)) } {
 				// CPU entry
 				0 => {
 					let cpu_entry: &ApicProcessorEntry =
-						unsafe { &*(addr as *const ApicProcessorEntry) };
+						unsafe { &*(ptr::from_exposed_addr(addr)) };
 					if cpu_entry.cpu_flags & 0x01 == 0x01 {
 						add_local_apic_id(cpu_entry.id);
 					}
@@ -407,7 +408,7 @@ fn detect_from_mp() -> Result<PhysAddr, ()> {
 				}
 				// IO-APIC entry
 				2 => {
-					let io_entry: &ApicIoEntry = unsafe { &*(addr as *const ApicIoEntry) };
+					let io_entry: &ApicIoEntry = unsafe { &*(ptr::from_exposed_addr(addr)) };
 					let ioapic = PhysAddr(io_entry.addr.into());
 					info!("Found IOAPIC at 0x{:p}", ioapic);
 
@@ -729,7 +730,7 @@ pub fn boot_application_processors() {
 		);
 		ptr::write_unaligned(
 			(SMP_BOOT_CODE_ADDRESS + SMP_BOOT_CODE_OFFSET_BOOTINFO).as_mut_ptr(),
-			raw_boot_info() as *const _ as u64,
+			ptr::from_ref(raw_boot_info()).addr() as u64,
 		);
 	}
 

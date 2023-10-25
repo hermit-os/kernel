@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::str;
+use core::{ptr, str};
 
 use align_address::Align;
 use hermit_sync::{without_interrupts, InterruptTicketMutex};
@@ -65,16 +65,16 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 
 		// Verify the first register value to find out if this is really an MMIO magic-value.
 		let mmio = unsafe {
-			&mut *((virtual_address.as_usize()
-				| (current_address & (BasePageSize::SIZE as usize - 1)))
-				as *mut MmioRegisterLayout)
+			&mut *(ptr::from_exposed_addr_mut::<MmioRegisterLayout>(
+				virtual_address.as_usize() | (current_address & (BasePageSize::SIZE as usize - 1)),
+			))
 		};
 
 		let magic = mmio.get_magic_value();
 		let version = mmio.get_version();
 
 		if magic != MAGIC_VALUE {
-			trace!("It's not a MMIO-device at {:#X}", mmio as *const _ as usize);
+			trace!("It's not a MMIO-device at {mmio:p}");
 			continue;
 		}
 
@@ -84,20 +84,17 @@ pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str>
 		}
 
 		// We found a MMIO-device (whose 512-bit address in this structure).
-		trace!("Found a MMIO-device at {:#X}", mmio as *const _ as usize);
+		trace!("Found a MMIO-device at {mmio:p}");
 
 		// Verify the device-ID to find the network card
 		let id = mmio.get_device_id();
 
 		if id != DevId::VIRTIO_DEV_ID_NET {
-			trace!(
-				"It's not a network card at {:#X}",
-				mmio as *const _ as usize
-			);
+			trace!("It's not a network card at {mmio:p}");
 			continue;
 		}
 
-		info!("Found network card at {:#X}", mmio as *const _ as usize);
+		info!("Found network card at {mmio:p}");
 
 		crate::arch::mm::physicalmem::reserve(
 			PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),

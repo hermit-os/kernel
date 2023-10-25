@@ -4,6 +4,7 @@ use alloc::rc::Rc;
 #[cfg(feature = "smp")]
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::ptr;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use crossbeam_utils::Backoff;
@@ -583,7 +584,7 @@ impl PerCoreScheduler {
 			let mut borrowed = self.current_task.borrow_mut();
 			(
 				borrowed.id,
-				&mut borrowed.last_stack_pointer as *mut _ as *mut usize,
+				ptr::from_mut(&mut borrowed.last_stack_pointer) as *mut usize,
 				borrowed.prio,
 				borrowed.status,
 			)

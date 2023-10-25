@@ -13,8 +13,8 @@ pub mod switch;
 pub mod systemtime;
 
 use core::arch::global_asm;
-use core::str;
 use core::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use core::{ptr, str};
 
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 
@@ -52,7 +52,7 @@ pub fn raw_boot_info() -> &'static RawBootInfo {
 }
 
 pub fn get_boot_info_address() -> VirtAddr {
-	VirtAddr(raw_boot_info() as *const _ as u64)
+	VirtAddr(ptr::from_ref(raw_boot_info()).addr() as u64)
 }
 
 pub fn is_uhyve_with_pci() -> bool {
@@ -93,8 +93,10 @@ pub fn get_processor_count() -> u32 {
 
 pub fn args() -> Option<&'static str> {
 	let dtb = unsafe {
-		hermit_dtb::Dtb::from_raw(boot_info().hardware_info.device_tree.unwrap().get() as *const u8)
-			.expect(".dtb file has invalid header")
+		hermit_dtb::Dtb::from_raw(ptr::from_exposed_addr(
+			boot_info().hardware_info.device_tree.unwrap().get() as usize,
+		))
+		.expect(".dtb file has invalid header")
 	};
 
 	dtb.get_property("/chosen", "bootargs")

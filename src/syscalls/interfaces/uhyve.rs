@@ -1,7 +1,7 @@
 use alloc::alloc::{alloc, Layout};
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::mem;
+use core::{mem, ptr};
 
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
@@ -29,7 +29,7 @@ extern "C" {
 #[inline]
 #[cfg(target_arch = "x86_64")]
 pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(data as *mut _ as u64);
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -43,7 +43,7 @@ pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
 pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
-	let ptr = VirtAddr(data as *mut _ as u64);
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
 	unsafe {
@@ -148,11 +148,11 @@ impl SyscallInterface for Uhyve {
 
 			argv.push(unsafe { alloc(layout).cast_const() });
 
-			argv_phy.push(
+			argv_phy.push(ptr::from_exposed_addr::<u8>(
 				paging::virtual_to_physical(VirtAddr(argv[i] as u64))
 					.unwrap()
-					.as_u64() as *const u8,
-			);
+					.as_usize(),
+			));
 		}
 
 		// create array to receive the environment
@@ -164,11 +164,11 @@ impl SyscallInterface for Uhyve {
 					.unwrap();
 			env.push(unsafe { alloc(layout).cast_const() });
 
-			env_phy.push(
+			env_phy.push(ptr::from_exposed_addr::<u8>(
 				paging::virtual_to_physical(VirtAddr(env[i] as u64))
 					.unwrap()
-					.as_u64() as *const u8,
-			);
+					.as_usize(),
+			));
 		}
 
 		// ask uhyve for the environment

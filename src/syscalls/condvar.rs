@@ -2,8 +2,8 @@
 // "Implementing Condition Variables with Semaphores"
 
 use alloc::boxed::Box;
-use core::mem;
 use core::sync::atomic::{AtomicIsize, Ordering};
+use core::{mem, ptr};
 
 use crate::synch::semaphore::Semaphore;
 
@@ -25,14 +25,14 @@ impl CondQueue {
 
 extern "C" fn __sys_destroy_queue(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr as *mut usize;
+		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_wait: invalid address to condition variable");
 			return -1;
 		}
 
 		if *id != 0 {
-			let cond = Box::from_raw((*id) as *mut CondQueue);
+			let cond = Box::from_raw(ptr::from_exposed_addr_mut::<CondQueue>(*id));
 			mem::drop(cond);
 		}
 
@@ -47,7 +47,7 @@ pub unsafe extern "C" fn sys_destroy_queue(ptr: usize) -> i32 {
 
 extern "C" fn __sys_notify(ptr: usize, count: i32) -> i32 {
 	unsafe {
-		let id = ptr as *const usize;
+		let id = ptr::from_exposed_addr::<usize>(ptr);
 
 		if id.is_null() {
 			// invalid argument
@@ -60,7 +60,7 @@ extern "C" fn __sys_notify(ptr: usize, count: i32) -> i32 {
 			return -1;
 		}
 
-		let cond = &mut *((*id) as *mut CondQueue);
+		let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
 
 		if count < 0 {
 			// Wake up all task that has been waiting for this condition variable
@@ -88,7 +88,7 @@ pub unsafe extern "C" fn sys_notify(ptr: usize, count: i32) -> i32 {
 
 extern "C" fn __sys_init_queue(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr as *mut usize;
+		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_init_queue: invalid address to condition variable");
 			return -1;
@@ -111,7 +111,7 @@ pub unsafe extern "C" fn sys_init_queue(ptr: usize) -> i32 {
 
 extern "C" fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 	unsafe {
-		let id = ptr as *mut usize;
+		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_add_queue: invalid address to condition variable");
 			return -1;
@@ -124,7 +124,7 @@ extern "C" fn __sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 		}
 
 		if timeout_ns <= 0 {
-			let cond = &mut *((*id) as *mut CondQueue);
+			let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
 			cond.counter.fetch_add(1, Ordering::SeqCst);
 
 			0
@@ -143,7 +143,7 @@ pub unsafe extern "C" fn sys_add_queue(ptr: usize, timeout_ns: i64) -> i32 {
 
 extern "C" fn __sys_wait(ptr: usize) -> i32 {
 	unsafe {
-		let id = ptr as *mut usize;
+		let id = ptr::from_exposed_addr_mut::<usize>(ptr);
 		if id.is_null() {
 			debug!("sys_wait: invalid address to condition variable");
 			return -1;
@@ -154,7 +154,7 @@ extern "C" fn __sys_wait(ptr: usize) -> i32 {
 			return -1;
 		}
 
-		let cond = &mut *((*id) as *mut CondQueue);
+		let cond = &mut *(ptr::from_exposed_addr_mut::<CondQueue>(*id));
 		cond.sem1.acquire(None);
 		cond.sem2.release();
 

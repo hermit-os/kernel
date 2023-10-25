@@ -33,11 +33,7 @@ impl FreeList {
 	}
 
 	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, AllocError> {
-		trace!(
-			"Allocating {} bytes from Free List {:#X}",
-			size,
-			self as *const Self as usize
-		);
+		trace!("Allocating {} bytes from Free List {self:p}", size);
 
 		let new_size = if let Some(align) = alignment {
 			size + align
@@ -90,10 +86,9 @@ impl FreeList {
 	#[cfg(all(target_arch = "x86_64", not(feature = "pci")))]
 	pub fn reserve(&mut self, address: usize, size: usize) -> Result<(), AllocError> {
 		trace!(
-			"Try to reserve {} bytes at {:#X} from Free List {:#X}",
+			"Try to reserve {} bytes at {:#X} from Free List {self:p}",
 			size,
-			address,
-			self as *const Self as usize
+			address
 		);
 
 		// Find a region in the Free List that has at least the requested size.
@@ -119,10 +114,9 @@ impl FreeList {
 
 	pub fn deallocate(&mut self, address: usize, size: usize) {
 		trace!(
-			"Deallocating {} bytes at {:#X} from Free List {:#X}",
+			"Deallocating {} bytes at {:#X} from Free List {self:p}",
 			size,
-			address,
-			self as *const Self as usize
+			address
 		);
 
 		let end = address + size;
