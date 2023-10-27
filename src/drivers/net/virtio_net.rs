@@ -939,6 +939,12 @@ impl VirtioNetDriver {
 			self.com_cfg.set_drv_features(drv_feats.into());
 			Ok(())
 		} else {
+			let drvf = Features::from_set(drv_feats);
+			let devf = Features::from_set(dev_feats);
+			debug!("+++++++++++++++++++++++++++");
+			debug!("Device Features: {:?}", devf.unwrap());
+			debug!("Driver Features: {:?}", drvf.unwrap());
+			debug!("+++++++++++++++++++++++++++");
 			Err(VirtioNetError::IncompFeatsSet(drv_feats, dev_feats))
 		}
 	}
