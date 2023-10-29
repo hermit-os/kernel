@@ -1,6 +1,6 @@
 //! Central parsing of the command-line parameters.
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::str;
 
@@ -27,6 +27,8 @@ struct Cli {
 	freq: Option<u16>,
 	env_vars: HashMap<String, String, RandomState>,
 	args: Vec<String>,
+	#[allow(dead_code)]
+	mmio: Vec<String>,
 }
 
 /// Whether Hermit is running under the "uhyve" hypervisor.
@@ -43,6 +45,7 @@ impl Default for Cli {
 			RandomState::with_seeds(0, 0, 0, 0),
 		);
 		let mut args = Vec::new();
+		let mut mmio = Vec::new();
 
 		let words = shell_words::split(kernel::args().unwrap_or_default()).unwrap();
 		debug!("cli_words = {words:?}");
@@ -54,6 +57,12 @@ impl Default for Cli {
 			})
 		};
 		while let Some(word) = words.next() {
+			if word.as_str().starts_with("virtio_mmio.device=") {
+				let v: Vec<&str> = word.as_str().split('=').collect();
+				mmio.push(v[1].to_string());
+				continue;
+			}
+
 			match word.as_str() {
 				#[cfg(not(target_arch = "riscv64"))]
 				"-freq" => {
@@ -88,6 +97,8 @@ impl Default for Cli {
 			freq,
 			env_vars,
 			args,
+			#[allow(dead_code)]
+			mmio,
 		}
 	}
 }
@@ -110,4 +121,10 @@ pub fn vars() -> Iter<'static, String, String> {
 /// Returns the cmdline argument passed in after "--"
 pub fn args() -> &'static [String] {
 	CLI.get().unwrap().args.as_slice()
+}
+
+/// Returns the configuration of all mmio devices
+#[allow(dead_code)]
+pub fn mmio() -> &'static [String] {
+	CLI.get().unwrap().mmio.as_slice()
 }
