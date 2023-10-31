@@ -19,10 +19,7 @@ pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	arch::message_output_init();
 	crate::log::init();
 
-	info!(
-		"Loader: [{:#x} - {:#x}]",
-		&kernel_start as *const u8 as usize, &kernel_end as *const u8 as usize
-	);
+	info!("Loader: [{:p} - {:p}]", &kernel_start, &kernel_end);
 
 	let kernel = KernelObject::parse(arch::find_kernel()).unwrap();
 

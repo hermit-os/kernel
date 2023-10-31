@@ -363,7 +363,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		Some(RawBootInfo::from(boot_info))
 	};
 
-	info!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
+	info!("BootInfo located at {:p}", &BOOT_INFO);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -455,7 +455,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		Some(RawBootInfo::from(boot_info))
 	};
 
-	info!("BootInfo located at {:#x}", &BOOT_INFO as *const _ as u64);
+	info!("BootInfo located at {:p}", &BOOT_INFO);
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
