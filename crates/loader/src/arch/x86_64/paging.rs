@@ -56,7 +56,7 @@ pub fn clean_up() {
 
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000_usize;
-	let level_4_table_ptr = level_4_table_addr as *mut _;
+	let level_4_table_ptr = sptr::from_exposed_addr_mut(level_4_table_addr);
 	unsafe {
 		let level_4_table = &mut *(level_4_table_ptr);
 		RecursivePageTable::new(level_4_table).unwrap()

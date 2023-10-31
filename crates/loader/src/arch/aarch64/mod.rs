@@ -47,8 +47,10 @@ const PT_SELF: u64 = 1 << 55;
 static mut COM1: SerialPort = SerialPort::new(SERIAL_PORT_ADDRESS);
 
 pub fn message_output_init() {
-	let dtb =
-		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+	let dtb = unsafe {
+		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+			.expect(".dtb file has invalid header")
+	};
 
 	let property = dtb.get_property("/chosen", "stdout-path");
 	let uart_address = if let Some(stdout) = property {
@@ -81,8 +83,10 @@ pub unsafe fn get_memory(_memory_size: u64) -> u64 {
 }
 
 pub fn find_kernel() -> &'static [u8] {
-	let dtb =
-		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+	let dtb = unsafe {
+		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+			.expect(".dtb file has invalid header")
+	};
 
 	let module_start = dtb
 		.enum_subnodes("/chosen")
@@ -99,8 +103,9 @@ pub fn find_kernel() -> &'static [u8] {
 		})
 		.unwrap();
 
-	let header =
-		unsafe { &*core::mem::transmute::<*const u8, *const Header>(module_start as *const u8) };
+	let header = unsafe {
+		&*core::mem::transmute::<*const u8, *const Header>(sptr::from_exposed_addr(module_start))
+	};
 
 	for i in 0..SELFMAG {
 		if header.e_ident[i] != ELFMAG[i] {
@@ -123,7 +128,12 @@ pub fn find_kernel() -> &'static [u8] {
 
 	info!("Found ELF file with size {}", file_size);
 
-	unsafe { core::slice::from_raw_parts(module_start as *const u8, file_size.try_into().unwrap()) }
+	unsafe {
+		core::slice::from_raw_parts(
+			sptr::from_exposed_addr(module_start),
+			file_size.try_into().unwrap(),
+		)
+	}
 }
 
 pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
@@ -132,8 +142,10 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let dtb =
-		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+	let dtb = unsafe {
+		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+			.expect(".dtb file has invalid header")
+	};
 	let cpus = dtb
 		.enum_subnodes("/cpus")
 		.filter(|c| c.split('@').next().unwrap() == "cpu")
@@ -210,8 +222,10 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let current_stack_address = load_info.kernel_image_addr_range.start - KERNEL_STACK_SIZE as u64;
 	pub static mut BOOT_INFO: Option<RawBootInfo> = None;
 
-	let dtb =
-		unsafe { Dtb::from_raw(DEVICE_TREE as *const u8).expect(".dtb file has invalid header") };
+	let dtb = unsafe {
+		Dtb::from_raw(sptr::from_exposed_addr(DEVICE_TREE as usize))
+			.expect(".dtb file has invalid header")
+	};
 
 	if let Some(device_type) = dtb.get_property("/memory", "device_type") {
 		let device_type = core::str::from_utf8(device_type)

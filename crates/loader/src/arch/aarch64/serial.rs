@@ -17,7 +17,8 @@ impl SerialPort {
 
 	pub fn write_byte(&self, byte: u8) {
 		unsafe {
-			let port = core::ptr::read_volatile(&self.port_address) as *mut u8;
+			let port =
+				sptr::from_exposed_addr_mut(core::ptr::read_volatile(&self.port_address) as usize);
 
 			// LF newline characters need to be extended to CRLF over a real serial port.
 			if byte == b'\n' {

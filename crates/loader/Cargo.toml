@@ -10,6 +10,7 @@ edition = "2021"
 align-address = "0.1"
 hermit-entry = { version = "0.9", features = ["loader"] }
 log = "0.4"
+sptr = "0.3"
 
 [features]
 default = []
