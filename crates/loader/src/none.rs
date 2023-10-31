@@ -26,7 +26,10 @@ pub(crate) unsafe extern "C" fn loader_main() -> ! {
 	let mem_size = kernel.mem_size();
 	let kernel_addr = arch::get_memory(mem_size as u64);
 	let kernel_addr = kernel.start_addr().unwrap_or(kernel_addr);
-	let memory = slice::from_raw_parts_mut(kernel_addr as *mut MaybeUninit<u8>, mem_size);
+	let memory = slice::from_raw_parts_mut(
+		sptr::from_exposed_addr_mut::<MaybeUninit<u8>>(kernel_addr as usize),
+		mem_size,
+	);
 
 	let kernel_info = kernel.load_kernel(memory, memory.as_ptr() as u64);
 
