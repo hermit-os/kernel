@@ -7,6 +7,7 @@ use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::pin::Pin;
 use core::ptr;
 use core::sync::atomic::{fence, Ordering};
 
@@ -20,8 +21,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
-	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer,
+	TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -87,7 +88,7 @@ impl WrapCount {
 /// RELOCATION OF THE VECTOR AND HENCE THE DEVICE WILL NO LONGER NO THE RINGS ADDRESS!
 struct DescriptorRing {
 	ring: &'static mut [Descriptor],
-	//ring: Pinned<Vec<Descriptor>>,
+	//ring: Pin<Vec<Descriptor>>,
 	tkn_ref_ring: Box<[*mut TransferToken]>,
 
 	// Controlling variables for the ring
@@ -141,16 +142,16 @@ impl DescriptorRing {
 			// be sure, that the token is not dropped, which would making
 			// the dereferencing operation undefined behaviour as also
 			// all operations on the reference.
-			let tkn = unsafe { &mut *(tkn) };
+			let mut tkn = unsafe { Box::from_raw(tkn) };
 
 			match tkn.await_queue {
 				Some(_) => {
 					tkn.state = TransferState::Finished;
 					let queue = tkn.await_queue.take().unwrap();
 
-					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
+					// Turn the raw pointer into a Pin again, which will hold ownership of the Token
 					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(Pinned::from_raw(ptr::from_mut(tkn))),
+						transfer_tkn: Some(Pin::new(tkn)),
 					});
 				}
 				None => tkn.state = TransferState::Finished,
@@ -161,7 +162,7 @@ impl DescriptorRing {
 	fn push_batch(
 		&mut self,
 		tkn_lst: Vec<TransferToken>,
-	) -> (Vec<Pinned<TransferToken>>, usize, u8) {
+	) -> (Vec<Pin<Box<TransferToken>>>, usize, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
@@ -170,12 +171,12 @@ impl DescriptorRing {
 		let mut pind_lst = Vec::with_capacity(tkn_lst.len());
 
 		for (i, tkn) in tkn_lst.into_iter().enumerate() {
-			// fix memory address of token
-			let mut pinned = Pinned::pin(tkn);
-
 			// Check length and if its fits. This should always be true due to the restriction of
 			// the memory pool, but to be sure.
-			assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+			assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+
+			// fix memory address of token
+			let mut pinned = Box::pin(tkn);
 
 			// create an counter that wrappes to the first element
 			// after reaching a the end of the ring
@@ -286,7 +287,7 @@ impl DescriptorRing {
 				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
 			} else {
 				// Update flags of the first descriptor and set new write_index
-				ctrl.make_avail(pinned.raw_addr());
+				ctrl.make_avail(ptr::from_mut(&mut pinned));
 			}
 
 			// Update the state of the actual Token
@@ -297,7 +298,8 @@ impl DescriptorRing {
 		//
 		// Providing the first buffer in the list manually
 		// provide reference, in order to let TransferToken now upon finish.
-		self.tkn_ref_ring[usize::try_from(first_ctrl_settings.1).unwrap()] = pind_lst[0].raw_addr();
+		self.tkn_ref_ring[usize::try_from(first_ctrl_settings.1).unwrap()] =
+			ptr::from_mut(&mut pind_lst[0]);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -311,13 +313,13 @@ impl DescriptorRing {
 		)
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, usize, u8) {
-		// fix memory address of token
-		let mut pinned = Pinned::pin(tkn);
-
+	fn push(&mut self, tkn: TransferToken) -> (Pin<Box<TransferToken>>, usize, u8) {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
-		assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+
+		// fix memory address of token
+		let mut pinned = Box::pin(tkn);
 
 		// create an counter that wrappes to the first element
 		// after reaching a the end of the ring
@@ -419,7 +421,7 @@ impl DescriptorRing {
 
 		fence(Ordering::SeqCst);
 		// Update flags of the first descriptor and set new write_index
-		ctrl.make_avail(pinned.raw_addr());
+		ctrl.make_avail(ptr::from_mut(&mut pinned));
 		fence(Ordering::SeqCst);
 
 		// Update the state of the actual Token
@@ -1000,7 +1002,7 @@ pub struct PackedVq {
 	/// Holds all early dropped `TransferToken`
 	/// If `TransferToken.state == TransferState::Finished`
 	/// the Token can be safely dropped.
-	dropped: RefCell<Vec<Pinned<TransferToken>>>,
+	dropped: RefCell<Vec<Pin<Box<TransferToken>>>>,
 }
 
 // Public interface of PackedVq
@@ -1142,7 +1144,7 @@ impl PackedVq {
 			// Prevent TransferToken from being dropped
 			// I.e. do NOT run the custom constructor which will
 			// deallocate memory.
-			pinned.into_raw();
+			core::mem::forget(pinned);
 		}
 	}
 
@@ -1190,7 +1192,7 @@ impl PackedVq {
 	/// will check these descriptors from time to time during its poll function.
 	///
 	/// Also see `Virtq.early_drop()` documentation.
-	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
+	pub fn early_drop(&self, tkn: Pin<Box<TransferToken>>) {
 		match tkn.state {
 			TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
 			TransferState::Ready => {
@@ -1295,7 +1297,7 @@ impl PackedVq {
 		let mem_pool = Rc::new(MemPool::new(vq_size));
 
 		// Initialize an empty vector for future dropped transfers
-		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
+		let dropped: RefCell<Vec<Pin<Box<TransferToken>>>> = RefCell::new(Vec::new());
 
 		vq_handler.enable_queue();
 

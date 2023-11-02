@@ -7,6 +7,7 @@ use alloc::collections::VecDeque;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
+use core::pin::Pin;
 use core::ptr;
 
 use align_address::Align;
@@ -17,8 +18,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
-	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer,
+	TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
@@ -78,8 +79,8 @@ struct DescrRing {
 }
 
 impl DescrRing {
-	fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, u16, u16) {
-		let pin = Pinned::pin(tkn);
+	fn push(&mut self, tkn: TransferToken) -> (Pin<Box<TransferToken>>, u16, u16) {
+		let mut pin = Box::pin(tkn);
 
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
@@ -189,7 +190,7 @@ impl DescrRing {
 			len -= 1;
 		}
 
-		self.ref_ring[index] = pin.raw_addr();
+		self.ref_ring[index] = ptr::from_mut(&mut pin);
 		self.avail_ring.ring[*self.avail_ring.index as usize % self.avail_ring.ring.len()] =
 			index as u16;
 
@@ -204,7 +205,7 @@ impl DescrRing {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
 			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
 
-			let tkn = unsafe { &mut *(self.ref_ring[used_elem.id as usize]) };
+			let mut tkn = unsafe { Box::from_raw(self.ref_ring[used_elem.id as usize]) };
 
 			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
 				tkn.buff_tkn
@@ -218,9 +219,9 @@ impl DescrRing {
 					tkn.state = TransferState::Finished;
 					let queue = tkn.await_queue.take().unwrap();
 
-					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
+					// Turn the raw pointer into a Pin again, which will hold ownership of the Token
 					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(Pinned::from_raw(ptr::from_mut(tkn))),
+						transfer_tkn: Some(Pin::new(tkn)),
 					});
 				}
 				None => tkn.state = TransferState::Finished,
@@ -248,7 +249,7 @@ pub struct SplitVq {
 	ring: RefCell<DescrRing>,
 	mem_pool: Rc<MemPool>,
 	size: VqSize,
-	dropped: RefCell<Vec<Pinned<TransferToken>>>,
+	dropped: RefCell<Vec<Pin<Box<TransferToken>>>>,
 	index: VqIndex,
 
 	notif_ctrl: NotifCtrl,
@@ -357,7 +358,7 @@ impl SplitVq {
 	/// will check these descriptors from time to time during its poll function.
 	///
 	/// Also see `Virtq.early_drop()` documentation
-	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
+	pub fn early_drop(&self, tkn: Pin<Box<TransferToken>>) {
 		match tkn.state {
 			TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
 			TransferState::Ready => {
@@ -467,7 +468,7 @@ impl SplitVq {
 		let mem_pool = Rc::new(MemPool::new(size));
 
 		// Initialize an empty vector for future dropped transfers
-		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
+		let dropped: RefCell<Vec<Pin<Box<TransferToken>>>> = RefCell::new(Vec::new());
 
 		vq_handler.enable_queue();
 

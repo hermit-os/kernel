@@ -19,6 +19,7 @@ use alloc::rc::Rc;
 use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::ops::{BitAnd, Deref, DerefMut};
+use core::pin::Pin;
 use core::ptr;
 
 use align_address::Align;
@@ -512,7 +513,7 @@ impl Virtq {
 	/// Early drop provides a mechanism for the queue to detect, if an ongoing transfer or a transfer not yet polled by the driver
 	/// has been dropped. The queue implementation is responsible for taking care what should happen to the respective TransferToken
 	/// and BufferToken.
-	fn early_drop(&self, transfer_tk: Pinned<TransferToken>) {
+	fn early_drop(&self, transfer_tk: Pin<Box<TransferToken>>) {
 		match self {
 			Virtq::Packed(vq) => vq.early_drop(transfer_tk),
 			Virtq::Split(vq) => vq.early_drop(transfer_tk),
@@ -588,11 +589,11 @@ pub trait AsSliceU8 {
 pub struct Transfer {
 	/// Needs to be `Option<Pinned<TransferToken>>` in order to prevent deallocation via None
 	// See custom drop function for clarity
-	transfer_tkn: Option<Pinned<TransferToken>>,
+	transfer_tkn: Option<Pin<Box<TransferToken>>>,
 }
 
 impl Drop for Transfer {
-	/// When an unclosed transfer is dropped. The [Pinned]<[TransferToken]> is returned to the respective
+	/// When an unclosed transfer is dropped. The [Pin]<[TransferToken]> is returned to the respective
 	/// virtqueue, who is responsible of handling these situations.
 	fn drop(&mut self) {
 		if let Some(tkn) = self.transfer_tkn.take() {
@@ -870,7 +871,7 @@ impl Transfer {
 		match state {
 			TransferState::Finished => {
 				// Desctructure Token
-				let mut transfer_tkn = self.transfer_tkn.take().unwrap().unpin();
+				let mut transfer_tkn = Pin::into_inner(self.transfer_tkn.take().unwrap());
 
 				let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
 
@@ -955,11 +956,7 @@ impl Transfer {
 					.unwrap()
 					.reusable
 				{
-					let tkn = self
-						.transfer_tkn
-						.take()
-						.unwrap()
-						.unpin()
+					let tkn = Pin::into_inner(self.transfer_tkn.take().unwrap())
 						.buff_tkn
 						.take()
 						.unwrap();
@@ -995,11 +992,7 @@ impl Transfer {
 					.unwrap()
 					.reusable
 				{
-					let tkn = self
-						.transfer_tkn
-						.take()
-						.unwrap()
-						.unpin()
+					let tkn = Pin::into_inner(self.transfer_tkn.take().unwrap())
 						.buff_tkn
 						.take()
 						.unwrap();
@@ -1061,12 +1054,13 @@ impl TransferToken {
 		// Prevent TransferToken from being dropped
 		// I.e. do NOT run the custom constructor which will
 		// deallocate memory.
-		self.get_vq()
-			.dispatch(self, notif)
-			.transfer_tkn
-			.take()
-			.unwrap()
-			.into_raw();
+		core::mem::forget(
+			self.get_vq()
+				.dispatch(self, notif)
+				.transfer_tkn
+				.take()
+				.unwrap(),
+		);
 	}
 
 	/// Dispatches the provided TransferToken to the respective queue and returns a transfer.
@@ -2372,109 +2366,6 @@ pub enum BuffSpec<'a> {
 	/// virtqueue.
 	Indirect(&'a [Bytes]),
 }
-
-/// Ensures `T` is pinned at the same memory location.
-/// This allows to refer to structures via raw pointers.
-///
-/// **WARN:**
-///
-/// Assuming a raw pointer `*mut T / *const T` is valid, is only safe as long as
-/// the `Pinned<T>` does life!
-///
-/// **Properties:**
-///
-/// * `Pinned<T>` behaves like T and implements `Deref`.
-/// *  Drops `T` upon drop.
-pub struct Pinned<T> {
-	raw_ptr: *mut T,
-	_drop_inner: bool,
-}
-
-impl<T: Sized> Pinned<T> {
-	/// Turns a `Pinned<T>` into a *mut T. Memory will remain valid.
-	fn into_raw(mut self) -> *mut T {
-		self._drop_inner = false;
-		self.raw_ptr
-	}
-
-	/// Creates a new pinned `T` by boxing and leaking it.
-	/// Be aware that this will result in a new heap allocation
-	/// for `T` to be boxed.
-	fn pin(val: T) -> Pinned<T> {
-		let boxed = Box::new(val);
-		Pinned {
-			raw_ptr: Box::into_raw(boxed),
-			_drop_inner: true,
-		}
-	}
-
-	/// Creates a new pinned `T` from a boxed `T`.
-	fn from_boxed(boxed: Box<T>) -> Pinned<T> {
-		Pinned {
-			raw_ptr: Box::into_raw(boxed),
-			_drop_inner: true,
-		}
-	}
-
-	/// Create a new pinned `T` from a `*mut T`
-	fn from_raw(raw_ptr: *mut T) -> Pinned<T> {
-		Pinned {
-			raw_ptr,
-			_drop_inner: true,
-		}
-	}
-
-	/// Unpins the pinned value and returns it. This is only
-	/// save as long as no one relies on the
-	/// memory location of `T`, as this location
-	/// will no longer be constant.
-	fn unpin(mut self) -> T {
-		self._drop_inner = false;
-
-		unsafe { *Box::from_raw(self.raw_ptr) }
-	}
-
-	/// Returns a pointer to `T`. The pointer
-	/// can be assumed to be constant over the lifetime of
-	/// `Pinned<T>`.
-	fn raw_addr(&self) -> *mut T {
-		self.raw_ptr
-	}
-}
-
-impl<T> Deref for Pinned<T> {
-	type Target = T;
-	fn deref(&self) -> &Self::Target {
-		unsafe { &*(self.raw_ptr) }
-	}
-}
-
-impl<T> DerefMut for Pinned<T> {
-	fn deref_mut(&mut self) -> &mut Self::Target {
-		unsafe { &mut *(self.raw_ptr) }
-	}
-}
-
-impl<T> Drop for Pinned<T> {
-	fn drop(&mut self) {
-		if self._drop_inner {
-			unsafe {
-				drop(Box::from_raw(self.raw_ptr));
-			}
-		}
-	}
-}
-
-//impl <K> Deref for Pinned<Vec<K>>  {
-//   type Target = [K];
-//   fn deref(&self) -> &Self::Target {
-//       let vec = unsafe {
-//           & *(self.raw_ptr)
-//       };
-//
-//       vec.as_slice()
-//   }
-//}
 
 /// Virtqueue descr flags as defined in the specification.
 ///
