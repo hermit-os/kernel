@@ -205,7 +205,7 @@ jobs:
           file: hermit-loader-${{ matrix.arch }}
       - name: Install virtiofsd
         if: ${{ matrix.arch == 'x86_64' && matrix.package == 'rusty_demo' }}
-        run: cargo install virtiofsd
+        run: cargo install --locked virtiofsd
       - name: Run VM
         # cargo accepts multiple 'features' flags
         # The '… && … || …' expression is like a ternary operator
