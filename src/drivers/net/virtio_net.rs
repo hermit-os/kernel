@@ -336,7 +336,7 @@ impl TxQueues {
 		self.vqs.push(Rc::new(vq));
 		if self.vqs.len() == 1 {
 			// Unwrapping is safe, as one virtq will be definitely in the vector.
-			let vq = self.vqs.get(0).unwrap();
+			let vq = self.vqs.first().unwrap();
 
 			if dev_cfg
 				.features
