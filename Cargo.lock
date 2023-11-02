@@ -509,9 +509,9 @@ dependencies = [
 
 [[package]]
 name = "interrupts"
-version = "0.1.3"
+version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7cf90d5870a82a39ded4b34b70bc153d44b435635e8b92d20c840345f44b5bd"
+checksum = "d279d26957f3721239fc45a5eae4c4534c13cc8485342972753d170190af578e"
 dependencies = [
  "cfg-if",
  "nix",
