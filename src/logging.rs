@@ -53,6 +53,7 @@ macro_rules! infoheader {
 	}};
 }
 
+#[cfg_attr(target_arch = "riscv64", allow(unused))]
 macro_rules! infoentry {
 	($str:expr, $rhs:expr) => (infoentry!($str, "{}", $rhs));
 	($str:expr, $($arg:tt)+) => (::log::info!("{:25}{}", concat!($str, ":"), format_args!($($arg)+)));

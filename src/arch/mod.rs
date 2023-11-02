@@ -54,5 +54,24 @@ cfg_if::cfg_if! {
 			message_output_init,
 			output_message_buf,
 		};
+	} else if #[cfg(target_arch = "riscv64")] {
+		pub mod riscv64;
+		pub use self::riscv64::*;
+
+		#[cfg(feature = "smp")]
+		pub use self::riscv64::kernel::application_processor_init;
+		pub use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
+		pub use self::riscv64::kernel::systemtime::get_boot_time;
+		pub use self::riscv64::kernel::{
+			boot_application_processors,
+			boot_processor_init,
+			core_local,
+			get_processor_count,
+			interrupts,
+			message_output_init,
+			output_message_buf,
+			scheduler,
+			switch,
+		};
 	}
 }

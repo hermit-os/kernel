@@ -50,6 +50,7 @@ unsafe extern "C" fn __sys_read_entropy(buf: *mut u8, len: usize, flags: u32) ->
 /// * `-EINVAL` if `flags` contains unknown flags.
 /// * `-ENOSYS` if the system does not support random data generation.
 #[no_mangle]
+#[cfg_attr(target_arch = "riscv64", allow(unsafe_op_in_unsafe_fn))] // FIXME
 pub unsafe extern "C" fn sys_read_entropy(buf: *mut u8, len: usize, flags: u32) -> isize {
 	kernel_function!(__sys_read_entropy(buf, len, flags))
 }

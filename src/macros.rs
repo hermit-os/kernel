@@ -72,7 +72,10 @@ macro_rules! dbg {
 /// let ret = f(arg);
 /// ```
 #[allow(unused_macro_rules)]
-#[cfg(not(feature = "newlib"))]
+#[cfg(not(any(
+	target_arch = "riscv64",
+	all(target_arch = "x86_64", feature = "newlib")
+)))]
 macro_rules! kernel_function {
 	($f:ident()) => {
 		$crate::arch::switch::kernel_function0($f)
@@ -105,7 +108,11 @@ macro_rules! kernel_function {
 
 // TODO: Properly switch kernel stack with newlib
 // https://github.com/hermit-os/kernel/issues/471
-#[cfg(all(target_arch = "x86_64", feature = "newlib"))]
+// TODO: Switch kernel stack on RISC-V
+#[cfg(any(
+	target_arch = "riscv64",
+	all(target_arch = "x86_64", feature = "newlib")
+))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
 		$f($($x)*)

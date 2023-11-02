@@ -83,6 +83,13 @@ fn start_endpoint() -> u16 {
 	(value % (u16::MAX as u64)).try_into().unwrap()
 }
 
+#[cfg(target_arch = "riscv64")]
+fn start_endpoint() -> u16 {
+	(riscv::register::time::read64() % (u16::MAX as u64))
+		.try_into()
+		.unwrap()
+}
+
 #[inline]
 pub(crate) fn now() -> Instant {
 	let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();

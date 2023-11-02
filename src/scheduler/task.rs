@@ -324,7 +324,7 @@ impl PriorityTaskQueue {
 	}
 
 	/// Returns the highest priority of all available task
-	#[cfg(all(target_arch = "x86_64", feature = "smp"))]
+	#[cfg(all(any(target_arch = "x86_64", target_arch = "riscv64"), feature = "smp"))]
 	pub fn get_highest_priority(&self) -> Priority {
 		if let Some(i) = msb(self.prio_bitmap) {
 			Priority::from(i.try_into().unwrap())

@@ -54,6 +54,7 @@ dhcpv4 = [
 ]
 fs = ["pci"]
 fsgsbase = []
+gem-net = ["tcp"]
 newlib = []
 pci = []
 rtl8139 = ["tcp", "pci"]
@@ -123,6 +124,12 @@ x86_64 = "0.14"
 aarch64 = { version = "0.0", default-features = false }
 arm-gic = { version = "0.1" }
 hermit-dtb = { version = "0.1" }
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+fdt = "0.1"
+riscv = "0.10"
+sbi = "0.2"
+trapframe = "0.9"
 
 [dev-dependencies]
 float-cmp = "0.9"

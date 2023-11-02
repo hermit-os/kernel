@@ -56,6 +56,13 @@ pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
 	}
 }
 
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "riscv64")]
+fn uhyve_send<T>(_port: u16, _data: &mut T) {
+	todo!()
+}
+
 const MAX_ARGC_ENVC: usize = 128;
 
 #[repr(C, packed)]

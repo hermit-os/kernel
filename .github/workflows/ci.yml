@@ -27,7 +27,7 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Check each feature
-        run: cargo hack check --package hermit-kernel --each-feature --no-dev-deps --target x86_64-unknown-none
+        run: cargo hack check --package hermit-kernel --each-feature --skip gem-net --no-dev-deps --target x86_64-unknown-none
         env:
           RUSTFLAGS:
 
@@ -125,14 +125,20 @@ jobs:
         working-directory: kernel
     strategy:
       matrix:
-        arch: [x86_64, aarch64]
+        arch: [x86_64, aarch64, riscv64]
         package: [rusty_demo, httpd, testudp, hello_world]
         netdev: [none, virtio-net-pci, rtl8139]
         profile: [dev, release]
         exclude:
-          # microvm (Firecracker) test does not run on aarch64
+          - arch: riscv64
+            package: httpd
+          - arch: riscv64
+            package: testudp
+          # microvm (Firecracker) test does not run on aarch64 or riscv64
           - package: hello_world
             arch: aarch64
+          - package: hello_world
+            arch: riscv64
           # rtl8139 support does not build on aarch64
           - arch: aarch64
             netdev: rtl8139
@@ -155,6 +161,9 @@ jobs:
             packages: qemu-system-x86 libcap-ng-dev libseccomp-dev socat
           - arch: aarch64
             packages: qemu-system-aarch64
+          - arch: riscv64
+            packages: qemu-system-misc
+            flags: --no-default-features
 
           - arch: x86_64
             package: rusty_demo

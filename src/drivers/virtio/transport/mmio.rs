@@ -394,6 +394,7 @@ pub(crate) fn init_device(
 					info!("Virtio network driver initialized.");
 					// Install interrupt handler
 					irq_install_handler(irq_no, network_irqhandler);
+					#[cfg(not(target_arch = "riscv64"))]
 					add_irq_name(irq_no, "virtio_net");
 
 					Ok(VirtioDriver::Network(virt_net_drv))
