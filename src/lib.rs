@@ -16,7 +16,6 @@
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
 #![feature(noop_waker)]
-#![feature(pointer_byte_offsets)]
 #![feature(pointer_is_aligned)]
 #![feature(ptr_from_ref)]
 #![feature(slice_from_ptr_range)]
