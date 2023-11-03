@@ -98,8 +98,6 @@ fn check_linux_args(
 					continue;
 				}
 
-				info!("Found network card at {mmio:p}, irq {}", irq);
-
 				crate::arch::mm::physicalmem::reserve(
 					PhysAddr::from(current_address.align_down(BasePageSize::SIZE as usize)),
 					BasePageSize::SIZE as usize,
