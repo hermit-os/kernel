@@ -582,9 +582,21 @@ impl NetworkDriver for VirtioNetDriver {
 				if recv_data.len() == 1 {
 					let mut vec_data: Vec<u8> = Vec::with_capacity(self.mtu.into());
 					let num_buffers = {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 						let packet = recv_data.pop().unwrap();
+
+						// drop packets with invalid packet size
+						if packet.len() < HEADER_SIZE {
+							transfer
+								.reuse()
+								.unwrap()
+								.provide()
+								.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+
+							return None;
+						}
+
 						let header = unsafe {
-							const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 							core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
 								packet[..HEADER_SIZE].try_into().unwrap(),
 							)
