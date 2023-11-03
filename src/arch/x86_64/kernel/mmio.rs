@@ -38,7 +38,7 @@ impl MmioDriver {
 
 fn check_linux_args(
 	linux_mmio: &'static [String],
-) -> Result<&'static mut MmioRegisterLayout, &'static str> {
+) -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
 	let virtual_address =
 		crate::arch::mm::virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
 
@@ -50,7 +50,7 @@ fn check_linux_args(
 				let v: Vec<&str> = arg.trim().split(':').collect();
 				let without_prefix = v[0].trim_start_matches("0x");
 				let current_address = usize::from_str_radix(without_prefix, 16).unwrap();
-				let irq: u32 = v[1].parse::<u32>().unwrap();
+				let irq: u8 = v[1].parse::<u8>().unwrap();
 
 				trace!(
 					"try to detect MMIO device at physical address {:#X}",
@@ -105,7 +105,7 @@ fn check_linux_args(
 					BasePageSize::SIZE as usize,
 				);
 
-				return Ok(mmio);
+				return Ok((mmio, irq));
 			}
 			_ => {
 				warn!("Inavlid prefix in {}", arg);
@@ -119,7 +119,7 @@ fn check_linux_args(
 	Err("Network card not found!")
 }
 
-fn guess_mmio() -> Result<&'static mut MmioRegisterLayout, &'static str> {
+fn guess_device() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
 	// Trigger page mapping in the first iteration!
 	let mut current_page = 0;
 	let virtual_address =
@@ -186,7 +186,7 @@ fn guess_mmio() -> Result<&'static mut MmioRegisterLayout, &'static str> {
 
 		//mmio.print_information();
 
-		return Ok(mmio);
+		return Ok((mmio, IRQ_NUMBER));
 	}
 
 	// frees obsolete virtual memory region for MMIO devices
@@ -197,13 +197,13 @@ fn guess_mmio() -> Result<&'static mut MmioRegisterLayout, &'static str> {
 
 /// Tries to find the network device within the specified address range.
 /// Returns a reference to it within the Ok() if successful or an Err() on failure.
-pub fn detect_network() -> Result<&'static mut MmioRegisterLayout, &'static str> {
+fn detect_network() -> Result<(&'static mut MmioRegisterLayout, u8), &'static str> {
 	let linux_mmio = env::mmio();
 
 	if linux_mmio.len() > 0 {
 		check_linux_args(linux_mmio)
 	} else {
-		guess_mmio()
+		guess_device()
 	}
 }
 
@@ -220,12 +220,12 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<Virti
 pub(crate) fn init_drivers() {
 	// virtio: MMIO Device Discovery
 	without_interrupts(|| {
-		if let Ok(mmio) = detect_network() {
+		if let Ok((mmio, irq)) = detect_network() {
 			warn!(
 				"Found MMIO device, but we guess the interrupt number {}!",
-				IRQ_NUMBER
+				irq
 			);
-			if let Ok(VirtioDriver::Network(drv)) = mmio_virtio::init_device(mmio, IRQ_NUMBER) {
+			if let Ok(VirtioDriver::Network(drv)) = mmio_virtio::init_device(mmio, irq) {
 				register_driver(MmioDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 			}
 		} else {
