@@ -1,4 +1,4 @@
-<img width="256" align="right" src="https://github.com/hermit-os/.github/blob/main/img/Hermit.svg" />
+<img width="256" align="right" src="https://github.com/hermit-os/.github/blob/main/logo/hermit-logo.svg" />
 
 # Hermit Kernel
 
