@@ -582,9 +582,21 @@ impl NetworkDriver for VirtioNetDriver {
 				if recv_data.len() == 1 {
 					let mut vec_data: Vec<u8> = Vec::with_capacity(self.mtu.into());
 					let num_buffers = {
+						const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 						let packet = recv_data.pop().unwrap();
+
+						// drop packets with invalid packet size
+						if packet.len() < HEADER_SIZE {
+							transfer
+								.reuse()
+								.unwrap()
+								.provide()
+								.dispatch_await(Rc::clone(&self.recv_vqs.poll_queue), false);
+
+							return None;
+						}
+
 						let header = unsafe {
-							const HEADER_SIZE: usize = mem::size_of::<VirtioNetHdr>();
 							core::mem::transmute::<[u8; HEADER_SIZE], VirtioNetHdr>(
 								packet[..HEADER_SIZE].try_into().unwrap(),
 							)
@@ -681,7 +693,7 @@ impl VirtioNetDriver {
 	}
 
 	/// Returns the current status of the device, if VIRTIO_NET_F_STATUS
-	/// has been negotiated. Otherwise returns zero.
+	/// has been negotiated. Otherwise assumes an active device.
 	#[cfg(not(feature = "pci"))]
 	pub fn dev_status(&self) -> u16 {
 		if self
@@ -691,7 +703,7 @@ impl VirtioNetDriver {
 		{
 			self.dev_cfg.raw.get_status()
 		} else {
-			0
+			u16::from(Status::VIRTIO_NET_S_LINK_UP)
 		}
 	}
 
@@ -767,11 +779,8 @@ impl VirtioNetDriver {
 		self.com_cfg.set_drv();
 
 		// Define minimal feature set
-		let min_feats: Vec<Features> = vec![
-			Features::VIRTIO_F_VERSION_1,
-			Features::VIRTIO_NET_F_MAC,
-			Features::VIRTIO_NET_F_STATUS,
-		];
+		let min_feats: Vec<Features> =
+			vec![Features::VIRTIO_F_VERSION_1, Features::VIRTIO_NET_F_MAC];
 
 		let mut min_feat_set = FeatureSet::new(0);
 		min_feat_set.set_features(&min_feats);
@@ -779,6 +788,8 @@ impl VirtioNetDriver {
 
 		// If wanted, push new features into feats here:
 		//
+		// the link status can be announced
+		feats.push(Features::VIRTIO_NET_F_STATUS);
 		// Indirect descriptors can be used
 		feats.push(Features::VIRTIO_F_RING_INDIRECT_DESC);
 		// MTU setting can be used

@@ -81,7 +81,7 @@ pub(crate) fn init() {
 		npage_2tables / (BasePageSize::SIZE as usize / mem::align_of::<usize>()) + 1;
 	let reserved_space = (npage_3tables + npage_2tables + npage_1tables)
 		* BasePageSize::SIZE as usize
-		+ LargePageSize::SIZE as usize;
+		+ 2 * LargePageSize::SIZE as usize;
 	#[cfg(any(target_arch = "x86_64", target_arch = "riscv64"))]
 	let has_1gib_pages = arch::processor::supports_1gib_pages();
 	let has_2mib_pages = arch::processor::supports_2mib_pages();
