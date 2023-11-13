@@ -29,8 +29,8 @@ hermit-dtb = { version = "0.1" }
 goblin = { version = "0.7", default-features = false, features = ["elf64"] }
 
 [target.'cfg(target_os = "uefi")'.dependencies]
-uefi = "0.25"
-uefi-services = "0.22"
+uefi = "0.26"
+uefi-services = "0.23"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = "0.1"
