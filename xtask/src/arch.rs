@@ -74,13 +74,15 @@ impl Arch {
 			Self::X86_64 => &["--target=x86_64-unknown-none"],
 			Self::Aarch64 => &[
 				"--target=aarch64-unknown-none-softfloat",
-				// We can't use prebuilt std for aarch64 because it is built with
+				// We can't use prebuilt std here because it is built with
 				// relocation-model=static and we need relocation-model=pic
 				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
 			Self::Riscv64 => &[
 				"--target=riscv64gc-unknown-none-elf",
+				// We can't use prebuilt std here because it is built with
+				// relocation-model=static and we need relocation-model=pic
 				"-Zbuild-std=core,alloc",
 				"-Zbuild-std-features=compiler-builtins-mem",
 			],
