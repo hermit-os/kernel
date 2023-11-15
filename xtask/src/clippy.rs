@@ -13,6 +13,8 @@ impl Clippy {
 		let sh = crate::sh()?;
 
 		for target in [Arch::X86_64, Arch::Aarch64] {
+			target.install()?;
+
 			let target_args = target.cargo_args();
 			cmd!(sh, "cargo clippy {target_args...}").run()?;
 			cmd!(sh, "cargo clippy {target_args...}")

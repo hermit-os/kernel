@@ -1,4 +1,6 @@
+use anyhow::Result;
 use clap::ValueEnum;
+use xshell::cmd;
 
 /// Target architecture.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Eq, Debug)]
@@ -13,6 +15,20 @@ pub enum Arch {
 }
 
 impl Arch {
+	pub fn install(&self) -> Result<()> {
+		eprintln!("Installing target");
+		let sh = crate::sh()?;
+		match self {
+			Self::X86_64 => {
+				let triple = self.triple();
+				cmd!(sh, "rustup target add {triple}").run()?;
+			}
+			Self::Aarch64 => {}
+			Self::Riscv64 => {}
+		}
+		Ok(())
+	}
+
 	pub fn name(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64",

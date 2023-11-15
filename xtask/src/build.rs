@@ -25,6 +25,8 @@ impl Build {
 	pub fn run(self) -> Result<()> {
 		let sh = crate::sh()?;
 
+		self.cargo_build.artifact.arch.install()?;
+
 		eprintln!("Building kernel");
 		cmd!(sh, "cargo build")
 			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
