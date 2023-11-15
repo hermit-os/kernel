@@ -459,7 +459,7 @@ impl SplitVq {
 
 		let notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
 			notif_cfg.base()
-				+ usize::try_from(vq_handler.notif_off()).unwrap()
+				+ usize::from(vq_handler.notif_off())
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
 		));
 

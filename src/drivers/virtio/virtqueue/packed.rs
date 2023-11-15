@@ -105,7 +105,7 @@ struct DescriptorRing {
 
 impl DescriptorRing {
 	fn new(size: u16) -> Self {
-		let size = usize::try_from(size).unwrap();
+		let size = usize::from(size);
 
 		// Allocate heap memory via a vec, leak and cast
 		let _mem_len =
@@ -297,7 +297,7 @@ impl DescriptorRing {
 		//
 		// Providing the first buffer in the list manually
 		// provide reference, in order to let TransferToken now upon finish.
-		self.tkn_ref_ring[usize::try_from(first_ctrl_settings.1).unwrap()] = pind_lst[0].raw_addr();
+		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = pind_lst[0].raw_addr();
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -805,7 +805,7 @@ impl<'a> WriteCtrl<'a> {
 		assert!(self.buff_id != 0);
 
 		// provide reference, in order to let TransferToken now upon finish.
-		self.desc_ring.tkn_ref_ring[usize::try_from(self.buff_id).unwrap()] = raw_tkn;
+		self.desc_ring.tkn_ref_ring[usize::from(self.buff_id)] = raw_tkn;
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -1279,7 +1279,7 @@ impl PackedVq {
 
 		let mut notif_ctrl = NotifCtrl::new(ptr::from_exposed_addr_mut(
 			notif_cfg.base()
-				+ usize::try_from(vq_handler.notif_off()).unwrap()
+				+ usize::from(vq_handler.notif_off())
 				+ usize::try_from(notif_cfg.multiplier()).unwrap(),
 		));
 
