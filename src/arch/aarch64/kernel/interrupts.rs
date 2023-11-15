@@ -126,7 +126,7 @@ pub(crate) extern "C" fn do_fiq(state: &State) -> *mut usize {
 		if unsafe {
 			reschedule
 				|| vector == TIMER_INTERRUPT.try_into().unwrap()
-				|| vector == SGI_RESCHED.try_into().unwrap()
+				|| vector == SGI_RESCHED.into()
 		} {
 			// a timer interrupt may have caused unblocking of tasks
 			return core_scheduler()
@@ -162,7 +162,7 @@ pub(crate) extern "C" fn do_irq(state: &State) -> *mut usize {
 		if unsafe {
 			reschedule
 				|| vector == TIMER_INTERRUPT.try_into().unwrap()
-				|| vector == SGI_RESCHED.try_into().unwrap()
+				|| vector == SGI_RESCHED.into()
 		} {
 			// a timer interrupt may have caused unblocking of tasks
 			return core_scheduler()
