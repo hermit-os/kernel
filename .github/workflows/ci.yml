@@ -26,6 +26,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: rustup target add x86_64-unknown-none
       - name: Check each feature
         run: cargo hack check --package hermit-kernel --each-feature --skip gem-net --no-dev-deps --target x86_64-unknown-none
         env:
@@ -61,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: mkroening/rust-toolchain-toml@main
-      - run: rustup target add aarch64-unknown-none-softfloat
+      - run: rustup target add x86_64-unknown-none aarch64-unknown-none-softfloat
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -112,6 +113,7 @@ jobs:
         with:
           repo: hermit-os/loader
           file: hermit-loader-x86_64
+      - run: rustup target add x86_64-unknown-none
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64
         env:
