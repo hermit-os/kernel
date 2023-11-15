@@ -16,15 +16,11 @@ pub enum Arch {
 
 impl Arch {
 	pub fn install(&self) -> Result<()> {
-		eprintln!("Installing target");
 		let sh = crate::sh()?;
-		match self {
-			Self::X86_64 => {
-				let triple = self.triple();
-				cmd!(sh, "rustup target add {triple}").run()?;
-			}
-			Self::Aarch64 => {}
-			Self::Riscv64 => {}
+		if self == &Self::X86_64 {
+			eprintln!("Installing target");
+			let triple = self.triple();
+			cmd!(sh, "rustup target add {triple}").run()?;
 		}
 		Ok(())
 	}
