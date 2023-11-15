@@ -256,7 +256,9 @@ fn get_frequency() -> u64 {
 	let mut sys = System::new();
 	sys.refresh_cpu_specifics(CpuRefreshKind::new().with_frequency());
 	let frequency = sys.cpus().first().unwrap().frequency();
-	assert!(sys.cpus().iter().all(|cpu| cpu.frequency() == frequency));
+	if !sys.cpus().iter().all(|cpu| cpu.frequency() == frequency) {
+		eprintln!("CPU frequencies are not all equal");
+	}
 	frequency
 }
 
