@@ -14,8 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Rustup (apply rust-toolchain.toml)
-        run: rustup show
+      - uses: mkroening/rust-toolchain-toml@main
+      - run: rustup target add x86_64-unknown-none
       - name: Generate documentation
         run: cargo doc --target x86_64-unknown-none --package hermit-kernel
       - name: Generate index.html
