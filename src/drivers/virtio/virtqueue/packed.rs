@@ -20,8 +20,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
-	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer,
+	TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::mm::paging::{BasePageSize, PageSize};
 use crate::arch::mm::{paging, VirtAddr};
@@ -88,7 +88,7 @@ impl WrapCount {
 struct DescriptorRing {
 	ring: &'static mut [Descriptor],
 	//ring: Pinned<Vec<Descriptor>>,
-	tkn_ref_ring: Box<[*mut TransferToken]>,
+	tkn_ref_ring: Box<[Option<Rc<TransferToken>>]>,
 
 	// Controlling variables for the ring
 	//
@@ -117,7 +117,7 @@ impl DescriptorRing {
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
 		// reference ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
 		// and do not care about the first element being unused.
-		let tkn_ref_ring = vec![ptr::null_mut(); size + 1].into_boxed_slice();
+		let tkn_ref_ring = vec![None; size + 1].into_boxed_slice();
 
 		DescriptorRing {
 			ring,
@@ -135,33 +135,27 @@ impl DescriptorRing {
 	fn poll(&mut self) {
 		let mut ctrl = self.get_read_ctrler();
 
-		if let Some(tkn) = ctrl.poll_next() {
+		if let Some(mut tkn) = ctrl.poll_next() {
 			// The state of the TransferToken up to this point MUST NOT be
 			// finished. As soon as we mark the token as finished, we can not
 			// be sure, that the token is not dropped, which would making
 			// the dereferencing operation undefined behaviour as also
 			// all operations on the reference.
-			let tkn = unsafe { &mut *(tkn) };
 
-			match tkn.await_queue {
-				Some(_) => {
-					tkn.state = TransferState::Finished;
-					let queue = tkn.await_queue.take().unwrap();
-
+			unsafe {
+				let tkn_ref = Rc::get_mut_unchecked(&mut tkn);
+				tkn_ref.state = TransferState::Finished;
+				if let Some(queue) = tkn_ref.await_queue.take() {
 					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
 					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(Pinned::from_raw(ptr::from_mut(tkn))),
+						transfer_tkn: Some(tkn),
 					});
 				}
-				None => tkn.state = TransferState::Finished,
 			}
 		}
 	}
 
-	fn push_batch(
-		&mut self,
-		tkn_lst: Vec<TransferToken>,
-	) -> (Vec<Pinned<TransferToken>>, usize, u8) {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (Vec<Rc<TransferToken>>, usize, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
@@ -169,13 +163,10 @@ impl DescriptorRing {
 		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
 		let mut pind_lst = Vec::with_capacity(tkn_lst.len());
 
-		for (i, tkn) in tkn_lst.into_iter().enumerate() {
-			// fix memory address of token
-			let mut pinned = Pinned::pin(tkn);
-
+		for (i, mut tkn) in tkn_lst.into_iter().enumerate() {
 			// Check length and if its fits. This should always be true due to the restriction of
 			// the memory pool, but to be sure.
-			assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+			assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
 
 			// create an counter that wrappes to the first element
 			// after reaching a the end of the ring
@@ -190,8 +181,8 @@ impl DescriptorRing {
 			// * write descriptors in the correct order
 			// * make them available in the right order (reversed order or i.e. lastly where device polls)
 			match (
-				&pinned.buff_tkn.as_ref().unwrap().send_buff,
-				&pinned.buff_tkn.as_ref().unwrap().recv_buff,
+				&tkn.buff_tkn.as_ref().unwrap().send_buff,
+				&tkn.buff_tkn.as_ref().unwrap().recv_buff,
 			) {
 				(Some(send_buff), Some(recv_buff)) => {
 					// It is important to differentiate between indirect and direct descriptors here and if
@@ -282,22 +273,25 @@ impl DescriptorRing {
 				(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 			}
 
+			// Update the state of the actual Token
+			tkn.state = TransferState::Processing;
+
+			let tkn = Rc::new(tkn);
+
 			if i == 0 {
 				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
 			} else {
 				// Update flags of the first descriptor and set new write_index
-				ctrl.make_avail(pinned.raw_addr());
+				ctrl.make_avail(tkn.clone());
 			}
 
-			// Update the state of the actual Token
-			pinned.state = TransferState::Processing;
-			pind_lst.push(pinned);
+			pind_lst.push(tkn.clone());
 		}
 		// Manually make the first buffer available lastly
 		//
 		// Providing the first buffer in the list manually
 		// provide reference, in order to let TransferToken now upon finish.
-		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = pind_lst[0].raw_addr();
+		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = Some(pind_lst[0].clone());
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -311,13 +305,10 @@ impl DescriptorRing {
 		)
 	}
 
-	fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, usize, u8) {
-		// fix memory address of token
-		let mut pinned = Pinned::pin(tkn);
-
+	fn push(&mut self, mut tkn: TransferToken) -> (Rc<TransferToken>, usize, u8) {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
-		assert!(pinned.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
+		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
 
 		// create an counter that wrappes to the first element
 		// after reaching a the end of the ring
@@ -332,8 +323,8 @@ impl DescriptorRing {
 		// * write descriptors in the correct order
 		// * make them available in the right order (reversed order or i.e. lastly where device polls)
 		match (
-			&pinned.buff_tkn.as_ref().unwrap().send_buff,
-			&pinned.buff_tkn.as_ref().unwrap().recv_buff,
+			&tkn.buff_tkn.as_ref().unwrap().send_buff,
+			&tkn.buff_tkn.as_ref().unwrap().recv_buff,
 		) {
 			(Some(send_buff), Some(recv_buff)) => {
 				// It is important to differentiate between indirect and direct descriptors here and if
@@ -418,15 +409,19 @@ impl DescriptorRing {
 		}
 
 		fence(Ordering::SeqCst);
+		// Update the state of the actual Token
+		tkn.state = TransferState::Processing;
+
+		fence(Ordering::SeqCst);
+		let tkn = Rc::new(tkn);
+
+		fence(Ordering::SeqCst);
 		// Update flags of the first descriptor and set new write_index
-		ctrl.make_avail(pinned.raw_addr());
+		ctrl.make_avail(tkn.clone());
 		fence(Ordering::SeqCst);
 
-		// Update the state of the actual Token
-		pinned.state = TransferState::Processing;
-
 		// Converting a boolean as u8 is fine
-		(pinned, ctrl.start, ctrl.wrap_at_init.0 as u8)
+		(tkn, ctrl.start, ctrl.wrap_at_init.0 as u8)
 	}
 
 	/// # Unsafe
@@ -472,26 +467,22 @@ struct ReadCtrl<'a> {
 impl<'a> ReadCtrl<'a> {
 	/// Polls the ring for a new finished buffer. If buffer is marked as used, takes care of
 	/// updating the queue and returns the respective TransferToken.
-	fn poll_next(&mut self) -> Option<*mut TransferToken> {
+	fn poll_next(&mut self) -> Option<Rc<TransferToken>> {
 		// Check if descriptor has been marked used.
 		if self.desc_ring.ring[self.position].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
-			let tkn = unsafe {
-				let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
-				let raw_tkn = self.desc_ring.tkn_ref_ring[buff_id];
-				// unset the reference in the reference ring for security!
-				self.desc_ring.tkn_ref_ring[buff_id] = ptr::null_mut();
-				assert!(!raw_tkn.is_null());
-				&mut *raw_tkn
-			};
+			let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
+			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id]
+				.take()
+				.expect("TransferToken at position does not exist");
 
 			let (send_buff, recv_buff) = {
 				let BufferToken {
 					send_buff,
 					recv_buff,
 					..
-				} = tkn.buff_tkn.as_mut().unwrap();
+				} = unsafe { Rc::get_mut_unchecked(&mut tkn).buff_tkn.as_mut().unwrap() };
 				(recv_buff.as_mut(), send_buff.as_mut())
 			};
 
@@ -542,7 +533,7 @@ impl<'a> ReadCtrl<'a> {
 				(None, None) => unreachable!("Empty Transfers are not allowed..."),
 			}
 
-			Some(ptr::from_mut(tkn))
+			Some(tkn)
 		} else {
 			None
 		}
@@ -798,14 +789,14 @@ impl<'a> WriteCtrl<'a> {
 		}
 	}
 
-	fn make_avail(&mut self, raw_tkn: *mut TransferToken) {
+	fn make_avail(&mut self, raw_tkn: Rc<TransferToken>) {
 		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
 		// We also fail if buff_id is not set!
 		assert!(self.buff_id != 0);
 
 		// provide reference, in order to let TransferToken now upon finish.
-		self.desc_ring.tkn_ref_ring[usize::from(self.buff_id)] = raw_tkn;
+		self.desc_ring.tkn_ref_ring[usize::from(self.buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
@@ -997,10 +988,6 @@ pub struct PackedVq {
 	/// The virtqueues index. This identifies the virtqueue to the
 	/// device and is unique on a per device basis.
 	index: VqIndex,
-	/// Holds all early dropped `TransferToken`
-	/// If `TransferToken.state == TransferState::Finished`
-	/// the Token can be safely dropped.
-	dropped: RefCell<Vec<Pinned<TransferToken>>>,
 }
 
 // Public interface of PackedVq
@@ -1016,17 +1003,6 @@ impl PackedVq {
 	/// Disables interrupts for this virtqueue upon receiving a transfer
 	pub fn disable_notifs(&self) {
 		self.drv_event.borrow_mut().disable_notif();
-	}
-
-	/// This function does check if early dropped TransferTokens are finished
-	/// and removes them if this is the case.
-	pub fn clean_up(&self) {
-		// remove and drop all finished Transfers
-		if !self.dropped.borrow().is_empty() {
-			self.dropped
-				.borrow_mut()
-				.retain(|tkn| tkn.state != TransferState::Finished);
-		}
 	}
 
 	/// See `Virtq.poll()` documentation
@@ -1110,7 +1086,7 @@ impl PackedVq {
 			tkn.await_queue = Some(Rc::clone(&await_queue));
 		}
 
-		let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let (_, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
 			self.drv_event
@@ -1136,13 +1112,6 @@ impl PackedVq {
 			}
 
 			self.notif_ctrl.notify_dev(&notif_data)
-		}
-
-		for pinned in pin_tkn_lst {
-			// Prevent TransferToken from being dropped
-			// I.e. do NOT run the custom constructor which will
-			// deallocate memory.
-			pinned.into_raw();
 		}
 	}
 
@@ -1182,24 +1151,6 @@ impl PackedVq {
 
 		Transfer {
 			transfer_tkn: Some(pin_tkn),
-		}
-	}
-
-	/// The packed virtqueue handles early dropped transfers by moving the respective tokens into
-	/// an vector. Here they will remain until they are finished. In order to ensure this the queue
-	/// will check these descriptors from time to time during its poll function.
-	///
-	/// Also see `Virtq.early_drop()` documentation.
-	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
-		match tkn.state {
-			TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
-			TransferState::Ready => {
-				unreachable!("Early dropped transfers are not allowed to be state == Ready")
-			}
-			TransferState::Processing => {
-				// Keep token until state is finished. This needs to be checked/cleaned up later
-				self.dropped.borrow_mut().push(tkn);
-			}
 		}
 	}
 
@@ -1294,9 +1245,6 @@ impl PackedVq {
 		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(vq_size));
 
-		// Initialize an empty vector for future dropped transfers
-		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
-
 		vq_handler.enable_queue();
 
 		info!("Created PackedVq: idx={}, size={}", index.0, vq_size);
@@ -1309,7 +1257,6 @@ impl PackedVq {
 			mem_pool,
 			size: VqSize::from(vq_size),
 			index,
-			dropped,
 		})
 	}
 

@@ -17,8 +17,8 @@ use super::super::transport::mmio::{ComCfg, NotifCfg, NotifCtrl};
 use super::super::transport::pci::{ComCfg, NotifCfg, NotifCtrl};
 use super::error::VirtqError;
 use super::{
-	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Pinned,
-	Transfer, TransferState, TransferToken, Virtq, VqIndex, VqSize,
+	AsSliceU8, BuffSpec, Buffer, BufferToken, Bytes, DescrFlags, MemDescr, MemPool, Transfer,
+	TransferState, TransferToken, Virtq, VqIndex, VqSize,
 };
 use crate::arch::memory_barrier;
 use crate::arch::mm::paging::{BasePageSize, PageSize};
@@ -72,19 +72,19 @@ struct UsedElem {
 struct DescrRing {
 	read_idx: u16,
 	descr_table: DescrTable,
-	ref_ring: Box<[*mut TransferToken]>,
+	ref_ring: Box<[Option<Rc<TransferToken>>]>,
 	avail_ring: AvailRing,
 	used_ring: UsedRing,
 }
 
 impl DescrRing {
-	fn push(&mut self, tkn: TransferToken) -> (Pinned<TransferToken>, u16, u16) {
-		let pin = Pinned::pin(tkn);
+	fn push(&mut self, tkn: TransferToken) -> (Rc<TransferToken>, u16, u16) {
+		let tkn = Rc::new(tkn);
 
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
 
-		if let Some(buff) = pin.buff_tkn.as_ref().unwrap().send_buff.as_ref() {
+		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().send_buff.as_ref() {
 			if buff.is_indirect() {
 				desc_lst.push((buff.get_ctrl_desc().unwrap(), false));
 				is_indirect = true;
@@ -95,7 +95,7 @@ impl DescrRing {
 			}
 		}
 
-		if let Some(buff) = pin.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
+		if let Some(buff) = tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref() {
 			if buff.is_indirect() {
 				if desc_lst.is_empty() {
 					desc_lst.push((buff.get_ctrl_desc().unwrap(), true));
@@ -114,7 +114,7 @@ impl DescrRing {
 			}
 		}
 
-		let mut len = pin.buff_tkn.as_ref().unwrap().num_consuming_descr();
+		let mut len = tkn.buff_tkn.as_ref().unwrap().num_consuming_descr();
 
 		assert!(!desc_lst.is_empty());
 		// Minus 1, comes from  the fact that ids run from one to 255 and not from 0 to 254 for u8::MAX sized pool
@@ -189,14 +189,14 @@ impl DescrRing {
 			len -= 1;
 		}
 
-		self.ref_ring[index] = pin.raw_addr();
+		self.ref_ring[index] = Some(tkn.clone());
 		self.avail_ring.ring[*self.avail_ring.index as usize % self.avail_ring.ring.len()] =
 			index as u16;
 
 		memory_barrier();
 		*self.avail_ring.index = self.avail_ring.index.wrapping_add(1);
 
-		(pin, 0, 0)
+		(tkn, 0, 0)
 	}
 
 	fn poll(&mut self) {
@@ -204,26 +204,33 @@ impl DescrRing {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
 			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
 
-			let tkn = unsafe { &mut *(self.ref_ring[used_elem.id as usize]) };
+			let mut tkn = self.ref_ring[used_elem.id as usize]
+				.take()
+				.expect("Invalid TransferToken reference in reference ring");
 
-			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
-				tkn.buff_tkn
-					.as_mut()
+			unsafe {
+				let tkn_ref = Rc::get_mut_unchecked(&mut tkn);
+				if tkn_ref
+					.buff_tkn
+					.as_ref()
 					.unwrap()
-					.restr_size(None, Some(used_elem.len as usize))
-					.unwrap();
-			}
-			match tkn.await_queue {
-				Some(_) => {
-					tkn.state = TransferState::Finished;
-					let queue = tkn.await_queue.take().unwrap();
-
-					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
-					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(Pinned::from_raw(ptr::from_mut(tkn))),
-					});
+					.recv_buff
+					.as_ref()
+					.is_some()
+				{
+					tkn_ref
+						.buff_tkn
+						.as_mut()
+						.unwrap()
+						.restr_size(None, Some(used_elem.len as usize))
+						.unwrap();
 				}
-				None => tkn.state = TransferState::Finished,
+				tkn_ref.state = TransferState::Finished;
+				if let Some(queue) = tkn_ref.await_queue.take() {
+					queue.borrow_mut().push_back(Transfer {
+						transfer_tkn: Some(tkn),
+					})
+				}
 			}
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
@@ -248,7 +255,6 @@ pub struct SplitVq {
 	ring: RefCell<DescrRing>,
 	mem_pool: Rc<MemPool>,
 	size: VqSize,
-	dropped: RefCell<Vec<Pinned<TransferToken>>>,
 	index: VqIndex,
 
 	notif_ctrl: NotifCtrl,
@@ -263,17 +269,6 @@ impl SplitVq {
 	/// Disables interrupts for this virtqueue upon receiving a transfer
 	pub fn disable_notifs(&self) {
 		self.ring.borrow_mut().drv_disable_notif();
-	}
-
-	/// This function does check if early dropped TransferTokens are finished
-	/// and removes them if this is the case.
-	pub fn clean_up(&self) {
-		// remove and drop all finished Transfers
-		if !self.dropped.borrow().is_empty() {
-			self.dropped
-				.borrow_mut()
-				.retain(|tkn| tkn.state != TransferState::Finished);
-		}
 	}
 
 	/// See `Virtq.poll()` documentation
@@ -349,24 +344,6 @@ impl SplitVq {
 
 		Transfer {
 			transfer_tkn: Some(pin_tkn),
-		}
-	}
-
-	/// The packed virtqueue handles early dropped transfers by moving the respective tokens into
-	/// a vector. Here they will remain until they are finished. In order to ensure this the queue
-	/// will check these descriptors from time to time during its poll function.
-	///
-	/// Also see `Virtq.early_drop()` documentation
-	pub fn early_drop(&self, tkn: Pinned<TransferToken>) {
-		match tkn.state {
-			TransferState::Finished => (), // Drop the pinned token -> Dealloc everything
-			TransferState::Ready => {
-				unreachable!("Early dropped transfers are not allowed to be state == Ready")
-			}
-			TransferState::Processing => {
-				// Keep token until state is finished. This needs to be checked/cleaned up later.
-				self.dropped.borrow_mut().push(tkn);
-			}
 		}
 	}
 
@@ -451,7 +428,7 @@ impl SplitVq {
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
-			ref_ring: vec![ptr::null_mut(); size as usize].into_boxed_slice(),
+			ref_ring: vec![None; size as usize].into_boxed_slice(),
 			descr_table,
 			avail_ring,
 			used_ring,
@@ -466,9 +443,6 @@ impl SplitVq {
 		// Initialize new memory pool.
 		let mem_pool = Rc::new(MemPool::new(size));
 
-		// Initialize an empty vector for future dropped transfers
-		let dropped: RefCell<Vec<Pinned<TransferToken>>> = RefCell::new(Vec::new());
-
 		vq_handler.enable_queue();
 
 		info!("Created SplitVq: idx={}, size={}", index.0, size);
@@ -479,7 +453,6 @@ impl SplitVq {
 			mem_pool,
 			size: VqSize(size),
 			index,
-			dropped,
 		})
 	}
 

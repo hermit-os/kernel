@@ -16,6 +16,7 @@
 #![feature(allocator_api)]
 #![feature(asm_const)]
 #![feature(exposed_provenance)]
+#![feature(get_mut_unchecked)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
