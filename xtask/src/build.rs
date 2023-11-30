@@ -103,6 +103,7 @@ impl Build {
 		let explicit_exports = [
 			"_start",
 			"__bss_start",
+			"mcount",
 			"runtime_entry",
 			// lwIP functions (C runtime)
 			"init_lwip",
