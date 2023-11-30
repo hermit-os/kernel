@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env;
 use std::fmt::Write;
 use std::path::{Path, PathBuf};
@@ -41,21 +42,40 @@ impl Archive {
 		Ok(symbols)
 	}
 
-	pub fn retain_symbols<'a>(&self, symbols: impl Iterator<Item = &'a str>) -> Result<()> {
+	pub fn retain_symbols(&self, mut exported_symbols: HashSet<&str>) -> Result<()> {
 		let sh = crate::sh()?;
 		let archive = self.as_ref();
-		let prefix = archive.file_stem().unwrap().to_str().unwrap();
+		let prefix = {
+			let file_stem = archive.file_stem().unwrap().to_str().unwrap();
+			file_stem.strip_prefix("lib").unwrap_or(file_stem)
+		};
 
-		let symbol_renames = symbols.fold(String::new(), |mut output, symbol| {
-			let _ = writeln!(output, "{prefix}_{symbol} {symbol}");
-			output
-		});
+		let all_symbols = {
+			let nm = binutil("nm")?;
+			let stdout = cmd!(sh, "{nm} --export-symbols {archive}").output()?.stdout;
+			String::from_utf8(stdout)?
+		};
+
+		let symbol_renames = all_symbols
+			.lines()
+			.fold(String::new(), |mut output, symbol| {
+				if exported_symbols.remove(symbol) {
+					return output;
+				}
+
+				if let Some(symbol) = symbol.strip_prefix("_ZN") {
+					let prefix_len = prefix.len();
+					let _ = writeln!(output, "_ZN{symbol} _ZN{prefix_len}{prefix}{symbol}",);
+				} else {
+					let _ = writeln!(output, "{symbol} {prefix}_{symbol}");
+				}
+				output
+			});
 
 		let rename_path = archive.with_extension("redefine-syms");
 		sh.write_file(&rename_path, symbol_renames)?;
 
 		let objcopy = binutil("objcopy")?;
-		cmd!(sh, "{objcopy} --prefix-symbols={prefix}_ {archive}").run()?;
 		cmd!(sh, "{objcopy} --redefine-syms={rename_path} {archive}").run()?;
 
 		sh.remove_path(&rename_path)?;

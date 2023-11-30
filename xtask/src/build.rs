@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::env::{self, VarError};
 
 use anyhow::Result;
@@ -57,7 +58,7 @@ impl Build {
 		eprintln!("Exporting hermit-builtins symbols");
 		let builtins = self.cargo_build.artifact.builtins_archive();
 		let builtin_symbols = sh.read_file("hermit-builtins/exports")?;
-		builtins.retain_symbols(builtin_symbols.lines())?;
+		builtins.retain_symbols(builtin_symbols.lines().collect::<HashSet<_>>())?;
 
 		dist_archive.append(&builtins)?;
 
@@ -85,6 +86,7 @@ impl Build {
 
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
+			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		}
 
 		if self.randomize_layout {
@@ -103,6 +105,7 @@ impl Build {
 		let explicit_exports = [
 			"_start",
 			"__bss_start",
+			"mcount",
 			"runtime_entry",
 			// lwIP functions (C runtime)
 			"init_lwip",
@@ -118,7 +121,7 @@ impl Build {
 
 		let symbols = explicit_exports.chain(syscall_symbols.iter().map(String::as_str));
 
-		archive.retain_symbols(symbols)?;
+		archive.retain_symbols(symbols.collect::<HashSet<_>>())?;
 
 		Ok(())
 	}
