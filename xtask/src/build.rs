@@ -85,6 +85,7 @@ impl Build {
 
 		if self.instrument_mcount {
 			rustflags.push("-Zinstrument-mcount");
+			rustflags.push("-Cpasses=ee-instrument<post-inline>");
 		}
 
 		if self.randomize_layout {
