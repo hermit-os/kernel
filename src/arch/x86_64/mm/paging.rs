@@ -4,12 +4,15 @@ use core::ptr;
 use env::kernel::pit::PIT_INTERRUPT_NUMBER;
 use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3};
-use x86_64::structures::paging::mapper::{MapToError, MappedFrame, UnmapError, MapperAllSizes, TranslateResult};
-pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
+use x86_64::structures::paging::frame::PhysFrameRange;
+use x86_64::structures::paging::mapper::{
+	MapToError, MappedFrame, MapperAllSizes, TranslateResult, UnmapError,
+};
 use x86_64::structures::paging::page_table::PageTableLevel;
+pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
-	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Translate, self, FrameAllocator,
+	self, FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame,
+	RecursivePageTable, Translate,
 };
 
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
@@ -159,7 +162,7 @@ pub fn map<S>(
 					}
 					flush.flush();
 					debug!("Had to unmap page {page:?} before mapping.");
-				}		
+				}
 				pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
 					.unwrap_or_else(|e| match e {
 						MapToError::ParentEntryHugePage => {
@@ -384,46 +387,59 @@ fn set_pagetable_page_writable(
 /// It takes the Page Table with its mapping, the Hugepage in question, the physical frame it is stored in and its flags as input.
 /// The page gets remapped and a new level 2 Pagetable is allocated in this function to connect the (now) 512 level 1 pages.
 unsafe fn recast_huge_page<S>(
-	mut pt: OffsetPageTable<'static>, 
-	page: Page<S>, 
+	mut pt: OffsetPageTable<'static>,
+	page: Page<S>,
 	frame: PhysFrame<S>,
 	flags: PageTableEntryFlags,
 ) -> x86_64::structures::paging::mapper::MapperFlush<S>
-where 
+where
 	S: PageSize + Debug,
- 	OffsetPageTable<'static>: Mapper<S> + MapperAllSizes,
-	{
+	OffsetPageTable<'static>: Mapper<S> + MapperAllSizes,
+{
+	//make sure that the allocated physical frame is NOT inside the page that needs remapping
+	let forbidden_start: PhysFrame<BasePageSize> =
+		PhysFrame::from_start_address(frame.start_address()).unwrap();
+	let forbidden_end: PhysFrame<BasePageSize> = PhysFrame::from_start_address(
+		x86_64::PhysAddr::new(frame.start_address().as_u64() + 0x200000),
+	)
+	.unwrap();
+	trace!("forbidden start: {forbidden_start:?}, forbidden end: {forbidden_end:?}");
+	let forbidden_range: PhysFrameRange<BasePageSize> =
+		PhysFrame::range(forbidden_start, forbidden_end);
 	//Pagetable walk to get the correct data
 	let pml4 = pt.level_4_table();
 	let pdpte_entry = &mut pml4[page.p4_index()];
 	let pdpte_ptr: *mut PageTable = x86_64::VirtAddr::new(pdpte_entry.addr().as_u64()).as_mut_ptr();
-	let pdpte = unsafe{&mut *pdpte_ptr};
+	let pdpte = unsafe { &mut *pdpte_ptr };
 	let pde_entry = &mut pdpte[page.p3_index()];
 	let pde_ptr: *mut PageTable = x86_64::VirtAddr::new(pde_entry.addr().as_u64()).as_mut_ptr();
-	let pde = unsafe{&mut *pde_ptr};
+	let pde = unsafe { &mut *pde_ptr };
 	let pte_entry = &mut pde[page.page_table_index(PageTableLevel::Two)];
 	let pte_entry_start = pte_entry.addr().as_u64(); //start of HUGE PAGE
-	//allocate new 4KiB frame for pte
+												 //allocate new 4KiB frame for pte
 	let allocator = &mut physicalmem::FrameAlloc;
-	//make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator 
-	let pte_frame: PhysFrame<BasePageSize> = PhysFrame::from_start_address(x86_64::PhysAddr::new(0x1800000)).unwrap(); 
-	let new_flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::WRITABLE; 
+	//make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator
+	let pte_frame: PhysFrame<BasePageSize> =
+		physicalmem::allocate_outside_of(S::SIZE as usize, S::SIZE as usize, forbidden_range)
+			.unwrap();
+	let new_flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::WRITABLE;
 	let pte_ptr: *mut PageTable = x86_64::VirtAddr::new(pte_entry.addr().as_u64()).as_mut_ptr();
-	let pte = unsafe{&mut *pte_ptr};
+	let pte = unsafe { &mut *pte_ptr };
 	//remap everything
 	for (i, entry) in pte.iter_mut().enumerate() {
-		let addr = pte_entry_start + (i*0x1000) as u64; //calculates starting addresses of the normal sized pages
+		let addr = pte_entry_start + (i * 0x1000) as u64; //calculates starting addresses of the normal sized pages
 		entry.set_addr(x86_64::PhysAddr::new(addr), new_flags)
 	}
-	
+
 	pte_entry.set_frame(pte_frame, new_flags);
 	trace!("new pte_entry point: {pte_entry:?}");
 	trace!("successfully remapped");
 	tlb::flush_all(); // flush TLB to ensure all memory is valid and up-to-date
-	unsafe {pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc).unwrap()}
-
+	unsafe {
+		pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
+			.unwrap()
+	}
 }
-
 
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
