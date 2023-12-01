@@ -198,7 +198,11 @@ pub fn boot_processor_init() {
 	}
 	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]
-		acpi::init();
+		if is_uefi() {
+			acpi::init_uefi();
+		} else {
+			acpi::init();
+		}
 	}
 
 	apic::init();

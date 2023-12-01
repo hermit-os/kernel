@@ -50,6 +50,7 @@ static SLP_TYPA: OnceCell<u8> = OnceCell::new();
 
 /// The "Root System Description Pointer" structure providing pointers to all other ACPI tables.
 #[repr(C, packed)]
+#[derive(Debug)]
 struct AcpiRsdp {
 	signature: [u8; 8],
 	checksum: u8,
@@ -86,6 +87,9 @@ struct AcpiSdtHeader {
 impl AcpiSdtHeader {
 	fn signature(&self) -> &str {
 		str::from_utf8(&self.signature).unwrap()
+	}
+	pub fn header_start_address(&self) -> usize {
+		self as *const _ as usize
 	}
 }
 
@@ -309,6 +313,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
+	// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
 	if crate::arch::kernel::is_uefi() {
 		let rsdp = crate::arch::kernel::get_rsdp_addr();
 		trace!("rsdp detected successfully at {rsdp:#x?}");
@@ -421,7 +426,17 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	} else {
 		PhysAddr(fadt_table.dsdt.into())
 	};
-	let dsdt = AcpiTable::map(dsdt_address);
+	let dsdt = if !crate::arch::kernel::is_uefi() {
+		AcpiTable::map(dsdt_address)
+	} else {
+		// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
+		let table = unsafe { (dsdt_address.0 as *const AcpiSdtHeader).as_ref().unwrap() };
+		AcpiTable {
+			header: table,
+			allocated_virtual_address: VirtAddr(dsdt_address.0),
+			allocated_length: table.length as usize,
+		}
+	};
 
 	// Check it.
 	assert!(
@@ -533,6 +548,88 @@ pub fn init() {
 				"SSDT at {table_physical_address:p} has invalid checksum"
 			);
 			parse_ssdt(table);
+		}
+	}
+}
+
+pub fn init_uefi() {
+	// Detect the RSDP and get a pointer to either the XSDT (64-bit) or RSDT (32-bit), whichever is available.
+	// Both are called RSDT in the following.
+	let rsdp = detect_acpi().expect("Hermit requires an ACPI-compliant system");
+	let rsdt_physical_address = if rsdp.revision >= 2 {
+		PhysAddr(rsdp.xsdt_physical_address)
+	} else {
+		PhysAddr(rsdp.rsdt_physical_address.into())
+	};
+
+	//Load RSDT
+	let rsdt = &unsafe { *(rsdt_physical_address.0 as *const AcpiSdtHeader) };
+	trace!("RSDT: {rsdt:#x?}");
+
+	// The RSDT contains pointers to all available ACPI tables.
+	// Iterate through them.
+	let mut current_address = rsdt_physical_address.0 as usize + mem::size_of::<AcpiRsdp>();
+	trace!("RSDT start address at {current_address:#x}");
+	let nr_entries =
+		(rsdt.length as usize - mem::size_of::<AcpiRsdp>()) / mem::size_of::<AcpiSdtHeader>();
+	let end_addr = current_address + nr_entries * mem::size_of::<AcpiSdtHeader>();
+	while current_address < end_addr {
+		trace!("current_address: {current_address:#x}");
+
+		// Depending on the RSDP revision, either an XSDT or an RSDT has been chosen above.
+		// The XSDT contains 64-bit pointers whereas the RSDT has 32-bit pointers.
+		let table_physical_address = if rsdp.revision >= 2 {
+			let address = PhysAddr(unsafe { ptr::read_unaligned(current_address as *const u64) });
+			current_address += mem::size_of::<u64>();
+			address
+		} else {
+			let address =
+				PhysAddr((unsafe { ptr::read_unaligned(current_address as *const u32) }).into());
+			current_address += mem::size_of::<u32>();
+			address
+		};
+
+		trace!("table_physical_address: {table_physical_address:#x}");
+
+		let table = unsafe {
+			(table_physical_address.0 as *const AcpiSdtHeader)
+				.as_ref()
+				.unwrap()
+		};
+
+		trace!("table: {table:#x?}");
+
+		let signature = table.signature();
+
+		debug!("Found ACPI table: {signature:#?}");
+
+		if signature == "APIC" {
+			// This is a "Multiple APIC Descriptor Table" (MADT) aka "APIC Table"
+			// Check and save the entire APIC table for the get_apic_table() call
+			assert!(
+				verify_checksum(table.header_start_address(), table.length as usize).is_ok(),
+				"MADT at {table_physical_address:#x} has invalid checksum"
+			);
+			let madt: AcpiTable<'static> = AcpiTable {
+				header: table,
+				allocated_virtual_address: VirtAddr(table_physical_address.0),
+				allocated_length: table.length as usize,
+			};
+			MADT.set(madt).unwrap();
+			trace!("setting MADT successful");
+		} else if signature == "FACP" {
+			// This is the "Fixed ACPI Description Table" (FADT) aka "Fixed ACPI Control Pointer" (FACP)
+			// Check and parse this table for the poweroff() call
+			assert!(
+				verify_checksum(table.header_start_address(), table.length as usize).is_ok(),
+				"FADT at {table_physical_address:#x} has invalid checksum"
+			);
+			let fadt: AcpiTable<'static> = AcpiTable {
+				header: table,
+				allocated_virtual_address: VirtAddr(table_physical_address.0),
+				allocated_length: table.length as usize,
+			};
+			parse_fadt(fadt);
 		}
 	}
 }
