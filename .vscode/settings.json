@@ -1,0 +1,28 @@
+{
+    "rust-analyzer.cargo.buildScripts.overrideCommand": [
+        "cargo",
+        "check",
+        "--quiet",
+        "--workspace",
+        "--message-format=json",
+        "--all-targets",
+    ],
+    // "rust-analyzer.cargo.target": "aarch64-unknown-none-softfloat",
+    // "rust-analyzer.cargo.target": "riscv64gc-unknown-none-elf",
+    "rust-analyzer.cargo.target": "x86_64-unknown-none",
+    "rust-analyzer.check.overrideCommand": [
+        "cargo",
+        "clippy",
+        "-Zbuild-std=core,alloc",
+        "--quiet",
+        "--message-format=json",
+        "--target=aarch64-unknown-none-softfloat",
+        // "--target=riscv64gc-unknown-none-elf",
+        "--target=x86_64-unknown-none",
+    ],
+    "rust-analyzer.check.targets": [
+        "aarch64-unknown-none-softfloat",
+        "riscv64gc-unknown-none-elf",
+        "x86_64-unknown-none",
+    ],
+}
