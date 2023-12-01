@@ -1,13 +1,15 @@
 use core::fmt::Debug;
 use core::ptr;
 
+use env::kernel::pit::PIT_INTERRUPT_NUMBER;
 use x86_64::instructions::tlb;
 use x86_64::registers::control::{Cr0, Cr0Flags, Cr3};
-use x86_64::structures::paging::mapper::{MappedFrame, UnmapError};
+use x86_64::structures::paging::mapper::{MapToError, MappedFrame, UnmapError, MapperAllSizes, TranslateResult};
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
+use x86_64::structures::paging::page_table::PageTableLevel;
 use x86_64::structures::paging::{
 	Mapper, OffsetPageTable, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable,
-	Size2MiB, Translate,
+	Translate, self, FrameAllocator,
 };
 
 use crate::arch::x86_64::mm::{physicalmem, PhysAddr, VirtAddr};
@@ -103,8 +105,8 @@ pub fn map<S>(
 	flags: PageTableEntryFlags,
 ) where
 	S: PageSize + Debug,
-	RecursivePageTable<'static>: Mapper<S>,
-	OffsetPageTable<'static>: Mapper<S>,
+	RecursivePageTable<'static>: Mapper<S> + MapperAllSizes,
+	OffsetPageTable<'static>: Mapper<S> + MapperAllSizes,
 {
 	let pages = {
 		let start = Page::<S>::containing_address(x86_64::VirtAddr::new(virtual_address.0));
@@ -157,9 +159,15 @@ pub fn map<S>(
 					}
 					flush.flush();
 					debug!("Had to unmap page {page:?} before mapping.");
-				}
+				}		
 				pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
-					.unwrap()
+					.unwrap_or_else(|e| match e {
+						MapToError::ParentEntryHugePage => {
+							assert!(S::SIZE == BasePageSize::SIZE, "Giant Pages are not supported");
+							recast_huge_page(pt, page, frame, flags)
+						},
+						_ => panic!("error {e:?} at: {frame:?} \n pages: 4 {:?}, 3 {:?}, PageTableLevel {:?} \n pagetable: {:?}", page.p4_index(), page.p3_index(), page.page_table_index(PageTableLevel::Two), disect(pt, page.start_address())),
+					})
 					.flush();
 			}
 		}
@@ -267,7 +275,7 @@ pub fn init_page_tables() {
 		// Ideally, uhyve would only map as much memory as necessary, but this requires a hermit-entry ABI jump.
 		// See https://github.com/hermit-os/uhyve/issues/426
 		let kernel_end_addr = x86_64::VirtAddr::new(mm::kernel_end_address().as_u64());
-		let start_page = Page::<Size2MiB>::from_start_address(kernel_end_addr).unwrap();
+		let start_page = Page::<LargePageSize>::from_start_address(kernel_end_addr).unwrap();
 		let end_page = Page::from_page_table_indices_2mib(
 			start_page.p4_index(),
 			start_page.p3_index(),
@@ -287,7 +295,6 @@ pub fn init_page_tables() {
 
 /// Checks the address stored in the CR3 register and if necessary, makes its page writable.
 fn check_root_pagetable() {
-	use x86_64::structures::paging::mapper::TranslateResult;
 	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
 	let virt_lvl_4_addr = x86_64::VirtAddr::new(level_4_table_addr);
 	let pt = unsafe { identity_mapped_page_table() };
@@ -373,11 +380,53 @@ fn set_pagetable_page_writable(
 	trace!("Rootpage now writable");
 }
 
+/// This function remaps one given Huge Page (2 MiB) into 512 Normal Pages (4 KiB) with a given (Offset/ID mapped) Page Table.
+/// It takes the Page Table with its mapping, the Hugepage in question, the physical frame it is stored in and its flags as input.
+/// The page gets remapped and a new level 2 Pagetable is allocated in this function to connect the (now) 512 level 1 pages.
+unsafe fn recast_huge_page<S>(
+	mut pt: OffsetPageTable<'static>, 
+	page: Page<S>, 
+	frame: PhysFrame<S>,
+	flags: PageTableEntryFlags,
+) -> x86_64::structures::paging::mapper::MapperFlush<S>
+where 
+	S: PageSize + Debug,
+ 	OffsetPageTable<'static>: Mapper<S> + MapperAllSizes,
+	{
+	//Pagetable walk to get the correct data
+	let pml4 = pt.level_4_table();
+	let pdpte_entry = &mut pml4[page.p4_index()];
+	let pdpte_ptr: *mut PageTable = x86_64::VirtAddr::new(pdpte_entry.addr().as_u64()).as_mut_ptr();
+	let pdpte = unsafe{&mut *pdpte_ptr};
+	let pde_entry = &mut pdpte[page.p3_index()];
+	let pde_ptr: *mut PageTable = x86_64::VirtAddr::new(pde_entry.addr().as_u64()).as_mut_ptr();
+	let pde = unsafe{&mut *pde_ptr};
+	let pte_entry = &mut pde[page.page_table_index(PageTableLevel::Two)];
+	let pte_entry_start = pte_entry.addr().as_u64(); //start of HUGE PAGE
+	//allocate new 4KiB frame for pte
+	let allocator = &mut physicalmem::FrameAlloc;
+	//make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator 
+	let pte_frame: PhysFrame<BasePageSize> = PhysFrame::from_start_address(x86_64::PhysAddr::new(0x1800000)).unwrap(); 
+	let new_flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::WRITABLE; 
+	let pte_ptr: *mut PageTable = x86_64::VirtAddr::new(pte_entry.addr().as_u64()).as_mut_ptr();
+	let pte = unsafe{&mut *pte_ptr};
+	//remap everything
+	for (i, entry) in pte.iter_mut().enumerate() {
+		let addr = pte_entry_start + (i*0x1000) as u64; //calculates starting addresses of the normal sized pages
+		entry.set_addr(x86_64::PhysAddr::new(addr), new_flags)
+	}
+	
+	pte_entry.set_frame(pte_frame, new_flags);
+	trace!("new pte_entry point: {pte_entry:?}");
+	trace!("successfully remapped");
+	tlb::flush_all(); // flush TLB to ensure all memory is valid and up-to-date
+	unsafe {pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc).unwrap()}
+
+}
+
+
 #[allow(dead_code)]
 unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
-	use x86_64::structures::paging::mapper::TranslateResult;
-	use x86_64::structures::paging::{Size1GiB, Size4KiB};
-
 	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
 			frame,
@@ -388,7 +437,7 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 			println!("virt_addr: {virt_addr:p}, phys_addr: {phys_addr:p}, flags: {flags:?}");
 			match frame {
 				MappedFrame::Size4KiB(_) => {
-					let page = Page::<Size4KiB>::containing_address(virt_addr);
+					let page = Page::<BasePageSize>::containing_address(virt_addr);
 					println!(
 						"p4: {}, p3: {}, p2: {}, p1: {}",
 						u16::from(page.p4_index()),
@@ -398,7 +447,7 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 					);
 				}
 				MappedFrame::Size2MiB(_) => {
-					let page = Page::<Size2MiB>::containing_address(virt_addr);
+					let page = Page::<LargePageSize>::containing_address(virt_addr);
 					println!(
 						"p4: {}, p3: {}, p2: {}",
 						u16::from(page.p4_index()),
@@ -407,7 +456,7 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 					);
 				}
 				MappedFrame::Size1GiB(_) => {
-					let page = Page::<Size1GiB>::containing_address(virt_addr);
+					let page = Page::<HugePageSize>::containing_address(virt_addr);
 					println!(
 						"p4: {}, p3: {}",
 						u16::from(page.p4_index()),
@@ -431,7 +480,7 @@ unsafe fn print_page_tables(levels: usize) {
 			.enumerate()
 			.filter(|(_i, entry)| !entry.is_unused())
 		{
-			if level != min_level && i >= 1 {
+			if level <= min_level {
 				break;
 			}
 			let indent = &"        "[0..2 * (4 - level)];
