@@ -93,7 +93,7 @@ pub(crate) fn init() {
 	let mut map_size: usize;
 
 	//in the case of UEFI, the given memory is guaranteed free memory and the kernel is located before the given memory
-	let available_memory = if let Ok(()) = crate::arch::x86_64::kernel::is_uefi() {
+	let available_memory = if crate::arch::x86_64::kernel::is_uefi() {
 		(total_memory_size() - reserved_space).align_down(LargePageSize::SIZE as usize)
 	} else {
 		if total_memory_size()

@@ -94,8 +94,7 @@ fn detect_from_limits() -> Result<(), ()> {
 ///Use the free memory provided by the UEFI memory map (rewrite as soon as entire memory map is in kernel!)
 ///right now, all memory in the Physical Address Range of HardwareInfo is guaranteed free memory
 fn detect_from_memory_map() -> Result<(), ()> {
-	let uefi = is_uefi().is_ok();
-	if !uefi {
+	if !is_uefi() {
 		return Err(());
 	}
 

@@ -275,7 +275,7 @@ pub fn get_application_page_size() -> usize {
 }
 
 pub fn init() {
-	if crate::arch::x86_64::kernel::is_uefi().is_ok() {
+	if crate::arch::x86_64::kernel::is_uefi() {
 		check_root_pagetable();
 	}
 }

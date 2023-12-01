@@ -309,7 +309,7 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
-	if crate::arch::kernel::is_uefi().is_ok() {
+	if crate::arch::kernel::is_uefi() {
 		let rsdp = crate::arch::kernel::get_rsdp_addr();
 		trace!("rsdp detected successfully at {rsdp:#x?}");
 		let rsdp = unsafe { &*(rsdp as *const AcpiRsdp) };

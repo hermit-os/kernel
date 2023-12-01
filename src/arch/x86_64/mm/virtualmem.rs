@@ -12,8 +12,7 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
 	InterruptTicketMutex::new(FreeList::new());
 
 pub fn init() {
-	let uefi = is_uefi().is_ok();
-	if uefi {
+	if is_uefi() {
 		let entry = FreeListEntry::new(get_start(), get_limit());
 		KERNEL_FREE_LIST.lock().push(entry);
 	} else {

@@ -73,8 +73,10 @@ pub fn get_start() -> usize {
 
 pub fn is_uefi() -> Result<(), ()> {
 	match boot_info().platform_info {
-		PlatformInfo::Uefi { .. } => Ok(()),
-		_ => Err(()),
+		PlatformInfo::Uefi { .. } => true,
+		PlatformInfo::LinuxBootParams { .. } => false,
+		PlatformInfo::Uhyve { .. } => false,
+		PlatformInfo::Multiboot { .. } => false,
 	}
 }
 
