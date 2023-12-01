@@ -166,10 +166,19 @@ pub fn map<S>(
 				pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
 					.unwrap_or_else(|e| match e {
 						MapToError::ParentEntryHugePage => {
-							assert!(S::SIZE == BasePageSize::SIZE, "Giant Pages are not supported");
+							assert!(
+								S::SIZE == BasePageSize::SIZE,
+								"Giant Pages are not supported"
+							);
 							recast_huge_page(pt, page, frame, flags)
-						},
-						_ => panic!("error {e:?} at: {frame:?} \n pages: 4 {:?}, 3 {:?}, PageTableLevel {:?} \n pagetable: {:?}", page.p4_index(), page.p3_index(), page.page_table_index(PageTableLevel::Two), disect(pt, page.start_address())),
+						}
+						_ => panic!(
+							"error {e:?} at: {frame:?} \n pages: 4 {:?}, 3 {:?}, 2 {:?}, 1 {:?} \n",
+							page.p4_index(),
+							page.p3_index(),
+							page.page_table_index(PageTableLevel::Two),
+							page.page_table_index(PageTableLevel::One)
+						),
 					})
 					.flush();
 			}
@@ -417,11 +426,13 @@ where
 	let pte_entry = &mut pde[page.page_table_index(PageTableLevel::Two)];
 	let pte_entry_start = pte_entry.addr().as_u64(); //start of HUGE PAGE
 												 //allocate new 4KiB frame for pte
-	let allocator = &mut physicalmem::FrameAlloc;
-	//make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator
+												 //let allocator = &mut physicalmem::FrameAlloc;
+												 //make sure that this frame is NOT inside the page that is to be recast -> TODO: adapt Allocator
 	let pte_frame: PhysFrame<BasePageSize> =
 		physicalmem::allocate_outside_of(S::SIZE as usize, S::SIZE as usize, forbidden_range)
 			.unwrap();
+
+	trace!("pte_frame: {pte_frame:#?}");
 	let new_flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::WRITABLE;
 	let pte_ptr: *mut PageTable = x86_64::VirtAddr::new(pte_entry.addr().as_u64()).as_mut_ptr();
 	let pte = unsafe { &mut *pte_ptr };
@@ -435,6 +446,7 @@ where
 	trace!("new pte_entry point: {pte_entry:?}");
 	trace!("successfully remapped");
 	tlb::flush_all(); // flush TLB to ensure all memory is valid and up-to-date
+	crate::arch::mm::physicalmem::print_information();
 	unsafe {
 		pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
 			.unwrap()

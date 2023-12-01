@@ -38,7 +38,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(size, None, None)?
 			.try_into()
 			.unwrap(),
 	))
@@ -64,7 +64,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(size, Some(alignment), None)?
 			.try_into()
 			.unwrap(),
 	))
