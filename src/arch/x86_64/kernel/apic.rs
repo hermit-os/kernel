@@ -693,20 +693,18 @@ pub fn boot_application_processors() {
 		"SMP Boot Code is larger than a page"
 	);
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
+	// We can only allocate full pages of physmem
+	let length = BasePageSize::SIZE as usize;
+	let phys_addr: PhysAddr = crate::arch::mm::physicalmem::allocate(length).unwrap();
 
-	// Identity-map the boot code page and copy over the code.
-	debug!(
-		"Mapping SMP boot code to physical and virtual address {:p}",
-		SMP_BOOT_CODE_ADDRESS
-	);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	paging::map::<BasePageSize>(
-		SMP_BOOT_CODE_ADDRESS,
-		PhysAddr(SMP_BOOT_CODE_ADDRESS.as_u64()),
-		1,
-		flags,
+	debug!(
+		"Mapping SMP boot code from physical address {phys_addr:x} to virtual address {:p}",
+		SMP_BOOT_CODE_ADDRESS
 	);
+	//map physical memory to SMP_BOOT_CODE_ADDRESS in virtual memory
+	paging::map::<BasePageSize>(SMP_BOOT_CODE_ADDRESS, phys_addr, 1, flags);
 	unsafe {
 		ptr::copy_nonoverlapping(
 			smp_boot_code.as_ptr(),
