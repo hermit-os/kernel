@@ -131,6 +131,7 @@ jobs:
         package: [rusty_demo, httpd, testudp, hello_world]
         netdev: [none, virtio-net-pci, rtl8139]
         profile: [dev, release]
+        smp: [1, 4]
         exclude:
           - arch: riscv64
             package: httpd
@@ -141,6 +142,12 @@ jobs:
             arch: aarch64
           - package: hello_world
             arch: riscv64
+          # https://github.com/hermit-os/kernel/issues/995
+          - package: hello_world
+            smp: 4
+          # https://github.com/hermit-os/kernel/issues/737
+          - arch: aarch64
+            smp: 4
           # rtl8139 support does not build on aarch64
           - arch: aarch64
             netdev: rtl8139
@@ -224,6 +231,7 @@ jobs:
               cargo xtask ci qemu
               --arch ${{ matrix.arch }}
               --package ${{ matrix.package }}
+              --smp ${{ matrix.smp }}
               ${{ matrix.flags }}
               ${{ matrix.netdev == 'rtl8139' && '--features rtl8139' || '' }}
               ${{ matrix.netdev != 'none' && format('--netdev {0}', matrix.netdev) || '' }}
