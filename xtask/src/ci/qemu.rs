@@ -28,8 +28,8 @@ pub struct Qemu {
 	netdev: Option<NetworkDevice>,
 
 	/// Create multiple vCPUs.
-	#[arg(long)]
-	smp: bool,
+	#[arg(long, default_value_t = 1)]
+	smp: usize,
 
 	/// Enable the `virtiofsd` virtio-fs vhost-user device daemon.
 	#[arg(long)]
@@ -46,7 +46,14 @@ pub enum NetworkDevice {
 }
 
 impl Qemu {
-	pub fn run(self) -> Result<()> {
+	pub fn run(mut self) -> Result<()> {
+		if self.smp > 1 {
+			self.build
+				.cargo_build
+				.features
+				.push("hermit/smp".to_string());
+		}
+
 		self.build.run()?;
 
 		let sh = crate::sh()?;
@@ -63,7 +70,7 @@ impl Qemu {
 			.args(&["-kernel", format!("../hermit-loader-{arch}").as_ref()])
 			.args(self.machine_args())
 			.args(self.cpu_args())
-			.args(self.smp_args())
+			.args(&["-smp", &self.smp.to_string()])
 			.args(self.memory_args())
 			.args(self.netdev_args())
 			.args(self.virtiofsd_args());
@@ -171,14 +178,6 @@ impl Qemu {
 		}
 	}
 
-	fn smp_args(&self) -> &'static [&'static str] {
-		if self.smp {
-			&["-smp", "4"]
-		} else {
-			&["-smp", "1"]
-		}
-	}
-
 	fn memory(&self) -> usize {
 		let mut memory = 32usize;
 		if self.build.cargo_build.artifact.arch == Arch::Riscv64 {
@@ -190,9 +189,7 @@ impl Qemu {
 		if self.netdev.is_some() {
 			memory *= 4;
 		}
-		if self.smp {
-			memory *= 4;
-		}
+		memory *= self.smp;
 		if self.build.cargo_build.artifact.arch == Arch::Aarch64 {
 			memory = memory.max(256);
 		}

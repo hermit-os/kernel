@@ -16,7 +16,7 @@ pub struct CargoBuild {
 
 	/// Space or comma separated list of features to activate.
 	#[arg(long)]
-	features: Vec<String>,
+	pub features: Vec<String>,
 }
 
 pub trait CmdExt {
