@@ -185,6 +185,13 @@ pub fn init() {
 			let boot_time = current_time - processor::get_timer_ticks();
 			OffsetDateTime::from_unix_timestamp_nanos(boot_time as i128 * 1000).unwrap()
 		}
+		PlatformInfo::Uefi { .. } => {
+			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
+			// Subtract the timer ticks to get the actual time when HermitCore-rs was booted.
+			let current_time = without_interrupts(|| Rtc::new().get_microseconds_since_epoch());
+			let boot_time = current_time - processor::get_timer_ticks();
+			OffsetDateTime::from_unix_timestamp_nanos(boot_time as i128 * 1000).unwrap()
+		}
 		PlatformInfo::LinuxBootParams { .. } => {
 			// Get the current time in microseconds since the epoch (1970-01-01) from the x86 RTC.
 			// Subtract the timer ticks to get the actual time when Hermit was booted.

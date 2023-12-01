@@ -5,7 +5,7 @@ use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
 
-use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{get_limit, get_mbinfo, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
@@ -90,8 +90,28 @@ fn detect_from_limits() -> Result<(), ()> {
 	Ok(())
 }
 
+///Use the free memory provided by the UEFI memory map (rewrite as soon as entire memory map is in kernel!)
+///right now, all memory in the Physical Address Range of HardwareInfo is guaranteed free memory
+fn detect_from_memory_map() -> Result<(), ()> {
+	let uefi = is_uefi().is_ok();
+	if !uefi {
+		return Err(());
+	}
+
+	let limit = get_limit();
+
+	let start = get_start();
+
+	let entry = FreeListEntry::new(start, limit);
+	PHYSICAL_FREE_LIST.lock().push(entry);
+	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+
+	Ok(())
+}
+
 pub fn init() {
 	detect_from_multiboot_info()
+		.or_else(|_e| detect_from_memory_map())
 		.or_else(|_e| detect_from_limits())
 		.unwrap();
 }
