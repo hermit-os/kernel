@@ -4,6 +4,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
+use x86_64::structures::paging::frame::PhysFrameRange;
 
 use crate::arch::x86_64::kernel::{get_limit, get_mbinfo, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
@@ -133,7 +134,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(size, None, None)?
 			.try_into()
 			.unwrap(),
 	))
@@ -145,7 +146,7 @@ unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for Frame
 	fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
 		let addr = PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(S::SIZE as usize, Some(S::SIZE as usize))
+			.allocate(S::SIZE as usize, Some(S::SIZE as usize), None)
 			.ok()? as u64;
 		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(addr)).unwrap())
 	}
@@ -201,7 +202,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(size, Some(alignment), None)?
 			.try_into()
 			.unwrap(),
 	))
