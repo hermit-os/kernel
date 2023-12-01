@@ -78,6 +78,13 @@ pub fn is_uefi() -> Result<(), ()> {
 	}
 }
 
+pub fn get_rsdp_addr() -> u64 {
+	match boot_info().platform_info {
+		PlatformInfo::Uefi { rsdp_addr } => rsdp_addr,
+		_ => 0,
+	}
+}
+
 pub fn get_mbinfo() -> VirtAddr {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot {

@@ -309,6 +309,15 @@ fn detect_rsdp(start_address: PhysAddr, end_address: PhysAddr) -> Result<&'stati
 /// Detects ACPI support of the computer system.
 /// Returns a reference to the ACPI RSDP within the Ok() if successful or an empty Err() on failure.
 fn detect_acpi() -> Result<&'static AcpiRsdp, ()> {
+	if crate::arch::kernel::is_uefi().is_ok() {
+		let rsdp = crate::arch::kernel::get_rsdp_addr();
+		trace!("rsdp detected successfully at {rsdp:#x?}");
+		let rsdp = unsafe { &*(rsdp as *const AcpiRsdp) };
+		if &rsdp.signature != b"RSD PTR " {
+			panic!("RSDP Address not valid!");
+		}
+		return Ok(rsdp);
+	}
 	// Get the address of the EBDA.
 	let frame =
 		PhysFrame::<BasePageSize>::containing_address(x86_64::PhysAddr::new(EBDA_PTR_LOCATION.0));
