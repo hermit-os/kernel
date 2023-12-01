@@ -695,7 +695,7 @@ pub fn boot_application_processors() {
 	debug!("SMP boot code is {} bytes long", smp_boot_code.len());
 	// We can only allocate full pages of physmem
 	let length = BasePageSize::SIZE as usize;
-	let phys_addr: PhysAddr = physicalmem::allocate(length).unwrap();
+	let phys_addr: PhysAddr = crate::arch::mm::physicalmem::allocate(length).unwrap();
 
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
