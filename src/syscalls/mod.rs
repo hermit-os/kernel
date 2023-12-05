@@ -257,3 +257,12 @@ extern "C" fn __sys_dup(fd: i32) -> i32 {
 pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	kernel_function!(__sys_dup(fd))
 }
+
+extern "C" fn __sys_image_start_addr() -> usize {
+	crate::mm::kernel_start_address().0.try_into().unwrap()
+}
+
+#[no_mangle]
+pub extern "C" fn sys_image_start_addr() -> usize {
+	kernel_function!(__sys_image_start_addr())
+}
