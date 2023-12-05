@@ -277,13 +277,10 @@ jobs:
         repo: hermit-os/loader
     - name: Install firecracker
       run: |
-        # https://github.com/firecracker-microvm/firecracker/blob/7c5fc8707f26c4244d48a747631ab0fb31fc4c39/docs/getting-started.md#getting-a-firecracker-binary
+        # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
         ARCH="$(uname -m)"
         release_url="https://github.com/firecracker-microvm/firecracker/releases"
         latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
-        # TODO: use the latest release once fixed:
-        # https://github.com/firecracker-microvm/firecracker/issues/4176
-        latest="v1.4.1"
         curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
         | tar -xz
         
