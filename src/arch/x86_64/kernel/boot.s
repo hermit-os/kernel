@@ -21,11 +21,6 @@
 _start:
     jmp _rmstart
 
-    # Fill padding with `nop` to generate exact same binary as NASM
-    .rept 5
-    nop
-    .endr
-
 # PARAMETERS
 .align 8
     entry_point:    .8byte 0xDEADC0DE
@@ -48,11 +43,6 @@ _rmstart:
     # far jump to the 32bit code
     ljmpl $codesel, $_pmstart
     .intel_syntax noprefix
-
-    # Fill padding with `nop` to generate exact same binary as NASM
-    .rept 2
-    nop
-    .endr
 
 .code32
 .align 4
@@ -157,11 +147,6 @@ stublet:
     # Set the code segment and enter 64-bit long mode.
     ljmpl $GDT64.Code, $start64
     .intel_syntax noprefix
-
-    # Fill padding with `nop` to generate exact same binary as NASM
-    .rept 1
-    nop
-    .endr
 
 .code64
 .align 8
