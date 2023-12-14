@@ -8,3 +8,5 @@ libm = "0.2"
 
 [lib]
 crate-type = ["staticlib"]
+
+[workspace]
