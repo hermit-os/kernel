@@ -210,3 +210,27 @@ pub extern "C" fn sys_recv(fd: i32, buf: *mut u8, len: usize, flags: i32) -> isi
 		(-crate::errno::EINVAL).try_into().unwrap()
 	}
 }
+
+#[no_mangle]
+pub extern "C" fn sys_sendto(
+	_s: i32,
+	_mem: *const c_void,
+	_len: usize,
+	_flags: i32,
+	_to: *const sockaddr,
+	_tolen: socklen_t,
+) -> isize {
+	(-crate::errno::EINVAL).try_into().unwrap()
+}
+
+#[no_mangle]
+pub extern "C" fn sys_recvfrom(
+	socket: i32,
+	buf: *mut u8,
+	len: usize,
+	flags: i32,
+	addr: *mut sockaddr,
+	addrlen: *mut socklen_t,
+) -> isize {
+	kernel_function!(__sys_recvfrom(socket, buf, len, flags, addr, addrlen))
+}

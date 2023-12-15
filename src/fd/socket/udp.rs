@@ -8,6 +8,7 @@ use core::task::Poll;
 
 use crossbeam_utils::atomic::AtomicCell;
 use smoltcp::socket::udp;
+use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
@@ -76,6 +77,38 @@ impl<T> Socket<T> {
 									}
 								}
 								None => Poll::Ready(Ok(len.try_into().unwrap())),
+							},
+							_ => Poll::Ready(Err(-crate::errno::EIO)),
+						}
+					} else {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					}
+				} else {
+					Poll::Ready(Err(-crate::errno::EIO))
+				}
+			})
+		})
+		.await
+	}
+
+	async fn async_recvfrom(&self, buffer: &mut [u8]) -> Result<(isize, UdpMetadata), i32> {
+		future::poll_fn(|cx| {
+			self.with(|socket| {
+				if socket.is_open() {
+					if socket.can_recv() {
+						match socket.recv_slice(buffer) {
+							Ok((len, meta)) => match self.endpoint.load() {
+								Some(ep) => {
+									if meta.endpoint == ep {
+										Poll::Ready(Ok((len.try_into().unwrap(), meta)))
+									} else {
+										buffer[..len].iter_mut().for_each(|x| *x = 0);
+										socket.register_recv_waker(cx.waker());
+										Poll::Pending
+									}
+								}
+								None => Poll::Ready(Ok((len.try_into().unwrap(), meta))),
 							},
 							_ => Poll::Ready(Err(-crate::errno::EIO)),
 						}
@@ -262,6 +295,93 @@ impl ObjectInterface for Socket<IPv4> {
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		self.write(buf, len)
 	}
+
+	fn recvfrom(
+		&self,
+		buf: *mut u8,
+		len: usize,
+		address: *mut sockaddr,
+		address_len: *mut socklen_t,
+	) -> isize {
+		if !address_len.is_null() {
+			let len = unsafe { &mut *address_len };
+			if *len < size_of::<sockaddr_in>().try_into().unwrap() {
+				return (-EINVAL).try_into().unwrap();
+			}
+		}
+
+		if len == 0 {
+			return (-EINVAL).try_into().unwrap();
+		}
+
+		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+
+		if self.nonblocking.load(Ordering::Acquire) {
+			poll_on(self.async_recvfrom(slice), Some(Duration::ZERO)).map_or_else(
+				|x| {
+					if x == -ETIME {
+						(-EAGAIN).try_into().unwrap()
+					} else {
+						x.try_into().unwrap()
+					}
+				},
+				|(x, meta)| {
+					let len = unsafe { &mut *address_len };
+					if address.is_null() {
+						*len = 0;
+					} else {
+						let addr = unsafe { &mut *(address as *mut sockaddr_in) };
+						addr.sin_port = meta.endpoint.port.to_be();
+						if let IpAddress::Ipv4(ip) = meta.endpoint.addr {
+							addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+						}
+						*len = size_of::<sockaddr_in>().try_into().unwrap();
+					}
+					x.try_into().unwrap()
+				},
+			)
+		} else {
+			poll_on(self.async_recvfrom(slice), Some(Duration::from_secs(2))).map_or_else(
+				|x| {
+					if x == -ETIME {
+						block_on(self.async_recvfrom(slice), None).map_or_else(
+							|x| x.try_into().unwrap(),
+							|(x, meta)| {
+								let len = unsafe { &mut *address_len };
+								if address.is_null() {
+									*len = 0;
+								} else {
+									let addr = unsafe { &mut *(address as *mut sockaddr_in) };
+									addr.sin_port = meta.endpoint.port.to_be();
+									if let IpAddress::Ipv4(ip) = meta.endpoint.addr {
+										addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+									}
+									*len = size_of::<sockaddr_in>().try_into().unwrap();
+								}
+								x.try_into().unwrap()
+							},
+						)
+					} else {
+						x.try_into().unwrap()
+					}
+				},
+				|(x, meta)| {
+					let len = unsafe { &mut *address_len };
+					if address.is_null() {
+						*len = 0;
+					} else {
+						let addr = unsafe { &mut *(address as *mut sockaddr_in) };
+						addr.sin_port = meta.endpoint.port.to_be();
+						if let IpAddress::Ipv4(ip) = meta.endpoint.addr {
+							addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
+						}
+						*len = size_of::<sockaddr_in>().try_into().unwrap();
+					}
+					x.try_into().unwrap()
+				},
+			)
+		}
+	}
 }
 
 impl ObjectInterface for Socket<IPv6> {
@@ -327,6 +447,93 @@ impl ObjectInterface for Socket<IPv6> {
 
 	fn read(&self, buf: *mut u8, len: usize) -> isize {
 		self.read(buf, len)
+	}
+
+	fn recvfrom(
+		&self,
+		buf: *mut u8,
+		len: usize,
+		address: *mut sockaddr,
+		address_len: *mut socklen_t,
+	) -> isize {
+		if !address_len.is_null() {
+			let len = unsafe { &mut *address_len };
+			if *len < size_of::<sockaddr_in6>().try_into().unwrap() {
+				return (-EINVAL).try_into().unwrap();
+			}
+		}
+
+		if len == 0 {
+			return (-EINVAL).try_into().unwrap();
+		}
+
+		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
+
+		if self.nonblocking.load(Ordering::Acquire) {
+			poll_on(self.async_recvfrom(slice), Some(Duration::ZERO)).map_or_else(
+				|x| {
+					if x == -ETIME {
+						(-EAGAIN).try_into().unwrap()
+					} else {
+						x.try_into().unwrap()
+					}
+				},
+				|(x, meta)| {
+					let len = unsafe { &mut *address_len };
+					if address.is_null() {
+						*len = 0;
+					} else {
+						let addr = unsafe { &mut *(address as *mut sockaddr_in6) };
+						addr.sin6_port = meta.endpoint.port.to_be();
+						if let IpAddress::Ipv6(ip) = meta.endpoint.addr {
+							addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+						}
+						*len = size_of::<sockaddr_in6>().try_into().unwrap();
+					}
+					x.try_into().unwrap()
+				},
+			)
+		} else {
+			poll_on(self.async_recvfrom(slice), Some(Duration::from_secs(2))).map_or_else(
+				|x| {
+					if x == -ETIME {
+						block_on(self.async_recvfrom(slice), None).map_or_else(
+							|x| x.try_into().unwrap(),
+							|(x, meta)| {
+								let len = unsafe { &mut *address_len };
+								if address.is_null() {
+									*len = 0;
+								} else {
+									let addr = unsafe { &mut *(address as *mut sockaddr_in6) };
+									addr.sin6_port = meta.endpoint.port.to_be();
+									if let IpAddress::Ipv6(ip) = meta.endpoint.addr {
+										addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+									}
+									*len = size_of::<sockaddr_in6>().try_into().unwrap();
+								}
+								x.try_into().unwrap()
+							},
+						)
+					} else {
+						x.try_into().unwrap()
+					}
+				},
+				|(x, meta)| {
+					let len = unsafe { &mut *address_len };
+					if address.is_null() {
+						*len = 0;
+					} else {
+						let addr = unsafe { &mut *(address as *mut sockaddr_in6) };
+						addr.sin6_port = meta.endpoint.port.to_be();
+						if let IpAddress::Ipv6(ip) = meta.endpoint.addr {
+							addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+						}
+						*len = size_of::<sockaddr_in6>().try_into().unwrap();
+					}
+					x.try_into().unwrap()
+				},
+			)
+		}
 	}
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
