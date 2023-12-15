@@ -4,7 +4,6 @@
 #![allow(dead_code)]
 
 use alloc::vec::Vec;
-use core::intrinsics::unaligned_volatile_store;
 use core::result::Result;
 use core::sync::atomic::{fence, Ordering};
 use core::{mem, ptr};
@@ -720,22 +719,16 @@ impl NotifCtrl {
 		fence(Ordering::Acquire);
 
 		if self.f_notif_data {
-			let ptr = self.notif_addr as *mut u32;
+			let ptr = self.notif_addr as *mut [u8; 4];
 
 			unsafe {
-				unaligned_volatile_store(
-					ptr,
-					u32::from_ne_bytes(notif_data[0..4].try_into().unwrap()),
-				);
+				ptr.write_volatile(notif_data[0..4].try_into().unwrap());
 			}
 		} else {
-			let ptr = self.notif_addr as *mut u16;
+			let ptr = self.notif_addr as *mut [u8; 2];
 
 			unsafe {
-				unaligned_volatile_store(
-					ptr,
-					u16::from_ne_bytes(notif_data[0..2].try_into().unwrap()),
-				);
+				ptr.write_volatile(notif_data[0..2].try_into().unwrap());
 			}
 		}
 
