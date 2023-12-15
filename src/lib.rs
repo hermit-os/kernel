@@ -15,7 +15,7 @@
 #![cfg_attr(target_arch = "riscv64", feature(offset_of))]
 #![feature(allocator_api)]
 #![feature(asm_const)]
-#![feature(core_intrinsics)]
+#![feature(exposed_provenance)]
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
