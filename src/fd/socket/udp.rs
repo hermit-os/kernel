@@ -259,7 +259,7 @@ impl ObjectInterface for Socket<IPv4> {
 			self.with(|socket| {
 				if !socket.is_open() {
 					let _ = socket.bind(endpoint).unwrap();
-					info!("{:?}", endpoint);
+					debug!("{:?}", endpoint);
 				}
 			});
 
