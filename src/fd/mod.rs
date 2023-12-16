@@ -319,6 +319,23 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		(-ENOSYS).try_into().unwrap()
 	}
 
+	/// send a message from a socket
+	///
+	/// The sendto() function shall send a message.
+	/// If the socket is a connectionless-mode socket, the message shall
+	/// If a peer address has been prespecified, either the message shall
+	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
+	/// address).
+	fn sendto(
+		&self,
+		_buffer: *const u8,
+		_len: usize,
+		_addr: *const sockaddr,
+		_addr_len: socklen_t,
+	) -> isize {
+		(-ENOSYS).try_into().unwrap()
+	}
+
 	/// shut down part of a full-duplex connection
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn shutdown(&self, _how: i32) -> i32 {

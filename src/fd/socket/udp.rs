@@ -10,7 +10,7 @@ use crossbeam_utils::atomic::AtomicCell;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
-use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
+use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address};
 
 use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
@@ -124,17 +124,11 @@ impl<T> Socket<T> {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
-		let endpoint = self.endpoint.load();
-		if endpoint.is_none() {
-			return Err(-crate::errno::EINVAL);
-		}
-
+	async fn async_write(&self, buffer: &[u8], meta: UdpMetadata) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_send() {
-						let meta = udp::UdpMetadata::from(endpoint.unwrap());
 						Poll::Ready(
 							socket
 								.send_slice(buffer, meta)
@@ -184,10 +178,16 @@ impl<T> Socket<T> {
 			return 0;
 		}
 
+		let endpoint = self.endpoint.load();
+		if endpoint.is_none() {
+			return (-EINVAL).try_into().unwrap();
+		}
+
+		let meta = UdpMetadata::from(endpoint.unwrap());
 		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -195,7 +195,7 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			poll_on(self.async_write(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_write(slice, meta), None).unwrap_or_else(|x| x.try_into().unwrap())
 		}
 	}
 
@@ -294,6 +294,44 @@ impl ObjectInterface for Socket<IPv4> {
 
 	fn write(&self, buf: *const u8, len: usize) -> isize {
 		self.write(buf, len)
+	}
+
+	fn sendto(
+		&self,
+		buf: *const u8,
+		len: usize,
+		addr: *const sockaddr,
+		addr_len: socklen_t,
+	) -> isize {
+		if addr.is_null() || addr_len == 0 {
+			self.write(buf, len)
+		} else {
+			if addr_len >= size_of::<sockaddr_in>().try_into().unwrap() {
+				let addr = unsafe { &*(addr as *const sockaddr_in) };
+				let ip = IpAddress::from(Ipv4Address::from_bytes(&addr.sin_addr.s_addr[0..]));
+				let endpoint = IpEndpoint::new(ip, u16::from_be(addr.sin_port));
+				self.endpoint.store(Some(endpoint));
+				let meta = UdpMetadata::from(endpoint);
+				let slice = unsafe { core::slice::from_raw_parts(buf, len) };
+
+				if self.nonblocking.load(Ordering::Acquire) {
+					poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(
+						|x| {
+							if x == -ETIME {
+								(-EAGAIN).try_into().unwrap()
+							} else {
+								x.try_into().unwrap()
+							}
+						},
+					)
+				} else {
+					poll_on(self.async_write(slice, meta), None)
+						.unwrap_or_else(|x| x.try_into().unwrap())
+				}
+			} else {
+				(-EINVAL).try_into().unwrap()
+			}
+		}
 	}
 
 	fn recvfrom(
@@ -447,6 +485,44 @@ impl ObjectInterface for Socket<IPv6> {
 
 	fn read(&self, buf: *mut u8, len: usize) -> isize {
 		self.read(buf, len)
+	}
+
+	fn sendto(
+		&self,
+		buf: *const u8,
+		len: usize,
+		addr: *const sockaddr,
+		addr_len: socklen_t,
+	) -> isize {
+		if addr.is_null() || addr_len == 0 {
+			self.write(buf, len)
+		} else {
+			if addr_len >= size_of::<sockaddr_in6>().try_into().unwrap() {
+				let addr = unsafe { &*(addr as *const sockaddr_in6) };
+				let ip = IpAddress::from(Ipv4Address::from_bytes(&addr.sin6_addr.s6_addr[0..]));
+				let endpoint = IpEndpoint::new(ip, u16::from_be(addr.sin6_port));
+				self.endpoint.store(Some(endpoint));
+				let meta = UdpMetadata::from(endpoint);
+				let slice = unsafe { core::slice::from_raw_parts(buf, len) };
+
+				if self.nonblocking.load(Ordering::Acquire) {
+					poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(
+						|x| {
+							if x == -ETIME {
+								(-EAGAIN).try_into().unwrap()
+							} else {
+								x.try_into().unwrap()
+							}
+						},
+					)
+				} else {
+					poll_on(self.async_write(slice, meta), None)
+						.unwrap_or_else(|x| x.try_into().unwrap())
+				}
+			} else {
+				(-EINVAL).try_into().unwrap()
+			}
+		}
 	}
 
 	fn recvfrom(
