@@ -326,6 +326,7 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// If a peer address has been prespecified, either the message shall
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn sendto(
 		&self,
 		_buffer: *const u8,
