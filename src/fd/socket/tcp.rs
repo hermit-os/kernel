@@ -570,26 +570,7 @@ impl ObjectInterface for Socket<IPv4> {
 
 	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
 		self.ioctl(cmd, argp)
-	}
-
-	fn recvfrom(
-		&self,
-		buf: *mut u8,
-		len: usize,
-		address: *mut sockaddr,
-		address_len: *mut socklen_t,
-	) -> isize {
-		let nbytes = self.read(buf, len);
-		if nbytes >= 0 && !address.is_null() {
-			let result = self.getpeername(address, address_len);
-
-			if result < 0 {
-				return result.try_into().unwrap();
-			}
-		}
-
-		nbytes
-	}
+	}	
 }
 
 impl ObjectInterface for Socket<IPv6> {
@@ -738,24 +719,5 @@ impl ObjectInterface for Socket<IPv6> {
 
 	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
 		self.ioctl(cmd, argp)
-	}
-
-	fn recvfrom(
-		&self,
-		buf: *mut u8,
-		len: usize,
-		address: *mut sockaddr,
-		address_len: *mut socklen_t,
-	) -> isize {
-		let nbytes = self.read(buf, len);
-		if nbytes >= 0 && !address.is_null() {
-			let result = self.getpeername(address, address_len);
-
-			if result < 0 {
-				return result.try_into().unwrap();
-			}
-		}
-
-		nbytes
 	}
 }
