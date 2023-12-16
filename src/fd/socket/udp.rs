@@ -10,7 +10,7 @@ use crossbeam_utils::atomic::AtomicCell;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
-use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address};
+use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address, Ipv6Address};
 
 use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
@@ -499,7 +499,7 @@ impl ObjectInterface for Socket<IPv6> {
 		} else {
 			if addr_len >= size_of::<sockaddr_in6>().try_into().unwrap() {
 				let addr = unsafe { &*(addr as *const sockaddr_in6) };
-				let ip = IpAddress::from(Ipv4Address::from_bytes(&addr.sin6_addr.s6_addr[0..]));
+				let ip = IpAddress::from(Ipv6Address::from_bytes(&addr.sin6_addr.s6_addr[0..]));
 				let endpoint = IpEndpoint::new(ip, u16::from_be(addr.sin6_port));
 				self.endpoint.store(Some(endpoint));
 				let meta = UdpMetadata::from(endpoint);
