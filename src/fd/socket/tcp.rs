@@ -570,7 +570,7 @@ impl ObjectInterface for Socket<IPv4> {
 
 	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
 		self.ioctl(cmd, argp)
-	}	
+	}
 }
 
 impl ObjectInterface for Socket<IPv6> {
