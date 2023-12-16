@@ -124,14 +124,14 @@ impl<T> Socket<T> {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8], meta: UdpMetadata) -> Result<isize, i32> {
+	async fn async_write(&self, buffer: &[u8], meta: &UdpMetadata) -> Result<isize, i32> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
 					if socket.can_send() {
 						Poll::Ready(
 							socket
-								.send_slice(buffer, meta)
+								.send_slice(buffer, *meta)
 								.map(|_| buffer.len() as isize)
 								.map_err(|_| -crate::errno::EIO),
 						)
@@ -187,7 +187,7 @@ impl<T> Socket<T> {
 		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(|x| {
+			poll_on(self.async_write(slice, &meta), Some(Duration::ZERO)).unwrap_or_else(|x| {
 				if x == -ETIME {
 					(-EAGAIN).try_into().unwrap()
 				} else {
@@ -195,7 +195,7 @@ impl<T> Socket<T> {
 				}
 			})
 		} else {
-			poll_on(self.async_write(slice, meta), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_write(slice, &meta), None).unwrap_or_else(|x| x.try_into().unwrap())
 		}
 	}
 
@@ -315,7 +315,7 @@ impl ObjectInterface for Socket<IPv4> {
 				let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 				if self.nonblocking.load(Ordering::Acquire) {
-					poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(
+					poll_on(self.async_write(slice, &meta), Some(Duration::ZERO)).unwrap_or_else(
 						|x| {
 							if x == -ETIME {
 								(-EAGAIN).try_into().unwrap()
@@ -325,7 +325,7 @@ impl ObjectInterface for Socket<IPv4> {
 						},
 					)
 				} else {
-					poll_on(self.async_write(slice, meta), None)
+					poll_on(self.async_write(slice, &meta), None)
 						.unwrap_or_else(|x| x.try_into().unwrap())
 				}
 			} else {
@@ -506,7 +506,7 @@ impl ObjectInterface for Socket<IPv6> {
 				let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 
 				if self.nonblocking.load(Ordering::Acquire) {
-					poll_on(self.async_write(slice, meta), Some(Duration::ZERO)).unwrap_or_else(
+					poll_on(self.async_write(slice, &meta), Some(Duration::ZERO)).unwrap_or_else(
 						|x| {
 							if x == -ETIME {
 								(-EAGAIN).try_into().unwrap()
@@ -516,7 +516,7 @@ impl ObjectInterface for Socket<IPv6> {
 						},
 					)
 				} else {
-					poll_on(self.async_write(slice, meta), None)
+					poll_on(self.async_write(slice, &meta), None)
 						.unwrap_or_else(|x| x.try_into().unwrap())
 				}
 			} else {
