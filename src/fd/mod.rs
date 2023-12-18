@@ -302,6 +302,41 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		-EINVAL
 	}
 
+	/// receive a message from a socket
+	///
+	/// If `address` is not a null pointer, the source address of the message is filled in.  The
+	/// `address_len` argument is a value-result argument, initialized to the size
+	/// of the buffer associated with address, and modified on return to
+	/// indicate the actual size of the address stored there.
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	fn recvfrom(
+		&self,
+		_buffer: *mut u8,
+		_len: usize,
+		_address: *mut sockaddr,
+		_address_len: *mut socklen_t,
+	) -> isize {
+		(-ENOSYS).try_into().unwrap()
+	}
+
+	/// send a message from a socket
+	///
+	/// The sendto() function shall send a message.
+	/// If the socket is a connectionless-mode socket, the message shall
+	/// If a peer address has been prespecified, either the message shall
+	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
+	/// address).
+	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+	fn sendto(
+		&self,
+		_buffer: *const u8,
+		_len: usize,
+		_addr: *const sockaddr,
+		_addr_len: socklen_t,
+	) -> isize {
+		(-ENOSYS).try_into().unwrap()
+	}
+
 	/// shut down part of a full-duplex connection
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn shutdown(&self, _how: i32) -> i32 {

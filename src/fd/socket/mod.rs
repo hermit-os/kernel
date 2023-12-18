@@ -186,3 +186,27 @@ pub extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
 	let obj = get_object(fd);
 	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
 }
+
+pub extern "C" fn __sys_sendto(
+	fd: i32,
+	buf: *const u8,
+	len: usize,
+	_flags: i32,
+	addr: *const sockaddr,
+	addr_len: socklen_t,
+) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| (*v).sendto(buf, len, addr, addr_len))
+}
+
+pub extern "C" fn __sys_recvfrom(
+	fd: i32,
+	buf: *mut u8,
+	len: usize,
+	_flags: i32,
+	addr: *mut sockaddr,
+	addr_len: *mut socklen_t,
+) -> isize {
+	let obj = get_object(fd);
+	obj.map_or_else(|e| e as isize, |v| (*v).recvfrom(buf, len, addr, addr_len))
+}
