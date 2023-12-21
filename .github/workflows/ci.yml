@@ -287,6 +287,8 @@ jobs:
         # Rename the binary to "firecracker"
         mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
         echo "$PWD" >> $GITHUB_PATH
+
+        ./firecracker --version
     - uses: dtolnay/rust-toolchain@stable
     - run: cargo install uhyve
     - uses: mkroening/rust-toolchain-toml@main
