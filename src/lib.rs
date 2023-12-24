@@ -250,8 +250,10 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
-		#[cfg(not(test))]
+		#[cfg(all(not(test), not(feature = "syscall")))]
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
+		#[cfg(all(not(test), feature = "syscall"))]
+		fn main() -> !;
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
 		#[cfg(feature = "newlib")]
@@ -294,7 +296,10 @@ extern "C" fn initd(_arg: usize) {
 	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
-		runtime_entry(argc, argv, environ)
+		#[cfg(all(not(test), not(feature = "syscall")))]
+		runtime_entry(argc, argv, environ);
+		#[cfg(all(not(test), feature = "syscall"))]
+		main();
 	}
 	#[cfg(test)]
 	test_main();
