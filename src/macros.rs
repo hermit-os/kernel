@@ -74,7 +74,8 @@ macro_rules! dbg {
 #[allow(unused_macro_rules)]
 #[cfg(not(any(
 	target_arch = "riscv64",
-	all(target_arch = "x86_64", feature = "newlib")
+	all(target_arch = "x86_64", feature = "newlib"),
+	feature = "syscall"
 )))]
 macro_rules! kernel_function {
 	($f:ident()) => {
@@ -111,7 +112,8 @@ macro_rules! kernel_function {
 // TODO: Switch kernel stack on RISC-V
 #[cfg(any(
 	target_arch = "riscv64",
-	all(target_arch = "x86_64", feature = "newlib")
+	all(target_arch = "x86_64", feature = "newlib"),
+	feature = "syscall"
 ))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
