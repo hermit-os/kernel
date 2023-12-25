@@ -6,7 +6,7 @@ use core::ops::Deref;
 
 use hermit_sync::TicketMutex;
 
-#[cfg(feature = "pci")]
+#[cfg(all(feature = "fuse", feature = "pci"))]
 pub(crate) mod fuse;
 
 // TODO: lazy static could be replaced with explicit init on OS boot.
@@ -172,7 +172,6 @@ impl Filesystem {
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
-	#[cfg(feature = "fs")]
 	pub fn mount(
 		&mut self,
 		mntpath: &str,
@@ -212,13 +211,9 @@ impl Filesystem {
 #[derive(Debug, FromPrimitive, ToPrimitive)]
 pub enum FileError {
 	ENOENT = errno::ENOENT as isize,
-	#[cfg(any(feature = "fs", feature = "pci"))]
 	ENOSYS = errno::ENOSYS as isize,
-	#[cfg(any(feature = "fs", feature = "pci"))]
 	EIO = errno::EIO as isize,
-	#[cfg(feature = "pci")]
 	EBADF = errno::EBADF as isize,
-	#[cfg(feature = "pci")]
 	EISDIR = errno::EISDIR as isize,
 }
 
@@ -259,9 +254,8 @@ pub enum FileError {
 /// - FileDescriptor newtype
 use crate::env::is_uhyve;
 use crate::errno;
-#[cfg(feature = "fs")]
+#[cfg(feature = "fuse")]
 pub use crate::fs::fuse::fuse_dirent as Dirent;
-#[cfg(not(feature = "fs"))]
 pub struct Dirent;
 
 pub trait PosixFileSystem {
@@ -342,6 +336,6 @@ pub enum SeekWhence {
 }
 
 pub(crate) fn init() {
-	#[cfg(all(feature = "fs", feature = "pci"))]
+	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();
 }
