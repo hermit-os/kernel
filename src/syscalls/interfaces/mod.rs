@@ -6,7 +6,7 @@ pub use self::generic::*;
 pub use self::uhyve::*;
 #[cfg(not(target_arch = "x86_64"))]
 use crate::errno::ENOSYS;
-use crate::syscalls::fs::{self, FileAttr};
+use crate::fs::{self, FileAttr};
 use crate::{arch, env};
 
 mod generic;

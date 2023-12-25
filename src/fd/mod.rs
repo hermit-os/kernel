@@ -15,7 +15,7 @@ use crate::env;
 use crate::errno::*;
 use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::syscalls::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
+use crate::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::net::*;
 

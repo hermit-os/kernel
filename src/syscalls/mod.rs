@@ -17,14 +17,13 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor};
-use crate::syscalls::fs::FileAttr;
+use crate::fs::FileAttr;
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
 
 mod condvar;
 mod entropy;
-pub(crate) mod fs;
 mod futex;
 mod interfaces;
 #[cfg(feature = "newlib")]

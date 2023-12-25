@@ -5,7 +5,7 @@ use crate::fd::{
 	uhyve_send, DirectoryEntry, ObjectInterface, SysClose, SysLseek, SysRead, SysWrite,
 	UHYVE_PORT_CLOSE, UHYVE_PORT_LSEEK, UHYVE_PORT_READ, UHYVE_PORT_WRITE,
 };
-use crate::syscalls::fs::{self, FileAttr, PosixFile, SeekWhence};
+use crate::fs::{self, FileAttr, PosixFile, SeekWhence};
 
 #[derive(Debug, Clone)]
 pub struct UhyveFile(i32);

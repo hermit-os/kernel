@@ -10,7 +10,7 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
-use crate::syscalls::fs::{
+use crate::fs::{
 	self, Dirent, FileAttr, FileError, FilePerms, PosixFile, PosixFileSystem, SeekWhence,
 };
 
