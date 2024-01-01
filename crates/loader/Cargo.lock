@@ -91,7 +91,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f27c1b4369c2cd341b5de549380158b105a04c331be5db9110eef7b6d2742134"
 dependencies = [
  "plain",
- "scroll",
+ "scroll 0.11.0",
+]
+
+[[package]]
+name = "goblin"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb07a4ffed2093b118a525b1d8f5204ae274faed5604537caf7135d0f18d9887"
+dependencies = [
+ "plain",
+ "scroll 0.12.0",
 ]
 
 [[package]]
@@ -107,7 +117,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e907e00c48a6a1e1b321654d6cf90d0568ae0e6466646c3da302508cf53dc44e"
 dependencies = [
  "align-address",
- "goblin",
+ "goblin 0.7.1",
  "log",
  "plain",
  "time",
@@ -121,7 +131,7 @@ dependencies = [
  "align-data",
  "cc",
  "fdt",
- "goblin",
+ "goblin 0.8.0",
  "hermit-dtb",
  "hermit-entry",
  "log",
@@ -299,6 +309,12 @@ name = "scroll"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04c565b551bafbef4157586fa379538366e4385d42082f255bfd96e4fe8519da"
+
+[[package]]
+name = "scroll"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ab8598aa408498679922eff7fa985c25d58a90771bd6be794434c5277eab1a6"
 
 [[package]]
 name = "sptr"
