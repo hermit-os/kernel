@@ -238,7 +238,7 @@ pub extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).read(slice)
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
@@ -257,7 +257,7 @@ pub extern "C" fn __sys_sendto(
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).sendto(slice, addr, addr_len)
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
@@ -276,7 +276,7 @@ pub extern "C" fn __sys_recvfrom(
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).recvfrom(slice, addr, addr_len)
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)

@@ -14,7 +14,7 @@ use crate::fs::{self, FileAttr, SeekWhence};
 use crate::syscalls::net::*;
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-pub mod socket;
+pub(crate) mod socket;
 mod stdio;
 
 const STDIN_FILENO: FileDescriptor = 0;
@@ -84,7 +84,7 @@ pub enum DirectoryEntry {
 	Valid(*const Dirent),
 }
 
-pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
+pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
 	fn read(&self, _buf: &mut [u8]) -> Result<isize, IoError> {

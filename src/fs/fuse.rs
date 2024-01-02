@@ -1167,7 +1167,7 @@ impl FuseFileHandleInner {
 				- ::core::mem::size_of::<fuse_read_out>()
 				>= len
 			{
-				len.try_into().unwrap()
+				len
 			} else {
 				rsp.header.len as usize
 					- ::core::mem::size_of::<fuse_out_header>()

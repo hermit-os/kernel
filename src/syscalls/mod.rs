@@ -237,7 +237,7 @@ extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize 
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).read(slice)
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
@@ -254,7 +254,7 @@ extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isi
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).write(slice)
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
@@ -286,7 +286,7 @@ pub extern "C" fn sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::
 extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e as isize,
+		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
 			(*v).lseek(offset, num::FromPrimitive::from_i32(whence).unwrap())
 				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)

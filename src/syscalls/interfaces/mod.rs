@@ -3,8 +3,6 @@ use alloc::vec::Vec;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
-#[cfg(not(target_arch = "x86_64"))]
-use crate::errno::ENOSYS;
 use crate::{arch, env};
 
 mod generic;
