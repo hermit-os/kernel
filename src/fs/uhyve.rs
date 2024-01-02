@@ -306,7 +306,7 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 	if is_uhyve() {
-		let mount_point = format!("/host");
+		let mount_point = "/host".to_string();
 		info!("Mounting virtio-fs at {}", mount_point);
 		fs::FILESYSTEM
 			.get()

@@ -31,6 +31,7 @@ const U64_SIZE: u32 = ::core::mem::size_of::<u64>() as u32;
 const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
+#[allow(dead_code)]
 const FUSE_GETATTR_FH: u32 = 1 << 0;
 
 #[repr(C)]
@@ -202,7 +203,7 @@ struct fuse_attr {
 }
 
 impl fuse_attr {
-	fn to_stat(self) -> FileAttr {
+	fn to_stat(&self) -> FileAttr {
 		FileAttr {
 			st_ino: self.ino,
 			st_nlink: self.nlink as u64,
@@ -1151,7 +1152,7 @@ impl FuseFileHandleInner {
 	fn read(&mut self, buf: &mut [u8]) -> Result<isize, IoError> {
 		debug!("FUSE read!");
 		let mut len = buf.len();
-		if len as usize > MAX_READ_LEN {
+		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {}", len);
 			len = MAX_READ_LEN;
 		}
@@ -1164,7 +1165,7 @@ impl FuseFileHandleInner {
 			let len: usize = if rsp.header.len as usize
 				- ::core::mem::size_of::<fuse_out_header>()
 				- ::core::mem::size_of::<fuse_read_out>()
-				>= len.try_into().unwrap()
+				>= len
 			{
 				len.try_into().unwrap()
 			} else {
@@ -1498,7 +1499,7 @@ impl VfsNode for FuseDirectory {
 			Ok(attr.to_stat())
 		} else {
 			let path = readlink(rsp.nodeid)?;
-			let mut components: Vec<&str> = path.split("/").collect();
+			let mut components: Vec<&str> = path.split('/').collect();
 			self.traverse_stat(&mut components)
 		}
 	}

@@ -4,7 +4,6 @@ mod mem;
 mod uhyve;
 
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
@@ -96,7 +95,7 @@ impl Filesystem {
 	/// Tries to open file at given path.
 	pub fn open(&self, path: &str, opt: OpenOption) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		info!("Open file {}", path);
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
@@ -107,7 +106,7 @@ impl Filesystem {
 	/// Unlinks a file given by path
 	pub fn unlink(&self, path: &str) -> Result<(), IoError> {
 		debug!("Unlinking file {}", path);
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
@@ -118,7 +117,7 @@ impl Filesystem {
 	/// Remove directory given by path
 	pub fn rmdir(&self, path: &str) -> Result<(), IoError> {
 		debug!("Removing directory {}", path);
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
@@ -129,7 +128,7 @@ impl Filesystem {
 	/// Create directory given by path
 	pub fn mkdir(&self, path: &str, mode: u32) -> Result<(), IoError> {
 		debug!("Create directory {}", path);
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
@@ -143,7 +142,7 @@ impl Filesystem {
 			let mut components: Vec<&str> = Vec::new();
 			self.root.traverse_opendir(&mut components)
 		} else {
-			let mut components: Vec<&str> = path.split("/").collect();
+			let mut components: Vec<&str> = path.split('/').collect();
 
 			components.reverse();
 			components.pop();
@@ -156,7 +155,7 @@ impl Filesystem {
 	pub fn stat(&self, path: &str) -> Result<FileAttr, IoError> {
 		debug!("Getting stats {}", path);
 
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 		components.reverse();
 		components.pop();
 
@@ -167,7 +166,7 @@ impl Filesystem {
 	pub fn lstat(&self, path: &str) -> Result<FileAttr, IoError> {
 		debug!("Getting lstats {}", path);
 
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 		components.reverse();
 		components.pop();
 
@@ -182,7 +181,7 @@ impl Filesystem {
 	) -> Result<(), IoError> {
 		debug!("Mounting {}", path);
 
-		let mut components: Vec<&str> = path.split("/").collect();
+		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
@@ -255,61 +254,6 @@ pub(crate) fn init() {
 	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();
 	uhyve::init();
-
-	/*let fd = crate::sys_opendir("/\0".as_ptr());
-	info!("fd {}", fd);
-	loop {
-		if let crate::fd::DirectoryEntry::Valid(dirent) = crate::sys_readdir(fd) {
-			if dirent == core::ptr::null() {
-				break;
-			}
-
-			let s = unsafe {
-				String::from_raw_parts(
-					&(*dirent).d_name as *const _ as *mut u8,
-					(*dirent).d_namelen as usize,
-					(*dirent).d_namelen as usize,
-				)
-			};
-			info!("dirent.d_name {:?}", s);
-			core::mem::forget(s);
-		}
-	}
-
-	let fd = crate::sys_opendir("/root\0".as_ptr());
-	info!("fd {}", fd);
-	loop {
-		if let crate::fd::DirectoryEntry::Valid(dirent) = crate::sys_readdir(fd) {
-			if dirent == core::ptr::null() {
-				break;
-			}
-
-			let s = unsafe {
-				String::from_raw_parts(
-					&(*dirent).d_name as *const _ as *mut u8,
-					(*dirent).d_namelen as usize,
-					(*dirent).d_namelen as usize,
-				)
-			};
-			info!("dirent.d_name {:?}", s);
-			core::mem::forget(s);
-		}
-	}
-
-	let mut attr: FileAttr = Default::default();
-	let ret = crate::sys_lstat("/root/hello.txt\0".as_ptr(), &mut attr as *mut FileAttr);
-	info!("ret {} {:?}", ret, attr);
-
-	let fd = crate::sys_open("/root/hello.txt\0".as_ptr(), 0o0000, 0);
-	info!("fd {}", fd);
-	let mut values = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-	let ret = crate::sys_read(fd, values.as_mut_ptr(), values.len());
-	info!(
-		"result {} {}",
-		unsafe { String::from_utf8_unchecked(values) },
-		ret
-	);
-	crate::sys_close(fd);*/
 }
 
 pub unsafe fn create_file(name: &str, ptr: *const u8, length: usize) {

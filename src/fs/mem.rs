@@ -143,7 +143,7 @@ impl MemDirectory {
 
 	pub fn create_file(&self, name: &str, ptr: *const u8, length: usize) -> Result<(), IoError> {
 		let name = name.trim();
-		if name.find("/").is_none() {
+		if name.find('/').is_none() {
 			let file = unsafe { MemFile::from_raw_parts(ptr, length) };
 			self.inner
 				.0
@@ -336,7 +336,7 @@ impl RomHandle {
 
 	pub fn len(&self) -> usize {
 		let guard = self.data.read();
-		guard.len() as usize
+		guard.len()
 	}
 }
 
@@ -367,8 +367,8 @@ impl RamHandle {
 
 	pub fn len(&self) -> usize {
 		let guard = self.data.read();
-		let ref vec: &Vec<u8> = guard.deref();
-		vec.len() as usize
+		let vec: &Vec<u8> = guard.deref();
+		vec.len()
 	}
 }
 
@@ -384,8 +384,8 @@ impl Clone for RamHandle {
 /// Enumeration of possible methods to seek within an I/O object.
 #[derive(Debug, Clone)]
 enum DataHandle {
-	RAM(RamHandle),
-	ROM(RomHandle),
+	Ram(RamHandle),
+	Rom(RomHandle),
 }
 
 #[derive(Debug)]
@@ -397,13 +397,13 @@ pub(crate) struct MemFile {
 impl MemFile {
 	pub fn new() -> Self {
 		Self {
-			data: DataHandle::RAM(RamHandle::new()),
+			data: DataHandle::Ram(RamHandle::new()),
 		}
 	}
 
 	pub unsafe fn from_raw_parts(ptr: *const u8, length: usize) -> Self {
 		Self {
-			data: unsafe { DataHandle::ROM(RomHandle::new(ptr, length)) },
+			data: unsafe { DataHandle::Rom(RomHandle::new(ptr, length)) },
 		}
 	}
 }

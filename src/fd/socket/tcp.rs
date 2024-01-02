@@ -253,7 +253,7 @@ impl<T> Socket<T> {
 	}
 
 	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
-		if buf.len() == 0 {
+		if buf.is_empty() {
 			return Ok(0);
 		}
 
@@ -275,7 +275,7 @@ impl<T> Socket<T> {
 	}
 
 	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
-		if buf.len() == 0 {
+		if buf.is_empty() {
 			return Ok(0);
 		}
 
