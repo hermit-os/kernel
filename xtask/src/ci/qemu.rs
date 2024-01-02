@@ -5,7 +5,7 @@ use std::{env, thread};
 
 use anyhow::{bail, ensure, Context, Result};
 use clap::{Args, ValueEnum};
-use sysinfo::{CpuExt, CpuRefreshKind, System, SystemExt};
+use sysinfo::{CpuRefreshKind, System};
 use wait_timeout::ChildExt;
 use xshell::cmd;
 
