@@ -61,7 +61,8 @@ pub trait SyscallInterface: Send + Sync {
 		debug!("unlink {}", name);
 
 		fs::FILESYSTEM
-			.lock()
+			.get()
+			.unwrap()
 			.unlink(name)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
@@ -72,7 +73,8 @@ pub trait SyscallInterface: Send + Sync {
 		debug!("rmdir {}", name);
 
 		fs::FILESYSTEM
-			.lock()
+			.get()
+			.unwrap()
 			.rmdir(name)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
@@ -83,42 +85,35 @@ pub trait SyscallInterface: Send + Sync {
 		debug!("mkdir {}, mode {}", name, mode);
 
 		fs::FILESYSTEM
-			.lock()
+			.get()
+			.unwrap()
 			.mkdir(name, mode)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 
-	#[cfg(not(target_arch = "x86_64"))]
-	fn stat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
-		debug!("stat is unimplemented, returning -ENOSYS");
-		-ENOSYS
-	}
-
-	#[cfg(target_arch = "x86_64")]
 	fn stat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
 		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 		debug!("stat {}", name);
 
-		fs::FILESYSTEM
-			.lock()
-			.stat(name, stat)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		match fs::FILESYSTEM.get().unwrap().stat(name) {
+			Ok(attr) => unsafe {
+				*stat = attr;
+				0
+			},
+			Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+		}
 	}
 
-	#[cfg(not(target_arch = "x86_64"))]
-	fn lstat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
-		debug!("lstat is unimplemented, returning -ENOSYS");
-		-ENOSYS
-	}
-
-	#[cfg(target_arch = "x86_64")]
 	fn lstat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
 		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 		debug!("lstat {}", name);
 
-		fs::FILESYSTEM
-			.lock()
-			.lstat(name, stat)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		match fs::FILESYSTEM.get().unwrap().lstat(name) {
+			Ok(attr) => unsafe {
+				*stat = attr;
+				0
+			},
+			Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+		}
 	}
 }

@@ -11,9 +11,8 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::IpAddress;
 
-use crate::errno::*;
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::fd::ObjectInterface;
+use crate::fd::{IoError, ObjectInterface};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
@@ -69,7 +68,7 @@ impl<T> Socket<T> {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, i32> {
+	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -78,7 +77,7 @@ impl<T> Socket<T> {
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
 				_ => {
 					if socket.can_recv() {
 						Poll::Ready(
@@ -88,7 +87,7 @@ impl<T> Socket<T> {
 									buffer[..len].copy_from_slice(&data[..len]);
 									(len, isize::try_from(len).unwrap())
 								})
-								.map_err(|_| -crate::errno::EIO),
+								.map_err(|_| IoError::EIO),
 						)
 					} else {
 						socket.register_recv_waker(cx.waker());
@@ -100,7 +99,7 @@ impl<T> Socket<T> {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> Result<isize, i32> {
+	async fn async_write(&self, buffer: &[u8]) -> Result<isize, IoError> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
@@ -113,13 +112,11 @@ impl<T> Socket<T> {
 						tcp::State::FinWait1
 						| tcp::State::FinWait2
 						| tcp::State::Listen
-						| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+						| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
 						_ => {
 							if socket.can_send() {
 								Poll::Ready(
-									socket
-										.send_slice(&buffer[pos..])
-										.map_err(|_| -crate::errno::EIO),
+									socket.send_slice(&buffer[pos..]).map_err(|_| IoError::EIO),
 								)
 							} else if pos > 0 {
 								// we already send some data => return 0 as signal to stop the
@@ -145,19 +142,17 @@ impl<T> Socket<T> {
 		Ok(pos.try_into().unwrap())
 	}
 
-	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, i32> {
+	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, IoError> {
 		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
 			.map_err(|x| {
 				info!("x {:?}", x);
-				-crate::errno::EIO
+				IoError::EIO
 			})?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::TimeWait => {
-					Poll::Ready(Err(-crate::errno::EFAULT))
-				}
-				tcp::State::Listen => Poll::Ready(Err(-crate::errno::EIO)),
+				tcp::State::Closed | tcp::State::TimeWait => Poll::Ready(Err(IoError::EFAULT)),
+				tcp::State::Listen => Poll::Ready(Err(IoError::EIO)),
 				tcp::State::SynSent | tcp::State::SynReceived => {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
@@ -168,14 +163,14 @@ impl<T> Socket<T> {
 		.await
 	}
 
-	async fn async_close(&self) -> Result<(), i32> {
+	async fn async_close(&self) -> Result<(), IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Closed
 				| tcp::State::Closing
-				| tcp::State::TimeWait => Poll::Ready(Err(-crate::errno::EIO)),
+				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
 				_ => {
 					if socket.send_queue() > 0 {
 						socket.register_send_waker(cx.waker());
@@ -209,7 +204,7 @@ impl<T> Socket<T> {
 		&self,
 		_addr: *mut sockaddr,
 		_addrlen: *mut socklen_t,
-	) -> Result<(), i32> {
+	) -> Result<(), IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed => {
@@ -234,7 +229,7 @@ impl<T> Socket<T> {
 						tcp::State::Closed
 						| tcp::State::Closing
 						| tcp::State::FinWait1
-						| tcp::State::FinWait2 => Poll::Ready(Err(-crate::errno::EIO)),
+						| tcp::State::FinWait2 => Poll::Ready(Err(IoError::EIO)),
 						_ => {
 							socket.register_recv_waker(cx.waker());
 							Poll::Pending
@@ -246,74 +241,66 @@ impl<T> Socket<T> {
 		.await?;
 
 		let mut guard = NIC.lock();
-		let nic = guard.as_nic_mut().map_err(|_| -crate::errno::EIO)?;
+		let nic = guard.as_nic_mut().map_err(|_| IoError::EIO)?;
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 
 		Ok(())
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
-		block_on(self.async_accept(addr, addrlen), None)
-			.map(|_| 0)
-			.unwrap_or_else(|x| x)
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
+		block_on(self.async_accept(addr, addrlen), None).map(|_| 0)
 	}
 
-	fn read(&self, buf: *mut u8, len: usize) -> isize {
-		if len == 0 {
-			return 0;
+	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+		if buf.len() == 0 {
+			return Ok(0);
 		}
 
-		let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
-				if x == -ETIME {
-					(-EAGAIN).try_into().unwrap()
+			poll_on(self.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
+				if x == IoError::ETIME {
+					IoError::EAGAIN
 				} else {
-					x.try_into().unwrap()
+					x
 				}
 			})
 		} else {
-			poll_on(self.async_read(slice), Some(Duration::from_secs(2))).unwrap_or_else(|x| {
-				if x == -ETIME {
-					block_on(self.async_read(slice), None).unwrap_or_else(|y| y.try_into().unwrap())
-				} else {
-					x.try_into().unwrap()
-				}
-			})
+			match poll_on(self.async_read(buf), Some(Duration::from_secs(2))) {
+				Err(IoError::ETIME) => block_on(self.async_read(buf), None),
+				Err(x) => Err(x),
+				Ok(x) => Ok(x),
+			}
 		}
 	}
 
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		if len == 0 {
-			return 0;
+	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+		if buf.len() == 0 {
+			return Ok(0);
 		}
 
-		let slice = unsafe { core::slice::from_raw_parts(buf, len) };
-
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(slice), Some(Duration::ZERO)).unwrap_or_else(|x| {
-				if x == -ETIME {
-					(-EAGAIN).try_into().unwrap()
+			poll_on(self.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
+				if x == IoError::ETIME {
+					IoError::EAGAIN
 				} else {
-					x.try_into().unwrap()
+					x
 				}
 			})
 		} else {
-			poll_on(self.async_write(slice), None).unwrap_or_else(|x| x.try_into().unwrap())
+			poll_on(self.async_write(buf), None)
 		}
 	}
 
-	fn listen(&self, _backlog: i32) -> i32 {
+	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
 		self.with(|socket| {
 			if !socket.is_open() {
 				socket
 					.listen(self.port.load(Ordering::Acquire))
-					.map(|_| 0)
-					.unwrap_or_else(|_| -crate::errno::EIO)
+					.map(|_| ())
+					.map_err(|_| IoError::EIO)
 			} else {
-				-crate::errno::EIO
+				Err(IoError::EIO)
 			}
 		})
 	}
@@ -324,7 +311,7 @@ impl<T> Socket<T> {
 		optname: i32,
 		optval: *const c_void,
 		optlen: socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		if level == IPPROTO_TCP
 			&& optname == TCP_NODELAY
 			&& optlen == size_of::<i32>().try_into().unwrap()
@@ -338,12 +325,12 @@ impl<T> Socket<T> {
 					socket.set_ack_delay(Some(Duration::from_millis(10)));
 				}
 			});
-			0
+			Ok(())
 		} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
 			// smoltcp is always able to reuse the addr
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
@@ -353,7 +340,7 @@ impl<T> Socket<T> {
 		optname: i32,
 		optval: *mut c_void,
 		optlen: *mut socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		if level == IPPROTO_TCP && optname == TCP_NODELAY {
 			let optlen = unsafe { &mut *optlen };
 			if *optlen >= size_of::<i32>().try_into().unwrap() {
@@ -367,25 +354,25 @@ impl<T> Socket<T> {
 				});
 				*optlen = size_of::<i32>().try_into().unwrap();
 
-				0
+				Ok(())
 			} else {
-				-EINVAL
+				Err(IoError::EINVAL)
 			}
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn shutdown(&self, how: i32) -> i32 {
+	fn shutdown(&self, how: i32) -> Result<(), IoError> {
 		match how {
 			SHUT_RD /* Read  */ |
 			SHUT_WR /* Write */ |
-			SHUT_RDWR /* Both */ => 0,
-			_ => -EINVAL,
+			SHUT_RDWR /* Both */ => Ok(()),
+			_ => Err(IoError::EINVAL),
 		}
 	}
 
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
+	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
 		if cmd == FIONBIO {
 			let value = unsafe { *(argp as *const i32) };
 			if value != 0 {
@@ -396,9 +383,9 @@ impl<T> Socket<T> {
 				self.nonblocking.store(false, Ordering::Release);
 			}
 
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 }
@@ -430,18 +417,18 @@ impl<T> Drop for Socket<T> {
 }
 
 impl ObjectInterface for Socket<IPv4> {
-	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> Result<(), IoError> {
 		if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 			let addr = unsafe { *(name as *const sockaddr_in) };
 			let port = u16::from_be(addr.sin_port);
 			self.port.store(port, Ordering::Release);
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> Result<i32, IoError> {
 		if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
 			let saddr = unsafe { *(name as *const sockaddr_in) };
 			let port = u16::from_be(saddr.sin_port);
@@ -453,31 +440,29 @@ impl ObjectInterface for Socket<IPv4> {
 			);
 
 			if self.nonblocking.load(Ordering::Acquire) {
-				block_on(self.async_connect(address, port), Some(Duration::ZERO)).unwrap_or_else(
-					|x| {
-						if x == -ETIME {
-							-EAGAIN
-						} else {
-							x
-						}
-					},
-				)
+				block_on(self.async_connect(address, port), Some(Duration::ZERO)).map_err(|x| {
+					if x == IoError::ETIME {
+						IoError::EAGAIN
+					} else {
+						x
+					}
+				})
 			} else {
-				block_on(self.async_connect(address, port), None).unwrap_or_else(|x| x)
+				block_on(self.async_connect(address, port), None)
 			}
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
+	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
 		if namelen.is_null() {
-			return -ENOBUFS;
+			return Err(IoError::ENOBUFS);
 		}
 
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in>().try_into().unwrap() {
-			let mut ret: i32 = 0;
+			let mut ret: Result<(), IoError> = Ok(());
 			let addr = unsafe { &mut *(name as *mut sockaddr_in) };
 
 			self.with(|socket| {
@@ -488,7 +473,7 @@ impl ObjectInterface for Socket<IPv4> {
 						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
 					}
 				} else {
-					ret = -crate::errno::ENOTCONN;
+					ret = Err(IoError::ENOTCONN);
 				}
 			});
 
@@ -496,13 +481,13 @@ impl ObjectInterface for Socket<IPv4> {
 
 			ret
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
+	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
 		if namelen.is_null() {
-			return -ENOBUFS;
+			return Err(IoError::ENOBUFS);
 		}
 
 		let namelen = unsafe { &mut *namelen };
@@ -522,25 +507,25 @@ impl ObjectInterface for Socket<IPv4> {
 
 			*namelen = size_of::<sockaddr_in6>().try_into().unwrap();
 
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
 		self.accept(addr, addrlen)
 	}
 
-	fn read(&self, buf: *mut u8, len: usize) -> isize {
-		self.read(buf, len)
+	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+		self.read(buf)
 	}
 
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		self.write(buf, len)
+	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+		self.write(buf)
 	}
 
-	fn listen(&self, backlog: i32) -> i32 {
+	fn listen(&self, backlog: i32) -> Result<(), IoError> {
 		self.listen(backlog)
 	}
 
@@ -550,7 +535,7 @@ impl ObjectInterface for Socket<IPv4> {
 		optname: i32,
 		optval: *const c_void,
 		optlen: socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		self.setsockopt(level, optname, optval, optlen)
 	}
 
@@ -560,31 +545,31 @@ impl ObjectInterface for Socket<IPv4> {
 		optname: i32,
 		optval: *mut c_void,
 		optlen: *mut socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		self.getsockopt(level, optname, optval, optlen)
 	}
 
-	fn shutdown(&self, how: i32) -> i32 {
+	fn shutdown(&self, how: i32) -> Result<(), IoError> {
 		self.shutdown(how)
 	}
 
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
+	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
 		self.ioctl(cmd, argp)
 	}
 }
 
 impl ObjectInterface for Socket<IPv6> {
-	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> Result<(), IoError> {
 		if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
 			let addr = unsafe { *(name as *const sockaddr_in6) };
 			self.port.store(addr.sin6_port, Ordering::Release);
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> i32 {
+	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> Result<i32, IoError> {
 		if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
 			let saddr = unsafe { *(name as *const sockaddr_in6) };
 			let port = u16::from_be(saddr.sin6_port);
@@ -602,31 +587,29 @@ impl ObjectInterface for Socket<IPv6> {
 			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
 
 			if self.nonblocking.load(Ordering::Acquire) {
-				block_on(self.async_connect(address, port), Some(Duration::ZERO)).unwrap_or_else(
-					|x| {
-						if x == -ETIME {
-							-EAGAIN
-						} else {
-							x
-						}
-					},
-				)
+				block_on(self.async_connect(address, port), Some(Duration::ZERO)).map_err(|x| {
+					if x == IoError::ETIME {
+						IoError::EAGAIN
+					} else {
+						x
+					}
+				})
 			} else {
-				block_on(self.async_connect(address, port), None).unwrap_or_else(|x| x)
+				block_on(self.async_connect(address, port), None)
 			}
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
+	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
 		if namelen.is_null() {
-			return -ENOBUFS;
+			return Err(IoError::ENOBUFS);
 		}
 
 		let namelen = unsafe { &mut *namelen };
 		if *namelen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-			let mut ret: i32 = 0;
+			let mut ret: Result<(), IoError> = Ok(());
 			let addr = unsafe { &mut *(name as *mut sockaddr_in6) };
 
 			self.with(|socket| {
@@ -637,7 +620,7 @@ impl ObjectInterface for Socket<IPv6> {
 						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
 					}
 				} else {
-					ret = -crate::errno::ENOTCONN;
+					ret = Err(IoError::ENOTCONN);
 				}
 			});
 
@@ -645,13 +628,13 @@ impl ObjectInterface for Socket<IPv6> {
 
 			ret
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> i32 {
+	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
 		if namelen.is_null() {
-			return -ENOBUFS;
+			return Err(IoError::ENOBUFS);
 		}
 
 		let namelen = unsafe { &mut *namelen };
@@ -671,25 +654,25 @@ impl ObjectInterface for Socket<IPv6> {
 
 			*namelen = size_of::<sockaddr_in6>().try_into().unwrap();
 
-			0
+			Ok(())
 		} else {
-			-EINVAL
+			Err(IoError::EINVAL)
 		}
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> i32 {
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
 		self.accept(addr, addrlen)
 	}
 
-	fn read(&self, buf: *mut u8, len: usize) -> isize {
-		self.read(buf, len)
+	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+		self.read(buf)
 	}
 
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		self.write(buf, len)
+	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+		self.write(buf)
 	}
 
-	fn listen(&self, backlog: i32) -> i32 {
+	fn listen(&self, backlog: i32) -> Result<(), IoError> {
 		self.listen(backlog)
 	}
 
@@ -699,7 +682,7 @@ impl ObjectInterface for Socket<IPv6> {
 		optname: i32,
 		optval: *const c_void,
 		optlen: socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		self.setsockopt(level, optname, optval, optlen)
 	}
 
@@ -709,15 +692,15 @@ impl ObjectInterface for Socket<IPv6> {
 		optname: i32,
 		optval: *mut c_void,
 		optlen: *mut socklen_t,
-	) -> i32 {
+	) -> Result<(), IoError> {
 		self.getsockopt(level, optname, optval, optlen)
 	}
 
-	fn shutdown(&self, how: i32) -> i32 {
+	fn shutdown(&self, how: i32) -> Result<(), IoError> {
 		self.shutdown(how)
 	}
 
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> i32 {
+	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
 		self.ioctl(cmd, argp)
 	}
 }

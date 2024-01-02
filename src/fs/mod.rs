@@ -1,286 +1,208 @@
-use alloc::boxed::Box;
-use alloc::collections::BTreeMap;
-use alloc::string::String;
-use alloc::vec::Vec;
-use core::ops::Deref;
-
-use hermit_sync::TicketMutex;
-
 #[cfg(all(feature = "fuse", feature = "pci"))]
 pub(crate) mod fuse;
+mod mem;
+mod uhyve;
 
-// TODO: lazy static could be replaced with explicit init on OS boot.
-pub static FILESYSTEM: TicketMutex<Filesystem> = TicketMutex::new(Filesystem::new());
+use alloc::boxed::Box;
+use alloc::string::String;
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 
-pub struct Filesystem {
-	// Keep track of mount-points
-	mounts: BTreeMap<String, Box<dyn PosixFileSystem + Send>>,
+use hermit_sync::OnceCell;
+use mem::MemDirectory;
 
-	// Keep track of open files
-	files: BTreeMap<u64, Box<dyn PosixFile + Send>>,
+use crate::fd::{IoError, ObjectInterface, OpenOption};
+
+pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
+
+/// Type of the VNode
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum NodeKind {
+	/// Node represent a file
+	File,
+	/// Node represent a directory
+	Directory,
+}
+
+/// VfsNode represents an internal node of the ramdisk.
+pub(crate) trait VfsNode: core::fmt::Debug {
+	/// Determines the current node type
+	fn get_kind(&self) -> NodeKind;
+
+	/// Helper function to create a new dirctory node
+	fn traverse_mkdir(&self, _components: &mut Vec<&str>, _mode: u32) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to delete a dirctory node
+	fn traverse_rmdir(&self, _components: &mut Vec<&str>) -> core::result::Result<(), IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to remove the specified file
+	fn traverse_unlink(&self, _components: &mut Vec<&str>) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to open a directory
+	fn traverse_opendir(
+		&self,
+		_components: &mut Vec<&str>,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to get file status
+	fn traverse_lstat(&self, _components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to get file status
+	fn traverse_stat(&self, _components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to mount a file system
+	fn traverse_mount(
+		&self,
+		_components: &mut Vec<&str>,
+		_obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
+	) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
+	}
+
+	/// Helper function to open a file
+	fn traverse_open(
+		&self,
+		_components: &mut Vec<&str>,
+		_option: OpenOption,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Err(IoError::ENOSYS)
+	}
+}
+
+#[derive(Debug)]
+pub(crate) struct Filesystem {
+	root: MemDirectory,
 }
 
 impl Filesystem {
-	pub const fn new() -> Self {
+	pub fn new() -> Self {
 		Self {
-			mounts: BTreeMap::new(),
-			files: BTreeMap::new(),
+			root: MemDirectory::new(),
 		}
 	}
 
-	/// Returns next free file-descriptor. We map index in files BTreeMap as fd's.
-	/// Done determining the current biggest stored index.
-	/// This is efficient, since BTreeMap's iter() calculates min and max key directly.
-	/// see <https://github.com/rust-lang/rust/issues/62924>
-	fn assign_new_fd(&self) -> u64 {
-		// BTreeMap has efficient max/min index calculation. One way to access these is the following iter.
-		// Add 1 to get next never-assigned fd num
-		if let Some((fd, _)) = self.files.iter().next_back() {
-			fd + 1
-		} else {
-			3 // start at 3, to reserve stdin/out/err
-		}
-	}
+	/// Tries to open file at given path.
+	pub fn open(&self, path: &str, opt: OpenOption) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		info!("Open file {}", path);
+		let mut components: Vec<&str> = path.split("/").collect();
 
-	/// Gets a new fd for a file and inserts it into open files.
-	/// Returns file descriptor
-	fn add_file(&mut self, file: Box<dyn PosixFile + Send>) -> u64 {
-		let fd = self.assign_new_fd();
-		self.files.insert(fd, file);
-		fd
-	}
+		components.reverse();
+		components.pop();
 
-	/// parses path `/MOUNTPOINT/internal-path` into mount-filesystem and internal_path
-	/// Returns (PosixFileSystem, internal_path) or Error on failure.
-	fn parse_path<'a, 'b>(
-		&'a self,
-		path: &'b str,
-	) -> Result<(&'a (dyn PosixFileSystem + Send), &'b str), FileError> {
-		let mut pathsplit = path.splitn(3, '/');
-
-		if path.starts_with('/') {
-			pathsplit.next(); // empty, since first char is /
-
-			let mount = pathsplit.next().unwrap();
-			let internal_path = pathsplit.next().unwrap_or("/");
-			if let Some(fs) = self.mounts.get(mount) {
-				return Ok((fs.deref(), internal_path));
-			}
-
-			warn!(
-				"Trying to open file on non-existing mount point '{}'!",
-				mount
-			);
-		} else {
-			let mount = if !is_uhyve() {
-				option_env!("HERMIT_WD").unwrap_or("root")
-			} else {
-				"."
-			};
-			let internal_path = pathsplit.next().unwrap_or("/");
-
-			debug!(
-				"Assume that the directory '{}' is used as mount point!",
-				mount
-			);
-
-			if let Some(fs) = self.mounts.get(mount) {
-				return Ok((fs.deref(), internal_path));
-			}
-
-			warn!(
-				"Trying to open file on non-existing mount point '{}'!",
-				mount
-			);
-		}
-
-		Err(FileError::ENOENT)
-	}
-
-	/// Tries to open file at given path (/MOUNTPOINT/internal-path).
-	/// Looks up MOUNTPOINT in mounted dirs, passes internal-path to filesystem backend
-	/// Returns the file descriptor of the newly opened file, or an error on failure
-	pub fn open(&mut self, path: &str, perms: FilePerms) -> Result<u64, FileError> {
-		debug!("Opening file {} {:?}", path, perms);
-		let (fs, internal_path) = self.parse_path(path)?;
-		let file = fs.open(internal_path, perms)?;
-		Ok(self.add_file(file))
-	}
-
-	/// Similar to open
-	#[allow(dead_code)]
-	pub fn opendir(&mut self, path: &str) -> Result<u64, FileError> {
-		debug!("Opening dir {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		let file = fs.opendir(internal_path)?;
-		Ok(self.add_file(file))
-	}
-
-	/// Closes a file with given fd.
-	/// If the file is currently open, closes it
-	/// Remove the file from map of open files
-	pub fn close(&mut self, fd: u64) {
-		debug!("Closing fd {}", fd);
-		if let Some(file) = self.files.get_mut(&fd) {
-			file.close().unwrap(); // TODO: handle error
-		}
-		self.files.remove(&fd);
+		self.root.traverse_open(&mut components, opt)
 	}
 
 	/// Unlinks a file given by path
-	pub fn unlink(&mut self, path: &str) -> Result<(), FileError> {
+	pub fn unlink(&self, path: &str) -> Result<(), IoError> {
 		debug!("Unlinking file {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		fs.unlink(internal_path)?;
-		Ok(())
+		let mut components: Vec<&str> = path.split("/").collect();
+
+		components.reverse();
+		components.pop();
+
+		self.root.traverse_unlink(&mut components)
 	}
 
 	/// Remove directory given by path
-	#[allow(dead_code)]
-	pub fn rmdir(&mut self, path: &str) -> Result<(), FileError> {
+	pub fn rmdir(&self, path: &str) -> Result<(), IoError> {
 		debug!("Removing directory {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		fs.rmdir(internal_path)?;
-		Ok(())
+		let mut components: Vec<&str> = path.split("/").collect();
+
+		components.reverse();
+		components.pop();
+
+		self.root.traverse_rmdir(&mut components)
 	}
 
 	/// Create directory given by path
-	#[allow(dead_code)]
-	pub fn mkdir(&mut self, path: &str, mode: u32) -> Result<(), FileError> {
-		debug!("Removing directory {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		fs.mkdir(internal_path, mode)?;
-		Ok(())
+	pub fn mkdir(&self, path: &str, mode: u32) -> Result<(), IoError> {
+		debug!("Create directory {}", path);
+		let mut components: Vec<&str> = path.split("/").collect();
+
+		components.reverse();
+		components.pop();
+
+		self.root.traverse_mkdir(&mut components, mode)
+	}
+
+	/// List given directory
+	pub fn opendir(&self, path: &str) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		if path.trim() == "/" {
+			let mut components: Vec<&str> = Vec::new();
+			self.root.traverse_opendir(&mut components)
+		} else {
+			let mut components: Vec<&str> = path.split("/").collect();
+
+			components.reverse();
+			components.pop();
+
+			self.root.traverse_opendir(&mut components)
+		}
 	}
 
 	/// stat
-	#[allow(dead_code)]
-	pub fn stat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+	pub fn stat(&self, path: &str) -> Result<FileAttr, IoError> {
 		debug!("Getting stats {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		fs.stat(internal_path, stat)?;
-		Ok(())
+
+		let mut components: Vec<&str> = path.split("/").collect();
+		components.reverse();
+		components.pop();
+
+		self.root.traverse_stat(&mut components)
 	}
 
 	/// lstat
-	#[allow(dead_code)]
-	pub fn lstat(&mut self, path: &str, stat: *mut FileAttr) -> Result<(), FileError> {
+	pub fn lstat(&self, path: &str) -> Result<FileAttr, IoError> {
 		debug!("Getting lstats {}", path);
-		let (fs, internal_path) = self.parse_path(path)?;
-		fs.lstat(internal_path, stat)?;
-		Ok(())
+
+		let mut components: Vec<&str> = path.split("/").collect();
+		components.reverse();
+		components.pop();
+
+		self.root.traverse_lstat(&mut components)
 	}
 
 	/// Create new backing-fs at mountpoint mntpath
 	pub fn mount(
-		&mut self,
-		mntpath: &str,
-		mntobj: Box<dyn PosixFileSystem + Send>,
-	) -> Result<(), ()> {
-		use alloc::string::ToString;
+		&self,
+		path: &str,
+		obj: Box<dyn VfsNode + core::marker::Send + core::marker::Sync>,
+	) -> Result<(), IoError> {
+		debug!("Mounting {}", path);
 
-		debug!("Mounting {}", mntpath);
-		if mntpath.contains('/') {
-			warn!(
-				"Trying to mount at '{}', but slashes in name are not supported!",
-				mntpath
-			);
-			return Err(());
-		}
+		let mut components: Vec<&str> = path.split("/").collect();
 
-		// if mounts contains path already abort
-		if self.mounts.contains_key(mntpath) {
-			warn!("Mountpoint already exists!");
-			return Err(());
-		}
+		components.reverse();
+		components.pop();
 
-		// insert filesystem into mounts, done
-		self.mounts.insert(mntpath.to_string(), mntobj);
-
-		Ok(())
+		self.root.traverse_mount(&mut components, obj)
 	}
 
-	/// Run closure on file referenced by file descriptor.
-	pub fn fd_op(&mut self, fd: u64, f: impl FnOnce(&mut Box<dyn PosixFile + Send>)) {
-		f(self.files.get_mut(&fd).unwrap());
+	/// Create file from ROM
+	pub unsafe fn create_file(
+		&self,
+		name: &str,
+		ptr: *const u8,
+		length: usize,
+	) -> Result<(), IoError> {
+		self.root.create_file(name, ptr, length)
 	}
-}
-
-// TODO: Integrate with src/errno.rs ?
-#[allow(clippy::upper_case_acronyms)]
-#[derive(Debug, FromPrimitive, ToPrimitive)]
-pub enum FileError {
-	ENOENT = errno::ENOENT as isize,
-	ENOSYS = errno::ENOSYS as isize,
-	EIO = errno::EIO as isize,
-	EBADF = errno::EBADF as isize,
-	EISDIR = errno::EISDIR as isize,
-}
-
-/// Design:
-/// - want to support different backends. One of them virtiofs.
-/// - want to support multiple mounted filesystems at once.
-/// - for simplicity: no overlays. All 'folders' in / are mountpoints!
-/// - manage all files in a global map. Do not hand out references, let syscalls operate by passing in closures (fd_op())
-///
-/// - we internally treat all file systems as posix filesystems.
-/// - Have two traits. One representing a filesystem, another a file: PosixFileSystem and PosixFile
-/// - filesystem.open creates new file
-/// - trait methods like open return Result<....>, so we can catch errors on eg open() and NOT permanently assign an fd to it!
-///
-/// - have a FUSE filesystem, which implements both PosixFileSystem and PosixFile
-/// - fuse can have various FuseInterface backends. These only have to provide fuse command send/receive capabilities.
-/// - virtiofs implements FuseInterface and sends commands via virtio queues.
-///
-/// - fd management is only relevant for "user" facing code. We don't care how fuse etc. manages nodes internally.
-/// - But we still want to have a list of open files and mounted filesystems (here in fs.rs).
-///
-/// Open Questions:
-/// - what is the maximum number of open files I want to support? if small, could have static allocation, no need for hashmap?
-/// - create Stdin/out virtual files, assign fd's 0-2. Instantiate them on program start. currently fd 0-2 are hardcoded exceptions.
-/// - optimize callchain? how does LTO work here?:
-///     - app calls rust.open (which is stdlib hermit/fs.rs) [https://github.com/rust-lang/rust/blob/master/src/libstd/sys/hermit/fs.rs#L267]
-///     - abi::open() (hermit-sys crate)
-///     - [KERNEL BORDER] (uses C-interface. needed? Could just be alternative to native rust?)
-///     - hermit-lib/....rs/sys_open()
-///     - SyscallInterface.open (via &'static dyn ref)
-///     - Filesystem::open()
-///     - Fuse::open()
-///     - VirtiofsDriver::send_command(...)
-///     - [HYPERVISOR BORDER] (via virtio)
-///     - virtiofsd receives fuse command and sends reply
-///
-/// TODO:
-/// - FileDescriptor newtype
-use crate::env::is_uhyve;
-use crate::errno;
-#[cfg(feature = "fuse")]
-pub use crate::fs::fuse::fuse_dirent as Dirent;
-pub struct Dirent;
-
-pub trait PosixFileSystem {
-	fn open(&self, _path: &str, _perms: FilePerms) -> Result<Box<dyn PosixFile + Send>, FileError>;
-	fn opendir(&self, path: &str) -> Result<Box<dyn PosixFile + Send>, FileError>;
-	fn unlink(&self, _path: &str) -> Result<(), FileError>;
-
-	fn rmdir(&self, _path: &str) -> Result<(), FileError>;
-	fn mkdir(&self, name: &str, mode: u32) -> Result<i32, FileError>;
-	fn stat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
-	fn lstat(&self, _path: &str, stat: *mut FileAttr) -> Result<(), FileError>;
-}
-
-pub trait PosixFile {
-	fn close(&mut self) -> Result<(), FileError>;
-	fn read(&mut self, len: u32) -> Result<Vec<u8>, FileError>;
-	fn write(&mut self, buf: &[u8]) -> Result<u64, FileError>;
-	fn lseek(&mut self, offset: isize, whence: SeekWhence) -> Result<usize, FileError>;
-
-	fn readdir(&mut self) -> Result<*const Dirent, FileError>;
-	fn fstat(&self, stat: *mut FileAttr) -> Result<(), FileError>;
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct FileAttr {
 	pub st_dev: u64,
 	pub st_ino: u64,
@@ -301,7 +223,7 @@ pub struct FileAttr {
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
-pub enum PosixFileType {
+pub enum FileType {
 	Unknown = 0,         // DT_UNKNOWN
 	Fifo = 1,            // DT_FIFO
 	CharacterDevice = 2, // DT_CHR
@@ -311,19 +233,6 @@ pub enum PosixFileType {
 	SymbolicLink = 10,   // DT_LNK
 	Socket = 12,         // DT_SOCK
 	Whiteout = 14,       // DT_WHT
-}
-
-// TODO: raw is partially redundant, create nicer interface
-#[derive(Clone, Copy, Debug, Default)]
-pub struct FilePerms {
-	pub write: bool,
-	pub creat: bool,
-	pub excl: bool,
-	pub trunc: bool,
-	pub append: bool,
-	pub directio: bool,
-	pub raw: u32,
-	pub mode: u32,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -336,6 +245,79 @@ pub enum SeekWhence {
 }
 
 pub(crate) fn init() {
+	FILESYSTEM.set(Filesystem::new()).unwrap();
+	FILESYSTEM
+		.get()
+		.unwrap()
+		.mkdir("/tmp", 777)
+		.expect("Unable to create /tmp");
+
 	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();
+	uhyve::init();
+
+	/*let fd = crate::sys_opendir("/\0".as_ptr());
+	info!("fd {}", fd);
+	loop {
+		if let crate::fd::DirectoryEntry::Valid(dirent) = crate::sys_readdir(fd) {
+			if dirent == core::ptr::null() {
+				break;
+			}
+
+			let s = unsafe {
+				String::from_raw_parts(
+					&(*dirent).d_name as *const _ as *mut u8,
+					(*dirent).d_namelen as usize,
+					(*dirent).d_namelen as usize,
+				)
+			};
+			info!("dirent.d_name {:?}", s);
+			core::mem::forget(s);
+		}
+	}
+
+	let fd = crate::sys_opendir("/root\0".as_ptr());
+	info!("fd {}", fd);
+	loop {
+		if let crate::fd::DirectoryEntry::Valid(dirent) = crate::sys_readdir(fd) {
+			if dirent == core::ptr::null() {
+				break;
+			}
+
+			let s = unsafe {
+				String::from_raw_parts(
+					&(*dirent).d_name as *const _ as *mut u8,
+					(*dirent).d_namelen as usize,
+					(*dirent).d_namelen as usize,
+				)
+			};
+			info!("dirent.d_name {:?}", s);
+			core::mem::forget(s);
+		}
+	}
+
+	let mut attr: FileAttr = Default::default();
+	let ret = crate::sys_lstat("/root/hello.txt\0".as_ptr(), &mut attr as *mut FileAttr);
+	info!("ret {} {:?}", ret, attr);
+
+	let fd = crate::sys_open("/root/hello.txt\0".as_ptr(), 0o0000, 0);
+	info!("fd {}", fd);
+	let mut values = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+	let ret = crate::sys_read(fd, values.as_mut_ptr(), values.len());
+	info!(
+		"result {} {}",
+		unsafe { String::from_utf8_unchecked(values) },
+		ret
+	);
+	crate::sys_close(fd);*/
+}
+
+pub unsafe fn create_file(name: &str, ptr: *const u8, length: usize) {
+	unsafe {
+		FILESYSTEM
+			.get()
+			.unwrap()
+			.create_file(name, ptr, length)
+			.expect("Unable to create file from ROM")
+	}
 }

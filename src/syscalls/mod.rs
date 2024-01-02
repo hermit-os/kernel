@@ -1,5 +1,7 @@
 #![allow(clippy::result_unit_err)]
 
+use core::ffi::CStr;
+
 #[cfg(feature = "newlib")]
 use hermit_sync::InterruptTicketMutex;
 use hermit_sync::Lazy;
@@ -156,8 +158,15 @@ pub extern "C" fn sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
 }
 
 extern "C" fn __sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
+	let stat = unsafe { &mut *stat };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).fstat(stat))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).fstat(stat)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 #[no_mangle]
@@ -166,7 +175,11 @@ pub extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 }
 
 extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
-	crate::fd::opendir(name).map_or_else(|e| e, |v| v)
+	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+		crate::fd::opendir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+	} else {
+		-crate::errno::EINVAL
+	}
 }
 
 #[no_mangle]
@@ -175,7 +188,12 @@ pub extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
 }
 
 extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
-	crate::fd::open(name, flags, mode).map_or_else(|e| e, |v| v)
+	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
+		crate::fd::open(name, flags, mode)
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+	} else {
+		-crate::errno::EINVAL
+	}
 }
 
 #[no_mangle]
@@ -185,7 +203,7 @@ pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescri
 
 extern "C" fn __sys_close(fd: FileDescriptor) -> i32 {
 	let obj = remove_object(fd);
-	obj.map_or_else(|e| e, |_| 0)
+	obj.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[no_mangle]
@@ -194,8 +212,15 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 }
 
 extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| {
+			(*v).read(slice)
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+		},
+	)
 }
 
 #[no_mangle]
@@ -204,8 +229,15 @@ pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isiz
 }
 
 extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
+	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).write(buf, len))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| {
+			(*v).write(slice)
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+		},
+	)
 }
 
 #[no_mangle]
@@ -215,7 +247,13 @@ pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i
 
 extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).ioctl(cmd, argp))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).ioctl(cmd, argp)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 #[no_mangle]
@@ -227,7 +265,10 @@ extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isi
 	let obj = get_object(fd);
 	obj.map_or_else(
 		|e| e as isize,
-		|v| (*v).lseek(offset, num::FromPrimitive::from_i32(whence).unwrap()),
+		|v| {
+			(*v).lseek(offset, num::FromPrimitive::from_i32(whence).unwrap())
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |_| 0)
+		},
 	)
 }
 
@@ -249,7 +290,7 @@ pub extern "C" fn sys_readdir(fd: FileDescriptor) -> DirectoryEntry {
 }
 
 extern "C" fn __sys_dup(fd: i32) -> i32 {
-	dup_object(fd).map_or_else(|e| e, |v| v)
+	dup_object(fd).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
 }
 
 #[no_mangle]

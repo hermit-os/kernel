@@ -14,10 +14,9 @@ use crate::syscalls::lwip::sys_lwip_get_errno;
 #[cfg(feature = "newlib")]
 use crate::syscalls::{LWIP_FD_BIT, LWIP_LOCK};
 
-pub(crate) const UHYVE_PORT_EXIT: u16 = 0x540;
-pub(crate) const UHYVE_PORT_CMDSIZE: u16 = 0x740;
-pub(crate) const UHYVE_PORT_CMDVAL: u16 = 0x780;
-pub(crate) const UHYVE_PORT_UNLINK: u16 = 0x840;
+const UHYVE_PORT_EXIT: u16 = 0x540;
+const UHYVE_PORT_CMDSIZE: u16 = 0x740;
+const UHYVE_PORT_CMDVAL: u16 = 0x780;
 
 #[cfg(feature = "newlib")]
 extern "C" {
@@ -28,7 +27,7 @@ extern "C" {
 /// forward a request to the hypervisor uhyve
 #[inline]
 #[cfg(target_arch = "x86_64")]
-pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
+fn uhyve_send<T>(port: u16, data: &mut T) {
 	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
 	let physical_address = paging::virtual_to_physical(ptr).unwrap();
 
@@ -40,7 +39,7 @@ pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
 /// forward a request to the hypervisor uhyve
 #[inline]
 #[cfg(target_arch = "aarch64")]
-pub(crate) fn uhyve_send<T>(port: u16, data: &mut T) {
+fn uhyve_send<T>(port: u16, data: &mut T) {
 	use core::arch::asm;
 
 	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
@@ -110,31 +109,9 @@ impl SysExit {
 	}
 }
 
-#[repr(C, packed)]
-struct SysUnlink {
-	name: PhysAddr,
-	ret: i32,
-}
-
-impl SysUnlink {
-	fn new(name: VirtAddr) -> SysUnlink {
-		SysUnlink {
-			name: paging::virtual_to_physical(name).unwrap(),
-			ret: -1,
-		}
-	}
-}
-
 pub struct Uhyve;
 
 impl SyscallInterface for Uhyve {
-	fn unlink(&self, name: *const u8) -> i32 {
-		let mut sysunlink = SysUnlink::new(VirtAddr(name as u64));
-		uhyve_send(UHYVE_PORT_UNLINK, &mut sysunlink);
-
-		sysunlink.ret
-	}
-
 	/// ToDo: This function needs a description - also applies to trait in src/syscalls/interfaces/mod.rs
 	///
 	/// ToDo: Add Safety section under which circumctances this is safe/unsafe to use

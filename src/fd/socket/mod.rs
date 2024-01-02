@@ -84,36 +84,58 @@ pub(crate) extern "C" fn __sys_accept(
 ) -> i32 {
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|e| e,
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 		|v| {
-			let result = (*v).accept(addr, addrlen);
-			if result >= 0 {
-				let new_obj = dyn_clone::clone_box(&*v);
-				insert_object(fd, Arc::from(new_obj));
-				let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-				(*v).listen(1);
-				insert_object(new_fd, v.clone());
-				new_fd
-			} else {
-				result
-			}
+			(*v).accept(addr, addrlen).map_or_else(
+				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+				|_| {
+					let new_obj = dyn_clone::clone_box(&*v);
+					insert_object(fd, Arc::from(new_obj));
+					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+					match (*v).listen(1) {
+						Ok(_) => {
+							insert_object(new_fd, v.clone());
+							new_fd
+						}
+						Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+					}
+				},
+			)
 		},
 	)
 }
 
 pub(crate) extern "C" fn __sys_listen(fd: i32, backlog: i32) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).listen(backlog))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).listen(backlog)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_bind(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).bind(name, namelen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).bind(name, namelen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_connect(fd: i32, name: *const sockaddr, namelen: socklen_t) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).connect(name, namelen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).connect(name, namelen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_getsockname(
@@ -122,7 +144,13 @@ pub(crate) extern "C" fn __sys_getsockname(
 	namelen: *mut socklen_t,
 ) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).getsockname(name, namelen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).getsockname(name, namelen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_setsockopt(
@@ -138,7 +166,13 @@ pub(crate) extern "C" fn __sys_setsockopt(
 	);
 
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).setsockopt(level, optname, optval, optlen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).setsockopt(level, optname, optval, optlen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_getsockopt(
@@ -154,7 +188,13 @@ pub(crate) extern "C" fn __sys_getsockopt(
 	);
 
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).getsockopt(level, optname, optval, optlen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).getsockopt(level, optname, optval, optlen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub(crate) extern "C" fn __sys_getpeername(
@@ -163,7 +203,13 @@ pub(crate) extern "C" fn __sys_getpeername(
 	namelen: *mut socklen_t,
 ) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).getpeername(name, namelen))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).getpeername(name, namelen)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub extern "C" fn __sys_freeaddrinfo(_ai: *mut addrinfo) {}
@@ -179,12 +225,25 @@ pub extern "C" fn __sys_getaddrinfo(
 
 pub extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e, |v| (*v).shutdown(how))
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			(*v).shutdown(how)
+				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+		},
+	)
 }
 
 pub extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).read(buf, len))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| {
+			(*v).read(slice)
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+		},
+	)
 }
 
 pub extern "C" fn __sys_sendto(
@@ -195,8 +254,15 @@ pub extern "C" fn __sys_sendto(
 	addr: *const sockaddr,
 	addr_len: socklen_t,
 ) -> isize {
+	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).sendto(buf, len, addr, addr_len))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| {
+			(*v).sendto(slice, addr, addr_len)
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+		},
+	)
 }
 
 pub extern "C" fn __sys_recvfrom(
@@ -207,6 +273,13 @@ pub extern "C" fn __sys_recvfrom(
 	addr: *mut sockaddr,
 	addr_len: *mut socklen_t,
 ) -> isize {
+	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
 	let obj = get_object(fd);
-	obj.map_or_else(|e| e as isize, |v| (*v).recvfrom(buf, len, addr, addr_len))
+	obj.map_or_else(
+		|e| e as isize,
+		|v| {
+			(*v).recvfrom(slice, addr, addr_len)
+				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+		},
+	)
 }

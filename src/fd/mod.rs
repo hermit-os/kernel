@@ -1,38 +1,44 @@
 use alloc::sync::Arc;
-use core::ffi::{c_void, CStr};
-#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-use core::ptr;
+use core::ffi::c_void;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::RandomState;
 use dyn_clone::DynClone;
 use hashbrown::HashMap;
-#[cfg(target_arch = "x86_64")]
-use x86::io::*;
 
-use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env;
 use crate::errno::*;
-use crate::fd::file::{GenericFile, UhyveFile};
 use crate::fd::stdio::*;
-use crate::fs::{self, Dirent, FileAttr, FilePerms, SeekWhence};
+use crate::fs::{self, FileAttr, SeekWhence};
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::syscalls::net::*;
 
-mod file;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub mod socket;
 mod stdio;
 
-const UHYVE_PORT_WRITE: u16 = 0x400;
-const UHYVE_PORT_OPEN: u16 = 0x440;
-const UHYVE_PORT_CLOSE: u16 = 0x480;
-const UHYVE_PORT_READ: u16 = 0x500;
-const UHYVE_PORT_LSEEK: u16 = 0x580;
-
 const STDIN_FILENO: FileDescriptor = 0;
 const STDOUT_FILENO: FileDescriptor = 1;
 const STDERR_FILENO: FileDescriptor = 2;
+
+// TODO: Integrate with src/errno.rs ?
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Debug, PartialEq, FromPrimitive, ToPrimitive)]
+pub(crate) enum IoError {
+	ENOENT = crate::errno::ENOENT as isize,
+	ENOSYS = crate::errno::ENOSYS as isize,
+	EIO = crate::errno::EIO as isize,
+	EBADF = crate::errno::EBADF as isize,
+	EISDIR = crate::errno::EISDIR as isize,
+	EINVAL = crate::errno::EINVAL as isize,
+	ETIME = crate::errno::ETIME as isize,
+	EAGAIN = crate::errno::EAGAIN as isize,
+	EFAULT = crate::errno::EFAULT as isize,
+	ENOBUFS = crate::errno::ENOBUFS as isize,
+	ENOTCONN = crate::errno::ENOTCONN as isize,
+	ENOTDIR = crate::errno::ENOTDIR as isize,
+	EMFILE = crate::errno::EMFILE as isize,
+}
 
 pub(crate) type FileDescriptor = i32;
 
@@ -46,148 +52,29 @@ static OBJECT_MAP: pflock::PFLock<HashMap<FileDescriptor, Arc<dyn ObjectInterfac
 /// Atomic counter to determine the next unused file descriptor
 static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
-// TODO: these are defined in hermit-abi. Should we use a constants crate imported in both?
-//const O_RDONLY: i32 = 0o0000;
-const O_WRONLY: i32 = 0o0001;
-const O_RDWR: i32 = 0o0002;
-const O_CREAT: i32 = 0o0100;
-const O_EXCL: i32 = 0o0200;
-const O_TRUNC: i32 = 0o1000;
-const O_APPEND: i32 = 0o2000;
-const O_DIRECT: i32 = 0o40000;
-
-#[repr(C, packed)]
-struct SysOpen {
-	name: PhysAddr,
-	flags: i32,
-	mode: i32,
-	ret: i32,
-}
-
-impl SysOpen {
-	fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
-		SysOpen {
-			name: paging::virtual_to_physical(name).unwrap(),
-			flags,
-			mode,
-			ret: -1,
-		}
+bitflags! {
+	/// Options for opening files
+	#[derive(Debug, Copy, Clone, Default)]
+	pub(crate) struct OpenOption: i32 {
+		const O_RDONLY = 0o0000;
+		const O_WRONLY = 0o0001;
+		const O_RDWR = 0o0002;
+		const O_CREAT = 0o0100;
+		const O_EXCL = 0o0200;
+		const O_TRUNC = 0o1000;
+		const O_APPEND = 0o2000;
+		const O_DIRECT = 0o40000;
 	}
 }
 
-#[repr(C, packed)]
-struct SysClose {
-	fd: i32,
-	ret: i32,
-}
-
-impl SysClose {
-	fn new(fd: i32) -> SysClose {
-		SysClose { fd, ret: -1 }
-	}
-}
-
-#[repr(C, packed)]
-struct SysRead {
-	fd: i32,
-	buf: *const u8,
-	len: usize,
-	ret: isize,
-}
-
-impl SysRead {
-	fn new(fd: i32, buf: *const u8, len: usize) -> SysRead {
-		SysRead {
-			fd,
-			buf,
-			len,
-			ret: -1,
-		}
-	}
-}
-
-#[repr(C, packed)]
-struct SysWrite {
-	fd: i32,
-	buf: *const u8,
-	len: usize,
-}
-
-impl SysWrite {
-	pub fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
-		SysWrite { fd, buf, len }
-	}
-}
-
-#[repr(C, packed)]
-struct SysLseek {
-	pub fd: i32,
-	pub offset: isize,
-	pub whence: i32,
-}
-
-impl SysLseek {
-	fn new(fd: i32, offset: isize, whence: SeekWhence) -> SysLseek {
-		let whence: i32 = num::ToPrimitive::to_i32(&whence).unwrap();
-
-		SysLseek { fd, offset, whence }
-	}
-}
-
-/// forward a request to the hypervisor uhyve
-#[inline]
-#[cfg(target_arch = "x86_64")]
-fn uhyve_send<T>(port: u16, data: &mut T) {
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
-	let physical_address = paging::virtual_to_physical(ptr).unwrap();
-
-	unsafe {
-		outl(port, physical_address.as_u64() as u32);
-	}
-}
-
-/// forward a request to the hypervisor uhyve
-#[inline]
-#[cfg(target_arch = "aarch64")]
-fn uhyve_send<T>(port: u16, data: &mut T) {
-	use core::arch::asm;
-
-	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
-	let physical_address = paging::virtual_to_physical(ptr).unwrap();
-
-	unsafe {
-		asm!(
-			"str x8, [{port}]",
-			port = in(reg) u64::from(port),
-			in("x8") physical_address.as_u64(),
-			options(nostack),
-		);
-	}
-}
-
-/// forward a request to the hypervisor uhyve
-#[inline]
-#[cfg(target_arch = "riscv64")]
-fn uhyve_send<T>(_port: u16, _data: &mut T) {
-	todo!()
-}
-
-fn open_flags_to_perm(flags: i32, mode: u32) -> FilePerms {
-	let mut perms = FilePerms {
-		raw: flags as u32,
-		mode,
-		..Default::default()
-	};
-	perms.write = flags & (O_WRONLY | O_RDWR) != 0;
-	perms.creat = flags & (O_CREAT) != 0;
-	perms.excl = flags & (O_EXCL) != 0;
-	perms.trunc = flags & (O_TRUNC) != 0;
-	perms.append = flags & (O_APPEND) != 0;
-	perms.directio = flags & (O_DIRECT) != 0;
-	if flags & !(O_WRONLY | O_RDWR | O_CREAT | O_EXCL | O_TRUNC | O_APPEND | O_DIRECT) != 0 {
-		warn!("Unknown file flags used! {}", flags);
-	}
-	perms
+#[repr(C)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct Dirent {
+	pub d_ino: u64,
+	pub d_off: u64,
+	pub d_namelen: u32,
+	pub d_type: u32,
+	pub d_name: [u8; 0],
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -200,34 +87,34 @@ pub enum DirectoryEntry {
 pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	fn read(&self, _buf: *mut u8, _len: usize) -> isize {
-		(-ENOSYS).try_into().unwrap()
+	fn read(&self, _buf: &mut [u8]) -> Result<isize, IoError> {
+		Err(IoError::ENOSYS)
 	}
 
 	/// `write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	fn write(&self, _buf: *const u8, _len: usize) -> isize {
-		(-EINVAL).try_into().unwrap()
+	fn write(&self, _buf: &[u8]) -> Result<isize, IoError> {
+		Err(IoError::ENOSYS)
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
-	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> isize {
-		(-EINVAL).try_into().unwrap()
+	fn lseek(&self, _offset: isize, _whence: SeekWhence) -> Result<isize, IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `fstat`
-	fn fstat(&self, _stat: *mut FileAttr) -> i32 {
-		-EINVAL
+	fn fstat(&self, _stat: &mut FileAttr) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `unlink` removes file entry
-	fn unlink(&self, _name: *const u8) -> i32 {
-		-EINVAL
+	fn unlink(&self, _path: &str) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `rmdir` removes directory entry
-	fn rmdir(&self, _name: *const u8) -> i32 {
-		-EINVAL
+	fn rmdir(&self, _path: &str) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// 'readdir' returns a pointer to a dirent structure
@@ -238,32 +125,32 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	/// `mkdir` creates a directory entry
-	fn mkdir(&self, _name: *const u8, _mode: u32) -> i32 {
-		-EINVAL
+	fn mkdir(&self, _path: &str, _mode: u32) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `accept` a connection on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> i32 {
-		-EINVAL
+	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> Result<i32, IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
-		-EINVAL
+	fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> Result<i32, IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> i32 {
-		-EINVAL
+	fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `listen` for connections on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn listen(&self, _backlog: i32) -> i32 {
-		-EINVAL
+	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `setsockopt` sets options on sockets
@@ -274,8 +161,8 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		_optname: i32,
 		_optval: *const c_void,
 		_optlen: socklen_t,
-	) -> i32 {
-		-EINVAL
+	) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
@@ -286,20 +173,20 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		_option_name: i32,
 		_optval: *mut c_void,
 		_optlen: *mut socklen_t,
-	) -> i32 {
-		-EINVAL
+	) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
-		-EINVAL
+	fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `getpeername` get address of connected peer
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> i32 {
-		-EINVAL
+	fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> Result<(), IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// receive a message from a socket
@@ -311,12 +198,11 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn recvfrom(
 		&self,
-		_buffer: *mut u8,
-		_len: usize,
+		_buffer: &mut [u8],
 		_address: *mut sockaddr,
 		_address_len: *mut socklen_t,
-	) -> isize {
-		(-ENOSYS).try_into().unwrap()
+	) -> Result<isize, IoError> {
+		Err(IoError::ENOSYS)
 	}
 
 	/// send a message from a socket
@@ -329,102 +215,71 @@ pub trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 	fn sendto(
 		&self,
-		_buffer: *const u8,
-		_len: usize,
+		_buffer: &[u8],
 		_addr: *const sockaddr,
 		_addr_len: socklen_t,
-	) -> isize {
-		(-ENOSYS).try_into().unwrap()
+	) -> Result<isize, IoError> {
+		Err(IoError::ENOSYS)
 	}
 
 	/// shut down part of a full-duplex connection
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn shutdown(&self, _how: i32) -> i32 {
-		-EINVAL
+	fn shutdown(&self, _how: i32) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
 	}
 
 	/// The `ioctl` function manipulates the underlying device parameters of special
 	/// files.
-	fn ioctl(&self, _cmd: i32, _argp: *mut c_void) -> i32 {
-		-EINVAL
+	fn ioctl(&self, _cmd: i32, _argp: *mut c_void) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
 	}
 }
 
-pub(crate) fn open(name: *const u8, flags: i32, mode: i32) -> Result<FileDescriptor, i32> {
-	if env::is_uhyve() {
-		let mut sysopen = SysOpen::new(VirtAddr(name as u64), flags, mode);
-		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
+pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, IoError> {
+	{
+		// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
+		// flags is bitmask of O_DEC_* defined above.
+		// (taken from rust stdlib/sys hermit target )
 
-		if sysopen.ret > 0 {
+		debug!("Open {}, {}, {}", name, flags, mode);
+
+		let fs = fs::FILESYSTEM.get().unwrap();
+		if let Ok(file) = fs.open(
+			name,
+			OpenOption::from_bits(mode).expect("Invalid open flags"),
+		) {
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-			let file = UhyveFile::new(sysopen.ret);
-
-			if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
-				Err(-EINVAL)
+			if OBJECT_MAP.write().try_insert(fd, file).is_err() {
+				Err(IoError::EINVAL)
 			} else {
 				Ok(fd as FileDescriptor)
 			}
 		} else {
-			Err(sysopen.ret)
+			Err(IoError::EINVAL)
 		}
-	} else {
-		{
-			// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
-			// flags is bitmask of O_DEC_* defined above.
-			// (taken from rust stdlib/sys hermit target )
-
-			let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-			debug!("Open {}, {}, {}", name, flags, mode);
-
-			let mut fs = fs::FILESYSTEM.lock();
-			if let Ok(filesystem_fd) = fs.open(name, open_flags_to_perm(flags, mode as u32)) {
-				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-				let file = GenericFile::new(filesystem_fd);
-				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
-					Err(-EINVAL)
-				} else {
-					Ok(fd as FileDescriptor)
-				}
-			} else {
-				Err(-EINVAL)
-			}
-		}
-	}
+	} //}
 }
 
 #[allow(unused_variables)]
-pub(crate) fn opendir(name: *const u8) -> Result<FileDescriptor, i32> {
-	if env::is_uhyve() {
-		Err(-EINVAL)
-	} else {
-		#[cfg(target_arch = "x86_64")]
-		{
-			let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-			debug!("Open directory {}", name);
+pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
+	debug!("Open directory {}", name);
 
-			let mut fs = fs::FILESYSTEM.lock();
-			if let Ok(filesystem_fd) = fs.opendir(name) {
-				let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-				// Would a GenericDir make sense?
-				let file = GenericFile::new(filesystem_fd);
-				if OBJECT_MAP.write().try_insert(fd, Arc::new(file)).is_err() {
-					Err(-EINVAL)
-				} else {
-					Ok(fd as FileDescriptor)
-				}
-			} else {
-				Err(-EINVAL)
-			}
+	let fs = fs::FILESYSTEM.get().unwrap();
+	if let Ok(obj) = fs.opendir(name) {
+		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+		// Would a GenericDir make sense?
+		if OBJECT_MAP.write().try_insert(fd, obj).is_err() {
+			Err(IoError::EINVAL)
+		} else {
+			Ok(fd as FileDescriptor)
 		}
-		#[cfg(not(target_arch = "x86_64"))]
-		{
-			Err(-ENOSYS)
-		}
+	} else {
+		Err(IoError::EINVAL)
 	}
 }
 
-pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
-	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(-EINVAL)?)).clone())
+pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(IoError::EINVAL)?)).clone())
 }
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
@@ -439,9 +294,9 @@ pub(crate) fn insert_object(
 // to the same open file description as the descriptor oldfd. The new
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
-pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
+pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
 	let mut guard = OBJECT_MAP.write();
-	let obj = (*(guard.get(&fd).ok_or(-EINVAL)?)).clone();
+	let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
 
 	let new_fd = || -> i32 {
 		for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
@@ -454,17 +309,17 @@ pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, i32> {
 
 	let fd = new_fd();
 	if guard.try_insert(fd, obj).is_err() {
-		Err(-EMFILE)
+		Err(IoError::EMFILE)
 	} else {
 		Ok(fd as FileDescriptor)
 	}
 }
 
-pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, i32> {
+pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
 	if fd <= 2 {
-		Err(-EINVAL)
+		Err(IoError::EINVAL)
 	} else {
-		let obj = OBJECT_MAP.write().remove(&fd).ok_or(-EINVAL)?;
+		let obj = OBJECT_MAP.write().remove(&fd).ok_or(IoError::EINVAL)?;
 		Ok(obj)
 	}
 }
