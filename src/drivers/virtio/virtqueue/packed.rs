@@ -82,13 +82,9 @@ impl WrapCount {
 }
 
 /// Structure which allows to control raw ring and operate easily on it
-///
-/// WARN: NEVER PUSH TO THE RING AFTER DESCRIPTORRING HAS BEEN INITIALIZED AS THIS WILL PROBABLY RESULT IN A
-/// RELOCATION OF THE VECTOR AND HENCE THE DEVICE WILL NO LONGER NO THE RINGS ADDRESS!
 struct DescriptorRing {
 	ring: &'static mut [Descriptor],
-	//ring: Pinned<Vec<Descriptor>>,
-	tkn_ref_ring: Box<[Option<Rc<TransferToken>>]>,
+	tkn_ref_ring: Box<[Option<Box<TransferToken>>]>,
 
 	// Controlling variables for the ring
 	//
@@ -117,7 +113,11 @@ impl DescriptorRing {
 		// Descriptor ID's run from 1 to size_of_queue. In order to index directly into the
 		// reference ring via an ID it is much easier to simply have an array of size = size_of_queue + 1
 		// and do not care about the first element being unused.
-		let tkn_ref_ring = vec![None; size + 1].into_boxed_slice();
+		// `Box` is not Clone, so neither is `None::<Box<_>>`. Hence, we need to produce `None`s with a closure.
+		let tkn_ref_ring = core::iter::repeat_with(|| None)
+			.take(size + 1)
+			.collect::<Vec<_>>()
+			.into_boxed_slice();
 
 		DescriptorRing {
 			ring,
@@ -130,38 +130,29 @@ impl DescriptorRing {
 		}
 	}
 
-	/// Polls poll index and sets states of eventually used TransferTokens to finished.
-	/// If Await_qeue is available, the Transfer will be provieded to the queue.
+	/// Polls poll index and sets the state of any finished TransferTokens.
+	/// If [TransferToken::await_queue] is available, the Transfer will be moved to the queue.
 	fn poll(&mut self) {
 		let mut ctrl = self.get_read_ctrler();
 
 		if let Some(mut tkn) = ctrl.poll_next() {
-			// The state of the TransferToken up to this point MUST NOT be
-			// finished. As soon as we mark the token as finished, we can not
-			// be sure, that the token is not dropped, which would making
-			// the dereferencing operation undefined behaviour as also
-			// all operations on the reference.
-
-			unsafe {
-				let tkn_ref = Rc::get_mut_unchecked(&mut tkn);
-				tkn_ref.state = TransferState::Finished;
-				if let Some(queue) = tkn_ref.await_queue.take() {
-					// Turn the raw pointer into a Pinned again, which will hold ownership of the Token
-					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(tkn),
-					});
-				}
+			tkn.state = TransferState::Finished;
+			if let Some(queue) = tkn.await_queue.take() {
+				// Place the TransferToken in a Transfer, which will hold ownership of the token
+				queue.borrow_mut().push_back(Transfer {
+					transfer_tkn: Some(tkn),
+				});
 			}
 		}
 	}
 
-	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (Vec<Rc<TransferToken>>, usize, u8) {
+	fn push_batch(&mut self, tkn_lst: Vec<TransferToken>) -> (usize, u8) {
 		// Catch empty push, in order to allow zero initialized first_ctrl_settings struct
 		// which will be overwritten in the first iteration of the for-loop
 		assert!(!tkn_lst.is_empty());
 
 		let mut first_ctrl_settings: (usize, u16, WrapCount) = (0, 0, WrapCount::new());
-		let mut pind_lst = Vec::with_capacity(tkn_lst.len());
+		let mut first_buffer = None;
 
 		for (i, mut tkn) in tkn_lst.into_iter().enumerate() {
 			// Check length and if its fits. This should always be true due to the restriction of
@@ -273,39 +264,31 @@ impl DescriptorRing {
 				(None, None) => unreachable!("Empty Transfers are not allowed!"), // This should already be caught at creation of BufferToken
 			}
 
-			// Update the state of the actual Token
 			tkn.state = TransferState::Processing;
-
-			let tkn = Rc::new(tkn);
 
 			if i == 0 {
 				first_ctrl_settings = (ctrl.start, ctrl.buff_id, ctrl.wrap_at_init);
+				first_buffer = Some(Box::new(tkn));
 			} else {
 				// Update flags of the first descriptor and set new write_index
-				ctrl.make_avail(tkn.clone());
+				ctrl.make_avail(Box::new(tkn));
 			}
-
-			pind_lst.push(tkn.clone());
 		}
 		// Manually make the first buffer available lastly
 		//
 		// Providing the first buffer in the list manually
 		// provide reference, in order to let TransferToken now upon finish.
-		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = Some(pind_lst[0].clone());
+		self.tkn_ref_ring[usize::from(first_ctrl_settings.1)] = first_buffer;
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
 		fence(Ordering::SeqCst);
 		self.ring[first_ctrl_settings.0].flags |= first_ctrl_settings.2.as_flags_avail();
 
 		// Converting a boolean as u8 is fine
-		(
-			pind_lst,
-			first_ctrl_settings.0,
-			first_ctrl_settings.2 .0 as u8,
-		)
+		(first_ctrl_settings.0, first_ctrl_settings.2 .0 as u8)
 	}
 
-	fn push(&mut self, mut tkn: TransferToken) -> (Rc<TransferToken>, usize, u8) {
+	fn push(&mut self, mut tkn: TransferToken) -> (usize, u8) {
 		// Check length and if its fits. This should always be true due to the restriction of
 		// the memory pool, but to be sure.
 		assert!(tkn.buff_tkn.as_ref().unwrap().num_consuming_descr() <= self.capacity);
@@ -413,15 +396,12 @@ impl DescriptorRing {
 		tkn.state = TransferState::Processing;
 
 		fence(Ordering::SeqCst);
-		let tkn = Rc::new(tkn);
-
-		fence(Ordering::SeqCst);
 		// Update flags of the first descriptor and set new write_index
-		ctrl.make_avail(tkn.clone());
+		ctrl.make_avail(Box::new(tkn));
 		fence(Ordering::SeqCst);
 
 		// Converting a boolean as u8 is fine
-		(tkn, ctrl.start, ctrl.wrap_at_init.0 as u8)
+		(ctrl.start, ctrl.wrap_at_init.0 as u8)
 	}
 
 	/// # Unsafe
@@ -465,24 +445,24 @@ struct ReadCtrl<'a> {
 }
 
 impl<'a> ReadCtrl<'a> {
-	/// Polls the ring for a new finished buffer. If buffer is marked as used, takes care of
+	/// Polls the ring for a new finished buffer. If buffer is marked as finished, takes care of
 	/// updating the queue and returns the respective TransferToken.
-	fn poll_next(&mut self) -> Option<Rc<TransferToken>> {
+	fn poll_next(&mut self) -> Option<Box<TransferToken>> {
 		// Check if descriptor has been marked used.
 		if self.desc_ring.ring[self.position].flags & WrapCount::flag_mask()
 			== self.desc_ring.dev_wc.as_flags_used()
 		{
 			let buff_id = usize::from(self.desc_ring.ring[self.position].buff_id);
-			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id]
-				.take()
-				.expect("TransferToken at position does not exist");
+			let mut tkn = self.desc_ring.tkn_ref_ring[buff_id].take().expect(
+				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+			);
 
 			let (send_buff, recv_buff) = {
 				let BufferToken {
 					send_buff,
 					recv_buff,
 					..
-				} = unsafe { Rc::get_mut_unchecked(&mut tkn).buff_tkn.as_mut().unwrap() };
+				} = tkn.buff_tkn.as_mut().unwrap();
 				(recv_buff.as_mut(), send_buff.as_mut())
 			};
 
@@ -789,13 +769,13 @@ impl<'a> WriteCtrl<'a> {
 		}
 	}
 
-	fn make_avail(&mut self, raw_tkn: Rc<TransferToken>) {
+	fn make_avail(&mut self, raw_tkn: Box<TransferToken>) {
 		// We fail if one wants to make a buffer available without inserting one element!
 		assert!(self.start != self.position);
 		// We also fail if buff_id is not set!
 		assert!(self.buff_id != 0);
 
-		// provide reference, in order to let TransferToken now upon finish.
+		// provide reference, in order to let TransferToken know upon finish.
 		self.desc_ring.tkn_ref_ring[usize::from(self.buff_id)] = Some(raw_tkn);
 		// The driver performs a suitable memory barrier to ensure the device sees the updated descriptor table and available ring before the next step.
 		// See Virtio specfification v1.1. - 2.7.21
@@ -1017,11 +997,11 @@ impl PackedVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
+	pub fn dispatch_batch(&self, tkns: Vec<TransferToken>, notif: bool) {
 		// Zero transfers are not allowed
 		assert!(!tkns.is_empty());
 
-		let (pin_tkn_lst, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
 			self.drv_event
@@ -1048,16 +1028,6 @@ impl PackedVq {
 
 			self.notif_ctrl.notify_dev(&notif_data)
 		}
-
-		let mut transfer_lst = Vec::with_capacity(pin_tkn_lst.len());
-
-		for pinned in pin_tkn_lst {
-			transfer_lst.push(Transfer {
-				transfer_tkn: Some(pinned),
-			})
-		}
-
-		transfer_lst
 	}
 
 	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
@@ -1086,7 +1056,7 @@ impl PackedVq {
 			tkn.await_queue = Some(Rc::clone(&await_queue));
 		}
 
-		let (_, next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
+		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push_batch(tkns);
 
 		if notif {
 			self.drv_event
@@ -1120,8 +1090,8 @@ impl PackedVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
-		let (pin_tkn, next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
+	pub fn dispatch(&self, tkn: TransferToken, notif: bool) {
+		let (next_off, next_wrap) = self.descr_ring.borrow_mut().push(tkn);
 
 		if notif {
 			self.drv_event
@@ -1147,10 +1117,6 @@ impl PackedVq {
 			}
 
 			self.notif_ctrl.notify_dev(&notif_data)
-		}
-
-		Transfer {
-			transfer_tkn: Some(pin_tkn),
 		}
 	}
 

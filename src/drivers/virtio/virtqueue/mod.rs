@@ -127,11 +127,11 @@ impl Virtq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
+	fn dispatch(&self, tkn: TransferToken, notif: bool) {
 		match self {
 			Virtq::Packed(vq) => vq.dispatch(tkn, notif),
 			Virtq::Split(vq) => vq.dispatch(tkn, notif),
-		}
+		};
 	}
 }
 
@@ -225,7 +225,7 @@ impl Virtq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) -> Vec<Transfer> {
+	pub fn dispatch_batch(tkns: Vec<TransferToken>, notif: bool) {
 		let mut used_vqs: Vec<(Rc<Virtq>, Vec<TransferToken>)> = Vec::new();
 
 		// Sort the TransferTokens depending in the queue their coming from.
@@ -255,17 +255,12 @@ impl Virtq {
 			}
 		}
 
-		let mut transfer_lst = Vec::new();
 		for (vq_ref, tkn_lst) in used_vqs {
 			match vq_ref.as_ref() {
-				Virtq::Packed(vq) => {
-					transfer_lst.append(vq.dispatch_batch(tkn_lst, notif).as_mut())
-				}
-				Virtq::Split(vq) => transfer_lst.append(vq.dispatch_batch(tkn_lst, notif).as_mut()),
+				Virtq::Packed(vq) => vq.dispatch_batch(tkn_lst, notif),
+				Virtq::Split(vq) => vq.dispatch_batch(tkn_lst, notif),
 			}
 		}
-
-		transfer_lst
 	}
 
 	/// Dispatches a batch of TransferTokens. The Transfers will be placed in to the `await_queue`
@@ -540,8 +535,8 @@ pub trait AsSliceU8 {
 	}
 }
 
-/// The [Transfer] will be received when a [TransferToken] is dispatched via `TransferToken.dispatch()` or
-/// via `TransferToken.dispatch_blocking()`.
+/// The [Transfer] will be received when a [TransferToken] is dispatched via [TransferToken::dispatch_blocking] or through the await
+/// queue given to [TransferToken::dispatch_await].
 ///
 /// The struct represents an ongoing transfer or an active transfer. While this does NOT mean, that the transfer is at all times inside
 /// actual virtqueue. The Transfers state can be polled via `Transfer.poll()`, which returns a bool if the transfer is finished.
@@ -549,24 +544,10 @@ pub trait AsSliceU8 {
 /// **Finished Transfers:**
 /// * Finished transfers are able to return their send and receive buffers. Either as a copy via `Transfer.ret_cpy()` or as the actual
 /// buffers via `Transfer.ret()`.
-/// * Finished transfers should be closed via `Transfer.close()` or via `Transfer.ret()`.
 /// * Finished transfers can be reused via `Transfer.reuse()`.
-///   * This closes the transfer
-///   * And returns an normal BufferToken (One should be cautious with reusing transfers where buffers were created from raw pointers)
-///
-/// **Early dropped Transfers:**
-///
-/// If a transfer is dropped without being closed (independent of being finished or ongoing), the transfer will return the respective
-/// `Pinned<TransferToken>` to the handling virtqueue, which will take of handling graceful shutdown. Which generally should take
-/// care of waiting till the device handled the respective transfer and free the memory afterwards.
-///
-/// One could "abuse" this procedure in order to realize a "fire-and-forget" transfer.
-/// A warning here: The respective queue implementation is taking care of handling this case and there are no guarantees that the queue
-/// won't be unusable afterwards.
+///   * This returns an normal BufferToken (One should be cautious with reusing transfers where buffers were created from raw pointers)
 pub struct Transfer {
-	/// Needs to be `Option<Pinned<TransferToken>>` in order to prevent deallocation via None
-	// See custom drop function for clarity
-	transfer_tkn: Option<Rc<TransferToken>>,
+	transfer_tkn: Option<Box<TransferToken>>,
 }
 
 // Public Interface of Transfer
@@ -670,12 +651,13 @@ impl Transfer {
 						send_buff,
 						recv_buff,
 						..
-					} = unsafe {
-						Rc::get_mut_unchecked(self.transfer_tkn.as_mut().unwrap())
-							.buff_tkn
-							.as_mut()
-							.unwrap()
-					};
+					} = self
+						.transfer_tkn
+						.as_mut()
+						.unwrap()
+						.buff_tkn
+						.as_mut()
+						.unwrap();
 
 					(send_buff.as_mut(), recv_buff.as_mut())
 				};
@@ -835,8 +817,7 @@ impl Transfer {
 		match state {
 			TransferState::Finished => {
 				// Desctructure Token
-				let mut transfer_tkn = Rc::into_inner(self.transfer_tkn.take().unwrap())
-					.expect("There should not have been other references to the token.");
+				let mut transfer_tkn = self.transfer_tkn.take().unwrap();
 
 				let mut buffer_tkn = transfer_tkn.buff_tkn.take().unwrap();
 
@@ -904,11 +885,7 @@ impl Transfer {
 					.unwrap()
 					.reusable
 				{
-					let tkn = Rc::into_inner(self.transfer_tkn.take().unwrap())
-						.expect("There should not have been other references to the token")
-						.buff_tkn
-						.take()
-						.unwrap();
+					let tkn = self.transfer_tkn.take().unwrap().buff_tkn.take().unwrap();
 
 					Ok(tkn.reset())
 				} else {
@@ -941,11 +918,7 @@ impl Transfer {
 					.unwrap()
 					.reusable
 				{
-					let tkn = Rc::into_inner(self.transfer_tkn.take().unwrap())
-						.expect("There should not have been other references to the token")
-						.buff_tkn
-						.take()
-						.unwrap();
+					let tkn = self.transfer_tkn.take().unwrap().buff_tkn.take().unwrap();
 
 					Ok(tkn.reset_purge())
 				} else {
@@ -1004,13 +977,13 @@ impl TransferToken {
 		self.get_vq().dispatch(self, notif);
 	}
 
-	/// Dispatches the provided TransferToken to the respective queue and returns a transfer.
+	/// Dispatches the provided TransferToken to the respective queue.
 	///
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch(self, notif: bool) -> Transfer {
-		self.get_vq().dispatch(self, notif)
+	pub fn dispatch(self, notif: bool) {
+		self.get_vq().dispatch(self, notif);
 	}
 
 	/// Dispatches the provided TransferToken to the respectuve queue and does
@@ -1025,18 +998,20 @@ impl TransferToken {
 	/// Upon finish notifications are enabled again.
 	pub fn dispatch_blocking(self) -> Result<Transfer, VirtqError> {
 		let vq = self.get_vq();
-		let transfer = self.get_vq().dispatch(self, false);
+		let rcv_queue = Rc::new(RefCell::new(VecDeque::with_capacity(1)));
+		self.dispatch_await(rcv_queue.clone(), false);
 
 		vq.disable_notifs();
 
-		while transfer.transfer_tkn.as_ref().unwrap().state != TransferState::Finished {
-			// Keep Spinning until the state changes to Finished
+		while rcv_queue.borrow().is_empty() {
+			// Keep Spinning until the receive queue is filled
 			vq.poll()
 		}
 
 		vq.enable_notifs();
 
-		Ok(transfer)
+		let result = Ok(rcv_queue.borrow_mut().pop_front().unwrap());
+		result
 	}
 }
 

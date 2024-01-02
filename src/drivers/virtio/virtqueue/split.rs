@@ -72,15 +72,13 @@ struct UsedElem {
 struct DescrRing {
 	read_idx: u16,
 	descr_table: DescrTable,
-	ref_ring: Box<[Option<Rc<TransferToken>>]>,
+	ref_ring: Box<[Option<Box<TransferToken>>]>,
 	avail_ring: AvailRing,
 	used_ring: UsedRing,
 }
 
 impl DescrRing {
-	fn push(&mut self, tkn: TransferToken) -> (Rc<TransferToken>, u16, u16) {
-		let tkn = Rc::new(tkn);
-
+	fn push(&mut self, tkn: TransferToken) -> (u16, u16) {
 		let mut desc_lst = Vec::new();
 		let mut is_indirect = false;
 
@@ -189,14 +187,14 @@ impl DescrRing {
 			len -= 1;
 		}
 
-		self.ref_ring[index] = Some(tkn.clone());
+		self.ref_ring[index] = Some(Box::new(tkn));
 		self.avail_ring.ring[*self.avail_ring.index as usize % self.avail_ring.ring.len()] =
 			index as u16;
 
 		memory_barrier();
 		*self.avail_ring.index = self.avail_ring.index.wrapping_add(1);
 
-		(tkn, 0, 0)
+		(0, 0)
 	}
 
 	fn poll(&mut self) {
@@ -204,33 +202,22 @@ impl DescrRing {
 			let cur_ring_index = self.read_idx as usize % self.used_ring.ring.len();
 			let used_elem = unsafe { ptr::read_volatile(&self.used_ring.ring[cur_ring_index]) };
 
-			let mut tkn = self.ref_ring[used_elem.id as usize]
-				.take()
-				.expect("Invalid TransferToken reference in reference ring");
+			let mut tkn = self.ref_ring[used_elem.id as usize].take().expect(
+				"The buff_id is incorrect or the reference to the TransferToken was misplaced.",
+			);
 
-			unsafe {
-				let tkn_ref = Rc::get_mut_unchecked(&mut tkn);
-				if tkn_ref
-					.buff_tkn
-					.as_ref()
+			if tkn.buff_tkn.as_ref().unwrap().recv_buff.as_ref().is_some() {
+				tkn.buff_tkn
+					.as_mut()
 					.unwrap()
-					.recv_buff
-					.as_ref()
-					.is_some()
-				{
-					tkn_ref
-						.buff_tkn
-						.as_mut()
-						.unwrap()
-						.restr_size(None, Some(used_elem.len as usize))
-						.unwrap();
-				}
-				tkn_ref.state = TransferState::Finished;
-				if let Some(queue) = tkn_ref.await_queue.take() {
-					queue.borrow_mut().push_back(Transfer {
-						transfer_tkn: Some(tkn),
-					})
-				}
+					.restr_size(None, Some(used_elem.len as usize))
+					.unwrap();
+			}
+			tkn.state = TransferState::Finished;
+			if let Some(queue) = tkn.await_queue.take() {
+				queue.borrow_mut().push_back(Transfer {
+					transfer_tkn: Some(tkn),
+				})
 			}
 			memory_barrier();
 			self.read_idx = self.read_idx.wrapping_add(1);
@@ -283,7 +270,7 @@ impl SplitVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) -> Vec<Transfer> {
+	pub fn dispatch_batch(&self, _tkns: Vec<TransferToken>, _notif: bool) {
 		unimplemented!();
 	}
 
@@ -313,8 +300,8 @@ impl SplitVq {
 	/// The `notif` parameter indicates if the driver wants to have a notification for this specific
 	/// transfer. This is only for performance optimization. As it is NOT ensured, that the device sees the
 	/// updated notification flags before finishing transfers!
-	pub fn dispatch(&self, tkn: TransferToken, notif: bool) -> Transfer {
-		let (pin_tkn, next_off, next_wrap) = self.ring.borrow_mut().push(tkn);
+	pub fn dispatch(&self, tkn: TransferToken, notif: bool) {
+		let (next_off, next_wrap) = self.ring.borrow_mut().push(tkn);
 
 		if notif {
 			// TODO: Check whether the splitvirtquue has notifications for specific descriptors
@@ -340,10 +327,6 @@ impl SplitVq {
 			}
 
 			self.notif_ctrl.notify_dev(&notif_data)
-		}
-
-		Transfer {
-			transfer_tkn: Some(pin_tkn),
 		}
 	}
 
@@ -428,7 +411,10 @@ impl SplitVq {
 
 		let descr_ring = DescrRing {
 			read_idx: 0,
-			ref_ring: vec![None; size as usize].into_boxed_slice(),
+			ref_ring: core::iter::repeat_with(|| None)
+				.take(size.into())
+				.collect::<Vec<_>>()
+				.into_boxed_slice(),
 			descr_table,
 			avail_ring,
 			used_ring,
