@@ -1,8 +1,8 @@
 //! This module contains Virtio's virtqueue.
 //!
 //! The virtqueue is available in two forms.
-//! [Split](structs.SplitVqueue.html) and [Packed](structs.PackedVqueue.html).
-//! Both queues are wrapped inside an enum [Virtqueue](enums.Virtqueue.html) in
+//! [SplitVq] and [PackedVq].
+//! Both queues are wrapped inside an enum [Virtq] in
 //! order to provide an unified interface.
 //!
 //! Drivers who need a more fine grained access to the specific queues must
@@ -108,7 +108,7 @@ struct Descriptor {
 }
 
 /// The Virtq enum unifies access to the two different Virtqueue types
-/// [PackedVq](structs.PackedVq.html) and [SplitVq](structs.SplitVq.html).
+/// [PackedVq] and [SplitVq].
 ///
 /// The enum provides a common interface for both types. Which in some case
 /// might not provide the complete feature set of each queue. Drivers who
@@ -2584,7 +2584,7 @@ pub mod error {
 		/// "unsend" `TransferToken` to the queue (see Docs for details)
 		/// or the device needs to process available descriptors in the queue.
 		NoDescrAvail,
-		/// Indicates that a [BuffSpec](super.BuffSpec) does have the right size
+		/// Indicates that a [BuffSpec](super::BuffSpec) does have the right size
 		/// for a given structure. Returns the structures size in bytes.
 		///
 		/// E.g: A struct `T` with size of `4 bytes` must have a `BuffSpec`, which

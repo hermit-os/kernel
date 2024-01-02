@@ -182,7 +182,7 @@ pub fn map_dev_cfg<T>(cap: &PciCap) -> Option<&'static mut T> {
 /// as it is not directly mapped into address space from PCI device
 /// configuration space.
 /// Therefore the struct only contains necessary information to map
-/// corresponding [CfgType](enums.CfgType.html) into address space.
+/// corresponding [CfgType] into address space.
 #[derive(Clone)]
 pub struct PciCap {
 	cfg_type: CfgType,
@@ -262,11 +262,11 @@ impl PartialEq for PciCapRaw {
 /// a given Virtio PCI device.
 ///
 /// As Virtio's PCI devices are allowed to present multiple capability
-/// structures of the same [CfgType](enums.cfgtype.html), the structure
+/// structures of the same [CfgType], the structure
 /// provides a driver with all capabilities, sorted in descending priority,
 /// allowing the driver to choose.
 /// The structure contains a special dev_cfg_list field, a vector holding
-/// [PciCap](structs.pcicap.html) objects, to allow the driver to map its
+/// [PciCap] objects, to allow the driver to map its
 /// device specific configurations independently.
 pub struct UniCapsColl {
 	com_cfg_list: Vec<ComCfg>,
@@ -378,7 +378,7 @@ impl UniCapsColl {
 	}
 }
 
-/// Wraps a [ComCfgRaw](structs.comcfgraw.html) in order to preserve
+/// Wraps a [ComCfgRaw] in order to preserve
 /// the original structure.
 ///
 /// Provides a safe API for Raw structure and allows interaction with the device via
@@ -736,7 +736,7 @@ impl NotifCtrl {
 	}
 }
 
-/// Wraps a [IsrStatusRaw](structs.isrstatusraw.html) in order to preserve
+/// Wraps a [IsrStatusRaw] in order to preserve
 /// the original structure and allow interaction with the device via
 /// the structure.
 ///
@@ -1000,7 +1000,7 @@ impl PciBar {
 	}
 }
 
-/// Reads a raw capability struct [PciCapRaw](structs.PcicapRaw.html) out of a PCI device's configuration space.
+/// Reads a raw capability struct [PciCapRaw] out of a PCI device's configuration space.
 fn read_cap_raw(device: &PciDevice<PciConfigRegion>, register: u32) -> PciCapRaw {
 	let mut quadruple_word: [u8; 16] = [0; 16];
 
@@ -1228,8 +1228,8 @@ pub(crate) fn map_caps(device: &PciDevice<PciConfigRegion>) -> Result<UniCapsCol
 }
 
 /// Checks existing drivers for support of given device. Upon match, provides
-/// driver with a [Caplist](struct.Caplist.html) struct, holding the structures of the capabilities
-/// list of the given device.
+/// driver with a [`PciDevice<PciConfigRegion>`] reference, allowing access to the capabilities
+/// list of the given device through [map_caps].
 pub(crate) fn init_device(
 	device: &PciDevice<PciConfigRegion>,
 ) -> Result<VirtioDriver, DriverError> {

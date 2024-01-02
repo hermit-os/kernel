@@ -98,10 +98,10 @@ impl<'a> VqCfgHandler<'a> {
 	}
 }
 
-/// Wraps a [ComCfgRaw](structs.comcfgraw.html) in order to preserve
+/// Wraps a [MmioRegisterLayout] in order to preserve
 /// the original structure.
 ///
-/// Provides a safe API for Raw structure and allows interaction with the device via
+/// Provides a safe API for the raw structure and allows interaction with the device via
 /// the structure.
 pub struct ComCfg {
 	// References the raw structure in PCI memory space. Is static as
@@ -313,7 +313,7 @@ impl NotifCtrl {
 	}
 }
 
-/// Wraps a [IsrStatusRaw](structs.isrstatusraw.html) in order to preserve
+/// Wraps a [IsrStatusRaw] in order to preserve
 /// the original structure and allow interaction with the device via
 /// the structure.
 ///
