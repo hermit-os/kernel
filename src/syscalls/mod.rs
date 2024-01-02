@@ -19,7 +19,7 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor};
-use crate::fs::FileAttr;
+use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -101,7 +101,13 @@ pub extern "C" fn sys_shutdown(arg: i32) -> ! {
 }
 
 extern "C" fn __sys_unlink(name: *const u8) -> i32 {
-	SYS.unlink(name)
+	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+
+	fs::FILESYSTEM
+		.get()
+		.unwrap()
+		.unlink(name)
+		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[no_mangle]
@@ -109,14 +115,14 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
-#[cfg(target_arch = "x86_64")]
 extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
-	SYS.mkdir(name, mode)
-}
+	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-#[cfg(not(target_arch = "x86_64"))]
-extern "C" fn __sys_mkdir(_name: *const u8, _mode: u32) -> i32 {
-	-crate::errno::ENOSYS
+	fs::FILESYSTEM
+		.get()
+		.unwrap()
+		.mkdir(name, mode)
+		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[no_mangle]
@@ -124,14 +130,14 @@ pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	kernel_function!(__sys_mkdir(name, mode))
 }
 
-#[cfg(target_arch = "x86_64")]
 extern "C" fn __sys_rmdir(name: *const u8) -> i32 {
-	SYS.rmdir(name)
-}
+	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
-#[cfg(not(target_arch = "x86_64"))]
-extern "C" fn __sys_rmdir(_name: *const u8) -> i32 {
-	-crate::errno::ENOSYS
+	fs::FILESYSTEM
+		.get()
+		.unwrap()
+		.rmdir(name)
+		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[no_mangle]
@@ -140,7 +146,15 @@ pub extern "C" fn sys_rmdir(name: *const u8) -> i32 {
 }
 
 extern "C" fn __sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
-	SYS.stat(name, stat)
+	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+
+	match fs::FILESYSTEM.get().unwrap().stat(name) {
+		Ok(attr) => unsafe {
+			*stat = attr;
+			0
+		},
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+	}
 }
 
 #[no_mangle]
@@ -149,7 +163,15 @@ pub extern "C" fn sys_stat(name: *const u8, stat: *mut FileAttr) -> i32 {
 }
 
 extern "C" fn __sys_lstat(name: *const u8, stat: *mut FileAttr) -> i32 {
-	SYS.lstat(name, stat)
+	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+
+	match fs::FILESYSTEM.get().unwrap().lstat(name) {
+		Ok(attr) => unsafe {
+			*stat = attr;
+			0
+		},
+		Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
+	}
 }
 
 #[no_mangle]
