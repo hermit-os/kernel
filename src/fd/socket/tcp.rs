@@ -144,7 +144,7 @@ impl<T> Socket<T> {
 
 	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, IoError> {
 		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
-			.map_err(|x| IoError::EIO)?;
+			.map_err(|_| IoError::EIO)?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
