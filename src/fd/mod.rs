@@ -1,5 +1,4 @@
 use alloc::sync::Arc;
-use core::ffi::c_void;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::RandomState;
@@ -46,6 +45,12 @@ pub(crate) enum IoError {
 #[derive(Debug, PartialEq)]
 pub(crate) enum SocketOption {
 	TcpNoDelay,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, PartialEq)]
+pub(crate) enum IoCtl {
+	NonBlocking,
 }
 
 pub(crate) type FileDescriptor = i32;
@@ -211,7 +216,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// The `ioctl` function manipulates the underlying device parameters of special
 	/// files.
-	fn ioctl(&self, _cmd: i32, _argp: *mut c_void) -> Result<(), IoError> {
+	fn ioctl(&self, _cmd: IoCtl, _value: bool) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
 

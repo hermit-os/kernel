@@ -37,7 +37,6 @@ pub const SO_SNDTIMEO: i32 = 4101;
 pub const SO_LINGER: i32 = 128;
 pub const TCP_NODELAY: i32 = 1;
 pub const MSG_PEEK: i32 = 1;
-pub const FIONBIO: i32 = 0x8008667eu32 as i32;
 pub const EAI_NONAME: i32 = -2200;
 pub const EAI_SERVICE: i32 = -2201;
 pub const EAI_FAIL: i32 = -2202;

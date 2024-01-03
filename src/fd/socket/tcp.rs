@@ -1,4 +1,3 @@
-use core::ffi::c_void;
 use core::future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
@@ -10,7 +9,7 @@ use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::fd::{IoError, ObjectInterface, SocketOption};
+use crate::fd::{IoCtl, IoError, ObjectInterface, SocketOption};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
@@ -356,10 +355,9 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
-		if cmd == FIONBIO {
-			let value = unsafe { *(argp as *const i32) };
-			if value != 0 {
+	fn ioctl(&self, cmd: IoCtl, value: bool) -> Result<(), IoError> {
+		if cmd == IoCtl::NonBlocking {
+			if value {
 				info!("set device to nonblocking mode");
 				self.nonblocking.store(true, Ordering::Release);
 			} else {

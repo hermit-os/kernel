@@ -18,7 +18,7 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor};
+use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor, IoCtl};
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
@@ -273,15 +273,23 @@ pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i
 	kernel_function!(__sys_write(fd, buf, len))
 }
 
+pub const FIONBIO: i32 = 0x8008667eu32 as i32;
+
 extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
-	let obj = get_object(fd);
-	obj.map_or_else(
-		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
-		|v| {
-			(*v).ioctl(cmd, argp)
-				.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
-		},
-	)
+	if cmd == FIONBIO {
+		let value = unsafe { *(argp as *const i32) };
+
+		let obj = get_object(fd);
+		obj.map_or_else(
+			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|v| {
+				(*v).ioctl(IoCtl::NonBlocking, value != 0)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+			},
+		)
+	} else {
+		-crate::errno::EINVAL
+	}
 }
 
 #[no_mangle]
