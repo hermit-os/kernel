@@ -28,6 +28,11 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 
+	/// Determine the syscall interface
+	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
 	/// Helper function to create a new dirctory node
 	fn traverse_mkdir(&self, _components: &mut Vec<&str>, _mode: u32) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
@@ -94,7 +99,7 @@ impl Filesystem {
 
 	/// Tries to open file at given path.
 	pub fn open(&self, path: &str, opt: OpenOption) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		info!("Open file {}", path);
+		debug!("Open file {} with {:?}", path, opt);
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();

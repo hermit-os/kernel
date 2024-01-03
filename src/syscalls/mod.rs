@@ -225,7 +225,13 @@ pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescri
 
 extern "C" fn __sys_close(fd: FileDescriptor) -> i32 {
 	let obj = remove_object(fd);
-	obj.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	obj.map_or_else(
+		|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+		|v| {
+			v.close();
+			0
+		},
+	)
 }
 
 #[no_mangle]

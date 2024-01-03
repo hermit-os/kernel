@@ -38,6 +38,7 @@ pub(crate) enum IoError {
 	ENOTCONN = crate::errno::ENOTCONN as isize,
 	ENOTDIR = crate::errno::ENOTDIR as isize,
 	EMFILE = crate::errno::EMFILE as isize,
+	EEXIST = crate::errno::EEXIST as isize,
 }
 
 pub(crate) type FileDescriptor = i32;
@@ -233,31 +234,32 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	fn ioctl(&self, _cmd: i32, _argp: *mut c_void) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
+
+	// close a file descriptor
+	fn close(&self) {}
 }
 
 pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, IoError> {
-	{
-		// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
-		// flags is bitmask of O_DEC_* defined above.
-		// (taken from rust stdlib/sys hermit target )
+	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
+	// flags is bitmask of O_DEC_* defined above.
+	// (taken from rust stdlib/sys hermit target )
 
-		debug!("Open {}, {}, {}", name, flags, mode);
+	debug!("Open {}, {}, {}", name, flags, mode);
 
-		let fs = fs::FILESYSTEM.get().unwrap();
-		if let Ok(file) = fs.open(
-			name,
-			OpenOption::from_bits(mode).expect("Invalid open flags"),
-		) {
-			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-			if OBJECT_MAP.write().try_insert(fd, file).is_err() {
-				Err(IoError::EINVAL)
-			} else {
-				Ok(fd as FileDescriptor)
-			}
-		} else {
+	let fs = fs::FILESYSTEM.get().unwrap();
+	if let Ok(file) = fs.open(
+		name,
+		OpenOption::from_bits(flags).expect("Invalid open flags"),
+	) {
+		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
 			Err(IoError::EINVAL)
+		} else {
+			Ok(fd as FileDescriptor)
 		}
-	} //}
+	} else {
+		Err(IoError::EINVAL)
+	}
 }
 
 #[allow(unused_variables)]

@@ -15,14 +15,186 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use core::slice;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
-use hermit_sync::RwSpinLock;
+use hermit_sync::{RwSpinLock, SpinMutex};
 
 use crate::fd::{DirectoryEntry, Dirent, IoError, ObjectInterface, OpenOption};
 use crate::fs::{FileAttr, NodeKind, VfsNode};
+
+#[derive(Debug)]
+struct RomFileInner {
+	/// Position within the file
+	pos: SpinMutex<usize>,
+	/// File content
+	data: Arc<RwSpinLock<&'static [u8]>>,
+}
+
+impl ObjectInterface for RomFileInner {
+	fn close(&self) {
+		*self.pos.lock() = 0;
+	}
+
+	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+		let vec = self.data.read();
+		let mut pos_guard = self.pos.lock();
+		let pos = *pos_guard;
+
+		if pos >= vec.len() {
+			return Ok(0);
+		}
+
+		let len = if vec.len() - pos < buf.len() {
+			vec.len() - pos
+		} else {
+			buf.len()
+		};
+
+		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
+		*pos_guard = pos + len;
+
+		Ok(len.try_into().unwrap())
+	}
+}
+
+impl RomFileInner {
+	pub unsafe fn new(addr: *const u8, len: usize) -> Self {
+		Self {
+			pos: SpinMutex::new(0),
+			data: Arc::new(RwSpinLock::new(unsafe { slice::from_raw_parts(addr, len) })),
+		}
+	}
+
+	pub fn len(&self) -> usize {
+		let guard = self.data.read();
+		guard.len()
+	}
+}
+
+impl Clone for RomFileInner {
+	fn clone(&self) -> Self {
+		RomFileInner {
+			pos: SpinMutex::new(0),
+			data: self.data.clone(),
+		}
+	}
+}
+
+#[derive(Debug)]
+pub struct RamFileInner {
+	/// Position within the file
+	pos: SpinMutex<usize>,
+	/// File content
+	data: Arc<RwSpinLock<Vec<u8>>>,
+}
+
+impl ObjectInterface for RamFileInner {
+	fn close(&self) {
+		*self.pos.lock() = 0;
+	}
+
+	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+		let guard = self.data.read();
+		let vec = guard.deref();
+		let mut pos_guard = self.pos.lock();
+		let pos = *pos_guard;
+
+		if pos >= vec.len() {
+			return Ok(0);
+		}
+
+		let len = if vec.len() - pos < buf.len() {
+			vec.len() - pos
+		} else {
+			buf.len()
+		};
+
+		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
+		*pos_guard = pos + len;
+
+		Ok(len.try_into().unwrap())
+	}
+
+	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+		let mut guard = self.data.write();
+		let vec = guard.deref_mut();
+		let mut pos_guard = self.pos.lock();
+		let pos = *pos_guard;
+
+		if pos + buf.len() > vec.len() {
+			vec.resize(pos + buf.len(), 0);
+		}
+
+		vec[pos..pos + buf.len()].clone_from_slice(buf);
+		*pos_guard = pos + buf.len();
+
+		Ok(buf.len().try_into().unwrap())
+	}
+}
+
+impl RamFileInner {
+	pub fn new() -> Self {
+		Self {
+			pos: SpinMutex::new(0),
+			data: Arc::new(RwSpinLock::new(Vec::new())),
+		}
+	}
+
+	pub fn len(&self) -> usize {
+		let guard = self.data.read();
+		let vec: &Vec<u8> = guard.deref();
+		vec.len()
+	}
+}
+
+impl Clone for RamFileInner {
+	fn clone(&self) -> Self {
+		RamFileInner {
+			pos: SpinMutex::new(0),
+			data: self.data.clone(),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RomFile(Arc<RomFileInner>);
+
+impl VfsNode for RomFile {
+	fn get_kind(&self) -> NodeKind {
+		NodeKind::File
+	}
+
+	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Ok(self.0.clone())
+	}
+}
+
+impl RomFile {
+	pub unsafe fn new(ptr: *const u8, length: usize) -> Self {
+		Self(Arc::new(RomFileInner::new(ptr, length)))
+	}
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RamFile(Arc<RamFileInner>);
+
+impl VfsNode for RamFile {
+	fn get_kind(&self) -> NodeKind {
+		NodeKind::File
+	}
+
+	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		Ok(self.0.clone())
+	}
+}
+
+impl RamFile {
+	pub fn new() -> Self {
+		Self(Arc::new(RamFileInner::new()))
+	}
+}
 
 #[derive(Debug)]
 struct MemDirectoryInner(
@@ -144,7 +316,7 @@ impl MemDirectory {
 	pub fn create_file(&self, name: &str, ptr: *const u8, length: usize) -> Result<(), IoError> {
 		let name = name.trim();
 		if name.find('/').is_none() {
-			let file = unsafe { MemFile::from_raw_parts(ptr, length) };
+			let file = unsafe { RomFile::new(ptr, length) };
 			self.inner
 				.0
 				.write()
@@ -157,7 +329,6 @@ impl MemDirectory {
 }
 
 impl VfsNode for MemDirectory {
-	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
 	}
@@ -304,113 +475,32 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
+			if components.is_empty() {
+				let mut guard = self.inner.0.write();
+				if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
+					if guard.get(&node_name).is_some() {
+						return Err(IoError::EEXIST);
+					} else {
+						let file = Box::new(RamFile::new());
+						guard.insert(node_name, file.clone());
+						return Ok(file.0.clone());
+					}
+				} else if let Some(file) = guard.get(&node_name) {
+					if file.get_kind() == NodeKind::File {
+						return file.get_object();
+					} else {
+						return Err(IoError::ENOENT);
+					}
+				} else {
+					return Err(IoError::ENOENT);
+				}
+			}
+
 			if let Some(directory) = self.inner.0.read().get(&node_name) {
 				return directory.traverse_open(components, opt);
 			}
-
-			/*if components.is_empty() {
-				self.children.insert(node_name, obj);
-				return Ok(());
-			}*/
 		}
 
-		Err(IoError::EBADF)
-	}
-}
-
-#[derive(Debug)]
-pub struct RomHandle {
-	/// Position within the file
-	pos: AtomicUsize,
-	/// File content
-	data: Arc<RwSpinLock<&'static [u8]>>,
-}
-
-impl RomHandle {
-	pub unsafe fn new(addr: *const u8, len: usize) -> Self {
-		RomHandle {
-			pos: AtomicUsize::new(0),
-			data: Arc::new(RwSpinLock::new(unsafe { slice::from_raw_parts(addr, len) })),
-		}
-	}
-
-	pub fn len(&self) -> usize {
-		let guard = self.data.read();
-		guard.len()
-	}
-}
-
-impl Clone for RomHandle {
-	fn clone(&self) -> Self {
-		RomHandle {
-			pos: AtomicUsize::new(self.pos.load(Ordering::Relaxed)),
-			data: self.data.clone(),
-		}
-	}
-}
-
-#[derive(Debug)]
-pub struct RamHandle {
-	/// Position within the file
-	pos: AtomicUsize,
-	/// File content
-	data: Arc<RwSpinLock<Vec<u8>>>,
-}
-
-impl RamHandle {
-	pub fn new() -> Self {
-		RamHandle {
-			pos: AtomicUsize::new(0),
-			data: Arc::new(RwSpinLock::new(Vec::new())),
-		}
-	}
-
-	pub fn len(&self) -> usize {
-		let guard = self.data.read();
-		let vec: &Vec<u8> = guard.deref();
-		vec.len()
-	}
-}
-
-impl Clone for RamHandle {
-	fn clone(&self) -> Self {
-		RamHandle {
-			pos: AtomicUsize::new(self.pos.load(Ordering::Relaxed)),
-			data: self.data.clone(),
-		}
-	}
-}
-
-/// Enumeration of possible methods to seek within an I/O object.
-#[derive(Debug, Clone)]
-enum DataHandle {
-	Ram(RamHandle),
-	Rom(RomHandle),
-}
-
-#[derive(Debug)]
-pub(crate) struct MemFile {
-	/// File content
-	data: DataHandle,
-}
-
-impl MemFile {
-	pub fn new() -> Self {
-		Self {
-			data: DataHandle::Ram(RamHandle::new()),
-		}
-	}
-
-	pub unsafe fn from_raw_parts(ptr: *const u8, length: usize) -> Self {
-		Self {
-			data: unsafe { DataHandle::Rom(RomHandle::new(ptr, length)) },
-		}
-	}
-}
-
-impl VfsNode for MemFile {
-	/// Returns the node type
-	fn get_kind(&self) -> NodeKind {
-		NodeKind::File
+		Err(IoError::ENOENT)
 	}
 }
