@@ -34,6 +34,7 @@ struct RomFileInner {
 
 impl ObjectInterface for RomFileInner {
 	fn close(&self) {
+		trace!("close file");
 		*self.pos.lock() = 0;
 	}
 
@@ -92,6 +93,7 @@ pub struct RamFileInner {
 
 impl ObjectInterface for RamFileInner {
 	fn close(&self) {
+		trace!("close file");
 		*self.pos.lock() = 0;
 	}
 
@@ -214,6 +216,11 @@ impl MemDirectoryInner {
 }
 
 impl ObjectInterface for MemDirectoryInner {
+	fn close(&self) {
+		trace!("close directory");
+		self.1.store(0, Ordering::SeqCst);
+	}
+
 	fn readdir(&self) -> DirectoryEntry {
 		let pos = self.1.fetch_add(1, Ordering::SeqCst);
 

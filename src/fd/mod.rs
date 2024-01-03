@@ -236,7 +236,9 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	// close a file descriptor
-	fn close(&self) {}
+	fn close(&self) {
+		trace!("close file descriptor");
+	}
 }
 
 pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, IoError> {
