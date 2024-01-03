@@ -1,7 +1,5 @@
 use core::ffi::c_void;
 use core::future;
-use core::marker::PhantomData;
-use core::mem::size_of;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
@@ -9,10 +7,10 @@ use core::task::Poll;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
-use smoltcp::wire::IpAddress;
+use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::fd::{IoError, ObjectInterface};
+use crate::fd::{IoError, ObjectInterface, SocketOption};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
@@ -29,20 +27,18 @@ pub struct IPv4;
 pub struct IPv6;
 
 #[derive(Debug)]
-pub struct Socket<T> {
+pub struct Socket {
 	handle: Handle,
 	port: AtomicU16,
 	nonblocking: AtomicBool,
-	phantom: PhantomData<T>,
 }
 
-impl<T> Socket<T> {
+impl Socket {
 	pub fn new(handle: Handle) -> Self {
 		Self {
 			handle,
 			port: AtomicU16::new(0),
 			nonblocking: AtomicBool::new(false),
-			phantom: PhantomData,
 		}
 	}
 
@@ -142,8 +138,8 @@ impl<T> Socket<T> {
 		Ok(pos.try_into().unwrap())
 	}
 
-	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, IoError> {
-		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
+	async fn async_connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
+		self.with_context(|socket, cx| socket.connect(cx, endpoint, get_ephemeral_port()))
 			.map_err(|_| IoError::EIO)?;
 
 		future::poll_fn(|cx| {
@@ -154,7 +150,7 @@ impl<T> Socket<T> {
 					socket.register_send_waker(cx.waker());
 					Poll::Pending
 				}
-				_ => Poll::Ready(Ok(0)),
+				_ => Poll::Ready(Ok(())),
 			})
 		})
 		.await
@@ -197,11 +193,7 @@ impl<T> Socket<T> {
 		.await
 	}
 
-	async fn async_accept(
-		&self,
-		_addr: *mut sockaddr,
-		_addrlen: *mut socklen_t,
-	) -> Result<(), IoError> {
+	async fn async_accept(&self) -> Result<IpEndpoint, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed => {
@@ -242,11 +234,40 @@ impl<T> Socket<T> {
 		let socket = nic.get_mut_socket::<tcp::Socket<'_>>(self.handle);
 		socket.set_keep_alive(Some(Duration::from_millis(DEFAULT_KEEP_ALIVE_INTERVAL)));
 
+		Ok(socket.remote_endpoint().unwrap())
+	}
+}
+
+impl ObjectInterface for Socket {
+	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), IoError> {
+		self.port.store(endpoint.port, Ordering::Release);
 		Ok(())
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
-		block_on(self.async_accept(addr, addrlen), None)
+	fn connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
+		if self.nonblocking.load(Ordering::Acquire) {
+			block_on(self.async_connect(endpoint), Some(Duration::ZERO)).map_err(|x| {
+				if x == IoError::ETIME {
+					IoError::EAGAIN
+				} else {
+					x
+				}
+			})
+		} else {
+			block_on(self.async_connect(endpoint), None)
+		}
+	}
+
+	fn accept(&self) -> Result<IpEndpoint, IoError> {
+		block_on(self.async_accept(), None)
+	}
+
+	fn getpeername(&self) -> Option<IpEndpoint> {
+		self.with(|socket| socket.remote_endpoint())
+	}
+
+	fn getsockname(&self) -> Option<IpEndpoint> {
+		self.with(|socket| socket.local_endpoint())
 	}
 
 	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
@@ -302,59 +323,25 @@ impl<T> Socket<T> {
 		})
 	}
 
-	fn setsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *const c_void,
-		optlen: socklen_t,
-	) -> Result<(), IoError> {
-		if level == IPPROTO_TCP
-			&& optname == TCP_NODELAY
-			&& optlen == size_of::<i32>().try_into().unwrap()
-		{
-			let value = unsafe { *(optval as *const i32) };
+	fn setsockopt(&self, opt: SocketOption, optval: bool) -> Result<(), IoError> {
+		if opt == SocketOption::TcpNoDelay {
 			self.with(|socket| {
-				socket.set_nagle_enabled(value != 0);
-				if value == 0 {
+				socket.set_nagle_enabled(optval);
+				if optval {
 					socket.set_ack_delay(None);
 				} else {
 					socket.set_ack_delay(Some(Duration::from_millis(10)));
 				}
 			});
 			Ok(())
-		} else if level == SOL_SOCKET && optname == SO_REUSEADDR {
-			// smoltcp is always able to reuse the addr
-			Ok(())
 		} else {
 			Err(IoError::EINVAL)
 		}
 	}
 
-	fn getsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *mut c_void,
-		optlen: *mut socklen_t,
-	) -> Result<(), IoError> {
-		if level == IPPROTO_TCP && optname == TCP_NODELAY {
-			let optlen = unsafe { &mut *optlen };
-			if *optlen >= size_of::<i32>().try_into().unwrap() {
-				let optval = unsafe { &mut *(optval as *mut i32) };
-				self.with(|socket| {
-					if socket.nagle_enabled() {
-						*optval = 0;
-					} else {
-						*optval = 1;
-					}
-				});
-				*optlen = size_of::<i32>().try_into().unwrap();
-
-				Ok(())
-			} else {
-				Err(IoError::EINVAL)
-			}
+	fn getsockopt(&self, opt: SocketOption) -> Result<bool, IoError> {
+		if opt == SocketOption::TcpNoDelay {
+			self.with(|socket| Ok(socket.nagle_enabled()))
 		} else {
 			Err(IoError::EINVAL)
 		}
@@ -387,7 +374,7 @@ impl<T> Socket<T> {
 	}
 }
 
-impl<T> Clone for Socket<T> {
+impl Clone for Socket {
 	fn clone(&self) -> Self {
 		let mut guard = NIC.lock();
 
@@ -401,303 +388,13 @@ impl<T> Clone for Socket<T> {
 			handle,
 			port: AtomicU16::new(self.port.load(Ordering::Acquire)),
 			nonblocking: AtomicBool::new(self.nonblocking.load(Ordering::Acquire)),
-			phantom: PhantomData,
 		}
 	}
 }
 
-impl<T> Drop for Socket<T> {
+impl Drop for Socket {
 	fn drop(&mut self) {
 		let _ = block_on(self.async_close(), None);
 		NIC.lock().as_nic_mut().unwrap().destroy_socket(self.handle);
-	}
-}
-
-impl ObjectInterface for Socket<IPv4> {
-	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> Result<(), IoError> {
-		if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
-			let addr = unsafe { *(name as *const sockaddr_in) };
-			let port = u16::from_be(addr.sin_port);
-			self.port.store(port, Ordering::Release);
-			Ok(())
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> Result<i32, IoError> {
-		if namelen == size_of::<sockaddr_in>().try_into().unwrap() {
-			let saddr = unsafe { *(name as *const sockaddr_in) };
-			let port = u16::from_be(saddr.sin_port);
-			let address = IpAddress::v4(
-				saddr.sin_addr.s_addr[0],
-				saddr.sin_addr.s_addr[1],
-				saddr.sin_addr.s_addr[2],
-				saddr.sin_addr.s_addr[3],
-			);
-
-			if self.nonblocking.load(Ordering::Acquire) {
-				block_on(self.async_connect(address, port), Some(Duration::ZERO)).map_err(|x| {
-					if x == IoError::ETIME {
-						IoError::EAGAIN
-					} else {
-						x
-					}
-				})
-			} else {
-				block_on(self.async_connect(address, port), None)
-			}
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
-		if namelen.is_null() {
-			return Err(IoError::ENOBUFS);
-		}
-
-		let namelen = unsafe { &mut *namelen };
-		if *namelen >= size_of::<sockaddr_in>().try_into().unwrap() {
-			let mut ret: Result<(), IoError> = Ok(());
-			let addr = unsafe { &mut *(name as *mut sockaddr_in) };
-
-			self.with(|socket| {
-				if let Some(remote) = socket.remote_endpoint() {
-					addr.sin_port = remote.port.to_be();
-
-					if let IpAddress::Ipv4(ip) = remote.addr {
-						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
-					}
-				} else {
-					ret = Err(IoError::ENOTCONN);
-				}
-			});
-
-			*namelen = size_of::<sockaddr_in>().try_into().unwrap();
-
-			ret
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
-		if namelen.is_null() {
-			return Err(IoError::ENOBUFS);
-		}
-
-		let namelen = unsafe { &mut *namelen };
-		if *namelen >= size_of::<sockaddr_in>().try_into().unwrap() {
-			let addr = unsafe { &mut *(name as *mut sockaddr_in) };
-			addr.sin_family = AF_INET.try_into().unwrap();
-
-			self.with(|socket| {
-				if let Some(local) = socket.local_endpoint() {
-					addr.sin_port = local.port.to_be();
-
-					if let IpAddress::Ipv4(ip) = local.addr {
-						addr.sin_addr.s_addr.copy_from_slice(ip.as_bytes());
-					}
-				}
-			});
-
-			*namelen = size_of::<sockaddr_in6>().try_into().unwrap();
-
-			Ok(())
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
-		self.accept(addr, addrlen)
-	}
-
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
-		self.read(buf)
-	}
-
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
-		self.write(buf)
-	}
-
-	fn listen(&self, backlog: i32) -> Result<(), IoError> {
-		self.listen(backlog)
-	}
-
-	fn setsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *const c_void,
-		optlen: socklen_t,
-	) -> Result<(), IoError> {
-		self.setsockopt(level, optname, optval, optlen)
-	}
-
-	fn getsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *mut c_void,
-		optlen: *mut socklen_t,
-	) -> Result<(), IoError> {
-		self.getsockopt(level, optname, optval, optlen)
-	}
-
-	fn shutdown(&self, how: i32) -> Result<(), IoError> {
-		self.shutdown(how)
-	}
-
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
-		self.ioctl(cmd, argp)
-	}
-}
-
-impl ObjectInterface for Socket<IPv6> {
-	fn bind(&self, name: *const sockaddr, namelen: socklen_t) -> Result<(), IoError> {
-		if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
-			let addr = unsafe { *(name as *const sockaddr_in6) };
-			self.port.store(addr.sin6_port, Ordering::Release);
-			Ok(())
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn connect(&self, name: *const sockaddr, namelen: socklen_t) -> Result<i32, IoError> {
-		if namelen == size_of::<sockaddr_in6>().try_into().unwrap() {
-			let saddr = unsafe { *(name as *const sockaddr_in6) };
-			let port = u16::from_be(saddr.sin6_port);
-			let a0 = ((saddr.sin6_addr.s6_addr[0] as u16) << 8) | saddr.sin6_addr.s6_addr[1] as u16;
-			let a1 = ((saddr.sin6_addr.s6_addr[2] as u16) << 8) | saddr.sin6_addr.s6_addr[3] as u16;
-			let a2 = ((saddr.sin6_addr.s6_addr[4] as u16) << 8) | saddr.sin6_addr.s6_addr[5] as u16;
-			let a3 = ((saddr.sin6_addr.s6_addr[6] as u16) << 8) | saddr.sin6_addr.s6_addr[7] as u16;
-			let a4 = ((saddr.sin6_addr.s6_addr[8] as u16) << 8) | saddr.sin6_addr.s6_addr[9] as u16;
-			let a5 =
-				((saddr.sin6_addr.s6_addr[10] as u16) << 8) | saddr.sin6_addr.s6_addr[11] as u16;
-			let a6 =
-				((saddr.sin6_addr.s6_addr[12] as u16) << 8) | saddr.sin6_addr.s6_addr[13] as u16;
-			let a7 =
-				((saddr.sin6_addr.s6_addr[14] as u16) << 8) | saddr.sin6_addr.s6_addr[15] as u16;
-			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
-
-			if self.nonblocking.load(Ordering::Acquire) {
-				block_on(self.async_connect(address, port), Some(Duration::ZERO)).map_err(|x| {
-					if x == IoError::ETIME {
-						IoError::EAGAIN
-					} else {
-						x
-					}
-				})
-			} else {
-				block_on(self.async_connect(address, port), None)
-			}
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn getpeername(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
-		if namelen.is_null() {
-			return Err(IoError::ENOBUFS);
-		}
-
-		let namelen = unsafe { &mut *namelen };
-		if *namelen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-			let mut ret: Result<(), IoError> = Ok(());
-			let addr = unsafe { &mut *(name as *mut sockaddr_in6) };
-
-			self.with(|socket| {
-				if let Some(remote) = socket.remote_endpoint() {
-					addr.sin6_port = remote.port.to_be();
-
-					if let IpAddress::Ipv6(ip) = remote.addr {
-						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
-					}
-				} else {
-					ret = Err(IoError::ENOTCONN);
-				}
-			});
-
-			*namelen = size_of::<sockaddr_in>().try_into().unwrap();
-
-			ret
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn getsockname(&self, name: *mut sockaddr, namelen: *mut socklen_t) -> Result<(), IoError> {
-		if namelen.is_null() {
-			return Err(IoError::ENOBUFS);
-		}
-
-		let namelen = unsafe { &mut *namelen };
-		if *namelen >= size_of::<sockaddr_in6>().try_into().unwrap() {
-			let addr = unsafe { &mut *(name as *mut sockaddr_in6) };
-			addr.sin6_family = AF_INET6.try_into().unwrap();
-
-			self.with(|socket| {
-				if let Some(local) = socket.local_endpoint() {
-					addr.sin6_port = local.port.to_be();
-
-					if let IpAddress::Ipv6(ip) = local.addr {
-						addr.sin6_addr.s6_addr.copy_from_slice(ip.as_bytes());
-					}
-				}
-			});
-
-			*namelen = size_of::<sockaddr_in6>().try_into().unwrap();
-
-			Ok(())
-		} else {
-			Err(IoError::EINVAL)
-		}
-	}
-
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
-		self.accept(addr, addrlen)
-	}
-
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
-		self.read(buf)
-	}
-
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
-		self.write(buf)
-	}
-
-	fn listen(&self, backlog: i32) -> Result<(), IoError> {
-		self.listen(backlog)
-	}
-
-	fn setsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *const c_void,
-		optlen: socklen_t,
-	) -> Result<(), IoError> {
-		self.setsockopt(level, optname, optval, optlen)
-	}
-
-	fn getsockopt(
-		&self,
-		level: i32,
-		optname: i32,
-		optval: *mut c_void,
-		optlen: *mut socklen_t,
-	) -> Result<(), IoError> {
-		self.getsockopt(level, optname, optval, optlen)
-	}
-
-	fn shutdown(&self, how: i32) -> Result<(), IoError> {
-		self.shutdown(how)
-	}
-
-	fn ioctl(&self, cmd: i32, argp: *mut c_void) -> Result<(), IoError> {
-		self.ioctl(cmd, argp)
 	}
 }

@@ -2,6 +2,9 @@
 #![allow(nonstandard_style)]
 use core::ffi::c_void;
 
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
+
 use crate::fd::socket::*;
 use crate::syscalls::__sys_write;
 
@@ -47,19 +50,19 @@ pub type in_port_t = u16;
 pub type time_t = i64;
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct in_addr {
 	pub s_addr: [u8; 4],
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct in6_addr {
 	pub s6_addr: [u8; 16],
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct sockaddr {
 	pub sa_len: u8,
 	pub sa_family: sa_family_t,
@@ -67,7 +70,7 @@ pub struct sockaddr {
 }
 
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct sockaddr_in {
 	pub sin_len: u8,
 	pub sin_family: sa_family_t,
@@ -76,14 +79,129 @@ pub struct sockaddr_in {
 	pub sin_zero: [u8; 8],
 }
 
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<sockaddr_in> for IpListenEndpoint {
+	fn from(addr: sockaddr_in) -> IpListenEndpoint {
+		let port = u16::from_be(addr.sin_port);
+		if addr.sin_addr.s_addr.into_iter().all(|b| b == 0) {
+			IpListenEndpoint { addr: None, port }
+		} else {
+			let address = IpAddress::v4(
+				addr.sin_addr.s_addr[0],
+				addr.sin_addr.s_addr[1],
+				addr.sin_addr.s_addr[2],
+				addr.sin_addr.s_addr[3],
+			);
+
+			IpListenEndpoint::from((address, port))
+		}
+	}
+}
+
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<sockaddr_in> for IpEndpoint {
+	fn from(addr: sockaddr_in) -> IpEndpoint {
+		let port = u16::from_be(addr.sin_port);
+		let address = IpAddress::v4(
+			addr.sin_addr.s_addr[0],
+			addr.sin_addr.s_addr[1],
+			addr.sin_addr.s_addr[2],
+			addr.sin_addr.s_addr[3],
+		);
+
+		IpEndpoint::from((address, port))
+	}
+}
+
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<IpEndpoint> for sockaddr_in {
+	fn from(endpoint: IpEndpoint) -> Self {
+		match endpoint.addr {
+			IpAddress::Ipv4(ip) => {
+				let mut in_addr: in_addr = Default::default();
+				in_addr.s_addr.copy_from_slice(ip.as_bytes());
+
+				Self {
+					sin_len: core::mem::size_of::<sockaddr_in>().try_into().unwrap(),
+					sin_port: endpoint.port.to_be(),
+					sin_family: AF_INET.try_into().unwrap(),
+					sin_addr: in_addr,
+					..Default::default()
+				}
+			}
+			IpAddress::Ipv6(_) => panic!("Unable to convert IPv6 address to sockadd_in"),
+		}
+	}
+}
+
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 pub struct sockaddr_in6 {
 	pub sin6_family: sa_family_t,
 	pub sin6_port: in_port_t,
 	pub sin6_addr: in6_addr,
 	pub sin6_flowinfo: u32,
 	pub sin6_scope_id: u32,
+}
+
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<sockaddr_in6> for IpListenEndpoint {
+	fn from(addr: sockaddr_in6) -> IpListenEndpoint {
+		let port = u16::from_be(addr.sin6_port);
+		if addr.sin6_addr.s6_addr.into_iter().all(|b| b == 0) {
+			IpListenEndpoint { addr: None, port }
+		} else {
+			let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
+			let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
+			let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
+			let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
+			let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
+			let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
+			let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
+			let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+			let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
+
+			IpListenEndpoint::from((address, port))
+		}
+	}
+}
+
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<sockaddr_in6> for IpEndpoint {
+	fn from(addr: sockaddr_in6) -> IpEndpoint {
+		let port = u16::from_be(addr.sin6_port);
+		let a0 = ((addr.sin6_addr.s6_addr[0] as u16) << 8) | addr.sin6_addr.s6_addr[1] as u16;
+		let a1 = ((addr.sin6_addr.s6_addr[2] as u16) << 8) | addr.sin6_addr.s6_addr[3] as u16;
+		let a2 = ((addr.sin6_addr.s6_addr[4] as u16) << 8) | addr.sin6_addr.s6_addr[5] as u16;
+		let a3 = ((addr.sin6_addr.s6_addr[6] as u16) << 8) | addr.sin6_addr.s6_addr[7] as u16;
+		let a4 = ((addr.sin6_addr.s6_addr[8] as u16) << 8) | addr.sin6_addr.s6_addr[9] as u16;
+		let a5 = ((addr.sin6_addr.s6_addr[10] as u16) << 8) | addr.sin6_addr.s6_addr[11] as u16;
+		let a6 = ((addr.sin6_addr.s6_addr[12] as u16) << 8) | addr.sin6_addr.s6_addr[13] as u16;
+		let a7 = ((addr.sin6_addr.s6_addr[14] as u16) << 8) | addr.sin6_addr.s6_addr[15] as u16;
+		let address = IpAddress::v6(a0, a1, a2, a3, a4, a5, a6, a7);
+
+		IpEndpoint::from((address, port))
+	}
+}
+
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+impl From<IpEndpoint> for sockaddr_in6 {
+	fn from(endpoint: IpEndpoint) -> Self {
+		match endpoint.addr {
+			IpAddress::Ipv6(ip) => {
+				let mut in6_addr: in6_addr = Default::default();
+				in6_addr.s6_addr.copy_from_slice(ip.as_bytes());
+
+				Self {
+					sin6_port: endpoint.port.to_be(),
+					sin6_family: AF_INET6.try_into().unwrap(),
+					sin6_addr: in6_addr,
+					..Default::default()
+				}
+			}
+			IpAddress::Ipv4(_) => panic!("Unable to convert IPv4 address to sockadd_in6"),
+		}
+	}
 }
 
 #[repr(C)]

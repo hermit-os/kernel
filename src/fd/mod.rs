@@ -5,13 +5,13 @@ use core::sync::atomic::{AtomicI32, Ordering};
 use ahash::RandomState;
 use dyn_clone::DynClone;
 use hashbrown::HashMap;
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
+use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::env;
 use crate::errno::*;
 use crate::fd::stdio::*;
 use crate::fs::{self, FileAttr, SeekWhence};
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-use crate::syscalls::net::*;
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) mod socket;
@@ -39,6 +39,12 @@ pub(crate) enum IoError {
 	ENOTDIR = crate::errno::ENOTDIR as isize,
 	EMFILE = crate::errno::EMFILE as isize,
 	EEXIST = crate::errno::EEXIST as isize,
+	EADDRINUSE = crate::errno::EADDRINUSE as isize,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum SocketOption {
+	TcpNoDelay,
 }
 
 pub(crate) type FileDescriptor = i32;
@@ -132,19 +138,19 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `accept` a connection on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> Result<(), IoError> {
+	fn accept(&self) -> Result<IpEndpoint, IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// initiate a connection on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn connect(&self, _name: *const sockaddr, _namelen: socklen_t) -> Result<i32, IoError> {
+	fn connect(&self, _endpoint: IpEndpoint) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `bind` a name to a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn bind(&self, _name: *const sockaddr, _namelen: socklen_t) -> Result<(), IoError> {
+	fn bind(&self, _name: IpListenEndpoint) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
@@ -156,53 +162,31 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `setsockopt` sets options on sockets
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn setsockopt(
-		&self,
-		_level: i32,
-		_optname: i32,
-		_optval: *const c_void,
-		_optlen: socklen_t,
-	) -> Result<(), IoError> {
+	fn setsockopt(&self, _opt: SocketOption, _optval: bool) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `getsockopt` gets options on sockets
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn getsockopt(
-		&self,
-		_level: i32,
-		_option_name: i32,
-		_optval: *mut c_void,
-		_optlen: *mut socklen_t,
-	) -> Result<(), IoError> {
+	fn getsockopt(&self, _opt: SocketOption) -> Result<bool, IoError> {
 		Err(IoError::EINVAL)
 	}
 
 	/// `getsockname` gets socket name
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn getsockname(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn getsockname(&self) -> Option<IpEndpoint> {
+		None
 	}
 
 	/// `getpeername` get address of connected peer
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn getpeername(&self, _name: *mut sockaddr, _namelen: *mut socklen_t) -> Result<(), IoError> {
-		Err(IoError::EINVAL)
+	fn getpeername(&self) -> Option<IpEndpoint> {
+		None
 	}
 
 	/// receive a message from a socket
-	///
-	/// If `address` is not a null pointer, the source address of the message is filled in.  The
-	/// `address_len` argument is a value-result argument, initialized to the size
-	/// of the buffer associated with address, and modified on return to
-	/// indicate the actual size of the address stored there.
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn recvfrom(
-		&self,
-		_buffer: &mut [u8],
-		_address: *mut sockaddr,
-		_address_len: *mut socklen_t,
-	) -> Result<isize, IoError> {
+	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(isize, IpEndpoint), IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -214,12 +198,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn sendto(
-		&self,
-		_buffer: &[u8],
-		_addr: *const sockaddr,
-		_addr_len: socklen_t,
-	) -> Result<isize, IoError> {
+	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<isize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
