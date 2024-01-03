@@ -42,6 +42,7 @@ pub(crate) enum IoError {
 	EADDRINUSE = crate::errno::EADDRINUSE as isize,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub(crate) enum SocketOption {
 	TcpNoDelay,
