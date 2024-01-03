@@ -144,10 +144,7 @@ impl<T> Socket<T> {
 
 	async fn async_connect(&self, address: IpAddress, port: u16) -> Result<i32, IoError> {
 		self.with_context(|socket, cx| socket.connect(cx, (address, port), get_ephemeral_port()))
-			.map_err(|x| {
-				info!("x {:?}", x);
-				IoError::EIO
-			})?;
+			.map_err(|x| IoError::EIO)?;
 
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
@@ -248,8 +245,8 @@ impl<T> Socket<T> {
 		Ok(())
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
-		block_on(self.async_accept(addr, addrlen), None).map(|_| 0)
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
+		block_on(self.async_accept(addr, addrlen), None)
 	}
 
 	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
@@ -513,7 +510,7 @@ impl ObjectInterface for Socket<IPv4> {
 		}
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
 		self.accept(addr, addrlen)
 	}
 
@@ -660,7 +657,7 @@ impl ObjectInterface for Socket<IPv6> {
 		}
 	}
 
-	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<i32, IoError> {
+	fn accept(&self, addr: *mut sockaddr, addrlen: *mut socklen_t) -> Result<(), IoError> {
 		self.accept(addr, addrlen)
 	}
 

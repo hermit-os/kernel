@@ -132,7 +132,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// `accept` a connection on a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> Result<i32, IoError> {
+	fn accept(&self, _addr: *mut sockaddr, _addrlen: *mut socklen_t) -> Result<(), IoError> {
 		Err(IoError::EINVAL)
 	}
 
@@ -236,9 +236,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	}
 
 	// close a file descriptor
-	fn close(&self) {
-		trace!("close file descriptor");
-	}
+	fn close(&self) {}
 }
 
 pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, IoError> {

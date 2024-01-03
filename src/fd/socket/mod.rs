@@ -92,13 +92,9 @@ pub(crate) extern "C" fn __sys_accept(
 					let new_obj = dyn_clone::clone_box(&*v);
 					insert_object(fd, Arc::from(new_obj));
 					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-					match (*v).listen(1) {
-						Ok(_) => {
-							insert_object(new_fd, v.clone());
-							new_fd
-						}
-						Err(e) => -num::ToPrimitive::to_i32(&e).unwrap(),
-					}
+					insert_object(new_fd, v.clone());
+
+					new_fd
 				},
 			)
 		},
