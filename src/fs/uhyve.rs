@@ -3,6 +3,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 
 use hermit_sync::SpinMutex;

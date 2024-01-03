@@ -5,6 +5,7 @@ use core::ptr;
 #[cfg(target_arch = "x86_64")]
 use x86::io::*;
 
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use crate::arch::mm::{paging, VirtAddr};
 use crate::console::CONSOLE;
 use crate::fd::{IoError, ObjectInterface, STDERR_FILENO, STDOUT_FILENO};

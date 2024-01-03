@@ -173,7 +173,7 @@ impl VfsNode for RomFile {
 
 impl RomFile {
 	pub unsafe fn new(ptr: *const u8, length: usize) -> Self {
-		Self(Arc::new(RomFileInner::new(ptr, length)))
+		Self(Arc::new(unsafe { RomFileInner::new(ptr, length) }))
 	}
 }
 
