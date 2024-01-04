@@ -119,11 +119,16 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 
 extern "C" fn __sys_mkdir(name: *const u8, mode: i32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
+	let mode = if let Some(mode) = CreationMode::from_bits(mode) {
+		mode
+	} else {
+		return -crate::errno::EINVAL;
+	};
 
 	fs::FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir(name, CreationMode::from_bits(mode).unwrap())
+		.mkdir(name, mode)
 		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 

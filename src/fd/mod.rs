@@ -252,8 +252,8 @@ pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, 
 	let fs = fs::FILESYSTEM.get().unwrap();
 	if let Ok(file) = fs.open(
 		name,
-		OpenOption::from_bits(flags).expect("Invalid flags"),
-		CreationMode::from_bits(mode).expect("Invalid mode"),
+		OpenOption::from_bits(flags).ok_or(IoError::EINVAL)?,
+		CreationMode::from_bits(mode).ok_or(IoError::EINVAL)?,
 	) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
@@ -266,7 +266,6 @@ pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, 
 	}
 }
 
-#[allow(unused_variables)]
 pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
 	debug!("Open directory {}", name);
 
