@@ -63,7 +63,7 @@ static OBJECT_MAP: pflock::PFLock<HashMap<FileDescriptor, Arc<dyn ObjectInterfac
 		RandomState,
 	>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
-static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
+pub(crate) static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
 bitflags! {
 	/// Options for opening files
