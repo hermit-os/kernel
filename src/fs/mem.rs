@@ -151,7 +151,10 @@ impl Clone for RamFileInterface {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RomFile(Arc<RwSpinLock<&'static [u8]>>);
+pub(crate) struct RomFile {
+	data: Arc<RwSpinLock<&'static [u8]>>,
+	attr: FileAttr,
+}
 
 impl VfsNode for RomFile {
 	fn get_kind(&self) -> NodeKind {
@@ -159,20 +162,49 @@ impl VfsNode for RomFile {
 	}
 
 	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		Ok(Arc::new(RomFileInterface::new(self.0.clone())))
+		Ok(Arc::new(RomFileInterface::new(self.data.clone())))
+	}
+
+	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+		Ok(self.attr)
+	}
+
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		if components.is_empty() {
+			Ok(self.attr)
+		} else {
+			Err(IoError::EBADF)
+		}
+	}
+
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		if components.is_empty() {
+			Ok(self.attr)
+		} else {
+			Err(IoError::EBADF)
+		}
 	}
 }
 
 impl RomFile {
-	pub unsafe fn new(ptr: *const u8, length: usize) -> Self {
-		Self(Arc::new(RwSpinLock::new(unsafe {
-			slice::from_raw_parts(ptr, length)
-		})))
+	pub unsafe fn new(ptr: *const u8, length: usize, mode: AccessPermission) -> Self {
+		Self {
+			data: Arc::new(RwSpinLock::new(unsafe {
+				slice::from_raw_parts(ptr, length)
+			})),
+			attr: FileAttr {
+				st_mode: mode,
+				..Default::default()
+			},
+		}
 	}
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RamFile(Arc<RwSpinLock<Vec<u8>>>);
+pub(crate) struct RamFile {
+	data: Arc<RwSpinLock<Vec<u8>>>,
+	attr: FileAttr,
+}
 
 impl VfsNode for RamFile {
 	fn get_kind(&self) -> NodeKind {
@@ -180,13 +212,39 @@ impl VfsNode for RamFile {
 	}
 
 	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		Ok(Arc::new(RamFileInterface::new(self.0.clone())))
+		Ok(Arc::new(RamFileInterface::new(self.data.clone())))
+	}
+
+	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+		Ok(self.attr)
+	}
+
+	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		if components.is_empty() {
+			Ok(self.attr)
+		} else {
+			Err(IoError::EBADF)
+		}
+	}
+
+	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
+		if components.is_empty() {
+			Ok(self.attr)
+		} else {
+			Err(IoError::EBADF)
+		}
 	}
 }
 
 impl RamFile {
-	pub fn new() -> Self {
-		Self(Arc::new(RwSpinLock::new(Vec::new())))
+	pub fn new(mode: AccessPermission) -> Self {
+		Self {
+			data: Arc::new(RwSpinLock::new(Vec::new())),
+			attr: FileAttr {
+				st_mode: mode,
+				..Default::default()
+			},
+		}
 	}
 }
 
@@ -308,19 +366,30 @@ pub(crate) struct MemDirectory {
 	inner: Arc<
 		RwSpinLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
 	>,
+	attr: FileAttr,
 }
 
 impl MemDirectory {
-	pub fn new() -> Self {
+	pub fn new(mode: AccessPermission) -> Self {
 		Self {
 			inner: Arc::new(RwSpinLock::new(BTreeMap::new())),
+			attr: FileAttr {
+				st_mode: mode,
+				..Default::default()
+			},
 		}
 	}
 
-	pub fn create_file(&self, name: &str, ptr: *const u8, length: usize) -> Result<(), IoError> {
+	pub fn create_file(
+		&self,
+		name: &str,
+		ptr: *const u8,
+		length: usize,
+		mode: AccessPermission,
+	) -> Result<(), IoError> {
 		let name = name.trim();
 		if name.find('/').is_none() {
-			let file = unsafe { RomFile::new(ptr, length) };
+			let file = unsafe { RomFile::new(ptr, length, mode) };
 			self.inner.write().insert(name.to_string(), Box::new(file));
 			Ok(())
 		} else {
@@ -332,6 +401,10 @@ impl MemDirectory {
 impl VfsNode for MemDirectory {
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
+	}
+
+	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+		Ok(self.attr)
 	}
 
 	fn traverse_mkdir(
@@ -349,7 +422,7 @@ impl VfsNode for MemDirectory {
 			if components.is_empty() {
 				self.inner
 					.write()
-					.insert(node_name, Box::new(MemDirectory::new()));
+					.insert(node_name, Box::new(MemDirectory::new(mode)));
 				return Ok(());
 			}
 		}
@@ -426,6 +499,12 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
+			if components.is_empty() {
+				if let Some(node) = self.inner.read().get(&node_name) {
+					node.get_file_attributes()?;
+				}
+			}
+
 			if let Some(directory) = self.inner.read().get(&node_name) {
 				directory.traverse_lstat(components)
 			} else {
@@ -439,6 +518,12 @@ impl VfsNode for MemDirectory {
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
+
+			if components.is_empty() {
+				if let Some(node) = self.inner.read().get(&node_name) {
+					node.get_file_attributes()?;
+				}
+			}
 
 			if let Some(directory) = self.inner.read().get(&node_name) {
 				directory.traverse_stat(components)
@@ -486,9 +571,9 @@ impl VfsNode for MemDirectory {
 					if guard.get(&node_name).is_some() {
 						return Err(IoError::EEXIST);
 					} else {
-						let file = Box::new(RamFile::new());
+						let file = Box::new(RamFile::new(mode));
 						guard.insert(node_name, file.clone());
-						return Ok(Arc::new(RamFileInterface::new(file.0.clone())));
+						return Ok(Arc::new(RamFileInterface::new(file.data.clone())));
 					}
 				} else if let Some(file) = guard.get(&node_name) {
 					if file.get_kind() == NodeKind::File {

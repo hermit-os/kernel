@@ -204,24 +204,24 @@ struct fuse_attr {
 	pub padding: u32,
 }
 
-impl fuse_attr {
-	fn to_stat(&self) -> FileAttr {
+impl From<fuse_attr> for FileAttr {
+	fn from(attr: fuse_attr) -> FileAttr {
 		FileAttr {
-			st_ino: self.ino,
-			st_nlink: self.nlink as u64,
-			st_mode: self.mode,
-			st_uid: self.uid,
-			st_gid: self.gid,
-			st_rdev: self.rdev as u64,
-			st_size: self.size.try_into().unwrap(),
-			st_blksize: self.blksize as i64,
-			st_blocks: self.blocks.try_into().unwrap(),
-			st_atime: self.atime.try_into().unwrap(),
-			st_atime_nsec: self.atimensec as i64,
-			st_mtime: self.mtime.try_into().unwrap(),
-			st_mtime_nsec: self.atimensec as i64,
-			st_ctime: self.ctime.try_into().unwrap(),
-			st_ctime_nsec: self.ctimensec as i64,
+			st_ino: attr.ino,
+			st_nlink: attr.nlink as u64,
+			st_mode: AccessPermission::from_bits(attr.mode).unwrap(),
+			st_uid: attr.uid,
+			st_gid: attr.gid,
+			st_rdev: attr.rdev as u64,
+			st_size: attr.size.try_into().unwrap(),
+			st_blksize: attr.blksize as i64,
+			st_blocks: attr.blocks.try_into().unwrap(),
+			st_atime: attr.atime.try_into().unwrap(),
+			st_atime_nsec: attr.atimensec as i64,
+			st_mtime: attr.mtime.try_into().unwrap(),
+			st_mtime_nsec: attr.atimensec as i64,
+			st_ctime: attr.ctime.try_into().unwrap(),
+			st_ctime_nsec: attr.ctimensec as i64,
 			..Default::default()
 		}
 	}
@@ -1498,7 +1498,7 @@ impl VfsNode for FuseDirectory {
 		let attr = rsp.attr;
 
 		if attr.mode & S_IFMT != S_IFLNK {
-			Ok(attr.to_stat())
+			Ok(FileAttr::from(attr))
 		} else {
 			let path = readlink(rsp.nodeid)?;
 			let mut components: Vec<&str> = path.split('/').collect();
@@ -1522,7 +1522,7 @@ impl VfsNode for FuseDirectory {
 			.send_command(cmd.as_ref(), rsp.as_mut());
 
 		let attr = unsafe { rsp.rsp.assume_init().attr };
-		Ok(attr.to_stat())
+		Ok(FileAttr::from(attr))
 	}
 
 	fn traverse_open(
@@ -1565,11 +1565,7 @@ impl VfsNode for FuseDirectory {
 			file_guard.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) = create_create(
-				&path,
-				opt.bits().try_into().unwrap(),
-				mode.bits().try_into().unwrap(),
-			);
+			let (cmd, mut rsp) = create_create(&path, opt.bits().try_into().unwrap(), mode.bits());
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -1629,7 +1625,7 @@ impl VfsNode for FuseDirectory {
 		} else {
 			components.iter().map(|v| "/".to_owned() + v).collect()
 		};
-		let (cmd, mut rsp) = create_mkdir(&path, mode.bits().try_into().unwrap());
+		let (cmd, mut rsp) = create_mkdir(&path, mode.bits());
 
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?

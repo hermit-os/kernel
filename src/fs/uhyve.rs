@@ -66,12 +66,12 @@ const UHYVE_PORT_UNLINK: u16 = 0x840;
 struct SysOpen {
 	name: PhysAddr,
 	flags: i32,
-	mode: i32,
+	mode: u32,
 	ret: i32,
 }
 
 impl SysOpen {
-	fn new(name: VirtAddr, flags: i32, mode: i32) -> SysOpen {
+	fn new(name: VirtAddr, flags: i32, mode: u32) -> SysOpen {
 		SysOpen {
 			name: paging::virtual_to_physical(name).unwrap(),
 			flags,

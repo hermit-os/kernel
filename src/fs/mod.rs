@@ -28,6 +28,11 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	/// Determines the current node type
 	fn get_kind(&self) -> NodeKind;
 
+	/// determines the current file attribute
+	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
 	/// Determine the syscall interface
 	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		Err(IoError::ENOSYS)
@@ -98,7 +103,7 @@ pub(crate) struct Filesystem {
 impl Filesystem {
 	pub fn new() -> Self {
 		Self {
-			root: MemDirectory::new(),
+			root: MemDirectory::new(AccessPermission::from_bits(0o777).unwrap()),
 		}
 	}
 
@@ -210,8 +215,9 @@ impl Filesystem {
 		name: &str,
 		ptr: *const u8,
 		length: usize,
+		mode: AccessPermission,
 	) -> Result<(), IoError> {
-		self.root.create_file(name, ptr, length)
+		self.root.create_file(name, ptr, length, mode)
 	}
 }
 
@@ -221,7 +227,7 @@ pub struct FileAttr {
 	pub st_dev: u64,
 	pub st_ino: u64,
 	pub st_nlink: u64,
-	pub st_mode: u32,
+	pub st_mode: AccessPermission,
 	pub st_uid: u32,
 	pub st_gid: u32,
 	pub st_rdev: u64,
@@ -275,7 +281,7 @@ pub(crate) fn init() {
 	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
 		"/etc/hostname",
 		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		AccessPermission::from_bits(0o666).unwrap(),
+		AccessPermission::from_bits(0o644).unwrap(),
 	) {
 		let _ret = fd.write(b"Hermit");
 		fd.close();
@@ -283,7 +289,7 @@ pub(crate) fn init() {
 	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
 		"/etc/version",
 		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		AccessPermission::from_bits(0o666).unwrap(),
+		AccessPermission::from_bits(0o644).unwrap(),
 	) {
 		let _ret = fd.write(VERSION.as_bytes());
 		fd.close();
@@ -294,12 +300,12 @@ pub(crate) fn init() {
 	uhyve::init();
 }
 
-pub unsafe fn create_file(name: &str, ptr: *const u8, length: usize) {
+pub unsafe fn create_file(name: &str, ptr: *const u8, length: usize, mode: AccessPermission) {
 	unsafe {
 		FILESYSTEM
 			.get()
 			.unwrap()
-			.create_file(name, ptr, length)
+			.create_file(name, ptr, length, mode)
 			.expect("Unable to create file from ROM")
 	}
 }

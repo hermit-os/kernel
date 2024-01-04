@@ -117,7 +117,7 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
-extern "C" fn __sys_mkdir(name: *const u8, mode: i32) -> i32 {
+extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
 		mode
@@ -133,7 +133,7 @@ extern "C" fn __sys_mkdir(name: *const u8, mode: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_mkdir(name: *const u8, mode: i32) -> i32 {
+pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
 	kernel_function!(__sys_mkdir(name, mode))
 }
 
@@ -216,7 +216,7 @@ pub extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
 	kernel_function!(__sys_opendir(name))
 }
 
-extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
+extern "C" fn __sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
 		crate::fd::open(name, flags, mode)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
@@ -226,7 +226,7 @@ extern "C" fn __sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescript
 }
 
 #[no_mangle]
-pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: i32) -> FileDescriptor {
+pub extern "C" fn sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
 	kernel_function!(__sys_open(name, flags, mode))
 }
 

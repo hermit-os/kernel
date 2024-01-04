@@ -81,8 +81,8 @@ bitflags! {
 }
 
 bitflags! {
-	#[derive(Debug, Copy, Clone, Default)]
-	pub(crate) struct AccessPermission: i32 {
+	#[derive(Debug, Copy, Clone)]
+	pub struct AccessPermission: u32 {
 		const S_IRUSR = 0o400;
 		const S_IWUSR = 0o200;
 		const S_IXUSR = 0o100;
@@ -95,6 +95,12 @@ bitflags! {
 		const S_IWOTH = 0o002;
 		const S_IXOTH = 0o001;
 		const S_IRWXO = 0o007;
+	}
+}
+
+impl Default for AccessPermission {
+	fn default() -> Self {
+		AccessPermission::from_bits(0o666).unwrap()
 	}
 }
 
@@ -242,7 +248,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	fn close(&self) {}
 }
 
-pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, IoError> {
+pub(crate) fn open(name: &str, flags: i32, mode: u32) -> Result<FileDescriptor, IoError> {
 	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
