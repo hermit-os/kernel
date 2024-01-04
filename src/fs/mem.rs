@@ -25,19 +25,14 @@ use crate::fd::{CreationMode, DirectoryEntry, Dirent, IoError, ObjectInterface, 
 use crate::fs::{FileAttr, NodeKind, VfsNode};
 
 #[derive(Debug)]
-struct RomFileInner {
+struct RomFileInterface {
 	/// Position within the file
 	pos: SpinMutex<usize>,
 	/// File content
 	data: Arc<RwSpinLock<&'static [u8]>>,
 }
 
-impl ObjectInterface for RomFileInner {
-	fn close(&self) {
-		trace!("close file");
-		*self.pos.lock() = 0;
-	}
-
+impl ObjectInterface for RomFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
 		let vec = self.data.read();
 		let mut pos_guard = self.pos.lock();
@@ -60,11 +55,11 @@ impl ObjectInterface for RomFileInner {
 	}
 }
 
-impl RomFileInner {
-	pub unsafe fn new(addr: *const u8, len: usize) -> Self {
+impl RomFileInterface {
+	pub fn new(data: Arc<RwSpinLock<&'static [u8]>>) -> Self {
 		Self {
 			pos: SpinMutex::new(0),
-			data: Arc::new(RwSpinLock::new(unsafe { slice::from_raw_parts(addr, len) })),
+			data,
 		}
 	}
 
@@ -74,29 +69,24 @@ impl RomFileInner {
 	}
 }
 
-impl Clone for RomFileInner {
+impl Clone for RomFileInterface {
 	fn clone(&self) -> Self {
-		RomFileInner {
-			pos: SpinMutex::new(0),
+		Self {
+			pos: SpinMutex::new(*self.pos.lock()),
 			data: self.data.clone(),
 		}
 	}
 }
 
 #[derive(Debug)]
-pub struct RamFileInner {
+pub struct RamFileInterface {
 	/// Position within the file
 	pos: SpinMutex<usize>,
 	/// File content
 	data: Arc<RwSpinLock<Vec<u8>>>,
 }
 
-impl ObjectInterface for RamFileInner {
-	fn close(&self) {
-		trace!("close file");
-		*self.pos.lock() = 0;
-	}
-
+impl ObjectInterface for RamFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
 		let guard = self.data.read();
 		let vec = guard.deref();
@@ -136,11 +126,11 @@ impl ObjectInterface for RamFileInner {
 	}
 }
 
-impl RamFileInner {
-	pub fn new() -> Self {
+impl RamFileInterface {
+	pub fn new(data: Arc<RwSpinLock<Vec<u8>>>) -> Self {
 		Self {
 			pos: SpinMutex::new(0),
-			data: Arc::new(RwSpinLock::new(Vec::new())),
+			data,
 		}
 	}
 
@@ -151,17 +141,17 @@ impl RamFileInner {
 	}
 }
 
-impl Clone for RamFileInner {
+impl Clone for RamFileInterface {
 	fn clone(&self) -> Self {
-		RamFileInner {
-			pos: SpinMutex::new(0),
+		Self {
+			pos: SpinMutex::new(*self.pos.lock()),
 			data: self.data.clone(),
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RomFile(Arc<RomFileInner>);
+pub(crate) struct RomFile(Arc<RwSpinLock<&'static [u8]>>);
 
 impl VfsNode for RomFile {
 	fn get_kind(&self) -> NodeKind {
@@ -169,18 +159,20 @@ impl VfsNode for RomFile {
 	}
 
 	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		Ok(self.0.clone())
+		Ok(Arc::new(RomFileInterface::new(self.0.clone())))
 	}
 }
 
 impl RomFile {
 	pub unsafe fn new(ptr: *const u8, length: usize) -> Self {
-		Self(Arc::new(unsafe { RomFileInner::new(ptr, length) }))
+		Self(Arc::new(RwSpinLock::new(unsafe {
+			slice::from_raw_parts(ptr, length)
+		})))
 	}
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RamFile(Arc<RamFileInner>);
+pub(crate) struct RamFile(Arc<RwSpinLock<Vec<u8>>>);
 
 impl VfsNode for RamFile {
 	fn get_kind(&self) -> NodeKind {
@@ -188,41 +180,44 @@ impl VfsNode for RamFile {
 	}
 
 	fn get_object(&self) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		Ok(self.0.clone())
+		Ok(Arc::new(RamFileInterface::new(self.0.clone())))
 	}
 }
 
 impl RamFile {
 	pub fn new() -> Self {
-		Self(Arc::new(RamFileInner::new()))
+		Self(Arc::new(RwSpinLock::new(Vec::new())))
 	}
 }
 
 #[derive(Debug)]
-struct MemDirectoryInner(
-	pub  Arc<
+struct MemDirectoryInterface {
+	/// Position within the file
+	pos: AtomicUsize,
+	/// File content
+	data: Arc<
 		RwSpinLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
 	>,
-	AtomicUsize,
-);
+}
 
-impl MemDirectoryInner {
-	pub fn new() -> Self {
-		Self(
-			Arc::new(RwSpinLock::new(BTreeMap::new())),
-			AtomicUsize::new(0),
-		)
+impl MemDirectoryInterface {
+	pub fn new(
+		data: Arc<
+			RwSpinLock<
+				BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>,
+			>,
+		>,
+	) -> Self {
+		Self {
+			pos: AtomicUsize::new(0),
+			data,
+		}
 	}
 }
 
-impl ObjectInterface for MemDirectoryInner {
-	fn close(&self) {
-		trace!("close directory");
-		self.1.store(0, Ordering::SeqCst);
-	}
-
+impl ObjectInterface for MemDirectoryInterface {
 	fn readdir(&self) -> DirectoryEntry {
-		let pos = self.1.fetch_add(1, Ordering::SeqCst);
+		let pos = self.pos.fetch_add(1, Ordering::SeqCst);
 
 		if pos == 0 {
 			let name = ".";
@@ -269,7 +264,7 @@ impl ObjectInterface for MemDirectoryInner {
 
 			DirectoryEntry::Valid(raw)
 		} else {
-			let keys: Vec<_> = self.0.read().keys().cloned().collect();
+			let keys: Vec<_> = self.data.read().keys().cloned().collect();
 
 			if keys.len() > pos - 2 {
 				let name_len = keys[pos - 2].len();
@@ -299,24 +294,26 @@ impl ObjectInterface for MemDirectoryInner {
 	}
 }
 
-impl Clone for MemDirectoryInner {
+impl Clone for MemDirectoryInterface {
 	fn clone(&self) -> Self {
-		Self(
-			self.0.clone(),
-			AtomicUsize::new(self.1.load(Ordering::Relaxed)),
-		)
+		Self {
+			pos: AtomicUsize::new(self.pos.load(Ordering::SeqCst)),
+			data: self.data.clone(),
+		}
 	}
 }
 
 #[derive(Debug)]
 pub(crate) struct MemDirectory {
-	inner: Arc<MemDirectoryInner>,
+	inner: Arc<
+		RwSpinLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
+	>,
 }
 
 impl MemDirectory {
 	pub fn new() -> Self {
 		Self {
-			inner: Arc::new(MemDirectoryInner::new()),
+			inner: Arc::new(RwSpinLock::new(BTreeMap::new())),
 		}
 	}
 
@@ -324,10 +321,7 @@ impl MemDirectory {
 		let name = name.trim();
 		if name.find('/').is_none() {
 			let file = unsafe { RomFile::new(ptr, length) };
-			self.inner
-				.0
-				.write()
-				.insert(name.to_string(), Box::new(file));
+			self.inner.write().insert(name.to_string(), Box::new(file));
 			Ok(())
 		} else {
 			Err(IoError::EBADF)
@@ -348,13 +342,12 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_mkdir(components, mode);
 			}
 
 			if components.is_empty() {
 				self.inner
-					.0
 					.write()
 					.insert(node_name, Box::new(MemDirectory::new()));
 				return Ok(());
@@ -368,12 +361,12 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_rmdir(components);
 			}
 
 			if components.is_empty() {
-				let mut guard = self.inner.0.write();
+				let mut guard = self.inner.write();
 
 				let obj = guard.remove(&node_name).ok_or(IoError::ENOENT)?;
 				if obj.get_kind() == NodeKind::Directory {
@@ -392,12 +385,12 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_unlink(components);
 			}
 
 			if components.is_empty() {
-				let mut guard = self.inner.0.write();
+				let mut guard = self.inner.write();
 
 				let obj = guard.remove(&node_name).ok_or(IoError::ENOENT)?;
 				if obj.get_kind() == NodeKind::Directory {
@@ -419,13 +412,13 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				directory.traverse_opendir(components)
 			} else {
 				Err(IoError::EBADF)
 			}
 		} else {
-			Ok(self.inner.clone())
+			Ok(Arc::new(MemDirectoryInterface::new(self.inner.clone())))
 		}
 	}
 
@@ -433,7 +426,7 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				directory.traverse_lstat(components)
 			} else {
 				Err(IoError::EBADF)
@@ -447,7 +440,7 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				directory.traverse_stat(components)
 			} else {
 				Err(IoError::EBADF)
@@ -465,12 +458,12 @@ impl VfsNode for MemDirectory {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_mount(components, obj);
 			}
 
 			if components.is_empty() {
-				self.inner.0.write().insert(node_name, obj);
+				self.inner.write().insert(node_name, obj);
 				return Ok(());
 			}
 		}
@@ -488,14 +481,14 @@ impl VfsNode for MemDirectory {
 			let node_name = String::from(component);
 
 			if components.is_empty() {
-				let mut guard = self.inner.0.write();
+				let mut guard = self.inner.write();
 				if opt.contains(OpenOption::O_CREAT) || opt.contains(OpenOption::O_CREAT) {
 					if guard.get(&node_name).is_some() {
 						return Err(IoError::EEXIST);
 					} else {
 						let file = Box::new(RamFile::new());
 						guard.insert(node_name, file.clone());
-						return Ok(file.0.clone());
+						return Ok(Arc::new(RamFileInterface::new(file.0.clone())));
 					}
 				} else if let Some(file) = guard.get(&node_name) {
 					if file.get_kind() == NodeKind::File {
@@ -508,7 +501,7 @@ impl VfsNode for MemDirectory {
 				}
 			}
 
-			if let Some(directory) = self.inner.0.read().get(&node_name) {
+			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_open(components, opt, mode);
 			}
 		}
