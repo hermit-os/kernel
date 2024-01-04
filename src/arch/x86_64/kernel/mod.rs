@@ -71,7 +71,7 @@ pub fn get_start() -> usize {
 	boot_info().hardware_info.phys_addr_range.start as usize
 }
 
-pub fn is_uefi() -> Result<(), ()> {
+pub fn is_uefi() -> bool {
 	match boot_info().platform_info {
 		PlatformInfo::Uefi { .. } => true,
 		PlatformInfo::LinuxBootParams { .. } => false,
