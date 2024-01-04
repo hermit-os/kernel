@@ -246,13 +246,18 @@ pub fn local_apic_id_count() -> u32 {
 }
 
 fn init_ioapic_address(phys_addr: PhysAddr) {
-	let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-	IOAPIC_ADDRESS.set(ioapic_address).unwrap();
-	debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
+	if !crate::kernel::is_uefi() {
+		let ioapic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+		IOAPIC_ADDRESS.set(ioapic_address).unwrap();
+		debug!("Mapping IOAPIC at {phys_addr:p} to virtual address {ioapic_address:p}",);
 
-	let mut flags = PageTableEntryFlags::empty();
-	flags.device().writable().execute_disable();
-	paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
+		let mut flags = PageTableEntryFlags::empty();
+		flags.device().writable().execute_disable();
+		paging::map::<BasePageSize>(ioapic_address, phys_addr, 1, flags);
+	} else {
+		// UEFI systems have already id mapped everything, so we can just set the physical address as the virtual one
+		IOAPIC_ADDRESS.set(VirtAddr(phys_addr.as_u64())).unwrap();
+	}
 }
 
 #[cfg(not(feature = "acpi"))]
@@ -455,16 +460,23 @@ pub fn init() {
 	if !processor::supports_x2apic() {
 		// We use the traditional xAPIC mode available on all x86-64 CPUs.
 		// It uses a mapped page for communication.
-		let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
-		LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
-		debug!(
-			"Mapping Local APIC at {:p} to virtual address {:p}",
-			local_apic_physical_address, local_apic_address
-		);
+		if crate::kernel::is_uefi() {
+			//already id mapped in UEFI systems, just use the physical address as virtual one
+			LOCAL_APIC_ADDRESS
+				.set(VirtAddr(local_apic_physical_address.as_u64()))
+				.unwrap();
+		} else {
+			let local_apic_address = virtualmem::allocate(BasePageSize::SIZE as usize).unwrap();
+			LOCAL_APIC_ADDRESS.set(local_apic_address).unwrap();
+			debug!(
+				"Mapping Local APIC at {:p} to virtual address {:p}",
+				local_apic_physical_address, local_apic_address
+			);
 
-		let mut flags = PageTableEntryFlags::empty();
-		flags.device().writable().execute_disable();
-		paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
+			let mut flags = PageTableEntryFlags::empty();
+			flags.device().writable().execute_disable();
+			paging::map::<BasePageSize>(local_apic_address, local_apic_physical_address, 1, flags);
+		}
 	}
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.

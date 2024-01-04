@@ -431,10 +431,19 @@ fn parse_fadt(fadt: AcpiTable<'_>) {
 	} else {
 		// For UEFI Systems, the tables are already mapped so we only need to return a proper reference to the table
 		let table = unsafe { (dsdt_address.0 as *const AcpiSdtHeader).as_ref().unwrap() };
+		let mut length = table.length as u64;
+		let res = length % BasePageSize::SIZE;
+		//ACPI tables are 4KiB aligned, so the length can span the entire pagetable
+		//-> necessary since the tables are dropped (and virtual memory is deallocated) after use
+		//somehow, this table is larger than 4KiB, so we bumb it up to the entire page
+		if res != 0 {
+			length += 0x1000 - res;
+		}
+
 		AcpiTable {
 			header: table,
 			allocated_virtual_address: VirtAddr(dsdt_address.0),
-			allocated_length: table.length as usize,
+			allocated_length: length as usize,
 		}
 	};
 
@@ -610,10 +619,17 @@ pub fn init_uefi() {
 				verify_checksum(table.header_start_address(), table.length as usize).is_ok(),
 				"MADT at {table_physical_address:#x} has invalid checksum"
 			);
+			//ACPI tables are 4KiB aligned, so the length can span the entire pagetable
+			//-> necessary since the tables are dropped (and virtual memory is deallocated) after use
+			let mut length = table.length as u64;
+			if length < 0x1000 {
+				length = 0x1000;
+			}
+
 			let madt: AcpiTable<'static> = AcpiTable {
 				header: table,
 				allocated_virtual_address: VirtAddr(table_physical_address.0),
-				allocated_length: table.length as usize,
+				allocated_length: length as usize,
 			};
 			MADT.set(madt).unwrap();
 			trace!("setting MADT successful");
@@ -624,11 +640,20 @@ pub fn init_uefi() {
 				verify_checksum(table.header_start_address(), table.length as usize).is_ok(),
 				"FADT at {table_physical_address:#x} has invalid checksum"
 			);
+			//ACPI tables are 4KiB aligned, so the length can span the entire pagetable
+			//-> necessary since the tables are dropped (and virtual memory is deallocated) after use
+			let mut length = table.length as u64;
+			if length < 0x1000 {
+				length = 0x1000;
+			}
+			trace!("length of FACP: {length:x?}");
 			let fadt: AcpiTable<'static> = AcpiTable {
 				header: table,
 				allocated_virtual_address: VirtAddr(table_physical_address.0),
-				allocated_length: table.length as usize,
+				allocated_length: length as usize,
 			};
+
+			trace!("fadt: {fadt:#?}");
 			parse_fadt(fadt);
 		}
 	}
