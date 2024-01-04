@@ -17,7 +17,7 @@ use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::fd::{DirectoryEntry, IoError};
 use crate::fs::{
-	self, CreationMode, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
@@ -1529,7 +1529,7 @@ impl VfsNode for FuseDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		opt: OpenOption,
-		mode: CreationMode,
+		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		let path: String = if components.is_empty() {
 			"/".to_string()
@@ -1622,7 +1622,7 @@ impl VfsNode for FuseDirectory {
 	fn traverse_mkdir(
 		&self,
 		components: &mut Vec<&str>,
-		mode: CreationMode,
+		mode: AccessPermission,
 	) -> Result<(), IoError> {
 		let path: String = if components.is_empty() {
 			"/".to_string()

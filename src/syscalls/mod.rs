@@ -19,7 +19,7 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{
-	dup_object, get_object, remove_object, CreationMode, DirectoryEntry, FileDescriptor, IoCtl,
+	dup_object, get_object, remove_object, AccessPermission, DirectoryEntry, FileDescriptor, IoCtl,
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
@@ -119,7 +119,7 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 
 extern "C" fn __sys_mkdir(name: *const u8, mode: i32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-	let mode = if let Some(mode) = CreationMode::from_bits(mode) {
+	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
 		mode
 	} else {
 		return -crate::errno::EINVAL;

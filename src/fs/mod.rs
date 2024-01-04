@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{CreationMode, IoError, ObjectInterface, OpenOption};
+use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
 
 pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
@@ -37,7 +37,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
-		_mode: CreationMode,
+		_mode: AccessPermission,
 	) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
@@ -84,7 +84,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		&self,
 		_components: &mut Vec<&str>,
 		_option: OpenOption,
-		_mode: CreationMode,
+		_mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		Err(IoError::ENOSYS)
 	}
@@ -107,7 +107,7 @@ impl Filesystem {
 		&self,
 		path: &str,
 		opt: OpenOption,
-		mode: CreationMode,
+		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		debug!("Open file {} with {:?}", path, opt);
 		let mut components: Vec<&str> = path.split('/').collect();
@@ -141,7 +141,7 @@ impl Filesystem {
 	}
 
 	/// Create directory given by path
-	pub fn mkdir(&self, path: &str, mode: CreationMode) -> Result<(), IoError> {
+	pub fn mkdir(&self, path: &str, mode: AccessPermission) -> Result<(), IoError> {
 		debug!("Create directory {}", path);
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -265,17 +265,17 @@ pub(crate) fn init() {
 	FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir("/tmp", CreationMode::from_bits(0o777).unwrap())
+		.mkdir("/tmp", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
 	FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir("/etc", CreationMode::from_bits(0o777).unwrap())
+		.mkdir("/etc", AccessPermission::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
 	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
 		"/etc/hostname",
 		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		CreationMode::from_bits(0o666).unwrap(),
+		AccessPermission::from_bits(0o666).unwrap(),
 	) {
 		let _ret = fd.write(b"Hermit");
 		fd.close();
@@ -283,7 +283,7 @@ pub(crate) fn init() {
 	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
 		"/etc/version",
 		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		CreationMode::from_bits(0o666).unwrap(),
+		AccessPermission::from_bits(0o666).unwrap(),
 	) {
 		let _ret = fd.write(VERSION.as_bytes());
 		fd.close();

@@ -14,7 +14,7 @@ use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env::is_uhyve;
 use crate::fd::IoError;
 use crate::fs::{
-	self, CreationMode, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
 };
 
 /// forward a request to the hypervisor uhyve
@@ -263,7 +263,7 @@ impl VfsNode for UhyveDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		opt: OpenOption,
-		mode: CreationMode,
+		mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		let path: String = if components.is_empty() {
 			"/\0".to_string()
@@ -308,7 +308,7 @@ impl VfsNode for UhyveDirectory {
 	fn traverse_mkdir(
 		&self,
 		_components: &mut Vec<&str>,
-		_mode: CreationMode,
+		_mode: AccessPermission,
 	) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}

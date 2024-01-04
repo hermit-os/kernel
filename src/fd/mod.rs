@@ -82,7 +82,7 @@ bitflags! {
 
 bitflags! {
 	#[derive(Debug, Copy, Clone, Default)]
-	pub(crate) struct CreationMode: i32 {
+	pub(crate) struct AccessPermission: i32 {
 		const S_IRUSR = 0o400;
 		const S_IWUSR = 0o200;
 		const S_IXUSR = 0o100;
@@ -253,7 +253,7 @@ pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, 
 	if let Ok(file) = fs.open(
 		name,
 		OpenOption::from_bits(flags).ok_or(IoError::EINVAL)?,
-		CreationMode::from_bits(mode).ok_or(IoError::EINVAL)?,
+		AccessPermission::from_bits(mode).ok_or(IoError::EINVAL)?,
 	) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
