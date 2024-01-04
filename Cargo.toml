@@ -147,3 +147,6 @@ members = [
 exclude = [
 	"hermit-builtins",
 ]
+
+[patch.crates-io]
+hermit-entry = { git = "https://github.com/sarahspberrypi/hermit-entry.git" }

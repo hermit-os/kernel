@@ -373,6 +373,7 @@ impl CpuFrequency {
 		fn detect_from_uhyve() -> Result<u16, ()> {
 			match boot_info().platform_info {
 				PlatformInfo::Multiboot { .. } => Err(()),
+				PlatformInfo::Uefi { .. } => Err(()),
 				PlatformInfo::LinuxBootParams { .. } => Err(()),
 				PlatformInfo::Uhyve { cpu_freq, .. } => Ok(u16::try_from(
 					cpu_freq.map(NonZeroU32::get).unwrap_or_default() / 1000,
@@ -1016,7 +1017,7 @@ pub fn shutdown() -> ! {
 		Err(()) => {
 			match boot_info().platform_info {
 				PlatformInfo::LinuxBootParams { .. } => triple_fault(),
-				PlatformInfo::Multiboot { .. } => {
+				PlatformInfo::Multiboot { .. } | PlatformInfo::Uefi { .. } => {
 					// Try QEMU's debug exit
 					let exit_handler = qemu_exit::X86::new(0xf4, 3);
 					exit_handler.exit_success()

@@ -67,12 +67,33 @@ pub fn get_limit() -> usize {
 	boot_info().hardware_info.phys_addr_range.end as usize
 }
 
+pub fn get_start() -> usize {
+	boot_info().hardware_info.phys_addr_range.start as usize
+}
+
+pub fn is_uefi() -> Result<(), ()> {
+	match boot_info().platform_info {
+		PlatformInfo::Uefi { .. } => true,
+		PlatformInfo::LinuxBootParams { .. } => false,
+		PlatformInfo::Uhyve { .. } => false,
+		PlatformInfo::Multiboot { .. } => false,
+	}
+}
+
+pub fn get_rsdp_addr() -> u64 {
+	match boot_info().platform_info {
+		PlatformInfo::Uefi { rsdp_addr } => rsdp_addr,
+		_ => 0,
+	}
+}
+
 pub fn get_mbinfo() -> VirtAddr {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot {
 			multiboot_info_addr,
 			..
 		} => VirtAddr(multiboot_info_addr.get()),
+		PlatformInfo::Uefi { .. } => VirtAddr(0),
 		PlatformInfo::LinuxBootParams { .. } => VirtAddr(0),
 		PlatformInfo::Uhyve { .. } => VirtAddr(0),
 	}
@@ -83,6 +104,7 @@ pub fn get_possible_cpus() -> u32 {
 	use core::cmp;
 
 	match boot_info().platform_info {
+		PlatformInfo::Uefi { .. } => apic::local_apic_id_count(),
 		PlatformInfo::LinuxBootParams { .. } => apic::local_apic_id_count(),
 		PlatformInfo::Multiboot { .. } => apic::local_apic_id_count(),
 		// FIXME: Remove get_processor_count after a transition period for uhyve 0.1.3 adoption
@@ -106,6 +128,7 @@ pub fn get_processor_count() -> u32 {
 pub fn is_uhyve_with_pci() -> bool {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => false,
+		PlatformInfo::Uefi { .. } => false,
 		PlatformInfo::LinuxBootParams { .. } => false,
 		PlatformInfo::Uhyve { has_pci, .. } => has_pci,
 	}
@@ -115,7 +138,7 @@ pub fn args() -> Option<&'static str> {
 	match boot_info().platform_info {
 		PlatformInfo::Multiboot { command_line, .. } => command_line,
 		PlatformInfo::LinuxBootParams { command_line, .. } => command_line,
-		PlatformInfo::Uhyve { .. } => None,
+		PlatformInfo::Uhyve { .. } | PlatformInfo::Uefi { .. } => None,
 	}
 }
 
@@ -175,7 +198,11 @@ pub fn boot_processor_init() {
 	}
 	if !env::is_uhyve() {
 		#[cfg(feature = "acpi")]
-		acpi::init();
+		if is_uefi() {
+			acpi::init_uefi();
+		} else {
+			acpi::init();
+		}
 	}
 
 	apic::init();

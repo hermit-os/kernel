@@ -723,7 +723,6 @@ pub fn boot_application_processors() {
 			flags,
 		);
 	}
-
 	unsafe {
 		ptr::copy_nonoverlapping(
 			smp_boot_code.as_ptr(),
