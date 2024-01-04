@@ -11,7 +11,10 @@ use smoltcp::wire::{IpAddress, IpEndpoint, IpListenEndpoint};
 
 use crate::errno::*;
 use crate::executor::network::{NetworkState, NIC};
-use crate::fd::socket::{tcp, udp};
+#[cfg(feature = "tcp")]
+use crate::fd::socket::tcp;
+#[cfg(feature = "udp")]
+use crate::fd::socket::udp;
 use crate::fd::{get_object, insert_object, SocketOption, FD_COUNTER};
 use crate::syscalls::__sys_write;
 
