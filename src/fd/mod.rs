@@ -80,6 +80,24 @@ bitflags! {
 	}
 }
 
+bitflags! {
+	#[derive(Debug, Copy, Clone, Default)]
+	pub(crate) struct CreationMode: i32 {
+		const S_IRUSR = 0o400;
+		const S_IWUSR = 0o200;
+		const S_IXUSR = 0o100;
+		const S_IRWXU = 0o700;
+		const S_IRGRP = 0o040;
+		const S_IWGRP = 0o020;
+		const S_IXGRP = 0o010;
+		const S_IRWXG = 0o070;
+		const S_IROTH = 0o004;
+		const S_IWOTH = 0o002;
+		const S_IXOTH = 0o001;
+		const S_IRWXO = 0o007;
+	}
+}
+
 #[repr(C)]
 #[derive(Debug, Copy, Clone, Default)]
 pub struct Dirent {
@@ -234,7 +252,8 @@ pub(crate) fn open(name: &str, flags: i32, mode: i32) -> Result<FileDescriptor, 
 	let fs = fs::FILESYSTEM.get().unwrap();
 	if let Ok(file) = fs.open(
 		name,
-		OpenOption::from_bits(flags).expect("Invalid open flags"),
+		OpenOption::from_bits(flags).expect("Invalid flags"),
+		CreationMode::from_bits(mode).expect("Invalid mode"),
 	) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 		if OBJECT_MAP.write().try_insert(fd, file).is_err() {

@@ -18,7 +18,9 @@ pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
-use crate::fd::{dup_object, get_object, remove_object, DirectoryEntry, FileDescriptor, IoCtl};
+use crate::fd::{
+	dup_object, get_object, remove_object, CreationMode, DirectoryEntry, FileDescriptor, IoCtl,
+};
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
@@ -115,18 +117,18 @@ pub extern "C" fn sys_unlink(name: *const u8) -> i32 {
 	kernel_function!(__sys_unlink(name))
 }
 
-extern "C" fn __sys_mkdir(name: *const u8, mode: u32) -> i32 {
+extern "C" fn __sys_mkdir(name: *const u8, mode: i32) -> i32 {
 	let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
 
 	fs::FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir(name, mode)
+		.mkdir(name, CreationMode::from_bits(mode).unwrap())
 		.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 }
 
 #[no_mangle]
-pub extern "C" fn sys_mkdir(name: *const u8, mode: u32) -> i32 {
+pub extern "C" fn sys_mkdir(name: *const u8, mode: i32) -> i32 {
 	kernel_function!(__sys_mkdir(name, mode))
 }
 

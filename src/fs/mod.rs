@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{IoError, ObjectInterface, OpenOption};
+use crate::fd::{CreationMode, IoError, ObjectInterface, OpenOption};
 
 pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
@@ -34,7 +34,11 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 
 	/// Helper function to create a new dirctory node
-	fn traverse_mkdir(&self, _components: &mut Vec<&str>, _mode: u32) -> Result<(), IoError> {
+	fn traverse_mkdir(
+		&self,
+		_components: &mut Vec<&str>,
+		_mode: CreationMode,
+	) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -80,6 +84,7 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		&self,
 		_components: &mut Vec<&str>,
 		_option: OpenOption,
+		_mode: CreationMode,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		Err(IoError::ENOSYS)
 	}
@@ -98,14 +103,19 @@ impl Filesystem {
 	}
 
 	/// Tries to open file at given path.
-	pub fn open(&self, path: &str, opt: OpenOption) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	pub fn open(
+		&self,
+		path: &str,
+		opt: OpenOption,
+		mode: CreationMode,
+	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		debug!("Open file {} with {:?}", path, opt);
 		let mut components: Vec<&str> = path.split('/').collect();
 
 		components.reverse();
 		components.pop();
 
-		self.root.traverse_open(&mut components, opt)
+		self.root.traverse_open(&mut components, opt, mode)
 	}
 
 	/// Unlinks a file given by path
@@ -131,7 +141,7 @@ impl Filesystem {
 	}
 
 	/// Create directory given by path
-	pub fn mkdir(&self, path: &str, mode: u32) -> Result<(), IoError> {
+	pub fn mkdir(&self, path: &str, mode: CreationMode) -> Result<(), IoError> {
 		debug!("Create directory {}", path);
 		let mut components: Vec<&str> = path.split('/').collect();
 
@@ -249,12 +259,35 @@ pub enum SeekWhence {
 }
 
 pub(crate) fn init() {
+	const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 	FILESYSTEM.set(Filesystem::new()).unwrap();
 	FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir("/tmp", 777)
+		.mkdir("/tmp", CreationMode::from_bits(0o777).unwrap())
 		.expect("Unable to create /tmp");
+	FILESYSTEM
+		.get()
+		.unwrap()
+		.mkdir("/etc", CreationMode::from_bits(0o777).unwrap())
+		.expect("Unable to create /tmp");
+	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
+		"/etc/hostname",
+		OpenOption::O_CREAT | OpenOption::O_RDWR,
+		CreationMode::from_bits(0o666).unwrap(),
+	) {
+		let _ret = fd.write(b"Hermit");
+		fd.close();
+	}
+	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
+		"/etc/version",
+		OpenOption::O_CREAT | OpenOption::O_RDWR,
+		CreationMode::from_bits(0o666).unwrap(),
+	) {
+		let _ret = fd.write(VERSION.as_bytes());
+		fd.close();
+	}
 
 	#[cfg(all(feature = "fuse", feature = "pci"))]
 	fuse::init();

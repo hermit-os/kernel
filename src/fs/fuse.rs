@@ -16,7 +16,9 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::fd::{DirectoryEntry, IoError};
-use crate::fs::{self, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode};
+use crate::fs::{
+	self, CreationMode, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+};
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
 // op in/out sizes/layout: https://github.com/hanwen/go-fuse/blob/204b45dba899dfa147235c255908236d5fde2d32/fuse/opcode.go#L439
@@ -1527,6 +1529,7 @@ impl VfsNode for FuseDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		opt: OpenOption,
+		mode: CreationMode,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		let path: String = if components.is_empty() {
 			"/".to_string()
@@ -1534,7 +1537,7 @@ impl VfsNode for FuseDirectory {
 			components.iter().map(|v| "/".to_owned() + v).collect()
 		};
 
-		info!("FUSE open: {}, {:?}", path, opt);
+		info!("FUSE open: {}, {:?} {:?}", path, opt, mode);
 
 		let file = FuseFileHandle::new();
 
@@ -1562,7 +1565,11 @@ impl VfsNode for FuseDirectory {
 			file_guard.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) = create_create(&path, opt.bits().try_into().unwrap(), 0);
+			let (cmd, mut rsp) = create_create(
+				&path,
+				opt.bits().try_into().unwrap(),
+				mode.bits().try_into().unwrap(),
+			);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -1612,13 +1619,17 @@ impl VfsNode for FuseDirectory {
 		Ok(())
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: u32) -> Result<(), IoError> {
+	fn traverse_mkdir(
+		&self,
+		components: &mut Vec<&str>,
+		mode: CreationMode,
+	) -> Result<(), IoError> {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
 			components.iter().map(|v| "/".to_owned() + v).collect()
 		};
-		let (cmd, mut rsp) = create_mkdir(&path, mode);
+		let (cmd, mut rsp) = create_mkdir(&path, mode.bits().try_into().unwrap());
 
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?

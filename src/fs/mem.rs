@@ -21,7 +21,7 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::{RwSpinLock, SpinMutex};
 
-use crate::fd::{DirectoryEntry, Dirent, IoError, ObjectInterface, OpenOption};
+use crate::fd::{CreationMode, DirectoryEntry, Dirent, IoError, ObjectInterface, OpenOption};
 use crate::fs::{FileAttr, NodeKind, VfsNode};
 
 #[derive(Debug)]
@@ -340,7 +340,11 @@ impl VfsNode for MemDirectory {
 		NodeKind::Directory
 	}
 
-	fn traverse_mkdir(&self, components: &mut Vec<&str>, mode: u32) -> Result<(), IoError> {
+	fn traverse_mkdir(
+		&self,
+		components: &mut Vec<&str>,
+		mode: CreationMode,
+	) -> Result<(), IoError> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
@@ -478,6 +482,7 @@ impl VfsNode for MemDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		opt: OpenOption,
+		mode: CreationMode,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
@@ -504,7 +509,7 @@ impl VfsNode for MemDirectory {
 			}
 
 			if let Some(directory) = self.inner.0.read().get(&node_name) {
-				return directory.traverse_open(components, opt);
+				return directory.traverse_open(components, opt, mode);
 			}
 		}
 

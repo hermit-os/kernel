@@ -13,7 +13,9 @@ use x86::io::outl;
 use crate::arch::mm::{paging, PhysAddr, VirtAddr};
 use crate::env::is_uhyve;
 use crate::fd::IoError;
-use crate::fs::{self, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode};
+use crate::fs::{
+	self, CreationMode, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+};
 
 /// forward a request to the hypervisor uhyve
 #[inline]
@@ -168,7 +170,7 @@ impl UhyveFileHandleInner {
 		if sysread.ret >= 0 {
 			Ok(sysread.ret)
 		} else {
-			Err(num::FromPrimitive::from_isize(sysread.ret).unwrap())
+			Err(IoError::EIO)
 		}
 	}
 
@@ -261,20 +263,24 @@ impl VfsNode for UhyveDirectory {
 		&self,
 		components: &mut Vec<&str>,
 		opt: OpenOption,
+		mode: CreationMode,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		let path: String = if components.is_empty() {
 			"/\0".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			let mut path: String = components.iter().map(|v| "/".to_owned() + v).collect();
+			path.push('\0');
+			path.remove(0);
+			path
 		};
 
-		let mut sysopen = SysOpen::new(VirtAddr(path.as_ptr() as u64), opt.bits(), 0);
+		let mut sysopen = SysOpen::new(VirtAddr(path.as_ptr() as u64), opt.bits(), mode.bits());
 		uhyve_send(UHYVE_PORT_OPEN, &mut sysopen);
 
 		if sysopen.ret > 0 {
 			Ok(Arc::new(UhyveFileHandle::new(sysopen.ret)))
 		} else {
-			Err(num::FromPrimitive::from_i32(sysopen.ret).unwrap())
+			Err(IoError::EIO)
 		}
 	}
 
@@ -291,7 +297,7 @@ impl VfsNode for UhyveDirectory {
 		if sysunlink.ret == 0 {
 			Ok(())
 		} else {
-			Err(num::FromPrimitive::from_i32(sysunlink.ret).unwrap())
+			Err(IoError::EIO)
 		}
 	}
 
@@ -299,7 +305,11 @@ impl VfsNode for UhyveDirectory {
 		Err(IoError::ENOSYS)
 	}
 
-	fn traverse_mkdir(&self, _components: &mut Vec<&str>, _mode: u32) -> Result<(), IoError> {
+	fn traverse_mkdir(
+		&self,
+		_components: &mut Vec<&str>,
+		_mode: CreationMode,
+	) -> Result<(), IoError> {
 		Err(IoError::ENOSYS)
 	}
 }
