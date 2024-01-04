@@ -61,6 +61,7 @@ pub use x86_64::structures::paging::{
 	PageSize, Size1GiB as HugePageSize, Size2MiB as LargePageSize, Size4KiB as BasePageSize,
 };
 
+/// Returns a recursive page table mapping, its last entry is mapped to the table itself
 unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	let level_4_table_addr = 0xFFFF_FFFF_FFFF_F000;
 	let level_4_table_ptr = ptr::from_exposed_addr_mut(level_4_table_addr);
@@ -70,6 +71,7 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 	}
 }
 
+/// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
 unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
 	let level_4_table_ptr =
@@ -130,10 +132,9 @@ pub fn map<S>(
 	#[cfg(feature = "smp")]
 	let mut ipi_tlb_flush = false;
 
-	if crate::arch::x86_64::kernel::is_uefi().is_err() {
+	if !crate::arch::x86_64::kernel::is_uefi() {
 		for (page, frame) in pages.zip(frames) {
 			unsafe {
-				trace!("mapping pages to frames");
 				// TODO: Require explicit unmaps
 				if let Ok((_frame, flush)) = recursive_page_table().unmap(page) {
 					#[cfg(feature = "smp")]
@@ -152,7 +153,6 @@ pub fn map<S>(
 	} else {
 		for (page, frame) in pages.zip(frames) {
 			unsafe {
-				trace!("mapping page {page:#?} to frame {frame:#?}");
 				let mut pt = identity_mapped_page_table();
 				if let Ok((_frame, flush)) = pt.unmap(page) {
 					trace!("unmapped");
@@ -412,7 +412,6 @@ where
 		x86_64::PhysAddr::new(frame.start_address().as_u64() + 0x200000),
 	)
 	.unwrap();
-	trace!("forbidden start: {forbidden_start:?}, forbidden end: {forbidden_end:?}");
 	let forbidden_range: PhysFrameRange<BasePageSize> =
 		PhysFrame::range(forbidden_start, forbidden_end);
 	//Pagetable walk to get the correct data
@@ -432,7 +431,6 @@ where
 		physicalmem::allocate_outside_of(S::SIZE as usize, S::SIZE as usize, forbidden_range)
 			.unwrap();
 
-	trace!("pte_frame: {pte_frame:#?}");
 	let new_flags = PageTableEntryFlags::PRESENT | PageTableEntryFlags::WRITABLE;
 	let pte_ptr: *mut PageTable = x86_64::VirtAddr::new(pte_entry.addr().as_u64()).as_mut_ptr();
 	let pte = unsafe { &mut *pte_ptr };
@@ -443,10 +441,7 @@ where
 	}
 
 	pte_entry.set_frame(pte_frame, new_flags);
-	trace!("new pte_entry point: {pte_entry:?}");
-	trace!("successfully remapped");
 	tlb::flush_all(); // flush TLB to ensure all memory is valid and up-to-date
-	crate::arch::mm::physicalmem::print_information();
 	unsafe {
 		pt.identity_map(frame, flags, &mut physicalmem::FrameAlloc)
 			.unwrap()
