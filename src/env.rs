@@ -81,6 +81,10 @@ impl Default for Cli {
 					let gateway = expect_arg(words.next(), word.as_str());
 					env_vars.insert(String::from("HERMIT_GATEWAY"), gateway);
 				}
+				"-mount" => {
+					let gateway = expect_arg(words.next(), word.as_str());
+					env_vars.insert(String::from("UHYVE_MOUNT"), gateway);
+				}
 				"--" => args.extend(&mut words),
 				_ if image_path.is_none() => image_path = Some(word),
 				word => panic!(

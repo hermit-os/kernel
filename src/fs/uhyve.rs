@@ -317,12 +317,12 @@ impl VfsNode for UhyveDirectory {
 pub(crate) fn init() {
 	info!("Try to initialize uhyve filesystem");
 	if is_uhyve() {
-		let mount_point = "/host".to_string();
+		let mount_point = hermit_var_or!("UHYVE_MOUNT", "/host").to_string();
 		info!("Mounting virtio-fs at {}", mount_point);
 		fs::FILESYSTEM
 			.get()
 			.unwrap()
-			.mount(mount_point.as_str(), Box::new(UhyveDirectory::new()))
+			.mount(&mount_point, Box::new(UhyveDirectory::new()))
 			.expect("Mount failed. Duplicate mount_point?");
 	}
 }
