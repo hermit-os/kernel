@@ -6,13 +6,52 @@ mod uhyve;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::ffi::CStr;
+use core::fmt;
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
 
-use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
+use crate::fd::{
+	insert_object, AccessPermission, IoError, ObjectInterface, OpenOption, FD_COUNTER,
+};
+use crate::io::Write;
 
 pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
+
+pub const MAX_NAME_LENGTH: usize = 256;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DirectoryEntry {
+	pub d_name: [u8; MAX_NAME_LENGTH],
+}
+
+impl DirectoryEntry {
+	pub fn new(d_name: &[u8]) -> Self {
+		let len = core::cmp::min(d_name.len(), MAX_NAME_LENGTH);
+		let mut entry = Self {
+			d_name: [0; MAX_NAME_LENGTH],
+		};
+
+		entry.d_name[..len].copy_from_slice(&d_name[..len]);
+
+		entry
+	}
+}
+
+impl fmt::Debug for DirectoryEntry {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let d_name = unsafe { CStr::from_ptr(self.d_name.as_ptr() as _) }
+			.to_str()
+			.unwrap();
+
+		f.debug_struct("DirectoryEntry")
+			.field("d_name", &d_name)
+			.finish()
+	}
+}
 
 /// Type of the VNode
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -58,10 +97,10 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 
 	/// Helper function to open a directory
-	fn traverse_opendir(
+	fn traverse_readdir(
 		&self,
 		_components: &mut Vec<&str>,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	) -> Result<Vec<DirectoryEntry>, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -92,6 +131,41 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 		_mode: AccessPermission,
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		Err(IoError::ENOSYS)
+	}
+}
+
+#[derive(Debug)]
+struct DirectoryReader {
+	pos: AtomicUsize,
+	data: Vec<DirectoryEntry>,
+}
+
+impl DirectoryReader {
+	pub fn new(data: Vec<DirectoryEntry>) -> Self {
+		Self {
+			pos: AtomicUsize::new(0),
+			data,
+		}
+	}
+}
+
+impl ObjectInterface for DirectoryReader {
+	fn readdir(&self) -> Result<Option<DirectoryEntry>, IoError> {
+		let pos = self.pos.fetch_add(1, Ordering::SeqCst);
+		if pos < self.data.len() {
+			Ok(Some(self.data[pos]))
+		} else {
+			Ok(None)
+		}
+	}
+}
+
+impl Clone for DirectoryReader {
+	fn clone(&self) -> Self {
+		Self {
+			pos: AtomicUsize::new(self.pos.load(Ordering::SeqCst)),
+			data: self.data.clone(),
+		}
 	}
 }
 
@@ -156,18 +230,23 @@ impl Filesystem {
 		self.root.traverse_mkdir(&mut components, mode)
 	}
 
-	/// List given directory
 	pub fn opendir(&self, path: &str) -> Result<Arc<dyn ObjectInterface>, IoError> {
+		debug!("Open directory {}", path);
+		Ok(Arc::new(DirectoryReader::new(self.readdir(path)?)))
+	}
+
+	/// List given directory
+	pub fn readdir(&self, path: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 		if path.trim() == "/" {
 			let mut components: Vec<&str> = Vec::new();
-			self.root.traverse_opendir(&mut components)
+			self.root.traverse_readdir(&mut components)
 		} else {
 			let mut components: Vec<&str> = path.split('/').collect();
 
 			components.reverse();
 			components.pop();
 
-			self.root.traverse_opendir(&mut components)
+			self.root.traverse_readdir(&mut components)
 		}
 	}
 
@@ -266,6 +345,7 @@ pub enum SeekWhence {
 
 pub(crate) fn init() {
 	const VERSION: &str = env!("CARGO_PKG_VERSION");
+	const UTC_BUILT_TIME: &str = build_time::build_time_utc!();
 
 	FILESYSTEM.set(Filesystem::new()).unwrap();
 	FILESYSTEM
@@ -276,23 +356,15 @@ pub(crate) fn init() {
 	FILESYSTEM
 		.get()
 		.unwrap()
-		.mkdir("/etc", AccessPermission::from_bits(0o777).unwrap())
-		.expect("Unable to create /tmp");
-	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
-		"/etc/hostname",
-		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		AccessPermission::from_bits(0o644).unwrap(),
-	) {
-		let _ret = fd.write(b"Hermit");
-		fd.close();
-	}
-	if let Ok(fd) = FILESYSTEM.get().unwrap().open(
-		"/etc/version",
-		OpenOption::O_CREAT | OpenOption::O_RDWR,
-		AccessPermission::from_bits(0o644).unwrap(),
-	) {
-		let _ret = fd.write(VERSION.as_bytes());
-		fd.close();
+		.mkdir("/proc", AccessPermission::from_bits(0o777).unwrap())
+		.expect("Unable to create /proc");
+
+	if let Ok(mut file) = File::create("/proc/version") {
+		if write!(file, "HermitOS version {VERSION} # UTC {UTC_BUILT_TIME}").is_err() {
+			error!("Unable to write in /proc/version");
+		}
+	} else {
+		error!("Unable to create /proc/version");
 	}
 
 	#[cfg(all(feature = "fuse", feature = "pci"))]
@@ -300,12 +372,88 @@ pub(crate) fn init() {
 	uhyve::init();
 }
 
-pub unsafe fn create_file(name: &str, ptr: *const u8, length: usize, mode: AccessPermission) {
+pub unsafe fn create_file(
+	name: &str,
+	ptr: *const u8,
+	length: usize,
+	mode: AccessPermission,
+) -> Result<(), IoError> {
 	unsafe {
 		FILESYSTEM
 			.get()
-			.unwrap()
+			.ok_or(IoError::EINVAL)?
 			.create_file(name, ptr, length, mode)
-			.expect("Unable to create file from ROM")
+	}
+}
+
+/// Returns an vectri with all the entries within a directory.
+pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
+	debug!("Read directory {}", name);
+
+	FILESYSTEM.get().ok_or(IoError::EINVAL)?.readdir(name)
+}
+
+/// a
+pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
+	let obj = FILESYSTEM.get().unwrap().opendir(name)?;
+	let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+	let _ = insert_object(fd, obj);
+
+	Ok(fd)
+}
+
+use crate::fd::{self, FileDescriptor};
+
+pub fn file_attributes(path: &str) -> Result<FileAttr, IoError> {
+	FILESYSTEM.get().unwrap().lstat(path)
+}
+
+#[derive(Debug)]
+pub struct File(FileDescriptor);
+
+impl File {
+	/// Creates a new file in read-write mode; error if the file exists.
+	///
+	/// This function will create a file if it does not exist, or return
+	/// an error if it does. This way, if the call succeeds, the file
+	/// returned is guaranteed to be new.
+	pub fn create(path: &str) -> Result<Self, IoError> {
+		let fd = fd::open(
+			path,
+			OpenOption::O_CREAT | OpenOption::O_RDWR,
+			AccessPermission::from_bits(0o666).unwrap(),
+		)?;
+
+		Ok(File(fd))
+	}
+
+	/// Attempts to open a file in read-write mode.
+	pub fn open(path: &str) -> Result<Self, IoError> {
+		let fd = fd::open(
+			path,
+			OpenOption::O_RDWR,
+			AccessPermission::from_bits(0o666).unwrap(),
+		)?;
+
+		Ok(File(fd))
+	}
+}
+
+impl crate::io::Read for File {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
+		fd::read(self.0, buf)
+	}
+}
+
+impl crate::io::Write for File {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
+		fd::write(self.0, buf)
+	}
+}
+
+impl Drop for File {
+	fn drop(&mut self) {
+		fd::close(self.0);
 	}
 }

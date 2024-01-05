@@ -565,8 +565,10 @@ extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).read(slice)
-				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+			(*v).read(slice).map_or_else(
+				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				|v| v.try_into().unwrap(),
+			)
 		},
 	)
 }
@@ -592,8 +594,10 @@ extern "C" fn __sys_sendto(
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).sendto(slice, endpoint)
-				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+			(*v).sendto(slice, endpoint).map_or_else(
+				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				|v| v.try_into().unwrap(),
+			)
 		},
 	)
 }
@@ -639,7 +643,7 @@ extern "C" fn __sys_recvfrom(
 						}
 					}
 
-					len
+					len.try_into().unwrap()
 				},
 			)
 		},

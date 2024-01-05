@@ -15,9 +15,10 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
-use crate::fd::{DirectoryEntry, IoError};
+use crate::fd::IoError;
 use crate::fs::{
-	self, AccessPermission, FileAttr, NodeKind, ObjectInterface, OpenOption, SeekWhence, VfsNode,
+	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
+	SeekWhence, VfsNode,
 };
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
@@ -28,7 +29,7 @@ const FUSE_ROOT_ID: u64 = 1;
 const MAX_READ_LEN: usize = 1024 * 64;
 const MAX_WRITE_LEN: usize = 1024 * 64;
 
-const U64_SIZE: u32 = ::core::mem::size_of::<u64>() as u32;
+const U64_SIZE: usize = ::core::mem::size_of::<u64>();
 
 const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
@@ -1151,7 +1152,7 @@ impl FuseFileHandleInner {
 		}
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
 		debug!("FUSE read!");
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
@@ -1181,14 +1182,14 @@ impl FuseFileHandleInner {
 				MaybeUninit::slice_assume_init_ref(&rsp.extra_buffer[..len])
 			});
 
-			Ok(len.try_into().unwrap())
+			Ok(len)
 		} else {
 			debug!("File not open, cannot read!");
 			Err(IoError::ENOENT)
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
 		debug!("FUSE write!");
 		let mut len = buf.len();
 		if len > MAX_WRITE_LEN {
@@ -1217,7 +1218,7 @@ impl FuseFileHandleInner {
 				rsp_size.try_into().unwrap()
 			};
 			self.offset += len;
-			Ok(len.try_into().unwrap())
+			Ok(len)
 		} else {
 			warn!("File not open, cannot read!");
 			Err(IoError::ENOENT)
@@ -1269,11 +1270,11 @@ impl FuseFileHandle {
 }
 
 impl ObjectInterface for FuseFileHandle {
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		self.0.lock().read(buf)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		self.0.lock().write(buf)
 	}
 
@@ -1286,136 +1287,6 @@ impl Clone for FuseFileHandle {
 	fn clone(&self) -> Self {
 		warn!("FuseFileHandle: clone not tested");
 		Self(self.0.clone())
-	}
-}
-
-#[derive(Debug)]
-struct FuseDirectoryHandleInner {
-	fuse_nid: Option<u64>,
-	fuse_fh: Option<u64>,
-	offset: u64,
-	buffer_offset: u32,
-	response: Option<Box<Rsp<fuse_read_out>>>,
-}
-
-impl FuseDirectoryHandleInner {
-	pub fn new() -> Self {
-		Self {
-			fuse_nid: None,
-			fuse_fh: None,
-			offset: 0,
-			buffer_offset: 0,
-			response: None,
-		}
-	}
-
-	fn readdir(&mut self) -> DirectoryEntry {
-		// Check if we have to read the directory via FUSE or still have a direntry in the last respnse
-		let resp: &_ = match &mut self.response {
-			Some(resp)
-				if resp.header.len - self.buffer_offset
-					> core::mem::size_of::<fuse_dirent>().try_into().unwrap() =>
-			{
-				resp
-			}
-			option => {
-				debug!("FUSE read from dirfile");
-				// Linux seems to allocate a single page to store the dirfile
-				let len = MAX_READ_LEN as u32;
-
-				let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) else {
-					warn!("FUSE dir not open, cannot read!");
-					return DirectoryEntry::Invalid(-crate::errno::EBADF);
-				};
-
-				let (mut cmd, mut rsp) = create_read(nid, fh, len, self.offset);
-				cmd.header.opcode = Opcode::FUSE_READDIR as u32;
-				if let Some(fs_driver) = get_filesystem_driver() {
-					fs_driver.lock().send_command(cmd.as_ref(), rsp.as_mut());
-				} else {
-					return DirectoryEntry::Invalid(-crate::errno::ENOSYS);
-				}
-
-				let len: usize = if rsp.header.len as usize
-					- ::core::mem::size_of::<fuse_out_header>()
-					- ::core::mem::size_of::<fuse_read_out>()
-					>= len.try_into().unwrap()
-				{
-					len.try_into().unwrap()
-				} else {
-					rsp.header.len as usize
-						- ::core::mem::size_of::<fuse_out_header>()
-						- ::core::mem::size_of::<fuse_read_out>()
-				};
-
-				if len <= core::mem::size_of::<fuse_dirent>() {
-					debug!("FUSE no new dirs");
-					return DirectoryEntry::Valid(core::ptr::null());
-				}
-
-				// Keep smart pointer to response
-				let rsp = option.insert(rsp);
-				self.buffer_offset = 0;
-
-				debug!("FUSE new buffer len: {}", len);
-				rsp
-			}
-		};
-
-		let return_ptr: *const u8 = unsafe {
-			resp.extra_buffer
-				.as_ptr()
-				.byte_add(self.buffer_offset.try_into().unwrap()) as _
-		};
-
-		let dirent = unsafe { &*(return_ptr as *const fuse_dirent) };
-
-		self.offset = dirent.d_off;
-
-		self.buffer_offset += core::mem::size_of::<fuse_dirent>() as u32 + dirent.d_namelen;
-
-		// Allign to dirent struct
-		self.buffer_offset = ((self.buffer_offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
-
-		// Check alignment
-		assert!(return_ptr.is_aligned_to(U64_SIZE.try_into().unwrap()));
-
-		DirectoryEntry::Valid(return_ptr.cast())
-	}
-}
-
-impl Drop for FuseDirectoryHandleInner {
-	fn drop(&mut self) {
-		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (mut cmd, mut rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
-			cmd.header.opcode = Opcode::FUSE_RELEASEDIR as u32;
-			get_filesystem_driver()
-				.unwrap()
-				.lock()
-				.send_command(cmd.as_ref(), rsp.as_mut());
-		}
-	}
-}
-
-#[derive(Debug)]
-struct FuseDirectoryHandle(pub Arc<SpinMutex<FuseDirectoryHandleInner>>);
-
-impl Clone for FuseDirectoryHandle {
-	fn clone(&self) -> Self {
-		warn!("FuseDirectoryHandle: clone not tested");
-		Self(self.0.clone())
-	}
-}
-
-impl FuseDirectoryHandle {
-	pub fn new() -> Self {
-		Self(Arc::new(SpinMutex::new(FuseDirectoryHandleInner::new())))
-	}
-}
-
-impl ObjectInterface for FuseDirectoryHandle {
-	fn readdir(&self) -> DirectoryEntry {
-		self.0.lock().readdir()
 	}
 }
 
@@ -1434,10 +1305,7 @@ impl VfsNode for FuseDirectory {
 		NodeKind::Directory
 	}
 
-	fn traverse_opendir(
-		&self,
-		components: &mut Vec<&str>,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
@@ -1446,31 +1314,74 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE opendir: {}", path);
 
-		let readdir = FuseDirectoryHandle::new();
-
-		// Lookup nodeid
-
-		let mut readdir_guard = readdir.0.lock();
-		readdir_guard.fuse_nid = lookup(&path);
-
-		if readdir_guard.fuse_nid.is_none() {
-			warn!("Fuse lookup seems to have failed!");
-			return Err(IoError::ENOENT);
-		}
+		let fuse_nid = lookup(&path).ok_or(IoError::ENOENT)?;
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = create_open(readdir_guard.fuse_nid.unwrap(), 0x10000);
+		let (mut cmd, mut rsp) = create_open(fuse_nid, 0x10000);
 		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
-		readdir_guard.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
+		let fuse_fh = unsafe { rsp.rsp.assume_init().fh };
 
-		drop(readdir_guard);
+		debug!("FUSE readdir: {}", path);
 
-		Ok(Arc::new(readdir))
+		// Linux seems to allocate a single page to store the dirfile
+		let len = MAX_READ_LEN as u32;
+		let mut offset: usize = 0;
+
+		// read content of the directory
+		let (mut cmd, mut rsp) = create_read(fuse_nid, fuse_fh, len, 0);
+		cmd.header.opcode = Opcode::FUSE_READDIR as u32;
+		get_filesystem_driver()
+			.ok_or(IoError::ENOSYS)?
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+
+		let len: usize = if rsp.header.len as usize
+			- ::core::mem::size_of::<fuse_out_header>()
+			- ::core::mem::size_of::<fuse_read_out>()
+			>= len.try_into().unwrap()
+		{
+			len.try_into().unwrap()
+		} else {
+			rsp.header.len as usize
+				- ::core::mem::size_of::<fuse_out_header>()
+				- ::core::mem::size_of::<fuse_read_out>()
+		};
+
+		if len <= core::mem::size_of::<fuse_dirent>() {
+			debug!("FUSE no new dirs");
+			return Err(IoError::ENOENT);
+		}
+
+		let mut entries: Vec<DirectoryEntry> = Vec::new();
+		while rsp.header.len as usize - offset > core::mem::size_of::<fuse_dirent>() {
+			let dirent =
+				unsafe { &*(rsp.extra_buffer.as_ptr().byte_add(offset) as *const fuse_dirent) };
+
+			offset += core::mem::size_of::<fuse_dirent>() + dirent.d_namelen as usize;
+			// Allign to dirent struct
+			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
+
+			let name: &'static [u8] = unsafe {
+				core::slice::from_raw_parts(
+					dirent.d_name.as_ptr(),
+					dirent.d_namelen.try_into().unwrap(),
+				)
+			};
+			entries.push(DirectoryEntry::new(name));
+		}
+
+		let (cmd, mut rsp) = create_release(fuse_nid, fuse_fh);
+		get_filesystem_driver()
+			.unwrap()
+			.lock()
+			.send_command(cmd.as_ref(), rsp.as_mut());
+
+		Ok(entries)
 	}
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {

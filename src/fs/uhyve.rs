@@ -163,22 +163,22 @@ impl UhyveFileHandleInner {
 		Self(fd)
 	}
 
-	fn read(&mut self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
 		let mut sysread = SysRead::new(self.0, buf.as_mut_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_READ, &mut sysread);
 
 		if sysread.ret >= 0 {
-			Ok(sysread.ret)
+			Ok(sysread.ret.try_into().unwrap())
 		} else {
 			Err(IoError::EIO)
 		}
 	}
 
-	fn write(&mut self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(self.0, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
-		Ok(syswrite.len.try_into().unwrap())
+		Ok(syswrite.len)
 	}
 
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
@@ -210,11 +210,11 @@ impl UhyveFileHandle {
 }
 
 impl ObjectInterface for UhyveFileHandle {
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		self.0.lock().read(buf)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		self.0.lock().write(buf)
 	}
 
@@ -242,13 +242,6 @@ impl VfsNode for UhyveDirectory {
 	/// Returns the node type
 	fn get_kind(&self) -> NodeKind {
 		NodeKind::Directory
-	}
-
-	fn traverse_opendir(
-		&self,
-		_omponents: &mut Vec<&str>,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
-		Err(IoError::ENOSYS)
 	}
 
 	fn traverse_stat(&self, _components: &mut Vec<&str>) -> Result<FileAttr, IoError> {

@@ -9,7 +9,6 @@
 
 #![allow(dead_code)]
 
-use alloc::alloc::{alloc_zeroed, Layout};
 use alloc::boxed::Box;
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
@@ -17,12 +16,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ops::{Deref, DerefMut};
 use core::slice;
-use core::sync::atomic::{AtomicUsize, Ordering};
 
 use hermit_sync::{RwSpinLock, SpinMutex};
 
-use crate::fd::{AccessPermission, DirectoryEntry, Dirent, IoError, ObjectInterface, OpenOption};
-use crate::fs::{FileAttr, NodeKind, VfsNode};
+use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
+use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
 
 #[derive(Debug)]
 struct RomFileInterface {
@@ -33,7 +31,7 @@ struct RomFileInterface {
 }
 
 impl ObjectInterface for RomFileInterface {
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		let vec = self.data.read();
 		let mut pos_guard = self.pos.lock();
 		let pos = *pos_guard;
@@ -51,7 +49,7 @@ impl ObjectInterface for RomFileInterface {
 		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
-		Ok(len.try_into().unwrap())
+		Ok(len)
 	}
 }
 
@@ -87,7 +85,7 @@ pub struct RamFileInterface {
 }
 
 impl ObjectInterface for RamFileInterface {
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		let guard = self.data.read();
 		let vec = guard.deref();
 		let mut pos_guard = self.pos.lock();
@@ -106,10 +104,10 @@ impl ObjectInterface for RamFileInterface {
 		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
 		*pos_guard = pos + len;
 
-		Ok(len.try_into().unwrap())
+		Ok(len)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut guard = self.data.write();
 		let vec = guard.deref_mut();
 		let mut pos_guard = self.pos.lock();
@@ -122,7 +120,7 @@ impl ObjectInterface for RamFileInterface {
 		vec[pos..pos + buf.len()].clone_from_slice(buf);
 		*pos_guard = pos + buf.len();
 
-		Ok(buf.len().try_into().unwrap())
+		Ok(buf.len())
 	}
 }
 
@@ -249,119 +247,6 @@ impl RamFile {
 }
 
 #[derive(Debug)]
-struct MemDirectoryInterface {
-	/// Position within the file
-	pos: AtomicUsize,
-	/// File content
-	data: Arc<
-		RwSpinLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
-	>,
-}
-
-impl MemDirectoryInterface {
-	pub fn new(
-		data: Arc<
-			RwSpinLock<
-				BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>,
-			>,
-		>,
-	) -> Self {
-		Self {
-			pos: AtomicUsize::new(0),
-			data,
-		}
-	}
-}
-
-impl ObjectInterface for MemDirectoryInterface {
-	fn readdir(&self) -> DirectoryEntry {
-		let pos = self.pos.fetch_add(1, Ordering::SeqCst);
-
-		if pos == 0 {
-			let name = ".";
-			let name_len = name.len();
-
-			let len = core::mem::size_of::<Dirent>() + name_len + 1;
-			let layout = Layout::from_size_align(len, core::mem::align_of::<Dirent>())
-				.unwrap()
-				.pad_to_align();
-
-			let raw = unsafe {
-				let raw = alloc_zeroed(layout) as *mut Dirent;
-				(*raw).d_namelen = name_len.try_into().unwrap();
-				core::ptr::copy_nonoverlapping(
-					name.as_ptr(),
-					&mut (*raw).d_name as *mut u8,
-					name_len,
-				);
-
-				raw
-			};
-
-			DirectoryEntry::Valid(raw)
-		} else if pos == 1 {
-			let name = "..";
-			let name_len = name.len();
-
-			let len = core::mem::size_of::<Dirent>() + name_len + 1;
-			let layout = Layout::from_size_align(len, core::mem::align_of::<Dirent>())
-				.unwrap()
-				.pad_to_align();
-
-			let raw = unsafe {
-				let raw = alloc_zeroed(layout) as *mut Dirent;
-				(*raw).d_namelen = name_len.try_into().unwrap();
-				core::ptr::copy_nonoverlapping(
-					name.as_ptr(),
-					&mut (*raw).d_name as *mut u8,
-					name_len,
-				);
-
-				raw
-			};
-
-			DirectoryEntry::Valid(raw)
-		} else {
-			let keys: Vec<_> = self.data.read().keys().cloned().collect();
-
-			if keys.len() > pos - 2 {
-				let name_len = keys[pos - 2].len();
-
-				let len = core::mem::size_of::<Dirent>() + name_len + 1;
-				let layout = Layout::from_size_align(len, core::mem::align_of::<Dirent>())
-					.unwrap()
-					.pad_to_align();
-
-				let raw = unsafe {
-					let raw = alloc_zeroed(layout) as *mut Dirent;
-					(*raw).d_namelen = name_len.try_into().unwrap();
-					core::ptr::copy_nonoverlapping(
-						keys[pos - 2].as_ptr(),
-						&mut (*raw).d_name as *mut u8,
-						name_len,
-					);
-
-					raw
-				};
-
-				DirectoryEntry::Valid(raw)
-			} else {
-				DirectoryEntry::Valid(core::ptr::null())
-			}
-		}
-	}
-}
-
-impl Clone for MemDirectoryInterface {
-	fn clone(&self) -> Self {
-		Self {
-			pos: AtomicUsize::new(self.pos.load(Ordering::SeqCst)),
-			data: self.data.clone(),
-		}
-	}
-}
-
-#[derive(Debug)]
 pub(crate) struct MemDirectory {
 	inner: Arc<
 		RwSpinLock<BTreeMap<String, Box<dyn VfsNode + core::marker::Send + core::marker::Sync>>>,
@@ -478,20 +363,22 @@ impl VfsNode for MemDirectory {
 		Err(IoError::EBADF)
 	}
 
-	fn traverse_opendir(
-		&self,
-		components: &mut Vec<&str>,
-	) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	fn traverse_readdir(&self, components: &mut Vec<&str>) -> Result<Vec<DirectoryEntry>, IoError> {
 		if let Some(component) = components.pop() {
 			let node_name = String::from(component);
 
 			if let Some(directory) = self.inner.read().get(&node_name) {
-				directory.traverse_opendir(components)
+				directory.traverse_readdir(components)
 			} else {
 				Err(IoError::EBADF)
 			}
 		} else {
-			Ok(Arc::new(MemDirectoryInterface::new(self.inner.clone())))
+			let mut entries: Vec<DirectoryEntry> = Vec::new();
+			for name in self.inner.read().keys() {
+				entries.push(DirectoryEntry::new(name.as_bytes()));
+			}
+
+			Ok(entries)
 		}
 	}
 

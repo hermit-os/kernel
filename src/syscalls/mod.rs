@@ -19,9 +19,9 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{
-	dup_object, get_object, remove_object, AccessPermission, DirectoryEntry, FileDescriptor, IoCtl,
+	dup_object, get_object, remove_object, AccessPermission, FileDescriptor, IoCtl, OpenOption,
 };
-use crate::fs::{self, FileAttr};
+use crate::fs::{self, DirectoryEntry, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -47,7 +47,7 @@ mod timer;
 const LWIP_FD_BIT: i32 = 1 << 30;
 
 #[cfg(feature = "newlib")]
-pub static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
+pub(crate) static LWIP_LOCK: InterruptTicketMutex<()> = InterruptTicketMutex::new(());
 
 pub(crate) static SYS: Lazy<&'static dyn SyscallInterface> = Lazy::new(|| {
 	if env::is_uhyve() {
@@ -205,7 +205,7 @@ pub extern "C" fn sys_fstat(fd: FileDescriptor, stat: *mut FileAttr) -> i32 {
 
 extern "C" fn __sys_opendir(name: *const u8) -> FileDescriptor {
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
-		crate::fd::opendir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+		crate::fs::opendir(name).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
 	} else {
 		-crate::errno::EINVAL
 	}
@@ -217,6 +217,17 @@ pub extern "C" fn sys_opendir(name: *const u8) -> FileDescriptor {
 }
 
 extern "C" fn __sys_open(name: *const u8, flags: i32, mode: u32) -> FileDescriptor {
+	let flags = if let Some(flags) = OpenOption::from_bits(flags) {
+		flags
+	} else {
+		return -crate::errno::EINVAL;
+	};
+	let mode = if let Some(mode) = AccessPermission::from_bits(mode) {
+		mode
+	} else {
+		return -crate::errno::EINVAL;
+	};
+
 	if let Ok(name) = unsafe { CStr::from_ptr(name as _) }.to_str() {
 		crate::fd::open(name, flags, mode)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
@@ -252,8 +263,10 @@ extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize 
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).read(slice)
-				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+			(*v).read(slice).map_or_else(
+				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				|v| v.try_into().unwrap(),
+			)
 		},
 	)
 }
@@ -269,8 +282,10 @@ extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isi
 	obj.map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
 		|v| {
-			(*v).write(slice)
-				.map_or_else(|e| -num::ToPrimitive::to_isize(&e).unwrap(), |v| v)
+			(*v).write(slice).map_or_else(
+				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
+				|v| v.try_into().unwrap(),
+			)
 		},
 	)
 }
@@ -320,16 +335,45 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
-extern "C" fn __sys_readdir(fd: FileDescriptor) -> DirectoryEntry {
+extern "C" fn __sys_readdir(
+	fd: FileDescriptor,
+	dirent: *mut DirectoryEntry,
+	dirent_len: *mut usize,
+) -> i32 {
+	if dirent.is_null() || dirent_len.is_null() {
+		return -crate::errno::EINVAL;
+	}
+
+	let dirent = unsafe { &mut *dirent };
+	let dirent_len = unsafe { &mut *dirent_len };
 	let obj = get_object(fd);
-	obj.map_or(DirectoryEntry::Invalid(-crate::errno::EINVAL), |v| {
-		(*v).readdir()
-	})
+	obj.map_or_else(
+		|_| -crate::errno::EINVAL,
+		|v| {
+			(*v).readdir().map_or_else(
+				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+				|v| {
+					if let Some(v) = v {
+						*dirent = v;
+						*dirent_len = core::mem::size_of::<DirectoryEntry>();
+					} else {
+						*dirent_len = 0;
+					}
+
+					0
+				},
+			)
+		},
+	)
 }
 
 #[no_mangle]
-pub extern "C" fn sys_readdir(fd: FileDescriptor) -> DirectoryEntry {
-	kernel_function!(__sys_readdir(fd))
+pub extern "C" fn sys_readdir(
+	fd: FileDescriptor,
+	dirent: *mut DirectoryEntry,
+	dirent_len: *mut usize,
+) -> i32 {
+	kernel_function!(__sys_readdir(fd, dirent, dirent_len))
 }
 
 extern "C" fn __sys_dup(fd: i32) -> i32 {

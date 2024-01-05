@@ -8,9 +8,8 @@ use hashbrown::HashMap;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::env;
-use crate::errno::*;
 use crate::fd::stdio::*;
-use crate::fs::{self, FileAttr, SeekWhence};
+use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
 
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) mod socket;
@@ -23,7 +22,7 @@ const STDERR_FILENO: FileDescriptor = 2;
 // TODO: Integrate with src/errno.rs ?
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, PartialEq, FromPrimitive, ToPrimitive)]
-pub(crate) enum IoError {
+pub enum IoError {
 	ENOENT = crate::errno::ENOENT as isize,
 	ENOSYS = crate::errno::ENOSYS as isize,
 	EIO = crate::errno::EIO as isize,
@@ -104,33 +103,16 @@ impl Default for AccessPermission {
 	}
 }
 
-#[repr(C)]
-#[derive(Debug, Copy, Clone, Default)]
-pub struct Dirent {
-	pub d_ino: u64,
-	pub d_off: u64,
-	pub d_namelen: u32,
-	pub d_type: u32,
-	pub d_name: [u8; 0],
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub enum DirectoryEntry {
-	Invalid(i32),
-	Valid(*const Dirent),
-}
-
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	fn read(&self, _buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
 	/// `write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	fn write(&self, _buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, _buf: &[u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -157,8 +139,8 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> DirectoryEntry {
-		DirectoryEntry::Invalid(-ENOSYS)
+	fn readdir(&self) -> Result<Option<DirectoryEntry>, IoError> {
+		Err(IoError::EINVAL)
 	}
 
 	/// `mkdir` creates a directory entry
@@ -216,7 +198,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 
 	/// receive a message from a socket
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(isize, IpEndpoint), IoError> {
+	fn recvfrom(&self, _buffer: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -228,7 +210,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// be sent to the address specified by dest_addr (overriding the pre-specified peer
 	/// address).
 	#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
-	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<isize, IoError> {
+	fn sendto(&self, _buffer: &[u8], _endpoint: IpEndpoint) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
@@ -248,19 +230,19 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	fn close(&self) {}
 }
 
-pub(crate) fn open(name: &str, flags: i32, mode: u32) -> Result<FileDescriptor, IoError> {
+pub(crate) fn open(
+	name: &str,
+	flags: OpenOption,
+	mode: AccessPermission,
+) -> Result<FileDescriptor, IoError> {
 	// mode is 0x777 (0b0111_0111_0111), when flags | O_CREAT, else 0
 	// flags is bitmask of O_DEC_* defined above.
 	// (taken from rust stdlib/sys hermit target )
 
-	debug!("Open {}, {}, {}", name, flags, mode);
+	debug!("Open {}, {:?}, {:?}", name, flags, mode);
 
 	let fs = fs::FILESYSTEM.get().unwrap();
-	if let Ok(file) = fs.open(
-		name,
-		OpenOption::from_bits(flags).ok_or(IoError::EINVAL)?,
-		AccessPermission::from_bits(mode).ok_or(IoError::EINVAL)?,
-	) {
+	if let Ok(file) = fs.open(name, flags, mode) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
 			Err(IoError::EINVAL)
@@ -272,28 +254,22 @@ pub(crate) fn open(name: &str, flags: i32, mode: u32) -> Result<FileDescriptor, 
 	}
 }
 
-pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
-	debug!("Open directory {}", name);
+pub(crate) fn close(fd: FileDescriptor) {
+	let _ = remove_object(fd).map(|v| v.close());
+}
 
-	let fs = fs::FILESYSTEM.get().unwrap();
-	if let Ok(obj) = fs.opendir(name) {
-		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-		// Would a GenericDir make sense?
-		if OBJECT_MAP.write().try_insert(fd, obj).is_err() {
-			Err(IoError::EINVAL)
-		} else {
-			Ok(fd as FileDescriptor)
-		}
-	} else {
-		Err(IoError::EINVAL)
-	}
+pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError> {
+	get_object(fd)?.read(buf)
+}
+
+pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
+	get_object(fd)?.write(buf)
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
 	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(IoError::EINVAL)?)).clone())
 }
 
-#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,

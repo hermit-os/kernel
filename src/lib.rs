@@ -86,10 +86,11 @@ pub mod errno;
 mod executor;
 pub mod fd;
 pub mod fs;
+pub mod io;
 mod mm;
 mod scheduler;
 mod synch;
-mod syscalls;
+pub mod syscalls;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();

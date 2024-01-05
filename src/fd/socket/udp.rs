@@ -53,7 +53,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, IoError> {
+	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -62,14 +62,14 @@ impl Socket {
 							Ok((len, meta)) => match self.endpoint.load() {
 								Some(ep) => {
 									if meta.endpoint == ep {
-										Poll::Ready(Ok(len.try_into().unwrap()))
+										Poll::Ready(Ok(len))
 									} else {
 										buffer[..len].iter_mut().for_each(|x| *x = 0);
 										socket.register_recv_waker(cx.waker());
 										Poll::Pending
 									}
 								}
-								None => Poll::Ready(Ok(len.try_into().unwrap())),
+								None => Poll::Ready(Ok(len)),
 							},
 							_ => Poll::Ready(Err(IoError::EIO)),
 						}
@@ -85,7 +85,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_recvfrom(&self, buffer: &mut [u8]) -> Result<(isize, IpEndpoint), IoError> {
+	async fn async_recvfrom(&self, buffer: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -94,14 +94,14 @@ impl Socket {
 							Ok((len, meta)) => match self.endpoint.load() {
 								Some(ep) => {
 									if meta.endpoint == ep {
-										Poll::Ready(Ok((len.try_into().unwrap(), meta.endpoint)))
+										Poll::Ready(Ok((len, meta.endpoint)))
 									} else {
 										buffer[..len].iter_mut().for_each(|x| *x = 0);
 										socket.register_recv_waker(cx.waker());
 										Poll::Pending
 									}
 								}
-								None => Poll::Ready(Ok((len.try_into().unwrap(), meta.endpoint))),
+								None => Poll::Ready(Ok((len, meta.endpoint))),
 							},
 							_ => Poll::Ready(Err(IoError::EIO)),
 						}
@@ -117,7 +117,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8], meta: &UdpMetadata) -> Result<isize, IoError> {
+	async fn async_write(&self, buffer: &[u8], meta: &UdpMetadata) -> Result<usize, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -125,7 +125,7 @@ impl Socket {
 						Poll::Ready(
 							socket
 								.send_slice(buffer, *meta)
-								.map(|_| buffer.len() as isize)
+								.map(|_| buffer.len())
 								.map_err(|_| IoError::EIO),
 						)
 					} else {
@@ -151,7 +151,7 @@ impl ObjectInterface for Socket {
 		Ok(())
 	}
 
-	fn sendto(&self, buf: &[u8], endpoint: IpEndpoint) -> Result<isize, IoError> {
+	fn sendto(&self, buf: &[u8], endpoint: IpEndpoint) -> Result<usize, IoError> {
 		let meta = UdpMetadata::from(endpoint);
 
 		if self.nonblocking.load(Ordering::Acquire) {
@@ -161,7 +161,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn recvfrom(&self, buf: &mut [u8]) -> Result<(isize, IpEndpoint), IoError> {
+	fn recvfrom(&self, buf: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		if self.nonblocking.load(Ordering::Acquire) {
 			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO)).map_err(|x| {
 				if x == IoError::ETIME {
@@ -179,7 +179,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		if buf.len() == 0 {
 			return Ok(0);
 		}
@@ -201,7 +201,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		if buf.len() == 0 {
 			return Ok(0);
 		}

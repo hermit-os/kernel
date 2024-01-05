@@ -1,4 +1,3 @@
-use core::isize;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
 use core::ptr;
 
@@ -78,11 +77,11 @@ impl GenericStdin {
 pub struct GenericStdout;
 
 impl ObjectInterface for GenericStdout {
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
-		Ok(buf.len().try_into().unwrap())
+		Ok(buf.len())
 	}
 }
 
@@ -96,11 +95,11 @@ impl GenericStdout {
 pub struct GenericStderr;
 
 impl ObjectInterface for GenericStderr {
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
-		Ok(buf.len().try_into().unwrap())
+		Ok(buf.len())
 	}
 }
 
@@ -125,11 +124,11 @@ impl UhyveStdin {
 pub struct UhyveStdout;
 
 impl ObjectInterface for UhyveStdout {
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
-		Ok(syswrite.len as isize)
+		Ok(syswrite.len)
 	}
 }
 
@@ -143,11 +142,11 @@ impl UhyveStdout {
 pub struct UhyveStderr;
 
 impl ObjectInterface for UhyveStderr {
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
-		Ok(syswrite.len as isize)
+		Ok(syswrite.len)
 	}
 }
 

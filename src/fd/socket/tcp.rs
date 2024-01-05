@@ -63,7 +63,7 @@ impl Socket {
 	// TODO: Remove allow once fixed:
 	// https://github.com/rust-lang/rust-clippy/issues/11380
 	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<isize, IoError> {
+	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| match socket.state() {
 				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
@@ -80,7 +80,7 @@ impl Socket {
 								.recv(|data| {
 									let len = core::cmp::min(buffer.len(), data.len());
 									buffer[..len].copy_from_slice(&data[..len]);
-									(len, isize::try_from(len).unwrap())
+									(len, len)
 								})
 								.map_err(|_| IoError::EIO),
 						)
@@ -94,7 +94,7 @@ impl Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8]) -> Result<isize, IoError> {
+	async fn async_write(&self, buffer: &[u8]) -> Result<usize, IoError> {
 		let mut pos: usize = 0;
 
 		while pos < buffer.len() {
@@ -134,7 +134,7 @@ impl Socket {
 			pos += n;
 		}
 
-		Ok(pos.try_into().unwrap())
+		Ok(pos)
 	}
 
 	async fn async_connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
@@ -269,7 +269,7 @@ impl ObjectInterface for Socket {
 		self.with(|socket| socket.local_endpoint())
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<isize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		if buf.is_empty() {
 			return Ok(0);
 		}
@@ -291,7 +291,7 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<isize, IoError> {
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		if buf.is_empty() {
 			return Ok(0);
 		}
