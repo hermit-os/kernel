@@ -261,7 +261,11 @@ impl VfsNode for UhyveDirectory {
 		let path: String = if components.is_empty() {
 			"/\0".to_string()
 		} else {
-			let mut path: String = components.iter().map(|v| "/".to_owned() + v).collect();
+			let mut path: String = components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect();
 			path.push('\0');
 			path.remove(0);
 			path
@@ -281,7 +285,11 @@ impl VfsNode for UhyveDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		let mut sysunlink = SysUnlink::new(VirtAddr(path.as_ptr() as u64));

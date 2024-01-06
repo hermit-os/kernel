@@ -1153,7 +1153,6 @@ impl FuseFileHandleInner {
 	}
 
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
-		debug!("FUSE read!");
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
 			debug!("Reading longer than max_read_len: {}", len);
@@ -1309,7 +1308,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		debug!("FUSE opendir: {}", path);
@@ -1388,7 +1391,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		debug!("FUSE stat: {}", path);
@@ -1421,7 +1428,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		debug!("FUSE lstat: {}", path);
@@ -1445,10 +1456,14 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
-		info!("FUSE open: {}, {:?} {:?}", path, opt, mode);
+		debug!("FUSE open: {}, {:?} {:?}", path, opt, mode);
 
 		let file = FuseFileHandle::new();
 
@@ -1496,7 +1511,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		let (cmd, mut rsp) = create_unlink(&path);
@@ -1513,7 +1532,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 
 		let (cmd, mut rsp) = create_rmdir(&path);
@@ -1534,7 +1557,11 @@ impl VfsNode for FuseDirectory {
 		let path: String = if components.is_empty() {
 			"/".to_string()
 		} else {
-			components.iter().map(|v| "/".to_owned() + v).collect()
+			components
+				.iter()
+				.rev()
+				.map(|v| "/".to_owned() + v)
+				.collect()
 		};
 		let (cmd, mut rsp) = create_mkdir(&path, mode.bits());
 

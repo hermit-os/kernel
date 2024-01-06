@@ -164,7 +164,9 @@ impl VfsNode for RomFile {
 	}
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
-		Ok(self.attr)
+		let mut attr = self.attr;
+		attr.st_size = self.data.read().len().try_into().unwrap();
+		Ok(attr)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
@@ -214,7 +216,9 @@ impl VfsNode for RamFile {
 	}
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
-		Ok(self.attr)
+		let mut attr = self.attr;
+		attr.st_size = self.data.read().len().try_into().unwrap();
+		Ok(attr)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
