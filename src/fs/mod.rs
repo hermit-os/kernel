@@ -4,6 +4,7 @@ mod mem;
 mod uhyve;
 
 use alloc::boxed::Box;
+use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::ffi::CStr;
@@ -393,7 +394,7 @@ pub fn readdir(name: &str) -> Result<Vec<DirectoryEntry>, IoError> {
 	FILESYSTEM.get().ok_or(IoError::EINVAL)?.readdir(name)
 }
 
-/// a
+/// Open a directory to read the directory entries
 pub(crate) fn opendir(name: &str) -> Result<FileDescriptor, IoError> {
 	let obj = FILESYSTEM.get().unwrap().opendir(name)?;
 	let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -409,8 +410,25 @@ pub fn file_attributes(path: &str) -> Result<FileAttr, IoError> {
 	FILESYSTEM.get().unwrap().lstat(path)
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Metadata(FileAttr);
+
+impl Metadata {
+	pub fn new(attr: FileAttr) -> Self {
+		Self(attr)
+	}
+
+	/// Returns the size of the file, in bytes
+	pub fn len(&self) -> usize {
+		self.0.st_size.try_into().unwrap()
+	}
+}
+
 #[derive(Debug)]
-pub struct File(FileDescriptor);
+pub struct File {
+	fd: FileDescriptor,
+	path: String,
+}
 
 impl File {
 	/// Creates a new file in read-write mode; error if the file exists.
@@ -425,7 +443,10 @@ impl File {
 			AccessPermission::from_bits(0o666).unwrap(),
 		)?;
 
-		Ok(File(fd))
+		Ok(File {
+			fd,
+			path: path.to_string(),
+		})
 	}
 
 	/// Attempts to open a file in read-write mode.
@@ -436,24 +457,31 @@ impl File {
 			AccessPermission::from_bits(0o666).unwrap(),
 		)?;
 
-		Ok(File(fd))
+		Ok(File {
+			fd,
+			path: path.to_string(),
+		})
+	}
+
+	pub fn metadata(&self) -> Result<Metadata, IoError> {
+		Ok(Metadata::new(file_attributes(&self.path)?))
 	}
 }
 
 impl crate::io::Read for File {
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
-		fd::read(self.0, buf)
+		fd::read(self.fd, buf)
 	}
 }
 
 impl crate::io::Write for File {
 	fn write(&mut self, buf: &[u8]) -> Result<usize, IoError> {
-		fd::write(self.0, buf)
+		fd::write(self.fd, buf)
 	}
 }
 
 impl Drop for File {
 	fn drop(&mut self) {
-		fd::close(self.0);
+		fd::close(self.fd);
 	}
 }
