@@ -332,23 +332,6 @@ impl MemDirectory {
 			},
 		}
 	}
-
-	pub fn create_file(
-		&self,
-		name: &str,
-		ptr: *const u8,
-		length: usize,
-		mode: AccessPermission,
-	) -> Result<(), IoError> {
-		let name = name.trim();
-		if name.find('/').is_none() {
-			let file = unsafe { RomFile::new(ptr, length, mode) };
-			self.inner.write().insert(name.to_string(), Box::new(file));
-			Ok(())
-		} else {
-			Err(IoError::EBADF)
-		}
-	}
 }
 
 impl VfsNode for MemDirectory {
@@ -543,6 +526,30 @@ impl VfsNode for MemDirectory {
 
 			if let Some(directory) = self.inner.read().get(&node_name) {
 				return directory.traverse_open(components, opt, mode);
+			}
+		}
+
+		Err(IoError::ENOENT)
+	}
+
+	fn traverse_create_file(
+		&self,
+		components: &mut Vec<&str>,
+		ptr: *const u8,
+		length: usize,
+		mode: AccessPermission,
+	) -> Result<(), IoError> {
+		if let Some(component) = components.pop() {
+			let name = String::from(component);
+
+			if components.is_empty() {
+				let file = unsafe { RomFile::new(ptr, length, mode) };
+				self.inner.write().insert(name.to_string(), Box::new(file));
+				return Ok(());
+			}
+
+			if let Some(directory) = self.inner.read().get(&name) {
+				return directory.traverse_create_file(components, ptr, length, mode);
 			}
 		}
 

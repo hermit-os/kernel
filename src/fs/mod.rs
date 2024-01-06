@@ -134,6 +134,17 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	) -> Result<Arc<dyn ObjectInterface>, IoError> {
 		Err(IoError::ENOSYS)
 	}
+
+	/// Helper function to create a read-only file
+	fn traverse_create_file(
+		&self,
+		_components: &mut Vec<&str>,
+		_ptr: *const u8,
+		_length: usize,
+		_mode: AccessPermission,
+	) -> Result<(), IoError> {
+		Err(IoError::ENOSYS)
+	}
 }
 
 #[derive(Debug)]
@@ -290,15 +301,23 @@ impl Filesystem {
 		self.root.traverse_mount(&mut components, obj)
 	}
 
-	/// Create file from ROM
+	/// Create read-only file
 	pub unsafe fn create_file(
 		&self,
-		name: &str,
+		path: &str,
 		ptr: *const u8,
 		length: usize,
 		mode: AccessPermission,
 	) -> Result<(), IoError> {
-		self.root.create_file(name, ptr, length, mode)
+		debug!("Create read-only file {}", path);
+
+		let mut components: Vec<&str> = path.split('/').collect();
+
+		components.reverse();
+		components.pop();
+
+		self.root
+			.traverse_create_file(&mut components, ptr, length, mode)
 	}
 }
 
