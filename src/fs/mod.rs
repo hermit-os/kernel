@@ -18,6 +18,7 @@ use crate::fd::{
 	insert_object, AccessPermission, IoError, ObjectInterface, OpenOption, FD_COUNTER,
 };
 use crate::io::Write;
+use crate::time::{timespec, SystemTime};
 
 pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
@@ -316,20 +317,20 @@ pub struct FileAttr {
 	/// device id
 	pub st_rdev: u64,
 	/// size in bytes
-	pub st_size: i64,
+	pub st_size: u64,
 	/// block size
 	pub st_blksize: i64,
 	/// size in blocks
 	pub st_blocks: i64,
 	/// time of last access
-	pub st_atime: i64,
-	pub st_atime_nsec: i64,
+	pub st_atime: u64,
+	pub st_atime_nsec: u64,
 	/// time of last modification
-	pub st_mtime: i64,
-	pub st_mtime_nsec: i64,
+	pub st_mtime: u64,
+	pub st_mtime_nsec: u64,
 	/// time of last status change
-	pub st_ctime: i64,
-	pub st_ctime_nsec: i64,
+	pub st_ctime: u64,
+	pub st_ctime_nsec: u64,
 }
 
 #[derive(Debug, FromPrimitive, ToPrimitive)]
@@ -438,6 +439,20 @@ impl Metadata {
 	/// Returns true if this metadata is for a directory.
 	pub fn is_dir(&self) -> bool {
 		self.0.st_mode.contains(AccessPermission::S_IFDIR)
+	}
+
+	/// Returns the last modification time listed in this metadata.
+	pub fn modified(&self) -> Result<SystemTime, IoError> {
+		Ok(SystemTime::from(timespec::from_usec(
+			self.0.st_mtime * 1_000_000 + self.0.st_mtime_nsec / 1000,
+		)))
+	}
+
+	/// Returns the last modification time listed in this metadata.
+	pub fn accessed(&self) -> Result<SystemTime, IoError> {
+		Ok(SystemTime::from(timespec::from_usec(
+			self.0.st_atime * 1_000_000 + self.0.st_atime_nsec / 1000,
+		)))
 	}
 }
 

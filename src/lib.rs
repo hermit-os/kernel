@@ -91,6 +91,7 @@ mod mm;
 mod scheduler;
 mod synch;
 pub mod syscalls;
+pub mod time;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();

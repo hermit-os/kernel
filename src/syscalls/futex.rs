@@ -2,7 +2,7 @@ use core::sync::atomic::AtomicU32;
 
 use crate::errno::EINVAL;
 use crate::synch::futex::{self as synch, Flags};
-use crate::{timespec, timespec_to_microseconds};
+use crate::time::timespec;
 
 /// Like `synch::futex_wait`, but does extra sanity checks and takes a `timespec`.
 ///
@@ -24,7 +24,7 @@ extern "C" fn __sys_futex_wait(
 	let timeout = if timeout.is_null() {
 		None
 	} else {
-		match timespec_to_microseconds(unsafe { timeout.read() }) {
+		match unsafe { timeout.read().into_usec() } {
 			t @ Some(_) => t,
 			None => return -EINVAL,
 		}

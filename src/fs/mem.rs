@@ -14,25 +14,47 @@ use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ops::{Deref, DerefMut};
 use core::slice;
 
 use hermit_sync::{RwSpinLock, SpinMutex};
 
+use crate::arch;
 use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
+
+#[derive(Debug, Clone)]
+pub(crate) struct RomFileInner {
+	pub data: &'static [u8],
+	pub attr: FileAttr,
+}
+
+impl RomFileInner {
+	pub unsafe fn new(ptr: *const u8, length: usize, attr: FileAttr) -> Self {
+		Self {
+			data: unsafe { slice::from_raw_parts(ptr, length) },
+			attr,
+		}
+	}
+}
 
 #[derive(Debug)]
 struct RomFileInterface {
 	/// Position within the file
 	pos: SpinMutex<usize>,
 	/// File content
-	data: Arc<RwSpinLock<&'static [u8]>>,
+	inner: Arc<RwSpinLock<RomFileInner>>,
 }
 
 impl ObjectInterface for RomFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		let vec = self.data.read();
+		{
+			let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+			let mut guard = self.inner.write();
+			guard.attr.st_atime = microseconds / 1_000_000;
+			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
+		}
+
+		let vec = self.inner.read().data;
 		let mut pos_guard = self.pos.lock();
 		let pos = *pos_guard;
 
@@ -54,16 +76,15 @@ impl ObjectInterface for RomFileInterface {
 }
 
 impl RomFileInterface {
-	pub fn new(data: Arc<RwSpinLock<&'static [u8]>>) -> Self {
+	pub fn new(inner: Arc<RwSpinLock<RomFileInner>>) -> Self {
 		Self {
 			pos: SpinMutex::new(0),
-			data,
+			inner,
 		}
 	}
 
 	pub fn len(&self) -> usize {
-		let guard = self.data.read();
-		guard.len()
+		self.inner.read().data.len()
 	}
 }
 
@@ -71,7 +92,22 @@ impl Clone for RomFileInterface {
 	fn clone(&self) -> Self {
 		Self {
 			pos: SpinMutex::new(*self.pos.lock()),
-			data: self.data.clone(),
+			inner: self.inner.clone(),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RamFileInner {
+	pub data: Vec<u8>,
+	pub attr: FileAttr,
+}
+
+impl RamFileInner {
+	pub fn new(attr: FileAttr) -> Self {
+		Self {
+			data: Vec::new(),
+			attr,
 		}
 	}
 }
@@ -81,43 +117,56 @@ pub struct RamFileInterface {
 	/// Position within the file
 	pos: SpinMutex<usize>,
 	/// File content
-	data: Arc<RwSpinLock<Vec<u8>>>,
+	inner: Arc<RwSpinLock<RamFileInner>>,
 }
 
 impl ObjectInterface for RamFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		let guard = self.data.read();
-		let vec = guard.deref();
+		{
+			let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+			let mut guard = self.inner.write();
+			guard.attr.st_atime = microseconds / 1_000_000;
+			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
+		}
+
+		let guard = self.inner.read();
 		let mut pos_guard = self.pos.lock();
 		let pos = *pos_guard;
 
-		if pos >= vec.len() {
+		if pos >= guard.data.len() {
 			return Ok(0);
 		}
 
-		let len = if vec.len() - pos < buf.len() {
-			vec.len() - pos
+		let len = if guard.data.len() - pos < buf.len() {
+			guard.data.len() - pos
 		} else {
 			buf.len()
 		};
 
-		buf[0..len].clone_from_slice(&vec[pos..pos + len]);
+		buf[0..len].clone_from_slice(&guard.data[pos..pos + len]);
 		*pos_guard = pos + len;
 
 		Ok(len)
 	}
 
 	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		let mut guard = self.data.write();
-		let vec = guard.deref_mut();
+		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let mut guard = self.inner.write();
 		let mut pos_guard = self.pos.lock();
 		let pos = *pos_guard;
 
-		if pos + buf.len() > vec.len() {
-			vec.resize(pos + buf.len(), 0);
+		if pos + buf.len() > guard.data.len() {
+			guard.data.resize(pos + buf.len(), 0);
+			guard.attr.st_size = guard.data.len().try_into().unwrap();
 		}
+		guard.attr.st_atime = microseconds / 1_000_000;
+		guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
+		guard.attr.st_mtime = guard.attr.st_atime;
+		guard.attr.st_mtime_nsec = guard.attr.st_atime_nsec;
+		guard.attr.st_ctime = guard.attr.st_atime;
+		guard.attr.st_ctime_nsec = guard.attr.st_atime_nsec;
 
-		vec[pos..pos + buf.len()].clone_from_slice(buf);
+		guard.data[pos..pos + buf.len()].clone_from_slice(buf);
 		*pos_guard = pos + buf.len();
 
 		Ok(buf.len())
@@ -125,17 +174,15 @@ impl ObjectInterface for RamFileInterface {
 }
 
 impl RamFileInterface {
-	pub fn new(data: Arc<RwSpinLock<Vec<u8>>>) -> Self {
+	pub fn new(inner: Arc<RwSpinLock<RamFileInner>>) -> Self {
 		Self {
 			pos: SpinMutex::new(0),
-			data,
+			inner,
 		}
 	}
 
 	pub fn len(&self) -> usize {
-		let guard = self.data.read();
-		let vec: &Vec<u8> = guard.deref();
-		vec.len()
+		self.inner.read().data.len()
 	}
 }
 
@@ -143,15 +190,14 @@ impl Clone for RamFileInterface {
 	fn clone(&self) -> Self {
 		Self {
 			pos: SpinMutex::new(*self.pos.lock()),
-			data: self.data.clone(),
+			inner: self.inner.clone(),
 		}
 	}
 }
 
 #[derive(Debug)]
 pub(crate) struct RomFile {
-	data: Arc<RwSpinLock<&'static [u8]>>,
-	attr: FileAttr,
+	data: Arc<RwSpinLock<RomFileInner>>,
 }
 
 impl VfsNode for RomFile {
@@ -164,9 +210,7 @@ impl VfsNode for RomFile {
 	}
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
-		let mut attr = self.attr;
-		attr.st_size = self.data.read().len().try_into().unwrap();
-		Ok(attr)
+		Ok(self.data.read().attr)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
@@ -188,22 +232,28 @@ impl VfsNode for RomFile {
 
 impl RomFile {
 	pub unsafe fn new(ptr: *const u8, length: usize, mode: AccessPermission) -> Self {
+		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let attr = FileAttr {
+			st_size: length.try_into().unwrap(),
+			st_mode: mode | AccessPermission::S_IFREG,
+			st_atime: microseconds / 1_000_000,
+			st_atime_nsec: (microseconds % 1_000_000) * 1000,
+			st_mtime: microseconds / 1_000_000,
+			st_mtime_nsec: (microseconds % 1_000_000) * 1000,
+			st_ctime: microseconds / 1_000_000,
+			st_ctime_nsec: (microseconds % 1_000_000) * 1000,
+			..Default::default()
+		};
+
 		Self {
-			data: Arc::new(RwSpinLock::new(unsafe {
-				slice::from_raw_parts(ptr, length)
-			})),
-			attr: FileAttr {
-				st_mode: mode | AccessPermission::S_IFREG,
-				..Default::default()
-			},
+			data: unsafe { Arc::new(RwSpinLock::new(RomFileInner::new(ptr, length, attr))) },
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct RamFile {
-	data: Arc<RwSpinLock<Vec<u8>>>,
-	attr: FileAttr,
+	data: Arc<RwSpinLock<RamFileInner>>,
 }
 
 impl VfsNode for RamFile {
@@ -216,9 +266,7 @@ impl VfsNode for RamFile {
 	}
 
 	fn get_file_attributes(&self) -> Result<FileAttr, IoError> {
-		let mut attr = self.attr;
-		attr.st_size = self.data.read().len().try_into().unwrap();
-		Ok(attr)
+		Ok(self.data.read().attr)
 	}
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
@@ -240,12 +288,20 @@ impl VfsNode for RamFile {
 
 impl RamFile {
 	pub fn new(mode: AccessPermission) -> Self {
+		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let attr = FileAttr {
+			st_mode: mode | AccessPermission::S_IFREG,
+			st_atime: microseconds / 1_000_000,
+			st_atime_nsec: (microseconds % 1_000_000) * 1000,
+			st_mtime: microseconds / 1_000_000,
+			st_mtime_nsec: (microseconds % 1_000_000) * 1000,
+			st_ctime: microseconds / 1_000_000,
+			st_ctime_nsec: (microseconds % 1_000_000) * 1000,
+			..Default::default()
+		};
+
 		Self {
-			data: Arc::new(RwSpinLock::new(Vec::new())),
-			attr: FileAttr {
-				st_mode: mode | AccessPermission::S_IFREG,
-				..Default::default()
-			},
+			data: Arc::new(RwSpinLock::new(RamFileInner::new(attr))),
 		}
 	}
 }
@@ -260,10 +316,18 @@ pub(crate) struct MemDirectory {
 
 impl MemDirectory {
 	pub fn new(mode: AccessPermission) -> Self {
+		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+
 		Self {
 			inner: Arc::new(RwSpinLock::new(BTreeMap::new())),
 			attr: FileAttr {
 				st_mode: mode | AccessPermission::S_IFDIR,
+				st_atime: microseconds / 1_000_000,
+				st_atime_nsec: (microseconds % 1_000_000) * 1000,
+				st_mtime: microseconds / 1_000_000,
+				st_mtime_nsec: (microseconds % 1_000_000) * 1000,
+				st_ctime: microseconds / 1_000_000,
+				st_ctime_nsec: (microseconds % 1_000_000) * 1000,
 				..Default::default()
 			},
 		}

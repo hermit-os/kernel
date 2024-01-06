@@ -226,15 +226,15 @@ impl From<fuse_attr> for FileAttr {
 			st_uid: attr.uid,
 			st_gid: attr.gid,
 			st_rdev: attr.rdev as u64,
-			st_size: attr.size.try_into().unwrap(),
+			st_size: attr.size,
 			st_blksize: attr.blksize as i64,
 			st_blocks: attr.blocks.try_into().unwrap(),
-			st_atime: attr.atime.try_into().unwrap(),
-			st_atime_nsec: attr.atimensec as i64,
-			st_mtime: attr.mtime.try_into().unwrap(),
-			st_mtime_nsec: attr.atimensec as i64,
-			st_ctime: attr.ctime.try_into().unwrap(),
-			st_ctime_nsec: attr.ctimensec as i64,
+			st_atime: attr.atime,
+			st_atime_nsec: attr.atimensec as u64,
+			st_mtime: attr.mtime,
+			st_mtime_nsec: attr.atimensec as u64,
+			st_ctime: attr.ctime,
+			st_ctime_nsec: attr.ctimensec as u64,
 			..Default::default()
 		}
 	}
