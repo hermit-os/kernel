@@ -307,17 +307,27 @@ pub struct FileAttr {
 	pub st_dev: u64,
 	pub st_ino: u64,
 	pub st_nlink: u64,
+	/// access permissions
 	pub st_mode: AccessPermission,
+	/// user id
 	pub st_uid: u32,
+	/// group id
 	pub st_gid: u32,
+	/// device id
 	pub st_rdev: u64,
+	/// size in bytes
 	pub st_size: i64,
+	/// block size
 	pub st_blksize: i64,
+	/// size in blocks
 	pub st_blocks: i64,
+	/// time of last access
 	pub st_atime: i64,
 	pub st_atime_nsec: i64,
+	/// time of last modification
 	pub st_mtime: i64,
 	pub st_mtime_nsec: i64,
+	/// time of last status change
 	pub st_ctime: i64,
 	pub st_ctime_nsec: i64,
 }
@@ -410,18 +420,30 @@ pub fn file_attributes(path: &str) -> Result<FileAttr, IoError> {
 	FILESYSTEM.get().unwrap().lstat(path)
 }
 
+#[allow(clippy::len_without_is_empty)]
 #[derive(Debug, Copy, Clone)]
 pub struct Metadata(FileAttr);
 
 impl Metadata {
-	pub fn new(attr: FileAttr) -> Self {
-		Self(attr)
-	}
-
 	/// Returns the size of the file, in bytes
 	pub fn len(&self) -> usize {
 		self.0.st_size.try_into().unwrap()
 	}
+
+	/// Returns true if this metadata is for a file.
+	pub fn is_file(&self) -> bool {
+		self.0.st_mode.contains(AccessPermission::S_IFREG)
+	}
+
+	/// Returns true if this metadata is for a directory.
+	pub fn is_dir(&self) -> bool {
+		self.0.st_mode.contains(AccessPermission::S_IFDIR)
+	}
+}
+
+/// Given a path, query the file system to get information about a file, directory, etc.
+pub fn metadata(path: &str) -> Result<Metadata, IoError> {
+	Ok(Metadata(file_attributes(path)?))
 }
 
 #[derive(Debug)]
@@ -464,7 +486,7 @@ impl File {
 	}
 
 	pub fn metadata(&self) -> Result<Metadata, IoError> {
-		Ok(Metadata::new(file_attributes(&self.path)?))
+		metadata(&self.path)
 	}
 }
 

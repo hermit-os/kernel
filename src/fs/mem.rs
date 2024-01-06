@@ -148,7 +148,7 @@ impl Clone for RamFileInterface {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RomFile {
 	data: Arc<RwSpinLock<&'static [u8]>>,
 	attr: FileAttr,
@@ -171,7 +171,7 @@ impl VfsNode for RomFile {
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		if components.is_empty() {
-			Ok(self.attr)
+			self.get_file_attributes()
 		} else {
 			Err(IoError::EBADF)
 		}
@@ -179,7 +179,7 @@ impl VfsNode for RomFile {
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		if components.is_empty() {
-			Ok(self.attr)
+			self.get_file_attributes()
 		} else {
 			Err(IoError::EBADF)
 		}
@@ -193,7 +193,7 @@ impl RomFile {
 				slice::from_raw_parts(ptr, length)
 			})),
 			attr: FileAttr {
-				st_mode: mode,
+				st_mode: mode | AccessPermission::S_IFREG,
 				..Default::default()
 			},
 		}
@@ -223,7 +223,7 @@ impl VfsNode for RamFile {
 
 	fn traverse_lstat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		if components.is_empty() {
-			Ok(self.attr)
+			self.get_file_attributes()
 		} else {
 			Err(IoError::EBADF)
 		}
@@ -231,7 +231,7 @@ impl VfsNode for RamFile {
 
 	fn traverse_stat(&self, components: &mut Vec<&str>) -> Result<FileAttr, IoError> {
 		if components.is_empty() {
-			Ok(self.attr)
+			self.get_file_attributes()
 		} else {
 			Err(IoError::EBADF)
 		}
@@ -243,7 +243,7 @@ impl RamFile {
 		Self {
 			data: Arc::new(RwSpinLock::new(Vec::new())),
 			attr: FileAttr {
-				st_mode: mode,
+				st_mode: mode | AccessPermission::S_IFREG,
 				..Default::default()
 			},
 		}
@@ -263,7 +263,7 @@ impl MemDirectory {
 		Self {
 			inner: Arc::new(RwSpinLock::new(BTreeMap::new())),
 			attr: FileAttr {
-				st_mode: mode,
+				st_mode: mode | AccessPermission::S_IFDIR,
 				..Default::default()
 			},
 		}
@@ -392,7 +392,7 @@ impl VfsNode for MemDirectory {
 
 			if components.is_empty() {
 				if let Some(node) = self.inner.read().get(&node_name) {
-					node.get_file_attributes()?;
+					return node.get_file_attributes();
 				}
 			}
 
@@ -412,7 +412,7 @@ impl VfsNode for MemDirectory {
 
 			if components.is_empty() {
 				if let Some(node) = self.inner.read().get(&node_name) {
-					node.get_file_attributes()?;
+					return node.get_file_attributes();
 				}
 			}
 

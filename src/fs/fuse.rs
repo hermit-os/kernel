@@ -187,20 +187,32 @@ unsafe impl FuseOut for fuse_entry_out {}
 #[repr(C)]
 #[derive(Default, Debug)]
 struct fuse_attr {
+	/// inode number
 	pub ino: u64,
+	/// size in bytes
 	pub size: u64,
+	/// size in blocks
 	pub blocks: u64,
+	/// time of last access
 	pub atime: u64,
+	/// time of last modification
 	pub mtime: u64,
+	/// time of last status change
 	pub ctime: u64,
 	pub atimensec: u32,
 	pub mtimensec: u32,
 	pub ctimensec: u32,
+	/// access permissions
 	pub mode: u32,
+	/// number of hard links
 	pub nlink: u32,
+	/// user id
 	pub uid: u32,
+	/// group id
 	pub gid: u32,
+	/// device id
 	pub rdev: u32,
+	/// block size
 	pub blksize: u32,
 	pub padding: u32,
 }

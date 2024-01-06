@@ -83,7 +83,7 @@ bitflags! {
 	#[derive(Debug, Copy, Clone)]
 	pub struct AccessPermission: u32 {
 		const S_IFMT = 0o170000;
-		const S_IFSOCK = 0140000;
+		const S_IFSOCK = 0o140000;
 		const S_IFLNK = 0o120000;
 		const S_IFREG = 0o100000;
 		const S_IFBLK = 0o060000;
