@@ -75,7 +75,7 @@ macro_rules! dbg {
 #[cfg(not(any(
 	target_arch = "riscv64",
 	all(target_arch = "x86_64", feature = "newlib"),
-	feature = "syscall"
+	feature = "common-os"
 )))]
 macro_rules! kernel_function {
 	($f:ident()) => {
@@ -113,7 +113,7 @@ macro_rules! kernel_function {
 #[cfg(any(
 	target_arch = "riscv64",
 	all(target_arch = "x86_64", feature = "newlib"),
-	feature = "syscall"
+	feature = "common-os"
 ))]
 macro_rules! kernel_function {
 	($f:ident($($x:tt)*)) => {{
