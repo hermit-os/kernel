@@ -1,6 +1,7 @@
 #![allow(clippy::result_unit_err)]
 
 use core::ffi::CStr;
+use core::marker::PhantomData;
 
 #[cfg(feature = "newlib")]
 use hermit_sync::InterruptTicketMutex;
@@ -21,7 +22,7 @@ use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, FileDescriptor, IoCtl, OpenOption,
 };
-use crate::fs::{self, DirectoryEntry, FileAttr};
+use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
 #[cfg(target_os = "none")]
 use crate::{__sys_free, __sys_malloc, __sys_realloc};
@@ -335,32 +336,65 @@ pub extern "C" fn sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> i
 	kernel_function!(__sys_lseek(fd, offset, whence))
 }
 
-extern "C" fn __sys_readdir(
-	fd: FileDescriptor,
-	dirent: *mut DirectoryEntry,
-	dirent_len: *mut usize,
-) -> i32 {
-	if dirent.is_null() || dirent_len.is_null() {
-		return -crate::errno::EINVAL;
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct Dirent64 {
+	/// 64-bit inode number
+	pub d_ino: u64,
+	/// 64-bit offset to next structure
+	pub d_off: i64,
+	/// Size of this dirent
+	pub d_reclen: u16,
+	/// File type
+	pub d_type: u8,
+	/// Filename (null-terminated)
+	pub d_name: PhantomData<u8>,
+}
+
+extern "C" fn __sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count: usize) -> i64 {
+	if dirp.is_null() || count == 0 {
+		return -crate::errno::EINVAL as i64;
 	}
 
-	let dirent = unsafe { &mut *dirent };
-	let dirent_len = unsafe { &mut *dirent_len };
+	let limit = dirp as usize + count;
+	let mut dirp: *mut Dirent64 = dirp;
+	let mut offset: i64 = 0;
 	let obj = get_object(fd);
 	obj.map_or_else(
-		|_| -crate::errno::EINVAL,
+		|_| -crate::errno::EINVAL as i64,
 		|v| {
 			(*v).readdir().map_or_else(
-				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+				|e| -num::ToPrimitive::to_i64(&e).unwrap(),
 				|v| {
-					if let Some(v) = v {
-						*dirent = v;
-						*dirent_len = core::mem::size_of::<DirectoryEntry>();
-					} else {
-						*dirent_len = 0;
+					for i in v.iter() {
+						let len = i.name.len();
+						if dirp as usize + core::mem::size_of::<Dirent64>() + len + 1 >= limit {
+							return -crate::errno::EINVAL as i64;
+						}
+
+						let dir = unsafe { &mut *dirp };
+
+						dir.d_ino = 0;
+						dir.d_type = 0;
+						dir.d_reclen = (core::mem::size_of::<Dirent64>() + len + 1)
+							.try_into()
+							.unwrap();
+						offset += i64::from(dir.d_reclen);
+						dir.d_off = offset;
+
+						// copy null-terminated filename
+						let s = &mut dir.d_name as *mut _ as *mut u8;
+						unsafe {
+							core::ptr::copy_nonoverlapping(i.name.as_ptr(), s, len);
+							s.add(len).write_bytes(0, 1);
+						}
+
+						dirp = unsafe {
+							(dirp as *mut u8).add(dir.d_reclen as usize) as *mut Dirent64
+						};
 					}
 
-					0
+					offset
 				},
 			)
 		},
@@ -368,12 +402,8 @@ extern "C" fn __sys_readdir(
 }
 
 #[no_mangle]
-pub extern "C" fn sys_readdir(
-	fd: FileDescriptor,
-	dirent: *mut DirectoryEntry,
-	dirent_len: *mut usize,
-) -> i32 {
-	kernel_function!(__sys_readdir(fd, dirent, dirent_len))
+pub extern "C" fn sys_getdents64(fd: FileDescriptor, dirp: *mut Dirent64, count: usize) -> i64 {
+	kernel_function!(__sys_getdents64(fd, dirp, count))
 }
 
 extern "C" fn __sys_dup(fd: i32) -> i32 {

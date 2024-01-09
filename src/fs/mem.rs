@@ -426,7 +426,7 @@ impl VfsNode for MemDirectory {
 		} else {
 			let mut entries: Vec<DirectoryEntry> = Vec::new();
 			for name in self.inner.read().keys() {
-				entries.push(DirectoryEntry::new(name.as_bytes()));
+				entries.push(DirectoryEntry::new(name.to_string()));
 			}
 
 			Ok(entries)

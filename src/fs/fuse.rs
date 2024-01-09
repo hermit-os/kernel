@@ -1387,7 +1387,9 @@ impl VfsNode for FuseDirectory {
 					dirent.d_namelen.try_into().unwrap(),
 				)
 			};
-			entries.push(DirectoryEntry::new(name));
+			entries.push(DirectoryEntry::new(unsafe {
+				core::str::from_utf8_unchecked(name).to_string()
+			}));
 		}
 
 		let (cmd, mut rsp) = create_release(fuse_nid, fuse_fh);

@@ -7,9 +7,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use core::ffi::CStr;
-use core::fmt;
-use core::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::Ordering;
 
 use hermit_sync::OnceCell;
 use mem::MemDirectory;
@@ -22,36 +20,14 @@ use crate::time::{timespec, SystemTime};
 
 pub(crate) static FILESYSTEM: OnceCell<Filesystem> = OnceCell::new();
 
-pub const MAX_NAME_LENGTH: usize = 256;
-
-#[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct DirectoryEntry {
-	pub d_name: [u8; MAX_NAME_LENGTH],
+	pub name: String,
 }
 
 impl DirectoryEntry {
-	pub fn new(d_name: &[u8]) -> Self {
-		let len = core::cmp::min(d_name.len(), MAX_NAME_LENGTH);
-		let mut entry = Self {
-			d_name: [0; MAX_NAME_LENGTH],
-		};
-
-		entry.d_name[..len].copy_from_slice(&d_name[..len]);
-
-		entry
-	}
-}
-
-impl fmt::Debug for DirectoryEntry {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		let d_name = unsafe { CStr::from_ptr(self.d_name.as_ptr() as _) }
-			.to_str()
-			.unwrap();
-
-		f.debug_struct("DirectoryEntry")
-			.field("d_name", &d_name)
-			.finish()
+	pub fn new(name: String) -> Self {
+		Self { name }
 	}
 }
 
@@ -147,38 +123,18 @@ pub(crate) trait VfsNode: core::fmt::Debug {
 	}
 }
 
-#[derive(Debug)]
-struct DirectoryReader {
-	pos: AtomicUsize,
-	data: Vec<DirectoryEntry>,
-}
+#[derive(Debug, Clone)]
+struct DirectoryReader(Vec<DirectoryEntry>);
 
 impl DirectoryReader {
 	pub fn new(data: Vec<DirectoryEntry>) -> Self {
-		Self {
-			pos: AtomicUsize::new(0),
-			data,
-		}
+		Self(data)
 	}
 }
 
 impl ObjectInterface for DirectoryReader {
-	fn readdir(&self) -> Result<Option<DirectoryEntry>, IoError> {
-		let pos = self.pos.fetch_add(1, Ordering::SeqCst);
-		if pos < self.data.len() {
-			Ok(Some(self.data[pos]))
-		} else {
-			Ok(None)
-		}
-	}
-}
-
-impl Clone for DirectoryReader {
-	fn clone(&self) -> Self {
-		Self {
-			pos: AtomicUsize::new(self.pos.load(Ordering::SeqCst)),
-			data: self.data.clone(),
-		}
+	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
+		Ok(self.0.clone())
 	}
 }
 

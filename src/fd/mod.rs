@@ -1,4 +1,5 @@
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicI32, Ordering};
 
 use ahash::RandomState;
@@ -147,7 +148,7 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// 'readdir' returns a pointer to a dirent structure
 	/// representing the next directory entry in the directory stream
 	/// pointed to by the file descriptor
-	fn readdir(&self) -> Result<Option<DirectoryEntry>, IoError> {
+	fn readdir(&self) -> Result<Vec<DirectoryEntry>, IoError> {
 		Err(IoError::EINVAL)
 	}
 
