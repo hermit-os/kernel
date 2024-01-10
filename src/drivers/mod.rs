@@ -15,7 +15,7 @@ pub mod pci;
 pub mod virtio;
 
 /// A common error module for drivers.
-/// [DriverError](enums.drivererror.html) values will be
+/// [DriverError](error::DriverError) values will be
 /// passed on to higher layers.
 pub mod error {
 	use core::fmt;

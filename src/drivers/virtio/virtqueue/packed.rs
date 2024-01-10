@@ -989,7 +989,7 @@ pub struct PackedVq {
 	/// Actually notify device about avail buffers
 	notif_ctrl: NotifCtrl,
 	/// Memory pool controls the amount of "free floating" descriptors
-	/// See [MemPool](super.MemPool) docs for detail.
+	/// See [MemPool] docs for detail.
 	mem_pool: Rc<MemPool>,
 	/// The size of the queue, equals the number of descriptors which can
 	/// be used
