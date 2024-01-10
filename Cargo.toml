@@ -94,7 +94,7 @@ time = { version = "0.3", default-features = false }
 zerocopy = { version = "0.7", features = ["derive"] }
 
 [dependencies.smoltcp]
-version = "0.10"
+version = "0.11"
 optional = true
 default-features = false
 features = [
