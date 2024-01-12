@@ -28,6 +28,11 @@ align-data = "0.1"
 hermit-dtb = { version = "0.1" }
 goblin = { version = "0.8", default-features = false, features = ["elf64"] }
 
+[target.'cfg(target_os = "none")'.dependencies]
+allocator-api2 = { version = "0.2", default-features = false }
+exclusive_cell = "0.1"
+spinning_top = "0.3"
+
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = "0.26"
 uefi-services = "0.23"
