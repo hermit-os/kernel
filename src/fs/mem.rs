@@ -22,7 +22,7 @@ use crate::arch;
 use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RomFileInner {
 	pub data: &'static [u8],
 	pub attr: FileAttr,
@@ -37,10 +37,10 @@ impl RomFileInner {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct RomFileInterface {
 	/// Position within the file
-	pos: SpinMutex<usize>,
+	pos: Arc<SpinMutex<usize>>,
 	/// File content
 	inner: Arc<RwSpinLock<RomFileInner>>,
 }
@@ -78,7 +78,7 @@ impl ObjectInterface for RomFileInterface {
 impl RomFileInterface {
 	pub fn new(inner: Arc<RwSpinLock<RomFileInner>>) -> Self {
 		Self {
-			pos: SpinMutex::new(0),
+			pos: Arc::new(SpinMutex::new(0)),
 			inner,
 		}
 	}
@@ -88,16 +88,7 @@ impl RomFileInterface {
 	}
 }
 
-impl Clone for RomFileInterface {
-	fn clone(&self) -> Self {
-		Self {
-			pos: SpinMutex::new(*self.pos.lock()),
-			inner: self.inner.clone(),
-		}
-	}
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RamFileInner {
 	pub data: Vec<u8>,
 	pub attr: FileAttr,
@@ -112,10 +103,10 @@ impl RamFileInner {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RamFileInterface {
 	/// Position within the file
-	pos: SpinMutex<usize>,
+	pos: Arc<SpinMutex<usize>>,
 	/// File content
 	inner: Arc<RwSpinLock<RamFileInner>>,
 }
@@ -176,22 +167,13 @@ impl ObjectInterface for RamFileInterface {
 impl RamFileInterface {
 	pub fn new(inner: Arc<RwSpinLock<RamFileInner>>) -> Self {
 		Self {
-			pos: SpinMutex::new(0),
+			pos: Arc::new(SpinMutex::new(0)),
 			inner,
 		}
 	}
 
 	pub fn len(&self) -> usize {
 		self.inner.read().data.len()
-	}
-}
-
-impl Clone for RamFileInterface {
-	fn clone(&self) -> Self {
-		Self {
-			pos: SpinMutex::new(*self.pos.lock()),
-			inner: self.inner.clone(),
-		}
 	}
 }
 
