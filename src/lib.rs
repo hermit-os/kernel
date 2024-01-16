@@ -64,6 +64,7 @@ use mm::allocator::LockedAllocator;
 
 pub(crate) use crate::arch::*;
 pub(crate) use crate::config::*;
+pub use crate::fs::create_file;
 use crate::kernel::is_uhyve_with_pci;
 use crate::scheduler::{PerCoreScheduler, PerCoreSchedulerExt};
 pub use crate::syscalls::*;
@@ -82,13 +83,14 @@ mod entropy;
 mod env;
 pub mod errno;
 mod executor;
-pub(crate) mod fd;
-#[cfg(feature = "fs")]
-pub(crate) mod fs;
+pub mod fd;
+pub mod fs;
+pub mod io;
 mod mm;
 mod scheduler;
 mod synch;
-mod syscalls;
+pub mod syscalls;
+pub mod time;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
@@ -249,10 +251,10 @@ pub(crate) extern "C" fn __sys_free(ptr: *mut u8, size: usize, align: usize) {
 #[cfg(target_os = "none")]
 extern "C" fn initd(_arg: usize) {
 	extern "C" {
-		#[cfg(all(not(test), not(feature = "syscall")))]
+		#[cfg(all(not(test), not(feature = "common-os")))]
 		fn runtime_entry(argc: i32, argv: *const *const u8, env: *const *const u8) -> !;
-		#[cfg(all(not(test), feature = "syscall"))]
-		fn main() -> !;
+		#[cfg(all(not(test), feature = "common-os"))]
+		fn main(argc: i32, argv: *const *const u8, env: *const *const u8);
 		#[cfg(feature = "newlib")]
 		fn init_lwip();
 		#[cfg(feature = "newlib")]
@@ -282,7 +284,6 @@ extern "C" fn initd(_arg: usize) {
 
 	syscalls::init();
 	fd::init();
-	#[cfg(feature = "fs")]
 	fs::init();
 
 	// Get the application arguments and environment variables.
@@ -295,10 +296,10 @@ extern "C" fn initd(_arg: usize) {
 	#[cfg(not(test))]
 	unsafe {
 		// And finally start the application.
-		#[cfg(all(not(test), not(feature = "syscall")))]
+		#[cfg(all(not(test), not(feature = "common-os")))]
 		runtime_entry(argc, argv, environ);
-		#[cfg(all(not(test), feature = "syscall"))]
-		main();
+		#[cfg(all(not(test), feature = "common-os"))]
+		main(argc, argv, environ);
 	}
 	#[cfg(test)]
 	test_main();

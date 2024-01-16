@@ -45,14 +45,15 @@ name = "measure_startup_time"
 harness = false
 
 [features]
-default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fs"]
+default = ["pci", "pci-ids", "acpi", "fsgsbase", "smp", "tcp", "dhcpv4", "fuse"]
 acpi = []
 dhcpv4 = [
     "smoltcp",
     "smoltcp/proto-dhcpv4",
     "smoltcp/socket-dhcpv4",
 ]
-fs = ["pci"]
+fs = ["fuse"]
+fuse = ["pci"]
 fsgsbase = []
 gem-net = ["tcp"]
 newlib = []
@@ -92,6 +93,7 @@ take-static = "0.1"
 talc = { version = "4" }
 time = { version = "0.3", default-features = false }
 zerocopy = { version = "0.7", features = ["derive"] }
+build-time = "0.1.3"
 
 [dependencies.smoltcp]
 version = "0.11"

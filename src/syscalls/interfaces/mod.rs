@@ -1,12 +1,8 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
-use core::ffi::CStr;
 
 pub use self::generic::*;
 pub use self::uhyve::*;
-#[cfg(not(target_arch = "x86_64"))]
-use crate::errno::ENOSYS;
-use crate::syscalls::fs::{self, FileAttr};
 use crate::{arch, env};
 
 mod generic;
@@ -54,71 +50,5 @@ pub trait SyscallInterface: Send + Sync {
 
 	fn shutdown(&self, _arg: i32) -> ! {
 		arch::processor::shutdown()
-	}
-
-	fn unlink(&self, name: *const u8) -> i32 {
-		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-		debug!("unlink {}", name);
-
-		fs::FILESYSTEM
-			.lock()
-			.unlink(name)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	fn rmdir(&self, name: *const u8) -> i32 {
-		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-		debug!("rmdir {}", name);
-
-		fs::FILESYSTEM
-			.lock()
-			.rmdir(name)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	fn mkdir(&self, name: *const u8, mode: u32) -> i32 {
-		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-		debug!("mkdir {}, mode {}", name, mode);
-
-		fs::FILESYSTEM
-			.lock()
-			.mkdir(name, mode)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
-	}
-
-	#[cfg(not(target_arch = "x86_64"))]
-	fn stat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
-		debug!("stat is unimplemented, returning -ENOSYS");
-		-ENOSYS
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	fn stat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
-		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-		debug!("stat {}", name);
-
-		fs::FILESYSTEM
-			.lock()
-			.stat(name, stat)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
-	}
-
-	#[cfg(not(target_arch = "x86_64"))]
-	fn lstat(&self, _name: *const u8, _stat: *mut FileAttr) -> i32 {
-		debug!("lstat is unimplemented, returning -ENOSYS");
-		-ENOSYS
-	}
-
-	#[cfg(target_arch = "x86_64")]
-	fn lstat(&self, name: *const u8, stat: *mut FileAttr) -> i32 {
-		let name = unsafe { CStr::from_ptr(name as _) }.to_str().unwrap();
-		debug!("lstat {}", name);
-
-		fs::FILESYSTEM
-			.lock()
-			.lstat(name, stat)
-			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
 	}
 }

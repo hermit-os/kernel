@@ -1,6 +1,6 @@
 //! A module containing hermit-rs driver, hermit-rs driver trait and driver specific errors.
 
-#[cfg(feature = "fs")]
+#[cfg(feature = "fuse")]
 pub mod fs;
 #[cfg(not(feature = "pci"))]
 pub mod mmio;
@@ -10,7 +10,7 @@ pub mod net;
 pub mod pci;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fs"
+	feature = "fuse"
 ))]
 pub mod virtio;
 
@@ -26,7 +26,7 @@ pub mod error {
 	use crate::drivers::net::rtl8139::RTL8139Error;
 	#[cfg(any(
 		all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-		feature = "fs"
+		feature = "fuse"
 	))]
 	use crate::drivers::virtio::error::VirtioError;
 
@@ -34,7 +34,7 @@ pub mod error {
 	pub enum DriverError {
 		#[cfg(any(
 			all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-			feature = "fs"
+			feature = "fuse"
 		))]
 		InitVirtioDevFail(VirtioError),
 		#[cfg(feature = "rtl8139")]
@@ -45,7 +45,7 @@ pub mod error {
 
 	#[cfg(any(
 		all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-		feature = "fs"
+		feature = "fuse"
 	))]
 	impl From<VirtioError> for DriverError {
 		fn from(err: VirtioError) -> Self {
@@ -73,7 +73,7 @@ pub mod error {
 			match *self {
 				#[cfg(any(
 					all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-					feature = "fs"
+					feature = "fuse"
 				))]
 				DriverError::InitVirtioDevFail(ref err) => {
 					write!(f, "Virtio driver failed: {err:?}")

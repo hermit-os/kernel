@@ -5,7 +5,7 @@ use core::fmt;
 
 use bitflags::bitflags;
 use hermit_sync::without_interrupts;
-#[cfg(any(feature = "tcp", feature = "udp", feature = "fs"))]
+#[cfg(any(feature = "tcp", feature = "udp", feature = "fuse"))]
 use hermit_sync::InterruptTicketMutex;
 use pci_types::{
 	Bar, ConfigRegionAccess, DeviceId, EndpointHeader, InterruptLine, InterruptPin, PciAddress,
@@ -14,7 +14,7 @@ use pci_types::{
 
 use crate::arch::mm::{PhysAddr, VirtAddr};
 use crate::arch::pci::PciConfigRegion;
-#[cfg(feature = "fs")]
+#[cfg(feature = "fuse")]
 use crate::drivers::fs::virtio_fs::VirtioFsDriver;
 #[cfg(feature = "rtl8139")]
 use crate::drivers::net::rtl8139::{self, RTL8139Driver};
@@ -22,12 +22,12 @@ use crate::drivers::net::rtl8139::{self, RTL8139Driver};
 use crate::drivers::net::virtio_net::VirtioNetDriver;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fs"
+	feature = "fuse"
 ))]
 use crate::drivers::virtio::transport::pci as pci_virtio;
 #[cfg(any(
 	all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-	feature = "fs"
+	feature = "fuse"
 ))]
 use crate::drivers::virtio::transport::pci::VirtioDriver;
 
@@ -466,7 +466,7 @@ pub(crate) fn print_information() {
 
 #[allow(clippy::large_enum_variant)]
 pub(crate) enum PciDriver {
-	#[cfg(feature = "fs")]
+	#[cfg(feature = "fuse")]
 	VirtioFs(InterruptTicketMutex<VirtioFsDriver>),
 	#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 	VirtioNet(InterruptTicketMutex<VirtioNetDriver>),
@@ -493,7 +493,7 @@ impl PciDriver {
 		}
 	}
 
-	#[cfg(feature = "fs")]
+	#[cfg(feature = "fuse")]
 	fn get_filesystem_driver(&self) -> Option<&InterruptTicketMutex<VirtioFsDriver>> {
 		match self {
 			Self::VirtioFs(drv) => Some(drv),
@@ -519,7 +519,7 @@ pub(crate) fn get_network_driver() -> Option<&'static InterruptTicketMutex<RTL81
 	unsafe { PCI_DRIVERS.iter().find_map(|drv| drv.get_network_driver()) }
 }
 
-#[cfg(feature = "fs")]
+#[cfg(feature = "fuse")]
 pub(crate) fn get_filesystem_driver() -> Option<&'static InterruptTicketMutex<VirtioFsDriver>> {
 	unsafe {
 		PCI_DRIVERS
@@ -544,14 +544,14 @@ pub(crate) fn init_drivers() {
 
 			#[cfg(any(
 				all(any(feature = "tcp", feature = "udp"), not(feature = "rtl8139")),
-				feature = "fs"
+				feature = "fuse"
 			))]
 			match pci_virtio::init_device(adapter) {
 				#[cfg(all(not(feature = "rtl8139"), any(feature = "tcp", feature = "udp")))]
 				Ok(VirtioDriver::Network(drv)) => {
 					register_driver(PciDriver::VirtioNet(InterruptTicketMutex::new(drv)))
 				}
-				#[cfg(feature = "fs")]
+				#[cfg(feature = "fuse")]
 				Ok(VirtioDriver::FileSystem(drv)) => {
 					register_driver(PciDriver::VirtioFs(InterruptTicketMutex::new(drv)))
 				}

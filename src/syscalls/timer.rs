@@ -1,50 +1,13 @@
 use crate::arch;
 use crate::errno::*;
 use crate::syscalls::__sys_usleep;
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct itimerval {
-	pub it_interval: timeval,
-	pub it_value: timeval,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct timespec {
-	pub tv_sec: i64,
-	pub tv_nsec: i64,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[repr(C)]
-pub struct timeval {
-	pub tv_sec: i64,
-	pub tv_usec: i64,
-}
+use crate::time::{itimerval, timespec, timeval};
 
 pub(crate) const CLOCK_REALTIME: u64 = 1;
 pub(crate) const CLOCK_PROCESS_CPUTIME_ID: u64 = 2;
 pub(crate) const CLOCK_THREAD_CPUTIME_ID: u64 = 3;
 pub(crate) const CLOCK_MONOTONIC: u64 = 4;
 pub(crate) const TIMER_ABSTIME: i32 = 4;
-
-fn microseconds_to_timespec(microseconds: u64, result: &mut timespec) {
-	result.tv_sec = (microseconds / 1_000_000) as i64;
-	result.tv_nsec = ((microseconds % 1_000_000) * 1000) as i64;
-}
-
-fn microseconds_to_timeval(microseconds: u64, result: &mut timeval) {
-	result.tv_sec = (microseconds / 1_000_000) as i64;
-	result.tv_usec = (microseconds % 1_000_000) as i64;
-}
-
-pub(crate) fn timespec_to_microseconds(time: timespec) -> Option<u64> {
-	u64::try_from(time.tv_sec)
-		.ok()
-		.and_then(|secs| secs.checked_mul(1_000_000))
-		.and_then(|millions| millions.checked_add(u64::try_from(time.tv_nsec).ok()? / 1000))
-}
 
 /// Finds the resolution (or precision) of a clock.
 ///
@@ -66,7 +29,7 @@ extern "C" fn __sys_clock_getres(clock_id: u64, res: *mut timespec) -> i32 {
 	match clock_id {
 		CLOCK_REALTIME | CLOCK_PROCESS_CPUTIME_ID | CLOCK_THREAD_CPUTIME_ID | CLOCK_MONOTONIC => {
 			// All clocks in Hermit have 1 microsecond resolution.
-			microseconds_to_timespec(1, result);
+			*result = timespec::from_usec(1);
 			0
 		}
 		_ => {
@@ -104,7 +67,7 @@ extern "C" fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 				microseconds += arch::get_boot_time();
 			}
 
-			microseconds_to_timespec(microseconds, result);
+			*result = timespec::from_usec(microseconds);
 			0
 		}
 		_ => {
@@ -202,7 +165,7 @@ extern "C" fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
 		let microseconds = arch::get_boot_time() + arch::processor::get_timer_ticks();
-		microseconds_to_timeval(microseconds, result);
+		*result = timeval::from_usec(microseconds);
 	}
 
 	if tz > 0 {

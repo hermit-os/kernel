@@ -1,9 +1,66 @@
-use core::{isize, slice};
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+use core::ptr;
 
+#[cfg(target_arch = "x86_64")]
+use x86::io::*;
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+use crate::arch::mm::{paging, VirtAddr};
 use crate::console::CONSOLE;
-use crate::fd::{
-	uhyve_send, ObjectInterface, SysWrite, STDERR_FILENO, STDOUT_FILENO, UHYVE_PORT_WRITE,
-};
+use crate::fd::{IoError, ObjectInterface, STDERR_FILENO, STDOUT_FILENO};
+
+const UHYVE_PORT_WRITE: u16 = 0x400;
+
+#[repr(C, packed)]
+struct SysWrite {
+	fd: i32,
+	buf: *const u8,
+	len: usize,
+}
+
+impl SysWrite {
+	pub fn new(fd: i32, buf: *const u8, len: usize) -> SysWrite {
+		SysWrite { fd, buf, len }
+	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "x86_64")]
+fn uhyve_send<T>(port: u16, data: &mut T) {
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
+
+	unsafe {
+		outl(port, physical_address.as_u64() as u32);
+	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "aarch64")]
+fn uhyve_send<T>(port: u16, data: &mut T) {
+	use core::arch::asm;
+
+	let ptr = VirtAddr(ptr::from_mut(data).addr() as u64);
+	let physical_address = paging::virtual_to_physical(ptr).unwrap();
+
+	unsafe {
+		asm!(
+			"str x8, [{port}]",
+			port = in(reg) u64::from(port),
+			in("x8") physical_address.as_u64(),
+			options(nostack),
+		);
+	}
+}
+
+/// forward a request to the hypervisor uhyve
+#[inline]
+#[cfg(target_arch = "riscv64")]
+fn uhyve_send<T>(_port: u16, _data: &mut T) {
+	todo!()
+}
 
 #[derive(Debug, Clone)]
 pub struct GenericStdin;
@@ -20,14 +77,11 @@ impl GenericStdin {
 pub struct GenericStdout;
 
 impl ObjectInterface for GenericStdout {
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		assert!(len <= isize::MAX as usize);
-		let buf = unsafe { slice::from_raw_parts(buf, len) };
-
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
-		len as isize
+		Ok(buf.len())
 	}
 }
 
@@ -41,14 +95,11 @@ impl GenericStdout {
 pub struct GenericStderr;
 
 impl ObjectInterface for GenericStderr {
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		assert!(len <= isize::MAX as usize);
-		let buf = unsafe { slice::from_raw_parts(buf, len) };
-
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
-		len as isize
+		Ok(buf.len())
 	}
 }
 
@@ -73,11 +124,11 @@ impl UhyveStdin {
 pub struct UhyveStdout;
 
 impl ObjectInterface for UhyveStdout {
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf, len);
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
-		syswrite.len as isize
+		Ok(syswrite.len)
 	}
 }
 
@@ -91,11 +142,11 @@ impl UhyveStdout {
 pub struct UhyveStderr;
 
 impl ObjectInterface for UhyveStderr {
-	fn write(&self, buf: *const u8, len: usize) -> isize {
-		let mut syswrite = SysWrite::new(STDERR_FILENO, buf, len);
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
-		syswrite.len as isize
+		Ok(syswrite.len)
 	}
 }
 

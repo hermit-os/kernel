@@ -29,6 +29,7 @@ use crate::drivers::net::NetworkDriver;
 use crate::drivers::pci::get_network_driver;
 use crate::executor::device::HermitNet;
 use crate::executor::{spawn, TaskNotify};
+use crate::fd::IoError;
 use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
@@ -248,9 +249,9 @@ fn network_poll(timestamp: Instant) {
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i32>
+pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
 where
-	F: Future<Output = Result<T, i32>>,
+	F: Future<Output = Result<T, IoError>>,
 {
 	// disable network interrupts
 	let no_retransmission = {
@@ -297,7 +298,7 @@ where
 				// allow network interrupts
 				get_network_driver().unwrap().lock().set_polling_mode(false);
 
-				return Err(-crate::errno::ETIME);
+				return Err(IoError::ETIME);
 			}
 		}
 
@@ -327,9 +328,9 @@ where
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, i32>
+pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
 where
-	F: Future<Output = Result<T, i32>>,
+	F: Future<Output = Result<T, IoError>>,
 {
 	// disable network interrupts
 	let no_retransmission = {
@@ -372,7 +373,7 @@ where
 				// allow network interrupts
 				get_network_driver().unwrap().lock().set_polling_mode(false);
 
-				return Err(-crate::errno::ETIME);
+				return Err(IoError::ETIME);
 			}
 		}
 	}
