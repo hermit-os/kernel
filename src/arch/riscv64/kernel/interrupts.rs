@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use hermit_sync::SpinMutex;
 use riscv::asm::wfi;
-use riscv::register::{fcsr, scause, sie, sip, sstatus, stval};
+use riscv::register::{scause, sie, sip, sstatus, stval};
 use trapframe::TrapFrame;
 
 use crate::scheduler;
@@ -145,7 +145,6 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 	trace!("stval = {stval:x}");
 	trace!("sepc = {sepc:x}");
 	trace!("SSTATUS FS = {:?}", sstatus::read().fs());
-	trace!("FCSR = {:x?}", fcsr::read());
 
 	match cause {
 		Trap::Interrupt(I::SupervisorExternal) => external_handler(),
@@ -160,7 +159,6 @@ pub extern "C" fn trap_handler(tf: &mut TrapFrame) {
 			error!("stval = {stval:x}");
 			error!("sepc = {sepc:x}");
 			error!("SSTATUS FS = {:?}", sstatus::read().fs());
-			error!("FCSR = {:x?}", fcsr::read());
 			scheduler::abort();
 		}
 	}
