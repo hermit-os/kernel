@@ -16,7 +16,7 @@ use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, Ordering};
 use fdt::Fdt;
 use hermit_entry::boot_info::{BootInfo, RawBootInfo};
 use hermit_sync::OnceCell;
-use riscv::register::{fcsr, sstatus};
+use riscv::register::sstatus;
 
 use crate::arch::riscv64::kernel::core_local::{core_id, CoreLocal};
 pub use crate::arch::riscv64::kernel::devicetree::init_drivers;
@@ -160,7 +160,6 @@ fn finish_processor_init() {
 		sstatus::set_fs(sstatus::FS::Initial);
 	}
 	trace!("SSTATUS FS: {:?}", sstatus::read().fs());
-	trace!("FCSR: {:x?}", fcsr::read());
 
 	let current_hart_id = get_current_boot_id() as usize;
 
