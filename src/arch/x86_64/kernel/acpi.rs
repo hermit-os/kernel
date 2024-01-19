@@ -655,6 +655,12 @@ pub fn init_uefi() {
 
 			trace!("fadt: {fadt:#?}");
 			parse_fadt(fadt);
+		} else if table.header.signature() == "SSDT" {
+			assert!(
+				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
+				"SSDT at {table_physical_address:p} has invalid checksum"
+			);
+			parse_ssdt(table);
 		}
 	}
 }
