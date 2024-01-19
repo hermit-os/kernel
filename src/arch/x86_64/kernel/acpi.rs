@@ -660,6 +660,17 @@ pub fn init_uefi() {
 				verify_checksum(table.header_start_address(), table.header.length as usize).is_ok(),
 				"SSDT at {table_physical_address:p} has invalid checksum"
 			);
+
+			let mut length = table.length as u64;
+			if length < 0x1000 {
+				length = 0x1000;
+			}
+
+			let ssdt: AcpiTable<'static> = AcpiTable {
+				header: table,
+				allocated_virtual_address: VirtAddr(table_physical_address.0),
+				allocated_length = length as usize,
+			};
 			parse_ssdt(table);
 		}
 	}
