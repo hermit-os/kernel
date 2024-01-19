@@ -72,7 +72,7 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 }
 
 /// Returns a mapping of the physical memory where physical address is equal to the virtual address (no offset)
-unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
+pub unsafe fn identity_mapped_page_table() -> OffsetPageTable<'static> {
 	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
 	let level_4_table_ptr =
 		ptr::from_exposed_addr_mut::<PageTable>(level_4_table_addr.try_into().unwrap());
@@ -449,7 +449,7 @@ where
 }
 
 #[allow(dead_code)]
-unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
+pub unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 	match pt.translate(virt_addr) {
 		TranslateResult::Mapped {
 			frame,
@@ -494,7 +494,7 @@ unsafe fn disect<PT: Translate>(pt: PT, virt_addr: x86_64::VirtAddr) {
 }
 
 #[allow(dead_code)]
-unsafe fn print_page_tables(levels: usize) {
+pub unsafe fn print_page_tables(levels: usize) {
 	assert!((1..=4).contains(&levels));
 
 	fn print(table: &x86_64::structures::paging::PageTable, level: usize, min_level: usize) {
@@ -530,4 +530,62 @@ unsafe fn print_page_tables(levels: usize) {
 	let pt = unsafe { &*level_4_table_ptr };
 
 	print(pt, 4, 5 - levels);
+}
+
+/// This debugging function takes up to 4 PageTable Indices (l2 and l1 are optional because of Huge and Giant Pages) and prints the specific entries in the PageTable.
+#[allow(dead_code)]
+pub unsafe fn print_specific_pagetable(l4: usize, l3: usize, l2: Option<usize>, l1: Option<usize>) {
+	let level_4_table_addr = Cr3::read().0.start_address().as_u64();
+	let level_4_table_ptr =
+		ptr::from_exposed_addr::<PageTable>(level_4_table_addr.try_into().unwrap());
+	let pt = unsafe { &*level_4_table_ptr };
+
+	for (i, entry) in pt.iter().enumerate() {
+		if i != l4 {
+			continue; //we haven't found the correct l4 index yet
+		}
+		println!("L4 Entry {i}: {entry:?}");
+		let phys = entry.frame().unwrap().start_address();
+		let virt = x86_64::VirtAddr::new(phys.as_u64());
+		let pt_l3: &PageTable = unsafe { &*virt.as_mut_ptr() };
+		for (i, entry) in pt_l3.iter().enumerate() {
+			if i != l3 {
+				continue; //we haven't found the correct l3 index yet
+			}
+			println!("L3 Entry {i}: {entry:?}");
+
+			if l2.is_some() {
+				let phys = entry.frame().unwrap().start_address();
+				let virt = x86_64::VirtAddr::new(phys.as_u64());
+				let pt_l2: &PageTable = unsafe { &*virt.as_mut_ptr() };
+
+				for (i, entry) in pt_l2.iter().enumerate() {
+					if i != l2.unwrap() {
+						continue; //we haven't found the correct l2 index yet
+					}
+					println!("L2 Entry {i}: {entry:?}");
+
+					if l1.is_some() {
+						let phys = entry.frame().unwrap().start_address();
+						let virt = x86_64::VirtAddr::new(phys.as_u64());
+						let pt_l1: &PageTable = unsafe { &*virt.as_mut_ptr() };
+						for (i, entry) in pt_l1.iter().enumerate() {
+							if i != l1.unwrap() {
+								continue; //we haven't found the correct l1 index yet
+							}
+
+							println!("L1 Entry {i}: {entry:?}");
+							break;
+						}
+					} else {
+						break;
+					}
+				}
+			} else {
+				break;
+			}
+			break;
+		}
+		break;
+	}
 }
