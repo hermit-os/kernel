@@ -519,6 +519,7 @@ dependencies = [
  "rand_chacha",
  "riscv",
  "sbi",
+ "semihosting",
  "shell-words",
  "smallvec",
  "smoltcp",
@@ -1074,6 +1075,12 @@ dependencies = [
  "ring",
  "untrusted",
 ]
+
+[[package]]
+name = "semihosting"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bab7a0be8d9e9893dfb5ce313aa0324396936d8bf788f5ef493c9f122ad84fd8"
 
 [[package]]
 name = "shell-words"
