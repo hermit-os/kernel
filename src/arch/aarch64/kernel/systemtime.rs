@@ -44,10 +44,6 @@ fn rtc_read(off: usize) -> u32 {
 	value
 }
 
-pub fn get_boot_time() -> u64 {
-	*BOOT_TIME.get().unwrap()
-}
-
 pub fn init() {
 	let dtb = unsafe {
 		Dtb::from_raw(core::ptr::from_exposed_addr(
@@ -91,7 +87,8 @@ pub fn init() {
 				info!("Hermit booted on {boot_time}");
 
 				let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-				BOOT_TIME.set(micros).unwrap();
+				let current_ticks = super::processor::get_timer_ticks();
+				BOOT_TIME.set(micros - current_ticks).unwrap();
 
 				return;
 			}
@@ -100,4 +97,9 @@ pub fn init() {
 
 	PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
 	BOOT_TIME.set(0).unwrap();
+}
+
+/// Returns the current time in microseconds since UNIX epoch.
+pub fn now_micros() -> u64 {
+	*BOOT_TIME.get().unwrap() + super::processor::get_timer_ticks()
 }

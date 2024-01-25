@@ -172,10 +172,6 @@ impl Rtc {
 
 static BOOT_TIME: OnceCell<u64> = OnceCell::new();
 
-pub fn get_boot_time() -> u64 {
-	*BOOT_TIME.get().unwrap()
-}
-
 pub fn init() {
 	let boot_time = match boot_info().platform_info {
 		PlatformInfo::Multiboot { .. } => {
@@ -198,4 +194,9 @@ pub fn init() {
 
 	let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
 	BOOT_TIME.set(micros).unwrap();
+}
+
+/// Returns the current time in microseconds since UNIX epoch.
+pub fn now_micros() -> u64 {
+	*BOOT_TIME.get().unwrap() + super::processor::get_timer_ticks()
 }

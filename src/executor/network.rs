@@ -93,8 +93,7 @@ fn start_endpoint() -> u16 {
 
 #[inline]
 pub(crate) fn now() -> Instant {
-	let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
-	Instant::from_micros_const(microseconds.try_into().unwrap())
+	Instant::from_micros_const(arch::kernel::systemtime::now_micros().try_into().unwrap())
 }
 
 async fn network_run() {

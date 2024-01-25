@@ -67,9 +67,7 @@ pub struct SystemTime(timespec);
 impl SystemTime {
 	/// Returns the system time corresponding to "now".
 	pub fn now() -> Self {
-		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
-
-		Self(timespec::from_usec(microseconds))
+		Self(timespec::from_usec(arch::kernel::systemtime::now_micros()))
 	}
 }
 
