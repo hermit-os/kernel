@@ -4,7 +4,6 @@ use core::{fmt, str};
 use aarch64::regs::{Readable, CNTFRQ_EL0};
 use hermit_dtb::Dtb;
 use hermit_sync::{without_interrupts, Lazy};
-use qemu_exit::QEMUExit;
 
 use crate::arch::aarch64::kernel::boot_info;
 use crate::env;
@@ -119,8 +118,22 @@ pub fn halt() {
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
 
-	let exit_handler = qemu_exit::AArch64::new();
-	exit_handler.exit_success();
+	cfg_if::cfg_if! {
+		if #[cfg(feature = "semihosting")] {
+			semihosting::process::exit(0)
+		} else {
+			unsafe {
+				const PSCI_SYSTEM_OFF: u64 = 0x84000008;
+				// call hypervisor to shut down the system
+				asm!("hvc #0", in("x0") PSCI_SYSTEM_OFF, options(nomem, nostack));
+
+				// we should never reach this point
+				loop {
+					asm!("wfe", options(nomem, nostack));
+				}
+			}
+		}
+	}
 }
 
 #[inline]

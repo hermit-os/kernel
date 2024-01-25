@@ -229,8 +229,15 @@ pub fn halt() {
 /// Shutdown the system
 pub fn shutdown() -> ! {
 	info!("Shutting down system");
-	//SBI shutdown
-	sbi::legacy::shutdown()
+
+	cfg_if::cfg_if! {
+		if #[cfg(feature = "semihosting")] {
+			semihosting::process::exit(0)
+		} else {
+			// use SBI shutdown
+			sbi::legacy::shutdown()
+		}
+	}
 }
 
 pub fn get_timer_ticks() -> u64 {
