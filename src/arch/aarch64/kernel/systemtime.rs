@@ -87,7 +87,8 @@ pub fn init() {
 				info!("Hermit booted on {boot_time}");
 
 				let micros = u64::try_from(boot_time.unix_timestamp_nanos() / 1000).unwrap();
-				BOOT_TIME.set(micros).unwrap();
+				let current_ticks = super::processor::get_timer_ticks();
+				BOOT_TIME.set(micros - current_ticks).unwrap();
 
 				return;
 			}
