@@ -48,7 +48,7 @@ struct RomFileInterface {
 impl ObjectInterface for RomFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
-			let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+			let microseconds = arch::kernel::systemtime::now_micros();
 			let mut guard = self.inner.write();
 			guard.attr.st_atime = microseconds / 1_000_000;
 			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
@@ -114,7 +114,7 @@ pub struct RamFileInterface {
 impl ObjectInterface for RamFileInterface {
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
-			let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+			let microseconds = arch::kernel::systemtime::now_micros();
 			let mut guard = self.inner.write();
 			guard.attr.st_atime = microseconds / 1_000_000;
 			guard.attr.st_atime_nsec = (microseconds % 1_000_000) * 1000;
@@ -141,7 +141,7 @@ impl ObjectInterface for RamFileInterface {
 	}
 
 	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let microseconds = arch::kernel::systemtime::now_micros();
 		let mut guard = self.inner.write();
 		let mut pos_guard = self.pos.lock();
 		let pos = *pos_guard;
@@ -214,7 +214,7 @@ impl VfsNode for RomFile {
 
 impl RomFile {
 	pub unsafe fn new(ptr: *const u8, length: usize, mode: AccessPermission) -> Self {
-		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let microseconds = arch::kernel::systemtime::now_micros();
 		let attr = FileAttr {
 			st_size: length.try_into().unwrap(),
 			st_mode: mode | AccessPermission::S_IFREG,
@@ -270,7 +270,7 @@ impl VfsNode for RamFile {
 
 impl RamFile {
 	pub fn new(mode: AccessPermission) -> Self {
-		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let microseconds = arch::kernel::systemtime::now_micros();
 		let attr = FileAttr {
 			st_mode: mode | AccessPermission::S_IFREG,
 			st_atime: microseconds / 1_000_000,
@@ -298,7 +298,7 @@ pub(crate) struct MemDirectory {
 
 impl MemDirectory {
 	pub fn new(mode: AccessPermission) -> Self {
-		let microseconds = arch::processor::get_timer_ticks() + arch::get_boot_time();
+		let microseconds = arch::kernel::systemtime::now_micros();
 
 		Self {
 			inner: Arc::new(RwSpinLock::new(BTreeMap::new())),

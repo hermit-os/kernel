@@ -101,3 +101,8 @@ pub fn init() {
 	PL031_ADDRESS.set(VirtAddr::zero()).unwrap();
 	BOOT_TIME.set(0).unwrap();
 }
+
+/// Returns the current time in microseconds since UNIX epoch.
+pub fn now_micros() -> u64 {
+	get_boot_time() + super::processor::get_timer_ticks()
+}

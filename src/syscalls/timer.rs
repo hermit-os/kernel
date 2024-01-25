@@ -60,14 +60,12 @@ extern "C" fn __sys_clock_gettime(clock_id: u64, tp: *mut timespec) -> i32 {
 	let result = unsafe { &mut *tp };
 
 	match clock_id {
-		CLOCK_REALTIME | CLOCK_MONOTONIC => {
-			let mut microseconds = arch::processor::get_timer_ticks();
-
-			if clock_id == CLOCK_REALTIME {
-				microseconds += arch::get_boot_time();
-			}
-
-			*result = timespec::from_usec(microseconds);
+		CLOCK_REALTIME => {
+			*result = timespec::from_usec(arch::kernel::systemtime::now_micros());
+			0
+		}
+		CLOCK_MONOTONIC => {
+			*result = timespec::from_usec(arch::processor::get_timer_ticks());
 			0
 		}
 		_ => {
@@ -119,10 +117,10 @@ extern "C" fn __sys_clock_nanosleep(
 				+ (requested_time.tv_nsec as u64) / 1_000;
 
 			if flags & TIMER_ABSTIME > 0 {
-				microseconds -= arch::processor::get_timer_ticks();
-
 				if clock_id == CLOCK_REALTIME {
-					microseconds -= arch::get_boot_time();
+					microseconds -= arch::kernel::systemtime::now_micros();
+				} else {
+					microseconds -= arch::processor::get_timer_ticks();
 				}
 			}
 
@@ -164,7 +162,7 @@ extern "C" fn __sys_gettimeofday(tp: *mut timeval, tz: usize) -> i32 {
 	if let Some(result) = unsafe { tp.as_mut() } {
 		// Return the current time based on the wallclock time when we were booted up
 		// plus the current timer ticks.
-		let microseconds = arch::get_boot_time() + arch::processor::get_timer_ticks();
+		let microseconds = arch::kernel::systemtime::now_micros();
 		*result = timeval::from_usec(microseconds);
 	}
 

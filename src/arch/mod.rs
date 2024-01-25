@@ -16,7 +16,6 @@ cfg_if::cfg_if! {
 		pub use self::aarch64::kernel::processor::set_oneshot_timer;
 		pub use self::aarch64::kernel::scheduler;
 		pub use self::aarch64::kernel::switch;
-		pub use self::aarch64::kernel::systemtime::get_boot_time;
 		#[cfg(feature = "smp")]
 		pub use self::aarch64::kernel::application_processor_init;
 		pub use self::aarch64::kernel::{
@@ -43,7 +42,6 @@ cfg_if::cfg_if! {
 		pub use self::x86_64::kernel::processor;
 		pub use self::x86_64::kernel::scheduler;
 		pub use self::x86_64::kernel::switch;
-		pub use self::x86_64::kernel::systemtime::get_boot_time;
 		#[cfg(target_os = "none")]
 		pub use self::x86_64::kernel::{
 			boot_application_processors,
@@ -61,7 +59,6 @@ cfg_if::cfg_if! {
 		#[cfg(feature = "smp")]
 		pub use self::riscv64::kernel::application_processor_init;
 		pub use self::riscv64::kernel::processor::{self, set_oneshot_timer, wakeup_core};
-		pub use self::riscv64::kernel::systemtime::get_boot_time;
 		pub use self::riscv64::kernel::{
 			boot_application_processors,
 			boot_processor_init,
