@@ -44,10 +44,6 @@ fn rtc_read(off: usize) -> u32 {
 	value
 }
 
-pub fn get_boot_time() -> u64 {
-	*BOOT_TIME.get().unwrap()
-}
-
 pub fn init() {
 	let dtb = unsafe {
 		Dtb::from_raw(core::ptr::from_exposed_addr(
@@ -104,5 +100,5 @@ pub fn init() {
 
 /// Returns the current time in microseconds since UNIX epoch.
 pub fn now_micros() -> u64 {
-	get_boot_time() + super::processor::get_timer_ticks()
+	*BOOT_TIME.get().unwrap() + super::processor::get_timer_ticks()
 }
