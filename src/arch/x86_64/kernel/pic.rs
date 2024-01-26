@@ -31,7 +31,7 @@ pub fn init() {
 	// Even if we mask all interrupts, spurious interrupts may still occur.
 	// This is especially true for real hardware. So provide a handler for them.
 	unsafe {
-		let idt = &mut IDT;
+		let mut idt = IDT.lock();
 		idt[(PIC1_INTERRUPT_OFFSET + SPURIOUS_IRQ_NUMBER) as usize]
 			.set_handler_fn(spurious_interrupt_on_master)
 			.set_stack_index(0);

@@ -469,7 +469,7 @@ pub fn init() {
 
 	// Set gates to ISRs for the APIC interrupts we are going to enable.
 	unsafe {
-		let idt = &mut IDT;
+		let mut idt = IDT.lock();
 		idt[ERROR_INTERRUPT_NUMBER as usize]
 			.set_handler_fn(error_interrupt_handler)
 			.set_stack_index(0);
