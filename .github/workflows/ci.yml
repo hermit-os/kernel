@@ -8,6 +8,7 @@ on:
   merge_group:
 
 env:
+  GH_TOKEN: ${{ github.token }}
   RUSTFLAGS: -Dwarnings
   RUSTDOCFLAGS: -Dwarnings
 
@@ -109,10 +110,7 @@ jobs:
         env:
           RUSTFLAGS: -Awarnings
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          repo: hermit-os/loader
-          file: hermit-loader-x86_64
+        run: gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64
       - run: rustup target add x86_64-unknown-none
       - name: Integration tests
         run: cargo test --tests --no-fail-fast --target x86_64-unknown-none -- --bootloader_path=hermit-loader-x86_64
@@ -217,10 +215,7 @@ jobs:
             kernel
             kernel/hermit-builtins
       - name: Download loader
-        uses: dsaltares/fetch-gh-release-asset@master
-        with:
-          repo: hermit-os/loader
-          file: hermit-loader-${{ matrix.arch }}
+        run: gh release download --repo hermit-os/loader --pattern hermit-loader-${{ matrix.arch }}
       - name: Install virtiofsd
         if: ${{ matrix.arch == 'x86_64' && matrix.package == 'rusty_demo' }}
         run: cargo install --locked virtiofsd
@@ -265,16 +260,10 @@ jobs:
       run: |
           lscpu
           kvm-ok
-    - name: Download loader (x86_64)
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        file: hermit-loader-x86_64
-        repo: hermit-os/loader
-    - name: Download loader (x86_64-fc)
-      uses: dsaltares/fetch-gh-release-asset@master
-      with:
-        file: hermit-loader-x86_64-fc
-        repo: hermit-os/loader
+    - name: Download loader (x86_64, x86_64-fc)
+      run: |
+        sudo apt-get install -y --no-install-recommends gh
+        gh release download --repo hermit-os/loader --pattern hermit-loader-x86_64 --pattern hermit-loader-x86_64-fc
     - name: Install firecracker
       run: |
         # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
