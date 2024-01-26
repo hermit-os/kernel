@@ -76,3 +76,9 @@ impl From<timespec> for SystemTime {
 		Self(t)
 	}
 }
+
+impl From<SystemTime> for timespec {
+	fn from(value: SystemTime) -> Self {
+		value.0
+	}
+}
