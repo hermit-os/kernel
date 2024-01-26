@@ -67,7 +67,7 @@ impl Qemu {
 		let qemu = cmd!(sh, "{qemu}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
-			.args(&["-kernel", format!("../hermit-loader-{arch}").as_ref()])
+			.args(&["-kernel", format!("hermit-loader-{arch}").as_ref()])
 			.args(self.machine_args())
 			.args(self.cpu_args())
 			.args(&["-smp", &self.smp.to_string()])
