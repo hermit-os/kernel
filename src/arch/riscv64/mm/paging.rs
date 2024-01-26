@@ -1,14 +1,15 @@
 use core::marker::PhantomData;
-use core::usize;
+use core::{ptr, usize};
 
 use align_address::Align;
+use hermit_sync::SpinMutex;
 use riscv::asm::sfence_vma;
 use riscv::register::satp;
 
 use crate::arch::riscv64::kernel::get_ram_address;
 use crate::arch::riscv64::mm::{physicalmem, PhysAddr, VirtAddr};
 
-static mut ROOT_PAGETABLE: PageTable<L2Table> = PageTable::new();
+static ROOT_PAGETABLE: SpinMutex<PageTable<L2Table>> = SpinMutex::new(PageTable::new());
 
 /// Number of Offset bits of a virtual address for a 4 KiB page, which are shifted away to get its Page Frame Number (PFN).
 const PAGE_BITS: usize = 12;
@@ -581,7 +582,8 @@ pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 		);
 	}
 
-	let mut page_table_addr = unsafe { &ROOT_PAGETABLE as *const PageTable<L2Table> };
+	let page_table = ROOT_PAGETABLE.lock();
+	let mut page_table_addr = ptr::from_ref(&*page_table);
 	for i in (0..PAGE_LEVELS).rev() {
 		let pte = unsafe { (*page_table_addr).entries[(vpn[i]) as usize] };
 		// trace!("PTE: {:?} , i: {}, vpn[i]: {:#X}", pte, i, vpn[i]);
@@ -637,9 +639,9 @@ pub fn map<S: PageSize>(
 	);
 
 	let range = get_page_range::<S>(virtual_address, count);
-	unsafe {
-		ROOT_PAGETABLE.map_pages(range, physical_address, flags);
-	}
+	ROOT_PAGETABLE
+		.lock()
+		.map_pages(range, physical_address, flags);
 
 	//assert_eq!(virtual_address.as_u64(), physical_address.as_u64(), "Paging not implemented");
 }
@@ -673,9 +675,9 @@ pub fn unmap<S: PageSize>(virtual_address: VirtAddr, count: usize) {
 	/* let root_pagetable = unsafe {
 		&mut *mem::transmute::<*mut u64, *mut PageTable<L2Table>>(L2TABLE_ADDRESS.as_mut_ptr())
 	}; */
-	unsafe {
-		ROOT_PAGETABLE.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
-	}
+	ROOT_PAGETABLE
+		.lock()
+		.map_pages(range, PhysAddr::zero(), PageTableEntryFlags::BLANK);
 }
 
 #[inline]
@@ -705,25 +707,25 @@ pub fn identity_map<S: PageSize>(start_address: PhysAddr, end_address: PhysAddr)
 	let range = Page::<S>::range(first_page, last_page);
 	let mut flags = PageTableEntryFlags::empty();
 	flags.normal().writable();
-	unsafe {
-		ROOT_PAGETABLE.map_pages(range, PhysAddr(first_page.address().as_u64()), flags);
-	}
+	ROOT_PAGETABLE
+		.lock()
+		.map_pages(range, PhysAddr(first_page.address().as_u64()), flags);
 }
 
 pub fn init_page_tables() {
 	trace!("Identity map the physical memory using HugePages");
 
-	unsafe {
-		identity_map::<HugePageSize>(
-			get_ram_address(),
-			get_ram_address() + PhysAddr(physicalmem::total_memory_size() as u64 - 1),
-		);
-		satp::write(0x8 << 60 | ((&ROOT_PAGETABLE as *const _ as usize) >> 12))
-	}
+	identity_map::<HugePageSize>(
+		get_ram_address(),
+		get_ram_address() + PhysAddr(physicalmem::total_memory_size() as u64 - 1),
+	);
+	// FIXME: This is not sound, since we are ignoring races with the hardware.
+	satp::write(0x8 << 60 | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
 }
 
 #[cfg(feature = "smp")]
 pub fn init_application_processor() {
 	trace!("Identity map the physical memory using HugePages");
-	unsafe { satp::write(0x8 << 60 | ((&ROOT_PAGETABLE as *const _ as usize) >> 12)) }
+	// FIXME: This is not sound, since we are ignoring races with the hardware.
+	satp::write(0x8 << 60 | (ROOT_PAGETABLE.data_ptr().addr() >> 12));
 }

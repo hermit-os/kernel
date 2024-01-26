@@ -19,20 +19,25 @@ use crate::scheduler::{self, CoreId};
 pub const IST_ENTRIES: usize = 4;
 pub const IST_SIZE: usize = 8 * BasePageSize::SIZE as usize;
 
-pub static mut IDT: InterruptDescriptorTable = InterruptDescriptorTable::new();
+pub static IDT: InterruptSpinMutex<InterruptDescriptorTable> =
+	InterruptSpinMutex::new(InterruptDescriptorTable::new());
 
 pub fn load_idt() {
+	// FIXME: This is not sound! For this to be sound, the table must never be
+	// modified or destroyed while in use. This is _not_ the case here. Instead, we
+	// disable interrupts on the current core when modifying the table and hope for
+	// the best in regards to interrupts on other cores.
 	unsafe {
-		IDT.load_unsafe();
+		(*IDT.data_ptr()).load_unsafe();
 	}
 }
 
 pub fn install() {
-	let idt = unsafe { &mut IDT };
+	let mut idt = IDT.lock();
 
-	set_general_handler!(idt, abort, 0..32);
-	set_general_handler!(idt, unhandle, 32..64);
-	set_general_handler!(idt, unknown, 64..);
+	set_general_handler!(&mut *idt, abort, 0..32);
+	set_general_handler!(&mut *idt, unhandle, 32..64);
+	set_general_handler!(&mut *idt, unknown, 64..);
 
 	unsafe {
 		for i in 32..256 {
@@ -110,7 +115,7 @@ pub extern "C" fn irq_install_handler(
 ) {
 	debug!("Install handler for interrupt {}", irq_number);
 
-	let idt = unsafe { &mut IDT };
+	let mut idt = IDT.lock();
 	unsafe {
 		idt[(32 + irq_number) as usize]
 			.set_handler_addr(x86_64::VirtAddr::new(

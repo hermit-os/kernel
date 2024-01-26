@@ -415,7 +415,7 @@ impl CpuFrequency {
 		// Use the Programmable Interval Timer (PIT) for this measurement, which is the only
 		// system timer with a known constant frequency.
 		unsafe {
-			let idt = &mut IDT;
+			let mut idt = IDT.lock();
 			idt[pit::PIT_INTERRUPT_NUMBER as usize]
 				.set_handler_fn(Self::measure_frequency_timer_handler)
 				.set_stack_index(0);
