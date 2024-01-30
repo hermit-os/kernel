@@ -4,8 +4,9 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 use ::x86_64::structures::paging::{FrameAllocator, PhysFrame};
 use hermit_sync::InterruptTicketMutex;
 use multiboot::information::{MemoryType, Multiboot};
+use x86_64::structures::paging::frame::PhysFrameRange;
 
-use crate::arch::x86_64::kernel::{get_limit, get_mbinfo};
+use crate::arch::x86_64::kernel::{get_limit, get_mbinfo, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::{MultibootMemory, PhysAddr, VirtAddr};
 use crate::mm;
@@ -90,8 +91,27 @@ fn detect_from_limits() -> Result<(), ()> {
 	Ok(())
 }
 
+///Use the free memory provided by the UEFI memory map (rewrite as soon as entire memory map is in kernel!)
+///right now, all memory in the Physical Address Range of HardwareInfo is guaranteed free memory
+fn detect_from_memory_map() -> Result<(), ()> {
+	if !is_uefi() {
+		return Err(());
+	}
+
+	let limit = get_limit();
+
+	let start = get_start();
+
+	let entry = FreeListEntry::new(start, limit);
+	PHYSICAL_FREE_LIST.lock().push(entry);
+	TOTAL_MEMORY.store(limit, Ordering::SeqCst);
+
+	Ok(())
+}
+
 pub fn init() {
 	detect_from_multiboot_info()
+		.or_else(|_e| detect_from_memory_map())
 		.or_else(|_e| detect_from_limits())
 		.unwrap();
 }
@@ -113,7 +133,7 @@ pub fn allocate(size: usize) -> Result<PhysAddr, AllocError> {
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(size, None, None)?
 			.try_into()
 			.unwrap(),
 	))
@@ -125,10 +145,41 @@ unsafe impl<S: x86_64::structures::paging::PageSize> FrameAllocator<S> for Frame
 	fn allocate_frame(&mut self) -> Option<PhysFrame<S>> {
 		let addr = PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(S::SIZE as usize, Some(S::SIZE as usize))
+			.allocate(S::SIZE as usize, Some(S::SIZE as usize), None)
 			.ok()? as u64;
 		Some(PhysFrame::from_start_address(x86_64::PhysAddr::new(addr)).unwrap())
 	}
+}
+
+pub fn allocate_outside_of(
+	size: usize,
+	alignment: usize,
+	forbidden_range: PhysFrameRange,
+) -> Result<PhysFrame, AllocError> {
+	//general sanity checks
+	assert!(size > 0);
+	assert!(alignment > 0);
+	assert_eq!(
+		size % alignment,
+		0,
+		"Size {size:#X} is not a multiple of the given alignment {alignment:#X}"
+	);
+	assert_eq!(
+		alignment % BasePageSize::SIZE as usize,
+		0,
+		"Alignment {:#X} is not a multiple of {:#X}",
+		alignment,
+		BasePageSize::SIZE
+	);
+
+	Ok(PhysFrame::from_start_address(x86_64::addr::PhysAddr::new(
+		PHYSICAL_FREE_LIST
+			.lock()
+			.allocate(size, Some(alignment), Some(forbidden_range))?
+			.try_into()
+			.unwrap(),
+	))
+	.unwrap())
 }
 
 pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, AllocError> {
@@ -150,7 +201,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<PhysAddr, Alloc
 	Ok(PhysAddr(
 		PHYSICAL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(size, Some(alignment), None)?
 			.try_into()
 			.unwrap(),
 	))

@@ -3,6 +3,7 @@ use core::cmp::Ordering;
 
 use align_address::Align;
 use smallvec::SmallVec;
+use x86_64::structures::paging::frame::PhysFrameRange;
 
 #[derive(Debug)]
 pub struct FreeListEntry {
@@ -32,7 +33,12 @@ impl FreeList {
 		self.list.push(entry);
 	}
 
-	pub fn allocate(&mut self, size: usize, alignment: Option<usize>) -> Result<usize, AllocError> {
+	pub fn allocate(
+		&mut self,
+		size: usize,
+		alignment: Option<usize>,
+		forbidden_range: Option<PhysFrameRange>,
+	) -> Result<usize, AllocError> {
 		trace!("Allocating {} bytes from Free List {self:p}", size);
 
 		let new_size = if let Some(align) = alignment {
@@ -43,8 +49,52 @@ impl FreeList {
 
 		// Find a region in the Free List that has at least the requested size.
 		for (i, node) in self.list.iter_mut().enumerate() {
-			let (region_start, region_size) = (node.start, node.end - node.start);
-
+			//let (region_start, region_size) = (node.start, node.end - node.start);
+			let (region_start, region_size) = if let Some(forbidden_range) = forbidden_range {
+				// println!("forbidden range: {forbidden_range:?}");
+				// let region_size = node.end - node.start;
+				// println!("region size: {region_size:?}");
+				// let forbidden_range_size = (forbidden_range.end - forbidden_range.start) as usize;
+				// println!("forbidden size: {forbidden_range_size:?}");
+				// let free_size = region_size - forbidden_range_size;
+				// println!("forbidden range: {forbidden_range:?}");
+				println!("forbidden range detected");
+				if node.start >= forbidden_range.start.start_address().as_u64() as usize
+					&& node.start <= forbidden_range.end.start_address().as_u64() as usize
+				{
+					println!("inside first if!");
+					if node.end >= forbidden_range.start.start_address().as_u64() as usize
+						&& node.end <= forbidden_range.end.start_address().as_u64() as usize
+					{
+						println!("inside forbidden range, look elsewhere");
+						continue; //node is entirely inside forbidden zone, look elsewhere
+					}
+					//return the chunk from the end of the forbidden zone onwards
+					println!(
+						"rangestart at {:#x?}, size: {:#x?}",
+						forbidden_range.end.start_address().as_u64() as usize,
+						node.end - forbidden_range.end.start_address().as_u64() as usize
+					);
+					node.start = forbidden_range.end.start_address().as_u64() as usize;
+					(node.start, node.end - node.start)
+				} else if node.end >= forbidden_range.start.start_address().as_u64() as usize
+					&& node.end <= forbidden_range.end.start_address().as_u64() as usize
+				{
+					//return the chunk up to the forbidden zone
+					println!(
+						"rangestart at {:#x?}, size: {:#x?}",
+						node.start,
+						forbidden_range.end.start_address().as_u64() as usize - node.start
+					);
+					node.end = forbidden_range.end.start_address().as_u64() as usize;
+					(node.start, node.end - node.start)
+				} else {
+					println!("no collision detected");
+					(node.start, node.end - node.start)
+				}
+			} else {
+				(node.start, node.end - node.start)
+			};
 			match region_size.cmp(&new_size) {
 				Ordering::Greater => {
 					// We have found a region that is larger than the requested size.
@@ -197,8 +247,7 @@ mod tests {
 		let entry = FreeListEntry::new(0x10000, 0x100000);
 
 		freelist.push(entry);
-		let addr = freelist.allocate(0x1000, None);
-
+		let addr = freelist.allocate(0x1000, None, None);
 		assert_eq!(addr.unwrap(), 0x10000);
 
 		for node in &freelist.list {
@@ -206,7 +255,7 @@ mod tests {
 			assert_eq!(node.end, 0x100000);
 		}
 
-		let addr = freelist.allocate(0x1000, Some(0x2000));
+		let addr = freelist.allocate(0x1000, Some(0x2000), None);
 		let mut iter = freelist.list.iter();
 		assert_eq!(iter.next().unwrap().start, 0x11000);
 		assert_eq!(iter.next().unwrap().start, 0x13000);
@@ -218,7 +267,7 @@ mod tests {
 		let entry = FreeListEntry::new(0x10000, 0x100000);
 
 		freelist.push(entry);
-		let addr = freelist.allocate(0x1000, None);
+		let addr = freelist.allocate(0x1000, None, None);
 		freelist.deallocate(addr.unwrap(), 0x1000);
 
 		for node in &freelist.list {

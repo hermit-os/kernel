@@ -2,6 +2,7 @@ use core::alloc::AllocError;
 
 use hermit_sync::InterruptTicketMutex;
 
+use crate::arch::x86_64::kernel::{get_limit, get_start, is_uefi};
 use crate::arch::x86_64::mm::paging::{BasePageSize, PageSize};
 use crate::arch::x86_64::mm::VirtAddr;
 use crate::mm;
@@ -11,11 +12,16 @@ static KERNEL_FREE_LIST: InterruptTicketMutex<FreeList> =
 	InterruptTicketMutex::new(FreeList::new());
 
 pub fn init() {
-	let entry = FreeListEntry::new(
-		mm::kernel_end_address().as_usize(),
-		kernel_heap_end().as_usize(),
-	);
-	KERNEL_FREE_LIST.lock().push(entry);
+	if is_uefi() {
+		let entry = FreeListEntry::new(get_start(), get_limit());
+		KERNEL_FREE_LIST.lock().push(entry);
+	} else {
+		let entry = FreeListEntry::new(
+			mm::kernel_end_address().as_usize(),
+			kernel_heap_end().as_usize(),
+		);
+		KERNEL_FREE_LIST.lock().push(entry);
+	}
 }
 
 pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
@@ -31,7 +37,7 @@ pub fn allocate(size: usize) -> Result<VirtAddr, AllocError> {
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, None)?
+			.allocate(size, None, None)?
 			.try_into()
 			.unwrap(),
 	))
@@ -57,7 +63,7 @@ pub fn allocate_aligned(size: usize, alignment: usize) -> Result<VirtAddr, Alloc
 	Ok(VirtAddr(
 		KERNEL_FREE_LIST
 			.lock()
-			.allocate(size, Some(alignment))?
+			.allocate(size, Some(alignment), None)?
 			.try_into()
 			.unwrap(),
 	))
