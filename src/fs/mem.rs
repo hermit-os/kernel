@@ -49,19 +49,20 @@ struct RomFileInterface {
 #[async_trait]
 impl ObjectInterface for RomFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
 		let len = self.inner.read().data.len();
 		let pos_guard = self.pos.lock();
 		let pos = *pos_guard;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
-			Ok(PollEvent::POLLIN)
+			result.insert(PollEvent::POLLIN);
 		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			Ok(PollEvent::POLLRDNORM)
+			result.insert(PollEvent::POLLRDNORM);
 		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			Ok(PollEvent::POLLRDBAND)
-		} else {
-			Ok(PollEvent::EMPTY)
+			result.insert(PollEvent::POLLRDBAND);
 		}
+
+		Ok(result)
 	}
 
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
@@ -132,25 +133,26 @@ pub struct RamFileInterface {
 #[async_trait]
 impl ObjectInterface for RamFileInterface {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
 		let len = self.inner.read().data.len();
 		let pos_guard = self.pos.lock();
 		let pos = *pos_guard;
 
 		if event.contains(PollEvent::POLLIN) && pos < len {
-			Ok(PollEvent::POLLIN)
+			result.insert(PollEvent::POLLIN);
 		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
-			Ok(PollEvent::POLLRDNORM)
+			result.insert(PollEvent::POLLRDNORM);
 		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
-			Ok(PollEvent::POLLRDBAND)
+			result.insert(PollEvent::POLLRDBAND);
 		} else if event.contains(PollEvent::POLLOUT) {
-			Ok(PollEvent::POLLOUT)
+			result.insert(PollEvent::POLLOUT);
 		} else if event.contains(PollEvent::POLLWRNORM) {
-			Ok(PollEvent::POLLWRNORM)
+			result.insert(PollEvent::POLLWRNORM);
 		} else if event.contains(PollEvent::POLLWRBAND) {
-			Ok(PollEvent::POLLWRBAND)
-		} else {
-			Ok(PollEvent::EMPTY)
+			result.insert(PollEvent::POLLWRBAND);
 		}
+
+		Ok(result)
 	}
 
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
