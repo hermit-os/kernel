@@ -1,8 +1,10 @@
+use alloc::boxed::Box;
 use core::future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
+use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
@@ -10,7 +12,7 @@ use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::executor::network::{now, Handle, NetworkState, NIC};
 use crate::executor::{block_on, poll_on};
-use crate::fd::{IoCtl, IoError, ObjectInterface, SocketOption};
+use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent, SocketOption};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
@@ -238,7 +240,53 @@ impl Socket {
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for Socket {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		future::poll_fn(|cx| {
+			self.with(|socket| match socket.state() {
+				tcp::State::Closed
+				| tcp::State::Closing
+				| tcp::State::CloseWait
+				| tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Listen
+				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+				_ => {
+					if socket.can_send() {
+						if event.contains(PollEvent::POLLOUT) {
+							result.insert(PollEvent::POLLOUT);
+						} else if event.contains(PollEvent::POLLWRNORM) {
+							result.insert(PollEvent::POLLWRNORM);
+						} else if event.contains(PollEvent::POLLWRBAND) {
+							result.insert(PollEvent::POLLWRBAND);
+						}
+					}
+
+					if socket.can_recv() {
+						if event.contains(PollEvent::POLLIN) {
+							result.insert(PollEvent::POLLIN);
+						} else if event.contains(PollEvent::POLLRDNORM) {
+							result.insert(PollEvent::POLLRDNORM);
+						} else if event.contains(PollEvent::POLLRDBAND) {
+							result.insert(PollEvent::POLLRDBAND);
+						}
+					}
+
+					if result.is_empty() {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					} else {
+						Poll::Ready(Ok(result))
+					}
+				}
+			})
+		})
+		.await
+	}
+
 	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), IoError> {
 		self.port.store(endpoint.port, Ordering::Release);
 		Ok(())
