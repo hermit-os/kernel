@@ -1,12 +1,9 @@
 use alloc::boxed::Box;
-use alloc::sync::Arc;
 use core::future;
-use core::future::Future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicU16, Ordering};
-use core::task::{Context, Poll};
+use core::task::Poll;
 
-use crossbeam_utils::Backoff;
 use hermit_sync::InterruptTicketMutex;
 use smoltcp::iface::{SocketHandle, SocketSet};
 #[cfg(feature = "dhcpv4")]
@@ -21,15 +18,8 @@ use smoltcp::time::{Duration, Instant};
 use smoltcp::wire::{IpCidr, Ipv4Address, Ipv4Cidr};
 
 use crate::arch;
-use crate::arch::core_local::*;
-#[cfg(not(feature = "pci"))]
-use crate::drivers::mmio::get_network_driver;
-use crate::drivers::net::NetworkDriver;
-#[cfg(feature = "pci")]
-use crate::drivers::pci::get_network_driver;
 use crate::executor::device::HermitNet;
-use crate::executor::{spawn, TaskNotify};
-use crate::fd::IoError;
+use crate::executor::spawn;
 use crate::scheduler::PerCoreSchedulerExt;
 
 pub(crate) enum NetworkState<'a> {
@@ -230,7 +220,7 @@ impl<'a> NetworkInterface<'a> {
 }
 
 #[inline]
-fn network_delay(timestamp: Instant) -> Option<Duration> {
+pub(crate) fn network_delay(timestamp: Instant) -> Option<Duration> {
 	crate::executor::network::NIC
 		.lock()
 		.as_nic_mut()
@@ -245,135 +235,4 @@ fn network_poll(timestamp: Instant) {
 		.as_nic_mut()
 		.unwrap()
 		.poll_common(timestamp);
-}
-
-/// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
-where
-	F: Future<Output = Result<T, IoError>>,
-{
-	// disable network interrupts
-	let no_retransmission = {
-		let mut guard = get_network_driver().unwrap().lock();
-		guard.set_polling_mode(true);
-		!guard.get_checksums().tcp.tx()
-	};
-
-	let backoff = Backoff::new();
-	let start = now();
-	let task_notify = Arc::new(TaskNotify::new());
-	let waker = task_notify.clone().into();
-	let mut cx = Context::from_waker(&waker);
-	let mut future = future;
-	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
-
-	loop {
-		// run background tasks
-		crate::executor::run();
-
-		let now = crate::executor::network::now();
-
-		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			if !no_retransmission {
-				let network_timer = network_delay(now)
-					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(network_timer);
-			}
-
-			// allow network interrupts
-			get_network_driver().unwrap().lock().set_polling_mode(false);
-
-			return t;
-		}
-
-		if let Some(duration) = timeout {
-			if crate::executor::network::now() >= start + duration {
-				if !no_retransmission {
-					let network_timer = network_delay(now)
-						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-					core_scheduler().add_network_timer(network_timer);
-				}
-
-				// allow network interrupts
-				get_network_driver().unwrap().lock().set_polling_mode(false);
-
-				return Err(IoError::ETIME);
-			}
-		}
-
-		let delay = network_delay(now).map(|d| d.total_micros());
-		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
-			let wakeup_time =
-				timeout.map(|duration| u64::try_from((start + duration).total_micros()).unwrap());
-			if !no_retransmission {
-				let ticks = crate::arch::processor::get_timer_ticks();
-				let network_timer = delay.map(|d| ticks + d);
-				core_scheduler().add_network_timer(network_timer);
-			}
-
-			// allow network interrupts
-			get_network_driver().unwrap().lock().set_polling_mode(false);
-
-			// switch to another task
-			task_notify.wait(wakeup_time);
-
-			// restore default values
-			get_network_driver().unwrap().lock().set_polling_mode(true);
-			backoff.reset();
-		} else {
-			backoff.snooze();
-		}
-	}
-}
-
-/// Blocks the current thread on `f`, running the executor when idling.
-pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, IoError>
-where
-	F: Future<Output = Result<T, IoError>>,
-{
-	// disable network interrupts
-	let no_retransmission = {
-		let mut guard = get_network_driver().unwrap().lock();
-		guard.set_polling_mode(true);
-		guard.get_checksums().tcp.tx()
-	};
-
-	let start = now();
-	let waker = core::task::Waker::noop();
-	let mut cx = Context::from_waker(&waker);
-	let mut future = future;
-	let mut future = unsafe { core::pin::Pin::new_unchecked(&mut future) };
-
-	loop {
-		// run background tasks
-		crate::executor::run();
-
-		if let Poll::Ready(t) = future.as_mut().poll(&mut cx) {
-			if !no_retransmission {
-				let wakeup_time = network_delay(now())
-					.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-				core_scheduler().add_network_timer(wakeup_time);
-			}
-
-			// allow network interrupts
-			get_network_driver().unwrap().lock().set_polling_mode(false);
-
-			return t;
-		}
-
-		if let Some(duration) = timeout {
-			if crate::executor::network::now() >= start + duration {
-				if !no_retransmission {
-					let wakeup_time = network_delay(now())
-						.map(|d| crate::arch::processor::get_timer_ticks() + d.total_micros());
-					core_scheduler().add_network_timer(wakeup_time);
-				}
-
-				// allow network interrupts
-				get_network_driver().unwrap().lock().set_polling_mode(false);
-
-				return Err(IoError::ETIME);
-			}
-		}
-	}
 }

@@ -21,6 +21,7 @@ pub use self::timer::*;
 use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, FileDescriptor, IoCtl, OpenOption,
+	PollFd,
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
@@ -413,6 +414,17 @@ extern "C" fn __sys_dup(fd: i32) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	kernel_function!(__sys_dup(fd))
+}
+
+extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
+	let slice = unsafe { core::slice::from_raw_parts_mut(fds, nfds) };
+
+	crate::fd::poll(slice, timeout).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
+	kernel_function!(__sys_poll(fds, nfds, timeout))
 }
 
 extern "C" fn __sys_image_start_addr() -> usize {

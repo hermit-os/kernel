@@ -10,6 +10,7 @@ use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
+use crate::executor::poll_on;
 use crate::fd::{IoCtl, IoError, ObjectInterface};
 
 #[derive(Debug)]
@@ -155,7 +156,7 @@ impl ObjectInterface for Socket {
 		let meta = UdpMetadata::from(endpoint);
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO))
+			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO.into()))
 		} else {
 			poll_on(self.async_write(buf, &meta), None)
 		}
@@ -163,7 +164,7 @@ impl ObjectInterface for Socket {
 
 	fn recvfrom(&self, buf: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO)).map_err(|x| {
+			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == IoError::ETIME {
 					IoError::EAGAIN
 				} else {
@@ -171,7 +172,10 @@ impl ObjectInterface for Socket {
 				}
 			})
 		} else {
-			match poll_on(self.async_recvfrom(buf), Some(Duration::from_secs(2))) {
+			match poll_on(
+				self.async_recvfrom(buf),
+				Some(Duration::from_secs(2).into()),
+			) {
 				Err(IoError::ETIME) => block_on(self.async_recvfrom(buf), None),
 				Err(x) => Err(x),
 				Ok(x) => Ok(x),
@@ -185,7 +189,7 @@ impl ObjectInterface for Socket {
 		}
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
+			poll_on(self.async_read(buf), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == IoError::ETIME {
 					IoError::EAGAIN
 				} else {
@@ -193,7 +197,7 @@ impl ObjectInterface for Socket {
 				}
 			})
 		} else {
-			match poll_on(self.async_read(buf), Some(Duration::from_secs(2))) {
+			match poll_on(self.async_read(buf), Some(Duration::from_secs(2).into())) {
 				Err(IoError::ETIME) => block_on(self.async_read(buf), None),
 				Err(x) => Err(x),
 				Ok(x) => Ok(x),
@@ -214,7 +218,7 @@ impl ObjectInterface for Socket {
 		let meta = UdpMetadata::from(endpoint.unwrap());
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO))
+			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO.into()))
 		} else {
 			poll_on(self.async_write(buf, &meta), None)
 		}

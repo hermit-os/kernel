@@ -124,6 +124,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-trait"
+version = "0.1.76"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531b97fb4cd3dfdce92c35dedbfdc1f0b9d8091c8ca943d6dae340ef5012d514"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.41",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -493,6 +504,7 @@ dependencies = [
  "align-address",
  "anyhow",
  "arm-gic",
+ "async-trait",
  "bit_field",
  "bitflags 2.4.2",
  "build-time",

@@ -16,10 +16,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::slice;
 
+use async_trait::async_trait;
 use hermit_sync::{RwSpinLock, SpinMutex};
 
 use crate::arch;
-use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption};
+use crate::fd::{AccessPermission, IoError, ObjectInterface, OpenOption, PollEvent};
 use crate::fs::{DirectoryEntry, FileAttr, NodeKind, VfsNode};
 
 #[derive(Debug)]
@@ -45,7 +46,24 @@ struct RomFileInterface {
 	inner: Arc<RwSpinLock<RomFileInner>>,
 }
 
+#[async_trait]
 impl ObjectInterface for RomFileInterface {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let len = self.inner.read().data.len();
+		let pos_guard = self.pos.lock();
+		let pos = *pos_guard;
+
+		if event.contains(PollEvent::POLLIN) && pos < len {
+			Ok(PollEvent::POLLIN)
+		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
+			Ok(PollEvent::POLLRDNORM)
+		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
+			Ok(PollEvent::POLLRDBAND)
+		} else {
+			Ok(PollEvent::EMPTY)
+		}
+	}
+
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();
@@ -111,7 +129,30 @@ pub struct RamFileInterface {
 	inner: Arc<RwSpinLock<RamFileInner>>,
 }
 
+#[async_trait]
 impl ObjectInterface for RamFileInterface {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let len = self.inner.read().data.len();
+		let pos_guard = self.pos.lock();
+		let pos = *pos_guard;
+
+		if event.contains(PollEvent::POLLIN) && pos < len {
+			Ok(PollEvent::POLLIN)
+		} else if event.contains(PollEvent::POLLRDNORM) && pos < len {
+			Ok(PollEvent::POLLRDNORM)
+		} else if event.contains(PollEvent::POLLRDBAND) && pos < len {
+			Ok(PollEvent::POLLRDBAND)
+		} else if event.contains(PollEvent::POLLOUT) {
+			Ok(PollEvent::POLLOUT)
+		} else if event.contains(PollEvent::POLLWRNORM) {
+			Ok(PollEvent::POLLWRNORM)
+		} else if event.contains(PollEvent::POLLWRBAND) {
+			Ok(PollEvent::POLLWRBAND)
+		} else {
+			Ok(PollEvent::EMPTY)
+		}
+	}
+
 	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
 		{
 			let microseconds = arch::kernel::systemtime::now_micros();

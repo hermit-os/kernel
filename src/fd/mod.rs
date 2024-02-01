@@ -1,14 +1,20 @@
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use core::future::{self, Future};
 use core::sync::atomic::{AtomicI32, Ordering};
+use core::task::Poll::{Pending, Ready};
+use core::time::Duration;
 
 use ahash::RandomState;
+use async_trait::async_trait;
 use dyn_clone::DynClone;
 use hashbrown::HashMap;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
 use crate::env;
+use crate::executor::{block_on, poll_on};
 use crate::fd::stdio::*;
 use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
 
@@ -81,6 +87,35 @@ bitflags! {
 }
 
 bitflags! {
+	#[derive(Debug, Copy, Clone, Default)]
+	pub struct PollEvent: i16 {
+		const EMPTY = 0;
+		const POLLIN = 0x1;
+		const POLLPRI = 0x2;
+		const POLLOUT = 0x4;
+		const POLLERR = 0x8;
+		const POLLHUP = 0x10;
+		const POLLNVAL = 0x20;
+		const POLLRDNORM = 0x040;
+		const POLLRDBAND = 0x080;
+		const POLLWRNORM = 0x0100;
+		const POLLWRBAND = 0x0200;
+		const POLLRDHUP = 0x2000;
+	}
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct PollFd {
+	/// file descriptor
+	pub fd: i32,
+	/// events to look for
+	pub events: PollEvent,
+	/// events returned
+	pub revents: PollEvent,
+}
+
+bitflags! {
 	#[derive(Debug, Copy, Clone)]
 	pub struct AccessPermission: u32 {
 		const S_IFMT = 0o170000;
@@ -112,7 +147,13 @@ impl Default for AccessPermission {
 	}
 }
 
+#[async_trait]
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
+	/// check if an IO event is possible
+	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, IoError> {
+		Ok(PollEvent::EMPTY)
+	}
+
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
 	fn read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
@@ -273,6 +314,48 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError>
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 	get_object(fd)?.write(buf)
+}
+
+async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
+	future::poll_fn(|mut cx| {
+		let mut ready: bool = false;
+
+		for i in &mut *fds {
+			let fd = i.fd;
+			if let Ok(obj) = get_object(fd) {
+				let mut pinned = core::pin::pin!(obj.poll(i.events));
+				if let Ready(event) = pinned.as_mut().poll(&mut cx) {
+					if let Ok(e) = event {
+						ready = true;
+						i.revents = e;
+					}
+				}
+			}
+		}
+
+		if ready {
+			Ready(())
+		} else {
+			Pending
+		}
+	})
+	.await;
+
+	Ok(())
+}
+
+pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
+	if timeout >= 0 {
+		let timeout = if timeout > 0 {
+			Some(Duration::from_millis(timeout.try_into().unwrap()))
+		} else {
+			None
+		};
+
+		poll_on(poll_fds(fds), timeout)
+	} else {
+		block_on(poll_fds(fds), None)
+	}
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
