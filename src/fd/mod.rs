@@ -317,18 +317,16 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
-	future::poll_fn(|mut cx| {
+	future::poll_fn(|cx| {
 		let mut ready: bool = false;
 
 		for i in &mut *fds {
 			let fd = i.fd;
 			if let Ok(obj) = get_object(fd) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
-				if let Ready(event) = pinned.as_mut().poll(&mut cx) {
-					if let Ok(e) = event {
-						ready = true;
-						i.revents = e;
-					}
+				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
+					ready = true;
+					i.revents = e;
 				}
 			}
 		}

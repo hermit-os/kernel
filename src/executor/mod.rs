@@ -103,8 +103,6 @@ pub fn init() {
 #[inline]
 pub(crate) fn now() -> u64 {
 	crate::arch::kernel::systemtime::now_micros()
-		.try_into()
-		.unwrap()
 }
 
 /// Blocks the current thread on `f`, running the executor when idling.
@@ -233,9 +231,8 @@ where
 		let delay = None;
 
 		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
-			let wakeup_time = timeout.map(|duration| {
-				u64::try_from(start).unwrap() + u64::try_from(duration.as_micros()).unwrap()
-			});
+			let wakeup_time =
+				timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
 			#[cfg(any(feature = "tcp", feature = "udp"))]
 			if !no_retransmission {
 				let ticks = crate::arch::processor::get_timer_ticks();
