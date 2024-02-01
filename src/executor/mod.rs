@@ -37,6 +37,7 @@ use crate::drivers::pci::get_network_driver;
 use crate::executor::network::network_delay;
 use crate::executor::task::AsyncTask;
 use crate::fd::IoError;
+#[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 use crate::scheduler::PerCoreSchedulerExt;
 use crate::synch::futex::*;
 
@@ -225,34 +226,46 @@ where
 		}
 
 		#[cfg(any(feature = "tcp", feature = "udp"))]
-		let delay = network_delay(Instant::from_micros_const(now.try_into().unwrap()))
-			.map(|d| d.total_micros());
-		#[cfg(not(any(feature = "tcp", feature = "udp")))]
-		let delay = None;
+		{
+			let delay = network_delay(Instant::from_micros_const(now.try_into().unwrap()))
+				.map(|d| d.total_micros());
 
-		if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
-			let wakeup_time =
-				timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			if !no_retransmission {
-				let ticks = crate::arch::processor::get_timer_ticks();
-				let network_timer = delay.map(|d| ticks + d);
-				core_scheduler().add_network_timer(network_timer);
+			if backoff.is_completed() && delay.unwrap_or(10_000_000) > 10_000 {
+				let wakeup_time =
+					timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
+				if !no_retransmission {
+					let ticks = crate::arch::processor::get_timer_ticks();
+					let network_timer = delay.map(|d| ticks + d);
+					core_scheduler().add_network_timer(network_timer);
+				}
+
+				// allow network interrupts
+				get_network_driver().unwrap().lock().set_polling_mode(false);
+
+				// switch to another task
+				task_notify.wait(wakeup_time);
+
+				// restore default values
+				get_network_driver().unwrap().lock().set_polling_mode(true);
+				backoff.reset();
+			} else {
+				backoff.snooze();
 			}
+		}
+		#[cfg(not(any(feature = "tcp", feature = "udp")))]
+		{
+			if backoff.is_completed() {
+				let wakeup_time =
+					timeout.map(|duration| start + u64::try_from(duration.as_micros()).unwrap());
 
-			// allow network interrupts
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			get_network_driver().unwrap().lock().set_polling_mode(false);
+				// switch to another task
+				task_notify.wait(wakeup_time);
 
-			// switch to another task
-			task_notify.wait(wakeup_time);
-
-			// restore default values
-			#[cfg(any(feature = "tcp", feature = "udp"))]
-			get_network_driver().unwrap().lock().set_polling_mode(true);
-			backoff.reset();
-		} else {
-			backoff.snooze();
+				// restore default values
+				backoff.reset();
+			} else {
+				backoff.snooze();
+			}
 		}
 	}
 }
