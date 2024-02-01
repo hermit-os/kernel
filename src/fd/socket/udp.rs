@@ -9,8 +9,8 @@ use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
-use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::executor::poll_on;
+use crate::executor::network::{now, Handle, NetworkState, NIC};
+use crate::executor::{block_on, poll_on};
 use crate::fd::{IoCtl, IoError, ObjectInterface};
 
 #[derive(Debug)]
