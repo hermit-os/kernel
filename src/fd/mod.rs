@@ -344,13 +344,18 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
 
 pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
 	if timeout >= 0 {
-		let timeout = if timeout > 0 {
-			Some(Duration::from_millis(timeout.try_into().unwrap()))
+		// for larger timeouts, we block on the async function
+		if timeout >= 5000 {
+			block_on(
+				poll_fds(fds),
+				Some(Duration::from_millis(timeout.try_into().unwrap())),
+			)
 		} else {
-			None
-		};
-
-		poll_on(poll_fds(fds), timeout)
+			poll_on(
+				poll_fds(fds),
+				Some(Duration::from_millis(timeout.try_into().unwrap())),
+			)
+		}
 	} else {
 		block_on(poll_fds(fds), None)
 	}
