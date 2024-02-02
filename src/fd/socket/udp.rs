@@ -171,6 +171,8 @@ impl ObjectInterface for Socket {
 							result.insert(PollEvent::POLLRDBAND);
 						}
 					}
+				} else {
+					result.insert(PollEvent::POLLNVAL);
 				}
 
 				if result.is_empty() {

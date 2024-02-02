@@ -253,7 +253,10 @@ impl ObjectInterface for Socket {
 				| tcp::State::FinWait1
 				| tcp::State::FinWait2
 				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+				| tcp::State::TimeWait => {
+					result.insert(PollEvent::POLLNVAL);
+					Poll::Ready(Ok(result))
+				}
 				_ => {
 					if socket.can_send() {
 						if event.contains(PollEvent::POLLOUT) {
