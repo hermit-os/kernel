@@ -9,8 +9,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use core::task::Poll;
 use core::{fmt, future, u32, u8};
 
+use async_lock::Mutex;
 use async_trait::async_trait;
-use hermit_sync::SpinMutex;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -18,6 +18,7 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
+use crate::executor::block_on;
 use crate::fd::{IoError, PollEvent};
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
@@ -1385,30 +1386,30 @@ impl Drop for FuseFileHandleInner {
 }
 
 #[derive(Debug)]
-struct FuseFileHandle(pub Arc<SpinMutex<FuseFileHandleInner>>);
+struct FuseFileHandle(pub Arc<Mutex<FuseFileHandleInner>>);
 
 impl FuseFileHandle {
 	pub fn new() -> Self {
-		Self(Arc::new(SpinMutex::new(FuseFileHandleInner::new())))
+		Self(Arc::new(Mutex::new(FuseFileHandleInner::new())))
 	}
 }
 
 #[async_trait]
 impl ObjectInterface for FuseFileHandle {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		self.0.lock().poll(event).await
+		self.0.lock().await.poll(event).await
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		self.0.lock().read(buf)
+	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+		self.0.lock().await.read(buf)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		self.0.lock().write(buf)
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		self.0.lock().await.write(buf)
 	}
 
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
-		self.0.lock().lseek(offset, whence)
+		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
 
@@ -1601,7 +1602,7 @@ impl VfsNode for FuseDirectory {
 
 		// 1.FUSE_INIT to create session
 		// Already done
-		let mut file_guard = file.0.lock();
+		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
 		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
 		if !opt.contains(OpenOption::O_CREAT) {

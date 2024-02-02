@@ -154,16 +154,28 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		Ok(PollEvent::EMPTY)
 	}
 
+	/// `async_read` attempts to read `len` bytes from the object references
+	/// by the descriptor
+	async fn async_read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
+		Err(IoError::ENOSYS)
+	}
+
 	/// `read` attempts to read `len` bytes from the object references
 	/// by the descriptor
-	fn read(&self, _buf: &mut [u8]) -> Result<usize, IoError> {
+	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+		block_on(self.async_read(buf), None)
+	}
+
+	/// `async_write` attempts to write `len` bytes to the object references
+	/// by the descriptor
+	async fn async_write(&self, _buf: &[u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
 	/// `write` attempts to write `len` bytes to the object references
 	/// by the descriptor
-	fn write(&self, _buf: &[u8]) -> Result<usize, IoError> {
-		Err(IoError::ENOSYS)
+	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		block_on(self.async_write(buf), None)
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
