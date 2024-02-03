@@ -153,10 +153,9 @@ impl VirtioFsDriver {
 }
 
 impl FuseInterface for VirtioFsDriver {
-	fn send_command<S, T>(&mut self, cmd: &fuse::Cmd<S>, rsp: &mut fuse::Rsp<T>)
+	fn send_command<const CODE: u32>(&mut self, cmd: &<fuse::Op<CODE> as fuse::OpTrait>::Cmd, rsp: &mut <fuse::Op<CODE> as fuse::OpTrait>::Rsp)
 	where
-		S: fuse::FuseIn + core::fmt::Debug,
-		T: fuse::FuseOut + core::fmt::Debug,
+		fuse::Op<CODE>: fuse::OpTrait
 	{
 		if let Some(mut buff_tkn) = self.ready_queue.pop() {
 			let cmd_len = Some(cmd.len());

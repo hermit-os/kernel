@@ -1,11 +1,11 @@
-pub(super) const ROOT_ID: u64 = 1;
+pub(crate) const ROOT_ID: u64 = 1;
 
 #[allow(dead_code)]
-pub(super) const GETATTR_FH: u32 = 1 << 0;
+pub(crate) const GETATTR_FH: u32 = 1 << 0;
 
 #[repr(C)]
 #[derive(Debug)]
-pub(super) struct Dirent {
+pub(crate) struct Dirent {
 	pub d_ino: u64,
 	pub d_off: u64,
 	pub d_namelen: u32,
@@ -15,7 +15,7 @@ pub(super) struct Dirent {
 
 #[repr(C)]
 #[derive(Debug, Default)]
-pub(super) struct InHeader {
+pub(crate) struct InHeader {
 	pub len: u32,
 	pub opcode: u32,
 	pub unique: u64,
@@ -28,7 +28,7 @@ pub(super) struct InHeader {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct OutHeader {
+pub(crate) struct OutHeader {
 	pub len: u32,
 	pub error: i32,
 	pub unique: u64,
@@ -36,7 +36,7 @@ pub(super) struct OutHeader {
 
 #[repr(C)]
 #[derive(Debug, Default)]
-pub(super) struct InitIn {
+pub(crate) struct InitIn {
 	pub major: u32,
 	pub minor: u32,
 	pub max_readahead: u32,
@@ -45,7 +45,7 @@ pub(super) struct InitIn {
 
 #[repr(C)]
 #[derive(Debug, Default)]
-pub(super) struct InitOut {
+pub(crate) struct InitOut {
 	pub major: u32,
 	pub minor: u32,
 	pub max_readahead: u32,
@@ -59,7 +59,7 @@ pub(super) struct InitOut {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct ReadIn {
+pub(crate) struct ReadIn {
 	pub fh: u64,
 	pub offset: u64,
 	pub size: u32,
@@ -83,22 +83,22 @@ pub struct WriteIn {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct WriteOut {
+pub(crate) struct WriteOut {
 	pub size: u32,
 	pub padding: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct ReadOut {}
+pub(crate) struct ReadOut {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct LookupIn {}
+pub(crate) struct LookupIn {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct ReadlinkIn {}
+pub(crate) struct ReadlinkIn {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
@@ -106,7 +106,7 @@ pub struct ReadlinkOut {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct AttrOut {
+pub(crate) struct AttrOut {
 	pub attr_valid: u64,
 	pub attr_valid_nsec: u32,
 	pub dummy: u32,
@@ -115,7 +115,7 @@ pub(super) struct AttrOut {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct EntryOut {
+pub(crate) struct EntryOut {
 	pub nodeid: u64,
 	pub generation: u64,
 	pub entry_valid: u64,
@@ -127,7 +127,7 @@ pub(super) struct EntryOut {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct Attr {
+pub(crate) struct Attr {
 	/// inode number
 	pub ino: u64,
 	/// size in bytes
@@ -160,7 +160,7 @@ pub(super) struct Attr {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct CreateIn {
+pub(crate) struct CreateIn {
 	pub flags: u32,
 	pub mode: u32,
 	pub umask: u32,
@@ -169,21 +169,21 @@ pub(super) struct CreateIn {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct CreateOut {
+pub(crate) struct CreateOut {
 	pub entry: EntryOut,
 	pub open: OpenOut,
 }
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct OpenIn {
+pub(crate) struct OpenIn {
 	pub flags: u32,
 	pub unused: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct OpenOut {
+pub(crate) struct OpenOut {
 	pub fh: u64,
 	pub open_flags: u32,
 	pub padding: u32,
@@ -191,7 +191,7 @@ pub(super) struct OpenOut {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct ReleaseIn {
+pub(crate) struct ReleaseIn {
 	pub fh: u64,
 	pub flags: u32,
 	pub release_flags: u32,
@@ -200,34 +200,34 @@ pub(super) struct ReleaseIn {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct ReleaseOut {}
+pub(crate) struct ReleaseOut {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct RmdirIn {}
+pub(crate) struct RmdirIn {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct RmdirOut {}
+pub(crate) struct RmdirOut {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct MkdirIn {
+pub(crate) struct MkdirIn {
 	pub mode: u32,
 	pub umask: u32,
 }
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct UnlinkIn {}
+pub(crate) struct UnlinkIn {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct UnlinkOut {}
+pub(crate) struct UnlinkOut {}
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct LseekIn {
+pub(crate) struct LseekIn {
 	pub fh: u64,
 	pub offset: u64,
 	pub whence: u32,
@@ -236,8 +236,8 @@ pub(super) struct LseekIn {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct LseekOut {
-	pub(super) offset: u64,
+pub(crate) struct LseekOut {
+	pub(crate) offset: u64,
 }
 
 #[repr(C)]
@@ -259,7 +259,7 @@ pub(super) struct PollOut {
 #[repr(u32)]
 #[derive(Debug, Copy, Clone)]
 #[allow(dead_code)]
-pub(super) enum Opcode {
+pub(crate) enum Opcode {
 	Lookup = 1,
 	Forget = 2, // no reply
 	Getattr = 3,
