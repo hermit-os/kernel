@@ -20,10 +20,9 @@ use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
 use crate::executor::block_on;
 use crate::fd::{IoError, PollEvent};
-use crate::fs::fuse_abi::*;
 use crate::fs::{
-	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
-	SeekWhence, VfsNode,
+	self, fuse_abi, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface,
+	OpenOption, SeekWhence, VfsNode,
 };
 
 // response out layout eg @ https://github.com/zargony/fuse-rs/blob/bf6d1cf03f3277e35b580f3c7b9999255d72ecf3/src/ll/request.rs#L44
@@ -54,35 +53,35 @@ pub(crate) unsafe trait FuseIn {}
 /// Struct has to be repr(C)!
 pub(crate) unsafe trait FuseOut {}
 
-unsafe impl FuseIn for fuse_init_in {}
-unsafe impl FuseOut for fuse_init_out {}
-unsafe impl FuseIn for fuse_read_in {}
-unsafe impl FuseIn for fuse_write_in {}
-unsafe impl FuseOut for fuse_write_out {}
-unsafe impl FuseOut for fuse_read_out {}
-unsafe impl FuseIn for fuse_lookup_in {}
-unsafe impl FuseIn for fuse_readlink_in {}
-unsafe impl FuseOut for fuse_readlink_out {}
-unsafe impl FuseOut for fuse_attr_out {}
-unsafe impl FuseOut for fuse_entry_out {}
-unsafe impl FuseIn for fuse_create_in {}
-unsafe impl FuseOut for fuse_create_out {}
-unsafe impl FuseIn for fuse_open_in {}
-unsafe impl FuseOut for fuse_open_out {}
-unsafe impl FuseIn for fuse_release_in {}
-unsafe impl FuseOut for fuse_release_out {}
-unsafe impl FuseIn for fuse_rmdir_in {}
-unsafe impl FuseOut for fuse_rmdir_out {}
-unsafe impl FuseIn for fuse_mkdir_in {}
-unsafe impl FuseIn for fuse_unlink_in {}
-unsafe impl FuseOut for fuse_unlink_out {}
-unsafe impl FuseIn for fuse_lseek_in {}
-unsafe impl FuseOut for fuse_lseek_out {}
-unsafe impl FuseIn for fuse_poll_in {}
-unsafe impl FuseOut for fuse_poll_out {}
+unsafe impl FuseIn for fuse_abi::InitIn {}
+unsafe impl FuseOut for fuse_abi::InitOut {}
+unsafe impl FuseIn for fuse_abi::ReadIn {}
+unsafe impl FuseIn for fuse_abi::WriteIn {}
+unsafe impl FuseOut for fuse_abi::WriteOut {}
+unsafe impl FuseOut for fuse_abi::ReadOut {}
+unsafe impl FuseIn for fuse_abi::LookupIn {}
+unsafe impl FuseIn for fuse_abi::ReadlinkIn {}
+unsafe impl FuseOut for fuse_abi::ReadlinkOut {}
+unsafe impl FuseOut for fuse_abi::AttrOut {}
+unsafe impl FuseOut for fuse_abi::EntryOut {}
+unsafe impl FuseIn for fuse_abi::CreateIn {}
+unsafe impl FuseOut for fuse_abi::CreateOut {}
+unsafe impl FuseIn for fuse_abi::OpenIn {}
+unsafe impl FuseOut for fuse_abi::OpenOut {}
+unsafe impl FuseIn for fuse_abi::ReleaseIn {}
+unsafe impl FuseOut for fuse_abi::ReleaseOut {}
+unsafe impl FuseIn for fuse_abi::RmdirIn {}
+unsafe impl FuseOut for fuse_abi::RmdirOut {}
+unsafe impl FuseIn for fuse_abi::MkdirIn {}
+unsafe impl FuseIn for fuse_abi::UnlinkIn {}
+unsafe impl FuseOut for fuse_abi::UnlinkOut {}
+unsafe impl FuseIn for fuse_abi::LseekIn {}
+unsafe impl FuseOut for fuse_abi::LseekOut {}
+unsafe impl FuseIn for fuse_abi::PollIn {}
+unsafe impl FuseOut for fuse_abi::PollOut {}
 
-impl From<fuse_attr> for FileAttr {
-	fn from(attr: fuse_attr) -> FileAttr {
+impl From<fuse_abi::Attr> for FileAttr {
+	fn from(attr: fuse_abi::Attr) -> FileAttr {
 		FileAttr {
 			st_ino: attr.ino,
 			st_nlink: attr.nlink as u64,
@@ -107,7 +106,7 @@ impl From<fuse_attr> for FileAttr {
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct Cmd<T: FuseIn + fmt::Debug> {
-	header: fuse_in_header,
+	header: fuse_abi::InHeader,
 	cmd: T,
 	extra_buffer: [u8],
 }
@@ -121,7 +120,7 @@ impl<T: FuseIn + core::fmt::Debug> AsSliceU8 for Cmd<T> {
 #[repr(C)]
 #[derive(Debug)]
 pub(crate) struct Rsp<T: FuseOut + fmt::Debug> {
-	header: fuse_out_header,
+	header: fuse_abi::OutHeader,
 	rsp: MaybeUninit<T>,
 	extra_buffer: [MaybeUninit<u8>],
 }
@@ -132,12 +131,12 @@ impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {
 	}
 }
 
-fn create_in_header<T>(nodeid: u64, opcode: Opcode) -> fuse_in_header
+fn create_in_header<T>(nodeid: u64, opcode: fuse_abi::Opcode) -> fuse_abi::InHeader
 where
 	T: FuseIn,
 {
-	fuse_in_header {
-		len: (core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<T>()) as u32,
+	fuse_abi::InHeader {
+		len: (core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<T>()) as u32,
 		opcode: opcode as u32,
 		unique: 1,
 		nodeid,
@@ -145,23 +144,24 @@ where
 	}
 }
 
-fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_init_in>();
+fn create_init() -> (Box<Cmd<fuse_abi::InitIn>>, Box<Rsp<fuse_abi::InitOut>>) {
+	let len = core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::InitIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_init_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::InitIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_init_in>;
-		(*raw).header = create_in_header::<fuse_init_in>(FUSE_ROOT_ID, Opcode::FUSE_INIT);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::InitIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::InitIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Init);
 		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_init_in {
+		(*raw).cmd = fuse_abi::InitIn {
 			major: 7,
 			minor: 31,
 			max_readahead: 0,
@@ -172,20 +172,21 @@ fn create_init() -> (Box<Cmd<fuse_init_in>>, Box<Rsp<fuse_init_out>>) {
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_init_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::InitOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_init_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::InitOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_init_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::InitOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -201,28 +202,29 @@ fn create_create(
 	path: &str,
 	flags: u32,
 	mode: u32,
-) -> (Box<Cmd<fuse_create_in>>, Box<Rsp<fuse_create_out>>) {
+) -> (Box<Cmd<fuse_abi::CreateIn>>, Box<Rsp<fuse_abi::CreateOut>>) {
 	let slice = path.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_create_in>()
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::CreateIn>()
 		+ slice.len()
 		+ 1;
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_create_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::CreateIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_create_in>;
-		(*raw).header = create_in_header::<fuse_create_in>(FUSE_ROOT_ID, Opcode::FUSE_CREATE);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1)
+			as *mut Cmd<fuse_abi::CreateIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::CreateIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Create);
 		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_create_in {
+		(*raw).cmd = fuse_abi::CreateIn {
 			flags,
 			mode,
 			..Default::default()
@@ -234,20 +236,21 @@ fn create_create(
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_create_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::CreateOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_create_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::CreateOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_create_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::CreateOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -259,22 +262,22 @@ fn create_create(
 	(cmd, rsp)
 }
 
-fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_open_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_open_in>();
+fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_abi::OpenIn>>, Box<Rsp<fuse_abi::OpenOut>>) {
+	let len = core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::OpenIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_open_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::OpenIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_open_in>;
-		(*raw).header = create_in_header::<fuse_open_in>(nid, Opcode::FUSE_OPEN);
-		(*raw).cmd = fuse_open_in {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::OpenIn>;
+		(*raw).header = create_in_header::<fuse_abi::OpenIn>(nid, fuse_abi::Opcode::Open);
+		(*raw).cmd = fuse_abi::OpenIn {
 			flags,
 			..Default::default()
 		};
@@ -283,20 +286,21 @@ fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_open_in>>, Box<Rsp<fuse_op
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_open_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::OpenOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_open_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::OpenOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_open_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::OpenOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -314,29 +318,31 @@ fn create_write(
 	fh: u64,
 	buf: &[u8],
 	offset: u64,
-) -> (Box<Cmd<fuse_write_in>>, Box<Rsp<fuse_write_out>>) {
-	let len =
-		core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_write_in>() + buf.len();
+) -> (Box<Cmd<fuse_abi::WriteIn>>, Box<Rsp<fuse_abi::WriteOut>>) {
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::WriteIn>()
+		+ buf.len();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_write_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::WriteIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, buf.len()) as *mut Cmd<fuse_write_in>;
-		(*raw).header = fuse_in_header {
+		let raw =
+			core::ptr::slice_from_raw_parts_mut(data, buf.len()) as *mut Cmd<fuse_abi::WriteIn>;
+		(*raw).header = fuse_abi::InHeader {
 			len: len.try_into().unwrap(),
-			opcode: Opcode::FUSE_WRITE as u32,
+			opcode: fuse_abi::Opcode::Write as u32,
 			unique: 1,
 			nodeid: nid,
 			..Default::default()
 		};
-		(*raw).cmd = fuse_write_in {
+		(*raw).cmd = fuse_abi::WriteIn {
 			fh,
 			offset,
 			size: buf.len().try_into().unwrap(),
@@ -348,20 +354,21 @@ fn create_write(
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_write_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::WriteOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_write_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::WriteOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_write_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::WriteOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -378,22 +385,22 @@ fn create_read(
 	fh: u64,
 	size: u32,
 	offset: u64,
-) -> (Box<Cmd<fuse_read_in>>, Box<Rsp<fuse_read_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_read_in>();
+) -> (Box<Cmd<fuse_abi::ReadIn>>, Box<Rsp<fuse_abi::ReadOut>>) {
+	let len = core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::ReadIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_read_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::ReadIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_read_in>;
-		(*raw).header = create_in_header::<fuse_read_in>(nid, Opcode::FUSE_READ);
-		(*raw).cmd = fuse_read_in {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::ReadIn>;
+		(*raw).header = create_in_header::<fuse_abi::ReadIn>(nid, fuse_abi::Opcode::Read);
+		(*raw).cmd = fuse_abi::ReadIn {
 			fh,
 			offset,
 			size,
@@ -404,14 +411,14 @@ fn create_read(
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>()
-		+ core::mem::size_of::<fuse_read_out>()
+	let len = core::mem::size_of::<fuse_abi::OutHeader>()
+		+ core::mem::size_of::<fuse_abi::ReadOut>()
 		+ usize::try_from(size).unwrap();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_read_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::ReadOut>(),
 		),
 	)
 	.unwrap()
@@ -419,8 +426,8 @@ fn create_read(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_read_out>;
-		(*raw).header = fuse_out_header {
+			as *mut Rsp<fuse_abi::ReadOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -437,28 +444,29 @@ fn create_lseek(
 	fh: u64,
 	offset: isize,
 	whence: SeekWhence,
-) -> (Box<Cmd<fuse_lseek_in>>, Box<Rsp<fuse_lseek_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_lseek_in>();
+) -> (Box<Cmd<fuse_abi::LseekIn>>, Box<Rsp<fuse_abi::LseekOut>>) {
+	let len =
+		core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::LseekIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_lseek_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::LseekIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_lseek_in>;
-		(*raw).header = fuse_in_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::LseekIn>;
+		(*raw).header = fuse_abi::InHeader {
 			len: len.try_into().unwrap(),
-			opcode: Opcode::FUSE_LSEEK as u32,
+			opcode: fuse_abi::Opcode::Lseek as u32,
 			unique: 1,
 			nodeid: nid,
 			..Default::default()
 		};
-		(*raw).cmd = fuse_lseek_in {
+		(*raw).cmd = fuse_abi::LseekIn {
 			fh,
 			offset: offset.try_into().unwrap(),
 			whence: num::ToPrimitive::to_u32(&whence).unwrap(),
@@ -469,20 +477,21 @@ fn create_lseek(
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_lseek_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::LseekOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_lseek_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::LseekOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_lseek_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::LseekOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -497,35 +506,39 @@ fn create_lseek(
 fn create_readlink(
 	nid: u64,
 	size: u32,
-) -> (Box<Cmd<fuse_readlink_in>>, Box<Rsp<fuse_readlink_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_readlink_in>();
+) -> (
+	Box<Cmd<fuse_abi::ReadlinkIn>>,
+	Box<Rsp<fuse_abi::ReadlinkOut>>,
+) {
+	let len =
+		core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::ReadlinkIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_readlink_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::ReadlinkIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_readlink_in>;
-		(*raw).header = create_in_header::<fuse_readlink_in>(nid, Opcode::FUSE_READLINK);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::ReadlinkIn>;
+		(*raw).header = create_in_header::<fuse_abi::ReadlinkIn>(nid, fuse_abi::Opcode::Readlink);
 		(*raw).header.len = len.try_into().unwrap();
 
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>()
-		+ core::mem::size_of::<fuse_readlink_out>()
+	let len = core::mem::size_of::<fuse_abi::OutHeader>()
+		+ core::mem::size_of::<fuse_abi::ReadlinkOut>()
 		+ usize::try_from(size).unwrap();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_readlink_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::ReadlinkOut>(),
 		),
 	)
 	.unwrap()
@@ -533,8 +546,8 @@ fn create_readlink(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_readlink_out>;
-		(*raw).header = fuse_out_header {
+			as *mut Rsp<fuse_abi::ReadlinkOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -546,22 +559,29 @@ fn create_readlink(
 	(cmd, rsp)
 }
 
-fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse_release_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_release_in>();
+fn create_release(
+	nid: u64,
+	fh: u64,
+) -> (
+	Box<Cmd<fuse_abi::ReleaseIn>>,
+	Box<Rsp<fuse_abi::ReleaseOut>>,
+) {
+	let len =
+		core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::ReleaseIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_release_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::ReleaseIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_release_in>;
-		(*raw).header = create_in_header::<fuse_release_in>(nid, Opcode::FUSE_RELEASE);
-		(*raw).cmd = fuse_release_in {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::ReleaseIn>;
+		(*raw).header = create_in_header::<fuse_abi::ReleaseIn>(nid, fuse_abi::Opcode::Release);
+		(*raw).cmd = fuse_abi::ReleaseIn {
 			fh,
 			..Default::default()
 		};
@@ -570,20 +590,21 @@ fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_release_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::ReleaseOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_release_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::ReleaseOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_release_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::ReleaseOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -600,22 +621,22 @@ fn create_poll(
 	fh: u64,
 	kh: u64,
 	event: PollEvent,
-) -> (Box<Cmd<fuse_poll_in>>, Box<Rsp<fuse_poll_out>>) {
-	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_poll_in>();
+) -> (Box<Cmd<fuse_abi::PollIn>>, Box<Rsp<fuse_abi::PollOut>>) {
+	let len = core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::PollIn>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_poll_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::PollIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_poll_in>;
-		(*raw).header = create_in_header::<fuse_poll_in>(nid, Opcode::FUSE_POLL);
-		(*raw).cmd = fuse_poll_in {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::PollIn>;
+		(*raw).header = create_in_header::<fuse_abi::PollIn>(nid, fuse_abi::Opcode::Poll);
+		(*raw).cmd = fuse_abi::PollIn {
 			fh,
 			kh,
 			events: event.bits() as u32,
@@ -626,20 +647,21 @@ fn create_poll(
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_poll_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::PollOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_poll_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::PollOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_poll_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::PollOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -651,28 +673,32 @@ fn create_poll(
 	(cmd, rsp)
 }
 
-fn create_mkdir(path: &str, mode: u32) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
+fn create_mkdir(
+	path: &str,
+	mode: u32,
+) -> (Box<Cmd<fuse_abi::MkdirIn>>, Box<Rsp<fuse_abi::EntryOut>>) {
 	let slice = path.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_mkdir_in>()
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::MkdirIn>()
 		+ slice.len()
 		+ 1;
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_mkdir_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::MkdirIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_mkdir_in>;
-		(*raw).header = create_in_header::<fuse_mkdir_in>(FUSE_ROOT_ID, Opcode::FUSE_MKDIR);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1)
+			as *mut Cmd<fuse_abi::MkdirIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::MkdirIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Mkdir);
 		(*raw).header.len = len.try_into().unwrap();
-		(*raw).cmd = fuse_mkdir_in {
+		(*raw).cmd = fuse_abi::MkdirIn {
 			mode,
 			..Default::default()
 		};
@@ -683,20 +709,21 @@ fn create_mkdir(path: &str, mode: u32) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::EntryOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_entry_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::EntryOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -708,26 +735,27 @@ fn create_mkdir(path: &str, mode: u32) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse
 	(cmd, rsp)
 }
 
-fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_out>>) {
+fn create_unlink(name: &str) -> (Box<Cmd<fuse_abi::UnlinkIn>>, Box<Rsp<fuse_abi::UnlinkOut>>) {
 	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_unlink_in>()
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::UnlinkIn>()
 		+ slice.len()
 		+ 1;
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_unlink_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::UnlinkIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_unlink_in>;
-		(*raw).header = create_in_header::<fuse_unlink_in>(FUSE_ROOT_ID, Opcode::FUSE_UNLINK);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1)
+			as *mut Cmd<fuse_abi::UnlinkIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::UnlinkIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Unlink);
 		(*raw).header.len = len.try_into().unwrap();
 		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
 		(*raw).extra_buffer[slice.len()] = 0;
@@ -736,20 +764,21 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_unlink_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::UnlinkOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_unlink_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::UnlinkOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_unlink_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::UnlinkOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -761,26 +790,27 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_unlink_in>>, Box<Rsp<fuse_unlink_o
 	(cmd, rsp)
 }
 
-fn create_rmdir(name: &str) -> (Box<Cmd<fuse_rmdir_in>>, Box<Rsp<fuse_rmdir_out>>) {
+fn create_rmdir(name: &str) -> (Box<Cmd<fuse_abi::RmdirIn>>, Box<Rsp<fuse_abi::RmdirOut>>) {
 	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_rmdir_in>()
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::RmdirIn>()
 		+ slice.len()
 		+ 1;
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_rmdir_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::RmdirIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_rmdir_in>;
-		(*raw).header = create_in_header::<fuse_rmdir_in>(FUSE_ROOT_ID, Opcode::FUSE_RMDIR);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1)
+			as *mut Cmd<fuse_abi::RmdirIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::RmdirIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Rmdir);
 		(*raw).header.len = len.try_into().unwrap();
 		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
 		(*raw).extra_buffer[slice.len()] = 0;
@@ -789,20 +819,21 @@ fn create_rmdir(name: &str) -> (Box<Cmd<fuse_rmdir_in>>, Box<Rsp<fuse_rmdir_out>
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_rmdir_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::RmdirOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_rmdir_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::RmdirOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_rmdir_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::RmdirOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -814,26 +845,27 @@ fn create_rmdir(name: &str) -> (Box<Cmd<fuse_rmdir_in>>, Box<Rsp<fuse_rmdir_out>
 	(cmd, rsp)
 }
 
-fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_out>>) {
+fn create_lookup(name: &str) -> (Box<Cmd<fuse_abi::LookupIn>>, Box<Rsp<fuse_abi::EntryOut>>) {
 	let slice = name.as_bytes();
-	let len = core::mem::size_of::<fuse_in_header>()
-		+ core::mem::size_of::<fuse_lookup_in>()
+	let len = core::mem::size_of::<fuse_abi::InHeader>()
+		+ core::mem::size_of::<fuse_abi::LookupIn>()
 		+ slice.len()
 		+ 1;
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_in_header>(),
-			core::mem::align_of::<fuse_lookup_in>(),
+			core::mem::align_of::<fuse_abi::InHeader>(),
+			core::mem::align_of::<fuse_abi::LookupIn>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let cmd = unsafe {
 		let data = alloc(layout);
-		let raw =
-			core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1) as *mut Cmd<fuse_lookup_in>;
-		(*raw).header = create_in_header::<fuse_lookup_in>(FUSE_ROOT_ID, Opcode::FUSE_LOOKUP);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, slice.len() + 1)
+			as *mut Cmd<fuse_abi::LookupIn>;
+		(*raw).header =
+			create_in_header::<fuse_abi::LookupIn>(fuse_abi::ROOT_ID, fuse_abi::Opcode::Lookup);
 		(*raw).header.len = len.try_into().unwrap();
 		(*raw).extra_buffer[..slice.len()].copy_from_slice(slice);
 		(*raw).extra_buffer[slice.len()] = 0;
@@ -842,20 +874,21 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_lookup_in>>, Box<Rsp<fuse_entry_ou
 	};
 	assert_eq!(layout, Layout::for_value(&*cmd));
 
-	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_entry_out>();
+	let len =
+		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::EntryOut>();
 	let layout = Layout::from_size_align(
 		len,
 		core::cmp::max(
-			core::mem::align_of::<fuse_out_header>(),
-			core::mem::align_of::<fuse_entry_out>(),
+			core::mem::align_of::<fuse_abi::OutHeader>(),
+			core::mem::align_of::<fuse_abi::EntryOut>(),
 		),
 	)
 	.unwrap()
 	.pad_to_align();
 	let rsp = unsafe {
 		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_entry_out>;
-		(*raw).header = fuse_out_header {
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
+		(*raw).header = fuse_abi::OutHeader {
 			len: len.try_into().unwrap(),
 			..Default::default()
 		};
@@ -888,15 +921,15 @@ fn readlink(nid: u64) -> Result<String, IoError> {
 		.lock()
 		.send_command(cmd.as_ref(), rsp.as_mut());
 	let len: usize = if rsp.header.len as usize
-		- ::core::mem::size_of::<fuse_out_header>()
-		- ::core::mem::size_of::<fuse_readlink_out>()
+		- ::core::mem::size_of::<fuse_abi::OutHeader>()
+		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 		>= len.try_into().unwrap()
 	{
 		len.try_into().unwrap()
 	} else {
 		rsp.header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
-			- ::core::mem::size_of::<fuse_readlink_out>()
+			- ::core::mem::size_of::<fuse_abi::OutHeader>()
+			- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
 	};
 
 	Ok(String::from_utf8(unsafe {
@@ -970,15 +1003,15 @@ impl FuseFileHandleInner {
 				.lock()
 				.send_command(cmd.as_ref(), rsp.as_mut());
 			let len: usize = if rsp.header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
-				- ::core::mem::size_of::<fuse_read_out>()
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 				>= len
 			{
 				len
 			} else {
 				rsp.header.len as usize
-					- ::core::mem::size_of::<fuse_out_header>()
-					- ::core::mem::size_of::<fuse_read_out>()
+					- ::core::mem::size_of::<fuse_abi::OutHeader>()
+					- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			};
 			self.offset += len;
 
@@ -1132,7 +1165,7 @@ impl VfsNode for FuseDirectory {
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
 		let (mut cmd, mut rsp) = create_open(fuse_nid, 0x10000);
-		cmd.header.opcode = Opcode::FUSE_OPENDIR as u32;
+		cmd.header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1147,35 +1180,36 @@ impl VfsNode for FuseDirectory {
 
 		// read content of the directory
 		let (mut cmd, mut rsp) = create_read(fuse_nid, fuse_fh, len, 0);
-		cmd.header.opcode = Opcode::FUSE_READDIR as u32;
+		cmd.header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
 			.send_command(cmd.as_ref(), rsp.as_mut());
 
 		let len: usize = if rsp.header.len as usize
-			- ::core::mem::size_of::<fuse_out_header>()
-			- ::core::mem::size_of::<fuse_read_out>()
+			- ::core::mem::size_of::<fuse_abi::OutHeader>()
+			- ::core::mem::size_of::<fuse_abi::ReadOut>()
 			>= len.try_into().unwrap()
 		{
 			len.try_into().unwrap()
 		} else {
 			rsp.header.len as usize
-				- ::core::mem::size_of::<fuse_out_header>()
-				- ::core::mem::size_of::<fuse_read_out>()
+				- ::core::mem::size_of::<fuse_abi::OutHeader>()
+				- ::core::mem::size_of::<fuse_abi::ReadOut>()
 		};
 
-		if len <= core::mem::size_of::<fuse_dirent>() {
+		if len <= core::mem::size_of::<fuse_abi::Dirent>() {
 			debug!("FUSE no new dirs");
 			return Err(IoError::ENOENT);
 		}
 
 		let mut entries: Vec<DirectoryEntry> = Vec::new();
-		while rsp.header.len as usize - offset > core::mem::size_of::<fuse_dirent>() {
-			let dirent =
-				unsafe { &*(rsp.extra_buffer.as_ptr().byte_add(offset) as *const fuse_dirent) };
+		while rsp.header.len as usize - offset > core::mem::size_of::<fuse_abi::Dirent>() {
+			let dirent = unsafe {
+				&*(rsp.extra_buffer.as_ptr().byte_add(offset) as *const fuse_abi::Dirent)
+			};
 
-			offset += core::mem::size_of::<fuse_dirent>() + dirent.d_namelen as usize;
+			offset += core::mem::size_of::<fuse_abi::Dirent>() + dirent.d_namelen as usize;
 			// Allign to dirent struct
 			offset = ((offset) + U64_SIZE - 1) & (!(U64_SIZE - 1));
 
