@@ -38,8 +38,11 @@ const S_IFLNK: u32 = 40960;
 const S_IFMT: u32 = 61440;
 
 pub(crate) trait FuseInterface {
-	fn send_command<const CODE: u32>(&mut self, cmd: &<Op<CODE> as OpTrait>::Cmd, rsp: &mut <Op<CODE> as OpTrait>::Rsp)
-	where
+	fn send_command<const CODE: u32>(
+		&mut self,
+		cmd: &<Op<CODE> as OpTrait>::Cmd,
+		rsp: &mut <Op<CODE> as OpTrait>::Rsp,
+	) where
 		Op<CODE>: OpTrait;
 
 	fn get_mount_point(&self) -> String;
@@ -89,62 +92,62 @@ pub(crate) trait OpTrait {
 
 pub(crate) struct Op<const CODE: u32>;
 
-impl OpTrait for Op<{fuse_abi::Opcode::Init as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Init as u32 }> {
 	type InStruct = fuse_abi::InitIn;
 	type OutStruct = fuse_abi::InitOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Create as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Create as u32 }> {
 	type InStruct = fuse_abi::CreateIn;
 	type OutStruct = fuse_abi::CreateOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Open as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Open as u32 }> {
 	type InStruct = fuse_abi::OpenIn;
 	type OutStruct = fuse_abi::OpenOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Write as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Write as u32 }> {
 	type InStruct = fuse_abi::WriteIn;
 	type OutStruct = fuse_abi::WriteOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Read as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Read as u32 }> {
 	type InStruct = fuse_abi::ReadIn;
 	type OutStruct = fuse_abi::ReadOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Lseek as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Lseek as u32 }> {
 	type InStruct = fuse_abi::LseekIn;
 	type OutStruct = fuse_abi::LseekOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Readlink as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Readlink as u32 }> {
 	type InStruct = fuse_abi::ReadlinkIn;
 	type OutStruct = fuse_abi::ReadlinkOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Release as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Release as u32 }> {
 	type InStruct = fuse_abi::ReleaseIn;
 	type OutStruct = fuse_abi::ReleaseOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Mkdir as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
 	type InStruct = fuse_abi::MkdirIn;
 	type OutStruct = fuse_abi::EntryOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Unlink as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Unlink as u32 }> {
 	type InStruct = fuse_abi::UnlinkIn;
 	type OutStruct = fuse_abi::UnlinkOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Rmdir as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
 	type InStruct = fuse_abi::RmdirIn;
 	type OutStruct = fuse_abi::RmdirOut;
 }
 
-impl OpTrait for Op<{fuse_abi::Opcode::Lookup as u32}> {
+impl OpTrait for Op<{ fuse_abi::Opcode::Lookup as u32 }> {
 	type InStruct = fuse_abi::LookupIn;
 	type OutStruct = fuse_abi::EntryOut;
 }
@@ -194,11 +197,7 @@ pub(crate) struct Rsp<T: FuseOut + fmt::Debug> {
 	extra_buffer: [MaybeUninit<u8>],
 }
 
-impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {
-	fn len(&self) -> usize {
-		self.header.len.try_into().unwrap()
-	}
-}
+impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {}
 
 fn create_in_header<T>(nodeid: u64, opcode: fuse_abi::Opcode) -> fuse_abi::InHeader
 where
@@ -255,11 +254,6 @@ fn create_init() -> (Box<Cmd<fuse_abi::InitIn>>, Box<Rsp<fuse_abi::InitOut>>) {
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::InitOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -319,11 +313,6 @@ fn create_create(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::CreateOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -369,11 +358,6 @@ fn create_open(nid: u64, flags: u32) -> (Box<Cmd<fuse_abi::OpenIn>>, Box<Rsp<fus
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::OpenOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -437,11 +421,6 @@ fn create_write(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::WriteOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -496,11 +475,6 @@ fn create_read(
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
 			as *mut Rsp<fuse_abi::ReadOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -560,11 +534,6 @@ fn create_lseek(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::LseekOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -616,11 +585,6 @@ fn create_readlink(
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
 			as *mut Rsp<fuse_abi::ReadlinkOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -673,11 +637,6 @@ fn create_release(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::ReleaseOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -792,11 +751,6 @@ fn create_mkdir(
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -847,11 +801,6 @@ fn create_unlink(name: &str) -> (Box<Cmd<fuse_abi::UnlinkIn>>, Box<Rsp<fuse_abi:
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::UnlinkOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -902,11 +851,6 @@ fn create_rmdir(name: &str) -> (Box<Cmd<fuse_abi::RmdirIn>>, Box<Rsp<fuse_abi::R
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::RmdirOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -957,11 +901,6 @@ fn create_lookup(name: &str) -> (Box<Cmd<fuse_abi::LookupIn>>, Box<Rsp<fuse_abi:
 	let rsp = unsafe {
 		let data = alloc(layout);
 		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
 		Box::from_raw(raw)
 	};
 	assert_eq!(layout, Layout::for_value(&*rsp));
@@ -974,7 +913,7 @@ fn lookup(name: &str) -> Option<u64> {
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command::<{fuse_abi::Opcode::Lookup as u32}>(cmd.as_ref(), rsp.as_mut());
+		.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
 	if rsp.header.error == 0 {
 		Some(unsafe { rsp.rsp.assume_init().nodeid })
 	} else {
@@ -988,7 +927,7 @@ fn readlink(nid: u64) -> Result<String, IoError> {
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
-		.send_command::<{fuse_abi::Opcode::Readlink as u32}>(cmd.as_ref(), rsp.as_mut());
+		.send_command::<{ fuse_abi::Opcode::Readlink as u32 }>(cmd.as_ref(), rsp.as_mut());
 	let len: usize = if rsp.header.len as usize
 		- ::core::mem::size_of::<fuse_abi::OutHeader>()
 		- ::core::mem::size_of::<fuse_abi::ReadlinkOut>()
@@ -1070,7 +1009,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Read as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Read as u32 }>(cmd.as_ref(), rsp.as_mut());
 			let len: usize = if rsp.header.len as usize
 				- ::core::mem::size_of::<fuse_abi::OutHeader>()
 				- ::core::mem::size_of::<fuse_abi::ReadOut>()
@@ -1111,7 +1050,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Write as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Write as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 			if rsp.header.error < 0 {
 				return Err(IoError::EIO);
@@ -1139,7 +1078,7 @@ impl FuseFileHandleInner {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Lseek as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Lseek as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 			if rsp.header.error < 0 {
 				return Err(IoError::EIO);
@@ -1161,7 +1100,7 @@ impl Drop for FuseFileHandleInner {
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Release as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Release as u32 }>(cmd.as_ref(), rsp.as_mut());
 		}
 	}
 }
@@ -1238,7 +1177,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Open as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Open as u32 }>(cmd.as_ref(), rsp.as_mut());
 		let fuse_fh = unsafe { rsp.rsp.assume_init().fh };
 
 		debug!("FUSE readdir: {}", path);
@@ -1253,7 +1192,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Read as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Read as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 		let len: usize = if rsp.header.len as usize
 			- ::core::mem::size_of::<fuse_abi::OutHeader>()
@@ -1297,7 +1236,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Release as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Release as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 		Ok(entries)
 	}
@@ -1320,7 +1259,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Lookup as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 		if rsp.header.error != 0 {
 			// TODO: Correct error handling
@@ -1356,7 +1295,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Lookup as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Lookup as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 		let attr = unsafe { rsp.rsp.assume_init().attr };
 		Ok(FileAttr::from(attr))
@@ -1402,7 +1341,7 @@ impl VfsNode for FuseDirectory {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Open as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Open as u32 }>(cmd.as_ref(), rsp.as_mut());
 			file_guard.fuse_fh = Some(unsafe { rsp.rsp.assume_init().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
@@ -1410,7 +1349,7 @@ impl VfsNode for FuseDirectory {
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
-				.send_command::<{fuse_abi::Opcode::Create as u32}>(cmd.as_ref(), rsp.as_mut());
+				.send_command::<{ fuse_abi::Opcode::Create as u32 }>(cmd.as_ref(), rsp.as_mut());
 
 			let inner = unsafe { rsp.rsp.assume_init() };
 			file_guard.fuse_nid = Some(inner.entry.nodeid);
@@ -1437,7 +1376,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Unlink as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Unlink as u32 }>(cmd.as_ref(), rsp.as_mut());
 		trace!("unlink answer {:?}", rsp);
 
 		Ok(())
@@ -1458,7 +1397,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Rmdir as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Rmdir as u32 }>(cmd.as_ref(), rsp.as_mut());
 		trace!("rmdir answer {:?}", rsp);
 
 		Ok(())
@@ -1483,7 +1422,7 @@ impl VfsNode for FuseDirectory {
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
-			.send_command::<{fuse_abi::Opcode::Mkdir as u32}>(cmd.as_ref(), rsp.as_mut());
+			.send_command::<{ fuse_abi::Opcode::Mkdir as u32 }>(cmd.as_ref(), rsp.as_mut());
 		if rsp.header.error == 0 {
 			Ok(())
 		} else {
@@ -1497,7 +1436,9 @@ pub(crate) fn init() {
 
 	if let Some(driver) = get_filesystem_driver() {
 		let (cmd, mut rsp) = create_init();
-		driver.lock().send_command::<{fuse_abi::Opcode::Init as u32}>(cmd.as_ref(), rsp.as_mut());
+		driver
+			.lock()
+			.send_command::<{ fuse_abi::Opcode::Init as u32 }>(cmd.as_ref(), rsp.as_mut());
 		trace!("fuse init answer: {:?}", rsp);
 
 		let mount_point = format!("/{}", driver.lock().get_mount_point());
