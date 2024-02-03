@@ -283,7 +283,7 @@ extern "C" fn initd(_arg: usize) {
 	riscv64::kernel::init_drivers();
 
 	syscalls::init();
-	fd::init();
+	fd::init().unwrap();
 	fs::init();
 
 	// Get the application arguments and environment variables.

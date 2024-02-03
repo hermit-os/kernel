@@ -85,7 +85,6 @@ num-derive = "0.4"
 num-traits = { version = "0.2", default-features = false }
 pci-ids = { version = "0.2", optional = true }
 pci_types = { version = "0.6" }
-pflock = "0.2"
 rand_chacha = { version = "0.3", default-features = false }
 shell-words = { version = "1.1", default-features = false }
 smallvec = { version = "1", features = ["const_new"] }

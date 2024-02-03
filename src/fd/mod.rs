@@ -62,12 +62,13 @@ pub(crate) enum IoCtl {
 pub(crate) type FileDescriptor = i32;
 
 /// Mapping between file descriptor and the referenced object
-static OBJECT_MAP: pflock::PFLock<HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>> =
-	pflock::PFLock::new(HashMap::<
-		FileDescriptor,
-		Arc<dyn ObjectInterface>,
-		RandomState,
-	>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
+static OBJECT_MAP: async_lock::RwLock<
+	HashMap<FileDescriptor, Arc<dyn ObjectInterface>, RandomState>,
+> = async_lock::RwLock::new(HashMap::<
+	FileDescriptor,
+	Arc<dyn ObjectInterface>,
+	RandomState,
+>::with_hasher(RandomState::with_seeds(0, 0, 0, 0)));
 /// Atomic counter to determine the next unused file descriptor
 pub(crate) static FD_COUNTER: AtomicI32 = AtomicI32::new(3);
 
@@ -306,11 +307,16 @@ pub(crate) fn open(
 	let fs = fs::FILESYSTEM.get().unwrap();
 	if let Ok(file) = fs.open(name, flags, mode) {
 		let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-		if OBJECT_MAP.write().try_insert(fd, file).is_err() {
-			Err(IoError::EINVAL)
-		} else {
-			Ok(fd as FileDescriptor)
-		}
+		block_on(
+			async {
+				if OBJECT_MAP.write().await.try_insert(fd, file).is_err() {
+					Err(IoError::EINVAL)
+				} else {
+					Ok(fd as FileDescriptor)
+				}
+			},
+			None,
+		)
 	} else {
 		Err(IoError::EINVAL)
 	}
@@ -334,7 +340,8 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
 
 		for i in &mut *fds {
 			let fd = i.fd;
-			if let Ok(obj) = get_object(fd) {
+			let mut pinned_obj = core::pin::pin!(async_get_object(fd));
+			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
 					ready = true;
@@ -374,14 +381,18 @@ pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
 }
 
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	Ok((*(OBJECT_MAP.read().get(&fd).ok_or(IoError::EINVAL)?)).clone())
+	block_on(async_get_object(fd), None)
+}
+
+async fn async_get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	Ok((*(OBJECT_MAP.read().await.get(&fd).ok_or(IoError::EINVAL)?)).clone())
 }
 
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
 ) -> Option<Arc<dyn ObjectInterface>> {
-	OBJECT_MAP.write().insert(fd, obj)
+	block_on(async { Ok(OBJECT_MAP.write().await.insert(fd, obj)) }, None).unwrap()
 }
 
 // The dup system call allocates a new file descriptor that refers
@@ -389,56 +400,77 @@ pub(crate) fn insert_object(
 // file descriptor number is guaranteed to be the lowest-numbered
 // file descriptor that was unused in the calling process.
 pub(crate) fn dup_object(fd: FileDescriptor) -> Result<FileDescriptor, IoError> {
-	let mut guard = OBJECT_MAP.write();
-	let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
+	block_on(
+		async {
+			let mut guard = OBJECT_MAP.write().await;
+			let obj = (*(guard.get(&fd).ok_or(IoError::EINVAL)?)).clone();
 
-	let new_fd = || -> i32 {
-		for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
-			if !guard.contains_key(&i) {
-				return i;
+			let new_fd = || -> i32 {
+				for i in 3..FD_COUNTER.load(Ordering::SeqCst) {
+					if !guard.contains_key(&i) {
+						return i;
+					}
+				}
+				FD_COUNTER.fetch_add(1, Ordering::SeqCst)
+			};
+
+			let fd = new_fd();
+			if guard.try_insert(fd, obj).is_err() {
+				Err(IoError::EMFILE)
+			} else {
+				Ok(fd as FileDescriptor)
 			}
-		}
-		FD_COUNTER.fetch_add(1, Ordering::SeqCst)
-	};
-
-	let fd = new_fd();
-	if guard.try_insert(fd, obj).is_err() {
-		Err(IoError::EMFILE)
-	} else {
-		Ok(fd as FileDescriptor)
-	}
+		},
+		None,
+	)
 }
 
 pub(crate) fn remove_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	if fd <= 2 {
-		Err(IoError::EINVAL)
-	} else {
-		let obj = OBJECT_MAP.write().remove(&fd).ok_or(IoError::EINVAL)?;
-		Ok(obj)
-	}
+	block_on(
+		async {
+			if fd <= 2 {
+				Err(IoError::EINVAL)
+			} else {
+				let obj = OBJECT_MAP
+					.write()
+					.await
+					.remove(&fd)
+					.ok_or(IoError::EINVAL)?;
+				Ok(obj)
+			}
+		},
+		None,
+	)
 }
 
-pub(crate) fn init() {
-	let mut guard = OBJECT_MAP.write();
-	if env::is_uhyve() {
-		guard
-			.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
-			.unwrap();
-		guard
-			.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
-			.unwrap();
-		guard
-			.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
-			.unwrap();
-	} else {
-		guard
-			.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
-			.unwrap();
-		guard
-			.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
-			.unwrap();
-		guard
-			.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
-			.unwrap();
-	}
+pub(crate) fn init() -> Result<(), IoError> {
+	block_on(
+		async {
+			let mut guard = OBJECT_MAP.write().await;
+			if env::is_uhyve() {
+				guard
+					.try_insert(STDIN_FILENO, Arc::new(UhyveStdin::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDOUT_FILENO, Arc::new(UhyveStdout::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDERR_FILENO, Arc::new(UhyveStderr::new()))
+					.map_err(|_| IoError::EIO)?;
+			} else {
+				guard
+					.try_insert(STDIN_FILENO, Arc::new(GenericStdin::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDOUT_FILENO, Arc::new(GenericStdout::new()))
+					.map_err(|_| IoError::EIO)?;
+				guard
+					.try_insert(STDERR_FILENO, Arc::new(GenericStderr::new()))
+					.map_err(|_| IoError::EIO)?;
+			}
+
+			Ok(())
+		},
+		None,
+	)
 }

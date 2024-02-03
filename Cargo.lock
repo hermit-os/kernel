@@ -567,7 +567,6 @@ dependencies = [
  "num-traits",
  "pci-ids",
  "pci_types",
- "pflock",
  "qemu-exit",
  "rand_chacha",
  "riscv",
@@ -867,15 +866,6 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
-
-[[package]]
-name = "pflock"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cb30d7f84b469117e8b95025621135ec4b32c8a987e7e40e38d3654e0b2e47e"
-dependencies = [
- "lock_api",
-]
 
 [[package]]
 name = "phf"
