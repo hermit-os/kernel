@@ -3,7 +3,7 @@ use core::ptr;
 
 use x86_64::instructions::tlb;
 use x86_64::registers::control::Cr3;
-use x86_64::structures::paging::mapper::UnmapError;
+use x86_64::structures::paging::mapper::{TranslateResult, UnmapError};
 pub use x86_64::structures::paging::PageTableFlags as PageTableEntryFlags;
 use x86_64::structures::paging::{
 	Mapper, Page, PageTable, PageTableIndex, PhysFrame, RecursivePageTable, Size2MiB, Translate,
@@ -68,9 +68,20 @@ unsafe fn recursive_page_table() -> RecursivePageTable<'static> {
 pub fn virtual_to_physical(virtual_address: VirtAddr) -> Option<PhysAddr> {
 	let virtual_address = x86_64::VirtAddr::new(virtual_address.0);
 	let page_table = unsafe { recursive_page_table() };
-	page_table
-		.translate_addr(virtual_address)
-		.map(|addr| PhysAddr(addr.as_u64()))
+	let translate = page_table.translate(virtual_address);
+
+	match translate {
+		TranslateResult::NotMapped | TranslateResult::InvalidFrameAddress(_) => {
+			warn!(
+				"Uable to determine the physical address of 0x{:X}",
+				virtual_address
+			);
+			None
+		}
+		TranslateResult::Mapped { frame, offset, .. } => {
+			Some(PhysAddr((frame.start_address() + offset).as_u64()))
+		}
+	}
 }
 
 #[no_mangle]
