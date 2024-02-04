@@ -103,11 +103,49 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Init as u32 }> {
 	type OutPayload = ();
 }
 
+impl Op<{ fuse_abi::Opcode::Init as u32 }> {
+	fn create() -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			fuse_abi::ROOT_ID,
+			fuse_abi::InitIn {
+				major: 7,
+				minor: 31,
+				max_readahead: 0,
+				flags: 0,
+			},
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Create as u32 }> {
 	type InStruct = fuse_abi::CreateIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::CreateOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Create as u32 }> {
+	fn create(
+		path: &str,
+		flags: u32,
+		mode: u32,
+	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_str(
+			fuse_abi::ROOT_ID,
+			fuse_abi::CreateIn {
+				flags,
+				mode,
+				..Default::default()
+			},
+			path,
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Open as u32 }> {
@@ -117,11 +155,49 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Open as u32 }> {
 	type OutPayload = ();
 }
 
+impl Op<{ fuse_abi::Opcode::Open as u32 }> {
+	fn create(nid: u64, flags: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			nid,
+			fuse_abi::OpenIn {
+				flags,
+				..Default::default()
+			},
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Write as u32 }> {
 	type InStruct = fuse_abi::WriteIn;
 	type InPayload = [u8];
 	type OutStruct = fuse_abi::WriteOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Write as u32 }> {
+	fn create(
+		nid: u64,
+		fh: u64,
+		buf: &[u8],
+		offset: u64,
+	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_array(
+			nid,
+			fuse_abi::WriteIn {
+				fh,
+				offset,
+				size: buf.len().try_into().unwrap(),
+				..Default::default()
+			},
+			buf,
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Read as u32 }> {
@@ -134,11 +210,59 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Read as u32 }> {
 	type OutPayload = [MaybeUninit<u8>];
 }
 
+impl Op<{ fuse_abi::Opcode::Read as u32 }> {
+	fn create(
+		nid: u64,
+		fh: u64,
+		size: u32,
+		offset: u64,
+	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			nid,
+			fuse_abi::ReadIn {
+				fh,
+				offset,
+				size,
+				..Default::default()
+			},
+		);
+		let rsp = unsafe {
+			<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp::new_uninit(
+				size.try_into().unwrap(),
+			)
+		};
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Lseek as u32 }> {
 	type InStruct = fuse_abi::LseekIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::LseekOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Lseek as u32 }> {
+	fn create(
+		nid: u64,
+		fh: u64,
+		offset: isize,
+		whence: SeekWhence,
+	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			nid,
+			fuse_abi::LseekIn {
+				fh,
+				offset: offset.try_into().unwrap(),
+				whence: num::ToPrimitive::to_u32(&whence).unwrap(),
+				..Default::default()
+			},
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Readlink as u32 }> {
@@ -151,11 +275,68 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Readlink as u32 }> {
 	type OutPayload = [MaybeUninit<u8>];
 }
 
+impl Op<{ fuse_abi::Opcode::Readlink as u32 }> {
+	fn create(nid: u64, size: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(nid, fuse_abi::ReadlinkIn {});
+		let rsp = unsafe {
+			<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp::new_uninit(
+				size.try_into().unwrap(),
+			)
+		};
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Release as u32 }> {
 	type InStruct = fuse_abi::ReleaseIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::ReleaseOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Release as u32 }> {
+	fn create(nid: u64, fh: u64) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			nid,
+			fuse_abi::ReleaseIn {
+				fh,
+				..Default::default()
+			},
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
+}
+
+impl OpTrait for Op<{ fuse_abi::Opcode::Poll as u32 }> {
+	type InStruct = fuse_abi::PollIn;
+	type InPayload = ();
+	type OutStruct = fuse_abi::PollOut;
+	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Poll as u32 }> {
+	fn create(
+		nid: u64,
+		fh: u64,
+		kh: u64,
+		event: PollEvent,
+	) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::new_cmd(
+			nid,
+			fuse_abi::PollIn {
+				fh,
+				kh,
+				events: event.bits() as u32,
+				..Default::default()
+			},
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
@@ -165,11 +346,36 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
 	type OutPayload = ();
 }
 
+impl Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
+	fn create(path: &str, mode: u32) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_str(
+			fuse_abi::ROOT_ID,
+			fuse_abi::MkdirIn {
+				mode,
+				..Default::default()
+			},
+			path,
+		);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Unlink as u32 }> {
 	type InStruct = fuse_abi::UnlinkIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::UnlinkOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Unlink as u32 }> {
+	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::UnlinkIn {}, name);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
@@ -179,11 +385,29 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
 	type OutPayload = ();
 }
 
+impl Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
+	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::RmdirIn {}, name);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
+}
+
 impl OpTrait for Op<{ fuse_abi::Opcode::Lookup as u32 }> {
 	type InStruct = fuse_abi::LookupIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::EntryOut;
 	type OutPayload = ();
+}
+
+impl Op<{ fuse_abi::Opcode::Lookup as u32 }> {
+	fn create(name: &str) -> (Box<<Self as OpTrait>::Cmd>, Box<<Self as OpTrait>::Rsp>) {
+		let cmd = Self::cmd_from_str(fuse_abi::ROOT_ID, fuse_abi::LookupIn {}, name);
+		let rsp = unsafe { Box::new_uninit().assume_init() };
+
+		(cmd, rsp)
+	}
 }
 
 impl From<fuse_abi::Attr> for FileAttr {
@@ -331,303 +555,8 @@ where
 	}
 }
 
-fn create_init() -> (
-	Box<<Op<{ fuse_abi::Opcode::Init as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Init as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Init as u32 }>::new_cmd(
-		fuse_abi::ROOT_ID,
-		fuse_abi::InitIn {
-			major: 7,
-			minor: 31,
-			max_readahead: 0,
-			flags: 0,
-		},
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_create(
-	path: &str,
-	flags: u32,
-	mode: u32,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Create as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Create as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Create as u32 }>::cmd_from_str(
-		fuse_abi::ROOT_ID,
-		fuse_abi::CreateIn {
-			flags,
-			mode,
-			..Default::default()
-		},
-		path,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_open(
-	nid: u64,
-	flags: u32,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Open as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Open as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Open as u32 }>::new_cmd(
-		nid,
-		fuse_abi::OpenIn {
-			flags,
-			..Default::default()
-		},
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-// TODO: do write zerocopy?
-fn create_write(
-	nid: u64,
-	fh: u64,
-	buf: &[u8],
-	offset: u64,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Write as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Write as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Write as u32 }>::cmd_from_array(
-		nid,
-		fuse_abi::WriteIn {
-			fh,
-			offset,
-			size: buf.len().try_into().unwrap(),
-			..Default::default()
-		},
-		buf,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_read(
-	nid: u64,
-	fh: u64,
-	size: u32,
-	offset: u64,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Read as u32 }>::new_cmd(
-		nid,
-		fuse_abi::ReadIn {
-			fh,
-			offset,
-			size,
-			..Default::default()
-		},
-	);
-	let rsp = unsafe {
-		<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp::new_uninit(
-			size.try_into().unwrap(),
-		)
-	};
-
-	(cmd, rsp)
-}
-
-fn create_lseek(
-	nid: u64,
-	fh: u64,
-	offset: isize,
-	whence: SeekWhence,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Lseek as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Lseek as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Lseek as u32 }>::new_cmd(
-		nid,
-		fuse_abi::LseekIn {
-			fh,
-			offset: offset.try_into().unwrap(),
-			whence: num::ToPrimitive::to_u32(&whence).unwrap(),
-			..Default::default()
-		},
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_readlink(
-	nid: u64,
-	size: u32,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Readlink as u32 }>::new_cmd(nid, fuse_abi::ReadlinkIn {});
-	let rsp = unsafe {
-		<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp::new_uninit(
-			size.try_into().unwrap(),
-		)
-	};
-
-	(cmd, rsp)
-}
-
-fn create_release(
-	nid: u64,
-	fh: u64,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Release as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Release as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Release as u32 }>::new_cmd(
-		nid,
-		fuse_abi::ReleaseIn {
-			fh,
-			..Default::default()
-		},
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_poll(
-	nid: u64,
-	fh: u64,
-	kh: u64,
-	event: PollEvent,
-) -> (Box<Cmd<fuse_abi::PollIn>>, Box<Rsp<fuse_abi::PollOut>>) {
-	let len = core::mem::size_of::<fuse_abi::InHeader>() + core::mem::size_of::<fuse_abi::PollIn>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::InHeader>(),
-			core::mem::align_of::<fuse_abi::PollIn>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let cmd = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_abi::PollIn>;
-		(*raw).header = create_in_header::<fuse_abi::PollIn>(nid, fuse_abi::Opcode::Poll);
-		(*raw).cmd = fuse_abi::PollIn {
-			fh,
-			kh,
-			events: event.bits() as u32,
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*cmd));
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::PollOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::PollOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::PollOut>;
-		(*raw).header = fuse_abi::OutHeader {
-			len: len.try_into().unwrap(),
-			..Default::default()
-		};
-
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
-
-	(cmd, rsp)
-}
-
-fn create_mkdir(
-	path: &str,
-	mode: u32,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Mkdir as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Mkdir as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Mkdir as u32 }>::cmd_from_str(
-		fuse_abi::ROOT_ID,
-		fuse_abi::MkdirIn {
-			mode,
-			..Default::default()
-		},
-		path,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_unlink(
-	name: &str,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Unlink as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Unlink as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Unlink as u32 }>::cmd_from_str(
-		fuse_abi::ROOT_ID,
-		fuse_abi::UnlinkIn {},
-		name,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_rmdir(
-	name: &str,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Rmdir as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Rmdir as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Rmdir as u32 }>::cmd_from_str(
-		fuse_abi::ROOT_ID,
-		fuse_abi::RmdirIn {},
-		name,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
-fn create_lookup(
-	name: &str,
-) -> (
-	Box<<Op<{ fuse_abi::Opcode::Lookup as u32 }> as OpTrait>::Cmd>,
-	Box<<Op<{ fuse_abi::Opcode::Lookup as u32 }> as OpTrait>::Rsp>,
-) {
-	let cmd = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::cmd_from_str(
-		fuse_abi::ROOT_ID,
-		fuse_abi::LookupIn {},
-		name,
-	);
-	let rsp = unsafe { Box::new_uninit().assume_init() };
-
-	(cmd, rsp)
-}
-
 fn lookup(name: &str) -> Option<u64> {
-	let (cmd, mut rsp) = create_lookup(name);
+	let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(name);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
@@ -641,7 +570,7 @@ fn lookup(name: &str) -> Option<u64> {
 
 fn readlink(nid: u64) -> Result<String, IoError> {
 	let len = MAX_READ_LEN as u32;
-	let (cmd, mut rsp) = create_readlink(nid, len);
+	let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Readlink as u32 }>::create(nid, len);
 	get_filesystem_driver()
 		.unwrap()
 		.lock()
@@ -686,18 +615,21 @@ impl FuseFileHandleInner {
 
 		future::poll_fn(|cx| {
 			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-				let (cmd, mut rsp) = create_poll(nid, fh, kh, events);
+				let (cmd, mut rsp) =
+					Op::<{ fuse_abi::Opcode::Poll as u32 }>::create(nid, fh, kh, events);
 				get_filesystem_driver()
 					.ok_or(IoError::ENOSYS)?
 					.lock()
-					.send_command(cmd.as_ref(), rsp.as_mut());
+					.send_command::<{ fuse_abi::Opcode::Poll as u32 }>(cmd.as_ref(), rsp.as_mut());
 
-				if rsp.header.error < 0 {
+				if rsp.common_header.error < 0 {
 					Poll::Ready(Err(IoError::EIO))
 				} else {
 					let revents = unsafe {
-						PollEvent::from_bits(i16::try_from(rsp.rsp.assume_init().revents).unwrap())
-							.unwrap()
+						PollEvent::from_bits(
+							i16::try_from(rsp.op_header.assume_init().revents).unwrap(),
+						)
+						.unwrap()
 					};
 					if !revents.intersects(events)
 						&& !revents.intersects(
@@ -723,7 +655,12 @@ impl FuseFileHandleInner {
 			len = MAX_READ_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_read(nid, fh, len.try_into().unwrap(), self.offset as u64);
+			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Read as u32 }>::create(
+				nid,
+				fh,
+				len.try_into().unwrap(),
+				self.offset as u64,
+			);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -764,7 +701,12 @@ impl FuseFileHandleInner {
 			len = MAX_WRITE_LEN;
 		}
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_write(nid, fh, &buf[..len], self.offset as u64);
+			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Write as u32 }>::create(
+				nid,
+				fh,
+				&buf[..len],
+				self.offset as u64,
+			);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -792,7 +734,8 @@ impl FuseFileHandleInner {
 		debug!("FUSE lseek");
 
 		if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
-			let (cmd, mut rsp) = create_lseek(nid, fh, offset, whence);
+			let (cmd, mut rsp) =
+				Op::<{ fuse_abi::Opcode::Lseek as u32 }>::create(nid, fh, offset, whence);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -814,7 +757,10 @@ impl FuseFileHandleInner {
 impl Drop for FuseFileHandleInner {
 	fn drop(&mut self) {
 		if self.fuse_nid.is_some() && self.fuse_fh.is_some() {
-			let (cmd, mut rsp) = create_release(self.fuse_nid.unwrap(), self.fuse_fh.unwrap());
+			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Release as u32 }>::create(
+				self.fuse_nid.unwrap(),
+				self.fuse_fh.unwrap(),
+			);
 			get_filesystem_driver()
 				.unwrap()
 				.lock()
@@ -890,7 +836,7 @@ impl VfsNode for FuseDirectory {
 
 		// Opendir
 		// Flag 0x10000 for O_DIRECTORY might not be necessary
-		let (mut cmd, mut rsp) = create_open(fuse_nid, 0x10000);
+		let (mut cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Open as u32 }>::create(fuse_nid, 0x10000);
 		cmd.common_header.opcode = fuse_abi::Opcode::Opendir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
@@ -905,7 +851,8 @@ impl VfsNode for FuseDirectory {
 		let mut offset: usize = 0;
 
 		// read content of the directory
-		let (mut cmd, mut rsp) = create_read(fuse_nid, fuse_fh, len, 0);
+		let (mut cmd, mut rsp) =
+			Op::<{ fuse_abi::Opcode::Read as u32 }>::create(fuse_nid, fuse_fh, len, 0);
 		cmd.common_header.opcode = fuse_abi::Opcode::Readdir as u32;
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
@@ -949,7 +896,7 @@ impl VfsNode for FuseDirectory {
 			}));
 		}
 
-		let (cmd, mut rsp) = create_release(fuse_nid, fuse_fh);
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Release as u32 }>::create(fuse_nid, fuse_fh);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -972,7 +919,7 @@ impl VfsNode for FuseDirectory {
 		debug!("FUSE stat: {}", path);
 
 		// Is there a better way to implement this?
-		let (cmd, mut rsp) = create_lookup(&path);
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -1008,7 +955,7 @@ impl VfsNode for FuseDirectory {
 
 		debug!("FUSE lstat: {}", path);
 
-		let (cmd, mut rsp) = create_lookup(&path);
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::create(&path);
 		get_filesystem_driver()
 			.unwrap()
 			.lock()
@@ -1053,8 +1000,10 @@ impl VfsNode for FuseDirectory {
 			}
 
 			// 3.FUSE_OPEN(nodeid, O_RDONLY) -> fh
-			let (cmd, mut rsp) =
-				create_open(file_guard.fuse_nid.unwrap(), opt.bits().try_into().unwrap());
+			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Open as u32 }>::create(
+				file_guard.fuse_nid.unwrap(),
+				opt.bits().try_into().unwrap(),
+			);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -1062,7 +1011,11 @@ impl VfsNode for FuseDirectory {
 			file_guard.fuse_fh = Some(unsafe { rsp.op_header.assume_init().fh });
 		} else {
 			// Create file (opens implicitly, returns results from both lookup and open calls)
-			let (cmd, mut rsp) = create_create(&path, opt.bits().try_into().unwrap(), mode.bits());
+			let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Create as u32 }>::create(
+				&path,
+				opt.bits().try_into().unwrap(),
+				mode.bits(),
+			);
 			get_filesystem_driver()
 				.ok_or(IoError::ENOSYS)?
 				.lock()
@@ -1089,7 +1042,7 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = create_unlink(&path);
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Unlink as u32 }>::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1110,7 +1063,7 @@ impl VfsNode for FuseDirectory {
 				.collect()
 		};
 
-		let (cmd, mut rsp) = create_rmdir(&path);
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Rmdir as u32 }>::create(&path);
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
 			.lock()
@@ -1134,7 +1087,7 @@ impl VfsNode for FuseDirectory {
 				.map(|v| "/".to_owned() + v)
 				.collect()
 		};
-		let (cmd, mut rsp) = create_mkdir(&path, mode.bits());
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Mkdir as u32 }>::create(&path, mode.bits());
 
 		get_filesystem_driver()
 			.ok_or(IoError::ENOSYS)?
@@ -1152,7 +1105,7 @@ pub(crate) fn init() {
 	debug!("Try to initialize fuse filesystem");
 
 	if let Some(driver) = get_filesystem_driver() {
-		let (cmd, mut rsp) = create_init();
+		let (cmd, mut rsp) = Op::<{ fuse_abi::Opcode::Init as u32 }>::create();
 		driver
 			.lock()
 			.send_command::<{ fuse_abi::Opcode::Init as u32 }>(cmd.as_ref(), rsp.as_mut());

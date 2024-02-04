@@ -242,7 +242,7 @@ pub(crate) struct LseekOut {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct PollIn {
+pub(crate) struct PollIn {
 	pub fh: u64,
 	pub kh: u64,
 	pub flags: u32,
@@ -251,7 +251,7 @@ pub(super) struct PollIn {
 
 #[repr(C)]
 #[derive(Default, Debug)]
-pub(super) struct PollOut {
+pub(crate) struct PollOut {
 	pub revents: u32,
 	padding: u32,
 }
