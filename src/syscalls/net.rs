@@ -270,7 +270,7 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 				drop(guard);
 				let socket = udp::Socket::new(handle);
 
-				insert_object(fd, Arc::new(socket));
+				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -281,7 +281,7 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 				drop(guard);
 				let socket = tcp::Socket::new(handle);
 
-				insert_object(fd, Arc::new(socket));
+				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -302,9 +302,9 @@ extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 				|endpoint| {
 					let new_obj = dyn_clone::clone_box(&*v);
-					insert_object(fd, Arc::from(new_obj));
+					insert_object(fd, Arc::from(new_obj)).expect("FD is already used");
 					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-					insert_object(new_fd, v.clone());
+					insert_object(new_fd, v.clone()).expect("FD is already used");
 
 					if !addr.is_null() && !addrlen.is_null() {
 						let addrlen = unsafe { &mut *addrlen };

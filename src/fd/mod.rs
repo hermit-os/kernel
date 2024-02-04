@@ -380,19 +380,29 @@ pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
 	}
 }
 
+#[inline]
+async fn async_get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
+	Ok((*(OBJECT_MAP.read().await.get(&fd).ok_or(IoError::EINVAL)?)).clone())
+}
+
 pub(crate) fn get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
 	block_on(async_get_object(fd), None)
 }
 
-async fn async_get_object(fd: FileDescriptor) -> Result<Arc<dyn ObjectInterface>, IoError> {
-	Ok((*(OBJECT_MAP.read().await.get(&fd).ok_or(IoError::EINVAL)?)).clone())
+#[inline]
+async fn async_insert_object(
+	fd: FileDescriptor,
+	obj: Arc<dyn ObjectInterface>,
+) -> Result<(), IoError> {
+	let _ = OBJECT_MAP.write().await.insert(fd, obj);
+	Ok(())
 }
 
 pub(crate) fn insert_object(
 	fd: FileDescriptor,
 	obj: Arc<dyn ObjectInterface>,
-) -> Option<Arc<dyn ObjectInterface>> {
-	block_on(async { Ok(OBJECT_MAP.write().await.insert(fd, obj)) }, None).unwrap()
+) -> Result<(), IoError> {
+	block_on(async_insert_object(fd, obj), None)
 }
 
 // The dup system call allocates a new file descriptor that refers
