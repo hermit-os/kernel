@@ -4,7 +4,7 @@ use hermit_sync::InterruptTicketMutex;
 
 use crate::arch;
 
-pub struct Console(());
+pub(crate) struct Console(());
 
 /// A collection of methods that are required to format
 /// a message to Hermit's console.
@@ -21,14 +21,16 @@ impl fmt::Write for Console {
 	}
 }
 
-impl Console {
-	#[inline]
-	pub fn write_all(&mut self, buf: &[u8]) {
-		arch::output_message_buf(buf)
-	}
-}
-
+#[cfg(feature = "newlib")]
 pub static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
+#[cfg(not(feature = "newlib"))]
+static CONSOLE: InterruptTicketMutex<Console> = InterruptTicketMutex::new(Console(()));
+
+#[doc(hidden)]
+pub fn _print(args: ::core::fmt::Arguments<'_>) {
+	use core::fmt::Write;
+	CONSOLE.lock().write_fmt(args).unwrap();
+}
 
 #[cfg(all(test, not(target_os = "none")))]
 mod tests {
