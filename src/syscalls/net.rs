@@ -267,6 +267,7 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			#[cfg(feature = "udp")]
 			if type_ == SOCK_DGRAM {
 				let handle = nic.create_udp_handle().unwrap();
+				drop(guard);
 				let socket = udp::Socket::new(handle);
 
 				insert_object(fd, Arc::new(socket));
@@ -277,7 +278,9 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			#[cfg(feature = "tcp")]
 			if type_ == SOCK_STREAM {
 				let handle = nic.create_tcp_handle().unwrap();
+				drop(guard);
 				let socket = tcp::Socket::new(handle);
+
 				insert_object(fd, Arc::new(socket));
 
 				return fd;
