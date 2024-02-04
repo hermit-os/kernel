@@ -441,10 +441,6 @@ impl VfsNode for MemDirectory {
 				if let Some(component) = components.pop() {
 					let node_name = String::from(component);
 
-					if let Some(directory) = self.inner.read().await.get(&node_name) {
-						return directory.traverse_rmdir(components);
-					}
-
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
@@ -455,6 +451,8 @@ impl VfsNode for MemDirectory {
 							guard.insert(node_name, obj);
 							return Err(IoError::ENOTDIR);
 						}
+					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
+						return directory.traverse_rmdir(components);
 					}
 				}
 
@@ -470,20 +468,18 @@ impl VfsNode for MemDirectory {
 				if let Some(component) = components.pop() {
 					let node_name = String::from(component);
 
-					if let Some(directory) = self.inner.read().await.get(&node_name) {
-						return directory.traverse_unlink(components);
-					}
-
 					if components.is_empty() {
 						let mut guard = self.inner.write().await;
 
 						let obj = guard.remove(&node_name).ok_or(IoError::ENOENT)?;
-						if obj.get_kind() == NodeKind::Directory {
+						if obj.get_kind() == NodeKind::File {
+							return Ok(());
+						} else {
 							guard.insert(node_name, obj);
 							return Err(IoError::EISDIR);
-						} else {
-							return Ok(());
 						}
+					} else if let Some(directory) = self.inner.read().await.get(&node_name) {
+						return directory.traverse_unlink(components);
 					}
 				}
 
