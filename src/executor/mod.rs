@@ -111,12 +111,17 @@ pub(crate) fn poll_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, I
 where
 	F: Future<Output = Result<T, IoError>>,
 {
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	let nic = get_network_driver();
+
 	// disable network interrupts
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let no_retransmission = {
-		let mut guard = get_network_driver().unwrap().lock();
+	let no_retransmission = if let Some(nic) = nic {
+		let mut guard = nic.lock();
 		guard.set_polling_mode(true);
 		guard.get_checksums().tcp.tx()
+	} else {
+		true
 	};
 
 	let start = now();
@@ -140,7 +145,9 @@ where
 
 			// allow network interrupts
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			get_network_driver().unwrap().lock().set_polling_mode(false);
+			if let Some(nic) = nic {
+				nic.lock().set_polling_mode(false);
+			}
 
 			return t;
 		}
@@ -157,7 +164,9 @@ where
 
 				// allow network interrupts
 				#[cfg(any(feature = "tcp", feature = "udp"))]
-				get_network_driver().unwrap().lock().set_polling_mode(false);
+				if let Some(nic) = nic {
+					nic.lock().set_polling_mode(false);
+				}
 
 				return Err(IoError::ETIME);
 			}
@@ -170,12 +179,17 @@ pub(crate) fn block_on<F, T>(future: F, timeout: Option<Duration>) -> Result<T, 
 where
 	F: Future<Output = Result<T, IoError>>,
 {
+	#[cfg(any(feature = "tcp", feature = "udp"))]
+	let nic = get_network_driver();
+
 	// disable network interrupts
 	#[cfg(any(feature = "tcp", feature = "udp"))]
-	let no_retransmission = {
-		let mut guard = get_network_driver().unwrap().lock();
+	let no_retransmission = if let Some(nic) = nic {
+		let mut guard = nic.lock();
 		guard.set_polling_mode(true);
 		!guard.get_checksums().tcp.tx()
+	} else {
+		true
 	};
 
 	let backoff = Backoff::new();
@@ -202,7 +216,9 @@ where
 
 			// allow network interrupts
 			#[cfg(any(feature = "tcp", feature = "udp"))]
-			get_network_driver().unwrap().lock().set_polling_mode(false);
+			if let Some(nic) = nic {
+				nic.lock().set_polling_mode(false);
+			}
 
 			return t;
 		}
@@ -219,7 +235,9 @@ where
 
 				// allow network interrupts
 				#[cfg(any(feature = "tcp", feature = "udp"))]
-				get_network_driver().unwrap().lock().set_polling_mode(false);
+				if let Some(nic) = nic {
+					nic.lock().set_polling_mode(false);
+				}
 
 				return Err(IoError::ETIME);
 			}
@@ -240,13 +258,17 @@ where
 				}
 
 				// allow network interrupts
-				get_network_driver().unwrap().lock().set_polling_mode(false);
+				if let Some(nic) = nic {
+					nic.lock().set_polling_mode(false);
+				}
 
 				// switch to another task
 				task_notify.wait(wakeup_time);
 
 				// restore default values
-				get_network_driver().unwrap().lock().set_polling_mode(true);
+				if let Some(nic) = nic {
+					nic.lock().set_polling_mode(true);
+				}
 				backoff.reset();
 			} else {
 				backoff.snooze();
