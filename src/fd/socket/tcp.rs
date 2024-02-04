@@ -10,8 +10,8 @@ use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
+use crate::executor::block_on;
 use crate::executor::network::{now, Handle, NetworkState, NIC};
-use crate::executor::{block_on, poll_on};
 use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent, SocketOption};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
@@ -321,44 +321,8 @@ impl ObjectInterface for Socket {
 		self.with(|socket| socket.local_endpoint())
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		if buf.is_empty() {
-			return Ok(0);
-		}
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(buf), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
-				} else {
-					x
-				}
-			})
-		} else {
-			match poll_on(self.async_read(buf), Some(Duration::from_secs(2).into())) {
-				Err(IoError::ETIME) => block_on(self.async_read(buf), None),
-				Err(x) => Err(x),
-				Ok(x) => Ok(x),
-			}
-		}
-	}
-
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		if buf.is_empty() {
-			return Ok(0);
-		}
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf), Some(Duration::ZERO.into())).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
-				} else {
-					x
-				}
-			})
-		} else {
-			poll_on(self.async_write(buf), None)
-		}
+	fn is_nonblocking(&self) -> bool {
+		self.nonblocking.load(Ordering::Acquire)
 	}
 
 	fn listen(&self, _backlog: i32) -> Result<(), IoError> {

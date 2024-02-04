@@ -94,7 +94,7 @@ impl ObjectInterface for GenericStdout {
 		Ok(result)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
@@ -127,7 +127,7 @@ impl ObjectInterface for GenericStderr {
 		Ok(result)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		// stdin/err/out all go to console
 		CONSOLE.lock().write_all(buf);
 
@@ -171,7 +171,7 @@ impl ObjectInterface for UhyveStdout {
 		Ok(result)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDOUT_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 
@@ -204,7 +204,7 @@ impl ObjectInterface for UhyveStderr {
 		Ok(result)
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
 		let mut syswrite = SysWrite::new(STDERR_FILENO, buf.as_ptr(), buf.len());
 		uhyve_send(UHYVE_PORT_WRITE, &mut syswrite);
 

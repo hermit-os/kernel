@@ -564,15 +564,9 @@ extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 
 extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).read(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 

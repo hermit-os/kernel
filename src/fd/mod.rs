@@ -161,22 +161,16 @@ pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 		Err(IoError::ENOSYS)
 	}
 
-	/// `read` attempts to read `len` bytes from the object references
-	/// by the descriptor
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		block_on(self.async_read(buf), None)
-	}
-
 	/// `async_write` attempts to write `len` bytes to the object references
 	/// by the descriptor
 	async fn async_write(&self, _buf: &[u8]) -> Result<usize, IoError> {
 		Err(IoError::ENOSYS)
 	}
 
-	/// `write` attempts to write `len` bytes to the object references
-	/// by the descriptor
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		block_on(self.async_write(buf), None)
+	/// `is_nonblocking` returns `true`, if `read`, `write`, `recv` and send operations
+	/// don't block.
+	fn is_nonblocking(&self) -> bool {
+		false
 	}
 
 	/// `lseek` function repositions the offset of the file descriptor fildes
@@ -327,11 +321,51 @@ pub(crate) fn close(fd: FileDescriptor) {
 }
 
 pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError> {
-	get_object(fd)?.read(buf)
+	let obj = get_object(fd)?;
+
+	if buf.is_empty() {
+		return Ok(0);
+	}
+
+	if obj.is_nonblocking() {
+		poll_on(obj.async_read(buf), Some(Duration::ZERO.into())).map_err(|x| {
+			if x == IoError::ETIME {
+				IoError::EAGAIN
+			} else {
+				x
+			}
+		})
+	} else {
+		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2).into())) {
+			Err(IoError::ETIME) => block_on(obj.async_read(buf), None),
+			Err(x) => Err(x),
+			Ok(x) => Ok(x),
+		}
+	}
 }
 
 pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
-	get_object(fd)?.write(buf)
+	let obj = get_object(fd)?;
+
+	if buf.is_empty() {
+		return Ok(0);
+	}
+
+	if obj.is_nonblocking() {
+		poll_on(obj.async_write(buf), Some(Duration::ZERO.into())).map_err(|x| {
+			if x == IoError::ETIME {
+				IoError::EAGAIN
+			} else {
+				x
+			}
+		})
+	} else {
+		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2).into())) {
+			Err(IoError::ETIME) => block_on(obj.async_write(buf), None),
+			Err(x) => Err(x),
+			Ok(x) => Ok(x),
+		}
+	}
 }
 
 async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {

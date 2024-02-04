@@ -261,15 +261,9 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 
 extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).read(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 
@@ -280,15 +274,9 @@ pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isiz
 
 extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::write(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).write(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 
