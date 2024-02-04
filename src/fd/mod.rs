@@ -328,7 +328,7 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError>
 	}
 
 	if obj.is_nonblocking() {
-		poll_on(obj.async_read(buf), Some(Duration::ZERO.into())).map_err(|x| {
+		poll_on(obj.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
 			if x == IoError::ETIME {
 				IoError::EAGAIN
 			} else {
@@ -336,7 +336,7 @@ pub(crate) fn read(fd: FileDescriptor, buf: &mut [u8]) -> Result<usize, IoError>
 			}
 		})
 	} else {
-		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2).into())) {
+		match poll_on(obj.async_read(buf), Some(Duration::from_secs(2))) {
 			Err(IoError::ETIME) => block_on(obj.async_read(buf), None),
 			Err(x) => Err(x),
 			Ok(x) => Ok(x),
@@ -352,7 +352,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 	}
 
 	if obj.is_nonblocking() {
-		poll_on(obj.async_write(buf), Some(Duration::ZERO.into())).map_err(|x| {
+		poll_on(obj.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
 			if x == IoError::ETIME {
 				IoError::EAGAIN
 			} else {
@@ -360,7 +360,7 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 			}
 		})
 	} else {
-		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2).into())) {
+		match poll_on(obj.async_write(buf), Some(Duration::from_secs(2))) {
 			Err(IoError::ETIME) => block_on(obj.async_write(buf), None),
 			Err(x) => Err(x),
 			Ok(x) => Ok(x),
