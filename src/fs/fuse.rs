@@ -87,9 +87,11 @@ pub(crate) trait OpTrait {
 	type InStruct: FuseIn + core::fmt::Debug;
 	type InPayload: ?Sized;
 	type OutStruct: FuseOut + core::fmt::Debug;
+	type OutPayload: ?Sized;
 
-	type Cmd: ?Sized + AsSliceU8 = Cmd<Self::InStruct, Self::InPayload>;
-	type Rsp: ?Sized + AsSliceU8 = Rsp<Self::OutStruct>;
+	type Cmd: ?Sized + AsSliceU8 = ReqPart<fuse_abi::InHeader, Self::InStruct, Self::InPayload>;
+	type Rsp: ?Sized + AsSliceU8 =
+		ReqPart<fuse_abi::OutHeader, MaybeUninit<Self::OutStruct>, Self::OutPayload>;
 }
 
 pub(crate) struct Op<const CODE: u32>;
@@ -98,72 +100,90 @@ impl OpTrait for Op<{ fuse_abi::Opcode::Init as u32 }> {
 	type InStruct = fuse_abi::InitIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::InitOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Create as u32 }> {
 	type InStruct = fuse_abi::CreateIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::CreateOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Open as u32 }> {
 	type InStruct = fuse_abi::OpenIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::OpenOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Write as u32 }> {
 	type InStruct = fuse_abi::WriteIn;
 	type InPayload = [u8];
 	type OutStruct = fuse_abi::WriteOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Read as u32 }> {
 	type InStruct = fuse_abi::ReadIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::ReadOut;
+
+	// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+	// instead of a MaybeUninit<[_]>.
+	type OutPayload = [MaybeUninit<u8>];
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Lseek as u32 }> {
 	type InStruct = fuse_abi::LseekIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::LseekOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Readlink as u32 }> {
 	type InStruct = fuse_abi::ReadlinkIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::ReadlinkOut;
+
+	// Since at the time of writing MaybeUninit does not support DSTs as type parameters, we have to define `OutPayload` as [MaybeUninit<_>]
+	// instead of a MaybeUninit<[_]>.
+	type OutPayload = [MaybeUninit<u8>];
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Release as u32 }> {
 	type InStruct = fuse_abi::ReleaseIn;
 	type InPayload = ();
 	type OutStruct = fuse_abi::ReleaseOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Mkdir as u32 }> {
 	type InStruct = fuse_abi::MkdirIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::EntryOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Unlink as u32 }> {
 	type InStruct = fuse_abi::UnlinkIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::UnlinkOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Rmdir as u32 }> {
 	type InStruct = fuse_abi::RmdirIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::RmdirOut;
+	type OutPayload = ();
 }
 
 impl OpTrait for Op<{ fuse_abi::Opcode::Lookup as u32 }> {
 	type InStruct = fuse_abi::LookupIn;
 	type InPayload = CStr;
 	type OutStruct = fuse_abi::EntryOut;
+	type OutPayload = ();
 }
 
 impl From<fuse_abi::Attr> for FileAttr {
@@ -197,16 +217,17 @@ pub(crate) struct ReqPart<H, T: fmt::Debug, P: ?Sized> {
 	payload: P,
 }
 
-type Cmd<T, P> = ReqPart<fuse_abi::InHeader, T, P>;
-type Rsp<T> = ReqPart<fuse_abi::OutHeader, MaybeUninit<T>, [MaybeUninit<u8>]>;
-
-impl<T: FuseIn + core::fmt::Debug, P: ?Sized> AsSliceU8 for Cmd<T, P> {
+impl<T: FuseIn + core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::InHeader, T, P> {
 	fn len(&self) -> usize {
 		self.common_header.len.try_into().unwrap()
 	}
 }
 
-impl<T: FuseOut + core::fmt::Debug> AsSliceU8 for Rsp<T> {}
+// Since we don't bother with initializing the len field, we use the default len implementation.
+impl<T: FuseOut + core::fmt::Debug, P: ?Sized> AsSliceU8
+	for ReqPart<fuse_abi::OutHeader, MaybeUninit<T>, P>
+{
+}
 
 impl<H, T: fmt::Debug, P: ?Sized> ReqPart<H, T, P>
 where
@@ -262,7 +283,7 @@ where
 		op_header: <Op<O> as OpTrait>::InStruct,
 		len: usize,
 	) -> Box<ReqPart<fuse_abi::InHeader, <Self as OpTrait>::InStruct, [u8]>> {
-		let mut cmd = unsafe { Cmd::new_uninit(len) };
+		let mut cmd = unsafe { ReqPart::new_uninit(len) };
 		cmd.common_header = fuse_abi::InHeader {
 			len: core::mem::size_of_val(cmd.as_ref())
 				.try_into()
@@ -312,7 +333,7 @@ where
 
 fn create_init() -> (
 	Box<<Op<{ fuse_abi::Opcode::Init as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::InitOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Init as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Init as u32 }>::new_cmd(
 		fuse_abi::ROOT_ID,
@@ -323,24 +344,7 @@ fn create_init() -> (
 			flags: 0,
 		},
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::InitOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::InitOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::InitOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -351,7 +355,7 @@ fn create_create(
 	mode: u32,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Create as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::CreateOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Create as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Create as u32 }>::cmd_from_str(
 		fuse_abi::ROOT_ID,
@@ -362,24 +366,7 @@ fn create_create(
 		},
 		path,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::CreateOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::CreateOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::CreateOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -389,7 +376,7 @@ fn create_open(
 	flags: u32,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Open as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::OpenOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Open as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Open as u32 }>::new_cmd(
 		nid,
@@ -398,24 +385,7 @@ fn create_open(
 			..Default::default()
 		},
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::OpenOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::OpenOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::OpenOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -428,7 +398,7 @@ fn create_write(
 	offset: u64,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Write as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::WriteOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Write as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Write as u32 }>::cmd_from_array(
 		nid,
@@ -440,24 +410,7 @@ fn create_write(
 		},
 		buf,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::WriteOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::WriteOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::WriteOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -469,7 +422,7 @@ fn create_read(
 	offset: u64,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::ReadOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Read as u32 }>::new_cmd(
 		nid,
@@ -480,26 +433,11 @@ fn create_read(
 			..Default::default()
 		},
 	);
-
-	let len = core::mem::size_of::<fuse_abi::OutHeader>()
-		+ core::mem::size_of::<fuse_abi::ReadOut>()
-		+ usize::try_from(size).unwrap();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::ReadOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
 	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_abi::ReadOut>;
-		Box::from_raw(raw)
+		<Op<{ fuse_abi::Opcode::Read as u32 }> as OpTrait>::Rsp::new_uninit(
+			size.try_into().unwrap(),
+		)
 	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
 
 	(cmd, rsp)
 }
@@ -511,7 +449,7 @@ fn create_lseek(
 	whence: SeekWhence,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Lseek as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::LseekOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Lseek as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Lseek as u32 }>::new_cmd(
 		nid,
@@ -522,24 +460,7 @@ fn create_lseek(
 			..Default::default()
 		},
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::LseekOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::LseekOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::LseekOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -549,29 +470,14 @@ fn create_readlink(
 	size: u32,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::ReadlinkOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Readlink as u32 }>::new_cmd(nid, fuse_abi::ReadlinkIn {});
-
-	let len = core::mem::size_of::<fuse_abi::OutHeader>()
-		+ core::mem::size_of::<fuse_abi::ReadlinkOut>()
-		+ usize::try_from(size).unwrap();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::ReadlinkOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
 	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, size.try_into().unwrap())
-			as *mut Rsp<fuse_abi::ReadlinkOut>;
-		Box::from_raw(raw)
+		<Op<{ fuse_abi::Opcode::Readlink as u32 }> as OpTrait>::Rsp::new_uninit(
+			size.try_into().unwrap(),
+		)
 	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
 
 	(cmd, rsp)
 }
@@ -581,7 +487,7 @@ fn create_release(
 	fh: u64,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Release as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::ReleaseOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Release as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Release as u32 }>::new_cmd(
 		nid,
@@ -590,24 +496,7 @@ fn create_release(
 			..Default::default()
 		},
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::ReleaseOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::ReleaseOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::ReleaseOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -674,7 +563,7 @@ fn create_mkdir(
 	mode: u32,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Mkdir as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::EntryOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Mkdir as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Mkdir as u32 }>::cmd_from_str(
 		fuse_abi::ROOT_ID,
@@ -684,24 +573,7 @@ fn create_mkdir(
 		},
 		path,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::EntryOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::EntryOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -710,31 +582,14 @@ fn create_unlink(
 	name: &str,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Unlink as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::UnlinkOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Unlink as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Unlink as u32 }>::cmd_from_str(
 		fuse_abi::ROOT_ID,
 		fuse_abi::UnlinkIn {},
 		name,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::UnlinkOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::UnlinkOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::UnlinkOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -743,31 +598,14 @@ fn create_rmdir(
 	name: &str,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Rmdir as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::RmdirOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Rmdir as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Rmdir as u32 }>::cmd_from_str(
 		fuse_abi::ROOT_ID,
 		fuse_abi::RmdirIn {},
 		name,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::RmdirOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::RmdirOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::RmdirOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
@@ -776,31 +614,14 @@ fn create_lookup(
 	name: &str,
 ) -> (
 	Box<<Op<{ fuse_abi::Opcode::Lookup as u32 }> as OpTrait>::Cmd>,
-	Box<Rsp<fuse_abi::EntryOut>>,
+	Box<<Op<{ fuse_abi::Opcode::Lookup as u32 }> as OpTrait>::Rsp>,
 ) {
 	let cmd = Op::<{ fuse_abi::Opcode::Lookup as u32 }>::cmd_from_str(
 		fuse_abi::ROOT_ID,
 		fuse_abi::LookupIn {},
 		name,
 	);
-
-	let len =
-		core::mem::size_of::<fuse_abi::OutHeader>() + core::mem::size_of::<fuse_abi::EntryOut>();
-	let layout = Layout::from_size_align(
-		len,
-		core::cmp::max(
-			core::mem::align_of::<fuse_abi::OutHeader>(),
-			core::mem::align_of::<fuse_abi::EntryOut>(),
-		),
-	)
-	.unwrap()
-	.pad_to_align();
-	let rsp = unsafe {
-		let data = alloc(layout);
-		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_abi::EntryOut>;
-		Box::from_raw(raw)
-	};
-	assert_eq!(layout, Layout::for_value(&*rsp));
+	let rsp = unsafe { Box::new_uninit().assume_init() };
 
 	(cmd, rsp)
 }
