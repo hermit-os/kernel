@@ -87,12 +87,19 @@ pub(crate) fn now() -> Instant {
 }
 
 async fn network_run() {
-	future::poll_fn(|_cx| match NIC.lock().deref_mut() {
-		NetworkState::Initialized(nic) => {
-			nic.poll_common(now());
+	future::poll_fn(|_cx| {
+		if let Some(mut guard) = NIC.try_lock() {
+			match guard.deref_mut() {
+				NetworkState::Initialized(nic) => {
+					nic.poll_common(now());
+					Poll::Pending
+				}
+				_ => Poll::Ready(()),
+			}
+		} else {
+			// another task is already using the NIC => don't check
 			Poll::Pending
 		}
-		_ => Poll::Ready(()),
 	})
 	.await
 }
