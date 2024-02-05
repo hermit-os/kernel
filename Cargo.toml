@@ -75,6 +75,7 @@ bitflags = "2.4"
 cfg-if = "1"
 crossbeam-utils = { version = "0.8", default-features = false }
 dyn-clone = "1.0"
+fdt = "0.1"
 hashbrown = { version = "0.14", default-features = false }
 hermit-entry = { version = "0.9", features = ["kernel"] }
 hermit-sync = "0.1"
@@ -132,7 +133,6 @@ hermit-dtb = { version = "0.1" }
 semihosting = { version = "0.1", optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-fdt = "0.1"
 riscv = "0.11"
 sbi = "0.2"
 trapframe = "0.9"
