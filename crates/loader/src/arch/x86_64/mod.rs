@@ -1,3 +1,5 @@
+#[cfg(all(target_os = "none", not(feature = "fc")))]
+mod fdt;
 mod paging;
 mod physicalmem;
 
@@ -10,6 +12,8 @@ use core::ptr::write_bytes;
 use core::slice;
 
 use align_address::Align;
+#[cfg(all(target_os = "none", not(feature = "fc")))]
+use hermit_entry::boot_info::DeviceTreeAddress;
 use hermit_entry::boot_info::{BootInfo, HardwareInfo, PlatformInfo, RawBootInfo, SerialPortBase};
 use hermit_entry::elf::LoadedKernel;
 #[cfg(all(target_os = "none", feature = "fc"))]
@@ -27,6 +31,8 @@ use multiboot::information::{Multiboot, PAddr};
 use uart_16550::SerialPort;
 use x86_64::structures::paging::{PageSize, PageTableFlags, Size2MiB, Size4KiB};
 
+#[cfg(all(target_os = "none", not(feature = "fc")))]
+use self::fdt::DeviceTree;
 use self::physicalmem::PhysAlloc;
 
 #[cfg(target_os = "none")]
@@ -472,6 +478,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		);
 	}
 
+	let device_tree = DeviceTree::create().expect("Unable to create devicetree!");
+
 	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
 	let boot_info = {
@@ -479,7 +487,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			hardware_info: HardwareInfo {
 				phys_addr_range: 0..0,
 				serial_port_base: SerialPortBase::new(SERIAL_IO_PORT),
-				device_tree: None,
+				device_tree: DeviceTreeAddress::new(device_tree.as_ptr() as u64),
 			},
 			load_info,
 			platform_info: PlatformInfo::Multiboot {
