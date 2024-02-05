@@ -19,6 +19,7 @@
 #![feature(linked_list_cursors)]
 #![feature(maybe_uninit_slice)]
 #![feature(naked_functions)]
+#![feature(new_uninit)]
 #![feature(noop_waker)]
 #![feature(pointer_is_aligned)]
 #![feature(slice_from_ptr_range)]
