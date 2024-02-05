@@ -267,9 +267,10 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			#[cfg(feature = "udp")]
 			if type_ == SOCK_DGRAM {
 				let handle = nic.create_udp_handle().unwrap();
+				drop(guard);
 				let socket = udp::Socket::new(handle);
 
-				insert_object(fd, Arc::new(socket));
+				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -277,8 +278,10 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			#[cfg(feature = "tcp")]
 			if type_ == SOCK_STREAM {
 				let handle = nic.create_tcp_handle().unwrap();
+				drop(guard);
 				let socket = tcp::Socket::new(handle);
-				insert_object(fd, Arc::new(socket));
+
+				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
 				return fd;
 			}
@@ -299,9 +302,9 @@ extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 				|endpoint| {
 					let new_obj = dyn_clone::clone_box(&*v);
-					insert_object(fd, Arc::from(new_obj));
+					insert_object(fd, Arc::from(new_obj)).expect("FD is already used");
 					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-					insert_object(new_fd, v.clone());
+					insert_object(new_fd, v.clone()).expect("FD is already used");
 
 					if !addr.is_null() && !addrlen.is_null() {
 						let addrlen = unsafe { &mut *addrlen };
@@ -561,15 +564,9 @@ extern "C" fn __sys_shutdown_socket(fd: i32, how: i32) -> i32 {
 
 extern "C" fn __sys_recv(fd: i32, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).read(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 

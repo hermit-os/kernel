@@ -5,9 +5,12 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
-use core::{fmt, u32, u8};
+use core::sync::atomic::{AtomicU64, Ordering};
+use core::task::Poll;
+use core::{fmt, future, u32, u8};
 
-use hermit_sync::SpinMutex;
+use async_lock::Mutex;
+use async_trait::async_trait;
 
 use crate::alloc::string::ToString;
 #[cfg(not(feature = "pci"))]
@@ -15,7 +18,8 @@ use crate::arch::kernel::mmio::get_filesystem_driver;
 #[cfg(feature = "pci")]
 use crate::drivers::pci::get_filesystem_driver;
 use crate::drivers::virtio::virtqueue::AsSliceU8;
-use crate::fd::IoError;
+use crate::executor::block_on;
+use crate::fd::{IoError, PollEvent};
 use crate::fs::{
 	self, AccessPermission, DirectoryEntry, FileAttr, NodeKind, ObjectInterface, OpenOption,
 	SeekWhence, VfsNode,
@@ -338,6 +342,24 @@ struct fuse_lseek_out {
 	offset: u64,
 }
 unsafe impl FuseOut for fuse_lseek_out {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+struct fuse_poll_in {
+	pub fh: u64,
+	pub kh: u64,
+	pub flags: u32,
+	pub events: u32,
+}
+unsafe impl FuseIn for fuse_poll_in {}
+
+#[repr(C)]
+#[derive(Default, Debug)]
+struct fuse_poll_out {
+	revents: u32,
+	padding: u32,
+}
+unsafe impl FuseOut for fuse_poll_out {}
 
 #[repr(u32)]
 #[derive(Debug, Copy, Clone)]
@@ -894,6 +916,62 @@ fn create_release(nid: u64, fh: u64) -> (Box<Cmd<fuse_release_in>>, Box<Rsp<fuse
 	(cmd, rsp)
 }
 
+fn create_poll(
+	nid: u64,
+	fh: u64,
+	kh: u64,
+	event: PollEvent,
+) -> (Box<Cmd<fuse_poll_in>>, Box<Rsp<fuse_poll_out>>) {
+	let len = core::mem::size_of::<fuse_in_header>() + core::mem::size_of::<fuse_poll_in>();
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_in_header>(),
+			core::mem::align_of::<fuse_poll_in>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let cmd = unsafe {
+		let data = alloc(layout);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Cmd<fuse_poll_in>;
+		(*raw).header = create_in_header::<fuse_poll_in>(nid, Opcode::FUSE_POLL);
+		(*raw).cmd = fuse_poll_in {
+			fh,
+			kh,
+			events: event.bits() as u32,
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*cmd));
+
+	let len = core::mem::size_of::<fuse_out_header>() + core::mem::size_of::<fuse_poll_out>();
+	let layout = Layout::from_size_align(
+		len,
+		core::cmp::max(
+			core::mem::align_of::<fuse_out_header>(),
+			core::mem::align_of::<fuse_poll_out>(),
+		),
+	)
+	.unwrap()
+	.pad_to_align();
+	let rsp = unsafe {
+		let data = alloc(layout);
+		let raw = core::ptr::slice_from_raw_parts_mut(data, 0) as *mut Rsp<fuse_poll_out>;
+		(*raw).header = fuse_out_header {
+			len: len.try_into().unwrap(),
+			..Default::default()
+		};
+
+		Box::from_raw(raw)
+	};
+	assert_eq!(layout, Layout::for_value(&*rsp));
+
+	(cmd, rsp)
+}
+
 fn create_mkdir(path: &str, mode: u32) -> (Box<Cmd<fuse_mkdir_in>>, Box<Rsp<fuse_entry_out>>) {
 	let slice = path.as_bytes();
 	let len = core::mem::size_of::<fuse_in_header>()
@@ -1164,6 +1242,42 @@ impl FuseFileHandleInner {
 		}
 	}
 
+	async fn poll(&self, events: PollEvent) -> Result<PollEvent, IoError> {
+		static KH: AtomicU64 = AtomicU64::new(0);
+		let kh = KH.fetch_add(1, Ordering::SeqCst);
+
+		future::poll_fn(|cx| {
+			if let (Some(nid), Some(fh)) = (self.fuse_nid, self.fuse_fh) {
+				let (cmd, mut rsp) = create_poll(nid, fh, kh, events);
+				get_filesystem_driver()
+					.ok_or(IoError::ENOSYS)?
+					.lock()
+					.send_command(cmd.as_ref(), rsp.as_mut());
+
+				if rsp.header.error < 0 {
+					Poll::Ready(Err(IoError::EIO))
+				} else {
+					let revents = unsafe {
+						PollEvent::from_bits(i16::try_from(rsp.rsp.assume_init().revents).unwrap())
+							.unwrap()
+					};
+					if !revents.intersects(events)
+						&& !revents.intersects(
+							PollEvent::POLLERR | PollEvent::POLLNVAL | PollEvent::POLLHUP,
+						) {
+						// the current implementation use polling to wait for an event
+						// consequently, we have to wakeup the waker, if the the event doesn't arrive
+						cx.waker().wake_by_ref();
+					}
+					Poll::Ready(Ok(revents))
+				}
+			} else {
+				Poll::Ready(Ok(PollEvent::POLLERR))
+			}
+		})
+		.await
+	}
+
 	fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
 		let mut len = buf.len();
 		if len > MAX_READ_LEN {
@@ -1272,25 +1386,30 @@ impl Drop for FuseFileHandleInner {
 }
 
 #[derive(Debug)]
-struct FuseFileHandle(pub Arc<SpinMutex<FuseFileHandleInner>>);
+struct FuseFileHandle(pub Arc<Mutex<FuseFileHandleInner>>);
 
 impl FuseFileHandle {
 	pub fn new() -> Self {
-		Self(Arc::new(SpinMutex::new(FuseFileHandleInner::new())))
+		Self(Arc::new(Mutex::new(FuseFileHandleInner::new())))
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for FuseFileHandle {
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		self.0.lock().read(buf)
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		self.0.lock().await.poll(event).await
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		self.0.lock().write(buf)
+	async fn async_read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
+		self.0.lock().await.read(buf)
+	}
+
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		self.0.lock().await.write(buf)
 	}
 
 	fn lseek(&self, offset: isize, whence: SeekWhence) -> Result<isize, IoError> {
-		self.0.lock().lseek(offset, whence)
+		block_on(async { self.0.lock().await.lseek(offset, whence) }, None)
 	}
 }
 
@@ -1483,7 +1602,7 @@ impl VfsNode for FuseDirectory {
 
 		// 1.FUSE_INIT to create session
 		// Already done
-		let mut file_guard = file.0.lock();
+		let mut file_guard = block_on(async { Ok(file.0.lock().await) }, None)?;
 
 		// Differentiate between opening and creating new file, since fuse does not support O_CREAT on open.
 		if !opt.contains(OpenOption::O_CREAT) {

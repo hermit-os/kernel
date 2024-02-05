@@ -1,15 +1,18 @@
+use alloc::boxed::Box;
 use core::future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use core::task::Poll;
 
+use async_trait::async_trait;
 use smoltcp::iface;
 use smoltcp::socket::tcp;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
-use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::fd::{IoCtl, IoError, ObjectInterface, SocketOption};
+use crate::executor::block_on;
+use crate::executor::network::{now, Handle, NetworkState, NIC};
+use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent, SocketOption};
 use crate::syscalls::net::*;
 use crate::DEFAULT_KEEP_ALIVE_INTERVAL;
 
@@ -58,83 +61,6 @@ impl Socket {
 		nic.poll_common(now());
 
 		result
-	}
-
-	// TODO: Remove allow once fixed:
-	// https://github.com/rust-lang/rust-clippy/issues/11380
-	#[allow(clippy::needless_pass_by_ref_mut)]
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
-		future::poll_fn(|cx| {
-			self.with(|socket| match socket.state() {
-				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-					Poll::Ready(Ok(0))
-				}
-				tcp::State::FinWait1
-				| tcp::State::FinWait2
-				| tcp::State::Listen
-				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
-				_ => {
-					if socket.can_recv() {
-						Poll::Ready(
-							socket
-								.recv(|data| {
-									let len = core::cmp::min(buffer.len(), data.len());
-									buffer[..len].copy_from_slice(&data[..len]);
-									(len, len)
-								})
-								.map_err(|_| IoError::EIO),
-						)
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
-					}
-				}
-			})
-		})
-		.await
-	}
-
-	async fn async_write(&self, buffer: &[u8]) -> Result<usize, IoError> {
-		let mut pos: usize = 0;
-
-		while pos < buffer.len() {
-			let n = future::poll_fn(|cx| {
-				self.with(|socket| {
-					match socket.state() {
-						tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
-							Poll::Ready(Ok(0))
-						}
-						tcp::State::FinWait1
-						| tcp::State::FinWait2
-						| tcp::State::Listen
-						| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
-						_ => {
-							if socket.can_send() {
-								Poll::Ready(
-									socket.send_slice(&buffer[pos..]).map_err(|_| IoError::EIO),
-								)
-							} else if pos > 0 {
-								// we already send some data => return 0 as signal to stop the
-								// async write
-								Poll::Ready(Ok(0))
-							} else {
-								socket.register_send_waker(cx.waker());
-								Poll::Pending
-							}
-						}
-					}
-				})
-			})
-			.await?;
-
-			if n == 0 {
-				break;
-			}
-
-			pos += n;
-		}
-
-		Ok(pos)
 	}
 
 	async fn async_connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
@@ -237,7 +163,133 @@ impl Socket {
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for Socket {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		future::poll_fn(|cx| {
+			self.with(|socket| match socket.state() {
+				tcp::State::Closed
+				| tcp::State::Closing
+				| tcp::State::CloseWait
+				| tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Listen
+				| tcp::State::TimeWait => {
+					result.insert(PollEvent::POLLNVAL);
+					Poll::Ready(Ok(result))
+				}
+				_ => {
+					if socket.can_send() {
+						if event.contains(PollEvent::POLLOUT) {
+							result.insert(PollEvent::POLLOUT);
+						} else if event.contains(PollEvent::POLLWRNORM) {
+							result.insert(PollEvent::POLLWRNORM);
+						} else if event.contains(PollEvent::POLLWRBAND) {
+							result.insert(PollEvent::POLLWRBAND);
+						}
+					}
+
+					if socket.can_recv() {
+						if event.contains(PollEvent::POLLIN) {
+							result.insert(PollEvent::POLLIN);
+						} else if event.contains(PollEvent::POLLRDNORM) {
+							result.insert(PollEvent::POLLRDNORM);
+						} else if event.contains(PollEvent::POLLRDBAND) {
+							result.insert(PollEvent::POLLRDBAND);
+						}
+					}
+
+					if result.is_empty() {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					} else {
+						Poll::Ready(Ok(result))
+					}
+				}
+			})
+		})
+		.await
+	}
+
+	// TODO: Remove allow once fixed:
+	// https://github.com/rust-lang/rust-clippy/issues/11380
+	#[allow(clippy::needless_pass_by_ref_mut)]
+	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
+		future::poll_fn(|cx| {
+			self.with(|socket| match socket.state() {
+				tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+					Poll::Ready(Ok(0))
+				}
+				tcp::State::FinWait1
+				| tcp::State::FinWait2
+				| tcp::State::Listen
+				| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+				_ => {
+					if socket.can_recv() {
+						Poll::Ready(
+							socket
+								.recv(|data| {
+									let len = core::cmp::min(buffer.len(), data.len());
+									buffer[..len].copy_from_slice(&data[..len]);
+									(len, len)
+								})
+								.map_err(|_| IoError::EIO),
+						)
+					} else {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					}
+				}
+			})
+		})
+		.await
+	}
+
+	async fn async_write(&self, buffer: &[u8]) -> Result<usize, IoError> {
+		let mut pos: usize = 0;
+
+		while pos < buffer.len() {
+			let n = future::poll_fn(|cx| {
+				self.with(|socket| {
+					match socket.state() {
+						tcp::State::Closed | tcp::State::Closing | tcp::State::CloseWait => {
+							Poll::Ready(Ok(0))
+						}
+						tcp::State::FinWait1
+						| tcp::State::FinWait2
+						| tcp::State::Listen
+						| tcp::State::TimeWait => Poll::Ready(Err(IoError::EIO)),
+						_ => {
+							if socket.can_send() {
+								Poll::Ready(
+									socket.send_slice(&buffer[pos..]).map_err(|_| IoError::EIO),
+								)
+							} else if pos > 0 {
+								// we already send some data => return 0 as signal to stop the
+								// async write
+								Poll::Ready(Ok(0))
+							} else {
+								socket.register_send_waker(cx.waker());
+								Poll::Pending
+							}
+						}
+					}
+				})
+			})
+			.await?;
+
+			if n == 0 {
+				break;
+			}
+
+			pos += n;
+		}
+
+		Ok(pos)
+	}
+
 	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), IoError> {
 		self.port.store(endpoint.port, Ordering::Release);
 		Ok(())
@@ -245,7 +297,7 @@ impl ObjectInterface for Socket {
 
 	fn connect(&self, endpoint: IpEndpoint) -> Result<(), IoError> {
 		if self.nonblocking.load(Ordering::Acquire) {
-			block_on(self.async_connect(endpoint), Some(Duration::ZERO)).map_err(|x| {
+			block_on(self.async_connect(endpoint), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == IoError::ETIME {
 					IoError::EAGAIN
 				} else {
@@ -269,44 +321,8 @@ impl ObjectInterface for Socket {
 		self.with(|socket| socket.local_endpoint())
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		if buf.is_empty() {
-			return Ok(0);
-		}
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
-				} else {
-					x
-				}
-			})
-		} else {
-			match poll_on(self.async_read(buf), Some(Duration::from_secs(2))) {
-				Err(IoError::ETIME) => block_on(self.async_read(buf), None),
-				Err(x) => Err(x),
-				Ok(x) => Ok(x),
-			}
-		}
-	}
-
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		if buf.is_empty() {
-			return Ok(0);
-		}
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf), Some(Duration::ZERO)).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
-				} else {
-					x
-				}
-			})
-		} else {
-			poll_on(self.async_write(buf), None)
-		}
+	fn is_nonblocking(&self) -> bool {
+		self.nonblocking.load(Ordering::Acquire)
 	}
 
 	fn listen(&self, _backlog: i32) -> Result<(), IoError> {

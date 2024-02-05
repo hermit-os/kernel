@@ -21,6 +21,7 @@ pub use self::timer::*;
 use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, FileDescriptor, IoCtl, OpenOption,
+	PollFd,
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
@@ -260,15 +261,9 @@ pub extern "C" fn sys_close(fd: FileDescriptor) -> i32 {
 
 extern "C" fn __sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts_mut(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::read(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).read(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 
@@ -279,15 +274,9 @@ pub extern "C" fn sys_read(fd: FileDescriptor, buf: *mut u8, len: usize) -> isiz
 
 extern "C" fn __sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> isize {
 	let slice = unsafe { core::slice::from_raw_parts(buf, len) };
-	let obj = get_object(fd);
-	obj.map_or_else(
+	crate::fd::write(fd, slice).map_or_else(
 		|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-		|v| {
-			(*v).write(slice).map_or_else(
-				|e| -num::ToPrimitive::to_isize(&e).unwrap(),
-				|v| v.try_into().unwrap(),
-			)
-		},
+		|v| v.try_into().unwrap(),
 	)
 }
 
@@ -413,6 +402,17 @@ extern "C" fn __sys_dup(fd: i32) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_dup(fd: i32) -> i32 {
 	kernel_function!(__sys_dup(fd))
+}
+
+extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
+	let slice = unsafe { core::slice::from_raw_parts_mut(fds, nfds) };
+
+	crate::fd::poll(slice, timeout).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+}
+
+#[no_mangle]
+pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
+	kernel_function!(__sys_poll(fds, nfds, timeout))
 }
 
 extern "C" fn __sys_image_start_addr() -> usize {

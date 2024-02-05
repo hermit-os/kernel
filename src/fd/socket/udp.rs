@@ -1,16 +1,19 @@
+use alloc::boxed::Box;
 use core::future;
 use core::ops::DerefMut;
 use core::sync::atomic::{AtomicBool, Ordering};
 use core::task::Poll;
 
+use async_trait::async_trait;
 use crossbeam_utils::atomic::AtomicCell;
 use smoltcp::socket::udp;
 use smoltcp::socket::udp::UdpMetadata;
 use smoltcp::time::Duration;
 use smoltcp::wire::{IpEndpoint, IpListenEndpoint};
 
-use crate::executor::network::{block_on, now, poll_on, Handle, NetworkState, NIC};
-use crate::fd::{IoCtl, IoError, ObjectInterface};
+use crate::executor::network::{now, Handle, NetworkState, NIC};
+use crate::executor::{block_on, poll_on};
+use crate::fd::{IoCtl, IoError, ObjectInterface, PollEvent};
 
 #[derive(Debug)]
 pub struct IPv4;
@@ -53,38 +56,6 @@ impl Socket {
 		.await
 	}
 
-	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
-		future::poll_fn(|cx| {
-			self.with(|socket| {
-				if socket.is_open() {
-					if socket.can_recv() {
-						match socket.recv_slice(buffer) {
-							Ok((len, meta)) => match self.endpoint.load() {
-								Some(ep) => {
-									if meta.endpoint == ep {
-										Poll::Ready(Ok(len))
-									} else {
-										buffer[..len].iter_mut().for_each(|x| *x = 0);
-										socket.register_recv_waker(cx.waker());
-										Poll::Pending
-									}
-								}
-								None => Poll::Ready(Ok(len)),
-							},
-							_ => Poll::Ready(Err(IoError::EIO)),
-						}
-					} else {
-						socket.register_recv_waker(cx.waker());
-						Poll::Pending
-					}
-				} else {
-					Poll::Ready(Err(IoError::EIO))
-				}
-			})
-		})
-		.await
-	}
-
 	async fn async_recvfrom(&self, buffer: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -117,7 +88,11 @@ impl Socket {
 		.await
 	}
 
-	async fn async_write(&self, buffer: &[u8], meta: &UdpMetadata) -> Result<usize, IoError> {
+	async fn async_write_with_meta(
+		&self,
+		buffer: &[u8],
+		meta: &UdpMetadata,
+	) -> Result<usize, IoError> {
 		future::poll_fn(|cx| {
 			self.with(|socket| {
 				if socket.is_open() {
@@ -141,7 +116,48 @@ impl Socket {
 	}
 }
 
+#[async_trait]
 impl ObjectInterface for Socket {
+	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
+		let mut result: PollEvent = PollEvent::EMPTY;
+
+		future::poll_fn(|cx| {
+			self.with(|socket| {
+				if socket.is_open() {
+					if socket.can_send() {
+						if event.contains(PollEvent::POLLOUT) {
+							result.insert(PollEvent::POLLOUT);
+						} else if event.contains(PollEvent::POLLWRNORM) {
+							result.insert(PollEvent::POLLWRNORM);
+						} else if event.contains(PollEvent::POLLWRBAND) {
+							result.insert(PollEvent::POLLWRBAND);
+						}
+					}
+
+					if socket.can_recv() {
+						if event.contains(PollEvent::POLLIN) {
+							result.insert(PollEvent::POLLIN);
+						} else if event.contains(PollEvent::POLLRDNORM) {
+							result.insert(PollEvent::POLLRDNORM);
+						} else if event.contains(PollEvent::POLLRDBAND) {
+							result.insert(PollEvent::POLLRDBAND);
+						}
+					}
+				} else {
+					result.insert(PollEvent::POLLNVAL);
+				}
+
+				if result.is_empty() {
+					socket.register_recv_waker(cx.waker());
+					Poll::Pending
+				} else {
+					Poll::Ready(Ok(result))
+				}
+			})
+		})
+		.await
+	}
+
 	fn bind(&self, endpoint: IpListenEndpoint) -> Result<(), IoError> {
 		self.with(|socket| socket.bind(endpoint).map_err(|_| IoError::EADDRINUSE))
 	}
@@ -155,15 +171,18 @@ impl ObjectInterface for Socket {
 		let meta = UdpMetadata::from(endpoint);
 
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO))
+			poll_on(
+				self.async_write_with_meta(buf, &meta),
+				Some(Duration::ZERO.into()),
+			)
 		} else {
-			poll_on(self.async_write(buf, &meta), None)
+			poll_on(self.async_write_with_meta(buf, &meta), None)
 		}
 	}
 
 	fn recvfrom(&self, buf: &mut [u8]) -> Result<(usize, IpEndpoint), IoError> {
 		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO)).map_err(|x| {
+			poll_on(self.async_recvfrom(buf), Some(Duration::ZERO.into())).map_err(|x| {
 				if x == IoError::ETIME {
 					IoError::EAGAIN
 				} else {
@@ -171,7 +190,10 @@ impl ObjectInterface for Socket {
 				}
 			})
 		} else {
-			match poll_on(self.async_recvfrom(buf), Some(Duration::from_secs(2))) {
+			match poll_on(
+				self.async_recvfrom(buf),
+				Some(Duration::from_secs(2).into()),
+			) {
 				Err(IoError::ETIME) => block_on(self.async_recvfrom(buf), None),
 				Err(x) => Err(x),
 				Ok(x) => Ok(x),
@@ -179,44 +201,44 @@ impl ObjectInterface for Socket {
 		}
 	}
 
-	fn read(&self, buf: &mut [u8]) -> Result<usize, IoError> {
-		if buf.len() == 0 {
-			return Ok(0);
-		}
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_read(buf), Some(Duration::ZERO)).map_err(|x| {
-				if x == IoError::ETIME {
-					IoError::EAGAIN
+	async fn async_read(&self, buffer: &mut [u8]) -> Result<usize, IoError> {
+		future::poll_fn(|cx| {
+			self.with(|socket| {
+				if socket.is_open() {
+					if socket.can_recv() {
+						match socket.recv_slice(buffer) {
+							Ok((len, meta)) => match self.endpoint.load() {
+								Some(ep) => {
+									if meta.endpoint == ep {
+										Poll::Ready(Ok(len))
+									} else {
+										buffer[..len].iter_mut().for_each(|x| *x = 0);
+										socket.register_recv_waker(cx.waker());
+										Poll::Pending
+									}
+								}
+								None => Poll::Ready(Ok(len)),
+							},
+							_ => Poll::Ready(Err(IoError::EIO)),
+						}
+					} else {
+						socket.register_recv_waker(cx.waker());
+						Poll::Pending
+					}
 				} else {
-					x
+					Poll::Ready(Err(IoError::EIO))
 				}
 			})
-		} else {
-			match poll_on(self.async_read(buf), Some(Duration::from_secs(2))) {
-				Err(IoError::ETIME) => block_on(self.async_read(buf), None),
-				Err(x) => Err(x),
-				Ok(x) => Ok(x),
-			}
-		}
+		})
+		.await
 	}
 
-	fn write(&self, buf: &[u8]) -> Result<usize, IoError> {
-		if buf.len() == 0 {
-			return Ok(0);
-		}
-
-		let endpoint = self.endpoint.load();
-		if endpoint.is_none() {
-			return Err(IoError::EINVAL);
-		}
-
-		let meta = UdpMetadata::from(endpoint.unwrap());
-
-		if self.nonblocking.load(Ordering::Acquire) {
-			poll_on(self.async_write(buf, &meta), Some(Duration::ZERO))
+	async fn async_write(&self, buf: &[u8]) -> Result<usize, IoError> {
+		if let Some(endpoint) = self.endpoint.load() {
+			let meta = UdpMetadata::from(endpoint);
+			self.async_write_with_meta(buf, &meta).await
 		} else {
-			poll_on(self.async_write(buf, &meta), None)
+			Err(IoError::EINVAL)
 		}
 	}
 

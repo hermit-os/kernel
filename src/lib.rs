@@ -78,7 +78,7 @@ mod logging;
 
 mod arch;
 mod config;
-mod console;
+pub mod console;
 mod drivers;
 mod entropy;
 mod env;
@@ -95,12 +95,6 @@ pub mod time;
 
 #[cfg(target_os = "none")]
 hermit_entry::define_entry_version!();
-
-#[doc(hidden)]
-pub fn _print(args: ::core::fmt::Arguments<'_>) {
-	use core::fmt::Write;
-	crate::console::CONSOLE.lock().write_fmt(args).unwrap();
-}
 
 #[cfg(test)]
 #[cfg(target_os = "none")]
@@ -284,7 +278,7 @@ extern "C" fn initd(_arg: usize) {
 	riscv64::kernel::init_drivers();
 
 	syscalls::init();
-	fd::init();
+	fd::init().expect("Unable to initialized standard file descriptors");
 	fs::init();
 
 	// Get the application arguments and environment variables.
