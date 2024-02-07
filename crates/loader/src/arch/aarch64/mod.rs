@@ -57,7 +57,7 @@ pub fn message_output_init() {
 		let stdout = core::str::from_utf8(stdout)
 			.unwrap()
 			.trim_matches(char::from(0));
-		if let Some(pos) = stdout.find("@") {
+		if let Some(pos) = stdout.find('@') {
 			let len = stdout.len();
 			u32::from_str_radix(&stdout[pos + 1..len], 16).unwrap_or(SERIAL_PORT_ADDRESS)
 		} else {
