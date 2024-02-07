@@ -18,10 +18,10 @@ mod none;
 #[cfg(target_os = "uefi")]
 mod uefi;
 
-use core::fmt::{self, Write};
-
 #[doc(hidden)]
-fn _print(args: fmt::Arguments<'_>) {
+fn _print(args: core::fmt::Arguments<'_>) {
+	use core::fmt::Write;
+
 	unsafe {
 		console::CONSOLE.write_fmt(args).unwrap();
 	}
