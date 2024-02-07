@@ -146,7 +146,6 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/loader/issues/78
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/loader/issues/122
-		#[allow(clippy::single_element_loop)]
 		for target in [Target::X86_64, Target::Riscv64] {
 			target.install()?;
 			let triple = target.triple();
