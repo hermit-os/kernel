@@ -94,21 +94,25 @@ pub unsafe fn boot_kernel(
 }
 
 #[cfg(all(target_os = "none", feature = "fc"))]
-pub unsafe fn find_kernel() -> &'static [u8] {
+pub fn find_kernel() -> &'static [u8] {
 	use core::cmp;
 
 	paging::clean_up();
 
 	// Identity-map the Multiboot information.
-	assert!(boot_params > 0, "Could not find boot_params");
-	info!("Found boot_params at 0x{:x}", boot_params);
-	let page_address = boot_params.align_down(Size4KiB::SIZE as usize);
+	unsafe {
+		assert!(boot_params > 0, "Could not find boot_params");
+		info!("Found boot_params at 0x{:x}", boot_params);
+	}
+	let page_address = unsafe { boot_params }.align_down(Size4KiB::SIZE as usize);
 	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
-	let linux_kernel_boot_flag_magic: u16 =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + BOOT_FLAG_OFFSET));
-	let linux_kernel_header_magic: u32 =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + HDR_MAGIC_OFFSET));
+	let linux_kernel_boot_flag_magic: u16 = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + BOOT_FLAG_OFFSET))
+	};
+	let linux_kernel_header_magic: u32 = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + HDR_MAGIC_OFFSET))
+	};
 	if linux_kernel_boot_flag_magic == LINUX_KERNEL_BOOT_FLAG_MAGIC
 		&& linux_kernel_header_magic == LINUX_KERNEL_HRD_MAGIC
 	{
@@ -121,22 +125,27 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	}
 
 	// Load the boot_param memory-map information
-	let linux_e820_entries: u8 = *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET));
+	let linux_e820_entries: u8 =
+		unsafe { *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET)) };
 	info!("Number of e820-entries: {}", linux_e820_entries);
 
-	let e820_entries_address = boot_params + E820_TABLE_OFFSET;
+	let e820_entries_address = unsafe { boot_params } + E820_TABLE_OFFSET;
 	info!("e820-entry-table at 0x{:x}", e820_entries_address);
 	let page_address = e820_entries_address.align_down(Size4KiB::SIZE as usize);
 
-	if !(boot_params >= page_address && boot_params < page_address + Size4KiB::SIZE as usize) {
+	if !(unsafe { boot_params } >= page_address
+		&& unsafe { boot_params } < page_address + Size4KiB::SIZE as usize)
+	{
 		paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 	}
 
 	// Load the Hermit-ELF from the initrd supplied by Firecracker
-	let ramdisk_address: u32 =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + RAMDISK_IMAGE_OFFSET));
-	let ramdisk_size: u32 =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + RAMDISK_SIZE_OFFSET));
+	let ramdisk_address: u32 = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + RAMDISK_IMAGE_OFFSET))
+	};
+	let ramdisk_size: u32 = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + RAMDISK_SIZE_OFFSET))
+	};
 
 	info!(
 		"Initrd: Address 0x{:x}, Size 0x{:x}",
@@ -146,7 +155,8 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let elf_start = ramdisk_address as usize;
 	let elf_len = ramdisk_size as usize;
 
-	let free_memory_address = (&kernel_end as *const u8 as usize).align_up(Size2MiB::SIZE as usize);
+	let free_memory_address =
+		(unsafe { &kernel_end } as *const u8 as usize).align_up(Size2MiB::SIZE as usize);
 	// TODO: Workaround for https://github.com/hermitcore/loader/issues/96
 	let free_memory_address = cmp::max(free_memory_address, 0x800000);
 	info!("Intialize PhysAlloc with {:#x}", free_memory_address);
@@ -168,7 +178,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::empty());
 	}
 
-	slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len)
+	unsafe { slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len) }
 }
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
@@ -256,12 +266,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	} = kernel_info;
 
 	// determine boot stack address
-	let new_stack = (&kernel_end as *const u8 as usize + 0x1000).align_up(Size4KiB::SIZE as usize);
+	let new_stack =
+		(unsafe { &kernel_end } as *const u8 as usize + 0x1000).align_up(Size4KiB::SIZE as usize);
 
-	let cmdline_ptr =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET));
-	let cmdline_size: u32 =
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_SIZE_OFFSET));
+	let cmdline_ptr = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_PTR_OFFSET))
+	};
+	let cmdline_size: u32 = unsafe {
+		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + CMD_LINE_SIZE_OFFSET))
+	};
 
 	let command_line = if cmdline_size > 0 {
 		// Identity-map the command line.
@@ -297,30 +310,33 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	);
 
 	// clear stack
-	write_bytes(
-		sptr::from_exposed_addr_mut::<u8>(new_stack),
-		0,
-		KERNEL_STACK_SIZE.try_into().unwrap(),
-	);
+	unsafe {
+		write_bytes(
+			sptr::from_exposed_addr_mut::<u8>(new_stack),
+			0,
+			KERNEL_STACK_SIZE.try_into().unwrap(),
+		);
+	}
 
 	// Load the boot_param memory-map information
-	let linux_e820_entries = *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET));
+	let linux_e820_entries =
+		unsafe { *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET)) };
 	info!("Number of e820-entries: {}", linux_e820_entries);
 
 	let mut found_entry = false;
 	let mut start_address: usize = 0;
 	let mut end_address: usize = 0;
 
-	let e820_entries_address = boot_params + E820_TABLE_OFFSET;
+	let e820_entries_address = unsafe { boot_params } + E820_TABLE_OFFSET;
 
 	for index in 0..linux_e820_entries {
 		found_entry = true;
 
 		//20: Size of one e820-Entry
 		let entry_address = e820_entries_address + (index as usize) * 20;
-		let entry_start: u64 = *(sptr::from_exposed_addr(entry_address));
-		let entry_size: u64 = *(sptr::from_exposed_addr(entry_address + 8));
-		let entry_type: u32 = *(sptr::from_exposed_addr(entry_address + 16));
+		let entry_start: u64 = unsafe { *(sptr::from_exposed_addr(entry_address)) };
+		let entry_size: u64 = unsafe { *(sptr::from_exposed_addr(entry_address + 8)) };
+		let entry_type: u32 = unsafe { *(sptr::from_exposed_addr(entry_address + 16)) };
 
 		info!(
 			"e820-Entry with index {}: Address 0x{:x}, Size 0x{:x}, Type 0x{:x}",
@@ -348,7 +364,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
-	BOOT_INFO = {
+	let boot_info = {
 		let boot_info = BootInfo {
 			hardware_info: HardwareInfo {
 				phys_addr_range: start_address as u64..end_address as u64,
@@ -358,13 +374,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			load_info,
 			platform_info: PlatformInfo::LinuxBootParams {
 				command_line,
-				boot_params_addr: (boot_params as u64).try_into().unwrap(),
+				boot_params_addr: (unsafe { boot_params } as u64).try_into().unwrap(),
 			},
 		};
-		Some(RawBootInfo::from(boot_info))
+		RawBootInfo::from(boot_info)
 	};
-
-	info!("BootInfo located at {:p}", &BOOT_INFO);
+	unsafe {
+		BOOT_INFO = Some(boot_info);
+		info!("BootInfo located at {:p}", &BOOT_INFO);
+	};
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -383,15 +401,17 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_signature
 	};
 
-	asm!(
-		"mov rsp, {stack_address}",
-		"jmp {entry}",
-		stack_address = in(reg) current_stack_address,
-		entry = in(reg) entry_point,
-		in("rdi") BOOT_INFO.as_ref().unwrap(),
-		in("rsi") 0,
-		options(noreturn)
-	)
+	unsafe {
+		asm!(
+			"mov rsp, {stack_address}",
+			"jmp {entry}",
+			stack_address = in(reg) current_stack_address,
+			entry = in(reg) entry_point,
+			in("rdi") BOOT_INFO.as_ref().unwrap(),
+			in("rsi") 0,
+			options(noreturn)
+		)
+	}
 }
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
