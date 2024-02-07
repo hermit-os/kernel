@@ -142,11 +142,14 @@ impl flags::Clippy {
 	fn run(self) -> Result<()> {
 		let sh = Shell::new()?;
 
-		// TODO: Enable clippy for aarch64
-		// https://github.com/hermitcore/loader/issues/78
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/loader/issues/122
-		for target in [Target::X86_64, Target::X86_64Fc, Target::Riscv64] {
+		for target in [
+			Target::X86_64,
+			Target::X86_64Fc,
+			Target::AArch64,
+			Target::Riscv64,
+		] {
 			target.install()?;
 			let triple = target.triple();
 			let feature_flags = target.feature_flags();

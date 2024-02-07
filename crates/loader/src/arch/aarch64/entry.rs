@@ -2,6 +2,7 @@
 
 use core::arch::{asm, global_asm};
 
+use aarch64_cpu::registers::{Writeable, SCTLR_EL1};
 use log::info;
 
 extern "C" {
@@ -53,17 +54,21 @@ global_asm!(include_str!("entry.s"));
 #[no_mangle]
 #[link_section = ".text._start"]
 pub unsafe fn _start_rust() -> ! {
-	pre_init()
+	unsafe { pre_init() }
 }
 
 unsafe fn pre_init() -> ! {
 	info!("Enter startup code");
 
 	/* disable interrupts */
-	asm!("msr daifset, 0b111", options(nostack),);
+	unsafe {
+		asm!("msr daifset, 0b111", options(nostack));
+	}
 
 	/* reset thread id registers */
-	asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack),);
+	unsafe {
+		asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack));
+	}
 
 	/*
 	 * Disable the MMU. We may have entered the kernel with it on and
@@ -72,16 +77,20 @@ unsafe fn pre_init() -> ! {
 	 * but in this case the code to find where we are running from
 	 * would have also failed.
 	 */
-	asm!("dsb sy",
-		"mrs x2, sctlr_el1",
-		"bic x2, x2, 0x1",
-		"msr sctlr_el1, x2",
-		"isb",
-		out("x2") _,
-		options(nostack),
-	);
+	unsafe {
+		asm!("dsb sy",
+			"mrs x2, sctlr_el1",
+			"bic x2, x2, 0x1",
+			"msr sctlr_el1, x2",
+			"isb",
+			out("x2") _,
+			options(nostack),
+		);
+	}
 
-	asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack),);
+	unsafe {
+		asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack));
+	}
 
 	/*
 	 * Setup memory attribute type tables
@@ -101,44 +110,54 @@ unsafe fn pre_init() -> ! {
 		| mair(0x0c, MT_DEVICE_GRE)
 		| mair(0x44, MT_NORMAL_NC)
 		| mair(0xff, MT_NORMAL);
-	asm!("msr mair_el1, {}",
-		in(reg) mair_el1,
-		options(nostack),
-	);
+	unsafe {
+		asm!("msr mair_el1, {}",
+			in(reg) mair_el1,
+			options(nostack),
+		);
+	}
 
 	/*
 	 * Setup translation control register (TCR)
 	 */
 
 	// determine physical address size
-	asm!("mrs x0, id_aa64mmfr0_el1",
-		"and x0, x0, 0xF",
-		"lsl x0, x0, 32",
-		"orr x0, x0, {tcr_bits}",
-		"mrs x1, id_aa64mmfr0_el1",
-		"bfi x0, x1, #32, #3",
-		"msr tcr_el1, x0",
-		tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
-		out("x0") _,
-		out("x1") _,
-	);
+	unsafe {
+		asm!("mrs x0, id_aa64mmfr0_el1",
+			"and x0, x0, 0xF",
+			"lsl x0, x0, 32",
+			"orr x0, x0, {tcr_bits}",
+			"mrs x1, id_aa64mmfr0_el1",
+			"bfi x0, x1, #32, #3",
+			"msr tcr_el1, x0",
+			tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
+			out("x0") _,
+			out("x1") _,
+		);
+	}
 
 	/*
 	 * Enable FP/ASIMD in Architectural Feature Access Control Register,
 	 */
 	let bit_mask: u64 = 3 << 20;
-	asm!("msr cpacr_el1, {mask}",
-		mask = in(reg) bit_mask,
-		options(nostack),
-	);
+	unsafe {
+		asm!("msr cpacr_el1, {mask}",
+			mask = in(reg) bit_mask,
+			options(nostack),
+		);
+	}
 
 	/*
 	 * Reset debug control register
 	 */
-	asm!("msr mdscr_el1, xzr", options(nostack));
+	unsafe {
+		asm!("msr mdscr_el1, xzr", options(nostack));
+	}
 
 	/* Memory barrier */
-	asm!("dsb sy", options(nostack));
+	unsafe {
+		asm!("dsb sy", options(nostack));
+	}
 
 	/*
 	* Prepare system control register (SCTRL)
@@ -148,51 +167,38 @@ unsafe fn pre_init() -> ! {
 		   - Fill in the missing Documentation for some of the bits and verify if we care about them
 			 or if loading and not setting them would be the appropriate action.
 	*/
-	let sctrl_el1: u64 = 0
-	 | (1 << 26) 	    /* UCI     	Enables EL0 access in AArch64 for DC CVAU, DC CIVAC,
-				 				    DC CVAC and IC IVAU instructions */
-	 | (0 << 25)		/* EE      	Explicit data accesses at EL1 and Stage 1 translation
-	 			 				    table walks at EL1 & EL0 are little-endian */
-	 | (0 << 24)		/* EOE     	Explicit data accesses at EL0 are little-endian */
-	 | (1 << 23)
-	 | (1 << 22)
-	 | (1 << 20)
-	 | (0 << 19)		/* WXN     	Regions with write permission are not forced to XN */
-	 | (1 << 18)		/* nTWE     WFE instructions are executed as normal */
-	 | (0 << 17)
-	 | (1 << 16)		/* nTWI    	WFI instructions are executed as normal */
-	 | (1 << 15)		/* UCT     	Enables EL0 access in AArch64 to the CTR_EL0 register */
-	 | (1 << 14)		/* DZE     	Execution of the DC ZVA instruction is allowed at EL0 */
-	 | (0 << 13)
-	 | (1 << 12)		/* I       	Instruction caches enabled at EL0 and EL1 */
-	 | (1 << 11)
-	 | (0 << 10)
-	 | (0 << 9)			/* UMA      Disable access to the interrupt masks from EL0 */
-	 | (1 << 8)			/* SED      The SETEND instruction is available */
-	 | (0 << 7)			/* ITD      The IT instruction functionality is available */
-	 | (0 << 6)			/* THEE    	ThumbEE is disabled */
-	 | (0 << 5)			/* CP15BEN  CP15 barrier operations disabled */
-	 | (1 << 4)			/* SA0     	Stack Alignment check for EL0 enabled */
-	 | (1 << 3)			/* SA      	Stack Alignment check enabled */
-	 | (1 << 2)			/* C       	Data and unified enabled */
-	 | (0 << 1)			/* A       	Alignment fault checking disabled */
-	 | (0 << 0)			/* M       	MMU enable */
-	;
 
-	asm!(
-		"msr sctlr_el1, {0}",
-		in(reg) sctrl_el1,
-		options(nostack),
+	SCTLR_EL1.write(
+		SCTLR_EL1::UCI::DontTrap
+			+ SCTLR_EL1::EE::LittleEndian
+			+ SCTLR_EL1::E0E::LittleEndian
+			+ SCTLR_EL1::WXN::Disable
+			+ SCTLR_EL1::NTWE::DontTrap
+			+ SCTLR_EL1::NTWI::DontTrap
+			+ SCTLR_EL1::UCT::DontTrap
+			+ SCTLR_EL1::DZE::DontTrap
+			+ SCTLR_EL1::I::Cacheable
+			+ SCTLR_EL1::UMA::Trap
+			+ SCTLR_EL1::NAA::Disable
+			+ SCTLR_EL1::SA0::Enable
+			+ SCTLR_EL1::SA::Enable
+			+ SCTLR_EL1::C::Cacheable
+			+ SCTLR_EL1::A::Disable
+			+ SCTLR_EL1::M::Disable,
 	);
 
 	// Enter loader
-	loader_main();
+	unsafe {
+		loader_main();
+	}
 
 	unreachable!()
 }
 
 pub unsafe fn wait_forever() -> ! {
 	loop {
-		asm!("wfe")
+		unsafe {
+			asm!("wfe");
+		}
 	}
 }
