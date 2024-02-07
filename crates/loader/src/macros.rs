@@ -3,6 +3,7 @@
 /// Adapted from [`std::print`].
 ///
 /// [`std::print`]: https://doc.rust-lang.org/stable/std/macro.print.html
+#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {{
@@ -15,6 +16,7 @@ macro_rules! print {
 /// Adapted from [`std::println`].
 ///
 /// [`std::println`]: https://doc.rust-lang.org/stable/std/macro.println.html
+#[cfg(target_os = "none")]
 #[macro_export]
 macro_rules! println {
     () => {

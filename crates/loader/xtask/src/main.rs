@@ -142,11 +142,10 @@ impl flags::Clippy {
 	fn run(self) -> Result<()> {
 		let sh = Shell::new()?;
 
-		// TODO: Enable clippy for x86_64-uefi
-		// https://github.com/hermitcore/loader/issues/122
 		for target in [
 			Target::X86_64,
 			Target::X86_64Fc,
+			Target::X86_64Uefi,
 			Target::AArch64,
 			Target::Riscv64,
 		] {
