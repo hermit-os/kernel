@@ -24,6 +24,7 @@ uart_16550 = "0.3"
 x86_64 = { version = "0.14", default-features = false, features = ["instructions"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
+aarch64-cpu = "9"
 hermit-dtb = { version = "0.1" }
 goblin = { version = "0.8", default-features = false, features = ["elf64"] }
 
