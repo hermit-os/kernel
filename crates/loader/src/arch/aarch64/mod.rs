@@ -98,7 +98,7 @@ pub fn find_kernel() -> &'static [u8] {
 			} else if let Some(value) = value.strip_prefix("0X") {
 				usize::from_str_radix(value, 16).unwrap()
 			} else {
-				usize::from_str_radix(value, 10).unwrap()
+				value.parse().unwrap()
 			}
 		})
 		.unwrap();
