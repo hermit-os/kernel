@@ -32,8 +32,6 @@ use self::physicalmem::PhysAlloc;
 #[cfg(target_os = "none")]
 extern "C" {
 	static kernel_end: u8;
-	#[cfg(feature = "fc")]
-	static kernel_start: u8;
 	#[cfg(not(feature = "fc"))]
 	static mb_info: usize;
 	#[cfg(feature = "fc")]
