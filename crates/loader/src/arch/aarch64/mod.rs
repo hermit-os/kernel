@@ -107,10 +107,8 @@ pub fn find_kernel() -> &'static [u8] {
 		&*core::mem::transmute::<*const u8, *const Header>(sptr::from_exposed_addr(module_start))
 	};
 
-	for i in 0..SELFMAG {
-		if header.e_ident[i] != ELFMAG[i] {
-			panic!("Don't found valid ELF file!");
-		}
+	if header.e_ident[0..SELFMAG] != ELFMAG[..] {
+		panic!("Don't found valid ELF file!");
 	}
 
 	#[cfg(target_endian = "little")]
@@ -186,9 +184,8 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	for i in pgt_slice.iter_mut() {
 		*i = 0;
 	}
-	for i in 0..10 {
-		pgt_slice[i] =
-			&mut L0mib_pgtable as *mut _ as u64 + (i * BasePageSize::SIZE) as u64 + PT_PT;
+	for (i, pgt_slice) in pgt_slice.iter_mut().enumerate().take(10) {
+		*pgt_slice = &mut L0mib_pgtable as *mut _ as u64 + (i * BasePageSize::SIZE) as u64 + PT_PT;
 	}
 
 	let pgt_slice = core::slice::from_raw_parts_mut(&mut L0mib_pgtable as *mut u64, 10 * 512);
