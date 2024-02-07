@@ -54,17 +54,21 @@ global_asm!(include_str!("entry.s"));
 #[no_mangle]
 #[link_section = ".text._start"]
 pub unsafe fn _start_rust() -> ! {
-	pre_init()
+	unsafe { pre_init() }
 }
 
 unsafe fn pre_init() -> ! {
 	info!("Enter startup code");
 
 	/* disable interrupts */
-	asm!("msr daifset, 0b111", options(nostack),);
+	unsafe {
+		asm!("msr daifset, 0b111", options(nostack));
+	}
 
 	/* reset thread id registers */
-	asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack),);
+	unsafe {
+		asm!("msr tpidr_el0, xzr", "msr tpidr_el1, xzr", options(nostack));
+	}
 
 	/*
 	 * Disable the MMU. We may have entered the kernel with it on and
@@ -73,16 +77,20 @@ unsafe fn pre_init() -> ! {
 	 * but in this case the code to find where we are running from
 	 * would have also failed.
 	 */
-	asm!("dsb sy",
-		"mrs x2, sctlr_el1",
-		"bic x2, x2, 0x1",
-		"msr sctlr_el1, x2",
-		"isb",
-		out("x2") _,
-		options(nostack),
-	);
+	unsafe {
+		asm!("dsb sy",
+			"mrs x2, sctlr_el1",
+			"bic x2, x2, 0x1",
+			"msr sctlr_el1, x2",
+			"isb",
+			out("x2") _,
+			options(nostack),
+		);
+	}
 
-	asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack),);
+	unsafe {
+		asm!("ic iallu", "tlbi vmalle1is", "dsb ish", options(nostack));
+	}
 
 	/*
 	 * Setup memory attribute type tables
@@ -102,44 +110,54 @@ unsafe fn pre_init() -> ! {
 		| mair(0x0c, MT_DEVICE_GRE)
 		| mair(0x44, MT_NORMAL_NC)
 		| mair(0xff, MT_NORMAL);
-	asm!("msr mair_el1, {}",
-		in(reg) mair_el1,
-		options(nostack),
-	);
+	unsafe {
+		asm!("msr mair_el1, {}",
+			in(reg) mair_el1,
+			options(nostack),
+		);
+	}
 
 	/*
 	 * Setup translation control register (TCR)
 	 */
 
 	// determine physical address size
-	asm!("mrs x0, id_aa64mmfr0_el1",
-		"and x0, x0, 0xF",
-		"lsl x0, x0, 32",
-		"orr x0, x0, {tcr_bits}",
-		"mrs x1, id_aa64mmfr0_el1",
-		"bfi x0, x1, #32, #3",
-		"msr tcr_el1, x0",
-		tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
-		out("x0") _,
-		out("x1") _,
-	);
+	unsafe {
+		asm!("mrs x0, id_aa64mmfr0_el1",
+			"and x0, x0, 0xF",
+			"lsl x0, x0, 32",
+			"orr x0, x0, {tcr_bits}",
+			"mrs x1, id_aa64mmfr0_el1",
+			"bfi x0, x1, #32, #3",
+			"msr tcr_el1, x0",
+			tcr_bits = in(reg) tcr_size(VA_BITS) | TCR_TG1_4K | TCR_FLAGS,
+			out("x0") _,
+			out("x1") _,
+		);
+	}
 
 	/*
 	 * Enable FP/ASIMD in Architectural Feature Access Control Register,
 	 */
 	let bit_mask: u64 = 3 << 20;
-	asm!("msr cpacr_el1, {mask}",
-		mask = in(reg) bit_mask,
-		options(nostack),
-	);
+	unsafe {
+		asm!("msr cpacr_el1, {mask}",
+			mask = in(reg) bit_mask,
+			options(nostack),
+		);
+	}
 
 	/*
 	 * Reset debug control register
 	 */
-	asm!("msr mdscr_el1, xzr", options(nostack));
+	unsafe {
+		asm!("msr mdscr_el1, xzr", options(nostack));
+	}
 
 	/* Memory barrier */
-	asm!("dsb sy", options(nostack));
+	unsafe {
+		asm!("dsb sy", options(nostack));
+	}
 
 	/*
 	* Prepare system control register (SCTRL)
@@ -170,13 +188,17 @@ unsafe fn pre_init() -> ! {
 	);
 
 	// Enter loader
-	loader_main();
+	unsafe {
+		loader_main();
+	}
 
 	unreachable!()
 }
 
 pub unsafe fn wait_forever() -> ! {
 	loop {
-		asm!("wfe")
+		unsafe {
+			asm!("wfe");
+		}
 	}
 }
