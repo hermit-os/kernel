@@ -34,21 +34,12 @@ impl flags::Build {
 
 		eprintln!("Building loader");
 		let triple = self.target.triple();
-		if self.target == Target::X86_64Fc {
-			cmd!(sh, "cargo build --target={triple}")
-				.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-				.args(self.target_dir_args())
-				.args(self.profile_args())
-				.args(&["--no-default-features"])
-				.args(&["--features", "fc"])
-				.run()?;
-		} else {
-			cmd!(sh, "cargo build --target={triple}")
-				.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
-				.args(self.target_dir_args())
-				.args(self.profile_args())
-				.run()?;
-		}
+		cmd!(sh, "cargo build --target={triple}")
+			.env("CARGO_ENCODED_RUSTFLAGS", self.cargo_encoded_rustflags()?)
+			.args(self.target.feature_flags())
+			.args(self.target_dir_args())
+			.args(self.profile_args())
+			.run()?;
 
 		let build_object = self.build_object();
 		let dist_object = self.dist_object();
@@ -155,11 +146,11 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/loader/issues/78
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/loader/issues/122
-		#[allow(clippy::single_element_loop)]
-		for target in [Target::X86_64, Target::Riscv64] {
+		for target in [Target::X86_64, Target::X86_64Fc, Target::Riscv64] {
 			target.install()?;
 			let triple = target.triple();
-			cmd!(sh, "cargo clippy --target={triple}").run()?;
+			let feature_flags = target.feature_flags();
+			cmd!(sh, "cargo clippy --target={triple} {feature_flags...}").run()?;
 		}
 
 		cmd!(sh, "cargo clippy --package xtask").run()?;

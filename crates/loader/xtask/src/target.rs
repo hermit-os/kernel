@@ -62,6 +62,13 @@ impl Target {
 		}
 	}
 
+	pub fn feature_flags(&self) -> &'static [&'static str] {
+		match self {
+			Self::X86_64Fc => &["--features=fc"],
+			_ => &[],
+		}
+	}
+
 	pub fn build_name(&self) -> &'static str {
 		match self {
 			Self::X86_64Uefi => "hermit-loader.efi",
