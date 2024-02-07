@@ -124,7 +124,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 	let linux_e820_entries: u8 = *(sptr::from_exposed_addr(boot_params + E820_ENTRIES_OFFSET));
 	info!("Number of e820-entries: {}", linux_e820_entries);
 
-	let e820_entries_address = boot_params as usize + E820_TABLE_OFFSET;
+	let e820_entries_address = boot_params + E820_TABLE_OFFSET;
 	info!("e820-entry-table at 0x{:x}", e820_entries_address);
 	let page_address = e820_entries_address.align_down(Size4KiB::SIZE as usize);
 
@@ -311,7 +311,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	let mut start_address: usize = 0;
 	let mut end_address: usize = 0;
 
-	let e820_entries_address = boot_params as usize + E820_TABLE_OFFSET;
+	let e820_entries_address = boot_params + E820_TABLE_OFFSET;
 
 	for index in 0..linux_e820_entries {
 		found_entry = true;
