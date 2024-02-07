@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 #![warn(rust_2018_idioms)]
+#![warn(unsafe_op_in_unsafe_fn)]
 #![allow(unstable_name_collisions)]
 #![allow(clippy::missing_safety_doc)]
 

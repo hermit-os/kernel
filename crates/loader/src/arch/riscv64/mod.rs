@@ -64,7 +64,8 @@ pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	let initrd = AddressRange::try_from(find_kernel().as_ptr_range()).unwrap();
 	let fdt = {
 		let start = start::get_fdt_ptr();
-		AddressRange::try_from(start..start.add(start::get_fdt().total_size())).unwrap()
+		let end = unsafe { start.add(start::get_fdt().total_size()) };
+		AddressRange::try_from(start..end).unwrap()
 	};
 
 	info!("initrd = {initrd}");
@@ -101,7 +102,7 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
-	BOOT_INFO = {
+	let boot_info = {
 		let phys_addr_range = {
 			let memory = fdt.memory();
 			let mut regions = memory.regions();
@@ -134,25 +135,31 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 		info!("boot_info = {boot_info:#?}");
 
-		Some(RawBootInfo::from(boot_info))
+		RawBootInfo::from(boot_info)
 	};
+
+	unsafe {
+		BOOT_INFO = Some(boot_info);
+	}
 
 	// Check expected signature of entry function
 	let entry: Entry = {
 		let entry: unsafe extern "C" fn(hart_id: usize, boot_info: &'static RawBootInfo) -> ! =
-			core::mem::transmute(entry_point);
+			unsafe { core::mem::transmute(entry_point) };
 		entry
 	};
 
 	info!("Jumping into kernel at {entry:p}");
 
-	asm!(
-		"mv sp, {stack}",
-		"jr {entry}",
-		entry = in(reg) entry,
-		stack = in(reg) start::get_stack_ptr(),
-		in("a0") start::get_hart_id(),
-		in("a1") BOOT_INFO.as_ref().unwrap(),
-		options(noreturn)
-	)
+	unsafe {
+		asm!(
+			"mv sp, {stack}",
+			"jr {entry}",
+			entry = in(reg) entry,
+			stack = in(reg) start::get_stack_ptr(),
+			in("a0") start::get_hart_id(),
+			in("a1") BOOT_INFO.as_ref().unwrap(),
+			options(noreturn)
+		)
+	}
 }
