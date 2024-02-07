@@ -1,8 +1,8 @@
 #![no_std]
 #![no_main]
 #![warn(rust_2018_idioms)]
-#![allow(clippy::missing_safety_doc)]
 #![allow(unstable_name_collisions)]
+#![allow(clippy::missing_safety_doc)]
 
 #[macro_use]
 mod macros;
