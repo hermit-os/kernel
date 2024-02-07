@@ -146,10 +146,11 @@ impl flags::Clippy {
 		// https://github.com/hermitcore/loader/issues/78
 		// TODO: Enable clippy for x86_64-uefi
 		// https://github.com/hermitcore/loader/issues/122
-		for target in [Target::X86_64, Target::Riscv64] {
+		for target in [Target::X86_64, Target::X86_64Fc, Target::Riscv64] {
 			target.install()?;
 			let triple = target.triple();
-			cmd!(sh, "cargo clippy --target={triple}").run()?;
+			let feature_flags = target.feature_flags();
+			cmd!(sh, "cargo clippy --target={triple} {feature_flags...}").run()?;
 		}
 
 		cmd!(sh, "cargo clippy --package xtask").run()?;
