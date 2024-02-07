@@ -56,7 +56,7 @@ static mut MEM: Mem = Mem;
 impl MemoryManagement for Mem {
 	unsafe fn paddr_to_slice<'a>(&self, p: PAddr, sz: usize) -> Option<&'static [u8]> {
 		let ptr = sptr::from_exposed_addr(p as usize);
-		Some(slice::from_raw_parts(ptr, sz))
+		unsafe { Some(slice::from_raw_parts(ptr, sz)) }
 	}
 
 	// If you only want to read fields, you can simply return `None`.
@@ -174,18 +174,20 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 }
 
 #[cfg(all(target_os = "none", not(feature = "fc")))]
-pub unsafe fn find_kernel() -> &'static [u8] {
+pub fn find_kernel() -> &'static [u8] {
 	use core::cmp;
 
 	paging::clean_up();
 	// Identity-map the Multiboot information.
-	assert!(mb_info > 0, "Could not find Multiboot information");
-	info!("Found Multiboot information at {:#x}", mb_info);
-	let page_address = mb_info.align_down(Size4KiB::SIZE as usize);
+	unsafe {
+		assert!(mb_info > 0, "Could not find Multiboot information");
+		info!("Found Multiboot information at {:#x}", mb_info);
+	}
+	let page_address = unsafe { mb_info.align_down(Size4KiB::SIZE as usize) };
 	paging::map::<Size4KiB>(page_address, page_address, 1, PageTableFlags::empty());
 
 	// Load the Multiboot information and identity-map the modules information.
-	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
+	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
 	let modules_address = multiboot
 		.modules()
 		.expect("Could not find a memory map in the Multiboot information")
@@ -245,7 +247,7 @@ pub unsafe fn find_kernel() -> &'static [u8] {
 		paging::map::<Size2MiB>(address, address, counter, PageTableFlags::empty());
 	}
 
-	slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len)
+	unsafe { slice::from_raw_parts(sptr::from_exposed_addr(elf_start), elf_len) }
 }
 
 #[cfg(all(target_os = "none", feature = "fc"))]
@@ -401,14 +403,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_point,
 	} = kernel_info;
 
-	let multiboot = Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap();
+	let multiboot = unsafe { Multiboot::from_ptr(mb_info as u64, &mut MEM).unwrap() };
 
 	// determine boot stack address
-	let mut new_stack = (&kernel_end as *const u8 as usize).align_up(Size4KiB::SIZE as usize);
+	let mut new_stack =
+		(unsafe { &kernel_end } as *const u8 as usize).align_up(Size4KiB::SIZE as usize);
 
-	if new_stack + KERNEL_STACK_SIZE as usize > mb_info {
-		new_stack =
-			(mb_info + mem::size_of::<Multiboot<'_, '_>>()).align_up(Size4KiB::SIZE as usize);
+	if new_stack + KERNEL_STACK_SIZE as usize > unsafe { mb_info } {
+		new_stack = (unsafe { mb_info } + mem::size_of::<Multiboot<'_, '_>>())
+			.align_up(Size4KiB::SIZE as usize);
 	}
 
 	let command_line = multiboot.command_line();
@@ -432,15 +435,17 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 	);
 
 	// clear stack
-	write_bytes(
-		sptr::from_exposed_addr_mut::<u8>(new_stack),
-		0,
-		KERNEL_STACK_SIZE.try_into().unwrap(),
-	);
+	unsafe {
+		write_bytes(
+			sptr::from_exposed_addr_mut::<u8>(new_stack),
+			0,
+			KERNEL_STACK_SIZE.try_into().unwrap(),
+		);
+	}
 
 	static mut BOOT_INFO: Option<RawBootInfo> = None;
 
-	BOOT_INFO = {
+	let boot_info = {
 		let boot_info = BootInfo {
 			hardware_info: HardwareInfo {
 				phys_addr_range: 0..0,
@@ -450,13 +455,15 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 			load_info,
 			platform_info: PlatformInfo::Multiboot {
 				command_line,
-				multiboot_info_addr: (mb_info as u64).try_into().unwrap(),
+				multiboot_info_addr: (unsafe { mb_info } as u64).try_into().unwrap(),
 			},
 		};
-		Some(RawBootInfo::from(boot_info))
+		RawBootInfo::from(boot_info)
 	};
-
-	info!("BootInfo located at {:p}", &BOOT_INFO);
+	unsafe {
+		BOOT_INFO = Some(boot_info);
+		info!("BootInfo located at {:p}", &BOOT_INFO);
+	}
 
 	// Jump to the kernel entry point and provide the Multiboot information to it.
 	info!(
@@ -475,15 +482,17 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 		entry_signature
 	};
 
-	asm!(
-		"mov rsp, {stack_address}",
-		"jmp {entry}",
-		stack_address = in(reg) current_stack_address,
-		entry = in(reg) entry_point,
-		in("rdi") BOOT_INFO.as_ref().unwrap(),
-		in("rsi") 0,
-		options(noreturn)
-	)
+	unsafe {
+		asm!(
+			"mov rsp, {stack_address}",
+			"jmp {entry}",
+			stack_address = in(reg) current_stack_address,
+			entry = in(reg) entry_point,
+			in("rdi") BOOT_INFO.as_ref().unwrap(),
+			in("rsi") 0,
+			options(noreturn)
+		)
+	}
 }
 
 unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
@@ -497,5 +506,5 @@ unsafe fn map_memory(address: usize, memory_size: usize) -> usize {
 
 pub unsafe fn get_memory(memory_size: u64) -> u64 {
 	let address = PhysAlloc::allocate((memory_size as usize).align_up(Size2MiB::SIZE as usize));
-	map_memory(address, memory_size as usize) as u64
+	unsafe { map_memory(address, memory_size as usize) as u64 }
 }
