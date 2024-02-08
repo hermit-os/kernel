@@ -49,7 +49,7 @@ impl Artifact {
 			self.target_dir(),
 			self.target.triple().as_ref(),
 			self.profile_path_component().as_ref(),
-			self.target.build_name().as_ref(),
+			self.target.image_name().as_ref(),
 		]
 		.iter()
 		.collect::<PathBuf>()
@@ -61,7 +61,7 @@ impl Artifact {
 			self.target_dir(),
 			self.target.name().as_ref(),
 			self.profile_path_component().as_ref(),
-			self.target.dist_name().as_ref(),
+			self.target.image_name().as_ref(),
 		]
 		.iter()
 		.collect::<PathBuf>()
