@@ -69,6 +69,6 @@ impl Artifact {
 	}
 
 	pub fn ci_image(&self, image: &str) -> PathBuf {
-		["data", self.target.name(), image].iter().collect()
+		["data", self.target.arch(), image].iter().collect()
 	}
 }
