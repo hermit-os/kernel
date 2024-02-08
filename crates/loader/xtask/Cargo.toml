@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
+clap = { version = "4", features = ["derive"] }
 llvm-tools = "0.1"
-xflags = "0.3"
+sysinfo = "0.30"
 xshell = "0.2"
