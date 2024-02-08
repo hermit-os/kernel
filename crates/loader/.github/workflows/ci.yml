@@ -4,6 +4,10 @@ on:
   pull_request:
   merge_group:
 
+env:
+  RUSTFLAGS: -Dwarnings
+  RUSTDOCFLAGS: -Dwarnings
+
 defaults:
   run:
     shell: bash
@@ -24,8 +28,6 @@ jobs:
           components: clippy
       - name: Clippy
         run: cargo xtask clippy
-        env:
-          RUSTFLAGS: -Dwarnings
   
   fmt:
     name: Format
