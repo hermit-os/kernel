@@ -110,8 +110,9 @@ pub fn find_kernel() -> &'static [u8] {
 	let linux_kernel_boot_flag_magic: u16 = unsafe {
 		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + BOOT_FLAG_OFFSET))
 	};
-	let linux_kernel_header_magic: u32 = unsafe {
-		*(sptr::from_exposed_addr(boot_params + LINUX_SETUP_HEADER_OFFSET + HDR_MAGIC_OFFSET))
+	let linux_kernel_header_magic = unsafe {
+		sptr::from_exposed_addr::<u32>(boot_params + LINUX_SETUP_HEADER_OFFSET + HDR_MAGIC_OFFSET)
+			.read_unaligned()
 	};
 	if linux_kernel_boot_flag_magic == LINUX_KERNEL_BOOT_FLAG_MAGIC
 		&& linux_kernel_header_magic == LINUX_KERNEL_HRD_MAGIC
@@ -334,9 +335,10 @@ pub unsafe fn boot_kernel(kernel_info: LoadedKernel) -> ! {
 
 		//20: Size of one e820-Entry
 		let entry_address = e820_entries_address + (index as usize) * 20;
-		let entry_start: u64 = unsafe { *(sptr::from_exposed_addr(entry_address)) };
-		let entry_size: u64 = unsafe { *(sptr::from_exposed_addr(entry_address + 8)) };
-		let entry_type: u32 = unsafe { *(sptr::from_exposed_addr(entry_address + 16)) };
+		let entry_start = unsafe { sptr::from_exposed_addr::<u64>(entry_address).read_unaligned() };
+		let entry_size =
+			unsafe { sptr::from_exposed_addr::<u64>(entry_address + 8).read_unaligned() };
+		let entry_type: u32 = unsafe { sptr::from_exposed_addr::<u32>(entry_address + 16).read() };
 
 		info!(
 			"e820-Entry with index {}: Address 0x{:x}, Size 0x{:x}, Type 0x{:x}",
