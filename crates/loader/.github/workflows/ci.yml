@@ -80,3 +80,38 @@ jobs:
       - name: Run VM (hello_c, release)
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_c --release
+
+  run-kvm:
+    name: Run (KVM)
+    runs-on: [self-hosted]
+    steps:
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends qemu-system-x86
+      - uses: actions/checkout@v4
+        with:
+            lfs: true
+      - name: Install firecracker
+        run: |
+          # https://github.com/firecracker-microvm/firecracker/blob/v1.5.1/docs/getting-started.md#getting-a-firecracker-binary
+          ARCH="$(uname -m)"
+          release_url="https://github.com/firecracker-microvm/firecracker/releases"
+          latest=$(basename $(curl -fsSLI -o /dev/null -w  %{url_effective} ${release_url}/latest))
+          curl -L ${release_url}/download/${latest}/firecracker-${latest}-${ARCH}.tgz \
+          | tar -xz
+          
+          # Rename the binary to "firecracker"
+          mv release-${latest}-$(uname -m)/firecracker-${latest}-${ARCH} firecracker
+          echo "$PWD" >> $GITHUB_PATH
+  
+          ./firecracker --version
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run QEMU (hello_world, dev)
+        run: cargo xtask ci qemu --target x86_64 --accel
+      - name: Run QEMU (hello_world, release)
+        run: cargo xtask ci qemu --target x86_64 --accel --release
+      - name: Run Firecracker (hello_world, dev)
+        run: cargo xtask ci firecracker --target x86_64-fc --features fc
+      - name: Run Firecracker (hello_world, release)
+        run: cargo xtask ci firecracker --target x86_64-fc --features fc --release
