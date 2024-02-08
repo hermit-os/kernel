@@ -20,8 +20,8 @@ pub use self::tasks::*;
 pub use self::timer::*;
 use crate::env;
 use crate::fd::{
-	dup_object, get_object, remove_object, AccessPermission, FileDescriptor, IoCtl, OpenOption,
-	PollFd,
+	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
+	OpenOption, PollFd,
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
@@ -413,6 +413,20 @@ extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 #[no_mangle]
 pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 	kernel_function!(__sys_poll(fds, nfds, timeout))
+}
+
+extern "C" fn __sys_eventfd(initval: u64, flags: i32) -> i32 {
+	if let Some(flags) = EventFlags::from_bits(flags) {
+		crate::fd::eventfd(initval, flags)
+			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
+	} else {
+		-crate::errno::EINVAL
+	}
+}
+
+#[no_mangle]
+pub extern "C" fn sys_eventfd(initval: u64, flags: i32) -> i32 {
+	kernel_function!(__sys_eventfd(initval, flags))
 }
 
 extern "C" fn __sys_image_start_addr() -> usize {

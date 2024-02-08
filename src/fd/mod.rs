@@ -18,6 +18,7 @@ use crate::executor::{block_on, poll_on};
 use crate::fd::stdio::*;
 use crate::fs::{self, DirectoryEntry, FileAttr, SeekWhence};
 
+mod eventfd;
 #[cfg(all(any(feature = "tcp", feature = "udp"), not(feature = "newlib")))]
 pub(crate) mod socket;
 mod stdio;
@@ -114,6 +115,16 @@ pub struct PollFd {
 	pub events: PollEvent,
 	/// events returned
 	pub revents: PollEvent,
+}
+
+bitflags! {
+	#[derive(Debug, Default, Copy, Clone)]
+	pub struct EventFlags: i32 {
+		const EMPTY = 0;
+		const EFD_SEMAPHORE = 0x1;
+		const EFD_NONBLOCK = 0x4;
+		const EFD_CLOEXEC = 0x200000;
+	}
 }
 
 bitflags! {
@@ -395,7 +406,11 @@ async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
 	Ok(())
 }
 
-pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
+/// The unix-like `poll` waits for one of a set of file descriptors
+/// to become ready to perform I/O. The set of file descriptors to be
+/// monitored is specified in the `fds` argument, which is an array
+/// of structures of `PollFd`.
+pub fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
 	if timeout >= 0 {
 		// for larger timeouts, we block on the async function
 		if timeout >= 5000 {
@@ -412,6 +427,31 @@ pub(crate) fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
 	} else {
 		block_on(poll_fds(fds), None)
 	}
+}
+
+/// `eventfd` creates an linux-like "eventfd object" that can be used
+/// as an event wait/notify mechanism by user-space applications, and by
+/// the kernel to notify user-space applications of events. The
+/// object contains an unsigned 64-bit integer counter
+/// that is maintained by the kernel. This counter is initialized
+/// with the value specified in the argument `initval`.
+///
+/// As its return value, `eventfd` returns a new file descriptor that
+/// can be used to refer to the eventfd object.
+///
+/// The following values may be bitwise set in flags to change the
+/// behavior of `eventfd`:
+///
+/// `EFD_NONBLOCK`: Set the file descriptor in non-blocking mode
+/// `EFD_SEMAPHORE`: Provide semaphore-like semantics for reads
+/// from the new file descriptor.
+pub fn eventfd(initval: u64, flags: EventFlags) -> Result<FileDescriptor, IoError> {
+	let obj = self::eventfd::EventFd::new(initval, flags);
+	let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
+
+	block_on(async_insert_object(fd, Arc::new(obj)), None)?;
+
+	Ok(fd)
 }
 
 #[inline]
