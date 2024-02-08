@@ -41,16 +41,23 @@ impl Qemu {
 
 		let sh = crate::sh()?;
 
+		if self.build.target() == Target::X86_64Uefi {
+			if super::in_ci() {
+				sh.copy_file("/usr/share/OVMF/OVMF_CODE.fd", "OVMF_CODE.fd")?;
+				sh.copy_file("/usr/share/OVMF/OVMF_VARS.fd", "OVMF_VARS.fd")?;
+			}
+
+			sh.create_dir("target/esp/efi/boot")?;
+			sh.copy_file(self.build.dist_object(), "target/esp/efi/boot/bootx64.efi")?;
+		}
+
 		let target = self.build.target();
 		let arch = target.arch();
 		let qemu = env::var_os("QEMU").unwrap_or_else(|| format!("qemu-system-{arch}").into());
 
-		let dist_object = self.build.dist_object();
 		let qemu = cmd!(sh, "{qemu}")
 			.args(&["-display", "none"])
 			.args(&["-serial", "stdio"])
-			.arg("-kernel")
-			.arg(&dist_object)
 			.args(self.machine_args())
 			.args(self.cpu_args())
 			.args(self.memory_args());
@@ -86,7 +93,7 @@ impl Qemu {
 
 	fn cpu_args(&self) -> Vec<String> {
 		match self.build.target() {
-			Target::X86_64 | Target::X86_64Fc | Target::X86_64Uefi => {
+			Target::X86_64 | Target::X86_64Uefi => {
 				let mut cpu_args = if self.accel {
 					if cfg!(target_os = "linux") {
 						vec![
@@ -102,21 +109,55 @@ impl Qemu {
 				};
 				cpu_args.push("-device".to_string());
 				cpu_args.push("isa-debug-exit,iobase=0xf4,iosize=0x04".to_string());
-				cpu_args.push("-initrd".to_string());
-				cpu_args.push(
-					self.build
-						.ci_image(&self.image)
-						.into_os_string()
-						.into_string()
-						.unwrap(),
-				);
+
+				match self.build.target() {
+					Target::X86_64 => {
+						cpu_args.push("-kernel".to_string());
+						cpu_args.push(
+							self.build
+								.dist_object()
+								.into_os_string()
+								.into_string()
+								.unwrap(),
+						);
+						cpu_args.push("-initrd".to_string());
+						cpu_args.push(
+							self.build
+								.ci_image(&self.image)
+								.into_os_string()
+								.into_string()
+								.unwrap(),
+						);
+					}
+					Target::X86_64Uefi => {
+						cpu_args.push("-drive".to_string());
+						cpu_args
+							.push("if=pflash,format=raw,readonly=on,file=OVMF_CODE.fd".to_string());
+						cpu_args.push("-drive".to_string());
+						cpu_args
+							.push("if=pflash,format=raw,readonly=on,file=OVMF_VARS.fd".to_string());
+						cpu_args.push("-drive".to_string());
+						cpu_args.push("format=raw,file=fat:rw:target/esp".to_string());
+					}
+					_ => unreachable!(),
+				}
 				cpu_args
 			}
+			Target::X86_64Fc => panic!("unsupported"),
 			Target::Aarch64 => {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
-					vec!["-cpu".to_string(), "cortex-a72".to_string()]
+					vec![
+						"-cpu".to_string(),
+						"cortex-a72".to_string(),
+						"-kernel".to_string(),
+						self.build
+							.dist_object()
+							.into_os_string()
+							.into_string()
+							.unwrap(),
+					]
 				};
 				cpu_args.push("-semihosting".to_string());
 				cpu_args.push("-device".to_string());
@@ -130,7 +171,16 @@ impl Qemu {
 				let mut cpu_args = if self.accel {
 					todo!()
 				} else {
-					vec!["-cpu".to_string(), "rv64".to_string()]
+					vec![
+						"-cpu".to_string(),
+						"rv64".to_string(),
+						"-kernel".to_string(),
+						self.build
+							.dist_object()
+							.into_os_string()
+							.into_string()
+							.unwrap(),
+					]
 				};
 				cpu_args.push("-initrd".to_string());
 				cpu_args.push(
@@ -150,8 +200,14 @@ impl Qemu {
 		if self.image == "hello_c" {
 			memory = memory.max(64);
 		}
-		if self.build.target() == Target::Aarch64 {
-			memory = memory.max(256);
+		match self.build.target() {
+			Target::X86_64Uefi => {
+				memory = memory.max(64);
+			}
+			Target::Aarch64 => {
+				memory = memory.max(256);
+			}
+			_ => {}
 		}
 		memory
 	}
