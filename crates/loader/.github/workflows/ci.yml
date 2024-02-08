@@ -80,6 +80,12 @@ jobs:
         run: cargo xtask ci qemu --target ${{ matrix.target }}
       - name: Run VM (hello_world, release)
         run: cargo xtask ci qemu --target ${{ matrix.target }} --release
+      - name: Run VM (hello_world-microvm, dev)
+        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+        run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_world-microvm --microvm
+      - name: Run VM (hello_world-microvm, release)
+        if: matrix.target == 'x86_64' && matrix.os == 'ubuntu-latest'
+        run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_world-microvm --microvm --release
       - name: Run VM (hello_c, dev)
         if: matrix.target == 'x86_64'
         run: cargo xtask ci qemu --target ${{ matrix.target }} --image hello_c
@@ -117,6 +123,10 @@ jobs:
         run: cargo xtask ci qemu --target x86_64 --accel
       - name: Run QEMU (hello_world, release)
         run: cargo xtask ci qemu --target x86_64 --accel --release
+      - name: Run QEMU (hello_world-microvm, dev)
+        run: cargo xtask ci qemu --target x86_64 --accel --image hello_world-microvm --microvm
+      - name: Run QEMU (hello_world-microvm, release)
+        run: cargo xtask ci qemu --target x86_64 --accel --image hello_world-microvm --microvm --release
       - name: Run UEFI (dev)
         run: cargo xtask ci qemu --target x86_64-uefi --accel
       - name: Run UEFI (release)
