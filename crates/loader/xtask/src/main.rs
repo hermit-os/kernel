@@ -146,7 +146,7 @@ impl flags::Clippy {
 			Target::X86_64,
 			Target::X86_64Fc,
 			Target::X86_64Uefi,
-			Target::AArch64,
+			Target::Aarch64,
 			Target::Riscv64,
 		] {
 			target.install()?;

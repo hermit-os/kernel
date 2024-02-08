@@ -8,7 +8,7 @@ pub enum Target {
 	X86_64,
 	X86_64Fc,
 	X86_64Uefi,
-	AArch64,
+	Aarch64,
 	Riscv64,
 }
 
@@ -31,7 +31,7 @@ impl Target {
 			Self::X86_64 => "x86_64",
 			Self::X86_64Fc => "x86_64-fc",
 			Self::X86_64Uefi => "x86_64-uefi",
-			Self::AArch64 => "aarch64",
+			Self::Aarch64 => "aarch64",
 			Self::Riscv64 => "riscv64",
 		}
 	}
@@ -41,7 +41,7 @@ impl Target {
 			Self::X86_64 => "x86_64-unknown-none",
 			Self::X86_64Fc => "x86_64-unknown-none",
 			Self::X86_64Uefi => "x86_64-unknown-uefi",
-			Self::AArch64 => "aarch64-unknown-none-softfloat",
+			Self::Aarch64 => "aarch64-unknown-none-softfloat",
 			Self::Riscv64 => "riscv64imac-unknown-none-elf",
 		}
 	}
@@ -57,7 +57,7 @@ impl Target {
 				"-Crelocation-model=static",
 			],
 			Self::X86_64Uefi => &[],
-			Self::AArch64 => &["-Clink-arg=-Tsrc/arch/aarch64/link.ld"],
+			Self::Aarch64 => &["-Clink-arg=-Tsrc/arch/aarch64/link.ld"],
 			Self::Riscv64 => &["-Clink-arg=-Tsrc/arch/riscv64/link.ld"],
 		}
 	}
@@ -92,7 +92,7 @@ impl FromStr for Target {
 			"x86_64" => Ok(Self::X86_64),
 			"x86_64-fc" => Ok(Self::X86_64Fc),
 			"x86_64-uefi" => Ok(Self::X86_64Uefi),
-			"aarch64" => Ok(Self::AArch64),
+			"aarch64" => Ok(Self::Aarch64),
 			"riscv64" => Ok(Self::Riscv64),
 			s => Err(anyhow!("Unsupported target: {s}")),
 		}
