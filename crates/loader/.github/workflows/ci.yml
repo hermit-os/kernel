@@ -17,10 +17,6 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - name: Install NASM
-        run: |
-          sudo apt-get update
-          sudo apt-get install nasm
       - uses: actions/checkout@v4
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -54,23 +50,21 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Install QEMU, NASM (ubuntu)
+      - name: Install QEMU (ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc ovmf nasm
-      - name: Install QEMU, NASM (macos)
+          sudo apt-get install qemu-system-x86 qemu-system-arm qemu-system-misc ovmf
+      - name: Install QEMU (macos)
         if: matrix.os == 'macos-latest'
         run: |
           brew update
-          brew install qemu nasm
-      - name: Install QEMU, NASM (windows)
+          brew install qemu
+      - name: Install QEMU (windows)
         if: matrix.os == 'windows-latest'
         run: |
           choco install qemu
           echo "C:\Program Files\qemu" >> $GITHUB_PATH
-          choco install nasm
-          echo "C:\Program Files\NASM" >> $GITHUB_PATH
       - uses: actions/checkout@v4
         with:
             lfs: true

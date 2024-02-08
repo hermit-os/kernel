@@ -5,7 +5,6 @@ This project is a loader to run the [Hermit kernel](https://github.com/hermitcor
 ## Requirements
 
 * [`rustup`](https://www.rust-lang.org/tools/install)
-* [NASM](https://nasm.us/) (only for x86_64)
 
 ## Building
 
