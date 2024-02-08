@@ -86,7 +86,7 @@ impl Qemu {
 
 	fn cpu_args(&self) -> Vec<String> {
 		match self.build.target() {
-			Target::X86_64 | Target::X86_64Fc | Target::X86_64Uefi => {
+			Target::X86_64 | Target::X86_64Uefi => {
 				let mut cpu_args = if self.accel {
 					if cfg!(target_os = "linux") {
 						vec![
@@ -112,6 +112,7 @@ impl Qemu {
 				);
 				cpu_args
 			}
+			Target::X86_64Fc => panic!("unsupported"),
 			Target::Aarch64 => {
 				let mut cpu_args = if self.accel {
 					todo!()
