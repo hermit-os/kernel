@@ -57,8 +57,7 @@ jobs:
       - name: Install QEMU, NASM (macos)
         if: matrix.os == 'macos-latest'
         run: |
-          # enable once it works again
-          # brew update
+          brew update
           brew install qemu nasm
       - name: Install QEMU, NASM (windows)
         if: matrix.os == 'windows-latest'
