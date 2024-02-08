@@ -36,6 +36,16 @@ impl Target {
 		}
 	}
 
+	pub fn arch(&self) -> &'static str {
+		match self {
+			Self::X86_64 => "x86_64",
+			Self::X86_64Fc => "x86_64",
+			Self::X86_64Uefi => "x86_64",
+			Self::Aarch64 => "aarch64",
+			Self::Riscv64 => "riscv64",
+		}
+	}
+
 	pub fn triple(&self) -> &'static str {
 		match self {
 			Self::X86_64 => "x86_64-unknown-none",
@@ -43,6 +53,16 @@ impl Target {
 			Self::X86_64Uefi => "x86_64-unknown-uefi",
 			Self::Aarch64 => "aarch64-unknown-none-softfloat",
 			Self::Riscv64 => "riscv64imac-unknown-none-elf",
+		}
+	}
+
+	pub fn cargo_args(&self) -> &'static [&'static str] {
+		match self {
+			Self::X86_64 => &["--target=x86_64-unknown-none"],
+			Self::X86_64Fc => &["--target=x86_64-unknown-none"],
+			Self::X86_64Uefi => &["--target=x86_64-unknown-uefi"],
+			Self::Aarch64 => &["--target=aarch64-unknown-none-softfloat"],
+			Self::Riscv64 => &["--target=riscv64imac-unknown-none-elf"],
 		}
 	}
 
