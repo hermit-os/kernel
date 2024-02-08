@@ -36,6 +36,7 @@ spinning_top = "0.3"
 [target.'cfg(target_os = "uefi")'.dependencies]
 uefi = "0.26"
 uefi-services = "0.23"
+qemu-exit = "3"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 fdt = "0.1"

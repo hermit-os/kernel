@@ -294,6 +294,7 @@ dependencies = [
  "multiboot",
  "naked-function",
  "nasm-rs",
+ "qemu-exit",
  "riscv",
  "sbi",
  "spinning_top",
@@ -429,6 +430,12 @@ dependencies = [
  "quote",
  "syn 1.0.109",
 ]
+
+[[package]]
+name = "qemu-exit"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bb0fd6580eeed0103c054e3fba2c2618ff476943762f28a645b63b8692b21c9"
 
 [[package]]
 name = "quote"
