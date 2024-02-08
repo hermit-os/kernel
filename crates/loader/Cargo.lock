@@ -661,6 +661,7 @@ checksum = "a79fcb420624743c895bad0f9480fbc2f64e7c8d8611fb1ada6bdd799942feb4"
 dependencies = [
  "cfg-if",
  "log",
+ "qemu-exit",
  "uefi",
 ]
 
