@@ -69,6 +69,15 @@ impl MemoryManagement for Mem {
 	}
 }
 
+#[cfg_attr(not(feature = "fc"), allow(bad_asm_style))]
+mod entry {
+	#[cfg(not(feature = "fc"))]
+	core::arch::global_asm!(include_str!("entry.s"));
+
+	#[cfg(feature = "fc")]
+	core::arch::global_asm!(include_str!("entry_fc.s"));
+}
+
 // FUNCTIONS
 pub fn message_output_init() {
 	unsafe { COM1.init() };
