@@ -14,7 +14,6 @@ pub use self::processor::*;
 #[cfg(feature = "newlib")]
 pub use self::recmutex::*;
 pub use self::semaphore::*;
-pub use self::spinlock::*;
 pub use self::system::*;
 pub use self::tasks::*;
 pub use self::timer::*;
@@ -40,7 +39,6 @@ mod processor;
 #[cfg(feature = "newlib")]
 mod recmutex;
 mod semaphore;
-mod spinlock;
 mod system;
 mod tasks;
 mod timer;
