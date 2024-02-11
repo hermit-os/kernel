@@ -382,7 +382,7 @@ impl ObjectInterface for Socket {
 		self.nonblocking.load(Ordering::Acquire)
 	}
 
-	fn listen(&self, backlog: i32) -> Result<(), IoError> {
+	fn listen(&self, _backlog: i32) -> Result<(), IoError> {
 		self.with(|socket| {
 			if !socket.is_open() {
 				socket
