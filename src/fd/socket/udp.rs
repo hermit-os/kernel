@@ -119,7 +119,7 @@ impl Socket {
 #[async_trait]
 impl ObjectInterface for Socket {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		future::poll_fn(|cx| {
 			self.with(|socket| {
@@ -127,9 +127,11 @@ impl ObjectInterface for Socket {
 					if socket.can_send() {
 						if event.contains(PollEvent::POLLOUT) {
 							result.insert(PollEvent::POLLOUT);
-						} else if event.contains(PollEvent::POLLWRNORM) {
+						}
+						if event.contains(PollEvent::POLLWRNORM) {
 							result.insert(PollEvent::POLLWRNORM);
-						} else if event.contains(PollEvent::POLLWRBAND) {
+						}
+						if event.contains(PollEvent::POLLWRBAND) {
 							result.insert(PollEvent::POLLWRBAND);
 						}
 					}
@@ -137,9 +139,11 @@ impl ObjectInterface for Socket {
 					if socket.can_recv() {
 						if event.contains(PollEvent::POLLIN) {
 							result.insert(PollEvent::POLLIN);
-						} else if event.contains(PollEvent::POLLRDNORM) {
+						}
+						if event.contains(PollEvent::POLLRDNORM) {
 							result.insert(PollEvent::POLLRDNORM);
-						} else if event.contains(PollEvent::POLLRDBAND) {
+						}
+						if event.contains(PollEvent::POLLRDBAND) {
 							result.insert(PollEvent::POLLRDBAND);
 						}
 					}
@@ -149,6 +153,7 @@ impl ObjectInterface for Socket {
 
 				if result.is_empty() {
 					socket.register_recv_waker(cx.waker());
+					socket.register_send_waker(cx.waker());
 					Poll::Pending
 				} else {
 					Poll::Ready(Ok(result))

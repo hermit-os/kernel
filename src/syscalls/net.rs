@@ -15,8 +15,8 @@ use crate::executor::network::{NetworkState, NIC};
 use crate::fd::socket::tcp;
 #[cfg(feature = "udp")]
 use crate::fd::socket::udp;
-use crate::fd::{get_object, insert_object, SocketOption, FD_COUNTER};
-use crate::syscalls::__sys_write;
+use crate::fd::{get_object, insert_object, ObjectInterface, SocketOption, FD_COUNTER};
+use crate::syscalls::{IoCtl, __sys_write};
 
 pub const AF_INET: i32 = 0;
 pub const AF_INET6: i32 = 1;
@@ -38,6 +38,8 @@ pub const SHUT_WR: i32 = 1;
 pub const SHUT_RDWR: i32 = 2;
 pub const SOCK_DGRAM: i32 = 2;
 pub const SOCK_STREAM: i32 = 1;
+pub const SOCK_NONBLOCK: i32 = 0o4000;
+pub const SOCK_CLOEXEC: i32 = 0o40000;
 pub const SOL_SOCKET: i32 = 4095;
 pub const SO_BROADCAST: i32 = 32;
 pub const SO_ERROR: i32 = 4103;
@@ -254,7 +256,7 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 	);
 
 	if (domain != AF_INET && domain != AF_INET6)
-		|| (type_ != SOCK_STREAM && type_ != SOCK_DGRAM)
+		|| (type_ & SOCK_STREAM != SOCK_STREAM && type_ & SOCK_DGRAM != SOCK_DGRAM)
 		|| protocol != 0
 	{
 		-EINVAL
@@ -265,10 +267,14 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			let fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
 
 			#[cfg(feature = "udp")]
-			if type_ == SOCK_DGRAM {
+			if type_ & SOCK_DGRAM == SOCK_DGRAM {
 				let handle = nic.create_udp_handle().unwrap();
 				drop(guard);
 				let socket = udp::Socket::new(handle);
+
+				if type_ & SOCK_NONBLOCK == SOCK_NONBLOCK {
+					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+				}
 
 				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
@@ -276,10 +282,14 @@ extern "C" fn __sys_socket(domain: i32, type_: i32, protocol: i32) -> i32 {
 			}
 
 			#[cfg(feature = "tcp")]
-			if type_ == SOCK_STREAM {
+			if type_ & SOCK_STREAM == SOCK_STREAM {
 				let handle = nic.create_tcp_handle().unwrap();
 				drop(guard);
 				let socket = tcp::Socket::new(handle);
+
+				if type_ & SOCK_NONBLOCK == SOCK_NONBLOCK {
+					socket.ioctl(IoCtl::NonBlocking, true).unwrap();
+				}
 
 				insert_object(fd, Arc::new(socket)).expect("FD is already used");
 
@@ -302,9 +312,9 @@ extern "C" fn __sys_accept(fd: i32, addr: *mut sockaddr, addrlen: *mut socklen_t
 				|e| -num::ToPrimitive::to_i32(&e).unwrap(),
 				|endpoint| {
 					let new_obj = dyn_clone::clone_box(&*v);
-					insert_object(fd, Arc::from(new_obj)).expect("FD is already used");
+					insert_object(fd, Arc::from(new_obj)).unwrap();
 					let new_fd = FD_COUNTER.fetch_add(1, Ordering::SeqCst);
-					insert_object(new_fd, v.clone()).expect("FD is already used");
+					insert_object(new_fd, v).expect("FD is already used");
 
 					if !addr.is_null() && !addrlen.is_null() {
 						let addrlen = unsafe { &mut *addrlen };

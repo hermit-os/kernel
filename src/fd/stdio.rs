@@ -84,13 +84,15 @@ pub struct GenericStdout;
 #[async_trait]
 impl ObjectInterface for GenericStdout {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 
@@ -117,13 +119,15 @@ pub struct GenericStderr;
 #[async_trait]
 impl ObjectInterface for GenericStderr {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 
@@ -161,13 +165,15 @@ pub struct UhyveStdout;
 #[async_trait]
 impl ObjectInterface for UhyveStdout {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 
@@ -194,13 +200,15 @@ pub struct UhyveStderr;
 #[async_trait]
 impl ObjectInterface for UhyveStderr {
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 

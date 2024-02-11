@@ -274,6 +274,7 @@ where
 				backoff.snooze();
 			}
 		}
+
 		#[cfg(not(any(feature = "tcp", feature = "udp")))]
 		{
 			if backoff.is_completed() {

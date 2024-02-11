@@ -21,7 +21,7 @@ pub use self::timer::*;
 use crate::env;
 use crate::fd::{
 	dup_object, get_object, remove_object, AccessPermission, EventFlags, FileDescriptor, IoCtl,
-	OpenOption, PollFd,
+	IoError, OpenOption, PollFd,
 };
 use crate::fs::{self, FileAttr};
 use crate::syscalls::interfaces::SyscallInterface;
@@ -285,9 +285,9 @@ pub extern "C" fn sys_write(fd: FileDescriptor, buf: *const u8, len: usize) -> i
 	kernel_function!(__sys_write(fd, buf, len))
 }
 
-pub const FIONBIO: i32 = 0x8008667eu32 as i32;
-
 extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
+	const FIONBIO: i32 = 0x8008667eu32 as i32;
+
 	if cmd == FIONBIO {
 		let value = unsafe { *(argp as *const i32) };
 
@@ -307,6 +307,34 @@ extern "C" fn __sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_
 #[no_mangle]
 pub extern "C" fn sys_ioctl(fd: FileDescriptor, cmd: i32, argp: *mut core::ffi::c_void) -> i32 {
 	kernel_function!(__sys_ioctl(fd, cmd, argp))
+}
+
+extern "C" fn __sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
+	const F_SETFD: i32 = 2;
+	const F_SETFL: i32 = 4;
+	const FD_CLOEXEC: i32 = 1;
+	const O_NONBLOCK: i32 = 0o4000;
+
+	if cmd == F_SETFD && arg == FD_CLOEXEC {
+		0
+	} else if cmd == F_SETFL && arg == O_NONBLOCK {
+		let obj = get_object(fd);
+		obj.map_or_else(
+			|e| -num::ToPrimitive::to_i32(&e).unwrap(),
+			|v| {
+				(*v).ioctl(IoCtl::NonBlocking, true)
+					.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+			},
+		)
+	} else {
+		-crate::errno::EINVAL
+	}
+}
+
+/// manipulate file descriptor
+#[no_mangle]
+pub extern "C" fn sys_fcntl(fd: i32, cmd: i32, arg: i32) -> i32 {
+	kernel_function!(__sys_fcntl(fd, cmd, arg))
 }
 
 extern "C" fn __sys_lseek(fd: FileDescriptor, offset: isize, whence: i32) -> isize {
@@ -406,8 +434,24 @@ pub extern "C" fn sys_dup(fd: i32) -> i32 {
 
 extern "C" fn __sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 	let slice = unsafe { core::slice::from_raw_parts_mut(fds, nfds) };
+	let timeout = if timeout >= 0 {
+		Some(core::time::Duration::from_millis(
+			timeout.try_into().unwrap(),
+		))
+	} else {
+		None
+	};
 
-	crate::fd::poll(slice, timeout).map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |_| 0)
+	crate::fd::poll(slice, timeout).map_or_else(
+		|e| {
+			if e == IoError::ETIME {
+				0
+			} else {
+				-num::ToPrimitive::to_i32(&e).unwrap()
+			}
+		},
+		|v| v.try_into().unwrap(),
+	)
 }
 
 #[no_mangle]
@@ -415,7 +459,7 @@ pub extern "C" fn sys_poll(fds: *mut PollFd, nfds: usize, timeout: i32) -> i32 {
 	kernel_function!(__sys_poll(fds, nfds, timeout))
 }
 
-extern "C" fn __sys_eventfd(initval: u64, flags: i32) -> i32 {
+extern "C" fn __sys_eventfd(initval: u64, flags: i16) -> i32 {
 	if let Some(flags) = EventFlags::from_bits(flags) {
 		crate::fd::eventfd(initval, flags)
 			.map_or_else(|e| -num::ToPrimitive::to_i32(&e).unwrap(), |v| v)
@@ -425,7 +469,7 @@ extern "C" fn __sys_eventfd(initval: u64, flags: i32) -> i32 {
 }
 
 #[no_mangle]
-pub extern "C" fn sys_eventfd(initval: u64, flags: i32) -> i32 {
+pub extern "C" fn sys_eventfd(initval: u64, flags: i16) -> i32 {
 	kernel_function!(__sys_eventfd(initval, flags))
 }
 

@@ -91,7 +91,6 @@ bitflags! {
 bitflags! {
 	#[derive(Debug, Copy, Clone, Default)]
 	pub struct PollEvent: i16 {
-		const EMPTY = 0;
 		const POLLIN = 0x1;
 		const POLLPRI = 0x2;
 		const POLLOUT = 0x4;
@@ -119,11 +118,10 @@ pub struct PollFd {
 
 bitflags! {
 	#[derive(Debug, Default, Copy, Clone)]
-	pub struct EventFlags: i32 {
-		const EMPTY = 0;
-		const EFD_SEMAPHORE = 0x1;
-		const EFD_NONBLOCK = 0x4;
-		const EFD_CLOEXEC = 0x200000;
+	pub struct EventFlags: i16 {
+		const EFD_SEMAPHORE = 0o1;
+		const EFD_NONBLOCK = 0o4000;
+		const EFD_CLOEXEC = 0o40000;
 	}
 }
 
@@ -163,7 +161,7 @@ impl Default for AccessPermission {
 pub(crate) trait ObjectInterface: Sync + Send + core::fmt::Debug + DynClone {
 	/// check if an IO event is possible
 	async fn poll(&self, _event: PollEvent) -> Result<PollEvent, IoError> {
-		Ok(PollEvent::EMPTY)
+		Ok(PollEvent::empty())
 	}
 
 	/// `async_read` attempts to read `len` bytes from the object references
@@ -379,54 +377,40 @@ pub(crate) fn write(fd: FileDescriptor, buf: &[u8]) -> Result<usize, IoError> {
 	}
 }
 
-async fn poll_fds(fds: &mut [PollFd]) -> Result<(), IoError> {
+async fn poll_fds(fds: &mut [PollFd]) -> Result<u64, IoError> {
 	future::poll_fn(|cx| {
-		let mut ready: bool = false;
+		let mut counter: u64 = 0;
 
 		for i in &mut *fds {
 			let fd = i.fd;
+			i.revents = PollEvent::empty();
 			let mut pinned_obj = core::pin::pin!(async_get_object(fd));
 			if let Ready(Ok(obj)) = pinned_obj.as_mut().poll(cx) {
 				let mut pinned = core::pin::pin!(obj.poll(i.events));
 				if let Ready(Ok(e)) = pinned.as_mut().poll(cx) {
-					ready = true;
-					i.revents = e;
+					if !e.is_empty() {
+						counter += 1;
+						i.revents = e;
+					}
 				}
 			}
 		}
 
-		if ready {
-			Ready(())
+		if counter > 0 {
+			Ready(Ok(counter))
 		} else {
 			Pending
 		}
 	})
-	.await;
-
-	Ok(())
+	.await
 }
 
 /// The unix-like `poll` waits for one of a set of file descriptors
 /// to become ready to perform I/O. The set of file descriptors to be
 /// monitored is specified in the `fds` argument, which is an array
-/// of structures of `PollFd`.
-pub fn poll(fds: &mut [PollFd], timeout: i32) -> Result<(), IoError> {
-	if timeout >= 0 {
-		// for larger timeouts, we block on the async function
-		if timeout >= 5000 {
-			block_on(
-				poll_fds(fds),
-				Some(Duration::from_millis(timeout.try_into().unwrap())),
-			)
-		} else {
-			poll_on(
-				poll_fds(fds),
-				Some(Duration::from_millis(timeout.try_into().unwrap())),
-			)
-		}
-	} else {
-		block_on(poll_fds(fds), None)
-	}
+/// of structs of `PollFd`.
+pub fn poll(fds: &mut [PollFd], timeout: Option<Duration>) -> Result<u64, IoError> {
+	block_on(poll_fds(fds), timeout)
 }
 
 /// `eventfd` creates an linux-like "eventfd object" that can be used

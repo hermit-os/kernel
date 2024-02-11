@@ -42,6 +42,7 @@ impl Clone for EventFd {
 
 impl EventFd {
 	pub fn new(initval: u64, flags: EventFlags) -> Self {
+		debug!("Create EventFd {}, {:?}", initval, flags);
 		Self {
 			state: Mutex::new(EventState::new(initval)),
 			flags,
@@ -138,28 +139,42 @@ impl ObjectInterface for EventFd {
 	}
 
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
-		let mut result: PollEvent = PollEvent::EMPTY;
+		let mut result: PollEvent = PollEvent::empty();
 
 		if event.contains(PollEvent::POLLOUT) {
 			result.insert(PollEvent::POLLOUT);
-		} else if event.contains(PollEvent::POLLWRNORM) {
+		}
+		if event.contains(PollEvent::POLLWRNORM) {
 			result.insert(PollEvent::POLLWRNORM);
-		} else if event.contains(PollEvent::POLLWRBAND) {
+		}
+		if event.contains(PollEvent::POLLWRBAND) {
 			result.insert(PollEvent::POLLWRBAND);
 		}
 
-		let guard = self.state.lock().await;
-		if guard.counter > 0 {
+		if self.state.lock().await.counter > 0 {
 			if event.contains(PollEvent::POLLIN) {
 				result.insert(PollEvent::POLLIN);
-			} else if event.contains(PollEvent::POLLRDNORM) {
+			}
+			if event.contains(PollEvent::POLLRDNORM) {
 				result.insert(PollEvent::POLLRDNORM);
-			} else if event.contains(PollEvent::POLLRDBAND) {
+			}
+			if event.contains(PollEvent::POLLRDBAND) {
 				result.insert(PollEvent::POLLRDBAND);
 			}
 		}
 
-		Ok(result)
+		future::poll_fn(|cx| {
+			if result.is_empty() {
+				let mut pinned = core::pin::pin!(self.state.lock());
+				if let Poll::Ready(mut guard) = pinned.as_mut().poll(cx) {
+					guard.queue.push_back(cx.waker().clone());
+				}
+				Poll::Pending
+			} else {
+				Poll::Ready(Ok(result))
+			}
+		})
+		.await
 	}
 
 	fn is_nonblocking(&self) -> bool {
