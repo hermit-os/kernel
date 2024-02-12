@@ -12,14 +12,16 @@ use crate::fd::{block_on, EventFlags, IoError, ObjectInterface, PollEvent};
 #[derive(Debug)]
 struct EventState {
 	pub counter: u64,
-	pub queue: VecDeque<Waker>,
+	pub read_queue: VecDeque<Waker>,
+	pub write_queue: VecDeque<Waker>,
 }
 
 impl EventState {
 	pub fn new(counter: u64) -> Self {
 		Self {
 			counter,
-			queue: VecDeque::new(),
+			read_queue: VecDeque::new(),
+			write_queue: VecDeque::new(),
 		}
 	}
 }
@@ -67,9 +69,12 @@ impl ObjectInterface for EventFd {
 						guard.counter -= 1;
 						let tmp = u64::to_ne_bytes(1);
 						buf[..len].copy_from_slice(&tmp);
+						if let Some(cx) = guard.write_queue.pop_front() {
+							cx.wake_by_ref();
+						}
 						Poll::Ready(Ok(len))
 					} else {
-						guard.queue.push_back(cx.waker().clone());
+						guard.read_queue.push_back(cx.waker().clone());
 						Poll::Pending
 					}
 				} else {
@@ -82,9 +87,12 @@ impl ObjectInterface for EventFd {
 					if tmp > 0 {
 						guard.counter = 0;
 						buf[..len].copy_from_slice(&u64::to_ne_bytes(tmp));
+						if let Some(cx) = guard.read_queue.pop_front() {
+							cx.wake_by_ref();
+						}
 						Poll::Ready(Ok(len))
 					} else {
-						guard.queue.push_back(cx.waker().clone());
+						guard.read_queue.push_back(cx.waker().clone());
 						Poll::Pending
 					}
 				} else {
@@ -103,55 +111,55 @@ impl ObjectInterface for EventFd {
 		}
 
 		let c = u64::from_ne_bytes(buf[..len].try_into().unwrap());
-		if self.flags.contains(EventFlags::EFD_SEMAPHORE) {
-			let mut guard = self.state.lock().await;
-			for _i in 0..c {
-				if guard.counter == u64::MAX - 1 {
-					if self.is_nonblocking() {
-						return Err(IoError::EAGAIN);
-					} else {
-						// TODO: task should be blocked until the addition is possible
-						return Err(IoError::EINVAL);
-					}
-				}
-				guard.counter += 1;
-				if let Some(cx) = guard.queue.pop_front() {
-					cx.wake_by_ref();
-				}
-			}
-		} else {
-			let mut guard = self.state.lock().await;
-			if guard.counter == u64::MAX - c - 1 {
-				if self.is_nonblocking() {
-					return Err(IoError::EAGAIN);
-				} else {
-					// TODO: task should be blocked until the addition is possible
-					return Err(IoError::EINVAL);
-				}
-			}
-			guard.counter += c;
-			if let Some(cx) = guard.queue.pop_front() {
-				cx.wake_by_ref();
-			}
-		}
 
-		Ok(len)
+		future::poll_fn(|cx| {
+			let mut pinned = core::pin::pin!(self.state.lock());
+			if let Poll::Ready(mut guard) = pinned.as_mut().poll(cx) {
+				if u64::MAX - guard.counter > c {
+					guard.counter += c;
+					if self.flags.contains(EventFlags::EFD_SEMAPHORE) {
+						for _i in 0..c {
+							if let Some(cx) = guard.read_queue.pop_front() {
+								cx.wake_by_ref();
+							} else {
+								break;
+							}
+						}
+					} else {
+						if let Some(cx) = guard.read_queue.pop_front() {
+							cx.wake_by_ref();
+						}
+					}
+
+					Poll::Ready(Ok(len))
+				} else {
+					guard.write_queue.push_back(cx.waker().clone());
+					Poll::Pending
+				}
+			} else {
+				Poll::Pending
+			}
+		})
+		.await
 	}
 
 	async fn poll(&self, event: PollEvent) -> Result<PollEvent, IoError> {
 		let mut result: PollEvent = PollEvent::empty();
+		let guard = self.state.lock().await;
 
-		if event.contains(PollEvent::POLLOUT) {
-			result.insert(PollEvent::POLLOUT);
-		}
-		if event.contains(PollEvent::POLLWRNORM) {
-			result.insert(PollEvent::POLLWRNORM);
-		}
-		if event.contains(PollEvent::POLLWRBAND) {
-			result.insert(PollEvent::POLLWRBAND);
+		if guard.counter < u64::MAX - 1 {
+			if event.contains(PollEvent::POLLOUT) {
+				result.insert(PollEvent::POLLOUT);
+			}
+			if event.contains(PollEvent::POLLWRNORM) {
+				result.insert(PollEvent::POLLWRNORM);
+			}
+			if event.contains(PollEvent::POLLWRBAND) {
+				result.insert(PollEvent::POLLWRBAND);
+			}
 		}
 
-		if self.state.lock().await.counter > 0 {
+		if guard.counter > 0 {
 			if event.contains(PollEvent::POLLIN) {
 				result.insert(PollEvent::POLLIN);
 			}
@@ -167,9 +175,22 @@ impl ObjectInterface for EventFd {
 			if result.is_empty() {
 				let mut pinned = core::pin::pin!(self.state.lock());
 				if let Poll::Ready(mut guard) = pinned.as_mut().poll(cx) {
-					guard.queue.push_back(cx.waker().clone());
+					if event.intersects(
+						PollEvent::POLLIN | PollEvent::POLLRDNORM | PollEvent::POLLRDNORM,
+					) {
+						guard.read_queue.push_back(cx.waker().clone());
+						Poll::Pending
+					} else if event.intersects(
+						PollEvent::POLLOUT | PollEvent::POLLWRNORM | PollEvent::POLLWRBAND,
+					) {
+						guard.write_queue.push_back(cx.waker().clone());
+						Poll::Pending
+					} else {
+						Poll::Ready(Ok(result))
+					}
+				} else {
+					Poll::Pending
 				}
-				Poll::Pending
 			} else {
 				Poll::Ready(Ok(result))
 			}
