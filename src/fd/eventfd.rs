@@ -125,10 +125,8 @@ impl ObjectInterface for EventFd {
 								break;
 							}
 						}
-					} else {
-						if let Some(cx) = guard.read_queue.pop_front() {
-							cx.wake_by_ref();
-						}
+					} else if let Some(cx) = guard.read_queue.pop_front() {
+						cx.wake_by_ref();
 					}
 
 					Poll::Ready(Ok(len))
