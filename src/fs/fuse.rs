@@ -49,44 +49,10 @@ pub(crate) trait FuseInterface {
 	fn get_mount_point(&self) -> String;
 }
 
-/// Marker trait, which signals that a struct is a valid Fuse command.
-/// Struct has to be repr(C)!
-pub(crate) unsafe trait FuseIn {}
-/// Marker trait, which signals that a struct is a valid Fuse response.
-/// Struct has to be repr(C)!
-pub(crate) unsafe trait FuseOut {}
-
-unsafe impl FuseIn for fuse_abi::InitIn {}
-unsafe impl FuseOut for fuse_abi::InitOut {}
-unsafe impl FuseIn for fuse_abi::ReadIn {}
-unsafe impl FuseIn for fuse_abi::WriteIn {}
-unsafe impl FuseOut for fuse_abi::WriteOut {}
-unsafe impl FuseOut for fuse_abi::ReadOut {}
-unsafe impl FuseIn for fuse_abi::LookupIn {}
-unsafe impl FuseIn for fuse_abi::ReadlinkIn {}
-unsafe impl FuseOut for fuse_abi::ReadlinkOut {}
-unsafe impl FuseOut for fuse_abi::AttrOut {}
-unsafe impl FuseOut for fuse_abi::EntryOut {}
-unsafe impl FuseIn for fuse_abi::CreateIn {}
-unsafe impl FuseOut for fuse_abi::CreateOut {}
-unsafe impl FuseIn for fuse_abi::OpenIn {}
-unsafe impl FuseOut for fuse_abi::OpenOut {}
-unsafe impl FuseIn for fuse_abi::ReleaseIn {}
-unsafe impl FuseOut for fuse_abi::ReleaseOut {}
-unsafe impl FuseIn for fuse_abi::RmdirIn {}
-unsafe impl FuseOut for fuse_abi::RmdirOut {}
-unsafe impl FuseIn for fuse_abi::MkdirIn {}
-unsafe impl FuseIn for fuse_abi::UnlinkIn {}
-unsafe impl FuseOut for fuse_abi::UnlinkOut {}
-unsafe impl FuseIn for fuse_abi::LseekIn {}
-unsafe impl FuseOut for fuse_abi::LseekOut {}
-unsafe impl FuseIn for fuse_abi::PollIn {}
-unsafe impl FuseOut for fuse_abi::PollOut {}
-
 pub(crate) trait OpTrait {
-	type InStruct: FuseIn + core::fmt::Debug;
+	type InStruct: core::fmt::Debug;
 	type InPayload: ?Sized;
-	type OutStruct: FuseOut + core::fmt::Debug;
+	type OutStruct: core::fmt::Debug;
 	type OutPayload: ?Sized;
 
 	type Cmd: ?Sized + AsSliceU8 = ReqPart<fuse_abi::InHeader, Self::InStruct, Self::InPayload>;
@@ -441,17 +407,14 @@ pub(crate) struct ReqPart<H, T: fmt::Debug, P: ?Sized> {
 	payload: P,
 }
 
-impl<T: FuseIn + core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::InHeader, T, P> {
+impl<T: core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::InHeader, T, P> {
 	fn len(&self) -> usize {
 		self.common_header.len.try_into().unwrap()
 	}
 }
 
 // Since we don't bother with initializing the len field, we use the default len implementation.
-impl<T: FuseOut + core::fmt::Debug, P: ?Sized> AsSliceU8
-	for ReqPart<fuse_abi::OutHeader, MaybeUninit<T>, P>
-{
-}
+impl<T: core::fmt::Debug, P: ?Sized> AsSliceU8 for ReqPart<fuse_abi::OutHeader, MaybeUninit<T>, P> {}
 
 impl<H, T: fmt::Debug, P: ?Sized> ReqPart<H, T, P>
 where
