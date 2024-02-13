@@ -15,10 +15,13 @@ impl LockedAllocator {
 
 	#[inline]
 	fn align_layout(layout: Layout) -> Layout {
+		let size = layout
+			.size()
+			.align_up(core::mem::size_of::<crossbeam_utils::CachePadded<u8>>());
 		let align = layout
 			.align()
 			.max(core::mem::align_of::<crossbeam_utils::CachePadded<u8>>());
-		Layout::from_size_align(layout.size(), align).unwrap()
+		Layout::from_size_align(size, align).unwrap()
 	}
 
 	pub unsafe fn init(&self, heap_bottom: *mut u8, heap_size: usize) {
@@ -42,10 +45,10 @@ unsafe impl GlobalAlloc for LockedAllocator {
 		unsafe { self.0.dealloc(ptr, layout) }
 	}
 
-	/* unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+	unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
 		let layout = Self::align_layout(layout);
 		unsafe { self.0.realloc(ptr, layout, new_size) }
-	} */
+	}
 }
 
 #[cfg(all(test, not(target_os = "none")))]
